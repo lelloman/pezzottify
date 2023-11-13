@@ -1,8 +1,5 @@
 package com.lelloman.pezzottify.server
 
-import com.fasterxml.jackson.core.JsonFactory
-import com.fasterxml.jackson.core.JsonGenerator
-import com.google.gson.GsonBuilder
 import com.lelloman.pezzottify.server.model.Artist
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
@@ -23,6 +20,14 @@ class PezzottifyServerApplicationTests {
 
     class Artists : ArrayList<Artist>()
 
+    private fun performAdminLogin() {
+        httpClient.formPost("/login")
+            .add("username", "admin")
+            .add("password", "admin")
+            .execute()
+            .assertRedirectTo("/")
+    }
+
     @Test
     fun contextLoads() {
         httpClient.get("/")
@@ -34,17 +39,29 @@ class PezzottifyServerApplicationTests {
 
     @Test
     fun createsArtistsTracksAndAlbum() {
-        httpClient.formPost("/login")
-            .add("username", "admin")
-            .add("password", "admin")
-            .execute()
-            .assertRedirectTo("/")
+        performAdminLogin()
 
         httpClient.get("/api/artists")
             .parsedBody<Artists> { artists ->
                 assertThat(artists).hasSize(2)
                 val prince = artists.firstOrNull { it.displayName == "Prince" }
                 assertThat(prince).isNotNull
+            }
+
+        val artistRequest1 = Artist(
+            firstName = null,
+            lastName = "lastName",
+            displayName = "The display"
+        )
+        httpClient.bodyPost("/api/artist")
+            .execute(artistRequest1)
+            .assertStatus(200)
+
+        httpClient.get("/api/artists")
+            .parsedBody<Artists> { artists ->
+                assertThat(artists).hasSize(3)
+                val created = artists.firstOrNull { it.displayName == "The display" }
+                assertThat(created).isNotNull
             }
     }
 

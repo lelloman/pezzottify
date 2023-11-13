@@ -1,14 +1,10 @@
 package com.lelloman.pezzottify.server
 
-import com.google.gson.Gson
 import com.google.gson.GsonBuilder
 import okhttp3.*
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.RequestBody.Companion.toRequestBody
 import org.assertj.core.api.Assertions.assertThat
-import org.junit.jupiter.api.Test
-import org.springframework.boot.test.context.SpringBootTest
-import org.springframework.boot.test.web.server.LocalServerPort
-import org.springframework.http.codec.json.Jackson2JsonDecoder
-import org.springframework.http.converter.json.Jackson2ObjectMapperBuilder
 
 class HttpClient(private val baseUrl: String) {
     private var cookiesEnabled = true
@@ -75,6 +71,12 @@ class HttpClient(private val baseUrl: String) {
         }
     }
 
+    inner class BodyPostRequest(private val httpClient: HttpClient, private val url: String) {
+        fun <T>execute(body: T) : ResponseSpec {
+            return httpClient.doPost(url, gson.toJson(body))
+        }
+    }
+
     private val cookieJar = Cookies()
     private val okHttpClient = OkHttpClient.Builder()
         .followRedirects(false)
@@ -93,8 +95,19 @@ class HttpClient(private val baseUrl: String) {
         return ResponseSpec(okHttpClient.newCall(request).execute())
     }
 
+    private fun doPost(url: String, body: String): ResponseSpec {
+        val url = "$baseUrl$url"
+        val body = body.toRequestBody("application/json".toMediaType())
+        val request = Request.Builder().post(body).url(url).build()
+        return ResponseSpec(okHttpClient.newCall(request).execute())
+    }
+
     fun formPost(url: String): FormPostRequest {
         return FormPostRequest(this, url)
+    }
+
+    fun bodyPost(url: String): BodyPostRequest {
+        return BodyPostRequest(this, url)
     }
 
     private fun disableCookies() {
