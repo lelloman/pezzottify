@@ -28,10 +28,15 @@ class SecurityConfig {
             it.requestMatchers(AntPathRequestMatcher("/h2/**")).permitAll()
             it.anyRequest().authenticated()
         }
-        http.csrf { it.ignoringRequestMatchers(AntPathRequestMatcher("/h2/**")) }
-        http.headers { it.frameOptions {
-            it.disable()
-        } }
+        http.csrf {
+            it.ignoringRequestMatchers(AntPathRequestMatcher("/h2/**"))
+            it.ignoringRequestMatchers(AntPathRequestMatcher("/login"))
+        }
+        http.headers {
+            it.frameOptions {
+                it.disable()
+            }
+        }
         http.formLogin { it.permitAll() }
         return http.build();
     }

@@ -21,7 +21,6 @@ repositories {
 
 dependencies {
 	implementation("org.springframework.boot:spring-boot-starter-data-jpa")
-	implementation("org.springframework.boot:spring-boot-starter-data-rest")
 	implementation("org.springframework.boot:spring-boot-starter-security")
 	implementation("org.springframework.boot:spring-boot-starter-web")
 	implementation("com.fasterxml.jackson.module:jackson-module-kotlin")
@@ -38,6 +37,7 @@ dependencies {
 	testImplementation(platform("com.squareup.okhttp3:okhttp-bom:4.11.0"))
 	testImplementation("com.squareup.okhttp3:okhttp")
 	testImplementation("com.squareup.okhttp3:logging-interceptor")
+	testImplementation("com.google.code.gson:gson:2.10.1")
 }
 
 tasks.withType<KotlinCompile> {

@@ -1,5 +1,7 @@
 package com.lelloman.pezzottify.server
 
+import com.google.gson.Gson
+import com.google.gson.GsonBuilder
 import okhttp3.*
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
@@ -10,6 +12,8 @@ import org.springframework.http.converter.json.Jackson2ObjectMapperBuilder
 
 class HttpClient(private val baseUrl: String) {
     private var cookiesEnabled = true
+
+    val gson = GsonBuilder().create()
 
     private inner class Cookies : CookieJar {
         private val stored = mutableListOf<Cookie>()
@@ -25,14 +29,19 @@ class HttpClient(private val baseUrl: String) {
     }
 
     inner class ResponseSpec(private val response: Response) {
-        private var bodyString: String? = null
+        var bodyString: String? = null
+            get() {
+                if (field == null) {
+                    field = response.body?.string()
+                }
+                return field
+            }
 
         fun assertStatus(code: Int): ResponseSpec = apply {
             assertThat(this.response.code).isEqualTo(code)
         }
 
         fun bodyString(consumer: (String?) -> Unit): ResponseSpec = apply {
-            extractBodyString()
             consumer(this.bodyString)
         }
 
@@ -40,13 +49,17 @@ class HttpClient(private val baseUrl: String) {
             assertThat(response.isRedirect).isTrue()
             val expectedLocation = "$baseUrl$to"
             assertThat(response.headers["Location"]).isEqualTo(expectedLocation)
-            val a = 1
         }
 
-        private fun extractBodyString() {
-            if (this.bodyString == null) {
-                bodyString = response.body?.string()
-            }
+        fun assertRedirectTo(action: (String) -> Unit) = apply {
+            assertThat(response.isRedirect).isTrue()
+            val redirect = response.headers["Location"]
+            assertThat(redirect).isNotNull()
+            action(redirect!!)
+        }
+
+        inline fun <reified T> parsedBody(action: (T) -> Unit): ResponseSpec = apply {
+            action(gson.fromJson(this.bodyString, T::class.java))
         }
     }
 

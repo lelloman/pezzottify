@@ -1,9 +1,6 @@
 package com.lelloman.pezzottify.server.model
 
-import jakarta.persistence.Entity
-import jakarta.persistence.GeneratedValue
-import jakarta.persistence.GenerationType
-import jakarta.persistence.Id
+import jakarta.persistence.*
 
 interface MediaItem {
     val id: String
@@ -28,9 +25,11 @@ data class Image(
 data class AudioTrack(
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
-    override val id: String,
+    override val id: String = "",
     override val size: Long,
     override val created: Long,
     override val uri: String,
     val durationMs: Int,
+    @ManyToMany
+    val artists: List<Artist>,
 ) : MediaItem

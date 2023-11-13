@@ -10,7 +10,7 @@ import jakarta.persistence.Id
 data class Artist(
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
-    val id: String,
+    val id: String = "",
     val firstName: String?,
     val lastName: String?,
     val displayName: String,
