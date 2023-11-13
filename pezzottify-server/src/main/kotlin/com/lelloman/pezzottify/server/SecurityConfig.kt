@@ -35,14 +35,4 @@ class SecurityConfig {
         http.formLogin { it.permitAll() }
         return http.build();
     }
-
-    @Bean
-    fun userDetailsService(): UserDetailsService {
-        val user: UserDetails = User.withDefaultPasswordEncoder()
-            .username("admin")
-            .password("admin")
-            .roles("ADMIN")
-            .build()
-        return InMemoryUserDetailsManager(user)
-    }
 }
