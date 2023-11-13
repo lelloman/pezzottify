@@ -57,6 +57,8 @@ class HttpClient(private val baseUrl: String) {
         inline fun <reified T> parsedBody(action: (T) -> Unit): ResponseSpec = apply {
             action(gson.fromJson(this.bodyString, T::class.java))
         }
+
+        inline fun <reified T> parsedBody(): T = gson.fromJson(this.bodyString, T::class.java)
     }
 
     inner class FormPostRequest(private val httpClient: HttpClient, private val url: String) {
@@ -72,13 +74,13 @@ class HttpClient(private val baseUrl: String) {
     }
 
     inner class BodyPostRequest(private val httpClient: HttpClient, private val url: String) {
-        fun <T>execute(body: T) : ResponseSpec {
+        fun <T> execute(body: T): ResponseSpec {
             return httpClient.doPost(url, gson.toJson(body))
         }
     }
 
     private val cookieJar = Cookies()
-    private val okHttpClient = OkHttpClient.Builder()
+    val okHttpClient = OkHttpClient.Builder()
         .followRedirects(false)
         .cookieJar(cookieJar)
         .build()

@@ -1,6 +1,12 @@
 package com.lelloman.pezzottify.server
 
+import com.google.gson.Gson
 import com.lelloman.pezzottify.server.model.Artist
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.MultipartBody
+import okhttp3.Request
+import okhttp3.RequestBody
+import okhttp3.RequestBody.Companion.toRequestBody
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
 import org.springframework.boot.test.context.SpringBootTest
@@ -53,16 +59,30 @@ class PezzottifyServerApplicationTests {
             lastName = "lastName",
             displayName = "The display"
         )
-        httpClient.bodyPost("/api/artist")
-            .execute(artistRequest1)
-            .assertStatus(200)
 
-        httpClient.get("/api/artists")
-            .parsedBody<Artists> { artists ->
-                assertThat(artists).hasSize(3)
-                val created = artists.firstOrNull { it.displayName == "The display" }
-                assertThat(created).isNotNull
-            }
+        val requestBody = MultipartBody.Builder()
+            .setType(MultipartBody.FORM)
+            .addFormDataPart(
+                "artist",
+                null,
+                Gson().toJson(artistRequest1).toRequestBody("application/json".toMediaType())
+            )
+            .addFormDataPart("image", "image", ByteArray(10) { it.toByte() }.toRequestBody())
+            .build()
+        val request = Request.Builder()
+            .url("$baseUrl/api/artist")
+            .post(requestBody)
+            .build()
+        val response = httpClient.okHttpClient.newCall(request).execute()
+        assertThat(response.code).isEqualTo(200)
+
+        val artists: Artists = httpClient.get("/api/artists").parsedBody()
+        assertThat(artists).hasSize(3)
+        val created = artists.firstOrNull { it.displayName == "The display" }
+        assertThat(created).isNotNull
+        val image = created?.image
+        assertThat(image).isNotNull
+        assertThat(image!!.size).isEqualTo(10)
+        assertThat(image.orphan).isFalse()
     }
-
 }

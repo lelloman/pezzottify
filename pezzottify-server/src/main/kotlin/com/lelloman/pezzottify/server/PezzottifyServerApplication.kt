@@ -50,8 +50,6 @@ class DevConfig {
 
         val track1 = AudioTrack(
             size = 1234,
-            created = 11111,
-            uri = "http://something.com/track.mp3",
             durationMs = 60_000,
             artists = listOf(lello, prince),
         )

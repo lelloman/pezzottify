@@ -39,8 +39,8 @@ data class UserPlayList(
     override val audioTracks: List<AudioTrack>,
 
     @ManyToOne
-    @JoinColumn(name = "user_id")
-    @OnDelete(action = OnDeleteAction.CASCADE)
-    @JsonIgnore
+    //@JoinColumn(name = "user_id")
+    //@OnDelete(action = OnDeleteAction.CASCADE)
+    //@JsonIgnore
     val owner: User,
 ) : Playlist
