@@ -3,6 +3,8 @@ package com.lelloman.pezzottify.server
 import com.lelloman.pezzottify.server.controller.ImageDecoder
 import com.lelloman.pezzottify.server.model.Artist
 import com.lelloman.pezzottify.server.model.AudioTrack
+import com.lelloman.pezzottify.server.model.Image
+import com.lelloman.pezzottify.server.service.FileStorageService
 import org.slf4j.LoggerFactory
 import org.springframework.boot.CommandLineRunner
 import org.springframework.boot.autoconfigure.EnableAutoConfiguration
@@ -15,56 +17,11 @@ import org.springframework.security.core.userdetails.User
 import org.springframework.security.core.userdetails.UserDetails
 import org.springframework.security.core.userdetails.UserDetailsService
 import org.springframework.security.provisioning.InMemoryUserDetailsManager
+import java.awt.Color
+import java.awt.image.BufferedImage
+import java.io.ByteArrayOutputStream
+import javax.imageio.ImageIO
 import javax.sql.DataSource
-
-@Configuration
-@Profile("dev")
-class DevConfig {
-
-    private val log = LoggerFactory.getLogger(this::class.java)
-
-    @Bean
-    fun demo(
-        artistRepo: ArtistRepository,
-        trackRepo: AudioTrackRepository,
-        dataSource: DataSource
-    ): CommandLineRunner = CommandLineRunner {
-        val dbUrl = dataSource.connection?.metaData?.url
-        log.info("")
-        log.info("-------------- DEMO CLI RUNNER --------------")
-
-        log.info("DB: $dbUrl")
-
-        val prince = Artist(
-            firstName = "",
-            lastName = "",
-            displayName = "Prince"
-        )
-        val createdPrince = artistRepo.save(prince)
-        log.info("Created prince: $createdPrince")
-
-        val lello = Artist(
-            firstName = "Lello",
-            lastName = "Vitello",
-            displayName = "Lelloman",
-        )
-        val createdLello = artistRepo.save(lello)
-        log.info("Created lello: $createdLello")
-
-        val track1 = AudioTrack(
-            size = 1234,
-            durationMs = 60_000,
-            artists = listOf(lello, prince),
-        )
-        val createdTrack1 = trackRepo.save(track1)
-        log.info("Created track1: $createdTrack1")
-
-        log.info("---------------------------------------------")
-        log.info("")
-    }
-
-}
-
 
 @SpringBootApplication
 @EnableAutoConfiguration

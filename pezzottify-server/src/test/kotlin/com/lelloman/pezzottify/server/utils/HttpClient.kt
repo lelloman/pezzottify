@@ -45,6 +45,8 @@ class HttpClient(private val baseUrl: String) {
             consumer(this.bodyString)
         }
 
+        fun rawBody(): ByteArray? = this.response.body?.bytes()
+
         fun assertRedirectTo(to: String): ResponseSpec = apply {
             assertThat(response.isRedirect).isTrue()
             val expectedLocation = "$baseUrl$to"

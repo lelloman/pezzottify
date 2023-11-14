@@ -113,6 +113,11 @@ class ArtistsRestTest {
             .assertStatus(202)
             .parsedBody()
         assertThat(artist).isEqualTo(createdArtist)
-    }
 
+        val response = httpClient.get("/api/image/${image.id}")
+            .assertStatus(200)
+            .rawBody()
+        assertThat(response).isNotNull()
+        assertThat(response!!.size).isEqualTo(imageBytes.size)
+    }
 }
