@@ -166,6 +166,14 @@ class HttpClient(private val baseUrl: String) {
             .assertRedirectTo("/")
     }
 
+    fun delete(url: String) = Request.Builder()
+        .delete()
+        .url("$baseUrl$url")
+        .build()
+        .let(okHttpClient::newCall)
+        .execute()
+        .let(::ResponseSpec)
+
     private fun disableCookies() {
         this.cookiesEnabled = false
     }

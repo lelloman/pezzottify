@@ -22,13 +22,13 @@ data class Album(
 
     override val name: String,
 
-    @ManyToMany
+    @ManyToMany(cascade = [CascadeType.ALL])
     override val audioTracks: List<AudioTrack> = emptyList(),
 
     @ManyToOne(cascade = [CascadeType.ALL])
     val coverImage: Image? = null,
 
-    @ManyToMany
+    @ManyToMany(cascade = [CascadeType.ALL])
     val sideImages: List<Image> = emptyList(),
 ) : Playlist
 
