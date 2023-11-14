@@ -37,7 +37,6 @@ data class Image(
 @Entity
 data class AudioTrack(
     @Id
-    @GeneratedValue(strategy = GenerationType.UUID)
     override val id: String = "",
 
     override val size: Long,
@@ -48,14 +47,11 @@ data class AudioTrack(
 
     val name: String,
 
-    val durationMs: Int,
+    val durationMs: Long,
 
     val sampleRate: Int,
 
     val bitRate: Int,
-
-    @ManyToMany
-    val artists: List<Artist>,
 
     val type: Type,
 ) : MediaItem {

@@ -77,7 +77,6 @@ class DevAppInitializer {
             name = "First track",
             size = 1234,
             durationMs = 60_000,
-            artists = listOf(lello, prince),
             type = AudioTrack.Type.MP3,
             bitRate = 100,
             sampleRate = 44100,
