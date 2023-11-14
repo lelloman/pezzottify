@@ -21,6 +21,12 @@ class ArtistsRestTest {
 
     private fun HttpClient.getArtist(id: String): HttpClient.ResponseSpec = this.get("/api/artist/$id")
 
+    private fun HttpClient.createArtist(artist: Artist) = this.multipartPost("/api/artist")
+        .addJsonField("artist", artist)
+
+    private fun HttpClient.updateArtist(artist: Artist) = this.multipartPut("/api/artist")
+        .addJsonField("artist", artist)
+
     @Test
     fun `returns 404 for non existent artist id`() {
         httpClient.performAdminLogin()
@@ -33,21 +39,39 @@ class ArtistsRestTest {
         httpClient.performAdminLogin()
 
         val artistRequest1 = Artist(displayName = "")
-        httpClient.multipartPost("/api/artist")
-            .addJsonField("artist", artistRequest1)
+        httpClient.createArtist(artistRequest1)
             .execute()
             .assertStatus(400)
 
         val artistRequest2 = Artist(displayName = "display")
-        httpClient.multipartPost("/api/artist")
-            .addJsonField("artist", artistRequest2)
+        httpClient.createArtist(artistRequest2)
             .execute()
             .assertStatus(201)
 
-        httpClient.multipartPost("/api/artist")
-            .addJsonField("artist", artistRequest2)
+        httpClient.createArtist(artistRequest2)
             .execute()
             .assertStatus(500) // this should probably be a 400 with a message but whatever
+    }
+
+    @Test
+    fun `updates artist without image`() {
+        httpClient.performAdminLogin()
+
+        val aristRequest1 = Artist(displayName = "display")
+        val createdArtist1: Artist = httpClient.createArtist(aristRequest1)
+            .execute()
+            .assertStatus(201)
+            .parsedBody()
+
+        val updatedArtist1: Artist = httpClient.updateArtist(createdArtist1.copy(displayName = "another display"))
+            .execute()
+            .assertStatus(202)
+            .parsedBody()
+        assertThat(updatedArtist1).isEqualTo(createdArtist1.copy(displayName = "another display"))
+
+        httpClient.getArtist(updatedArtist1.id)
+            .assertStatus2xx()
+            .parsedBody<Artist> { assertThat(it).isEqualTo(updatedArtist1) }
     }
 
     @Test
@@ -59,8 +83,7 @@ class ArtistsRestTest {
             lastName = "lastName",
             displayName = "The display"
         )
-        val createdArtist: Artist = httpClient.multipartPost("/api/artist")
-            .addJsonField("artist", artistRequest)
+        val createdArtist: Artist = httpClient.createArtist(artistRequest)
             .addFile("image", ByteArray(10) { it.toByte() })
             .execute()
             .assertStatus(201)

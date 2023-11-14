@@ -61,4 +61,39 @@ class ArtistController(
         createdImage?.let { imagesRepo.save(it.copy(orphan = false)) }
         return response
     }
+
+    @PutMapping("/artist", consumes = ["multipart/form-data"])
+    fun replace(
+        @RequestPart("artist") artist: Artist,
+        @RequestParam("image") image: MultipartFile?,
+    ): ResponseEntity<Artist> {
+        val foundArtist = repo.findById(artist.id).getOrNull() ?: return ResponseEntity(HttpStatus.NOT_FOUND)
+
+        if (artist.displayName.isBlank()) {
+            return ResponseEntity(HttpStatus.BAD_REQUEST)
+        }
+
+        val createdImage = image?.inputStream
+            ?.let(storage::create)
+            ?.let { (id, size) ->
+                val imageToSave = Image(
+                    id = id,
+                    size = size,
+                    width = 0,
+                    height = 0,
+                )
+                imagesRepo.save(imageToSave)
+            }
+        if (createdImage != null && foundArtist.image != null) {
+            imagesRepo.delete(foundArtist.image)
+        }
+
+        val artistToSave = when {
+            image == null -> artist
+            else -> artist.copy(image = createdImage)
+        }
+        val response = ResponseEntity(repo.save(artistToSave), HttpStatus.ACCEPTED)
+        createdImage?.let { imagesRepo.save(it.copy(orphan = false)) }
+        return response
+    }
 }

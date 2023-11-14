@@ -37,6 +37,10 @@ class HttpClient(private val baseUrl: String) {
             assertThat(this.response.code).isEqualTo(code)
         }
 
+        fun assertStatus2xx() = apply {
+            assertThat(response.code).isGreaterThanOrEqualTo(200).isLessThan(300)
+        }
+
         fun bodyString(consumer: (String?) -> Unit): ResponseSpec = apply {
             consumer(this.bodyString)
         }
@@ -61,7 +65,11 @@ class HttpClient(private val baseUrl: String) {
         inline fun <reified T> parsedBody(): T = gson.fromJson(this.bodyString, T::class.java)
     }
 
-    inner class FormPostRequest(private val httpClient: HttpClient, private val url: String) {
+    inner class FormPostRequest(
+        private val httpClient: HttpClient,
+        private val url: String,
+        private val method: BodyMethod
+    ) {
         private val formBuilder = FormBody.Builder()
 
         fun add(name: String, value: String) = apply {
@@ -69,11 +77,15 @@ class HttpClient(private val baseUrl: String) {
         }
 
         fun execute(): ResponseSpec {
-            return httpClient.doPost(url, formBuilder.build())
+            return httpClient.doBodyRequest(url, formBuilder.build(), method)
         }
     }
 
-    inner class MultipartPostRequest(private val httpClient: HttpClient, private val url: String) {
+    inner class MultipartRequest(
+        private val httpClient: HttpClient,
+        private val url: String,
+        private val method: BodyMethod
+    ) {
         private val builder = MultipartBody.Builder().setType(MultipartBody.FORM)
 
         fun <T> addJsonField(name: String, o: T) = apply {
@@ -88,8 +100,12 @@ class HttpClient(private val baseUrl: String) {
 
         fun execute(): ResponseSpec {
             val body = builder.build()
-            return httpClient.doPost(url, body)
+            return httpClient.doBodyRequest(url, body, method)
         }
+    }
+
+    enum class BodyMethod {
+        POST, PUT,
     }
 
     private val cookieJar = Cookies()
@@ -104,9 +120,13 @@ class HttpClient(private val baseUrl: String) {
         return ResponseSpec(okHttpClient.newCall(request).execute())
     }
 
-    private fun doPost(url: String, requestBody: RequestBody): ResponseSpec {
+    private fun doBodyRequest(url: String, requestBody: RequestBody, method: BodyMethod): ResponseSpec {
         val url = "$baseUrl$url"
-        val request = Request.Builder().post(requestBody).url(url).build()
+        val builder = when (method) {
+            BodyMethod.POST -> Request.Builder().post(requestBody)
+            BodyMethod.PUT -> Request.Builder().put(requestBody)
+        }
+        val request = builder.url(url).build()
         return ResponseSpec(okHttpClient.newCall(request).execute())
     }
 
@@ -118,11 +138,15 @@ class HttpClient(private val baseUrl: String) {
     }
 
     fun formPost(url: String): FormPostRequest {
-        return FormPostRequest(this, url)
+        return FormPostRequest(this, url, BodyMethod.POST)
     }
 
-    fun multipartPost(url: String): MultipartPostRequest {
-        return MultipartPostRequest(this, url)
+    fun multipartPost(url: String): MultipartRequest {
+        return MultipartRequest(this, url, BodyMethod.POST)
+    }
+
+    fun multipartPut(url: String): MultipartRequest {
+        return MultipartRequest(this, url, BodyMethod.PUT)
     }
 
     fun performAdminLogin() {
