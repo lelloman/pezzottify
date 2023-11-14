@@ -12,9 +12,13 @@ import java.util.UUID
 @Service
 interface FileStorageService {
 
+    val totalSize: Long
+
     fun create(inputStream: InputStream): Creation
 
     fun open(id: String): InputStream
+
+    fun remove(id: String)
 
     data class Creation(val id: String, val size: Long)
 }
@@ -40,6 +44,8 @@ class InMemoryFileStorageService : FileStorageService {
 
     private val files = mutableMapOf<String, ByteArray>()
 
+    override val totalSize get() = files.values.sumOf { it.size.toLong() }
+
     override fun create(inputStream: InputStream): FileStorageService.Creation {
         var id: String
         do {
@@ -52,5 +58,9 @@ class InMemoryFileStorageService : FileStorageService {
 
     override fun open(id: String): InputStream {
         return files[id]?.inputStream() ?: throw FileNotFoundException()
+    }
+
+    override fun remove(id: String) {
+        files.remove(id)
     }
 }

@@ -7,8 +7,11 @@ import javax.imageio.ImageIO
 
 class Artists : ArrayList<Artist>()
 
-fun mockPng(): ByteArray {
-    val image = BufferedImage(10, 10, BufferedImage.TYPE_INT_RGB)
+fun mockPng(
+    width: Int = 10,
+    height: Int = 10,
+): ByteArray {
+    val image = BufferedImage(width, height, BufferedImage.TYPE_INT_RGB)
     val output = ByteArrayOutputStream()
     ImageIO.write(image, "png", output)
     return output.toByteArray()

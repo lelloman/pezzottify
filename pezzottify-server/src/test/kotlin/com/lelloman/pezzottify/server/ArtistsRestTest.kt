@@ -1,11 +1,13 @@
 package com.lelloman.pezzottify.server
 
 import com.lelloman.pezzottify.server.model.Artist
+import com.lelloman.pezzottify.server.service.FileStorageService
 import com.lelloman.pezzottify.server.utils.Artists
 import com.lelloman.pezzottify.server.utils.HttpClient
 import com.lelloman.pezzottify.server.utils.mockPng
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
+import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.boot.test.web.server.LocalServerPort
 import org.springframework.test.annotation.DirtiesContext
@@ -18,6 +20,12 @@ class ArtistsRestTest {
 
     @LocalServerPort
     private val port = 0
+
+    @Autowired
+    private lateinit var imagesRepository: ImagesRepository
+
+    @Autowired
+    private lateinit var fileStorageService: FileStorageService
 
     private val baseUrl by lazy { "http://localhost:$port" }
     private val httpClient by lazy { HttpClient(baseUrl) }
@@ -119,5 +127,81 @@ class ArtistsRestTest {
             .rawBody()
         assertThat(response).isNotNull()
         assertThat(response!!.size).isEqualTo(imageBytes.size)
+    }
+
+    @Test
+    fun `deletes artists image`() {
+        httpClient.performAdminLogin()
+
+        val artistRequest = Artist(
+            firstName = null,
+            lastName = "lastName",
+            displayName = "The display"
+        )
+        val imageBytes = mockPng()
+        val createdArtistId = httpClient.createArtist(artistRequest)
+            .addFile("image", imageBytes)
+            .execute()
+            .assertStatus(201)
+            .parsedBody<Artist>()
+            .id
+
+        assertThat(imagesRepository.count()).isEqualTo(1)
+        assertThat(fileStorageService.totalSize).isEqualTo(imageBytes.size.toLong())
+
+        val updateArtistRequest = Artist(
+            id = createdArtistId,
+            displayName = "a new display",
+        )
+        val updatedArtist: Artist = httpClient.updateArtist(updateArtistRequest)
+            .execute()
+            .assertStatus(202)
+            .parsedBody()
+
+        assertThat(updatedArtist.image).isNull()
+        assertThat(imagesRepository.count()).isEqualTo(0)
+        assertThat(fileStorageService.totalSize).isEqualTo(0)
+    }
+
+    @Test
+    fun `replaces artists image`() {
+        httpClient.performAdminLogin()
+
+        val artistRequest = Artist(
+            firstName = null,
+            lastName = "lastName",
+            displayName = "The display"
+        )
+        val imageBytes1 = mockPng(10, 10)
+        val createdArtistId = httpClient.createArtist(artistRequest)
+            .addFile("image", imageBytes1)
+            .execute()
+            .assertStatus(201)
+            .parsedBody<Artist>()
+            .id
+
+        assertThat(imagesRepository.count()).isEqualTo(1)
+        assertThat(fileStorageService.totalSize).isEqualTo(imageBytes1.size.toLong())
+
+        val imageBytes2 = mockPng(100, 100)
+        assertThat(imageBytes2.size).isGreaterThan(imageBytes1.size)
+        val updateArtistRequest = Artist(
+            id = createdArtistId,
+            displayName = "a new display",
+        )
+        val updatedArtist: Artist = httpClient.updateArtist(updateArtistRequest)
+            .addFile("image", imageBytes2)
+            .execute()
+            .assertStatus(202)
+            .parsedBody()
+
+        assertThat(updatedArtist.image).isNotNull
+        with(updatedArtist.image!!) {
+            assertThat(width).isEqualTo(100)
+            assertThat(height).isEqualTo(100)
+            assertThat(size).isEqualTo(imageBytes2.size.toLong())
+        }
+        assertThat(imagesRepository.count()).isEqualTo(1)
+        assertThat(fileStorageService.totalSize).isEqualTo(imageBytes2.size.toLong())
     }
 }

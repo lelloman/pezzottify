@@ -44,7 +44,6 @@ class ArtistController(
             return ResponseEntity(HttpStatus.BAD_REQUEST)
         }
 
-
         val createdImage = image?.inputStream?.let(::BufferedInputStream)?.let { imageIs ->
             val imageSpecs = imageDecoder.decode(imageIs) ?: return ResponseEntity(HttpStatus.BAD_REQUEST)
             imageIs.let(storage::create).let { (id, size) ->
@@ -76,7 +75,7 @@ class ArtistController(
             return ResponseEntity(HttpStatus.BAD_REQUEST)
         }
 
-        val createdImage = image?.inputStream?.let { imageIs ->
+        val createdImage = image?.inputStream?.let(::BufferedInputStream)?.let { imageIs ->
             val imageSpecs = imageDecoder.decode(imageIs) ?: return ResponseEntity(HttpStatus.BAD_REQUEST)
             imageIs.let(storage::create).let { (id, size) ->
                 val imageToSave = Image(
@@ -89,8 +88,14 @@ class ArtistController(
                 imagesRepo.save(imageToSave)
             }
         }
-        if (createdImage != null && foundArtist.image != null) {
-            imagesRepo.delete(foundArtist.image)
+        if (foundArtist.image != null) {
+            val replacedImage = createdImage != null
+            val deletedImage = createdImage == null && artist.image == null
+            if (replacedImage || deletedImage) {
+                val imageId = foundArtist.image.id
+                repo.save(foundArtist.copy(image = null))
+                imagesRepo.deleteById(imageId)
+            }
         }
 
         val artistToSave = when {

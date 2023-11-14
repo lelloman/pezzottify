@@ -1,7 +1,10 @@
 package com.lelloman.pezzottify.server.model
 
+import com.lelloman.pezzottify.server.service.FileStorageService
 import jakarta.persistence.*
 import org.hibernate.annotations.CreationTimestamp
+import org.springframework.beans.factory.annotation.Autowired
+import org.springframework.stereotype.Component
 import java.time.Instant
 import java.util.Date
 
@@ -12,6 +15,7 @@ interface MediaItem {
     val orphan: Boolean
 }
 
+@EntityListeners(MediaItemListener::class)
 @Entity
 data class Image(
     @Id
@@ -29,6 +33,7 @@ data class Image(
     }
 }
 
+@EntityListeners(MediaItemListener::class)
 @Entity
 data class AudioTrack(
     @Id
@@ -41,3 +46,12 @@ data class AudioTrack(
     @ManyToMany
     val artists: List<Artist>,
 ) : MediaItem
+
+@Component
+class MediaItemListener(@Autowired private val fileStorageService: FileStorageService) {
+
+    @PostRemove
+    fun postRemove(mediaItem: MediaItem) {
+        fileStorageService.remove(mediaItem.id)
+    }
+}
