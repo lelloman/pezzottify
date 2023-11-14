@@ -9,6 +9,7 @@ import org.springframework.boot.autoconfigure.SpringBootApplication
 import org.springframework.boot.runApplication
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
+import org.springframework.context.annotation.Profile
 import org.springframework.security.core.userdetails.User
 import org.springframework.security.core.userdetails.UserDetails
 import org.springframework.security.core.userdetails.UserDetailsService
@@ -16,6 +17,7 @@ import org.springframework.security.provisioning.InMemoryUserDetailsManager
 import javax.sql.DataSource
 
 @Configuration
+@Profile("dev")
 class DevConfig {
 
     private val log = LoggerFactory.getLogger(this::class.java)

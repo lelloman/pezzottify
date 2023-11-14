@@ -69,18 +69,31 @@ class HttpClient(private val baseUrl: String) {
         }
 
         fun execute(): ResponseSpec {
-            return httpClient.doPost(url, formBuilder)
+            return httpClient.doPost(url, formBuilder.build())
         }
     }
 
-    inner class BodyPostRequest(private val httpClient: HttpClient, private val url: String) {
-        fun <T> execute(body: T): ResponseSpec {
-            return httpClient.doPost(url, gson.toJson(body))
+    inner class MultipartPostRequest(private val httpClient: HttpClient, private val url: String) {
+        private val builder = MultipartBody.Builder().setType(MultipartBody.FORM)
+
+        fun <T> addJsonField(name: String, o: T) = apply {
+            val jsonString = gson.toJson(o)
+            val body = jsonString.toRequestBody("application/json".toMediaType())
+            builder.addFormDataPart(name, null, body)
+        }
+
+        fun addFile(name: String, content: ByteArray) = apply {
+            builder.addFormDataPart(name, name, content.toRequestBody())
+        }
+
+        fun execute(): ResponseSpec {
+            val body = builder.build()
+            return httpClient.doPost(url, body)
         }
     }
 
     private val cookieJar = Cookies()
-    val okHttpClient = OkHttpClient.Builder()
+    private val okHttpClient = OkHttpClient.Builder()
         .followRedirects(false)
         .cookieJar(cookieJar)
         .build()
@@ -91,9 +104,9 @@ class HttpClient(private val baseUrl: String) {
         return ResponseSpec(okHttpClient.newCall(request).execute())
     }
 
-    private fun doPost(url: String, formBuilder: FormBody.Builder): ResponseSpec {
+    private fun doPost(url: String, requestBody: RequestBody): ResponseSpec {
         val url = "$baseUrl$url"
-        val request = Request.Builder().post(formBuilder.build()).url(url).build()
+        val request = Request.Builder().post(requestBody).url(url).build()
         return ResponseSpec(okHttpClient.newCall(request).execute())
     }
 
@@ -108,8 +121,16 @@ class HttpClient(private val baseUrl: String) {
         return FormPostRequest(this, url)
     }
 
-    fun bodyPost(url: String): BodyPostRequest {
-        return BodyPostRequest(this, url)
+    fun multipartPost(url: String): MultipartPostRequest {
+        return MultipartPostRequest(this, url)
+    }
+
+    fun performAdminLogin() {
+        formPost("/login")
+            .add("username", "admin")
+            .add("password", "admin")
+            .execute()
+            .assertRedirectTo("/")
     }
 
     private fun disableCookies() {

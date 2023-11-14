@@ -5,9 +5,14 @@ import com.lelloman.pezzottify.server.ImagesRepository
 import com.lelloman.pezzottify.server.model.Artist
 import com.lelloman.pezzottify.server.model.Image
 import com.lelloman.pezzottify.server.service.FileStorageService
+import jakarta.websocket.server.PathParam
+import org.apache.coyote.Response
 import org.springframework.beans.factory.annotation.Autowired
+import org.springframework.http.HttpStatus
+import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.*
 import org.springframework.web.multipart.MultipartFile
+import kotlin.jvm.optionals.getOrNull
 
 @RestController
 @RequestMapping("/api")
@@ -22,11 +27,23 @@ class ArtistController(
         return repo.findAll()
     }
 
+    @GetMapping("/artist/{id}")
+    fun getArtist(@PathVariable("id") id: String): ResponseEntity<Artist> {
+        return when (val model = repo.findById(id).getOrNull()) {
+            null -> ResponseEntity(HttpStatus.NOT_FOUND)
+            else -> ResponseEntity.accepted().body(model)
+        }
+    }
+
     @PostMapping("/artist", consumes = ["multipart/form-data"])
     fun newArtist(
         @RequestPart("artist") artist: Artist,
         @RequestParam("image") image: MultipartFile?,
-    ): Artist {
+    ): ResponseEntity<Artist> {
+        if (artist.displayName.isBlank()) {
+            return ResponseEntity(HttpStatus.BAD_REQUEST)
+        }
+
         val createdImage = image?.inputStream
             ?.let(storage::create)
             ?.let { (id, size) ->
@@ -40,10 +57,8 @@ class ArtistController(
             }
 
         val artistToSave = artist.copy(image = createdImage)
-        return repo.save(artistToSave).also {
-            createdImage?.let {
-                imagesRepo.save(it.copy(orphan = false))
-            }
-        }
+        val response = ResponseEntity(repo.save(artistToSave), HttpStatus.CREATED)
+        createdImage?.let { imagesRepo.save(it.copy(orphan = false)) }
+        return response
     }
 }

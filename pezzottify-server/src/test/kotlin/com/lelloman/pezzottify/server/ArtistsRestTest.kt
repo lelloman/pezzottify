@@ -1,0 +1,89 @@
+package com.lelloman.pezzottify.server
+
+import com.lelloman.pezzottify.server.model.Artist
+import org.assertj.core.api.Assertions.assertThat
+import org.junit.jupiter.api.Test
+import org.springframework.boot.test.context.SpringBootTest
+import org.springframework.boot.test.web.server.LocalServerPort
+import org.springframework.test.annotation.DirtiesContext
+import org.springframework.test.context.ActiveProfiles
+
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+@ActiveProfiles("test")
+@DirtiesContext(classMode = DirtiesContext.ClassMode.BEFORE_EACH_TEST_METHOD)
+class ArtistsRestTest {
+
+    @LocalServerPort
+    private val port = 0
+
+    private val baseUrl by lazy { "http://localhost:$port" }
+    private val httpClient by lazy { HttpClient(baseUrl) }
+
+    private fun HttpClient.getArtist(id: String): HttpClient.ResponseSpec = this.get("/api/artist/$id")
+
+    @Test
+    fun `returns 404 for non existent artist id`() {
+        httpClient.performAdminLogin()
+
+        httpClient.getArtist("non-existent").assertStatus(404)
+    }
+
+    @Test
+    fun `cannot create artist without a display name nor a duplicate one`() {
+        httpClient.performAdminLogin()
+
+        val artistRequest1 = Artist(displayName = "")
+        httpClient.multipartPost("/api/artist")
+            .addJsonField("artist", artistRequest1)
+            .execute()
+            .assertStatus(400)
+
+        val artistRequest2 = Artist(displayName = "display")
+        httpClient.multipartPost("/api/artist")
+            .addJsonField("artist", artistRequest2)
+            .execute()
+            .assertStatus(201)
+
+        httpClient.multipartPost("/api/artist")
+            .addJsonField("artist", artistRequest2)
+            .execute()
+            .assertStatus(500) // this should probably be a 400 with a message but whatever
+    }
+
+    @Test
+    fun `creates artist with image`() {
+        httpClient.performAdminLogin()
+
+        val artistRequest = Artist(
+            firstName = null,
+            lastName = "lastName",
+            displayName = "The display"
+        )
+        val createdArtist: Artist = httpClient.multipartPost("/api/artist")
+            .addJsonField("artist", artistRequest)
+            .addFile("image", ByteArray(10) { it.toByte() })
+            .execute()
+            .assertStatus(201)
+            .parsedBody()
+        with(createdArtist) {
+            assertThat(image).isNotNull
+            assertThat(id).isNotEmpty()
+            assertThat(displayName).isEqualTo("The display")
+        }
+
+        val artists: Artists = httpClient.get("/api/artists").parsedBody()
+        assertThat(artists).hasSize(1)
+        val created = artists.firstOrNull { it.displayName == "The display" }
+        assertThat(created).isNotNull
+        val image = created?.image
+        assertThat(image).isNotNull
+        assertThat(image!!.size).isEqualTo(10)
+        assertThat(image.orphan).isFalse()
+
+        val artist: Artist = httpClient.getArtist(createdArtist.id)
+            .assertStatus(202)
+            .parsedBody()
+        assertThat(artist).isEqualTo(createdArtist)
+    }
+
+}
