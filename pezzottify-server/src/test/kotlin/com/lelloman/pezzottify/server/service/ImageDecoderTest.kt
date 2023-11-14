@@ -1,13 +1,11 @@
-package com.lelloman.pezzottify.server
+package com.lelloman.pezzottify.server.service
 
-import com.lelloman.pezzottify.server.controller.ImageDecoder
 import com.lelloman.pezzottify.server.model.Image
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
 import java.awt.image.BufferedImage
 import java.io.ByteArrayOutputStream
 import javax.imageio.ImageIO
-import kotlin.jvm.optionals.getOrNull
 
 class ImageDecoderTest {
 

@@ -1,12 +1,14 @@
-package com.lelloman.pezzottify.server.controller
+package com.lelloman.pezzottify.server.service
 
 import com.lelloman.pezzottify.server.model.Image
+import org.springframework.stereotype.Component
 import java.io.IOException
 import java.io.InputStream
 import javax.imageio.ImageIO
 import javax.imageio.ImageReader
 import javax.imageio.stream.MemoryCacheImageInputStream
 
+@Component
 class ImageDecoder {
     fun decode(inputStream: InputStream): ImageSpec? {
         return tryDecodeFormat(inputStream, "png") ?: tryDecodeFormat(inputStream, "jpg")

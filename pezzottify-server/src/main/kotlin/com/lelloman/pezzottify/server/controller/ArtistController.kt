@@ -5,6 +5,7 @@ import com.lelloman.pezzottify.server.ImagesRepository
 import com.lelloman.pezzottify.server.model.Artist
 import com.lelloman.pezzottify.server.model.Image
 import com.lelloman.pezzottify.server.service.FileStorageService
+import com.lelloman.pezzottify.server.service.ImageDecoder
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity

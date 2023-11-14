@@ -74,9 +74,13 @@ class DevAppInitializer {
         log.info("Created lello: $createdLello")
 
         val track1 = AudioTrack(
+            name = "First track",
             size = 1234,
             durationMs = 60_000,
             artists = listOf(lello, prince),
+            type = AudioTrack.Type.MP3,
+            bitRate = 100,
+            sampleRate = 44100,
         )
         val createdTrack1 = trackRepo.save(track1)
         log.info("Created track1: $createdTrack1")

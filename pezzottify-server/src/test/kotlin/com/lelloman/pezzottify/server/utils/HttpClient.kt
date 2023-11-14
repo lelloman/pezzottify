@@ -100,6 +100,13 @@ class HttpClient(private val baseUrl: String) {
             builder.addFormDataPart(name, name, content.toRequestBody())
         }
 
+        fun addFiles(fieldName: String, fileNames: Array<String>, contents: Array<ByteArray>) = apply {
+            assertThat(fileNames.size).isEqualTo(contents.size)
+            fileNames.forEachIndexed { i, fileName ->
+                builder.addFormDataPart(fieldName, fileName, contents[i].toRequestBody())
+            }
+        }
+
         fun execute(): ResponseSpec {
             val body = builder.build()
             return httpClient.doBodyRequest(url, body, method)

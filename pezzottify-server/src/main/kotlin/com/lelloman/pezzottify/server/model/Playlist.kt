@@ -1,15 +1,12 @@
 package com.lelloman.pezzottify.server.model
 
-import com.fasterxml.jackson.annotation.JsonIgnore
+import jakarta.persistence.CascadeType
 import jakarta.persistence.Entity
 import jakarta.persistence.GeneratedValue
 import jakarta.persistence.GenerationType
 import jakarta.persistence.Id
-import jakarta.persistence.JoinColumn
 import jakarta.persistence.ManyToMany
 import jakarta.persistence.ManyToOne
-import org.hibernate.annotations.OnDelete
-import org.hibernate.annotations.OnDeleteAction
 
 interface Playlist {
     val id: String
@@ -21,10 +18,18 @@ interface Playlist {
 data class Album(
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
-    override val id: String,
+    override val id: String = "",
+
     override val name: String,
+
     @ManyToMany
-    override val audioTracks: List<AudioTrack>,
+    override val audioTracks: List<AudioTrack> = emptyList(),
+
+    @ManyToOne(cascade = [CascadeType.ALL])
+    val coverImage: Image? = null,
+
+    @ManyToMany
+    val sideImages: List<Image> = emptyList(),
 ) : Playlist
 
 @Entity
