@@ -10,6 +10,7 @@ import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.*
 import org.springframework.web.multipart.MultipartFile
+import java.io.BufferedInputStream
 import kotlin.jvm.optionals.getOrNull
 
 @RestController
@@ -44,19 +45,18 @@ class ArtistController(
         }
 
 
-        val createdImage = image?.inputStream?.let { imageIs ->
+        val createdImage = image?.inputStream?.let(::BufferedInputStream)?.let { imageIs ->
             val imageSpecs = imageDecoder.decode(imageIs) ?: return ResponseEntity(HttpStatus.BAD_REQUEST)
-            imageIs.let(storage::create)
-                .let { (id, size) ->
-                    val imageToSave = Image(
-                        id = id,
-                        size = size,
-                        width = imageSpecs.width,
-                        height = imageSpecs.height,
-                        type = imageSpecs.type,
-                    )
-                    imagesRepo.save(imageToSave)
-                }
+            imageIs.let(storage::create).let { (id, size) ->
+                val imageToSave = Image(
+                    id = id,
+                    size = size,
+                    width = imageSpecs.width,
+                    height = imageSpecs.height,
+                    type = imageSpecs.type,
+                )
+                imagesRepo.save(imageToSave)
+            }
         }
 
         val artistToSave = artist.copy(image = createdImage)
@@ -78,17 +78,16 @@ class ArtistController(
 
         val createdImage = image?.inputStream?.let { imageIs ->
             val imageSpecs = imageDecoder.decode(imageIs) ?: return ResponseEntity(HttpStatus.BAD_REQUEST)
-            imageIs.let(storage::create)
-                .let { (id, size) ->
-                    val imageToSave = Image(
-                        id = id,
-                        size = size,
-                        width = imageSpecs.width,
-                        height = imageSpecs.height,
-                        type = imageSpecs.type,
-                    )
-                    imagesRepo.save(imageToSave)
-                }
+            imageIs.let(storage::create).let { (id, size) ->
+                val imageToSave = Image(
+                    id = id,
+                    size = size,
+                    width = imageSpecs.width,
+                    height = imageSpecs.height,
+                    type = imageSpecs.type,
+                )
+                imagesRepo.save(imageToSave)
+            }
         }
         if (createdImage != null && foundArtist.image != null) {
             imagesRepo.delete(foundArtist.image)

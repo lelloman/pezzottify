@@ -1,4 +1,4 @@
-package com.lelloman.pezzottify.server
+package com.lelloman.pezzottify.server.utils
 
 import com.google.gson.GsonBuilder
 import okhttp3.*

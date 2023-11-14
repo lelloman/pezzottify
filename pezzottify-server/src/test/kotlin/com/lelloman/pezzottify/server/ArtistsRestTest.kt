@@ -1,6 +1,9 @@
 package com.lelloman.pezzottify.server
 
 import com.lelloman.pezzottify.server.model.Artist
+import com.lelloman.pezzottify.server.utils.Artists
+import com.lelloman.pezzottify.server.utils.HttpClient
+import com.lelloman.pezzottify.server.utils.mockPng
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
 import org.springframework.boot.test.context.SpringBootTest
@@ -83,8 +86,9 @@ class ArtistsRestTest {
             lastName = "lastName",
             displayName = "The display"
         )
+        val imageBytes = mockPng()
         val createdArtist: Artist = httpClient.createArtist(artistRequest)
-            .addFile("image", ByteArray(10) { it.toByte() })
+            .addFile("image", imageBytes)
             .execute()
             .assertStatus(201)
             .parsedBody()
@@ -100,7 +104,9 @@ class ArtistsRestTest {
         assertThat(created).isNotNull
         val image = created?.image
         assertThat(image).isNotNull
-        assertThat(image!!.size).isEqualTo(10)
+        assertThat(image!!.width).isEqualTo(10)
+        assertThat(image.height).isEqualTo(10)
+        assertThat(image.size).isEqualTo(imageBytes.size.toLong())
         assertThat(image.orphan).isFalse()
 
         val artist: Artist = httpClient.getArtist(createdArtist.id)

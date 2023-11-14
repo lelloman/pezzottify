@@ -1,6 +1,9 @@
 package com.lelloman.pezzottify.server
 
 import com.lelloman.pezzottify.server.model.Artist
+import com.lelloman.pezzottify.server.utils.Artists
+import com.lelloman.pezzottify.server.utils.HttpClient
+import com.lelloman.pezzottify.server.utils.mockPng
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
 import org.springframework.boot.test.context.SpringBootTest
@@ -44,7 +47,7 @@ class PezzottifyServerApplicationTests {
         artistRequests.forEach { request ->
             httpClient.multipartPost("/api/artist")
                 .addJsonField("artist", request)
-                .addFile("image", ByteArray(10) { it.toByte() })
+                .addFile("image", mockPng())
                 .execute()
                 .assertStatus(201)
         }
