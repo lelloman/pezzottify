@@ -1,5 +1,6 @@
 package com.lelloman.pezzottify.server
 
+import com.lelloman.pezzottify.server.controller.ImageDecoder
 import com.lelloman.pezzottify.server.model.Artist
 import com.lelloman.pezzottify.server.model.AudioTrack
 import org.slf4j.LoggerFactory
@@ -78,6 +79,9 @@ class PezzottifyServerApplication {
             .build()
         return InMemoryUserDetailsManager(user)
     }
+
+    @Bean
+    fun imageDecoder() = ImageDecoder()
 }
 
 fun main(args: Array<String>) {

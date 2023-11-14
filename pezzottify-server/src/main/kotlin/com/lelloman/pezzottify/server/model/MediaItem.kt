@@ -22,7 +22,12 @@ data class Image(
     override val orphan: Boolean = true,
     val width: Int,
     val height: Int,
-) : MediaItem
+    val type: Type,
+) : MediaItem {
+    enum class Type {
+        PNG, JPG
+    }
+}
 
 @Entity
 data class AudioTrack(

@@ -5,8 +5,6 @@ import com.lelloman.pezzottify.server.ImagesRepository
 import com.lelloman.pezzottify.server.model.Artist
 import com.lelloman.pezzottify.server.model.Image
 import com.lelloman.pezzottify.server.service.FileStorageService
-import jakarta.websocket.server.PathParam
-import org.apache.coyote.Response
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
@@ -20,6 +18,7 @@ class ArtistController(
     @Autowired private val repo: ArtistRepository,
     @Autowired private val imagesRepo: ImagesRepository,
     @Autowired private val storage: FileStorageService,
+    @Autowired private val imageDecoder: ImageDecoder,
 ) {
 
     @GetMapping("/artists")
@@ -44,17 +43,21 @@ class ArtistController(
             return ResponseEntity(HttpStatus.BAD_REQUEST)
         }
 
-        val createdImage = image?.inputStream
-            ?.let(storage::create)
-            ?.let { (id, size) ->
-                val imageToSave = Image(
-                    id = id,
-                    size = size,
-                    width = 0,
-                    height = 0,
-                )
-                imagesRepo.save(imageToSave)
-            }
+
+        val createdImage = image?.inputStream?.let { imageIs ->
+            val imageSpecs = imageDecoder.decode(imageIs) ?: return ResponseEntity(HttpStatus.BAD_REQUEST)
+            imageIs.let(storage::create)
+                .let { (id, size) ->
+                    val imageToSave = Image(
+                        id = id,
+                        size = size,
+                        width = imageSpecs.width,
+                        height = imageSpecs.height,
+                        type = imageSpecs.type,
+                    )
+                    imagesRepo.save(imageToSave)
+                }
+        }
 
         val artistToSave = artist.copy(image = createdImage)
         val response = ResponseEntity(repo.save(artistToSave), HttpStatus.CREATED)
@@ -73,17 +76,20 @@ class ArtistController(
             return ResponseEntity(HttpStatus.BAD_REQUEST)
         }
 
-        val createdImage = image?.inputStream
-            ?.let(storage::create)
-            ?.let { (id, size) ->
-                val imageToSave = Image(
-                    id = id,
-                    size = size,
-                    width = 0,
-                    height = 0,
-                )
-                imagesRepo.save(imageToSave)
-            }
+        val createdImage = image?.inputStream?.let { imageIs ->
+            val imageSpecs = imageDecoder.decode(imageIs) ?: return ResponseEntity(HttpStatus.BAD_REQUEST)
+            imageIs.let(storage::create)
+                .let { (id, size) ->
+                    val imageToSave = Image(
+                        id = id,
+                        size = size,
+                        width = imageSpecs.width,
+                        height = imageSpecs.height,
+                        type = imageSpecs.type,
+                    )
+                    imagesRepo.save(imageToSave)
+                }
+        }
         if (createdImage != null && foundArtist.image != null) {
             imagesRepo.delete(foundArtist.image)
         }
