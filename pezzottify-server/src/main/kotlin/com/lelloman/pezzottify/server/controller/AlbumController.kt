@@ -10,6 +10,7 @@ import com.lelloman.pezzottify.server.service.ImageUploader
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
+import org.springframework.security.access.annotation.Secured
 import org.springframework.web.bind.annotation.*
 import org.springframework.web.multipart.MultipartFile
 import kotlin.jvm.optionals.getOrNull
@@ -37,6 +38,7 @@ class AlbumController(
     }
 
     @DeleteMapping("/album/{id}")
+    @Secured("ROLE_ADMIN")
     fun deleteAlbum(@PathVariable("id") id: String): ResponseEntity<Void> {
         val foundArtist = repo.findById(id).getOrNull() ?: return ResponseEntity(HttpStatus.NOT_FOUND)
         repo.deleteById(id)
@@ -44,6 +46,7 @@ class AlbumController(
     }
 
     @PostMapping("/album", consumes = ["multipart/form-data"])
+    @Secured("ROLE_ADMIN")
     fun newAlbum(
         @RequestPart("album") albumRequest: CreateAlbumRequest,
         @RequestParam("cover") cover: MultipartFile?,

@@ -60,6 +60,18 @@ class HttpClient(private val baseUrl: String) {
             assertThat(response.code).isGreaterThanOrEqualTo(200).isLessThan(300)
         }
 
+        fun assertUnauthenticated() = apply {
+            assertThat(response.code).isEqualTo(401)
+        }
+
+        fun assertUnauthorized() = apply {
+            assertThat(response.code).isEqualTo(403)
+        }
+
+        fun assertNotFound() = apply {
+            assertThat(response.code).isEqualTo(404)
+        }
+
         fun bodyString(consumer: (String?) -> Unit): ResponseSpec = apply {
             consumer(this.bodyString)
         }
@@ -123,7 +135,7 @@ class HttpClient(private val baseUrl: String) {
             builder.addFormDataPart(name, name, content.toRequestBody())
         }
 
-        fun addFiles(fieldName: String, fileNames: Array<String>, contents: Array<ByteArray>) = apply {
+        fun addFiles(fieldName: String, fileNames: List<String>, contents: Array<ByteArray>) = apply {
             assertThat(fileNames.size).isEqualTo(contents.size)
             fileNames.forEachIndexed { i, fileName ->
                 builder.addFormDataPart(fieldName, fileName, contents[i].toRequestBody())
@@ -185,6 +197,14 @@ class HttpClient(private val baseUrl: String) {
         formPost("/login")
             .add("username", "admin")
             .add("password", "admin")
+            .execute()
+            .assertRedirectTo("/")
+    }
+
+    fun performUserLogin() {
+        formPost("/login")
+            .add("username", "user")
+            .add("password", "user")
             .execute()
             .assertRedirectTo("/")
     }

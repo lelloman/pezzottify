@@ -64,15 +64,14 @@ class AlbumRestTest {
         )
         assertThat(audioTrackRepository.count()).isEqualTo(0)
 
-        val trackNames = arrayOf("Track 1", "Track 2")
         val contents = arrayOf(
             MP3_SAMPLE,
             MP3_SAMPLE,
         )
         val createdAlbum: Album = httpClient.multipartPost("/api/album")
             .addJsonField("album", album)
-            .addFiles("audioTracks", trackNames, contents)
-            .addJsonField("audioTracksNames", trackNames)
+            .addFiles("audioTracks", album.audioTracksNames, contents)
+            .addJsonField("audioTracksNames", album.audioTracksNames)
             .execute()
             .assertStatus2xx()
             .parsedBody()
@@ -98,7 +97,7 @@ class AlbumRestTest {
         val album =
             CreateAlbumRequest(name = "The album", audioTracksNames = listOf("1", "2", "3"), artistsIds = listOf("1"))
 
-        val trackNames = arrayOf("Track 1", "Track 2", "Invalid track")
+        val trackNames = listOf("Track 1", "Track 2", "Invalid track")
         val contents = arrayOf(
             MP3_SAMPLE,
             MP3_SAMPLE,
@@ -130,7 +129,6 @@ class AlbumRestTest {
         )
         assertThat(audioTrackRepository.count()).isEqualTo(0)
 
-        val trackNames = arrayOf("Track 1", "Track 2")
         val contents = arrayOf(
             MP3_SAMPLE,
             MP3_SAMPLE,
@@ -142,10 +140,9 @@ class AlbumRestTest {
         )
         val createdAlbum: Album = httpClient.multipartPost("/api/album")
             .addJsonField("album", album)
-            .addFiles("audioTracks", trackNames, contents)
+            .addFiles("audioTracks", album.audioTracksNames, contents)
             .addFile("cover", coverBytes)
-            .addJsonField("audioTracksNames", trackNames)
-            .addFiles("sideImages", sideImagesBytes.map { "" }.toTypedArray(), sideImagesBytes)
+            .addFiles("sideImages", sideImagesBytes.map { "" }, sideImagesBytes)
             .execute()
             .assertStatus2xx()
             .parsedBody()
@@ -172,5 +169,38 @@ class AlbumRestTest {
         assertThat(audioTrackRepository.count()).isEqualTo(0)
         assertThat(imagesRepository.count()).isEqualTo(0)
         assertThat(fileStorageService.totalSize).isEqualTo(0)
+    }
+
+    @Test
+    fun `user role can only get ablums`() {
+        httpClient.withoutCookies {
+            httpClient.get("/api/albums")
+                .assertUnauthenticated()
+            httpClient.get("/api/album/something")
+                .assertUnauthenticated()
+        }
+
+        httpClient.performUserLogin()
+
+        httpClient.delete("/api/album/something")
+            .assertUnauthorized()
+
+        val album = CreateAlbumRequest(
+            name = "The album",
+            audioTracksNames = listOf("1"),
+            artistsIds = listOf("meow")
+        )
+        httpClient.multipartPost("/api/album")
+            .addJsonField("album", album)
+            .addFiles("audioTracks", listOf(""), arrayOf(MP3_SAMPLE))
+            .addFile("cover", mockPng())
+            .execute()
+            .assertUnauthorized()
+
+        httpClient.get("/api/albums")
+            .assertStatus2xx()
+
+        httpClient.get("/api/album/something")
+            .assertNotFound()
     }
 }

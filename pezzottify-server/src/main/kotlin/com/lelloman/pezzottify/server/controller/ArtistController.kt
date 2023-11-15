@@ -10,6 +10,7 @@ import com.lelloman.pezzottify.server.service.ImageUploader
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
+import org.springframework.security.access.annotation.Secured
 import org.springframework.web.bind.annotation.*
 import org.springframework.web.multipart.MultipartFile
 import kotlin.jvm.optionals.getOrNull
@@ -35,6 +36,7 @@ class ArtistController(
     }
 
     @PostMapping("/artist", consumes = ["multipart/form-data"])
+    @Secured("ROLE_ADMIN")
     fun newArtist(
         @RequestPart("individual") individual: IndividualArtist?,
         @RequestPart("band") band: CreateBandRequest?,
@@ -79,6 +81,7 @@ class ArtistController(
     }
 
     @PutMapping("/artist", consumes = ["multipart/form-data"])
+    @Secured("ROLE_ADMIN")
     fun replace(
         @RequestPart("individual") individual: IndividualArtist?,
         @RequestPart("band") band: UpdateBandRequest?,

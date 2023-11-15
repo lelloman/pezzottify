@@ -1,6 +1,5 @@
 package com.lelloman.pezzottify.server
 
-import com.lelloman.pezzottify.server.model.Artist
 import com.lelloman.pezzottify.server.model.AudioTrack
 import com.lelloman.pezzottify.server.model.Image
 import com.lelloman.pezzottify.server.model.IndividualArtist
@@ -58,10 +57,7 @@ class DevAppInitializer {
         val createdImage = imagesRepository.save(image)
         log.info("Prince image: ${createdImage.id}")
         val prince = IndividualArtist(
-            firstName = "",
-            lastName = "",
-            displayName = "Prince",
-            image = createdImage
+            firstName = "", lastName = "", displayName = "Prince", image = createdImage
         )
         val createdPrince = artistRepo.save(prince)
         log.info("Created prince: $createdPrince")

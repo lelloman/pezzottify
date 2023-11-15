@@ -458,4 +458,32 @@ class ArtistsRestTest {
             assertThat(image!!.id).isNotEqualTo(band.image!!.id)
         }
     }
+
+    @Test
+    fun `user role can only get artists`() {
+        httpClient.withoutCookies {
+            httpClient.get("/api/artists")
+                .assertUnauthenticated()
+            httpClient.get("/api/artist/something")
+                .assertUnauthenticated()
+        }
+
+        httpClient.performUserLogin()
+
+        httpClient.multipartPut("/api/artist")
+            .addJsonField("asd", Object())
+            .execute()
+            .assertUnauthorized()
+
+        httpClient.multipartPost("/api/artist")
+            .addJsonField("asd", Object())
+            .execute()
+            .assertUnauthorized()
+
+        httpClient.get("/api/artists")
+            .assertStatus2xx()
+
+        httpClient.get("/api/artist/something")
+            .assertNotFound()
+    }
 }
