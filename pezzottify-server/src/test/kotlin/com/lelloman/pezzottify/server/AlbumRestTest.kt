@@ -1,11 +1,10 @@
 package com.lelloman.pezzottify.server
 
+import com.lelloman.pezzottify.server.controller.model.CreateAlbumRequest
 import com.lelloman.pezzottify.server.model.Album
+import com.lelloman.pezzottify.server.model.Artist
 import com.lelloman.pezzottify.server.service.FileStorageService
-import com.lelloman.pezzottify.server.utils.Albums
-import com.lelloman.pezzottify.server.utils.HttpClient
-import com.lelloman.pezzottify.server.utils.MP3_SAMPLE
-import com.lelloman.pezzottify.server.utils.mockPng
+import com.lelloman.pezzottify.server.utils.*
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
@@ -37,6 +36,12 @@ class AlbumRestTest {
     private val baseUrl by lazy { "http://localhost:$port" }
     private val httpClient by lazy { HttpClient(baseUrl) }
 
+    private var artist1 = Artist(displayName = "artist 1")
+
+    private fun createArtist1() {
+        artist1 = httpClient.createArtist(artist1).execute().parsedBody()
+    }
+
     @Test
     fun `reads empty albums list`() {
         httpClient.performAdminLogin()
@@ -51,7 +56,12 @@ class AlbumRestTest {
     @Test
     fun `creates an album without images`() {
         httpClient.performAdminLogin()
-        val album = Album(name = "The album")
+        createArtist1()
+        val album = CreateAlbumRequest(
+            name = "The album",
+            artistsIds = listOf(artist1.id),
+            audioTracksNames = listOf("Track 1", "Track 2")
+        )
         assertThat(audioTrackRepository.count()).isEqualTo(0)
 
         val trackNames = arrayOf("Track 1", "Track 2")
@@ -85,7 +95,8 @@ class AlbumRestTest {
     @Test
     fun `deletes previously created audio tracks on failure`() {
         httpClient.performAdminLogin()
-        val album = Album(name = "The album")
+        val album =
+            CreateAlbumRequest(name = "The album", audioTracksNames = listOf("1", "2", "3"), artistsIds = listOf("1"))
 
         val trackNames = arrayOf("Track 1", "Track 2", "Invalid track")
         val contents = arrayOf(
@@ -111,7 +122,12 @@ class AlbumRestTest {
     @Test
     fun `creates an album with images`() {
         httpClient.performAdminLogin()
-        val album = Album(name = "The album")
+        createArtist1()
+        val album = CreateAlbumRequest(
+            name = "The album",
+            audioTracksNames = listOf("1", "2"),
+            artistsIds = listOf(artist1.id)
+        )
         assertThat(audioTrackRepository.count()).isEqualTo(0)
 
         val trackNames = arrayOf("Track 1", "Track 2")

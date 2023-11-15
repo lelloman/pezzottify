@@ -1,20 +1,17 @@
 package com.lelloman.pezzottify.server.controller
 
 import com.lelloman.pezzottify.server.AlbumRepository
-import com.lelloman.pezzottify.server.AudioTrackRepository
+import com.lelloman.pezzottify.server.ArtistRepository
+import com.lelloman.pezzottify.server.controller.model.CreateAlbumRequest
 import com.lelloman.pezzottify.server.model.Album
-import com.lelloman.pezzottify.server.model.AudioTrack
-import com.lelloman.pezzottify.server.service.AudioTrackDecoder
-import com.lelloman.pezzottify.server.service.FileStorageService
-import org.apache.coyote.Response
+import com.lelloman.pezzottify.server.model.Artist
+import com.lelloman.pezzottify.server.service.AudioTrackUploader
+import com.lelloman.pezzottify.server.service.ImageUploader
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.*
 import org.springframework.web.multipart.MultipartFile
-import java.io.File
-import java.io.FileInputStream
-import java.io.IOException
 import kotlin.jvm.optionals.getOrNull
 
 @RestController
@@ -22,9 +19,8 @@ import kotlin.jvm.optionals.getOrNull
 class AlbumController(
     @Autowired private val repo: AlbumRepository,
     @Autowired private val imageUploader: ImageUploader,
-    @Autowired private val storageService: FileStorageService,
-    @Autowired private val audioTrackRepo: AudioTrackRepository,
-    @Autowired private val audioTrackDecoder: AudioTrackDecoder,
+    @Autowired private val audioTrackUploader: AudioTrackUploader,
+    @Autowired private val artistRepository: ArtistRepository,
 ) {
 
     @GetMapping("/albums")
@@ -49,58 +45,48 @@ class AlbumController(
 
     @PostMapping("/album", consumes = ["multipart/form-data"])
     fun newAlbum(
-        @RequestPart("album") album: Album,
+        @RequestPart("album") albumRequest: CreateAlbumRequest,
         @RequestParam("cover") cover: MultipartFile?,
         @RequestParam("sideImages") sideImages: Array<MultipartFile>?,
-        @RequestPart("audioTracksNames") audioTracksNames: Array<String>,
         @RequestParam("audioTracks") audioTracks: Array<MultipartFile>,
     ): ResponseEntity<Album> {
-        val pendingAudioTracks = mutableListOf<AudioTrack>()
+        val audioTrackUpload = audioTrackUploader.newOperation()
         val imagesUpload = imageUploader.newOperation()
-        var tmpFile: File? = null
-        if (audioTracksNames.size != audioTracks.size) {
-            return ResponseEntity(HttpStatus.BAD_REQUEST)
+        if (albumRequest.audioTracksNames.size != audioTracks.size) {
+            badRequest("Sent ${audioTracks.size} audio files, but ${albumRequest.audioTracksNames.size} track names.")
+        }
+        if (albumRequest.artistsIds.isEmpty()) {
+            badRequest("At least one artist id must be provided.")
+        }
+        val artists = mutableListOf<Artist>()
+        albumRequest.artistsIds.map { artistId ->
+            val artist = artistRepository.findById(artistId).getOrNull()
+            if (artist == null) badRequest("Could not find artist with id $artistId")
+            artists.add(artist!!)
         }
 
         return try {
             val createdCover = cover?.let(imagesUpload::createImage)
             val createdSideImages = sideImages?.map(imagesUpload::createImage)
-            audioTracksNames.forEachIndexed { i, trackName ->
-                val audioTrackFile = audioTracks[i]
-                tmpFile = File.createTempFile("upload", ".mp3")
-                audioTrackFile.inputStream.copyTo(tmpFile!!.outputStream())
-                val decoded = audioTrackDecoder.decode(tmpFile!!) ?: throw IOException()
-                val creation = storageService.create(FileInputStream(tmpFile!!))
-
-                val audioTrack = AudioTrack(
-                    id = creation.id,
-                    size = creation.size,
-                    name = trackName,
-                    durationMs = decoded.durationMs,
-                    bitRate = decoded.bitRate,
-                    sampleRate = decoded.sampleRate,
-                    type = decoded.type,
-                )
-                val createdTrack = audioTrackRepo.save(audioTrack)
-                pendingAudioTracks.add(createdTrack)
-                tmpFile!!.delete()
-                tmpFile = null
+            val createdAudioTracks = audioTracks.mapIndexed { index, multipartFile ->
+                val trackName = albumRequest.audioTracksNames[index]
+                audioTrackUpload.createAudioTrack(multipartFile, trackName)
             }
-            val createdAlbum = repo.save(
-                album.copy(
-                    audioTracks = pendingAudioTracks,
-                    coverImage = createdCover,
-                    sideImages = createdSideImages.orEmpty()
-                )
+            val albumToCreate = Album(
+                name = albumRequest.name,
+                coverImage = createdCover,
+                sideImages = createdSideImages.orEmpty(),
+                artists = artists,
+                audioTracks = createdAudioTracks,
             )
-            audioTrackRepo.saveAll(pendingAudioTracks.map { it.copy(orphan = false) })
+            val createdAlbum = repo.save(albumToCreate)
+            audioTrackUpload.succeeded()
             imagesUpload.succeeded()
             ResponseEntity.ok().body(createdAlbum)
         } catch (e: Throwable) {
-            audioTrackRepo.deleteAll(pendingAudioTracks)
+            audioTrackUpload.aborted()
             imagesUpload.aborted()
-            tmpFile?.delete()
-            ResponseEntity(HttpStatus.BAD_REQUEST)
+            throw e
         }
     }
 }

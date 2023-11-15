@@ -36,7 +36,6 @@ class ImageDecoder {
             }
             spec = ImageSpec(width = width, height = height, type = type)
         } catch (e: IOException) {
-            val a = 1
         } finally {
             reader.dispose()
             inputStream.reset()

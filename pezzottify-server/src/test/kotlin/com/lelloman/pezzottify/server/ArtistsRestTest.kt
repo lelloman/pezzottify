@@ -2,9 +2,7 @@ package com.lelloman.pezzottify.server
 
 import com.lelloman.pezzottify.server.model.Artist
 import com.lelloman.pezzottify.server.service.FileStorageService
-import com.lelloman.pezzottify.server.utils.Artists
-import com.lelloman.pezzottify.server.utils.HttpClient
-import com.lelloman.pezzottify.server.utils.mockPng
+import com.lelloman.pezzottify.server.utils.*
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
@@ -29,14 +27,6 @@ class ArtistsRestTest {
 
     private val baseUrl by lazy { "http://localhost:$port" }
     private val httpClient by lazy { HttpClient(baseUrl) }
-
-    private fun HttpClient.getArtist(id: String): HttpClient.ResponseSpec = this.get("/api/artist/$id")
-
-    private fun HttpClient.createArtist(artist: Artist) = this.multipartPost("/api/artist")
-        .addJsonField("artist", artist)
-
-    private fun HttpClient.updateArtist(artist: Artist) = this.multipartPut("/api/artist")
-        .addJsonField("artist", artist)
 
     @Test
     fun `returns 404 for non existent artist id`() {

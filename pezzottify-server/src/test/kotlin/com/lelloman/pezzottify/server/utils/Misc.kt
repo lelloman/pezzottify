@@ -20,6 +20,14 @@ fun mockPng(
     return output.toByteArray()
 }
 
+fun HttpClient.getArtist(id: String): HttpClient.ResponseSpec = this.get("/api/artist/$id")
+
+fun HttpClient.createArtist(artist: Artist) = this.multipartPost("/api/artist")
+    .addJsonField("artist", artist)
+
+fun HttpClient.updateArtist(artist: Artist) = this.multipartPut("/api/artist")
+    .addJsonField("artist", artist)
+
 val MP3_SAMPLE = byteArrayOf(
     255.toByte(),
     251.toByte(),

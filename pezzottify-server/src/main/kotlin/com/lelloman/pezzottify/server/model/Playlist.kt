@@ -30,6 +30,9 @@ data class Album(
 
     @ManyToMany(cascade = [CascadeType.ALL])
     val sideImages: List<Image> = emptyList(),
+
+    @ManyToMany
+    val artists: List<Artist>,
 ) : Playlist
 
 @Entity

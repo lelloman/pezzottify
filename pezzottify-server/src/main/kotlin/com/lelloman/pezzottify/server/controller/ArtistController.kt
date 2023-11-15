@@ -2,6 +2,7 @@ package com.lelloman.pezzottify.server.controller
 
 import com.lelloman.pezzottify.server.ArtistRepository
 import com.lelloman.pezzottify.server.model.Artist
+import com.lelloman.pezzottify.server.service.ImageUploader
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity

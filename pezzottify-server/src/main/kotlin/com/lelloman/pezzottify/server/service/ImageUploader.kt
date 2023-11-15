@@ -1,9 +1,7 @@
-package com.lelloman.pezzottify.server.controller
+package com.lelloman.pezzottify.server.service
 
 import com.lelloman.pezzottify.server.ImagesRepository
 import com.lelloman.pezzottify.server.model.Image
-import com.lelloman.pezzottify.server.service.FileStorageService
-import com.lelloman.pezzottify.server.service.ImageDecoder
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.stereotype.Service
 import org.springframework.web.multipart.MultipartFile
