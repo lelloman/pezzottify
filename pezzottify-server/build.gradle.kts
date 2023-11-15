@@ -27,6 +27,7 @@ dependencies {
 	implementation("org.jetbrains.kotlin:kotlin-reflect")
 	implementation("org.springframework.boot:spring-boot-starter-thymeleaf:3.1.5")
 	implementation("com.mpatric:mp3agic:0.9.1")
+	implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:2.2.0")
 
 	developmentOnly("org.springframework.boot:spring-boot-devtools")
 
