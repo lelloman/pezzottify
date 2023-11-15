@@ -1,8 +1,9 @@
 package com.lelloman.pezzottify.server
 
-import com.lelloman.pezzottify.server.model.Artist
+import com.lelloman.pezzottify.server.model.IndividualArtist
 import com.lelloman.pezzottify.server.utils.Artists
 import com.lelloman.pezzottify.server.utils.HttpClient
+import com.lelloman.pezzottify.server.utils.createIndividualArtist
 import com.lelloman.pezzottify.server.utils.mockPng
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
@@ -38,15 +39,14 @@ class PezzottifyServerApplicationTests {
         httpClient.performAdminLogin()
 
         val artistRequests = Array(10) {
-            Artist(
+            IndividualArtist(
                 firstName = if (it % 2 == 0) "First $it" else null,
                 lastName = if (it % 2 == 0) "Last $it" else null,
                 displayName = "Display $it",
             )
         }
         artistRequests.forEach { request ->
-            httpClient.multipartPost("/api/artist")
-                .addJsonField("artist", request)
+            httpClient.createIndividualArtist(request)
                 .addFile("image", mockPng())
                 .execute()
                 .assertStatus(201)

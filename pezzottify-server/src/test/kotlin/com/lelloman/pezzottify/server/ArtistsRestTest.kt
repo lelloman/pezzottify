@@ -1,6 +1,6 @@
 package com.lelloman.pezzottify.server
 
-import com.lelloman.pezzottify.server.model.Artist
+import com.lelloman.pezzottify.server.model.IndividualArtist
 import com.lelloman.pezzottify.server.service.FileStorageService
 import com.lelloman.pezzottify.server.utils.*
 import org.assertj.core.api.Assertions.assertThat
@@ -39,17 +39,17 @@ class ArtistsRestTest {
     fun `cannot create artist without a display name nor a duplicate one`() {
         httpClient.performAdminLogin()
 
-        val artistRequest1 = Artist(displayName = "")
-        httpClient.createArtist(artistRequest1)
+        val artistRequest1 = IndividualArtist(displayName = "")
+        httpClient.createIndividualArtist(artistRequest1)
             .execute()
             .assertStatus(400)
 
-        val artistRequest2 = Artist(displayName = "display")
-        httpClient.createArtist(artistRequest2)
+        val artistRequest2 = IndividualArtist(displayName = "display")
+        httpClient.createIndividualArtist(artistRequest2)
             .execute()
             .assertStatus(201)
 
-        httpClient.createArtist(artistRequest2)
+        httpClient.createIndividualArtist(artistRequest2)
             .execute()
             .assertStatus(500) // this should probably be a 400 with a message but whatever
     }
@@ -58,34 +58,35 @@ class ArtistsRestTest {
     fun `updates artist without image`() {
         httpClient.performAdminLogin()
 
-        val aristRequest1 = Artist(displayName = "display")
-        val createdArtist1: Artist = httpClient.createArtist(aristRequest1)
+        val aristRequest1 = IndividualArtist(displayName = "display")
+        val createdArtist1: IndividualArtist = httpClient.createIndividualArtist(aristRequest1)
             .execute()
             .assertStatus(201)
             .parsedBody()
 
-        val updatedArtist1: Artist = httpClient.updateArtist(createdArtist1.copy(displayName = "another display"))
-            .execute()
-            .assertStatus(202)
-            .parsedBody()
+        val updatedArtist1: IndividualArtist =
+            httpClient.updateArtist(createdArtist1.copy(displayName = "another display"))
+                .execute()
+                .assertStatus(202)
+                .parsedBody()
         assertThat(updatedArtist1).isEqualTo(createdArtist1.copy(displayName = "another display"))
 
         httpClient.getArtist(updatedArtist1.id)
             .assertStatus2xx()
-            .parsedBody<Artist> { assertThat(it).isEqualTo(updatedArtist1) }
+            .parsedBody<IndividualArtist> { assertThat(it).isEqualTo(updatedArtist1) }
     }
 
     @Test
     fun `creates artist with image`() {
         httpClient.performAdminLogin()
 
-        val artistRequest = Artist(
+        val artistRequest = IndividualArtist(
             firstName = null,
             lastName = "lastName",
             displayName = "The display"
         )
         val imageBytes = mockPng()
-        val createdArtist: Artist = httpClient.createArtist(artistRequest)
+        val createdArtist: IndividualArtist = httpClient.createIndividualArtist(artistRequest)
             .addFile("image", imageBytes)
             .execute()
             .assertStatus(201)
@@ -107,7 +108,7 @@ class ArtistsRestTest {
         assertThat(image.size).isEqualTo(imageBytes.size.toLong())
         assertThat(image.orphan).isFalse()
 
-        val artist: Artist = httpClient.getArtist(createdArtist.id)
+        val artist: IndividualArtist = httpClient.getArtist(createdArtist.id)
             .assertStatus(202)
             .parsedBody()
         assertThat(artist).isEqualTo(createdArtist)
@@ -123,27 +124,27 @@ class ArtistsRestTest {
     fun `deletes artists image`() {
         httpClient.performAdminLogin()
 
-        val artistRequest = Artist(
+        val artistRequest = IndividualArtist(
             firstName = null,
             lastName = "lastName",
             displayName = "The display"
         )
         val imageBytes = mockPng()
-        val createdArtistId = httpClient.createArtist(artistRequest)
+        val createdArtistId = httpClient.createIndividualArtist(artistRequest)
             .addFile("image", imageBytes)
             .execute()
             .assertStatus(201)
-            .parsedBody<Artist>()
+            .parsedBody<IndividualArtist>()
             .id
 
         assertThat(imagesRepository.count()).isEqualTo(1)
         assertThat(fileStorageService.totalSize).isEqualTo(imageBytes.size.toLong())
 
-        val updateArtistRequest = Artist(
+        val updateArtistRequest = IndividualArtist(
             id = createdArtistId,
             displayName = "a new display",
         )
-        val updatedArtist: Artist = httpClient.updateArtist(updateArtistRequest)
+        val updatedArtist: IndividualArtist = httpClient.updateArtist(updateArtistRequest)
             .execute()
             .assertStatus(202)
             .parsedBody()
@@ -157,17 +158,17 @@ class ArtistsRestTest {
     fun `replaces artists image`() {
         httpClient.performAdminLogin()
 
-        val artistRequest = Artist(
+        val artistRequest = IndividualArtist(
             firstName = null,
             lastName = "lastName",
             displayName = "The display"
         )
         val imageBytes1 = mockPng(10, 10)
-        val createdArtistId = httpClient.createArtist(artistRequest)
+        val createdArtistId = httpClient.createIndividualArtist(artistRequest)
             .addFile("image", imageBytes1)
             .execute()
             .assertStatus(201)
-            .parsedBody<Artist>()
+            .parsedBody<IndividualArtist>()
             .id
 
         assertThat(imagesRepository.count()).isEqualTo(1)
@@ -175,11 +176,11 @@ class ArtistsRestTest {
 
         val imageBytes2 = mockPng(100, 100)
         assertThat(imageBytes2.size).isGreaterThan(imageBytes1.size)
-        val updateArtistRequest = Artist(
+        val updateArtistRequest = IndividualArtist(
             id = createdArtistId,
             displayName = "a new display",
         )
-        val updatedArtist: Artist = httpClient.updateArtist(updateArtistRequest)
+        val updatedArtist: IndividualArtist = httpClient.updateArtist(updateArtistRequest)
             .addFile("image", imageBytes2)
             .execute()
             .assertStatus(202)

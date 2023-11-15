@@ -3,6 +3,7 @@ package com.lelloman.pezzottify.server
 import com.lelloman.pezzottify.server.model.Artist
 import com.lelloman.pezzottify.server.model.AudioTrack
 import com.lelloman.pezzottify.server.model.Image
+import com.lelloman.pezzottify.server.model.IndividualArtist
 import com.lelloman.pezzottify.server.service.FileStorageService
 import org.slf4j.LoggerFactory
 import org.springframework.boot.CommandLineRunner
@@ -56,7 +57,7 @@ class DevAppInitializer {
         )
         val createdImage = imagesRepository.save(image)
         log.info("Prince image: ${createdImage.id}")
-        val prince = Artist(
+        val prince = IndividualArtist(
             firstName = "",
             lastName = "",
             displayName = "Prince",
@@ -65,10 +66,11 @@ class DevAppInitializer {
         val createdPrince = artistRepo.save(prince)
         log.info("Created prince: $createdPrince")
 
-        val lello = Artist(
+        val lello = IndividualArtist(
             firstName = "Lello",
             lastName = "Vitello",
             displayName = "Lelloman",
+            image = null,
         )
         val createdLello = artistRepo.save(lello)
         log.info("Created lello: $createdLello")

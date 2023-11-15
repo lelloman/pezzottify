@@ -2,6 +2,7 @@ package com.lelloman.pezzottify.server.utils
 
 import com.lelloman.pezzottify.server.model.Album
 import com.lelloman.pezzottify.server.model.Artist
+import com.lelloman.pezzottify.server.model.IndividualArtist
 import java.awt.image.BufferedImage
 import java.io.ByteArrayOutputStream
 import javax.imageio.ImageIO
@@ -22,11 +23,11 @@ fun mockPng(
 
 fun HttpClient.getArtist(id: String): HttpClient.ResponseSpec = this.get("/api/artist/$id")
 
-fun HttpClient.createArtist(artist: Artist) = this.multipartPost("/api/artist")
-    .addJsonField("artist", artist)
+fun HttpClient.createIndividualArtist(artist: IndividualArtist) = this.multipartPost("/api/artist")
+    .addJsonField("individual", artist)
 
-fun HttpClient.updateArtist(artist: Artist) = this.multipartPut("/api/artist")
-    .addJsonField("artist", artist)
+fun HttpClient.updateArtist(artist: IndividualArtist) = this.multipartPut("/api/artist")
+    .addJsonField("individual", artist)
 
 val MP3_SAMPLE = byteArrayOf(
     255.toByte(),

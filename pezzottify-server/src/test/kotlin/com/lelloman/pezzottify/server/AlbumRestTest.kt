@@ -3,6 +3,7 @@ package com.lelloman.pezzottify.server
 import com.lelloman.pezzottify.server.controller.model.CreateAlbumRequest
 import com.lelloman.pezzottify.server.model.Album
 import com.lelloman.pezzottify.server.model.Artist
+import com.lelloman.pezzottify.server.model.IndividualArtist
 import com.lelloman.pezzottify.server.service.FileStorageService
 import com.lelloman.pezzottify.server.utils.*
 import org.assertj.core.api.Assertions.assertThat
@@ -36,10 +37,10 @@ class AlbumRestTest {
     private val baseUrl by lazy { "http://localhost:$port" }
     private val httpClient by lazy { HttpClient(baseUrl) }
 
-    private var artist1 = Artist(displayName = "artist 1")
+    private var artist1 = IndividualArtist(displayName = "artist 1")
 
     private fun createArtist1() {
-        artist1 = httpClient.createArtist(artist1).execute().parsedBody()
+        artist1 = httpClient.createIndividualArtist(artist1).execute().parsedBody()
     }
 
     @Test
