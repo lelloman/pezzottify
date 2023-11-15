@@ -1,5 +1,6 @@
 package com.lelloman.pezzottify.server.utils
 
+import com.lelloman.pezzottify.server.controller.model.CreateBandRequest
 import com.lelloman.pezzottify.server.model.Album
 import com.lelloman.pezzottify.server.model.Artist
 import com.lelloman.pezzottify.server.model.IndividualArtist
@@ -23,8 +24,11 @@ fun mockPng(
 
 fun HttpClient.getArtist(id: String): HttpClient.ResponseSpec = this.get("/api/artist/$id")
 
-fun HttpClient.createIndividualArtist(artist: IndividualArtist) = this.multipartPost("/api/artist")
+fun HttpClient.createArtist(artist: IndividualArtist) = this.multipartPost("/api/artist")
     .addJsonField("individual", artist)
+
+fun HttpClient.createArtist(artist: CreateBandRequest) = this.multipartPost("/api/artist")
+    .addJsonField("band", artist)
 
 fun HttpClient.updateArtist(artist: IndividualArtist) = this.multipartPut("/api/artist")
     .addJsonField("individual", artist)

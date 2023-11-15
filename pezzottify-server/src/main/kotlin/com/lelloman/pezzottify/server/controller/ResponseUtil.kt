@@ -9,10 +9,15 @@ import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExcep
 
 sealed class CustomControllerException(message: String) : Throwable(message) {
     class BadRequest(message: String) : CustomControllerException(message)
+    class NotFound(message: String) : CustomControllerException(message)
 }
 
 fun badRequest(message: String) {
     throw CustomControllerException.BadRequest(message)
+}
+
+fun notFound(message: String) {
+    throw CustomControllerException.NotFound(message)
 }
 
 @ControllerAdvice

@@ -1,5 +1,7 @@
 package com.lelloman.pezzottify.server
 
+import com.lelloman.pezzottify.server.controller.model.CreateBandRequest
+import com.lelloman.pezzottify.server.model.BandArtist
 import com.lelloman.pezzottify.server.model.IndividualArtist
 import com.lelloman.pezzottify.server.service.FileStorageService
 import com.lelloman.pezzottify.server.utils.*
@@ -40,16 +42,16 @@ class ArtistsRestTest {
         httpClient.performAdminLogin()
 
         val artistRequest1 = IndividualArtist(displayName = "")
-        httpClient.createIndividualArtist(artistRequest1)
+        httpClient.createArtist(artistRequest1)
             .execute()
             .assertStatus(400)
 
         val artistRequest2 = IndividualArtist(displayName = "display")
-        httpClient.createIndividualArtist(artistRequest2)
+        httpClient.createArtist(artistRequest2)
             .execute()
             .assertStatus(201)
 
-        httpClient.createIndividualArtist(artistRequest2)
+        httpClient.createArtist(artistRequest2)
             .execute()
             .assertStatus(500) // this should probably be a 400 with a message but whatever
     }
@@ -59,7 +61,7 @@ class ArtistsRestTest {
         httpClient.performAdminLogin()
 
         val aristRequest1 = IndividualArtist(displayName = "display")
-        val createdArtist1: IndividualArtist = httpClient.createIndividualArtist(aristRequest1)
+        val createdArtist1: IndividualArtist = httpClient.createArtist(aristRequest1)
             .execute()
             .assertStatus(201)
             .parsedBody()
@@ -86,7 +88,7 @@ class ArtistsRestTest {
             displayName = "The display"
         )
         val imageBytes = mockPng()
-        val createdArtist: IndividualArtist = httpClient.createIndividualArtist(artistRequest)
+        val createdArtist: IndividualArtist = httpClient.createArtist(artistRequest)
             .addFile("image", imageBytes)
             .execute()
             .assertStatus(201)
@@ -130,7 +132,7 @@ class ArtistsRestTest {
             displayName = "The display"
         )
         val imageBytes = mockPng()
-        val createdArtistId = httpClient.createIndividualArtist(artistRequest)
+        val createdArtistId = httpClient.createArtist(artistRequest)
             .addFile("image", imageBytes)
             .execute()
             .assertStatus(201)
@@ -164,7 +166,7 @@ class ArtistsRestTest {
             displayName = "The display"
         )
         val imageBytes1 = mockPng(10, 10)
-        val createdArtistId = httpClient.createIndividualArtist(artistRequest)
+        val createdArtistId = httpClient.createArtist(artistRequest)
             .addFile("image", imageBytes1)
             .execute()
             .assertStatus(201)
@@ -194,5 +196,152 @@ class ArtistsRestTest {
         }
         assertThat(imagesRepository.count()).isEqualTo(1)
         assertThat(fileStorageService.totalSize).isEqualTo(imageBytes2.size.toLong())
+    }
+
+    @Test
+    fun `requires either a band or an individual to create an artist`() {
+        httpClient.performAdminLogin()
+        val individual = IndividualArtist(displayName = "somebody")
+        val band = CreateBandRequest(displayName = "a band", membersIds = listOf())
+
+        httpClient.multipartPost("/api/artist")
+            .addJsonField("individual", individual)
+            .addJsonField("band", band)
+            .execute()
+            .assertStatus(400)
+            .assertMessage { it.contains("either an individual or a band") }
+
+        httpClient.multipartPost("/api/artist")
+            .addFile("image", mockPng())
+            .execute()
+            .assertStatus(400)
+            .assertMessage { it.contains("either an individual or a band") }
+    }
+
+    @Test
+    fun `must provide members to create a band`() {
+        httpClient.performAdminLogin()
+        httpClient.createArtist(CreateBandRequest(displayName = "a band", membersIds = emptyList()))
+            .execute()
+            .assertStatus(400)
+            .assertMessage { it.contains("provide at least one member") }
+    }
+
+    @Test
+    fun `creates a band with one member without image`() {
+        httpClient.performAdminLogin()
+        val individual = httpClient.createArtist(IndividualArtist(displayName = "An individual"))
+            .execute()
+            .parsedBody<IndividualArtist>()
+        val bandRequest = CreateBandRequest(displayName = "the band", membersIds = listOf(individual.id))
+
+        val createdBand = httpClient.createArtist(bandRequest)
+            .execute()
+            .assertStatus(201)
+            .parsedBody<BandArtist>()
+
+        with(createdBand) {
+            assertThat(displayName).isEqualTo(bandRequest.displayName)
+            assertThat(members).hasSize(1)
+            assertThat(image).isNull()
+            assertThat(members[0].displayName).isEqualTo(individual.displayName)
+        }
+    }
+
+    @Test
+    fun `creates a band with two members and an image`() {
+        httpClient.performAdminLogin()
+        val individual1 = httpClient.createArtist(IndividualArtist(displayName = "An individual"))
+            .execute()
+            .parsedBody<IndividualArtist>()
+        val individual2 = httpClient.createArtist(IndividualArtist(displayName = "Another individual"))
+            .execute()
+            .parsedBody<IndividualArtist>()
+
+        val bandRequest =
+            CreateBandRequest(displayName = "the band", membersIds = listOf(individual1.id, individual2.id))
+
+        val pngBytes = mockPng(100, 120)
+        val createdBand = httpClient.createArtist(bandRequest)
+            .addFile("image", pngBytes)
+            .execute()
+            .assertStatus(201)
+            .parsedBody<BandArtist>()
+
+        with(createdBand) {
+            assertThat(displayName).isEqualTo(bandRequest.displayName)
+            assertThat(image?.size).isEqualTo(pngBytes.size.toLong())
+            assertThat(members).hasSize(2)
+            assertThat(members).anyMatch { it.displayName == individual1.displayName }
+            assertThat(members).anyMatch { it.displayName == individual2.displayName }
+        }
+        assertThat(fileStorageService.totalSize).isEqualTo(pngBytes.size.toLong())
+        assertThat(imagesRepository.count()).isEqualTo(1L)
+    }
+
+    @Test
+    fun `deletes image when band creation fails`() {
+        httpClient.performAdminLogin()
+        val bandRequest = CreateBandRequest(displayName = "the band", membersIds = listOf())
+
+        val pngBytes = mockPng(100, 120)
+        httpClient.createArtist(bandRequest)
+            .addFile("image", pngBytes)
+            .execute()
+            .assertStatus(400)
+            .assertMessage { it.contains("at least one member") }
+
+        assertThat(imagesRepository.count()).isEqualTo(0)
+        assertThat(fileStorageService.totalSize).isEqualTo(0)
+    }
+
+    @Test
+    fun `fetches both individuals and bands`() {
+        httpClient.performAdminLogin()
+        val createdIndividuals: List<IndividualArtist> = IntArray(10) { it }
+            .map {
+                httpClient.createArtist(IndividualArtist(displayName = "Individual $it"))
+                    .execute()
+                    .assertStatus2xx()
+                    .parsedBody<IndividualArtist>()
+            }
+        assertThat(createdIndividuals).hasSize(10)
+        val band1 = httpClient.createArtist(
+            CreateBandRequest(
+                displayName = "band 1",
+                membersIds = listOf(createdIndividuals[0].id, createdIndividuals[1].id)
+            )
+        ).execute().parsedBody<BandArtist>()
+
+        val band2 = httpClient.createArtist(
+            CreateBandRequest(
+                displayName = "band 2",
+                membersIds = listOf(createdIndividuals[5].id, createdIndividuals[3].id, band1.id)
+            )
+        ).execute().parsedBody<BandArtist>()
+
+        val artists: Artists = httpClient.get("/api/artists")
+            .assertStatus(200)
+            .bodyString {
+                val a = 1
+            }
+            .parsedBody()
+
+        assertThat(artists).hasSize(12)
+        assertThat(artists.filterIsInstance<BandArtist>()).hasSize(2)
+        assertThat(artists.filterIsInstance<IndividualArtist>()).hasSize(10)
+
+        with(artists.filterIsInstance<BandArtist>().first { it.displayName == band1.displayName }) {
+            assertThat(members).hasSize(2)
+            assertThat(members).anyMatch { it.displayName == "Individual 0" }
+            assertThat(members).anyMatch { it.displayName == "Individual 1" }
+        }
+
+        with(artists.filterIsInstance<BandArtist>().first { it.displayName == band2.displayName }) {
+            assertThat(members).hasSize(3)
+            assertThat(members).anyMatch { it.displayName == "Individual 5" }
+            assertThat(members).anyMatch { it.displayName == "Individual 3" }
+            assertThat(members).anyMatch { it.displayName == "band 1" }
+        }
     }
 }

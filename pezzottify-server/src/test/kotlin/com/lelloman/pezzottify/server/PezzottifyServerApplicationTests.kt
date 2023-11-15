@@ -3,7 +3,7 @@ package com.lelloman.pezzottify.server
 import com.lelloman.pezzottify.server.model.IndividualArtist
 import com.lelloman.pezzottify.server.utils.Artists
 import com.lelloman.pezzottify.server.utils.HttpClient
-import com.lelloman.pezzottify.server.utils.createIndividualArtist
+import com.lelloman.pezzottify.server.utils.createArtist
 import com.lelloman.pezzottify.server.utils.mockPng
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
@@ -46,7 +46,7 @@ class PezzottifyServerApplicationTests {
             )
         }
         artistRequests.forEach { request ->
-            httpClient.createIndividualArtist(request)
+            httpClient.createArtist(request)
                 .addFile("image", mockPng())
                 .execute()
                 .assertStatus(201)

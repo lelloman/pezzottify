@@ -47,3 +47,15 @@ class IndividualArtist(
         return other.id == this.id && other.displayName == this.displayName && other.image == this.image && other.firstName == this.firstName && other.lastName == this.lastName
     }
 }
+
+@Entity
+class BandArtist(
+    id: String = "",
+
+    displayName: String,
+
+    image: Image? = null,
+
+    @ManyToMany
+    val members: List<Artist>,
+) : Artist(id = id, displayName = displayName, image = image)

@@ -1,15 +1,34 @@
 package com.lelloman.pezzottify.server.utils
 
 import com.google.gson.GsonBuilder
+import com.google.gson.JsonDeserializationContext
+import com.google.gson.JsonDeserializer
+import com.google.gson.JsonElement
+import com.lelloman.pezzottify.server.model.Artist
+import com.lelloman.pezzottify.server.model.BandArtist
+import com.lelloman.pezzottify.server.model.IndividualArtist
 import okhttp3.*
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody.Companion.toRequestBody
+import org.assertj.core.api.AbstractStringAssert
 import org.assertj.core.api.Assertions.assertThat
+import java.lang.reflect.Type
+
+private class ArtistTypeAdapter : JsonDeserializer<Artist> {
+    override fun deserialize(json: JsonElement, typeOfT: Type?, context: JsonDeserializationContext): Artist {
+        if (json.asJsonObject?.get("members") != null) {
+            return context.deserialize(json, BandArtist::class.java) as Artist
+        }
+        return context.deserialize(json, IndividualArtist::class.java) as Artist
+    }
+}
 
 class HttpClient(private val baseUrl: String) {
     private var cookiesEnabled = true
 
-    val gson = GsonBuilder().create()
+    val gson = GsonBuilder()
+        .registerTypeAdapter(Artist::class.java, ArtistTypeAdapter())
+        .create()
 
     private inner class Cookies : CookieJar {
         private val stored = mutableListOf<Cookie>()
@@ -43,6 +62,10 @@ class HttpClient(private val baseUrl: String) {
 
         fun bodyString(consumer: (String?) -> Unit): ResponseSpec = apply {
             consumer(this.bodyString)
+        }
+
+        fun assertMessage(assertion: (AbstractStringAssert<*>) -> Unit) = apply {
+            assertThat(this.bodyString)
         }
 
         fun rawBody(): ByteArray? = this.response.body?.bytes()

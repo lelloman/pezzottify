@@ -1,9 +1,12 @@
 package com.lelloman.pezzottify.server.controller
 
 import com.lelloman.pezzottify.server.ArtistRepository
+import com.lelloman.pezzottify.server.controller.model.CreateBandRequest
 import com.lelloman.pezzottify.server.model.Artist
+import com.lelloman.pezzottify.server.model.BandArtist
 import com.lelloman.pezzottify.server.model.IndividualArtist
 import com.lelloman.pezzottify.server.service.ImageUploader
+import org.jetbrains.annotations.TestOnly
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
@@ -33,21 +36,43 @@ class ArtistController(
 
     @PostMapping("/artist", consumes = ["multipart/form-data"])
     fun newArtist(
-        @RequestPart("individual") artist: IndividualArtist,
+        @RequestPart("individual") individual: IndividualArtist?,
+        @RequestPart("band") band: CreateBandRequest?,
         @RequestParam("image") image: MultipartFile?,
     ): ResponseEntity<Artist> {
         val imagesUpload = imageUploader.newOperation()
+        if ((individual == null && band == null) || (individual != null && band != null)) {
+            badRequest("Must provide either an individual or a band.")
+        }
         try {
-            if (artist.displayName.isBlank()) {
-                badRequest("Artist's display name cannot be blank.")
-            }
             val createdImage = image?.let(imagesUpload::createImage)
+            val saved = if (individual != null) {
+                if (individual.displayName.isBlank()) {
+                    badRequest("Artist's display name cannot be blank.")
+                }
 
-            val artistToSave = artist.copy(image = createdImage)
-            val response = ResponseEntity(repo.save(artistToSave) as Artist, HttpStatus.CREATED)
+                repo.save(individual.copy(image = createdImage))
+            } else {
+                if (band!!.membersIds.isEmpty()) badRequest("Must provide at least one member.")
+                val members = band.membersIds.map {
+                    val found = repo.findById(it).getOrNull()
+                    if (found == null) {
+                        notFound("Could not find member with id $it")
+                    }
+
+                    found!!
+                }
+                val bandToSave = BandArtist(
+                    displayName = band.displayName,
+                    members = members,
+                    image = createdImage,
+                )
+                repo.save(bandToSave)
+            }
+            val response = ResponseEntity(saved, HttpStatus.CREATED)
             imagesUpload.succeeded()
             return response
-        } catch (e: ImageUploader.DecodeException) {
+        } catch (e: Throwable) {
             imagesUpload.aborted()
             throw e
         }
