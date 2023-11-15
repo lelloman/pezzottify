@@ -58,4 +58,11 @@ class BandArtist(
 
     @ManyToMany
     val members: List<Artist>,
-) : Artist(id = id, displayName = displayName, image = image)
+) : Artist(id = id, displayName = displayName, image = image) {
+    fun copy(image: Image?) = BandArtist(
+        id = id,
+        displayName = displayName,
+        image = image,
+        members = members,
+    )
+}

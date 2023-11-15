@@ -1,8 +1,10 @@
 package com.lelloman.pezzottify.server.utils
 
 import com.lelloman.pezzottify.server.controller.model.CreateBandRequest
+import com.lelloman.pezzottify.server.controller.model.UpdateBandRequest
 import com.lelloman.pezzottify.server.model.Album
 import com.lelloman.pezzottify.server.model.Artist
+import com.lelloman.pezzottify.server.model.BandArtist
 import com.lelloman.pezzottify.server.model.IndividualArtist
 import java.awt.image.BufferedImage
 import java.io.ByteArrayOutputStream
@@ -32,6 +34,9 @@ fun HttpClient.createArtist(artist: CreateBandRequest) = this.multipartPost("/ap
 
 fun HttpClient.updateArtist(artist: IndividualArtist) = this.multipartPut("/api/artist")
     .addJsonField("individual", artist)
+
+fun HttpClient.updateArtist(artist: UpdateBandRequest) = this.multipartPut("/api/artist")
+    .addJsonField("band", artist)
 
 val MP3_SAMPLE = byteArrayOf(
     255.toByte(),
