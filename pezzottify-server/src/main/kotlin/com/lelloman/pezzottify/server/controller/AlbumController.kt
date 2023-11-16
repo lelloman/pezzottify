@@ -38,7 +38,7 @@ class AlbumController(
     }
 
     @DeleteMapping("/album/{id}")
-    //@Secured("ROLE_ADMIN")
+    @Secured("ADMIN")
     fun deleteAlbum(@PathVariable("id") id: String): ResponseEntity<Void> {
         val foundArtist = repo.findById(id).getOrNull() ?: return ResponseEntity(HttpStatus.NOT_FOUND)
         repo.deleteById(id)
@@ -46,7 +46,7 @@ class AlbumController(
     }
 
     @PostMapping("/album", consumes = ["multipart/form-data"])
-    //@Secured("ADMIN")
+    @Secured("ADMIN")
     fun newAlbum(
         @RequestPart("album") albumRequest: CreateAlbumRequest,
         @RequestParam("cover") cover: MultipartFile?,

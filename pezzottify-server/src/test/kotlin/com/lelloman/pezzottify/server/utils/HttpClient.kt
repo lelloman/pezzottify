@@ -158,7 +158,6 @@ class HttpClient(private val baseUrl: String) {
         POST, PUT,
     }
 
-    private val cookieJar = Cookies()
     private var authToken: String? = null
     private val okHttpClient = OkHttpClient.Builder()
         .followRedirects(false)
@@ -172,7 +171,6 @@ class HttpClient(private val baseUrl: String) {
             chain.proceed(builder.build())
         })
         .addInterceptor(HttpLoggingInterceptor().apply { level = HttpLoggingInterceptor.Level.BASIC })
-        //.cookieJar(cookieJar)
         .build()
 
     fun get(url: String): ResponseSpec {
@@ -215,20 +213,16 @@ class HttpClient(private val baseUrl: String) {
         return doPost(url, bodyString)
     }
 
-    fun performAdminLogin() {
-        jsonBodyPost("/api/auth", AuthenticationRequest("admin", "admin"))
+    private fun performLogin(username: String, password: String) {
+        jsonBodyPost("/api/auth", AuthenticationRequest(username, password))
             .assertStatus2xx()
             .assertMessage { it.isNotBlank() }
             .bodyString { authToken = it }
     }
 
-    fun performUserLogin() {
-        formPost("/login")
-            .add("username", "user")
-            .add("password", "user")
-            .execute()
-            .assertRedirectTo("/")
-    }
+    fun performAdminLogin() = performLogin("admin", "admin")
+
+    fun performUserLogin() = performLogin("user", "user")
 
     fun delete(url: String) = Request.Builder()
         .delete()

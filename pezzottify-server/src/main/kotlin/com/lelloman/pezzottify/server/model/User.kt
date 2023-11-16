@@ -19,8 +19,9 @@ data class User(
     val bookmarkedAlbums: List<Album> = emptyList(),
 ) : UserDetails {
 
-    override fun getAuthorities(): MutableCollection<out GrantedAuthority> =
-        mutableListOf(SimpleGrantedAuthority("USER"))
+    override fun getAuthorities(): MutableCollection<out GrantedAuthority> = ArrayList<GrantedAuthority>() .apply {
+        roles.forEach { add(SimpleGrantedAuthority(it.name)) }
+    }
 
     override fun getPassword() = pw
 

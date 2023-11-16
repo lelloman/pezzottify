@@ -173,12 +173,10 @@ class AlbumRestTest {
 
     @Test
     fun `user role can only get ablums`() {
-        httpClient.withoutCookies {
-            httpClient.get("/api/albums")
-                .assertUnauthenticated()
-            httpClient.get("/api/album/something")
-                .assertUnauthenticated()
-        }
+        httpClient.get("/api/albums")
+            .assertUnauthorized()
+        httpClient.get("/api/album/something")
+            .assertUnauthorized()
 
         httpClient.performUserLogin()
 

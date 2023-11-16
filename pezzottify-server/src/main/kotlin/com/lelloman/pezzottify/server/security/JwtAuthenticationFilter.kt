@@ -18,7 +18,7 @@ import java.util.*
 import kotlin.collections.ArrayList
 
 val SECRET = "asd"
-private val EXPIRATION_TIME = 1000 * 60 * 60
+private const val EXPIRATION_TIME = 1000 * 60 * 60
 
 class JwtAuthenticationFilter(private val authenticationManager: AuthenticationManager) : UsernamePasswordAuthenticationFilter() {
 

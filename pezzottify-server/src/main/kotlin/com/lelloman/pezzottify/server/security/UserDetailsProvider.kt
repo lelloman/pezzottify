@@ -2,7 +2,6 @@ package com.lelloman.pezzottify.server.security
 
 import com.lelloman.pezzottify.server.UsersRepository
 import com.lelloman.pezzottify.server.model.User
-import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
 import org.springframework.context.annotation.Profile
@@ -16,7 +15,6 @@ import kotlin.jvm.optionals.getOrNull
 
 @Configuration
 class PasswordEncoderProvider {
-
     @Bean
     fun passwordEncoder(): PasswordEncoder = BCryptPasswordEncoder()
 }

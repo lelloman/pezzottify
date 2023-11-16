@@ -461,17 +461,14 @@ class ArtistsRestTest {
 
     @Test
     fun `user role can only get artists`() {
-        httpClient.withoutCookies {
-            httpClient.get("/api/artists")
-                .assertUnauthenticated()
-            httpClient.get("/api/artist/something")
-                .assertUnauthenticated()
-        }
+        httpClient.get("/api/artists")
+            .assertUnauthorized()
+        httpClient.get("/api/artist/something")
+            .assertUnauthorized()
 
         httpClient.performUserLogin()
 
-        httpClient.multipartPut("/api/artist")
-            .addJsonField("asd", Object())
+        httpClient.updateArtist(IndividualArtist(displayName = ""))
             .execute()
             .assertUnauthorized()
 

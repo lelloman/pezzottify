@@ -20,21 +20,21 @@ class JwtAuthTest {
 
     @Test
     fun `authenticates admin user`() {
-//        httpClient.get("/me")
-//            .assertStatus(200)
-//            .assertMessage { it.contains("You're nobody") }
+        httpClient.get("/me")
+            .assertStatus(200)
+            .assertMessage { it.contains("You're nobody") }
 
         httpClient.performAdminLogin()
 
-        val a = 1
         httpClient.get("/me")
             .assertStatus(200)
             .assertMessage { it.contains("You're the boss") }
 
-//        val userRequest = LoginRequest("user", "user")
-//        httpClient.jsonBodyPost("/authenticate", userRequest)
-//            .assertStatus(200)
-//            .assertMessage { it.isNotBlank() }
+        httpClient.performUserLogin()
+
+        httpClient.get("/me")
+            .assertStatus(200)
+            .assertMessage { it.contains("You're a regular user") }
     }
 
 }
