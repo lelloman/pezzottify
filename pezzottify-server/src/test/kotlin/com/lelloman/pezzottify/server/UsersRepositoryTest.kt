@@ -19,7 +19,7 @@ class UsersRepositoryTest {
 
     @Test
     fun `gets user by name`() {
-        val user1 = User("user1", "123", emptyList())
+        val user1 = User("user1", "123",  listOf(User.Role.USER))
         val savedUser1 = tested.save(user1)
         assertThat(user1).isEqualTo(savedUser1)
 

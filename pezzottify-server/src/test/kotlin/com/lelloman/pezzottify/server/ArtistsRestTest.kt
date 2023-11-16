@@ -54,7 +54,7 @@ class ArtistsRestTest {
 
         httpClient.createArtist(artistRequest2)
             .execute()
-            .assertStatus(500) // this should probably be a 400 with a message but whatever
+            .assertStatus4xx()
     }
 
     @Test

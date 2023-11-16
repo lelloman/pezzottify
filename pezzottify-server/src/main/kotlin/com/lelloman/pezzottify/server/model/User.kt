@@ -13,8 +13,10 @@ data class User(
 
     val pw: String,
 
+    val roles: List<Role>,
+
     @ManyToMany(fetch = FetchType.LAZY)
-    val bookmarkedAlbums: List<Album>,
+    val bookmarkedAlbums: List<Album> = emptyList(),
 ) : UserDetails {
 
     override fun getAuthorities(): MutableCollection<out GrantedAuthority> =
@@ -31,4 +33,8 @@ data class User(
     override fun isCredentialsNonExpired() = true
 
     override fun isEnabled() = true
+
+    enum class Role {
+        ADMIN, USER,
+    }
 }

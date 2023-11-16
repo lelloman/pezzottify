@@ -36,7 +36,7 @@ class ArtistController(
     }
 
     @PostMapping("/artist", consumes = ["multipart/form-data"])
-    @Secured("ROLE_ADMIN")
+//    @Secured("ADMIN")
     fun newArtist(
         @RequestPart("individual") individual: IndividualArtist?,
         @RequestPart("band") band: CreateBandRequest?,
@@ -81,7 +81,7 @@ class ArtistController(
     }
 
     @PutMapping("/artist", consumes = ["multipart/form-data"])
-    @Secured("ROLE_ADMIN")
+//    @Secured("ADMIN")
     fun replace(
         @RequestPart("individual") individual: IndividualArtist?,
         @RequestPart("band") band: UpdateBandRequest?,

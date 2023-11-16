@@ -28,6 +28,7 @@ dependencies {
 	implementation("org.springframework.boot:spring-boot-starter-thymeleaf:3.1.5")
 	implementation("com.mpatric:mp3agic:0.9.1")
 	implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:2.2.0")
+	implementation("com.auth0:java-jwt:3.10.3")
 
 	developmentOnly("org.springframework.boot:spring-boot-devtools")
 

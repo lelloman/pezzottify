@@ -4,12 +4,14 @@ import com.google.gson.GsonBuilder
 import com.google.gson.JsonDeserializationContext
 import com.google.gson.JsonDeserializer
 import com.google.gson.JsonElement
+import com.lelloman.pezzottify.server.controller.model.AuthenticationRequest
 import com.lelloman.pezzottify.server.model.Artist
 import com.lelloman.pezzottify.server.model.BandArtist
 import com.lelloman.pezzottify.server.model.IndividualArtist
 import okhttp3.*
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody.Companion.toRequestBody
+import okhttp3.logging.HttpLoggingInterceptor
 import org.assertj.core.api.AbstractStringAssert
 import org.assertj.core.api.Assertions.assertThat
 import java.lang.reflect.Type
@@ -60,6 +62,10 @@ class HttpClient(private val baseUrl: String) {
             assertThat(response.code).isGreaterThanOrEqualTo(200).isLessThan(300)
         }
 
+        fun assertStatus4xx() = apply {
+            assertThat(response.code).isGreaterThanOrEqualTo(400).isLessThan(500)
+        }
+
         fun assertUnauthenticated() = apply {
             assertThat(response.code).isEqualTo(401)
         }
@@ -77,7 +83,7 @@ class HttpClient(private val baseUrl: String) {
         }
 
         fun assertMessage(assertion: (AbstractStringAssert<*>) -> Unit) = apply {
-            assertThat(this.bodyString)
+            assertion(assertThat(this.bodyString))
         }
 
         fun rawBody(): ByteArray? = this.response.body?.bytes()
@@ -153,9 +159,20 @@ class HttpClient(private val baseUrl: String) {
     }
 
     private val cookieJar = Cookies()
+    private var authToken: String? = null
     private val okHttpClient = OkHttpClient.Builder()
         .followRedirects(false)
-        .cookieJar(cookieJar)
+        .cache(null)
+        .addInterceptor(Interceptor { chain ->
+            val builder = chain.request().newBuilder()
+            authToken?.let { builder.addHeader("Authorization", "Bearer $it") }
+            if (authToken != null) {
+                val a = 1
+            }
+            chain.proceed(builder.build())
+        })
+        .addInterceptor(HttpLoggingInterceptor().apply { level = HttpLoggingInterceptor.Level.BASIC })
+        //.cookieJar(cookieJar)
         .build()
 
     fun get(url: String): ResponseSpec {
@@ -193,12 +210,16 @@ class HttpClient(private val baseUrl: String) {
         return MultipartRequest(this, url, BodyMethod.PUT)
     }
 
+    fun <T> jsonBodyPost(url: String, body: T): ResponseSpec {
+        val bodyString = gson.toJson(body)
+        return doPost(url, bodyString)
+    }
+
     fun performAdminLogin() {
-        formPost("/login")
-            .add("username", "admin")
-            .add("password", "admin")
-            .execute()
-            .assertRedirectTo("/")
+        jsonBodyPost("/api/auth", AuthenticationRequest("admin", "admin"))
+            .assertStatus2xx()
+            .assertMessage { it.isNotBlank() }
+            .bodyString { authToken = it }
     }
 
     fun performUserLogin() {
