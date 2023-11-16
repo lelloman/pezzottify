@@ -1,30 +1,24 @@
 package com.lelloman.pezzottify.server.security
 
+import com.lelloman.pezzottify.server.UsersRepository
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
-import org.springframework.context.annotation.Profile
 import org.springframework.security.core.userdetails.User
 import org.springframework.security.core.userdetails.UserDetailsService
-import org.springframework.security.provisioning.InMemoryUserDetailsManager
-import org.springframework.stereotype.Component
-
-@Component
-interface UserDetailsServiceFactory {
-    fun create(): UserDetailsService
-}
-
-@Component
-@Profile("dev", "test")
-class InMemoryUserDetailsServiceFactory : UserDetailsServiceFactory {
-    override fun create(): UserDetailsService = InMemoryUserDetailsManager().apply {
-        createUser(User.withDefaultPasswordEncoder().username("admin").password("admin").roles("ADMIN").build())
-        createUser(User.withDefaultPasswordEncoder().username("user").password("user").roles("USER").build())
-    }
-}
+import org.springframework.security.core.userdetails.UsernameNotFoundException
+import kotlin.jvm.optionals.getOrNull
 
 @Configuration
-class InMemoryUserDetailsProvider {
+class InMemoryUserDetailsProvider(@Autowired private val usersRepository: UsersRepository) {
+
     @Bean
-    fun userDetailsService(@Autowired factory: UserDetailsServiceFactory) = factory.create()
+    fun userDetailsService() = UserDetailsService {
+        when (it) {
+            "admin" -> User.withDefaultPasswordEncoder().username("admin").password("admin").roles("ADMIN").build()
+            "user" -> User.withDefaultPasswordEncoder().username("user").password("user").roles("USER").build()
+            else -> usersRepository.getByName(it).getOrNull()
+                ?: throw UsernameNotFoundException("Could not find user $it")
+        }
+    }
 }
