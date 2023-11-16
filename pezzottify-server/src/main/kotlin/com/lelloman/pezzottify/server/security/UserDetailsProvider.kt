@@ -7,16 +7,32 @@ import org.springframework.context.annotation.Configuration
 import org.springframework.security.core.userdetails.User
 import org.springframework.security.core.userdetails.UserDetailsService
 import org.springframework.security.core.userdetails.UsernameNotFoundException
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder
+import org.springframework.security.crypto.password.PasswordEncoder
 import kotlin.jvm.optionals.getOrNull
+
 
 @Configuration
 class InMemoryUserDetailsProvider(@Autowired private val usersRepository: UsersRepository) {
 
+    private val passwordEncoder: PasswordEncoder = BCryptPasswordEncoder()
+
+    private val adminUser by lazy {
+        User.builder().username("admin").password(passwordEncoder.encode("admin")).roles("ADMIN").build()
+    }
+
+    private val regularUser by lazy {
+        User.builder().username("user").password(passwordEncoder.encode("user")).roles("USER").build()
+    }
+
     @Bean
-    fun userDetailsService() = UserDetailsService {
+    fun passwordEncoder() = passwordEncoder
+
+    @Bean
+    fun userDetailsService(passwordEncoder: PasswordEncoder) = UserDetailsService {
         when (it) {
-            "admin" -> User.withDefaultPasswordEncoder().username("admin").password("admin").roles("ADMIN").build()
-            "user" -> User.withDefaultPasswordEncoder().username("user").password("user").roles("USER").build()
+            "admin" -> adminUser
+            "user" -> regularUser
             else -> usersRepository.getByName(it).getOrNull()
                 ?: throw UsernameNotFoundException("Could not find user $it")
         }
