@@ -1,5 +1,6 @@
 package com.lelloman.pezzottify.server.controller
 
+import com.lelloman.pezzottify.server.AudioTrackRepository
 import com.lelloman.pezzottify.server.ImagesRepository
 import com.lelloman.pezzottify.server.model.Image
 import com.lelloman.pezzottify.server.service.FileStorageService
@@ -16,15 +17,16 @@ import org.springframework.web.bind.annotation.RestController
 import kotlin.jvm.optionals.getOrElse
 
 @RestController
-class ImagesController(
-    @Autowired private val repo: ImagesRepository,
+class MediaItemsController(
+    @Autowired private val imagesRepo: ImagesRepository,
+    @Autowired private val audioTracksRepository: AudioTrackRepository,
     @Autowired private val storage: FileStorageService,
 ) {
 
     @GetMapping("/api/image/{id}")
     fun getImage(@PathVariable("id") id: String): ResponseEntity<InputStreamResource> {
         try {
-            val image = repo.findById(id).getOrElse { throw NotFoundException() }
+            val image = imagesRepo.findById(id).getOrElse { throw NotFoundException() }
             val inputStream = storage.open(id)
             val contentType = when (image.type) {
                 Image.Type.PNG -> MediaType.IMAGE_PNG

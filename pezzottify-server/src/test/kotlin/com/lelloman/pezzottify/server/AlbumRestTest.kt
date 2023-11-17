@@ -65,8 +65,8 @@ class AlbumRestTest {
         assertThat(audioTrackRepository.count()).isEqualTo(0)
 
         val contents = listOf(
-            MP3_SAMPLE,
-            MP3_SAMPLE,
+            AudioSample.MP3,
+            AudioSample.MP3,
         )
         val createdAlbum: Album = httpClient.multipartPost("/api/album")
             .addJsonField("album", album)
@@ -99,8 +99,8 @@ class AlbumRestTest {
 
         val trackNames = listOf("Track 1", "Track 2", "Invalid track")
         val contents = listOf(
-            MP3_SAMPLE,
-            MP3_SAMPLE,
+            AudioSample.MP3,
+            AudioSample.MP3,
             ByteArray(10000),
         )
 
@@ -130,8 +130,8 @@ class AlbumRestTest {
         assertThat(audioTrackRepository.count()).isEqualTo(0)
 
         val contents = listOf(
-            MP3_SAMPLE,
-            MP3_SAMPLE,
+            AudioSample.MP3,
+            AudioSample.MP3,
         )
         val coverBytes = mockPng(100, 100)
         val sideImagesBytes = listOf(
@@ -162,7 +162,7 @@ class AlbumRestTest {
         assertThat(tracks).hasSize(2)
         assertThat(tracks).allMatch { !it.orphan }
         assertThat(fileStorageService.totalSize)
-            .isEqualTo(MP3_SAMPLE.size * 2L + coverBytes.size + sideImagesBytes.sumOf { it.size })
+            .isEqualTo(AudioSample.MP3.size * 2L + coverBytes.size + sideImagesBytes.sumOf { it.size })
 
         httpClient.delete("/api/album/${createdAlbum.id}").assertStatus2xx()
         assertThat(albumsRepo.count()).isEqualTo(0)
@@ -190,7 +190,7 @@ class AlbumRestTest {
         )
         httpClient.multipartPost("/api/album")
             .addJsonField("album", album)
-            .addFiles("audioTracks", listOf(""), listOf(MP3_SAMPLE))
+            .addFiles("audioTracks", listOf(""), listOf(AudioSample.MP3))
             .addFile("cover", mockPng())
             .execute()
             .assertUnauthorized()

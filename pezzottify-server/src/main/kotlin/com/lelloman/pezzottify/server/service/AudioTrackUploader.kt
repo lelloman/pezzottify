@@ -20,7 +20,7 @@ class AudioTrackUploader(
         private var tmpFile: File? = null
 
         override fun createAudioTrack(multipartFile: MultipartFile, name: String): AudioTrack {
-            tmpFile = File.createTempFile("upload", ".mp3")
+            tmpFile = File.createTempFile("upload", "tmp")
             multipartFile.inputStream.copyTo(tmpFile!!.outputStream())
             val decoded = audioTrackDecoder.decode(tmpFile!!)
                 ?: throw DecodeAudioTrackException("Could not decode audio track \"$name\"")

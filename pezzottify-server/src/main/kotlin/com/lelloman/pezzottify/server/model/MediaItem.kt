@@ -51,7 +51,7 @@ data class AudioTrack(
 
     val sampleRate: Int,
 
-    val bitRate: Int,
+    val bitRate: Long,
 
     val type: Type,
 ) : MediaItem {
