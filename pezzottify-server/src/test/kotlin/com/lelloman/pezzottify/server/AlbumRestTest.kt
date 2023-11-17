@@ -64,7 +64,7 @@ class AlbumRestTest {
         )
         assertThat(audioTrackRepository.count()).isEqualTo(0)
 
-        val contents = arrayOf(
+        val contents = listOf(
             MP3_SAMPLE,
             MP3_SAMPLE,
         )
@@ -98,7 +98,7 @@ class AlbumRestTest {
             CreateAlbumRequest(name = "The album", audioTracksNames = listOf("1", "2", "3"), artistsIds = listOf("1"))
 
         val trackNames = listOf("Track 1", "Track 2", "Invalid track")
-        val contents = arrayOf(
+        val contents = listOf(
             MP3_SAMPLE,
             MP3_SAMPLE,
             ByteArray(10000),
@@ -129,12 +129,12 @@ class AlbumRestTest {
         )
         assertThat(audioTrackRepository.count()).isEqualTo(0)
 
-        val contents = arrayOf(
+        val contents = listOf(
             MP3_SAMPLE,
             MP3_SAMPLE,
         )
         val coverBytes = mockPng(100, 100)
-        val sideImagesBytes = arrayOf(
+        val sideImagesBytes = listOf(
             mockPng(123, 20),
             mockPng(20, 123),
         )
@@ -190,7 +190,7 @@ class AlbumRestTest {
         )
         httpClient.multipartPost("/api/album")
             .addJsonField("album", album)
-            .addFiles("audioTracks", listOf(""), arrayOf(MP3_SAMPLE))
+            .addFiles("audioTracks", listOf(""), listOf(MP3_SAMPLE))
             .addFile("cover", mockPng())
             .execute()
             .assertUnauthorized()

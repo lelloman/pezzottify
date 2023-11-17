@@ -22,6 +22,8 @@ class PasswordEncoderProvider {
 @Component
 interface StaticUsers {
     fun get(username: String): User?
+
+    fun forEach(visitor: (User) -> Unit)
 }
 
 @Component
@@ -30,14 +32,14 @@ class TestStaticUsers(passwordEncoder: PasswordEncoder) : StaticUsers {
     private val adminUser = User(
         name = "admin",
         pw = passwordEncoder.encode("admin"),
-        roles = listOf(User.Role.ADMIN),
-        bookmarkedAlbums = emptyList(),
+        roles = setOf(User.Role.ADMIN),
+        bookmarkedAlbums = emptySet(),
     )
     private val regularUser = User(
         name = "user",
         pw = passwordEncoder.encode("user"),
-        roles = listOf(User.Role.USER),
-        bookmarkedAlbums = emptyList(),
+        roles = setOf(User.Role.USER),
+        bookmarkedAlbums = emptySet(),
     )
 
     private val users = mapOf(
@@ -46,15 +48,26 @@ class TestStaticUsers(passwordEncoder: PasswordEncoder) : StaticUsers {
     )
 
     override fun get(username: String) = users[username]
+
+    override fun forEach(visitor: (User) -> Unit) {
+        users.values.forEach(visitor)
+    }
 }
 
 @Component
 class CompoundUserDetailsService(
     private val usersRepository: UsersRepository,
-    private val staticUsers: StaticUsers,
+    staticUsers: StaticUsers,
 ) : UserDetailsService {
+    init {
+        staticUsers.forEach {
+            if (usersRepository.findById(it.name).isEmpty) {
+                usersRepository.save(it)
+            }
+        }
+    }
+
     override fun loadUserByUsername(it: String): UserDetails {
-        staticUsers.get(it)?.let { return it }
         return usersRepository.getByName(it).getOrNull() ?: throw UsernameNotFoundException("Could not find user $it")
     }
 }

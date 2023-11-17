@@ -141,7 +141,7 @@ class HttpClient(private val baseUrl: String) {
             builder.addFormDataPart(name, name, content.toRequestBody())
         }
 
-        fun addFiles(fieldName: String, fileNames: List<String>, contents: Array<ByteArray>) = apply {
+        fun addFiles(fieldName: String, fileNames: List<String>, contents: List<ByteArray>) = apply {
             assertThat(fileNames.size).isEqualTo(contents.size)
             fileNames.forEachIndexed { i, fileName ->
                 builder.addFormDataPart(fieldName, fileName, contents[i].toRequestBody())
@@ -159,18 +159,15 @@ class HttpClient(private val baseUrl: String) {
     }
 
     private var authToken: String? = null
-    private val okHttpClient = OkHttpClient.Builder()
+    val okHttpClient = OkHttpClient.Builder()
         .followRedirects(false)
         .cache(null)
         .addInterceptor(Interceptor { chain ->
             val builder = chain.request().newBuilder()
             authToken?.let { builder.addHeader("Authorization", "Bearer $it") }
-            if (authToken != null) {
-                val a = 1
-            }
             chain.proceed(builder.build())
         })
-        .addInterceptor(HttpLoggingInterceptor().apply { level = HttpLoggingInterceptor.Level.BASIC })
+        .addInterceptor(HttpLoggingInterceptor().apply { level = HttpLoggingInterceptor.Level.HEADERS })
         .build()
 
     fun get(url: String): ResponseSpec {
@@ -189,11 +186,8 @@ class HttpClient(private val baseUrl: String) {
         return ResponseSpec(okHttpClient.newCall(request).execute())
     }
 
-    private fun doPost(url: String, body: String): ResponseSpec {
-        val url = "$baseUrl$url"
-        val body = body.toRequestBody("application/json".toMediaType())
-        val request = Request.Builder().post(body).url(url).build()
-        return ResponseSpec(okHttpClient.newCall(request).execute())
+    private fun doJson(url: String, json: String, method: BodyMethod): ResponseSpec {
+        return doBodyRequest(url, json.toRequestBody("application/json".toMediaType()), method)
     }
 
     fun formPost(url: String): FormPostRequest {
@@ -209,8 +203,11 @@ class HttpClient(private val baseUrl: String) {
     }
 
     fun <T> jsonBodyPost(url: String, body: T): ResponseSpec {
-        val bodyString = gson.toJson(body)
-        return doPost(url, bodyString)
+        return doJson(url, gson.toJson(body), BodyMethod.POST)
+    }
+
+    fun <T> jsonBodyPut(url: String, body: T): ResponseSpec {
+        return doJson(url, gson.toJson(body), BodyMethod.PUT)
     }
 
     private fun performLogin(username: String, password: String) {
@@ -218,6 +215,10 @@ class HttpClient(private val baseUrl: String) {
             .assertStatus2xx()
             .assertMessage { it.isNotBlank() }
             .bodyString { authToken = it }
+    }
+
+    fun clearLogin() {
+        authToken = null
     }
 
     fun performAdminLogin() = performLogin("admin", "admin")

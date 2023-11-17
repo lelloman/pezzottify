@@ -19,14 +19,14 @@ class UsersRepositoryTest {
 
     @Test
     fun `gets user by name`() {
-        val user1 = User("user1", "123",  listOf(User.Role.USER))
+        val user1 = User("user1", "123",  setOf(User.Role.USER))
         val savedUser1 = tested.save(user1)
         assertThat(user1).isEqualTo(savedUser1)
 
         assertThat(tested.getByName("user1").getOrNull()?.name).isEqualTo("user1")
         assertThat(tested.getByName("user2").getOrNull()).isNull()
 
-        tested.save(User("user2", "123", emptyList()))
+        tested.save(User("user2", "123", emptySet()))
         assertThat(tested.getByName("user2").getOrNull()?.name).isEqualTo("user2")
     }
 }

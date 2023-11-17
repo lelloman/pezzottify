@@ -52,9 +52,10 @@ class SecurityConfig(@Autowired private val userDetailsService: UserDetailsServi
         http.addFilter(JwtAuthenticationFilter(authenticationManager))
         http.addFilter(JwtAuthorizationFilter(authenticationManager, userDetailsService))
         http.csrf {
-            it.ignoringRequestMatchers(AntPathRequestMatcher("/h2/**"))
-            it.ignoringRequestMatchers(AntPathRequestMatcher("/api/**"))
-            it.ignoringRequestMatchers(AntPathRequestMatcher("/authenticate/**"))
+            it.disable()
+//            it.ignoringRequestMatchers(AntPathRequestMatcher("/h2/**"))
+//            it.ignoringRequestMatchers(AntPathRequestMatcher("/api/**"))
+//            it.ignoringRequestMatchers(AntPathRequestMatcher("/authenticate/**"))
         }
         http.sessionManagement { it.sessionCreationPolicy(SessionCreationPolicy.STATELESS) }
         return http.build();

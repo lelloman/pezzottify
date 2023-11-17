@@ -13,10 +13,9 @@ data class User(
 
     val pw: String,
 
-    val roles: List<Role>,
+    val roles: Set<Role>,
 
-    @ManyToMany(fetch = FetchType.LAZY)
-    val bookmarkedAlbums: List<Album> = emptyList(),
+    val bookmarkedAlbums: Set<String> = emptySet(),
 ) : UserDetails {
 
     override fun getAuthorities(): MutableCollection<out GrantedAuthority> = ArrayList<GrantedAuthority>() .apply {

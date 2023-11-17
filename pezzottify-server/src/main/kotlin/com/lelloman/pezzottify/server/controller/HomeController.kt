@@ -12,11 +12,10 @@ import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.ResponseBody
 
-
 @Controller
 class HomeController(
     @Autowired private val profileService: ProfileService,
-    @Autowired private val userDetailsService: UserDetailsService,
+    @Autowired private val getAuthenticatedUser: GetAuthenticatedUser,
 ) {
 
     @ResponseBody
@@ -27,13 +26,7 @@ class HomeController(
 
     @GetMapping("/me")
     fun me(): ResponseEntity<MeResponse> {
-        val user = try {
-            SecurityContextHolder
-                .getContext()
-                .authentication?.name?.let { userDetailsService.loadUserByUsername(it) as? User }
-        } catch (e: Throwable) {
-            null
-        }
+        val user = getAuthenticatedUser()
         val response = when {
             user == null -> MeResponse.Nobody
             user.roles.containsAll(listOf(User.Role.ADMIN, User.Role.USER)) -> MeResponse.AdminAndUser(user.username)
