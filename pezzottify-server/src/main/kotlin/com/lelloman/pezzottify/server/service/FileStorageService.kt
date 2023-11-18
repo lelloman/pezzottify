@@ -2,12 +2,10 @@ package com.lelloman.pezzottify.server.service
 
 import org.springframework.context.annotation.Profile
 import org.springframework.stereotype.Service
-import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.FileNotFoundException
 import java.io.InputStream
-import java.io.OutputStream
-import java.util.UUID
+import java.util.*
 
 @Service
 interface FileStorageService {
@@ -19,6 +17,8 @@ interface FileStorageService {
     fun open(id: String): InputStream
 
     fun remove(id: String)
+
+    fun createTemp(input: InputStream): File
 
     data class Creation(val id: String, val size: Long)
 }
@@ -63,4 +63,9 @@ class InMemoryFileStorageService : FileStorageService {
     override fun remove(id: String) {
         files.remove(id)
     }
+
+    override fun createTemp(input: InputStream) =
+        File("/tmp", "tmpo_${UUID.randomUUID()}").apply {
+            input.copyTo(this.outputStream())
+        }
 }

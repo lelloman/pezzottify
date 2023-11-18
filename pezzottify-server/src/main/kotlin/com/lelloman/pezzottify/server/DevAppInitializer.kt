@@ -12,8 +12,11 @@ import org.springframework.context.annotation.Profile
 import java.awt.Color
 import java.awt.image.BufferedImage
 import java.io.ByteArrayOutputStream
+import java.io.File
+import java.io.IOException
 import javax.imageio.ImageIO
 import javax.sql.DataSource
+
 
 @Configuration
 @Profile("dev")
@@ -82,8 +85,30 @@ class DevAppInitializer {
         val createdTrack1 = trackRepo.save(track1)
         log.info("Created track1: $createdTrack1")
 
+        val dummyCatalogDir = findDummyCatalogDir()
+        log.info("Dummy catalog dir: ${dummyCatalogDir?.absolutePath}")
+        if (dummyCatalogDir != null) {
+            val creator = File(dummyCatalogDir, "create.sh")
+            val processBuilder = ProcessBuilder(creator.absolutePath)
+            processBuilder.directory(dummyCatalogDir)
+            try {
+                processBuilder.start()
+            } catch (ex: IOException) {
+                ex.printStackTrace()
+            }
+        }
         log.info("---------------------------------------------")
         log.info("")
     }
 
+    private fun findDummyCatalogDir(file: File? = File(System.getProperty("user.dir"))): File? {
+        log.info("Visiting ${file?.absolutePath}")
+        return when {
+            file == null -> null
+            file.isDirectory && file.list()?.contains("dummy-catalog") == true -> File(file, "dummy-catalog")
+            file.name == "dummy-catalog" && file.isDirectory -> file
+            file.parentFile != file -> findDummyCatalogDir(file.parentFile)
+            else -> null
+        }
+    }
 }
