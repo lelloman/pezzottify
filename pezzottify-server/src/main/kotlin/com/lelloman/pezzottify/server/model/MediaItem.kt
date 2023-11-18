@@ -56,7 +56,11 @@ data class AudioTrack(
     val type: Type,
 ) : MediaItem {
     enum class Type {
-        MP3, FLAC,
+        MP3, FLAC;
+        fun mimeType() = when(this) {
+            MP3 -> "audio/mpeg"
+            FLAC -> "audio/x-flac"
+        }
     }
 }
 

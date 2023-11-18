@@ -41,21 +41,21 @@ class SecurityConfig(@Autowired private val userDetailsService: UserDetailsServi
         introspector: HandlerMappingIntrospector,
         authenticationManager: AuthenticationManager
     ): SecurityFilterChain {
+        http.addFilter(JwtAuthenticationFilter(authenticationManager))
+        http.addFilter(JwtAuthorizationFilter(authenticationManager, userDetailsService))
         val mvcMatcherBuilder = MvcRequestMatcher.Builder(introspector)
         http.authorizeHttpRequests {
             it.requestMatchers(mvcMatcherBuilder.pattern("/")).permitAll()
             it.requestMatchers(AntPathRequestMatcher("/api/auth")).permitAll()
             it.requestMatchers(mvcMatcherBuilder.pattern("/me")).permitAll()
             it.requestMatchers(AntPathRequestMatcher("/h2/**")).permitAll()
+            it.requestMatchers(mvcMatcherBuilder.pattern("/api/track/**")).permitAll()
             it.anyRequest().authenticated()
         }
-        http.addFilter(JwtAuthenticationFilter(authenticationManager))
-        http.addFilter(JwtAuthorizationFilter(authenticationManager, userDetailsService))
         http.csrf {
             it.disable()
-//            it.ignoringRequestMatchers(AntPathRequestMatcher("/h2/**"))
-//            it.ignoringRequestMatchers(AntPathRequestMatcher("/api/**"))
-//            it.ignoringRequestMatchers(AntPathRequestMatcher("/authenticate/**"))
+            it.ignoringRequestMatchers(AntPathRequestMatcher("/h2/**"))
+            it.ignoringRequestMatchers(AntPathRequestMatcher("/api/**"))
         }
         http.sessionManagement { it.sessionCreationPolicy(SessionCreationPolicy.STATELESS) }
         return http.build();

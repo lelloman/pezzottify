@@ -36,8 +36,6 @@ class DevAppInitializer {
         log.info("")
         log.info("-------------- DEMO CLI RUNNER --------------")
 
-        log.info("DB: $dbUrl")
-
         val bufferedImage = BufferedImage(128, 128, BufferedImage.TYPE_INT_RGB)
         val g = bufferedImage.graphics
         g.color = Color.BLUE
@@ -92,11 +90,14 @@ class DevAppInitializer {
             val processBuilder = ProcessBuilder(creator.absolutePath)
             processBuilder.directory(dummyCatalogDir)
             try {
-                processBuilder.start()
+                processBuilder.start().waitFor()
             } catch (ex: IOException) {
                 ex.printStackTrace()
             }
         }
+        val randomTrack = trackRepo.findAll().random()
+        log.info("Random track: http://127.0.0.1:8080/api/track/${randomTrack.id}")
+        log.info("DB: $dbUrl")
         log.info("---------------------------------------------")
         log.info("")
     }

@@ -14,6 +14,8 @@ interface FileStorageService {
 
     fun create(inputStream: InputStream): Creation
 
+    fun openAt(id: String, startIndex: Long): InputStream
+
     fun open(id: String): InputStream
 
     fun remove(id: String)
@@ -56,9 +58,10 @@ class InMemoryFileStorageService : FileStorageService {
         return FileStorageService.Creation(id, bytes.size.toLong())
     }
 
-    override fun open(id: String): InputStream {
-        return files[id]?.inputStream() ?: throw FileNotFoundException()
-    }
+    override fun openAt(id: String, startIndex: Long): InputStream =
+        files[id]?.inputStream()?.apply { skip(startIndex) } ?: throw FileNotFoundException()
+
+    override fun open(id: String): InputStream = openAt(id, 0)
 
     override fun remove(id: String) {
         files.remove(id)
