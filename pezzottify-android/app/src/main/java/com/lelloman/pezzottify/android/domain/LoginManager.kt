@@ -1,5 +1,6 @@
 package com.lelloman.pezzottify.android.domain
 
+import com.lelloman.pezzottify.remoteapi.RemoteApi
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -11,11 +12,7 @@ interface LoginManager {
     suspend fun performLogin(username: String, password: String): LoginResult
 }
 
-interface RemoteLoginInteractor {
-    suspend fun doLogin()
-}
-
-class MockLoginManager(private val remoteLoginInteractor: RemoteLoginInteractor) : LoginManager {
+class MockLoginManager(private val remoteApi: RemoteApi) : LoginManager {
 
     private val stateBroadcast = MutableStateFlow<LoginState>(LoginState.Loading)
 
@@ -24,7 +21,7 @@ class MockLoginManager(private val remoteLoginInteractor: RemoteLoginInteractor)
     override suspend fun performLogin(username: String, password: String): LoginResult {
         Dispatchers.IO.run {
             return try {
-                remoteLoginInteractor.doLogin()
+                val loginResult = remoteApi.performLogin(username = username, password = password)
                 stateBroadcast.emit(LoginState.LoggedIn("asd", "asd") as LoginState)
                 LoginResult.Success("asd")
             } catch (e: Exception) {

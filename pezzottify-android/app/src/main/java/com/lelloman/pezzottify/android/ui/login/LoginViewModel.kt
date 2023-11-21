@@ -1,13 +1,13 @@
 package com.lelloman.pezzottify.android.ui.login
 
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
 import com.lelloman.pezzottify.android.domain.LoginManager
-import com.lelloman.pezzottify.android.domain.MockLoginManager
 import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.withContext
+import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 @HiltViewModel
@@ -16,24 +16,22 @@ class LoginViewModel @Inject constructor(
 ) : ViewModel() {
 
     private val mutableState = MutableStateFlow(State())
-    val state = mutableState.asStateFlow()
+    val state: StateFlow<State> = mutableState.asStateFlow()
 
-    suspend fun onLoginClicked() {
+    fun onLoginClicked() = viewModelScope.launch {
         state.value.let { currentState ->
-            if (currentState.loading) return
+            if (currentState.loading) return@launch
             updateState(mutableState.value.copy(loading = true))
-            withContext(Dispatchers.IO) {
-                val loginResult = loginManager.performLogin(
-                    username = currentState.username,
-                    password = currentState.password
-                )
-            }
+            val loginResult = loginManager.performLogin(
+                username = currentState.username,
+                password = currentState.password
+            )
             updateState(mutableState.value.copy(loading = false))
         }
     }
 
-    private fun updateState(newState: State) {
-
+    private suspend fun updateState(newState: State) {
+        mutableState.emit(newState)
     }
 
     data class State(

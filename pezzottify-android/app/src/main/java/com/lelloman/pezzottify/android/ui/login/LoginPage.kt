@@ -1,54 +1,38 @@
 package com.lelloman.pezzottify.android.ui.login
 
+import android.widget.Toast
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.ClickableText
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.AnnotatedString
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.TextFieldValue
-import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
-import androidx.navigation.NavHostController
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun LoginPage(navController: NavHostController, viewModel: LoginViewModel = hiltViewModel()) {
-    Box(modifier = Modifier.fillMaxSize()) {
-        ClickableText(
-            text = AnnotatedString("Sign up here"),
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .padding(20.dp),
-            onClick = { },
-            style = TextStyle(
-                fontSize = 14.sp,
-                fontFamily = FontFamily.Default,
-                textDecoration = TextDecoration.Underline,
-            )
-        )
-    }
+fun LoginPage(viewModel: LoginViewModel = hiltViewModel()) {
+    val state by viewModel.state.collectAsState()
+    val context = LocalContext.current
     Column(
         modifier = Modifier.padding(20.dp),
         verticalArrangement = Arrangement.Center,
@@ -58,39 +42,49 @@ fun LoginPage(navController: NavHostController, viewModel: LoginViewModel = hilt
         val username = remember { mutableStateOf(TextFieldValue()) }
         val password = remember { mutableStateOf(TextFieldValue()) }
 
-        Text(text = "Login", style = TextStyle(fontSize = 40.sp, fontFamily = FontFamily.Cursive))
-
-        Spacer(modifier = Modifier.height(20.dp))
-        TextField(label = { Text(text = "Username") },
+        Box(modifier = Modifier.padding(40.dp, 0.dp, 40.dp, 0.dp)) {
+            Button(
+                onClick = {
+                    Toast.makeText(context, "ASD", Toast.LENGTH_SHORT).show()
+                },
+                shape = RoundedCornerShape(50.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(50.dp),
+            ) {
+                Text("ASD")
+            }
+        }
+        TextField(
+            label = { Text(text = "Username") },
             value = username.value,
-            onValueChange = { username.value = it })
+            onValueChange = { username.value = it },
+            enabled = !state.loading,
+        )
 
         Spacer(modifier = Modifier.height(20.dp))
-        TextField(label = { Text(text = "Password") },
+        TextField(
+            label = { Text(text = "Password") },
             value = password.value,
             visualTransformation = PasswordVisualTransformation(),
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-            onValueChange = { password.value = it })
+            onValueChange = { password.value = it },
+            enabled = !state.loading,
+        )
 
         Spacer(modifier = Modifier.height(20.dp))
         Box(modifier = Modifier.padding(40.dp, 0.dp, 40.dp, 0.dp)) {
             Button(
-                onClick = { },
+                onClick = { viewModel.onLoginClicked() },
                 shape = RoundedCornerShape(50.dp),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(50.dp)
+                    .height(50.dp),
+                enabled = !state.loading,
             ) {
                 Text(text = "Login")
             }
         }
-
-        Spacer(modifier = Modifier.height(20.dp))
-        ClickableText(
-            text = AnnotatedString("Forgot password?"), onClick = { }, style = TextStyle(
-                fontSize = 14.sp, fontFamily = FontFamily.Default
-            )
-        )
     }
 }
 
