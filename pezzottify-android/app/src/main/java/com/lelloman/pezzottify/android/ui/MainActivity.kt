@@ -1,17 +1,21 @@
-package com.lelloman.pezzottify.android
+package com.lelloman.pezzottify.android.ui
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.rememberNavController
+import com.lelloman.pezzottify.android.ui.login.LoginPage
 import com.lelloman.pezzottify.android.ui.theme.PezzottifyTheme
+import dagger.hilt.android.AndroidEntryPoint
 
+@AndroidEntryPoint
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -20,27 +24,33 @@ class MainActivity : ComponentActivity() {
                 // A surface container using the 'background' color from the theme
                 Surface(
                     modifier = Modifier.fillMaxSize(),
-                    color = MaterialTheme.colorScheme.background
+//                    color = MaterialTheme.colors.background
                 ) {
-                    Greeting("Android")
+                    ScreenMain()
                 }
             }
         }
     }
 }
 
-@Composable
-fun Greeting(name: String, modifier: Modifier = Modifier) {
-    Text(
-        text = "Hello $name!",
-        modifier = modifier
-    )
-}
-
 @Preview(showBackground = true)
 @Composable
-fun GreetingPreview() {
+fun DefaultPreview() {
     PezzottifyTheme {
-        Greeting("Android")
+        ScreenMain()
+    }
+}
+
+sealed class Routes(val route: String) {
+    object Login : Routes("Login")
+}
+
+@Composable
+fun ScreenMain() {
+    val navController = rememberNavController()
+    NavHost(navController = navController, startDestination = Routes.Login.route) {
+        composable(Routes.Login.route) {
+            LoginPage(navController = navController)
+        }
     }
 }
