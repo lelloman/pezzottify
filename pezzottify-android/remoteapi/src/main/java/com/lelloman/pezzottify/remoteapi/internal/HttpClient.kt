@@ -72,7 +72,7 @@ internal class HttpClientImpl(
             authToken?.let { builder.addHeader("Authorization", "Bearer $it") }
             chain.proceed(builder.build())
         }).addInterceptor(HttpLoggingInterceptor().apply {
-            level = HttpLoggingInterceptor.Level.HEADERS
+            level = HttpLoggingInterceptor.Level.BODY
         }).build()
 
     override fun setAuthToken(authToken: String?) {

@@ -39,9 +39,6 @@ fun LoginPage(viewModel: LoginViewModel = hiltViewModel()) {
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
 
-        val username = remember { mutableStateOf(TextFieldValue()) }
-        val password = remember { mutableStateOf(TextFieldValue()) }
-
         Box(modifier = Modifier.padding(40.dp, 0.dp, 40.dp, 0.dp)) {
             Button(
                 onClick = {
@@ -57,18 +54,18 @@ fun LoginPage(viewModel: LoginViewModel = hiltViewModel()) {
         }
         TextField(
             label = { Text(text = "Username") },
-            value = username.value,
-            onValueChange = { username.value = it },
+            value = state.username,
+            onValueChange = { viewModel.onUsernameUpdate(it) },
             enabled = !state.loading,
         )
 
         Spacer(modifier = Modifier.height(20.dp))
         TextField(
             label = { Text(text = "Password") },
-            value = password.value,
+            value = state.password,
             visualTransformation = PasswordVisualTransformation(),
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-            onValueChange = { password.value = it },
+            onValueChange = { viewModel.onPasswordUpdate(it) },
             enabled = !state.loading,
         )
 

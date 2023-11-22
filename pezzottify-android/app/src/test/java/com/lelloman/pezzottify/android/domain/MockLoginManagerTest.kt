@@ -14,7 +14,7 @@ import org.mockito.kotlin.whenever
 class MockLoginManagerTest {
 
     private val interactor: RemoteLoginInteractor = mock()
-    private val tested = MockLoginManager(interactor)
+    private val tested = LoginManagerImpl(interactor)
 
     private suspend fun loginFail() {
         delay(5000)

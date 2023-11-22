@@ -3,16 +3,20 @@ package com.lelloman.pezzottify.android.ui.login
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.lelloman.pezzottify.android.domain.LoginManager
+import com.lelloman.pezzottify.android.domain.LoginResult
+import com.lelloman.pezzottify.android.ui.Navigator
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import javax.inject.Inject
 
 @HiltViewModel
 class LoginViewModel @Inject constructor(
     private val loginManager: LoginManager,
+    private val navigator: Navigator,
 ) : ViewModel() {
 
     private val mutableState = MutableStateFlow(State())
@@ -26,11 +30,23 @@ class LoginViewModel @Inject constructor(
                 username = currentState.username,
                 password = currentState.password
             )
+            when (loginResult) {
+                is LoginResult.Success -> navigator.fromLoginToHome()
+                is LoginResult.Failure -> {}
+            }
             updateState(mutableState.value.copy(loading = false))
         }
     }
 
-    private suspend fun updateState(newState: State) {
+    fun onUsernameUpdate(newUsername: String) {
+        updateState(state.value.copy(username = newUsername))
+    }
+
+    fun onPasswordUpdate(newPassword: String) {
+        updateState(state.value.copy(password = newPassword))
+    }
+
+    private fun updateState(newState: State) = runBlocking {
         mutableState.emit(newState)
     }
 

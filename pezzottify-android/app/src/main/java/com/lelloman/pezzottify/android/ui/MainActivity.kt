@@ -3,33 +3,61 @@ package com.lelloman.pezzottify.android.ui
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Modifier
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import com.lelloman.pezzottify.android.ui.home.HomePage
 import com.lelloman.pezzottify.android.ui.login.LoginPage
+import com.lelloman.pezzottify.android.ui.splash.SplashPage
 import com.lelloman.pezzottify.android.ui.theme.PezzottifyTheme
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.flow.receiveAsFlow
+import javax.inject.Inject
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
+
+    @Inject
+    lateinit var navigator: Navigator
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
+            val navController = rememberNavController()
+            val navigationChannel = navigator.channel
             PezzottifyTheme {
-                // A surface container using the 'background' color from the theme
-                Surface(
-                    modifier = Modifier.fillMaxSize(),
-//                    color = MaterialTheme.colors.background
-                ) {
-                    ScreenMain()
+                LaunchedEffect(key1 = this@MainActivity, navController, navigationChannel) {
+                    navigator.channel.receiveAsFlow().collect { navigationEvent ->
+                        when (navigationEvent) {
+                            NavigationEvent.GoBack -> navController.popBackStack()
+                            is NavigationEvent.GoTo -> {
+                                navController.navigate(navigationEvent.route) {
+                                    navigationEvent.popUpTo?.let { popUpDef ->
+                                        popUpTo(popUpDef.route) {
+                                            inclusive = popUpDef.inclusive
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
+                PezzottifyNavHost(navController = navController)
             }
         }
+    }
+}
+
+@Composable
+fun PezzottifyNavHost(navController: NavHostController) {
+    NavHost(navController = navController, startDestination = "splash") {
+        composable(Routes.Splash.route) { SplashPage() }
+        composable(Routes.Login.route) { LoginPage() }
+        composable(Routes.Home.route) { HomePage() }
     }
 }
 
@@ -39,10 +67,6 @@ fun DefaultPreview() {
     PezzottifyTheme {
         ScreenMain()
     }
-}
-
-sealed class Routes(val route: String) {
-    object Login : Routes("Login")
 }
 
 @Composable
