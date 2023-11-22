@@ -2,7 +2,7 @@ package com.lelloman.pezzottify.android.domain
 
 import com.lelloman.pezzottify.remoteapi.LoginResponse
 import com.lelloman.pezzottify.remoteapi.RemoteApi
-import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.runBlocking
@@ -13,9 +13,15 @@ interface LoginManager {
     val loginState: Flow<LoginState>
 
     suspend fun performLogin(username: String, password: String): LoginResult
+
+    suspend fun logout()
 }
 
-class LoginManagerImpl(private val remoteApi: RemoteApi, private val persistence: File) :
+class LoginManagerImpl(
+    private val remoteApi: RemoteApi,
+    private val persistence: File,
+    private val ioDispatcher: CoroutineDispatcher,
+) :
     LoginManager {
 
     private val stateBroadcast = MutableStateFlow<LoginState>(LoginState.Loading)
@@ -45,8 +51,13 @@ class LoginManagerImpl(private val remoteApi: RemoteApi, private val persistence
         runBlocking { stateBroadcast.emit(state) }
     }
 
+    override suspend fun logout() = ioDispatcher.run {
+        persistence.delete()
+        stateBroadcast.emit(LoginState.Unauthenticated)
+    }
+
     override suspend fun performLogin(username: String, password: String): LoginResult {
-        Dispatchers.IO.run {
+        ioDispatcher.run {
             return try {
                 when (val response =
                     remoteApi.performLogin(username = username, password = password)) {

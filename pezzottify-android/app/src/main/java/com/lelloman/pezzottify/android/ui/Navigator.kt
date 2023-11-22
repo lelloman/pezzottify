@@ -17,7 +17,10 @@ class Navigator @Inject constructor() {
 
     fun fromSplashToHome() {
         val event =
-            NavigationEvent.GoTo(Routes.Dashboard.route, NavigationEvent.PopUpTo(Routes.Splash.route))
+            NavigationEvent.GoTo(
+                Routes.Dashboard.route,
+                NavigationEvent.PopUpTo(Routes.Splash.route)
+            )
         _channel.trySend(event)
     }
 
@@ -28,11 +31,32 @@ class Navigator @Inject constructor() {
     }
 
     fun fromLoginToHome() {
-        val event =
-            NavigationEvent.GoTo(Routes.Dashboard.route, NavigationEvent.PopUpTo(Routes.Login.route))
-        _channel.trySend(event)
+        Routes.Dashboard.destination()
+            .popUpTo(Routes.Login)
+            .go()
+    }
+
+    fun fromProfileToLogin() {
+        Routes.Login.destination()
+            .popUpTo(Routes.Dashboard)
+            .go()
+    }
+
+    private fun Routes.destination() = EventBuilder(this.route)
+
+    inner class EventBuilder(var dest: String) {
+        private var popUpTo: NavigationEvent.PopUpTo? = null
+
+        fun popUpTo(popUpTo: Routes) = apply {
+            this.popUpTo = NavigationEvent.PopUpTo(popUpTo.route)
+        }
+
+        fun go() {
+            _channel.trySend(NavigationEvent.GoTo(dest, popUpTo))
+        }
     }
 }
+
 
 sealed class NavigationEvent {
     object GoBack : NavigationEvent()

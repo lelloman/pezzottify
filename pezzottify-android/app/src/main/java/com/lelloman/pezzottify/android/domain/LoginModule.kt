@@ -17,7 +17,8 @@ class LoginModule {
     @Provides
     fun provideLoginManager(@ApplicationContext context: Context): LoginManager =
         LoginManagerImpl(
-            RemoteApi.Factory.create("http://10.0.2.2:8080", Dispatchers.IO),
-            File(context.filesDir, "2034hny")
+            remoteApi = RemoteApi.Factory.create("http://10.0.2.2:8080", Dispatchers.IO),
+            persistence = File(context.filesDir, "2034hny"),
+            ioDispatcher = Dispatchers.IO
         )
 }
