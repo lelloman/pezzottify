@@ -67,6 +67,8 @@ dependencies {
     implementation("androidx.compose.ui:ui-graphics")
     implementation("androidx.compose.ui:ui-tooling-preview")
     implementation("androidx.compose.material3:material3")
+    // constraint layout compose
+    implementation("androidx.constraintlayout:constraintlayout-compose:1.0.1")
     // hilt
     implementation("com.google.dagger:hilt-android:2.48")
     implementation("com.google.android.material:material:1.10.0")

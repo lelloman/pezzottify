@@ -9,7 +9,7 @@ import androidx.compose.ui.Modifier
 import androidx.hilt.navigation.compose.hiltViewModel
 
 @Composable
-fun SplashPage(viewModel: SplashViewModel = hiltViewModel()) {
+fun SplashScreen(viewModel: SplashViewModel = hiltViewModel()) {
     viewModel.onShown()
     Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
         Text("Splash")

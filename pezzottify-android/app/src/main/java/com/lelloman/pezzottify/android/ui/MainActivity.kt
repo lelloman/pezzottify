@@ -3,16 +3,22 @@ package com.lelloman.pezzottify.android.ui
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
-import com.lelloman.pezzottify.android.ui.home.HomePage
-import com.lelloman.pezzottify.android.ui.login.LoginPage
-import com.lelloman.pezzottify.android.ui.splash.SplashPage
+import com.lelloman.pezzottify.android.ui.dashboard.DashboardScreen
+import com.lelloman.pezzottify.android.ui.login.LoginScreen
+import com.lelloman.pezzottify.android.ui.splash.SplashScreen
 import com.lelloman.pezzottify.android.ui.theme.PezzottifyTheme
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.flow.receiveAsFlow
@@ -24,6 +30,7 @@ class MainActivity : ComponentActivity() {
     @Inject
     lateinit var navigator: Navigator
 
+    @OptIn(ExperimentalMaterial3Api::class)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
@@ -46,7 +53,9 @@ class MainActivity : ComponentActivity() {
                         }
                     }
                 }
-                PezzottifyNavHost(navController = navController)
+                Scaffold { _ ->
+                    PezzottifyNavHost(navController = navController)
+                }
             }
         }
     }
@@ -54,10 +63,28 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 fun PezzottifyNavHost(navController: NavHostController) {
-    NavHost(navController = navController, startDestination = "splash") {
-        composable(Routes.Splash.route) { SplashPage() }
-        composable(Routes.Login.route) { LoginPage() }
-        composable(Routes.Home.route) { HomePage() }
+    NavHost(
+        modifier = Modifier.fillMaxSize(),
+        navController = navController,
+        startDestination = Routes.Splash.route,
+        enterTransition = { EnterTransition.None },
+        popEnterTransition = { EnterTransition.None },
+        exitTransition = { ExitTransition.None },
+        popExitTransition = { ExitTransition.None },
+    ) {
+        composable(Routes.Splash.route) { SplashScreen() }
+        composable(Routes.Login.route) { LoginScreen() }
+        composable(Routes.Dashboard.route) {
+            DashboardScreen()
+        }
+//        navigation(
+//            startDestination = Routes.Home.Home.route,
+//            route = Routes.Home.route,
+//        ) {
+//        composable(Routes.Dashboard.Home.route) { HomePage(navController) }
+//        composable(Routes.Dashboard.Search.route) { SearchPage(navController) }
+//        composable(Routes.Dashboard.Profile.route) { ProfilePage(navController) }
+//        }
     }
 }
 
@@ -74,7 +101,7 @@ fun ScreenMain() {
     val navController = rememberNavController()
     NavHost(navController = navController, startDestination = Routes.Login.route) {
         composable(Routes.Login.route) {
-            LoginPage()
+            LoginScreen()
         }
     }
 }

@@ -1,4 +1,4 @@
-package com.lelloman.pezzottify.android.ui.home
+package com.lelloman.pezzottify.android.ui.dashboard.home
 
 import androidx.lifecycle.ViewModel
 import dagger.hilt.android.lifecycle.HiltViewModel
