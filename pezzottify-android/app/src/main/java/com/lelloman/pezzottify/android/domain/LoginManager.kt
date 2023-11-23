@@ -7,6 +7,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.runBlocking
 import java.io.File
+import java.net.ConnectException
 
 interface LoginManager {
 
@@ -21,8 +22,7 @@ class LoginManagerImpl(
     private val remoteApi: RemoteApi,
     private val persistence: File,
     private val ioDispatcher: CoroutineDispatcher,
-) :
-    LoginManager {
+) : LoginManager {
 
     private val stateBroadcast = MutableStateFlow<LoginState>(LoginState.Loading)
 
@@ -81,6 +81,8 @@ class LoginManagerImpl(
                     is RemoteApi.Response.NetworkError -> LoginResult.Failure.Network
                     else -> LoginResult.Failure.Unknown
                 }
+            } catch (e: ConnectException) {
+                LoginResult.Failure.Network
             } catch (e: Exception) {
                 when {
                     e.message?.contains("network") == true -> LoginResult.Failure.Network
