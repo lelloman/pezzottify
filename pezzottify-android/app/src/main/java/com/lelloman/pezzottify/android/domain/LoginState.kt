@@ -6,5 +6,6 @@ sealed class LoginState {
     data class LoggedIn(
         val username: String,
         val authToken: String,
+        val remoteUrl: String,
     ) : LoginState()
 }

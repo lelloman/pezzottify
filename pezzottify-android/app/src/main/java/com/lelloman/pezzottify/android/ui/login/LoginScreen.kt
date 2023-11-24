@@ -36,19 +36,14 @@ fun LoginScreen(viewModel: LoginViewModel = hiltViewModel()) {
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
 
-        Box(modifier = Modifier.padding(40.dp, 0.dp, 40.dp, 0.dp)) {
-            Button(
-                onClick = {
-                    Toast.makeText(context, "ASD", Toast.LENGTH_SHORT).show()
-                },
-                shape = RoundedCornerShape(50.dp),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(50.dp),
-            ) {
-                Text("ASD")
-            }
-        }
+        TextField(
+            label = { Text(text = "Remote url") },
+            value = state.remoteUrl,
+            onValueChange = { viewModel.onRemoteUrlUpdate(it) },
+            enabled = !state.loading,
+        )
+
+        Spacer(modifier = Modifier.height(20.dp))
         TextField(
             label = { Text(text = "Username") },
             value = state.username,

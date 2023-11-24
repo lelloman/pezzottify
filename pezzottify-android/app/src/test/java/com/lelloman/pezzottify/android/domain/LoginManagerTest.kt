@@ -45,78 +45,97 @@ class LoginManagerTest {
     fun `loads logged in state from persistence file`() {
         runBlocking {
             persistenceFile = File.createTempFile("login", "persistence")
+            val remoteUrl = "http://asd.com"
             val username = "the username"
             val token = "the token"
-            persistenceFile.writeText("$username\n$token")
+            persistenceFile.writeText("$remoteUrl\n$username\n$token")
 
             val state = tested.loginState.first()
 
-            assertThat(state).isEqualTo(LoginState.LoggedIn(username = username, authToken = token))
+            assertThat(state).isEqualTo(
+                LoginState.LoggedIn(
+                    username = username,
+                    authToken = token,
+                    remoteUrl = remoteUrl
+                )
+            )
         }
     }
 
     @Test
     fun `returns network error`() {
         runBlocking {
-            whenever(remoteApi.performLogin(any(), any()))
+            whenever(remoteApi.performLogin(any(), any(), any()))
                 .thenAnswer { throw ConnectException("networky stuff") }
 
-            assertThat(tested.performLogin("", "")).isEqualTo(LoginResult.Failure.Network)
+            assertThat(tested.performLogin("", "", "")).isEqualTo(LoginResult.Failure.Network)
         }
     }
 
     @Test
     fun `returns invalid credentials error`() {
         runBlocking {
-            whenever(remoteApi.performLogin(any(), any()))
+            whenever(remoteApi.performLogin(any(), any(), any()))
                 .thenReturn(RemoteApi.Response.Success(LoginResponse.InvalidCredentials))
 
-            assertThat(tested.performLogin("", "")).isEqualTo(LoginResult.Failure.Credentials)
+            assertThat(tested.performLogin("", "", "")).isEqualTo(LoginResult.Failure.Credentials)
         }
     }
 
     @Test
     fun `returns unknown error`() {
         runBlocking {
-            whenever(remoteApi.performLogin(any(), any()))
+            whenever(remoteApi.performLogin(any(), any(), any()))
                 .thenAnswer { throw IllegalStateException("mweh") }
 
-            assertThat(tested.performLogin("", "")).isEqualTo(LoginResult.Failure.Unknown)
+            assertThat(tested.performLogin("", "", "")).isEqualTo(LoginResult.Failure.Unknown)
         }
     }
 
     @Test
     fun `returns invalid credentials error 2`() {
         runBlocking {
-            whenever(remoteApi.performLogin(any(), any()))
+            whenever(remoteApi.performLogin(any(), any(), any()))
                 .thenReturn(RemoteApi.Response.UnknownError())
 
-            assertThat(tested.performLogin("", "")).isEqualTo(LoginResult.Failure.Unknown)
+            assertThat(tested.performLogin("", "", "")).isEqualTo(LoginResult.Failure.Unknown)
         }
     }
 
     @Test
     fun `returns invalid credentials error 3`() {
         runBlocking {
-            whenever(remoteApi.performLogin(any(), any()))
+            whenever(remoteApi.performLogin(any(), any(), any()))
                 .thenReturn(RemoteApi.Response.ResponseError())
 
-            assertThat(tested.performLogin("", "")).isEqualTo(LoginResult.Failure.Unknown)
+            assertThat(tested.performLogin("", "", "")).isEqualTo(LoginResult.Failure.Unknown)
         }
     }
 
     @Test
     fun `logs in successfully`() {
         runBlocking {
-            val (username, token) = "Username" to "Token"
+            val (username, token, remoteUrl) = arrayOf("Username", "Token", "http://asd.com")
             persistenceFile = File.createTempFile("persitence", "tmp")
-            whenever(remoteApi.performLogin(any(), any()))
+            whenever(remoteApi.performLogin(any(), any(), any()))
                 .thenReturn(RemoteApi.Response.Success(LoginResponse.Success(token)))
 
-            assertThat(tested.performLogin(username, "")).isEqualTo(LoginResult.Success(token))
+            assertThat(
+                tested.performLogin(
+                    username = username,
+                    remoteUrl = remoteUrl,
+                    password = ""
+                )
+            ).isEqualTo(LoginResult.Success(token))
             assertThat(tested.loginState.first())
-                .isEqualTo(LoginState.LoggedIn(username = username, authToken = token))
-            assertThat(persistenceFile.readText()).isEqualTo("$username\n$token")
+                .isEqualTo(
+                    LoginState.LoggedIn(
+                        username = username,
+                        authToken = token,
+                        remoteUrl = remoteUrl
+                    )
+                )
+            assertThat(persistenceFile.readText()).isEqualTo("$remoteUrl\n$username\n$token")
         }
     }
 }

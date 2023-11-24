@@ -5,6 +5,7 @@ import com.lelloman.pezzottify.remoteapi.RemoteApi
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.runBlocking
 import java.io.File
 import java.net.ConnectException
@@ -13,7 +14,7 @@ interface LoginManager {
 
     val loginState: Flow<LoginState>
 
-    suspend fun performLogin(username: String, password: String): LoginResult
+    suspend fun performLogin(remoteUrl: String, username: String, password: String): LoginResult
 
     suspend fun logout()
 }
@@ -26,23 +27,24 @@ class LoginManagerImpl(
 
     private val stateBroadcast = MutableStateFlow<LoginState>(LoginState.Loading)
 
-    override val loginState: Flow<LoginState> by lazy {
+    override val loginState: StateFlow<LoginState> by lazy {
         loadPersistedState()
         stateBroadcast
     }
 
     private fun loadPersistedState() {
         val state = try {
-            val (l1, l2) = persistence.readText()
+            val (remoteUrl, username, authToken) = persistence.readText()
                 .lines()
-                .takeIf { it.size > 1 }
-                ?.take(2)
+                .takeIf { it.size > 2 }
+                ?.take(3)
                 ?.takeIf { lines -> lines.all { it.isNotBlank() } }
                 ?: throw Exception()
 
             LoginState.LoggedIn(
-                username = l1,
-                authToken = l2,
+                username = username,
+                authToken = authToken,
+                remoteUrl = remoteUrl,
             )
 
         } catch (_: Throwable) {
@@ -56,19 +58,31 @@ class LoginManagerImpl(
         stateBroadcast.emit(LoginState.Unauthenticated)
     }
 
-    override suspend fun performLogin(username: String, password: String): LoginResult {
+    override suspend fun performLogin(
+        remoteUrl: String,
+        username: String,
+        password: String
+    ): LoginResult {
         ioDispatcher.run {
             return try {
                 when (val response =
-                    remoteApi.performLogin(username = username, password = password)) {
+                    remoteApi.performLogin(
+                        username = username,
+                        password = password,
+                        remoteUrl = remoteUrl
+                    )) {
                     is RemoteApi.Response.Success -> {
                         when (response.value) {
                             is LoginResponse.Success -> {
                                 val token = (response.value as LoginResponse.Success).authToken
                                 stateBroadcast.emit(
-                                    LoginState.LoggedIn(username, token) as LoginState
+                                    LoginState.LoggedIn(
+                                        username = username,
+                                        authToken = token,
+                                        remoteUrl = remoteUrl,
+                                    ) as LoginState
                                 )
-                                persistence.writeText("$username\n$token")
+                                persistence.writeText("$remoteUrl\n$username\n$token")
                                 LoginResult.Success(token)
                             }
 

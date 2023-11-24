@@ -13,7 +13,7 @@ import kotlin.coroutines.CoroutineContext
 
 interface RemoteApi {
 
-    suspend fun performLogin(username: String, password: String): Response<LoginResponse>
+    suspend fun performLogin(remoteUrl: String, username: String, password: String): Response<LoginResponse>
 
     suspend fun getUserState(): Response<UserStateResponse>
 
@@ -29,27 +29,28 @@ interface RemoteApi {
     }
 
     companion object Factory {
-        fun create(baseUrl: String, ioContext: CoroutineContext): RemoteApi {
+        fun create(ioContext: CoroutineContext): RemoteApi {
             val gson =
                 GsonBuilder().registerTypeAdapter(Artist::class.java, ArtistTypeAdapter()).create()
             val httpClient = HttpClientImpl(gson)
-            return RemoteApiImpl(httpClient, baseUrl, ioContext)
+            return RemoteApiImpl(httpClient, ioContext)
         }
     }
 }
 
 internal class RemoteApiImpl(
     private val httpClient: HttpClient,
-    private val baseUrl: String,
     private val ioContext: CoroutineContext
 ) : RemoteApi {
+
+    private var baseUrl = ""
 
     private suspend fun <T> onIo(action: () -> T) = withContext(ioContext) { action() }
 
     override suspend fun performLogin(
-        username: String, password: String
+        remoteUrl: String, username: String, password: String
     ): RemoteApi.Response<LoginResponse> = onIo {
-        val url = baseUrl + LOGIN_PATH
+        val url = remoteUrl + LOGIN_PATH
         val response =
             httpClient.jsonPost(url, LoginRequest(username = username, password = password))
         if (response.isSuccessful) {
@@ -58,6 +59,7 @@ internal class RemoteApiImpl(
                 RemoteApi.Response.ResponseError()
             } else {
                 httpClient.setAuthToken(authToken)
+                this.baseUrl = remoteUrl
                 RemoteApi.Response.Success(LoginResponse.Success(authToken))
             }
         } else if (response.is4xx) {
