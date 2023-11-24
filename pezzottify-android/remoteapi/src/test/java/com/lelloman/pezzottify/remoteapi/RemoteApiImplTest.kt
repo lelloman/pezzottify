@@ -9,10 +9,11 @@ import org.junit.Test
 @Ignore("Needs running server")
 class RemoteApiImplTest {
 
-    private val tested = RemoteApi.create("http://127.0.0.1:8080", Dispatchers.IO)
+    private val tested = RemoteApi.create(Dispatchers.IO)
+    private val remoteUrl = "http://127.0.0.1:8080"
 
     private suspend fun performUserLogin() {
-        with(tested.performLogin("user", "user")) {
+        with(tested.performLogin(remoteUrl, "user", "user")) {
             assertThat(this).isInstanceOf(RemoteApi.Response.Success::class.java)
             val loginResponse = (this as RemoteApi.Response.Success).value
             assertThat(loginResponse).isInstanceOf(LoginResponse.Success::class.java)
@@ -22,13 +23,13 @@ class RemoteApiImplTest {
 
     @Test
     fun `performs admin login`() = runBlocking {
-        with(tested.performLogin("admin", "wrong pw")) {
+        with(tested.performLogin(remoteUrl, "admin", "wrong pw")) {
             assertThat(this).isInstanceOf(RemoteApi.Response.Success::class.java)
             val loginResponse = (this as RemoteApi.Response.Success).value
             assertThat(loginResponse).isInstanceOf(LoginResponse.InvalidCredentials::class.java)
         }
 
-        with(tested.performLogin("admin", "admin")) {
+        with(tested.performLogin(remoteUrl, "admin", "admin")) {
             assertThat(this).isInstanceOf(RemoteApi.Response.Success::class.java)
             val loginResponse = (this as RemoteApi.Response.Success).value
             assertThat(loginResponse).isInstanceOf(LoginResponse.Success::class.java)
@@ -38,8 +39,8 @@ class RemoteApiImplTest {
 
     @Test
     fun `performs user login`() = runBlocking {
-        val tested = RemoteApi.create("http://127.0.0.1:8080", Dispatchers.IO)
-        with(tested.performLogin("user", "wrong pw")) {
+        val tested = RemoteApi.create(Dispatchers.IO)
+        with(tested.performLogin(remoteUrl, "user", "wrong pw")) {
             assertThat(this).isInstanceOf(RemoteApi.Response.Success::class.java)
             val loginResponse = (this as RemoteApi.Response.Success).value
             assertThat(loginResponse).isInstanceOf(LoginResponse.InvalidCredentials::class.java)

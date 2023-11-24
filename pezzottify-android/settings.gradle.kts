@@ -16,3 +16,4 @@ dependencyResolutionManagement {
 rootProject.name = "Pezzottify"
 include(":app")
 include(":remoteapi")
+include(":localdata")

@@ -1,10 +1,5 @@
 package com.lelloman.pezzottify.remoteapi.model
 
-import com.google.gson.JsonDeserializationContext
-import com.google.gson.JsonDeserializer
-import com.google.gson.JsonElement
-import java.lang.reflect.Type
-
 interface Artist {
     val id: String
     val displayName: String
