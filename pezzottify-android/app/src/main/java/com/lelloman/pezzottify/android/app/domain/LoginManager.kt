@@ -24,7 +24,8 @@ class LoginManagerImpl(
     private val remoteApi: RemoteApi,
     private val persistence: File,
     private val ioDispatcher: CoroutineDispatcher,
-    private val loginOperations: List<LoginOperation>,
+    private val loginOperations: Set<LoginOperation>,
+    private val logoutOperations: Set<LogoutOperation>,
 ) : LoginManager {
 
     private val stateBroadcast = MutableStateFlow<LoginState>(LoginState.Loading)
@@ -55,7 +56,14 @@ class LoginManagerImpl(
         runBlocking { stateBroadcast.emit(state) }
     }
 
-    override suspend fun logout() = ioDispatcher.run {
+    override suspend fun logout() = withContext(ioDispatcher) {
+        logoutOperations.forEach { operation ->
+            try {
+                operation()
+            } catch (e: Throwable) {
+                e.printStackTrace()
+            }
+        }
         persistence.delete()
         stateBroadcast.emit(LoginState.Unauthenticated)
     }

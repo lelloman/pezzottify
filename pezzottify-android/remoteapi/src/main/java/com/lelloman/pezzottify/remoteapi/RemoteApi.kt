@@ -7,17 +7,24 @@ import com.lelloman.pezzottify.remoteapi.internal.HttpClientImpl
 import com.lelloman.pezzottify.remoteapi.internal.LoginRequest
 import com.lelloman.pezzottify.remoteapi.model.Albums
 import com.lelloman.pezzottify.remoteapi.model.Artist
+import com.lelloman.pezzottify.remoteapi.model.Artists
 import com.lelloman.pezzottify.remoteapi.model.UserStateResponse
 import kotlinx.coroutines.withContext
 import kotlin.coroutines.CoroutineContext
 
 interface RemoteApi {
 
-    suspend fun performLogin(remoteUrl: String, username: String, password: String): Response<LoginResponse>
+    suspend fun performLogin(
+        remoteUrl: String,
+        username: String,
+        password: String
+    ): Response<LoginResponse>
 
     suspend fun getUserState(): Response<UserStateResponse>
 
     suspend fun getAlbums(): Response<Albums>
+
+    suspend fun getArtists(): Response<Artists>
 
     sealed class Response<T> {
         class Success<T>(val value: T) : Response<T>()
@@ -101,9 +108,26 @@ internal class RemoteApiImpl(
         }
     }
 
+    override suspend fun getArtists(): RemoteApi.Response<Artists> = onIo {
+        val response = httpClient.get(baseUrl + ARTISTS_PATH)
+        when {
+            response.isSuccessful -> {
+                try {
+                    RemoteApi.Response.Success(response.consumeBody(Artists::class.java))
+                } catch (_: Throwable) {
+                    RemoteApi.Response.ResponseError()
+                }
+            }
+
+            response.status == 401 || response.status == 403 -> RemoteApi.Response.Unauthorized()
+            else -> RemoteApi.Response.UnknownError()
+        }
+    }
+
     companion object {
         private const val LOGIN_PATH = "/api/auth"
         private const val USER_STATE_PATH = "/api/user/state"
         private const val ALBUMS_PATH = "/api/albums"
+        private const val ARTISTS_PATH = "/api/artists"
     }
 }

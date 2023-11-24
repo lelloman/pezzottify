@@ -6,7 +6,10 @@ import androidx.room.TypeConverter
 import androidx.room.TypeConverters
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
+import com.lelloman.pezzottify.android.localdata.model.Album
+import com.lelloman.pezzottify.android.localdata.model.AudioTrack
 import com.lelloman.pezzottify.android.localdata.model.BandArtist
+import com.lelloman.pezzottify.android.localdata.model.Image
 import com.lelloman.pezzottify.android.localdata.model.IndividualArtist
 import java.lang.reflect.Type
 
@@ -22,7 +25,16 @@ object Converters {
     fun fromList(list: List<String>) = gson.toJson(list)
 }
 
-@Database(entities = [IndividualArtist::class, BandArtist::class], version = 1)
+@Database(
+    entities = [
+        IndividualArtist::class,
+        BandArtist::class,
+        Image::class,
+        Album::class,
+        AudioTrack::class
+    ],
+    version = 1
+)
 @TypeConverters(Converters::class)
 abstract class LocalDb : RoomDatabase() {
 

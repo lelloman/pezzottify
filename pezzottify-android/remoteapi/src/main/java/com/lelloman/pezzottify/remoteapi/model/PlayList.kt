@@ -29,3 +29,5 @@ data class UserPlayList(
 ) : Playlist
 
 class Albums : ArrayList<Album>()
+
+class Artists : ArrayList<Artist>()

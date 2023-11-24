@@ -1,6 +1,11 @@
 package com.lelloman.pezzottify.android.localdata.model
 
+import androidx.room.Entity
+import androidx.room.PrimaryKey
+
+@Entity(tableName = Image.TABLE_NAME)
 data class Image(
+    @PrimaryKey
     val id: String,
     val size: Long,
     val width: Int,
@@ -10,9 +15,15 @@ data class Image(
     enum class Type {
         PNG, JPG
     }
+
+    companion object {
+        const val TABLE_NAME = "image"
+    }
 }
 
+@Entity(tableName = AudioTrack.TABLE_NAME)
 data class AudioTrack(
+    @PrimaryKey
     val id: String = "",
     val size: Long,
     val name: String,
@@ -23,5 +34,9 @@ data class AudioTrack(
 ) {
     enum class Type {
         MP3, FLAC;
+    }
+
+    companion object {
+        const val TABLE_NAME = "audio_track"
     }
 }

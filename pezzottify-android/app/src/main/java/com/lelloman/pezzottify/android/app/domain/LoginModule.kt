@@ -18,10 +18,13 @@ class LoginModule {
     fun provideLoginManager(
         @ApplicationContext context: Context,
         loginOperations: Set<@JvmSuppressWildcards LoginOperation>,
+        logoutOperations: Set<@JvmSuppressWildcards LogoutOperation>,
+        remoteApi: RemoteApi,
     ): LoginManager = LoginManagerImpl(
-        remoteApi = RemoteApi.Factory.create(Dispatchers.IO),
+        remoteApi = remoteApi,
         persistence = File(context.filesDir, "2034hny"),
         ioDispatcher = Dispatchers.IO,
-        loginOperations = loginOperations.toList(),
+        loginOperations = loginOperations,
+        logoutOperations = logoutOperations,
     )
 }

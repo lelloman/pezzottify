@@ -1,31 +1,40 @@
 package com.lelloman.pezzottify.android.localdata.model
 
+import androidx.room.Entity
+import androidx.room.PrimaryKey
+
 interface Playlist {
     val id: String
-    val audioTracks: List<AudioTrack>
+    val audioTracksIds: List<String>
     val name: String
 }
 
+@Entity(tableName = Album.TABLE_NAME)
 data class Album(
+    @PrimaryKey
     override val id: String = "",
 
     override val name: String,
 
-    override val audioTracks: List<AudioTrack> = emptyList(),
+    override val audioTracksIds: List<String> = emptyList(),
 
-    val coverImage: Image? = null,
+    val coverImageId: String? = null,
 
-    val sideImages: List<Image> = emptyList(),
+    val sideImagesIds: List<String> = emptyList(),
 
-    val artists: List<Artist>,
-) : Playlist
+    val artistsIds: List<String>,
+) : Playlist {
+    companion object {
+        const val TABLE_NAME = "album"
+    }
+}
 
 data class UserPlayList(
     override val id: String,
 
     override val name: String,
 
-    override val audioTracks: List<AudioTrack>,
+    override val audioTracksIds: List<String>,
 ) : Playlist
 
 class Albums : ArrayList<Album>()

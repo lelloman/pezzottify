@@ -26,7 +26,8 @@ class LoginManagerTest {
             persistence = persistenceFile,
             remoteApi = remoteApi,
             ioDispatcher = Dispatchers.IO,
-            loginOperations = emptyList(),
+            loginOperations = emptySet(),
+            logoutOperations = emptySet(),
         )
     }
 
