@@ -20,6 +20,9 @@ interface StaticsDao {
     @Query("SELECT * FROM ${BandArtist.TABLE_NAME}")
     fun getBands(): Flow<List<BandArtist>>
 
+    @Query("SELECT * FROM ${Album.TABLE_NAME}")
+    fun getAlbums(): Flow<List<Album>>
+
     @Query("DELETE FROM ${IndividualArtist.TABLE_NAME}")
     fun deleteIndividuals()
 
@@ -31,6 +34,9 @@ interface StaticsDao {
 
     @Query("DELETE FROM ${AudioTrack.TABLE_NAME}")
     fun deleteAudioTracks()
+
+    @Query("DELETE FROM ${Album.TABLE_NAME}")
+    fun deleteAlbums()
 
     @Insert
     fun insertIndividuals(individuals: List<IndividualArtist>)
@@ -44,6 +50,12 @@ interface StaticsDao {
     @Insert
     fun insertAudioTracks(tracks: List<AudioTrack>)
 
+    @Insert
+    fun insertAlbums(albums: List<Album>)
+
+    @Query("SELECT * FROM ${Album.TABLE_NAME} WHERE id=:id")
+    suspend fun getAlbum(id: String): Album?
+
     @Transaction
     fun replaceStatics(
         albums: List<Album>,
@@ -56,9 +68,12 @@ interface StaticsDao {
         deleteBands()
         deleteImages()
         deleteAudioTracks()
+        deleteAlbums()
+
         insertIndividuals(individuals)
         insertBands(bands)
         insertImages(images)
         insertAudioTracks(audioTracks)
+        insertAlbums(albums)
     }
 }

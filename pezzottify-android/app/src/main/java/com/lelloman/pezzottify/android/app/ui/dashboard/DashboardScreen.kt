@@ -1,27 +1,53 @@
 package com.lelloman.pezzottify.android.app.ui.dashboard
 
-import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.dp
+import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import com.lelloman.pezzottify.android.app.R
 import com.lelloman.pezzottify.android.app.ui.Routes
 import com.lelloman.pezzottify.android.app.ui.dashboard.home.HomeScreen
 import com.lelloman.pezzottify.android.app.ui.dashboard.profile.ProfileScreen
@@ -51,11 +77,16 @@ data class BottomNavigationItem(
 }
 
 @Composable
-fun DashboardGraph(navHostController: NavHostController, paddingValues: PaddingValues) {
+fun DashboardGraph(navHostController: NavHostController, modifier: Modifier) {
     NavHost(
+        modifier = modifier,
         navController = navHostController,
         route = Routes.Dashboard.route,
         startDestination = Routes.Dashboard.Home.route,
+        enterTransition = { EnterTransition.None },
+        popEnterTransition = { EnterTransition.None },
+        exitTransition = { ExitTransition.None },
+        popExitTransition = { ExitTransition.None },
     ) {
         composable(Routes.Dashboard.Home.route) { HomeScreen() }
         composable(Routes.Dashboard.Search.route) { SearchScreen() }
@@ -67,7 +98,9 @@ fun DashboardGraph(navHostController: NavHostController, paddingValues: PaddingV
 @Composable
 fun DashboardScreen(
     navController: NavHostController = rememberNavController(),
+    viewModel: DashboardViewModel = hiltViewModel(),
 ) {
+    val state by viewModel.state.collectAsState()
     Scaffold(modifier = Modifier.fillMaxSize(), bottomBar = {
         NavigationBar {
             val navBackStackEntry by navController.currentBackStackEntryAsState()
@@ -91,6 +124,69 @@ fun DashboardScreen(
             }
         }
     }) { paddingValues ->
-        DashboardGraph(navController, paddingValues)
+        Column(
+            modifier = Modifier.padding(paddingValues)
+        ) {
+            DashboardGraph(navController, Modifier.weight(1f, true))
+            AnimatedVisibility(visible = state.playerControlsState != null) {
+                PlayerControls(
+                    Modifier,
+                    state.playerControlsState ?: DashboardViewModel.PlayerControlsState()
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun PlayerControls(
+    modifier: Modifier,
+    playerControlsState: DashboardViewModel.PlayerControlsState
+) {
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .background(color = Color(0xffbbbbbb))
+            .padding(8.dp)
+    ) {
+        var sliderPosition by remember { mutableFloatStateOf(0f) }
+        Row(horizontalArrangement = Arrangement.Center, modifier = Modifier.fillMaxWidth()) {
+            IconButton(modifier = Modifier.size(48.dp), onClick = {}) {
+                Icon(
+                    painter = painterResource(R.drawable.skip_previous_24),
+                    contentDescription = "play/pause",
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
+            Spacer(modifier = Modifier.width(24.dp))
+            IconButton(modifier = Modifier.size(48.dp), onClick = {}) {
+                Icon(
+                    painter = painterResource(R.drawable.play_circle_24),
+                    contentDescription = "play/pause",
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
+            Spacer(modifier = Modifier.width(24.dp))
+            IconButton(modifier = Modifier.size(48.dp), onClick = {}) {
+                Icon(
+                    painter = painterResource(R.drawable.skip_next_24),
+                    contentDescription = "play/pause",
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
+        }
+        Slider(
+            value = sliderPosition,
+            onValueChange = { sliderPosition = it },
+            modifier = Modifier.fillMaxWidth()
+        )
+    }
+}
+
+@Preview
+@Composable
+fun PlayerControlsPreview() {
+    Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
+        PlayerControls(modifier = Modifier.defaultMinSize(), DashboardViewModel.PlayerControlsState())
     }
 }

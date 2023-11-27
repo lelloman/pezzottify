@@ -49,7 +49,7 @@ class SecurityConfig(@Autowired private val userDetailsService: UserDetailsServi
             it.requestMatchers(AntPathRequestMatcher("/api/auth")).permitAll()
             it.requestMatchers(mvcMatcherBuilder.pattern("/me")).permitAll()
             it.requestMatchers(AntPathRequestMatcher("/h2/**")).permitAll()
-            it.requestMatchers(mvcMatcherBuilder.pattern("/api/track/**")).permitAll()
+//            it.requestMatchers(mvcMatcherBuilder.pattern("/api/track/**")).permitAll()
             it.anyRequest().authenticated()
         }
         http.csrf {

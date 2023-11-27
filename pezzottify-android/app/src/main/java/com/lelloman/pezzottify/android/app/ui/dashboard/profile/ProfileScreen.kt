@@ -28,7 +28,7 @@ fun ProfileScreen(
     viewModel: ProfileViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsState()
-    ConstraintLayout(modifier = Modifier.fillMaxSize()) {
+    ConstraintLayout() {
         val (label, button) = createRefs()
 
         val labelConstraint = Modifier.constrainAs(label) {
