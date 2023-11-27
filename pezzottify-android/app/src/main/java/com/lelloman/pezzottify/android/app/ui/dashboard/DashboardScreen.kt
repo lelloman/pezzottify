@@ -1,11 +1,13 @@
 package com.lelloman.pezzottify.android.app.ui.dashboard
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.Crossfade
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -31,9 +33,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -141,6 +140,7 @@ fun DashboardScreen(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun PlayerControls(
     modifier: Modifier,
@@ -151,34 +151,30 @@ fun PlayerControls(
         modifier = modifier
             .fillMaxWidth()
             .background(color = Color(0xffbbbbbb))
-            .padding(8.dp)
     ) {
-        var sliderPosition by remember { mutableFloatStateOf(0f) }
-        Row(horizontalArrangement = Arrangement.Center, modifier = Modifier.fillMaxWidth()) {
-            IconButton(modifier = Modifier.size(48.dp), onClick = {}) {
-                Icon(
-                    painter = painterResource(R.drawable.skip_previous_24),
-                    contentDescription = "play/pause",
-                    modifier = Modifier.fillMaxSize()
-                )
-            }
-            Spacer(modifier = Modifier.width(24.dp))
-            IconButton(modifier = Modifier.size(48.dp), onClick = onPlayPauseButtonClicked) {
-                val iconResource =
-                    if (playerControlsState.isPlaying) R.drawable.pause_circle_outline_24 else R.drawable.play_circle_24
-                Icon(
-                    painter = painterResource(iconResource),
-                    contentDescription = "play/pause",
-                    modifier = Modifier.fillMaxSize()
-                )
-            }
-            Spacer(modifier = Modifier.width(24.dp))
-            IconButton(modifier = Modifier.size(48.dp), onClick = {}) {
-                Icon(
-                    painter = painterResource(R.drawable.skip_next_24),
-                    contentDescription = "play/pause",
-                    modifier = Modifier.fillMaxSize()
-                )
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                playerControlsState.text,
+                modifier = Modifier
+                    .weight(1f)
+                    .basicMarquee(velocity = 60.dp),
+                maxLines = 1,
+            )
+            IconButton(
+                modifier = Modifier
+                    .size(48.dp)
+                    .padding(8.dp), onClick = onPlayPauseButtonClicked
+            ) {
+                Crossfade(targetState = playerControlsState.isPlaying, label = "") { isPlaying ->
+                    val res =
+                        if (isPlaying) R.drawable.baseline_pause_24 else R.drawable.baseline_play_arrow_24
+                    Icon(
+                        painter = painterResource(res),
+                        contentDescription = "play/pause",
+                        modifier = Modifier.fillMaxSize()
+                    )
+                }
             }
         }
         Canvas(
@@ -187,8 +183,13 @@ fun PlayerControls(
                 .height(4.dp),
         ) {
             val start = Offset(0f, size.height / 2)
-            val end = Offset(size.width * playerControlsState.trackPercent, size.height / 2)
-            drawLine(color = Color.Black, start = start, end = end)
+            val end = Offset(size.width, size.height / 2)
+            val strokeWidth = 4.dp.value
+            val progressEnd = Offset(size.width * playerControlsState.trackPercent, size.height / 2)
+            drawLine(color = Color.White, start = start, end = end, strokeWidth = strokeWidth)
+            drawLine(
+                color = Color.Black, start = start, end = progressEnd, strokeWidth = strokeWidth
+            )
         }
     }
 }

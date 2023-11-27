@@ -17,3 +17,4 @@ rootProject.name = "Pezzottify"
 include(":app")
 include(":remoteapi")
 include(":localdata")
+include(":log")

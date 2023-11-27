@@ -11,8 +11,11 @@ import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import com.lelloman.pezzottify.android.localdata.model.Playlist
+import com.lelloman.pezzottify.android.log.LoggerFactory
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -38,7 +41,7 @@ interface PlayerManager {
             val trackName: String,
             val artistName: String,
             val trackDurationMs: Long,
-            val currentTimeMs: Long
+            val currentPositionMs: Long
         ) : State()
     }
 }
@@ -47,13 +50,17 @@ internal class PlayerManagerImpl(
     private val context: Context,
     private val playerDispatcher: CoroutineDispatcher,
     private val authTokenProvider: Flow<String>,
+    loggerFactory: LoggerFactory,
 ) : PlayerManager, Player.Listener {
+
+    private val log by loggerFactory
 
     private val mutableState = MutableStateFlow<PlayerManager.State>(PlayerManager.State.Off)
     override val state = mutableState.asStateFlow()
 
     private val playerHolder = PlayerHolder()
     private var authToken: String? = null
+    private var pollProgressJob: Job? = null
 
     init {
         GlobalScope.launch {
@@ -83,14 +90,49 @@ internal class PlayerManagerImpl(
         if (it.playWhenReady) it.pause() else it.play()
     }
 
+    private fun startPollDurationJob() {
+        pollProgressJob = GlobalScope.launch {
+            playerDispatcher.run {
+                while (true) {
+                    val currentState = state.value
+                    if (currentState !is PlayerManager.State.Playing) break
+                    playerOperation {
+                        val newState = currentState.copy(
+                            trackDurationMs = it.duration,
+                            currentPositionMs = it.currentPosition,
+                        )
+                        mutableState.tryEmit(newState)
+                    }
+                    delay(500)
+                }
+            }
+        }
+    }
+
     override fun onIsPlayingChanged(isPlaying: Boolean) {
         super.onIsPlayingChanged(isPlaying)
-        val prev = state.value
-        val newValue = when (prev) {
-            is PlayerManager.State.Off -> PlayerManager.State.Playing(!isPlaying, "", "", 0, 0)
+        log.debug("onIsPlayingChanged() $isPlaying")
+        val newValue = when (val prev = state.value) {
+            is PlayerManager.State.Off -> PlayerManager.State.Playing(
+                paused = !isPlaying,
+                trackName = "",
+                artistName = "",
+                trackDurationMs = 0L,
+                currentPositionMs = 0L,
+            )
+
             is PlayerManager.State.Playing -> prev.copy(paused = !isPlaying)
         }
         mutableState.tryEmit(newValue)
+        if (!isPlaying) {
+            pollProgressJob?.cancel()
+            pollProgressJob = null
+        } else if (pollProgressJob == null) {
+            log.debug("onIsPlayingChanged() starting poll progress job.")
+            startPollDurationJob()
+        } else {
+            log.warn("onIsPlayingChanged() NOT starting poll progress job as it's already running, this shouldn't be happening.")
+        }
     }
 
     override fun onPlaybackStateChanged(playbackState: Int) {

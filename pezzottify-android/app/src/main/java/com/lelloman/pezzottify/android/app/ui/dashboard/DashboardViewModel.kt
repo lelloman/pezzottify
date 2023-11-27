@@ -3,6 +3,8 @@ package com.lelloman.pezzottify.android.app.ui.dashboard
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.lelloman.pezzottify.android.app.player.PlayerManager
+import com.lelloman.pezzottify.android.log.Logger
+import com.lelloman.pezzottify.android.log.LoggerFactory
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -13,7 +15,10 @@ import javax.inject.Inject
 @HiltViewModel
 class DashboardViewModel @Inject constructor(
     private val playerManager: PlayerManager,
+    loggerFactory: LoggerFactory,
 ) : ViewModel() {
+
+    private val log: Logger by loggerFactory
 
     val state: StateFlow<State>
         get() = playerManager.state
@@ -25,12 +30,13 @@ class DashboardViewModel @Inject constructor(
             is PlayerManager.State.Off -> null
             is PlayerManager.State.Playing -> PlayerControlsState(
                 isPlaying = !playerState.paused,
-                trackPercent = playerState.currentTimeMs.toDouble()
+                trackPercent = playerState.currentPositionMs.toDouble()
                     .div(playerState.trackDurationMs.toDouble())
                     .coerceIn(0.0, 1.0)
                     .toFloat(),
             )
         }
+        log.debug("Player state $playerState mapped to $controlsState")
         return State(controlsState)
     }
 
@@ -45,5 +51,6 @@ class DashboardViewModel @Inject constructor(
     data class PlayerControlsState(
         val isPlaying: Boolean = false,
         val trackPercent: Float = 0f,
+        val text: String = "",
     )
 }

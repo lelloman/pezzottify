@@ -6,6 +6,7 @@ import android.os.HandlerThread
 import com.lelloman.pezzottify.android.app.domain.LoginManager
 import com.lelloman.pezzottify.android.app.domain.LoginState
 import com.lelloman.pezzottify.android.app.domain.LogoutOperation
+import com.lelloman.pezzottify.android.log.LoggerFactory
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -25,7 +26,8 @@ class PlayerModule {
     @Singleton
     fun providePlayerManager(
         @ApplicationContext context: Context,
-        loginManager: LoginManager
+        loginManager: LoginManager,
+        loggerFactory: LoggerFactory,
     ): PlayerManager {
         val dispatcher = HandlerThread("Player thread")
             .apply { start() }
@@ -33,6 +35,7 @@ class PlayerModule {
             .let { Handler(it) }
             .asCoroutineDispatcher()
         return PlayerManagerImpl(
+            loggerFactory = loggerFactory,
             context = context,
             playerDispatcher = dispatcher,
             authTokenProvider = loginManager.loginState
