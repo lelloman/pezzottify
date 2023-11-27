@@ -3,6 +3,7 @@ package com.lelloman.pezzottify.android.app.ui.dashboard
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -12,6 +13,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -25,7 +27,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -35,6 +36,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.painterResource
@@ -131,7 +133,8 @@ fun DashboardScreen(
             AnimatedVisibility(visible = state.playerControlsState != null) {
                 PlayerControls(
                     Modifier,
-                    state.playerControlsState ?: DashboardViewModel.PlayerControlsState()
+                    state.playerControlsState ?: DashboardViewModel.PlayerControlsState(),
+                    onPlayPauseButtonClicked = viewModel::onPlayPauseButtonClicked,
                 )
             }
         }
@@ -141,7 +144,8 @@ fun DashboardScreen(
 @Composable
 fun PlayerControls(
     modifier: Modifier,
-    playerControlsState: DashboardViewModel.PlayerControlsState
+    playerControlsState: DashboardViewModel.PlayerControlsState,
+    onPlayPauseButtonClicked: () -> Unit,
 ) {
     Column(
         modifier = modifier
@@ -159,9 +163,11 @@ fun PlayerControls(
                 )
             }
             Spacer(modifier = Modifier.width(24.dp))
-            IconButton(modifier = Modifier.size(48.dp), onClick = {}) {
+            IconButton(modifier = Modifier.size(48.dp), onClick = onPlayPauseButtonClicked) {
+                val iconResource =
+                    if (playerControlsState.isPlaying) R.drawable.pause_circle_outline_24 else R.drawable.play_circle_24
                 Icon(
-                    painter = painterResource(R.drawable.play_circle_24),
+                    painter = painterResource(iconResource),
                     contentDescription = "play/pause",
                     modifier = Modifier.fillMaxSize()
                 )
@@ -175,11 +181,15 @@ fun PlayerControls(
                 )
             }
         }
-        Slider(
-            value = sliderPosition,
-            onValueChange = { sliderPosition = it },
-            modifier = Modifier.fillMaxWidth()
-        )
+        Canvas(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(4.dp),
+        ) {
+            val start = Offset(0f, size.height / 2)
+            val end = Offset(size.width * playerControlsState.trackPercent, size.height / 2)
+            drawLine(color = Color.Black, start = start, end = end)
+        }
     }
 }
 
@@ -187,6 +197,10 @@ fun PlayerControls(
 @Composable
 fun PlayerControlsPreview() {
     Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
-        PlayerControls(modifier = Modifier.defaultMinSize(), DashboardViewModel.PlayerControlsState())
+        PlayerControls(
+            modifier = Modifier.defaultMinSize(),
+            DashboardViewModel.PlayerControlsState(),
+            onPlayPauseButtonClicked = {},
+        )
     }
 }

@@ -15,6 +15,11 @@ interface LoginManager {
 
     val loginState: Flow<LoginState>
 
+    fun registerOperations(
+        loginOperations: Set<LoginOperation>,
+        logoutOperations: Set<LogoutOperation>
+    )
+
     suspend fun performLogin(remoteUrl: String, username: String, password: String): LoginResult
 
     suspend fun logout()
@@ -24,15 +29,24 @@ class LoginManagerImpl(
     private val remoteApi: RemoteApi,
     private val persistence: File,
     private val ioDispatcher: CoroutineDispatcher,
-    private val loginOperations: Set<LoginOperation>,
-    private val logoutOperations: Set<LogoutOperation>,
 ) : LoginManager {
+
+    private val loginOperations = mutableSetOf<LoginOperation>()
+    private val logoutOperations = mutableSetOf<LogoutOperation>()
 
     private val stateBroadcast = MutableStateFlow<LoginState>(LoginState.Loading)
 
     override val loginState: StateFlow<LoginState> by lazy {
         loadPersistedState()
         stateBroadcast
+    }
+
+    override fun registerOperations(
+        loginOperations: Set<LoginOperation>,
+        logoutOperations: Set<LogoutOperation>
+    ) {
+        this.loginOperations.addAll(loginOperations)
+        this.logoutOperations.addAll(logoutOperations)
     }
 
     private fun loadPersistedState() {

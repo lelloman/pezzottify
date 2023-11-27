@@ -9,22 +9,27 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
 import kotlinx.coroutines.Dispatchers
 import java.io.File
+import javax.inject.Singleton
 
 @Module
 @InstallIn(SingletonComponent::class)
 class LoginModule {
 
     @Provides
+    @Singleton
     fun provideLoginManager(
         @ApplicationContext context: Context,
-        loginOperations: Set<@JvmSuppressWildcards LoginOperation>,
-        logoutOperations: Set<@JvmSuppressWildcards LogoutOperation>,
         remoteApi: RemoteApi,
     ): LoginManager = LoginManagerImpl(
         remoteApi = remoteApi,
         persistence = File(context.filesDir, "2034hny"),
         ioDispatcher = Dispatchers.IO,
-        loginOperations = loginOperations,
-        logoutOperations = logoutOperations,
     )
+
+    @Provides
+    @Singleton
+    fun provideLoginStateOperationsCollector(
+        loginOperations: Set<@JvmSuppressWildcards LoginOperation>,
+        logoutOperations: Set<@JvmSuppressWildcards LogoutOperation>,
+    ) = LoginStateOperationsCollector(loginOperations, logoutOperations)
 }

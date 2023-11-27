@@ -40,4 +40,8 @@ class PlayerModule {
                 .map { it.authToken },
         )
     }
+
+    @Provides
+    @IntoSet
+    fun providesPlayerLogoutOperation(op: DisposePlayerLogoutOperation): LogoutOperation = op
 }
