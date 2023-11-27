@@ -1,4 +1,4 @@
-package com.lelloman.pezzottify.android.app.ui.dashboard
+package com.lelloman.pezzottify.android.app.ui.player
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -14,7 +14,7 @@ import kotlinx.coroutines.flow.stateIn
 import javax.inject.Inject
 
 @HiltViewModel
-class DashboardViewModel @Inject constructor(
+class PlayerViewModel @Inject constructor(
     private val playerManager: PlayerManager,
     loggerFactory: LoggerFactory,
     private val navigator: Navigator,
@@ -22,15 +22,15 @@ class DashboardViewModel @Inject constructor(
 
     private val log: Logger by loggerFactory
 
-    val state: StateFlow<State>
+    val state: StateFlow<PlayerState>
         get() = playerManager.state
             .map(::mapper)
             .stateIn(viewModelScope, SharingStarted.Eagerly, mapper(playerManager.state.value))
 
-    private fun mapper(playerState: PlayerManager.State): State {
-        val controlsState = when (playerState) {
-            is PlayerManager.State.Off -> null
-            is PlayerManager.State.Playing -> PlayerControlsState(
+    private fun mapper(playerState: PlayerManager.State): PlayerState {
+        val newState = when (playerState) {
+            is PlayerManager.State.Off -> PlayerState()
+            is PlayerManager.State.Playing -> PlayerState(
                 isPlaying = !playerState.paused,
                 trackPercent = playerState.currentPositionMs.toDouble()
                     .div(playerState.trackDurationMs.toDouble())
@@ -38,25 +38,37 @@ class DashboardViewModel @Inject constructor(
                     .toFloat(),
             )
         }
-        log.debug("Player state $playerState mapped to $controlsState")
-        return State(controlsState)
+        log.debug("Player state $playerState mapped to $newState")
+        return newState
     }
 
-    fun onPlayerControlsClicked() {
-        navigator.fromDashboardToPlayer()
+    fun onTrackPercentChanged(trackPercent: Float) {
+        playerManager.seek(trackPercent)
     }
 
     fun onPlayPauseButtonClicked() {
         playerManager.togglePlayPause()
     }
 
-    data class State(
-        val playerControlsState: PlayerControlsState?
-    )
+    fun onNextTrackButtonClicked() {
 
-    data class PlayerControlsState(
+    }
+
+    fun onPreviousTrackButtonClicked() {
+
+    }
+
+    fun onSeek(percent: Float) {
+
+    }
+
+    fun onBackButtonClicked() {
+        navigator.navigateBack()
+    }
+
+    data class PlayerState(
         val isPlaying: Boolean = false,
         val trackPercent: Float = 0f,
-        val text: String = "",
+        val albumName: String = "",
     )
 }

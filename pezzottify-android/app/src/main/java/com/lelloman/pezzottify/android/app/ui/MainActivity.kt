@@ -18,6 +18,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.lelloman.pezzottify.android.app.ui.dashboard.DashboardScreen
 import com.lelloman.pezzottify.android.app.ui.login.LoginScreen
+import com.lelloman.pezzottify.android.app.ui.player.PlayerScreen
 import com.lelloman.pezzottify.android.app.ui.splash.SplashScreen
 import com.lelloman.pezzottify.android.app.ui.theme.PezzottifyTheme
 import dagger.hilt.android.AndroidEntryPoint
@@ -74,17 +75,8 @@ fun PezzottifyNavHost(navController: NavHostController) {
     ) {
         composable(Routes.Splash.route) { SplashScreen() }
         composable(Routes.Login.route) { LoginScreen() }
-        composable(Routes.Dashboard.route) {
-            DashboardScreen()
-        }
-//        navigation(
-//            startDestination = Routes.Home.Home.route,
-//            route = Routes.Home.route,
-//        ) {
-//        composable(Routes.Dashboard.Home.route) { HomePage(navController) }
-//        composable(Routes.Dashboard.Search.route) { SearchPage(navController) }
-//        composable(Routes.Dashboard.Profile.route) { ProfilePage(navController) }
-//        }
+        composable(Routes.Dashboard.route) { DashboardScreen() }
+        composable(Routes.Player.route) { PlayerScreen() }
     }
 }
 

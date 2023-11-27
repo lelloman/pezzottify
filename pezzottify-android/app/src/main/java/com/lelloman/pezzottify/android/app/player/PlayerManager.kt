@@ -22,6 +22,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlin.math.roundToLong
 
 interface PlayerManager {
 
@@ -30,6 +31,8 @@ interface PlayerManager {
     fun play(playList: Playlist)
 
     fun togglePlayPause()
+
+    fun seek(percent: Float)
 
     suspend fun dispose()
 
@@ -84,6 +87,15 @@ internal class PlayerManagerImpl(
         }
         player.prepare()
         player.playWhenReady = true
+    }
+
+    override fun seek(percent: Float) = playerOperation { player ->
+        val positionMs = player.duration.toDouble().times(percent.toDouble()).roundToLong()
+        player.seekTo(positionMs)
+        state.value.takeIf { it is PlayerManager.State.Playing }
+            ?.let { it as PlayerManager.State.Playing }
+            ?.copy(currentPositionMs = positionMs)
+            ?.let(mutableState::tryEmit)
     }
 
     override fun togglePlayPause() = playerOperation {

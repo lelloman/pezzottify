@@ -42,6 +42,14 @@ class Navigator @Inject constructor() {
             .go()
     }
 
+    fun fromDashboardToPlayer() {
+        Routes.Player.destination().go()
+    }
+
+    fun navigateBack() {
+        _channel.trySend(NavigationEvent.GoBack)
+    }
+
     private fun Routes.destination() = EventBuilder(this.route)
 
     inner class EventBuilder(var dest: String) {
@@ -76,4 +84,5 @@ sealed class Routes(val route: String) {
     }
 
     object Login : Routes("login")
+    object Player : Routes("player")
 }

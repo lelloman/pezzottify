@@ -8,6 +8,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.basicMarquee
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -134,6 +135,7 @@ fun DashboardScreen(
                     Modifier,
                     state.playerControlsState ?: DashboardViewModel.PlayerControlsState(),
                     onPlayPauseButtonClicked = viewModel::onPlayPauseButtonClicked,
+                    onPlayerControlsClicked = viewModel::onPlayerControlsClicked,
                 )
             }
         }
@@ -145,12 +147,14 @@ fun DashboardScreen(
 fun PlayerControls(
     modifier: Modifier,
     playerControlsState: DashboardViewModel.PlayerControlsState,
+    onPlayerControlsClicked: () -> Unit,
     onPlayPauseButtonClicked: () -> Unit,
 ) {
     Column(
         modifier = modifier
             .fillMaxWidth()
             .background(color = Color(0xffbbbbbb))
+            .clickable { onPlayerControlsClicked() },
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
             Spacer(modifier = Modifier.width(8.dp))
@@ -202,6 +206,7 @@ fun PlayerControlsPreview() {
             modifier = Modifier.defaultMinSize(),
             DashboardViewModel.PlayerControlsState(),
             onPlayPauseButtonClicked = {},
+            onPlayerControlsClicked = {},
         )
     }
 }
