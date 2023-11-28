@@ -31,6 +31,8 @@ class PlayerViewModel @Inject constructor(
         val newState = when (playerState) {
             is PlayerManager.State.Off -> PlayerState()
             is PlayerManager.State.Playing -> PlayerState(
+                albumName = playerState.albumName,
+                trackName = playerState.trackName,
                 isPlaying = playerState.isPlaying,
                 trackPercent = playerState.currentPositionMs.toDouble()
                     .div(playerState.trackDurationMs.toDouble())
@@ -66,5 +68,6 @@ class PlayerViewModel @Inject constructor(
         val isPlaying: Boolean = false,
         val trackPercent: Float = 0f,
         val albumName: String = "",
+        val trackName: String = "",
     )
 }

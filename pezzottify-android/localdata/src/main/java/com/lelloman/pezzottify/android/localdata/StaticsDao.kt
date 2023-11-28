@@ -5,6 +5,7 @@ import androidx.room.Insert
 import androidx.room.Query
 import androidx.room.Transaction
 import com.lelloman.pezzottify.android.localdata.model.Album
+import com.lelloman.pezzottify.android.localdata.model.AlbumWithTracks
 import com.lelloman.pezzottify.android.localdata.model.AudioTrack
 import com.lelloman.pezzottify.android.localdata.model.BandArtist
 import com.lelloman.pezzottify.android.localdata.model.Image
@@ -55,6 +56,16 @@ interface StaticsDao {
 
     @Query("SELECT * FROM ${Album.TABLE_NAME} WHERE id=:id")
     suspend fun getAlbum(id: String): Album?
+
+    @Query("SELECT * FROM ${AudioTrack.TABLE_NAME} WHERE id=:id")
+    suspend fun getAudioTrack(id: String): AudioTrack?
+
+    @Transaction
+    suspend fun getMappedAlbum(id: String): AlbumWithTracks? {
+        val album = getAlbum(id) ?: return null
+        val tracks = album.audioTracksIds.map { getAudioTrack(it)!! }
+        return AlbumWithTracks(album, tracks)
+    }
 
     @Transaction
     fun replaceStatics(

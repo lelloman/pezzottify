@@ -6,12 +6,14 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.common.Player.EVENT_PLAYBACK_STATE_CHANGED
 import androidx.media3.common.Player.EVENT_PLAY_WHEN_READY_CHANGED
+import androidx.media3.common.Player.EVENT_TRACKS_CHANGED
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DataSource
 import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
-import com.lelloman.pezzottify.android.localdata.model.Playlist
+import com.lelloman.pezzottify.android.localdata.model.AlbumWithTracks
+import com.lelloman.pezzottify.android.localdata.model.AudioTrack
 import com.lelloman.pezzottify.android.log.LoggerFactory
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.GlobalScope
@@ -29,7 +31,7 @@ interface PlayerManager {
 
     val state: StateFlow<State>
 
-    fun play(playList: Playlist)
+    fun play(playList: AlbumWithTracks)
 
     fun togglePlayPause()
 
@@ -48,6 +50,7 @@ interface PlayerManager {
             val isPlaying: Boolean = false,
             val trackName: String = "",
             val artistName: String = "",
+            val albumName: String = "",
             val trackDurationMs: Long = 0L,
             val currentPositionMs: Long = 0L,
         ) : State()
@@ -70,6 +73,8 @@ internal class PlayerManagerImpl(
     private var authToken: String? = null
     private var pollProgressJob: Job? = null
 
+    private var currentPlaylist: AlbumWithTracks? = null
+
     init {
         GlobalScope.launch {
             authTokenProvider.collect { authToken = it }
@@ -84,12 +89,23 @@ internal class PlayerManagerImpl(
         }
     }
 
-    override fun play(playList: Playlist) = playerOperation { player ->
+    private fun updatePlayingState(action: (PlayerManager.State.Playing) -> PlayerManager.State.Playing) {
+        val oldState: PlayerManager.State.Playing = state.value
+            .takeIf { it is PlayerManager.State.Playing }
+            ?.let { it as PlayerManager.State.Playing }
+            ?: PlayerManager.State.Playing()
+        mutableState.tryEmit(action(oldState))
+    }
+
+    override fun play(playList: AlbumWithTracks) = playerOperation { player ->
+        currentPlaylist = playList
         player.clearMediaItems()
-        playList.audioTracksIds.forEach { audioTrackId ->
-            val url = "http://10.0.2.2:8080/api/track/${audioTrackId}"
-            player.addMediaItem(MediaItem.fromUri(url))
+        playList.tracks.forEach { audioTrack ->
+            val url = "http://10.0.2.2:8080/api/track/${audioTrack.id}"
+            val mediaItem = MediaItem.Builder().setUri(url).setTag(audioTrack).build()
+            player.addMediaItem(mediaItem)
         }
+        updatePlayingState { it.copy(albumName = playList.album.name) }
         player.prepare()
         player.playWhenReady = true
     }
@@ -112,8 +128,7 @@ internal class PlayerManagerImpl(
 
     private fun emitNewPositionMs(positionMs: Long) {
         state.value.takeIf { it is PlayerManager.State.Playing }
-            ?.let { it as PlayerManager.State.Playing }
-            ?.copy(currentPositionMs = positionMs)
+            ?.let { it as PlayerManager.State.Playing }?.copy(currentPositionMs = positionMs)
             ?.let(mutableState::tryEmit)
     }
 
@@ -125,14 +140,13 @@ internal class PlayerManagerImpl(
         pollProgressJob = GlobalScope.launch {
             playerDispatcher.run {
                 while (true) {
-                    val currentState = state.value
-                    if (currentState !is PlayerManager.State.Playing) break
-                    playerOperation {
-                        val newState = currentState.copy(
-                            trackDurationMs = it.duration,
-                            currentPositionMs = it.currentPosition,
-                        )
-                        mutableState.tryEmit(newState)
+                    playerOperation { player ->
+                        updatePlayingState {
+                            it.copy(
+                                trackDurationMs = player.duration,
+                                currentPositionMs = player.currentPosition,
+                            )
+                        }
                     }
                     delay(500)
                 }
@@ -141,25 +155,37 @@ internal class PlayerManagerImpl(
     }
 
     override fun onEvents(player: Player, events: Player.Events) {
-        if (events.containsAny(EVENT_PLAYBACK_STATE_CHANGED, EVENT_PLAY_WHEN_READY_CHANGED)) {
-            val shouldShowPlay =
-                !player.playWhenReady || player.playbackState == Player.STATE_IDLE || player.playbackState == Player.STATE_ENDED
-            val isPlaying = !shouldShowPlay
-            val newValue = when (val prev = state.value) {
-                is PlayerManager.State.Off -> PlayerManager.State.Playing(isPlaying = isPlaying)
+        log.debug("onEvents() $events")
+        val playbackStateChanged =
+            events.containsAny(EVENT_PLAYBACK_STATE_CHANGED, EVENT_PLAY_WHEN_READY_CHANGED)
+        val trackChanged = events.contains(EVENT_TRACKS_CHANGED)
+        if (!playbackStateChanged && !trackChanged) return
 
-                is PlayerManager.State.Playing -> prev.copy(isPlaying = isPlaying)
+        updatePlayingState {
+            var newState = it
+            if (playbackStateChanged) {
+                val shouldShowPlay =
+                    !player.playWhenReady || player.playbackState == Player.STATE_IDLE || player.playbackState == Player.STATE_ENDED
+                val isPlaying = !shouldShowPlay
+                newState = newState.copy(isPlaying = isPlaying)
+                if (!isPlaying) {
+                    pollProgressJob?.cancel()
+                    pollProgressJob = null
+                } else if (pollProgressJob == null) {
+                    log.debug("onIsPlayingChanged() starting poll progress job.")
+                    startPollDurationJob()
+                } else {
+                    log.warn("onIsPlayingChanged() NOT starting poll progress job as it's already running, this shouldn't be happening.")
+                }
             }
-            mutableState.tryEmit(newValue)
-            if (!isPlaying) {
-                pollProgressJob?.cancel()
-                pollProgressJob = null
-            } else if (pollProgressJob == null) {
-                log.debug("onIsPlayingChanged() starting poll progress job.")
-                startPollDurationJob()
-            } else {
-                log.warn("onIsPlayingChanged() NOT starting poll progress job as it's already running, this shouldn't be happening.")
+            if (trackChanged) {
+                val track = player.currentMediaItem?.localConfiguration?.tag
+                if (track is AudioTrack) {
+                    newState = newState.copy(trackName = track.name)
+                    log.debug("New track name ${track.name}")
+                }
             }
+            newState
         }
     }
 

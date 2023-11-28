@@ -24,7 +24,7 @@ class HomeViewModel @Inject constructor(
 
     fun onItemClicked(item: ListItem) {
         viewModelScope.launch launcho@{
-            val album = staticsDao.getAlbum(item.albumId) ?: return@launcho
+            val album = staticsDao.getMappedAlbum(item.albumId) ?: return@launcho
             playerManager.play(album)
         }
     }

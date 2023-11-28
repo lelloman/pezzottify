@@ -34,8 +34,10 @@ class DashboardViewModel @Inject constructor(
                 isPlaying = playerState.isPlaying,
                 trackPercent = playerState.currentPositionMs.toDouble()
                     .div(playerState.trackDurationMs.toDouble())
+                    .let { if(it.isNaN()) 0.0 else it }
                     .coerceIn(0.0, 1.0)
                     .toFloat(),
+                text = playerState.trackName,
             )
         }
         log.debug("Player state $playerState mapped to $controlsState")

@@ -25,12 +25,12 @@ data class Image(
 data class AudioTrack(
     @PrimaryKey
     val id: String = "",
-    val size: Long,
-    val name: String,
-    val durationMs: Long,
-    val sampleRate: Int,
-    val bitRate: Long,
-    val type: Type,
+    val size: Long = 0L,
+    val name: String = "",
+    val durationMs: Long = 0L,
+    val sampleRate: Int = 0,
+    val bitRate: Long = 0L,
+    val type: Type = Type.MP3,
 ) {
     enum class Type {
         MP3, FLAC;
