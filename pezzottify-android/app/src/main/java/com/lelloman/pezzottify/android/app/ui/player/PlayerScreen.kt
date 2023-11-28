@@ -1,5 +1,6 @@
 package com.lelloman.pezzottify.android.app.ui.player
 
+import android.content.pm.ActivityInfo
 import androidx.compose.animation.Crossfade
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.basicMarquee
@@ -40,6 +41,7 @@ import coil.Coil
 import coil.compose.AsyncImage
 import coil.imageLoader
 import com.lelloman.pezzottify.android.app.R
+import com.lelloman.pezzottify.android.app.ui.LockScreenOrientation
 
 interface PlayerScreenController {
     fun onBackButtonClicked()
@@ -68,6 +70,7 @@ class StubPlayerScreenController : PlayerScreenController {
 @Composable
 fun PlayerScreen(viewModel: PlayerViewModel = hiltViewModel()) {
     val state = viewModel.state.collectAsState()
+    LockScreenOrientation(orientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT)
     PlayerLayout(
         playerControlsState = state.value,
         controller = ViewModelController(viewModel),
@@ -123,7 +126,8 @@ fun PlayerLayout(
                 AsyncImage(
                     model = playerControlsState.trackImageUrl,
                     contentDescription = null,
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier
+                        .fillMaxWidth()
                         .aspectRatio(1f, true)
                 )
             }
