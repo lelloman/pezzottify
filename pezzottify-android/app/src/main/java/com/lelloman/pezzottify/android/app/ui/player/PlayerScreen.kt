@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material3.CenterAlignedTopAppBar
@@ -42,7 +43,9 @@ fun PlayerScreen(viewModel: PlayerViewModel = hiltViewModel()) {
         playerControlsState = state.value,
         onBackButtonClicked = viewModel::onBackButtonClicked,
         onPlayPauseButtonClicked = viewModel::onPlayPauseButtonClicked,
-        onTrackPercentChanged = viewModel::onTrackPercentChanged,
+        onTrackPercentChanged = viewModel::onSeek,
+        onSeekToNextButtonClicked = viewModel::onNextTrackButtonClicked,
+        onSeekToPreviousButtonClicked = viewModel::onPreviousTrackButtonClicked,
     )
 }
 
@@ -56,6 +59,8 @@ fun PlayerLayout(
     onPlayPauseButtonClicked: () -> Unit = {},
     onBackButtonClicked: () -> Unit = {},
     onTrackPercentChanged: (Float) -> Unit = {},
+    onSeekToNextButtonClicked: () -> Unit = {},
+    onSeekToPreviousButtonClicked: () -> Unit = {},
 ) {
     Scaffold(
         topBar = {
@@ -106,11 +111,18 @@ fun PlayerLayout(
                     .fillMaxWidth(),
                 horizontalArrangement = Arrangement.Center,
             ) {
-                IconButton(
-                    modifier = Modifier
-                        .size(96.dp)
-                        .padding(16.dp), onClick = onPlayPauseButtonClicked
-                ) {
+                val buttonsModifier = Modifier
+                    .size(96.dp)
+                    .padding(16.dp)
+                IconButton(modifier = buttonsModifier, onClick = onSeekToPreviousButtonClicked) {
+                    Icon(
+                        painter = painterResource(R.drawable.baseline_skip_previous_24),
+                        contentDescription = "seek to previous",
+                        modifier = Modifier.fillMaxSize()
+                    )
+                }
+                Spacer(Modifier.width(48.dp))
+                IconButton(modifier = buttonsModifier, onClick = onPlayPauseButtonClicked) {
                     Crossfade(
                         targetState = playerControlsState.isPlaying,
                         label = ""
@@ -123,6 +135,14 @@ fun PlayerLayout(
                             modifier = Modifier.fillMaxSize()
                         )
                     }
+                }
+                Spacer(Modifier.width(48.dp))
+                IconButton(modifier = buttonsModifier, onClick = onSeekToNextButtonClicked) {
+                    Icon(
+                        painter = painterResource(R.drawable.baseline_skip_next_24),
+                        contentDescription = "seek to previous",
+                        modifier = Modifier.fillMaxSize()
+                    )
                 }
             }
             Spacer(modifier = Modifier.height(32.dp))

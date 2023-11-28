@@ -31,7 +31,7 @@ class PlayerViewModel @Inject constructor(
         val newState = when (playerState) {
             is PlayerManager.State.Off -> PlayerState()
             is PlayerManager.State.Playing -> PlayerState(
-                isPlaying = !playerState.paused,
+                isPlaying = playerState.isPlaying,
                 trackPercent = playerState.currentPositionMs.toDouble()
                     .div(playerState.trackDurationMs.toDouble())
                     .coerceIn(0.0, 1.0)
@@ -42,7 +42,7 @@ class PlayerViewModel @Inject constructor(
         return newState
     }
 
-    fun onTrackPercentChanged(trackPercent: Float) {
+    fun onSeek(trackPercent: Float) {
         playerManager.seek(trackPercent)
     }
 
@@ -51,15 +51,11 @@ class PlayerViewModel @Inject constructor(
     }
 
     fun onNextTrackButtonClicked() {
-
+        playerManager.seekToNext()
     }
 
     fun onPreviousTrackButtonClicked() {
-
-    }
-
-    fun onSeek(percent: Float) {
-
+        playerManager.seekToPrevious()
     }
 
     fun onBackButtonClicked() {

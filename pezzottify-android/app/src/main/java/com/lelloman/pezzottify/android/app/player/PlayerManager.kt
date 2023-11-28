@@ -1,10 +1,11 @@
 package com.lelloman.pezzottify.android.app.player
 
 import android.content.Context
-import android.util.Log
 import androidx.annotation.OptIn
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
+import androidx.media3.common.Player.EVENT_PLAYBACK_STATE_CHANGED
+import androidx.media3.common.Player.EVENT_PLAY_WHEN_READY_CHANGED
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DataSource
 import androidx.media3.datasource.DefaultHttpDataSource
@@ -34,17 +35,21 @@ interface PlayerManager {
 
     fun seek(percent: Float)
 
+    fun seekToNext()
+
+    fun seekToPrevious()
+
     suspend fun dispose()
 
     sealed class State {
         object Off : State()
 
         data class Playing(
-            val paused: Boolean,
-            val trackName: String,
-            val artistName: String,
-            val trackDurationMs: Long,
-            val currentPositionMs: Long
+            val isPlaying: Boolean = false,
+            val trackName: String = "",
+            val artistName: String = "",
+            val trackDurationMs: Long = 0L,
+            val currentPositionMs: Long = 0L,
         ) : State()
     }
 }
@@ -92,6 +97,20 @@ internal class PlayerManagerImpl(
     override fun seek(percent: Float) = playerOperation { player ->
         val positionMs = player.duration.toDouble().times(percent.toDouble()).roundToLong()
         player.seekTo(positionMs)
+        emitNewPositionMs(positionMs)
+    }
+
+    override fun seekToNext() = playerOperation { player ->
+        player.seekToNext()
+        emitNewPositionMs(0)
+    }
+
+    override fun seekToPrevious() = playerOperation { player ->
+        player.seekToPrevious()
+        emitNewPositionMs(0)
+    }
+
+    private fun emitNewPositionMs(positionMs: Long) {
         state.value.takeIf { it is PlayerManager.State.Playing }
             ?.let { it as PlayerManager.State.Playing }
             ?.copy(currentPositionMs = positionMs)
@@ -121,35 +140,27 @@ internal class PlayerManagerImpl(
         }
     }
 
-    override fun onIsPlayingChanged(isPlaying: Boolean) {
-        super.onIsPlayingChanged(isPlaying)
-        log.debug("onIsPlayingChanged() $isPlaying")
-        val newValue = when (val prev = state.value) {
-            is PlayerManager.State.Off -> PlayerManager.State.Playing(
-                paused = !isPlaying,
-                trackName = "",
-                artistName = "",
-                trackDurationMs = 0L,
-                currentPositionMs = 0L,
-            )
+    override fun onEvents(player: Player, events: Player.Events) {
+        if (events.containsAny(EVENT_PLAYBACK_STATE_CHANGED, EVENT_PLAY_WHEN_READY_CHANGED)) {
+            val shouldShowPlay =
+                !player.playWhenReady || player.playbackState == Player.STATE_IDLE || player.playbackState == Player.STATE_ENDED
+            val isPlaying = !shouldShowPlay
+            val newValue = when (val prev = state.value) {
+                is PlayerManager.State.Off -> PlayerManager.State.Playing(isPlaying = isPlaying)
 
-            is PlayerManager.State.Playing -> prev.copy(paused = !isPlaying)
+                is PlayerManager.State.Playing -> prev.copy(isPlaying = isPlaying)
+            }
+            mutableState.tryEmit(newValue)
+            if (!isPlaying) {
+                pollProgressJob?.cancel()
+                pollProgressJob = null
+            } else if (pollProgressJob == null) {
+                log.debug("onIsPlayingChanged() starting poll progress job.")
+                startPollDurationJob()
+            } else {
+                log.warn("onIsPlayingChanged() NOT starting poll progress job as it's already running, this shouldn't be happening.")
+            }
         }
-        mutableState.tryEmit(newValue)
-        if (!isPlaying) {
-            pollProgressJob?.cancel()
-            pollProgressJob = null
-        } else if (pollProgressJob == null) {
-            log.debug("onIsPlayingChanged() starting poll progress job.")
-            startPollDurationJob()
-        } else {
-            log.warn("onIsPlayingChanged() NOT starting poll progress job as it's already running, this shouldn't be happening.")
-        }
-    }
-
-    override fun onPlaybackStateChanged(playbackState: Int) {
-        super.onPlaybackStateChanged(playbackState)
-        Log.d("ASDASD", "onPlaybackStateChanged() $playbackState")
     }
 
     private inner class PlayerHolder {
@@ -180,7 +191,6 @@ internal class PlayerManagerImpl(
                     player.stop()
                     player.release()
                     this@PlayerHolder.player = null
-
                 }
             }
         }

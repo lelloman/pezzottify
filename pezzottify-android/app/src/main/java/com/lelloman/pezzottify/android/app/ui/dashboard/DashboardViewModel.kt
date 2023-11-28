@@ -31,7 +31,7 @@ class DashboardViewModel @Inject constructor(
         val controlsState = when (playerState) {
             is PlayerManager.State.Off -> null
             is PlayerManager.State.Playing -> PlayerControlsState(
-                isPlaying = !playerState.paused,
+                isPlaying = playerState.isPlaying,
                 trackPercent = playerState.currentPositionMs.toDouble()
                     .div(playerState.trackDurationMs.toDouble())
                     .coerceIn(0.0, 1.0)
