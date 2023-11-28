@@ -20,11 +20,15 @@ interface RemoteApi {
         password: String
     ): Response<LoginResponse>
 
+    fun setRemoteUrl(remoteUrl: String)
+
     suspend fun getUserState(): Response<UserStateResponse>
 
     suspend fun getAlbums(): Response<Albums>
 
     suspend fun getArtists(): Response<Artists>
+
+    fun getImageUrl(imageId: String): String
 
     sealed class Response<T> {
         class Success<T>(val value: T) : Response<T>()
@@ -53,6 +57,10 @@ internal class RemoteApiImpl(
     private var baseUrl = ""
 
     private suspend fun <T> onIo(action: () -> T) = withContext(ioContext) { action() }
+
+    override fun setRemoteUrl(remoteUrl: String) {
+        baseUrl = remoteUrl
+    }
 
     override suspend fun performLogin(
         remoteUrl: String, username: String, password: String
@@ -124,10 +132,13 @@ internal class RemoteApiImpl(
         }
     }
 
+    override fun getImageUrl(imageId: String): String = baseUrl + IMAGE_PATH.format(imageId)
+
     companion object {
         private const val LOGIN_PATH = "/api/auth"
         private const val USER_STATE_PATH = "/api/user/state"
         private const val ALBUMS_PATH = "/api/albums"
         private const val ARTISTS_PATH = "/api/artists"
+        private const val IMAGE_PATH = "/api/image/%s"
     }
 }

@@ -1,20 +1,14 @@
 package com.lelloman.pezzottify.android.app.ui.player
 
-import android.util.Log
 import androidx.compose.animation.Crossfade
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.background
 import androidx.compose.foundation.basicMarquee
-import androidx.compose.foundation.gestures.Orientation
-import androidx.compose.foundation.gestures.detectDragGestures
-import androidx.compose.foundation.gestures.draggable
-import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -35,19 +29,16 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import coil.Coil
+import coil.compose.AsyncImage
+import coil.imageLoader
 import com.lelloman.pezzottify.android.app.R
 
 interface PlayerScreenController {
@@ -83,13 +74,17 @@ fun PlayerScreen(viewModel: PlayerViewModel = hiltViewModel()) {
     )
 }
 
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
+@OptIn(
+    ExperimentalMaterial3Api::class,
+    ExperimentalFoundationApi::class,
+)
 @Preview
 @Composable
 fun PlayerLayout(
     playerControlsState: PlayerViewModel.PlayerState = PlayerViewModel.PlayerState(
         albumName = "THE ALBUM NAME",
-        trackName = "A very very very very very very loooooong track name that cant possibly fit on the screen"
+        trackName = "A very very very very very very loooooong track name that cant possibly fit on the screen",
+        trackImageUrl = "https://pics.craiyon.com/2023-05-25/a1c8db716f044ba983bc20b6ab5bab91.webp",
     ),
     controller: PlayerScreenController = StubPlayerScreenController(),
 ) {
@@ -125,12 +120,11 @@ fun PlayerLayout(
                     .weight(1f),
                 contentAlignment = Alignment.Center,
             ) {
-                Text(
-                    "Image placeholder",
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(color = Color(0x11000000)),
-                    textAlign = TextAlign.Center,
+                AsyncImage(
+                    model = playerControlsState.trackImageUrl,
+                    contentDescription = null,
+                    modifier = Modifier.fillMaxWidth()
+                        .aspectRatio(1f, true)
                 )
             }
 

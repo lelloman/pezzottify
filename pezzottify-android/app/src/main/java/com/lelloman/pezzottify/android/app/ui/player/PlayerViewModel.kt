@@ -6,6 +6,7 @@ import com.lelloman.pezzottify.android.app.player.PlayerManager
 import com.lelloman.pezzottify.android.app.ui.Navigator
 import com.lelloman.pezzottify.android.log.Logger
 import com.lelloman.pezzottify.android.log.LoggerFactory
+import com.lelloman.pezzottify.remoteapi.RemoteApi
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -18,6 +19,7 @@ class PlayerViewModel @Inject constructor(
     private val playerManager: PlayerManager,
     loggerFactory: LoggerFactory,
     private val navigator: Navigator,
+    private val remoteApi: RemoteApi,
 ) : ViewModel() {
 
     private val log: Logger by loggerFactory
@@ -33,6 +35,7 @@ class PlayerViewModel @Inject constructor(
             is PlayerManager.State.Playing -> PlayerState(
                 albumName = playerState.albumName,
                 trackName = playerState.trackName,
+                trackImageUrl = playerState.trackImageId?.let(remoteApi::getImageUrl),
                 isPlaying = playerState.isPlaying,
                 trackPercent = playerState.currentPositionMs.toDouble()
                     .div(playerState.trackDurationMs.toDouble())
@@ -69,5 +72,6 @@ class PlayerViewModel @Inject constructor(
         val trackPercent: Float = 0f,
         val albumName: String = "",
         val trackName: String = "",
+        val trackImageUrl: String? = null,
     )
 }

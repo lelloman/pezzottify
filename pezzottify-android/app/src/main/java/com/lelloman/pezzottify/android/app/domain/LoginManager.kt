@@ -15,9 +15,10 @@ interface LoginManager {
 
     val loginState: Flow<LoginState>
 
+    fun getAuthToken(): String?
+
     fun registerOperations(
-        loginOperations: Set<LoginOperation>,
-        logoutOperations: Set<LogoutOperation>
+        loginOperations: Set<LoginOperation>, logoutOperations: Set<LogoutOperation>
     )
 
     suspend fun performLogin(remoteUrl: String, username: String, password: String): LoginResult
@@ -41,9 +42,13 @@ class LoginManagerImpl(
         stateBroadcast
     }
 
+    override fun getAuthToken() = when (val state = runBlocking { loginState.value }) {
+        is LoginState.LoggedIn -> state.authToken
+        is LoginState.Loading, is LoginState.Unauthenticated -> null
+    }
+
     override fun registerOperations(
-        loginOperations: Set<LoginOperation>,
-        logoutOperations: Set<LogoutOperation>
+        loginOperations: Set<LoginOperation>, logoutOperations: Set<LogoutOperation>
     ) {
         this.loginOperations.addAll(loginOperations)
         this.logoutOperations.addAll(logoutOperations)
@@ -51,13 +56,10 @@ class LoginManagerImpl(
 
     private fun loadPersistedState() {
         val state = try {
-            val (remoteUrl, username, authToken) = persistence.readText()
-                .lines()
-                .takeIf { it.size > 2 }
-                ?.take(3)
-                ?.takeIf { lines -> lines.all { it.isNotBlank() } }
+            val (remoteUrl, username, authToken) = persistence.readText().lines()
+                .takeIf { it.size > 2 }?.take(3)?.takeIf { lines -> lines.all { it.isNotBlank() } }
                 ?: throw Exception()
-
+            remoteApi.setRemoteUrl(remoteUrl)
             LoginState.LoggedIn(
                 username = username,
                 authToken = authToken,
@@ -90,18 +92,13 @@ class LoginManagerImpl(
     }
 
     override suspend fun performLogin(
-        remoteUrl: String,
-        username: String,
-        password: String
+        remoteUrl: String, username: String, password: String
     ): LoginResult {
         return withContext(ioDispatcher) {
             try {
-                when (val response =
-                    remoteApi.performLogin(
-                        username = username,
-                        password = password,
-                        remoteUrl = remoteUrl
-                    )) {
+                when (val response = remoteApi.performLogin(
+                    username = username, password = password, remoteUrl = remoteUrl
+                )) {
                     is RemoteApi.Response.Success -> {
                         when (response.value) {
                             is LoginResponse.Success -> {

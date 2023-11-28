@@ -49,6 +49,7 @@ interface PlayerManager {
         data class Playing(
             val isPlaying: Boolean = false,
             val trackName: String = "",
+            val trackImageId: String? = null,
             val artistName: String = "",
             val albumName: String = "",
             val trackDurationMs: Long = 0L,
@@ -102,7 +103,8 @@ internal class PlayerManagerImpl(
         player.clearMediaItems()
         playList.tracks.forEach { audioTrack ->
             val url = "http://10.0.2.2:8080/api/track/${audioTrack.id}"
-            val mediaItem = MediaItem.Builder().setUri(url).setTag(audioTrack).build()
+            val tag = AudioTrackTag(playList, audioTrack)
+            val mediaItem = MediaItem.Builder().setUri(url).setTag(tag).build()
             player.addMediaItem(mediaItem)
         }
         updatePlayingState { it.copy(albumName = playList.album.name) }
@@ -180,8 +182,11 @@ internal class PlayerManagerImpl(
             }
             if (trackChanged) {
                 val track = player.currentMediaItem?.localConfiguration?.tag
-                if (track is AudioTrack) {
-                    newState = newState.copy(trackName = track.name)
+                if (track is AudioTrackTag) {
+                    newState = newState.copy(
+                        trackName = track.name,
+                        trackImageId = track.imageId,
+                    )
                     log.debug("New track name ${track.name}")
                 }
             }
@@ -225,5 +230,15 @@ internal class PlayerManagerImpl(
     override suspend fun dispose() {
         playerHolder.dispose()
         mutableState.emit(PlayerManager.State.Off)
+    }
+
+    private data class AudioTrackTag(
+        val name: String,
+        val imageId: String?,
+    ) {
+        constructor(album: AlbumWithTracks, audioTrack: AudioTrack) : this(
+            name = audioTrack.name,
+            imageId = album.album.coverImageId,
+        )
     }
 }
