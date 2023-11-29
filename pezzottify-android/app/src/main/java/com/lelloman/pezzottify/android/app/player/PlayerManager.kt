@@ -1,8 +1,9 @@
 package com.lelloman.pezzottify.android.app.player
 
+import android.content.ComponentName
 import android.content.Context
-import androidx.annotation.OptIn
 import androidx.media3.common.MediaItem
+import androidx.media3.common.MediaMetadata
 import androidx.media3.common.Player
 import androidx.media3.common.Player.EVENT_PLAYBACK_STATE_CHANGED
 import androidx.media3.common.Player.EVENT_PLAY_WHEN_READY_CHANGED
@@ -12,6 +13,9 @@ import androidx.media3.datasource.DataSource
 import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
+import androidx.media3.session.MediaController
+import androidx.media3.session.SessionToken
+import com.lelloman.pezzottify.android.app.ui.PlaybackService
 import com.lelloman.pezzottify.android.localdata.model.AlbumWithTracks
 import com.lelloman.pezzottify.android.localdata.model.AudioTrack
 import com.lelloman.pezzottify.android.log.LoggerFactory
@@ -24,6 +28,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import kotlin.math.roundToLong
 
@@ -33,6 +38,8 @@ interface PlayerManager {
 
     fun play(playList: AlbumWithTracks)
 
+    suspend fun <T> withPlayer(action: (ExoPlayer) -> T): T
+
     fun togglePlayPause()
 
     fun seek(percent: Float)
@@ -40,6 +47,8 @@ interface PlayerManager {
     fun seekToNext()
 
     fun seekToPrevious()
+
+    fun getPlayer(): ExoPlayer
 
     suspend fun dispose()
 
@@ -58,6 +67,7 @@ interface PlayerManager {
     }
 }
 
+@UnstableApi
 internal class PlayerManagerImpl(
     private val context: Context,
     private val playerDispatcher: CoroutineDispatcher,
@@ -70,11 +80,21 @@ internal class PlayerManagerImpl(
     private val mutableState = MutableStateFlow<PlayerManager.State>(PlayerManager.State.Off)
     override val state = mutableState.asStateFlow()
 
-    private val playerHolder = PlayerHolder()
+    private var _player: ExoPlayer? = null
+
     private var authToken: String? = null
     private var pollProgressJob: Job? = null
 
     private var currentPlaylist: AlbumWithTracks? = null
+
+    private val dataSourceFactory = DataSource.Factory {
+        DefaultHttpDataSource.Factory().createDataSource().apply {
+            this.setRequestProperty(
+                "Authorization", "Bearer ${authToken}"
+            )
+        }
+    }
+    private val mediaSourceFactory = DefaultMediaSourceFactory(dataSourceFactory)
 
     init {
         GlobalScope.launch {
@@ -85,16 +105,19 @@ internal class PlayerManagerImpl(
     private fun playerOperation(operation: (ExoPlayer) -> Unit) {
         GlobalScope.launch {
             withContext(playerDispatcher) {
-                operation(playerHolder.getPlayer())
+                operation(getOrMakePlayer())
             }
         }
     }
 
+    override suspend fun <T> withPlayer(action: (ExoPlayer) -> T): T = withContext(playerDispatcher) {
+        action(getOrMakePlayer())
+    }
+
     private fun updatePlayingState(action: (PlayerManager.State.Playing) -> PlayerManager.State.Playing) {
-        val oldState: PlayerManager.State.Playing = state.value
-            .takeIf { it is PlayerManager.State.Playing }
-            ?.let { it as PlayerManager.State.Playing }
-            ?: PlayerManager.State.Playing()
+        val oldState: PlayerManager.State.Playing =
+            state.value.takeIf { it is PlayerManager.State.Playing }
+                ?.let { it as PlayerManager.State.Playing } ?: PlayerManager.State.Playing()
         mutableState.tryEmit(action(oldState))
     }
 
@@ -104,7 +127,11 @@ internal class PlayerManagerImpl(
         playList.tracks.forEach { audioTrack ->
             val url = "http://10.0.2.2:8080/api/track/${audioTrack.id}"
             val tag = AudioTrackTag(playList, audioTrack)
-            val mediaItem = MediaItem.Builder().setUri(url).setTag(tag).build()
+            val metadata =
+                MediaMetadata.Builder().setAlbumArtist("THE ARTIST").setTitle(audioTrack.name)
+                    .build()
+            val mediaItem =
+                MediaItem.Builder().setUri(url).setTag(tag).setMediaMetadata(metadata).build()
             player.addMediaItem(mediaItem)
         }
         updatePlayingState { it.copy(albumName = playList.album.name) }
@@ -156,6 +183,8 @@ internal class PlayerManagerImpl(
         }
     }
 
+    override fun getPlayer(): ExoPlayer = runBlocking { getOrMakePlayer() }
+
     override fun onEvents(player: Player, events: Player.Events) {
         log.debug("onEvents() $events")
         val playbackStateChanged =
@@ -194,41 +223,30 @@ internal class PlayerManagerImpl(
         }
     }
 
-    private inner class PlayerHolder {
-        private var player: ExoPlayer? = null
+    private fun buildMediaController() {
+        val sessionToken =
+            SessionToken(context, ComponentName(context, PlaybackService::class.java))
+        MediaController.Builder(context, sessionToken).buildAsync()
+    }
 
-        @OptIn(UnstableApi::class)
-        suspend fun getPlayer(): ExoPlayer {
-            player?.let { return it }
-            return withContext(playerDispatcher) {
-                val dataSourceFactory = DataSource.Factory {
-                    DefaultHttpDataSource.Factory().createDataSource().apply {
-                        this.setRequestProperty(
-                            "Authorization", "Bearer ${this@PlayerManagerImpl.authToken}"
-                        )
-                    }
-                }
-                val mediaSourceFactory = DefaultMediaSourceFactory(dataSourceFactory)
-                ExoPlayer.Builder(context).setMediaSourceFactory(mediaSourceFactory).build().apply {
-                    player = this
-                    addListener(this@PlayerManagerImpl)
-                }
+    private suspend fun getOrMakePlayer() = _player ?: withContext(playerDispatcher) {
+        ExoPlayer.Builder(context).setMediaSourceFactory(mediaSourceFactory).build()
+            .also { player ->
+                this@PlayerManagerImpl._player = player
+                player.addListener(this@PlayerManagerImpl)
+                player.playWhenReady = false
+                buildMediaController()
             }
-        }
-
-        suspend fun dispose() {
-            withContext(playerDispatcher) {
-                player?.let { player ->
-                    player.stop()
-                    player.release()
-                    this@PlayerHolder.player = null
-                }
-            }
-        }
     }
 
     override suspend fun dispose() {
-        playerHolder.dispose()
+        withContext(playerDispatcher) {
+            this@PlayerManagerImpl._player?.let { player ->
+                player.stop()
+                player.release()
+                this@PlayerManagerImpl._player = null
+            }
+        }
         mutableState.emit(PlayerManager.State.Off)
     }
 
