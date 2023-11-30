@@ -5,6 +5,8 @@ import com.lelloman.pezzottify.server.ArtistRepository
 import com.lelloman.pezzottify.server.controller.model.CreateAlbumRequest
 import com.lelloman.pezzottify.server.model.Album
 import com.lelloman.pezzottify.server.model.Artist
+import com.lelloman.pezzottify.server.model.ArtistRelation
+import com.lelloman.pezzottify.server.model.ArtistRole
 import com.lelloman.pezzottify.server.service.AudioTrackUploader
 import com.lelloman.pezzottify.server.service.ImageUploader
 import org.springframework.beans.factory.annotation.Autowired
@@ -55,8 +57,8 @@ class AlbumController(
     ): ResponseEntity<Album> {
         val audioTrackUpload = audioTrackUploader.newOperation()
         val imagesUpload = imageUploader.newOperation()
-        if (albumRequest.audioTracksNames.size != audioTracks.size) {
-            badRequest("Sent ${audioTracks.size} audio files, but ${albumRequest.audioTracksNames.size} track names.")
+        if (albumRequest.audioTracksDefs.size != audioTracks.size) {
+            badRequest("Sent ${audioTracks.size} audio files, but ${albumRequest.audioTracksDefs.size} track defs.")
         }
         if (albumRequest.artistsIds.isEmpty()) {
             badRequest("At least one artist id must be provided.")
@@ -72,8 +74,15 @@ class AlbumController(
             val createdCover = cover?.let(imagesUpload::createImage)
             val createdSideImages = sideImages?.map(imagesUpload::createImage)
             val createdAudioTracks = audioTracks.mapIndexed { index, multipartFile ->
-                val trackName = albumRequest.audioTracksNames[index]
-                audioTrackUpload.createAudioTrack(multipartFile, trackName)
+                val trackDef = albumRequest.audioTracksDefs[index]
+                val trackArtists = if (trackDef.artists.isNotEmpty()) {
+                    trackDef.artists
+                } else {
+                    albumRequest.artistsIds.map { artistId ->
+                        ArtistRelation(artistId = artistId, role = ArtistRole.Performer)
+                    }
+                }
+                audioTrackUpload.createAudioTrack(multipartFile, trackDef.name, trackArtists)
             }
             val albumToCreate = Album(
                 name = albumRequest.name,

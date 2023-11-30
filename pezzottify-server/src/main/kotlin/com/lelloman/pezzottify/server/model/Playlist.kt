@@ -1,12 +1,6 @@
 package com.lelloman.pezzottify.server.model
 
-import jakarta.persistence.CascadeType
-import jakarta.persistence.Entity
-import jakarta.persistence.GeneratedValue
-import jakarta.persistence.GenerationType
-import jakarta.persistence.Id
-import jakarta.persistence.ManyToMany
-import jakarta.persistence.ManyToOne
+import jakarta.persistence.*
 
 interface Playlist {
     val id: String
@@ -47,8 +41,5 @@ data class UserPlayList(
     override val audioTracks: List<AudioTrack>,
 
     @ManyToOne
-    //@JoinColumn(name = "user_id")
-    //@OnDelete(action = OnDeleteAction.CASCADE)
-    //@JsonIgnore
     val owner: User,
 ) : Playlist

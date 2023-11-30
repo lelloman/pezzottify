@@ -33,6 +33,22 @@ data class Image(
     }
 }
 
+enum class ArtistRole {
+    Performer,
+    Composer,
+}
+
+@Entity
+data class ArtistRelation(
+    @Id
+    @GeneratedValue(strategy = GenerationType.UUID)
+    val id: String = "",
+
+    val artistId: String,
+
+    val role: ArtistRole = ArtistRole.Performer,
+)
+
 @EntityListeners(MediaItemListener::class)
 @Entity
 data class AudioTrack(
@@ -54,10 +70,14 @@ data class AudioTrack(
     val bitRate: Long,
 
     val type: Type,
+
+    @ManyToMany(cascade = [CascadeType.ALL])
+    val artists: List<ArtistRelation> = emptyList(),
 ) : MediaItem {
     enum class Type {
         MP3, FLAC;
-        fun mimeType() = when(this) {
+
+        fun mimeType() = when (this) {
             MP3 -> "audio/mpeg"
             FLAC -> "audio/x-flac"
         }

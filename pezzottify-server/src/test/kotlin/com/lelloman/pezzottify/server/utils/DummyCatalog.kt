@@ -37,17 +37,19 @@ data class DummyCatalog(
             val album1Request = CreateAlbumRequest(
                 "Album 1",
                 artistsIds = listOf(individuals[0].id, band1.id),
-                audioTracksNames = listOf("Track 1", "Track 2")
+                audioTracksDefs = listOf("Track 1", "Track 2").map { CreateAlbumRequest.AudioTrackDef(name = it) }
             )
             val album1: Album = httpClient.multipartPost("/api/album").addJsonField("album", album1Request)
-                .addFiles("audioTracks", album1Request.audioTracksNames, listOf(MP3, FLAC))
+                .addFiles("audioTracks", album1Request.audioTracksDefs.map { it.name }, listOf(MP3, FLAC))
                 .addFile("cover", mockPng()).execute().assertStatus2xx().parsedBody()
 
             val album2Request = CreateAlbumRequest(
-                "Album 2", artistsIds = listOf(individuals[1].id), audioTracksNames = listOf("Track 1", "Track 2")
+                "Album 2",
+                artistsIds = listOf(individuals[1].id),
+                audioTracksDefs = listOf("Track 1", "Track 2").map { CreateAlbumRequest.AudioTrackDef(name = it) }
             )
             val album2: Album = httpClient.multipartPost("/api/album").addJsonField("album", album2Request)
-                .addFiles("audioTracks", album2Request.audioTracksNames, listOf(MP3, MP3))
+                .addFiles("audioTracks", album2Request.audioTracksDefs.map { it.name }, listOf(MP3, MP3))
                 .addFile("cover", mockPng()).execute().assertStatus2xx().parsedBody()
 
             return DummyCatalog(

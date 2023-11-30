@@ -1,6 +1,7 @@
 package com.lelloman.pezzottify.server.service
 
 import com.lelloman.pezzottify.server.AudioTrackRepository
+import com.lelloman.pezzottify.server.model.ArtistRelation
 import com.lelloman.pezzottify.server.model.AudioTrack
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.stereotype.Service
@@ -19,7 +20,7 @@ class AudioTrackUploader(
         private val pendingTracks = mutableListOf<AudioTrack>()
         private var tmpFile: File? = null
 
-        override fun createAudioTrack(multipartFile: MultipartFile, name: String): AudioTrack {
+        override fun createAudioTrack(multipartFile: MultipartFile, name: String, artists: List<ArtistRelation>): AudioTrack {
             tmpFile = storageService.createTemp(multipartFile.inputStream)
 
             val decoded = audioTrackDecoder.decode(tmpFile!!)
@@ -34,6 +35,7 @@ class AudioTrackUploader(
                 bitRate = decoded.bitRate,
                 sampleRate = decoded.sampleRate,
                 type = decoded.type,
+                artists = artists,
             )
             val createdTrack = audioTrackRepository.save(audioTrack)
             pendingTracks.add(createdTrack)
@@ -54,7 +56,7 @@ class AudioTrackUploader(
     }
 
     interface UploadOperation {
-        fun createAudioTrack(multipartFile: MultipartFile, name: String): AudioTrack
+        fun createAudioTrack(multipartFile: MultipartFile, name: String, artists: List<ArtistRelation>): AudioTrack
         fun aborted()
         fun succeeded()
     }

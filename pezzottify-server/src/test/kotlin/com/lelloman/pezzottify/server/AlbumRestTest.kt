@@ -2,6 +2,7 @@ package com.lelloman.pezzottify.server
 
 import com.lelloman.pezzottify.server.controller.model.CreateAlbumRequest
 import com.lelloman.pezzottify.server.model.Album
+import com.lelloman.pezzottify.server.model.ArtistRelation
 import com.lelloman.pezzottify.server.model.IndividualArtist
 import com.lelloman.pezzottify.server.service.FileStorageService
 import com.lelloman.pezzottify.server.utils.*
@@ -37,9 +38,14 @@ class AlbumRestTest {
     private val httpClient by lazy { HttpClient(baseUrl) }
 
     private var artist1 = IndividualArtist(displayName = "artist 1")
+    private var artist2 = IndividualArtist(displayName = "artist 2")
 
     private fun createArtist1() {
         artist1 = httpClient.createArtist(artist1).execute().parsedBody()
+    }
+
+    private fun createArtist2() {
+        artist2 = httpClient.createArtist(artist2).execute().parsedBody()
     }
 
     @Test
@@ -60,7 +66,9 @@ class AlbumRestTest {
         val album = CreateAlbumRequest(
             name = "The album",
             artistsIds = listOf(artist1.id),
-            audioTracksNames = listOf("Track 1", "Track 2")
+            audioTracksDefs = listOf("Track 1", "Track 2").map {
+                CreateAlbumRequest.AudioTrackDef(name = it)
+            }
         )
         assertThat(audioTrackRepository.count()).isEqualTo(0)
 
@@ -70,8 +78,7 @@ class AlbumRestTest {
         )
         val createdAlbum: Album = httpClient.multipartPost("/api/album")
             .addJsonField("album", album)
-            .addFiles("audioTracks", album.audioTracksNames, contents)
-            .addJsonField("audioTracksNames", album.audioTracksNames)
+            .addFiles("audioTracks", album.audioTracksDefs.map { it.name }, contents)
             .execute()
             .assertStatus2xx()
             .parsedBody()
@@ -94,8 +101,11 @@ class AlbumRestTest {
     @Test
     fun `deletes previously created audio tracks on failure`() {
         httpClient.performAdminLogin()
-        val album =
-            CreateAlbumRequest(name = "The album", audioTracksNames = listOf("1", "2", "3"), artistsIds = listOf("1"))
+        val album = CreateAlbumRequest(
+            name = "The album",
+            audioTracksDefs = listOf("1", "2", "3").map { CreateAlbumRequest.AudioTrackDef(name = it) },
+            artistsIds = listOf("1")
+        )
 
         val trackNames = listOf("Track 1", "Track 2", "Invalid track")
         val contents = listOf(
@@ -124,7 +134,7 @@ class AlbumRestTest {
         createArtist1()
         val album = CreateAlbumRequest(
             name = "The album",
-            audioTracksNames = listOf("1", "2"),
+            audioTracksDefs = listOf("1", "2").map { CreateAlbumRequest.AudioTrackDef(name = it) },
             artistsIds = listOf(artist1.id)
         )
         assertThat(audioTrackRepository.count()).isEqualTo(0)
@@ -140,7 +150,7 @@ class AlbumRestTest {
         )
         val createdAlbum: Album = httpClient.multipartPost("/api/album")
             .addJsonField("album", album)
-            .addFiles("audioTracks", album.audioTracksNames, contents)
+            .addFiles("audioTracks", album.audioTracksDefs.map { it.name }, contents)
             .addFile("cover", coverBytes)
             .addFiles("sideImages", sideImagesBytes.map { "" }, sideImagesBytes)
             .execute()
@@ -185,7 +195,7 @@ class AlbumRestTest {
 
         val album = CreateAlbumRequest(
             name = "The album",
-            audioTracksNames = listOf("1"),
+            audioTracksDefs = listOf(CreateAlbumRequest.AudioTrackDef(name = "1")),
             artistsIds = listOf("meow")
         )
         httpClient.multipartPost("/api/album")
@@ -200,5 +210,51 @@ class AlbumRestTest {
 
         httpClient.get("/api/album/something")
             .assertNotFound()
+    }
+
+    @Test
+    fun `track gets performer artists from album when not specified`() {
+        httpClient.performAdminLogin()
+
+        createArtist1()
+        createArtist2()
+        val album = CreateAlbumRequest(
+            name = "The album",
+            audioTracksDefs = listOf(
+                CreateAlbumRequest.AudioTrackDef(name = "1"),
+                CreateAlbumRequest.AudioTrackDef(name = "2", artists = listOf(ArtistRelation(artistId = artist1.id))),
+            ),
+            artistsIds = listOf(artist1.id, artist2.id)
+        )
+
+        val contents = listOf(
+            AudioSample.MP3,
+            AudioSample.MP3,
+        )
+        val coverBytes = mockPng(100, 100)
+        val sideImagesBytes = listOf(
+            mockPng(123, 20),
+            mockPng(20, 123),
+        )
+        val createdAlbum: Album = httpClient.multipartPost("/api/album")
+            .addJsonField("album", album)
+            .addFiles("audioTracks", album.audioTracksDefs.map { it.name }, contents)
+            .addFile("cover", coverBytes)
+            .addFiles("sideImages", sideImagesBytes.map { "" }, sideImagesBytes)
+            .execute()
+            .assertStatus2xx()
+            .parsedBody()
+
+        with(createdAlbum) {
+            assertThat(audioTracks).hasSize(2)
+            with(audioTracks[0]) {
+                assertThat(name).isEqualTo("1")
+                assertThat(artists).hasSize(2)
+            }
+            with(audioTracks[1]) {
+                assertThat(name).isEqualTo("2")
+                assertThat(artists).hasSize(1)
+            }
+        }
     }
 }
