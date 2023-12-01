@@ -1,7 +1,7 @@
-package com.lelloman.pezzottify.android.app.localdata
+package com.lelloman.pezzottify.android.app.domain.statics
 
-import com.lelloman.pezzottify.android.app.domain.LoginOperation
-import com.lelloman.pezzottify.android.app.domain.LoginState
+import com.lelloman.pezzottify.android.app.di.IoDispatcher
+import com.lelloman.pezzottify.android.localdata.LocalDb
 import com.lelloman.pezzottify.android.localdata.StaticsDao
 import com.lelloman.pezzottify.android.localdata.model.Album
 import com.lelloman.pezzottify.android.localdata.model.AudioTrack
@@ -11,17 +11,21 @@ import com.lelloman.pezzottify.android.localdata.model.IndividualArtist
 import com.lelloman.pezzottify.remoteapi.RemoteApi
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.withContext
+import javax.inject.Inject
+import javax.inject.Singleton
 
 private typealias RemoteIndividual = com.lelloman.pezzottify.remoteapi.model.IndividualArtist
 private typealias RemoteBand = com.lelloman.pezzottify.remoteapi.model.BandArtist
 private typealias RemoteImage = com.lelloman.pezzottify.remoteapi.model.Image
 private typealias RemoteAudioTrack = com.lelloman.pezzottify.remoteapi.model.AudioTrack
 
-class FetchStaticsLoginOperation(
-    private val dispatcher: CoroutineDispatcher,
+@Singleton
+class StaticsStore @Inject constructor(
+    @IoDispatcher private val dispatcher: CoroutineDispatcher,
     private val remoteApi: RemoteApi,
     private val staticsDao: StaticsDao,
-) : LoginOperation {
+    private val localDb: LocalDb,
+) {
 
     private val RemoteAudioTrack.mapped
         get() = AudioTrack(
@@ -32,8 +36,8 @@ class FetchStaticsLoginOperation(
             sampleRate = sampleRate,
             bitRate = bitRate,
             type = when (type) {
-                com.lelloman.pezzottify.remoteapi.model.AudioTrack.Type.MP3 -> AudioTrack.Type.MP3
-                com.lelloman.pezzottify.remoteapi.model.AudioTrack.Type.FLAC -> AudioTrack.Type.FLAC
+                com.lelloman.pezzottify.remoteapi.model.AudioTrack.Type.MP3 -> com.lelloman.pezzottify.android.localdata.model.AudioTrack.Type.MP3
+                com.lelloman.pezzottify.remoteapi.model.AudioTrack.Type.FLAC -> com.lelloman.pezzottify.android.localdata.model.AudioTrack.Type.FLAC
             }
         )
     private val RemoteBand.mapped
@@ -55,17 +59,13 @@ class FetchStaticsLoginOperation(
 
     private val RemoteImage.mapped
         get() = Image(
-            id = id,
-            size = size,
-            width = width,
-            height = height,
-            type = when (type) {
-                com.lelloman.pezzottify.remoteapi.model.Image.Type.PNG -> Image.Type.PNG
-                com.lelloman.pezzottify.remoteapi.model.Image.Type.JPG -> Image.Type.JPG
+            id = id, size = size, width = width, height = height, type = when (type) {
+                com.lelloman.pezzottify.remoteapi.model.Image.Type.PNG -> com.lelloman.pezzottify.android.localdata.model.Image.Type.PNG
+                com.lelloman.pezzottify.remoteapi.model.Image.Type.JPG -> com.lelloman.pezzottify.android.localdata.model.Image.Type.JPG
             }
         )
 
-    override suspend fun invoke(loginState: LoginState.LoggedIn) = withContext(dispatcher) context@{
+    suspend fun fetchStatics() = withContext(dispatcher) context@{
         val remoteAlbums = remoteApi.getAlbums().get() ?: return@context false
         val artists = remoteApi.getArtists().get() ?: return@context false
         val individuals = ArrayList<IndividualArtist>()
@@ -115,5 +115,9 @@ class FetchStaticsLoginOperation(
     private fun <T> RemoteApi.Response<T>.get(): T? = when (this) {
         is RemoteApi.Response.Success -> value
         else -> null
+    }
+
+    suspend fun deleteStatics() {
+        localDb.clearAllTables()
     }
 }

@@ -3,9 +3,9 @@ package com.lelloman.pezzottify.android.app.player
 import android.content.Context
 import android.os.Handler
 import android.os.HandlerThread
-import com.lelloman.pezzottify.android.app.domain.LoginManager
-import com.lelloman.pezzottify.android.app.domain.LoginState
-import com.lelloman.pezzottify.android.app.domain.LogoutOperation
+import com.lelloman.pezzottify.android.app.domain.login.LoginManager
+import com.lelloman.pezzottify.android.app.domain.login.LoginState
+import com.lelloman.pezzottify.android.app.domain.login.LogoutOperation
 import com.lelloman.pezzottify.android.log.LoggerFactory
 import dagger.Module
 import dagger.Provides

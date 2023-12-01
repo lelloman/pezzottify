@@ -1,4 +1,4 @@
-package com.lelloman.pezzottify.android.app.domain
+package com.lelloman.pezzottify.android.app.domain.login
 
 sealed class LoginResult {
 

@@ -1,4 +1,4 @@
-package com.lelloman.pezzottify.android.app.domain
+package com.lelloman.pezzottify.android.app.domain.login
 
 import com.lelloman.pezzottify.remoteapi.LoginResponse
 import com.lelloman.pezzottify.remoteapi.RemoteApi

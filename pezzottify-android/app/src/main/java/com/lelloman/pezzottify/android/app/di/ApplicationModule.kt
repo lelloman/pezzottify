@@ -1,7 +1,7 @@
 package com.lelloman.pezzottify.android.app.di
 
 import com.google.gson.GsonBuilder
-import com.lelloman.pezzottify.android.app.persistence.PersistentObjectDef
+import com.lelloman.pezzottify.android.app.localdata.PersistentObjectDef
 import com.lelloman.pezzottify.android.app.ui.login.LoginViewModel
 import com.lelloman.pezzottify.remoteapi.RemoteApi
 import dagger.Module

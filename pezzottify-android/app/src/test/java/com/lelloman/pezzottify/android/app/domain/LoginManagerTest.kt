@@ -1,6 +1,9 @@
 package com.lelloman.pezzottify.android.app.domain
 
 import com.google.common.truth.Truth.assertThat
+import com.lelloman.pezzottify.android.app.domain.login.LoginManagerImpl
+import com.lelloman.pezzottify.android.app.domain.login.LoginResult
+import com.lelloman.pezzottify.android.app.domain.login.LoginState
 import com.lelloman.pezzottify.remoteapi.LoginResponse
 import com.lelloman.pezzottify.remoteapi.RemoteApi
 import kotlinx.coroutines.Dispatchers

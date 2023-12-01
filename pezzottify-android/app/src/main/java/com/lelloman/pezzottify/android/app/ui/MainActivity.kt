@@ -15,7 +15,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.core.content.ContextCompat
-import androidx.core.content.PackageManagerCompat
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -38,10 +37,18 @@ class MainActivity : ComponentActivity() {
     @OptIn(ExperimentalMaterial3Api::class)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.FOREGROUND_SERVICE) != PackageManager.PERMISSION_GRANTED) {
+        if (ContextCompat.checkSelfPermission(
+                this,
+                Manifest.permission.FOREGROUND_SERVICE
+            ) != PackageManager.PERMISSION_GRANTED
+        ) {
             requestPermissions(arrayOf(Manifest.permission.FOREGROUND_SERVICE), 123)
         }
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK) != PackageManager.PERMISSION_GRANTED) {
+        if (ContextCompat.checkSelfPermission(
+                this,
+                Manifest.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK
+            ) != PackageManager.PERMISSION_GRANTED
+        ) {
             requestPermissions(arrayOf(Manifest.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK), 123)
         }
         setContent {
@@ -55,8 +62,14 @@ class MainActivity : ComponentActivity() {
                             is NavigationEvent.GoTo -> {
                                 navController.navigate(navigationEvent.route) {
                                     navigationEvent.popUpTo?.let { popUpDef ->
-                                        popUpTo(popUpDef.route) {
-                                            inclusive = popUpDef.inclusive
+                                        when (popUpDef) {
+                                            is NavigationEvent.PopUp.To -> popUpTo(popUpDef.route) {
+                                                inclusive = popUpDef.inclusive
+                                            }
+
+                                            is NavigationEvent.PopUp.All -> popUpTo(navController.graph.id) {
+                                                inclusive = true
+                                            }
                                         }
                                     }
                                 }

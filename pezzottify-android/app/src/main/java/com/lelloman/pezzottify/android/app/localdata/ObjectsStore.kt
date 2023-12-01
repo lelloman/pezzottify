@@ -1,4 +1,4 @@
-package com.lelloman.pezzottify.android.app.persistence
+package com.lelloman.pezzottify.android.app.localdata
 
 import android.content.Context
 import com.google.gson.GsonBuilder

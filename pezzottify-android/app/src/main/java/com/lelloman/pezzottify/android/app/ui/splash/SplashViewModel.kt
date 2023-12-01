@@ -2,8 +2,8 @@ package com.lelloman.pezzottify.android.app.ui.splash
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.lelloman.pezzottify.android.app.domain.LoginManager
-import com.lelloman.pezzottify.android.app.domain.LoginState
+import com.lelloman.pezzottify.android.app.domain.login.LoginManager
+import com.lelloman.pezzottify.android.app.domain.login.LoginState
 import com.lelloman.pezzottify.android.app.ui.Navigator
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.filter

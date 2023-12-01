@@ -1,4 +1,4 @@
-package com.lelloman.pezzottify.android.app.domain
+package com.lelloman.pezzottify.android.app.domain.login
 
 fun interface LoginOperation {
     suspend operator fun invoke(loginState: LoginState.LoggedIn): Boolean

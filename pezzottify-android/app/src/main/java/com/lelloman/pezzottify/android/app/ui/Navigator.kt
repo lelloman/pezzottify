@@ -15,31 +15,34 @@ class Navigator @Inject constructor() {
     )
     val channel: ReceiveChannel<NavigationEvent> = _channel
 
+    fun restartFromSplash() {
+        val event = NavigationEvent.GoTo(
+            Routes.Splash.route,
+            NavigationEvent.PopUp.All
+        )
+        _channel.trySend(event)
+    }
+
     fun fromSplashToHome() {
-        val event =
-            NavigationEvent.GoTo(
-                Routes.Dashboard.route,
-                NavigationEvent.PopUpTo(Routes.Splash.route)
-            )
+        val event = NavigationEvent.GoTo(
+            Routes.Dashboard.route, NavigationEvent.PopUp.To(Routes.Splash.route)
+        )
         _channel.trySend(event)
     }
 
     fun fromSplashToLogin() {
-        val event =
-            NavigationEvent.GoTo(Routes.Login.route, NavigationEvent.PopUpTo(Routes.Splash.route))
+        val event = NavigationEvent.GoTo(
+            Routes.Login.route, NavigationEvent.PopUp.To(Routes.Splash.route)
+        )
         _channel.trySend(event)
     }
 
     fun fromLoginToHome() {
-        Routes.Dashboard.destination()
-            .popUpTo(Routes.Login)
-            .go()
+        Routes.Dashboard.destination().popUpTo(Routes.Login).go()
     }
 
     fun fromProfileToLogin() {
-        Routes.Login.destination()
-            .popUpTo(Routes.Dashboard)
-            .go()
+        Routes.Login.destination().popUpTo(Routes.Dashboard).go()
     }
 
     fun fromDashboardToPlayer() {
@@ -53,10 +56,10 @@ class Navigator @Inject constructor() {
     private fun Routes.destination() = EventBuilder(this.route)
 
     inner class EventBuilder(var dest: String) {
-        private var popUpTo: NavigationEvent.PopUpTo? = null
+        private var popUpTo: NavigationEvent.PopUp? = null
 
         fun popUpTo(popUpTo: Routes) = apply {
-            this.popUpTo = NavigationEvent.PopUpTo(popUpTo.route)
+            this.popUpTo = NavigationEvent.PopUp.To(popUpTo.route)
         }
 
         fun go() {
@@ -69,9 +72,12 @@ class Navigator @Inject constructor() {
 sealed class NavigationEvent {
     object GoBack : NavigationEvent()
 
-    data class GoTo(val route: String, val popUpTo: PopUpTo? = null) : NavigationEvent()
+    data class GoTo(val route: String, val popUpTo: PopUp? = null) : NavigationEvent()
 
-    data class PopUpTo(val route: String, val inclusive: Boolean = true)
+    sealed class PopUp {
+        data class To(val route: String, val inclusive: Boolean = true) : PopUp()
+        object All : PopUp()
+    }
 }
 
 

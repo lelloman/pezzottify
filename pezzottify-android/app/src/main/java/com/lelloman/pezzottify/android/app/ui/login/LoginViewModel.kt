@@ -2,10 +2,10 @@ package com.lelloman.pezzottify.android.app.ui.login
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.lelloman.pezzottify.android.app.domain.LoginManager
-import com.lelloman.pezzottify.android.app.domain.LoginResult
-import com.lelloman.pezzottify.android.app.persistence.ObjectsStore
-import com.lelloman.pezzottify.android.app.persistence.PersistentObjectDef
+import com.lelloman.pezzottify.android.app.domain.login.LoginManager
+import com.lelloman.pezzottify.android.app.domain.login.LoginResult
+import com.lelloman.pezzottify.android.app.localdata.ObjectsStore
+import com.lelloman.pezzottify.android.app.localdata.PersistentObjectDef
 import com.lelloman.pezzottify.android.app.ui.Navigator
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
