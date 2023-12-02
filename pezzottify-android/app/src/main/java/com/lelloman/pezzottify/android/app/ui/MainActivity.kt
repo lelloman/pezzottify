@@ -10,8 +10,11 @@ import androidx.compose.animation.ExitTransition
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.core.content.ContextCompat
@@ -25,6 +28,7 @@ import com.lelloman.pezzottify.android.app.ui.player.PlayerScreen
 import com.lelloman.pezzottify.android.app.ui.splash.SplashScreen
 import com.lelloman.pezzottify.android.app.ui.theme.PezzottifyTheme
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.receiveAsFlow
 import javax.inject.Inject
 
@@ -33,6 +37,9 @@ class MainActivity : ComponentActivity() {
 
     @Inject
     lateinit var navigator: Navigator
+
+    @Inject
+    lateinit var snackBarController: SnackBarController
 
     @OptIn(ExperimentalMaterial3Api::class)
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -51,9 +58,11 @@ class MainActivity : ComponentActivity() {
         ) {
             requestPermissions(arrayOf(Manifest.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK), 123)
         }
+
         setContent {
             val navController = rememberNavController()
             val navigationChannel = navigator.channel
+            val snackbarHostState = remember { SnackbarHostState() }
             PezzottifyTheme {
                 LaunchedEffect(key1 = this@MainActivity, navController, navigationChannel) {
                     navigator.channel.receiveAsFlow().collect { navigationEvent ->
@@ -77,7 +86,18 @@ class MainActivity : ComponentActivity() {
                         }
                     }
                 }
-                Scaffold { _ ->
+                Scaffold(
+                    snackbarHost = {
+                        SnackbarHost(hostState = snackbarHostState)
+                    }
+                ) { _ ->
+                    LaunchedEffect(Unit) {
+                        snackBarController.snacks.collectLatest {
+                            if (it != null) {
+                                snackbarHostState.showSnackbar(it.message)
+                            }
+                        }
+                    }
                     PezzottifyNavHost(navController = navController)
                 }
             }

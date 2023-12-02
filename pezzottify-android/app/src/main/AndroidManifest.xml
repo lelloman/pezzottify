@@ -23,6 +23,7 @@
             android:exported="true"
             android:launchMode="singleTop"
             android:label="@string/app_name"
+            android:windowSoftInputMode="adjustResize"
             android:theme="@style/Theme.Pezzottify">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />

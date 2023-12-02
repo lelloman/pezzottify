@@ -1,5 +1,7 @@
 package com.lelloman.pezzottify.android.app.domain.login
 
+import com.lelloman.pezzottify.android.app.localdata.ObjectsStore
+import com.lelloman.pezzottify.android.app.localdata.PersistentObjectDef
 import com.lelloman.pezzottify.remoteapi.LoginResponse
 import com.lelloman.pezzottify.remoteapi.RemoteApi
 import kotlinx.coroutines.CoroutineDispatcher
@@ -8,7 +10,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
-import java.io.File
 import java.net.ConnectException
 
 interface LoginManager {
@@ -28,7 +29,7 @@ interface LoginManager {
 
 class LoginManagerImpl(
     private val remoteApi: RemoteApi,
-    private val persistence: File,
+    private val objectsStore: ObjectsStore,
     private val ioDispatcher: CoroutineDispatcher,
 ) : LoginManager {
 
@@ -38,7 +39,7 @@ class LoginManagerImpl(
     private val stateBroadcast = MutableStateFlow<LoginState>(LoginState.Loading)
 
     override val loginState: StateFlow<LoginState> by lazy {
-        loadPersistedState()
+        runBlocking {  loadPersistedState() }
         stateBroadcast
     }
 
@@ -54,22 +55,15 @@ class LoginManagerImpl(
         this.logoutOperations.addAll(logoutOperations)
     }
 
-    private fun loadPersistedState() {
-        val state = try {
-            val (remoteUrl, username, authToken) = persistence.readText().lines()
-                .takeIf { it.size > 2 }?.take(3)?.takeIf { lines -> lines.all { it.isNotBlank() } }
-                ?: throw Exception()
-            remoteApi.setRemoteUrl(remoteUrl)
-            LoginState.LoggedIn(
-                username = username,
-                authToken = authToken,
-                remoteUrl = remoteUrl,
-            )
-
-        } catch (_: Throwable) {
-            LoginState.Unauthenticated
+    private suspend fun loadPersistedState() {
+        withContext(ioDispatcher) {
+            val state = try {
+                objectsStore.load(persistenceObjectDef)
+            } catch (_: Throwable) {
+                LoginState.Unauthenticated
+            }
+            stateBroadcast.emit(state)
         }
-        runBlocking { stateBroadcast.emit(state) }
     }
 
     override suspend fun logout() = withContext(ioDispatcher) {
@@ -80,14 +74,14 @@ class LoginManagerImpl(
                 e.printStackTrace()
             }
         }
-        persistence.delete()
+        objectsStore.delete(persistenceObjectDef)
         stateBroadcast.emit(LoginState.Unauthenticated)
     }
 
     private suspend fun handleSuccessfulLogin(state: LoginState.LoggedIn): Boolean {
         if (loginOperations.any { it(state).not() }) return false
         stateBroadcast.emit(state as LoginState)
-        persistence.writeText("${state.remoteUrl}\n${state.username}\n${state.authToken}")
+        objectsStore.store(persistenceObjectDef, state)
         return true
     }
 
@@ -134,5 +128,9 @@ class LoginManagerImpl(
                 }
             }
         }
+    }
+
+    companion object {
+        val persistenceObjectDef = PersistentObjectDef("LoggedInState", LoginState.LoggedIn::class)
     }
 }

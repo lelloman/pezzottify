@@ -4,6 +4,7 @@ import com.google.common.truth.Truth.assertThat
 import com.lelloman.pezzottify.android.app.domain.login.LoginManagerImpl
 import com.lelloman.pezzottify.android.app.domain.login.LoginResult
 import com.lelloman.pezzottify.android.app.domain.login.LoginState
+import com.lelloman.pezzottify.android.app.localdata.ObjectsStore
 import com.lelloman.pezzottify.remoteapi.LoginResponse
 import com.lelloman.pezzottify.remoteapi.RemoteApi
 import kotlinx.coroutines.Dispatchers
@@ -11,26 +12,24 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.Test
 import org.mockito.kotlin.any
+import org.mockito.kotlin.doReturn
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.verifyNoInteractions
 import org.mockito.kotlin.whenever
-import java.io.File
 import java.net.ConnectException
 
 class LoginManagerTest {
 
-    private var persistenceFile: File = mock()
     private val remoteApi: RemoteApi = mock()
+    private val objectsStore: ObjectsStore = mock()
 
     private val tested by lazy {
         LoginManagerImpl(
-            persistence = persistenceFile,
+            objectsStore = objectsStore,
             remoteApi = remoteApi,
             ioDispatcher = Dispatchers.IO,
-            loginOperations = emptySet(),
-            logoutOperations = emptySet(),
         )
     }
 
@@ -38,32 +37,31 @@ class LoginManagerTest {
     fun `loads persistence state when loginState is observed`() {
         runBlocking {
             assertThat(tested).isNotNull()
-            verifyNoInteractions(persistenceFile)
+            whenever(objectsStore.load(LoginManagerImpl.persistenceObjectDef)).thenThrow(
+                IllegalArgumentException()
+            )
+            verifyNoInteractions(objectsStore)
 
             assertThat(tested.loginState.first()).isEqualTo(LoginState.Unauthenticated)
 
-            verify(persistenceFile, times(1)).path
+            verify(objectsStore, times(1)).load(LoginManagerImpl.persistenceObjectDef)
         }
     }
 
     @Test
     fun `loads logged in state from persistence file`() {
         runBlocking {
-            persistenceFile = File.createTempFile("login", "persistence")
-            val remoteUrl = "http://asd.com"
-            val username = "the username"
-            val token = "the token"
-            persistenceFile.writeText("$remoteUrl\n$username\n$token")
+            val persistedState = LoginState.LoggedIn(
+                username = "the username",
+                remoteUrl = "http://asd.com",
+                authToken = "the token",
+            )
+            doReturn(persistedState).whenever(objectsStore)
+                .load(LoginManagerImpl.persistenceObjectDef)
 
             val state = tested.loginState.first()
 
-            assertThat(state).isEqualTo(
-                LoginState.LoggedIn(
-                    username = username,
-                    authToken = token,
-                    remoteUrl = remoteUrl
-                )
-            )
+            assertThat(state).isEqualTo(persistedState)
         }
     }
 
@@ -121,9 +119,13 @@ class LoginManagerTest {
     fun `logs in successfully`() {
         runBlocking {
             val (username, token, remoteUrl) = arrayOf("Username", "Token", "http://asd.com")
-            persistenceFile = File.createTempFile("persitence", "tmp")
             whenever(remoteApi.performLogin(any(), any(), any()))
                 .thenReturn(RemoteApi.Response.Success(LoginResponse.Success(token)))
+            whenever(objectsStore.load(LoginManagerImpl.persistenceObjectDef)).thenThrow(
+                IllegalArgumentException()
+            )
+            assertThat(tested.loginState.first())
+                .isEqualTo(LoginState.Unauthenticated)
 
             assertThat(
                 tested.performLogin(
@@ -132,15 +134,14 @@ class LoginManagerTest {
                     password = ""
                 )
             ).isEqualTo(LoginResult.Success(token))
+            val loggedInState = LoginState.LoggedIn(
+                username = username,
+                authToken = token,
+                remoteUrl = remoteUrl
+            )
             assertThat(tested.loginState.first())
-                .isEqualTo(
-                    LoginState.LoggedIn(
-                        username = username,
-                        authToken = token,
-                        remoteUrl = remoteUrl
-                    )
-                )
-            assertThat(persistenceFile.readText()).isEqualTo("$remoteUrl\n$username\n$token")
+                .isEqualTo(loggedInState)
+            verify(objectsStore).store(LoginManagerImpl.persistenceObjectDef, loggedInState)
         }
     }
 }

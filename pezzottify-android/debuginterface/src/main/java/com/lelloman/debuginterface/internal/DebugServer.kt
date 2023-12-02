@@ -8,8 +8,9 @@ import java.io.StringWriter
 
 internal class DebugServer(
     private val operations: List<DebugOperation>,
-    gsonBuilder: GsonBuilder = GsonBuilder(),
-) : NanoHTTPD(8889) {
+    port: Int,
+    gsonBuilder: GsonBuilder,
+) : NanoHTTPD(port) {
 
     private val gson = gsonBuilder
         .setPrettyPrinting()

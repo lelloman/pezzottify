@@ -8,6 +8,7 @@ import com.lelloman.pezzottify.android.app.domain.login.LoginStateOperationsColl
 import com.lelloman.pezzottify.android.app.domain.login.LogoutOperation
 import com.lelloman.pezzottify.android.app.domain.statics.DeleteStaticsLogoutOperation
 import com.lelloman.pezzottify.android.app.domain.statics.FetchStaticsLoginOperation
+import com.lelloman.pezzottify.android.app.localdata.ObjectsStore
 import com.lelloman.pezzottify.remoteapi.RemoteApi
 import dagger.Module
 import dagger.Provides
@@ -16,7 +17,6 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
 import dagger.multibindings.IntoSet
 import kotlinx.coroutines.Dispatchers
-import java.io.File
 import javax.inject.Singleton
 
 @Module
@@ -28,9 +28,10 @@ class Module {
     fun provideLoginManager(
         @ApplicationContext context: Context,
         remoteApi: RemoteApi,
+        objectsStore: ObjectsStore,
     ): LoginManager = LoginManagerImpl(
         remoteApi = remoteApi,
-        persistence = File(context.filesDir, "2034hny"),
+        objectsStore = objectsStore,
         ioDispatcher = Dispatchers.IO,
     )
 

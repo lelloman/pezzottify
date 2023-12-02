@@ -40,20 +40,30 @@ class ObjectsStore @Inject constructor(
         }
     }
 
-    suspend fun <T> store(key: String, obj: T) = withContext(ioDispatcher) {
-        if (defsMap.containsKey(key).not()) {
-            throw IllegalArgumentException("Unknown key \"$key\"")
-        }
+    private val PersistentObjectDef<*>.file get() = File(context.filesDir, key)
+
+    suspend fun <T : Any> store(def: PersistentObjectDef<T>, obj: T) = withContext(ioDispatcher) {
+        assertKeyExists(def.key)
 
         val jsonString = gson.toJson(obj)
-        File(context.filesDir, key).writeText(jsonString)
+        def.file.writeText(jsonString)
     }
 
-    suspend fun <T> load(key: String): T = withContext(ioDispatcher) {
+    suspend fun <T : Any> load(def: PersistentObjectDef<T>): T = withContext(ioDispatcher) {
+        assertKeyExists(def.key)
+        val json = File(context.filesDir, def.key).readText()
+        gson.fromJson<T>(json, defsMap[def.key]!!.java)
+    }
+
+    suspend fun <T : Any> delete(def: PersistentObjectDef<T>) = withContext(ioDispatcher) {
+        assertKeyExists(def.key)
+        defsMap.remove(def.key)
+        def.file.delete()
+    }
+
+    private fun assertKeyExists(key: String) {
         if (defsMap.containsKey(key).not()) {
-            throw IllegalArgumentException("Unknown key \"$key\"")
+            throw IllegalArgumentException("Unknown key \"${key}\"")
         }
-        val json = File(context.filesDir, key).readText()
-        gson.fromJson<T>(json, defsMap[key]!!.java)
     }
 }

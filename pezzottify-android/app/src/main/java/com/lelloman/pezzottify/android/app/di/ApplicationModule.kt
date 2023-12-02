@@ -1,6 +1,7 @@
 package com.lelloman.pezzottify.android.app.di
 
 import com.google.gson.GsonBuilder
+import com.lelloman.pezzottify.android.app.domain.login.LoginManagerImpl
 import com.lelloman.pezzottify.android.app.localdata.PersistentObjectDef
 import com.lelloman.pezzottify.android.app.ui.login.LoginViewModel
 import com.lelloman.pezzottify.remoteapi.RemoteApi
@@ -34,6 +35,11 @@ class ApplicationModule {
     @IntoSet
     fun provideLoginPersistentObjectDef(): PersistentObjectDef<*> =
         LoginViewModel.PersistentObject.def
+
+    @Provides
+    @IntoSet
+    fun provideLoggedInPersistentObjectDef(): PersistentObjectDef<*> =
+        LoginManagerImpl.persistenceObjectDef
 
     @Provides
     @Singleton
