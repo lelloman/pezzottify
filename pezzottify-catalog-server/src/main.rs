@@ -36,6 +36,7 @@ fn main() {
 
     if cli_args.check_only {
         println!("Performed check only, catalog is OK.");
+        println!("Catalog has {} artists", catalog.get_artists_count());
         return;
     }
 }
