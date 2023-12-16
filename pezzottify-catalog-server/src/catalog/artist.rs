@@ -10,7 +10,7 @@ pub enum ActivityPeriod {
     Decade(u16),
 }
 
-#[derive(Deserialize, Debug, PartialEq, Eq)]
+#[derive(Deserialize, Serialize, Debug, PartialEq, Eq)]
 pub struct Artist {
     pub id: String,
     pub name: String,

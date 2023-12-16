@@ -29,14 +29,19 @@ fn main() {
     let catalog = match Catalog::build(&cli_args.path) {
         Ok(x) => x,
         Err(x) => {
-            eprintln!("Could not parse catalog.\n{}", x);
+            eprintln!("Could not parse catalog.\n{:?}", x);
             return;
         }
     };
 
     if cli_args.check_only {
         println!("Performed check only, catalog is OK.");
-        println!("Catalog has {} artists", catalog.get_artists_count());
+        println!(
+            "Catalog has:\n{} artists\n{} albums\n{} tracks",
+            catalog.get_artists_count(),
+            catalog.get_albums_count(),
+            catalog.get_tracks_count()
+        );
         return;
     }
 }
