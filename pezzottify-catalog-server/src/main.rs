@@ -26,22 +26,34 @@ struct CliArgs {
 
 fn main() {
     let cli_args = CliArgs::parse();
-    let catalog = match Catalog::build(&cli_args.path) {
-        Ok(x) => x,
-        Err(x) => {
-            eprintln!("Could not parse catalog.\n{:?}", x);
-            return;
-        }
-    };
+    let catalog_result = Catalog::build(&cli_args.path);
+    let problems = catalog_result.problems;
+    let catalog = catalog_result.catalog;
 
     if cli_args.check_only {
-        println!("Performed check only, catalog is OK.");
-        println!(
-            "Catalog has:\n{} artists\n{} albums\n{} tracks",
-            catalog.get_artists_count(),
-            catalog.get_albums_count(),
-            catalog.get_tracks_count()
-        );
+        if !problems.is_empty() {
+            println!("Found {} problems:", problems.len());
+            for problem in problems.iter() {
+                println!("- {:?}", problem);
+            }
+            println!("");
+        }
+
+        match (&catalog, problems.is_empty()) {
+            (Some(_), true) => println!("Catalog checked, no issues found."),
+            (Some(_), false) => println!("Catalog was built, but check the issues above."),
+            (None, _) => {
+                println!("Check the problems above, the catalog could not be initialized.")
+            }
+        }
+        if let Some(catalog) = catalog {
+            println!(
+                "Catalog has:\n{} artists\n{} albums\n{} tracks",
+                catalog.get_artists_count(),
+                catalog.get_albums_count(),
+                catalog.get_tracks_count()
+            );
+        }
         return;
     }
 }
