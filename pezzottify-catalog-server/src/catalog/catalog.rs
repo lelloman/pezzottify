@@ -163,7 +163,7 @@ fn parse_tracks(dir: &Path, album: &Album) -> Result<Vec<Track>> {
         .collect();
 
     for disc in album.discs.iter() {
-        for track_id in disc.tracks.iter() {
+        for track_id in disc.tracks.iter() { 
             let track_filename_prefix = format!("track_{track_id}");
             let track_json_file = dir.join(format!("{track_filename_prefix}.json"));
 
@@ -234,7 +234,7 @@ fn parse_albums_and_tracks(
         });
 
         let mut parsed_tracks = problemo!(parse_tracks(&path, &album), problems, |e| {
-            Problem::InvalidAlbumTracks(album.id)
+            Problem::InvalidAlbumTracks(format!("{} - {}", album.id, album.name))
         });
         loop {
             if parsed_tracks.is_empty() {
