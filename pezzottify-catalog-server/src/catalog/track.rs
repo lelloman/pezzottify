@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-#[derive(Eq, PartialEq, Hash, Serialize, Deserialize, Debug)]
+#[derive(Clone, Eq, PartialEq, Hash, Serialize, Deserialize, Debug)]
 pub enum Format {
     OGG_VORBIS_96 = 0,
     OGG_VORBIS_160 = 1,
@@ -16,7 +16,7 @@ pub enum Format {
     FLAC_FLAC = 16,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Clone, Serialize, Deserialize, Debug)]
 pub enum ArtistRole {
     ARTIST_ROLE_UNKNOWN = 0,
     ARTIST_ROLE_MAIN_ARTIST = 1,
@@ -28,14 +28,14 @@ pub enum ArtistRole {
     ARTIST_ROLE_ORCHESTRA = 7,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct ArtistWithRole {
     pub artist_id: String,
     pub name: String,
     pub role: ArtistRole,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct Track {
     pub id: String,
     pub name: String,

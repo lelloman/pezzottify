@@ -15,7 +15,7 @@ use catalog::Catalog;
 use axum::{
     extract::{Path, State},
     http::StatusCode,
-    response::{Response, IntoResponse},
+    response::{IntoResponse, Response},
     routing::{get, post},
     Json, Router,
 };
@@ -68,22 +68,25 @@ async fn home(State(state): State<Arc<ServerState>>) -> impl IntoResponse {
     Json(stats)
 }
 
-async fn get_artist(
-    State(state): State<Arc<ServerState>>,
-    Path(id): Path<String>,
-) -> Response {
+async fn get_artist(State(state): State<Arc<ServerState>>, Path(id): Path<String>) -> Response {
     match state.catalog.get_artist(&id) {
         Some(artist) => Json(artist).into_response(),
         None => StatusCode::NOT_FOUND.into_response(),
     }
 }
 
-async fn get_track(State(state): State<Arc<ServerState>>, track_id: String) -> impl IntoResponse {
-    todo!("get track not implemented yet")
+async fn get_track(State(state): State<Arc<ServerState>>, Path(id): Path<String>) -> Response {
+    match state.catalog.get_track(&id) {
+        Some(track) => Json(track).into_response(),
+        None => StatusCode::NOT_FOUND.into_response(),
+    }
 }
 
-async fn get_album(album_id: String) -> impl IntoResponse {
-    todo!("get album not implemented yet")
+async fn get_album(State(state): State<Arc<ServerState>>, Path(id): Path<String>) -> Response {
+    match state.catalog.get_album(&id) {
+        Some(album) => Json(album).into_response(),
+        None => StatusCode::NOT_FOUND.into_response(),
+    }
 }
 
 async fn get_image(image_id: String) -> impl IntoResponse {
@@ -145,6 +148,8 @@ async fn run_server(catalog: Catalog, port: u16) -> Result<()> {
     let app: Router = Router::new()
         .route("/", get(home))
         .route("/artist/{id}", get(get_artist))
+        .route("/album/{id}", get(get_album))
+        .route("/track/{id}", get(get_track))
         .with_state(state);
 
     let listener = tokio::net::TcpListener::bind(format!("127.0.0.1:{}", port))

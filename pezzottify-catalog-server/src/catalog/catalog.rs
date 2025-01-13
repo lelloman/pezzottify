@@ -299,4 +299,12 @@ impl Catalog {
     pub fn get_artist(&self, artist_id: &String) -> Option<Artist> {
         self.artists.get(artist_id).cloned()
     }
+
+    pub fn get_track(&self, track_id: &String) -> Option<Track> {
+        self.tracks.get(track_id).cloned()
+    }
+
+    pub fn get_album(&self, album_id: &String) -> Option<Album > {
+        self.albums.get(album_id).cloned()
+    }
 }
