@@ -136,7 +136,8 @@ fn parse_artists(dir: &Path, problems: &mut Vec<Problem>) -> HashMap<String, Art
             Err(x) => {
                 problems.push(Problem::InvalidArtistFile(format!(
                     "Could not deserialize {}\n{}",
-                    path.display(), x
+                    path.display(),
+                    x
                 )));
                 continue;
             }
@@ -163,7 +164,7 @@ fn parse_tracks(dir: &Path, album: &Album) -> Result<Vec<Track>> {
         .collect();
 
     for disc in album.discs.iter() {
-        for track_id in disc.tracks.iter() { 
+        for track_id in disc.tracks.iter() {
             let track_filename_prefix = format!("track_{track_id}");
             let track_json_file = dir.join(format!("{track_filename_prefix}.json"));
 
