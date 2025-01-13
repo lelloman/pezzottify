@@ -13,9 +13,9 @@ mod catalog;
 use catalog::Catalog;
 
 use axum::{
-    extract::State,
+    extract::{Path, State},
     http::StatusCode,
-    response::IntoResponse,
+    response::{Response, IntoResponse},
     routing::{get, post},
     Json, Router,
 };
@@ -66,6 +66,28 @@ async fn home(State(state): State<Arc<ServerState>>) -> impl IntoResponse {
         hash: state.hash.clone(),
     };
     Json(stats)
+}
+
+async fn get_artist(
+    State(state): State<Arc<ServerState>>,
+    Path(id): Path<String>,
+) -> Response {
+    match state.catalog.get_artist(&id) {
+        Some(artist) => Json(artist).into_response(),
+        None => StatusCode::NOT_FOUND.into_response(),
+    }
+}
+
+async fn get_track(State(state): State<Arc<ServerState>>, track_id: String) -> impl IntoResponse {
+    todo!("get track not implemented yet")
+}
+
+async fn get_album(album_id: String) -> impl IntoResponse {
+    todo!("get album not implemented yet")
+}
+
+async fn get_image(image_id: String) -> impl IntoResponse {
+    todo!("get image not implemented yet")
 }
 
 fn load_catalog(path: PathBuf) -> Result<Catalog> {
@@ -120,7 +142,10 @@ impl ServerState {
 async fn run_server(catalog: Catalog, port: u16) -> Result<()> {
     let state = Arc::new(ServerState::new(catalog));
 
-    let app: Router = Router::new().route("/", get(home)).with_state(state);
+    let app: Router = Router::new()
+        .route("/", get(home))
+        .route("/artist/{id}", get(get_artist))
+        .with_state(state);
 
     let listener = tokio::net::TcpListener::bind(format!("127.0.0.1:{}", port))
         .await

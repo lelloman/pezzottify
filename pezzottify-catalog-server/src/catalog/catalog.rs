@@ -295,4 +295,8 @@ impl Catalog {
     pub fn get_tracks_count(&self) -> usize {
         self.tracks.len()
     }
+
+    pub fn get_artist(&self, artist_id: &String) -> Option<Artist> {
+        self.artists.get(artist_id).cloned()
+    }
 }

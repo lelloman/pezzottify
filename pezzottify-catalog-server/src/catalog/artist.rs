@@ -1,7 +1,7 @@
 use super::Image;
 use serde::{Deserialize, Serialize};
 
-#[derive(Serialize, Deserialize, Debug, PartialEq, Eq)]
+#[derive(Clone, Serialize, Deserialize, Debug, PartialEq, Eq)]
 pub enum ActivityPeriod {
     Timespan {
         start_year: u16,
@@ -10,7 +10,7 @@ pub enum ActivityPeriod {
     Decade(u16),
 }
 
-#[derive(Deserialize, Serialize, Debug, PartialEq, Eq)]
+#[derive(Clone, Deserialize, Serialize, Debug, PartialEq, Eq)]
 pub struct Artist {
     pub id: String,
     pub name: String,
