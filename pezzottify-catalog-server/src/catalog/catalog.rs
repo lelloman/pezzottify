@@ -307,4 +307,8 @@ impl Catalog {
     pub fn get_album(&self, album_id: &String) -> Option<Album > {
         self.albums.get(album_id).cloned()
     }
+
+    pub fn iter_artists(&self) -> impl Iterator<Item = &Artist> {
+        self.artists.values()
+    }
 }
