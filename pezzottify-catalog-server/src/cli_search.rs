@@ -1,13 +1,13 @@
-use std::io;
-use clap::Parser;
-use std::path::PathBuf;
 use anyhow::Result;
+use clap::Parser;
+use std::io;
+use std::path::PathBuf;
 
 mod catalog;
 use catalog::load_catalog;
 
 mod search;
-use search::SearchVault;
+use search::{SearchResult, SearchVault};
 
 fn parse_root_dir(s: &str) -> Result<PathBuf> {
     let original_path = PathBuf::from(s).canonicalize()?;
@@ -18,16 +18,15 @@ fn parse_root_dir(s: &str) -> Result<PathBuf> {
     Ok(cwd.join(original_path))
 }
 
-
 #[derive(Parser, Debug)]
 struct CliArgs {
     #[clap(value_parser = parse_root_dir)]
     pub path: PathBuf,
 }
 
-fn main() {
+fn main() -> Result<()> {
     let cli_args = CliArgs::parse();
-    let catalog = load_catalog(cli_args.path); 
+    let catalog = load_catalog(cli_args.path)?;
     let search_vault = SearchVault::new(&catalog);
 
     loop {
@@ -41,10 +40,11 @@ fn main() {
 
         let user_input = user_input.trim();
 
-        println!("Processing...");
-        std::thread::sleep(std::time::Duration::from_secs(3));
-
-        println!("You entered: \"{}\"", user_input);
-
+        let results: Vec<SearchResult> = search_vault.search(user_input).collect();
+        if results.is_empty() {
+            println!("No matches found for \"{}\".", user_input);
+        } else {
+            println!("Found {} matches for \"{}\":\n", results.len(), user_input);
+        }
     }
 }

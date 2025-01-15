@@ -106,7 +106,7 @@ impl SearchVault {
         SearchVault { items }
     }
 
-    pub fn search<T: AsRef<str>>(query: T) -> impl Iterator<Item = SearchResult> {
+    pub fn search<T: AsRef<str>>(&self, query: T) -> impl Iterator<Item = SearchResult> {
         let query_hash = PezzottHash::calc(query);
         let results = SearchResultsHolder::new(10);
         

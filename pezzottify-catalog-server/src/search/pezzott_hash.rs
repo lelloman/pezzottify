@@ -1,5 +1,6 @@
 use sha2::{Digest, Sha256};
 use std::ops::Sub;
+use unicode_segmentation::UnicodeSegmentation;
 
 const SIM_HASH_LEN_BITS: usize = 256;
 const SIM_HASH_LEN_BYTES: usize = SIM_HASH_LEN_BITS / 8;
@@ -19,19 +20,15 @@ impl PezzottHash {
     pub fn calc<T: AsRef<str>>(source: T) -> PezzottHash {
         let clean_source = source.as_ref().to_lowercase();
         let source_len = clean_source.len();
-        let n_grams = if source_len <= SIM_HASH_MAX_CHARS {
+        let n_grams : Vec<String>= if source_len <= SIM_HASH_MAX_CHARS {
             vec![clean_source]
         } else {
             make_n_grams(
-                clean_source,
+                clean_source.graphemes(true),
                 SIM_HASH_MAX_CHARS,
                 PEZZOT_HASH_CHUNKS_CHARS_OVERLAP,
             )
         };
-        println!("generated {} chunks", n_grams.len());
-        for (i, s) in n_grams.iter().enumerate() {
-            println!("{}: {}", i + 1, s);
-        }
         PezzottHash {
             sim_hashes: n_grams.iter().map(|ng| make_sim_hash(ng)).collect(),
         }
@@ -70,23 +67,30 @@ impl std::fmt::Display for SimHash {
     }
 }
 
-fn make_n_grams<T: AsRef<str>>(source: T, n_gram_length: usize, overlap: usize) -> Vec<String> {
+fn make_n_grams<T>(source: T, n_gram_length: usize, overlap: usize) -> Vec<String>
+where
+    T: IntoIterator,
+    T::Item: AsRef<str>,
+{
     if n_gram_length <= overlap {
         panic!("The overlap must be smaller than the length of the n gram.")
     }
-    let source_str: &str = source.as_ref();
+    let source: Vec<String> = source
+        .into_iter()
+        .map(|item| item.as_ref().to_string())
+        .collect();
     let mut ngrams: Vec<String> = vec![];
     let mut left = 0;
     let step = n_gram_length - overlap;
-    let max_left = if source_str.len() > overlap {
-        source_str.len() - overlap
+    let max_left = if source.len() > overlap {
+        source.len() - overlap
     } else {
-        source_str.len()
+        source.len()
     };
     loop {
-        let right = std::cmp::min(left + n_gram_length, source_str.len());
-        let n_gram = &source_str[left..right];
-        ngrams.push(n_gram.to_owned());
+        let right = std::cmp::min(left + n_gram_length, source.len());
+        let n_gram = &source[left..right];
+        ngrams.push(n_gram.concat());
         left += step;
         if left >= max_left {
             break;
@@ -103,9 +107,10 @@ fn make_sim_hash<T: AsRef<str>>(source: T) -> SimHash {
         .chars()
         .filter(|c| !c.is_whitespace())
         .collect();
-    let source_length = sanitized_source.len();
+    let graphemes: Vec<&str> = sanitized_source.graphemes(true).collect();
+    let source_length = graphemes.len();
     let ngrams = make_n_grams(
-        sanitized_source,
+        graphemes.iter(),
         SIM_HASH_N_GRAM_LENGTH,
         SIM_HASH_N_GRAM_OVERLAP,
     );
@@ -139,16 +144,16 @@ mod tests {
 
     #[test]
     fn makes_ngrams() {
-        let ngrams = make_n_grams("12345678", 5, 1);
+        let ngrams = make_n_grams("12345678".graphemes(true), 5, 1);
         assert_eq!(ngrams, vec!["12345", "5678"]);
 
-        let ngrams = make_n_grams("12345678", 4, 2);
+        let ngrams = make_n_grams("12345678".graphemes(true), 4, 2);
         assert_eq!(ngrams, vec!["1234", "3456", "5678"]);
 
-        let ngrams = make_n_grams("12345678", 5, 0);
+        let ngrams = make_n_grams("12345678".graphemes(true), 5, 0);
         assert_eq!(ngrams, vec!["12345", "678"]);
 
-        let ngrams = make_n_grams("12345678", 6, 3);
+        let ngrams = make_n_grams("12345678".graphemes(true), 6, 3);
         assert_eq!(ngrams, vec!["123456", "45678"]);
     }
 
