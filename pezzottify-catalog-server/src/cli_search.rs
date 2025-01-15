@@ -4,10 +4,10 @@ use std::io;
 use std::path::PathBuf;
 
 mod catalog;
-use catalog::load_catalog;
+use catalog::{load_catalog, Catalog};
 
 mod search;
-use search::{SearchResult, SearchVault};
+use search::{HashedItemType, SearchResult, SearchVault};
 
 fn parse_root_dir(s: &str) -> Result<PathBuf> {
     let original_path = PathBuf::from(s).canonicalize()?;
@@ -24,10 +24,26 @@ struct CliArgs {
     pub path: PathBuf,
 }
 
+fn print_result(catalog: &Catalog, result: SearchResult) {
+    let name = match result.item_type {
+        HashedItemType::Artist => catalog.get_artist(&result.item_id).map(|a| a.name),
+        HashedItemType::Track => catalog.get_track(&result.item_id).map(|t| t.name),
+        HashedItemType::Album => catalog.get_album(&result.item_id).map(|a| a.name),
+    };
+    println!(
+        "{} -> {:?} {}",
+        name.unwrap_or_else(|| "ERROR".to_string()),
+        result.item_type,
+        result.score,
+    );
+}
+
 fn main() -> Result<()> {
     let cli_args = CliArgs::parse();
+    println!("Cli Search loading catalog...");
     let catalog = load_catalog(cli_args.path)?;
     let search_vault = SearchVault::new(&catalog);
+    println!("Done!");
 
     loop {
         println!("Please enter your search query:");
@@ -45,6 +61,10 @@ fn main() -> Result<()> {
             println!("No matches found for \"{}\".", user_input);
         } else {
             println!("Found {} matches for \"{}\":\n", results.len(), user_input);
+            for result in results {
+                print_result(&catalog, result);
+            }
         }
+        println!("\n");
     }
 }

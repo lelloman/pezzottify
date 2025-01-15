@@ -1,10 +1,10 @@
 use super::pezzott_hash::PezzottHash;
 use crate::catalog::Catalog;
 
-use std::collections::BTreeSet;
+use std::{collections::BinaryHeap, u32};
 
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
-enum HashedItemType {
+#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum HashedItemType {
     Track,
     Artist,
     Album,
@@ -15,16 +15,22 @@ struct HashedItem {
     pub hash: PezzottHash,
 }
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug, Hash, Eq)]
 pub struct SearchResult {
     pub item_type: HashedItemType,
     pub item_id: String,
-    pub score: usize,
+    pub score: u32,
+}
+
+impl PartialEq for SearchResult {
+    fn eq(&self, other: &Self) -> bool {
+        self.score == other.score
+    }
 }
 
 impl std::cmp::Ord for SearchResult {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        self.score.cmp(&other.score)
+        other.score.cmp(&self.score)
     }
 }
 
@@ -39,7 +45,7 @@ pub struct SearchVault {
 }
 
 struct SearchResultsHolder {
-    tree: BTreeSet<SearchResult>,
+    tree: BinaryHeap<SearchResult>,
     capacity: usize,
 }
 
@@ -47,27 +53,31 @@ impl SearchResultsHolder {
     fn new(capacity: usize) -> SearchResultsHolder {
         SearchResultsHolder {
             capacity,
-            tree: BTreeSet::new(),
+            tree: BinaryHeap::with_capacity(capacity),
         }
     }
 
-    fn consume(self) -> impl Iterator<Item = SearchResult> {
-        self.tree.into_iter()
+    fn consume(mut self) -> impl Iterator<Item = SearchResult> {
+        let mut out: Vec<SearchResult> = vec![];
+        while !self.tree.is_empty() {
+            if let Some(popped) = self.tree.pop() {
+                out.push(popped);
+            }
+        }
+        out.into_iter()
     }
 
-    fn maybe_add(&mut self, item: HashedItem, score: usize) {
-        let should_add = self.tree.last().map(|i| i.score).unwrap_or(0) < score;
-
+    fn maybe_add(&mut self, item: &HashedItem, score: u32) {
+        let should_add = self.tree.len() < self.capacity ||
+            self.tree.peek().map(|i| i.score).unwrap_or(0) > score;
+        
         if should_add {
             let result = SearchResult {
                 item_id: item.item_id.clone(),
                 item_type: item.item_type,
                 score: score,
             };
-            let _ = self.tree.insert(result);
-            if self.tree.len() > self.capacity {
-                self.tree.pop_first();
-            }
+            self.tree.push(result);
         }
     }
 }
@@ -107,9 +117,14 @@ impl SearchVault {
     }
 
     pub fn search<T: AsRef<str>>(&self, query: T) -> impl Iterator<Item = SearchResult> {
+        println!("SearchVault search for \"{}\"", query.as_ref());
         let query_hash = PezzottHash::calc(query);
-        let results = SearchResultsHolder::new(10);
-        
+
+        let mut results = SearchResultsHolder::new(10);
+        for item in self.items.iter() {
+            results.maybe_add(&item, &item.hash - &query_hash);
+        }
+
         results.consume()
     }
 }

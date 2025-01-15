@@ -1,16 +1,12 @@
 use sha2::{Digest, Sha256};
-use std::ops::Sub;
+use std::{ops::Sub, u32};
 use unicode_segmentation::UnicodeSegmentation;
 
 const SIM_HASH_LEN_BITS: usize = 256;
 const SIM_HASH_LEN_BYTES: usize = SIM_HASH_LEN_BITS / 8;
-const SIM_HASH_LEN_BITS_F64: f64 = SIM_HASH_LEN_BITS as f64;
 
-const SIM_HASH_N_GRAM_LENGTH: usize = 3;
+const SIM_HASH_N_GRAM_LENGTH: usize = 2;
 const SIM_HASH_N_GRAM_OVERLAP: usize = 1;
-
-const SIM_HASH_MAX_CHARS: usize = 32;
-const PEZZOT_HASH_CHUNKS_CHARS_OVERLAP: usize = 8;
 
 pub struct PezzottHash {
     sim_hashes: Vec<SimHash>,
@@ -18,43 +14,60 @@ pub struct PezzottHash {
 
 impl PezzottHash {
     pub fn calc<T: AsRef<str>>(source: T) -> PezzottHash {
-        let clean_source = source.as_ref().to_lowercase();
-        let source_len = clean_source.len();
-        let n_grams : Vec<String>= if source_len <= SIM_HASH_MAX_CHARS {
-            vec![clean_source]
-        } else {
-            make_n_grams(
-                clean_source.graphemes(true),
-                SIM_HASH_MAX_CHARS,
-                PEZZOT_HASH_CHUNKS_CHARS_OVERLAP,
-            )
-        };
-        PezzottHash {
-            sim_hashes: n_grams.iter().map(|ng| make_sim_hash(ng)).collect(),
+        let hashes = source
+            .as_ref()
+            .to_lowercase()
+            .unicode_words()
+            .map(|w| make_sim_hash(w))
+            .collect();
+
+        PezzottHash { sim_hashes: hashes }
+    }
+}
+
+impl Sub for &PezzottHash {
+    type Output = u32;
+
+    fn sub(self, other: &PezzottHash) -> u32 {
+        let mut min_scores: Vec<u32> = vec![];
+        for self_hash in self.sim_hashes.iter() {
+            let mut self_hash_min_score = u32::MAX;
+            for other_hash in other.sim_hashes.iter() {
+                self_hash_min_score = std::cmp::min(self_hash_min_score, self_hash - other_hash);
+            }
+            min_scores.push(self_hash_min_score);
         }
+        if min_scores.is_empty() {
+            return u32::MAX;
+        }
+        let mut total = 0f64;
+        let min_scores_count = min_scores.len() as f64;
+        for score in min_scores {
+            total += score as f64;
+        }
+        (total / min_scores_count) as u32
     }
 }
 
 struct SimHash {
     value: [u8; SIM_HASH_LEN_BYTES],
-    source_length: usize,
 }
 
-fn hamming_distance(a: &[u8; SIM_HASH_LEN_BYTES], b: &[u8; SIM_HASH_LEN_BYTES]) -> f64 {
+fn hamming_distance(a: &[u8; SIM_HASH_LEN_BYTES], b: &[u8; SIM_HASH_LEN_BYTES]) -> u32 {
     let mut count = 0u32;
 
     for (i, v) in a.iter().enumerate() {
         count += (v ^ b[i]).count_ones();
     }
-    count as f64
+    count
 }
 
 impl Sub for &SimHash {
-    type Output = f64;
+    type Output = u32;
 
-    fn sub(self, other: &SimHash) -> f64 {
+    fn sub(self, other: &SimHash) -> u32 {
         let hamming_dist = hamming_distance(&self.value, &other.value);
-        hamming_dist / SIM_HASH_LEN_BITS_F64
+        hamming_dist
     }
 }
 
@@ -108,7 +121,6 @@ fn make_sim_hash<T: AsRef<str>>(source: T) -> SimHash {
         .filter(|c| !c.is_whitespace())
         .collect();
     let graphemes: Vec<&str> = sanitized_source.graphemes(true).collect();
-    let source_length = graphemes.len();
     let ngrams = make_n_grams(
         graphemes.iter(),
         SIM_HASH_N_GRAM_LENGTH,
@@ -133,10 +145,7 @@ fn make_sim_hash<T: AsRef<str>>(source: T) -> SimHash {
             value[i / 8] |= 1 << (7 - (i % 8));
         }
     }
-    SimHash {
-        value,
-        source_length,
-    }
+    SimHash { value }
 }
 
 mod tests {
@@ -176,7 +185,7 @@ mod tests {
         let target = "a rich fat black cat";
         let target_hash = make_sim_hash(&target);
 
-        let distances: Vec<f64> = hashes.iter().map(|h| h - &target_hash).collect();
+        let distances: Vec<u32> = hashes.iter().map(|h| h - &target_hash).collect();
 
         for (i, d) in distances.iter().enumerate() {
             println!("{} - {} => {:.2}", target, names[i], d);
