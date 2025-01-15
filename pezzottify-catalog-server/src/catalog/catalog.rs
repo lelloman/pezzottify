@@ -311,4 +311,12 @@ impl Catalog {
     pub fn iter_artists(&self) -> impl Iterator<Item = &Artist> {
         self.artists.values()
     }
+
+    pub fn iter_albums(&self) -> impl Iterator<Item = &Album> {
+        self.albums.values()
+    }
+
+    pub fn iter_tracks(&self) -> impl Iterator<Item = &Track> {
+        self.tracks.values()
+    }
 }

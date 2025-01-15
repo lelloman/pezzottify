@@ -12,8 +12,6 @@ mod catalog;
 
 use catalog::Catalog;
 
-mod pezzott_hash;
-use pezzott_hash::PezzottHash;
 
 use axum::{
     extract::{Path, State},
@@ -96,47 +94,6 @@ async fn get_image(image_id: String) -> impl IntoResponse {
     todo!("get image not implemented yet")
 }
 
-fn load_catalog<P : AsRef<std::path::Path>>(path: P) -> Result<Catalog> {
-    let catalog_result = Catalog::build(path.as_ref());
-    let problems = catalog_result.problems;
-    let catalog = catalog_result.catalog;
-
-    if !problems.is_empty() {
-        info!("Found {} problems:", problems.len());
-        for problem in problems.iter() {
-            info!("- {:?}", problem);
-        }
-        info!("");
-    }
-
-    match (&catalog, problems.is_empty()) {
-        (Some(_), true) => info!("Catalog checked, no issues found."),
-        (Some(_), false) => info!("Catalog was built, but check the issues above."),
-        (None, _) => {
-            info!("Check the problems above, the catalog could not be initialized.")
-        }
-    }
-    if let Some(catalog) = catalog {
-        info!(
-            "Catalog has:\n{} artists\n{} albums\n{} tracks",
-            catalog.get_artists_count(),
-            catalog.get_albums_count(),
-            catalog.get_tracks_count()
-        );
-        return Ok(catalog);
-    }
-
-    bail!("Could not load catalog");
-}
-
-enum HashedItemType {
-    Track, Artist, Album,
-}
-struct HashedItem {
-    pub item_type: HashedItemType,
-    pub hash: PezzottHash,    
-}
-
 struct ServerState {
     start_time: Instant,
     catalog: Catalog,
@@ -175,7 +132,7 @@ async fn main() -> Result<()> {
     let cli_args = CliArgs::parse();
 
     tracing_subscriber::fmt::init();
-    let catalog = load_catalog(&cli_args.path)?;
+    let catalog = catalog::load_catalog(&cli_args.path)?;
 
     if cli_args.check_only {
         return Ok(());

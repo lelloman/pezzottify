@@ -22,13 +22,19 @@ impl PezzottHash {
         let n_grams = if source_len <= SIM_HASH_MAX_CHARS {
             vec![clean_source]
         } else {
-            make_n_grams(clean_source, SIM_HASH_MAX_CHARS, PEZZOT_HASH_CHUNKS_CHARS_OVERLAP)
+            make_n_grams(
+                clean_source,
+                SIM_HASH_MAX_CHARS,
+                PEZZOT_HASH_CHUNKS_CHARS_OVERLAP,
+            )
         };
         println!("generated {} chunks", n_grams.len());
         for (i, s) in n_grams.iter().enumerate() {
-            println!("{}: {}", i+1, s);
+            println!("{}: {}", i + 1, s);
         }
-        todo!()
+        PezzottHash {
+            sim_hashes: n_grams.iter().map(|ng| make_sim_hash(ng)).collect(),
+        }
     }
 }
 
@@ -65,18 +71,28 @@ impl std::fmt::Display for SimHash {
 }
 
 fn make_n_grams<T: AsRef<str>>(source: T, n_gram_length: usize, overlap: usize) -> Vec<String> {
-    let mut ngrams: Vec<String> = vec![];
+    if n_gram_length <= overlap {
+        panic!("The overlap must be smaller than the length of the n gram.")
+    }
     let source_str: &str = source.as_ref();
+    let mut ngrams: Vec<String> = vec![];
     let mut left = 0;
     let step = n_gram_length - overlap;
-    let max_left = source_str.len() - overlap;
-    while left < max_left {
+    let max_left = if source_str.len() > overlap {
+        source_str.len() - overlap
+    } else {
+        source_str.len()
+    };
+    loop {
         let right = std::cmp::min(left + n_gram_length, source_str.len());
         let n_gram = &source_str[left..right];
         ngrams.push(n_gram.to_owned());
-        left += step; 
+        left += step;
+        if left >= max_left {
+            break;
+        }
     }
-    
+
     ngrams
 }
 
@@ -88,7 +104,11 @@ fn make_sim_hash<T: AsRef<str>>(source: T) -> SimHash {
         .filter(|c| !c.is_whitespace())
         .collect();
     let source_length = sanitized_source.len();
-    let ngrams = make_n_grams(sanitized_source, SIM_HASH_N_GRAM_LENGTH, SIM_HASH_N_GRAM_OVERLAP);
+    let ngrams = make_n_grams(
+        sanitized_source,
+        SIM_HASH_N_GRAM_LENGTH,
+        SIM_HASH_N_GRAM_OVERLAP,
+    );
     let mut vector: Vec<i64> = vec![0; SIM_HASH_LEN_BITS];
 
     for ngram in ngrams {
@@ -119,15 +139,17 @@ mod tests {
 
     #[test]
     fn makes_ngrams() {
-        let ngrams1 = make_n_grams("abcdefgh", 5, 1);
-        println!("Generated {} ngrams1:", ngrams1.len());
-        for (i, s) in ngrams1.iter().enumerate() {
-            println!("{}: {}", i, s);
-        }
-        //assert_eq!(ngrams1.len(), 4);
-        //assert_eq!(ngrams1[0], "the");
-        //assert_eq!(ngrams1[1], "he ");
-        //assert_eq!(ngrams1[2], "e b");
+        let ngrams = make_n_grams("12345678", 5, 1);
+        assert_eq!(ngrams, vec!["12345", "5678"]);
+
+        let ngrams = make_n_grams("12345678", 4, 2);
+        assert_eq!(ngrams, vec!["1234", "3456", "5678"]);
+
+        let ngrams = make_n_grams("12345678", 5, 0);
+        assert_eq!(ngrams, vec!["12345", "678"]);
+
+        let ngrams = make_n_grams("12345678", 6, 3);
+        assert_eq!(ngrams, vec!["123456", "45678"]);
     }
 
     #[test]
@@ -139,7 +161,7 @@ mod tests {
             "a rich black cat",
             "a black cat",
             "the rich cat fat",
-            "a rich fat black cat"
+            "a rich fat black cat",
         ];
         let hashes: Vec<SimHash> = names.iter().map(|s| make_sim_hash(s)).collect();
         for h in hashes.iter() {
@@ -154,10 +176,5 @@ mod tests {
         for (i, d) in distances.iter().enumerate() {
             println!("{} - {} => {:.2}", target, names[i], d);
         }
-    }
-
-    #[test]
-    fn delete_me() {
-        PezzottHash::calc("0000000011111111222222223333333344444444" );
     }
 }

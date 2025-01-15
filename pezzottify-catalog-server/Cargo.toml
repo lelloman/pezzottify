@@ -2,6 +2,7 @@
 name = "pezzottify-catalog-server"
 version = "0.1.0"
 edition = "2021"
+default-run = "catalog-server"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -16,3 +17,11 @@ sha2 = "0.10.8"
 tokio = { version = "1.37.0", features = ["full"] }
 tracing = { version = "0.1.40", features = ["log"] }
 tracing-subscriber = "0.3.18"
+
+[[bin]]
+name = "catalog-server"
+path = "src/main.rs"
+
+[[bin]]
+name = "cli-search"
+path = "src/cli_search.rs"
