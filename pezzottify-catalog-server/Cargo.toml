@@ -10,6 +10,7 @@ default-run = "catalog-server"
 anyhow = "1.0.75"
 axum = "0.8.1"
 clap = { version = "4.4.11", features = ["derive"] }
+infer = "0.16.0"
 regex = "1.10.2"
 serde = { version = "1.0.193", features = ["derive"] }
 serde_json = "1.0.108"

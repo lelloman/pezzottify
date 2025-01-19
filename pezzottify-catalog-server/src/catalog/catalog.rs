@@ -59,6 +59,12 @@ impl Dirs {
             artists,
         })
     }
+
+    pub fn get_image_path(&self, id: String) -> PathBuf {
+        let mut output = self.images.clone();
+        output.push(id);
+        output
+    }
 }
 
 #[derive(Debug)]
@@ -304,7 +310,7 @@ impl Catalog {
         self.tracks.get(track_id).cloned()
     }
 
-    pub fn get_album(&self, album_id: &String) -> Option<Album > {
+    pub fn get_album(&self, album_id: &String) -> Option<Album> {
         self.albums.get(album_id).cloned()
     }
 
@@ -318,5 +324,9 @@ impl Catalog {
 
     pub fn iter_tracks(&self) -> impl Iterator<Item = &Track> {
         self.tracks.values()
+    }
+
+    pub fn get_image_path(&self, id: String) -> PathBuf {
+        self.dirs.get_image_path(id)
     }
 }
