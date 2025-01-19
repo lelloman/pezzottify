@@ -1,9 +1,11 @@
+use serde::Serialize;
+
 use super::pezzott_hash::PezzottHash;
 use crate::catalog::Catalog;
 
 use std::{collections::BinaryHeap, u32};
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize)]
 pub enum HashedItemType {
     Track,
     Artist,
@@ -15,7 +17,7 @@ struct HashedItem {
     pub hash: PezzottHash,
 }
 
-#[derive(Debug, Hash, Eq)]
+#[derive(Debug, Hash, Eq, Serialize)]
 pub struct SearchResult {
     pub item_type: HashedItemType,
     pub item_id: String,
@@ -117,7 +119,6 @@ impl SearchVault {
     }
 
     pub fn search<T: AsRef<str>>(&self, query: T) -> impl Iterator<Item = SearchResult> {
-        println!("SearchVault search for \"{}\"", query.as_ref());
         let query_hash = PezzottHash::calc(query);
 
         let mut results = SearchResultsHolder::new(10);

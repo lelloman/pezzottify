@@ -9,9 +9,10 @@ use std::{
 use tracing::{debug, info};
 
 mod catalog;
-
 use catalog::Catalog;
 
+mod search;
+use search::{SearchResult, SearchVault};
 
 use axum::{
     extract::{Path, State},
@@ -48,6 +49,11 @@ struct CliArgs {
 struct ServerStats {
     pub uptime: String,
     pub hash: String,
+}
+
+#[derive(Deserialize)]
+struct SearchBody {
+    pub query: String,
 }
 
 fn format_uptime(duration: Duration) -> String {
@@ -90,34 +96,43 @@ async fn get_album(State(state): State<Arc<ServerState>>, Path(id): Path<String>
     }
 }
 
-async fn get_image(image_id: String) -> impl IntoResponse {
+async fn search(State(state): State<Arc<ServerState>>, Json(payload): Json<SearchBody>) -> impl IntoResponse {
+    let search_results: Vec<SearchResult> = state.search_vault.search(payload.query).collect();
+    Json(search_results)
+}
+
+
+async fn get_image(State(state): State<Arc<ServerState>>, Path(id): Path<String>) -> impl IntoResponse {
     todo!("get image not implemented yet")
 }
 
 struct ServerState {
     start_time: Instant,
     catalog: Catalog,
+    search_vault: SearchVault,
     hash: String,
 }
 
 impl ServerState {
-    fn new(catalog: Catalog) -> ServerState {
+    fn new(catalog: Catalog, search_vault: SearchVault) -> ServerState {
         ServerState {
             start_time: Instant::now(),
             catalog,
+            search_vault,
             hash: "123456".to_owned(),
         }
     }
 }
 
-async fn run_server(catalog: Catalog, port: u16) -> Result<()> {
-    let state = Arc::new(ServerState::new(catalog));
+async fn run_server(catalog: Catalog, search_vault: SearchVault, port: u16) -> Result<()> {
+    let state = Arc::new(ServerState::new(catalog, search_vault));
 
     let app: Router = Router::new()
         .route("/", get(home))
         .route("/artist/{id}", get(get_artist))
         .route("/album/{id}", get(get_album))
         .route("/track/{id}", get(get_track))
+        .route("/search", post(search))
         .with_state(state);
 
     let listener = tokio::net::TcpListener::bind(format!("127.0.0.1:{}", port))
@@ -138,5 +153,6 @@ async fn main() -> Result<()> {
         return Ok(());
     }
 
-    run_server(catalog, cli_args.port).await
+    let search_vault = SearchVault::new(&catalog);
+    run_server(catalog, search_vault, cli_args.port).await
 }
