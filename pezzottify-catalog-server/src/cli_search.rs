@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{Context, Result};
 use clap::Parser;
 use std::io;
 use std::path::PathBuf;
@@ -21,7 +21,7 @@ fn parse_root_dir(s: &str) -> Result<PathBuf> {
 #[derive(Parser, Debug)]
 struct CliArgs {
     #[clap(value_parser = parse_root_dir)]
-    pub path: PathBuf,
+    pub path: Option<PathBuf>,
 }
 
 fn print_result(catalog: &Catalog, result: SearchResult) {
@@ -40,8 +40,14 @@ fn print_result(catalog: &Catalog, result: SearchResult) {
 
 fn main() -> Result<()> {
     let cli_args = CliArgs::parse();
-    println!("Cli Search loading catalog...");
-    let catalog = load_catalog(cli_args.path)?;
+    let catalog_path = match cli_args.path {
+        Some(path) => path,
+        None => Catalog::infer_path()
+            .with_context(|| "Could not infer catalog directory, please specify it explicitly.")?,
+    };
+    println!("Cli Search loading catalog at {}...", catalog_path.canonicalize().unwrap().display());
+
+    let catalog = load_catalog(catalog_path)?;
     let search_vault = SearchVault::new(&catalog);
     println!("Done!");
 

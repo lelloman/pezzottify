@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{Context, Result};
 use clap::Parser;
 use std::{
     fmt::Debug,
@@ -36,7 +36,7 @@ fn parse_root_dir(s: &str) -> Result<PathBuf> {
 #[derive(Parser, Debug)]
 struct CliArgs {
     #[clap(value_parser = parse_root_dir)]
-    pub path: PathBuf,
+    pub path: Option<PathBuf>,
 
     #[clap(long)]
     pub check_only: bool,
@@ -168,7 +168,11 @@ async fn main() -> Result<()> {
     let cli_args = CliArgs::parse();
 
     tracing_subscriber::fmt::init();
-    let catalog = catalog::load_catalog(&cli_args.path)?;
+    let catalog_path = match cli_args.path {
+        Some(path) => path,
+        None => Catalog::infer_path().with_context(|| "Could not infer catalog directory, please specifiy it explicityly.")?,
+    };
+    let catalog = catalog::load_catalog(catalog_path)?;
 
     if cli_args.check_only {
         return Ok(());

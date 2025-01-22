@@ -204,8 +204,8 @@ fn parse_albums_and_tracks(
 ) -> (HashMap<String, Album>, HashMap<String, Track>) {
     let mut albums = HashMap::new();
     let mut tracks = HashMap::new();
-    let album_dirname_regex =
-        Regex::new("album_([A-z0-9]+)").expect("Invalid Regex, this should be fixed at runtime.");
+    let album_dirname_regex = Regex::new("album_([A-z0-9]+)")
+        .expect("Invalid Regex, this should be fixed at compile time.");
     let read_dir = std::fs::read_dir(dir).unwrap();
     for dir_entry_result in read_dir.into_iter() {
         let path = problemo!(dir_entry_result, problems, |e| Problem::CantReadDir(
@@ -214,7 +214,11 @@ fn parse_albums_and_tracks(
         let path = path.path();
 
         let filename = problemo!(path.file_name().context(""), problems, |e| {
-            Problem::InvalidAlbumDirName(format!("Invalid name {}, {}", path.display().to_string(), e))
+            Problem::InvalidAlbumDirName(format!(
+                "Invalid name {}, {}",
+                path.display().to_string(),
+                e
+            ))
         });
         let filename = filename.to_string_lossy();
 
@@ -233,7 +237,8 @@ fn parse_albums_and_tracks(
         let album_json_string =
             problemo!(file_read, problems, |e| Problem::InvalidAlbumFile(format!(
                 "Could not read album json file {}, {}",
-                album_json_file.display(), e
+                album_json_file.display(),
+                e
             )));
 
         let json_read = serde_json::from_str(&album_json_string);
@@ -289,6 +294,30 @@ impl Catalog {
             catalog: Some(catalog),
             problems,
         }
+    }
+
+    pub fn infer_path() -> Option<PathBuf> {
+        let mut current_dir = std::env::current_dir().ok()?;
+
+        loop {
+            if let Ok(entries) = std::fs::read_dir(&current_dir) {
+                for entry in entries.flatten() {
+                    let path = entry.path();
+
+                    if let Ok(d) = Dirs::from_root(&path, &mut vec![]) {
+                        return Some(path);
+                    }
+                }
+            }
+
+            if let Some(parent) = current_dir.parent() {
+                current_dir = parent.to_path_buf();
+            } else {
+                break;
+            }
+        }
+
+        None
     }
 
     pub fn get_artists_count(&self) -> usize {
