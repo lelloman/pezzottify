@@ -14,7 +14,12 @@ pub enum Format {
     MP3_160_ENC = 7,
     AAC_24 = 8,
     AAC_48 = 9,
+    AAC_160 = 10,
+    AAC_320 = 11,
+    MP4_128 = 12,
+    OTHER5 = 13,
     FLAC_FLAC = 16,
+    UNKNOWN_FORMAT = 255,
 }
 
 #[derive(Clone, Serialize, Deserialize, Debug)]
