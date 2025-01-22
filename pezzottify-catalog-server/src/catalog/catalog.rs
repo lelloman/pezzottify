@@ -76,6 +76,7 @@ pub struct Catalog {
 }
 
 #[derive(Debug)]
+#[allow(dead_code)]
 pub enum Problem {
     InvalidRootDir,
     MissingCatalogDir(String),
@@ -213,26 +214,26 @@ fn parse_albums_and_tracks(
         let path = path.path();
 
         let filename = problemo!(path.file_name().context(""), problems, |e| {
-            Problem::InvalidAlbumDirName(path.display().to_string())
+            Problem::InvalidAlbumDirName(format!("Invalid name {}, {}", path.display().to_string(), e))
         });
         let filename = filename.to_string_lossy();
 
         let filename_match = album_dirname_regex.captures(&filename).context("");
         problemo!(filename_match, problems, |e| Problem::InvalidAlbumDirName(
-            filename.into_owned()
+            format!("Invalid name {}, {}", filename.into_owned(), e)
         ));
 
         let stripped = filename.strip_prefix("album_").context("");
         let dirname_album_id = problemo!(stripped, problems, |e| {
-            Problem::InvalidAlbumDirName(filename.into_owned())
+            Problem::InvalidAlbumDirName(format!("Invalid name {}, {}", filename.into_owned(), e))
         });
 
         let album_json_file = path.join(format!("album_{dirname_album_id}.json"));
         let file_read = std::fs::read_to_string(&album_json_file);
         let album_json_string =
             problemo!(file_read, problems, |e| Problem::InvalidAlbumFile(format!(
-                "Could not read album json file {}",
-                album_json_file.display()
+                "Could not read album json file {}, {}",
+                album_json_file.display(), e
             )));
 
         let json_read = serde_json::from_str(&album_json_string);
@@ -241,7 +242,7 @@ fn parse_albums_and_tracks(
         });
 
         let mut parsed_tracks = problemo!(parse_tracks(&path, &album), problems, |e| {
-            Problem::InvalidAlbumTracks(format!("{} - {}", album.id, album.name))
+            Problem::InvalidAlbumTracks(format!("{} - {} - {}", album.id, album.name, e))
         });
         loop {
             if parsed_tracks.is_empty() {
@@ -274,7 +275,7 @@ impl Catalog {
         let mut problems = Vec::<Problem>::new();
         let dirs = match Dirs::from_root(root_dir, &mut problems) {
             Ok(x) => x,
-            Err(x) => return CatalogBuildResult::only_problems(problems),
+            Err(_) => return CatalogBuildResult::only_problems(problems),
         };
         let artists = parse_artists(&dirs.artists, &mut problems);
         let (albums, tracks) = parse_albums_and_tracks(&dirs.albums, &mut problems);

@@ -148,7 +148,9 @@ fn make_sim_hash<T: AsRef<str>>(source: T) -> SimHash {
     SimHash { value }
 }
 
+#[cfg(test)]
 mod tests {
+    
     use super::*;
 
     #[test]

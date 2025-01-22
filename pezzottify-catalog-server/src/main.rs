@@ -1,14 +1,13 @@
-use anyhow::{bail, Result};
+use anyhow::Result;
 use clap::Parser;
 use std::{
-    fmt::{Debug, Write},
+    fmt::Debug,
     fs::File,
     io::Read,
     path::PathBuf,
     sync::Arc,
     time::{Duration, Instant},
 };
-use tracing::{debug, info};
 
 mod catalog;
 use catalog::Catalog;
@@ -24,7 +23,6 @@ use axum::{
     Json, Router,
 };
 use serde::{Deserialize, Serialize};
-use tokio::main;
 
 fn parse_root_dir(s: &str) -> Result<PathBuf> {
     let original_path = PathBuf::from(s).canonicalize()?;

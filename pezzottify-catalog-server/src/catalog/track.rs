@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 #[derive(Clone, Eq, PartialEq, Hash, Serialize, Deserialize, Debug)]
+#[allow(non_camel_case_types)]
 pub enum Format {
     OGG_VORBIS_96 = 0,
     OGG_VORBIS_160 = 1,
@@ -17,6 +18,7 @@ pub enum Format {
 }
 
 #[derive(Clone, Serialize, Deserialize, Debug)]
+#[allow(non_camel_case_types)]
 pub enum ArtistRole {
     ARTIST_ROLE_UNKNOWN = 0,
     ARTIST_ROLE_MAIN_ARTIST = 1,
