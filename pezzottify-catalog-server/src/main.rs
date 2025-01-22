@@ -1,28 +1,15 @@
 use anyhow::{Context, Result};
 use clap::Parser;
-use std::{
-    fmt::Debug,
-    fs::File,
-    io::Read,
-    path::PathBuf,
-    sync::Arc,
-    time::{Duration, Instant},
-};
+use std::{fmt::Debug, path::PathBuf};
 
 mod catalog;
 use catalog::Catalog;
 
 mod search;
-use search::{SearchResult, SearchVault};
+use search::SearchVault;
 
-use axum::{
-    extract::{Path, State},
-    http::{header, StatusCode},
-    response::{IntoResponse, Response},
-    routing::{get, post},
-    Json, Router,
-};
-use serde::{Deserialize, Serialize};
+mod server;
+use server::run_server;
 
 fn parse_root_dir(s: &str) -> Result<PathBuf> {
     let original_path = PathBuf::from(s).canonicalize()?;
@@ -45,124 +32,6 @@ struct CliArgs {
     pub port: u16,
 }
 
-#[derive(Serialize)]
-struct ServerStats {
-    pub uptime: String,
-    pub hash: String,
-}
-
-#[derive(Deserialize)]
-struct SearchBody {
-    pub query: String,
-}
-
-fn format_uptime(duration: Duration) -> String {
-    let total_seconds = duration.as_secs();
-
-    let days = total_seconds / 86_400;
-    let hours = (total_seconds % 86_400) / 3600;
-    let minutes = (total_seconds % 3600) / 60;
-    let seconds = total_seconds % 60;
-
-    format!("{}d {:02}:{:02}:{:02}", days, hours, minutes, seconds)
-}
-
-async fn home(State(state): State<Arc<ServerState>>) -> impl IntoResponse {
-    let stats = ServerStats {
-        uptime: format_uptime(state.start_time.elapsed()),
-        hash: state.hash.clone(),
-    };
-    Json(stats)
-}
-
-async fn get_artist(State(state): State<Arc<ServerState>>, Path(id): Path<String>) -> Response {
-    match state.catalog.get_artist(&id) {
-        Some(artist) => Json(artist).into_response(),
-        None => StatusCode::NOT_FOUND.into_response(),
-    }
-}
-
-async fn get_track(State(state): State<Arc<ServerState>>, Path(id): Path<String>) -> Response {
-    match state.catalog.get_track(&id) {
-        Some(track) => Json(track).into_response(),
-        None => StatusCode::NOT_FOUND.into_response(),
-    }
-}
-
-async fn get_album(State(state): State<Arc<ServerState>>, Path(id): Path<String>) -> Response {
-    match state.catalog.get_album(&id) {
-        Some(album) => Json(album).into_response(),
-        None => StatusCode::NOT_FOUND.into_response(),
-    }
-}
-
-async fn search(
-    State(state): State<Arc<ServerState>>,
-    Json(payload): Json<SearchBody>,
-) -> impl IntoResponse {
-    let search_results: Vec<SearchResult> = state.search_vault.search(payload.query).collect();
-    Json(search_results)
-}
-
-async fn get_image(State(state): State<Arc<ServerState>>, Path(id): Path<String>) -> Response {
-    let file_path = state.catalog.get_image_path(id);
-    if !file_path.exists() {
-        return StatusCode::NOT_FOUND.into_response();
-    }
-
-    let mut file = File::open(file_path).unwrap();
-    let mut buffer = Vec::new();
-    file.read_to_end(&mut buffer).unwrap();
-
-    if let Some(kind) = infer::get(&buffer) {
-        if kind.mime_type().starts_with("image/") {
-            return Response::builder()
-                .status(StatusCode::OK)
-                .header(header::CONTENT_TYPE, kind.mime_type().to_string())
-                .body(buffer.to_vec().into())
-                .unwrap();
-        }
-    }
-    StatusCode::NOT_FOUND.into_response()
-}
-
-struct ServerState {
-    start_time: Instant,
-    catalog: Catalog,
-    search_vault: SearchVault,
-    hash: String,
-}
-
-impl ServerState {
-    fn new(catalog: Catalog, search_vault: SearchVault) -> ServerState {
-        ServerState {
-            start_time: Instant::now(),
-            catalog,
-            search_vault,
-            hash: "123456".to_owned(),
-        }
-    }
-}
-
-async fn run_server(catalog: Catalog, search_vault: SearchVault, port: u16) -> Result<()> {
-    let state = Arc::new(ServerState::new(catalog, search_vault));
-
-    let app: Router = Router::new()
-        .route("/", get(home))
-        .route("/artist/{id}", get(get_artist))
-        .route("/album/{id}", get(get_album))
-        .route("/track/{id}", get(get_track))
-        .route("/search", post(search))
-        .route("/image/{id}", get(get_image))
-        .with_state(state);
-
-    let listener = tokio::net::TcpListener::bind(format!("127.0.0.1:{}", port))
-        .await
-        .unwrap();
-
-    Ok(axum::serve(listener, app).await?)
-}
-
 #[tokio::main]
 async fn main() -> Result<()> {
     let cli_args = CliArgs::parse();
@@ -170,7 +39,9 @@ async fn main() -> Result<()> {
     tracing_subscriber::fmt::init();
     let catalog_path = match cli_args.path {
         Some(path) => path,
-        None => Catalog::infer_path().with_context(|| "Could not infer catalog directory, please specifiy it explicityly.")?,
+        None => Catalog::infer_path().with_context(|| {
+            "Could not infer catalog directory, please specifiy it explicityly."
+        })?,
     };
     let catalog = catalog::load_catalog(catalog_path)?;
 
