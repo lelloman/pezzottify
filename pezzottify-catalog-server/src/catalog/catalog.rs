@@ -1,4 +1,4 @@
-use super::{Album, Artist, Track};
+use super::{Album, Artist, Image, Track};
 use anyhow::{bail, Context, Result};
 use regex::Regex;
 use std::borrow::Cow;
@@ -17,7 +17,7 @@ macro_rules! problemo {
     };
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct Dirs {
     root: PathBuf,
     pub albums: PathBuf,
@@ -87,6 +87,7 @@ pub enum Problem {
     InvalidAlbumTracks(String),
     MissingReferencedId(String),
     MissingTrackArtistId(String),
+    MissingImage(String),
 }
 
 fn get_artist_id_from_filename<'a>(filename: &'a Cow<'a, str>) -> Result<&'a str> {
@@ -97,14 +98,45 @@ fn get_artist_id_from_filename<'a>(filename: &'a Cow<'a, str>) -> Result<&'a str
         .with_context(|| "Invalid artist file name \"{filename}\"")
 }
 
-fn is_id_present<T: AsRef<str>>(dirs: &Dirs, id: T) -> bool {
-    dirs.artists
-        .join(format!("artist_{}.json", id.as_ref()))
-        .exists()
-        || dirs
-            .albums
-            .join(format!("album_{}.json", id.as_ref()))
+struct IdPresenceChecker {
+    dirs: Dirs,
+}
+
+impl IdPresenceChecker {
+    pub fn new(dirs: &Dirs) -> IdPresenceChecker {
+        IdPresenceChecker { dirs: dirs.clone() }
+    }
+    pub fn is_id_present<T: AsRef<str>>(&self, id: T) -> bool {
+        self.dirs
+            .artists
+            .join(format!("artist_{}.json", id.as_ref()))
             .exists()
+            || self
+                .dirs
+                .albums
+                .join(format!("album_{}.json", id.as_ref()))
+                .exists()
+            || self.dirs.images.join(id.as_ref()).exists()
+    }
+
+    pub fn check_images_exist<F>(&self, source: F, images: &Vec<Image>, problems: &mut Vec<Problem>)
+    where
+        F: Fn() -> String,
+    {
+        let mut reified_source: Option<String> = None;
+        for image in images.iter() {
+            if !self.is_id_present(&image.id) {
+                if let None = reified_source {
+                    reified_source = Some(source());
+                }
+                problems.push(Problem::MissingImage(format!(
+                    "{} has missing image {}.",
+                    &reified_source.as_ref().unwrap(),
+                    image.id
+                )));
+            }
+        }
+    }
 }
 
 fn parse_artists(dirs: &Dirs, problems: &mut Vec<Problem>) -> HashMap<String, Artist> {
@@ -123,6 +155,7 @@ fn parse_artists(dirs: &Dirs, problems: &mut Vec<Problem>) -> HashMap<String, Ar
             return out;
         }
     };
+    let id_checker = IdPresenceChecker::new(dirs);
     for dir_entry_result in dir_entries {
         let path = problemo!(&dir_entry_result, problems, |e| {
             Problem::InvalidArtistFile(format!("{:?}\n{}", dir_entry_result, e))
@@ -171,13 +204,33 @@ fn parse_artists(dirs: &Dirs, problems: &mut Vec<Problem>) -> HashMap<String, Ar
             continue;
         }
         for related in parsed_artist.related.iter() {
-            if !is_id_present(dirs, related) {
+            if !id_checker.is_id_present(related) {
                 problems.push(Problem::MissingReferencedId(format!(
                     "Artist {} related id {} is missing.",
                     parsed_artist.id, related
                 )));
             }
         }
+        id_checker.check_images_exist(
+            || {
+                format!(
+                    "Artist {} - {} portrait",
+                    &parsed_artist.id, &parsed_artist.name
+                )
+            },
+            &parsed_artist.portrait_group,
+            problems,
+        );
+        id_checker.check_images_exist(
+            || {
+                format!(
+                    "Artist {} - {} portrait",
+                    &parsed_artist.id, &parsed_artist.name
+                )
+            },
+            &parsed_artist.portraits,
+            problems,
+        );
         out.insert(filename_artist_id.to_owned(), parsed_artist);
     }
     out
@@ -190,6 +243,7 @@ fn parse_tracks(
     problems: &mut Vec<Problem>,
 ) -> Result<Vec<Track>> {
     let mut out = Vec::new();
+    let id_checker = IdPresenceChecker::new(dirs);
     let filenames_in_dir: Vec<String> = std::fs::read_dir(album_dir)
         .with_context(|| format!("Could not read album dir {}", album_dir.display()))?
         .filter_map(|entry| {
@@ -222,7 +276,7 @@ fn parse_tracks(
                 )
             })?;
             for artist_id in track.artists_ids.iter() {
-                if !is_id_present(dirs, artist_id) {
+                if !id_checker.is_id_present(artist_id) {
                     problems.push(Problem::MissingTrackArtistId(format!(
                         "Track {} in album {} has missing artist {}.",
                         track.id, track.album_id, artist_id
