@@ -20,9 +20,9 @@ macro_rules! problemo {
 #[derive(Debug)]
 struct Dirs {
     root: PathBuf,
-    albums: PathBuf,
-    artists: PathBuf,
-    images: PathBuf,
+    pub albums: PathBuf,
+    pub artists: PathBuf,
+    pub images: PathBuf,
 }
 
 impl Dirs {
@@ -85,6 +85,8 @@ pub enum Problem {
     InvalidAlbumDirName(String),
     InvalidAlbumFile(String),
     InvalidAlbumTracks(String),
+    MissingReferencedId(String),
+    MissingTrackArtistId(String),
 }
 
 fn get_artist_id_from_filename<'a>(filename: &'a Cow<'a, str>) -> Result<&'a str> {
@@ -95,14 +97,28 @@ fn get_artist_id_from_filename<'a>(filename: &'a Cow<'a, str>) -> Result<&'a str
         .with_context(|| "Invalid artist file name \"{filename}\"")
 }
 
-fn parse_artists(dir: &Path, problems: &mut Vec<Problem>) -> HashMap<String, Artist> {
+fn is_id_present<T: AsRef<str>>(dirs: &Dirs, id: T) -> bool {
+    dirs.artists
+        .join(format!("artist_{}.json", id.as_ref()))
+        .exists()
+        || dirs
+            .albums
+            .join(format!("album_{}.json", id.as_ref()))
+            .exists()
+}
+
+fn parse_artists(dirs: &Dirs, problems: &mut Vec<Problem>) -> HashMap<String, Artist> {
     let mut out = HashMap::new();
     let artist_filename_regex = Regex::new("artist_([A-z0-9]+)\\.json")
         .expect("Invalid Regex, this should be fixed at runtime.");
-    let dir_entries = match std::fs::read_dir(dir) {
+    let dir_entries = match std::fs::read_dir(&dirs.artists) {
         Ok(x) => x,
         Err(x) => {
-            let msg = format!("Error reading artists dir {}\n{}", dir.display(), x);
+            let msg = format!(
+                "Error reading artists dir {}\n{}",
+                &dirs.artists.display(),
+                x
+            );
             problems.push(Problem::CantReadDir(msg));
             return out;
         }
@@ -154,15 +170,28 @@ fn parse_artists(dir: &Path, problems: &mut Vec<Problem>) -> HashMap<String, Art
             problems.push(Problem::InvalidArtistFile(msg));
             continue;
         }
+        for related in parsed_artist.related.iter() {
+            if !is_id_present(dirs, related) {
+                problems.push(Problem::MissingReferencedId(format!(
+                    "Artist {} related id {} is missing.",
+                    parsed_artist.id, related
+                )));
+            }
+        }
         out.insert(filename_artist_id.to_owned(), parsed_artist);
     }
     out
 }
 
-fn parse_tracks(dir: &Path, album: &Album) -> Result<Vec<Track>> {
+fn parse_tracks(
+    dirs: &Dirs,
+    album_dir: &Path,
+    album: &Album,
+    problems: &mut Vec<Problem>,
+) -> Result<Vec<Track>> {
     let mut out = Vec::new();
-    let filenames_in_dir: Vec<String> = std::fs::read_dir(dir)
-        .with_context(|| format!("Could not read album dir {}", dir.display()))?
+    let filenames_in_dir: Vec<String> = std::fs::read_dir(album_dir)
+        .with_context(|| format!("Could not read album dir {}", album_dir.display()))?
         .filter_map(|entry| {
             entry
                 .ok()
@@ -173,7 +202,7 @@ fn parse_tracks(dir: &Path, album: &Album) -> Result<Vec<Track>> {
     for disc in album.discs.iter() {
         for track_id in disc.tracks.iter() {
             let track_filename_prefix = format!("track_{track_id}");
-            let track_json_file = dir.join(format!("{track_filename_prefix}.json"));
+            let track_json_file = album_dir.join(format!("{track_filename_prefix}.json"));
 
             if !filenames_in_dir
                 .iter()
@@ -181,7 +210,7 @@ fn parse_tracks(dir: &Path, album: &Album) -> Result<Vec<Track>> {
             {
                 bail!(
                     "Could not find an audio file for track {track_id} in {}",
-                    dir.display()
+                    album_dir.display()
                 );
             }
             let track_json_string = std::fs::read_to_string(&track_json_file)
@@ -192,6 +221,14 @@ fn parse_tracks(dir: &Path, album: &Album) -> Result<Vec<Track>> {
                     track_json_file.display()
                 )
             })?;
+            for artist_id in track.artists_ids.iter() {
+                if !is_id_present(dirs, artist_id) {
+                    problems.push(Problem::MissingTrackArtistId(format!(
+                        "Track {} in album {} has missing artist {}.",
+                        track.id, track.album_id, artist_id
+                    )));
+                }
+            }
             out.push(track);
         }
     }
@@ -199,14 +236,14 @@ fn parse_tracks(dir: &Path, album: &Album) -> Result<Vec<Track>> {
 }
 
 fn parse_albums_and_tracks(
-    dir: &Path,
+    dirs: &Dirs,
     problems: &mut Vec<Problem>,
 ) -> (HashMap<String, Album>, HashMap<String, Track>) {
     let mut albums = HashMap::new();
     let mut tracks = HashMap::new();
     let album_dirname_regex = Regex::new("album_([A-z0-9]+)")
         .expect("Invalid Regex, this should be fixed at compile time.");
-    let read_dir = std::fs::read_dir(dir).unwrap();
+    let read_dir = std::fs::read_dir(&dirs.albums).unwrap();
     for dir_entry_result in read_dir.into_iter() {
         let path = problemo!(dir_entry_result, problems, |e| Problem::CantReadDir(
             format!("Cant read album dir.\n{}", e)
@@ -246,9 +283,10 @@ fn parse_albums_and_tracks(
             Problem::InvalidAlbumFile(format!("Could not parse album.\n{}", e))
         });
 
-        let mut parsed_tracks = problemo!(parse_tracks(&path, &album), problems, |e| {
-            Problem::InvalidAlbumTracks(format!("{} - {} - {}", album.id, album.name, e))
-        });
+        let mut parsed_tracks =
+            problemo!(parse_tracks(dirs, &path, &album, problems), problems, |e| {
+                Problem::InvalidAlbumTracks(format!("{} - {} - {}", album.id, album.name, e))
+            });
         loop {
             if parsed_tracks.is_empty() {
                 break;
@@ -282,8 +320,8 @@ impl Catalog {
             Ok(x) => x,
             Err(_) => return CatalogBuildResult::only_problems(problems),
         };
-        let artists = parse_artists(&dirs.artists, &mut problems);
-        let (albums, tracks) = parse_albums_and_tracks(&dirs.albums, &mut problems);
+        let artists = parse_artists(&dirs, &mut problems);
+        let (albums, tracks) = parse_albums_and_tracks(&dirs, &mut problems);
         let catalog = Catalog {
             dirs,
             artists,

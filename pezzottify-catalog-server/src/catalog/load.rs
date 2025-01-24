@@ -17,9 +17,9 @@ pub fn load_catalog<P : AsRef<std::path::Path>>(path: P) -> Result<Catalog> {
 
     match (&catalog, problems.is_empty()) {
         (Some(_), true) => info!("Catalog checked, no issues found."),
-        (Some(_), false) => info!("Catalog was built, but check the issues above."),
+        (Some(_), false) => info!("Catalog was built, but check the {} non-fatal issues above.", problems.len()),
         (None, _) => {
-            info!("Check the problems above, the catalog could not be initialized.")
+            info!("Check the {} problems above, the catalog could not be initialized.", problems.len())
         }
     }
     if let Some(catalog) = catalog {
