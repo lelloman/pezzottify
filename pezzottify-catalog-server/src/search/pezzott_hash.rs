@@ -5,11 +5,12 @@ use unicode_segmentation::UnicodeSegmentation;
 const SIM_HASH_LEN_BITS: usize = 256;
 const SIM_HASH_LEN_BYTES: usize = SIM_HASH_LEN_BITS / 8;
 
-const SIM_HASH_N_GRAM_LENGTH: usize = 2;
+const SIM_HASH_N_GRAM_LENGTH: usize = 3;
 const SIM_HASH_N_GRAM_OVERLAP: usize = 1;
 
 pub struct PezzottHash {
     sim_hashes: Vec<SimHash>,
+    pub hashed_text: String,
 }
 
 impl PezzottHash {
@@ -21,18 +22,17 @@ impl PezzottHash {
             .map(|w| make_sim_hash(w))
             .collect();
 
-        PezzottHash { sim_hashes: hashes }
+        PezzottHash {
+            sim_hashes: hashes,
+            hashed_text: source.as_ref().to_lowercase().to_string(),
+        }
     }
-}
 
-impl Sub for &PezzottHash {
-    type Output = u32;
-
-    fn sub(self, other: &PezzottHash) -> u32 {
+    pub fn match_query(&self, query: &PezzottHash) -> u32 {
         let mut min_scores: Vec<u32> = vec![];
         for self_hash in self.sim_hashes.iter() {
             let mut self_hash_min_score = u32::MAX;
-            for other_hash in other.sim_hashes.iter() {
+            for other_hash in query.sim_hashes.iter() {
                 self_hash_min_score = std::cmp::min(self_hash_min_score, self_hash - other_hash);
             }
             min_scores.push(self_hash_min_score);
@@ -45,7 +45,16 @@ impl Sub for &PezzottHash {
         for score in min_scores {
             total += score as f64;
         }
-        (total / min_scores_count) as u32
+        let avg_score = total / min_scores_count;
+
+        let length_adjustment = if self.hashed_text.len() > query.hashed_text.len() {
+           1.0f64
+        } else {
+            let diff = query.hashed_text.len() - self.hashed_text.len();
+            1.0 + diff as f64 * 0.1f64
+        };
+
+        (avg_score * length_adjustment) as u32
     }
 }
 
@@ -150,7 +159,7 @@ fn make_sim_hash<T: AsRef<str>>(source: T) -> SimHash {
 
 #[cfg(test)]
 mod tests {
-    
+
     use super::*;
 
     #[test]

@@ -31,10 +31,12 @@ fn print_result(catalog: &Catalog, result: SearchResult) {
         HashedItemType::Album => catalog.get_album(&result.item_id).map(|a| a.name),
     };
     println!(
-        "{} -> {:?} {}",
+        "{} -> {:?} {}->{} - {}",
         name.unwrap_or_else(|| "ERROR".to_string()),
         result.item_type,
         result.score,
+        result.adjusted_score,
+        result.item_id,
     );
 }
 
@@ -62,7 +64,7 @@ fn main() -> Result<()> {
 
         let user_input = user_input.trim();
 
-        let results: Vec<SearchResult> = search_vault.search(user_input).collect();
+        let results: Vec<SearchResult> = search_vault.search(user_input, 60).collect();
         if results.is_empty() {
             println!("No matches found for \"{}\".", user_input);
         } else {

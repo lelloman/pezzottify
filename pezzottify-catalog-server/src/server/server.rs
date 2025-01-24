@@ -81,7 +81,7 @@ async fn search(
     State(search_vault): State<GuardedSearchVault>,
     Json(payload): Json<SearchBody>,
 ) -> impl IntoResponse {
-    let search_results: Vec<SearchResult> = search_vault.lock().unwrap().search(payload.query).collect();
+    let search_results: Vec<SearchResult> = search_vault.lock().unwrap().search(payload.query, 30).collect();
     Json(search_results)
 }
 
