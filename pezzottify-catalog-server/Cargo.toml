@@ -8,11 +8,13 @@ default-run = "catalog-server"
 
 [dependencies]
 anyhow = "1.0.75"
+argon2 = "0.5.3"
 async-trait = "0.1.85"
 axum = "0.8.1"
 axum-extra = { version = "0.10.0", features = ["cookie"] }
 clap = { version = "4.4.11", features = ["derive"] }
 infer = "0.16.0"
+rand_core = { version = "0.6.4", features = ["std"] }
 regex = "1.10.2"
 serde = { version = "1.0.193", features = ["derive"] }
 serde_json = "1.0.108"
