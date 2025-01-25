@@ -8,10 +8,13 @@ use catalog::Catalog;
 mod search;
 use search::SearchVault;
 
+mod file_auth_store;
+use file_auth_store::FileAuthStore;
+
 mod server;
 use server::run_server;
 
-fn parse_root_dir(s: &str) -> Result<PathBuf> {
+fn parse_path(s: &str) -> Result<PathBuf> {
     let original_path = PathBuf::from(s).canonicalize()?;
     if original_path.is_absolute() {
         return Ok(original_path);
@@ -22,8 +25,11 @@ fn parse_root_dir(s: &str) -> Result<PathBuf> {
 
 #[derive(Parser, Debug)]
 struct CliArgs {
-    #[clap(value_parser = parse_root_dir)]
-    pub path: Option<PathBuf>,
+    #[clap(value_parser = parse_path)]
+    pub catalog_path: Option<PathBuf>,
+
+    #[clap(value_parser = parse_path)]
+    pub auth_store_file_path: Option<PathBuf>,
 
     #[clap(long)]
     pub check_only: bool,
@@ -37,7 +43,7 @@ async fn main() -> Result<()> {
     let cli_args = CliArgs::parse();
 
     tracing_subscriber::fmt::init();
-    let catalog_path = match cli_args.path {
+    let catalog_path = match cli_args.catalog_path {
         Some(path) => path,
         None => Catalog::infer_path().with_context(|| {
             "Could not infer catalog directory, please specifiy it explicityly."
@@ -49,6 +55,14 @@ async fn main() -> Result<()> {
         return Ok(());
     }
 
+    let auth_store_file_path = match cli_args.auth_store_file_path {
+        Some(path) => path,
+        None => FileAuthStore::infer_path().with_context(|| {
+            "Could not infer auth store file path, please specify it explicitly."
+        })?,
+    };
+    let auth_store = Box::new(FileAuthStore::new(auth_store_file_path));
+
     let search_vault = SearchVault::new(&catalog);
-    run_server(catalog, search_vault, cli_args.port).await
+    run_server(catalog, search_vault, auth_store, cli_args.port).await
 }

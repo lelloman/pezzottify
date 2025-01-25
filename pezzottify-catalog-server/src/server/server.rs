@@ -18,11 +18,9 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 
-use super::session::Session;
-use super::state::ServerState;
-
-type GuardedCatalog = Arc<Mutex<Catalog>>;
-type GuardedSearchVault = Arc<Mutex<SearchVault>>;
+use super::state::*;
+use super::AuthStore;
+use super::{auth::AuthManager, session::Session};
 
 #[derive(Serialize)]
 struct ServerStats {
@@ -81,7 +79,11 @@ async fn search(
     State(search_vault): State<GuardedSearchVault>,
     Json(payload): Json<SearchBody>,
 ) -> impl IntoResponse {
-    let search_results: Vec<SearchResult> = search_vault.lock().unwrap().search(payload.query, 30).collect();
+    let search_results: Vec<SearchResult> = search_vault
+        .lock()
+        .unwrap()
+        .search(payload.query, 30)
+        .collect();
     Json(search_results)
 }
 
@@ -107,19 +109,44 @@ async fn get_image(State(catalog): State<GuardedCatalog>, Path(id): Path<String>
     StatusCode::NOT_FOUND.into_response()
 }
 
+async fn login(State(state): State<ServerState>) -> Response {
+    todo!()
+}
+
+async fn get_challenge(State(state): State<ServerState>) -> Response {
+    todo!()
+}
+
+async fn post_challenge(State(state): State<ServerState>) -> Response {
+    todo!()
+}
+
 impl ServerState {
-    fn new(catalog: Catalog, search_vault: SearchVault) -> ServerState {
+    fn new(catalog: Catalog, search_vault: SearchVault, auth_manager: AuthManager) -> ServerState {
         ServerState {
             start_time: Instant::now(),
             catalog: Arc::new(Mutex::new(catalog)),
             search_vault: Arc::new(Mutex::new(search_vault)),
+            auth_manager: Arc::new(Mutex::new(auth_manager)),
             hash: "123456".to_owned(),
         }
     }
 }
 
-pub async fn run_server(catalog: Catalog, search_vault: SearchVault, port: u16) -> Result<()> {
-    let state = ServerState::new(catalog, search_vault);
+pub async fn run_server(
+    catalog: Catalog,
+    search_vault: SearchVault,
+    auth_store: Box<dyn AuthStore>,
+    port: u16,
+) -> Result<()> {
+    let auth_manager = AuthManager::initialize(auth_store)?;
+    let state = ServerState::new(catalog, search_vault, auth_manager);
+
+    let auth_routes: Router = Router::new()
+        .route("/login", post(login))
+        .route("/challenge", get(get_challenge))
+        .route("/challenge", post(post_challenge))
+        .with_state(state.clone());
 
     let app: Router = Router::new()
         .route("/", get(home))
@@ -128,7 +155,8 @@ pub async fn run_server(catalog: Catalog, search_vault: SearchVault, port: u16) 
         .route("/track/{id}", get(get_track))
         .route("/search", post(search))
         .route("/image/{id}", get(get_image))
-        .with_state(state);
+        .with_state(state)
+        .merge(auth_routes);
 
     let listener = tokio::net::TcpListener::bind(format!("127.0.0.1:{}", port))
         .await
