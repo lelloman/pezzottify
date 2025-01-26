@@ -4,7 +4,7 @@ use crate::{catalog::Catalog, search::SearchVault};
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
-use super::auth::AuthManager;
+use crate::server::auth::AuthManager;
 
 pub type GuardedCatalog = Arc<Mutex<Catalog>>;
 pub type GuardedSearchVault = Arc<Mutex<SearchVault>>;

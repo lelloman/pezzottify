@@ -1,10 +1,12 @@
-use anyhow::Result;
+use anyhow::{bail, Context, Result};
 
 use rand::distributions::Alphanumeric;
 use rand::{thread_rng, Rng};
 use serde::{Deserialize, Serialize};
 
-use std::{collections::HashMap, time::SystemTime};
+use std::{collections::HashMap, sync::Mutex, time::SystemTime};
+
+use super::user;
 
 pub type UserId = String;
 
@@ -31,9 +33,9 @@ impl AuthTokenValue {
     }
 }
 
-pub trait AuthStore {
-    fn load_auth_credentials(&self) -> Result<HashMap<UserId, Vec<AuthCredentials>>>;
-    fn update_auth_credentials(&self, credentials: AuthCredentials) -> Result<()>;
+pub trait AuthStore: Send + Sync {
+    fn load_auth_credentials(&self) -> Result<HashMap<UserId, UserAuthCredentials>>;
+    fn update_auth_credentials(&self, credentials: UserAuthCredentials) -> Result<()>;
 
     fn load_challenges(&self) -> Result<Vec<ActiveChallenge>>;
     fn delete_challenge(&self, challenge: ActiveChallenge) -> Result<()>;
@@ -47,8 +49,8 @@ pub trait AuthStore {
 }
 
 pub struct AuthManager {
-    store: Box<dyn AuthStore>,
-    credentials: HashMap<UserId, Vec<AuthCredentials>>,
+    store: Mutex<Box<dyn AuthStore>>,
+    credentials: HashMap<UserId, UserAuthCredentials>,
     active_challenges: Vec<ActiveChallenge>,
     auth_tokens: HashMap<AuthTokenValue, AuthToken>,
 }
@@ -59,7 +61,7 @@ impl AuthManager {
         let active_challenges = store.load_challenges()?;
         let auth_tokens = store.load_auth_tokens()?;
         Ok(AuthManager {
-            store,
+            store: Mutex::new(store),
             credentials,
             active_challenges,
             auth_tokens,
@@ -70,8 +72,88 @@ impl AuthManager {
         self.auth_tokens.get(value).cloned()
     }
 
-    pub fn generate_auth_token(&mut self, credentials: AuthCredentials) -> Result<AuthTokenValue> {
+    pub fn generate_auth_token(
+        &mut self,
+        credentials: &mut UserAuthCredentials,
+    ) -> Result<AuthTokenValue> {
         todo!()
+    }
+
+    fn create_hashed_password(password: String) -> Result<UsernamePasswordCredentials> {
+        let hasher = PezzottifyHasher::Argon2;
+        let salt = hasher.generate_b64_salt();
+        let hash = hasher.hash(password.as_bytes(), &salt)?;
+        Ok(UsernamePasswordCredentials {
+            salt,
+            hash,
+            hasher,
+            created: SystemTime::now(),
+            last_tried: None,
+            last_used: None,
+        })
+    }
+
+    pub fn create_password_credentials(
+        &mut self,
+        user_id: &UserId,
+        password: String,
+    ) -> Result<()> {
+        if let Some(true) = self
+            .credentials
+            .get(user_id)
+            .map(|x| x.username_password.is_some())
+        {
+            bail!("User with id {} already has password credentials method. Maybe you want to modify it?", user_id);
+        }
+
+        let new_credentials =
+            self.credentials
+                .entry(user_id.clone())
+                .or_insert_with(|| UserAuthCredentials {
+                    user_id: user_id.clone(),
+                    username_password: None,
+                    keys: vec![],
+                });
+        new_credentials.username_password = Some(Self::create_hashed_password(password)?);
+
+        self.store
+            .lock()
+            .unwrap()
+            .update_auth_credentials(new_credentials.clone())
+    }
+
+    pub fn update_password_credentials(
+        &mut self,
+        user_id: &UserId,
+        password: String,
+    ) -> Result<()> {
+        let credentials = self
+            .credentials
+            .get_mut(user_id)
+            .with_context(|| format!("User with id {} not found.", user_id))?;
+        if let None = credentials.username_password {
+            bail!(
+                "Cannot update passowrd of user with id {} since it never had one.",
+                user_id
+            );
+        }
+        credentials.username_password = Some(Self::create_hashed_password(password)?);
+        self.store
+            .lock()
+            .unwrap()
+            .update_auth_credentials(credentials.clone())
+    }
+
+    pub fn delete_password_credentials(&mut self, user_id: &UserId) -> Result<()> {
+        let credentials = self
+            .credentials
+            .get_mut(user_id)
+            .with_context(|| format!("User with id {} not found.", user_id))?;
+        credentials.username_password = None;
+        self.store
+            .lock()
+            .unwrap()
+            .update_auth_credentials(credentials.clone())
     }
 }
 
@@ -146,30 +228,32 @@ pub struct ActiveChallenge {
 }
 
 #[derive(Clone, Serialize, Deserialize)]
-pub struct AuthCredentialsInfo {
-    pub user_id: String,
-    pub created: SystemTime,
-    pub last_tried: SystemTime,
-    pub last_used: SystemTime,
+pub struct UsernamePasswordCredentials {
+    salt: String,
+    hash: String,
+    hasher: PezzottifyHasher,
+
+    created: SystemTime,
+    last_tried: Option<SystemTime>,
+    last_used: Option<SystemTime>,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
-pub enum AuthCredentialsMethod {
-    UsernamePassword {
-        salt: String,
-        hash: String,
-        hasher: PezzottifyHasher,
-    },
-    CryptoKey {
-        kind: CryptoKeyKind,
-        pub_key: String,
-    },
+pub struct CryptoKeyCredentials {
+    name: String,
+    kind: CryptoKeyKind,
+    pub_key: String,
+
+    created: SystemTime,
+    last_tried: Option<SystemTime>,
+    last_used: Option<SystemTime>,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
-pub struct AuthCredentials {
-    pub info: AuthCredentialsInfo,
-    pub method: AuthCredentialsMethod,
+pub struct UserAuthCredentials {
+    pub user_id: UserId,
+    pub username_password: Option<UsernamePasswordCredentials>,
+    pub keys: Vec<CryptoKeyCredentials>,
 }
 
 #[cfg(test)]

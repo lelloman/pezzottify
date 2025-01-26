@@ -1,5 +1,6 @@
 use anyhow::{Context, Result};
 use clap::Parser;
+use tracing::info;
 use std::{fmt::Debug, path::PathBuf};
 
 mod catalog;
@@ -61,8 +62,9 @@ async fn main() -> Result<()> {
             "Could not infer auth store file path, please specify it explicitly."
         })?,
     };
-    let auth_store = Box::new(FileAuthStore::new(auth_store_file_path));
-
+    let auth_store = Box::new(FileAuthStore::initialize(auth_store_file_path));
+    info!("Indexing content for search...");
     let search_vault = SearchVault::new(&catalog);
+    info!("Ready to serve!");
     run_server(catalog, search_vault, auth_store, cli_args.port).await
 }

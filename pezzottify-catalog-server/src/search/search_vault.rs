@@ -139,31 +139,34 @@ impl SearchVault {
     pub fn new(catalog: &Catalog) -> SearchVault {
         let mut items: Vec<HashedItem> = vec![];
 
-        for artist in catalog.iter_artists() {
-            let item = HashedItem {
-                item_type: HashedItemType::Artist,
-                item_id: artist.id.clone(),
-                hash: PezzottHash::calc(&artist.name),
-            };
-            items.push(item);
-        }
+        #[cfg(not(feature = "no_search_index"))]
+        {
+            for artist in catalog.iter_artists() {
+                let item = HashedItem {
+                    item_type: HashedItemType::Artist,
+                    item_id: artist.id.clone(),
+                    hash: PezzottHash::calc(&artist.name),
+                };
+                items.push(item);
+            }
 
-        for album in catalog.iter_albums() {
-            let item = HashedItem {
-                item_type: HashedItemType::Album,
-                item_id: album.id.clone(),
-                hash: PezzottHash::calc(&album.name),
-            };
-            items.push(item);
-        }
+            for album in catalog.iter_albums() {
+                let item = HashedItem {
+                    item_type: HashedItemType::Album,
+                    item_id: album.id.clone(),
+                    hash: PezzottHash::calc(&album.name),
+                };
+                items.push(item);
+            }
 
-        for track in catalog.iter_tracks() {
-            let item = HashedItem {
-                item_type: HashedItemType::Track,
-                item_id: track.id.clone(),
-                hash: PezzottHash::calc(&track.name),
-            };
-            items.push(item);
+            for track in catalog.iter_tracks() {
+                let item = HashedItem {
+                    item_type: HashedItemType::Track,
+                    item_id: track.id.clone(),
+                    hash: PezzottHash::calc(&track.name),
+                };
+                items.push(item);
+            }
         }
 
         SearchVault { items }
@@ -228,4 +231,3 @@ mod tests {
         assert_results(holder.clone(), vec![0, 0, 1, 1, 2]);
     }
 }
-

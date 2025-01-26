@@ -5,4 +5,4 @@ mod auth;
 mod user;
 
 pub use server::run_server;
-pub use auth::{ActiveChallenge, AuthCredentials, AuthCredentialsMethod, AuthStore, AuthToken,  AuthTokenValue, UserId};
+pub use auth::{ActiveChallenge, UserAuthCredentials, AuthStore, AuthManager, AuthToken,  AuthTokenValue, UserId};

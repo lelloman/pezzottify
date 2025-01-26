@@ -20,7 +20,7 @@ use serde::{Deserialize, Serialize};
 
 use super::state::*;
 use super::AuthStore;
-use super::{auth::AuthManager, session::Session};
+use crate::server::{auth::AuthManager, session::Session};
 
 #[derive(Serialize)]
 struct ServerStats {
@@ -43,6 +43,12 @@ fn format_uptime(duration: Duration) -> String {
 #[derive(Deserialize)]
 struct SearchBody {
     pub query: String,
+}
+
+#[derive(Deserialize)]
+struct LoginBody {
+    pub username: String,
+    pub password: String,
 }
 
 async fn home(session: Option<Session>, State(state): State<ServerState>) -> impl IntoResponse {
@@ -109,7 +115,10 @@ async fn get_image(State(catalog): State<GuardedCatalog>, Path(id): Path<String>
     StatusCode::NOT_FOUND.into_response()
 }
 
-async fn login(State(state): State<ServerState>) -> Response {
+async fn login(
+    State(auth_manager): State<Arc<Mutex<AuthManager>>>,
+    Json(body): Json<LoginBody>,
+) -> Response {
     todo!()
 }
 
