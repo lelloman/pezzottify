@@ -10,10 +10,10 @@ use super::user;
 
 pub type UserId = String;
 
-#[derive(Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Eq, Hash, Serialize, Deserialize, Debug)]
 pub struct AuthTokenValue(String);
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct AuthToken {
     pub user_id: UserId,
     pub created: SystemTime,
@@ -155,6 +155,22 @@ impl AuthManager {
             .unwrap()
             .update_auth_credentials(credentials.clone())
     }
+
+    pub fn get_user_credentials(&self, user_id: &UserId) -> Option<UserAuthCredentials> {
+        self.credentials.get(user_id).cloned()
+    }
+
+    pub fn get_user_tokens(&self, user_id: &UserId) -> Vec<AuthToken> {
+        self.auth_tokens
+            .iter()
+            .filter(|(_, v)| &v.user_id == user_id)
+            .map(|(_, v)| v.clone())
+            .collect()
+    }
+
+    pub fn get_all_user_ids(&self) -> Vec<UserId> {
+        self.credentials.keys().cloned().collect()
+    }
 }
 
 mod pezzottify_argon2 {
@@ -190,7 +206,7 @@ mod pezzottify_argon2 {
     }
 }
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize, Debug)]
 pub enum PezzottifyHasher {
     Argon2,
 }
@@ -216,7 +232,7 @@ impl PezzottifyHasher {
     }
 }
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize, Debug)]
 pub enum CryptoKeyKind {
     Rsa,
 }
@@ -227,18 +243,18 @@ pub struct ActiveChallenge {
     pub sent_at: Option<SystemTime>,
 }
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct UsernamePasswordCredentials {
-    salt: String,
-    hash: String,
-    hasher: PezzottifyHasher,
+    pub salt: String,
+    pub hash: String,
+    pub hasher: PezzottifyHasher,
 
-    created: SystemTime,
-    last_tried: Option<SystemTime>,
-    last_used: Option<SystemTime>,
+    pub created: SystemTime,
+    pub last_tried: Option<SystemTime>,
+    pub last_used: Option<SystemTime>,
 }
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct CryptoKeyCredentials {
     name: String,
     kind: CryptoKeyKind,
@@ -249,7 +265,7 @@ pub struct CryptoKeyCredentials {
     last_used: Option<SystemTime>,
 }
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct UserAuthCredentials {
     pub user_id: UserId,
     pub username_password: Option<UsernamePasswordCredentials>,
