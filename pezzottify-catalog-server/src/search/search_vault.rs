@@ -11,6 +11,7 @@ pub enum HashedItemType {
     Artist,
     Album,
 }
+
 struct HashedItem {
     pub item_type: HashedItemType,
     pub item_id: String,
@@ -43,10 +44,6 @@ impl PartialOrd for SearchResult {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
         Some(self.cmp(other))
     }
-}
-
-pub struct SearchVault {
-    items: Vec<HashedItem>,
 }
 
 #[cfg_attr(test, derive(Clone))]
@@ -100,8 +97,8 @@ impl SearchResultsHolder {
         }
     }
 
-    fn consume(self) -> impl Iterator<Item = SearchResult> {
-        self.items.into_iter()
+    fn consume(self) -> Vec<SearchResult> {
+        self.items
     }
 
     fn maybe_add(&mut self, item: &HashedItem, score: u32) {
@@ -135,48 +132,59 @@ impl SearchResultsHolder {
     }
 }
 
-impl SearchVault {
-    pub fn new(catalog: &Catalog) -> SearchVault {
+pub trait SearchVault {
+    fn search(&self, query: &str, max_results: usize) -> Vec<SearchResult>;
+}
+
+pub struct NoOpSearchVault {}
+
+impl SearchVault for NoOpSearchVault {
+    fn search(&self, _query: &str, _max_results: usize) -> Vec<SearchResult> {
+        Vec::new()
+    }
+}
+
+pub struct PezzotHashSearchVault {
+    items: Vec<HashedItem>,
+}
+
+impl PezzotHashSearchVault {
+    pub fn new(catalog: &Catalog) -> PezzotHashSearchVault {
         let mut items: Vec<HashedItem> = vec![];
 
-        #[cfg(not(feature = "no_search_index"))]
-        {
-            for artist in catalog.iter_artists() {
-                let item = HashedItem {
-                    item_type: HashedItemType::Artist,
-                    item_id: artist.id.clone(),
-                    hash: PezzottHash::calc(&artist.name),
-                };
-                items.push(item);
-            }
-
-            for album in catalog.iter_albums() {
-                let item = HashedItem {
-                    item_type: HashedItemType::Album,
-                    item_id: album.id.clone(),
-                    hash: PezzottHash::calc(&album.name),
-                };
-                items.push(item);
-            }
-
-            for track in catalog.iter_tracks() {
-                let item = HashedItem {
-                    item_type: HashedItemType::Track,
-                    item_id: track.id.clone(),
-                    hash: PezzottHash::calc(&track.name),
-                };
-                items.push(item);
-            }
+        for artist in catalog.iter_artists() {
+            let item = HashedItem {
+                item_type: HashedItemType::Artist,
+                item_id: artist.id.clone(),
+                hash: PezzottHash::calc(&artist.name),
+            };
+            items.push(item);
         }
 
-        SearchVault { items }
-    }
+        for album in catalog.iter_albums() {
+            let item = HashedItem {
+                item_type: HashedItemType::Album,
+                item_id: album.id.clone(),
+                hash: PezzottHash::calc(&album.name),
+            };
+            items.push(item);
+        }
 
-    pub fn search<T: AsRef<str>>(
-        &self,
-        query: T,
-        max_results: usize,
-    ) -> impl Iterator<Item = SearchResult> {
+        for track in catalog.iter_tracks() {
+            let item = HashedItem {
+                item_type: HashedItemType::Track,
+                item_id: track.id.clone(),
+                hash: PezzottHash::calc(&track.name),
+            };
+            items.push(item);
+        }
+
+        PezzotHashSearchVault { items }
+    }
+}
+
+impl SearchVault for PezzotHashSearchVault {
+    fn search(&self, query: &str, max_results: usize) -> Vec<SearchResult> {
         let query_hash = PezzottHash::calc(&query);
 
         let mut results = SearchResultsHolder::new(max_results);
@@ -195,7 +203,7 @@ mod tests {
     use super::*;
 
     fn assert_results(holder: SearchResultsHolder, expected: Vec<u32>) {
-        let actual: Vec<u32> = holder.consume().map(|r| r.score).collect();
+        let actual: Vec<u32> = holder.consume().iter().map(|r| r.score).collect();
         assert_eq!(actual, expected);
     }
 

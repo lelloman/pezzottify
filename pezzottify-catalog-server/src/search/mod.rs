@@ -1,4 +1,4 @@
 mod search_vault;
 mod pezzott_hash;
 
-pub use search_vault::{SearchResult, SearchVault, HashedItemType};
+pub use search_vault::*;

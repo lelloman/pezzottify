@@ -7,7 +7,7 @@ mod catalog;
 use catalog::{load_catalog, Catalog};
 
 mod search;
-use search::{HashedItemType, SearchResult, SearchVault};
+use search::{HashedItemType, PezzotHashSearchVault, SearchResult, SearchVault};
 
 fn parse_root_dir(s: &str) -> Result<PathBuf> {
     let original_path = PathBuf::from(s).canonicalize()?;
@@ -47,10 +47,13 @@ fn main() -> Result<()> {
         None => Catalog::infer_path()
             .with_context(|| "Could not infer catalog directory, please specify it explicitly.")?,
     };
-    println!("Cli Search loading catalog at {}...", catalog_path.canonicalize().unwrap().display());
+    println!(
+        "Cli Search loading catalog at {}...",
+        catalog_path.canonicalize().unwrap().display()
+    );
 
     let catalog = load_catalog(catalog_path)?;
-    let search_vault = SearchVault::new(&catalog);
+    let search_vault = PezzotHashSearchVault::new(&catalog);
     println!("Done!");
 
     loop {
@@ -64,7 +67,7 @@ fn main() -> Result<()> {
 
         let user_input = user_input.trim();
 
-        let results: Vec<SearchResult> = search_vault.search(user_input, 60).collect();
+        let results = search_vault.search(user_input, 60);
         if results.is_empty() {
             println!("No matches found for \"{}\".", user_input);
         } else {

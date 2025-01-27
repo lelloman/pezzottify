@@ -1,13 +1,13 @@
 use anyhow::{Context, Result};
 use clap::Parser;
-use tracing::info;
 use std::{fmt::Debug, path::PathBuf};
+use tracing::info;
 
 mod catalog;
 use catalog::Catalog;
 
 mod search;
-use search::SearchVault;
+use search::{NoOpSearchVault, PezzotHashSearchVault, SearchVault};
 
 mod file_auth_store;
 use file_auth_store::FileAuthStore;
@@ -64,7 +64,13 @@ async fn main() -> Result<()> {
     };
     let auth_store = Box::new(FileAuthStore::initialize(auth_store_file_path));
     info!("Indexing content for search...");
-    let search_vault = SearchVault::new(&catalog);
+
+    #[cfg(not(feature = "no_search_index"))]
+    let search_vault: Box<dyn SearchVault> = Box::new(PezzotHashSearchVault::new(&catalog));
+
+    #[cfg(feature = "no_search_index")]
+    let search_vault: Box<dyn SearchVault> = Box::new(NoOpSearchVault {});
+
     info!("Ready to serve!");
     run_server(catalog, search_vault, auth_store, cli_args.port).await
 }

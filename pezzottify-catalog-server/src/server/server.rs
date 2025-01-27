@@ -102,14 +102,14 @@ async fn get_album(
 
 async fn search(
     session: Session,
-    State(search_vault): State<GuardedSearchVault>,
+    State(server_state): State<ServerState>,
     Json(payload): Json<SearchBody>,
 ) -> impl IntoResponse {
-    let search_results: Vec<SearchResult> = search_vault
+    let search_results = server_state
+        .search_vault
         .lock()
         .unwrap()
-        .search(payload.query, 30)
-        .collect();
+        .search(payload.query.as_str(), 30);
     Json(search_results)
 }
 
@@ -176,7 +176,11 @@ async fn post_challenge(State(state): State<ServerState>) -> Response {
 }
 
 impl ServerState {
-    fn new(catalog: Catalog, search_vault: SearchVault, auth_manager: AuthManager) -> ServerState {
+    fn new(
+        catalog: Catalog,
+        search_vault: Box<dyn SearchVault>,
+        auth_manager: AuthManager,
+    ) -> ServerState {
         ServerState {
             start_time: Instant::now(),
             catalog: Arc::new(Mutex::new(catalog)),
@@ -189,7 +193,7 @@ impl ServerState {
 
 fn make_app(
     catalog: Catalog,
-    search_vault: SearchVault,
+    search_vault: Box<dyn SearchVault>,
     auth_store: Box<dyn AuthStore>,
 ) -> Result<Router> {
     let auth_manager = AuthManager::initialize(auth_store)?;
@@ -216,7 +220,7 @@ fn make_app(
 
 pub async fn run_server(
     catalog: Catalog,
-    search_vault: SearchVault,
+    search_vault: Box<dyn SearchVault>,
     auth_store: Box<dyn AuthStore>,
     port: u16,
 ) -> Result<()> {
