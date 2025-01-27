@@ -11,7 +11,7 @@ use super::user;
 pub type UserId = String;
 
 #[derive(Clone, PartialEq, Eq, Hash, Serialize, Deserialize, Debug)]
-pub struct AuthTokenValue(String);
+pub struct AuthTokenValue(pub String);
 
 #[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct AuthToken {
@@ -74,7 +74,7 @@ impl AuthManager {
 
     pub fn generate_auth_token(
         &mut self,
-        credentials: &mut UserAuthCredentials,
+        credentials:  &UserAuthCredentials,
     ) -> Result<AuthTokenValue> {
         todo!()
     }

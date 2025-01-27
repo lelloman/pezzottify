@@ -6,6 +6,8 @@ use std::{
     time::{Duration, Instant},
 };
 
+use tracing::error;
+
 use crate::catalog::Catalog;
 use crate::search::{SearchResult, SearchVault};
 
@@ -18,8 +20,8 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 
-use super::state::*;
 use super::AuthStore;
+use super::{auth, state::*};
 use crate::server::{auth::AuthManager, session::Session};
 
 #[derive(Serialize)]
@@ -49,6 +51,11 @@ struct SearchBody {
 struct LoginBody {
     pub username: String,
     pub password: String,
+}
+
+#[derive(Serialize)]
+struct LoginSuccessResponse {
+    auth_token: String,
 }
 
 async fn home(session: Option<Session>, State(state): State<ServerState>) -> impl IntoResponse {
@@ -116,10 +123,31 @@ async fn get_image(State(catalog): State<GuardedCatalog>, Path(id): Path<String>
 }
 
 async fn login(
-    State(auth_manager): State<Arc<Mutex<AuthManager>>>,
+    State(auth_manager): State<GuardedAuthManager>,
     Json(body): Json<LoginBody>,
 ) -> Response {
-    todo!()
+    let mut locked_manager = auth_manager.lock().unwrap();
+    if let Some(credentials) = locked_manager.get_user_credentials(&body.username) {
+        if let Some(password_credentials) = &credentials.username_password {
+            if let Ok(true) = password_credentials.hasher.verify(
+                &body.password,
+                &password_credentials.hash,
+                &password_credentials.salt,
+            ) {
+                return match locked_manager.generate_auth_token(&credentials) {
+                    Ok(auth_token) => Json(LoginSuccessResponse {
+                        auth_token: auth_token.0,
+                    })
+                    .into_response(),
+                    Err(err) => {
+                        error!("Error with auth token generation: {}", err);
+                        StatusCode::INTERNAL_SERVER_ERROR.into_response()
+                    }
+                };
+            }
+        }
+    }
+    StatusCode::FORBIDDEN.into_response()
 }
 
 async fn get_challenge(State(state): State<ServerState>) -> Response {

@@ -4,6 +4,7 @@ use axum_extra::extract::cookie::{Cookie, CookieJar};
 
 #[derive(Debug)]
 pub struct Session {
+    pub user_id: String,
     pub token: String,
 }
 
@@ -45,10 +46,24 @@ async fn extract_session_from_request_parts(
     parts: &mut Parts,
     ctx: &ServerState,
 ) -> Option<Session> {
-    extract_session_token_from_cookies(parts, ctx)
+    let token = match extract_session_token_from_cookies(parts, ctx)
         .await
         .or_else(|| extract_session_token_from_headers(parts))
-        .map(|token| Session { token })
+    {
+        None => {
+            return None;
+        }
+        Some(x) => x,
+    };
+
+    ctx.auth_manager
+        .lock()
+        .unwrap()
+        .get_auth_token(&super::AuthTokenValue(token))
+        .map(|t| Session {
+            user_id: t.user_id,
+            token: t.value.0,
+        })
 }
 
 impl FromRequestParts<ServerState> for Session {
