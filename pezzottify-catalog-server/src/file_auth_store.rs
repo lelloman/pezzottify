@@ -112,6 +112,11 @@ impl AuthStore for FileAuthStore {
         todo!()
     }
     fn add_auth_token(&self, token: &AuthToken) -> Result<()> {
-        todo!()
+        self.dump
+            .lock()
+            .unwrap()
+            .auth_tokens
+            .insert(token.value.clone(), token.clone());
+        self.save_dump()
     }
 }

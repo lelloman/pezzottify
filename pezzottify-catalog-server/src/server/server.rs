@@ -20,8 +20,8 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 
-use super::AuthStore;
 use super::{auth, state::*};
+use super::{AuthStore, UserId};
 use crate::server::{auth::AuthManager, session::Session};
 
 #[derive(Serialize)]
@@ -49,7 +49,7 @@ struct SearchBody {
 
 #[derive(Deserialize)]
 struct LoginBody {
-    pub username: String,
+    pub user_id: UserId,
     pub password: String,
 }
 
@@ -67,21 +67,33 @@ async fn home(session: Option<Session>, State(state): State<ServerState>) -> imp
     Json(stats)
 }
 
-async fn get_artist(State(catalog): State<GuardedCatalog>, Path(id): Path<String>) -> Response {
+async fn get_artist(
+    session: Session,
+    State(catalog): State<GuardedCatalog>,
+    Path(id): Path<String>,
+) -> Response {
     match catalog.lock().unwrap().get_artist(&id) {
         Some(artist) => Json(artist).into_response(),
         None => StatusCode::NOT_FOUND.into_response(),
     }
 }
 
-async fn get_track(State(catalog): State<GuardedCatalog>, Path(id): Path<String>) -> Response {
+async fn get_track(
+    session: Session,
+    State(catalog): State<GuardedCatalog>,
+    Path(id): Path<String>,
+) -> Response {
     match catalog.lock().unwrap().get_track(&id) {
         Some(track) => Json(track).into_response(),
         None => StatusCode::NOT_FOUND.into_response(),
     }
 }
 
-async fn get_album(State(catalog): State<GuardedCatalog>, Path(id): Path<String>) -> Response {
+async fn get_album(
+    session: Session,
+    State(catalog): State<GuardedCatalog>,
+    Path(id): Path<String>,
+) -> Response {
     match catalog.lock().unwrap().get_album(&id) {
         Some(album) => Json(album).into_response(),
         None => StatusCode::NOT_FOUND.into_response(),
@@ -89,6 +101,7 @@ async fn get_album(State(catalog): State<GuardedCatalog>, Path(id): Path<String>
 }
 
 async fn search(
+    session: Session,
     State(search_vault): State<GuardedSearchVault>,
     Json(payload): Json<SearchBody>,
 ) -> impl IntoResponse {
@@ -100,7 +113,11 @@ async fn search(
     Json(search_results)
 }
 
-async fn get_image(State(catalog): State<GuardedCatalog>, Path(id): Path<String>) -> Response {
+async fn get_image(
+    session: Session,
+    State(catalog): State<GuardedCatalog>,
+    Path(id): Path<String>,
+) -> Response {
     let file_path = catalog.lock().unwrap().get_image_path(id);
     if !file_path.exists() {
         return StatusCode::NOT_FOUND.into_response();
@@ -127,7 +144,7 @@ async fn login(
     Json(body): Json<LoginBody>,
 ) -> Response {
     let mut locked_manager = auth_manager.lock().unwrap();
-    if let Some(credentials) = locked_manager.get_user_credentials(&body.username) {
+    if let Some(credentials) = locked_manager.get_user_credentials(&body.user_id) {
         if let Some(password_credentials) = &credentials.username_password {
             if let Ok(true) = password_credentials.hasher.verify(
                 &body.password,
@@ -136,7 +153,7 @@ async fn login(
             ) {
                 return match locked_manager.generate_auth_token(&credentials) {
                     Ok(auth_token) => Json(LoginSuccessResponse {
-                        auth_token: auth_token.0,
+                        auth_token: auth_token.value.0,
                     })
                     .into_response(),
                     Err(err) => {
@@ -170,12 +187,11 @@ impl ServerState {
     }
 }
 
-pub async fn run_server(
+fn make_app(
     catalog: Catalog,
     search_vault: SearchVault,
     auth_store: Box<dyn AuthStore>,
-    port: u16,
-) -> Result<()> {
+) -> Result<Router> {
     let auth_manager = AuthManager::initialize(auth_store)?;
     let state = ServerState::new(catalog, search_vault, auth_manager);
 
@@ -195,9 +211,78 @@ pub async fn run_server(
         .with_state(state)
         .merge(auth_routes);
 
+    Ok(app)
+}
+
+pub async fn run_server(
+    catalog: Catalog,
+    search_vault: SearchVault,
+    auth_store: Box<dyn AuthStore>,
+    port: u16,
+) -> Result<()> {
+    let app = make_app(catalog, search_vault, auth_store)?;
+
     let listener = tokio::net::TcpListener::bind(format!("127.0.0.1:{}", port))
         .await
         .unwrap();
 
     Ok(axum::serve(listener, app).await?)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn app_smoke_test1() {
+        //let app = make_app(catalog, search_vault, auth_store)
+    }
+
+    struct InMemoryAuthStore {}
+
+    impl AuthStore for InMemoryAuthStore {
+        fn load_auth_credentials(
+            &self,
+        ) -> Result<std::collections::HashMap<auth::UserId, auth::UserAuthCredentials>> {
+            todo!()
+        }
+
+        fn update_auth_credentials(&self, credentials: auth::UserAuthCredentials) -> Result<()> {
+            todo!()
+        }
+
+        fn load_challenges(&self) -> Result<Vec<auth::ActiveChallenge>> {
+            todo!()
+        }
+
+        fn delete_challenge(&self, challenge: auth::ActiveChallenge) -> Result<()> {
+            todo!()
+        }
+
+        fn flag_sent_challenge(&self, challenge: &auth::ActiveChallenge) -> Result<()> {
+            todo!()
+        }
+
+        fn add_challenges(&self, challenges: Vec<auth::ActiveChallenge>) -> Result<()> {
+            todo!()
+        }
+
+        fn load_auth_tokens(
+            &self,
+        ) -> Result<std::collections::HashMap<auth::AuthTokenValue, auth::AuthToken>> {
+            todo!()
+        }
+
+        fn delete_auth_token(&self, value: auth::AuthTokenValue) -> Result<()> {
+            todo!()
+        }
+
+        fn update_auth_token(&self, token: &auth::AuthToken) -> Result<()> {
+            todo!()
+        }
+
+        fn add_auth_token(&self, token: &auth::AuthToken) -> Result<()> {
+            todo!()
+        }
+    }
 }

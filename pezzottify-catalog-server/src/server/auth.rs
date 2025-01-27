@@ -17,7 +17,7 @@ pub struct AuthTokenValue(pub String);
 pub struct AuthToken {
     pub user_id: UserId,
     pub created: SystemTime,
-    pub last_used: SystemTime,
+    pub last_used: Option<SystemTime>,
     pub value: AuthTokenValue,
 }
 
@@ -72,11 +72,15 @@ impl AuthManager {
         self.auth_tokens.get(value).cloned()
     }
 
-    pub fn generate_auth_token(
-        &mut self,
-        credentials:  &UserAuthCredentials,
-    ) -> Result<AuthTokenValue> {
-        todo!()
+    pub fn generate_auth_token(&mut self, credentials: &UserAuthCredentials) -> Result<AuthToken> {
+        let token = AuthToken {
+            user_id: credentials.user_id.clone(),
+            value: AuthTokenValue::generate(),
+            created: SystemTime::now(),
+            last_used: None,
+        };
+        self.store.lock().unwrap().add_auth_token(&token)?;
+        Ok(token)
     }
 
     fn create_hashed_password(password: String) -> Result<UsernamePasswordCredentials> {

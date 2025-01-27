@@ -1,6 +1,11 @@
 use super::state::ServerState;
-use axum::{extract::FromRequestParts, http::request::Parts, response::IntoResponse};
+use axum::{
+    extract::FromRequestParts,
+    http::{request::Parts, StatusCode},
+    response::IntoResponse,
+};
 use axum_extra::extract::cookie::{Cookie, CookieJar};
+use tracing::debug;
 
 #[derive(Debug)]
 pub struct Session {
@@ -11,14 +16,19 @@ pub struct Session {
 pub const COOKIE_SESSION_TOKEN_KEY: &str = "session_token";
 pub const HEADER_SESSION_TOKEN_KEY: &str = "Authorization";
 
-pub enum ApiError {
+pub enum SessionExtractionError {
     AccessDenied,
-    CookieNotProvided,
+    InternalError,
 }
 
-impl IntoResponse for ApiError {
+impl IntoResponse for SessionExtractionError {
     fn into_response(self) -> axum::response::Response {
-        todo!()
+        match self {
+            SessionExtractionError::AccessDenied => StatusCode::FORBIDDEN.into_response(),
+            SessionExtractionError::InternalError => {
+                StatusCode::INTERNAL_SERVER_ERROR.into_response()
+            }
+        }
     }
 }
 
@@ -46,16 +56,19 @@ async fn extract_session_from_request_parts(
     parts: &mut Parts,
     ctx: &ServerState,
 ) -> Option<Session> {
+    debug!("exctracting session from request parts...");
     let token = match extract_session_token_from_cookies(parts, ctx)
         .await
         .or_else(|| extract_session_token_from_headers(parts))
     {
         None => {
+            debug!("No token in cookies nor headers.");
             return None;
         }
         Some(x) => x,
     };
 
+    debug!("Got session token {}", token);
     ctx.auth_manager
         .lock()
         .unwrap()
@@ -67,7 +80,7 @@ async fn extract_session_from_request_parts(
 }
 
 impl FromRequestParts<ServerState> for Session {
-    type Rejection = ApiError;
+    type Rejection = SessionExtractionError;
 
     async fn from_request_parts(
         parts: &mut Parts,
@@ -75,12 +88,12 @@ impl FromRequestParts<ServerState> for Session {
     ) -> Result<Self, Self::Rejection> {
         extract_session_from_request_parts(parts, ctx)
             .await
-            .ok_or(ApiError::AccessDenied)
+            .ok_or(SessionExtractionError::AccessDenied)
     }
 }
 
 impl FromRequestParts<ServerState> for Option<Session> {
-    type Rejection = ApiError;
+    type Rejection = SessionExtractionError;
 
     async fn from_request_parts(
         parts: &mut Parts,
