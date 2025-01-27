@@ -18,7 +18,7 @@ macro_rules! problemo {
 }
 
 #[derive(Debug, Clone)]
-struct Dirs {
+pub struct Dirs {
     root: PathBuf,
     pub albums: PathBuf,
     pub artists: PathBuf,
@@ -26,6 +26,17 @@ struct Dirs {
 }
 
 impl Dirs {
+    #[cfg(test)]
+    fn dummy() -> Dirs {
+        let p = PathBuf::from("/tmp/foo/bar");
+        Dirs {
+            root: p.clone(),
+            albums: p.clone(),
+            artists: p.clone(),
+            images: p.clone(),
+        }
+    }
+
     fn from_root(root: &Path, problems: &mut Vec<Problem>) -> Result<Dirs> {
         if !root.is_dir() {
             problems.push(Problem::InvalidRootDir);
@@ -368,6 +379,16 @@ impl CatalogBuildResult {
 }
 
 impl Catalog {
+    #[cfg(test)]
+    pub fn dummy() -> Catalog {
+        Catalog {
+            dirs: Dirs::dummy(),
+            albums: HashMap::new(),
+            artists: HashMap::new(),
+            tracks: HashMap::new(),
+        }
+    }
+
     pub fn build(root_dir: &Path) -> CatalogBuildResult {
         let mut problems = Vec::<Problem>::new();
         let dirs = match Dirs::from_root(root_dir, &mut problems) {

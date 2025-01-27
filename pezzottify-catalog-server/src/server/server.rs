@@ -19,6 +19,7 @@ use axum::{
     Json, Router,
 };
 use serde::{Deserialize, Serialize};
+use tower::{Service, ServiceExt}; // for `call`, `oneshot`, and `ready
 
 use super::{auth, state::*};
 use super::{AuthStore, UserId};
@@ -236,27 +237,55 @@ pub async fn run_server(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::{
+        search::NoOpSearchVault,
+        server::{ActiveChallenge, AuthToken, AuthTokenValue, UserAuthCredentials},
+    };
+    use axum::{body::Body, http::Request};
+    use std::collections::HashMap;
 
-    #[test]
-    fn app_smoke_test1() {
-        //let app = make_app(catalog, search_vault, auth_store)
+    #[tokio::test]
+    async fn responds_forbidden_on_protected_routes() {
+        let auth_store = Box::new(InMemoryAuthStore::default());
+        let app =
+            &mut make_app(Catalog::dummy(), Box::new(NoOpSearchVault {}), auth_store).unwrap();
+
+        let protected_routes = vec!["/artist/123", "/album/123", "/track/123", "/image/123"];
+
+        for route in protected_routes.into_iter() {
+            println!("Trying route {}", route);
+            let request = Request::builder().uri(route).body(Body::empty()).unwrap();
+            let response = app.oneshot(request).await.unwrap();
+            assert_eq!(response.status(), StatusCode::FORBIDDEN);
+        }
+
+        let request = Request::builder()
+            .method("POST")
+            .uri("/search")
+            .body(Body::empty())
+            .unwrap();
+        let response = app.oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
     }
 
-    struct InMemoryAuthStore {}
+    #[derive(Default)]
+    struct InMemoryAuthStore {
+        auth_credentials: HashMap<UserId, UserAuthCredentials>,
+        active_challenges: Vec<ActiveChallenge>,
+        auth_tokens: HashMap<AuthTokenValue, AuthToken>,
+    }
 
     impl AuthStore for InMemoryAuthStore {
-        fn load_auth_credentials(
-            &self,
-        ) -> Result<std::collections::HashMap<auth::UserId, auth::UserAuthCredentials>> {
-            todo!()
+        fn load_auth_credentials(&self) -> Result<HashMap<UserId, UserAuthCredentials>> {
+            Ok(self.auth_credentials.clone())
         }
 
         fn update_auth_credentials(&self, credentials: auth::UserAuthCredentials) -> Result<()> {
             todo!()
         }
 
-        fn load_challenges(&self) -> Result<Vec<auth::ActiveChallenge>> {
-            todo!()
+        fn load_challenges(&self) -> Result<Vec<ActiveChallenge>> {
+            Ok(self.active_challenges.clone())
         }
 
         fn delete_challenge(&self, challenge: auth::ActiveChallenge) -> Result<()> {
@@ -271,10 +300,8 @@ mod tests {
             todo!()
         }
 
-        fn load_auth_tokens(
-            &self,
-        ) -> Result<std::collections::HashMap<auth::AuthTokenValue, auth::AuthToken>> {
-            todo!()
+        fn load_auth_tokens(&self) -> Result<HashMap<AuthTokenValue, AuthToken>> {
+            Ok(self.auth_tokens.clone())
         }
 
         fn delete_auth_token(&self, value: auth::AuthTokenValue) -> Result<()> {
