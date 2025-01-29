@@ -179,6 +179,14 @@ async fn login(
     StatusCode::FORBIDDEN.into_response()
 }
 
+async fn logout(State(auth_manager): State<GuardedAuthManager>, session: Session) -> Response {
+    let mut locked_manager = auth_manager.lock().unwrap();
+    match locked_manager.delete_auth_token(&session.user_id, &auth::AuthTokenValue(session.token)) {
+        Ok(()) => StatusCode::OK.into_response(),
+        Err(_) => StatusCode::BAD_REQUEST.into_response(),
+    }
+}
+
 async fn get_challenge(State(state): State<ServerState>) -> Response {
     todo!()
 }
@@ -213,6 +221,7 @@ fn make_app(
 
     let auth_routes: Router = Router::new()
         .route("/login", post(login))
+        .route("/logout", get(logout))
         .route("/challenge", get(get_challenge))
         .route("/challenge", post(post_challenge))
         .with_state(state.clone());
@@ -270,6 +279,7 @@ mod tests {
             "/v1/content/album/123",
             "/v1/content/track/123",
             "/v1/content/image/123",
+            "/v1/auth/logout"
         ];
 
         for route in protected_routes.into_iter() {

@@ -164,6 +164,26 @@ impl AuthManager {
         self.credentials.get(user_id).cloned()
     }
 
+    pub fn delete_auth_token(
+        &mut self,
+        user_id: &UserId,
+        token_value: &AuthTokenValue,
+    ) -> Result<()> {
+        let removed = self.auth_tokens.remove(token_value);
+        match removed {
+            Some(removed) => {
+                if &removed.user_id == user_id {
+                    Ok(())
+                } else {
+                    self.auth_tokens
+                        .insert(token_value.clone(), removed.clone());
+                    bail!("Tried to delete auth token {}, but the authenticated user {} was not the owner {} of the token.", token_value.0, user_id, &removed.user_id)
+                }
+            }
+            None => bail!("Did not found auth token {}", token_value.0),
+        }
+    }
+
     pub fn get_user_tokens(&self, user_id: &UserId) -> Vec<AuthToken> {
         self.auth_tokens
             .iter()
