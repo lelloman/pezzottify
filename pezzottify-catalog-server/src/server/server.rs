@@ -12,8 +12,9 @@ use crate::catalog::Catalog;
 use crate::search::{SearchResult, SearchVault};
 
 use axum::{
+    body::Body,
     extract::{Path, State},
-    http::{header, StatusCode},
+    http::{header, response, HeaderValue, StatusCode},
     response::{IntoResponse, Response},
     routing::{get, post},
     Json, Router,
@@ -153,10 +154,20 @@ async fn login(
                 &password_credentials.salt,
             ) {
                 return match locked_manager.generate_auth_token(&credentials) {
-                    Ok(auth_token) => Json(LoginSuccessResponse {
-                        auth_token: auth_token.value.0,
-                    })
-                    .into_response(),
+                    Ok(auth_token) => {
+                        let response_body = LoginSuccessResponse {
+                            auth_token: auth_token.value.0.clone(),
+                        };
+                        let response_body = serde_json::to_string(&response_body).unwrap();
+
+                        let cookie_value =
+                            HeaderValue::from_str("my_cookie=my_value; Path=/; HttpOnly").unwrap();
+                        response::Builder::new()
+                            .status(StatusCode::CREATED)
+                            .header(axum::http::header::SET_COOKIE, cookie_value)
+                            .body(Body::from(response_body))
+                            .unwrap()
+                    }
                     Err(err) => {
                         error!("Error with auth token generation: {}", err);
                         StatusCode::INTERNAL_SERVER_ERROR.into_response()
@@ -206,15 +217,19 @@ fn make_app(
         .route("/challenge", post(post_challenge))
         .with_state(state.clone());
 
-    let app: Router = Router::new()
-        .route("/", get(home))
+    let content_routes: Router = Router::new()
         .route("/artist/{id}", get(get_artist))
         .route("/album/{id}", get(get_album))
         .route("/track/{id}", get(get_track))
         .route("/search", post(search))
         .route("/image/{id}", get(get_image))
+        .with_state(state.clone());
+
+    let app: Router = Router::new()
+        .route("/", get(home))
         .with_state(state)
-        .merge(auth_routes);
+        .nest("/v1/auth", auth_routes)
+        .nest("/v1/content", content_routes);
 
     Ok(app)
 }
@@ -250,7 +265,12 @@ mod tests {
         let app =
             &mut make_app(Catalog::dummy(), Box::new(NoOpSearchVault {}), auth_store).unwrap();
 
-        let protected_routes = vec!["/artist/123", "/album/123", "/track/123", "/image/123"];
+        let protected_routes = vec![
+            "/v1/content/artist/123",
+            "/v1/content/album/123",
+            "/v1/content/track/123",
+            "/v1/content/image/123",
+        ];
 
         for route in protected_routes.into_iter() {
             println!("Trying route {}", route);
@@ -261,7 +281,7 @@ mod tests {
 
         let request = Request::builder()
             .method("POST")
-            .uri("/search")
+            .uri("/v1/content/search")
             .body(Body::empty())
             .unwrap();
         let response = app.oneshot(request).await.unwrap();
