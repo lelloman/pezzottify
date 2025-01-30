@@ -9,7 +9,7 @@ use std::{
 use tracing::error;
 
 use crate::catalog::Catalog;
-use crate::search::{SearchResult, SearchVault};
+use crate::search::SearchVault;
 
 use axum::{
     body::Body,
@@ -23,7 +23,7 @@ use serde::{Deserialize, Serialize};
 use tower::{Service, ServiceExt}; // for `call`, `oneshot`, and `ready
 
 use super::{auth, state::*};
-use super::{AuthStore, UserId};
+use super::{stream_track, AuthStore, UserId};
 use crate::server::{auth::AuthManager, session::Session};
 
 #[derive(Serialize)]
@@ -80,17 +80,6 @@ async fn get_artist(
     }
 }
 
-async fn get_track(
-    session: Session,
-    State(catalog): State<GuardedCatalog>,
-    Path(id): Path<String>,
-) -> Response {
-    match catalog.lock().unwrap().get_track(&id) {
-        Some(track) => Json(track).into_response(),
-        None => StatusCode::NOT_FOUND.into_response(),
-    }
-}
-
 async fn get_album(
     session: Session,
     State(catalog): State<GuardedCatalog>,
@@ -98,6 +87,17 @@ async fn get_album(
 ) -> Response {
     match catalog.lock().unwrap().get_album(&id) {
         Some(album) => Json(album).into_response(),
+        None => StatusCode::NOT_FOUND.into_response(),
+    }
+}
+
+pub async fn get_track(
+    _session: Session,
+    State(catalog): State<GuardedCatalog>,
+    Path(id): Path<String>,
+) -> Response {
+    match catalog.lock().unwrap().get_track(&id) {
+        Some(track) => Json(track).into_response(),
         None => StatusCode::NOT_FOUND.into_response(),
     }
 }
@@ -232,6 +232,7 @@ fn make_app(
         .route("/track/{id}", get(get_track))
         .route("/search", post(search))
         .route("/image/{id}", get(get_image))
+        .route("/stream/{id}", get(stream_track))
         .with_state(state.clone());
 
     let app: Router = Router::new()
@@ -279,7 +280,8 @@ mod tests {
             "/v1/content/album/123",
             "/v1/content/track/123",
             "/v1/content/image/123",
-            "/v1/auth/logout"
+            "/v1/content/stream/123",
+            "/v1/auth/logout",
         ];
 
         for route in protected_routes.into_iter() {

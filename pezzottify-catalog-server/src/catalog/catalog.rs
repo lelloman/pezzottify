@@ -1,4 +1,4 @@
-use super::{Album, Artist, Image, Track};
+use super::{album, Album, Artist, Image, Track, TrackFormat};
 use anyhow::{bail, Context, Result};
 use regex::Regex;
 use std::borrow::Cow;
@@ -471,5 +471,29 @@ impl Catalog {
 
     pub fn get_image_path(&self, id: String) -> PathBuf {
         self.dirs.get_image_path(id)
+    }
+
+    pub fn get_track_audio_path(&self, album_id: &str, track_id: &str) -> Option<PathBuf> {
+        let album_dir = self.dirs.albums.join(format!("album_{}", album_id));
+
+        let track_file_prefix = format!("track_{}", &track_id);
+        if let Ok(entries) = std::fs::read_dir(album_dir) {
+            for entry in entries {
+                if let Ok(entry) = entry {
+                    let path = entry.path();
+                    if path.is_file() {
+                        if let Some(file_name) = path.file_name() {
+                            let name = file_name.to_string_lossy();
+                            if name.starts_with(&track_file_prefix) {
+                                if !name.to_lowercase().ends_with("json") {
+                                    return Some(path);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        None
     }
 }

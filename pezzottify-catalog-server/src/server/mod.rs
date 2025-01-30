@@ -1,8 +1,12 @@
+mod auth;
+mod server;
 pub(self) mod session;
 pub(self) mod state;
-mod server;
-mod auth;
+mod stream_track;
 mod user;
 
+pub use auth::{
+    ActiveChallenge, AuthManager, AuthStore, AuthToken, AuthTokenValue, UserAuthCredentials, UserId,
+};
 pub use server::run_server;
-pub use auth::{ActiveChallenge, UserAuthCredentials, AuthStore, AuthManager, AuthToken,  AuthTokenValue, UserId};
+pub(self) use stream_track::stream_track;
