@@ -102,6 +102,7 @@ pub async fn get_track(
     }
 }
 
+#[cfg(not(feature = "no_search"))]
 async fn search(
     session: Session,
     State(server_state): State<ServerState>,
@@ -211,6 +212,20 @@ impl ServerState {
     }
 }
 
+fn make_search_routes(state: ServerState) -> Option<Router> {
+    #[cfg(not(feature = "no_search"))]
+    {
+        Some(
+            Router::new()
+                .route("/search", post(search))
+                .with_state(state),
+        )
+    }
+
+    #[cfg(feature = "no_search")]
+    None
+}
+
 fn make_app(
     catalog: Catalog,
     search_vault: Box<dyn SearchVault>,
@@ -226,14 +241,17 @@ fn make_app(
         .route("/challenge", post(post_challenge))
         .with_state(state.clone());
 
-    let content_routes: Router = Router::new()
+    let mut content_routes: Router = Router::new()
         .route("/artist/{id}", get(get_artist))
         .route("/album/{id}", get(get_album))
         .route("/track/{id}", get(get_track))
-        .route("/search", post(search))
         .route("/image/{id}", get(get_image))
         .route("/stream/{id}", get(stream_track))
         .with_state(state.clone());
+
+    if let Some(search_routes) = make_search_routes(state.clone()) {
+        content_routes = content_routes.merge(search_routes);
+    }
 
     let app: Router = Router::new()
         .route("/", get(home))

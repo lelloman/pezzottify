@@ -65,10 +65,10 @@ async fn main() -> Result<()> {
     let auth_store = Box::new(FileAuthStore::initialize(auth_store_file_path));
     info!("Indexing content for search...");
 
-    #[cfg(not(feature = "no_search_index"))]
+    #[cfg(not(feature = "no_search"))]
     let search_vault: Box<dyn SearchVault> = Box::new(PezzotHashSearchVault::new(&catalog));
 
-    #[cfg(feature = "no_search_index")]
+    #[cfg(feature = "no_search")]
     let search_vault: Box<dyn SearchVault> = Box::new(NoOpSearchVault {});
 
     info!("Ready to serve!");
