@@ -50,6 +50,8 @@ async fn main() -> Result<()> {
             "Could not infer catalog directory, please specifiy it explicityly."
         })?,
     };
+
+    info!("Loading catalog...");
     let catalog = catalog::load_catalog(catalog_path)?;
 
     if cli_args.check_only {
