@@ -11,6 +11,8 @@ use tracing::error;
 use crate::catalog::Catalog;
 use crate::search::SearchVault;
 
+use axum_extra::extract::cookie::{Cookie, SameSite};
+
 use axum::{
     body::Body,
     extract::{Path, State},
@@ -57,7 +59,7 @@ struct LoginBody {
 
 #[derive(Serialize)]
 struct LoginSuccessResponse {
-    auth_token: String,
+    token: String,
 }
 
 async fn home(session: Option<Session>, State(state): State<ServerState>) -> impl IntoResponse {
@@ -157,12 +159,15 @@ async fn login(
                 return match locked_manager.generate_auth_token(&credentials) {
                     Ok(auth_token) => {
                         let response_body = LoginSuccessResponse {
-                            auth_token: auth_token.value.0.clone(),
+                            token: auth_token.value.0.clone(),
                         };
                         let response_body = serde_json::to_string(&response_body).unwrap();
 
-                        let cookie_value =
-                            HeaderValue::from_str("my_cookie=my_value; Path=/; HttpOnly").unwrap();
+                        let cookie_value = HeaderValue::from_str(&format!(
+                            "session_token={}; Path=/; HttpOnly",
+                            auth_token.value.0.clone()
+                        ))
+                        .unwrap();
                         response::Builder::new()
                             .status(StatusCode::CREATED)
                             .header(axum::http::header::SET_COOKIE, cookie_value)
@@ -183,7 +188,19 @@ async fn login(
 async fn logout(State(auth_manager): State<GuardedAuthManager>, session: Session) -> Response {
     let mut locked_manager = auth_manager.lock().unwrap();
     match locked_manager.delete_auth_token(&session.user_id, &auth::AuthTokenValue(session.token)) {
-        Ok(()) => StatusCode::OK.into_response(),
+        Ok(()) => {
+            let cookie_value = Cookie::build(Cookie::new("session_token", ""))
+                .path("/")
+                .expires(time::OffsetDateTime::now_utc() - time::Duration::days(1)) // Expire it in the past
+                .same_site(SameSite::Lax)
+                .build();
+            
+            response::Builder::new()
+                .status(StatusCode::OK)
+                .header(axum::http::header::SET_COOKIE, cookie_value.to_string())
+                .body(Body::empty())
+                .unwrap()
+        }
         Err(_) => StatusCode::BAD_REQUEST.into_response(),
     }
 }

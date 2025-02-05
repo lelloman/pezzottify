@@ -80,6 +80,7 @@ impl AuthManager {
             last_used: None,
         };
         self.store.lock().unwrap().add_auth_token(&token)?;
+        self.auth_tokens.insert(token.value.clone(), token.clone());
         Ok(token)
     }
 
