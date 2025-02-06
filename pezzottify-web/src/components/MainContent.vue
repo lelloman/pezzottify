@@ -1,5 +1,5 @@
 <template>
-    <main class="flex-1 p-6 overflow-auto">
+    <main class="">
         <div v-if="searchQuery" class="text-lg">Showing results for "{{ searchQuery }}"</div>
         <div v-else>
             <h1 class="text-2xl font-bold mb-4">Welcome to Home</h1>

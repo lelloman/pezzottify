@@ -1,8 +1,8 @@
 <template>
-  <div class="flex h-screen flex-col">
+  <div class="mainContainer">
     <!-- Top Bar -->
     <TopBar @search="handleSearch" />
-    <div class="flex flex-1 overflow-hidden">
+    <div class="centralPanel">
       <!-- Sidebar -->
       <SideBar :items="sidebarItems" @select-item="handleSelect" />
       <!-- Main Content -->
@@ -15,7 +15,7 @@
 
 <script setup>
 import { ref } from 'vue';
-import Sidebar from '../components/SideBar.vue';
+import SideBar from '../components/SideBar.vue';
 import TopBar from '../components/TopBar.vue';
 import MainContent from '../components/MainContent.vue';
 import BottomPlayer from '../components/BottomPlayer.vue';
@@ -40,5 +40,18 @@ function handleSelect(item) {
 <style>
 body {
   @apply bg-gray-900 text-gray-100;
+}
+
+.mainContainer {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.centralPanel {
+  flex: 1;
+  display: flex;
+  flex-direction: row;
 }
 </style>

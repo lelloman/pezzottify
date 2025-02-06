@@ -1,5 +1,5 @@
 <template>
-    <aside class="w-64 bg-gray-800 text-white h-full p-4">
+    <aside class="sidebar">
         <nav>
             <div v-for="item in items" :key="item.id" class="mb-4">
                 <h2 class="text-lg font-semibold" v-if="item.type === 'section'">{{ item.name }}</h2>
@@ -18,3 +18,16 @@
 import { defineProps } from 'vue';
 const props = defineProps({ items: Array });
 </script>
+
+<style scoped>
+.sidebar {
+    min-width: 200px;
+    width: 20%;
+    max-width: 600px;
+    background-color: #1f2937;
+    color: white;
+    height: 100%;
+    padding: 1rem;
+    box-sizing: border-box;
+}
+</style>

@@ -7,11 +7,11 @@ import { RouterLink, RouterView } from 'vue-router'
 </template>
 
 <style scoped>
-el_routo {
-  width: 100%;
+#el_routo {
+  width: 100vw;
+  height: 100vh;
   font-size: 12px;
   text-align: center;
-  margin-top: 2rem;
 }
 
 nav a.router-link-exact-active {
