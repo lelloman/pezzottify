@@ -6,11 +6,18 @@
 </template>
 
 <script setup>
-import { defineEmits } from 'vue';
+import { ref } from 'vue';
+import { debounce } from 'lodash-es'; // Lightweight debounce
 
 const emit = defineEmits(['search']);
+const inputValue = ref('');
+
+const debounceEmit = debounce((value) => {
+    emit('search', value);
+}, 300); // 300ms debounce
 
 function onInput(event) {
-    emit('search', event.target.value);
+    inputValue.value = event.target.value;
+    debounceEmit(inputValue.value);
 }
 </script>
