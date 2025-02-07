@@ -8,8 +8,8 @@ use std::{
 
 use tracing::error;
 
-use crate::catalog::Catalog;
 use crate::search::SearchVault;
+use crate::catalog::Catalog;
 
 use axum_extra::extract::cookie::{Cookie, SameSite};
 
@@ -24,7 +24,7 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use tower::{Service, ServiceExt}; // for `call`, `oneshot`, and `ready
 
-use super::{auth, state::*};
+use super::{auth, state::*, make_search_routes};
 use super::{stream_track, AuthStore, UserId};
 use crate::server::{auth::AuthManager, session::Session};
 
@@ -46,10 +46,6 @@ fn format_uptime(duration: Duration) -> String {
     format!("{}d {:02}:{:02}:{:02}", days, hours, minutes, seconds)
 }
 
-#[derive(Deserialize)]
-struct SearchBody {
-    pub query: String,
-}
 
 #[derive(Deserialize)]
 struct LoginBody {
@@ -102,20 +98,6 @@ pub async fn get_track(
         Some(track) => Json(track).into_response(),
         None => StatusCode::NOT_FOUND.into_response(),
     }
-}
-
-#[cfg(not(feature = "no_search"))]
-async fn search(
-    session: Session,
-    State(server_state): State<ServerState>,
-    Json(payload): Json<SearchBody>,
-) -> impl IntoResponse {
-    let search_results = server_state
-        .search_vault
-        .lock()
-        .unwrap()
-        .search(payload.query.as_str(), 30);
-    Json(search_results)
 }
 
 async fn get_image(
@@ -194,7 +176,7 @@ async fn logout(State(auth_manager): State<GuardedAuthManager>, session: Session
                 .expires(time::OffsetDateTime::now_utc() - time::Duration::days(1)) // Expire it in the past
                 .same_site(SameSite::Lax)
                 .build();
-            
+
             response::Builder::new()
                 .status(StatusCode::OK)
                 .header(axum::http::header::SET_COOKIE, cookie_value.to_string())
@@ -227,20 +209,6 @@ impl ServerState {
             hash: "123456".to_owned(),
         }
     }
-}
-
-fn make_search_routes(state: ServerState) -> Option<Router> {
-    #[cfg(not(feature = "no_search"))]
-    {
-        Some(
-            Router::new()
-                .route("/search", post(search))
-                .with_state(state),
-        )
-    }
-
-    #[cfg(feature = "no_search")]
-    None
 }
 
 fn make_app(

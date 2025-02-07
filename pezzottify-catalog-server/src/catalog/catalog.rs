@@ -473,15 +473,15 @@ impl Catalog {
         self.tracks.len()
     }
 
-    pub fn get_artist(&self, artist_id: &String) -> Option<Artist> {
+    pub fn get_artist(&self, artist_id: &str) -> Option<Artist> {
         self.artists.get(artist_id).cloned()
     }
 
-    pub fn get_track(&self, track_id: &String) -> Option<Track> {
+    pub fn get_track(&self, track_id: &str) -> Option<Track> {
         self.tracks.get(track_id).cloned()
     }
 
-    pub fn get_album(&self, album_id: &String) -> Option<Album> {
+    pub fn get_album(&self, album_id: &str) -> Option<Album> {
         self.albums.get(album_id).cloned()
     }
 

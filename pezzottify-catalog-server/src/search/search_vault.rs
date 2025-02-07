@@ -28,6 +28,39 @@ pub struct SearchResult {
     pub matchable_text: String,
 }
 
+#[derive(Debug, Serialize)]
+pub struct ResolvedAlbum {
+    pub id: String,
+    pub name: String,
+    pub artists_names: Vec<String>,
+    pub image_id: Option<String>,
+    pub year: Option<i64>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ResolvedArtist {
+    pub id: String,
+    pub name: String,
+    pub image_id: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ResolvedTrack {
+    pub id: String,
+    pub name: String,
+    pub duration: u32,
+    pub artist_names: Vec<String>,
+    pub image_id: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(tag = "type")]
+pub enum ResolvedSearchResult {
+    Track(ResolvedTrack),
+    Album(ResolvedAlbum),
+    Artist(ResolvedArtist),
+}
+
 impl PartialEq for SearchResult {
     fn eq(&self, other: &Self) -> bool {
         self.adjusted_score == other.adjusted_score
