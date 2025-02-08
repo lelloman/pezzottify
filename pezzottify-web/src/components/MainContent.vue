@@ -1,16 +1,14 @@
 <template>
-    <main>
+    <main class="mainContent">
         <div v-if="searchQuery" class="text-lg">
             <div v-if="loading">Loading...</div>
             <div v-else-if="results.length > 0">
                 <h2 class="text-xl font-semibold mb-2">Search Results:</h2>
                 <div class="list-none ml-5">
                     <div v-for="(result, index) in results" :key="index" class="mb-4">
-                        <div v-if="result.type === 'Album'" class="p-4 border rounded-lg shadow-sm">
-                            <h3 class="font-bold">{{ result.title }}</h3>
-                            <p>Album {{ result.name }}</p>
-                            <a :href="result.link" class="text-blue-500 hover:underline">Read more</a>
-                        </div>
+
+                        <AlbumResult v-if="result.type === 'Album'" :result="result" />
+
                         <div v-else-if="result.type === 'Track'" class="p-4 border rounded-lg shadow-sm bg-blue-50">
                             <h3 class="font-bold">{{ result.name }}</h3>
                             <p> Track {{ result.name }}</p>
@@ -37,6 +35,7 @@
 
 <script setup>
 import { ref, watch } from 'vue';
+import AlbumResult from './search/AlbumResult.vue';
 
 const props = defineProps({ searchQuery: String });
 const results = ref([]);
@@ -67,3 +66,10 @@ watch(() => props.searchQuery, async (newQuery) => {
     }
 });
 </script>
+
+
+<style>
+.mainContent {
+    flex: 1;
+}
+</style>

@@ -13,6 +13,7 @@
   </div>
 </template>
 
+
 <script setup>
 import { ref } from 'vue';
 import SideBar from '../components/SideBar.vue';
