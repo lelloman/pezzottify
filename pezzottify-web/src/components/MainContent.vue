@@ -4,9 +4,27 @@
             <div v-if="loading">Loading...</div>
             <div v-else-if="results.length > 0">
                 <h2 class="text-xl font-semibold mb-2">Search Results:</h2>
-                <ul class="list-disc ml-5">
-                    <li v-for="(result, index) in results" :key="index">{{ result }}</li>
-                </ul>
+                <div class="list-none ml-5">
+                    <div v-for="(result, index) in results" :key="index" class="mb-4">
+                        <div v-if="result.type === 'Album'" class="p-4 border rounded-lg shadow-sm">
+                            <h3 class="font-bold">{{ result.title }}</h3>
+                            <p>Album {{ result.name }}</p>
+                            <a :href="result.link" class="text-blue-500 hover:underline">Read more</a>
+                        </div>
+                        <div v-else-if="result.type === 'Track'" class="p-4 border rounded-lg shadow-sm bg-blue-50">
+                            <h3 class="font-bold">{{ result.name }}</h3>
+                            <p> Track {{ result.name }}</p>
+                            <button @click="handleAction(result)"
+                                class="mt-2 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600">Action</button>
+                        </div>
+                        <div v-else-if="result.type === 'Artist'" class="p-4 border rounded-lg shadow-sm bg-green-50">
+                            <p> Artist {{ result.name }}</p>
+                        </div>
+                        <div v-else class="p-4 border rounded-lg shadow-sm bg-gray-50">
+                            <p>Unknown result type</p>
+                        </div>
+                    </div>
+                </div>
             </div>
             <div v-else>No results found for "{{ searchQuery }}"</div>
         </div>
