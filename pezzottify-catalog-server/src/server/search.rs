@@ -73,7 +73,7 @@ fn resolve_track(catalog: &Catalog, track_id: &str) -> Option<ResolvedSearchResu
         .filter_map(|artist_id| catalog.get_artist(artist_id))
         .collect();
 
-    let artist_names = artists.iter().map(|a| a.name.clone()).collect();
+    let artists_names = artists.iter().map(|a| a.name.clone()).collect();
 
     let image_id = catalog
         .get_album(&track.album_id)
@@ -99,7 +99,7 @@ fn resolve_track(catalog: &Catalog, track_id: &str) -> Option<ResolvedSearchResu
         name: track.name,
         duration: track.duration as u32,
         image_id,
-        artist_names,
+        artists_names,
     };
 
     Some(ResolvedSearchResult::Track(resolved_track))

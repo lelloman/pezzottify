@@ -49,7 +49,7 @@ pub struct ResolvedTrack {
     pub id: String,
     pub name: String,
     pub duration: u32,
-    pub artist_names: Vec<String>,
+    pub artists_names: Vec<String>,
     pub image_id: Option<String>,
 }
 
