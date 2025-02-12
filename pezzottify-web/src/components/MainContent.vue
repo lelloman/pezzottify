@@ -3,9 +3,8 @@
     <div v-if="searchQuery">
       <div v-if="loading">Loading...</div>
       <div v-else-if="results.length > 0">
-        <div class="list-none ml-5">
+        <div class="searchResultsContainer">
           <div v-for="(result, index) in results" :key="index">
-
             <AlbumResult v-if="result.type === 'Album'" :result="result" />
             <ArtistResult v-else-if="result.type === 'Artist'" :result="result" />
             <TrackResult v-else-if="result.type === 'Track'" :result="result" />
@@ -65,5 +64,23 @@ watch(() => props.searchQuery, async (newQuery) => {
 .mainContent {
   flex: 1;
   overflow: auto;
+}
+
+.searchResultsContainer {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: repeat(1, 1fr);
+}
+
+@media (min-width: 1000px) {
+  .searchResultsContainer {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (min-width: 1500px) {
+  .searchResultsContainer {
+    grid-template-columns: repeat(3, 1fr);
+  }
 }
 </style>
