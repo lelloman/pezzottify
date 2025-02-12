@@ -1,0 +1,19 @@
+.searchResultRow {
+  display: flex;
+  align-items: center;
+  padding: 8px;
+  max-width: 800px;
+}
+
+.searchResultImage {
+  width: 80px;
+  height: 80px;
+  margin-right: 10px;
+}
+
+.searchResultRoundImage {
+  width: 80px;
+  height: 80px;
+  border-radius: 40px;
+  margin-right: 10px;
+}

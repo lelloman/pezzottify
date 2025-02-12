@@ -56,5 +56,6 @@ body {
   flex-direction: row;
   height: 100%;
   overflow: hidden;
+  text-align: left !important;
 }
 </style>
