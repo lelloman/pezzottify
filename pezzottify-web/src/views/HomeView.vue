@@ -1,7 +1,7 @@
 <template>
   <div class="mainContainer">
     <!-- Top Bar -->
-    <TopBar @search="handleSearch" />
+    <TopBar @search="handleSearch" :initialQuery="searchQuery" />
     <div class="centralPanel">
       <!-- Sidebar -->
       <SideBar :items="sidebarItems" @select-item="handleSelect" />
@@ -15,11 +15,12 @@
 
 
 <script setup>
-import { ref } from 'vue';
+import { ref, watch } from 'vue';
 import SideBar from '../components/SideBar.vue';
 import TopBar from '../components/TopBar.vue';
 import MainContent from '../components/MainContent.vue';
 import BottomPlayer from '../components/BottomPlayer.vue';
+import { useRoute } from 'vue-router';
 
 const sidebarItems = ref([
   { id: 1, name: 'Home', type: 'link' },
@@ -27,7 +28,17 @@ const sidebarItems = ref([
   { id: 3, name: 'Playlists', type: 'section', items: ['Playlist 1', 'Playlist 2'] }
 ]);
 
-const searchQuery = ref('');
+const route = useRoute();
+const searchQuery = ref(decodeURIComponent(route.params.query || ''));
+
+// Watch for changes in the route's query parameter
+watch(
+  () => route.params.query,
+  (newQuery) => {
+    searchQuery.value = decodeURIComponent(newQuery || '');
+  },
+  { immediate: true }
+);
 
 function handleSearch(query) {
   searchQuery.value = query;

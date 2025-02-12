@@ -14,6 +14,12 @@ const router = createRouter({
       meta: { requiresAuth: true }
     },
     {
+      path: '/search/:query?',
+      name: 'search_results',
+      component: HomeView,
+      meta: { requiresAuth: true }
+    },
+    {
       path: '/login',
       name: 'login',
       component: LoginView,

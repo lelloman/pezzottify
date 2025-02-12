@@ -28,12 +28,16 @@ import { ref, watch } from 'vue';
 import AlbumResult from './search/AlbumResult.vue';
 import ArtistResult from './search/ArtistResult.vue';
 import TrackResult from './search/TrackResult.vue';
+import { useRoute } from 'vue-router';
 
-const props = defineProps({ searchQuery: String });
 const results = ref([]);
 const loading = ref(false);
 
-watch(() => props.searchQuery, async (newQuery) => {
+const route = useRoute();
+const searchQuery = ref(route.params.query || '');
+
+const fetchResults = async (newQuery) => {
+  console.log("watch query? " + newQuery)
   if (newQuery) {
     loading.value = true;
     results.value = [];
@@ -46,7 +50,7 @@ watch(() => props.searchQuery, async (newQuery) => {
         body: JSON.stringify({ query: newQuery, resolve: true }),
       });
       const data = await response.json();
-      console.log("search response: " + JSON.stringify(data));
+      //console.log("search response: " + JSON.stringify(data));
       results.value = data;
     } catch (error) {
       console.error('Search error:', error);
@@ -56,7 +60,15 @@ watch(() => props.searchQuery, async (newQuery) => {
   } else {
     results.value = [];
   }
-});
+}
+watch(
+  () => route.params.query,
+  (newQuery) => {
+    searchQuery.value = newQuery || '';
+    fetchResults(newQuery);
+  },
+  { immediate: true }
+);
 </script>
 
 
