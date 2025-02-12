@@ -4,6 +4,7 @@ use crate::search::{
 };
 
 use axum::{extract::State, response::IntoResponse, routing::post, Json, Router};
+use chrono::Datelike;
 
 use super::{session::Session, state::ServerState};
 use crate::catalog::{Album, Artist, Catalog, Track};
@@ -21,6 +22,10 @@ struct SearchBody {
 fn resolve_album(catalog: &Catalog, album_id: &str) -> Option<ResolvedSearchResult> {
     let album = catalog.get_album(album_id)?;
 
+    let year = chrono::DateTime::from_timestamp(album.date, 0)
+        .map(|d| d.year())
+        .map(|y| y as i64);
+
     let resolved_album = ResolvedAlbum {
         id: album_id.to_owned(),
         name: album.name,
@@ -35,7 +40,7 @@ fn resolve_album(catalog: &Catalog, album_id: &str) -> Option<ResolvedSearchResu
             .first()
             .or_else(|| album.cover_group.first())
             .map(|i| i.id.to_owned()),
-        year: Some(album.date),
+        year,
     };
 
     Some(ResolvedSearchResult::Album(resolved_album))
