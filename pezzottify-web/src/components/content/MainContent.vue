@@ -16,9 +16,9 @@
       </div>
       <div v-else>No results found for "{{ searchQuery }}"</div>
     </div>
-    <div v-else-if="trackId">
-      Showing track {{ trackId }}.
-    </div>
+    <Track v-else-if="trackId" :trackId="trackId" />
+    <Album v-else-if="albumId" :albumId="albumId" />
+    <Artist v-else-if="artistId" :artistId="artistId" />
     <div v-else>
       <h1 class="text-2xl font-bold mb-4">Welcome to Home</h1>
       <p>This is your home content.</p>
@@ -29,9 +29,12 @@
 
 <script setup>
 import { ref, watch } from 'vue';
-import AlbumResult from './search/AlbumResult.vue';
-import ArtistResult from './search/ArtistResult.vue';
-import TrackResult from './search/TrackResult.vue';
+import AlbumResult from '@/components/search/AlbumResult.vue';
+import ArtistResult from '@/components/search/ArtistResult.vue';
+import TrackResult from '@/components/search/TrackResult.vue';
+import Track from '@/components/content/Track.vue';
+import Album from '@/components/content/Album.vue';
+import Artist from '@/components/content/Artist.vue';
 import { useRoute } from 'vue-router';
 
 const results = ref([]);
@@ -40,6 +43,8 @@ const loading = ref(false);
 const route = useRoute();
 const searchQuery = ref(route.params.query || '');
 const trackId = ref(route.params.trackId || '');
+const artistId = ref(route.params.artistId || '');
+const albumId = ref(route.params.albumId || '');
 
 const fetchResults = async (newQuery) => {
   console.log("watch query? " + newQuery)
@@ -74,6 +79,21 @@ watch(
   },
   { immediate: true }
 );
+watch(
+  () => route.params.trackId,
+  (newTrackId) => { trackId.value = newTrackId || ''; },
+  { immediate: true }
+)
+watch(
+  () => route.params.artistId,
+  (newArtistId) => { artistId.value = newArtistId || ''; },
+  { immediate: true }
+)
+watch(
+  () => route.params.albumId,
+  (newAlbumId) => { albumId.value = newAlbumId || ''; },
+  { immediate: true }
+)
 </script>
 
 

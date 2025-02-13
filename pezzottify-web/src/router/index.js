@@ -11,20 +11,35 @@ const router = createRouter({
       path: '/',
       name: 'home',
       component: HomeView,
-      meta: { requiresAuth: true }
+      meta: { requiresAuth: true },
+      children: [
+        {
+          path: '/search/:query?',
+          name: 'search_results',
+          component: HomeView,
+          meta: { requiresAuth: true }
+        },
+        {
+          path: '/track/:trackId?',
+          name: 'track',
+          component: HomeView,
+          meta: { requiresAuth: true }
+        },
+        {
+          path: '/album/:albumId?',
+          name: 'album',
+          component: HomeView,
+          meta: { requiresAuth: true }
+        },
+        {
+          path: '/artist/:artistId?',
+          name: 'artist',
+          component: HomeView,
+          meta: { requiresAuth: true }
+        }
+      ]
     },
-    {
-      path: '/search/:query?',
-      name: 'search_results',
-      component: HomeView,
-      meta: { requiresAuth: true }
-    },
-    {
-      path: '/track/:trackId?',
-      name: 'track',
-      component: HomeView,
-      meta: { requiresAuth: true }
-    },
+
     {
       path: '/login',
       name: 'login',

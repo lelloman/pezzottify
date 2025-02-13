@@ -16,10 +16,10 @@
 
 <script setup>
 import { ref, watch } from 'vue';
-import SideBar from '../components/SideBar.vue';
-import TopBar from '../components/TopBar.vue';
-import MainContent from '../components/MainContent.vue';
-import BottomPlayer from '../components/BottomPlayer.vue';
+import SideBar from '@/components/SideBar.vue';
+import TopBar from '@/components/TopBar.vue';
+import MainContent from '@/components/content/MainContent.vue';
+import BottomPlayer from '@/components/BottomPlayer.vue';
 import { useRoute } from 'vue-router';
 
 const sidebarItems = ref([
