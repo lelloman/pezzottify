@@ -101,6 +101,12 @@ watch(
 .mainContent {
   flex: 1;
   overflow: auto;
+  background-color: var(--panel-on-bg);
+  border-radius: var(--panel-border-radius);
+  padding: 16px;
+  margin-left: 8px;
+  margin-right: 16px;
+  margin-bottom: 16px;
 }
 
 .searchResultsContainer {

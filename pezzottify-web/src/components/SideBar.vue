@@ -24,10 +24,12 @@ const props = defineProps({ items: Array });
   min-width: 200px;
   width: 20%;
   max-width: 600px;
-  background-color: #1f2937;
-  color: white;
-  height: 100%;
   padding: 1rem;
   box-sizing: border-box;
+  background-color: var(--panel-on-bg);
+  border-radius: var(--panel-border-radius);
+  margin-left: 16px;
+  margin-bottom: 16px;
+  margin-right: 8px;
 }
 </style>
