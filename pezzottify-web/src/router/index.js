@@ -20,6 +20,12 @@ const router = createRouter({
       meta: { requiresAuth: true }
     },
     {
+      path: '/track/:trackId?',
+      name: 'track',
+      component: HomeView,
+      meta: { requiresAuth: true }
+    },
+    {
       path: '/login',
       name: 'login',
       component: LoginView,

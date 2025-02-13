@@ -1,5 +1,5 @@
 <template>
-  <div class="searchResultRow" :data-id="result.id" @click="handleClick($event)">
+  <div class="searchResultRow" :data-id="result" @click="handleClick(result)">
     <img :src="imageUrl" alt="Image" class="searchResultImage" />
     <div class="column">
       <h3 class="title">{{ result.name }}</h3>
@@ -14,6 +14,7 @@
 import '@/assets/search.css'
 import { computeImageUrl } from '@/utils';
 import { usePlayerStore } from '@/store/player';
+import { useRouter } from 'vue-router';
 
 const props = defineProps({
   result: {
@@ -33,11 +34,12 @@ function formatDuration(d) {
 const duration = formatDuration(props.result.duration);
 
 const playerStore = usePlayerStore();
+const router = useRouter();
 
 const handleClick = (event) => {
-  const id = event.currentTarget.dataset.id;
-  console.log('Clicked item with ID:', id);
-  playerStore.setTrack(id);
+  console.log(event);
+  router.push("/track/" + event.id);
+  //playerStore.setTrack(id);
 }
 
 </script>

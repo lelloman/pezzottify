@@ -16,9 +16,13 @@
       </div>
       <div v-else>No results found for "{{ searchQuery }}"</div>
     </div>
+    <div v-else-if="trackId">
+      Showing track {{ trackId }}.
+    </div>
     <div v-else>
       <h1 class="text-2xl font-bold mb-4">Welcome to Home</h1>
       <p>This is your home content.</p>
+      Showing track {{ trackId }}.
     </div>
   </main>
 </template>
@@ -35,6 +39,7 @@ const loading = ref(false);
 
 const route = useRoute();
 const searchQuery = ref(route.params.query || '');
+const trackId = ref(route.params.trackId || '');
 
 const fetchResults = async (newQuery) => {
   console.log("watch query? " + newQuery)
