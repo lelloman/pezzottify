@@ -2,7 +2,9 @@
 :root {
   --background: #121212;
   --panel-on-bg: #181818;
+  --highlighted-panel-color: #232323;
   --panel-border-radius: 8px;
+  --accent-color: rgb(231, 85, 0);
 
   --vt-c-white: #ffffff;
   --vt-c-white-soft: #f8f8f8;

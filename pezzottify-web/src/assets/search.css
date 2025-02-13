@@ -4,6 +4,12 @@
   padding: 8px;
   max-width: 800px;
   cursor: pointer;
+  border-radius: var(--panel-border-radius);
+  position: relative;
+}
+
+.searchResultRow:hover {
+  background-color: var(--highlighted-panel-color);
 }
 
 .searchResultImage {
@@ -17,4 +23,20 @@
   height: 80px;
   border-radius: 40px;
   margin-right: 10px;
+}
+
+.playIcon {
+  fill: var(--accent-color);
+  position: absolute;
+  bottom: 0px;
+  margin-left: 50px;
+  --size: 60px;
+  width: var(--size);
+  height: var(--size);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.searchResultRow:hover .playIcon {
+  opacity: 1;
 }
