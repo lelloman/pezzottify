@@ -1,5 +1,5 @@
 <template>
-  <div class="searchResultRow">
+  <div class="searchResultRow" :data-id="result.id" @click="handleClick($event)">
     <img :src="imageUrl" alt="Image" class="searchResultImage" />
     <div class="column">
       <h3 class="title">{{ result.name }}</h3>
@@ -13,6 +13,7 @@
 <script setup>
 import '@/assets/search.css'
 import { computeImageUrl } from '@/utils';
+import { usePlayerStore } from '@/store/player';
 
 const props = defineProps({
   result: {
@@ -30,6 +31,14 @@ function formatDuration(d) {
   return `${pad(hours)}:${pad(minutes)}:${pad(secs)}`;
 }
 const duration = formatDuration(props.result.duration);
+
+const playerStore = usePlayerStore();
+
+const handleClick = (event) => {
+  const id = event.currentTarget.dataset.id;
+  console.log('Clicked item with ID:', id);
+  playerStore.setTrack(id);
+}
 
 </script>
 
