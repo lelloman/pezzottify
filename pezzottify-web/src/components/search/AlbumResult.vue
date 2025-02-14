@@ -5,13 +5,18 @@
       <h3 class="title">{{ result.name }}</h3>
       <p class="subtitle">{{ result.year }} - {{ result.artists_names.join(", ") }}</p>
     </div>
+    <PlayIcon class="searchResultPlayIcon" :data-id="result" @click.stop="handlePlayClick(result)" />
   </div>
 </template>
 
 <script setup>
 import '@/assets/search.css'
+import { usePlayerStore } from '@/store/player';
 import { computedImageUrl } from '@/utils.js';
 import { useRouter } from 'vue-router';
+import PlayIcon from '../icons/PlayIcon.vue';
+
+const playerStore = usePlayerStore();
 
 const props = defineProps({
   result: {
@@ -27,7 +32,13 @@ const router = useRouter();
 const handleClick = (event) => {
   console.log(event);
   router.push("/album/" + event.id);
-  //playerStore.setTrack(id);
+}
+
+const handlePlayClick = (event) => {
+  console.log("play click");
+  console.log(event);
+  playerStore.setAlbum(event.id);
+  playerStore.setIsPlaying(true);
 }
 </script>
 

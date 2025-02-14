@@ -31,7 +31,7 @@
 
 <script setup>
 
-import { computed, ref, watch, h, onMounted, onUnmounted } from 'vue';
+import { computed, ref, watch, h } from 'vue';
 import { usePlayerStore } from '@/store/player';
 import { storeToRefs } from 'pinia';
 import { formatDuration } from '@/utils';
@@ -89,7 +89,7 @@ const startDragging = () => {
   draggingPercent.value = localProgressPercent.value;
 }
 
-const seekTrack = (event) => {
+const seekTrack = () => {
   if (draggingPercent.value) {
     const targetSeekPercent = draggingPercent.value;
     console.log("seekTrack target value: " + targetSeekPercent);
@@ -119,11 +119,11 @@ function rewind10Sec() {
 }
 
 function skipNextTrack() {
-  player.skipNext();
+  player.skipNextTrack();
 }
 
 function skipPreviousTrack() {
-  player.skipPrevious();
+  player.skipPreviousTrack();
 }
 
 watch(progressPercent,

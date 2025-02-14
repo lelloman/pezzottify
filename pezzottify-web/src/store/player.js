@@ -2,9 +2,13 @@ import { defineStore } from 'pinia';
 import { ref } from 'vue';
 import { Howl } from 'howler';
 import { formatImageUrl } from '@/utils';
+import axios from 'axios';
 
 export const usePlayerStore = defineStore('player', () => {
-  const playlist = ref([]);
+  const playlist = ref({
+    album: null,
+    tracks: [],
+  });
   const currentTrackIndex = ref(null);
   const currentTrack = ref(null);
   const isPlaying = ref(false);
@@ -13,18 +17,94 @@ export const usePlayerStore = defineStore('player', () => {
 
   let sound = null;
 
-  const setTrack = (newTrack) => {
-    const track = {
-      id: newTrack.id,
-      url: "/v1/content/stream/" + newTrack.id,
-      name: newTrack.name,
-      artist: newTrack.artists_names.join(", "),
-      imageUrl: formatImageUrl(newTrack.image_id),
-      duration: newTrack.duration,
+  const formatTrackUrl = (trackId) => "/v1/content/stream/" + trackId;
+
+  const chooseAlbumImageId = (album) => {
+    function imageSizeValue(x) {
+      if (x == "DEFAULT") return 3;
+      if (x == "LARGE") return 2;
+      if (x == "SMALL") return 1;
+      return 0;
     }
+    let found = null;
+    if (album.covers.length > 0) {
+      found = album.covers.reduce((a, b) => {
+        if (imageSizeValue(a) > imageSizeValue(b)) return a;
+        return b;
+      }, null)
+    }
+    if (album.cover_group.length > 0) {
+      found = album.cover_group.reduce((a, b) => {
+        if (imageSizeValue(a) > imageSizeValue(b)) return a;
+        return b;
+      }, null)
+    }
+    return found.id;
+  }
+
+  const makePlaylistFromResolvedAlbumResponse = (response) => {
+    const albumImageId = chooseAlbumImageId(response.album);
+    const albumImageUrl = formatImageUrl(albumImageId);
+    const allTracks = response.album.discs.flatMap(disc => disc.tracks).map((trackId) => {
+      const track = response.tracks[trackId];
+      console.log("track:");
+      console.log(track);
+      const artists_names = track.artists_ids.map((artistId) => response.artists[artistId].name);
+      return {
+        id: trackId,
+        url: formatTrackUrl(trackId),
+        name: track.name,
+        artist: artists_names.join(", "),
+        imageUrl: albumImageUrl,
+        duration: track.duration,
+      };
+    });
+
+    return {
+      album: {
+        name: response.album.name,
+      },
+      tracks: allTracks,
+    }
+  }
+
+  const makePlaylistFromTrack = (quakTrack) => {
+    return {
+      album: null,
+      tracks: [
+        {
+          id: quakTrack.id,
+          url: formatTrackUrl(quakTrack.id),
+          name: quakTrack.name,
+          artist: quakTrack.artists_names.join(", "),
+          imageUrl: formatImageUrl(quakTrack.image_id),
+          duration: quakTrack.duration,
+        }
+      ]
+    };
+  }
+
+  const setAlbum = async (albumId) => {
+    try {
+      const response = await axios.get(`/v1/content/album/${albumId}/resolved`);
+      console.log("setAlbum resolved response:");
+      console.log(response.data);
+      const albumPlaylist = makePlaylistFromResolvedAlbumResponse(response.data);
+      console.log("setAlbum " + albumId + " playlist =>");
+      console.log(albumPlaylist);
+      playlist.value = albumPlaylist;
+      loadTrack(0);
+      play();
+    } catch (error) {
+      console.error('Error fetching data:', error);
+    }
+  }
+
+  const setTrack = (newTrack) => {
+    const trackPlaylist = makePlaylistFromTrack(newTrack)
     console.log("PlayerStore setTrack:");
-    console.log(track);
-    playlist.value = [track];
+    console.log(trackPlaylist);
+    playlist.value = trackPlaylist;
     loadTrack(0);
     play();
   };
@@ -35,17 +115,18 @@ export const usePlayerStore = defineStore('player', () => {
     }
 
     currentTrackIndex.value = index;
-    const track = playlist.value[index]
+    const track = playlist.value.tracks[index]
     currentTrack.value = track;
     sound = new Howl({
       src: [track.url],
       html5: true,
-      onend: () => nextTrack(),
+      onend: () => skipNextTrack(),
       onplay: () => {
         console.log("PlayerStore onplay()");
         requestAnimationFrame(updateProgress);
       }
     });
+    requestAnimationFrame(updateProgress);
   }
 
   const updateProgress = () => {
@@ -60,17 +141,35 @@ export const usePlayerStore = defineStore('player', () => {
     }
   }
 
-  const nextTrack = () => {
+  const skipNextTrack = () => {
     let nextIndex = currentTrackIndex.value + 1;
-    if (nextIndex >= playlist.value.length) {
-      sound.seek(0);
-      sound.pause();
+    if (nextIndex >= playlist.value.tracks.length) {
+      if (sound) {
+        sound.unload();
+      }
       isPlaying.value = false;
       progressPercent.value = 0.0;
       progressSec.value = 0;
       return;
     }
     loadTrack(nextIndex);
+    if (isPlaying.value) {
+      play();
+    }
+  }
+
+  const skipPreviousTrack = () => {
+    let previousIndex = currentTrackIndex.value - 1;
+    if (previousIndex < 0) {
+      if (sound) {
+        sound.unload();
+      }
+      isPlaying.value = false;
+      progressPercent.value = 0.0;
+      progressSec.value = 0;
+      return;
+    }
+    loadTrack(previousIndex);
     if (isPlaying.value) {
       play();
     }
@@ -124,14 +223,6 @@ export const usePlayerStore = defineStore('player', () => {
     }
   };
 
-  const skipPrevious = () => {
-
-  }
-
-  const skipNext = () => {
-
-  }
-
   const forward10Sec = () => {
     if (sound) {
       sound.seek(sound.seek() + 10);
@@ -158,9 +249,10 @@ export const usePlayerStore = defineStore('player', () => {
     seekToPercentage,
     setIsPlaying,
     setTrack,
+    setAlbum,
     playPause,
-    skipPrevious,
-    skipNext,
+    skipPreviousTrack,
+    skipNextTrack,
     forward10Sec,
     rewind10Sec,
   };
