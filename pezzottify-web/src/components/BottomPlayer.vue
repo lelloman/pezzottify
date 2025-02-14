@@ -4,7 +4,8 @@
     <div class="flex items-center space-x-4">
       <button @click="playPause">{{ isPlaying ? 'Pause' : 'Play' }}</button>
       <button @click="stop">Stop</button>
-      <input type="range" v-model="localProgressPercent" max="100" @input="updateProgress" @change="seekTrack" />
+      <input type="range" :value="combinedProgressPercent" max="100" @mousedown="startDragging" @input="updateProgress"
+        @change="seekTrack" />
       <span>{{ formattedTime }}</span> <button class="p-2 bg-gray-700 rounded">Prev</button>
       <button class="p-2 bg-gray-700 rounded">Play/Pause</button>
       <button class="p-2 bg-gray-700 rounded">Next</button>
@@ -14,13 +15,17 @@
 
 <script setup>
 
-import { onMounted, computed, ref, watch } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { usePlayerStore } from '@/store/player';
 import { storeToRefs } from 'pinia';
 
 const player = usePlayerStore();
 const localCurrentTrack = ref(null);
 const localProgressPercent = ref(0);
+const combinedProgressPercent = computed(() => {
+  return draggingPercent.value || localProgressPercent.value;
+});
+const draggingPercent = ref(null);
 
 const { currentTrack, isPlaying, progressPercent, progressSec } = storeToRefs(player);
 
@@ -36,10 +41,17 @@ const formatTime = (timeInSeconds) => {
   return `${pad(hours)}:${pad(minutes)}:${pad(seconds)}`;
 };
 
+const startDragging = () => {
+  console.log("startDragging");
+  draggingPercent.value = localProgressPercent.value;
+}
+
 const seekTrack = (event) => {
   const targetSeekPercent = parseFloat(event.target.value);
   console.log("seekTrack target value: " + targetSeekPercent);
   player.seekToPercentage(targetSeekPercent / 100.0)
+  draggingPercent.value = null;
+  console.log("stopDragging");
 };
 
 const formattedTime = computed(() => formatTime(currentTimeSec.value));
@@ -50,8 +62,8 @@ function playPause() {
 }
 
 function updateProgress(event) {
-  localProgressPercent.value = event.target.value;
-  console.log("updateProgress() " + localProgressPercent.value);
+  draggingPercent.value = event.target.value;
+  //console.log("updateProgress() " + localProgressPercent.value);
 }
 
 watch(progressPercent,
