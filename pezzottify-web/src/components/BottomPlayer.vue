@@ -8,12 +8,13 @@
       </div>
     </div>
     <div class="playerControlsColumn">
-      <div class="playerControlButtonsRow">
-        <button class="">-10s</button>
-        <button class="">Next</button>
-        <button @click="playPause">{{ isPlaying ? 'Pause' : 'Play' }}</button>
-        <button class="">Prev</button>
-        <button class="">+10s</button>
+      <div class="playerControlsButtonsRow">
+        <ControlIconButton :action="rewind10Sec" :icon="Rewind10Sec" />
+        <ControlIconButton :action="skipPreviousTrack" :icon="SkipPrevious" />
+        <ControlIconButton v-if="!isPlaying" :action="playPause" :icon="PlayIcon" />
+        <ControlIconButton v-if="isPlaying" :action="playPause" :icon="PauseIcon" />
+        <ControlIconButton :action="skipNextTrack" :icon="NextTrack" />
+        <ControlIconButton :action="forward10Sec" :icon="Forward10Sec" />
       </div>
       <div class="progressControlsRow">
         <span>{{ formattedTime }}</span>
@@ -30,10 +31,29 @@
 
 <script setup>
 
-import { computed, ref, watch } from 'vue';
+import { computed, ref, watch, h } from 'vue';
 import { usePlayerStore } from '@/store/player';
 import { storeToRefs } from 'pinia';
 import { formatDuration } from '@/utils';
+import PlayIcon from './icons/PlayIcon.vue';
+import PauseIcon from './icons/PauseIcon.vue';
+import Forward10Sec from './icons/Forward10Sec.vue';
+import Rewind10Sec from './icons/Rewind10Sec.vue';
+import NextTrack from './icons/SkipNext.vue';
+import SkipPrevious from './icons/SkipPrevious.vue';
+
+const ControlIconButton = {
+  props: ["icon", "action"],
+  setup(props) {
+    const onClick = () => {
+      props.action();
+    }
+
+    return () => h('div', { class: 'scalingIcon', onClick }, [
+      h(props.icon, { class: 'lightControlFill' })
+    ])
+  },
+};
 
 const player = usePlayerStore();
 const localCurrentTrack = ref(null);
@@ -86,9 +106,29 @@ function updateProgress(event) {
   draggingPercent.value = event.target.value;
 }
 
+function forward10Sec() {
+  player.forward10Sec();
+}
+
+function rewind10Sec() {
+  player.rewind10Sec();
+}
+
+function skipNextTrack() {
+  player.skipNext();
+}
+
+function skipPreviousTrack() {
+  player.skipPrevious();
+}
+
 watch(progressPercent,
   (newProgressPercent) => {
-    localProgressPercent.value = newProgressPercent * 100;
+    if (newProgressPercent) {
+      localProgressPercent.value = newProgressPercent * 100;
+    } else {
+      localProgressPercent.value = 0;
+    }
   },
   { immediate: true }
 );
@@ -96,6 +136,8 @@ watch(progressSec,
   (newProgressSec) => {
     if (newProgressSec) {
       currentTimeSec.value = newProgressSec;
+    } else {
+      currentTimeSec.value = 0;
     }
   },
   { immediate: true }
@@ -131,9 +173,11 @@ watch(isPlaying,
 </script>
 
 <style scoped>
+@import "@/assets/icons.css";
+
 .footerPlayer {
   min-width: 800px;
-  height: 120px;
+  height: 100px;
   display: flex;
   flex-direction: row;
   overflow: hidden;
@@ -145,11 +189,14 @@ watch(isPlaying,
   flex: 1;
   display: flex;
   flex-direction: row;
+  align-items: center;
 }
 
 .trackImage {
-  width: 80px;
-  height: 80px;
+  width: 56px;
+  height: 56px;
+  border-radius: 4px;
+  ;
 }
 
 .trackNamesColumn {
@@ -172,15 +219,43 @@ watch(isPlaying,
 
 .playerControlsColumn {
   height: 100%;
-  align-content: center;
   flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.scalingIcon {
+  scale: 80%;
+  transition: scale 0.3s ease;
+  transform-origin: center;
+  margin: 0 4px;
+}
+
+.scalingIcon:hover {
+  scale: 100%;
+  transition: scale 0.3s ease;
+  cursor: pointer;
+}
+
+.scalingIcon:active {
+  scale: 90%;
+  transition: scale 0.3 ease;
+}
+
+.playerControlsButtonsRow {
+  display: flex;
+  flex-direction: row;
+  justify-content: center;
+  align-items: center;
 }
 
 .progressControlsRow {
+  flex: 1;
   display: flex;
   flex-direction: row;
   align-items: center;
-  align-content: center;
+  justify-content: center;
+  margin-bottom: 16px;
 }
 
 .extraControlsColumn {
@@ -193,5 +268,6 @@ watch(isPlaying,
   max-width: 400px;
   width: 100%;
   flex: 1;
+  margin: 0 12px;
 }
 </style>

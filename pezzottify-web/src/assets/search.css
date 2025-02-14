@@ -25,18 +25,15 @@
   margin-right: 10px;
 }
 
-.playIcon {
+.searchResultPlayIcon {
   fill: var(--accent-color);
   position: absolute;
   bottom: 0px;
   margin-left: 50px;
-  --size: 60px;
-  width: var(--size);
-  height: var(--size);
   opacity: 0;
   transition: opacity 0.3s ease;
 }
 
-.searchResultRow:hover .playIcon {
+.searchResultRow:hover .searchResultPlayIcon {
   opacity: 1;
 }

@@ -1,0 +1,15 @@
+.bigControlIcon {
+  --size: 60px;
+  width: var(--size);
+  height: var(--size);
+}
+
+.smallControlIcon {
+  --size: 40px;
+  width: var(--size);
+  height: var(--size);
+}
+
+.lightControlFill {
+  fill: #eee;
+}

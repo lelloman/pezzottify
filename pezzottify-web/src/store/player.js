@@ -63,6 +63,11 @@ export const usePlayerStore = defineStore('player', () => {
   const nextTrack = () => {
     let nextIndex = currentTrackIndex.value + 1;
     if (nextIndex >= playlist.value.length) {
+      sound.seek(0);
+      sound.pause();
+      isPlaying.value = false;
+      progressPercent.value = 0.0;
+      progressSec.value = 0;
       return;
     }
     loadTrack(nextIndex);
@@ -115,8 +120,33 @@ export const usePlayerStore = defineStore('player', () => {
         sound.play();
       }
       updateProgress();
+      requestAnimationFrame(updateProgress);
     }
   };
+
+  const skipPrevious = () => {
+
+  }
+
+  const skipNext = () => {
+
+  }
+
+  const forward10Sec = () => {
+    if (sound) {
+      sound.seek(sound.seek() + 10);
+      updateProgress();
+      requestAnimationFrame(updateProgress);
+    }
+  }
+
+  const rewind10Sec = () => {
+    if (sound) {
+      sound.seek(sound.seek() - 10);
+      updateProgress();
+      requestAnimationFrame(updateProgress);
+    }
+  }
 
   return {
     playlist,
@@ -129,5 +159,9 @@ export const usePlayerStore = defineStore('player', () => {
     setIsPlaying,
     setTrack,
     playPause,
+    skipPrevious,
+    skipNext,
+    forward10Sec,
+    rewind10Sec,
   };
 });
