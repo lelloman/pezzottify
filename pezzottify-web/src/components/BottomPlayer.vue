@@ -18,8 +18,8 @@
       </div>
       <div class="progressControlsRow">
         <span>{{ formattedTime }}</span>
-        <input class="rangeInput" type="range" :value="combinedProgressPercent" max="100" @mousedown="startDragging"
-          @input="updateProgress" @change="seekTrack" />
+        <TrackProgressBar class="rangeInput" :progress="combinedProgressPercent" @update:progress="updateProgress"
+          @update:startDrag="startDragging" @update:stopDrag="seekTrack" />
         <span>{{ duration }}</span>
       </div>
     </div>
@@ -31,7 +31,7 @@
 
 <script setup>
 
-import { computed, ref, watch, h } from 'vue';
+import { computed, ref, watch, h, onMounted, onUnmounted } from 'vue';
 import { usePlayerStore } from '@/store/player';
 import { storeToRefs } from 'pinia';
 import { formatDuration } from '@/utils';
@@ -41,6 +41,7 @@ import Forward10Sec from './icons/Forward10Sec.vue';
 import Rewind10Sec from './icons/Rewind10Sec.vue';
 import NextTrack from './icons/SkipNext.vue';
 import SkipPrevious from './icons/SkipPrevious.vue';
+import TrackProgressBar from './TrackProgressBar.vue';
 
 const ControlIconButton = {
   props: ["icon", "action"],
@@ -58,6 +59,7 @@ const ControlIconButton = {
 const player = usePlayerStore();
 const localCurrentTrack = ref(null);
 const localProgressPercent = ref(0);
+
 const combinedProgressPercent = computed(() => {
   return draggingPercent.value || localProgressPercent.value;
 });
@@ -88,11 +90,13 @@ const startDragging = () => {
 }
 
 const seekTrack = (event) => {
-  const targetSeekPercent = parseFloat(event.target.value);
-  console.log("seekTrack target value: " + targetSeekPercent);
-  player.seekToPercentage(targetSeekPercent / 100.0)
-  draggingPercent.value = null;
-  console.log("stopDragging");
+  if (draggingPercent.value) {
+    const targetSeekPercent = draggingPercent.value;
+    console.log("seekTrack target value: " + targetSeekPercent);
+    player.seekToPercentage(targetSeekPercent)
+    draggingPercent.value = null;
+    console.log("stopDragging");
+  }
 };
 
 const formattedTime = computed(() => formatTime(currentTimeSec.value));
@@ -103,7 +107,7 @@ function playPause() {
 }
 
 function updateProgress(event) {
-  draggingPercent.value = event.target.value;
+  draggingPercent.value = event;
 }
 
 function forward10Sec() {
@@ -125,8 +129,10 @@ function skipPreviousTrack() {
 watch(progressPercent,
   (newProgressPercent) => {
     if (newProgressPercent) {
-      localProgressPercent.value = newProgressPercent * 100;
+      //trackProgress.value = newProgressPercent;
+      localProgressPercent.value = newProgressPercent;
     } else {
+      //trackProgress.value = 0;
       localProgressPercent.value = 0;
     }
   },
