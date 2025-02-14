@@ -1,9 +1,10 @@
+use super::album::ResolvedAlbum;
 use super::{album, Album, Artist, Image, Track, TrackFormat};
 use anyhow::{bail, Context, Result};
 use rayon::iter::IntoParallelRefIterator;
 use regex::Regex;
 use std::borrow::Cow;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
@@ -509,5 +510,51 @@ impl Catalog {
 
     pub fn get_track_audio_path(&self, album_id: &str, track_id: &str) -> Option<PathBuf> {
         get_track_audio_path(&self.dirs, album_id, track_id)
+    }
+
+    pub fn get_resolved_album(&self, album_id: &str) -> Result<Option<ResolvedAlbum>> {
+        let album = match self.get_album(album_id) {
+            Some(album) => album,
+            None => return Ok(None),
+        };
+
+        let mut needed_artists_ids: HashSet<String> = HashSet::new();
+
+        for id in album.artists_ids.iter() {
+            needed_artists_ids.insert(id.to_string());
+        }
+
+        let mut tracks: HashMap<String, Track> = HashMap::new();
+        for disc in album.discs.iter() {
+            for track_id in disc.tracks.iter() {
+                match self.get_track(&track_id) {
+                    Some(track) => {
+                        let artists_ids = &track.artists_ids;
+                        for artist_id in artists_ids.iter() {
+                            needed_artists_ids.insert(artist_id.to_owned());
+                        }
+                        tracks.insert(track_id.clone(), track.clone());
+                    }
+                    None => bail!("Could not find track {}", track_id),
+                }
+            }
+        }
+
+        let mut artists: HashMap<String, Artist> = HashMap::new();
+        for artist_id in needed_artists_ids.iter() {
+            match self.get_artist(artist_id) {
+                Some(artist) => {
+                    artists.insert(artist_id.to_string(), artist);
+                }
+                None => bail!("Could not find artist {}", artist_id),
+            }
+        }
+
+        let resolved_album = ResolvedAlbum {
+            album,
+            artists,
+            tracks,
+        };
+        Ok(Some(resolved_album))
     }
 }

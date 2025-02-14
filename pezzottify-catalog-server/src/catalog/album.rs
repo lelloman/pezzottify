@@ -1,5 +1,7 @@
-use super::Image;
+use super::{Image, Track};
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use super::Artist;
 
 #[derive(Clone, Serialize, Deserialize, Debug)]
 pub enum AlbumType {
@@ -36,4 +38,11 @@ pub struct Album {
     pub original_title: String,
     pub version_title: String,
     pub type_str: String,
+}
+
+#[derive(Serialize)]
+pub struct ResolvedAlbum {
+    pub album: Album,
+    pub tracks: HashMap<String, Track>,
+    pub artists: HashMap<String, Artist>,
 }

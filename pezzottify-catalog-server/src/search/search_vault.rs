@@ -29,7 +29,7 @@ pub struct SearchResult {
 }
 
 #[derive(Debug, Serialize)]
-pub struct ResolvedAlbum {
+pub struct SearchedAlbum {
     pub id: String,
     pub name: String,
     pub artists_names: Vec<String>,
@@ -38,14 +38,14 @@ pub struct ResolvedAlbum {
 }
 
 #[derive(Debug, Serialize)]
-pub struct ResolvedArtist {
+pub struct SearchedArtist {
     pub id: String,
     pub name: String,
     pub image_id: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
-pub struct ResolvedTrack {
+pub struct SearchedTrack {
     pub id: String,
     pub name: String,
     pub duration: u32,
@@ -56,9 +56,9 @@ pub struct ResolvedTrack {
 #[derive(Debug, Serialize)]
 #[serde(tag = "type")]
 pub enum ResolvedSearchResult {
-    Track(ResolvedTrack),
-    Album(ResolvedAlbum),
-    Artist(ResolvedArtist),
+    Track(SearchedTrack),
+    Album(SearchedAlbum),
+    Artist(SearchedArtist),
 }
 
 impl PartialEq for SearchResult {

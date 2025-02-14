@@ -8,7 +8,7 @@ use std::{
 
 use tracing::error;
 
-use crate::search::SearchVault;
+use crate::search::{SearchedAlbum, SearchVault};
 use crate::catalog::Catalog;
 
 use axum_extra::extract::cookie::{Cookie, SameSite};
@@ -86,6 +86,18 @@ async fn get_album(
     match catalog.lock().unwrap().get_album(&id) {
         Some(album) => Json(album).into_response(),
         None => StatusCode::NOT_FOUND.into_response(),
+    }
+}
+
+async fn get_resolved_album(
+    session: Session,
+    State(catalog): State<GuardedCatalog>,
+    Path(id): Path<String>,
+) -> Response {
+    match catalog.lock().unwrap().get_resolved_album(&id) {
+        Ok(Some(album)) => Json(album).into_response(),
+        Ok(None) => StatusCode::NOT_FOUND.into_response(),
+        Err(err) => (StatusCode::INTERNAL_SERVER_ERROR, format!("{}", err)).into_response(),
     }
 }
 
@@ -229,6 +241,7 @@ fn make_app(
     let mut content_routes: Router = Router::new()
         .route("/artist/{id}", get(get_artist))
         .route("/album/{id}", get(get_album))
+        .route("/album/{id}/resolved", get(get_resolved_album))
         .route("/track/{id}", get(get_track))
         .route("/image/{id}", get(get_image))
         .route("/stream/{id}", get(stream_track))
@@ -281,6 +294,7 @@ mod tests {
         let protected_routes = vec![
             "/v1/content/artist/123",
             "/v1/content/album/123",
+            "/v1/content/album/123/resolved",
             "/v1/content/track/123",
             "/v1/content/image/123",
             "/v1/content/stream/123",

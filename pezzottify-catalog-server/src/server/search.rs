@@ -1,5 +1,5 @@
 use crate::search::{
-    HashedItemType, ResolvedAlbum, ResolvedArtist, ResolvedSearchResult, ResolvedTrack,
+    HashedItemType, SearchedAlbum, SearchedArtist, ResolvedSearchResult, SearchedTrack,
     SearchResult,
 };
 
@@ -26,7 +26,7 @@ fn resolve_album(catalog: &Catalog, album_id: &str) -> Option<ResolvedSearchResu
         .map(|d| d.year())
         .map(|y| y as i64);
 
-    let resolved_album = ResolvedAlbum {
+    let resolved_album = SearchedAlbum {
         id: album_id.to_owned(),
         name: album.name,
         artists_names: album
@@ -55,7 +55,7 @@ fn resolve_artist(catalog: &Catalog, artist_id: &str) -> Option<ResolvedSearchRe
         .or_else(|| artist.portrait_group.first())
         .map(|i| i.id.to_owned());
 
-    let resolved_artist = ResolvedArtist {
+    let resolved_artist = SearchedArtist {
         name: artist.name,
         id: artist_id.to_owned(),
         image_id,
@@ -94,7 +94,7 @@ fn resolve_track(catalog: &Catalog, track_id: &str) -> Option<ResolvedSearchResu
         .flatten()
         .map(|i| i.id);
 
-    let resolved_track = ResolvedTrack {
+    let resolved_track = SearchedTrack {
         id: track.id,
         name: track.name,
         duration: track.duration as u32,
