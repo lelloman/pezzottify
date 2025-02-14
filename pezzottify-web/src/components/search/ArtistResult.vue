@@ -7,7 +7,7 @@
 
 <script setup>
 import '@/assets/search.css'
-import { computeImageUrl } from '@/utils';
+import { computedImageUrl } from '@/utils';
 import { useRouter } from 'vue-router';
 
 const props = defineProps({
@@ -16,7 +16,7 @@ const props = defineProps({
     required: true,
   }
 });
-const imageUrl = computeImageUrl(props.result.image_id);
+const imageUrl = computedImageUrl(props.result.image_id);
 
 const router = useRouter();
 

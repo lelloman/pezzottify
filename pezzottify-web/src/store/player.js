@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia';
 import { ref } from 'vue';
 import { Howl } from 'howler';
+import { formatImageUrl } from '@/utils';
 
 export const usePlayerStore = defineStore('player', () => {
   const playlist = ref([]);
@@ -12,10 +13,14 @@ export const usePlayerStore = defineStore('player', () => {
 
   let sound = null;
 
-  const setTrack = (trackId) => {
+  const setTrack = (newTrack) => {
     const track = {
-      id: trackId,
-      url: "/v1/content/stream/" + trackId,
+      id: newTrack.id,
+      url: "/v1/content/stream/" + newTrack.id,
+      name: newTrack.name,
+      artist: newTrack.artists_names.join(", "),
+      imageUrl: formatImageUrl(newTrack.image_id),
+      duration: newTrack.duration,
     }
     console.log("PlayerStore setTrack:");
     console.log(track);

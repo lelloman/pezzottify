@@ -10,7 +10,7 @@
 
 <script setup>
 import '@/assets/search.css'
-import { computeImageUrl } from '@/utils.js';
+import { computedImageUrl } from '@/utils.js';
 import { useRouter } from 'vue-router';
 
 const props = defineProps({
@@ -20,7 +20,7 @@ const props = defineProps({
   }
 });
 
-const imageUrl = computeImageUrl(props.result.image_id);
+const imageUrl = computedImageUrl(props.result.image_id);
 
 const router = useRouter();
 

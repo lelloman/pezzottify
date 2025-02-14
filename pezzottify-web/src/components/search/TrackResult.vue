@@ -20,7 +20,7 @@
 
 <script setup>
 import '@/assets/search.css'
-import { computeImageUrl } from '@/utils';
+import { computedImageUrl, formatDuration } from '@/utils';
 import { usePlayerStore } from '@/store/player';
 import { useRouter } from 'vue-router';
 
@@ -30,15 +30,9 @@ const props = defineProps({
     required: true,
   }
 });
-const imageUrl = computeImageUrl(props.result.image_id);
-function formatDuration(d) {
-  const seconds = Math.round(d / 1000);
-  const pad = (num) => String(num).padStart(2, '0');
-  const hours = Math.floor(seconds / 3600);
-  const minutes = Math.floor((seconds % 3600) / 60);
-  const secs = seconds % 60;
-  return `${pad(hours)}:${pad(minutes)}:${pad(secs)}`;
-}
+const imageUrl = computedImageUrl(props.result.image_id);
+
+
 const duration = formatDuration(props.result.duration);
 
 const playerStore = usePlayerStore();
@@ -48,13 +42,12 @@ const handleTrackClick = (event) => {
   console.log("trackClick");
   console.log(event);
   router.push("/track/" + event.id);
-  //playerStore.setTrack(id);
 }
 
 const handlePlayClick = (event) => {
   console.log("play click");
   console.log(event);
-  playerStore.setTrack(event.id);
+  playerStore.setTrack(event);
   playerStore.setIsPlaying(true);
 }
 
