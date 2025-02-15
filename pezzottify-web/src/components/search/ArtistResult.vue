@@ -21,9 +21,7 @@ const imageUrl = computedImageUrl(props.result.image_id);
 const router = useRouter();
 
 const handleClick = (event) => {
-  console.log(event);
   router.push("/artist/" + event.id);
-  //playerStore.setTrack(id);
 }
 
 </script>

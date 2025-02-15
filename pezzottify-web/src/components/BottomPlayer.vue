@@ -46,7 +46,7 @@ import Forward10Sec from './icons/Forward10Sec.vue';
 import Rewind10Sec from './icons/Rewind10Sec.vue';
 import NextTrack from './icons/SkipNext.vue';
 import SkipPrevious from './icons/SkipPrevious.vue';
-import ProgressBar from './ProgressBar.vue';
+import ProgressBar from '@/components/common/ProgressBar.vue';
 import StopIcon from './icons/StopIcon.vue';
 import VolumeOnIcon from './icons/VolumeOnIcon.vue';
 import VolumeOffIcon from './icons/VolumeOffIcon.vue';
