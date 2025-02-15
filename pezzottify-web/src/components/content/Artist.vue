@@ -9,7 +9,10 @@
     <div v-if="data" class="relatedArtistsContainer">
       <RelatedArtist v-for="artistId in data.related" :key="artistId" :artistId="artistId" />
     </div>
-    <h2>Data for ID: {{ artistId }}</h2>
+    <div class="discographyContainer">
+      <h1>Discography:</h1>
+      <ArtistAlbums :artistId="artistId" />
+    </div>
     <pre>{{ data }}</pre>
   </div>
 
@@ -21,9 +24,10 @@
 <script setup>
 import { ref, watch, onMounted } from 'vue';
 import axios from 'axios';
-import { chooseCoverImageUrl } from '@/utils';
+import { chooseArtistCoverImageUrl } from '@/utils';
 import MultiSourceImage from '@/components/common/MultiSourceImage.vue';
 import RelatedArtist from '@/components/common/RelatedArtist.vue';
+import ArtistAlbums from '../common/ArtistAlbums.vue';
 
 const props = defineProps({
   artistId: {
@@ -49,7 +53,7 @@ const fetchData = async (id) => {
 watch(data,
   (newData) => {
     if (newData) {
-      coverUrls.value = chooseCoverImageUrl(newData);
+      coverUrls.value = chooseArtistCoverImageUrl(newData);
     }
   },
   { immediate: true });
@@ -85,5 +89,10 @@ onMounted(() => {
   display: flex;
   flex-direction: row;
   overflow-x: auto;
+  margin: 16px;
+}
+
+.discographyContainer {
+  margin: 16px;
 }
 </style>

@@ -30,7 +30,6 @@ const router = useRouter();
 
 const fetchArtistData = async (id) => {
   try {
-    // Replace with your actual API call to fetch artist data
     const response = await axios.get(`/v1/content/artist/${id}`);
     artistData.value = response.data;
   } catch (err) {

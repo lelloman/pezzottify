@@ -8,7 +8,7 @@
             <AlbumResult v-if="result.type === 'Album'" :result="result" />
             <ArtistResult v-else-if="result.type === 'Artist'" :result="result" />
             <TrackResult v-else-if="result.type === 'Track'" :result="result" />
-            <div v-else class="p-4 border rounded-lg shadow-sm bg-gray-50">
+            <div v-else class="">
               <p>Unknown result type</p>
             </div>
           </div>

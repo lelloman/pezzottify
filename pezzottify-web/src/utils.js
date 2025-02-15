@@ -17,8 +17,8 @@ export function formatDuration(d) {
   return `${pad(hours)}:${pad(minutes)}:${pad(secs)}`;
 }
 
-const makeImageUrlSortingFunction = (sortingPreferences) => {
-  return (artist) => {
+const makeImageUrlSortingFunction = (sortingPreferences, objectProps) => {
+  return (targetObject) => {
     const mapImg = (preferred) => {
       return (img) => {
         return {
@@ -28,8 +28,8 @@ const makeImageUrlSortingFunction = (sortingPreferences) => {
         }
       };
     };
-    const allImages = artist.portrait_group ? artist.portrait_group.map(mapImg(true)) : [];
-    allImages.push(...artist.portraits.map(mapImg(false)));
+    const allImages = targetObject[objectProps[0]] ? targetObject[objectProps[0]].map(mapImg(true)) : [];
+    allImages.push(...targetObject[objectProps[1]].map(mapImg(false)));
     function imageSizeValue(x) {
       return sortingPreferences[x.size] || 0;
     }
@@ -43,19 +43,23 @@ const makeImageUrlSortingFunction = (sortingPreferences) => {
   }
 }
 
-const artistCoverImageSizePreferences = {
+const bigImageSizePrefs = {
   "XLARGE": 5,
   "LARGE": 4,
   "DEFAULT": 2,
   "SMALL": 1,
 }
 
-const artistSmallImageSizePreferences = {
+const smallImageSizePrefs = {
   "SMALL": 4,
   "DEFAULT": 3,
   "LARGE": 2,
   "XLARGE": 1,
 }
 
-export const chooseCoverImageUrl = makeImageUrlSortingFunction(artistCoverImageSizePreferences);
-export const chooseSmallArtistImageUrl = makeImageUrlSortingFunction(artistSmallImageSizePreferences);
+const artistProps = ["portrait_group", "portraits"];
+const albumProps = ["covers", "cover_group"];
+
+export const chooseArtistCoverImageUrl = makeImageUrlSortingFunction(bigImageSizePrefs, artistProps);
+export const chooseSmallArtistImageUrl = makeImageUrlSortingFunction(smallImageSizePrefs, artistProps);
+export const chooseAlbumCoverImageUrl = makeImageUrlSortingFunction(bigImageSizePrefs, albumProps);
