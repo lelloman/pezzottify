@@ -18,12 +18,17 @@
       </div>
       <div class="progressControlsRow">
         <span>{{ formattedTime }}</span>
-        <TrackProgressBar class="rangeInput" :progress="combinedProgressPercent" @update:progress="updateProgress"
-          @update:startDrag="startDragging" @update:stopDrag="seekTrack" />
+        <ProgressBar id="TrackProgressBar" class="trackProgressBar" :progress="combinedProgressPercent"
+          @update:progress="updateTrackProgress" @update:startDrag="startDraggingTrackProgress"
+          @update:stopDrag="seekTrack" />
         <span>{{ duration }}</span>
       </div>
     </div>
-    <div class="extraControlsColumn">
+    <div class="extraControlsRow">
+      <ControlIconButton v-if="isMuted" :action="volumeOn" :icon="VolumeOffIcon" />
+      <ControlIconButton v-if="!isMuted" :action="volumeOff" :icon="VolumeOnIcon" />
+      <ProgressBar class="volumeProgressBar" :progress="computedVolumePercent" @update:progress="updateVolumeProgress"
+        @update:stratDrag="startDraggingVolumeProgress" @update:stopDrag="setVolume" />
       <ControlIconButton :action="stop" :icon="StopIcon" />
     </div>
   </footer>
@@ -41,8 +46,10 @@ import Forward10Sec from './icons/Forward10Sec.vue';
 import Rewind10Sec from './icons/Rewind10Sec.vue';
 import NextTrack from './icons/SkipNext.vue';
 import SkipPrevious from './icons/SkipPrevious.vue';
-import TrackProgressBar from './TrackProgressBar.vue';
+import ProgressBar from './ProgressBar.vue';
 import StopIcon from './icons/StopIcon.vue';
+import VolumeOnIcon from './icons/VolumeOnIcon.vue';
+import VolumeOffIcon from './icons/VolumeOffIcon.vue';
 
 const ControlIconButton = {
   props: ["icon", "action"],
@@ -62,11 +69,19 @@ const localCurrentTrack = ref(null);
 const localProgressPercent = ref(0);
 
 const combinedProgressPercent = computed(() => {
-  return draggingPercent.value || localProgressPercent.value;
+  return draggingTrackPercent.value || localProgressPercent.value;
 });
-const draggingPercent = ref(null);
+const draggingTrackPercent = ref(null);
 
-const { currentTrack, isPlaying, progressPercent, progressSec } = storeToRefs(player);
+const volumePercent = ref(0.0);
+const draggingVolumePercent = ref(null);
+const isMuted = ref(false);
+
+const computedVolumePercent = computed(() => {
+  return draggingVolumePercent.value || (isMuted.value ? 0.0 : volumePercent.value);
+})
+
+const { currentTrack, isPlaying, progressPercent, progressSec, volume, muted } = storeToRefs(player);
 
 const songName = ref('');
 const artistName = ref('');
@@ -85,17 +100,17 @@ const formatTime = (timeInSeconds) => {
   return `${pad(hours)}:${pad(minutes)}:${pad(seconds)}`;
 };
 
-const startDragging = () => {
+const startDraggingTrackProgress = () => {
   console.log("startDragging");
-  draggingPercent.value = localProgressPercent.value;
+  draggingTrackPercent.value = localProgressPercent.value;
 }
 
 const seekTrack = () => {
-  if (draggingPercent.value) {
-    const targetSeekPercent = draggingPercent.value;
+  if (draggingTrackPercent.value) {
+    const targetSeekPercent = draggingTrackPercent.value;
     console.log("seekTrack target value: " + targetSeekPercent);
     player.seekToPercentage(targetSeekPercent)
-    draggingPercent.value = null;
+    draggingTrackPercent.value = null;
     console.log("stopDragging");
   }
 };
@@ -107,8 +122,8 @@ function playPause() {
   player.playPause();
 }
 
-function updateProgress(event) {
-  draggingPercent.value = event;
+function updateTrackProgress(event) {
+  draggingTrackPercent.value = event;
 }
 
 function forward10Sec() {
@@ -131,13 +146,35 @@ function stop() {
   player.stop();
 }
 
+const startDraggingVolumeProgress = () => {
+  draggingVolumePercent.value = volumePercent.value;
+}
+
+const updateVolumeProgress = (event) => {
+  draggingVolumePercent.value = event;
+}
+
+const volumeOn = () => {
+  player.setMuted(false);
+}
+
+const volumeOff = () => {
+  player.setMuted(true);
+}
+
+const setVolume = () => {
+  volumePercent.value = draggingVolumePercent.value;
+  draggingVolumePercent.value = null;
+  console.log("BottomPlayer setVolume " + volumePercent.value);
+  player.setVolume(volumePercent.value);
+  player.setMuted(false);
+}
+
 watch(progressPercent,
   (newProgressPercent) => {
     if (newProgressPercent) {
-      //trackProgress.value = newProgressPercent;
       localProgressPercent.value = newProgressPercent;
     } else {
-      //trackProgress.value = 0;
       localProgressPercent.value = 0;
     }
   },
@@ -179,6 +216,21 @@ watch(isPlaying,
     console.log("Bottom Player newIsPlaying: " + newIsPlaying);
   },
   { immediate: true }
+);
+
+watch(muted,
+  (newMuted) => {
+    isMuted.value = newMuted;
+  },
+  { immediate: true },
+);
+watch(volume,
+  (newVolume) => {
+    if (newVolume) {
+      volumePercent.value = newVolume;
+    }
+  },
+  { immediate: true },
 );
 
 </script>
@@ -269,16 +321,25 @@ watch(isPlaying,
   margin-bottom: 16px;
 }
 
-.extraControlsColumn {
-  height: 100%;
-  align-content: center;
-  flex: 1;
-}
-
-.rangeInput {
+.trackProgressBar {
   max-width: 400px;
   width: 100%;
   flex: 1;
+  margin: 0 12px;
+}
+
+.extraControlsRow {
+  height: 100%;
+  align-content: center;
+  flex: 1;
+  display: flex;
+  flex-direction: row;
+  justify-content: center;
+  align-items: center;
+}
+
+.volumeProgressBar {
+  max-width: 150px;
   margin: 0 12px;
 }
 </style>

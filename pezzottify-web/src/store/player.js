@@ -14,6 +14,8 @@ export const usePlayerStore = defineStore('player', () => {
   const isPlaying = ref(false);
   const progressPercent = ref(0.0);
   const progressSec = ref(0);
+  const volume = ref(0.5);
+  const muted = ref(false);
 
   let sound = null;
 
@@ -120,6 +122,7 @@ export const usePlayerStore = defineStore('player', () => {
     sound = new Howl({
       src: [track.url],
       html5: true,
+      volume: muted.value ? 0.0 : volume.value,
       onend: () => skipNextTrack(),
       onplay: () => {
         console.log("PlayerStore onplay()");
@@ -251,6 +254,20 @@ export const usePlayerStore = defineStore('player', () => {
     playlist.value = null;
   }
 
+  const setVolume = (newVolume) => {
+    if (sound) {
+      sound.volume(newVolume);
+    }
+    volume.value = newVolume;
+  }
+
+  const setMuted = (newMuted) => {
+    if (sound) {
+      sound.volume(newMuted ? 0.0 : volume.value);
+    }
+    muted.value = newMuted;
+  }
+
   return {
     playlist,
     currentTrackIndex,
@@ -258,6 +275,8 @@ export const usePlayerStore = defineStore('player', () => {
     isPlaying,
     progressPercent,
     progressSec,
+    volume,
+    muted,
     seekToPercentage,
     setIsPlaying,
     setTrack,
@@ -268,5 +287,7 @@ export const usePlayerStore = defineStore('player', () => {
     forward10Sec,
     rewind10Sec,
     stop,
+    setVolume,
+    setMuted,
   };
 });
