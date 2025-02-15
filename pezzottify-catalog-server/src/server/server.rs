@@ -8,8 +8,8 @@ use std::{
 
 use tracing::error;
 
-use crate::search::{SearchedAlbum, SearchVault};
 use crate::catalog::Catalog;
+use crate::search::{SearchVault, SearchedAlbum};
 
 use axum_extra::extract::cookie::{Cookie, SameSite};
 
@@ -24,7 +24,7 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use tower::{Service, ServiceExt}; // for `call`, `oneshot`, and `ready
 
-use super::{auth, state::*, make_search_routes};
+use super::{auth, make_search_routes, state::*};
 use super::{stream_track, AuthStore, UserId};
 use crate::server::{auth::AuthManager, session::Session};
 
@@ -45,7 +45,6 @@ fn format_uptime(duration: Duration) -> String {
 
     format!("{}d {:02}:{:02}:{:02}", days, hours, minutes, seconds)
 }
-
 
 #[derive(Deserialize)]
 struct LoginBody {
@@ -98,6 +97,17 @@ async fn get_resolved_album(
         Ok(Some(album)) => Json(album).into_response(),
         Ok(None) => StatusCode::NOT_FOUND.into_response(),
         Err(err) => (StatusCode::INTERNAL_SERVER_ERROR, format!("{}", err)).into_response(),
+    }
+}
+
+async fn get_artist_albums(
+    session: Session,
+    State(catalog): State<GuardedCatalog>,
+    Path(id): Path<String>,
+) -> Response {
+    match catalog.lock().unwrap().get_artist_albums(id) {
+        None => StatusCode::NOT_FOUND.into_response(),
+        Some(albums_ids) => Json(albums_ids).into_response(),
     }
 }
 
@@ -242,6 +252,7 @@ fn make_app(
         .route("/artist/{id}", get(get_artist))
         .route("/album/{id}", get(get_album))
         .route("/album/{id}/resolved", get(get_resolved_album))
+        .route("/artist/{id}/albums", get(get_artist_albums))
         .route("/track/{id}", get(get_track))
         .route("/image/{id}", get(get_image))
         .route("/stream/{id}", get(stream_track))
@@ -294,6 +305,7 @@ mod tests {
         let protected_routes = vec![
             "/v1/content/artist/123",
             "/v1/content/album/123",
+            "/v1/content/artist/123/albums",
             "/v1/content/album/123/resolved",
             "/v1/content/track/123",
             "/v1/content/image/123",

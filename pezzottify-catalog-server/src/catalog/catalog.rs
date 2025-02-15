@@ -512,6 +512,25 @@ impl Catalog {
         get_track_audio_path(&self.dirs, album_id, track_id)
     }
 
+    pub fn get_artist_albums(&self, artist_id: String) -> Option<Vec<String>> {
+        if let None = self.get_artist(&artist_id) {
+            return None;
+        }
+
+        let album_ids = self
+            .albums
+            .values()
+            .filter_map(|album| {
+                if album.artists_ids.contains(&artist_id) {
+                    Some(album.id.clone())
+                } else {
+                    None
+                }
+            })
+            .collect();
+        Some(album_ids)
+    }
+
     pub fn get_resolved_album(&self, album_id: &str) -> Result<Option<ResolvedAlbum>> {
         let album = match self.get_album(album_id) {
             Some(album) => album,
