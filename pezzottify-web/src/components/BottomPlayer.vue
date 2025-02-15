@@ -24,7 +24,7 @@
       </div>
     </div>
     <div class="extraControlsColumn">
-      <button @click="stop">Stop</button>
+      <ControlIconButton :action="stop" :icon="StopIcon" />
     </div>
   </footer>
 </template>
@@ -42,6 +42,7 @@ import Rewind10Sec from './icons/Rewind10Sec.vue';
 import NextTrack from './icons/SkipNext.vue';
 import SkipPrevious from './icons/SkipPrevious.vue';
 import TrackProgressBar from './TrackProgressBar.vue';
+import StopIcon from './icons/StopIcon.vue';
 
 const ControlIconButton = {
   props: ["icon", "action"],
@@ -124,6 +125,10 @@ function skipNextTrack() {
 
 function skipPreviousTrack() {
   player.skipPreviousTrack();
+}
+
+function stop() {
+  player.stop();
 }
 
 watch(progressPercent,

@@ -239,6 +239,18 @@ export const usePlayerStore = defineStore('player', () => {
     }
   }
 
+  const stop = () => {
+    if (sound) {
+      sound.unload();
+    }
+    sound = null;
+    isPlaying.value = false;
+    progressPercent.value = 0.0;
+    progressSec.value = 0;
+    currentTrack.value = null;
+    playlist.value = null;
+  }
+
   return {
     playlist,
     currentTrackIndex,
@@ -255,5 +267,6 @@ export const usePlayerStore = defineStore('player', () => {
     skipNextTrack,
     forward10Sec,
     rewind10Sec,
+    stop,
   };
 });
