@@ -1,5 +1,6 @@
 <template>
-  <img :src="currentSrc" />
+  <img :src="currentSrc" alt=""
+    onerror="this.src='data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxNiIgaGVpZ2h0PSIxNiIgdmlld0JveD0iMCAwIDE2IDE2Ij48L3N2Zz4=';" />
 </template>
 
 <script setup>
@@ -14,6 +15,7 @@ const props = defineProps({
 });
 
 const currentSrc = ref('');
+let loaded = false;
 
 const tryLoadImage = (url) => {
   return new Promise((resolve, reject) => {
@@ -29,21 +31,22 @@ const loadImagesSequentially = async (urls) => {
     try {
       const successfulUrl = await tryLoadImage(url);
       currentSrc.value = successfulUrl;
-      break; // Stop after the first successful load
+      loaded = true;
+      break;
     } catch {
       // Continue to the next URL if this one fails
     }
   }
 };
 
-watch(
-  () => props.urls,
-  (newUrls) => {
-    if (newUrls && newUrls.length > 0) {
-      currentSrc.value = ''; // Reset the image source
-      loadImagesSequentially(newUrls);
-    }
-  },
-  { immediate: true }
-);
+watch([window.globalConf.imagesEnabled, () => props.urls], ([newImagesEnabled, newUrls], [oldImagesEnabled, oldUrls]) => {
+  if (!loaded && newImagesEnabled && newUrls && newUrls.length > 0) {
+    currentSrc.value = '';
+    loadImagesSequentially(newUrls);
+  } else if (oldImagesEnabled && !newImagesEnabled) {
+    loaded = false;
+    currentSrc.value = '';
+  }
+}, { immediate: true });
+
 </script>

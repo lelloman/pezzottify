@@ -1,6 +1,6 @@
 <template>
   <div class="searchResultRow" :data-id="result" @click="handleClick(result)">
-    <img :src="imageUrl" alt="Image" class="searchResultImage" />
+    <MultiSourceImage :urls="[imageUrl]" alt="Image" class="searchResultImage" />
     <div class="column">
       <h3 class="title">{{ result.name }}</h3>
       <ClickableArtistsNames class="subtitle" :prefix="result.year + ' - '"
@@ -17,6 +17,7 @@ import { computedImageUrl } from '@/utils.js';
 import { useRouter } from 'vue-router';
 import PlayIcon from '@/components/icons/PlayIcon.vue';
 import ClickableArtistsNames from '@/components/common/ClickableArtistsNames.vue';
+import MultiSourceImage from '../common/MultiSourceImage.vue';
 
 const playerStore = usePlayerStore();
 

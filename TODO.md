@@ -5,8 +5,9 @@
 - Make left and right panel collapsable
 - Make album content page
 - Make track content page
-- Persist data like playback status and volume
+- Persist data like playback status and volume and globalconfig
 - T Y P E S C R I P T?????
+- ~Add global config flag to disable images~
 - ~Make artists names clickable~
 - ~Log requests/responses to stdout~
 

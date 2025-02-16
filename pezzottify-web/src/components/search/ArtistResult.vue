@@ -1,6 +1,6 @@
 <template>
   <div class="searchResultRow" :data-id="result" @click="handleClick(result)">
-    <img :src="imageUrl" alt="Image" class="searchResultRoundImage" />
+    <MultiSourceImage :urls="[imageUrl]" alt="Image" class="searchResultRoundImage" />
     <h3 class="title">{{ result.name }}</h3>
   </div>
 </template>
@@ -9,6 +9,7 @@
 import '@/assets/search.css'
 import { computedImageUrl } from '@/utils';
 import { useRouter } from 'vue-router';
+import MultiSourceImage from '../common/MultiSourceImage.vue';
 
 const props = defineProps({
   result: {

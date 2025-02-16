@@ -1,6 +1,6 @@
 <template>
   <div class="searchResultRow" :data-id="result" @click="handleTrackClick(result)">
-    <img :src="imageUrl" alt="Image" class="searchResultImage" />
+    <MultiSourceImage :urls="[imageUrl]" alt="Image" class="searchResultImage" />
     <div class="column">
       <h3 class="title">{{ result.name }}</h3>
       <ClickableArtistsNames :artistsIdsNames="result.artists_ids_names" />
@@ -18,6 +18,7 @@ import { usePlayerStore } from '@/store/player';
 import { useRouter } from 'vue-router';
 import PlayIcon from '../icons/PlayIcon.vue';
 import ClickableArtistsNames from '../common/ClickableArtistsNames.vue';
+import MultiSourceImage from '../common/MultiSourceImage.vue';
 
 const props = defineProps({
   result: {
