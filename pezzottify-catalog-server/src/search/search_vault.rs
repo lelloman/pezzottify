@@ -32,7 +32,7 @@ pub struct SearchResult {
 pub struct SearchedAlbum {
     pub id: String,
     pub name: String,
-    pub artists_names: Vec<String>,
+    pub artists_ids_names: Vec<(String, String)>,
     pub image_id: Option<String>,
     pub year: Option<i64>,
 }
@@ -49,7 +49,7 @@ pub struct SearchedTrack {
     pub id: String,
     pub name: String,
     pub duration: u32,
-    pub artists_names: Vec<String>,
+    pub artists_ids_names: Vec<(String, String)>,
     pub image_id: Option<String>,
 }
 

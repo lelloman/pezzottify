@@ -1,6 +1,6 @@
 use crate::search::{
-    HashedItemType, SearchedAlbum, SearchedArtist, ResolvedSearchResult, SearchedTrack,
-    SearchResult,
+    HashedItemType, ResolvedSearchResult, SearchResult, SearchedAlbum, SearchedArtist,
+    SearchedTrack,
 };
 
 use axum::{extract::State, response::IntoResponse, routing::post, Json, Router};
@@ -29,11 +29,11 @@ fn resolve_album(catalog: &Catalog, album_id: &str) -> Option<ResolvedSearchResu
     let resolved_album = SearchedAlbum {
         id: album_id.to_owned(),
         name: album.name,
-        artists_names: album
+        artists_ids_names: album
             .artists_ids
             .iter()
             .filter_map(|a_id| catalog.get_artist(a_id))
-            .map(|a| a.name)
+            .map(|a| (a.id, a.name))
             .collect(),
         image_id: album
             .covers
@@ -73,7 +73,10 @@ fn resolve_track(catalog: &Catalog, track_id: &str) -> Option<ResolvedSearchResu
         .filter_map(|artist_id| catalog.get_artist(artist_id))
         .collect();
 
-    let artists_names = artists.iter().map(|a| a.name.clone()).collect();
+    let artists_ids_names = artists
+        .iter()
+        .map(|a| (a.id.clone(), a.name.clone()))
+        .collect();
 
     let image_id = catalog
         .get_album(&track.album_id)
@@ -99,7 +102,7 @@ fn resolve_track(catalog: &Catalog, track_id: &str) -> Option<ResolvedSearchResu
         name: track.name,
         duration: track.duration as u32,
         image_id,
-        artists_names,
+        artists_ids_names,
     };
 
     Some(ResolvedSearchResult::Track(resolved_track))
