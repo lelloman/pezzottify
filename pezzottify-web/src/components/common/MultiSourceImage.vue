@@ -4,7 +4,10 @@
 </template>
 
 <script setup>
+import { useConfigStore } from '@/store/config';
 import { ref, watch } from 'vue';
+
+const configStore = useConfigStore();
 
 const props = defineProps({
   urls: {
@@ -38,8 +41,10 @@ const loadImagesSequentially = async (urls) => {
     }
   }
 };
-
-watch([window.globalConf.imagesEnabled, () => props.urls], ([newImagesEnabled, newUrls], [oldImagesEnabled, oldUrls]) => {
+watch([() => configStore.imagesEnabled, () => props.urls], ([newImagesEnabled, newUrls], [oldImagesEnabled, oldUrls]) => {
+  if (newUrls != oldUrls) {
+    loaded = false;
+  }
   if (!loaded && newImagesEnabled && newUrls && newUrls.length > 0) {
     currentSrc.value = '';
     loadImagesSequentially(newUrls);

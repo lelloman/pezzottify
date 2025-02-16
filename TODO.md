@@ -5,8 +5,10 @@
 - Make left and right panel collapsable
 - Make album content page
 - Make track content page
-- Persist data like playback status and volume and globalconfig
 - T Y P E S C R I P T?????
+- Bind space key to toggle play/pause
+- Make titles and texts on single line and sliding if too long
+- ~Persist data like playback status and volume and globalconfig~
 - ~Add global config flag to disable images~
 - ~Make artists names clickable~
 - ~Log requests/responses to stdout~

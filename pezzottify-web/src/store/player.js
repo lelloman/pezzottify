@@ -1,10 +1,12 @@
 import { defineStore } from 'pinia';
-import { ref } from 'vue';
+import { ref, watch } from 'vue';
 import { Howl } from 'howler';
 import { formatImageUrl, chooseAlbumCoverImageUrl } from '@/utils';
 import axios from 'axios';
 
 export const usePlayerStore = defineStore('player', () => {
+
+  /* PROPS */
   const playlist = ref({
     album: null,
     tracks: [],
@@ -18,15 +20,80 @@ export const usePlayerStore = defineStore('player', () => {
   const muted = ref(false);
 
   let sound = null;
+  let pendingPercentSeek = null;
+  /* PROPS */
 
+  /* PERSISTENCE */
+  const savedPlaylist = localStorage.getItem("playlist");
+  if (savedPlaylist) {
+    playlist.value = JSON.parse(savedPlaylist);
+    const loadedTrackIndex = localStorage.getItem("currentTrackIndex");
+    if (loadedTrackIndex) {
+      const indexValue = Number.parseInt(loadedTrackIndex);
+      console.log("Loaded currenTrackIndex " + indexValue);
+      if (!Number.isNaN(indexValue) && indexValue >= 0 && indexValue < playlist.value.tracks.length) {
+        currentTrackIndex.value = indexValue;
+        currentTrack.value = playlist.value.tracks[indexValue]
+      }
+    }
+    const savedPercent = Number.parseFloat(localStorage.getItem("progressPercent"));
+    console.log("loaded savedPercent " + savedPercent);
+    if (!Number.isNaN(savedPercent) && savedPercent >= 0.0 && savedPercent <= 1.0) {
+      pendingPercentSeek = savedPercent;
+      progressPercent.value = savedPercent;
+      console.log("seeking saved percent");
+    }
+    const savedSec = Number.parseFloat(localStorage.getItem("progressSec"));
+    if (!Number.isNaN(savedSec)) {
+      progressSec.value = savedSec;
+    }
+  }
+  watch(playlist, (newPlaylist) => localStorage.setItem("playlist", JSON.stringify(newPlaylist)))
+
+  const savedMuted = localStorage.getItem("muted");
+  if (savedMuted === 'true') {
+    muted.value = true;
+  }
+  watch(muted, (newMuted) => localStorage.setItem('muted', newMuted));
+
+  const savedVolume = localStorage.getItem('volume');
+  if (savedVolume) {
+    const parseVolume = Number.parseFloat(savedVolume);
+    if (!Number.isNaN(parseFloat)) {
+      volume.value = Math.max(0.0, Math.min(1.0, parseVolume));
+    }
+  }
+  watch(volume, (newVolume) => localStorage.setItem("volume", newVolume));
+
+  watch(currentTrackIndex, (newTrackIndex) => {
+    if (Number.isInteger(newTrackIndex)) {
+      localStorage.setItem('currentTrackIndex', newTrackIndex);
+    }
+  });
+
+  function persistProgressPercent() {
+    localStorage.setItem("progressPercent", progressPercent.value);
+    lastSecProgressSaved = progressSec.value || 0;
+    localStorage.setItem("progressSec", progressSec.value);
+  }
+
+  let lastSecProgressSaved = 0;
+  watch(progressSec, (newSec) => {
+    let diff = Math.abs(Math.round(newSec) - lastSecProgressSaved);
+    if (diff > 4) {
+      persistProgressPercent();
+    }
+
+  });
+  /* PERSISTENCE */
+
+  /* ACTIONS */
   const formatTrackUrl = (trackId) => "/v1/content/stream/" + trackId;
 
   const makePlaylistFromResolvedAlbumResponse = (response) => {
     const albumImageUrls = chooseAlbumCoverImageUrl(response.album);
     const allTracks = response.album.discs.flatMap(disc => disc.tracks).map((trackId) => {
       const track = response.tracks[trackId];
-      console.log("track:");
-      console.log(track);
       const artistsIdsNames = track.artists_ids.map((artistId) => [artistId, response.artists[artistId].name]);
       return {
         id: trackId,
@@ -65,11 +132,7 @@ export const usePlayerStore = defineStore('player', () => {
   const setAlbum = async (albumId) => {
     try {
       const response = await axios.get(`/v1/content/album/${albumId}/resolved`);
-      console.log("setAlbum resolved response:");
-      console.log(response.data);
       const albumPlaylist = makePlaylistFromResolvedAlbumResponse(response.data);
-      console.log("setAlbum " + albumId + " playlist =>");
-      console.log(albumPlaylist);
       playlist.value = albumPlaylist;
       loadTrack(0);
       play();
@@ -93,30 +156,59 @@ export const usePlayerStore = defineStore('player', () => {
     }
 
     currentTrackIndex.value = index;
+    console.log("loadTrack() playlist:");
+    console.log(playlist);
     const track = playlist.value.tracks[index]
     currentTrack.value = track;
     sound = new Howl({
       src: [track.url],
       html5: true,
+      preload: true,
       volume: muted.value ? 0.0 : volume.value,
+      pos: 10,
+      autoplay: isPlaying.value,
       onend: () => skipNextTrack(),
       onplay: () => {
         console.log("PlayerStore onplay()");
-        requestAnimationFrame(updateProgress);
-      }
+      },
+      onload: () => {
+        if (pendingPercentSeek) {
+          requestAnimationFrame(() => {
+            seekToPercentage(pendingPercentSeek);
+            pendingPercentSeek = null;
+            updateProgress();
+          });
+        }
+        console.log("PlayerStore onLoad()");
+      },
     });
-    requestAnimationFrame(updateProgress);
+    requestUpdateProgressOnNewFrame();
   }
 
-  const updateProgress = () => {
+  let lastUpdateMs = 0;
+
+  const relaxedUpdateProgress = () => {
+    updateProgress(true)
+  }
+  const requestUpdateProgressOnNewFrame = () => {
+    requestAnimationFrame(relaxedUpdateProgress);
+  }
+  const updateProgress = (relaxed) => {
+    if (relaxed) {
+      if (Date.now() - lastUpdateMs < 300) {
+        requestUpdateProgressOnNewFrame();
+        return;
+      }
+    }
     if (sound) {
       const currentTime = sound.seek();
       const duration = sound.duration();
       progressPercent.value = (currentTime / duration);
       progressSec.value = currentTime;
       if (sound.playing()) {
-        requestAnimationFrame(updateProgress);
+        requestUpdateProgressOnNewFrame();
       }
+      lastUpdateMs = Date.now();
     }
   }
 
@@ -198,7 +290,8 @@ export const usePlayerStore = defineStore('player', () => {
         sound.play();
       }
       updateProgress();
-      requestAnimationFrame(updateProgress);
+      requestUpdateProgressOnNewFrame();
+      persistProgressPercent();
     }
   };
 
@@ -206,7 +299,7 @@ export const usePlayerStore = defineStore('player', () => {
     if (sound) {
       sound.seek(sound.seek() + 10);
       updateProgress();
-      requestAnimationFrame(updateProgress);
+      requestUpdateProgressOnNewFrame();
     }
   }
 
@@ -214,7 +307,7 @@ export const usePlayerStore = defineStore('player', () => {
     if (sound) {
       sound.seek(sound.seek() - 10);
       updateProgress();
-      requestAnimationFrame(updateProgress);
+      requestUpdateProgressOnNewFrame();
     }
   }
 
@@ -227,7 +320,7 @@ export const usePlayerStore = defineStore('player', () => {
     progressPercent.value = 0.0;
     progressSec.value = 0;
     currentTrack.value = null;
-    playlist.value = null;
+    playlist.value = { album: null, tracks: [] };
   }
 
   const setVolume = (newVolume) => {
@@ -243,6 +336,7 @@ export const usePlayerStore = defineStore('player', () => {
     }
     muted.value = newMuted;
   }
+  /* ACTIONS */
 
   return {
     playlist,
