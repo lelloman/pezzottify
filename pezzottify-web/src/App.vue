@@ -1,5 +1,25 @@
 <script setup>
-import { RouterLink, RouterView } from 'vue-router'
+import { RouterView } from 'vue-router'
+import { usePlayerStore } from './store/player';
+import { onMounted, onUnmounted } from 'vue';
+
+const player = usePlayerStore();
+
+function handleKeyDown(event) {
+  const isEditable = event.target.tagName === 'INPUT' ||
+    event.target.tagName === 'TEXTAREA' ||
+    event.target.isContentEditable;
+  if (!isEditable && event.key === ' ') {
+    player.playPause();
+  }
+}
+
+onMounted(() => {
+  window.addEventListener('keydown', handleKeyDown);
+})
+onUnmounted(() => {
+  window.removeEventListener('keydown', handleKeyDown);
+})
 </script>
 
 <template>
