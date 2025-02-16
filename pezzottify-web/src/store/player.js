@@ -169,6 +169,7 @@ export const usePlayerStore = defineStore('player', () => {
       autoplay: isPlaying.value,
       onend: () => skipNextTrack(),
       onplay: () => {
+        requestUpdateProgressOnNewFrame();
         console.log("PlayerStore onplay()");
       },
       onload: () => {
