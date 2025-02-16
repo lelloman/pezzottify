@@ -18,6 +18,7 @@ argon2 = "0.5.3"
 async-trait = "0.1.85"
 axum = "0.8.1"
 axum-extra = { version = "0.10.0", features = ["cookie"] }
+byte-unit = "5.1.6"
 chrono = "0.4.39"
 clap = { version = "4.4.11", features = ["derive"] }
 futures = "0.3.31"

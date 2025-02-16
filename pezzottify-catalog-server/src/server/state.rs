@@ -6,11 +6,14 @@ use std::time::Instant;
 
 use crate::server::auth::AuthManager;
 
+use super::ServerConfig;
+
 pub type GuardedCatalog = Arc<Mutex<Catalog>>;
 pub type GuardedAuthManager = Arc<Mutex<AuthManager>>;
 
 #[derive(Clone)]
 pub struct ServerState {
+    pub config: ServerConfig,
     pub start_time: Instant,
     pub catalog: GuardedCatalog,
     pub search_vault: Arc<Mutex<Box<dyn SearchVault>>>,
@@ -36,5 +39,11 @@ impl FromRef<ServerState> for Arc<Mutex<Box<dyn SearchVault>>> {
 impl FromRef<ServerState> for GuardedAuthManager {
     fn from_ref(input: &ServerState) -> Self {
         input.auth_manager.clone()
+    }
+}
+
+impl FromRef<ServerState> for ServerConfig {
+    fn from_ref(input: &ServerState) -> Self {
+        input.config.clone()
     }
 }

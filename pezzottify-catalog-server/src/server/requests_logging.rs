@@ -1,0 +1,161 @@
+use super::ServerConfig;
+use axum::extract::State;
+use axum::{
+    body::Body,
+    http::{header::HeaderMap, Request, Response},
+    middleware::{self, Next},
+    response::IntoResponse,
+    Router,
+};
+use std::time::Instant;
+use tracing::{error, info};
+
+#[derive(PartialEq, PartialOrd, Clone, Debug, clap::ValueEnum)]
+pub enum RequestsLoggingLevel {
+    None,
+    Path,
+    Headers,
+    Body,
+}
+
+impl ToString for RequestsLoggingLevel {
+    fn to_string(&self) -> String {
+        format!("{:?}", self)
+    }
+}
+
+const MAX_LOGGABLE_BODY_LENGTH: usize = 1024;
+
+enum ContentLengthParseResult {
+    Ok(usize),
+    No(&'static str),
+}
+
+fn parse_content_length(headers: &HeaderMap) -> ContentLengthParseResult {
+    let value = match headers.get("content-length") {
+        Some(x) => x,
+        None => return ContentLengthParseResult::No("Content-length not set."),
+    };
+
+    let str_value = match value.to_str() {
+        Ok(x) => x,
+        Err(_) => {
+            return ContentLengthParseResult::No("Could not get Content-length string value.")
+        }
+    };
+
+    match str_value.parse::<usize>() {
+        Ok(x) => ContentLengthParseResult::Ok(x),
+        Err(_) => {
+            return ContentLengthParseResult::No("Could not parse Content-length numeric value.")
+        }
+    }
+}
+
+pub async fn logging_middleware(
+    State(config): State<ServerConfig>,
+    mut request: Request<Body>,
+    next: Next,
+) -> impl IntoResponse {
+    let level = config.requests_logging_level;
+    if level <= RequestsLoggingLevel::None {
+        return next.run(request).await;
+    }
+
+    let start = Instant::now();
+
+    let method = request.method().to_string();
+    let uri = request.uri().to_string();
+    info!(">>> {} {}", method, uri);
+
+    if level >= RequestsLoggingLevel::Headers {
+        info!("  Req Headers:");
+        for header in request.headers().iter() {
+            info!("    {:?}: {:?}", header.0, header.1);
+        }
+    }
+
+    if level >= RequestsLoggingLevel::Body {
+        match parse_content_length(request.headers()) {
+            ContentLengthParseResult::No(reason) => info!("  Req Body: {}", reason),
+            ContentLengthParseResult::Ok(size) => {
+                if size < MAX_LOGGABLE_BODY_LENGTH {
+                    let (parts, body) = request.into_parts();
+                    let bytes = match axum::body::to_bytes(body, size).await {
+                        Ok(bytes) => bytes,
+                        Err(err) => {
+                            error!("Failed to read request body: {:?}", err);
+                            return Response::builder()
+                                .status(500)
+                                .body(axum::body::Body::from("Internal Server Error"))
+                                .unwrap();
+                        }
+                    };
+                    info!("  Req Body:\n{}", String::from_utf8_lossy(&bytes));
+                    request = Request::from_parts(parts, Body::from(bytes))
+                } else {
+                    info!(
+                        "  Req Body: Too big to log ({:#})",
+                        byte_unit::Byte::from(size)
+                    );
+                }
+            }
+        }
+    }
+
+    let mut response = next.run(request).await;
+
+    if level >= RequestsLoggingLevel::Headers {
+        info!("  Resp Headers:");
+        for header in response.headers().iter() {
+            info!("    {:?}: {:?}", header.0, header.1);
+        }
+    }
+
+    if level >= RequestsLoggingLevel::Body {
+        match parse_content_length(response.headers()) {
+            ContentLengthParseResult::No(reason) => info!("  Resp Body: {}", reason),
+            ContentLengthParseResult::Ok(size) => {
+                if size < MAX_LOGGABLE_BODY_LENGTH {
+                    let (parts, body) = response.into_parts();
+                    let bytes = match axum::body::to_bytes(body, size).await {
+                        Ok(bytes) => bytes,
+                        Err(err) => {
+                            error!("Failed to read response body: {:?}", err);
+                            return Response::builder()
+                                .status(500)
+                                .body(axum::body::Body::from("Internal Server Error"))
+                                .unwrap();
+                        }
+                    };
+                    info!("  Req Body:\n{}", String::from_utf8_lossy(&bytes));
+                    response = Response::from_parts(parts, Body::from(bytes))
+                } else {
+                    info!(
+                        "  Req Body: Too big to log ({:#})",
+                        byte_unit::Byte::from(size)
+                    );
+                }
+            }
+        }
+    }
+
+    let status = response.status().as_u16();
+    let duration: std::time::Duration = start.elapsed();
+    info!("<<< {} ({}ms)", status, duration.as_millis());
+
+    response
+}
+
+#[cfg(test)]
+mod tests {
+    use super::RequestsLoggingLevel;
+
+    #[test]
+    fn level_ordering() {
+        let none = RequestsLoggingLevel::None;
+
+        assert!(none < RequestsLoggingLevel::Headers);
+        assert!(RequestsLoggingLevel::Body > RequestsLoggingLevel::None);
+    }
+}

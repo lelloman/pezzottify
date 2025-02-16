@@ -8,6 +8,7 @@
 - Persist data like playback status and volume
 - T Y P E S C R I P T?????
 - ~Make artists names clickable~
+- ~Log requests/responses to stdout~
 
 ## [catalog-server]
 - Add user roles
@@ -15,7 +16,9 @@
 - Add user playlists
 - Create User identity/authentication db
 - Create catalog db
-- Wrap ids so that the type can be embedded in them 
+- Wrap ids so that the type can be embedded in them
+- Show requests in logs
+- Add cache directive to responses
 
 ## [agents]
 - Make artist info retrieval agent

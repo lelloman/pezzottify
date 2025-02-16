@@ -13,7 +13,7 @@ mod file_auth_store;
 use file_auth_store::FileAuthStore;
 
 mod server;
-use server::run_server;
+use server::{run_server, RequestsLoggingLevel};
 
 fn parse_path(s: &str) -> Result<PathBuf> {
     let original_path = PathBuf::from(s).canonicalize()?;
@@ -37,6 +37,9 @@ struct CliArgs {
 
     #[clap(short, long, default_value_t = 3001)]
     pub port: u16,
+
+    #[clap(long, default_value = "path")]
+    pub logging_level: RequestsLoggingLevel,
 }
 
 #[tokio::main]
@@ -74,5 +77,5 @@ async fn main() -> Result<()> {
     let search_vault: Box<dyn SearchVault> = Box::new(NoOpSearchVault {});
 
     info!("Ready to serve!");
-    run_server(catalog, search_vault, auth_store, cli_args.port).await
+    run_server(catalog, search_vault, auth_store, cli_args.logging_level, cli_args.port).await
 }

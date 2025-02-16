@@ -17,6 +17,7 @@ use axum::{
     body::Body,
     extract::{Path, State},
     http::{header, response, HeaderValue, StatusCode},
+    middleware,
     response::{IntoResponse, Response},
     routing::{get, post},
     Json, Router,
@@ -24,9 +25,11 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use tower::{Service, ServiceExt}; // for `call`, `oneshot`, and `ready
 
-use super::{auth, make_search_routes, state::*};
+use super::{
+    auth, make_search_routes, requests_logging, state::*, RequestsLoggingLevel, ServerConfig,
+};
 use super::{stream_track, AuthStore, UserId};
-use crate::server::{auth::AuthManager, session::Session};
+use crate::server::{auth::AuthManager, logging_middleware, session::Session};
 
 #[derive(Serialize)]
 struct ServerStats {
@@ -219,11 +222,13 @@ async fn post_challenge(State(state): State<ServerState>) -> Response {
 
 impl ServerState {
     fn new(
+        config: ServerConfig,
         catalog: Catalog,
         search_vault: Box<dyn SearchVault>,
         auth_manager: AuthManager,
     ) -> ServerState {
         ServerState {
+            config,
             start_time: Instant::now(),
             catalog: Arc::new(Mutex::new(catalog)),
             search_vault: Arc::new(Mutex::new(search_vault)),
@@ -234,12 +239,13 @@ impl ServerState {
 }
 
 fn make_app(
+    config: ServerConfig,
     catalog: Catalog,
     search_vault: Box<dyn SearchVault>,
     auth_store: Box<dyn AuthStore>,
 ) -> Result<Router> {
     let auth_manager = AuthManager::initialize(auth_store)?;
-    let state = ServerState::new(catalog, search_vault, auth_manager);
+    let state = ServerState::new(config, catalog, search_vault, auth_manager);
 
     let auth_routes: Router = Router::new()
         .route("/login", post(login))
@@ -264,9 +270,10 @@ fn make_app(
 
     let app: Router = Router::new()
         .route("/", get(home))
-        .with_state(state)
+        .with_state(state.clone())
         .nest("/v1/auth", auth_routes)
-        .nest("/v1/content", content_routes);
+        .nest("/v1/content", content_routes)
+        .layer(middleware::from_fn_with_state(state.clone(), logging_middleware));
 
     Ok(app)
 }
@@ -275,9 +282,14 @@ pub async fn run_server(
     catalog: Catalog,
     search_vault: Box<dyn SearchVault>,
     auth_store: Box<dyn AuthStore>,
+    requests_logging_level: RequestsLoggingLevel,
     port: u16,
 ) -> Result<()> {
-    let app = make_app(catalog, search_vault, auth_store)?;
+    let config = ServerConfig {
+        port,
+        requests_logging_level,
+    };
+    let app = make_app(config, catalog, search_vault, auth_store)?;
 
     let listener = tokio::net::TcpListener::bind(format!("127.0.0.1:{}", port))
         .await
@@ -299,8 +311,13 @@ mod tests {
     #[tokio::test]
     async fn responds_forbidden_on_protected_routes() {
         let auth_store = Box::new(InMemoryAuthStore::default());
-        let app =
-            &mut make_app(Catalog::dummy(), Box::new(NoOpSearchVault {}), auth_store).unwrap();
+        let app = &mut make_app(
+            ServerConfig::default(),
+            Catalog::dummy(),
+            Box::new(NoOpSearchVault {}),
+            auth_store,
+        )
+        .unwrap();
 
         let protected_routes = vec![
             "/v1/content/artist/123",
