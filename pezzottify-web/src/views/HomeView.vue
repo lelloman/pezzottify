@@ -1,14 +1,11 @@
 <template>
   <div class="mainContainer">
-    <!-- Top Bar -->
     <TopBar @search="handleSearch" :initialQuery="searchQuery" />
     <div class="centralPanel">
-      <!-- Sidebar -->
-      <SideBar :items="sidebarItems" @select-item="handleSelect" />
-      <!-- Main Content -->
+      <UserContentSideBar :items="sidebarItems" @select-item="handleSelect" />
       <MainContent :search-query="searchQuery" />
+      <CurrentPlayingSideBar />
     </div>
-    <!-- Bottom Player -->
     <BottomPlayer />
   </div>
 </template>
@@ -16,11 +13,12 @@
 
 <script setup>
 import { ref, watch } from 'vue';
-import SideBar from '@/components/SideBar.vue';
 import TopBar from '@/components/TopBar.vue';
 import MainContent from '@/components/content/MainContent.vue';
 import BottomPlayer from '@/components/BottomPlayer.vue';
 import { useRoute } from 'vue-router';
+import UserContentSideBar from '@/components/UserContentSideBar.vue';
+import CurrentPlayingSideBar from '@/components/CurrentPlayingSideBar.vue';
 
 const sidebarItems = ref([
   { id: 1, name: 'Home', type: 'link' },

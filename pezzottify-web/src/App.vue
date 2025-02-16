@@ -13,7 +13,6 @@ function handleKeyDown(event) {
     player.playPause();
   }
 }
-
 onMounted(() => {
   window.addEventListener('keydown', handleKeyDown);
 })

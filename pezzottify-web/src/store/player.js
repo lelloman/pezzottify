@@ -151,6 +151,7 @@ export const usePlayerStore = defineStore('player', () => {
   };
 
   const loadTrack = (index) => {
+
     if (sound) {
       sound.unload();
     }
@@ -337,6 +338,16 @@ export const usePlayerStore = defineStore('player', () => {
     }
     muted.value = newMuted;
   }
+
+  const loadTrackIndex = (index) => {
+    if (playlist.value.tracks.length && index >= 0 && index < playlist.value.tracks.length) {
+      currentTrackIndex.value = index;
+      loadTrack(index);
+      if (isPlaying.value) {
+        play();
+      }
+    }
+  }
   /* ACTIONS */
 
   return {
@@ -360,5 +371,6 @@ export const usePlayerStore = defineStore('player', () => {
     stop,
     setVolume,
     setMuted,
+    loadTrackIndex,
   };
 });

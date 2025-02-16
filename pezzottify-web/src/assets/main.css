@@ -28,3 +28,8 @@ a,
     place-items: center;
   }
 }
+
+.panel {
+  background-color: var(--panel-on-bg);
+  border-radius: var(--panel-border-radius);
+}
