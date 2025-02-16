@@ -60,7 +60,8 @@ const fetchResults = async (newQuery) => {
         body: JSON.stringify({ query: newQuery, resolve: true }),
       });
       const data = await response.json();
-      //console.log("search response: " + JSON.stringify(data));
+      console.log("search response: ");
+      console.log(data);
       results.value = data;
     } catch (error) {
       console.error('Search error:', error);

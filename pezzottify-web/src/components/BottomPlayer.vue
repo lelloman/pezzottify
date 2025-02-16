@@ -1,10 +1,10 @@
 <template>
   <footer v-if="localCurrentTrack" class="footerPlayer">
     <div class="trackInfoRow">
-      <img :src="imageUrl" alt="Image" class="trackImage" />
+      <MultiSourceImage :urls="imageUrls" alt="Image" class="trackImage" />
       <div class="trackNamesColumn">
         <h3 class="trackName"> {{ songName }}</h3>
-        <p class="trackArtist"> {{ artistName }}</p>
+        <ClickableArtistsNames :artistsIdsNames="artists" />
       </div>
     </div>
     <div class="playerControlsColumn">
@@ -50,6 +50,8 @@ import ProgressBar from '@/components/common/ProgressBar.vue';
 import StopIcon from './icons/StopIcon.vue';
 import VolumeOnIcon from './icons/VolumeOnIcon.vue';
 import VolumeOffIcon from './icons/VolumeOffIcon.vue';
+import MultiSourceImage from './common/MultiSourceImage.vue';
+import ClickableArtistsNames from './common/ClickableArtistsNames.vue';
 
 const ControlIconButton = {
   props: ["icon", "action"],
@@ -84,8 +86,8 @@ const computedVolumePercent = computed(() => {
 const { currentTrack, isPlaying, progressPercent, progressSec, volume, muted } = storeToRefs(player);
 
 const songName = ref('');
-const artistName = ref('');
-const imageUrl = ref('');
+const artists = ref([]);
+const imageUrls = ref([]);
 const duration = ref('');
 
 const currentTimeSec = ref(0);
@@ -197,14 +199,14 @@ watch(currentTrack,
     if (newCurrentTrack) {
       localCurrentTrack.value = newCurrentTrack;
       songName.value = newCurrentTrack.name;
-      artistName.value = newCurrentTrack.artist;
-      imageUrl.value = newCurrentTrack.imageUrl;
+      artists.value = newCurrentTrack.artists;
+      imageUrls.value = newCurrentTrack.imageUrls;
       duration.value = formatDuration(newCurrentTrack.duration);
     } else {
       localCurrentTrack.value = null;
       songName.value = '';
-      artistName.value = '';
-      imageUrl.value = '';
+      artists.value = [];
+      imageUrls.value = [];
       duration.value = '';
     }
   },

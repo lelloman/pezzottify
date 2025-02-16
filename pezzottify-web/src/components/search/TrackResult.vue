@@ -3,7 +3,7 @@
     <img :src="imageUrl" alt="Image" class="searchResultImage" />
     <div class="column">
       <h3 class="title">{{ result.name }}</h3>
-      <p class="subtitle">{{ result.artists_names.join(", ") }}</p>
+      <ClickableArtistsNames :artistsIdsNames="result.artists_ids_names" />
     </div>
     <h3 class="duration">{{ duration }}</h3>
     <PlayIcon class="searchResultPlayIcon" :data-id="result" @click.stop="handlePlayClick(result)" />
@@ -17,6 +17,7 @@ import { computedImageUrl, formatDuration } from '@/utils';
 import { usePlayerStore } from '@/store/player';
 import { useRouter } from 'vue-router';
 import PlayIcon from '../icons/PlayIcon.vue';
+import ClickableArtistsNames from '../common/ClickableArtistsNames.vue';
 
 const props = defineProps({
   result: {

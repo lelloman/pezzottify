@@ -1,5 +1,5 @@
 <template>
-  <div class=".relatedArtistWrapper">
+  <div class="relatedArtistWrapper">
     <div v-if="loading">Loading...</div>
     <div v-else-if="artistData" class="searchResultRow" :data-id="artistData.id" @click="handleClick(artistData)">
       <MultiSourceImage :urls="chooseSmallArtistImageUrl(artistData)" class="searchResultRoundImage" />
@@ -50,7 +50,10 @@ const handleClick = (artist) => {
 
 <style scoped>
 .relatedArtistWrapper {
-  max-width: 400px;
+  min-width: 200px;
+  margin: 10px;
+  height: 100%;
+  align-content: center;
 }
 
 .searchResultRoundImage {

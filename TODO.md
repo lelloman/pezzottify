@@ -5,6 +5,9 @@
 - Make left and right panel collapsable
 - Make album content page
 - Make track content page
+- Persist data like playback status and volume
+- T Y P E S C R I P T?????
+- ~Make artists names clickable~
 
 ## [catalog-server]
 - Add user roles
@@ -12,6 +15,7 @@
 - Add user playlists
 - Create User identity/authentication db
 - Create catalog db
+- Wrap ids so that the type can be embedded in them 
 
 ## [agents]
 - Make artist info retrieval agent

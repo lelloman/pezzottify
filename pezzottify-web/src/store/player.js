@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia';
 import { ref } from 'vue';
 import { Howl } from 'howler';
-import { formatImageUrl } from '@/utils';
+import { formatImageUrl, chooseAlbumCoverImageUrl } from '@/utils';
 import axios from 'axios';
 
 export const usePlayerStore = defineStore('player', () => {
@@ -21,43 +21,19 @@ export const usePlayerStore = defineStore('player', () => {
 
   const formatTrackUrl = (trackId) => "/v1/content/stream/" + trackId;
 
-  const chooseAlbumImageId = (album) => {
-    function imageSizeValue(x) {
-      if (x == "DEFAULT") return 3;
-      if (x == "LARGE") return 2;
-      if (x == "SMALL") return 1;
-      return 0;
-    }
-    let found = null;
-    if (album.covers.length > 0) {
-      found = album.covers.reduce((a, b) => {
-        if (imageSizeValue(a) > imageSizeValue(b)) return a;
-        return b;
-      }, null)
-    }
-    if (album.cover_group.length > 0) {
-      found = album.cover_group.reduce((a, b) => {
-        if (imageSizeValue(a) > imageSizeValue(b)) return a;
-        return b;
-      }, null)
-    }
-    return found.id;
-  }
-
   const makePlaylistFromResolvedAlbumResponse = (response) => {
-    const albumImageId = chooseAlbumImageId(response.album);
-    const albumImageUrl = formatImageUrl(albumImageId);
+    const albumImageUrls = chooseAlbumCoverImageUrl(response.album);
     const allTracks = response.album.discs.flatMap(disc => disc.tracks).map((trackId) => {
       const track = response.tracks[trackId];
       console.log("track:");
       console.log(track);
-      const artists_names = track.artists_ids.map((artistId) => response.artists[artistId].name);
+      const artistsIdsNames = track.artists_ids.map((artistId) => [artistId, response.artists[artistId].name]);
       return {
         id: trackId,
         url: formatTrackUrl(trackId),
         name: track.name,
-        artist: artists_names.join(", "),
-        imageUrl: albumImageUrl,
+        artists: artistsIdsNames,
+        imageUrls: albumImageUrls,
         duration: track.duration,
       };
     });
@@ -78,8 +54,8 @@ export const usePlayerStore = defineStore('player', () => {
           id: quakTrack.id,
           url: formatTrackUrl(quakTrack.id),
           name: quakTrack.name,
-          artist: quakTrack.artists_names.join(", "),
-          imageUrl: formatImageUrl(quakTrack.image_id),
+          artists: quakTrack.artists_ids_names,
+          imageUrls: [formatImageUrl(quakTrack.image_id)],
           duration: quakTrack.duration,
         }
       ]
