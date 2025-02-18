@@ -40,7 +40,7 @@ const handleClick = (event) => {
 const handlePlayClick = (event) => {
   console.log("play click");
   console.log(event);
-  playerStore.setAlbum(event.id);
+  playerStore.setAlbumId(event.id);
   playerStore.setIsPlaying(true);
 }
 </script>

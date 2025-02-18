@@ -103,6 +103,7 @@ fn resolve_track(catalog: &Catalog, track_id: &str) -> Option<ResolvedSearchResu
         duration: track.duration as u32,
         image_id,
         artists_ids_names,
+        album_id: track.album_id,
     };
 
     Some(ResolvedSearchResult::Track(resolved_track))

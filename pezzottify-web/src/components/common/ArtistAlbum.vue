@@ -38,7 +38,7 @@ const playerStore = usePlayerStore();
 const handlePlayClick = (event) => {
   console.log("play click");
   console.log(event);
-  playerStore.setAlbum(event);
+  playerStore.setAlbumId(event);
   playerStore.setIsPlaying(true);
 }
 

@@ -5,7 +5,7 @@
     </div>
     <div class="trackRow" v-for="(track, index) in tracks" :class="{ currentlyPlayingRow: index == currentIndex }"
       :key="index" @click.stop="handleClick(index)">
-      <MultiSourceImage class="trackImage" :urls="track.imageUrls" />
+      <MultiSourceImage class="trackImage" :urls="track.imageUrls" @click.stop="handleClickOnTrackImage(track)" />
       <div class="namesColumn">
         <p>{{ track.name }} </p>
         <ClickableArtistsNames :artistsIdsNames="track.artists" />
@@ -21,15 +21,21 @@ import { usePlayerStore } from '@/store/player';
 import { formatDuration } from '@/utils';
 import MultiSourceImage from './common/MultiSourceImage.vue';
 import ClickableArtistsNames from './common/ClickableArtistsNames.vue';
+import { useRouter } from 'vue-router';
 
 const panelVisible = computed(() => tracks.value.length);
 const tracks = ref([]);
 const currentIndex = ref(null);
 
+const router = useRouter();
 const player = usePlayerStore();
 
 const handleClick = (index) => {
   player.loadTrackIndex(index);
+}
+
+const handleClickOnTrackImage = (track) => {
+  router.push("/album/" + track.albumId);
 }
 
 watch(
@@ -89,13 +95,20 @@ watch(
 .trackImage {
   width: 40px;
   height: 40px;
+  transition: scale 0.3s ease;
+  cursor: pointer;
+}
+
+.trackImage:hover {
+  scale: 1.1;
+  transition: 0.3s ease;
 }
 
 .namesColumn {
   flex: 1;
   display: flex;
   flex-direction: column;
-  padding: 0 4px;
+  padding: 0 8px;
 }
 
 .currentlyPlayingRow {

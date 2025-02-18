@@ -1,7 +1,7 @@
 <template>
   <footer v-if="localCurrentTrack" class="footerPlayer">
     <div class="trackInfoRow">
-      <MultiSourceImage :urls="imageUrls" alt="Image" class="trackImage" />
+      <MultiSourceImage :urls="imageUrls" alt="Image" class="trackImage" @click.stop="handleClickOnAlbumCover" />
       <div class="trackNamesColumn">
         <h3 class="trackName"> {{ songName }}</h3>
         <ClickableArtistsNames :artistsIdsNames="artists" />
@@ -52,6 +52,7 @@ import VolumeOnIcon from './icons/VolumeOnIcon.vue';
 import VolumeOffIcon from './icons/VolumeOffIcon.vue';
 import MultiSourceImage from './common/MultiSourceImage.vue';
 import ClickableArtistsNames from './common/ClickableArtistsNames.vue';
+import { useRouter } from 'vue-router';
 
 const ControlIconButton = {
   props: ["icon", "action"],
@@ -66,6 +67,7 @@ const ControlIconButton = {
   },
 };
 
+const router = useRouter();
 const player = usePlayerStore();
 const localCurrentTrack = ref(null);
 const localProgressPercent = ref(0);
@@ -101,6 +103,11 @@ const formatTime = (timeInSeconds) => {
 
   return `${pad(hours)}:${pad(minutes)}:${pad(seconds)}`;
 };
+
+const handleClickOnAlbumCover = () => {
+  console.log(currentTrack.value);
+  router.push("/album/" + currentTrack.value.albumId);
+}
 
 const startDraggingTrackProgress = () => {
   console.log("startDragging");
@@ -261,7 +268,13 @@ watch(volume,
   width: 56px;
   height: 56px;
   border-radius: 4px;
-  ;
+  cursor: pointer;
+  transition: scale 0.3s ease;
+}
+
+.trackImage:hover {
+  scale: 1.1;
+  transition: scale 0.3s ease;
 }
 
 .trackNamesColumn {

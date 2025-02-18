@@ -26,7 +26,7 @@ import { ref, watch, onMounted } from 'vue';
 import axios from 'axios';
 import { chooseArtistCoverImageUrl } from '@/utils';
 import MultiSourceImage from '@/components/common/MultiSourceImage.vue';
-import RelatedArtist from '@/components/common/RelatedArtist.vue';
+import RelatedArtist from '@/components/common/LoadArtistListItem.vue';
 import ArtistAlbums from '../common/ArtistAlbums.vue';
 
 const props = defineProps({
@@ -56,7 +56,8 @@ watch(data,
       coverUrls.value = chooseArtistCoverImageUrl(newData);
     }
   },
-  { immediate: true });
+  { immediate: true }
+);
 
 watch(() => props.artistId, (newId) => {
   fetchData(newId);

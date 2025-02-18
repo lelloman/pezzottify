@@ -102,12 +102,14 @@ export const usePlayerStore = defineStore('player', () => {
         artists: artistsIdsNames,
         imageUrls: albumImageUrls,
         duration: track.duration,
+        albumId: response.album.id,
       };
     });
 
     return {
       album: {
         name: response.album.name,
+        id: response.album.id,
       },
       tracks: allTracks,
     }
@@ -124,12 +126,40 @@ export const usePlayerStore = defineStore('player', () => {
           artists: quakTrack.artists_ids_names,
           imageUrls: [formatImageUrl(quakTrack.image_id)],
           duration: quakTrack.duration,
+          albumId: quakTrack.album_id,
         }
       ]
     };
   }
 
-  const setAlbum = async (albumId) => {
+  const findTrackIndex = (album, discIndex, trackIndex) => {
+    let previousDiscsTracks = 0;
+    if (discIndex > 0) {
+      for (let i = 0; i < discIndex; i++) {
+        previousDiscsTracks += album.discs[i].tracks.length;
+      }
+      album.discs.map((disc) => disc.tracks.length).slice(0, discIndex - 1)
+    }
+    return trackIndex + previousDiscsTracks;
+  }
+
+  const setResolvedAlbum = (data, discIndex, trackIndex) => {
+    console.log("player.setResolvedAlbum() data:");
+    console.log(data);
+    if (!playlist.value.album || playlist.value.album.id != data.album.id) {
+      const albumPlaylist = makePlaylistFromResolvedAlbumResponse(data);
+      playlist.value = albumPlaylist;
+    }
+    if (Number.isInteger(discIndex) && Number.isInteger(trackIndex)) {
+      const desiredTrackIndex = findTrackIndex(data.album, discIndex, trackIndex);
+      loadTrack(desiredTrackIndex);
+    } else {
+      loadTrack(0);
+    }
+    play();
+  }
+
+  const setAlbumId = async (albumId) => {
     try {
       const response = await axios.get(`/v1/content/album/${albumId}/resolved`);
       const albumPlaylist = makePlaylistFromResolvedAlbumResponse(response.data);
@@ -362,7 +392,8 @@ export const usePlayerStore = defineStore('player', () => {
     seekToPercentage,
     setIsPlaying,
     setTrack,
-    setAlbum,
+    setAlbumId,
+    setResolvedAlbum,
     playPause,
     skipPreviousTrack,
     skipNextTrack,
