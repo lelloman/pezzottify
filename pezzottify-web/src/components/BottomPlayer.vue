@@ -3,7 +3,7 @@
     <div class="trackInfoRow">
       <MultiSourceImage :urls="imageUrls" alt="Image" class="trackImage" @click.stop="handleClickOnAlbumCover" />
       <div class="trackNamesColumn">
-        <h3 class="trackName"> {{ songName }}</h3>
+        <TrackName :track="localCurrentTrack" />
         <ClickableArtistsNames :artistsIdsNames="artists" />
       </div>
     </div>
@@ -53,6 +53,7 @@ import VolumeOffIcon from './icons/VolumeOffIcon.vue';
 import MultiSourceImage from './common/MultiSourceImage.vue';
 import ClickableArtistsNames from './common/ClickableArtistsNames.vue';
 import { useRouter } from 'vue-router';
+import TrackName from './common/TrackName.vue';
 
 const ControlIconButton = {
   props: ["icon", "action"],

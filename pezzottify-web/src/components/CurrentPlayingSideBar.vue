@@ -7,7 +7,7 @@
       :key="index" @click.stop="handleClick(index)">
       <MultiSourceImage class="trackImage" :urls="track.imageUrls" @click.stop="handleClickOnTrackImage(track)" />
       <div class="namesColumn">
-        <p>{{ track.name }} </p>
+        <TrackName :track="track" />
         <ClickableArtistsNames :artistsIdsNames="track.artists" />
       </div>
       <p>{{ formatDuration(track.duration) }} </p>
@@ -22,6 +22,7 @@ import { formatDuration } from '@/utils';
 import MultiSourceImage from './common/MultiSourceImage.vue';
 import ClickableArtistsNames from './common/ClickableArtistsNames.vue';
 import { useRouter } from 'vue-router';
+import TrackName from './common/TrackName.vue';
 
 const panelVisible = computed(() => tracks.value.length);
 const tracks = ref([]);

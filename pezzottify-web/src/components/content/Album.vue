@@ -22,7 +22,7 @@
             <div class="trackIndexSpan">
               <p>{{ trackIndex + 1 }} </p>
             </div>
-            <div class="trackNameSpan">{{ data.tracks[trackId].name }}</div>
+            <TrackName :track="data.tracks[trackId]" class="trackNameSpan" />
             <div class="trackArtistsSpan">
               <ClickableArtistsNames
                 :artistsIdsNames="data.tracks[trackId].artists_ids.map((artistId) => [artistId, data.artists[artistId].name])" />
@@ -44,6 +44,7 @@ import axios from 'axios';
 import { chooseAlbumCoverImageUrl, formatDuration } from '@/utils';
 import MultiSourceImage from '@/components/common/MultiSourceImage.vue';
 import RelatedArtist from '@/components/common/LoadArtistListItem.vue';
+import TrackName from '../common/TrackName.vue';
 import ClickableArtistsNames from '@/components/common/ClickableArtistsNames.vue';
 import PlayIcon from '../icons/PlayIcon.vue';
 import { usePlayerStore } from '@/store/player';
@@ -195,6 +196,7 @@ onMounted(() => {
 
 .trackNameSpan {
   flex: 1;
+  size: 14px !important;
 }
 
 .trackArtistsSpan {

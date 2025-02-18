@@ -13,7 +13,6 @@
       <h1>Discography:</h1>
       <ArtistAlbums :artistId="artistId" />
     </div>
-    <pre>{{ data }}</pre>
   </div>
 
   <div v-else>

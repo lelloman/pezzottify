@@ -1,8 +1,9 @@
 <template>
-  <div class="searchResultRow" :data-id="result" @click="handleTrackClick(result)">
-    <MultiSourceImage :urls="[imageUrl]" alt="Image" class="searchResultImage" />
+  <div class="searchResultRow" :data-id="result" @click.stop="handleTrackClick(result)">
+    <MultiSourceImage :urls="[imageUrl]" alt="Image" class="searchResultImage albumCoverImage"
+      @click.stop="handleImageClick" />
     <div class="column">
-      <h3 class="title">{{ result.name }}</h3>
+      <TrackName :track="result" />
       <ClickableArtistsNames :artistsIdsNames="result.artists_ids_names" />
     </div>
     <h3 class="duration">{{ duration }}</h3>
@@ -16,9 +17,10 @@ import '@/assets/search.css'
 import { computedImageUrl, formatDuration } from '@/utils';
 import { usePlayerStore } from '@/store/player';
 import { useRouter } from 'vue-router';
-import PlayIcon from '../icons/PlayIcon.vue';
-import ClickableArtistsNames from '../common/ClickableArtistsNames.vue';
-import MultiSourceImage from '../common/MultiSourceImage.vue';
+import PlayIcon from '@/components/icons/PlayIcon.vue';
+import ClickableArtistsNames from '@/components/common/ClickableArtistsNames.vue';
+import MultiSourceImage from '@/components/common/MultiSourceImage.vue';
+import TrackName from '../common/TrackName.vue';
 
 const props = defineProps({
   result: {
@@ -47,6 +49,10 @@ const handlePlayClick = (event) => {
   playerStore.setIsPlaying(true);
 }
 
+const handleImageClick = () => {
+  router.push("/album/" + props.result.album_id);
+}
+
 </script>
 
 <style scoped>
@@ -72,5 +78,14 @@ const handlePlayClick = (event) => {
   text-align: center;
   vertical-align: middle;
   height: 100%;
+}
+
+.albumCoverImage {
+  transition: scale 0.3s ease;
+}
+
+.albumCoverImage:hover {
+  scale: 1.1;
+  transition: scale 0.3s ease;
 }
 </style>
