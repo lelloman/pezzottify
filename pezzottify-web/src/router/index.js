@@ -50,15 +50,17 @@ const router = createRouter({
       name: 'logout',
       beforeEnter: async (to, from, next) => {
         try {
-          // Call your logout API
-          await axios.get('/v1/auth/logout');  // Replace with your actual logout endpoint
-          // Redirect to the home page (or any other page)
+          await axios.get('/v1/auth/logout');
           useAuthStore().logout();
           next('/login');
         } catch (error) {
           console.error('Logout failed', error);
-          // Optionally handle the error (e.g., redirect or show an error page)
-          next('/');
+          if (error.response.status == 403) {
+            useAuthStore().logout();
+            next('/login');
+          } else {
+            next('/');
+          }
         }
       },
     }
@@ -70,7 +72,7 @@ router.beforeEach((to, from, next) => {
 
   console.log("beforeEach to: " + to + " from: " + from + " is authenticaed: " + authStore.isAuthenticated);
   if (to.meta.requiresAuth && !authStore.isAuthenticated) {
-    next('/login'); // Redirect to login if not authenticated
+    next('/login');
   } else {
     next();
   }
