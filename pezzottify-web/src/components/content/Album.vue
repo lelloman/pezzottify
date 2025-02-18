@@ -14,7 +14,8 @@
     </div>
     <div class="tracksContainer">
       <div v-for="(disc, discIndex) in data.album.discs" :key="disc" class="discContainer">
-        <h1>Disc {{ discIndex + 1 }}<span v-if="disc.name">- {{ disc.name }}</span></h1>
+        <h1 v-if="data.album.discs.length > 1">Disc {{ discIndex + 1 }}<span v-if="disc.name">- {{ disc.name }}</span>
+        </h1>
         <div v-for="(trackId, trackIndex) in disc.tracks" :key="trackId" class="track">
           <div :class="computeTrackRowClasses(trackId)"
             @click.stop="handleClickOnTrack(trackId, discIndex, trackIndex)">

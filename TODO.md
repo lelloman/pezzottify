@@ -1,5 +1,6 @@
 
 ## [web]
+- Make right-click contextual menu for track, albums and artists (after user playlists) 
 - Make left and right panel collapsable
 - Make track content page
 - T Y P E S C R I P T?????
