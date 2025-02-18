@@ -92,7 +92,7 @@ async fn get_album(
 }
 
 async fn get_resolved_album(
-    session: Session,
+    _session: Session,
     State(catalog): State<GuardedCatalog>,
     Path(id): Path<String>,
 ) -> Response {
@@ -104,7 +104,7 @@ async fn get_resolved_album(
 }
 
 async fn get_artist_albums(
-    session: Session,
+    _session: Session,
     State(catalog): State<GuardedCatalog>,
     Path(id): Path<String>,
 ) -> Response {
@@ -125,8 +125,20 @@ pub async fn get_track(
     }
 }
 
+pub async fn get_resolved_track(
+    _session: Session,
+    State(catalog): State<GuardedCatalog>,
+    Path(id): Path<String>,
+) -> Response {
+    match catalog.lock().unwrap().get_resolved_track(&id) {
+        Ok(Some(track)) => Json(track).into_response(),
+        Ok(None) => StatusCode::NOT_FOUND.into_response(),
+        Err(err) => (StatusCode::INTERNAL_SERVER_ERROR, format!("{}", err)).into_response(),
+    }
+}
+
 async fn get_image(
-    session: Session,
+    _session: Session,
     State(catalog): State<GuardedCatalog>,
     Path(id): Path<String>,
 ) -> Response {
@@ -260,6 +272,7 @@ fn make_app(
         .route("/album/{id}/resolved", get(get_resolved_album))
         .route("/artist/{id}/albums", get(get_artist_albums))
         .route("/track/{id}", get(get_track))
+        .route("/track/{id}/resolved", get(get_resolved_track))
         .route("/image/{id}", get(get_image))
         .route("/stream/{id}", get(stream_track))
         .with_state(state.clone());

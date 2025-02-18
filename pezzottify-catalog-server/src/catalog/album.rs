@@ -46,3 +46,5 @@ pub struct ResolvedAlbum {
     pub tracks: HashMap<String, Track>,
     pub artists: HashMap<String, Artist>,
 }
+
+pub type ResolvedTrack = ResolvedAlbum;

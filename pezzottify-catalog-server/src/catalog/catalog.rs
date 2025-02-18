@@ -1,4 +1,4 @@
-use super::album::ResolvedAlbum;
+use super::album::{ResolvedAlbum, ResolvedTrack};
 use super::{album, Album, Artist, Image, Track, TrackFormat};
 use anyhow::{bail, Context, Result};
 use rayon::iter::IntoParallelRefIterator;
@@ -529,6 +529,35 @@ impl Catalog {
             })
             .collect();
         Some(album_ids)
+    }
+
+    pub fn get_resolved_track(&self, track_id: &str) -> Result<Option<ResolvedTrack>> {
+        let track = match self.get_track(&track_id) {
+            None => return Ok(None),
+            Some(x) => x,
+        };
+
+        let album = match self.get_album(&track.album_id) {
+            None => bail!("Could not find album {}", &track.album_id),
+            Some(album) => album,
+        };
+
+        let mut artists: HashMap<String, Artist> = HashMap::new();
+        for artist_id in track.artists_ids.iter() {
+            let artist = match self.get_artist(&artist_id) {
+                None => bail!("Could not find artist {}", &artist_id),
+                Some(a) => a,
+            };
+            artists.insert(artist_id.to_owned(), artist);
+        }
+
+        let mut tracks = HashMap::new();
+        tracks.insert(track_id.to_owned(), track);
+        Ok(Some(ResolvedTrack {
+            tracks,
+            album,
+            artists,
+        }))
     }
 
     pub fn get_resolved_album(&self, album_id: &str) -> Result<Option<ResolvedAlbum>> {
