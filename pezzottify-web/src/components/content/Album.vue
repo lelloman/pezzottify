@@ -74,8 +74,10 @@ const computeTrackRowClasses = (trackId) => {
 
 watch(() => player.currentTrack,
   (newTrack) => {
-    console.log("CurrentTrackId: " + newTrack.id);
-    currentTrackId.value = newTrack.id;
+    if (newTrack) {
+      console.log("CurrentTrackId: " + newTrack.id);
+      currentTrackId.value = newTrack.id;
+    }
   },
   { immediate: true }
 );
