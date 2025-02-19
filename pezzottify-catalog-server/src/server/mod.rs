@@ -1,4 +1,3 @@
-mod auth;
 mod config;
 mod requests_logging;
 mod search;
@@ -7,9 +6,6 @@ pub(self) mod session;
 pub(self) mod state;
 mod stream_track;
 
-pub use auth::{
-    ActiveChallenge, AuthManager, AuthStore, AuthToken, AuthTokenValue, UserAuthCredentials, UserId,
-};
 pub(self) use config::ServerConfig;
 pub(self) use requests_logging::logging_middleware;
 pub use requests_logging::RequestsLoggingLevel;

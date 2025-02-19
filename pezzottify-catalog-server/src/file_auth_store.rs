@@ -1,5 +1,5 @@
-use crate::server::{
-    ActiveChallenge, AuthStore, AuthToken, AuthTokenValue, UserAuthCredentials, UserId,
+use crate::user::auth::{
+    ActiveChallenge, AuthStore, AuthToken, AuthTokenValue, UserAuthCredentials,
 };
 use anyhow::{bail, Context, Result};
 use serde::{Deserialize, Serialize};
@@ -13,7 +13,7 @@ use std::{
 
 #[derive(Serialize, Deserialize, Default)]
 struct Dump {
-    auth_credentials: HashMap<UserId, UserAuthCredentials>,
+    auth_credentials: HashMap<String, UserAuthCredentials>,
     active_challenges: Vec<ActiveChallenge>,
     auth_tokens: HashMap<AuthTokenValue, AuthToken>,
 }
@@ -77,7 +77,7 @@ impl FileAuthStore {
 }
 
 impl AuthStore for FileAuthStore {
-    fn load_auth_credentials(&self) -> Result<HashMap<UserId, UserAuthCredentials>> {
+    fn load_auth_credentials(&self) -> Result<HashMap<String, UserAuthCredentials>> {
         Ok(self.dump.lock().unwrap().auth_credentials.clone())
     }
     fn update_auth_credentials(&self, credentials: UserAuthCredentials) -> Result<()> {

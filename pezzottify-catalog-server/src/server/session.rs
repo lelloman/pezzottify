@@ -1,4 +1,6 @@
 use super::state::ServerState;
+use crate::user::auth::AuthTokenValue;
+
 use axum::{
     extract::FromRequestParts,
     http::{request::Parts, StatusCode},
@@ -72,7 +74,7 @@ async fn extract_session_from_request_parts(
     ctx.auth_manager
         .lock()
         .unwrap()
-        .get_auth_token(&super::AuthTokenValue(token))
+        .get_auth_token(&AuthTokenValue(token))
         .map(|t| Session {
             user_id: t.user_id,
             token: t.value.0,

@@ -12,9 +12,10 @@ mod catalog;
 mod cli_style;
 mod search;
 mod server;
+mod user;
 
 use cli_style::get_styles;
-use server::{AuthManager, UserId};
+use user::auth::AuthManager;
 
 fn parse_path(s: &str) -> Result<PathBuf> {
     let original_path = PathBuf::from(s).canonicalize()?;
@@ -43,21 +44,21 @@ struct InnerCli {
 enum InnerCommand {
     /// Creates a password authentication for the given user id.
     /// Fails if the user already has a password set.
-    AddLogin { user_id: UserId, password: String },
+    AddLogin { user_id: String, password: String },
 
     /// Change the password of a user, fails if no password was set.
-    UpdateLogin { user_id: UserId, password: String },
+    UpdateLogin { user_id: String, password: String },
 
     /// Deletes the password authentication for a given user.
-    DeleteLogin { user_id: UserId },
+    DeleteLogin { user_id: String },
 
     /// Shows authentication information of a given user.
-    Show { user_id: UserId },
+    Show { user_id: String },
 
     /// Verifies the password of a given user, it doesn't make any
     /// persistent change, nor it creates any token, it just
     /// compares the password hash.
-    CheckPassword { user_id: UserId, password: String },
+    CheckPassword { user_id: String, password: String },
 
     /// Shows all user ids.
     UserIds,

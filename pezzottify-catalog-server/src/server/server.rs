@@ -25,11 +25,10 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use tower::{Service, ServiceExt}; // for `call`, `oneshot`, and `ready
 
-use super::{
-    auth, make_search_routes, requests_logging, state::*, RequestsLoggingLevel, ServerConfig,
-};
-use super::{stream_track, AuthStore, UserId};
-use crate::server::{auth::AuthManager, logging_middleware, session::Session};
+use super::stream_track;
+use super::{make_search_routes, requests_logging, state::*, RequestsLoggingLevel, ServerConfig};
+use crate::server::{logging_middleware, session::Session};
+use crate::user::auth::{AuthManager, AuthStore, AuthTokenValue, UserAuthCredentials};
 
 #[derive(Serialize)]
 struct ServerStats {
@@ -51,7 +50,7 @@ fn format_uptime(duration: Duration) -> String {
 
 #[derive(Deserialize)]
 struct LoginBody {
-    pub user_id: UserId,
+    pub user_id: String,
     pub password: String,
 }
 
@@ -206,7 +205,7 @@ async fn login(
 
 async fn logout(State(auth_manager): State<GuardedAuthManager>, session: Session) -> Response {
     let mut locked_manager = auth_manager.lock().unwrap();
-    match locked_manager.delete_auth_token(&session.user_id, &auth::AuthTokenValue(session.token)) {
+    match locked_manager.delete_auth_token(&session.user_id, &AuthTokenValue(session.token)) {
         Ok(()) => {
             let cookie_value = Cookie::build(Cookie::new("session_token", ""))
                 .path("/")
@@ -286,7 +285,10 @@ fn make_app(
         .with_state(state.clone())
         .nest("/v1/auth", auth_routes)
         .nest("/v1/content", content_routes)
-        .layer(middleware::from_fn_with_state(state.clone(), logging_middleware));
+        .layer(middleware::from_fn_with_state(
+            state.clone(),
+            logging_middleware,
+        ));
 
     Ok(app)
 }
@@ -314,10 +316,8 @@ pub async fn run_server(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{
-        search::NoOpSearchVault,
-        server::{ActiveChallenge, AuthToken, AuthTokenValue, UserAuthCredentials},
-    };
+    use crate::search::NoOpSearchVault;
+    use crate::user::auth::{ActiveChallenge, AuthToken, AuthTokenValue};
     use axum::{body::Body, http::Request};
     use std::collections::HashMap;
 
@@ -361,17 +361,17 @@ mod tests {
 
     #[derive(Default)]
     struct InMemoryAuthStore {
-        auth_credentials: HashMap<UserId, UserAuthCredentials>,
+        auth_credentials: HashMap<String, UserAuthCredentials>,
         active_challenges: Vec<ActiveChallenge>,
         auth_tokens: HashMap<AuthTokenValue, AuthToken>,
     }
 
     impl AuthStore for InMemoryAuthStore {
-        fn load_auth_credentials(&self) -> Result<HashMap<UserId, UserAuthCredentials>> {
+        fn load_auth_credentials(&self) -> Result<HashMap<String, UserAuthCredentials>> {
             Ok(self.auth_credentials.clone())
         }
 
-        fn update_auth_credentials(&self, credentials: auth::UserAuthCredentials) -> Result<()> {
+        fn update_auth_credentials(&self, credentials: UserAuthCredentials) -> Result<()> {
             todo!()
         }
 
@@ -379,15 +379,15 @@ mod tests {
             Ok(self.active_challenges.clone())
         }
 
-        fn delete_challenge(&self, challenge: auth::ActiveChallenge) -> Result<()> {
+        fn delete_challenge(&self, challenge: ActiveChallenge) -> Result<()> {
             todo!()
         }
 
-        fn flag_sent_challenge(&self, challenge: &auth::ActiveChallenge) -> Result<()> {
+        fn flag_sent_challenge(&self, challenge: &ActiveChallenge) -> Result<()> {
             todo!()
         }
 
-        fn add_challenges(&self, challenges: Vec<auth::ActiveChallenge>) -> Result<()> {
+        fn add_challenges(&self, challenges: Vec<ActiveChallenge>) -> Result<()> {
             todo!()
         }
 
@@ -395,15 +395,15 @@ mod tests {
             Ok(self.auth_tokens.clone())
         }
 
-        fn delete_auth_token(&self, value: auth::AuthTokenValue) -> Result<()> {
+        fn delete_auth_token(&self, value: AuthTokenValue) -> Result<()> {
             todo!()
         }
 
-        fn update_auth_token(&self, token: &auth::AuthToken) -> Result<()> {
+        fn update_auth_token(&self, token: &AuthToken) -> Result<()> {
             todo!()
         }
 
-        fn add_auth_token(&self, token: &auth::AuthToken) -> Result<()> {
+        fn add_auth_token(&self, token: &AuthToken) -> Result<()> {
             todo!()
         }
     }

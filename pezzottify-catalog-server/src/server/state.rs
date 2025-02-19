@@ -4,7 +4,7 @@ use crate::{catalog::Catalog, search::SearchVault};
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
-use crate::server::auth::AuthManager;
+use crate::user::auth::AuthManager;
 
 use super::ServerConfig;
 
