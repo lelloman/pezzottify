@@ -1,8 +1,6 @@
-use crate::catalog::track;
-
-use super::{Catalog, Track, LoadCatalogProblem};
+use super::{Catalog, LoadCatalogProblem, Track};
 use anyhow::{bail, Context, Result};
-use rayon::{collections::hash_map::Iter, iter::ParallelIterator};
+use rayon::iter::ParallelIterator;
 use std::{
     path::PathBuf,
     process::{Command, Output},
@@ -65,7 +63,6 @@ pub fn load_catalog<P: AsRef<std::path::Path>>(path: P) -> Result<Catalog> {
 
     #[cfg(feature = "no_checks")]
     println!("Skipping checks.");
-
 
     if !problems.is_empty() {
         info!("Found {} problems:", problems.len());

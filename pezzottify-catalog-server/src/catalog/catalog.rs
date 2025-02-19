@@ -1,12 +1,11 @@
 use super::album::{ResolvedAlbum, ResolvedTrack};
-use super::{album, Album, Artist, Image, Track, TrackFormat};
+use super::{Album, Artist, Image, Track};
 use anyhow::{bail, Context, Result};
 use rayon::iter::IntoParallelRefIterator;
 use regex::Regex;
 use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
-use std::process::{Command, Output};
 
 macro_rules! problemo {
     ($e:expr, $problems:expr, $problem_gen:expr) => {

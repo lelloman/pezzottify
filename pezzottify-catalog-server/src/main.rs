@@ -15,6 +15,8 @@ use file_auth_store::FileAuthStore;
 mod server;
 use server::{run_server, RequestsLoggingLevel};
 
+mod user;
+
 fn parse_path(s: &str) -> Result<PathBuf> {
     let original_path = PathBuf::from(s).canonicalize()?;
     if original_path.is_absolute() {
@@ -77,5 +79,12 @@ async fn main() -> Result<()> {
     let search_vault: Box<dyn SearchVault> = Box::new(NoOpSearchVault {});
 
     info!("Ready to serve!");
-    run_server(catalog, search_vault, auth_store, cli_args.logging_level, cli_args.port).await
+    run_server(
+        catalog,
+        search_vault,
+        auth_store,
+        cli_args.logging_level,
+        cli_args.port,
+    )
+    .await
 }

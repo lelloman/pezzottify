@@ -6,8 +6,6 @@ use serde::{Deserialize, Serialize};
 
 use std::{collections::HashMap, sync::Mutex, time::SystemTime};
 
-use super::user;
-
 pub type UserId = String;
 
 #[derive(Clone, PartialEq, Eq, Hash, Serialize, Deserialize, Debug)]
