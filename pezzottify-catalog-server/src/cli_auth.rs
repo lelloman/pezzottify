@@ -5,9 +5,6 @@ use std::{
     path::PathBuf,
 };
 
-mod file_auth_store;
-use file_auth_store::FileAuthStore;
-
 mod catalog;
 mod cli_style;
 mod search;
@@ -17,8 +14,11 @@ mod user;
 use cli_style::get_styles;
 use user::auth::AuthManager;
 
+mod sqlite_persistence;
+use sqlite_persistence::SqliteUserStore;
+
 fn parse_path(s: &str) -> Result<PathBuf> {
-    let original_path = PathBuf::from(s).canonicalize()?;
+    let original_path = PathBuf::from(s);
     if original_path.is_absolute() {
         return Ok(original_path);
     }
@@ -44,24 +44,33 @@ struct InnerCli {
 enum InnerCommand {
     /// Creates a password authentication for the given user id.
     /// Fails if the user already has a password set.
-    AddLogin { user_id: String, password: String },
+    AddLogin {
+        user_handle: String,
+        password: String,
+    },
 
     /// Change the password of a user, fails if no password was set.
-    UpdateLogin { user_id: String, password: String },
+    UpdateLogin {
+        user_handle: String,
+        password: String,
+    },
 
     /// Deletes the password authentication for a given user.
-    DeleteLogin { user_id: String },
+    DeleteLogin { user_handle: String },
 
     /// Shows authentication information of a given user.
-    Show { user_id: String },
+    Show { user_handle: String },
 
     /// Verifies the password of a given user, it doesn't make any
     /// persistent change, nor it creates any token, it just
     /// compares the password hash.
-    CheckPassword { user_id: String, password: String },
+    CheckPassword {
+        user_handle: String,
+        password: String,
+    },
 
-    /// Shows all user ids.
-    UserIds,
+    /// Shows all user handles.
+    UserHandles,
 
     /// Close this program.
     Exit,
@@ -71,12 +80,11 @@ fn main() -> Result<()> {
     let cli_args = CliArgs::parse();
     let auth_store_file_path = match cli_args.path {
         Some(path) => path,
-        None => FileAuthStore::infer_path().with_context(|| {
-            "Could not infer auth store file path, please specify it explicitly."
-        })?,
+        None => SqliteUserStore::infer_path()
+            .with_context(|| "Could not infer DB file path, please specify it explicitly.")?,
     };
-    let auth_store = FileAuthStore::initialize(auth_store_file_path);
-    let mut auth_manager = AuthManager::initialize(Box::new(auth_store))?;
+    let user_store = SqliteUserStore::new(auth_store_file_path)?;
+    let mut auth_manager = AuthManager::initialize(Box::new(user_store))?;
 
     let stdin = io::stdin();
     let mut reader = stdin.lock();
@@ -102,47 +110,60 @@ fn main() -> Result<()> {
 
         match cli {
             Ok(cli) => match cli.command {
-                InnerCommand::AddLogin { user_id, password } => {
-                    if let Err(err) = auth_manager.create_password_credentials(&user_id, password) {
+                InnerCommand::AddLogin {
+                    user_handle,
+                    password,
+                } => {
+                    if let Err(err) =
+                        auth_manager.create_password_credentials(&user_handle, password)
+                    {
                         eprintln!("Something went wrong: {}", err);
                         continue;
                     }
                 }
-                InnerCommand::UpdateLogin { user_id, password } => {
-                    if let Err(err) = auth_manager.update_password_credentials(&user_id, password) {
+                InnerCommand::UpdateLogin {
+                    user_handle,
+                    password,
+                } => {
+                    if let Err(err) =
+                        auth_manager.update_password_credentials(&user_handle, password)
+                    {
                         eprintln!("Something went wrong: {}", err);
                         continue;
                     }
                 }
-                InnerCommand::DeleteLogin { user_id } => {
-                    if let Err(err) = auth_manager.delete_password_credentials(&user_id) {
+                InnerCommand::DeleteLogin { user_handle } => {
+                    if let Err(err) = auth_manager.delete_password_credentials(&user_handle) {
                         eprintln!("Something went wrong: {}", err);
                         continue;
                     }
                 }
-                InnerCommand::Show { user_id } => {
-                    let user_credentials = auth_manager.get_user_credentials(&user_id);
-                    let user_token = auth_manager.get_user_tokens(&user_id);
+                InnerCommand::Show { user_handle } => {
+                    let user_credentials = auth_manager.get_user_credentials(&user_handle);
+                    let user_token = auth_manager.get_user_tokens(&user_handle);
                     println!("{:#?}", user_credentials);
                     for token in user_token.iter() {
                         println!("{:#?}", token);
                     }
                 }
-                InnerCommand::UserIds => {
-                    println!("{:#?}", auth_manager.get_all_user_ids());
+                InnerCommand::UserHandles => {
+                    println!("{:#?}", auth_manager.get_all_user_handles());
                 }
-                InnerCommand::CheckPassword { user_id, password } => {
-                    let user_credentials = match auth_manager.get_user_credentials(&user_id) {
+                InnerCommand::CheckPassword {
+                    user_handle,
+                    password,
+                } => {
+                    let user_credentials = match auth_manager.get_user_credentials(&user_handle) {
                         Some(x) => x,
                         None => {
-                            eprintln!("User {} not found.", user_id);
+                            eprintln!("User {} not found.", user_handle);
                             continue;
                         }
                     };
                     let password_credentials = match user_credentials.username_password {
                         Some(x) => x,
                         None => {
-                            eprintln!("User {} has no password set.", user_id);
+                            eprintln!("User {} has no password set.", user_handle);
                             continue;
                         }
                     };

@@ -2,6 +2,7 @@ use anyhow::{Context, Result};
 use clap::Parser;
 use std::{fmt::Debug, path::PathBuf};
 use tracing::info;
+use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
 
 mod catalog;
 use catalog::Catalog;
@@ -9,15 +10,13 @@ use catalog::Catalog;
 mod search;
 use search::{NoOpSearchVault, PezzotHashSearchVault, SearchVault};
 
-mod file_auth_store;
-use file_auth_store::FileAuthStore;
-
 mod server;
 use server::{run_server, RequestsLoggingLevel};
 
 mod user;
 
 mod sqlite_persistence;
+use sqlite_persistence::SqliteUserStore;
 
 fn parse_path(s: &str) -> Result<PathBuf> {
     let original_path = PathBuf::from(s).canonicalize()?;
@@ -34,7 +33,7 @@ struct CliArgs {
     pub catalog_path: Option<PathBuf>,
 
     #[clap(value_parser = parse_path)]
-    pub auth_store_file_path: Option<PathBuf>,
+    pub user_store_file_path: Option<PathBuf>,
 
     #[clap(long)]
     pub check_only: bool,
@@ -50,7 +49,12 @@ struct CliArgs {
 async fn main() -> Result<()> {
     let cli_args = CliArgs::parse();
 
-    tracing_subscriber::fmt::init();
+    tracing_subscriber::registry()
+        .with(tracing_subscriber::fmt::layer())
+        .with(EnvFilter::from_env("LOG_LEVEL"))
+        .try_init()
+        .unwrap();
+
     let catalog_path = match cli_args.catalog_path {
         Some(path) => path,
         None => Catalog::infer_path().with_context(|| {
@@ -65,13 +69,12 @@ async fn main() -> Result<()> {
         return Ok(());
     }
 
-    let auth_store_file_path = match cli_args.auth_store_file_path {
+    let user_store_file_path = match cli_args.user_store_file_path {
         Some(path) => path,
-        None => FileAuthStore::infer_path().with_context(|| {
-            "Could not infer auth store file path, please specify it explicitly."
-        })?,
+        None => SqliteUserStore::infer_path()
+            .with_context(|| "Could not infer DB file path, please specify it explicitly.")?,
     };
-    let auth_store = Box::new(FileAuthStore::initialize(auth_store_file_path));
+    let user_store = Box::new(SqliteUserStore::new(&user_store_file_path)?);
     info!("Indexing content for search...");
 
     #[cfg(not(feature = "no_search"))]
@@ -84,7 +87,7 @@ async fn main() -> Result<()> {
     run_server(
         catalog,
         search_vault,
-        auth_store,
+        user_store,
         cli_args.logging_level,
         cli_args.port,
     )

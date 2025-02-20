@@ -4,7 +4,10 @@ use rand::distributions::Alphanumeric;
 use rand::{thread_rng, Rng};
 use serde::{Deserialize, Serialize};
 
+use std::str::FromStr;
 use std::{collections::HashMap, sync::Mutex, time::SystemTime};
+
+use super::UserStore;
 
 #[derive(Clone, PartialEq, Eq, Hash, Serialize, Deserialize, Debug)]
 pub struct AuthTokenValue(pub String);
@@ -29,43 +32,19 @@ impl AuthTokenValue {
     }
 }
 
-pub trait AuthStore: Send + Sync {
-    fn load_auth_credentials(&self) -> Result<HashMap<usize, UserAuthCredentials>>;
-    fn update_auth_credentials(&self, credentials: UserAuthCredentials) -> Result<()>;
-
-    fn load_challenges(&self) -> Result<Vec<ActiveChallenge>>;
-    fn delete_challenge(&self, challenge: ActiveChallenge) -> Result<()>;
-    fn flag_sent_challenge(&self, challenge: &ActiveChallenge) -> Result<()>;
-    fn add_challenges(&self, challenges: Vec<ActiveChallenge>) -> Result<()>;
-
-    fn load_auth_tokens(&self) -> Result<HashMap<AuthTokenValue, AuthToken>>;
-    fn delete_auth_token(&self, value: AuthTokenValue) -> Result<()>;
-    fn update_auth_token(&self, token: &AuthToken) -> Result<()>;
-    fn add_auth_token(&self, token: &AuthToken) -> Result<()>;
-}
-
 pub struct AuthManager {
-    store: Mutex<Box<dyn AuthStore>>,
-    credentials: HashMap<usize, UserAuthCredentials>,
-    active_challenges: Vec<ActiveChallenge>,
-    auth_tokens: HashMap<AuthTokenValue, AuthToken>,
+    user_store: Mutex<Box<dyn UserStore>>,
 }
 
 impl AuthManager {
-    pub fn initialize(store: Box<dyn AuthStore>) -> Result<AuthManager> {
-        let credentials = store.load_auth_credentials()?;
-        let active_challenges = store.load_challenges()?;
-        let auth_tokens = store.load_auth_tokens()?;
+    pub fn initialize(user_store: Box<dyn UserStore>) -> Result<AuthManager> {
         Ok(AuthManager {
-            store: Mutex::new(store),
-            credentials,
-            active_challenges,
-            auth_tokens,
+            user_store: Mutex::new(user_store),
         })
     }
 
     pub fn get_auth_token(&self, value: &AuthTokenValue) -> Option<AuthToken> {
-        self.auth_tokens.get(value).cloned()
+        self.user_store.lock().unwrap().get_user_auth_token(value)
     }
 
     pub fn generate_auth_token(&mut self, credentials: &UserAuthCredentials) -> Result<AuthToken> {
@@ -75,16 +54,22 @@ impl AuthManager {
             created: SystemTime::now(),
             last_used: None,
         };
-        self.store.lock().unwrap().add_auth_token(&token)?;
-        self.auth_tokens.insert(token.value.clone(), token.clone());
+        self.user_store
+            .lock()
+            .unwrap()
+            .add_user_auth_token(token.clone())?;
         Ok(token)
     }
 
-    fn create_hashed_password(password: String) -> Result<UsernamePasswordCredentials> {
+    fn create_hashed_password(
+        user_id: usize,
+        password: String,
+    ) -> Result<UsernamePasswordCredentials> {
         let hasher = PezzottifyHasher::Argon2;
         let salt = hasher.generate_b64_salt();
         let hash = hasher.hash(password.as_bytes(), &salt)?;
         Ok(UsernamePasswordCredentials {
+            user_id,
             salt,
             hash,
             hasher,
@@ -94,63 +79,74 @@ impl AuthManager {
         })
     }
 
-    pub fn create_password_credentials(&mut self, user_id: &usize, password: String) -> Result<()> {
-        if let Some(true) = self
-            .credentials
-            .get(user_id)
+    pub fn create_password_credentials(
+        &mut self,
+        user_handle: &String,
+        password: String,
+    ) -> Result<()> {
+        let user_store = self.user_store.lock().unwrap();
+        if let Some(true) = user_store
+            .get_user_auth_credentials(user_handle)
             .map(|x| x.username_password.is_some())
         {
-            bail!("User with id {} already has password credentials method. Maybe you want to modify it?", user_id);
+            bail!("User with handle {} already has password credentials method. Maybe you want to modify it?", user_handle);
         }
 
-        let new_credentials =
-            self.credentials
-                .entry(user_id.clone())
-                .or_insert_with(|| UserAuthCredentials {
-                    user_id: user_id.clone(),
-                    username_password: None,
-                    keys: vec![],
-                });
-        new_credentials.username_password = Some(Self::create_hashed_password(password)?);
+        let user_id = user_store
+            .get_user_id(&user_handle)
+            .with_context(|| format!("User with handle {} not found.", user_handle))?;
 
-        self.store
-            .lock()
-            .unwrap()
-            .update_auth_credentials(new_credentials.clone())
+        let mut new_credentials = user_store
+            .get_user_auth_credentials(user_handle)
+            .unwrap_or_else(|| UserAuthCredentials {
+                user_id,
+                username_password: None,
+                keys: vec![],
+            });
+        new_credentials.username_password = Some(Self::create_hashed_password(user_id, password)?);
+
+        user_store.update_user_auth_credentials(new_credentials.clone())
     }
 
-    pub fn update_password_credentials(&mut self, user_id: &usize, password: String) -> Result<()> {
-        let credentials = self
-            .credentials
-            .get_mut(user_id)
-            .with_context(|| format!("User with id {} not found.", user_id))?;
+    pub fn update_password_credentials(
+        &mut self,
+        user_handle: &String,
+        password: String,
+    ) -> Result<()> {
+        let user_store = self.user_store.lock().unwrap();
+        let mut credentials = user_store
+            .get_user_auth_credentials(user_handle)
+            .with_context(|| format!("User with handle {} not found.", user_handle))?;
         if let None = credentials.username_password {
             bail!(
-                "Cannot update passowrd of user with id {} since it never had one.",
-                user_id
+                "Cannot update passowrd of user with handle {} since it never had one.",
+                user_handle
             );
         }
-        credentials.username_password = Some(Self::create_hashed_password(password)?);
-        self.store
-            .lock()
-            .unwrap()
-            .update_auth_credentials(credentials.clone())
+        credentials.username_password =
+            Some(Self::create_hashed_password(credentials.user_id, password)?);
+        user_store.update_user_auth_credentials(credentials.clone())
     }
 
-    pub fn delete_password_credentials(&mut self, user_id: &usize) -> Result<()> {
-        let credentials = self
-            .credentials
-            .get_mut(user_id)
-            .with_context(|| format!("User with id {} not found.", user_id))?;
+    pub fn delete_password_credentials(&mut self, user_handle: &String) -> Result<()> {
+        let mut credentials = self
+            .user_store
+            .lock()
+            .unwrap()
+            .get_user_auth_credentials(user_handle)
+            .with_context(|| format!("User with handle {} not found.", user_handle))?;
         credentials.username_password = None;
-        self.store
+        self.user_store
             .lock()
             .unwrap()
-            .update_auth_credentials(credentials.clone())
+            .update_user_auth_credentials(credentials.clone())
     }
 
-    pub fn get_user_credentials(&self, user_id: &usize) -> Option<UserAuthCredentials> {
-        self.credentials.get(user_id).cloned()
+    pub fn get_user_credentials(&self, user_handle: &String) -> Option<UserAuthCredentials> {
+        self.user_store
+            .lock()
+            .unwrap()
+            .get_user_auth_credentials(user_handle)
     }
 
     pub fn delete_auth_token(
@@ -158,14 +154,20 @@ impl AuthManager {
         user_id: &usize,
         token_value: &AuthTokenValue,
     ) -> Result<()> {
-        let removed = self.auth_tokens.remove(token_value);
+        let removed = self
+            .user_store
+            .lock()
+            .unwrap()
+            .delete_user_auth_token(token_value);
         match removed {
             Some(removed) => {
                 if &removed.user_id == user_id {
                     Ok(())
                 } else {
-                    self.auth_tokens
-                        .insert(token_value.clone(), removed.clone());
+                    self.user_store
+                        .lock()
+                        .unwrap()
+                        .add_user_auth_token(removed.clone());
                     bail!("Tried to delete auth token {}, but the authenticated user {} was not the owner {} of the token.", token_value.0, user_id, &removed.user_id)
                 }
             }
@@ -173,16 +175,15 @@ impl AuthManager {
         }
     }
 
-    pub fn get_user_tokens(&self, user_id: &usize) -> Vec<AuthToken> {
-        self.auth_tokens
-            .iter()
-            .filter(|(_, v)| &v.user_id == user_id)
-            .map(|(_, v)| v.clone())
-            .collect()
+    pub fn get_user_tokens(&self, user_handle: &String) -> Vec<AuthToken> {
+        self.user_store
+            .lock()
+            .unwrap()
+            .get_all_user_auth_tokens(user_handle)
     }
 
-    pub fn get_all_user_ids(&self) -> Vec<usize> {
-        self.credentials.keys().cloned().collect()
+    pub fn get_all_user_handles(&self) -> Vec<String> {
+        self.user_store.lock().unwrap().get_all_user_handles()
     }
 }
 
@@ -224,6 +225,25 @@ pub enum PezzottifyHasher {
     Argon2,
 }
 
+impl FromStr for PezzottifyHasher {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> Result<Self> {
+        match s {
+            "argon2" => Ok(PezzottifyHasher::Argon2),
+            _ => bail!("Unknown hasher {}", s),
+        }
+    }
+}
+
+impl ToString for PezzottifyHasher {
+    fn to_string(&self) -> String {
+        match self {
+            PezzottifyHasher::Argon2 => "argon2".to_string(),
+        }
+    }
+}
+
 impl PezzottifyHasher {
     pub fn generate_b64_salt(&self) -> String {
         match self {
@@ -258,6 +278,7 @@ pub struct ActiveChallenge {
 
 #[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct UsernamePasswordCredentials {
+    pub user_id: usize,
     pub salt: String,
     pub hash: String,
     pub hasher: PezzottifyHasher,

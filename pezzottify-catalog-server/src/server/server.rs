@@ -6,11 +6,10 @@ use std::{
     time::{Duration, Instant},
 };
 
-use tracing::error;
+use tracing::{debug, error};
 
-use crate::catalog::Catalog;
 use crate::search::{SearchVault, SearchedAlbum};
-
+use crate::{catalog::Catalog, user::UserStore};
 use axum_extra::extract::cookie::{Cookie, SameSite};
 
 use axum::{
@@ -28,7 +27,7 @@ use tower::{Service, ServiceExt}; // for `call`, `oneshot`, and `ready
 use super::stream_track;
 use super::{make_search_routes, requests_logging, state::*, RequestsLoggingLevel, ServerConfig};
 use crate::server::{logging_middleware, session::Session};
-use crate::user::auth::{AuthManager, AuthStore, AuthTokenValue, UserAuthCredentials};
+use crate::user::auth::{AuthManager, AuthTokenValue, UserAuthCredentials};
 
 #[derive(Serialize)]
 struct ServerStats {
@@ -48,9 +47,9 @@ fn format_uptime(duration: Duration) -> String {
     format!("{}d {:02}:{:02}:{:02}", days, hours, minutes, seconds)
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Debug)]
 struct LoginBody {
-    pub user_id: String,
+    pub user_handle: String,
     pub password: String,
 }
 
@@ -166,8 +165,9 @@ async fn login(
     State(auth_manager): State<GuardedAuthManager>,
     Json(body): Json<LoginBody>,
 ) -> Response {
+    debug!("login() called with {:?}", body);
     let mut locked_manager = auth_manager.lock().unwrap();
-    if let Some(credentials) = locked_manager.get_user_credentials(&body.user_id) {
+    if let Some(credentials) = locked_manager.get_user_credentials(&body.user_handle) {
         if let Some(password_credentials) = &credentials.username_password {
             if let Ok(true) = password_credentials.hasher.verify(
                 &body.password,
@@ -253,9 +253,9 @@ fn make_app(
     config: ServerConfig,
     catalog: Catalog,
     search_vault: Box<dyn SearchVault>,
-    auth_store: Box<dyn AuthStore>,
+    user_store: Box<dyn UserStore>,
 ) -> Result<Router> {
-    let auth_manager = AuthManager::initialize(auth_store)?;
+    let auth_manager = AuthManager::initialize(user_store)?;
     let state = ServerState::new(config, catalog, search_vault, auth_manager);
 
     let auth_routes: Router = Router::new()
@@ -296,7 +296,7 @@ fn make_app(
 pub async fn run_server(
     catalog: Catalog,
     search_vault: Box<dyn SearchVault>,
-    auth_store: Box<dyn AuthStore>,
+    user_store: Box<dyn UserStore>,
     requests_logging_level: RequestsLoggingLevel,
     port: u16,
 ) -> Result<()> {
@@ -304,7 +304,7 @@ pub async fn run_server(
         port,
         requests_logging_level,
     };
-    let app = make_app(config, catalog, search_vault, auth_store)?;
+    let app = make_app(config, catalog, search_vault, user_store)?;
 
     let listener = tokio::net::TcpListener::bind(format!("127.0.0.1:{}", port))
         .await
@@ -318,17 +318,18 @@ mod tests {
     use super::*;
     use crate::search::NoOpSearchVault;
     use crate::user::auth::{ActiveChallenge, AuthToken, AuthTokenValue};
+    use crate::user::{UserAuthCredentialsStore, UserAuthTokenStore};
     use axum::{body::Body, http::Request};
     use std::collections::HashMap;
 
     #[tokio::test]
     async fn responds_forbidden_on_protected_routes() {
-        let auth_store = Box::new(InMemoryAuthStore::default());
+        let user_store = Box::new(InMemoryUserStore::default());
         let app = &mut make_app(
             ServerConfig::default(),
             Catalog::dummy(),
             Box::new(NoOpSearchVault {}),
-            auth_store,
+            user_store,
         )
         .unwrap();
 
@@ -360,51 +361,79 @@ mod tests {
     }
 
     #[derive(Default)]
+    struct InMemoryUserStore {}
+
+    impl UserStore for InMemoryUserStore {
+        fn create_user(&self, user_handle: &str) -> Result<usize> {
+            todo!()
+        }
+
+        fn get_user_handle(&self, user_id: usize) -> Option<String> {
+            todo!()
+        }
+
+        fn get_user_id(&self, user_handle: &str) -> Option<usize> {
+            todo!()
+        }
+
+        fn get_user_playlists(&self, user_id: &str) -> Option<Vec<crate::user::UserPlaylist>> {
+            todo!()
+        }
+
+        fn is_user_liked_content(&self, user_id: usize, content_id: &str) -> Option<bool> {
+            todo!()
+        }
+
+        fn set_user_liked_content(
+            &self,
+            user_id: usize,
+            content_id: &str,
+            liked: bool,
+        ) -> Result<()> {
+            todo!()
+        }
+
+        fn get_all_user_handles(&self) -> Vec<String> {
+            todo!()
+        }
+    }
+
+    impl UserAuthTokenStore for InMemoryUserStore {
+        fn get_user_auth_token(&self, token: &AuthTokenValue) -> Option<AuthToken> {
+            todo!()
+        }
+
+        fn delete_user_auth_token(&self, token: &AuthTokenValue) -> Option<AuthToken> {
+            todo!()
+        }
+
+        fn update_user_auth_token_last_used_timestamp(&self, token: &AuthTokenValue) -> Result<()> {
+            todo!()
+        }
+
+        fn add_user_auth_token(&self, token: AuthToken) -> Result<()> {
+            todo!()
+        }
+
+        fn get_all_user_auth_tokens(&self, user_handle: &str) -> Vec<AuthToken> {
+            todo!()
+        }
+    }
+
+    impl UserAuthCredentialsStore for InMemoryUserStore {
+        fn get_user_auth_credentials(&self, user_handle: &str) -> Option<UserAuthCredentials> {
+            todo!()
+        }
+
+        fn update_user_auth_credentials(&self, credentials: UserAuthCredentials) -> Result<()> {
+            todo!()
+        }
+    }
+
+    #[derive(Default)]
     struct InMemoryAuthStore {
         auth_credentials: HashMap<String, UserAuthCredentials>,
         active_challenges: Vec<ActiveChallenge>,
         auth_tokens: HashMap<AuthTokenValue, AuthToken>,
-    }
-
-    impl AuthStore for InMemoryAuthStore {
-        fn load_auth_credentials(&self) -> Result<HashMap<String, UserAuthCredentials>> {
-            Ok(self.auth_credentials.clone())
-        }
-
-        fn update_auth_credentials(&self, credentials: UserAuthCredentials) -> Result<()> {
-            todo!()
-        }
-
-        fn load_challenges(&self) -> Result<Vec<ActiveChallenge>> {
-            Ok(self.active_challenges.clone())
-        }
-
-        fn delete_challenge(&self, challenge: ActiveChallenge) -> Result<()> {
-            todo!()
-        }
-
-        fn flag_sent_challenge(&self, challenge: &ActiveChallenge) -> Result<()> {
-            todo!()
-        }
-
-        fn add_challenges(&self, challenges: Vec<ActiveChallenge>) -> Result<()> {
-            todo!()
-        }
-
-        fn load_auth_tokens(&self) -> Result<HashMap<AuthTokenValue, AuthToken>> {
-            Ok(self.auth_tokens.clone())
-        }
-
-        fn delete_auth_token(&self, value: AuthTokenValue) -> Result<()> {
-            todo!()
-        }
-
-        fn update_auth_token(&self, token: &AuthToken) -> Result<()> {
-            todo!()
-        }
-
-        fn add_auth_token(&self, token: &AuthToken) -> Result<()> {
-            todo!()
-        }
     }
 }

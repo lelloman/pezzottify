@@ -11,7 +11,7 @@ use tracing::debug;
 
 #[derive(Debug)]
 pub struct Session {
-    pub user_id: String,
+    pub user_id: usize,
     pub token: String,
 }
 

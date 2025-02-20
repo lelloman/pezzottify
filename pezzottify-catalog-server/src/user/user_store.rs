@@ -1,13 +1,52 @@
-use super::user_models::{User, UserPlaylist, UserSessionView};
+use super::auth::{AuthToken, AuthTokenValue, UserAuthCredentials};
+use super::user_models::{UserPlaylist, UserSessionView};
 use anyhow::Result;
 
-pub trait UserStore: Send + Sync {
+pub trait UserAuthCredentialsStore: Send + Sync {
+    /// Returns the user's authentication credentials given the user handle.
+    /// Returns None if the user does not exist.
+    fn get_user_auth_credentials(&self, user_handle: &str) -> Option<UserAuthCredentials>;
+
+    /// Updates the user's authentication credentials.
+    /// Returns None if the user does not exist.
+    fn update_user_auth_credentials(&self, credentials: UserAuthCredentials) -> Result<()>;
+}
+
+pub trait UserAuthTokenStore: Send + Sync {
+    /// Returns a user's authentication token given an AuthTokenValue.
+    /// Returns None if the token does not exist.
+    fn get_user_auth_token(&self, token: &AuthTokenValue) -> Option<AuthToken>;
+
+    /// Deletes an auth token given the token value.
+    /// Returns None if the token does not exist.
+    fn delete_user_auth_token(&self, token: &AuthTokenValue) -> Option<AuthToken>;
+
+    /// Updates an auth token with the laatest timestamp.
+    /// Returns None if the token does not exist.
+    fn update_user_auth_token_last_used_timestamp(&self, token: &AuthTokenValue) -> Result<()>;
+
+    /// Adds a new auth token.
+    /// Returns None if the token already exists.
+    fn add_user_auth_token(&self, token: AuthToken) -> Result<()>;
+
+    /// Returns all user's authentication tokens.
+    fn get_all_user_auth_tokens(&self, user_handle: &str) -> Vec<AuthToken>;
+}
+
+pub trait UserStore: UserAuthTokenStore + UserAuthCredentialsStore + Send + Sync {
     /// Creates a new user and returns the user id.
     fn create_user(&self, user_handle: &str) -> Result<usize>;
 
     // Returns a full user object for the given user id.
     // Returns None if the user does not exist.
-    //fn get_user(&self, user_id: usize) -> Option<User>;
+    fn get_user_handle(&self, user_id: usize) -> Option<String>;
+
+    /// Returns all users' handles.
+    fn get_all_user_handles(&self) -> Vec<String>;
+
+    /// Returns a user's handle given the user id.
+    /// Returns None if the user does not exist.
+    fn get_user_id(&self, user_handle: &str) -> Option<usize>;
 
     /// Returns if the user liked the content with the given id,
     /// returns None if the user does not exist.

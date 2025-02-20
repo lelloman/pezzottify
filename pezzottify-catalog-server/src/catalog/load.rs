@@ -62,7 +62,7 @@ pub fn load_catalog<P: AsRef<std::path::Path>>(path: P) -> Result<Catalog> {
     }
 
     #[cfg(feature = "no_checks")]
-    println!("Skipping checks.");
+    info!("Skipping checks.");
 
     if !problems.is_empty() {
         info!("Found {} problems:", problems.len());
