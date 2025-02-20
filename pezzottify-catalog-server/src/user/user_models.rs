@@ -15,16 +15,9 @@ pub struct UserSessionView {
     pub permissions: Vec<Permission>,
 }
 
-pub enum LikedContentType {
-    Album,
-    Artist,
-    Track,
-}
-
 pub struct UserLikedContent {
-    pub contentType: LikedContentType,
     pub timestamp: SystemTime,
-    pub contentId: String,
+    pub content_id: String,
 }
 
 pub struct UserPlaylist {

@@ -17,6 +17,8 @@ use server::{run_server, RequestsLoggingLevel};
 
 mod user;
 
+mod sqlite_persistence;
+
 fn parse_path(s: &str) -> Result<PathBuf> {
     let original_path = PathBuf::from(s).canonicalize()?;
     if original_path.is_absolute() {

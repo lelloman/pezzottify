@@ -6,14 +6,12 @@ use serde::{Deserialize, Serialize};
 
 use std::{collections::HashMap, sync::Mutex, time::SystemTime};
 
-pub type UserId = String;
-
 #[derive(Clone, PartialEq, Eq, Hash, Serialize, Deserialize, Debug)]
 pub struct AuthTokenValue(pub String);
 
 #[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct AuthToken {
-    pub user_id: UserId,
+    pub user_id: usize,
     pub created: SystemTime,
     pub last_used: Option<SystemTime>,
     pub value: AuthTokenValue,
@@ -32,7 +30,7 @@ impl AuthTokenValue {
 }
 
 pub trait AuthStore: Send + Sync {
-    fn load_auth_credentials(&self) -> Result<HashMap<UserId, UserAuthCredentials>>;
+    fn load_auth_credentials(&self) -> Result<HashMap<usize, UserAuthCredentials>>;
     fn update_auth_credentials(&self, credentials: UserAuthCredentials) -> Result<()>;
 
     fn load_challenges(&self) -> Result<Vec<ActiveChallenge>>;
@@ -48,7 +46,7 @@ pub trait AuthStore: Send + Sync {
 
 pub struct AuthManager {
     store: Mutex<Box<dyn AuthStore>>,
-    credentials: HashMap<UserId, UserAuthCredentials>,
+    credentials: HashMap<usize, UserAuthCredentials>,
     active_challenges: Vec<ActiveChallenge>,
     auth_tokens: HashMap<AuthTokenValue, AuthToken>,
 }
@@ -96,11 +94,7 @@ impl AuthManager {
         })
     }
 
-    pub fn create_password_credentials(
-        &mut self,
-        user_id: &UserId,
-        password: String,
-    ) -> Result<()> {
+    pub fn create_password_credentials(&mut self, user_id: &usize, password: String) -> Result<()> {
         if let Some(true) = self
             .credentials
             .get(user_id)
@@ -125,11 +119,7 @@ impl AuthManager {
             .update_auth_credentials(new_credentials.clone())
     }
 
-    pub fn update_password_credentials(
-        &mut self,
-        user_id: &UserId,
-        password: String,
-    ) -> Result<()> {
+    pub fn update_password_credentials(&mut self, user_id: &usize, password: String) -> Result<()> {
         let credentials = self
             .credentials
             .get_mut(user_id)
@@ -147,7 +137,7 @@ impl AuthManager {
             .update_auth_credentials(credentials.clone())
     }
 
-    pub fn delete_password_credentials(&mut self, user_id: &UserId) -> Result<()> {
+    pub fn delete_password_credentials(&mut self, user_id: &usize) -> Result<()> {
         let credentials = self
             .credentials
             .get_mut(user_id)
@@ -159,13 +149,13 @@ impl AuthManager {
             .update_auth_credentials(credentials.clone())
     }
 
-    pub fn get_user_credentials(&self, user_id: &UserId) -> Option<UserAuthCredentials> {
+    pub fn get_user_credentials(&self, user_id: &usize) -> Option<UserAuthCredentials> {
         self.credentials.get(user_id).cloned()
     }
 
     pub fn delete_auth_token(
         &mut self,
-        user_id: &UserId,
+        user_id: &usize,
         token_value: &AuthTokenValue,
     ) -> Result<()> {
         let removed = self.auth_tokens.remove(token_value);
@@ -183,7 +173,7 @@ impl AuthManager {
         }
     }
 
-    pub fn get_user_tokens(&self, user_id: &UserId) -> Vec<AuthToken> {
+    pub fn get_user_tokens(&self, user_id: &usize) -> Vec<AuthToken> {
         self.auth_tokens
             .iter()
             .filter(|(_, v)| &v.user_id == user_id)
@@ -191,7 +181,7 @@ impl AuthManager {
             .collect()
     }
 
-    pub fn get_all_user_ids(&self) -> Vec<UserId> {
+    pub fn get_all_user_ids(&self) -> Vec<usize> {
         self.credentials.keys().cloned().collect()
     }
 }
@@ -290,7 +280,7 @@ pub struct CryptoKeyCredentials {
 
 #[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct UserAuthCredentials {
-    pub user_id: UserId,
+    pub user_id: usize,
     pub username_password: Option<UsernamePasswordCredentials>,
     pub keys: Vec<CryptoKeyCredentials>,
 }

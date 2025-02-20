@@ -7,6 +7,7 @@
 - Make titles and texts on single line and sliding if too long
 - Use a logger instead console.logging all over the place
 - Implement UNDO or history for playback playlists
+- Implement User page (profile?)
 - ~Make track content page~
 - ~Style scrollbars~
 - ~Make album content page~
