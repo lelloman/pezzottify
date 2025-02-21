@@ -12,7 +12,7 @@ mod server;
 mod user;
 
 use cli_style::get_styles;
-use user::auth::AuthManager;
+use user::UserManager;
 
 mod sqlite_persistence;
 use sqlite_persistence::SqliteUserStore;
@@ -84,7 +84,7 @@ fn main() -> Result<()> {
             .with_context(|| "Could not infer DB file path, please specify it explicitly.")?,
     };
     let user_store = SqliteUserStore::new(auth_store_file_path)?;
-    let mut auth_manager = AuthManager::initialize(Box::new(user_store))?;
+    let mut user_manager = UserManager::new(Box::new(user_store));
 
     let stdin = io::stdin();
     let mut reader = stdin.lock();
@@ -115,7 +115,7 @@ fn main() -> Result<()> {
                     password,
                 } => {
                     if let Err(err) =
-                        auth_manager.create_password_credentials(&user_handle, password)
+                        user_manager.create_password_credentials(&user_handle, password)
                     {
                         eprintln!("Something went wrong: {}", err);
                         continue;
@@ -126,34 +126,34 @@ fn main() -> Result<()> {
                     password,
                 } => {
                     if let Err(err) =
-                        auth_manager.update_password_credentials(&user_handle, password)
+                        user_manager.update_password_credentials(&user_handle, password)
                     {
                         eprintln!("Something went wrong: {}", err);
                         continue;
                     }
                 }
                 InnerCommand::DeleteLogin { user_handle } => {
-                    if let Err(err) = auth_manager.delete_password_credentials(&user_handle) {
+                    if let Err(err) = user_manager.delete_password_credentials(&user_handle) {
                         eprintln!("Something went wrong: {}", err);
                         continue;
                     }
                 }
                 InnerCommand::Show { user_handle } => {
-                    let user_credentials = auth_manager.get_user_credentials(&user_handle);
-                    let user_token = auth_manager.get_user_tokens(&user_handle);
+                    let user_credentials = user_manager.get_user_credentials(&user_handle);
+                    let user_token = user_manager.get_user_tokens(&user_handle);
                     println!("{:#?}", user_credentials);
                     for token in user_token.iter() {
                         println!("{:#?}", token);
                     }
                 }
                 InnerCommand::UserHandles => {
-                    println!("{:#?}", auth_manager.get_all_user_handles());
+                    println!("{:#?}", user_manager.get_all_user_handles());
                 }
                 InnerCommand::CheckPassword {
                     user_handle,
                     password,
                 } => {
-                    let user_credentials = match auth_manager.get_user_credentials(&user_handle) {
+                    let user_credentials = match user_manager.get_user_credentials(&user_handle) {
                         Some(x) => x,
                         None => {
                             eprintln!("User {} not found.", user_handle);

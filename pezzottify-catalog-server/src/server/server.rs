@@ -8,8 +8,11 @@ use std::{
 
 use tracing::{debug, error};
 
-use crate::search::{SearchVault, SearchedAlbum};
 use crate::{catalog::Catalog, user::UserStore};
+use crate::{
+    search::{SearchVault, SearchedAlbum},
+    user::UserManager,
+};
 use axum_extra::extract::cookie::{Cookie, SameSite};
 
 use axum::{
@@ -18,7 +21,7 @@ use axum::{
     http::{header, response, HeaderValue, StatusCode},
     middleware,
     response::{IntoResponse, Response},
-    routing::{get, post},
+    routing::{delete, get, post},
     Json, Router,
 };
 use serde::{Deserialize, Serialize};
@@ -27,7 +30,7 @@ use tower::{Service, ServiceExt}; // for `call`, `oneshot`, and `ready
 use super::stream_track;
 use super::{make_search_routes, requests_logging, state::*, RequestsLoggingLevel, ServerConfig};
 use crate::server::{logging_middleware, session::Session};
-use crate::user::auth::{AuthManager, AuthTokenValue, UserAuthCredentials};
+use crate::user::auth::{AuthTokenValue, UserAuthCredentials};
 
 #[derive(Serialize)]
 struct ServerStats {
@@ -161,12 +164,44 @@ async fn get_image(
     StatusCode::NOT_FOUND.into_response()
 }
 
+fn update_user_liked_content(
+    user_manager: GuardedUserManager,
+    user_id: usize,
+    content_id: &str,
+    liked: bool,
+) -> Response {
+    match user_manager
+        .lock()
+        .unwrap()
+        .set_user_liked_content(user_id, content_id, liked)
+    {
+        Ok(_) => StatusCode::OK.into_response(),
+        Err(_) => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+    }
+}
+
+async fn add_user_liked_content(
+    session: Session,
+    State(user_manager): State<GuardedUserManager>,
+    Path(content_id): Path<String>,
+) -> Response {
+    update_user_liked_content(user_manager, session.user_id, &content_id, true)
+}
+
+async fn delete_user_liked_content(
+    session: Session,
+    State(user_manager): State<GuardedUserManager>,
+    Path(content_id): Path<String>,
+) -> Response {
+    update_user_liked_content(user_manager, session.user_id, &content_id, false)
+}
+
 async fn login(
-    State(auth_manager): State<GuardedAuthManager>,
+    State(user_manager): State<GuardedUserManager>,
     Json(body): Json<LoginBody>,
 ) -> Response {
     debug!("login() called with {:?}", body);
-    let mut locked_manager = auth_manager.lock().unwrap();
+    let mut locked_manager = user_manager.lock().unwrap();
     if let Some(credentials) = locked_manager.get_user_credentials(&body.user_handle) {
         if let Some(password_credentials) = &credentials.username_password {
             if let Ok(true) = password_credentials.hasher.verify(
@@ -203,8 +238,8 @@ async fn login(
     StatusCode::FORBIDDEN.into_response()
 }
 
-async fn logout(State(auth_manager): State<GuardedAuthManager>, session: Session) -> Response {
-    let mut locked_manager = auth_manager.lock().unwrap();
+async fn logout(State(user_manager): State<GuardedUserManager>, session: Session) -> Response {
+    let mut locked_manager = user_manager.lock().unwrap();
     match locked_manager.delete_auth_token(&session.user_id, &AuthTokenValue(session.token)) {
         Ok(()) => {
             let cookie_value = Cookie::build(Cookie::new("session_token", ""))
@@ -236,14 +271,14 @@ impl ServerState {
         config: ServerConfig,
         catalog: Catalog,
         search_vault: Box<dyn SearchVault>,
-        auth_manager: AuthManager,
+        user_manager: UserManager,
     ) -> ServerState {
         ServerState {
             config,
             start_time: Instant::now(),
             catalog: Arc::new(Mutex::new(catalog)),
             search_vault: Arc::new(Mutex::new(search_vault)),
-            auth_manager: Arc::new(Mutex::new(auth_manager)),
+            user_manager: Arc::new(Mutex::new(user_manager)),
             hash: "123456".to_owned(),
         }
     }
@@ -255,8 +290,8 @@ fn make_app(
     search_vault: Box<dyn SearchVault>,
     user_store: Box<dyn UserStore>,
 ) -> Result<Router> {
-    let auth_manager = AuthManager::initialize(user_store)?;
-    let state = ServerState::new(config, catalog, search_vault, auth_manager);
+    let user_manager = UserManager::new(user_store);
+    let state = ServerState::new(config, catalog, search_vault, user_manager);
 
     let auth_routes: Router = Router::new()
         .route("/login", post(login))
@@ -274,6 +309,14 @@ fn make_app(
         .route("/track/{id}/resolved", get(get_resolved_track))
         .route("/image/{id}", get(get_image))
         .route("/stream/{id}", get(stream_track))
+        .with_state(state.clone());
+
+    let mut user_routes: Router = Router::new()
+        .route("/user/liked/{content_id}", post(add_user_liked_content))
+        .route(
+            "/user/liked/{content_id}",
+            delete(delete_user_liked_content),
+        )
         .with_state(state.clone());
 
     if let Some(search_routes) = make_search_routes(state.clone()) {

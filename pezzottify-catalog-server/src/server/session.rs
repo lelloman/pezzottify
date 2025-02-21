@@ -71,7 +71,7 @@ async fn extract_session_from_request_parts(
     };
 
     debug!("Got session token {}", token);
-    ctx.auth_manager
+    ctx.user_manager
         .lock()
         .unwrap()
         .get_auth_token(&AuthTokenValue(token))

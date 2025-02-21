@@ -6,12 +6,13 @@ use rusqlite::{params, Connection};
 use std::{
     path::{Path, PathBuf},
     str::FromStr,
-    sync::Mutex,
+    sync::{Arc, Mutex},
     time::SystemTime,
 };
 
+#[derive(Clone)]
 pub struct SqliteUserStore {
-    conn: Mutex<Connection>,
+    conn: Arc<Mutex<Connection>>,
 }
 
 const BASE_DB_VERSION: u32 = 199;
@@ -45,7 +46,7 @@ impl SqliteUserStore {
         }
 
         Ok(SqliteUserStore {
-            conn: Mutex::new(conn),
+            conn: Arc::new(Mutex::new(conn)),
         })
     }
 
