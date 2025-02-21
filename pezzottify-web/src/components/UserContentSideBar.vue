@@ -1,23 +1,48 @@
 <template>
   <aside class="sidebar panel">
-    <nav>
-      <div v-for="item in items" :key="item.id" class="mb-4">
-        <h2 class="text-lg font-semibold" v-if="item.type === 'section'">{{ item.name }}</h2>
-        <ul v-if="item.type === 'section'">
-          <li v-for="subItem in item.items" :key="subItem" class="pl-4 cursor-pointer hover:text-gray-400"
-            @click="$emit('select-item', subItem)">{{ subItem }}</li>
-        </ul>
-        <div v-else class="cursor-pointer hover:text-gray-400" @click="$emit('select-item', item.name)">{{
-          item.name }}</div>
-      </div>
-    </nav>
+    <p v-if="loading">Loading...</p>
+    <div v-else-if="albumIds">
+      <h2>Liked Albums</h2>
+      <ul>
+        <li v-for="albumId in albumIds" :key="albumId">
+          {{ albumId }}
+        </li>
+      </ul>
+    </div>
+    <p v-else> {{ typeof (albumIds) }}</p>
   </aside>
 </template>
 
 <script setup>
 import '@/assets/main.css';
-import { defineProps } from 'vue';
-const props = defineProps({ items: Array });
+import { watch, ref, onMounted } from 'vue';
+import { useUserStore } from '@/store/user.js';
+
+const userStore = useUserStore();
+
+const albumIds = ref(null);
+const loading = ref(true);
+
+watch(() => userStore.isLoadingLikedAlbums,
+  (isLoadingLikedAlbums) => {
+    loading.value = isLoadingLikedAlbums;
+  },
+  { immediate: true }
+);
+watch(() => userStore.likedAlbumIds,
+  (likedAlbums) => {
+    console.log("UserContentSideBar likedAlbumIds: " + likedAlbums);
+    console.log(likedAlbums);
+    if (likedAlbums) {
+      albumIds.value = likedAlbums;
+    }
+  },
+  { immediate: true }
+);
+
+onMounted(() => {
+  userStore.triggerAlbumsLoad();
+});
 </script>
 
 <style scoped>

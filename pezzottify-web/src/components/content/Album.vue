@@ -8,6 +8,7 @@
     </div>
     <div class="commandsSection">
       <PlayIcon class="playAlbumIcon" @click.stop="handleClickOnPlayAlbum" />
+      <ToggableFavoriteIcon :toggled="isAlbumLiked" :clickCallback="handleClickOnFavoriteIcon" />
     </div>
     <div class="artistsContainer">
       <RelatedArtist v-for="artistId in data.album.artists_ids" :key="artistId" :artistId="artistId" />
@@ -48,6 +49,8 @@ import TrackName from '../common/TrackName.vue';
 import ClickableArtistsNames from '@/components/common/ClickableArtistsNames.vue';
 import PlayIcon from '../icons/PlayIcon.vue';
 import { usePlayerStore } from '@/store/player';
+import { useUserStore } from '@/store/user';
+import ToggableFavoriteIcon from '../common/ToggableFavoriteIcon.vue';
 
 const props = defineProps({
   albumId: {
@@ -60,8 +63,10 @@ const data = ref(null);
 const coverUrls = ref(null);
 
 const player = usePlayerStore();
+const userStore = useUserStore();
 
 const currentTrackId = ref(null);
+const isAlbumLiked = ref(false);
 
 const computeTrackRowClasses = (trackId) => {
   const isCurrentTrack = trackId == currentTrackId.value;
@@ -94,6 +99,10 @@ const fetchData = async (id) => {
   }
 };
 
+const handleClickOnFavoriteIcon = () => {
+  userStore.setAlbumIsLiked(data.value.album.id, !isAlbumLiked.value);
+}
+
 const handleClickOnPlayAlbum = () => {
   player.setResolvedAlbum(data.value);
 }
@@ -117,8 +126,21 @@ watch(() => props.albumId, (newId) => {
   fetchData(newId);
 });
 
+watch([() => userStore.likedAlbumIds, data],
+  ([likedAlbums, albumData], [oldLikedAlbums, oldAlbumData]) => {
+    console.log("watch liked albums and album data, new stuff incoming: " + likedAlbums + " " + albumData);
+    if (likedAlbums && albumData) {
+      isAlbumLiked.value = likedAlbums.includes(albumData.album.id);
+      console.log("isAlbumLiked: " + isAlbumLiked.value);
+      console.log("likedAlbums: " + likedAlbums);
+    }
+  },
+  { immediate: true }
+);
+
 onMounted(() => {
   fetchData(props.albumId);
+  userStore.triggerAlbumsLoad();
 });
 </script>
 
@@ -157,6 +179,8 @@ onMounted(() => {
 }
 
 .commandsSection {
+  display: flex;
+  flex-direction: row;
   margin-top: 16px;
   margin-left: 8px;
   margin-right: 8px;
