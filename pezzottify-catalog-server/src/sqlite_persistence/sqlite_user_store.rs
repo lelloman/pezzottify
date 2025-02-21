@@ -267,6 +267,26 @@ impl UserStore for SqliteUserStore {
 
         Ok(())
     }
+
+    fn get_user_liked_content(
+        &self,
+        user_id: usize,
+        content_type: LikedContentType,
+    ) -> Result<Vec<String>> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn
+            .prepare(&format!(
+                "SELECT content_id FROM {} WHERE user_id = ?1 AND content_type = ?2",
+                TABLE_LIKED_CONTENT
+            ))
+            .ok()
+            .unwrap();
+        Ok(stmt
+            .query_map(params![user_id, content_type.to_int()], |row| row.get(0))
+            .ok()
+            .unwrap()
+            .collect::<Result<Vec<String>, _>>()?)
+    }
 }
 
 fn system_time_from_column_result(value: i64) -> SystemTime {

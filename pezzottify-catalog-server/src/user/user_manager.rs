@@ -176,4 +176,15 @@ impl UserManager {
     pub fn get_all_user_handles(&self) -> Vec<String> {
         self.user_store.lock().unwrap().get_all_user_handles()
     }
+
+    pub fn get_user_liked_content(
+        &self,
+        user_id: usize,
+        conten_type: LikedContentType,
+    ) -> Result<Vec<String>> {
+        self.user_store
+            .lock()
+            .unwrap()
+            .get_user_liked_content(user_id, conten_type)
+    }
 }

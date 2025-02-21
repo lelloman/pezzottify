@@ -66,6 +66,14 @@ pub trait UserStore: UserAuthTokenStore + UserAuthCredentialsStore + Send + Sync
     /// Returns None if the user does not exist.
     fn get_user_playlists(&self, user_id: &str) -> Option<Vec<UserPlaylist>>;
 
+    /// Returns the user's liked content.
+    /// Returns None if the user does not exist.
+    fn get_user_liked_content(
+        &self,
+        user_id: usize,
+        content_type: LikedContentType,
+    ) -> Result<Vec<String>>;
+
     // Returns a user object to be used for session management.
     // Returns None if the user does not exist.
     //fn get_user_session_view(&self, user_id: &str) -> Option<UserSessionView>;

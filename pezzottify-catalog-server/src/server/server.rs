@@ -8,7 +8,10 @@ use std::{
 
 use tracing::{debug, error};
 
-use crate::{catalog::Catalog, user::UserStore};
+use crate::{
+    catalog::Catalog,
+    user::{user_models::LikedContentType, UserStore},
+};
 use crate::{
     search::{SearchVault, SearchedAlbum},
     user::UserManager,
@@ -196,6 +199,27 @@ async fn delete_user_liked_content(
     update_user_liked_content(user_manager, session.user_id, &content_id, false)
 }
 
+async fn get_user_liked_content(
+    session: Session,
+    State(user_manager): State<GuardedUserManager>,
+    Path(content_id): Path<String>,
+) -> Response {
+    let content_type = content_id; // Other route methods are already registered with content_id.
+    let content_type = match content_type.as_str() {
+        "album" => LikedContentType::Album,
+        "artist" => LikedContentType::Artist,
+        "track" => LikedContentType::Track,
+        _ => return StatusCode::BAD_REQUEST.into_response(),
+    };
+
+    let user_manager = user_manager.lock().unwrap();
+    let liked_content = user_manager.get_user_liked_content(session.user_id, content_type);
+    match liked_content {
+        Ok(liked_content) => Json(liked_content).into_response(),
+        Err(_) => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+    }
+}
+
 async fn login(
     State(user_manager): State<GuardedUserManager>,
     Json(body): Json<LoginBody>,
@@ -312,11 +336,9 @@ fn make_app(
         .with_state(state.clone());
 
     let mut user_routes: Router = Router::new()
-        .route("/user/liked/{content_id}", post(add_user_liked_content))
-        .route(
-            "/user/liked/{content_id}",
-            delete(delete_user_liked_content),
-        )
+        .route("/liked/{content_id}", post(add_user_liked_content))
+        .route("/liked/{content_id}", delete(delete_user_liked_content))
+        .route("/liked/{content_id}", get(get_user_liked_content))
         .with_state(state.clone());
 
     if let Some(search_routes) = make_search_routes(state.clone()) {
@@ -328,6 +350,7 @@ fn make_app(
         .with_state(state.clone())
         .nest("/v1/auth", auth_routes)
         .nest("/v1/content", content_routes)
+        .nest("/v1/user", user_routes)
         .layer(middleware::from_fn_with_state(
             state.clone(),
             logging_middleware,
@@ -439,6 +462,14 @@ mod tests {
         }
 
         fn get_all_user_handles(&self) -> Vec<String> {
+            todo!()
+        }
+
+        fn get_user_liked_content(
+            &self,
+            user_id: usize,
+            content_type: LikedContentType,
+        ) -> Result<Vec<String>> {
             todo!()
         }
     }
