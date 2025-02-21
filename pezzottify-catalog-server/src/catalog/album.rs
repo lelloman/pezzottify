@@ -1,7 +1,7 @@
+use super::Artist;
 use super::{Image, Track};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use super::Artist;
 
 #[derive(Clone, Serialize, Deserialize, Debug)]
 pub enum AlbumType {

@@ -5,7 +5,7 @@ mod image;
 mod load;
 mod track;
 
-pub use album::Album;
+pub use album::{Album, Disc};
 pub use artist::Artist;
 pub use catalog::{Catalog, Dirs, Problem as LoadCatalogProblem};
 pub use image::Image;

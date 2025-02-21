@@ -9,11 +9,13 @@ use axum::{
     response::{IntoResponse, Response},
 };
 
+use serde::de;
 use tokio::{
     fs::File,
     io::{AsyncSeekExt, BufReader, SeekFrom},
 };
 use tokio_util::io::ReaderStream;
+use tracing::debug;
 
 const HEADER_BYTE_RANGE: &str = "Range";
 
@@ -93,15 +95,16 @@ pub async fn stream_track(
         None => return StatusCode::NOT_FOUND.into_response(),
         Some(x) => x,
     };
-
+    debug!("Streaming track: {}", track.name);
     let path = match catalog
         .lock()
         .unwrap()
-        .get_track_audio_path(&track.album_id.as_str(), id.as_str())
+        .get_track_audio_path(&track.album_id, id.as_str())
     {
         None => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
         Some(x) => x,
     };
+    debug!("Streaming track from path {}", path.display());
 
     let mut file = match File::open(&path).await {
         Err(_) => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),

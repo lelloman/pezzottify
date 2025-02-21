@@ -22,8 +22,8 @@
 - Add user roles
 - Add user playlists
 - Create catalog db
-- Wrap ids so that the type can be embedded in them
 - Add cache directive to responses
+- ~Wrap ids so that the type can be embedded in them~
 - ~Add user saved albums, tracks and artists~
 - ~Show requests in logs~
 - ~Create User identity/authentication db~

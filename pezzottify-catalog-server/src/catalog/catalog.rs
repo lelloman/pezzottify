@@ -1,11 +1,13 @@
 use super::album::{ResolvedAlbum, ResolvedTrack};
-use super::{Album, Artist, Image, Track};
+use super::track::ArtistWithRole;
+use super::{Album, Artist, Disc, Image, Track};
 use anyhow::{bail, Context, Result};
 use rayon::iter::IntoParallelRefIterator;
 use regex::Regex;
 use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
+use tracing::debug;
 
 macro_rules! problemo {
     ($e:expr, $problems:expr, $problem_gen:expr) => {
@@ -123,12 +125,12 @@ impl IdPresenceChecker {
     pub fn is_id_present<T: AsRef<str>>(&self, id: T) -> bool {
         self.dirs
             .artists
-            .join(format!("artist_{}.json", id.as_ref()))
+            .join(format!("artist_{}.json", id.as_ref()[1..].to_string()))
             .exists()
             || self
                 .dirs
                 .albums
-                .join(format!("album_{}.json", id.as_ref()))
+                .join(format!("album_{}.json", id.as_ref()[1..].to_string()))
                 .exists()
             || self.dirs.images.join(id.as_ref()).exists()
     }
@@ -201,7 +203,7 @@ fn parse_artists(dirs: &Dirs, problems: &mut Vec<Problem>) -> HashMap<String, Ar
         };
 
         let file_text = std::fs::read_to_string(&path).unwrap_or_default();
-        let parsed_artist: Artist = match serde_json::from_str(&file_text) {
+        let mut parsed_artist: Artist = match serde_json::from_str(&file_text) {
             Ok(x) => x,
             Err(x) => {
                 problems.push(Problem::InvalidArtistFile(format!(
@@ -212,11 +214,18 @@ fn parse_artists(dirs: &Dirs, problems: &mut Vec<Problem>) -> HashMap<String, Ar
                 continue;
             }
         };
+
         if parsed_artist.id != filename_artist_id {
             let msg = format!("File name {filename} implies {filename_artist_id} artist id, but the parsed artist has id {}", parsed_artist.id);
             problems.push(Problem::InvalidArtistFile(msg));
             continue;
         }
+        parsed_artist.id = format!("R{}", parsed_artist.id);
+        parsed_artist.related = parsed_artist
+            .related
+            .iter()
+            .map(|x| format!("R{}", x))
+            .collect();
         for related in parsed_artist.related.iter() {
             if !id_checker.is_id_present(related) {
                 problems.push(Problem::MissingReferencedId(format!(
@@ -228,7 +237,7 @@ fn parse_artists(dirs: &Dirs, problems: &mut Vec<Problem>) -> HashMap<String, Ar
         id_checker.check_images_exist(
             || {
                 format!(
-                    "Artist {} - {} portrait",
+                    "Artist {} - {} portrait group",
                     &parsed_artist.id, &parsed_artist.name
                 )
             },
@@ -238,14 +247,14 @@ fn parse_artists(dirs: &Dirs, problems: &mut Vec<Problem>) -> HashMap<String, Ar
         id_checker.check_images_exist(
             || {
                 format!(
-                    "Artist {} - {} portrait",
+                    "Artist {} - {} portraits",
                     &parsed_artist.id, &parsed_artist.name
                 )
             },
             &parsed_artist.portraits,
             problems,
         );
-        out.insert(filename_artist_id.to_owned(), parsed_artist);
+        out.insert(parsed_artist.id.clone(), parsed_artist);
     }
     out
 }
@@ -269,7 +278,8 @@ fn parse_tracks(
 
     for disc in album.discs.iter() {
         for track_id in disc.tracks.iter() {
-            let track_filename_prefix = format!("track_{track_id}");
+            let spotify_track_id = track_id.strip_prefix("T").unwrap();
+            let track_filename_prefix = format!("track_{}", spotify_track_id);
             let track_json_file = album_dir.join(format!("{track_filename_prefix}.json"));
 
             if !filenames_in_dir
@@ -277,18 +287,34 @@ fn parse_tracks(
                 .any(|x| !x.ends_with(".json") && x.starts_with(&track_filename_prefix))
             {
                 bail!(
-                    "Could not find an audio file for track {track_id} in {}",
+                    "Could not find an audio file for track {spotify_track_id} in {}",
                     album_dir.display()
                 );
             }
             let track_json_string = std::fs::read_to_string(&track_json_file)
                 .with_context(|| format!("Failed to read {}", track_json_file.display()))?;
-            let track: Track = serde_json::from_str(&track_json_string).with_context(|| {
+            let mut track: Track = serde_json::from_str(&track_json_string).with_context(|| {
                 format!(
                     "Could not parse track json file {}",
                     track_json_file.display()
                 )
             })?;
+            track.id = format!("T{}", track.id);
+            track.album_id = format!("A{}", track.album_id);
+            track.artists_ids = track
+                .artists_ids
+                .iter()
+                .map(|x| format!("R{}", x))
+                .collect();
+            track.artists_with_role = track
+                .artists_with_role
+                .iter()
+                .map(|a| ArtistWithRole {
+                    artist_id: format!("R{}", a.artist_id),
+                    role: a.role.clone(),
+                    name: a.name.clone(),
+                })
+                .collect();
             for artist_id in track.artists_ids.iter() {
                 if !id_checker.is_id_present(artist_id) {
                     problems.push(Problem::MissingTrackArtistId(format!(
@@ -347,10 +373,24 @@ fn parse_albums_and_tracks(
             )));
 
         let json_read = serde_json::from_str(&album_json_string);
-        let album: Album = problemo!(json_read, problems, |e| {
+        let mut album: Album = problemo!(json_read, problems, |e| {
             Problem::InvalidAlbumFile(format!("Could not parse album.\n{}", e))
         });
-
+        album.id = format!("A{}", album.id);
+        album.artists_ids = album
+            .artists_ids
+            .iter()
+            .map(|x| format!("R{}", x))
+            .collect();
+        album.discs = album
+            .discs
+            .iter()
+            .map(|x| Disc {
+                number: x.number,
+                name: x.name.clone(),
+                tracks: x.tracks.iter().map(|x| format!("T{}", x)).collect(),
+            })
+            .collect();
         let mut parsed_tracks =
             problemo!(parse_tracks(dirs, &path, &album, problems), problems, |e| {
                 Problem::InvalidAlbumTracks(format!("{} - {} - {}", album.id, album.name, e))
@@ -383,9 +423,13 @@ impl CatalogBuildResult {
 }
 
 fn get_track_audio_path(dirs: &Dirs, album_id: &str, track_id: &str) -> Option<PathBuf> {
-    let album_dir = dirs.albums.join(format!("album_{}", album_id));
-
-    let track_file_prefix = format!("track_{}", &track_id);
+    let album_dir = dirs.albums.join(format!("album_{}", &album_id[1..]));
+    debug!(
+        "Looking for track {} audio in {}",
+        track_id,
+        album_dir.display()
+    );
+    let track_file_prefix = format!("track_{}", &track_id[1..]);
     if let Ok(entries) = std::fs::read_dir(album_dir) {
         for entry in entries {
             if let Ok(entry) = entry {
