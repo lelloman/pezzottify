@@ -20,13 +20,13 @@
 
 ## [catalog-server]
 - Add user roles
-- Add user saved albums, tracks and artists
 - Add user playlists
-- Create User identity/authentication db
 - Create catalog db
 - Wrap ids so that the type can be embedded in them
-- Show requests in logs
 - Add cache directive to responses
+- ~Add user saved albums, tracks and artists~
+- ~Show requests in logs~
+- ~Create User identity/authentication db~
 
 ## [agents]
 - Make artist info retrieval agent
