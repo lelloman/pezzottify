@@ -1,6 +1,6 @@
-use super::VERSIONED_SCHEMAS;
-use crate::user::auth::PezzottifyHasher;
+use super::{BASE_DB_VERSION, VERSIONED_SCHEMAS};
 use crate::user::*;
+use crate::user::{auth::PezzottifyHasher, user_models::LikedContentType};
 use anyhow::{bail, Context, Result};
 use rusqlite::{params, Connection};
 use std::{
@@ -9,13 +9,12 @@ use std::{
     sync::{Arc, Mutex},
     time::SystemTime,
 };
+use tracing::info;
 
 #[derive(Clone)]
 pub struct SqliteUserStore {
     conn: Arc<Mutex<Connection>>,
 }
-
-const BASE_DB_VERSION: u32 = 199;
 
 const TABLE_USER: &str = "user";
 const TABLE_LIKED_CONTENT: &str = "liked_content";
@@ -36,14 +35,18 @@ impl SqliteUserStore {
         };
 
         // Read the database version
-        let version: i32 = conn
-            .query_row("PRAGMA user_version;", [], |row| row.get(0))
-            .context("Failed to read database version")?;
+        let version = conn
+            .query_row("PRAGMA user_version;", [], |row| row.get::<usize, usize>(0))
+            .context("Failed to read database version")?
+            - BASE_DB_VERSION;
 
         match version {
-            199 => Self::validate_schema_0(&conn)?,
+            0 => Self::validate_schema_0(&conn)?,
+            1 => Self::validate_schema_1(&conn)?,
             _ => bail!("Unknown database version {}", version),
         }
+
+        Self::migrate_if_needed(&conn, version)?;
 
         Ok(SqliteUserStore {
             conn: Arc::new(Mutex::new(conn)),
@@ -77,20 +80,25 @@ impl SqliteUserStore {
     }
 
     fn create_schema(conn: &Connection) -> Result<()> {
-        conn.execute("PRAGMA foreign_keys = ON;", [])?;
-        let last_versioned_schema = VERSIONED_SCHEMAS.last().unwrap();
-        for table in last_versioned_schema.tables {
-            conn.execute(&table.schema, [])?;
-            for index in table.indices {
-                conn.execute(index, [])?;
+        let latest_version = VERSIONED_SCHEMAS.last().unwrap();
+        let create_fn = latest_version.create;
+        create_fn(conn, latest_version)
+    }
+
+    fn migrate_if_needed(conn: &Connection, version: usize) -> Result<()> {
+        let mut latest_from = version;
+        for schema in VERSIONED_SCHEMAS.iter().skip(version + 1) {
+            if let Some(migration_fn) = schema.migration {
+                info!(
+                    "Migrating db from version {} to {}",
+                    latest_from, schema.version
+                );
+                migration_fn(conn)?;
+                latest_from = schema.version;
             }
         }
-
         conn.execute(
-            &format!(
-                "PRAGMA user_version = {}",
-                BASE_DB_VERSION + last_versioned_schema.version
-            ),
+            &format!("PRAGMA user_version = {}", BASE_DB_VERSION + latest_from),
             [],
         )?;
 
@@ -119,6 +127,41 @@ impl SqliteUserStore {
 
         if columns != ["id", "user_id", "content_id", "created"] {
             bail!("Schema validation failed for linked_content table.");
+        }
+
+        Ok(())
+    }
+
+    fn validate_schema_1(conn: &Connection) -> Result<()> {
+        // Verify user table column names
+        let mut stmt = conn.prepare(&format!("PRAGMA table_info({});", TABLE_USER))?;
+        let columns: Vec<String> = stmt
+            .query_map([], |row| row.get(1))?
+            .collect::<Result<_, _>>()?;
+
+        if columns != ["id", "handle", "created"] {
+            bail!(
+                "Schema validation failed for user table. found {:?}",
+                columns
+            );
+        }
+
+        // Verify liked_content table column names
+        let mut stmt = conn.prepare(&format!("PRAGMA table_info({});", TABLE_LIKED_CONTENT))?;
+        let columns: Vec<String> = stmt
+            .query_map([], |row| row.get(1))?
+            .collect::<Result<_, _>>()?;
+
+        if columns.len() != 5 {
+            bail!("Schema validation failed for linked_content table, should have 5 columns but actually has {}.", columns.len());
+        }
+        for name in ["id", "user_id", "content_id", "content_type", "created"] {
+            if !columns.contains(&name.to_string()) {
+                bail!(
+                    "Schema validation failed for linked_content table, missing {} column.",
+                    name
+                );
+            }
         }
 
         Ok(())
@@ -196,15 +239,21 @@ impl UserStore for SqliteUserStore {
         Some(count > 0)
     }
 
-    fn set_user_liked_content(&self, user_id: usize, content_id: &str, liked: bool) -> Result<()> {
+    fn set_user_liked_content(
+        &self,
+        user_id: usize,
+        content_id: &str,
+        content_type: LikedContentType,
+        liked: bool,
+    ) -> Result<()> {
         let conn = self.conn.lock().unwrap();
         if liked {
             conn.execute(
                 &format!(
-                    "INSERT INTO {} (user_id, content_id) VALUES (?1, ?2)",
+                    "INSERT INTO {} (user_id, content_id, content_type) VALUES (?1, ?2, ?3)",
                     TABLE_LIKED_CONTENT
                 ),
-                params![user_id, content_id],
+                params![user_id, content_id, content_type.to_int()],
             )?;
         } else {
             conn.execute(
@@ -413,7 +462,7 @@ mod tests {
     fn test_cannot_create_linked_content_without_user() {
         let (store, _temp_dir) = create_tmp_store();
 
-        let result = store.set_user_liked_content(1, "test_content", true);
+        let result = store.set_user_liked_content(1, "test_content", LikedContentType::Album, true);
         assert!(result.is_err());
     }
 
@@ -423,7 +472,7 @@ mod tests {
 
         let test_user_id = store.create_user("test_user").unwrap();
         store
-            .set_user_liked_content(test_user_id, "test_content", true)
+            .set_user_liked_content(test_user_id, "test_content", LikedContentType::Artist, true)
             .unwrap();
 
         assert!(store
@@ -431,7 +480,7 @@ mod tests {
             .unwrap());
 
         store
-            .set_user_liked_content(test_user_id, "test_content", false)
+            .set_user_liked_content(test_user_id, "test_content", LikedContentType::Album, false)
             .unwrap();
 
         assert!(!store

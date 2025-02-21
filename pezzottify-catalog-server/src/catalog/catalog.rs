@@ -125,12 +125,12 @@ impl IdPresenceChecker {
     pub fn is_id_present<T: AsRef<str>>(&self, id: T) -> bool {
         self.dirs
             .artists
-            .join(format!("artist_{}.json", id.as_ref()[1..].to_string()))
+            .join(format!("artist_{}.json", &id.as_ref()[1..]))
             .exists()
             || self
                 .dirs
                 .albums
-                .join(format!("album_{}.json", id.as_ref()[1..].to_string()))
+                .join(format!("album_{}.json", &id.as_ref()[1..]))
                 .exists()
             || self.dirs.images.join(id.as_ref()).exists()
     }

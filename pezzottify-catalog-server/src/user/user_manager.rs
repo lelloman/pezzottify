@@ -1,6 +1,6 @@
 use super::{
-    auth::PezzottifyHasher, AuthToken, AuthTokenValue, UserAuthCredentials, UserStore,
-    UsernamePasswordCredentials,
+    auth::PezzottifyHasher, user_models::LikedContentType, AuthToken, AuthTokenValue,
+    UserAuthCredentials, UserStore, UsernamePasswordCredentials,
 };
 use anyhow::{bail, Context, Result};
 use std::{
@@ -25,10 +25,13 @@ impl UserManager {
         content_id: &str,
         liked: bool,
     ) -> anyhow::Result<()> {
-        self.user_store
-            .lock()
-            .unwrap()
-            .set_user_liked_content(user_id, content_id, liked)
+        let content_type = LikedContentType::from_id(content_id);
+        self.user_store.lock().unwrap().set_user_liked_content(
+            user_id,
+            content_id,
+            content_type,
+            liked,
+        )
     }
 
     pub fn get_auth_token(&self, value: &AuthTokenValue) -> Option<AuthToken> {

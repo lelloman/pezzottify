@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::str::Chars;
 use std::time::SystemTime;
 
 use super::permissions::Permission;
@@ -15,9 +16,50 @@ pub struct UserSessionView {
     pub permissions: Vec<Permission>,
 }
 
+pub enum LikedContentType {
+    Artist,
+    Album,
+    Track,
+    Unknown,
+}
+
+impl LikedContentType {
+    pub fn to_int(&self) -> i32 {
+        match self {
+            LikedContentType::Artist => 1,
+            LikedContentType::Album => 2,
+            LikedContentType::Track => 3,
+            LikedContentType::Unknown => 0,
+        }
+    }
+
+    pub fn from_int(value: i32) -> Self {
+        match value {
+            1 => LikedContentType::Artist,
+            2 => LikedContentType::Album,
+            3 => LikedContentType::Track,
+            _ => LikedContentType::Unknown,
+        }
+    }
+
+    pub fn from_id(id: &str) -> Self {
+        if id.is_empty() {
+            return LikedContentType::Unknown;
+        }
+        let first_char = id.chars().next().unwrap();
+        match first_char {
+            'R' => LikedContentType::Artist,
+            'A' => LikedContentType::Album,
+            'T' => LikedContentType::Track,
+            _ => LikedContentType::Unknown,
+        }
+    }
+}
+
 pub struct UserLikedContent {
     pub timestamp: SystemTime,
     pub content_id: String,
+    pub content_type: LikedContentType,
 }
 
 pub struct UserPlaylist {

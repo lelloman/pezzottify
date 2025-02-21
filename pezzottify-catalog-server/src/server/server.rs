@@ -361,6 +361,7 @@ mod tests {
     use super::*;
     use crate::search::NoOpSearchVault;
     use crate::user::auth::{ActiveChallenge, AuthToken, AuthTokenValue};
+    use crate::user::user_models::LikedContentType;
     use crate::user::{UserAuthCredentialsStore, UserAuthTokenStore};
     use axum::{body::Body, http::Request};
     use std::collections::HashMap;
@@ -431,6 +432,7 @@ mod tests {
             &self,
             user_id: usize,
             content_id: &str,
+            content_type: LikedContentType,
             liked: bool,
         ) -> Result<()> {
             todo!()

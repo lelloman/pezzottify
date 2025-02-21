@@ -1,5 +1,5 @@
 use super::auth::{AuthToken, AuthTokenValue, UserAuthCredentials};
-use super::user_models::{UserPlaylist, UserSessionView};
+use super::user_models::{LikedContentType, UserPlaylist, UserSessionView};
 use anyhow::Result;
 
 pub trait UserAuthCredentialsStore: Send + Sync {
@@ -54,7 +54,13 @@ pub trait UserStore: UserAuthTokenStore + UserAuthCredentialsStore + Send + Sync
 
     /// Sets the liked status of the content with the given id.
     /// Returns None if the user does not exist.
-    fn set_user_liked_content(&self, user_id: usize, content_id: &str, liked: bool) -> Result<()>;
+    fn set_user_liked_content(
+        &self,
+        user_id: usize,
+        content_id: &str,
+        content_type: LikedContentType,
+        liked: bool,
+    ) -> Result<()>;
 
     /// Returns the users's playlists.
     /// Returns None if the user does not exist.
