@@ -146,6 +146,7 @@ export const usePlayerStore = defineStore('player', () => {
   const setResolvedAlbum = (data, discIndex, trackIndex) => {
     console.log("player.setResolvedAlbum() data:");
     console.log(data);
+    pendingPercentSeek = null;
     if (!playlist.value.album || playlist.value.album.id != data.album.id) {
       const albumPlaylist = makePlaylistFromResolvedAlbumResponse(data);
       playlist.value = albumPlaylist;
@@ -164,6 +165,7 @@ export const usePlayerStore = defineStore('player', () => {
       const response = await axios.get(`/v1/content/album/${albumId}/resolved`);
       const albumPlaylist = makePlaylistFromResolvedAlbumResponse(response.data);
       playlist.value = albumPlaylist;
+      pendingPercentSeek = null;
       loadTrack(0);
       play();
     } catch (error) {
@@ -176,6 +178,7 @@ export const usePlayerStore = defineStore('player', () => {
     console.log("PlayerStore setTrack:");
     console.log(trackPlaylist);
     playlist.value = trackPlaylist;
+    pendingPercentSeek = null;
     loadTrack(0);
     play();
   };
@@ -312,6 +315,7 @@ export const usePlayerStore = defineStore('player', () => {
       }
     }
   };
+
   const seekToPercentage = (percentage) => {
     if (sound) {
       const duration = sound.duration();
@@ -370,6 +374,7 @@ export const usePlayerStore = defineStore('player', () => {
   }
 
   const loadTrackIndex = (index) => {
+    pendingPercentSeek = null;
     if (playlist.value.tracks.length && index >= 0 && index < playlist.value.tracks.length) {
       currentTrackIndex.value = index;
       loadTrack(index);
