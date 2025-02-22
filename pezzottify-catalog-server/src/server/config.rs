@@ -5,6 +5,7 @@ pub struct ServerConfig {
     pub requests_logging_level: RequestsLoggingLevel,
     pub port: u16,
     pub content_cache_age_sec: usize,
+    pub frontend_dir_path: Option<String>,
 }
 
 impl Default for ServerConfig {
@@ -13,6 +14,7 @@ impl Default for ServerConfig {
             requests_logging_level: RequestsLoggingLevel::Path,
             port: 3001,
             content_cache_age_sec: 3600,
+            frontend_dir_path: None,
         }
     }
 }

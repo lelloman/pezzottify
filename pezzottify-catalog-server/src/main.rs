@@ -1,8 +1,10 @@
 use anyhow::{Context, Result};
 use clap::Parser;
 use std::{fmt::Debug, path::PathBuf};
-use tracing::info;
-use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
+use tracing::{info, level_filters::LevelFilter};
+use tracing_subscriber::{
+    filter::Directive, layer::SubscriberExt, util::SubscriberInitExt, EnvFilter,
+};
 
 mod catalog;
 use catalog::Catalog;
@@ -46,6 +48,9 @@ struct CliArgs {
 
     #[clap(long, default_value_t = 3600)]
     pub content_cache_age_sec: usize,
+
+    #[clap(long)]
+    pub frontend_dir_path: Option<String>,
 }
 
 #[tokio::main]
@@ -54,7 +59,12 @@ async fn main() -> Result<()> {
 
     tracing_subscriber::registry()
         .with(tracing_subscriber::fmt::layer())
-        .with(EnvFilter::from_env("LOG_LEVEL"))
+        .with(
+            EnvFilter::builder()
+                .with_default_directive(LevelFilter::INFO.into())
+                .with_env_var("LOG_LEVEL")
+                .from_env_lossy(),
+        )
         .try_init()
         .unwrap();
 
@@ -94,6 +104,7 @@ async fn main() -> Result<()> {
         cli_args.logging_level,
         cli_args.port,
         cli_args.content_cache_age_sec,
+        cli_args.frontend_dir_path,
     )
     .await
 }

@@ -8,6 +8,7 @@
 - Use a logger instead console.logging all over the place
 - Implement UNDO or history for playback playlists
 - Implement User page (profile?)
+- Add a logo with a home link
 - ~Make track content page~
 - ~Style scrollbars~
 - ~Make album content page~

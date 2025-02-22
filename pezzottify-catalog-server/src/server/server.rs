@@ -18,6 +18,7 @@ use crate::{
     user::UserManager,
 };
 use axum_extra::extract::cookie::{Cookie, SameSite};
+use tower_http::services::ServeDir;
 
 use axum::{
     body::Body,
@@ -352,9 +353,18 @@ fn make_app(
         content_routes = content_routes.merge(search_routes);
     }
 
-    let mut app: Router = Router::new()
-        .route("/", get(home))
-        .with_state(state.clone())
+    let home_router: Router = match config.frontend_dir_path {
+        Some(frontend_path) => {
+            let static_files_service =
+                ServeDir::new(frontend_path).append_index_html_on_directories(true);
+            Router::new().fallback_service(static_files_service)
+        }
+        None => Router::new()
+            .route("/", get(home))
+            .with_state(state.clone()),
+    };
+
+    let mut app: Router = home_router
         .nest("/v1/auth", auth_routes)
         .nest("/v1/content", content_routes)
         .nest("/v1/user", user_routes);
@@ -378,11 +388,13 @@ pub async fn run_server(
     requests_logging_level: RequestsLoggingLevel,
     port: u16,
     content_cache_age_sec: usize,
+    frontend_dir_path: Option<String>,
 ) -> Result<()> {
     let config = ServerConfig {
         port,
         requests_logging_level,
         content_cache_age_sec,
+        frontend_dir_path,
     };
     let app = make_app(config, catalog, search_vault, user_store)?;
 
