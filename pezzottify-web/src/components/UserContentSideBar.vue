@@ -1,30 +1,27 @@
 <template>
   <aside class="sidebar panel">
-    <p v-if="loading">Loading...</p>
-    <div v-else-if="albumIds && artistsIds">
-      <div class="tabSelectorsContainer">
-        <div @click.stop="selectedTab = 'albums'"
-          :class="{ 'tabSelector': true, 'selectedTab': selectedTab === 'albums' }">
-          <h3>Albums</h3>
-        </div>
-        <div @click.stop="selectedTab = 'artists'"
-          :class="{ 'tabSelector': true, 'selectedTab': selectedTab === 'artists' }">
-          <h3>Artists</h3>
-        </div>
+    <div class="tabSelectorsContainer">
+      <div @click.stop="selectedTab = 'albums'"
+        :class="{ 'tabSelector': true, 'selectedTab': selectedTab === 'albums' }">
+        <h3>Albums</h3>
       </div>
-      <div v-if="selectedTab == 'albums'">
-        <div v-for="albumId in albumIds" :key="albumId">
-          <AlbumCard :albumId="albumId" :showArtists="true" />
-        </div>
-      </div>
-      <div v-else-if="selectedTab == 'artists'">
-        <div v-for="artistId in artistsIds" :key="artistId">
-          <LoadArtistListItem :artistId="artistId" />
-        </div>
+      <div @click.stop="selectedTab = 'artists'"
+        :class="{ 'tabSelector': true, 'selectedTab': selectedTab === 'artists' }">
+        <h3>Artists</h3>
       </div>
     </div>
-    <p v-else> {{ albumIds }} <br><br> {{ artistsIds }}</p>
-
+    <div v-if="selectedTab == 'albums'">
+      <div v-if="isLoadingAlbums">Loading...</div>
+      <div ref="albumsRef" v-for="albumId in albumIds" :key="albumId" :mounted="userStore.triggerAlbumsLoad()">
+        <AlbumCard :albumId="albumId" :showArtists="true" />
+      </div>
+    </div>
+    <div v-else-if="selectedTab == 'artists'">
+      <div v-if="isLoadingArtists">Loading...</div>
+      <div ref="artistsRef" v-for="artistId in artistsIds" :key="artistId" :mounted="userStore.triggerArtistsLoad()">
+        <LoadArtistListItem :artistId="artistId" />
+      </div>
+    </div>
   </aside>
 </template>
 
@@ -39,13 +36,30 @@ const userStore = useUserStore();
 
 const albumIds = ref(null);
 const artistsIds = ref(null);
-const loading = ref(true);
+const isLoadingArtists = ref(true);
+const isLoadingAlbums = ref(true);
 
 const selectedTab = ref('albums');
 
-watch([() => userStore.isLoadingLikedAlbums, userStore.isLoadingLikedArtists],
-  ([isLoadingLikedAlbums, isLoadingLikedArtists], [oldIsLoadingLikedAlbums, oldIsLoadingLikedArtists]) => {
-    loading.value = isLoadingLikedAlbums || isLoadingLikedArtists;
+watch(selectedTab, (tab) => {
+  if (tab === 'albums') {
+    userStore.triggerAlbumsLoad();
+  } else if (tab === 'artists') {
+    userStore.triggerArtistsLoad();
+  }
+}, {
+  immediate: true
+});
+
+watch(() => userStore.isLoadingLikedAlbums,
+  (isLoading) => {
+    isLoadingAlbums.value = isLoading;
+  },
+  { immediate: true }
+);
+watch(() => userStore.isLoadingLikedArtists,
+  (isLoading) => {
+    isLoadingArtists.value = isLoading;
   },
   { immediate: true }
 );
@@ -66,10 +80,6 @@ watch(() => userStore.likedArtistsIds,
   { immediate: true }
 );
 
-onMounted(() => {
-  userStore.triggerAlbumsLoad();
-  userStore.triggerArtistsLoad();
-});
 </script>
 
 <style scoped>
@@ -80,6 +90,7 @@ onMounted(() => {
   margin-left: 16px;
   margin-bottom: 16px;
   margin-right: 8px;
+  overflow-y: auto;
 }
 
 .tabSelectorsContainer {
