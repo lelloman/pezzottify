@@ -9,13 +9,13 @@ mod catalog;
 mod cli_style;
 mod search;
 mod server;
+mod sqlite_persistence;
 mod user;
 
 use cli_style::get_styles;
 use user::UserManager;
 
-mod sqlite_persistence;
-use sqlite_persistence::SqliteUserStore;
+use user::SqliteUserStore;
 
 fn parse_path(s: &str) -> Result<PathBuf> {
     let original_path = PathBuf::from(s);

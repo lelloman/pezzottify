@@ -1,11 +1,18 @@
 use anyhow::{bail, Result};
-use hyper::Version;
 use rusqlite::{params, Connection};
 
 pub struct Table {
     pub name: &'static str,
     pub schema: &'static str,
     pub indices: &'static [&'static str],
+}
+
+pub struct VersionedSchema {
+    pub version: usize,
+    pub tables: &'static [Table],
+    pub create: fn(&Connection, &VersionedSchema) -> Result<()>,
+    pub migration: Option<fn(&Connection) -> Result<()>>,
+    pub validate: fn(&Connection) -> Result<()>,
 }
 
 pub const BASE_DB_VERSION: usize = 99999;
@@ -106,14 +113,6 @@ const USER_PLAYLIST_TRACKS_TABLE_V_3: Table = Table {
     schema: "CREATE TABLE user_playlist_tracks (id INTEGER, track_id TEXT NOT NULL, playlist_id INTEGER NOT NULL, position INTEGER NOT NULL, PRIMARY KEY(id), CONSTRAINT playlist_id FOREIGN KEY(playlist_id) REFERENCES user_playlist(id) ON DELETE CASCADE)",
     indices: &[],
 };
-
-pub struct VersionedSchema {
-    pub version: usize,
-    pub tables: &'static [Table],
-    pub create: fn(&Connection, &VersionedSchema) -> Result<()>,
-    pub migration: Option<fn(&Connection) -> Result<()>>,
-    pub validate: fn(&Connection) -> Result<()>,
-}
 
 pub const VERSIONED_SCHEMAS: &[VersionedSchema] = &[
     VersionedSchema {

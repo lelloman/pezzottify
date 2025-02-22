@@ -9,6 +9,7 @@
 - Implement UNDO or history for playback playlists
 - Implement User page (profile?)
 - Add a logo with a home link
+- Add admin panel (after user roles)
 - ~Make track content page~
 - ~Style scrollbars~
 - ~Make album content page~

@@ -15,10 +15,10 @@ use search::{NoOpSearchVault, PezzotHashSearchVault, SearchVault};
 mod server;
 use server::{run_server, RequestsLoggingLevel};
 
-mod user;
-
 mod sqlite_persistence;
-use sqlite_persistence::SqliteUserStore;
+
+mod user;
+use user::SqliteUserStore;
 
 fn parse_path(s: &str) -> Result<PathBuf> {
     let original_path = PathBuf::from(s).canonicalize()?;
