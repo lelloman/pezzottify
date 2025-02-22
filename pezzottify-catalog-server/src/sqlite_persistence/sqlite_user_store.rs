@@ -1,4 +1,4 @@
-use super::{BASE_DB_VERSION, VERSIONED_SCHEMAS};
+use super::{versioned_schema, BASE_DB_VERSION, VERSIONED_SCHEMAS};
 use crate::user::*;
 use crate::user::{auth::PezzottifyHasher, user_models::LikedContentType};
 use anyhow::{bail, Context, Result};
@@ -40,10 +40,13 @@ impl SqliteUserStore {
             .context("Failed to read database version")?
             - BASE_DB_VERSION;
 
-        match version {
-            0 => Self::validate_schema_0(&conn)?,
-            1 => Self::validate_schema_1(&conn)?,
-            _ => bail!("Unknown database version {}", version),
+        if version >= VERSIONED_SCHEMAS.len() {
+            bail!("Database version {} is too new", version);
+        } else {
+            (VERSIONED_SCHEMAS
+                .get(version)
+                .context("Failed to get schema")?
+                .validate)(&conn)?;
         }
 
         Self::migrate_if_needed(&conn, version)?;
@@ -101,68 +104,6 @@ impl SqliteUserStore {
             &format!("PRAGMA user_version = {}", BASE_DB_VERSION + latest_from),
             [],
         )?;
-
-        Ok(())
-    }
-
-    fn validate_schema_0(conn: &Connection) -> Result<()> {
-        // Verify user table column names
-        let mut stmt = conn.prepare(&format!("PRAGMA table_info({});", TABLE_USER))?;
-        let columns: Vec<String> = stmt
-            .query_map([], |row| row.get(1))?
-            .collect::<Result<_, _>>()?;
-
-        if columns != ["id", "handle", "created"] {
-            bail!(
-                "Schema validation failed for user table. found {:?}",
-                columns
-            );
-        }
-
-        // Verify liked_content table column names
-        let mut stmt = conn.prepare(&format!("PRAGMA table_info({});", TABLE_LIKED_CONTENT))?;
-        let columns: Vec<String> = stmt
-            .query_map([], |row| row.get(1))?
-            .collect::<Result<_, _>>()?;
-
-        if columns != ["id", "user_id", "content_id", "created"] {
-            bail!("Schema validation failed for linked_content table.");
-        }
-
-        Ok(())
-    }
-
-    fn validate_schema_1(conn: &Connection) -> Result<()> {
-        // Verify user table column names
-        let mut stmt = conn.prepare(&format!("PRAGMA table_info({});", TABLE_USER))?;
-        let columns: Vec<String> = stmt
-            .query_map([], |row| row.get(1))?
-            .collect::<Result<_, _>>()?;
-
-        if columns != ["id", "handle", "created"] {
-            bail!(
-                "Schema validation failed for user table. found {:?}",
-                columns
-            );
-        }
-
-        // Verify liked_content table column names
-        let mut stmt = conn.prepare(&format!("PRAGMA table_info({});", TABLE_LIKED_CONTENT))?;
-        let columns: Vec<String> = stmt
-            .query_map([], |row| row.get(1))?
-            .collect::<Result<_, _>>()?;
-
-        if columns.len() != 5 {
-            bail!("Schema validation failed for linked_content table, should have 5 columns but actually has {}.", columns.len());
-        }
-        for name in ["id", "user_id", "content_id", "content_type", "created"] {
-            if !columns.contains(&name.to_string()) {
-                bail!(
-                    "Schema validation failed for linked_content table, missing {} column.",
-                    name
-                );
-            }
-        }
 
         Ok(())
     }

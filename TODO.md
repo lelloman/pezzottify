@@ -24,6 +24,7 @@
 - Create catalog db
 - Add cache directive to responses
 - Check UserStore return type, we should not swallow errors
+- Make no_checks a cli args rather than build feature
 - ~Wrap ids so that the type can be embedded in them~
 - ~Add user saved albums, tracks and artists~
 - ~Show requests in logs~
