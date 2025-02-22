@@ -9,6 +9,7 @@ default = []
 no_search = [] # dev feature, the run is faster without building the search index
 no_checks = [] # dev feature, ignore expensive catalog integrity checks
 fast = ["no_search", "no_checks"]
+slowdown = [] # dev feature, adds a slowdown layer in front of server routes
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -24,8 +25,9 @@ clap = { version = "4.4.11", features = ["derive"] }
 futures = "0.3.31"
 hyper = "1.6.0"
 infer = "0.16.0"
-rand = "0.8.5"
-rand_core = { version = "0.6.4", features = ["std"] }
+rand = "0.9.0"
+rand_core = { version = "0.9.0", features = ["std"] }
+rand_distr = "0.5.1"
 rayon = "1.10.0"
 regex = "1.10.2"
 rsa = "0.9.7"

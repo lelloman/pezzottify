@@ -8,6 +8,7 @@ use std::{
 
 use tracing::{debug, error};
 
+use super::slowdown_request;
 use crate::{
     catalog::Catalog,
     user::{user_models::LikedContentType, UserStore},
@@ -335,7 +336,7 @@ fn make_app(
         .route("/stream/{id}", get(stream_track))
         .with_state(state.clone());
 
-    let mut user_routes: Router = Router::new()
+    let user_routes: Router = Router::new()
         .route("/liked/{content_id}", post(add_user_liked_content))
         .route("/liked/{content_id}", delete(delete_user_liked_content))
         .route("/liked/{content_id}", get(get_user_liked_content))
@@ -345,16 +346,21 @@ fn make_app(
         content_routes = content_routes.merge(search_routes);
     }
 
-    let app: Router = Router::new()
+    let mut app: Router = Router::new()
         .route("/", get(home))
         .with_state(state.clone())
         .nest("/v1/auth", auth_routes)
         .nest("/v1/content", content_routes)
-        .nest("/v1/user", user_routes)
-        .layer(middleware::from_fn_with_state(
-            state.clone(),
-            logging_middleware,
-        ));
+        .nest("/v1/user", user_routes);
+
+    #[cfg(feature = "slowdown")]
+    {
+        app = app.layer(middleware::from_fn(slowdown_request));
+    }
+    app = app.layer(middleware::from_fn_with_state(
+        state.clone(),
+        logging_middleware,
+    ));
 
     Ok(app)
 }

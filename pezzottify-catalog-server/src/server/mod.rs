@@ -1,4 +1,5 @@
 mod config;
+mod purpousful_slowdown;
 mod requests_logging;
 mod search;
 mod server;
@@ -7,6 +8,7 @@ pub(self) mod state;
 mod stream_track;
 
 pub(self) use config::ServerConfig;
+pub(self) use purpousful_slowdown::slowdown_request;
 pub(self) use requests_logging::logging_middleware;
 pub use requests_logging::RequestsLoggingLevel;
 pub(self) use search::make_search_routes;

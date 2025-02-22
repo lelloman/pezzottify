@@ -1,7 +1,7 @@
 use anyhow::{bail, Context, Result};
 
-use rand::distributions::Alphanumeric;
 use rand::{thread_rng, Rng};
+use rand_distr::Alphanumeric;
 use serde::{Deserialize, Serialize};
 
 use std::str::FromStr;
