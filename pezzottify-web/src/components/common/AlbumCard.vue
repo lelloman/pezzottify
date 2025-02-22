@@ -2,8 +2,11 @@
   <div class=".albumWrapper">
     <div v-if="loading">Loading...</div>
     <div v-else-if="albumData" class="searchResultRow" :data-id="albumData.id" @click="handleClick(albumData.id)">
-      <MultiSourceImage :urls="chooseAlbumCoverImageUrl(albumData)" class="searchResultRoundImage" />
-      <h3 class="title">{{ albumData.name }}</h3>
+      <MultiSourceImage :urls="chooseAlbumCoverImageUrl(albumData)" class="searchResultImage" />
+      <div class="column">
+        <h3 class="title">{{ albumData.name }}</h3>
+        <ClickableArtistsNames v-if="showArtists" class="artistsNames" :artistsIdsNames="artistsIdsNames" />
+      </div>
 
       <PlayIcon class="searchResultPlayIcon" :data-id="albumData.id" @click.stop="handlePlayClick(albumData.id)" />
     </div>
@@ -20,15 +23,22 @@ import axios from 'axios';
 import MultiSourceImage from './MultiSourceImage.vue';
 import PlayIcon from '@/components/icons/PlayIcon.vue';
 import { usePlayerStore } from '@/store/player';
+import ClickableArtistsNames from './ClickableArtistsNames.vue';
 
 const props = defineProps({
   albumId: {
     type: String,
     required: true,
+  },
+  showArtists: {
+    type: Boolean,
+    required: false,
+    withDefaults: false,
   }
 });
 
 const albumData = ref(null);
+const artistsIdsNames = ref([]);
 const loading = ref(true);
 const error = ref(null);
 const router = useRouter();
@@ -44,8 +54,12 @@ const handlePlayClick = (event) => {
 
 const fetchAlbumData = async (id) => {
   try {
-    const response = await axios.get(`/v1/content/album/${id}`);
-    albumData.value = response.data;
+    const response = await axios.get(`/v1/content/album/${id}/resolved`);
+    artistsIdsNames.value = response.data.album.artists_ids.map((artistId) => {
+      return [artistId, response.data.artists[artistId].name];
+    });
+    albumData.value = response.data.album;
+
   } catch (err) {
     error.value = err.message;
   } finally {
@@ -78,5 +92,11 @@ const handleClick = (albumId) => {
   margin: 0;
   font-size: 16px;
   font-weight: bold;
+}
+
+.column {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
 }
 </style>

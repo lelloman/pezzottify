@@ -11,7 +11,7 @@
     </div>
     <div class="discographyContainer">
       <h1>Discography:</h1>
-      <ArtistAlbums :artistId="artistId" />
+      <ArtistAlbumCards :artistId="artistId" />
     </div>
   </div>
 
@@ -26,7 +26,7 @@ import axios from 'axios';
 import { chooseArtistCoverImageUrl } from '@/utils';
 import MultiSourceImage from '@/components/common/MultiSourceImage.vue';
 import RelatedArtist from '@/components/common/LoadArtistListItem.vue';
-import ArtistAlbums from '../common/ArtistAlbums.vue';
+import ArtistAlbumCards from '@/components/common/ArtistAlbumCards.vue';
 
 const props = defineProps({
   artistId: {

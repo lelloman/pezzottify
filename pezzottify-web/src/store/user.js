@@ -35,7 +35,7 @@ export const useUserStore = defineStore('user', () => {
         await axios.delete(`/v1/user/liked/${albumId}`);
       }
       if (isLiked) {
-        likedAlbumIds.value = [...likedAlbumIds.value, albumId];
+        likedAlbumIds.value = [albumId, ...likedAlbumIds.value];
       } else {
         likedAlbumIds.value = likedAlbumIds.value.filter(id => id !== albumId);
       }

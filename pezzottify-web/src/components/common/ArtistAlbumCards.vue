@@ -1,6 +1,6 @@
 <template>
   <div v-if="albumIds" class="albumsContainer">
-    <ArtistAlbum v-for="albumId in albumIds" :key="albumId" :albumId="albumId" />
+    <AlbumCard v-for="albumId in albumIds" :key="albumId" :albumId="albumId" />
   </div>
   <div v-else-if="isLoading">
     Loading...
@@ -13,7 +13,7 @@
 <script setup>
 import { onMounted, ref } from 'vue';
 import axios from 'axios';
-import ArtistAlbum from './ArtistAlbum.vue';
+import AlbumCard from '@/components/common/AlbumCard.vue';
 
 const props = defineProps({
   artistId: {

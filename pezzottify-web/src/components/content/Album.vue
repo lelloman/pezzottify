@@ -186,6 +186,10 @@ onMounted(() => {
   margin-right: 8px;
 }
 
+.commandsSection>div {
+  margin-left: 16px;
+}
+
 .artistsContainer {
   width: 100%;
   display: flex;
