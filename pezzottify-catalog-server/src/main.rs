@@ -43,6 +43,9 @@ struct CliArgs {
 
     #[clap(long, default_value = "path")]
     pub logging_level: RequestsLoggingLevel,
+
+    #[clap(long, default_value_t = 3600)]
+    pub content_cache_age_sec: usize,
 }
 
 #[tokio::main]
@@ -90,6 +93,7 @@ async fn main() -> Result<()> {
         user_store,
         cli_args.logging_level,
         cli_args.port,
+        cli_args.content_cache_age_sec,
     )
     .await
 }

@@ -1,4 +1,5 @@
 mod config;
+pub mod http_cache_layer;
 mod purpousful_slowdown;
 mod requests_logging;
 mod search;

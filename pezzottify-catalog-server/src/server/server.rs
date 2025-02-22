@@ -36,6 +36,8 @@ use super::{make_search_routes, requests_logging, state::*, RequestsLoggingLevel
 use crate::server::{logging_middleware, session::Session};
 use crate::user::auth::{AuthTokenValue, UserAuthCredentials};
 
+use super::http_cache_layer::cache_layer;
+
 #[derive(Serialize)]
 struct ServerStats {
     pub uptime: String,
@@ -316,7 +318,7 @@ fn make_app(
     user_store: Box<dyn UserStore>,
 ) -> Result<Router> {
     let user_manager = UserManager::new(user_store);
-    let state = ServerState::new(config, catalog, search_vault, user_manager);
+    let state = ServerState::new(config.clone(), catalog, search_vault, user_manager);
 
     let auth_routes: Router = Router::new()
         .route("/login", post(login))
@@ -334,6 +336,10 @@ fn make_app(
         .route("/track/{id}/resolved", get(get_resolved_track))
         .route("/image/{id}", get(get_image))
         .route("/stream/{id}", get(stream_track))
+        .layer(middleware::from_fn_with_state(
+            config.content_cache_age_sec,
+            cache_layer,
+        ))
         .with_state(state.clone());
 
     let user_routes: Router = Router::new()
@@ -371,10 +377,12 @@ pub async fn run_server(
     user_store: Box<dyn UserStore>,
     requests_logging_level: RequestsLoggingLevel,
     port: u16,
+    content_cache_age_sec: usize,
 ) -> Result<()> {
     let config = ServerConfig {
         port,
         requests_logging_level,
+        content_cache_age_sec,
     };
     let app = make_app(config, catalog, search_vault, user_store)?;
 
