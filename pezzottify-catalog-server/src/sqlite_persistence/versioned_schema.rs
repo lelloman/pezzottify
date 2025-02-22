@@ -95,6 +95,18 @@ const LIKED_CONTENT_TABLE_V_2: Table = Table {
     indices: &[],
 };
 
+/// V 3
+const USER_PLAYLIST_TABLE_V_3: Table = Table {
+    name: "user_playlist",
+    schema: "CREATE TABLE user_playlist (id INTEGER, user_id INTEGER NOT NULL, name	TEXT, created INTEGER DEFAULT (CAST(strftime('%s', 'now') AS int)),	PRIMARY KEY(id), CONSTRAINT user_id FOREIGN KEY(user_id) REFERENCES user(id) ON DELETE CASCADE)",
+    indices: &[],
+};
+const USER_PLAYLIST_TRACKS_TABLE_V_3: Table = Table {
+    name: "user_playlist_tracks",
+    schema: "CREATE TABLE user_playlist_tracks (id INTEGER, track_id TEXT NOT NULL, playlist_id INTEGER NOT NULL, position INTEGER NOT NULL, PRIMARY KEY(id), CONSTRAINT playlist_id FOREIGN KEY(playlist_id) REFERENCES user_playlist(id) ON DELETE CASCADE)",
+    indices: &[],
+};
+
 pub struct VersionedSchema {
     pub version: usize,
     pub tables: &'static [Table],
@@ -178,6 +190,23 @@ pub const VERSIONED_SCHEMAS: &[VersionedSchema] = &[
             // Drop the backup table
             conn.execute("DROP TABLE liked_content_backup;", [])?;
 
+            Ok(())
+        }),
+        validate: validate_schema_1,
+    },
+    VersionedSchema {
+        version: 3,
+        tables: &[
+            USER_TABLE_V_0,
+            LIKED_CONTENT_TABLE_V_2,
+            AUTH_TOKEN_TABLE_V_0,
+            USER_PASSWORD_CREDENTIALS_V_0,
+            USER_PLAYLIST_TABLE_V_3,
+        ],
+        create: create_v0,
+        migration: Some(|conn: &Connection| {
+            conn.execute(&USER_PLAYLIST_TABLE_V_3.schema, [])?;
+            conn.execute(&USER_PLAYLIST_TRACKS_TABLE_V_3.schema, [])?;
             Ok(())
         }),
         validate: validate_schema_1,
