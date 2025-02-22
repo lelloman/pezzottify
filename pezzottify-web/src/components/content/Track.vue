@@ -30,7 +30,6 @@
 import { ref, watch, onMounted } from 'vue';
 import axios from 'axios';
 import MultiSourceImage from '@/components/common/MultiSourceImage.vue';
-import RelatedArtist from '@/components/common/LoadArtistListItem.vue';
 import PlayIcon from '../icons/PlayIcon.vue';
 import { usePlayerStore } from '@/store/player';
 import { chooseAlbumCoverImageUrl, chooseAlbumCoverImageIds, formatDuration, getYearFromTimestamp } from '@/utils';

@@ -44,7 +44,6 @@ import { ref, watch, onMounted } from 'vue';
 import axios from 'axios';
 import { chooseAlbumCoverImageUrl, formatDuration } from '@/utils';
 import MultiSourceImage from '@/components/common/MultiSourceImage.vue';
-import RelatedArtist from '@/components/common/LoadArtistListItem.vue';
 import TrackName from '../common/TrackName.vue';
 import ClickableArtistsNames from '@/components/common/ClickableArtistsNames.vue';
 import PlayIcon from '../icons/PlayIcon.vue';

@@ -45,7 +45,7 @@ pub fn load_catalog<P: AsRef<std::path::Path>>(path: P) -> Result<Catalog> {
 
     #[cfg(not(feature = "no_checks"))]
     {
-        println!("Performing checks...");
+        info!("Performing checks...");
         if let Some(catalog) = catalog.as_ref() {
             let mut tracks_problems: Vec<LoadCatalogProblem> = catalog
                 .par_iter_tracks()

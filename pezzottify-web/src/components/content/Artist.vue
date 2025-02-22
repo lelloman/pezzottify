@@ -4,6 +4,8 @@
       <MultiSourceImage class="coverImage" :urls="coverUrls" />
       <div class="artistInfoColum">
         <h1 class="artistName"> {{ data.name }}</h1>
+        <div class="verticalFiller"></div>
+        <ToggableFavoriteIcon :toggled="isArtistLiked" :clickCallback="handleClickOnFavoriteIcon" />
       </div>
     </div>
     <div v-if="data" class="relatedArtistsContainer">
@@ -24,9 +26,10 @@
 import { ref, watch, onMounted } from 'vue';
 import axios from 'axios';
 import { chooseArtistCoverImageUrl } from '@/utils';
+import { useUserStore } from '@/store/user.js';
 import MultiSourceImage from '@/components/common/MultiSourceImage.vue';
-import RelatedArtist from '@/components/common/LoadArtistListItem.vue';
 import ArtistAlbumCards from '@/components/common/ArtistAlbumCards.vue';
+import ToggableFavoriteIcon from '@/components/common/ToggableFavoriteIcon.vue';
 
 const props = defineProps({
   artistId: {
@@ -37,6 +40,9 @@ const props = defineProps({
 
 const data = ref(null);
 const coverUrls = ref(null);
+const isArtistLiked = ref(false);
+
+const userStore = useUserStore();
 
 const fetchData = async (id) => {
   if (!id) return;
@@ -48,6 +54,19 @@ const fetchData = async (id) => {
     console.error('Error fetching data:', error);
   }
 };
+
+watch([() => userStore.likedArtistsIds, data],
+  ([likedArtis, artistData], [oldLikedArtists, oldArtistData]) => {
+    if (likedArtis && artistData) {
+      isArtistLiked.value = likedArtis.includes(props.artistId);
+    }
+  },
+  { immediate: true }
+);
+
+const handleClickOnFavoriteIcon = () => {
+  userStore.setArtistIsLiked(props.artistId, !isArtistLiked.value);
+}
 
 watch(data,
   (newData) => {
@@ -64,6 +83,7 @@ watch(() => props.artistId, (newId) => {
 
 onMounted(() => {
   fetchData(props.artistId);
+  userStore.triggerArtistsLoad();
 });
 </script>
 
@@ -79,10 +99,13 @@ onMounted(() => {
   object-fit: contain
 }
 
-.artistName {
+.artistInfoColum {
+  display: flex;
+  flex-direction: column;
   margin: 0 16px;
-
 }
+
+.artistName {}
 
 .relatedArtistsContainer {
   width: 100%;
@@ -94,5 +117,9 @@ onMounted(() => {
 
 .discographyContainer {
   margin: 16px;
+}
+
+.verticalFiller {
+  flex: 1;
 }
 </style>
