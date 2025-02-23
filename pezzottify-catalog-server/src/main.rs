@@ -21,7 +21,17 @@ mod user;
 use user::SqliteUserStore;
 
 fn parse_path(s: &str) -> Result<PathBuf> {
-    let original_path = PathBuf::from(s).canonicalize()?;
+    let path_buf = PathBuf::from(s);
+    let original_path = match path_buf.canonicalize() {
+        Ok(path) => path,
+        Err(msg) => {
+            if msg.kind() == std::io::ErrorKind::NotFound {
+                path_buf
+            } else {
+                return Err(msg).with_context(|| format!("Error resolving path: {}", s));
+            }
+        }
+    };
     if original_path.is_absolute() {
         return Ok(original_path);
     }

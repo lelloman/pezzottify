@@ -1,6 +1,9 @@
-use crate::sqlite_persistence::{Table, VersionedSchema, BASE_DB_VERSION};
+use crate::sqlite_column;
+use crate::sqlite_persistence::{
+    Column, ForeignKey, ForeignKeyOnChange, SqlType, Table, VersionedSchema, BASE_DB_VERSION,
+    DEFAULT_TIMESTAMP,
+};
 use crate::user::*;
-use crate::user::{auth::PezzottifyHasher, user_models::LikedContentType};
 use anyhow::{bail, Context, Result};
 use rusqlite::{params, Connection};
 use std::{
@@ -11,100 +14,240 @@ use std::{
 };
 use tracing::info;
 
+use super::auth::PezzottifyHasher;
+
 /// V 0
 const USER_TABLE_V_0: Table = Table {
     name: "user",
-    schema: "CREATE TABLE user (id INTEGER UNIQUE, handle TEXT NOT NULL UNIQUE, created INTEGER DEFAULT (cast(strftime('%s','now') as int)), PRIMARY KEY (id));",
-    indices: &["CREATE INDEX handle_index ON user (handle);"],
+    columns: &[
+        sqlite_column!(
+            "id",
+            &SqlType::Integer,
+            is_primary_key = true,
+            is_unique = true
+        ),
+        sqlite_column!("handle", &SqlType::Text, non_null = true, is_unique = true),
+        sqlite_column!(
+            "created",
+            &SqlType::Integer,
+            default_value = Some(DEFAULT_TIMESTAMP)
+        ),
+    ],
+    unique_constraints: &[],
+    indices: &["handle"],
 };
 const LIKED_CONTENT_TABLE_V_0: Table = Table {
     name: "liked_content",
-    schema: "CREATE TABLE liked_content (id INTEGER NOT NULL UNIQUE, user_id TEXT NOT NULL, content_id TEXT NOT NULL, created INTEGER DEFAULT (cast(strftime('%s','now') as int)), PRIMARY KEY (id), CONSTRAINT user_id FOREIGN KEY (user_id) REFERENCES user (id));",
+    columns: &[
+        sqlite_column!(
+            "id",
+            &SqlType::Integer,
+            is_primary_key = true,
+            non_null = true,
+            is_unique = true
+        ),
+        sqlite_column!(
+            "user_id",
+            &SqlType::Integer,
+            non_null = true,
+            foreign_key = Some(&ForeignKey {
+                foreign_table: "user",
+                foreign_column: "id",
+                on_delete: ForeignKeyOnChange::Cascade,
+            })
+        ),
+        sqlite_column!("content_id", &SqlType::Text, non_null = true),
+        sqlite_column!(
+            "created",
+            &SqlType::Integer,
+            default_value = Some(DEFAULT_TIMESTAMP)
+        ),
+    ],
+    unique_constraints: &[],
     indices: &[],
 };
 const AUTH_TOKEN_TABLE_V_0: Table = Table {
     name: "auth_token",
-    schema: "CREATE TABLE auth_token (user_id INTEGER NOT NULL, value TEXT NOT NULL UNIQUE, created INTEGER DEFAULT (cast(strftime('%s','now') as int)), last_used INTEGER)",
-    indices: &["CREATE INDEX auth_token_value_index ON auth_token (value);"],
+    columns: &[
+        sqlite_column!(
+            "user_id",
+            &SqlType::Integer,
+            non_null = true,
+            foreign_key = Some(&ForeignKey {
+                foreign_table: "user",
+                foreign_column: "id",
+                on_delete: ForeignKeyOnChange::Cascade,
+            })
+        ),
+        sqlite_column!("value", &SqlType::Text, non_null = true, is_unique = true),
+        sqlite_column!(
+            "created",
+            &SqlType::Integer,
+            default_value = Some(DEFAULT_TIMESTAMP)
+        ),
+        sqlite_column!("last_used", &SqlType::Integer),
+    ],
+    unique_constraints: &[],
+    indices: &["value"],
 };
 const USER_PASSWORD_CREDENTIALS_V_0: Table = Table {
     name: "user_password_credentials",
-    schema: "CREATE TABLE user_password_credentials (user_id INTEGER NOT NULL, salt TEXT NOT NULL, hash	INTEGER NOT NULL, hasher TEXT NOT NULL, created	INTEGER DEFAULT (cast(strftime('%s','now') as int)), last_tried INTEGER, last_used INTEGER, CONSTRAINT user_id FOREIGN KEY(user_id) REFERENCES user(id) ON DELETE CASCADE)",
+    columns: &[
+        sqlite_column!(
+            "user_id",
+            &SqlType::Integer,
+            non_null = true,
+            foreign_key = Some(&ForeignKey {
+                foreign_table: "user",
+                foreign_column: "id",
+                on_delete: ForeignKeyOnChange::Cascade,
+            })
+        ),
+        sqlite_column!("salt", &SqlType::Text, non_null = true),
+        sqlite_column!("hash", &SqlType::Text, non_null = true),
+        sqlite_column!("hasher", &SqlType::Text, non_null = true),
+        sqlite_column!(
+            "created",
+            &SqlType::Integer,
+            default_value = Some(DEFAULT_TIMESTAMP)
+        ),
+        sqlite_column!("last_tried", &SqlType::Integer),
+        sqlite_column!("last_used", &SqlType::Integer),
+    ],
+    unique_constraints: &[],
     indices: &[],
 };
-
-fn create_v0(conn: &Connection, schema: &VersionedSchema) -> Result<()> {
-    conn.execute("PRAGMA foreign_keys = ON;", [])?;
-    for table in schema.tables {
-        conn.execute(table.schema, [])?;
-        for index in table.indices {
-            conn.execute(index, [])?;
-        }
-    }
-    conn.execute(
-        &format!("PRAGMA user_version = {}", BASE_DB_VERSION + schema.version),
-        [],
-    )?;
-    Ok(())
-}
 
 /// V 1
 const LIKED_CONTENT_TABLE_V_1: Table = Table {
     name: "liked_content",
-    schema: "CREATE TABLE liked_content (id INTEGER NOT NULL UNIQUE, user_id TEXT NOT NULL, content_id TEXT NOT NULL, content_type INTEGER NOT NULL, created INTEGER DEFAULT (cast(strftime('%s','now') as int)), PRIMARY KEY (id), CONSTRAINT user_id FOREIGN KEY (user_id) REFERENCES user (id));",
+    columns: &[
+        sqlite_column!(
+            "id",
+            &SqlType::Integer,
+            is_primary_key = true,
+            non_null = true,
+            is_unique = true
+        ),
+        sqlite_column!(
+            "user_id",
+            &SqlType::Integer,
+            non_null = true,
+            foreign_key = Some(&ForeignKey {
+                foreign_table: "user",
+                foreign_column: "id",
+                on_delete: ForeignKeyOnChange::Cascade,
+            })
+        ),
+        sqlite_column!("content_id", &SqlType::Text, non_null = true),
+        sqlite_column!(
+            "content_type",
+            &SqlType::Integer,
+            non_null = true,
+            default_value = None
+        ),
+        sqlite_column!(
+            "created",
+            &SqlType::Integer,
+            default_value = Some(DEFAULT_TIMESTAMP)
+        ),
+    ],
+    unique_constraints: &[],
     indices: &[],
 };
-fn validate_schema_1(conn: &Connection) -> Result<()> {
-    // Verify user table column names
-    let mut stmt = conn.prepare("PRAGMA table_info(user);")?;
-    let columns: Vec<String> = stmt
-        .query_map([], |row| row.get(1))?
-        .collect::<Result<_, _>>()?;
-
-    if columns != ["id", "handle", "created"] {
-        bail!(
-            "Schema validation failed for user table. found {:?}",
-            columns
-        );
-    }
-
-    // Verify liked_content table column names
-    let mut stmt = conn.prepare("PRAGMA table_info(liked_content);")?;
-    let columns: Vec<String> = stmt
-        .query_map([], |row| row.get(1))?
-        .collect::<Result<_, _>>()?;
-
-    if columns.len() != 5 {
-        bail!("Schema validation failed for linked_content table, should have 5 columns but actually has {}.", columns.len());
-    }
-    for name in ["id", "user_id", "content_id", "content_type", "created"] {
-        if !columns.contains(&name.to_string()) {
-            bail!(
-                "Schema validation failed for linked_content table, missing {} column.",
-                name
-            );
-        }
-    }
-
-    Ok(())
-}
 
 /// V 2
 const LIKED_CONTENT_TABLE_V_2: Table = Table {
     name: "liked_content",
-    schema: "CREATE TABLE liked_content (id INTEGER NOT NULL UNIQUE, user_id INTEGER NOT NULL, content_id TEXT NOT NULL, content_type INTEGER NOT NULL, created INTEGER DEFAULT (cast(strftime('%s','now') as int)), UNIQUE(user_id, content_id), PRIMARY KEY (id), CONSTRAINT user_id FOREIGN KEY (user_id) REFERENCES user (id));",
+    columns: &[
+        sqlite_column!(
+            "id",
+            &SqlType::Integer,
+            is_primary_key = true,
+            non_null = true,
+            is_unique = true
+        ),
+        sqlite_column!(
+            "user_id",
+            &SqlType::Integer,
+            non_null = true,
+            foreign_key = Some(&ForeignKey {
+                foreign_table: "user",
+                foreign_column: "id",
+                on_delete: ForeignKeyOnChange::Cascade,
+            })
+        ),
+        sqlite_column!("content_id", &SqlType::Text, non_null = true),
+        sqlite_column!(
+            "content_type",
+            &SqlType::Integer,
+            non_null = true,
+            default_value = None
+        ),
+        sqlite_column!(
+            "created",
+            &SqlType::Integer,
+            default_value = Some(DEFAULT_TIMESTAMP)
+        ),
+    ],
+    unique_constraints: &[&["user_id", "content_id"]],
     indices: &[],
 };
 
 /// V 3
 const USER_PLAYLIST_TABLE_V_3: Table = Table {
     name: "user_playlist",
-    schema: "CREATE TABLE user_playlist (id INTEGER, user_id INTEGER NOT NULL, name	TEXT, created INTEGER DEFAULT (CAST(strftime('%s', 'now') AS int)),	PRIMARY KEY(id), CONSTRAINT user_id FOREIGN KEY(user_id) REFERENCES user(id) ON DELETE CASCADE)",
+    columns: &[
+        sqlite_column!(
+            "id",
+            &SqlType::Integer,
+            is_primary_key = true,
+            is_unique = true
+        ),
+        sqlite_column!(
+            "user_id",
+            &SqlType::Integer,
+            non_null = true,
+            foreign_key = Some(&ForeignKey {
+                foreign_table: "user",
+                foreign_column: "id",
+                on_delete: ForeignKeyOnChange::Cascade,
+            })
+        ),
+        sqlite_column!("name", &SqlType::Text),
+        sqlite_column!(
+            "created",
+            &SqlType::Integer,
+            default_value = Some(DEFAULT_TIMESTAMP)
+        ),
+    ],
+    unique_constraints: &[],
     indices: &[],
 };
 const USER_PLAYLIST_TRACKS_TABLE_V_3: Table = Table {
     name: "user_playlist_tracks",
-    schema: "CREATE TABLE user_playlist_tracks (id INTEGER, track_id TEXT NOT NULL, playlist_id INTEGER NOT NULL, position INTEGER NOT NULL, PRIMARY KEY(id), CONSTRAINT playlist_id FOREIGN KEY(playlist_id) REFERENCES user_playlist(id) ON DELETE CASCADE)",
+    columns: &[
+        sqlite_column!(
+            "id",
+            &SqlType::Integer,
+            is_primary_key = true,
+            non_null = true,
+            is_unique = true
+        ),
+        sqlite_column!("track_id", &SqlType::Text, non_null = true),
+        sqlite_column!(
+            "playlist_id",
+            &SqlType::Integer,
+            non_null = true,
+            foreign_key = Some(&ForeignKey {
+                foreign_table: "user_playlist",
+                foreign_column: "id",
+                on_delete: ForeignKeyOnChange::Cascade,
+            })
+        ),
+        sqlite_column!("position", &SqlType::Integer, non_null = true),
+    ],
+    unique_constraints: &[],
     indices: &[],
 };
 
@@ -117,9 +260,7 @@ pub const VERSIONED_SCHEMAS: &[VersionedSchema] = &[
             AUTH_TOKEN_TABLE_V_0,
             USER_PASSWORD_CREDENTIALS_V_0,
         ],
-        create: create_v0,
         migration: None,
-        validate: |conn: &Connection| Ok(()),
     },
     VersionedSchema {
         version: 1,
@@ -129,7 +270,6 @@ pub const VERSIONED_SCHEMAS: &[VersionedSchema] = &[
             AUTH_TOKEN_TABLE_V_0,
             USER_PASSWORD_CREDENTIALS_V_0,
         ],
-        create: create_v0,
         migration: Some(|conn: &Connection| {
             conn.execute(
                 "ALTER TABLE liked_content ADD COLUMN content_type INTEGER NOT NULL DEFAULT 1000",
@@ -137,7 +277,6 @@ pub const VERSIONED_SCHEMAS: &[VersionedSchema] = &[
             )?;
             Ok(())
         }),
-        validate: validate_schema_1,
     },
     VersionedSchema {
         version: 2,
@@ -147,7 +286,6 @@ pub const VERSIONED_SCHEMAS: &[VersionedSchema] = &[
             AUTH_TOKEN_TABLE_V_0,
             USER_PASSWORD_CREDENTIALS_V_0,
         ],
-        create: create_v0,
         migration: Some(|conn: &Connection| {
             // Rename liked_content to liked_content_backup
             conn.execute(
@@ -156,7 +294,7 @@ pub const VERSIONED_SCHEMAS: &[VersionedSchema] = &[
             )?;
 
             // Create the new liked_content table
-            conn.execute(&LIKED_CONTENT_TABLE_V_2.schema, [])?;
+            LIKED_CONTENT_TABLE_V_2.create(conn)?;
 
             // Migrate data from liked_content_backup to liked_content
             let mut stmt = conn.prepare(
@@ -185,7 +323,6 @@ pub const VERSIONED_SCHEMAS: &[VersionedSchema] = &[
 
             Ok(())
         }),
-        validate: validate_schema_1,
     },
     VersionedSchema {
         version: 3,
@@ -196,13 +333,11 @@ pub const VERSIONED_SCHEMAS: &[VersionedSchema] = &[
             USER_PASSWORD_CREDENTIALS_V_0,
             USER_PLAYLIST_TABLE_V_3,
         ],
-        create: create_v0,
         migration: Some(|conn: &Connection| {
-            conn.execute(&USER_PLAYLIST_TABLE_V_3.schema, [])?;
-            conn.execute(&USER_PLAYLIST_TRACKS_TABLE_V_3.schema, [])?;
+            USER_PLAYLIST_TABLE_V_3.create(&conn)?;
+            USER_PLAYLIST_TRACKS_TABLE_V_3.create(&conn)?;
             Ok(())
         }),
-        validate: validate_schema_1,
     },
 ];
 
@@ -222,23 +357,32 @@ impl SqliteUserStore {
             )?
         } else {
             let conn = Connection::open(db_path)?;
-            Self::create_schema(&conn)?;
+            VERSIONED_SCHEMAS.last().unwrap().create(&conn)?;
             conn
         };
 
         // Read the database version
-        let version = conn
-            .query_row("PRAGMA user_version;", [], |row| row.get::<usize, usize>(0))
+        let db_version = conn
+            .query_row("PRAGMA user_version;", [], |row| row.get::<usize, i64>(0))
             .context("Failed to read database version")?
-            - BASE_DB_VERSION;
+            - BASE_DB_VERSION as i64;
 
-        if version >= VERSIONED_SCHEMAS.len() {
-            bail!("Database version {} is too new", version);
+        if db_version < 0 {
+            bail!(
+                "Database version {} is too old, does not contain base db version {}",
+                db_version,
+                BASE_DB_VERSION
+            );
+        }
+        let version = db_version as usize;
+
+        if db_version >= VERSIONED_SCHEMAS.len() as i64 {
+            bail!("Database version {} is too new", db_version);
         } else {
-            (VERSIONED_SCHEMAS
+            VERSIONED_SCHEMAS
                 .get(version)
                 .context("Failed to get schema")?
-                .validate)(&conn)?;
+                .validate(&conn)?;
         }
 
         Self::migrate_if_needed(&conn, version)?;
@@ -272,12 +416,6 @@ impl SqliteUserStore {
             }
         }
         None
-    }
-
-    fn create_schema(conn: &Connection) -> Result<()> {
-        let latest_version = VERSIONED_SCHEMAS.last().unwrap();
-        let create_fn = latest_version.create;
-        create_fn(conn, latest_version)
     }
 
     fn migrate_if_needed(conn: &Connection, version: usize) -> Result<()> {
