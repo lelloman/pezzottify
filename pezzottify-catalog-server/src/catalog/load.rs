@@ -38,13 +38,12 @@ fn check_track_file(catalog: &Catalog, album_id: &str, track: &Track) -> Result<
     ffprobe_file(file_path)
 }
 
-pub fn load_catalog<P: AsRef<std::path::Path>>(path: P) -> Result<Catalog> {
+pub fn load_catalog<P: AsRef<std::path::Path>>(path: P, check_all: bool) -> Result<Catalog> {
     let catalog_result = Catalog::build(path.as_ref());
     let mut problems = catalog_result.problems;
     let catalog = catalog_result.catalog;
 
-    #[cfg(not(feature = "no_checks"))]
-    {
+    if check_all {
         info!("Performing checks...");
         if let Some(catalog) = catalog.as_ref() {
             let mut tracks_problems: Vec<LoadCatalogProblem> = catalog
@@ -59,10 +58,9 @@ pub fn load_catalog<P: AsRef<std::path::Path>>(path: P) -> Result<Catalog> {
                 .collect();
             problems.append(&mut tracks_problems);
         }
+    } else {
+        info!("Skipping checks.");
     }
-
-    #[cfg(feature = "no_checks")]
-    info!("Skipping checks.");
 
     if !problems.is_empty() {
         info!("Found {} problems:", problems.len());

@@ -25,7 +25,7 @@
 - Add user playlists
 - Create catalog db
 - Check UserStore return type, we should not swallow errors
-- Make no_checks a cli args rather than build feature
+- ~Make no_checks a cli args rather than build feature~
 - ~Add cache directive to responses~
 - ~Wrap ids so that the type can be embedded in them~
 - ~Add user saved albums, tracks and artists~

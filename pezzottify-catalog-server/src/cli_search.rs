@@ -52,7 +52,7 @@ fn main() -> Result<()> {
         catalog_path.canonicalize().unwrap().display()
     );
 
-    let catalog = load_catalog(catalog_path)?;
+    let catalog = load_catalog(catalog_path, false)?;
     let search_vault = PezzotHashSearchVault::new(&catalog);
     println!("Done!");
 

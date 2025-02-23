@@ -41,26 +41,37 @@ fn parse_path(s: &str) -> Result<PathBuf> {
 
 #[derive(Parser, Debug)]
 struct CliArgs {
+    /// Path to the catalog directory.
     #[clap(value_parser = parse_path)]
     pub catalog_path: Option<PathBuf>,
 
+    /// Path to the SQLite database file to use for user storage.
     #[clap(value_parser = parse_path)]
     pub user_store_file_path: Option<PathBuf>,
 
+    /// Only check the catalog for errors, do not start the server, might want to run with check_all too.
     #[clap(long)]
     pub check_only: bool,
 
+    /// The port to listen on.
     #[clap(short, long, default_value_t = 3001)]
     pub port: u16,
 
+    /// The level of logging to perform on each request.
     #[clap(long, default_value = "path")]
     pub logging_level: RequestsLoggingLevel,
 
+    /// The maximum age of content in the cache in seconds.
     #[clap(long, default_value_t = 3600)]
     pub content_cache_age_sec: usize,
 
+    /// Path to the frontend directory to be statically served.
     #[clap(long)]
     pub frontend_dir_path: Option<String>,
+
+    /// Perform a full check of the catalog, including all files.
+    #[clap(long)]
+    pub check_all: bool,
 }
 
 #[tokio::main]
@@ -86,7 +97,7 @@ async fn main() -> Result<()> {
     };
 
     info!("Loading catalog...");
-    let catalog = catalog::load_catalog(catalog_path)?;
+    let catalog = catalog::load_catalog(catalog_path, cli_args.check_all)?;
 
     if cli_args.check_only {
         return Ok(());
