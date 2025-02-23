@@ -8,7 +8,6 @@ use std::{
 
 use tracing::{debug, error};
 
-use super::slowdown_request;
 use crate::{
     catalog::Catalog,
     user::{user_models::LikedContentType, UserStore},
@@ -23,7 +22,7 @@ use tower_http::services::ServeDir;
 use axum::{
     body::Body,
     extract::{Path, State},
-    http::{header, response, HeaderValue, StatusCode},
+    http::{self, header, response, HeaderValue, StatusCode},
     middleware,
     response::{IntoResponse, Response},
     routing::{delete, get, post},
@@ -33,12 +32,12 @@ use serde::{Deserialize, Serialize};
 use tower::{Service, ServiceExt}; // for `call`, `oneshot`, and `ready
 
 use super::stream_track;
-use super::{make_search_routes, requests_logging, state::*, RequestsLoggingLevel, ServerConfig};
-use crate::server::{logging_middleware, session::Session};
+use super::{
+    http_cache, log_requests, make_search_routes, slowdown_request, state::*, RequestsLoggingLevel,
+    ServerConfig,
+};
+use crate::server::session::Session;
 use crate::user::auth::{AuthTokenValue, UserAuthCredentials};
-
-use super::http_cache_layer::cache_layer;
-
 #[derive(Serialize)]
 struct ServerStats {
     pub uptime: String,
@@ -339,7 +338,7 @@ fn make_app(
         .route("/stream/{id}", get(stream_track))
         .layer(middleware::from_fn_with_state(
             config.content_cache_age_sec,
-            cache_layer,
+            http_cache,
         ))
         .with_state(state.clone());
 
@@ -373,10 +372,7 @@ fn make_app(
     {
         app = app.layer(middleware::from_fn(slowdown_request));
     }
-    app = app.layer(middleware::from_fn_with_state(
-        state.clone(),
-        logging_middleware,
-    ));
+    app = app.layer(middleware::from_fn_with_state(state.clone(), log_requests));
 
     Ok(app)
 }

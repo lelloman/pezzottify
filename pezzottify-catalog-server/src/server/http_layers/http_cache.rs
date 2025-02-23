@@ -1,6 +1,6 @@
 use axum::{body::Body, extract::State, http::Request, middleware::Next, response::IntoResponse};
 
-pub async fn cache_layer(
+pub async fn http_cache(
     State(max_age_sec): State<usize>,
     mut request: Request<Body>,
     next: Next,

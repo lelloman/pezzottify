@@ -1,4 +1,4 @@
-use super::ServerConfig;
+use super::super::ServerConfig;
 use axum::extract::State;
 use axum::{
     body::Body,
@@ -52,7 +52,7 @@ fn parse_content_length(headers: &HeaderMap) -> ContentLengthParseResult {
     }
 }
 
-pub async fn logging_middleware(
+pub async fn log_requests(
     State(config): State<ServerConfig>,
     mut request: Request<Body>,
     next: Next,
