@@ -2,6 +2,8 @@ use std::collections::HashMap;
 use std::str::Chars;
 use std::time::SystemTime;
 
+use serde::{Deserialize, Serialize};
+
 use super::permissions::Permission;
 
 pub struct User {
@@ -62,10 +64,11 @@ pub struct UserLikedContent {
     pub content_type: LikedContentType,
 }
 
+#[derive(Serialize, Debug)]
 pub struct UserPlaylist {
     pub id: String,
+    pub user_id: usize,
     pub name: String,
     pub created: SystemTime,
-    pub modified: SystemTime,
     pub tracks: Vec<String>,
 }

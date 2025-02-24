@@ -12,30 +12,27 @@ use crate::{
     catalog::Catalog,
     user::{user_models::LikedContentType, UserStore},
 };
-use crate::{
-    search::{SearchVault, SearchedAlbum},
-    user::UserManager,
-};
+use crate::{search::SearchVault, user::UserManager};
 use axum_extra::extract::cookie::{Cookie, SameSite};
 use tower_http::services::ServeDir;
 
 use axum::{
     body::Body,
     extract::{Path, State},
-    http::{self, header, response, HeaderValue, StatusCode},
+    http::{header, response, HeaderValue, StatusCode},
     middleware,
     response::{IntoResponse, Response},
-    routing::{delete, get, post},
+    routing::{delete, get, post, put},
     Json, Router,
 };
 use serde::{Deserialize, Serialize};
 use tower::{Service, ServiceExt}; // for `call`, `oneshot`, and `ready
 
-use super::stream_track;
 use super::{
     http_cache, log_requests, make_search_routes, slowdown_request, state::*, RequestsLoggingLevel,
     ServerConfig,
 };
+use super::{session, stream_track};
 use crate::server::session::Session;
 use crate::user::auth::{AuthTokenValue, UserAuthCredentials};
 #[derive(Serialize)]
@@ -60,6 +57,19 @@ fn format_uptime(duration: Duration) -> String {
 struct LoginBody {
     pub user_handle: String,
     pub password: String,
+}
+
+#[derive(Deserialize, Debug)]
+struct CreatePlaylistBody {
+    pub name: String,
+    pub track_ids: Vec<String>,
+}
+
+#[derive(Deserialize, Debug)]
+struct UpdatePlaylistBody {
+    pub id: String,
+    pub name: String,
+    pub track_ids: Vec<String>,
 }
 
 #[derive(Serialize)]
@@ -223,6 +233,87 @@ async fn get_user_liked_content(
     }
 }
 
+async fn post_playlist(
+    session: Session,
+    State(user_manager): State<GuardedUserManager>,
+    Json(body): Json<CreatePlaylistBody>,
+) -> Response {
+    match user_manager.lock().unwrap().create_user_playlist(
+        session.user_id,
+        &body.name,
+        body.track_ids.clone(),
+    ) {
+        Ok(id) => Json(id).into_response(),
+        Err(_) => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+    }
+}
+
+async fn put_playlist(
+    session: Session,
+    State(user_manager): State<GuardedUserManager>,
+    Json(body): Json<UpdatePlaylistBody>,
+) -> Response {
+    match user_manager.lock().unwrap().update_user_playlist(
+        &body.id,
+        session.user_id,
+        &body.name,
+        body.track_ids,
+    ) {
+        Ok(_) => StatusCode::OK.into_response(),
+        Err(_) => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+    }
+}
+
+async fn delete_playlist(
+    session: Session,
+    State(user_manager): State<GuardedUserManager>,
+    Path(id): Path<String>,
+) -> Response {
+    match user_manager
+        .lock()
+        .unwrap()
+        .delete_user_playlist(&id, session.user_id)
+    {
+        Ok(_) => StatusCode::OK.into_response(),
+        Err(_) => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+    }
+}
+
+async fn get_playlist(
+    session: Session,
+    State(user_manager): State<GuardedUserManager>,
+    Path(id): Path<String>,
+) -> Response {
+    match user_manager
+        .lock()
+        .unwrap()
+        .get_user_playlist(&id, session.user_id)
+    {
+        Ok(playlist) => {
+            if playlist.user_id == session.user_id {
+                Json(playlist).into_response()
+            } else {
+                StatusCode::NOT_FOUND.into_response()
+            }
+        }
+        Err(_) => StatusCode::NOT_FOUND.into_response(),
+    }
+}
+
+async fn get_user_playlists(
+    session: Session,
+    State(user_manager): State<GuardedUserManager>,
+) -> Response {
+    match user_manager
+        .lock()
+        .unwrap()
+        .get_user_playlists(session.user_id)
+    {
+        Ok(playlists) => Json(playlists).into_response(),
+        Err(_) => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+    }
+}
+
 async fn login(
     State(user_manager): State<GuardedUserManager>,
     Json(body): Json<LoginBody>,
@@ -346,6 +437,11 @@ fn make_app(
         .route("/liked/{content_id}", post(add_user_liked_content))
         .route("/liked/{content_id}", delete(delete_user_liked_content))
         .route("/liked/{content_id}", get(get_user_liked_content))
+        .route("/playlist", post(post_playlist))
+        .route("/playlist/{id}", put(put_playlist))
+        .route("/playlist/{id}", delete(delete_playlist))
+        .route("/playlist/{id}", get(get_playlist))
+        .route("/playlists", get(get_user_playlists))
         .with_state(state.clone());
 
     if let Some(search_routes) = make_search_routes(state.clone()) {
@@ -465,7 +561,7 @@ mod tests {
             todo!()
         }
 
-        fn get_user_playlists(&self, user_id: &str) -> Option<Vec<crate::user::UserPlaylist>> {
+        fn get_user_playlists(&self, user_id: usize) -> Result<Vec<String>> {
             todo!()
         }
 
@@ -492,6 +588,37 @@ mod tests {
             user_id: usize,
             content_type: LikedContentType,
         ) -> Result<Vec<String>> {
+            todo!()
+        }
+
+        fn create_user_playlist(
+            &self,
+            user_id: usize,
+            playlist_name: &str,
+            track_ids: Vec<String>,
+        ) -> Result<String> {
+            todo!()
+        }
+
+        fn delete_user_playlist(&self, playlist_id: &str, user_id: usize) -> Result<()> {
+            todo!()
+        }
+
+        fn update_user_playlist(
+            &self,
+            playlist_id: &str,
+            user_id: usize,
+            playlist_name: &str,
+            track_ids: Vec<String>,
+        ) -> Result<()> {
+            todo!()
+        }
+
+        fn get_user_playlist(
+            &self,
+            playlist_id: &str,
+            user_id: usize,
+        ) -> Result<crate::user::UserPlaylist> {
             todo!()
         }
     }

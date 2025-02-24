@@ -10,6 +10,7 @@
 - Implement User page (profile?)
 - Add a logo with a home link
 - Add admin panel (after user roles)
+- Make user content list items lazily loaded
 - ~Make track content page~
 - ~Style scrollbars~
 - ~Make album content page~
@@ -22,9 +23,12 @@
 
 ## [catalog-server]
 - Add user roles
-- Add user playlists
 - Create catalog db
 - Check UserStore return type, we should not swallow errors
+- Verify that all sqlite operations are performed within a transaction
+- Delete cli_search and clean up unused stuff and format and warnings
+- Add more unit tests (expecially to db, like migrations?)
+- ~Add user playlists~
 - ~Make no_checks a cli args rather than build feature~
 - ~Add cache directive to responses~
 - ~Wrap ids so that the type can be embedded in them~

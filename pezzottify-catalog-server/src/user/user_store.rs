@@ -63,8 +63,7 @@ pub trait UserStore: UserAuthTokenStore + UserAuthCredentialsStore + Send + Sync
     ) -> Result<()>;
 
     /// Returns the users's playlists.
-    /// Returns None if the user does not exist.
-    fn get_user_playlists(&self, user_id: &str) -> Option<Vec<UserPlaylist>>;
+    fn get_user_playlists(&self, user_id: usize) -> Result<Vec<String>>;
 
     /// Returns the user's liked content.
     /// Returns None if the user does not exist.
@@ -77,4 +76,27 @@ pub trait UserStore: UserAuthTokenStore + UserAuthCredentialsStore + Send + Sync
     // Returns a user object to be used for session management.
     // Returns None if the user does not exist.
     //fn get_user_session_view(&self, user_id: &str) -> Option<UserSessionView>;
+
+    /// Creates a new user playlist.
+    fn create_user_playlist(
+        &self,
+        user_id: usize,
+        playlist_name: &str,
+        track_ids: Vec<String>,
+    ) -> Result<String>;
+
+    /// Updates a user playlist.
+    fn update_user_playlist(
+        &self,
+        playlist_id: &str,
+        user_id: usize,
+        playlist_name: &str,
+        track_ids: Vec<String>,
+    ) -> Result<()>;
+
+    /// Deletes a user playlist given the playlist id and its owner's id.
+    fn delete_user_playlist(&self, playlist_id: &str, user_id: usize) -> Result<()>;
+
+    /// Get a user playlist given the playlist id and its owner's id.
+    fn get_user_playlist(&self, playlist_id: &str, user_id: usize) -> Result<UserPlaylist>;
 }

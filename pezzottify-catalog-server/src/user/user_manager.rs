@@ -1,6 +1,6 @@
 use super::{
     auth::PezzottifyHasher, user_models::LikedContentType, AuthToken, AuthTokenValue,
-    UserAuthCredentials, UserStore, UsernamePasswordCredentials,
+    UserAuthCredentials, UserPlaylist, UserStore, UsernamePasswordCredentials,
 };
 use anyhow::{bail, Context, Result};
 use std::{
@@ -186,5 +186,50 @@ impl UserManager {
             .lock()
             .unwrap()
             .get_user_liked_content(user_id, conten_type)
+    }
+
+    pub fn create_user_playlist(
+        &self,
+        user_id: usize,
+        playlist_name: &str,
+        track_ids: Vec<String>,
+    ) -> Result<String> {
+        self.user_store
+            .lock()
+            .unwrap()
+            .create_user_playlist(user_id, playlist_name, track_ids)
+    }
+
+    pub fn update_user_playlist(
+        &self,
+        playlist_id: &str,
+        user_id: usize,
+        playlist_name: &str,
+        track_ids: Vec<String>,
+    ) -> Result<()> {
+        self.user_store.lock().unwrap().update_user_playlist(
+            playlist_id,
+            user_id,
+            playlist_name,
+            track_ids,
+        )
+    }
+
+    pub fn delete_user_playlist(&self, playlist_id: &str, user_id: usize) -> Result<()> {
+        self.user_store
+            .lock()
+            .unwrap()
+            .delete_user_playlist(playlist_id, user_id)
+    }
+
+    pub fn get_user_playlist(&self, playlist_id: &str, user_id: usize) -> Result<UserPlaylist> {
+        self.user_store
+            .lock()
+            .unwrap()
+            .get_user_playlist(playlist_id, user_id)
+    }
+
+    pub fn get_user_playlists(&self, user_id: usize) -> Result<Vec<String>> {
+        self.user_store.lock().unwrap().get_user_playlists(user_id)
     }
 }

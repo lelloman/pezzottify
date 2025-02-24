@@ -15,6 +15,8 @@ use std::{
 use tracing::info;
 
 use super::auth::PezzottifyHasher;
+use rand::{rng, Rng};
+use rand_distr::Alphanumeric;
 
 /// V 0
 const USER_TABLE_V_0: Table = Table {
@@ -200,8 +202,9 @@ const USER_PLAYLIST_TABLE_V_3: Table = Table {
     columns: &[
         sqlite_column!(
             "id",
-            &SqlType::Integer,
+            &SqlType::Text,
             is_primary_key = true,
+            non_null = true,
             is_unique = true
         ),
         sqlite_column!(
@@ -231,7 +234,6 @@ const USER_PLAYLIST_TRACKS_TABLE_V_3: Table = Table {
             "id",
             &SqlType::Integer,
             is_primary_key = true,
-            non_null = true,
             is_unique = true
         ),
         sqlite_column!("track_id", &SqlType::Text, non_null = true),
@@ -332,6 +334,7 @@ pub const VERSIONED_SCHEMAS: &[VersionedSchema] = &[
             AUTH_TOKEN_TABLE_V_0,
             USER_PASSWORD_CREDENTIALS_V_0,
             USER_PLAYLIST_TABLE_V_3,
+            USER_PLAYLIST_TRACKS_TABLE_V_3,
         ],
         migration: Some(|conn: &Connection| {
             USER_PLAYLIST_TABLE_V_3.create(&conn)?;
@@ -340,6 +343,15 @@ pub const VERSIONED_SCHEMAS: &[VersionedSchema] = &[
         }),
     },
 ];
+
+/// A random A-z0-9 string
+fn random_string(len: usize) -> String {
+    let bytes = rng()
+        .sample_iter(&Alphanumeric)
+        .take(len)
+        .collect::<Vec<u8>>();
+    String::from_utf8_lossy(&bytes).to_string()
+}
 
 #[derive(Clone)]
 pub struct SqliteUserStore {
@@ -449,11 +461,16 @@ impl UserStore for SqliteUserStore {
         .with_context(|| format!("Failed to create user {}", user_handle))
     }
 
-    fn get_user_playlists(
-        &self,
-        user_id: &str,
-    ) -> Option<Vec<crate::user::user_models::UserPlaylist>> {
-        todo!()
+    fn get_user_playlists(&self, user_id: usize) -> Result<Vec<String>> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare(&format!(
+            "SELECT id, name FROM {} WHERE user_id = ?1",
+            USER_PLAYLIST_TABLE_V_3.name
+        ))?;
+        let playlists = stmt
+            .query_map(params![user_id], |row| Ok(row.get(0)?))?
+            .collect::<Result<Vec<String>, _>>()?;
+        Ok(playlists)
     }
 
     fn get_user_handle(&self, user_id: usize) -> Option<String> {
@@ -563,6 +580,146 @@ impl UserStore for SqliteUserStore {
             .ok()
             .unwrap()
             .collect::<Result<Vec<String>, _>>()?)
+    }
+
+    fn create_user_playlist(
+        &self,
+        user_id: usize,
+        playlist_name: &str,
+        track_ids: Vec<String>,
+    ) -> Result<String> {
+        let mut conn = self.conn.lock().unwrap();
+        let tx = conn.transaction()?;
+
+        // Generate a random 16 A-z0-9 string that's not already a playlist id
+        let mut playlist_id = random_string(16);
+        while tx.query_row(
+            &format!(
+                "SELECT COUNT(*) FROM {} WHERE id = ?1",
+                USER_PLAYLIST_TABLE_V_3.name
+            ),
+            params![playlist_id],
+            |row| row.get::<usize, i64>(0),
+        )? > 0
+        {
+            playlist_id = random_string(16);
+        }
+
+        tx.execute(
+            &format!(
+                "INSERT INTO {} (id, user_id, name) VALUES (?1, ?2, ?3)",
+                USER_PLAYLIST_TABLE_V_3.name
+            ),
+            params![&playlist_id, user_id, playlist_name],
+        )
+        .context("Could not create playlist")?;
+
+        for (position, track_id) in track_ids.iter().enumerate() {
+            tx.execute(
+                &format!(
+                    "INSERT INTO {} (playlist_id, track_id, position) VALUES (?1, ?2, ?3)",
+                    USER_PLAYLIST_TRACKS_TABLE_V_3.name
+                ),
+                params![playlist_id, track_id, position as i32],
+            )?;
+        }
+
+        tx.commit()?;
+        Ok(playlist_id)
+    }
+
+    fn update_user_playlist(
+        &self,
+        playlist_id: &str,
+        user_id: usize,
+        playlist_name: &str,
+        track_ids: Vec<String>,
+    ) -> Result<()> {
+        let mut conn = self.conn.lock().unwrap();
+        let tx = conn.transaction()?;
+
+        let playlist_user_id = tx.execute(
+            &format!(
+                "SELECT user_id FROM {} WHERE id = ?1",
+                USER_PLAYLIST_TABLE_V_3.name
+            ),
+            params![playlist_id],
+        )?;
+
+        if user_id != playlist_user_id {
+            bail!("User does not own the playlist");
+        }
+
+        tx.execute(
+            &format!(
+                "UPDATE {} SET name = ?1 WHERE id = ?2",
+                USER_PLAYLIST_TABLE_V_3.name
+            ),
+            params![playlist_name, playlist_id],
+        )?;
+
+        tx.execute(
+            &format!(
+                "DELETE FROM {} WHERE playlist_id = ?1",
+                USER_PLAYLIST_TRACKS_TABLE_V_3.name
+            ),
+            params![playlist_id],
+        )?;
+
+        for (position, track_id) in track_ids.iter().enumerate() {
+            tx.execute(
+                &format!(
+                    "INSERT INTO {} (playlist_id, track_id, position) VALUES (?1, ?2, ?3)",
+                    USER_PLAYLIST_TRACKS_TABLE_V_3.name
+                ),
+                params![playlist_id, track_id, position as i32],
+            )?;
+        }
+
+        tx.commit()?;
+        Ok(())
+    }
+
+    fn delete_user_playlist(&self, playlist_id: &str, user_id: usize) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            &format!(
+                "DELETE FROM {} WHERE id = ?1 AND user_id = ?2",
+                USER_PLAYLIST_TABLE_V_3.name
+            ),
+            params![playlist_id, user_id],
+        )?;
+        Ok(())
+    }
+
+    fn get_user_playlist(&self, playlist_id: &str, user_id: usize) -> Result<UserPlaylist> {
+        let conn = self.conn.lock().unwrap();
+
+        let mut stmt = conn.prepare(&format!(
+            "SELECT id, name, created FROM {} WHERE id = ?1 AND user_id = ?2",
+            USER_PLAYLIST_TABLE_V_3.name
+        ))?;
+
+        let mut playlist = stmt.query_row(params![playlist_id], |row| {
+            Ok(UserPlaylist {
+                id: row.get(0)?,
+                user_id: user_id,
+                name: row.get(1)?,
+                created: system_time_from_column_result(row.get(2)?),
+                tracks: vec![],
+            })
+        })?;
+
+        let track_ids = conn
+            .prepare(&format!(
+                "SELECT track_id FROM {} WHERE playlist_id = ?1 ORDER BY position",
+                USER_PLAYLIST_TRACKS_TABLE_V_3.name
+            ))?
+            .query_map(params![playlist_id], |row| row.get(0))?
+            .collect::<Result<Vec<String>, _>>()?;
+
+        playlist.tracks = track_ids;
+        Ok(playlist)
     }
 }
 
@@ -783,5 +940,49 @@ mod tests {
         assert!(!store
             .is_user_liked_content(test_user_id, "test_content")
             .unwrap());
+    }
+
+    #[test]
+    fn handles_playlists() {
+        // First create a user
+        let (store, _temp_dir) = create_tmp_store();
+        let user_handle = "test_handle";
+        let test_user_id = store.create_user(&user_handle).unwrap();
+
+        // Create a playlist
+        let plyalist_id = store
+            .create_user_playlist(
+                test_user_id,
+                "test_playlist",
+                vec!["track1".to_string(), "track2".to_string()],
+            )
+            .unwrap();
+
+        let user_playslits_ids = store.get_user_playlists(test_user_id).unwrap();
+        assert_eq!(user_playslits_ids, vec![plyalist_id.clone()]);
+
+        let playlist2_id = store
+            .create_user_playlist(
+                test_user_id,
+                "test_playlist2",
+                vec!["track1".to_string(), "track2".to_string()],
+            )
+            .unwrap();
+
+        let user_playslits_ids = store.get_user_playlists(test_user_id).unwrap();
+
+        assert_eq!(
+            user_playslits_ids,
+            vec![plyalist_id.clone(), playlist2_id.clone()]
+        );
+
+        store
+            .delete_user_playlist(&plyalist_id, test_user_id)
+            .unwrap();
+        store
+            .delete_user_playlist(&playlist2_id, test_user_id)
+            .unwrap();
+
+        assert_eq!(store.get_user_playlists(test_user_id).unwrap().len(), 0,);
     }
 }
