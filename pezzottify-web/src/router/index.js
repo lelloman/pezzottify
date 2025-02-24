@@ -36,6 +36,12 @@ const router = createRouter({
           name: 'artist',
           component: HomeView,
           meta: { requiresAuth: true }
+        },
+        {
+          path: '/new-playlist',
+          name: 'new_playlist',
+          component: HomeView,
+          meta: { requiresAuth: true }
         }
       ]
     },

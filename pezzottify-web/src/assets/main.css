@@ -33,3 +33,8 @@ a,
   background-color: var(--panel-on-bg);
   border-radius: var(--panel-border-radius);
 }
+
+.cardOnPanel {
+  background-color: var(--card-on-panel-bg);
+  border-radius: var(--card-on-panel-border-radius);
+}
