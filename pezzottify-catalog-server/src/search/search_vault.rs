@@ -167,13 +167,23 @@ impl SearchResultsHolder {
 }
 
 pub trait SearchVault {
-    fn search(&self, query: &str, max_results: usize) -> Vec<SearchResult>;
+    fn search(
+        &self,
+        query: &str,
+        max_results: usize,
+        filter: Option<Vec<HashedItemType>>,
+    ) -> Vec<SearchResult>;
 }
 
 pub struct NoOpSearchVault {}
 
 impl SearchVault for NoOpSearchVault {
-    fn search(&self, _query: &str, _max_results: usize) -> Vec<SearchResult> {
+    fn search(
+        &self,
+        _query: &str,
+        _max_results: usize,
+        filter: Option<Vec<HashedItemType>>,
+    ) -> Vec<SearchResult> {
         Vec::new()
     }
 }
@@ -218,11 +228,27 @@ impl PezzotHashSearchVault {
 }
 
 impl SearchVault for PezzotHashSearchVault {
-    fn search(&self, query: &str, max_results: usize) -> Vec<SearchResult> {
+    fn search(
+        &self,
+        query: &str,
+        max_results: usize,
+        filter: Option<Vec<HashedItemType>>,
+    ) -> Vec<SearchResult> {
         let query_hash = PezzottHash::calc(&query);
 
         let mut results = SearchResultsHolder::new(max_results);
+        let allowed_types = filter.unwrap_or_else(|| {
+            vec![
+                HashedItemType::Artist,
+                HashedItemType::Album,
+                HashedItemType::Track,
+            ]
+        });
+
         for item in self.items.iter() {
+            if !allowed_types.contains(&item.item_type) {
+                continue;
+            }
             results.maybe_add(&item, item.hash.match_query(&query_hash));
         }
 

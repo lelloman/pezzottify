@@ -67,7 +67,7 @@ fn main() -> Result<()> {
 
         let user_input = user_input.trim();
 
-        let results = search_vault.search(user_input, 60);
+        let results = search_vault.search(user_input, 60, None);
         if results.is_empty() {
             println!("No matches found for \"{}\".", user_input);
         } else {

@@ -12,11 +12,20 @@ use crate::search::SearchVault;
 use serde::Deserialize;
 
 #[derive(Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum SearchFilter {
+    Album,
+    Artist,
+    Track,
+}
+#[derive(Deserialize)]
 struct SearchBody {
     pub query: String,
 
     #[serde(default)]
     pub resolve: bool,
+
+    pub filters: Option<Vec<SearchFilter>>,
 }
 
 fn resolve_album(catalog: &Catalog, album_id: &str) -> Option<ResolvedSearchResult> {
@@ -143,11 +152,21 @@ async fn search(
     State(server_state): State<ServerState>,
     Json(payload): Json<SearchBody>,
 ) -> impl IntoResponse {
-    let search_results = server_state
-        .search_vault
-        .lock()
-        .unwrap()
-        .search(payload.query.as_str(), 30);
+    let filters = payload.filters.map(|v| {
+        v.iter()
+            .map(|i| match i {
+                SearchFilter::Album => HashedItemType::Album,
+                SearchFilter::Artist => HashedItemType::Artist,
+                SearchFilter::Track => HashedItemType::Track,
+            })
+            .collect()
+    });
+    let search_results =
+        server_state
+            .search_vault
+            .lock()
+            .unwrap()
+            .search(payload.query.as_str(), 30, filters);
     if payload.resolve {
         SearchResponse::Resolved(Json(resolve_search_results(
             &server_state.catalog.lock().unwrap(),
