@@ -68,6 +68,7 @@ pub struct UserLikedContent {
 pub struct UserPlaylist {
     pub id: String,
     pub user_id: usize,
+    pub creator: String,
     pub name: String,
     pub created: SystemTime,
     pub tracks: Vec<String>,

@@ -241,6 +241,7 @@ async fn post_playlist(
     match user_manager.lock().unwrap().create_user_playlist(
         session.user_id,
         &body.name,
+        session.user_id,
         body.track_ids.clone(),
     ) {
         Ok(id) => Json(id).into_response(),
@@ -595,6 +596,7 @@ mod tests {
             &self,
             user_id: usize,
             playlist_name: &str,
+            creator_id: usize,
             track_ids: Vec<String>,
         ) -> Result<String> {
             todo!()

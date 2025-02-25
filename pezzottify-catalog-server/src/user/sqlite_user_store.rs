@@ -12,7 +12,7 @@ use std::{
     sync::{Arc, Mutex},
     time::SystemTime,
 };
-use tracing::info;
+use tracing::{debug, info};
 
 use super::auth::PezzottifyHasher;
 use rand::{rng, Rng};
@@ -218,6 +218,16 @@ const USER_PLAYLIST_TABLE_V_3: Table = Table {
             })
         ),
         sqlite_column!("name", &SqlType::Text),
+        sqlite_column!(
+            "creator_id",
+            &SqlType::Integer,
+            non_null = true,
+            foreign_key = Some(&ForeignKey {
+                foreign_table: "user",
+                foreign_column: "id",
+                on_delete: ForeignKeyOnChange::Cascade,
+            })
+        ),
         sqlite_column!(
             "created",
             &SqlType::Integer,
@@ -586,6 +596,7 @@ impl UserStore for SqliteUserStore {
         &self,
         user_id: usize,
         playlist_name: &str,
+        creator_user_id: usize,
         track_ids: Vec<String>,
     ) -> Result<String> {
         let mut conn = self.conn.lock().unwrap();
@@ -607,10 +618,10 @@ impl UserStore for SqliteUserStore {
 
         tx.execute(
             &format!(
-                "INSERT INTO {} (id, user_id, name) VALUES (?1, ?2, ?3)",
+                "INSERT INTO {} (id, user_id, name, creator_id) VALUES (?1, ?2, ?3, ?4)",
                 USER_PLAYLIST_TABLE_V_3.name
             ),
-            params![&playlist_id, user_id, playlist_name],
+            params![&playlist_id, user_id, playlist_name, creator_user_id],
         )
         .context("Could not create playlist")?;
 
@@ -695,21 +706,34 @@ impl UserStore for SqliteUserStore {
     fn get_user_playlist(&self, playlist_id: &str, user_id: usize) -> Result<UserPlaylist> {
         let conn = self.conn.lock().unwrap();
 
+        debug!("get_user_playlist({playlist_id})");
+
+        let creator_name = conn.query_row(
+            &format!(
+                "SELECT handle FROM {} WHERE id = (SELECT creator_id FROM {} WHERE id = ?1)",
+                USER_TABLE_V_0.name, USER_PLAYLIST_TABLE_V_3.name
+            ),
+            params![playlist_id],
+            |row| row.get(0),
+        )?;
+        debug!("get_user_playlist({playlist_id}) found creator name: {creator_name}",);
+
         let mut stmt = conn.prepare(&format!(
             "SELECT id, name, created FROM {} WHERE id = ?1 AND user_id = ?2",
             USER_PLAYLIST_TABLE_V_3.name
         ))?;
-
-        let mut playlist = stmt.query_row(params![playlist_id], |row| {
+        let mut playlist = stmt.query_row(params![playlist_id, user_id], |row| {
             Ok(UserPlaylist {
                 id: row.get(0)?,
                 user_id: user_id,
+                creator: creator_name,
                 name: row.get(1)?,
                 created: system_time_from_column_result(row.get(2)?),
                 tracks: vec![],
             })
         })?;
 
+        debug!("get_user_playlist({playlist_id}) fetching tracks...",);
         let track_ids = conn
             .prepare(&format!(
                 "SELECT track_id FROM {} WHERE playlist_id = ?1 ORDER BY position",
@@ -954,6 +978,7 @@ mod tests {
             .create_user_playlist(
                 test_user_id,
                 "test_playlist",
+                test_user_id,
                 vec!["track1".to_string(), "track2".to_string()],
             )
             .unwrap();
@@ -965,6 +990,7 @@ mod tests {
             .create_user_playlist(
                 test_user_id,
                 "test_playlist2",
+                test_user_id,
                 vec!["track1".to_string(), "track2".to_string()],
             )
             .unwrap();

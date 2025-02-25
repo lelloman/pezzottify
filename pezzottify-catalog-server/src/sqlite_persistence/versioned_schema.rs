@@ -188,10 +188,27 @@ impl VersionedSchema {
 
             if actual_columns.len() != table.columns.len() {
                 bail!(
-                    "Table {} has {} columns, expected {}",
+                    "Table {} has {} columns, expected {}. Found column names: {}, expected: {}",
                     table.name,
                     actual_columns.len(),
-                    table.columns.len()
+                    table.columns.len(),
+                    actual_columns
+                        .iter()
+                        .filter_map(|c| {
+                            if let Ok(column) = c {
+                                Some(column.name.clone())
+                            } else {
+                                None
+                            }
+                        })
+                        .collect::<Vec<String>>()
+                        .join(", "),
+                    table
+                        .columns
+                        .iter()
+                        .map(|c| c.name)
+                        .collect::<Vec<_>>()
+                        .join(", ")
                 );
             }
 

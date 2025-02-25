@@ -82,6 +82,7 @@ pub trait UserStore: UserAuthTokenStore + UserAuthCredentialsStore + Send + Sync
         &self,
         user_id: usize,
         playlist_name: &str,
+        creator_id: usize,
         track_ids: Vec<String>,
     ) -> Result<String>;
 

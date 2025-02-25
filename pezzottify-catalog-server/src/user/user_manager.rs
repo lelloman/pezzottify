@@ -192,12 +192,15 @@ impl UserManager {
         &self,
         user_id: usize,
         playlist_name: &str,
+        creator_id: usize,
         track_ids: Vec<String>,
     ) -> Result<String> {
-        self.user_store
-            .lock()
-            .unwrap()
-            .create_user_playlist(user_id, playlist_name, track_ids)
+        self.user_store.lock().unwrap().create_user_playlist(
+            user_id,
+            playlist_name,
+            creator_id,
+            track_ids,
+        )
     }
 
     pub fn update_user_playlist(
