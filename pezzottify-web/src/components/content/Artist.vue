@@ -9,7 +9,7 @@
       </div>
     </div>
     <div v-if="data" class="relatedArtistsContainer">
-      <RelatedArtist v-for="artistId in data.related" :key="artistId" :artistId="artistId" />
+      <LoadArtistListItem v-for="artistId in data.related" :key="artistId" :artistId="artistId" />
     </div>
     <div class="discographyContainer">
       <h1>Discography:</h1>
@@ -30,6 +30,7 @@ import { useUserStore } from '@/store/user.js';
 import MultiSourceImage from '@/components/common/MultiSourceImage.vue';
 import ArtistAlbumCards from '@/components/common/ArtistAlbumCards.vue';
 import ToggableFavoriteIcon from '@/components/common/ToggableFavoriteIcon.vue';
+import LoadArtistListItem from '../common/LoadArtistListItem.vue';
 
 const props = defineProps({
   artistId: {

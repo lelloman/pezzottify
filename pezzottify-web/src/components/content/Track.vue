@@ -10,7 +10,7 @@
         <p v-if="track.is_explicit">Explicit!</p>
         <p v-if="track.has_lyrics && track.language_of_performance.length"> Language: {{
           track.language_of_performance.join(", ")
-        }}
+          }}
         </p>
       </div>
     </div>
@@ -18,7 +18,7 @@
       <PlayIcon class="playTrackIcon" @click.stop="handleClickOnPlayTrack" />
     </div>
     <div class="artistsContainer">
-      <RelatedArtist v-for="artistId in track.artists_ids" :key="artistId" :artistId="artistId" />
+      <LoadArtistListItem v-for="artistId in track.artists_ids" :key="artistId" :artistId="artistId" />
     </div>
   </div>
   <div v-else>
@@ -34,6 +34,7 @@ import PlayIcon from '../icons/PlayIcon.vue';
 import { usePlayerStore } from '@/store/player';
 import { chooseAlbumCoverImageUrl, chooseAlbumCoverImageIds, formatDuration, getYearFromTimestamp } from '@/utils';
 import { useRouter } from 'vue-router';
+import LoadArtistListItem from '../common/LoadArtistListItem.vue';
 
 const props = defineProps({
   trackId: {

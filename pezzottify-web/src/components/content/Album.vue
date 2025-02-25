@@ -11,7 +11,7 @@
       <ToggableFavoriteIcon :toggled="isAlbumLiked" :clickCallback="handleClickOnFavoriteIcon" />
     </div>
     <div class="artistsContainer">
-      <RelatedArtist v-for="artistId in data.album.artists_ids" :key="artistId" :artistId="artistId" />
+      <LoadArtistListItem v-for="artistId in data.album.artists_ids" :key="artistId" :artistId="artistId" />
     </div>
     <div class="tracksContainer">
       <div v-for="(disc, discIndex) in data.album.discs" :key="disc" class="discContainer">
@@ -50,6 +50,7 @@ import PlayIcon from '../icons/PlayIcon.vue';
 import { usePlayerStore } from '@/store/player';
 import { useUserStore } from '@/store/user';
 import ToggableFavoriteIcon from '../common/ToggableFavoriteIcon.vue';
+import LoadArtistListItem from '../common/LoadArtistListItem.vue';
 
 const props = defineProps({
   albumId: {
