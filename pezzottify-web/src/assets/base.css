@@ -123,3 +123,18 @@ body {
 ::-webkit-scrollbar-thumb:hover {
   background: var(--scrollbar-thumb-color-hover);
 }
+
+.scaleClickFeedback {
+  transition: transition 0.3s ease;
+  cursor: pointer;
+}
+
+.scaleClickFeedback:hover {
+  transition: scale 0.3s ease;
+  scale: 1.1;
+}
+
+.scaleClickFeedback:active {
+  transition: scale 0.3s ease;
+  scale: 0.9;
+}

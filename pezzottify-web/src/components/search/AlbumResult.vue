@@ -6,7 +6,7 @@
       <ClickableArtistsNames class="subtitle" :prefix="result.year + ' - '"
         :artistsIdsNames="result.artists_ids_names" />
     </div>
-    <PlayIcon class="searchResultPlayIcon" :data-id="result" @click.stop="handlePlayClick(result)" />
+    <PlayIcon class="searchResultPlayIcon scaleClickFeedback" :data-id="result" @click.stop="handlePlayClick(result)" />
   </div>
 </template>
 

@@ -1,7 +1,8 @@
 <template>
   <footer v-if="localCurrentTrack" class="footerPlayer">
     <div class="trackInfoRow">
-      <MultiSourceImage :urls="imageUrls" alt="Image" class="trackImage" @click.stop="handleClickOnAlbumCover" />
+      <MultiSourceImage :urls="imageUrls" alt="Image" class="trackImage scaleClickFeedback"
+        @click.stop="handleClickOnAlbumCover" />
       <div class="trackNamesColumn">
         <TrackName :track="localCurrentTrack" />
         <ClickableArtistsNames :artistsIdsNames="artists" />
@@ -62,7 +63,7 @@ const ControlIconButton = {
       props.action();
     }
 
-    return () => h('div', { class: 'scalingIcon', onClick }, [
+    return () => h('div', { class: 'scalingIcon scaleClickFeedback', onClick }, [
       h(props.icon, { class: 'lightControlFill' })
     ])
   },
@@ -270,12 +271,6 @@ watch(volume,
   height: 56px;
   border-radius: 4px;
   cursor: pointer;
-  transition: scale 0.3s ease;
-}
-
-.trackImage:hover {
-  scale: 1.1;
-  transition: scale 0.3s ease;
 }
 
 .trackNamesColumn {
@@ -304,21 +299,8 @@ watch(volume,
 }
 
 .scalingIcon {
-  scale: 80%;
-  transition: scale 0.3s ease;
   transform-origin: center;
   margin: 0 4px;
-}
-
-.scalingIcon:hover {
-  scale: 100%;
-  transition: scale 0.3s ease;
-  cursor: pointer;
-}
-
-.scalingIcon:active {
-  scale: 90%;
-  transition: scale 0.3 ease;
 }
 
 .playerControlsButtonsRow {

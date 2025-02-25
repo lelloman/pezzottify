@@ -2,10 +2,16 @@
   <div class="playlistWrapper">
     <div v-if="loading">Loading...</div>
     <div v-else-if="playlistData" class="playlistData">
-      <h1 class="playlistName">{{ playlistData.name }}</h1>
+      <div class="nameRow">
+        <h1 class="playlistName">
+          {{ playlistData.name }}
+        </h1>
+
+        <EditIcon v-if="!isEditMode" class="editIcon" />
+      </div>
       <div class="commandsSection">
-        <PlayIcon class="commandIcon" @click.stop="handleClickOnPlay" />
-        <TrashIcon class="commandIcon" @click.stop="handleClickOnDelete" />
+        <PlayIcon v-if="!isEditMode" class="commandIcon scaleClickFeedback" @click.stop="handleClickOnPlay" />
+        <TrashIcon v-if="!isEditMode" class="commandIcon scaleClickFeedback" @click.stop="handleClickOnDelete" />
       </div>
     </div>
     <div v-else-if="error">Error. {{ error }}</div>
@@ -26,13 +32,14 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue';
+import { watch, ref, onMounted } from 'vue';
 import axios from 'axios';
 import PlayIcon from '@/components/icons/PlayIcon.vue';
 import TrashIcon from '../icons/TrashIcon.vue';
 import ConfirmationDialog from '@/components/common/ConfirmationDialog.vue';
-import { useRouter } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 import { useUserStore } from '@/store/user';
+import EditIcon from '@/components/icons/EditIcon.vue';
 
 // Define playlistId prop
 const props = defineProps({
@@ -43,6 +50,7 @@ const props = defineProps({
 });
 
 const router = useRouter();
+const route = useRoute();
 const userStore = useUserStore();
 
 const playlistData = ref(null);
@@ -50,6 +58,8 @@ const loading = ref(true);
 const error = ref(null);
 
 const deleteConfirmationDialogOpen = ref(false);
+
+const isEditMode = ref(false);
 
 // Fetch playlist data
 const fetchPlaylistData = async (id) => {
@@ -77,6 +87,10 @@ const handleClickOnDelete = () => {
   deleteConfirmationDialogOpen.value = true;
 };
 
+watch(route, (newRoute) => {
+  isEditMode.value = newRoute.query.edit;
+}, { immediate: true });
+
 onMounted(() => {
   fetchPlaylistData(props.playlistId);
 });
@@ -89,8 +103,22 @@ onMounted(() => {
   margin: 8px;
 }
 
+.nameRow {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+}
+
 .playlistName {
   font-size: 34px;
+  flex: 1;
+}
+
+.editIcon {
+  fill: white;
+  height: 32px;
+  width: 32px;
+  cursor: pointer;
 }
 
 .commandsSection {
@@ -103,20 +131,7 @@ onMounted(() => {
 }
 
 .commandIcon {
-  scale: 1;
   fill: var(--accent-color);
-  cursor: pointer;
-  transition: scale 0.3s ease;
-}
-
-.commandIcon:hover {
-  scale: 1.1;
-  transition: scale 0.3s ease;
-}
-
-.commandIcon:active {
-  scale: 0.9;
-  transition: scale 0.3s ease;
 }
 
 .playlistConfirmationName {

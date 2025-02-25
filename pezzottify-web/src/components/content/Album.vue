@@ -7,7 +7,7 @@
       </div>
     </div>
     <div class="commandsSection">
-      <PlayIcon class="playAlbumIcon" @click.stop="handleClickOnPlayAlbum" />
+      <PlayIcon class="playAlbumIcon scaleClickFeedback" @click.stop="handleClickOnPlayAlbum" />
       <ToggableFavoriteIcon :toggled="isAlbumLiked" :clickCallback="handleClickOnFavoriteIcon" />
     </div>
     <div class="artistsContainer">
@@ -167,15 +167,9 @@ onMounted(() => {
 }
 
 .playAlbumIcon {
-  scale: 1.2;
+  width: 64px;
+  height: 64px;
   fill: var(--accent-color);
-  cursor: pointer;
-  transition: scale 0.3s ease;
-}
-
-.playAlbumIcon:hover {
-  scale: 1.3;
-  transition: scale 0.3s ease;
 }
 
 .commandsSection {

@@ -1,6 +1,6 @@
 <template>
   <div class="searchResultRow" :data-id="result" @click.stop="handleTrackClick(result)">
-    <MultiSourceImage :urls="[imageUrl]" alt="Image" class="searchResultImage albumCoverImage"
+    <MultiSourceImage :urls="[imageUrl]" alt="Image" class="searchResultImage scaleClickFeedback"
       @click.stop="handleImageClick" />
     <div class="column">
       <TrackName :track="result" />
@@ -78,14 +78,5 @@ const handleImageClick = () => {
   text-align: center;
   vertical-align: middle;
   height: 100%;
-}
-
-.albumCoverImage {
-  transition: scale 0.3s ease;
-}
-
-.albumCoverImage:hover {
-  scale: 1.1;
-  transition: scale 0.3s ease;
 }
 </style>

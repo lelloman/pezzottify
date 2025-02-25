@@ -1,13 +1,16 @@
 <template>
   <aside class="sidebar panel">
     <div class="tabSelectorsContainer">
-      <div @click.stop="setAlbumsTab" :class="{ 'tabSelector': true, 'selectedTab': selectedTab === 'albums' }">
+      <div @click.stop="setAlbumsTab"
+        :class="{ 'tabSelector': true, 'scaleClickFeedback': true, 'selectedTab': selectedTab === 'albums' }">
         <h3>Albums</h3>
       </div>
-      <div @click.stop="setArtistsTab" :class="{ 'tabSelector': true, 'selectedTab': selectedTab === 'artists' }">
+      <div @click.stop="setArtistsTab"
+        :class="{ 'tabSelector': true, 'scaleClickFeedback': true, 'selectedTab': selectedTab === 'artists' }">
         <h3>Artists</h3>
       </div>
-      <div @click.stop="setPlaylistsTab" :class="{ 'tabSelector': true, 'selectedTab': selectedTab === 'playlists' }">
+      <div @click.stop="setPlaylistsTab"
+        :class="{ 'tabSelector': true, 'scaleClickFeedback': true, 'selectedTab': selectedTab === 'playlists' }">
         <h3>Playlists</h3>
       </div>
     </div>
@@ -23,9 +26,10 @@
     </div>
     <div v-else-if="selectedTab == 'playlists'" class="contentContainer">
       <div class="createPlaylistButtonContainer">
-        <div v-if="!isCreatingPlaylist" class="createPlaylistButton" @click.stop="handleCreatePlaylistButtonClick">
-          Create</div>
-        <div v-else class="createPlaylistButton">...</div>
+        <div class="createPlaylistButton scaleClickFeedback" @click.stop="handleCreatePlaylistButtonClick">
+          <span v-if="!isCreatingPlaylist">Create</span>
+          <span v-else>...</span>
+        </div>
       </div>
       <div class="playlistsContainer">
         <div v-for="playlistId in playlistsIds" :key="playlistId">
@@ -38,6 +42,7 @@
 </template>
 
 <script setup>
+import '@/assets/base.css';
 import '@/assets/main.css';
 import { watch, ref, onMounted } from 'vue';
 import { useUserStore } from '@/store/user.js';
@@ -156,7 +161,7 @@ onMounted(() => {
   cursor: pointer;
   padding: 8px 16px;
   border-radius: 8px;
-  transition: scale 0.3s ease, opacity 0.3s ease;
+  transition: scale 0.3s ease;
   opacity: 0.4;
 }
 
@@ -169,18 +174,17 @@ onMounted(() => {
   background-color: var(--highlighted-panel-color);
   transition: scale 0.3s ease, background-color 0.3s ease, opacity 0.3s ease;
   opacity: 1.0;
-  scale: 1.1;
 }
 
 .tabSelector:active {
   transition: scale 0.3s ease, opacity 0.3s ease;
   opacity: 1.0;
-  scale: 0.9;
 }
 
 .selectedTab {
   background-color: var(--accent-color) !important;
-  transition: scale 0.3s ease, background-color 0.3s ease;
+  transition: transform;
+  ;
   opacity: 1 !important;
 }
 
@@ -204,17 +208,11 @@ onMounted(() => {
   padding: 8px 16px;
   width: fit-content;
   cursor: pointer;
-  transition: scale 0.3s ease, background-color 0.3s ease;
+  transition: background-color 0.3s ease;
 }
 
 .createPlaylistButton:hover {
   background-color: var(--highlighted-panel-color);
-  transition: scale 0.3s ease, background-color 0.3s ease;
-  scale: 1.1;
-}
-
-.createPlaylistButton:active {
-  transition: scale 0.3s ease;
-  scale: 0.9;
+  transition: background-color 0.3s ease;
 }
 </style>

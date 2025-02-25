@@ -1,11 +1,14 @@
 <template>
   <div class="wrapper">
     <div class="filtersContainer">
-      <div :class="{ 'filter': true, 'selectedFilter': selectedFilters.indexOf('album') > -1 }"
+      <div
+        :class="{ 'filter': true, 'selectedFilter': selectedFilters.indexOf('album') > -1, 'scaleClickFeedback': true }"
         @click.stop="toggleFilter('album')">Albums</div>
-      <div :class="{ 'filter': true, 'selectedFilter': selectedFilters.indexOf('artist') > -1 }"
+      <div
+        :class="{ 'filter': true, 'selectedFilter': selectedFilters.indexOf('artist') > -1, 'scaleClickFeedback': true }"
         @click.stop="toggleFilter('artist')">Artists</div>
-      <div :class="{ 'filter': true, 'selectedFilter': selectedFilters.indexOf('track') > -1 }"
+      <div
+        :class="{ 'filter': true, 'selectedFilter': selectedFilters.indexOf('track') > -1, 'scaleClickFeedback': true }"
         @click.stop="toggleFilter('track')">Tracks</div>
     </div>
     <div class="searchResultsContainer">
@@ -106,12 +109,10 @@ watch(route, (newRoute) => {
 }
 
 .filter:hover {
-  scale: 1.1;
   transition: scale 0.3s ease, background-color 0.3s ease;
 }
 
 .filter:active {
-  scale: 0.9;
   transition: scale 0.3s ease, background-color 0.3s ease;
 }
 

@@ -2,19 +2,21 @@
   <div class=".albumWrapper">
     <div v-if="loading">Loading...</div>
     <div v-else-if="albumData" class="searchResultRow" :data-id="albumData.id" @click="handleClick(albumData.id)">
-      <MultiSourceImage :urls="chooseAlbumCoverImageUrl(albumData)" class="searchResultImage" />
+      <MultiSourceImage :urls="chooseAlbumCoverImageUrl(albumData)" class="searchResultImage scaleClickFeedback" />
       <div class="column">
         <h3 class="title">{{ albumData.name }}</h3>
         <ClickableArtistsNames v-if="showArtists" class="artistsNames" :artistsIdsNames="artistsIdsNames" />
       </div>
 
-      <PlayIcon class="searchResultPlayIcon" :data-id="albumData.id" @click.stop="handlePlayClick(albumData.id)" />
+      <PlayIcon class="searchResultPlayIcon scaleClickFeedback" :data-id="albumData.id"
+        @click.stop="handlePlayClick(albumData.id)" />
     </div>
     <div v-else-if="error">Error. {{ error }}</div>
   </div>
 </template>
 
 <script setup>
+import '@/assets/base.css'
 import '@/assets/search.css'
 import { ref, onMounted } from 'vue';
 import { useRouter } from 'vue-router';

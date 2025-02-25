@@ -5,7 +5,8 @@
     </div>
     <div class="trackRow" v-for="(track, index) in tracks" :class="{ currentlyPlayingRow: index == currentIndex }"
       :key="index" @click.stop="handleClick(index)">
-      <MultiSourceImage class="trackImage" :urls="track.imageUrls" @click.stop="handleClickOnTrackImage(track)" />
+      <MultiSourceImage class="trackImage scaleClickFeedback" :urls="track.imageUrls"
+        @click.stop="handleClickOnTrackImage(track)" />
       <div class="namesColumn">
         <TrackName :track="track" />
         <ClickableArtistsNames :artistsIdsNames="track.artists" />
@@ -96,13 +97,6 @@ watch(
 .trackImage {
   width: 40px;
   height: 40px;
-  transition: scale 0.3s ease;
-  cursor: pointer;
-}
-
-.trackImage:hover {
-  scale: 1.1;
-  transition: 0.3s ease;
 }
 
 .namesColumn {

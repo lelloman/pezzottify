@@ -31,15 +31,7 @@
   bottom: 0px;
   margin-left: 40px;
   opacity: 0;
-  transition:
-    opacity 0.3s ease,
-    scale 0.2s ease;
-  scale: 0.8;
-}
-
-.searchResultPlayIcon:hover {
-  scale: 1;
-  transition: scale 0.2s ease;
+  transition: opacity 0.3s ease;
 }
 
 .searchResultRow:hover .searchResultPlayIcon {

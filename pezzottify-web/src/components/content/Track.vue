@@ -15,7 +15,7 @@
       </div>
     </div>
     <div class="commandsSection">
-      <PlayIcon class="playTrackIcon" @click.stop="handleClickOnPlayTrack" />
+      <PlayIcon class="playTrackIcon scaleClickFeedback" @click.stop="handleClickOnPlayTrack" />
     </div>
     <div class="artistsContainer">
       <LoadArtistListItem v-for="artistId in track.artists_ids" :key="artistId" :artistId="artistId" />
@@ -122,15 +122,9 @@ onMounted(() => {
 }
 
 .playTrackIcon {
-  scale: 1.2;
   fill: var(--accent-color);
-  cursor: pointer;
-  transition: scale 0.3s ease;
-}
-
-.playTrackIcon:hover {
-  scale: 1.3;
-  transition: scale 0.3s ease;
+  width: 64px;
+  height: 64px;
 }
 
 .commandsSection {
