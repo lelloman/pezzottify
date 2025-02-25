@@ -17,11 +17,12 @@
 <script setup>
 import { ref, watch } from 'vue';
 import { debounce } from 'lodash-es'; // Lightweight debounce
-import { useRouter } from 'vue-router';
+import { useRouter, useRoute } from 'vue-router';
 
 const emit = defineEmits(['search']);
 const inputValue = ref('');
 const router = useRouter();
+const route = useRoute();
 
 const props = defineProps({
   initialQuery: {
@@ -41,7 +42,8 @@ watch(
 const debounceEmit = debounce((value) => {
   const trimmed = value.trim();
   if (trimmed.length > 0) {
-    router.push({ path: `/search/${encodeURIComponent(value.trim())}` });
+    console.log("TopBar changing search query, current path query: " + route.query);
+    router.push({ path: `/search/${encodeURIComponent(value.trim())}`, query: route.query });
   } else {
     router.push({ path: "/" });
   }
