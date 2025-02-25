@@ -3,15 +3,16 @@
     <div v-if="loading">Loading...</div>
     <div v-else-if="playlistData" class="playlistData">
       <div class="nameRow">
-        <h1 class="playlistName">
+        <h1 class="playlistNameLabel">
           {{ playlistData.name }}
         </h1>
 
-        <EditIcon v-if="!isEditMode" class="editIcon" />
+        <EditIcon class="editIcon scaleClickFeedback" @click.stop="handleEditButtonClick" />
+
       </div>
       <div class="commandsSection">
-        <PlayIcon v-if="!isEditMode" class="commandIcon scaleClickFeedback" @click.stop="handleClickOnPlay" />
-        <TrashIcon v-if="!isEditMode" class="commandIcon scaleClickFeedback" @click.stop="handleClickOnDelete" />
+        <PlayIcon class="commandIcon scaleClickFeedback" @click.stop="handleClickOnPlay" />
+        <TrashIcon class="commandIcon scaleClickFeedback" @click.stop="handleClickOnDelete" />
       </div>
     </div>
     <div v-else-if="error">Error. {{ error }}</div>
@@ -20,7 +21,6 @@
   <Transition>
     <ConfirmationDialog v-if="deleteConfirmationDialogOpen" :isOpen="deleteConfirmationDialogOpen"
       :closeCallback="() => deleteConfirmationDialogOpen = false" :title="'Delete playlist'"
-      :message="'Are you sure you want to delete <b>' + playlistData.name + '</b>?'"
       :positiveButtonCallback="handleDeletePlaylistConfirmation">
 
       <template #message>
@@ -29,11 +29,21 @@
     </ConfirmationDialog>
   </Transition>
 
+  <Transition>
+    <ConfirmationDialog v-show="isEditMode" :isOpen="isEditMode" :closeCallback="closeEditMode"
+      :title="'Edit playlist name'" :negativeButtonText="'Cancel'" :positiveButtonText="'Save'"
+      :positiveButtonCallback="handleChangeNameButtonClicked">
+
+      <template #message>
+        <input id="editPlaylistNameInput" />
+      </template>
+
+    </ConfirmationDialog>
+  </Transition>
 </template>
 
 <script setup>
 import { watch, ref, onMounted } from 'vue';
-import axios from 'axios';
 import PlayIcon from '@/components/icons/PlayIcon.vue';
 import TrashIcon from '../icons/TrashIcon.vue';
 import ConfirmationDialog from '@/components/common/ConfirmationDialog.vue';
@@ -61,16 +71,37 @@ const deleteConfirmationDialogOpen = ref(false);
 
 const isEditMode = ref(false);
 
+const handleEditButtonClick = () => {
+  router.push({ query: { edit: !isEditMode.value } });
+}
+
+
 // Fetch playlist data
 const fetchPlaylistData = async (id) => {
-  try {
-    const response = await axios.get(`/v1/user/playlist/${id}`);
-    playlistData.value = response.data;
-  } catch (err) {
-    error.value = err.message;
-  } finally {
+  userStore.loadPlaylistData(id, (data) => {
+    console.log("UserPlaylist data loaded:");
+    console.log(data);
+    if (data) {
+      playlistData.value = data;
+    } else {
+      error.value = "Error loading playlist data";
+    }
     loading.value = false;
-  }
+  });
+};
+
+const handleChangeNameButtonClicked = async () => {
+  const newName = document.getElementById("editPlaylistNameInput").value;
+  closeEditMode();
+  userStore.updatePlaylistName(props.playlistId, newName, (success) => {
+    if (success) {
+      playlistData.value.name = newName;
+    }
+  });
+};
+
+const closeEditMode = () => {
+  router.push({});
 };
 
 const handleDeletePlaylistConfirmation = async () => {
@@ -87,10 +118,26 @@ const handleClickOnDelete = () => {
   deleteConfirmationDialogOpen.value = true;
 };
 
-watch(route, (newRoute) => {
-  isEditMode.value = newRoute.query.edit;
-}, { immediate: true });
+watch(
+  route,
+  (newRoute) => {
+    isEditMode.value = newRoute.query.edit;
+    if (isEditMode.value) {
+      requestAnimationFrame(() => {
+        document.getElementById("editPlaylistNameInput").value = playlistData.value.name;
+      });
+    }
+  },
+  { immediate: true }
+);
 
+watch(
+  () => props.playlistId,
+  (newId) => {
+    fetchPlaylistData(newId);
+  },
+  { immediate: true }
+);
 onMounted(() => {
   fetchPlaylistData(props.playlistId);
 });
@@ -109,7 +156,7 @@ onMounted(() => {
   align-items: center;
 }
 
-.playlistName {
+.playlistNameLabel {
   font-size: 34px;
   flex: 1;
 }
@@ -118,7 +165,6 @@ onMounted(() => {
   fill: white;
   height: 32px;
   width: 32px;
-  cursor: pointer;
 }
 
 .commandsSection {
@@ -128,6 +174,7 @@ onMounted(() => {
   margin-left: 8px;
   margin-right: 8px;
   gap: 16px;
+  align-items: center;
 }
 
 .commandIcon {
@@ -137,5 +184,20 @@ onMounted(() => {
 .playlistConfirmationName {
   font-weight: bold;
   color: red;
+}
+
+#playlistNameInput {
+  font-size: 34px;
+  flex: 1;
+  background-color: transparent;
+  border: none;
+  color: white;
+  font-weight: bold;
+  font-size: 34px;
+  padding: 0;
+  margin: 0;
+  outline: none;
+  border-bottom: 2px solid white;
+  margin-right: 16px;
 }
 </style>

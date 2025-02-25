@@ -1,8 +1,8 @@
 <template>
   <div class="playlistWrapper">
     <div v-if="loading">Loading...</div>
-    <div v-else-if="playlistData" class="playlistItem searchResultRow" @click.stop="handleClick">
-      <h2>{{ playlistData.name }} ({{ playlistData.tracks.length }})</h2>
+    <div v-else-if="localPlaylistdata" class="playlistItem searchResultRow" @click.stop="handleClick">
+      <h2>{{ localPlaylistdata.name }} ({{ localPlaylistdata.tracks.length }})</h2>
     </div>
     <div v-else-if="error">Error. {{ error }}</div>
   </div>
@@ -10,39 +10,50 @@
 
 <script setup>
 import { ref, onMounted } from 'vue';
-import axios from 'axios';
 import { useRouter } from 'vue-router';
+import { useUserStore } from '@/store/user';
 
 const router = useRouter();
+const userStore = useUserStore();
 
 const props = defineProps({
-  playlistId: {
-    type: String,
+  playlistData: {
     required: true,
   }
 });
 
-const playlistData = ref(null);
+const localPlaylistdata = ref(null);
 const loading = ref(true);
 const error = ref(null);
 
 const fetchPlyalistData = async (id) => {
-  try {
-    const response = await axios.get(`/v1/user/playlist/${id}`);
-    playlistData.value = response.data;
-  } catch (err) {
-    error.value = err.message;
-  } finally {
+  loading.value = true;
+  userStore.loadPlaylistData(id, (data) => {
+    console.log("LoadPLaylistListItem UserPlaylist data loaded:");
+    console.log(data);
+    if (data) {
+      localPlaylistdata.value = data;
+    } else {
+      error.value = "Error loading playlist data";
+    }
     loading.value = false;
-  }
+  });
 };
 
 const handleClick = () => {
-  router.push(`/playlist/${props.playlistId}`);
+  router.push(`/playlist/${localPlaylistdata.value.id}`);
 };
 
 onMounted(() => {
-  fetchPlyalistData(props.playlistId);
+  const isString = typeof (props.playlistData) == 'string';
+  console.log("LoadPLaylistListItem mounted, data (isString ", isString, ") :");
+  console.log(props.playlistData);
+  if (isString) {
+    fetchPlyalistData(props.playlistData);
+  } else {
+    localPlaylistdata.value = props.playlistData;
+    loading.value = false;
+  }
 });
 
 </script>

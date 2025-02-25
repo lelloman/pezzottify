@@ -67,9 +67,8 @@ struct CreatePlaylistBody {
 
 #[derive(Deserialize, Debug)]
 struct UpdatePlaylistBody {
-    pub id: String,
-    pub name: String,
-    pub track_ids: Vec<String>,
+    pub name: Option<String>,
+    pub track_ids: Option<Vec<String>>,
 }
 
 #[derive(Serialize)]
@@ -252,16 +251,21 @@ async fn post_playlist(
 async fn put_playlist(
     session: Session,
     State(user_manager): State<GuardedUserManager>,
+    Path(id): Path<String>,
     Json(body): Json<UpdatePlaylistBody>,
 ) -> Response {
+    debug!("Updating playlist with id {}", id);
     match user_manager.lock().unwrap().update_user_playlist(
-        &body.id,
+        &id,
         session.user_id,
-        &body.name,
+        body.name,
         body.track_ids,
     ) {
         Ok(_) => StatusCode::OK.into_response(),
-        Err(_) => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+        Err(err) => {
+            debug!("Error updating playlist: {}", err);
+            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+        }
     }
 }
 
@@ -610,8 +614,8 @@ mod tests {
             &self,
             playlist_id: &str,
             user_id: usize,
-            playlist_name: &str,
-            track_ids: Vec<String>,
+            playlist_name: Option<String>,
+            track_ids: Option<Vec<String>>,
         ) -> Result<()> {
             todo!()
         }

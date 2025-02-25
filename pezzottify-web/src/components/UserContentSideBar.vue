@@ -31,9 +31,9 @@
           <span v-else>...</span>
         </div>
       </div>
-      <div class="playlistsContainer">
-        <div v-for="playlistId in playlistsIds" :key="playlistId">
-          <LoadPlaylistListItem :playlistId="playlistId" />
+      <div class="playlistsContainer" v-if="playlistsData">
+        <div v-for="playlistData in playlistsData.list" :key="playlistData">
+          <LoadPlaylistListItem :playlistData="playlistData" />
         </div>
       </div>
     </div>
@@ -56,7 +56,7 @@ const router = useRouter();
 
 const albumIds = ref(null);
 const artistsIds = ref(null);
-const playlistsIds = ref(null);
+const playlistsData = ref(null);
 const loading = ref(true);
 
 const selectedTab = ref(null);
@@ -85,11 +85,11 @@ watch(() => userStore.likedArtistsIds,
   },
   { immediate: true }
 );
-watch(() => userStore.playlistsIds,
-  (newPlaylistsIds) => {
-    console.log("new userStore.playlistsIds ", newPlaylistsIds);
-    if (newPlaylistsIds) {
-      playlistsIds.value = newPlaylistsIds;
+watch(() => userStore.playlistsData,
+  (newPlaylistsData) => {
+    console.log("new userStore.playlistsData ", newPlaylistsData);
+    if (newPlaylistsData) {
+      playlistsData.value = newPlaylistsData;
     }
   },
   { immediate: true }
@@ -104,7 +104,7 @@ const handleCreatePlaylistButtonClick = () => {
     isCreatingPlaylist.value = false;
 
     if (newPlaylistId) {
-      router.push(`/playlist/${newPlaylistId}`);
+      router.push(`/playlist/${newPlaylistId}?edit=true`);
     }
   });
 }

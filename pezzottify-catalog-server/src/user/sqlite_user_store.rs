@@ -13,6 +13,7 @@ use std::{
     time::SystemTime,
 };
 use tracing::{debug, info};
+use tracing_subscriber::field::debug;
 
 use super::auth::PezzottifyHasher;
 use rand::{rng, Rng};
@@ -643,50 +644,57 @@ impl UserStore for SqliteUserStore {
         &self,
         playlist_id: &str,
         user_id: usize,
-        playlist_name: &str,
-        track_ids: Vec<String>,
+        playlist_name: Option<String>,
+        track_ids: Option<Vec<String>>,
     ) -> Result<()> {
         let mut conn = self.conn.lock().unwrap();
         let tx = conn.transaction()?;
 
-        let playlist_user_id = tx.execute(
+        let playlist_user_id = tx.query_row(
             &format!(
                 "SELECT user_id FROM {} WHERE id = ?1",
                 USER_PLAYLIST_TABLE_V_3.name
             ),
             params![playlist_id],
+            |row| row.get::<usize, usize>(0),
         )?;
-
+        debug!("update_user_playlist({playlist_id}) found user_id: {playlist_user_id}",);
         if user_id != playlist_user_id {
             bail!("User does not own the playlist");
         }
 
-        tx.execute(
-            &format!(
-                "UPDATE {} SET name = ?1 WHERE id = ?2",
-                USER_PLAYLIST_TABLE_V_3.name
-            ),
-            params![playlist_name, playlist_id],
-        )?;
-
-        tx.execute(
-            &format!(
-                "DELETE FROM {} WHERE playlist_id = ?1",
-                USER_PLAYLIST_TRACKS_TABLE_V_3.name
-            ),
-            params![playlist_id],
-        )?;
-
-        for (position, track_id) in track_ids.iter().enumerate() {
+        if let Some(playlist_name) = playlist_name {
+            debug!("update_user_playlist({playlist_id}) updating name to {playlist_name}",);
             tx.execute(
                 &format!(
-                    "INSERT INTO {} (playlist_id, track_id, position) VALUES (?1, ?2, ?3)",
-                    USER_PLAYLIST_TRACKS_TABLE_V_3.name
+                    "UPDATE {} SET name = ?1 WHERE id = ?2",
+                    USER_PLAYLIST_TABLE_V_3.name
                 ),
-                params![playlist_id, track_id, position as i32],
+                params![playlist_name, playlist_id],
             )?;
         }
 
+        if let Some(track_ids) = track_ids {
+            debug!("update_user_playlist({playlist_id}) updating tracks",);
+            tx.execute(
+                &format!(
+                    "DELETE FROM {} WHERE playlist_id = ?1",
+                    USER_PLAYLIST_TRACKS_TABLE_V_3.name
+                ),
+                params![playlist_id],
+            )?;
+
+            for (position, track_id) in track_ids.iter().enumerate() {
+                tx.execute(
+                    &format!(
+                        "INSERT INTO {} (playlist_id, track_id, position) VALUES (?1, ?2, ?3)",
+                        USER_PLAYLIST_TRACKS_TABLE_V_3.name
+                    ),
+                    params![playlist_id, track_id, position as i32],
+                )?;
+            }
+        }
+        debug!("update_user_playlist({playlist_id}) committing...",);
         tx.commit()?;
         Ok(())
     }

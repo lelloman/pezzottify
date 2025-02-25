@@ -91,8 +91,8 @@ pub trait UserStore: UserAuthTokenStore + UserAuthCredentialsStore + Send + Sync
         &self,
         playlist_id: &str,
         user_id: usize,
-        playlist_name: &str,
-        track_ids: Vec<String>,
+        playlist_name: Option<String>,
+        track_ids: Option<Vec<String>>,
     ) -> Result<()>;
 
     /// Deletes a user playlist given the playlist id and its owner's id.

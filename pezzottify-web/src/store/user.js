@@ -10,7 +10,7 @@ export const useUserStore = defineStore('user', () => {
   const likedArtistsIds = ref(null);
   let isLoadingLikedArtists = ref(false);
 
-  const playlistsIds = ref(null);
+  const playlistsData = ref(null);
   let isLoadingPlaylists = ref(false);
 
 
@@ -94,7 +94,16 @@ export const useUserStore = defineStore('user', () => {
       const response = await axios.get('/v1/user/playlists');
       console.log("Writing new data to playlistsIds");
       console.log(response.data);
-      playlistsIds.value = response.data;
+
+      const by_id = {};
+      response.data.forEach(playlist => {
+        by_id[playlist.id] = playlist.id;
+      });
+
+      playlistsData.value = {
+        list: response.data,
+        by_id: by_id,
+      }
     } catch (error) {
       console.error('Failed to load playlists:', error);
     } finally {
@@ -103,8 +112,37 @@ export const useUserStore = defineStore('user', () => {
   }
 
   const triggerPlaylistsLoad = async () => {
-    if (playlistsIds.value == null && !isLoadingPlaylists.value) {
+    if (playlistsData.value == null && !isLoadingPlaylists.value) {
       await loadPlaylists();
+    }
+  }
+
+  const loadPlaylistData = async (playlistId, callback) => {
+    console.log("userStore loadPlaylistData playlistId: " + playlistId);
+    if (playlistsData.value && playlistsData.value.by_id[playlistId]) {
+      const mapped = playlistsData.value.by_id[playlistId];
+      if (mapped) {
+        callback(mapped);
+        return;
+      }
+    }
+    try {
+      const response = await axios.get(`/v1/user/playlist/${playlistId}`);
+      console.log("Writing new data to playlistData");
+      console.log(response.data);
+      callback(response.data);
+      if (playlistsData.value) {
+        playlistsData.value.list = playlistsData.value.list.map(playlist => {
+          if (playlist.id === playlistId) {
+            return response.data;
+          }
+          return playlist;
+        });
+        playlistsData.value.by_id[playlistId] = response.data;
+      }
+
+    } catch (error) {
+      console.error('Failed to load playlist data:', error);
     }
   }
 
@@ -116,7 +154,8 @@ export const useUserStore = defineStore('user', () => {
       });
       console.log("Creating new playlist");
       console.log(response.data);
-      playlistsIds.value = [response.data, ...playlistsIds.value];
+      playlistsData.value.list = [response.data, ...playlistsData.value.list];
+      playlistsData.value.by_id[response.data.id] = response.data;
       callback(response.data);
     } catch (error) {
       console.error('Failed to create new playlist:', error);
@@ -127,10 +166,24 @@ export const useUserStore = defineStore('user', () => {
   const deletePlaylist = async (playlistId, callback) => {
     try {
       await axios.delete(`/v1/user/playlist/${playlistId}`);
-      playlistsIds.value = playlistsIds.value.filter(id => id !== playlistId);
+      playlistsData.value.list = playlistsData.value.list.filter(id => id !== playlistId);
+      playlistsData.value.by_id[playlistId] = null;
       callback(true);
     } catch (error) {
       console.error('Failed to delete playlist:', error);
+      callback(false);
+    }
+  }
+
+  const updatePlaylistName = async (playlistId, name, callback) => {
+    try {
+      await axios.put(`/v1/user/playlist/${playlistId}`, {
+        name: name,
+      });
+      playlistsData.value.by_id[playlistId].name = name;
+      callback(true);
+    } catch (error) {
+      console.error('Failed to update playlist name:', error);
       callback(false);
     }
   }
@@ -141,7 +194,7 @@ export const useUserStore = defineStore('user', () => {
     isLoadingLikedArtists,
     likedArtistsIds,
     isLoadingPlaylists,
-    playlistsIds,
+    playlistsData,
     triggerAlbumsLoad,
     setAlbumIsLiked,
     triggerArtistsLoad,
@@ -149,5 +202,7 @@ export const useUserStore = defineStore('user', () => {
     triggerPlaylistsLoad,
     createPlaylist,
     deletePlaylist,
+    loadPlaylistData,
+    updatePlaylistName,
   };
 });

@@ -207,8 +207,8 @@ impl UserManager {
         &self,
         playlist_id: &str,
         user_id: usize,
-        playlist_name: &str,
-        track_ids: Vec<String>,
+        playlist_name: Option<String>,
+        track_ids: Option<Vec<String>>,
     ) -> Result<()> {
         self.user_store.lock().unwrap().update_user_playlist(
             playlist_id,
