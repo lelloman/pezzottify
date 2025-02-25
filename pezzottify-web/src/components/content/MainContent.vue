@@ -19,6 +19,7 @@
     <Track v-else-if="trackId" :trackId="trackId" />
     <Album v-else-if="albumId" :albumId="albumId" />
     <Artist v-else-if="artistId" :artistId="artistId" />
+    <UserPlaylist v-else-if="playlistId" :playlistId="playlistId" />
     <div v-else>
       <h1 class="text-2xl font-bold mb-4">Welcome to Home</h1>
       <p>This is your home content.</p>
@@ -35,6 +36,7 @@ import TrackResult from '@/components/search/TrackResult.vue';
 import Track from '@/components/content/Track.vue';
 import Album from '@/components/content/Album.vue';
 import Artist from '@/components/content/Artist.vue';
+import UserPlaylist from '@/components/content/UserPlaylist.vue';
 import { useRoute } from 'vue-router';
 
 const results = ref([]);
@@ -45,6 +47,7 @@ const searchQuery = ref(route.params.query || '');
 const trackId = ref(route.params.trackId || '');
 const artistId = ref(route.params.artistId || '');
 const albumId = ref(route.params.albumId || '');
+const playlistId = ref(route.params.playlistId || '');
 
 const fetchResults = async (newQuery) => {
   console.log("watch query? " + newQuery)
@@ -93,6 +96,11 @@ watch(
 watch(
   () => route.params.albumId,
   (newAlbumId) => { albumId.value = newAlbumId || ''; },
+  { immediate: true }
+)
+watch(
+  () => route.params.playlistId,
+  (newPlaylistId) => { playlistId.value = newPlaylistId || ''; },
   { immediate: true }
 )
 </script>

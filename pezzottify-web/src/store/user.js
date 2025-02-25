@@ -116,11 +116,22 @@ export const useUserStore = defineStore('user', () => {
       });
       console.log("Creating new playlist");
       console.log(response.data);
-      playlistsIds.value = [response.data.id, ...playlistsIds.value];
-      callback(response.data.id);
+      playlistsIds.value = [response.data, ...playlistsIds.value];
+      callback(response.data);
     } catch (error) {
       console.error('Failed to create new playlist:', error);
       callback(null);
+    }
+  }
+
+  const deletePlaylist = async (playlistId, callback) => {
+    try {
+      await axios.delete(`/v1/user/playlist/${playlistId}`);
+      playlistsIds.value = playlistsIds.value.filter(id => id !== playlistId);
+      callback(true);
+    } catch (error) {
+      console.error('Failed to delete playlist:', error);
+      callback(false);
     }
   }
 
@@ -137,5 +148,6 @@ export const useUserStore = defineStore('user', () => {
     setArtistIsLiked,
     triggerPlaylistsLoad,
     createPlaylist,
+    deletePlaylist,
   };
 });

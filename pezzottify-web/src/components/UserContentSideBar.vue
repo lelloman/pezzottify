@@ -29,7 +29,7 @@
       </div>
       <div class="playlistsContainer">
         <div v-for="playlistId in playlistsIds" :key="playlistId">
-          {{ playlistId }}
+          <LoadPlaylistListItem :playlistId="playlistId" />
         </div>
       </div>
     </div>
@@ -44,6 +44,7 @@ import { useUserStore } from '@/store/user.js';
 import { useRouter } from 'vue-router';
 import AlbumCard from '@/components/common/AlbumCard.vue';
 import LoadArtistListItem from '@/components/common/LoadArtistListItem.vue';
+import LoadPlaylistListItem from './common/LoadPlaylistListItem.vue';
 
 const userStore = useUserStore();
 const router = useRouter();

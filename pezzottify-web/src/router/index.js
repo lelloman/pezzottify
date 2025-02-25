@@ -38,8 +38,8 @@ const router = createRouter({
           meta: { requiresAuth: true }
         },
         {
-          path: '/new-playlist',
-          name: 'new_playlist',
+          path: '/playlist/:playlistId?',
+          name: 'playlist',
           component: HomeView,
           meta: { requiresAuth: true }
         }
