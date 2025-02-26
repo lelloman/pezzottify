@@ -17,7 +17,8 @@
       <div v-for="(disc, discIndex) in data.album.discs" :key="disc" class="discContainer">
         <h1 v-if="data.album.discs.length > 1">Disc {{ discIndex + 1 }}<span v-if="disc.name">- {{ disc.name }}</span>
         </h1>
-        <div v-for="(trackId, trackIndex) in disc.tracks" :key="trackId" class="track">
+        <div v-for="(trackId, trackIndex) in disc.tracks" :key="trackId" class="track"
+          @contextmenu.prevent="openTrackContextMenu($event, data.tracks[trackId])">
           <div :class="computeTrackRowClasses(trackId)"
             @click.stop="handleClickOnTrack(trackId, discIndex, trackIndex)">
             <div class="trackIndexSpan">
@@ -33,6 +34,7 @@
         </div>
       </div>
     </div>
+    <TrackContextMenu ref="trackContextMenuRef" />
   </div>
   <div v-else>
     <p>Loading {{ albumId }}...</p>
@@ -46,11 +48,12 @@ import { chooseAlbumCoverImageUrl, formatDuration } from '@/utils';
 import MultiSourceImage from '@/components/common/MultiSourceImage.vue';
 import TrackName from '../common/TrackName.vue';
 import ClickableArtistsNames from '@/components/common/ClickableArtistsNames.vue';
-import PlayIcon from '../icons/PlayIcon.vue';
+import PlayIcon from '@/components/icons/PlayIcon.vue';
 import { usePlayerStore } from '@/store/player';
 import { useUserStore } from '@/store/user';
-import ToggableFavoriteIcon from '../common/ToggableFavoriteIcon.vue';
-import LoadArtistListItem from '../common/LoadArtistListItem.vue';
+import ToggableFavoriteIcon from '@/components/common/ToggableFavoriteIcon.vue';
+import LoadArtistListItem from '@/components/common/LoadArtistListItem.vue';
+import TrackContextMenu from '@/components/common/contextmenu/TrackContextMenu.vue';
 
 const props = defineProps({
   albumId: {
@@ -67,6 +70,11 @@ const userStore = useUserStore();
 
 const currentTrackId = ref(null);
 const isAlbumLiked = ref(false);
+
+const trackContextMenuRef = ref(null);
+const openTrackContextMenu = (event, track) => {
+  trackContextMenuRef.value.openMenu(event, track);
+}
 
 const computeTrackRowClasses = (trackId) => {
   const isCurrentTrack = trackId == currentTrackId.value;

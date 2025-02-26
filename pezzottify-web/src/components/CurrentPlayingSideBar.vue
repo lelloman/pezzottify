@@ -4,7 +4,7 @@
       <h1>Currently Playing</h1>
     </div>
     <div class="trackRow" v-for="(track, index) in tracks" :class="{ currentlyPlayingRow: index == currentIndex }"
-      :key="index" @click.stop="handleClick(index)">
+      :key="index" @click.stop="handleClick(index)" @contextmenu.prevent="openContextMenu($event, track)">
       <MultiSourceImage class="trackImage scaleClickFeedback" :urls="track.imageUrls"
         @click.stop="handleClickOnTrackImage(track)" />
       <div class="namesColumn">
@@ -13,6 +13,8 @@
       </div>
       <p>{{ formatDuration(track.duration) }} </p>
     </div>
+
+    <TrackContextMenu ref="trackContextMenuRef" />
   </div>
 </template>
 <script setup>
@@ -24,6 +26,7 @@ import MultiSourceImage from './common/MultiSourceImage.vue';
 import ClickableArtistsNames from './common/ClickableArtistsNames.vue';
 import { useRouter } from 'vue-router';
 import TrackName from './common/TrackName.vue';
+import TrackContextMenu from '@/components/common/contextmenu/TrackContextMenu.vue';
 
 const panelVisible = computed(() => tracks.value.length);
 const tracks = ref([]);
@@ -38,6 +41,12 @@ const handleClick = (index) => {
 
 const handleClickOnTrackImage = (track) => {
   router.push("/album/" + track.albumId);
+}
+
+const trackContextMenuRef = ref(null);
+
+const openContextMenu = (event, track) => {
+  trackContextMenuRef.value.openMenu(event, track);
 }
 
 watch(
