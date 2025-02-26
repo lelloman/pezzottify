@@ -123,9 +123,10 @@ watch(
   (newRoute) => {
     isEditMode.value = newRoute.query.edit;
     if (isEditMode.value) {
-      requestAnimationFrame(() => {
+      setTimeout(() => {
         document.getElementById("editPlaylistNameInput").value = playlistData.value.name;
-      });
+        document.getElementById("editPlaylistNameInput").focus();
+      }, 100);
     }
   },
   { immediate: true }

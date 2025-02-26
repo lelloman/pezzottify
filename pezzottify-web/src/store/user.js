@@ -181,6 +181,7 @@ export const useUserStore = defineStore('user', () => {
         name: name,
       });
       playlistsData.value.by_id[playlistId].name = name;
+      playlistsData.value = playlistsData.value;
       callback(true);
     } catch (error) {
       console.error('Failed to update playlist name:', error);
