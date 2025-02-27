@@ -1,130 +1,87 @@
 <template>
-  <div v-if="isOpen" ref="menu" class="container" :style="{ top: `${adjustedY}px`, left: `${adjustedX}px` }">
-
-    <div class="contextMenuItem" @click="handleClick('play')">
-      Add to playlist
-    </div>
-
-    <div class="contextMenuItem" @click="handleClick('add')">
-      Add to queue
-    </div>
-  </div>
+  <ContextMenu ref="contextMenu" :items="menuItems" />
 </template>
 
 <script setup>
-import { watch, computed, useTemplateRef, ref, defineExpose } from 'vue'
+import PlusIcon from '@/components/icons/PlusIcon.vue';
+import ContextMenu from '@/components/common/contextmenu/ContextMenu.vue';
+import { ref, markRaw } from 'vue';
+import PlaylistPlusIcon from '@/components/icons/PlaylistPlusIcon.vue';
+import { useUserStore } from '@/store/user';
 
-const menu = useTemplateRef('menu');
+const contextMenu = ref(null);
+const userStore = useUserStore();
 
-const contextData = ref({
-  track: null,
-  x: 0,
-  y: 0,
-  isOpen: false,
-});
+const track = ref(null);
 
-const isOpen = computed(() => contextData.value.isOpen);
-
-watch(() => contextData.value.isOpen, (isOpen) => {
-  console.log("TrackContextMenu isOpen changed to: " + isOpen);
-  if (isOpen) {
-    window.addEventListener('click', handleClickOutside, true); // Use capture mode
-    window.addEventListener('contextmenu', handleClickOutside, true); // Use capture mode for right-click
-    window.addEventListener('keydown', handleKeydown, true); // Use capture mode
-  } else {
-    window.removeEventListener('click', handleClickOutside, true); // Use capture mode
-    window.removeEventListener('contextmenu', handleClickOutside, true); // Use capture mode for right-click
-    window.removeEventListener('keydown', handleKeydown, true); // Use capture mode
-  }
-});
-
-const adjustedX = computed(() => {
-  if (!menu.value) return;
-
-  const menuWidth = menu.value.getBoundingClientRect().width;
-  const viewportWidth = window.innerWidth;
-  const x = contextData.value.x;
-  return x + menuWidth > viewportWidth ? x - menuWidth : x;
-});
-
-const adjustedY = computed(() => {
-  if (!menu.value) return;
-
-  const menuHeight = menu.value.getBoundingClientRect().height;
-  const viewportHeight = window.innerHeight;
-  const y = contextData.value.y;
-  return y + menuHeight > viewportHeight ? viewportHeight - menuHeight : y;
-});
-
-const handleClick = (option) => {
-  this.$emit('select', option);
-  this.closeMenu();
+const handleAddToQueueClick = (option) => {
+  contextMenu.value.$emit('select', option);
 };
 
-const handleClickOutside = (event) => {
-  event.preventDefault(); // Prevent the default context menu
-  event.stopImmediatePropagation();
-  const isOutside = !menu.value.contains(event.target);
-  console.log("TrackContextMenu handleClickOutside " + isOutside);
-  // Check if the click is outside the context menu
-  if (isOutside) {
-    // emit a "close" event
-    contextData.value = {
-      ...contextData.value,
-      isOpen: false,
-    };
-  }
-};
+const makeAddToPlaylistSubMenu = () => {
+  return userStore.playlistsData.list.map(playlistId => (
+    {
+      name: userStore.playlistsData.by_id[playlistId].name,
+      action: () => userStore.addTracksToPlaylist(playlistId, [track.value.id], () => { })
+    }
+  ));
+}
 
-const handleKeydown = (event) => {
-  // Close the menu if the Escape key is pressed
-  if (event.key === 'Escape') {
-    contextData.value = {
-      ...contextData.value,
-      isOpen: false,
-    };
+const menuItems = ref([
+  {
+    icon: markRaw(PlusIcon),
+    name: 'Add to playlist',
+    subMenu: makeAddToPlaylistSubMenu
+  },
+  {
+    icon: markRaw(PlaylistPlusIcon),
+    name: 'Add to queue',
+    action: () => handleAddToQueueClick('add')
   }
-};
+]);
 
-const openMenu = (event, track) => {
-  contextData.value = {
-    track: track,
-    x: event.clientX,
-    y: event.clientY,
-    isOpen: true,
-  };
-  console.log("TrackContextMenu openMenu");
-  console.log(contextData.value);
+const openMenu = (event, selectedTrack) => {
+  track.value = selectedTrack;
+  userStore.triggerPlaylistsLoad();
+  contextMenu.value.openMenu(event);
 };
 
 defineExpose({
   openMenu,
 });
-
 </script>
 
 <style scoped>
-.container {
-  position: fixed;
-  width: 220px;
-  border: 1px solid #ccc;
-  background-color: #151515;
-  z-index: 1000;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
+@import '@/assets/icons.css';
 
 .contextMenuItem {
+  display: flex;
+  flex-direction: row;
   padding: 8px;
   height: 50px;
   cursor: pointer;
-  align-content: center;
+  align-items: center;
   font-size: 14px;
   padding: 0 16px;
 }
 
+.contextMenuItem span {
+  flex: 1;
+}
+
 .contextMenuItem:hover {
   background-color: #222;
+}
+
+.subMenu {
+  z-index: 1001;
+  position: fixed;
+  width: 200px;
+  border: 1px solid #ccc;
+  background-color: #151515;
+  z-index: 1001;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 </style>

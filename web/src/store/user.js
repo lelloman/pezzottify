@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia';
-import { ref } from 'vue';
+import { ref, computed } from 'vue';
 import axios from 'axios';
 
 export const useUserStore = defineStore('user', () => {
@@ -12,7 +12,7 @@ export const useUserStore = defineStore('user', () => {
 
   const playlistsData = ref(null);
   let isLoadingPlaylists = ref(false);
-
+  const playlistRefs = {};
 
   const loadLikedAlbumIds = async () => {
     isLoadingLikedAlbums.value = true;
@@ -117,20 +117,25 @@ export const useUserStore = defineStore('user', () => {
     }
   }
 
-  const loadPlaylistData = async (playlistId, callback) => {
+  const getPlaylistRef = (playlistId) => {
+    if (!playlistRefs[playlistId]) {
+      playlistRefs[playlistId] = computed(() => {
+        if (!playlistsData.value || !playlistsData.value.by_id) return null;
+        return playlistsData.value.by_id[playlistId];
+      });
+    }
+    return playlistRefs[playlistId];
+  };
+
+  const loadPlaylistData = async (playlistId) => {
     console.log("userStore loadPlaylistData playlistId: " + playlistId);
     if (playlistsData.value && playlistsData.value.by_id[playlistId]) {
-      const mapped = playlistsData.value.by_id[playlistId];
-      if (mapped) {
-        callback(mapped);
-        return;
-      }
+      return;
     }
     try {
       const response = await axios.get(`/v1/user/playlist/${playlistId}`);
       console.log("Writing new data to playlistData");
       console.log(response.data);
-      callback(response.data);
       if (playlistsData.value) {
         playlistsData.value.list = playlistsData.value.list.map(playlist => {
           if (playlist.id === playlistId) {
@@ -154,8 +159,10 @@ export const useUserStore = defineStore('user', () => {
       });
       console.log("Creating new playlist");
       console.log(response.data);
-      playlistsData.value.list = [response.data, ...playlistsData.value.list];
-      playlistsData.value.by_id[response.data.id] = response.data;
+      if (playlistsData.value) {
+        playlistsData.value.list = [response.data, ...playlistsData.value.list];
+        playlistsData.value.by_id[response.data.id] = response.data;
+      }
       callback(response.data);
     } catch (error) {
       console.error('Failed to create new playlist:', error);
@@ -166,8 +173,10 @@ export const useUserStore = defineStore('user', () => {
   const deletePlaylist = async (playlistId, callback) => {
     try {
       await axios.delete(`/v1/user/playlist/${playlistId}`);
-      playlistsData.value.list = playlistsData.value.list.filter(id => id !== playlistId);
-      playlistsData.value.by_id[playlistId] = null;
+      if (playlistsData.value) {
+        playlistsData.value.list = playlistsData.value.list.filter(playlist => playlist.id !== playlistId);
+        playlistsData.value.by_id[playlistId] = null;
+      }
       callback(true);
     } catch (error) {
       console.error('Failed to delete playlist:', error);
@@ -180,11 +189,32 @@ export const useUserStore = defineStore('user', () => {
       await axios.put(`/v1/user/playlist/${playlistId}`, {
         name: name,
       });
-      playlistsData.value.by_id[playlistId].name = name;
-      playlistsData.value = playlistsData.value;
+      if (playlistsData.value && playlistsData.value.by_id[playlistId]) {
+        playlistsData.value.by_id[playlistId].name = name;
+      }
       callback(true);
     } catch (error) {
       console.error('Failed to update playlist name:', error);
+      callback(false);
+    }
+  }
+
+  const addTracksToPlaylist = async (playlistId, trackIds, callback) => {
+    try {
+      await axios.put(`/v1/user/playlist/${playlistId}/add`, {
+        tracks_ids: trackIds
+      });
+      if (playlistsData.value && playlistsData.value.by_id[playlistId]) {
+        const playlist = playlistsData.value.by_id[playlistId];
+        playlist.track_ids = [...playlist.tracks, ...trackIds];
+        // update any refs if exists
+        if (playlistRefs[playlistId]) {
+          playlistRefs[playlistId].value = playlist;
+        }
+      }
+      callback(true);
+    } catch (error) {
+      console.error('Failed to add tracks to playlist:', error);
       callback(false);
     }
   }
@@ -205,5 +235,7 @@ export const useUserStore = defineStore('user', () => {
     deletePlaylist,
     loadPlaylistData,
     updatePlaylistName,
+    addTracksToPlaylist,
+    getPlaylistRef,
   };
 });

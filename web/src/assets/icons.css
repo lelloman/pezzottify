@@ -4,8 +4,13 @@
   height: var(--size);
 }
 
-.smallIcon {
+.mediumIcon {
   --size: 40px;
+  width: var(--size);
+  height: var(--size);
+}
+.smallIcon {
+  --size: 24px;
   width: var(--size);
   height: var(--size);
 }

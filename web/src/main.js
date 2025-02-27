@@ -7,8 +7,6 @@ import { createPinia } from 'pinia'
 import { useConfigStore } from './store/config'
 import axios from 'axios';
 
-window.addEventListener("contextmenu", (e) => { e.preventDefault() });
-
 const pinia = createPinia();
 const app = createApp(App);
 
@@ -28,5 +26,15 @@ if (window.config.blockHttpCache) {
 watch(() => window.config.blockHttpCache, (value) => {
   console.log("blockHttpCache changed, reloading page");
   window.location.reload();
+});
+
+const rightClickBlocker = (e) => { e.preventDefault() };
+
+watch(() => window.config.blockRightClick, (value) => {
+  if (value) {
+    window.addEventListener("contextmenu", rightClickBlocker);
+  } else {
+    window.removeEventListener("contextmenu", rightClickBlocker);
+  }
 });
 

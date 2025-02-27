@@ -63,7 +63,7 @@ const ControlIconButton = {
       props.action();
     }
 
-    const sizeClass = props.big ? 'bigIcon' : 'smallIcon';
+    const sizeClass = props.big ? 'bigIcon' : 'mediumIcon';
 
     return () => h('div', { class: 'lightControlFill scaleClickFeedback scalingIcon ' + sizeClass, onClick }, [
       h(props.icon)

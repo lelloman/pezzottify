@@ -32,8 +32,8 @@
         </div>
       </div>
       <div class="playlistsContainer" v-if="playlistsData">
-        <div v-for="playlistData in playlistsData.list" :key="playlistData">
-          <LoadPlaylistListItem :playlistData="playlistData" />
+        <div v-for="playlistId in playlists" :key="playlistId">
+          <LoadPlaylistListItem :playlistId="playlistId" />
         </div>
       </div>
     </div>
@@ -44,7 +44,7 @@
 <script setup>
 import '@/assets/base.css';
 import '@/assets/main.css';
-import { watch, ref, onMounted } from 'vue';
+import { watch, ref, onMounted, computed } from 'vue';
 import { useUserStore } from '@/store/user.js';
 import { useRouter } from 'vue-router';
 import AlbumCard from '@/components/common/AlbumCard.vue';
@@ -62,6 +62,15 @@ const loading = ref(true);
 const selectedTab = ref(null);
 
 const isCreatingPlaylist = ref(false);
+
+// Get playlists as a computed property to ensure reactivity
+const playlists = computed(() => {
+  if (playlistsData.value && playlistsData.value.list) {
+    // Return the playlist list directly
+    return playlistsData.value.list;
+  }
+  return [];
+});
 
 watch([() => userStore.isLoadingLikedAlbums, userStore.isLoadingLikedArtists, userStore.isLoadingPlaylists],
   ([isLoadingLikedAlbums, isLoadingLikedArtists, isLoadingPlaylists]) => {
@@ -100,11 +109,11 @@ const handleCreatePlaylistButtonClick = () => {
     return;
   }
   isCreatingPlaylist.value = true;
-  userStore.createPlaylist((newPlaylistId) => {
+  userStore.createPlaylist((newPlaylist) => {
     isCreatingPlaylist.value = false;
 
-    if (newPlaylistId) {
-      router.push(`/playlist/${newPlaylistId}?edit=true`);
+    if (newPlaylist) {
+      router.push(`/playlist/${newPlaylist.id}?edit=true`);
     }
   });
 }

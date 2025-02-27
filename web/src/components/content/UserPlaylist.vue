@@ -1,10 +1,10 @@
 <template>
   <div class="playlistWrapper">
     <div v-if="loading">Loading...</div>
-    <div v-else-if="playlistData" class="playlistData">
+    <div v-else-if="playlist" class="playlistData">
       <div class="nameRow">
         <h1 class="playlistNameLabel">
-          {{ playlistData.name }}
+          {{ playlist.name }}
         </h1>
 
         <EditIcon class="editIcon scaleClickFeedback" @click.stop="handleEditButtonClick" />
@@ -12,7 +12,7 @@
       </div>
       <div class="commandsSection">
         <PlayIcon class="commandIcon scaleClickFeedback bigIcon" @click.stop="handleClickOnPlay" />
-        <TrashIcon class="commandIcon scaleClickFeedback smallIcon" @click.stop="handleClickOnDelete" />
+        <TrashIcon class="commandIcon scaleClickFeedback mediumIcon" @click.stop="handleClickOnDelete" />
       </div>
     </div>
     <div v-else-if="error">Error. {{ error }}</div>
@@ -24,13 +24,13 @@
       :positiveButtonCallback="handleDeletePlaylistConfirmation">
 
       <template #message>
-        Are you sure you want to delete playlist <span style="font-weight: bold;">{{ playlistData.name }}</span>?
+        Are you sure you want to delete playlist <span style="font-weight: bold;">{{ playlist?.name }}</span>?
       </template>
     </ConfirmationDialog>
   </Transition>
 
   <Transition>
-    <ConfirmationDialog v-show="isEditMode" :isOpen="isEditMode" :closeCallback="closeEditMode"
+    <ConfirmationDialog v-if="isEditMode" :isOpen="isEditMode" :closeCallback="closeEditMode"
       :title="'Edit playlist name'" :negativeButtonText="'Cancel'" :positiveButtonText="'Save'"
       :positiveButtonCallback="handleChangeNameButtonClicked">
 
@@ -43,7 +43,7 @@
 </template>
 
 <script setup>
-import { watch, ref, onMounted } from 'vue';
+import { watch, ref, onMounted, computed } from 'vue';
 import PlayIcon from '@/components/icons/PlayIcon.vue';
 import TrashIcon from '../icons/TrashIcon.vue';
 import ConfirmationDialog from '@/components/common/ConfirmationDialog.vue';
@@ -63,41 +63,42 @@ const router = useRouter();
 const route = useRoute();
 const userStore = useUserStore();
 
-const playlistData = ref(null);
 const loading = ref(true);
 const error = ref(null);
 
-const deleteConfirmationDialogOpen = ref(false);
+// Get reactive reference to the playlist
+const playlist = computed(() => {
+  const playlistRef = userStore.getPlaylistRef(props.playlistId);
+  return playlistRef?.value; // Unwrap the computed ref
+});
 
+const deleteConfirmationDialogOpen = ref(false);
 const isEditMode = ref(false);
 
 const handleEditButtonClick = () => {
   router.push({ query: { edit: !isEditMode.value } });
 }
 
+// Load playlist data
+const loadData = async () => {
+  if (!props.playlistId) return;
 
-// Fetch playlist data
-const fetchPlaylistData = async (id) => {
-  userStore.loadPlaylistData(id, (data) => {
-    console.log("UserPlaylist data loaded:");
-    console.log(data);
-    if (data) {
-      playlistData.value = data;
-    } else {
-      error.value = "Error loading playlist data";
-    }
+  loading.value = true;
+  try {
+    await userStore.loadPlaylistData(props.playlistId);
+    error.value = null;
+  } catch (e) {
+    error.value = "Failed to load playlist data";
+    console.error(e);
+  } finally {
     loading.value = false;
-  });
+  }
 };
 
 const handleChangeNameButtonClicked = async () => {
   const newName = document.getElementById("editPlaylistNameInput").value;
   closeEditMode();
-  userStore.updatePlaylistName(props.playlistId, newName, (success) => {
-    if (success) {
-      playlistData.value.name = newName;
-    }
-  });
+  userStore.updatePlaylistName(props.playlistId, newName);
 };
 
 const closeEditMode = () => {
@@ -122,9 +123,9 @@ watch(
   route,
   (newRoute) => {
     isEditMode.value = newRoute.query.edit;
-    if (isEditMode.value) {
+    if (isEditMode.value && playlist.value) {
       setTimeout(() => {
-        document.getElementById("editPlaylistNameInput").value = playlistData.value.name;
+        document.getElementById("editPlaylistNameInput").value = playlist.value.name;
         document.getElementById("editPlaylistNameInput").focus();
       }, 100);
     }
@@ -132,15 +133,19 @@ watch(
   { immediate: true }
 );
 
+// Watch for playlist ID changes to load data
 watch(
   () => props.playlistId,
   (newId) => {
-    fetchPlaylistData(newId);
+    if (newId) {
+      loadData();
+    }
   },
   { immediate: true }
 );
+
 onMounted(() => {
-  fetchPlaylistData(props.playlistId);
+  loadData();
 });
 </script>
 

@@ -30,7 +30,6 @@ pub struct Dirs {
 }
 
 impl Dirs {
-    #[cfg(test)]
     fn dummy() -> Dirs {
         let p = PathBuf::from("/tmp/foo/bar");
         Dirs {
