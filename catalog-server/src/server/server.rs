@@ -76,6 +76,11 @@ struct LoginSuccessResponse {
     token: String,
 }
 
+#[derive(Deserialize, Debug)]
+struct AddTracksToPlaylistBody {
+    pub tracks_ids: Vec<String>,
+}
+
 async fn home(session: Option<Session>, State(state): State<ServerState>) -> impl IntoResponse {
     let stats = ServerStats {
         uptime: format_uptime(state.start_time.elapsed()),
@@ -305,6 +310,22 @@ async fn get_playlist(
     }
 }
 
+async fn add_playlist_tracks(
+    session: Session,
+    State(user_manager): State<GuardedUserManager>,
+    Path(id): Path<String>,
+    Json(body): Json<AddTracksToPlaylistBody>,
+) -> Response {
+    match user_manager
+        .lock()
+        .unwrap()
+        .add_playlist_tracks(&id, session.user_id, body.tracks_ids)
+    {
+        Ok(_) => StatusCode::OK.into_response(),
+        Err(_) => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+    }
+}
+
 async fn get_user_playlists(
     session: Session,
     State(user_manager): State<GuardedUserManager>,
@@ -392,14 +413,14 @@ async fn post_challenge(State(state): State<ServerState>) -> Response {
 impl ServerState {
     fn new(
         config: ServerConfig,
-        catalog: Catalog,
+        catalog: Arc<Mutex<Catalog>>,
         search_vault: Box<dyn SearchVault>,
         user_manager: UserManager,
     ) -> ServerState {
         ServerState {
             config,
             start_time: Instant::now(),
-            catalog: Arc::new(Mutex::new(catalog)),
+            catalog: catalog,
             search_vault: Arc::new(Mutex::new(search_vault)),
             user_manager: Arc::new(Mutex::new(user_manager)),
             hash: "123456".to_owned(),
@@ -413,8 +434,9 @@ fn make_app(
     search_vault: Box<dyn SearchVault>,
     user_store: Box<dyn UserStore>,
 ) -> Result<Router> {
-    let user_manager = UserManager::new(user_store);
-    let state = ServerState::new(config.clone(), catalog, search_vault, user_manager);
+    let guarded_catalog = Arc::new(Mutex::new(catalog));
+    let user_manager = UserManager::new(guarded_catalog.clone(), user_store);
+    let state = ServerState::new(config.clone(), guarded_catalog, search_vault, user_manager);
 
     let auth_routes: Router = Router::new()
         .route("/login", post(login))
@@ -446,6 +468,7 @@ fn make_app(
         .route("/playlist/{id}", put(put_playlist))
         .route("/playlist/{id}", delete(delete_playlist))
         .route("/playlist/{id}", get(get_playlist))
+        .route("/playlist/{id}/add", put(add_playlist_tracks))
         .route("/playlists", get(get_user_playlists))
         .with_state(state.clone());
 

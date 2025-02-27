@@ -451,7 +451,6 @@ fn get_track_audio_path(dirs: &Dirs, album_id: &str, track_id: &str) -> Option<P
 }
 
 impl Catalog {
-    #[cfg(test)]
     pub fn dummy() -> Catalog {
         Catalog {
             dirs: Dirs::dummy(),

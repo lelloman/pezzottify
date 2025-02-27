@@ -1,3 +1,5 @@
+use crate::catalog::{self, Catalog};
+
 use super::{
     auth::PezzottifyHasher, user_models::LikedContentType, AuthToken, AuthTokenValue,
     UserAuthCredentials, UserPlaylist, UserStore, UsernamePasswordCredentials,
@@ -9,12 +11,14 @@ use std::{
 };
 
 pub struct UserManager {
+    catalog: Arc<Mutex<Catalog>>,
     user_store: Arc<Mutex<Box<dyn UserStore>>>,
 }
 
 impl UserManager {
-    pub fn new(user_store: Box<dyn UserStore>) -> Self {
+    pub fn new(catalog: Arc<Mutex<Catalog>>, user_store: Box<dyn UserStore>) -> Self {
         Self {
+            catalog,
             user_store: Arc::new(Mutex::new(user_store)),
         }
     }
@@ -234,5 +238,29 @@ impl UserManager {
 
     pub fn get_user_playlists(&self, user_id: usize) -> Result<Vec<String>> {
         self.user_store.lock().unwrap().get_user_playlists(user_id)
+    }
+
+    pub fn add_playlist_tracks(
+        &self,
+        playlist_id: &str,
+        user_id: usize,
+        track_ids: Vec<String>,
+    ) -> Result<()> {
+        let playlist = self
+            .user_store
+            .lock()
+            .unwrap()
+            .get_user_playlist(playlist_id, user_id)?;
+
+        // verify that all tracks to add exist
+        for track_id in &track_ids {
+            if let None = self.catalog.lock().unwrap().get_track(track_id) {
+                bail!("Track with id {} does not exist.", track_id);
+            }
+        }
+
+        let mut new_tracks = playlist.tracks.clone();
+        new_tracks.extend(track_ids);
+        self.update_user_playlist(playlist_id, user_id, None, Some(new_tracks))
     }
 }

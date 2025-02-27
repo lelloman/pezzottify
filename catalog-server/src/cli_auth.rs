@@ -3,6 +3,7 @@ use clap::{CommandFactory, Parser, Subcommand};
 use std::{
     io::{self, BufRead, Write},
     path::PathBuf,
+    sync::{Arc, Mutex},
 };
 
 mod catalog;
@@ -15,6 +16,7 @@ mod user;
 use cli_style::get_styles;
 use user::UserManager;
 
+use catalog::Catalog;
 use user::SqliteUserStore;
 
 fn parse_path(s: &str) -> Result<PathBuf> {
@@ -84,7 +86,8 @@ fn main() -> Result<()> {
             .with_context(|| "Could not infer DB file path, please specify it explicitly.")?,
     };
     let user_store = SqliteUserStore::new(auth_store_file_path)?;
-    let mut user_manager = UserManager::new(Box::new(user_store));
+    let catalog = Arc::new(Mutex::new(Catalog::dummy()));
+    let mut user_manager = UserManager::new(catalog, Box::new(user_store));
 
     let stdin = io::stdin();
     let mut reader = stdin.lock();
