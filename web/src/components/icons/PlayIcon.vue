@@ -1,5 +1,5 @@
 <template>
-  <svg class="bigControlIcon" viewBox="0 0 24 24">
+  <svg viewBox="0 0 24 24">
     <g>
       <circle cx="12" cy="12" r="6" :fill="props.triangleColor" />
     </g>
@@ -23,7 +23,3 @@ const props = defineProps({
 })
 
 </script>
-
-<style scoped>
-@import "@/assets/icons.css";
-</style>

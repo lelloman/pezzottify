@@ -8,7 +8,7 @@
         <ClickableArtistsNames v-if="showArtists" class="artistsNames" :artistsIdsNames="artistsIdsNames" />
       </div>
 
-      <PlayIcon class="searchResultPlayIcon scaleClickFeedback" :data-id="albumData.id"
+      <PlayIcon class="searchResultPlayIcon scaleClickFeedback bigIcon" :data-id="albumData.id"
         @click.stop="handlePlayClick(albumData.id)" />
     </div>
     <div v-else-if="error">Error. {{ error }}</div>
@@ -18,6 +18,7 @@
 <script setup>
 import '@/assets/base.css'
 import '@/assets/search.css'
+import '@/assets/icons.css'
 import { ref, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { chooseAlbumCoverImageUrl } from '@/utils';

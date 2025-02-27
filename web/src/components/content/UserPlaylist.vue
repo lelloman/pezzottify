@@ -11,8 +11,8 @@
 
       </div>
       <div class="commandsSection">
-        <PlayIcon class="commandIcon scaleClickFeedback" @click.stop="handleClickOnPlay" />
-        <TrashIcon class="commandIcon scaleClickFeedback" @click.stop="handleClickOnDelete" />
+        <PlayIcon class="commandIcon scaleClickFeedback bigIcon" @click.stop="handleClickOnPlay" />
+        <TrashIcon class="commandIcon scaleClickFeedback smallIcon" @click.stop="handleClickOnDelete" />
       </div>
     </div>
     <div v-else-if="error">Error. {{ error }}</div>
@@ -145,6 +145,8 @@ onMounted(() => {
 </script>
 
 <style scoped>
+@import "@/assets/icons.css";
+
 .playlistData {
   display: flex;
   flex-direction: column;

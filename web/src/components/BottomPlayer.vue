@@ -12,8 +12,8 @@
       <div class="playerControlsButtonsRow">
         <ControlIconButton :action="rewind10Sec" :icon="Rewind10Sec" />
         <ControlIconButton :action="skipPreviousTrack" :icon="SkipPrevious" />
-        <ControlIconButton v-if="!isPlaying" :action="playPause" :icon="PlayIcon" />
-        <ControlIconButton v-if="isPlaying" :action="playPause" :icon="PauseIcon" />
+        <ControlIconButton v-if="!isPlaying" :action="playPause" :icon="PlayIcon" :big="true" />
+        <ControlIconButton v-if="isPlaying" :action="playPause" :icon="PauseIcon" :big="true" />
         <ControlIconButton :action="skipNextTrack" :icon="NextTrack" />
         <ControlIconButton :action="forward10Sec" :icon="Forward10Sec" />
       </div>
@@ -57,14 +57,16 @@ import { useRouter } from 'vue-router';
 import TrackName from './common/TrackName.vue';
 
 const ControlIconButton = {
-  props: ["icon", "action"],
+  props: ["icon", "action", "big"],
   setup(props) {
     const onClick = () => {
       props.action();
     }
 
-    return () => h('div', { class: 'scalingIcon scaleClickFeedback', onClick }, [
-      h(props.icon, { class: 'lightControlFill' })
+    const sizeClass = props.big ? 'bigIcon' : 'smallIcon';
+
+    return () => h('div', { class: 'lightControlFill scaleClickFeedback scalingIcon ' + sizeClass, onClick }, [
+      h(props.icon)
     ])
   },
 };

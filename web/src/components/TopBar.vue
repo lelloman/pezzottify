@@ -5,9 +5,7 @@
         <input class="searchInput" type="text" placeholder="Search..." @input="onInput" inputmode="search"
           v-model="localQuery" />
         <button v-if="localQuery" id="clearQueryButton" type="submit" name="clearQueryButton" @click="clearQuery()">
-          <svg width="24px" height="24px" fill="none" style="width:24px;height:24px" viewBox="0 0 24 24">
-            <path stroke="#666" fill="#666666" d="M16 8L7.99997 16M7.99999 8L16 16" />
-          </svg>
+          <CrossIcon class="scaleClickFeedback crossIcon" />
         </button>
       </div>
     </div>
@@ -18,6 +16,7 @@
 import { ref, watch } from 'vue';
 import { debounce } from 'lodash-es'; // Lightweight debounce
 import { useRouter, useRoute } from 'vue-router';
+import CrossIcon from './icons/CrossIcon.vue';
 
 const emit = defineEmits(['search']);
 const inputValue = ref('');
@@ -97,5 +96,11 @@ function clearQuery() {
 
 #clearQueryButton:hover {
   cursor: pointer;
+}
+
+.crossIcon {
+  width: 24px;
+  height: 24px;
+  stroke: #666;
 }
 </style>

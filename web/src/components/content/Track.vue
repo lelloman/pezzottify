@@ -15,7 +15,7 @@
       </div>
     </div>
     <div class="commandsSection">
-      <PlayIcon class="playTrackIcon scaleClickFeedback" @click.stop="handleClickOnPlayTrack" />
+      <PlayIcon class="playTrackIcon scaleClickFeedback bigIcon" @click.stop="handleClickOnPlayTrack" />
     </div>
     <div class="artistsContainer">
       <LoadArtistListItem v-for="artistId in track.artists_ids" :key="artistId" :artistId="artistId" />
@@ -99,6 +99,8 @@ onMounted(() => {
 </script>
 
 <style scoped>
+@import "@/assets/icons.css";
+
 .topSection {
   display: flex;
   flex-direction: row;

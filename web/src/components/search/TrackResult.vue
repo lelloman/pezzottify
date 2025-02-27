@@ -8,7 +8,8 @@
       <ClickableArtistsNames :artistsIdsNames="result.artists_ids_names" />
     </div>
     <h3 class="duration">{{ duration }}</h3>
-    <PlayIcon class="searchResultPlayIcon" :data-id="result" @click.stop="handlePlayClick(result)" />
+    <PlayIcon class="searchResultPlayIcon scaleClickFeedback bigIcon" :data-id="result"
+      @click.stop="handlePlayClick(result)" />
   </div>
   <TrackContextMenu ref="trackContextMenuRef" />
 </template>

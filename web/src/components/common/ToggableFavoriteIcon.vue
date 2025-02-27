@@ -1,7 +1,7 @@
 <template>
   <div class="container">
-    <EmptyFavoriteIcon class="favIcon scaleClickFeedback" v-if="!toggled" @click.stop="props.clickCallback" />
-    <FilledFavoriteIcon class="favIcon filled scaleClickFeedback" v-else @click.stop="clickCallback" />
+    <EmptyFavoriteIcon class="favIcon scaleClickFeedback bigIcon" v-if="!toggled" @click.stop="props.clickCallback" />
+    <FilledFavoriteIcon class="favIcon filled scaleClickFeedback bigIcon" v-else @click.stop="clickCallback" />
   </div>
 </template>
 
@@ -23,6 +23,8 @@ const props = defineProps({
 </script>
 
 <style scoped>
+@import "@/assets/icons.css";
+
 .container {
   fill: var(--accent-color);
 }

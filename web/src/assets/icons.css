@@ -1,10 +1,10 @@
-.bigControlIcon {
+.bigIcon {
   --size: 60px;
   width: var(--size);
   height: var(--size);
 }
 
-.smallControlIcon {
+.smallIcon {
   --size: 40px;
   width: var(--size);
   height: var(--size);

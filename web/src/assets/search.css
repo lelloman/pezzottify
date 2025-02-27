@@ -31,7 +31,9 @@
   bottom: 0px;
   margin-left: 40px;
   opacity: 0;
-  transition: opacity 0.3s ease;
+  transition:
+    scale 0.3s ease,
+    opacity 0.3s ease;
 }
 
 .searchResultRow:hover .searchResultPlayIcon {

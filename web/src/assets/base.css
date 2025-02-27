@@ -130,7 +130,7 @@ body {
 }
 
 .scaleClickFeedback {
-  transition: transition 0.3s ease;
+  transition: scale 0.3s ease;
   cursor: pointer;
 }
 

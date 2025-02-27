@@ -7,7 +7,7 @@
       </div>
     </div>
     <div class="commandsSection">
-      <PlayIcon class="playAlbumIcon scaleClickFeedback" @click.stop="handleClickOnPlayAlbum" />
+      <PlayIcon class="playAlbumIcon scaleClickFeedback bigIcon" @click.stop="handleClickOnPlayAlbum" />
       <ToggableFavoriteIcon :toggled="isAlbumLiked" :clickCallback="handleClickOnFavoriteIcon" />
     </div>
     <div class="artistsContainer">
