@@ -109,11 +109,11 @@ const handleCreatePlaylistButtonClick = () => {
     return;
   }
   isCreatingPlaylist.value = true;
-  userStore.createPlaylist((newPlaylist) => {
+  userStore.createPlaylist((newPlaylistId) => {
     isCreatingPlaylist.value = false;
-
-    if (newPlaylist) {
-      router.push(`/playlist/${newPlaylist.id}?edit=true`);
+    console.log("New playlist created: ", newPlaylistId);
+    if (newPlaylistId) {
+      router.push(`/playlist/${newPlaylistId}?edit=true`);
     }
   });
 }
