@@ -84,7 +84,6 @@ watch(() => props.artistId, (newId) => {
 
 onMounted(() => {
   fetchData(props.artistId);
-  userStore.triggerArtistsLoad();
 });
 </script>
 

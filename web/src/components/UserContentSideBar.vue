@@ -72,9 +72,9 @@ const playlists = computed(() => {
   return [];
 });
 
-watch([() => userStore.isLoadingLikedAlbums, userStore.isLoadingLikedArtists, userStore.isLoadingPlaylists],
-  ([isLoadingLikedAlbums, isLoadingLikedArtists, isLoadingPlaylists]) => {
-    loading.value = isLoadingLikedAlbums || isLoadingLikedArtists || isLoadingPlaylists;
+watch(() => userStore.isInitializing,
+  (newIsInitializing) => {
+    loading.value = newIsInitializing
   },
   { immediate: true }
 );
@@ -123,8 +123,6 @@ const setTab = (tabName) => {
     return false;
   }
   selectedTab.value = tabName;
-  const localStorageMethod = "trigger" + tabName.charAt(0).toUpperCase() + tabName.slice(1) + "Load";
-  userStore[localStorageMethod]();
   localStorage.setItem('selectedTab', tabName);
   return true;
 };

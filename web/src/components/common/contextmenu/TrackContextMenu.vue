@@ -42,7 +42,6 @@ const menuItems = ref([
 
 const openMenu = (event, selectedTrack) => {
   track.value = selectedTrack;
-  userStore.triggerPlaylistsLoad();
   contextMenu.value.openMenu(event);
 };
 

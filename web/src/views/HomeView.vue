@@ -1,30 +1,46 @@
 <template>
   <div class="mainContainer">
-    <TopBar @search="handleSearch" :initialQuery="searchQuery" />
-    <div class="centralPanel">
-      <UserContentSideBar :items="sidebarItems" @select-item="handleSelect" />
-      <MainContent :search-query="searchQuery" />
-      <CurrentPlayingSideBar />
+    <div v-if="isLoading" class="loading-container">
+      <div class="loader"></div>
+      <p>Loading your content...</p>
     </div>
-    <BottomPlayer />
+    <template v-else>
+      <TopBar @search="handleSearch" :initialQuery="searchQuery" />
+      <div class="centralPanel">
+        <UserContentSideBar :items="sidebarItems" @select-item="handleSelect" />
+        <MainContent :search-query="searchQuery" />
+        <CurrentPlayingSideBar />
+      </div>
+      <BottomPlayer />
+    </template>
   </div>
 </template>
 
 
 <script setup>
-import { ref, watch } from 'vue';
+import { ref, watch, onMounted } from 'vue';
 import TopBar from '@/components/TopBar.vue';
 import MainContent from '@/components/content/MainContent.vue';
 import BottomPlayer from '@/components/BottomPlayer.vue';
 import { useRoute } from 'vue-router';
 import UserContentSideBar from '@/components/UserContentSideBar.vue';
 import CurrentPlayingSideBar from '@/components/CurrentPlayingSideBar.vue';
+import { useUserStore } from '@/store/user';
 
-const sidebarItems = ref([
-  { id: 1, name: 'Home', type: 'link' },
-  { id: 2, name: 'Albums', type: 'section', items: ['Album 1', 'Album 2', 'Album 3'] },
-  { id: 3, name: 'Playlists', type: 'section', items: ['Playlist 1', 'Playlist 2'] }
-]);
+// Access the user store
+const userStore = useUserStore();
+const isLoading = ref(true);
+
+// Initialize the store when the component is mounted
+onMounted(async () => {
+  try {
+    await userStore.initialize();
+  } catch (error) {
+    console.error('Failed to initialize user data:', error);
+  } finally {
+    isLoading.value = false;
+  }
+});
 
 const route = useRoute();
 const searchQuery = ref(decodeURIComponent(route.params.query || ''));
@@ -66,5 +82,35 @@ body {
   height: 100%;
   overflow: hidden;
   text-align: left !important;
+}
+
+.loading-container {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  height: 100vh;
+  width: 100%;
+}
+
+.loader {
+  border: 5px solid rgba(255, 255, 255, 0.3);
+  border-radius: 50%;
+  border-top: 5px solid #1DB954;
+  /* Spotify green color */
+  width: 50px;
+  height: 50px;
+  animation: spin 1s linear infinite;
+  margin-bottom: 20px;
+}
+
+@keyframes spin {
+  0% {
+    transform: rotate(0deg);
+  }
+
+  100% {
+    transform: rotate(360deg);
+  }
 }
 </style>

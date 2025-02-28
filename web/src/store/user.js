@@ -2,35 +2,109 @@ import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
 import axios from 'axios';
 
-export const useUserStore = defineStore('user', () => {
+const STORAGE_KEY = 'pezzottify-user-data';
 
+export const useUserStore = defineStore('user', () => {
   const likedAlbumIds = ref(null);
-  let isLoadingLikedAlbums = ref(false);
 
   const likedArtistsIds = ref(null);
-  let isLoadingLikedArtists = ref(false);
 
   const playlistsData = ref(null);
-  let isLoadingPlaylists = ref(false);
   const playlistRefs = {};
 
-  const loadLikedAlbumIds = async () => {
-    isLoadingLikedAlbums.value = true;
+  // New overall loading state
+  const isInitialized = ref(false);
+  const isInitializing = ref(false);
+
+  // Load data from localStorage on store creation
+  const loadFromStorage = () => {
     try {
-      const response = await axios.get('/v1/user/liked/album');
-      console.log("Writing new data to likedAlbumIds");
-      console.log(response.data);
-      likedAlbumIds.value = response.data;
+      const storedData = localStorage.getItem(STORAGE_KEY);
+      if (storedData) {
+        const parsedData = JSON.parse(storedData);
+        if (parsedData.likedAlbumIds) likedAlbumIds.value = parsedData.likedAlbumIds;
+        if (parsedData.likedArtistsIds) likedArtistsIds.value = parsedData.likedArtistsIds;
+        if (parsedData.playlistsData) playlistsData.value = parsedData.playlistsData;
+        console.log('Loaded user data from localStorage');
+        return true;
+      }
     } catch (error) {
-      console.error('Failed to load liked albums:', error);
-    } finally {
-      isLoadingLikedAlbums.value = false;
+      console.error('Failed to load data from localStorage:', error);
+    }
+    return false;
+  };
+
+  // Save current state to localStorage
+  const saveToStorage = () => {
+    try {
+      const dataToSave = {
+        likedAlbumIds: likedAlbumIds.value,
+        likedArtistsIds: likedArtistsIds.value,
+        playlistsData: playlistsData.value,
+      };
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(dataToSave));
+    } catch (error) {
+      console.error('Failed to save data to localStorage:', error);
     }
   };
 
-  const triggerAlbumsLoad = async () => {
-    if (!likedAlbumIds.value && !isLoadingLikedAlbums.value) {
-      await loadLikedAlbumIds();
+  // Load all user data
+  const initialize = async (forceRefresh = false) => {
+    // Return early if already initialized and not forcing refresh
+    if (isInitialized.value && !forceRefresh) return true;
+
+    // Return early if already initializing
+    if (isInitializing.value) return false;
+
+    // Try loading from localStorage first if not forcing refresh
+    if (!forceRefresh && loadFromStorage()) {
+      isInitialized.value = true;
+      return true;
+    }
+
+    isInitializing.value = true;
+
+    try {
+      // Load all data in parallel
+      const [albumsResponse, artistsResponse, playlistsResponse] = await Promise.all([
+        axios.get('/v1/user/liked/album').catch(error => {
+          console.error('Failed to load liked albums:', error);
+          return { data: [] };
+        }),
+        axios.get('/v1/user/liked/artist').catch(error => {
+          console.error('Failed to load liked artists:', error);
+          return { data: [] };
+        }),
+        axios.get('/v1/user/playlists').catch(error => {
+          console.error('Failed to load playlists:', error);
+          return { data: [] };
+        })
+      ]);
+
+      // Update state with fetched data
+      likedAlbumIds.value = albumsResponse.data;
+      likedArtistsIds.value = artistsResponse.data;
+
+      const by_id = {};
+      playlistsResponse.data.forEach(playlist => {
+        by_id[playlist.id] = playlist;
+      });
+
+      playlistsData.value = {
+        list: playlistsResponse.data,
+        by_id: by_id,
+      };
+
+      // Save to localStorage
+      saveToStorage();
+
+      isInitialized.value = true;
+      return true;
+    } catch (error) {
+      console.error('Failed to initialize user data:', error);
+      return false;
+    } finally {
+      isInitializing.value = false;
     }
   };
 
@@ -46,28 +120,9 @@ export const useUserStore = defineStore('user', () => {
       } else {
         likedAlbumIds.value = likedAlbumIds.value.filter(id => id !== albumId);
       }
+      saveToStorage();
     } catch (error) {
       console.error('Failed to update liked status:', error);
-    }
-  }
-
-  const loadLikedArtistsIds = async () => {
-    isLoadingLikedArtists.value = true;
-    try {
-      const response = await axios.get('/v1/user/liked/artist');
-      console.log("Writing new data to likedArtistsIds");
-      console.log(response.data);
-      likedArtistsIds.value = response.data;
-    } catch (error) {
-      console.error('Failed to load liked artists:', error);
-    } finally {
-      isLoadingLikedArtists.value = false;
-    }
-  }
-
-  const triggerArtistsLoad = async () => {
-    if (!likedArtistsIds.value && !isLoadingLikedArtists.value) {
-      await loadLikedArtistsIds();
     }
   }
 
@@ -83,37 +138,9 @@ export const useUserStore = defineStore('user', () => {
       } else {
         likedArtistsIds.value = likedArtistsIds.value.filter(id => id !== artistId);
       }
+      saveToStorage();
     } catch (error) {
       console.error('Failed to update liked status:', error);
-    }
-  }
-
-  const loadPlaylists = async () => {
-    isLoadingPlaylists.value = true;
-    try {
-      const response = await axios.get('/v1/user/playlists');
-      console.log("Writing new data to playlistsIds");
-      console.log(response.data);
-
-      const by_id = {};
-      response.data.forEach(playlist => {
-        by_id[playlist.id] = playlist.id;
-      });
-
-      playlistsData.value = {
-        list: response.data,
-        by_id: by_id,
-      }
-    } catch (error) {
-      console.error('Failed to load playlists:', error);
-    } finally {
-      isLoadingPlaylists.value = false;
-    }
-  }
-
-  const triggerPlaylistsLoad = async () => {
-    if (playlistsData.value == null && !isLoadingPlaylists.value) {
-      await loadPlaylists();
     }
   }
 
@@ -144,6 +171,7 @@ export const useUserStore = defineStore('user', () => {
           return playlist;
         });
         playlistsData.value.by_id[playlistId] = response.data;
+        saveToStorage();
       }
 
     } catch (error) {
@@ -162,6 +190,7 @@ export const useUserStore = defineStore('user', () => {
       if (playlistsData.value) {
         playlistsData.value.list = [response.data, ...playlistsData.value.list];
         playlistsData.value.by_id[response.data.id] = response.data;
+        saveToStorage();
       }
       callback(response.data);
     } catch (error) {
@@ -176,6 +205,7 @@ export const useUserStore = defineStore('user', () => {
       if (playlistsData.value) {
         playlistsData.value.list = playlistsData.value.list.filter(playlist => playlist.id !== playlistId);
         playlistsData.value.by_id[playlistId] = null;
+        saveToStorage();
       }
       callback(true);
     } catch (error) {
@@ -191,6 +221,7 @@ export const useUserStore = defineStore('user', () => {
       });
       if (playlistsData.value && playlistsData.value.by_id[playlistId]) {
         playlistsData.value.by_id[playlistId].name = name;
+        saveToStorage();
       }
       callback(true);
     } catch (error) {
@@ -211,6 +242,7 @@ export const useUserStore = defineStore('user', () => {
         if (playlistRefs[playlistId]) {
           playlistRefs[playlistId].value = playlist;
         }
+        saveToStorage();
       }
       callback(true);
     } catch (error) {
@@ -219,18 +251,18 @@ export const useUserStore = defineStore('user', () => {
     }
   }
 
+  // Try to load from localStorage immediately when store is created
+  loadFromStorage();
+
   return {
-    isLoadingLikedAlbums,
     likedAlbumIds,
-    isLoadingLikedArtists,
     likedArtistsIds,
-    isLoadingPlaylists,
     playlistsData,
-    triggerAlbumsLoad,
+    isInitialized,
+    isInitializing,
+    initialize,
     setAlbumIsLiked,
-    triggerArtistsLoad,
     setArtistIsLiked,
-    triggerPlaylistsLoad,
     createPlaylist,
     deletePlaylist,
     loadPlaylistData,

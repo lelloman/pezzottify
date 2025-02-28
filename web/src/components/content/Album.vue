@@ -148,7 +148,6 @@ watch([() => userStore.likedAlbumIds, data],
 
 onMounted(() => {
   fetchData(props.albumId);
-  userStore.triggerAlbumsLoad();
 });
 </script>
 
