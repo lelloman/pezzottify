@@ -2,65 +2,23 @@ import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
 import axios from 'axios';
 
-const STORAGE_KEY = 'pezzottify-user-data';
 
 export const useUserStore = defineStore('user', () => {
   const likedAlbumIds = ref(null);
-
   const likedArtistsIds = ref(null);
-
   const playlistsData = ref(null);
   const playlistRefs = {};
 
-  // New overall loading state
   const isInitialized = ref(false);
   const isInitializing = ref(false);
 
-  // Load data from localStorage on store creation
-  const loadFromStorage = () => {
-    try {
-      const storedData = localStorage.getItem(STORAGE_KEY);
-      if (storedData) {
-        const parsedData = JSON.parse(storedData);
-        if (parsedData.likedAlbumIds) likedAlbumIds.value = parsedData.likedAlbumIds;
-        if (parsedData.likedArtistsIds) likedArtistsIds.value = parsedData.likedArtistsIds;
-        if (parsedData.playlistsData) playlistsData.value = parsedData.playlistsData;
-        console.log('Loaded user data from localStorage');
-        return true;
-      }
-    } catch (error) {
-      console.error('Failed to load data from localStorage:', error);
-    }
-    return false;
-  };
-
-  // Save current state to localStorage
-  const saveToStorage = () => {
-    try {
-      const dataToSave = {
-        likedAlbumIds: likedAlbumIds.value,
-        likedArtistsIds: likedArtistsIds.value,
-        playlistsData: playlistsData.value,
-      };
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(dataToSave));
-    } catch (error) {
-      console.error('Failed to save data to localStorage:', error);
-    }
-  };
-
   // Load all user data
-  const initialize = async (forceRefresh = false) => {
+  const initialize = async () => {
     // Return early if already initialized and not forcing refresh
-    if (isInitialized.value && !forceRefresh) return true;
+    if (isInitialized.value) return true;
 
     // Return early if already initializing
     if (isInitializing.value) return false;
-
-    // Try loading from localStorage first if not forcing refresh
-    if (!forceRefresh && loadFromStorage()) {
-      isInitialized.value = true;
-      return true;
-    }
 
     isInitializing.value = true;
 
@@ -95,9 +53,6 @@ export const useUserStore = defineStore('user', () => {
         by_id: by_id,
       };
 
-      // Save to localStorage
-      saveToStorage();
-
       isInitialized.value = true;
       return true;
     } catch (error) {
@@ -120,7 +75,6 @@ export const useUserStore = defineStore('user', () => {
       } else {
         likedAlbumIds.value = likedAlbumIds.value.filter(id => id !== albumId);
       }
-      saveToStorage();
     } catch (error) {
       console.error('Failed to update liked status:', error);
     }
@@ -138,7 +92,6 @@ export const useUserStore = defineStore('user', () => {
       } else {
         likedArtistsIds.value = likedArtistsIds.value.filter(id => id !== artistId);
       }
-      saveToStorage();
     } catch (error) {
       console.error('Failed to update liked status:', error);
     }
@@ -171,9 +124,8 @@ export const useUserStore = defineStore('user', () => {
           return playlist;
         });
         playlistsData.value.by_id[playlistId] = response.data;
-        saveToStorage();
-      }
 
+      }
     } catch (error) {
       console.error('Failed to load playlist data:', error);
     }
@@ -190,7 +142,6 @@ export const useUserStore = defineStore('user', () => {
       if (playlistsData.value) {
         playlistsData.value.list = [response.data, ...playlistsData.value.list];
         playlistsData.value.by_id[response.data.id] = response.data;
-        saveToStorage();
       }
       callback(response.data);
     } catch (error) {
@@ -204,8 +155,7 @@ export const useUserStore = defineStore('user', () => {
       await axios.delete(`/v1/user/playlist/${playlistId}`);
       if (playlistsData.value) {
         playlistsData.value.list = playlistsData.value.list.filter(playlist => playlist.id !== playlistId);
-        playlistsData.value.by_id[playlistId] = null;
-        saveToStorage();
+        delete playlistsData.value.by_id[playlistId];
       }
       callback(true);
     } catch (error) {
@@ -220,8 +170,13 @@ export const useUserStore = defineStore('user', () => {
         name: name,
       });
       if (playlistsData.value && playlistsData.value.by_id[playlistId]) {
+        // Update name in memory
         playlistsData.value.by_id[playlistId].name = name;
-        saveToStorage();
+
+        // Update the playlist in the list
+        playlistsData.value.list = playlistsData.value.list.map(p =>
+          p.id === playlistId ? { ...p, name } : p
+        );
       }
       callback(true);
     } catch (error) {
@@ -238,11 +193,11 @@ export const useUserStore = defineStore('user', () => {
       if (playlistsData.value && playlistsData.value.by_id[playlistId]) {
         const playlist = playlistsData.value.by_id[playlistId];
         playlist.track_ids = [...playlist.tracks, ...trackIds];
+
         // update any refs if exists
         if (playlistRefs[playlistId]) {
           playlistRefs[playlistId].value = playlist;
         }
-        saveToStorage();
       }
       callback(true);
     } catch (error) {
@@ -250,9 +205,6 @@ export const useUserStore = defineStore('user', () => {
       callback(false);
     }
   }
-
-  // Try to load from localStorage immediately when store is created
-  loadFromStorage();
 
   return {
     likedAlbumIds,
