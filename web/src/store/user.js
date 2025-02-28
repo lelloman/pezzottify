@@ -168,8 +168,13 @@ export const useUserStore = defineStore('user', () => {
     try {
       await axios.delete(`/v1/user/playlist/${playlistId}`);
       if (playlistsData.value) {
-        playlistsData.value.list = playlistsData.value.list.filter(playlist => playlist.id !== playlistId);
-        delete playlistsData.value.by_id[playlistId];
+        const oldValue = playlistsData.value;
+        delete oldValue.by_id[playlistId];
+        oldValue.list = oldValue.list.filter(playlist => playlist !== playlistId);
+        playlistsData.value = oldValue;
+        if (playlistRefs[playlistId]) {
+          delete playlistRefs[playlistId];
+        }
       }
       callback(true);
     } catch (error) {

@@ -19,6 +19,7 @@ const handleAddToQueueClick = (option) => {
 };
 
 const makeAddToPlaylistSubMenu = () => {
+  console.log("Make add to playlist sub menu, userStore.playlistsData.list.length: ", userStore.playlistsData.list.length);
   return userStore.playlistsData.list.map(playlistId => (
     {
       name: userStore.playlistsData.by_id[playlistId].name,

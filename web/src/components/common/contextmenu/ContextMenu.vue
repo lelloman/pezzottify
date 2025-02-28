@@ -25,7 +25,7 @@
 import { watch, computed, useTemplateRef, ref, defineExpose } from 'vue';
 import ChevronRight from '@/components/icons/ChevronRight.vue';
 
-const props = defineProps({
+defineProps({
   items: {
     type: Array,
     required: true
