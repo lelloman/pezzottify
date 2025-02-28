@@ -19,18 +19,8 @@
         </h1>
         <div v-for="(trackId, trackIndex) in disc.tracks" :key="trackId" class="track"
           @contextmenu.prevent="openTrackContextMenu($event, data.tracks[trackId])">
-          <div :class="computeTrackRowClasses(trackId)"
-            @click.stop="handleClickOnTrack(trackId, discIndex, trackIndex)">
-            <div class="trackIndexSpan">
-              <p>{{ trackIndex + 1 }} </p>
-            </div>
-            <TrackName :track="data.tracks[trackId]" class="trackNameSpan" />
-            <div class="trackArtistsSpan">
-              <ClickableArtistsNames
-                :artistsIdsNames="data.tracks[trackId].artists_ids.map((artistId) => [artistId, data.artists[artistId].name])" />
-            </div>
-            <div class="trackDurationSpan">{{ formatDuration(data.tracks[trackId].duration) }}</div>
-          </div>
+          <LoadTrackListItem :trackId="trackId" :resolvedTrack="data.tracks[trackId]" :trackNumber="trackIndex + 1"
+            @track-clicked="handleClickOnTrack(trackId)" />
         </div>
       </div>
     </div>
@@ -44,16 +34,15 @@
 <script setup>
 import { ref, watch, onMounted } from 'vue';
 import axios from 'axios';
-import { chooseAlbumCoverImageUrl, formatDuration } from '@/utils';
+import { chooseAlbumCoverImageUrl } from '@/utils';
 import MultiSourceImage from '@/components/common/MultiSourceImage.vue';
-import TrackName from '../common/TrackName.vue';
-import ClickableArtistsNames from '@/components/common/ClickableArtistsNames.vue';
 import PlayIcon from '@/components/icons/PlayIcon.vue';
 import { usePlayerStore } from '@/store/player';
 import { useUserStore } from '@/store/user';
 import ToggableFavoriteIcon from '@/components/common/ToggableFavoriteIcon.vue';
 import LoadArtistListItem from '@/components/common/LoadArtistListItem.vue';
 import TrackContextMenu from '@/components/common/contextmenu/TrackContextMenu.vue';
+import LoadTrackListItem from '../common/LoadTrackListItem.vue';
 
 const props = defineProps({
   albumId: {
@@ -115,8 +104,10 @@ const handleClickOnPlayAlbum = () => {
   player.setResolvedAlbum(data.value);
 }
 
-const handleClickOnTrack = (trackId, discIndex, trackIndex) => {
+const handleClickOnTrack = (trackId) => {
   if (trackId != currentTrackId.value) {
+    const discIndex = data.value.album.discs.findIndex((disc) => disc.tracks.includes(trackId));
+    const trackIndex = data.value.album.discs[discIndex].tracks.indexOf(trackId);
     player.setResolvedAlbum(data.value, discIndex, trackIndex);
   }
 }

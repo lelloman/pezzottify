@@ -1,7 +1,6 @@
 
 ## [web]
-- In Album.vue, make 1 access to data.tracks[trackId] instead of one for each element
-- Make right-click contextual menu for track, albums and artists (after user playlists) 
+- Make right-click contextual menu for albums and artists (after user playlists) 
 - Make left and right panel collapsable
 - T Y P E S C R I P T?????
 - Make titles and texts on single line and sliding if too long
@@ -11,6 +10,8 @@
 - Add a logo with a home link
 - Add admin panel (after user roles)
 - Make user content list items lazily loaded
+- ~Make right-click contextual menu for track~
+- ~In Album.vue, make 1 access to data.tracks[trackId] instead of one for each element~
 - ~Make track content page~
 - ~Style scrollbars~
 - ~Make album content page~

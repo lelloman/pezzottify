@@ -14,6 +14,12 @@
         <PlayIcon class="commandIcon scaleClickFeedback bigIcon" @click.stop="handleClickOnPlay" />
         <TrashIcon class="commandIcon scaleClickFeedback mediumIcon" @click.stop="handleClickOnDelete" />
       </div>
+      <div class="tracksSection">
+        <div v-for="(trackId, trackIndex) in playlist.tracks" :key="trackId" class="track"
+          @contextmenu.prevent="openTrackContextMenu($event, data.tracks[trackId])">
+          <LoadTrackListItem :trackId="trackId" :trackNumber="trackIndex + 1" @track-selected="handleTrackSelection" />
+        </div>
+      </div>
     </div>
     <div v-else-if="error">Error. {{ error }}</div>
   </div>
@@ -43,13 +49,14 @@
 </template>
 
 <script setup>
-import { watch, ref, onMounted, computed } from 'vue';
+import { watch, ref, computed, onBeforeUnmount } from 'vue';
 import PlayIcon from '@/components/icons/PlayIcon.vue';
 import TrashIcon from '../icons/TrashIcon.vue';
 import ConfirmationDialog from '@/components/common/ConfirmationDialog.vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useUserStore } from '@/store/user';
 import EditIcon from '@/components/icons/EditIcon.vue';
+import LoadTrackListItem from '@/components/common/LoadTrackListItem.vue'; 1
 
 // Define playlistId prop
 const props = defineProps({
@@ -65,12 +72,7 @@ const userStore = useUserStore();
 
 const loading = ref(true);
 const error = ref(null);
-
-// Get reactive reference to the playlist
-const playlist = computed(() => {
-  const playlistRef = userStore.getPlaylistRef(props.playlistId);
-  return playlistRef?.value; // Unwrap the computed ref
-});
+const playlistRef = ref(null);
 
 const deleteConfirmationDialogOpen = ref(false);
 const isEditMode = ref(false);
@@ -79,21 +81,9 @@ const handleEditButtonClick = () => {
   router.push({ query: { edit: !isEditMode.value } });
 }
 
-// Load playlist data
-const loadData = async () => {
-  if (!props.playlistId) return;
-
-  loading.value = true;
-  try {
-    await userStore.loadPlaylistData(props.playlistId);
-    error.value = null;
-  } catch (e) {
-    error.value = "Failed to load playlist data";
-    console.error(e);
-  } finally {
-    loading.value = false;
-  }
-};
+const playlist = computed(() => {
+  return playlistRef.value?.value;
+});
 
 const handleChangeNameButtonClicked = async () => {
   const newName = document.getElementById("editPlaylistNameInput").value;
@@ -138,15 +128,23 @@ watch(
   () => props.playlistId,
   (newId) => {
     if (newId) {
-      loadData();
+      if (playlistRef.value) {
+        userStore.putPlaylistRef(playlistRef.value.id);
+      }
+      playlistRef.value = userStore.getPlaylistRef(newId);
+      userStore.loadPlaylistData(newId).finally(() => loading.value = false);
     }
   },
   { immediate: true }
 );
 
-onMounted(() => {
-  loadData();
+onBeforeUnmount(() => {
+  // Release the reference when component is unmounted
+  if (playlistRef.value) {
+    userStore.putPlaylistRef(props.playlistId);
+  }
 });
+
 </script>
 
 <style scoped>
