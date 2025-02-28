@@ -8,8 +8,10 @@
 
 <script setup>
 import { ref, onMounted } from 'vue';
-import axios from 'axios';
 import ArtistListItem from '@/components/common/ArtistListItem.vue';
+import { useRemoteStore } from '@/store/remote';
+
+const remoteStore = useRemoteStore();
 
 const props = defineProps({
   artistId: {
@@ -24,8 +26,10 @@ const error = ref(null);
 
 const fetchArtistData = async (id) => {
   try {
-    const response = await axios.get(`/v1/content/artist/${id}`);
-    artistData.value = response.data;
+    artistData.value = await remoteStore.fetchArtistData(id);
+    if (!artistData.value) {
+      error.value = "Failed to load artist data";
+    }
   } catch (err) {
     error.value = err.message;
   } finally {

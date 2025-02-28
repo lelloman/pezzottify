@@ -24,13 +24,13 @@
 
 <script setup>
 import { ref, watch, onMounted } from 'vue';
-import axios from 'axios';
 import { chooseArtistCoverImageUrl } from '@/utils';
 import { useUserStore } from '@/store/user.js';
 import MultiSourceImage from '@/components/common/MultiSourceImage.vue';
 import ArtistAlbumCards from '@/components/common/ArtistAlbumCards.vue';
 import ToggableFavoriteIcon from '@/components/common/ToggableFavoriteIcon.vue';
 import LoadArtistListItem from '../common/LoadArtistListItem.vue';
+import { useRemoteStore } from '@/store/remote';
 
 const props = defineProps({
   artistId: {
@@ -44,16 +44,12 @@ const coverUrls = ref(null);
 const isArtistLiked = ref(false);
 
 const userStore = useUserStore();
+const remoteStore = useRemoteStore();
 
 const fetchData = async (id) => {
   if (!id) return;
   data.value = null;
-  try {
-    const response = await axios.get(`/v1/content/artist/${id}`);
-    data.value = response.data;
-  } catch (error) {
-    console.error('Error fetching data:', error);
-  }
+  data.value = await remoteStore.fetchArtistData(id);
 };
 
 watch([() => userStore.likedArtistsIds, data],

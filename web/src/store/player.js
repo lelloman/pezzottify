@@ -2,9 +2,10 @@ import { defineStore } from 'pinia';
 import { ref, watch } from 'vue';
 import { Howl } from 'howler';
 import { formatImageUrl, chooseAlbumCoverImageUrl } from '@/utils';
-import axios from 'axios';
+import { useRemoteStore } from './remote';
 
 export const usePlayerStore = defineStore('player', () => {
+  const remoteStore = useRemoteStore();
 
   /* PROPS */
   const playlist = ref({
@@ -162,14 +163,16 @@ export const usePlayerStore = defineStore('player', () => {
 
   const setAlbumId = async (albumId) => {
     try {
-      const response = await axios.get(`/v1/content/album/${albumId}/resolved`);
-      const albumPlaylist = makePlaylistFromResolvedAlbumResponse(response.data);
-      playlist.value = albumPlaylist;
-      pendingPercentSeek = null;
-      loadTrack(0);
-      play();
+      const albumData = await remoteStore.fetchResolvedAlbum(albumId);
+      if (albumData) {
+        const albumPlaylist = makePlaylistFromResolvedAlbumResponse(albumData);
+        playlist.value = albumPlaylist;
+        pendingPercentSeek = null;
+        loadTrack(0);
+        play();
+      }
     } catch (error) {
-      console.error('Error fetching data:', error);
+      console.error('Error setting album:', error);
     }
   }
 

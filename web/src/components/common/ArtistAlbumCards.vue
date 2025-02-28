@@ -12,8 +12,8 @@
 
 <script setup>
 import { onMounted, ref } from 'vue';
-import axios from 'axios';
 import AlbumCard from '@/components/common/AlbumCard.vue';
+import { useRemoteStore } from '@/store/remote';
 
 const props = defineProps({
   artistId: {
@@ -22,20 +22,20 @@ const props = defineProps({
   }
 });
 
+const remoteStore = useRemoteStore();
 const albumIds = ref(null);
 const error = ref(null);
 const isLoading = ref(false);
 
 const loadAlbumIds = async (artistId) => {
   isLoading.value = true;
-  try {
-    const response = await axios.get(`/v1/content/artist/${artistId}/albums`);
-    albumIds.value = response.data;
-  } catch (err) {
-    error.value = err.message;
-  } finally {
-    isLoading.value = false;
+  const artistsAlbumsResponse = await remoteStore.fetchArtistAlbums(artistId);
+  if (artistsAlbumsResponse) {
+    albumIds.value = artistsAlbumsResponse;
+  } else {
+    error.value = "Error fetching artist albums";
   }
+  isLoading.value = false;
 };
 
 onMounted(() => {

@@ -33,12 +33,12 @@
 
 <script setup>
 import { ref, watch, onMounted } from 'vue';
-import axios from 'axios';
 import { chooseAlbumCoverImageUrl } from '@/utils';
 import MultiSourceImage from '@/components/common/MultiSourceImage.vue';
 import PlayIcon from '@/components/icons/PlayIcon.vue';
 import { usePlayerStore } from '@/store/player';
 import { useUserStore } from '@/store/user';
+import { useRemoteStore } from '@/store/remote';
 import ToggableFavoriteIcon from '@/components/common/ToggableFavoriteIcon.vue';
 import LoadArtistListItem from '@/components/common/LoadArtistListItem.vue';
 import TrackContextMenu from '@/components/common/contextmenu/TrackContextMenu.vue';
@@ -56,6 +56,7 @@ const coverUrls = ref(null);
 
 const player = usePlayerStore();
 const userStore = useUserStore();
+const remoteStore = useRemoteStore();
 
 const currentTrackId = ref(null);
 const isAlbumLiked = ref(false);
@@ -87,13 +88,7 @@ watch(() => player.currentTrack,
 const fetchData = async (id) => {
   if (!id) return;
   data.value = null;
-  try {
-    const response = await axios.get(`/v1/content/album/${id}/resolved`);
-    console.log(response.data);
-    data.value = response.data;
-  } catch (error) {
-    console.error('Error fetching data:', error);
-  }
+  data.value = await remoteStore.fetchResolvedAlbum(id);
 };
 
 const handleClickOnFavoriteIcon = () => {

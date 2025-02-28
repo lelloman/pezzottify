@@ -28,10 +28,10 @@
 
 <script setup>
 import { ref, watch, onMounted } from 'vue';
-import axios from 'axios';
 import MultiSourceImage from '@/components/common/MultiSourceImage.vue';
 import PlayIcon from '../icons/PlayIcon.vue';
 import { usePlayerStore } from '@/store/player';
+import { useRemoteStore } from '@/store/remote';
 import { chooseAlbumCoverImageUrl, chooseAlbumCoverImageIds, formatDuration, getYearFromTimestamp } from '@/utils';
 import { useRouter } from 'vue-router';
 import LoadArtistListItem from '../common/LoadArtistListItem.vue';
@@ -51,6 +51,7 @@ const coverUrls = ref([]);
 
 const router = useRouter();
 const player = usePlayerStore();
+const remote = useRemoteStore();
 
 const handleClickOnPlayTrack = () => {
   if (data.value) {
@@ -72,13 +73,7 @@ const handleClickOnAlbumName = () => {
 
 const fetchTrack = async (id) => {
   if (!id) return;
-  data.value = null;
-  try {
-    const response = await axios.get(`/v1/content/track/${id}/resolved`);
-    data.value = response.data;
-  } catch (error) {
-    console.error('Error fetching data:', error);
-  }
+  data.value = await remote.fetchResolvedTrack(id);
 };
 
 watch(data, (newData) => {

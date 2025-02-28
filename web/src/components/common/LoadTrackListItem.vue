@@ -18,12 +18,13 @@
 <script setup>
 import { ref, onMounted, computed, watch } from 'vue';
 import { usePlayerStore } from '@/store/player';
-import axios from 'axios';
+import { useRemoteStore } from '@/store/remote';
 import { formatDuration } from '@/utils';
 import TrackName from '@/components/common/TrackName.vue';
 import LoadClickableArtistsNames from '@/components/common/LoadClickableArtistsName.vue';
 
 const player = usePlayerStore();
+const remoteStore = useRemoteStore();
 
 const props = defineProps({
   trackId: {
@@ -75,8 +76,10 @@ const loadTrackData = async () => {
   error.value = null;
 
   try {
-    const response = await axios.get(`/v1/content/track/${props.trackId}`);
-    resolvedData.value = response.data;
+    resolvedData.value = await remoteStore.fetchTrackData(props.trackId);
+    if (!resolvedData.value) {
+      error.value = 'Failed to load track data';
+    }
   } catch (err) {
     console.error('Failed to load track data:', err);
     error.value = 'Failed to load track data';

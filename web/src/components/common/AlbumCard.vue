@@ -22,10 +22,10 @@ import '@/assets/icons.css'
 import { ref, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { chooseAlbumCoverImageUrl } from '@/utils';
-import axios from 'axios';
 import MultiSourceImage from './MultiSourceImage.vue';
 import PlayIcon from '@/components/icons/PlayIcon.vue';
 import { usePlayerStore } from '@/store/player';
+import { useRemoteStore } from '@/store/remote';
 import ClickableArtistsNames from './ClickableArtistsNames.vue';
 
 const props = defineProps({
@@ -47,6 +47,7 @@ const error = ref(null);
 const router = useRouter();
 
 const playerStore = usePlayerStore();
+const remoteStore = useRemoteStore();
 
 const handlePlayClick = (event) => {
   console.log("play click");
@@ -56,17 +57,17 @@ const handlePlayClick = (event) => {
 }
 
 const fetchAlbumData = async (id) => {
-  try {
-    const response = await axios.get(`/v1/content/album/${id}/resolved`);
-    artistsIdsNames.value = response.data.album.artists_ids.map((artistId) => {
-      return [artistId, response.data.artists[artistId].name];
-    });
-    albumData.value = response.data.album;
 
-  } catch (err) {
-    error.value = err.message;
-  } finally {
-    loading.value = false;
+  const responseData = await remoteStore.fetchResolvedAlbum(id);
+
+  loading.value = false;
+  if (responseData) {
+    artistsIdsNames.value = responseData.album.artists_ids.map((artistId) => {
+      return [artistId, responseData.artists[artistId].name];
+    });
+    albumData.value = responseData.album;
+  } else {
+    error.value = "Error fetching album data";
   }
 };
 

@@ -5,8 +5,8 @@
 
 <script setup>
 import { onMounted, ref } from 'vue';
-import axios from 'axios';
 import ClickableArtistsNames from './ClickableArtistsNames.vue';
+import { useRemoteStore } from '@/store/remote';
 
 const props = defineProps({
   prefix: {
@@ -18,14 +18,16 @@ const props = defineProps({
   }
 });
 
+const remoteStore = useRemoteStore();
+
 const isLoading = ref(false);
 const artistsIdsNames = ref(null);
 
 onMounted(async () => {
   isLoading.value = true;
   const artistsPromises = props.artistsIds.map(async (artistId) => {
-    const response = await axios.get(`/v1/content/artist/${artistId}`);
-    return [artistId, response.data.name];
+    const response = await remoteStore.fetchArtistData(artistId);
+    return [artistId, response.name];
   });
   console.log("LoadClickableArtistsName starting to wait...");
   artistsIdsNames.value = await Promise.all(artistsPromises);

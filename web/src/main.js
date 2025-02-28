@@ -5,7 +5,7 @@ import App from './App.vue'
 import router from './router'
 import { createPinia } from 'pinia'
 import { useConfigStore } from './store/config'
-import axios from 'axios';
+import { useRemoteStore } from './store/remote'
 
 const pinia = createPinia();
 const app = createApp(App);
@@ -15,15 +15,12 @@ app.use(pinia)
 app.use(router)
 
 window.config = useConfigStore();
+const remoteStore = useRemoteStore();
 app.mount('#app')
 
-if (window.config.blockHttpCache) {
-  axios.defaults.headers.common['Cache-Control'] = 'no-cache, no-store, must-revalidate';
-  axios.defaults.headers.common['Pragma'] = 'no-cache';
-  axios.defaults.headers.common['Expires'] = '0';
-}
+remoteStore.setBlockHttpCache(window.config.blockHttpCache);
 
-watch(() => window.config.blockHttpCache, (value) => {
+watch(() => window.config.blockHttpCache, () => {
   console.log("blockHttpCache changed, reloading page");
   window.location.reload();
 });
