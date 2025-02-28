@@ -12,7 +12,8 @@
 
       <div v-if="isSubMenuOpen && currentSubMenu === item" class="subMenu"
         :style="{ top: `${subMenuY}px`, left: `${subMenuX}px` }">
-        <div class="contextMenuItem" v-for="subItem in item.subMenu()" :key="subItem.name" @click="subItem.action">
+        <div class="contextMenuItem" v-for="subItem in item.subMenu()" :key="subItem.name"
+          @click.stop="executeSubItemAction(subItem)">
           {{ subItem.name }}
         </div>
       </div>
@@ -42,11 +43,21 @@ const contextData = ref({
 const isOpen = computed(() => contextData.value.isOpen);
 
 const executeItemAction = (item) => {
-  const hasSubmenu = item.subMenu;
-  console.log("Executing item action (hasSubmenu: " + hasSubmenu + ")");
+  const hasSubmenu = item.subMenu !== undefined;
+  console.log("Executing item '" + item.name + "' action (hasSubmenu: " + hasSubmenu + ")");
   if (hasSubmenu) return;
 
   item.action();
+  contextData.value.isOpen = false;
+};
+
+const executeSubItemAction = (subItem) => {
+  const hasSubmenu = subItem.subMenu !== undefined;
+  console.log("Executing subItem '" + subItem.name + "' action " + (hasSubmenu ? " (hasSubmenu)" : ""));
+  if (hasSubmenu) return;
+
+  subItem.action();
+  isSubMenuOpen.value = false;
   contextData.value.isOpen = false;
 };
 

@@ -98,7 +98,7 @@ const loadData = async () => {
 const handleChangeNameButtonClicked = async () => {
   const newName = document.getElementById("editPlaylistNameInput").value;
   closeEditMode();
-  userStore.updatePlaylistName(props.playlistId, newName);
+  userStore.updatePlaylistName(props.playlistId, newName, () => { });
 };
 
 const closeEditMode = () => {
@@ -122,7 +122,7 @@ const handleClickOnDelete = () => {
 watch(
   route,
   (newRoute) => {
-    isEditMode.value = newRoute.query.edit;
+    isEditMode.value = newRoute.query.edit ? true : false;
     if (isEditMode.value && playlist.value) {
       setTimeout(() => {
         document.getElementById("editPlaylistNameInput").value = playlist.value.name;

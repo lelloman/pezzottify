@@ -9,7 +9,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, computed } from 'vue';
+import { ref, onMounted, onBeforeUnmount, computed, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { useUserStore } from '@/store/user';
 
@@ -25,15 +25,32 @@ const props = defineProps({
 
 const loading = ref(true);
 const error = ref(null);
+const playlistRef = ref(null);
 
 onMounted(() => {
+  // Get the reference on mount
+  playlistRef.value = userStore.getPlaylistRef(props.playlistId);
+
   userStore.loadPlaylistData(props.playlistId)
     .finally(() => loading.value = false);
 });
 
+onBeforeUnmount(() => {
+  // Release the reference when component is unmounted
+  if (playlistRef.value) {
+    userStore.putPlaylistRef(props.playlistId);
+  }
+});
+
 const playlist = computed(() => {
-  const playlistRef = userStore.getPlaylistRef(props.playlistId);
-  return playlistRef?.value;
+  return playlistRef.value?.value;
+});
+
+watch(playlist, (newPlaylist) => {
+  console.log("New playlist value: ", newPlaylist);
+}, {
+  immediate: true,
+  deep: true,
 });
 
 const handleClick = () => {

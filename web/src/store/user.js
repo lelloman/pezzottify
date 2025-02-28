@@ -99,12 +99,26 @@ export const useUserStore = defineStore('user', () => {
 
   const getPlaylistRef = (playlistId) => {
     if (!playlistRefs[playlistId]) {
-      playlistRefs[playlistId] = computed(() => {
-        if (!playlistsData.value || !playlistsData.value.by_id) return null;
-        return playlistsData.value.by_id[playlistId];
-      });
+      playlistRefs[playlistId] = {
+        value: computed(() => {
+          if (!playlistsData.value || !playlistsData.value.by_id) return null;
+          return playlistsData.value.by_id[playlistId];
+        }),
+        refCount: 1,
+      };
+    } else {
+      playlistRefs[playlistId].refCount++;
     }
-    return playlistRefs[playlistId];
+    return playlistRefs[playlistId].value;
+  };
+
+  const putPlaylistRef = (playlistId) => {
+    if (playlistRefs[playlistId]) {
+      playlistRefs[playlistId].refCount--;
+      if (playlistRefs[playlistId].refCount === 0) {
+        delete playlistRefs[playlistId];
+      }
+    }
   };
 
   const loadPlaylistData = async (playlistId) => {
@@ -192,7 +206,7 @@ export const useUserStore = defineStore('user', () => {
       });
       if (playlistsData.value && playlistsData.value.by_id[playlistId]) {
         const playlist = playlistsData.value.by_id[playlistId];
-        playlist.track_ids = [...playlist.tracks, ...trackIds];
+        playlist.tracks = [...playlist.tracks, ...trackIds];
 
         // update any refs if exists
         if (playlistRefs[playlistId]) {
@@ -221,5 +235,6 @@ export const useUserStore = defineStore('user', () => {
     updatePlaylistName,
     addTracksToPlaylist,
     getPlaylistRef,
+    putPlaylistRef,
   };
 });
