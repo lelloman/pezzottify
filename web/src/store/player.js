@@ -116,6 +116,26 @@ export const usePlayerStore = defineStore('player', () => {
     }
   }
 
+  const makePlaylistFromResolvedTracksAndPlaylist = (resolvedTracks, playlist) => {
+    const tracks = resolvedTracks.map((resolvedTrackData) => {
+      const track = Object.values(resolvedTrackData.tracks)[0];
+      const artistsIdsNames = track.artists_ids.map((artistId) => [artistId, resolvedTrackData.artists[artistId].name]);
+      return {
+        id: track.id,
+        url: formatTrackUrl(track.id),
+        name: track.name,
+        artists: artistsIdsNames,
+        imageUrls: [formatImageUrl(track.image_id)],
+        duration: track.duration,
+        albumId: track.album_id,
+      }
+    });
+    return {
+      album: playlist,
+      tracks: tracks,
+    };
+  }
+
   const makePlaylistFromTrack = (quakTrack) => {
     return {
       album: null,
@@ -185,6 +205,30 @@ export const usePlayerStore = defineStore('player', () => {
     loadTrack(0);
     play();
   };
+
+  const setPlaylist = async (newPlaylist) => {
+    console.log("player setPlaylist:");
+    console.log(newPlaylist);
+    if (newPlaylist.tracks.length === 0) {
+      return;
+    }
+    const resolvedTracks = newPlaylist.tracks.map(async (track) => {
+      console.log("fetching track data for track:");
+      console.log(track);
+      const resolvedTrack = remoteStore.fetchResolvedTrack(track);
+      console.log(resolvedTrack);
+      return resolvedTrack;
+    });
+    const waitedTracks = await Promise.all(resolvedTracks);
+    console.log("resolved tracks:");
+    console.log(waitedTracks);
+    playlist.value = makePlaylistFromResolvedTracksAndPlaylist(waitedTracks, newPlaylist);
+    console.log("player new playlist set:");
+    console.log(playlist.value);
+    pendingPercentSeek = null;
+    loadTrack(0);
+    play();
+  }
 
   const loadTrack = (index) => {
 
@@ -397,11 +441,12 @@ export const usePlayerStore = defineStore('player', () => {
     progressSec,
     volume,
     muted,
+    setTrack,
+    setPlaylist,
+    setResolvedAlbum,
+    setAlbumId,
     seekToPercentage,
     setIsPlaying,
-    setTrack,
-    setAlbumId,
-    setResolvedAlbum,
     playPause,
     skipPreviousTrack,
     skipNextTrack,

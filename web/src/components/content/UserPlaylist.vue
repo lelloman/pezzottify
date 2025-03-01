@@ -15,8 +15,8 @@
         <TrashIcon class="commandIcon scaleClickFeedback mediumIcon" @click.stop="handleClickOnDelete" />
       </div>
       <div class="tracksSection">
-        <div v-for="(trackId, trackIndex) in playlist.tracks" :key="trackId" class="track"
-          @contextmenu.prevent="openTrackContextMenu($event, data.tracks[trackId])">
+        <div v-for="(trackId, trackIndex) in playlist.tracks" :key="trackIndex + trackId" class="track"
+          @contextmenu.prevent="openTrackContextMenu($event, track)">
           <LoadTrackListItem :trackId="trackId" :trackNumber="trackIndex + 1" @track-selected="handleTrackSelection" />
         </div>
       </div>
@@ -56,7 +56,8 @@ import ConfirmationDialog from '@/components/common/ConfirmationDialog.vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useUserStore } from '@/store/user';
 import EditIcon from '@/components/icons/EditIcon.vue';
-import LoadTrackListItem from '@/components/common/LoadTrackListItem.vue'; 1
+import LoadTrackListItem from '@/components/common/LoadTrackListItem.vue'; import { usePlayerStore } from '@/store/player';
+1
 
 // Define playlistId prop
 const props = defineProps({
@@ -69,6 +70,7 @@ const props = defineProps({
 const router = useRouter();
 const route = useRoute();
 const userStore = useUserStore();
+const player = usePlayerStore();
 
 const loading = ref(true);
 const error = ref(null);
@@ -102,6 +104,7 @@ const handleDeletePlaylistConfirmation = async () => {
 
 const handleClickOnPlay = () => {
   console.log('Play playlist:', props.playlistId);
+  player.setPlaylist(playlist.value);
 };
 
 const handleClickOnDelete = () => {
@@ -127,11 +130,14 @@ watch(
 watch(
   () => props.playlistId,
   (newId) => {
+    console.log('UserPlaylist Load playlist:', newId);
     if (newId) {
       if (playlistRef.value) {
         userStore.putPlaylistRef(playlistRef.value.id);
       }
       playlistRef.value = userStore.getPlaylistRef(newId);
+      console.log('UserPlaylist got playlist ref');
+      console.log(playlistRef.value);
       userStore.loadPlaylistData(newId).finally(() => loading.value = false);
     }
   },

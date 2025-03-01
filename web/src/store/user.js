@@ -161,14 +161,12 @@ export const useUserStore = defineStore('user', () => {
 
   const addTracksToPlaylist = async (playlistId, trackIds, callback) => {
     const success = await remoteStore.addTracksToPlaylist(playlistId, trackIds);
+    console.log("user store addTracksToPlaylist success: " + success);
     if (success && playlistsData.value && playlistsData.value.by_id[playlistId]) {
       const playlist = playlistsData.value.by_id[playlistId];
       playlist.tracks = [...playlist.tracks, ...trackIds];
+      console.log("user store addTracksToPlaylist playlist:");
 
-      // update any refs if exists
-      if (playlistRefs[playlistId]) {
-        playlistRefs[playlistId].value = playlist;
-      }
     }
     callback(success);
   }

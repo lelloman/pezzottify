@@ -6,13 +6,13 @@
     <div class="trackRowsContainer">
       <div class="trackRow" v-for="(track, index) in tracks" :class="{ currentlyPlayingRow: index == currentIndex }"
         :key="index" @click.stop="handleClick(index)" @contextmenu.prevent="openContextMenu($event, track)">
-        <MultiSourceImage class="trackImage scaleClickFeedback" :urls="track.imageUrls"
+        <MultiSourceImage class="trackImage scaleClickFeedback" :urls="track ? track.imageUrls : []"
           @click.stop="handleClickOnTrackImage(track)" />
         <div class="namesColumn">
-          <TrackName :track="track" :hoverAnimation="true" />
-          <ClickableArtistsNames :artistsIdsNames="track.artists" />
+          <TrackName v-if="track" :track="track" :hoverAnimation="true" />
+          <ClickableArtistsNames :artistsIdsNames="track ? track.artists : []" />
         </div>
-        <p>{{ formatDuration(track.duration) }} </p>
+        <p>{{ track ? formatDuration(track.duration) : '' }} </p>
       </div>
     </div>
 
@@ -96,7 +96,6 @@ watch(
 .trackRow {
   display: flex;
   width: 100%;
-  flex: 1;
   flex-direction: row;
   cursor: pointer;
   padding: 8px 16px;

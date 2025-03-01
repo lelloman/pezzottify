@@ -28,10 +28,14 @@ const props = defineProps({
 const router = useRouter();
 
 const sanitizedTrackName = computed(() => {
-  return props.track.name
-    .replace(/<br\s*\/?>/gi, ' ')  // Replace <br> tags with spaces
-    .replace(/\r?\n|\r/g, ' ')     // Replace line feeds with spaces
-    .replace(/<[^>]*>/g, '');      // Remove any remaining HTML tags
+  if (props.track.name) {
+    return props.track.name
+      .replace(/<br\s*\/?>/gi, ' ')  // Replace <br> tags with spaces
+      .replace(/\r?\n|\r/g, ' ')     // Replace line feeds with spaces
+      .replace(/<[^>]*>/g, '');      // Remove any remaining HTML tags
+  } else {
+    return '';
+  }
 });
 
 const handleClick = () => {
