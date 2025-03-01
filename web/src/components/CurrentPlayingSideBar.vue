@@ -9,7 +9,7 @@
         <MultiSourceImage class="trackImage scaleClickFeedback" :urls="track.imageUrls"
           @click.stop="handleClickOnTrackImage(track)" />
         <div class="namesColumn">
-          <TrackName :track="track" />
+          <TrackName :track="track" :hoverAnimation="true" />
           <ClickableArtistsNames :artistsIdsNames="track.artists" />
         </div>
         <p>{{ formatDuration(track.duration) }} </p>
