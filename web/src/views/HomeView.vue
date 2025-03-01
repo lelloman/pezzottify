@@ -7,9 +7,9 @@
     <template v-else>
       <TopBar @search="handleSearch" :initialQuery="searchQuery" />
       <div class="centralPanel">
-        <UserContentSideBar :items="sidebarItems" @select-item="handleSelect" />
+        <UserContentSideBar :items="sidebarItems" @select-item="handleSelect" class="sideBar userContentSideBar" />
         <MainContent :search-query="searchQuery" />
-        <CurrentPlayingSideBar />
+        <CurrentPlayingSideBar class="sideBar currentPlayingSideBar" />
       </div>
       <BottomPlayer />
     </template>
@@ -82,6 +82,28 @@ body {
   height: 100%;
   overflow: hidden;
   text-align: left !important;
+}
+
+.sideBar {
+  min-width: 200px;
+  max-width: 600px;
+  width: 20%;
+}
+
+.userContentSideBar {
+  display: flex;
+  flex-direction: column;
+  margin-left: 16px;
+  margin-bottom: 16px;
+  margin-right: 8px;
+}
+
+.currentPlayingSideBar {
+  overflow-y: auto;
+  overflow-x: hidden;
+  box-sizing: border-box;
+  margin-bottom: 16px;
+  margin-right: 16px;
 }
 
 .loading-container {

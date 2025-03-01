@@ -159,12 +159,16 @@ defineExpose({
 }
 
 .trackNameSpan {
+  width: 0;
   flex: 1;
   size: 14px !important;
+  padding-right: 8px;
 }
 
 .trackArtistsSpan {
   flex: 1;
+  width: 0;
+  padding-right: 8px;
 }
 
 .track-number {

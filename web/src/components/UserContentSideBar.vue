@@ -1,5 +1,5 @@
 <template>
-  <aside class="sidebar panel">
+  <aside class="panel">
     <div class="tabSelectorsContainer">
       <div @click.stop="setAlbumsTab"
         :class="{ 'tabSelector': true, 'scaleClickFeedback': true, 'selectedTab': selectedTab === 'albums' }">
@@ -147,17 +147,6 @@ onMounted(() => {
 </script>
 
 <style scoped>
-.sidebar {
-  display: flex;
-  flex-direction: column;
-  min-width: 200px;
-  width: 20%;
-  max-width: 600px;
-  margin-left: 16px;
-  margin-bottom: 16px;
-  margin-right: 8px;
-}
-
 .tabSelectorsContainer {
   display: flex;
   justify-content: space-around;

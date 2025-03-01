@@ -1,17 +1,19 @@
 <template>
-  <div v-if="panelVisible" class="currentPlayingSideBar panel">
+  <div v-if="panelVisible" class="panel containero">
     <div class="header">
       <h1>Currently Playing</h1>
     </div>
-    <div class="trackRow" v-for="(track, index) in tracks" :class="{ currentlyPlayingRow: index == currentIndex }"
-      :key="index" @click.stop="handleClick(index)" @contextmenu.prevent="openContextMenu($event, track)">
-      <MultiSourceImage class="trackImage scaleClickFeedback" :urls="track.imageUrls"
-        @click.stop="handleClickOnTrackImage(track)" />
-      <div class="namesColumn">
-        <TrackName :track="track" />
-        <ClickableArtistsNames :artistsIdsNames="track.artists" />
+    <div class="trackRowsContainer">
+      <div class="trackRow" v-for="(track, index) in tracks" :class="{ currentlyPlayingRow: index == currentIndex }"
+        :key="index" @click.stop="handleClick(index)" @contextmenu.prevent="openContextMenu($event, track)">
+        <MultiSourceImage class="trackImage scaleClickFeedback" :urls="track.imageUrls"
+          @click.stop="handleClickOnTrackImage(track)" />
+        <div class="namesColumn">
+          <TrackName :track="track" />
+          <ClickableArtistsNames :artistsIdsNames="track.artists" />
+        </div>
+        <p>{{ formatDuration(track.duration) }} </p>
       </div>
-      <p>{{ formatDuration(track.duration) }} </p>
     </div>
 
     <TrackContextMenu ref="trackContextMenuRef" />
@@ -74,24 +76,27 @@ watch(
 </script>
 
 <style scoped>
-.currentPlayingSideBar {
-  overflow-x: hidden;
-  overflow-y: auto;
-  min-width: 200px;
-  width: 20%;
-  max-width: 600px;
-  box-sizing: border-box;
-  margin-left: 8px;
-  margin-bottom: 16px;
-  margin-right: 16px;
+.containero {
+  display: flex;
+  flex-direction: column;
 }
 
 .header {
   padding: 8px 16px;
 }
 
+.trackRowsContainer {
+  display: flex;
+  width: 100%;
+  flex-direction: column;
+  overflow-y: auto;
+  flex: 1;
+}
+
 .trackRow {
   display: flex;
+  width: 100%;
+  flex: 1;
   flex-direction: row;
   cursor: pointer;
   padding: 8px 16px;
@@ -110,6 +115,7 @@ watch(
 
 .namesColumn {
   flex: 1;
+  width: 0;
   display: flex;
   flex-direction: column;
   padding: 0 8px;

@@ -9,7 +9,7 @@
 - Implement User page (profile?)
 - Add a logo with a home link
 - Add admin panel (after user roles)
-- Make user content list items lazily loaded
+- Make all list items lazily loaded (RecyclerView/LazyColumn behavior)
 - ~Make right-click contextual menu for track~
 - ~In Album.vue, make 1 access to data.tracks[trackId] instead of one for each element~
 - ~Make track content page~

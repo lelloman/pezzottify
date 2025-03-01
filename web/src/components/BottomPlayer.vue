@@ -4,7 +4,7 @@
       <MultiSourceImage :urls="imageUrls" alt="Image" class="trackImage scaleClickFeedback"
         @click.stop="handleClickOnAlbumCover" />
       <div class="trackNamesColumn">
-        <TrackName :track="localCurrentTrack" />
+        <TrackName :track="localCurrentTrack" :infiniteAnimation="true" />
         <ClickableArtistsNames :artistsIdsNames="artists" />
       </div>
     </div>
@@ -260,6 +260,7 @@ watch(volume,
 }
 
 .trackInfoRow {
+  width: 0;
   padding: 16px;
   text-align: left;
   flex: 1;
@@ -276,6 +277,7 @@ watch(volume,
 }
 
 .trackNamesColumn {
+  width: 0;
   flex: 1;
   flex-direction: column;
   padding: 16px;
@@ -294,6 +296,7 @@ watch(volume,
 }
 
 .playerControlsColumn {
+  width: 0;
   height: 100%;
   flex: 1;
   display: flex;
@@ -307,6 +310,7 @@ watch(volume,
 
 .playerControlsButtonsRow {
   display: flex;
+  flex: 1;
   flex-direction: row;
   justify-content: center;
   align-items: center;
@@ -329,6 +333,7 @@ watch(volume,
 }
 
 .extraControlsRow {
+  width: 0;
   height: 100%;
   align-content: center;
   flex: 1;
