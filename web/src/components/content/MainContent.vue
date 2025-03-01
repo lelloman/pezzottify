@@ -107,6 +107,5 @@ watch(
   padding: 16px;
   margin-left: 8px;
   margin-right: 16px;
-  margin-bottom: 16px;
 }
 </style>

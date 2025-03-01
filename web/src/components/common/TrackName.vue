@@ -1,5 +1,6 @@
 <template>
-  <SlidingText :infiniteAnimation="props.infiniteAnimation" :data-id="track.id" @click="handleClick">
+  <SlidingText :infiniteAnimation="props.infiniteAnimation" :animateOnHover="props.animateOnHover" :data-id="track.id"
+    @click="handleClick">
     <span class="track-name">{{ sanitizedTrackName }}</span>
   </SlidingText>
 </template>
@@ -15,6 +16,10 @@ const props = defineProps({
     required: true,
   },
   infiniteAnimation: {
+    type: Boolean,
+    default: false,
+  },
+  animateOnHover: {
     type: Boolean,
     default: false,
   },

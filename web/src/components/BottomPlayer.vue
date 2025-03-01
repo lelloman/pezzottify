@@ -301,6 +301,7 @@ watch(volume,
   flex: 1;
   display: flex;
   flex-direction: column;
+  justify-content: center;
 }
 
 .scalingIcon {
@@ -310,6 +311,7 @@ watch(volume,
 
 .playerControlsButtonsRow {
   display: flex;
+  height: 0;
   flex: 1;
   flex-direction: row;
   justify-content: center;
@@ -317,7 +319,7 @@ watch(volume,
 }
 
 .progressControlsRow {
-  flex: 1;
+  height: 0;
   display: flex;
   flex-direction: row;
   align-items: center;

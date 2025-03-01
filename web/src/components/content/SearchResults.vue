@@ -12,7 +12,7 @@
         @click.stop="toggleFilter('track')">Tracks</div>
     </div>
     <div class="searchResultsContainer">
-      <div v-for="(result, index) in results" :key="index">
+      <div v-for="(result, index) in results" :key="index" class="searchResult">
         <AlbumResult v-if="result.type === 'Album'" :result="result" />
         <ArtistResult v-else-if="result.type === 'Artist'" :result="result" />
         <TrackResult v-else-if="result.type === 'Track'" :result="result" />
@@ -122,20 +122,25 @@ watch(route, (newRoute) => {
   transition: scale 0.3s ease, background-color 0.3s ease;
 }
 
+.searchResult {
+  min-width: 300px;
+}
+
 .searchResultsContainer {
   flex: 1;
   display: grid;
   gap: 16px;
   grid-template-columns: repeat(1, 1fr);
+  overflow-x: hidden;
 }
 
-@media (min-width: 1000px) {
+@media (min-width: 1200px) {
   .searchResultsContainer {
     grid-template-columns: repeat(2, 1fr);
   }
 }
 
-@media (min-width: 1500px) {
+@media (min-width: 1600px) {
   .searchResultsContainer {
     grid-template-columns: repeat(3, 1fr);
   }

@@ -1,5 +1,6 @@
 <template>
-  <div class="sliding-container" ref="containerRef" @click.stop="$emit('click')">
+  <div class="sliding-container" ref="containerRef" :style="containerStyle" @click.stop="$emit('click')"
+    @mouseenter="handleHover(true)" @mouseleave="handleHover(false)">
     <!-- Primary slot with conditional styling -->
     <div ref="contentRef" :class="computeContentClasses">
       <p>
@@ -25,20 +26,42 @@ const props = defineProps({
   hoverAnimation: {
     type: Boolean,
     default: false,
+  },
+  scrollSpeed: {
+    type: Number,
+    default: 50, // pixels per second
   }
 });
 
 const containerRef = ref(null);
 const contentRef = ref(null);
 const isOverflowing = ref(false);
+const animationDuration = ref(8); // default duration in seconds
+const isHovering = ref(false); // Track hover state
 
-// Check if content is overflowing
+// Handle mouse hover events
+const handleHover = (hovering) => {
+  isHovering.value = hovering;
+  if (props.hoverAnimation && hovering) {
+    // Force recalculation when hovering starts
+    checkOverflow();
+  }
+};
+
+// Check if content is overflowing and calculate animation duration
 const checkOverflow = async () => {
   await nextTick();
   if (containerRef.value && contentRef.value) {
     const containerWidth = containerRef.value.offsetWidth;
     const contentWidth = contentRef.value.scrollWidth;
     isOverflowing.value = contentWidth > containerWidth;
+
+    // Calculate animation duration based on content width and desired scroll speed
+    // We need to scroll the full content width + gap
+    if (isOverflowing.value) {
+      // Content width + gap, converted to seconds based on scroll speed
+      animationDuration.value = (contentWidth + parseFloat(getComputedStyle(containerRef.value).getPropertyValue('--gap'))) / props.scrollSpeed;
+    }
   }
 };
 
@@ -54,17 +77,24 @@ const debounce = (fn, delay) => {
 // Create debounced version of checkOverflow
 const debouncedCheckOverflow = debounce(checkOverflow, 200);
 
-// Should animate only if infiniteAnimation is true AND content is overflowing
+// Should animate only if animation is enabled
 const shouldAnimate = computed(() => {
-  return (props.infiniteAnimation || props.hoverAnimation) && isOverflowing.value;
+  return isOverflowing.value && (props.infiniteAnimation || (props.hoverAnimation && isHovering.value));
 });
 
 const computeContentClasses = computed(() => {
   return {
-    'animating': props.infiniteAnimation && shouldAnimate.value,
+    'animating': isOverflowing.value && (props.infiniteAnimation || (props.hoverAnimation && isHovering.value)),
     'non-animating': !props.infiniteAnimation && !props.hoverAnimation,
-    'animateOnHover': props.hoverAnimation,
+    'animateOnHover': props.hoverAnimation && !isHovering.value,
+    'hovering': isOverflowing.value && props.hoverAnimation && isHovering.value,
   };
+});
+
+// IMPORTANT CHANGE: Move the animation style to the container level
+// This ensures the CSS variable is available to all child elements including hover states
+const containerStyle = computed(() => {
+  return { '--animation-duration': `${animationDuration.value}s` };
 });
 
 // Check overflow on mount and updates, and set up resize listener
@@ -91,11 +121,13 @@ defineEmits(['click']);
   user-select: none;
   gap: var(--gap);
   width: 100%;
+  --animation-duration: 8s;
+  /* Default, will be overridden by dynamic calculation */
 }
 
 .animating {
   display: flex;
-  animation: scroll 8s linear infinite;
+  animation: scroll var(--animation-duration) linear infinite;
   flex-shrink: 0;
   justify-content: space-around;
   gap: var(--gap);
@@ -129,15 +161,15 @@ defineEmits(['click']);
   white-space: nowrap;
 }
 
-.animateOnHover:hover {
+.hovering {
   display: flex;
-  animation: scroll 8s linear infinite;
+  animation: scroll var(--animation-duration) linear infinite;
   flex-shrink: 0;
   justify-content: space-around;
   gap: var(--gap);
 }
 
-.animateOnHover:hover p {
+.hovering p {
   width: auto;
   overflow: visible;
   text-overflow: clip;

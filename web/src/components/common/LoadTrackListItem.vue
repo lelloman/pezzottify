@@ -6,7 +6,7 @@
       <div class="trackIndexSpan">
         <p>{{ trackNumber }} </p>
       </div>
-      <TrackName :track="track" class="trackNameSpan" />
+      <TrackName :track="track" class="trackNameSpan" :hoverAnimation="true" />
       <div class="trackArtistsSpan">
         <LoadClickableArtistsNames :artistsIds="track.artists_ids" />
       </div>
@@ -162,7 +162,7 @@ defineExpose({
   width: 0;
   flex: 1;
   size: 14px !important;
-  padding-right: 8px;
+  margin-right: 16px;
 }
 
 .trackArtistsSpan {

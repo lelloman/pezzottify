@@ -4,7 +4,7 @@
     <MultiSourceImage :urls="[imageUrl]" alt="Image" class="searchResultImage scaleClickFeedback"
       @click.stop="handleImageClick" />
     <div class="column">
-      <TrackName :track="result" />
+      <TrackName :track="result" class="trackName" :hoverAnimation="true" />
       <ClickableArtistsNames :artistsIdsNames="result.artists_ids_names" />
     </div>
     <h3 class="duration">{{ duration }}</h3>
@@ -69,6 +69,8 @@ const handleImageClick = () => {
   display: flex;
   flex-direction: column;
   flex: 1;
+  width: 0;
+  margin-right: 8px;
 }
 
 .title {
@@ -87,5 +89,10 @@ const handleImageClick = () => {
   text-align: center;
   vertical-align: middle;
   height: 100%;
+}
+
+.trackName {
+  flex: 1;
+  width: 100%;
 }
 </style>

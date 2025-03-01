@@ -94,7 +94,6 @@ body {
   display: flex;
   flex-direction: column;
   margin-left: 16px;
-  margin-bottom: 16px;
   margin-right: 8px;
 }
 
@@ -102,7 +101,6 @@ body {
   overflow-y: auto;
   overflow-x: hidden;
   box-sizing: border-box;
-  margin-bottom: 16px;
   margin-right: 16px;
 }
 
