@@ -65,7 +65,10 @@ export const usePlayerStore = defineStore('player', () => {
       }
     }
   }
-  watch(playlistsHistory, (newPlaylistsHistory) => localStorage.setItem("playlistsHistory", JSON.stringify(newPlaylistsHistory)))
+
+  const savePlaylistHistory = (history) => localStorage.setItem("playlistsHistory", JSON.stringify(history));
+
+  watch(playlistsHistory, (newPlaylistsHistory) => savePlaylistHistory(newPlaylistsHistory));
 
   const savedMuted = localStorage.getItem("muted");
   if (savedMuted === 'true') {
@@ -495,6 +498,64 @@ export const usePlayerStore = defineStore('player', () => {
       }
     }
   }
+
+  const moveTrack = (fromIndex, toIndex) => {
+    if (fromIndex === toIndex) {
+      return;
+    }
+    const newTracks = [...currentPlaylist.value.tracks];
+    const [removedTrack] = newTracks.splice(fromIndex, 1);
+    newTracks.splice(toIndex, 0, removedTrack);
+
+    let pushNewHistory = false;
+    const newPlaylist = {
+      ...currentPlaylist.value,
+      tracks: newTracks,
+    }
+    if (currentPlaylist.value.type === PLAYBACK_CONTEXTS.album) {
+      newPlaylist.type = PLAYBACK_CONTEXTS.userMix;
+      console.log("player moveTrack() changing context type from album to userMix");
+      pushNewHistory = true;
+    }
+
+    if (pushNewHistory) {
+      setNewPlaylingPlaylist(newPlaylist);
+    }
+
+    if (fromIndex === currentTrackIndex.value) {
+      currentTrackIndex.value = toIndex;
+    } else if (fromIndex < currentTrackIndex.value && toIndex >= currentTrackIndex.value) {
+      currentTrackIndex.value -= 1;
+    } else if (fromIndex > currentTrackIndex.value && toIndex <= currentTrackIndex.value) {
+      currentTrackIndex.value += 1;
+    }
+    savePlaylistHistory(playlistsHistory.value);
+  }
+
+  const addTracksToPlaylist = (tracks) => {
+    if (!currentPlaylist.value) {
+      return;
+    }
+    let pushNewHistory = false;
+    const newTracks = [...currentPlaylist.value.tracks, ...tracks];
+    const newPlaylist = {
+      ...currentPlaylist.value,
+      tracks: newTracks,
+    }
+    if (currentPlaylist.value.type === PLAYBACK_CONTEXTS.album) {
+      newPlaylist.type = PLAYBACK_CONTEXTS.userMix;
+      console.log("player addTracksToPlaylist() changing context type from album to userMix");
+      pushNewHistory = true;
+    }
+
+    if (pushNewHistory) {
+      setNewPlaylingPlaylist(newPlaylist);
+    } else {
+      playlistsHistory.value[currentPlaylistIndex.value] = newPlaylist;
+      savePlaylistHistory(playlistsHistory.value);
+    }
+  }
+
   /* ACTIONS */
 
   return {
@@ -526,5 +587,7 @@ export const usePlayerStore = defineStore('player', () => {
     loadTrackIndex,
     goToPreviousPlaylist,
     goToNextPlaylist,
+    moveTrack,
+    addTracksToPlaylist,
   };
 });

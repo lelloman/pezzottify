@@ -10,16 +10,22 @@
       <ChevronRight :class="computeNextPlaylistButtonClasses" @click.stop="seekPlaybackHistory(1)" />
     </div>
     <div class="trackRowsContainer">
-      <div class="trackRow" v-for="(track, index) in tracks" :class="{ currentlyPlayingRow: index == currentIndex }"
-        :key="index" @click.stop="handleClick(index)" @contextmenu.prevent="openContextMenu($event, track)">
-        <MultiSourceImage class="trackImage scaleClickFeedback" :urls="track ? track.imageUrls : []"
-          @click.stop="handleClickOnTrackImage(track)" />
-        <div class="namesColumn">
-          <TrackName v-if="track" :track="track" :hoverAnimation="true" />
-          <ClickableArtistsNames :artistsIdsNames="track ? track.artists : []" />
-        </div>
-        <p>{{ track ? formatDuration(track.duration) : '' }} </p>
-      </div>
+      <VirtualList v-model="tracksVModel" data-key="id" @drop="handleDrop">
+
+        <template v-slot:item="{ record, index, dataKey }">
+          <div :class="{ currentlyPlayingRow: index == currentIndex, trackRow: true }"
+            @contextmenu.prevent="openContextMenu($event, track)" @click.stop="handleClick(index)">
+            <MultiSourceImage class="trackImage scaleClickFeedback" :urls="record ? record.imageUrls : []"
+              @click.stop="handleClickOnTrackImage(record)" />
+            <div class="namesColumn">
+              <TrackName v-if="record" :track="record" :hoverAnimation="true" />
+              <ClickableArtistsNames :artistsIdsNames="record ? record.artists : []" />
+            </div>
+            <p>{{ record ? formatDuration(record.duration) : '' }} </p>
+          </div>
+        </template>
+
+      </VirtualList>
     </div>
 
     <TrackContextMenu ref="trackContextMenuRef" />
@@ -38,9 +44,9 @@ import TrackContextMenu from '@/components/common/contextmenu/TrackContextMenu.v
 import ChevronLeft from '@/components/icons/ChevronLeft.vue';
 import ChevronRight from '@/components/icons/ChevronRight.vue';
 import SlidingText from '@/components/common/SlidingText.vue';
+import VirtualList from 'vue-virtual-draglist';
 
-const panelVisible = computed(() => tracks.value.length);
-const tracks = ref([]);
+const panelVisible = computed(() => tracksVModel.value.length);
 const currentIndex = ref(null);
 const playingContext = ref({
   text: 'Currently Playing'
@@ -48,6 +54,8 @@ const playingContext = ref({
 
 const router = useRouter();
 const player = usePlayerStore();
+
+const tracksVModel = ref([]);
 
 const handleClick = (index) => {
   player.loadTrackIndex(index);
@@ -70,6 +78,13 @@ const seekPlaybackHistory = (direction) => {
     player.goToPreviousPlaylist();
   }
 }
+
+const handleDrop = (event) => {
+  const { newIndex, oldIndex } = event;
+  console.log(event);
+  player.moveTrack(oldIndex, newIndex);
+}
+
 const computeNextPlaylistButtonClasses = computed(() => {
   return {
     playbackHistoryIcon: true,
@@ -109,11 +124,11 @@ watch(
       }
       playingContext.value.text = playingContextText;
 
-      tracks.value = playlist.tracks.map((track) => {
+      tracksVModel.value = playlist.tracks.map((track) => {
         return track;
       });
     } else {
-      tracks.value = [];
+      tracksVModel.value = [];
     }
   },
   { immediate: true }
