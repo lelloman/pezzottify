@@ -7,7 +7,7 @@
     <template v-else>
       <TopBar @search="handleSearch" :initialQuery="searchQuery" />
       <div class="centralPanel">
-        <UserContentSideBar :items="sidebarItems" @select-item="handleSelect" class="sideBar userContentSideBar" />
+        <UserContentSideBar @select-item="handleSelect" class="sideBar userContentSideBar" />
         <MainContent :search-query="searchQuery" />
         <CurrentPlayingSideBar class="sideBar currentPlayingSideBar" />
       </div>

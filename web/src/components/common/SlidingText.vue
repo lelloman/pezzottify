@@ -83,11 +83,17 @@ const shouldAnimate = computed(() => {
 });
 
 const computeContentClasses = computed(() => {
+  const animating = isOverflowing.value && (props.infiniteAnimation || (props.hoverAnimation && isHovering.value));
+  const ellipsisOverflow = !props.infiniteAnimation && !props.hoverAnimation;
+  const animateOnHover = props.hoverAnimation && !isHovering.value;
+  const hovering = isOverflowing.value && props.hoverAnimation && isHovering.value;
+  const base = !(animating || ellipsisOverflow || animateOnHover || hovering);
   return {
-    'animating': isOverflowing.value && (props.infiniteAnimation || (props.hoverAnimation && isHovering.value)),
-    'non-animating': !props.infiniteAnimation && !props.hoverAnimation,
-    'animateOnHover': props.hoverAnimation && !isHovering.value,
-    'hovering': isOverflowing.value && props.hoverAnimation && isHovering.value,
+    'animating': animating,
+    'ellipsis-overflow': ellipsisOverflow,
+    'animateOnHover': animateOnHover,
+    'hovering': hovering,
+    'base': base,
   };
 });
 
@@ -133,7 +139,15 @@ defineEmits(['click']);
   gap: var(--gap);
 }
 
-.non-animating p {
+.base {
+  width: 100%;
+}
+
+.base p {
+  width: 100%;
+}
+
+.ellipsisOverflow p {
   margin: 0;
   overflow: hidden;
   width: 100%;
@@ -141,7 +155,7 @@ defineEmits(['click']);
   white-space: nowrap;
 }
 
-.non-animating {
+.ellipsisOverflow {
   width: 100%;
 }
 

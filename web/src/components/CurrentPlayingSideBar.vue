@@ -2,7 +2,11 @@
   <div v-if="panelVisible" class="panel containero">
     <div class="header">
       <ChevronLeft :class="computePreviousPlaylistButtonClasses" @click.stop="seekPlaybackHistory(-1)" />
-      <h2 class="currePlaylistHeader">Currently Playing</h2>
+      <div class="currentlyPlaylistHeader">
+        <SlidingText class="currePlaylistHeader" :hoverAnimation="true">
+          <span class="currentlyPlayingText"> {{ playingContext.text }}</span>
+        </SlidingText>
+      </div>
       <ChevronRight :class="computeNextPlaylistButtonClasses" @click.stop="seekPlaybackHistory(1)" />
     </div>
     <div class="trackRowsContainer">
@@ -26,17 +30,21 @@ import '@/assets/main.css';
 import { watch, ref, computed } from 'vue';
 import { usePlayerStore } from '@/store/player';
 import { formatDuration } from '@/utils';
-import MultiSourceImage from './common/MultiSourceImage.vue';
-import ClickableArtistsNames from './common/ClickableArtistsNames.vue';
 import { useRouter } from 'vue-router';
-import TrackName from './common/TrackName.vue';
+import MultiSourceImage from '@/components/common/MultiSourceImage.vue';
+import ClickableArtistsNames from '@/components/common/ClickableArtistsNames.vue';
+import TrackName from '@/components/common/TrackName.vue';
 import TrackContextMenu from '@/components/common/contextmenu/TrackContextMenu.vue';
-import ChevronLeft from './icons/ChevronLeft.vue';
-import ChevronRight from './icons/ChevronRight.vue';
+import ChevronLeft from '@/components/icons/ChevronLeft.vue';
+import ChevronRight from '@/components/icons/ChevronRight.vue';
+import SlidingText from '@/components/common/SlidingText.vue';
 
 const panelVisible = computed(() => tracks.value.length);
 const tracks = ref([]);
 const currentIndex = ref(null);
+const playingContext = ref({
+  text: 'Currently Playing'
+});
 
 const router = useRouter();
 const player = usePlayerStore();
@@ -90,6 +98,17 @@ watch(
   () => player.currentPlaylist,
   (playlist) => {
     if (playlist && playlist.tracks) {
+
+      let playingContextText = playlist.type;
+      if (playlist.type == player.PLAYBACK_CONTEXTS.album) {
+        playingContextText = 'Album: ' + playlist.context.name;
+      } else if (playlist.type == player.PLAYBACK_CONTEXTS.userPlaylist) {
+        playingContextText = 'Playlist: ' + playlist.context.name;
+      } else if (playlist.type == player.PLAYBACK_CONTEXTS.userMix) {
+        playingContextText = "Your mix";
+      }
+      playingContext.value.text = playingContextText;
+
       tracks.value = playlist.tracks.map((track) => {
         return track;
       });
@@ -114,11 +133,17 @@ watch(
   flex-direction: row;
 }
 
-.currePlaylistHeader {
+.currentlyPlaylistHeader {
   width: 0;
   flex: 1;
   overflow: hidden;
   text-align: center;
+}
+
+.currentlyPlayingText {
+  font-size: 24px;
+  white-space: nowrap;
+  justify-content: space-around;
 }
 
 .trackRowsContainer {

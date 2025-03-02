@@ -14,7 +14,6 @@ export const useConfigStore = defineStore('config', () => {
   watch(imagesEnabled, (v) => localStorage.setItem("imagesEnabled", v));
   watch(blockHttpCache, (v) => localStorage.setItem("blockHttpCache", v));
   watch(blockRightClick, (v) => localStorage.setItem("blockRightClick", v));
-  watch()
   return {
     imagesEnabled, blockHttpCache, blockRightClick
   };

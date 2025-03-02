@@ -107,6 +107,13 @@ export const usePlayerStore = defineStore('player', () => {
   /* ACTIONS */
   const formatTrackUrl = (trackId) => "/v1/content/stream/" + trackId;
 
+  const PLAYBACK_CONTEXTS = {
+    album: "ALBUM",
+    userPlaylist: "USER_PLAYLIST",
+    userMix: "USER_MIX",
+  };
+
+  /* Playlist creation */
   const makePlaylistFromResolvedAlbumResponse = (response) => {
     const albumImageUrls = chooseAlbumCoverImageUrl(response.album);
     const allTracks = response.album.discs.flatMap(disc => disc.tracks).map((trackId) => {
@@ -124,11 +131,12 @@ export const usePlayerStore = defineStore('player', () => {
     });
 
     return {
-      album: {
+      context: {
         name: response.album.name,
         id: response.album.id,
       },
       tracks: allTracks,
+      type: PLAYBACK_CONTEXTS.album,
     }
   }
 
@@ -147,14 +155,15 @@ export const usePlayerStore = defineStore('player', () => {
       }
     });
     return {
-      album: playlist,
+      context: playlist,
       tracks: tracks,
+      type: PLAYBACK_CONTEXTS.userPlaylist,
     };
   }
 
   const makePlaylistFromTrack = (quakTrack) => {
     return {
-      album: null,
+      context: null,
       tracks: [
         {
           id: quakTrack.id,
@@ -165,20 +174,11 @@ export const usePlayerStore = defineStore('player', () => {
           duration: quakTrack.duration,
           albumId: quakTrack.album_id,
         }
-      ]
+      ],
+      type: PLAYBACK_CONTEXTS.userMix,
     };
   }
-
-  const findTrackIndex = (album, discIndex, trackIndex) => {
-    let previousDiscsTracks = 0;
-    if (discIndex > 0) {
-      for (let i = 0; i < discIndex; i++) {
-        previousDiscsTracks += album.discs[i].tracks.length;
-      }
-      album.discs.map((disc) => disc.tracks.length).slice(0, discIndex - 1)
-    }
-    return trackIndex + previousDiscsTracks;
-  }
+  /* Playlist creation */
 
   const setNewPlaylingPlaylist = (newPlaylist) => {
     pendingPercentSeek = null;
@@ -199,6 +199,17 @@ export const usePlayerStore = defineStore('player', () => {
     playlistsHistory.value = newHistory;
     currentPlaylistIndex.value = newHistory.length - 1;
   };
+
+  const findTrackIndex = (album, discIndex, trackIndex) => {
+    let previousDiscsTracks = 0;
+    if (discIndex > 0) {
+      for (let i = 0; i < discIndex; i++) {
+        previousDiscsTracks += album.discs[i].tracks.length;
+      }
+      album.discs.map((disc) => disc.tracks.length).slice(0, discIndex - 1)
+    }
+    return trackIndex + previousDiscsTracks;
+  }
 
   const setResolvedAlbum = (data, discIndex, trackIndex) => {
     console.log("player.setResolvedAlbum() data:");
@@ -497,6 +508,7 @@ export const usePlayerStore = defineStore('player', () => {
     muted,
     canGoToPreviousPlaylist,
     canGoToNextPlaylist,
+    PLAYBACK_CONTEXTS,
     setTrack,
     setPlaylist,
     setResolvedAlbum,

@@ -17,7 +17,7 @@
       <div class="tracksSection">
         <div v-for="(trackId, trackIndex) in playlist.tracks" :key="trackIndex + trackId" class="track"
           @contextmenu.prevent="openTrackContextMenu($event, track)">
-          <LoadTrackListItem :trackId="trackId" :trackNumber="trackIndex + 1" @track-selected="handleTrackSelection" />
+          <LoadTrackListItem :trackId="trackId" :trackNumber="trackIndex + 1" @track-clicked="handleTrackSelection" />
         </div>
       </div>
     </div>
@@ -110,6 +110,10 @@ const handleClickOnPlay = () => {
 const handleClickOnDelete = () => {
   console.log('Delete playlist:', props.playlistId);
   deleteConfirmationDialogOpen.value = true;
+};
+
+const handleTrackSelection = (track) => {
+  console.log('Selected track:', track);
 };
 
 watch(
