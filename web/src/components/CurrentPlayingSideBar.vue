@@ -1,7 +1,9 @@
 <template>
   <div v-if="panelVisible" class="panel containero">
     <div class="header">
-      <h1>Currently Playing</h1>
+      <ChevronLeft :class="computePreviousPlaylistButtonClasses" @click.stop="seekPlaybackHistory(-1)" />
+      <h2 class="currePlaylistHeader">Currently Playing</h2>
+      <ChevronRight :class="computeNextPlaylistButtonClasses" @click.stop="seekPlaybackHistory(1)" />
     </div>
     <div class="trackRowsContainer">
       <div class="trackRow" v-for="(track, index) in tracks" :class="{ currentlyPlayingRow: index == currentIndex }"
@@ -29,6 +31,8 @@ import ClickableArtistsNames from './common/ClickableArtistsNames.vue';
 import { useRouter } from 'vue-router';
 import TrackName from './common/TrackName.vue';
 import TrackContextMenu from '@/components/common/contextmenu/TrackContextMenu.vue';
+import ChevronLeft from './icons/ChevronLeft.vue';
+import ChevronRight from './icons/ChevronRight.vue';
 
 const panelVisible = computed(() => tracks.value.length);
 const tracks = ref([]);
@@ -51,6 +55,29 @@ const openContextMenu = (event, track) => {
   trackContextMenuRef.value.openMenu(event, track);
 }
 
+const seekPlaybackHistory = (direction) => {
+  if (direction == 1) {
+    player.goToNextPlaylist();
+  } else {
+    player.goToPreviousPlaylist();
+  }
+}
+const computeNextPlaylistButtonClasses = computed(() => {
+  return {
+    playbackHistoryIcon: true,
+    scaleClickFeedback: player.canGoToNextPlaylist,
+    disabledPlaybackHistoryButton: !player.canGoToNextPlaylist,
+  }
+});
+
+const computePreviousPlaylistButtonClasses = computed(() => {
+  return {
+    playbackHistoryIcon: true,
+    scaleClickFeedback: player.canGoToPreviousPlaylist,
+    disabledPlaybackHistoryButton: !player.canGoToPreviousPlaylist,
+  }
+});
+
 watch(
   () => player.currentTrackIndex,
   (index) => {
@@ -60,7 +87,7 @@ watch(
 )
 
 watch(
-  () => player.playlist,
+  () => player.currentPlaylist,
   (playlist) => {
     if (playlist && playlist.tracks) {
       tracks.value = playlist.tracks.map((track) => {
@@ -83,6 +110,15 @@ watch(
 
 .header {
   padding: 8px 16px;
+  display: flex;
+  flex-direction: row;
+}
+
+.currePlaylistHeader {
+  width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-align: center;
 }
 
 .trackRowsContainer {
@@ -91,6 +127,16 @@ watch(
   flex-direction: column;
   overflow-y: auto;
   flex: 1;
+}
+
+.playbackHistoryIcon {
+  fill: white;
+  height: 32px;
+  width: 32px;
+}
+
+.disabledPlaybackHistoryButton {
+  opacity: 0.5;
 }
 
 .trackRow {

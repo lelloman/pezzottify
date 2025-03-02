@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia';
-import { ref, watch } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { Howl } from 'howler';
 import { formatImageUrl, chooseAlbumCoverImageUrl } from '@/utils';
 import { useRemoteStore } from './remote';
@@ -8,7 +8,10 @@ export const usePlayerStore = defineStore('player', () => {
   const remoteStore = useRemoteStore();
 
   /* PROPS */
-  const playlist = ref(null);
+  const MAX_PLAYLISTS_HISTORY = 20;
+  const playlistsHistory = ref(null);
+  const currentPlaylistIndex = ref(null);
+
   const currentTrackIndex = ref(null);
   const currentTrack = ref(null);
   const isPlaying = ref(false);
@@ -19,20 +22,34 @@ export const usePlayerStore = defineStore('player', () => {
 
   let sound = null;
   let pendingPercentSeek = null;
+
+  const currentPlaylist = computed(() => {
+    if (currentPlaylistIndex.value !== null) {
+      return playlistsHistory.value[currentPlaylistIndex.value];
+    }
+    return null;
+  });
+
+  const canGoToPreviousPlaylist = computed(() => currentPlaylistIndex.value > 0);
+  const canGoToNextPlaylist = computed(() => currentPlaylistIndex.value < (playlistsHistory.value.length - 1));
   /* PROPS */
 
   /* PERSISTENCE */
-  const savedPlaylist = localStorage.getItem("playlist");
-  if (savedPlaylist) {
-    playlist.value = JSON.parse(savedPlaylist);
-    if (playlist.value) {
+  const savedPlaylistsHistory = localStorage.getItem("playlistsHistory");
+  if (savedPlaylistsHistory) {
+    playlistsHistory.value = JSON.parse(savedPlaylistsHistory);
+    if (playlistsHistory.value) {
+
+      const savedCurrentPlaylistIndex = localStorage.getItem("currentPlaylistIndex") || playlistsHistory.value.length - 1;
+      currentPlaylistIndex.value = Number.parseInt(savedCurrentPlaylistIndex);
+
       const loadedTrackIndex = localStorage.getItem("currentTrackIndex");
       if (loadedTrackIndex) {
         const indexValue = Number.parseInt(loadedTrackIndex);
         console.log("Loaded currenTrackIndex " + indexValue);
-        if (Number.isInteger(indexValue) && !Number.isNaN(indexValue) && indexValue >= 0 && indexValue < playlist.value.tracks.length) {
+        if (Number.isInteger(indexValue) && !Number.isNaN(indexValue) && indexValue >= 0 && indexValue < currentPlaylist.value.tracks.length) {
           currentTrackIndex.value = indexValue;
-          currentTrack.value = playlist.value.tracks[indexValue]
+          currentTrack.value = currentPlaylist.value.tracks[indexValue]
         }
       }
       const savedPercent = Number.parseFloat(localStorage.getItem("progressPercent"));
@@ -48,7 +65,7 @@ export const usePlayerStore = defineStore('player', () => {
       }
     }
   }
-  watch(playlist, (newPlaylist) => localStorage.setItem("playlist", JSON.stringify(newPlaylist)))
+  watch(playlistsHistory, (newPlaylistsHistory) => localStorage.setItem("playlistsHistory", JSON.stringify(newPlaylistsHistory)))
 
   const savedMuted = localStorage.getItem("muted");
   if (savedMuted === 'true') {
@@ -163,13 +180,33 @@ export const usePlayerStore = defineStore('player', () => {
     return trackIndex + previousDiscsTracks;
   }
 
+  const setNewPlaylingPlaylist = (newPlaylist) => {
+    pendingPercentSeek = null;
+    let newHistory;
+
+    if (playlistsHistory.value && currentPlaylistIndex.value !== null && currentPlaylistIndex.value < playlistsHistory.value.length - 1) {
+      // If we're not at the end of history, remove all future playlists
+      newHistory = [...playlistsHistory.value.slice(0, currentPlaylistIndex.value + 1), newPlaylist];
+    } else {
+      // Otherwise, just append normally
+      newHistory = [...(playlistsHistory.value || []), newPlaylist];
+    }
+
+    if (newHistory.length > MAX_PLAYLISTS_HISTORY) {
+      newHistory = newHistory.slice(newHistory.length - MAX_PLAYLISTS_HISTORY);
+    }
+
+    playlistsHistory.value = newHistory;
+    currentPlaylistIndex.value = newHistory.length - 1;
+  };
+
   const setResolvedAlbum = (data, discIndex, trackIndex) => {
     console.log("player.setResolvedAlbum() data:");
     console.log(data);
     pendingPercentSeek = null;
-    if (!playlist.value || !playlist.value.album || playlist.value.album.id != data.album.id) {
+    if (!currentPlaylist.value || !currentPlaylist.value.album || currentPlaylist.value.album.id != data.album.id) {
       const albumPlaylist = makePlaylistFromResolvedAlbumResponse(data);
-      playlist.value = albumPlaylist;
+      setNewPlaylingPlaylist(albumPlaylist);
     }
     if (Number.isInteger(discIndex) && Number.isInteger(trackIndex)) {
       const desiredTrackIndex = findTrackIndex(data.album, discIndex, trackIndex);
@@ -185,8 +222,7 @@ export const usePlayerStore = defineStore('player', () => {
       const albumData = await remoteStore.fetchResolvedAlbum(albumId);
       if (albumData) {
         const albumPlaylist = makePlaylistFromResolvedAlbumResponse(albumData);
-        playlist.value = albumPlaylist;
-        pendingPercentSeek = null;
+        setNewPlaylingPlaylist(albumPlaylist);
         loadTrack(0);
         play();
       }
@@ -199,8 +235,7 @@ export const usePlayerStore = defineStore('player', () => {
     const trackPlaylist = makePlaylistFromTrack(newTrack)
     console.log("PlayerStore setTrack:");
     console.log(trackPlaylist);
-    playlist.value = trackPlaylist;
-    pendingPercentSeek = null;
+    setNewPlaylingPlaylist(trackPlaylist);
     loadTrack(0);
     play();
   };
@@ -221,10 +256,8 @@ export const usePlayerStore = defineStore('player', () => {
     const waitedTracks = await Promise.all(resolvedTracks);
     console.log("resolved tracks:");
     console.log(waitedTracks);
-    playlist.value = makePlaylistFromResolvedTracksAndPlaylist(waitedTracks, newPlaylist);
-    console.log("player new playlist set:");
-    console.log(playlist.value);
-    pendingPercentSeek = null;
+    const userPlaylistPlaylist = makePlaylistFromResolvedTracksAndPlaylist(waitedTracks, newPlaylist);
+    setNewPlaylingPlaylist(userPlaylistPlaylist);
     loadTrack(0);
     play();
   }
@@ -237,8 +270,8 @@ export const usePlayerStore = defineStore('player', () => {
 
     currentTrackIndex.value = index;
     console.log("loadTrack() playlist:");
-    console.log(playlist);
-    const track = playlist.value.tracks[index]
+    console.log(currentPlaylist.value);
+    const track = currentPlaylist.value.tracks[index]
     currentTrack.value = track;
     sound = new Howl({
       src: [track.url],
@@ -295,7 +328,7 @@ export const usePlayerStore = defineStore('player', () => {
 
   const skipNextTrack = () => {
     let nextIndex = currentTrackIndex.value + 1;
-    if (nextIndex >= playlist.value.tracks.length) {
+    if (nextIndex >= currentPlaylist.value.tracks.length) {
       if (sound) {
         sound.unload();
       }
@@ -402,8 +435,10 @@ export const usePlayerStore = defineStore('player', () => {
     progressPercent.value = 0.0;
     progressSec.value = 0;
     currentTrack.value = null;
-    playlist.value = null;
+    pendingPercentSeek = null;
     currentTrackIndex.value = null;
+    currentPlaylistIndex.value = null
+    playlistsHistory.value = [];
   }
 
   const setVolume = (newVolume) => {
@@ -422,9 +457,28 @@ export const usePlayerStore = defineStore('player', () => {
 
   const loadTrackIndex = (index) => {
     pendingPercentSeek = null;
-    if (playlist.value.tracks.length && index >= 0 && index < playlist.value.tracks.length) {
+    if (currentPlaylist.value.tracks.length && index >= 0 && index < currentPlaylist.value.tracks.length) {
       currentTrackIndex.value = index;
       loadTrack(index);
+      if (isPlaying.value) {
+        play();
+      }
+    }
+  }
+
+  const goToPreviousPlaylist = () => {
+    if (canGoToPreviousPlaylist.value) {
+      currentPlaylistIndex.value -= 1;
+      loadTrack(0);
+      if (isPlaying.value) {
+        play();
+      }
+    }
+  }
+  const goToNextPlaylist = () => {
+    if (canGoToNextPlaylist.value) {
+      currentPlaylistIndex.value += 1;
+      loadTrack(0);
       if (isPlaying.value) {
         play();
       }
@@ -433,7 +487,7 @@ export const usePlayerStore = defineStore('player', () => {
   /* ACTIONS */
 
   return {
-    playlist,
+    currentPlaylist,
     currentTrackIndex,
     currentTrack,
     isPlaying,
@@ -441,6 +495,8 @@ export const usePlayerStore = defineStore('player', () => {
     progressSec,
     volume,
     muted,
+    canGoToPreviousPlaylist,
+    canGoToNextPlaylist,
     setTrack,
     setPlaylist,
     setResolvedAlbum,
@@ -456,5 +512,7 @@ export const usePlayerStore = defineStore('player', () => {
     setVolume,
     setMuted,
     loadTrackIndex,
+    goToPreviousPlaylist,
+    goToNextPlaylist,
   };
 });

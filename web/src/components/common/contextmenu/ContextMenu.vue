@@ -8,7 +8,7 @@
 
       <span>{{ item.name }}</span>
 
-      <ChevronRight v-if="item.subMenu" class="smallIcon" />
+      <ChevronRight v-if="item.subMenu" class="smallIcon" style="fill: #eee;" />
 
       <div v-if="isSubMenuOpen && currentSubMenu === item" class="subMenu"
         :style="{ top: `${subMenuY}px`, left: `${subMenuX}px` }">

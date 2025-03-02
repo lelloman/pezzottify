@@ -2,14 +2,14 @@
 ## [web]
 - Make right-click contextual menu for albums and artists (after user playlists) 
 - Make left and right panel collapsable
-- T Y P E S C R I P T?????
 - Make titles and texts on single line and sliding if too long
 - Use a logger instead console.logging all over the place
-- Implement UNDO or history for playback playlists
 - Implement User page (profile?)
 - Add a logo with a home link
 - Add admin panel (after user roles)
 - Make all list items lazily loaded (RecyclerView/LazyColumn behavior)
+- Add current playing context (as in Album, Playlist, User's mix) 
+- ~Implement UNDO or history for playback playlists~
 - ~Make right-click contextual menu for track~
 - ~In Album.vue, make 1 access to data.tracks[trackId] instead of one for each element~
 - ~Make track content page~
