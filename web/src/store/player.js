@@ -8,10 +8,7 @@ export const usePlayerStore = defineStore('player', () => {
   const remoteStore = useRemoteStore();
 
   /* PROPS */
-  const playlist = ref({
-    album: null,
-    tracks: [],
-  });
+  const playlist = ref(null);
   const currentTrackIndex = ref(null);
   const currentTrack = ref(null);
   const isPlaying = ref(false);
@@ -28,25 +25,27 @@ export const usePlayerStore = defineStore('player', () => {
   const savedPlaylist = localStorage.getItem("playlist");
   if (savedPlaylist) {
     playlist.value = JSON.parse(savedPlaylist);
-    const loadedTrackIndex = localStorage.getItem("currentTrackIndex");
-    if (loadedTrackIndex) {
-      const indexValue = Number.parseInt(loadedTrackIndex);
-      console.log("Loaded currenTrackIndex " + indexValue);
-      if (!Number.isNaN(indexValue) && indexValue >= 0 && indexValue < playlist.value.tracks.length) {
-        currentTrackIndex.value = indexValue;
-        currentTrack.value = playlist.value.tracks[indexValue]
+    if (playlist.value) {
+      const loadedTrackIndex = localStorage.getItem("currentTrackIndex");
+      if (loadedTrackIndex) {
+        const indexValue = Number.parseInt(loadedTrackIndex);
+        console.log("Loaded currenTrackIndex " + indexValue);
+        if (Number.isInteger(indexValue) && !Number.isNaN(indexValue) && indexValue >= 0 && indexValue < playlist.value.tracks.length) {
+          currentTrackIndex.value = indexValue;
+          currentTrack.value = playlist.value.tracks[indexValue]
+        }
       }
-    }
-    const savedPercent = Number.parseFloat(localStorage.getItem("progressPercent"));
-    console.log("loaded savedPercent " + savedPercent);
-    if (!Number.isNaN(savedPercent) && savedPercent >= 0.0 && savedPercent <= 1.0) {
-      pendingPercentSeek = savedPercent;
-      progressPercent.value = savedPercent;
-      console.log("seeking saved percent");
-    }
-    const savedSec = Number.parseFloat(localStorage.getItem("progressSec"));
-    if (!Number.isNaN(savedSec)) {
-      progressSec.value = savedSec;
+      const savedPercent = Number.parseFloat(localStorage.getItem("progressPercent"));
+      console.log("loaded savedPercent " + savedPercent);
+      if (!Number.isNaN(savedPercent) && savedPercent >= 0.0 && savedPercent <= 1.0) {
+        pendingPercentSeek = savedPercent;
+        progressPercent.value = savedPercent;
+        console.log("seeking saved percent");
+      }
+      const savedSec = Number.parseFloat(localStorage.getItem("progressSec"));
+      if (!Number.isNaN(savedSec)) {
+        progressSec.value = savedSec;
+      }
     }
   }
   watch(playlist, (newPlaylist) => localStorage.setItem("playlist", JSON.stringify(newPlaylist)))
@@ -168,7 +167,7 @@ export const usePlayerStore = defineStore('player', () => {
     console.log("player.setResolvedAlbum() data:");
     console.log(data);
     pendingPercentSeek = null;
-    if (!playlist.value.album || playlist.value.album.id != data.album.id) {
+    if (!playlist.value || !playlist.value.album || playlist.value.album.id != data.album.id) {
       const albumPlaylist = makePlaylistFromResolvedAlbumResponse(data);
       playlist.value = albumPlaylist;
     }
@@ -403,7 +402,8 @@ export const usePlayerStore = defineStore('player', () => {
     progressPercent.value = 0.0;
     progressSec.value = 0;
     currentTrack.value = null;
-    playlist.value = { album: null, tracks: [] };
+    playlist.value = null;
+    currentTrackIndex.value = null;
   }
 
   const setVolume = (newVolume) => {
