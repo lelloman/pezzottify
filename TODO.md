@@ -1,5 +1,6 @@
 
 ## [web]
+- Implement a Toast/Snackbar like messages visualization component
 - Make right-click contextual menu for albums and artists (after user playlists) 
 - Make left and right panel collapsable
 - Make titles and texts on single line and sliding if too long
@@ -8,7 +9,8 @@
 - Add a logo with a home link
 - Add admin panel (after user roles)
 - Make all list items lazily loaded (RecyclerView/LazyColumn behavior)
-- Add current playing context (as in Album, Playlist, User's mix) 
+- Implement track selection (instead of play command), so that group of tracks can be added/removed
+- ~Add current playing context (as in Album, Playlist, User's mix)~
 - ~Implement UNDO or history for playback playlists~
 - ~Make right-click contextual menu for track~
 - ~In Album.vue, make 1 access to data.tracks[trackId] instead of one for each element~
@@ -29,6 +31,7 @@
 - Verify that all sqlite operations are performed within a transaction
 - Delete cli_search and clean up unused stuff and format and warnings
 - Add more unit tests (expecially to db, like migrations?)
+- Add hard limit for playlist size (150?)
 - ~Add user playlists~
 - ~Make no_checks a cli args rather than build feature~
 - ~Add cache directive to responses~

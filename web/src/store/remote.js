@@ -133,6 +133,18 @@ export const useRemoteStore = defineStore('remote', () => {
     }
   };
 
+  const removeTracksFromPlaylist = async (playlistId, tracksPositions) => {
+    try {
+      await axios.put(`/v1/user/playlist/${playlistId}/remove`, {
+        tracks_positions: tracksPositions
+      });
+      return true;
+    } catch (error) {
+      console.error('Failed to remove tracks from playlist:', error);
+      return false;
+    }
+  }
+
   // Track operations
   const fetchTrackData = async (trackId) => {
     try {
@@ -198,6 +210,7 @@ export const useRemoteStore = defineStore('remote', () => {
     deleteUserPlaylist,
     updatePlaylistName,
     addTracksToPlaylist,
+    removeTracksFromPlaylist,
     fetchTrackData,
     fetchResolvedTrack,
     fetchResolvedAlbum,

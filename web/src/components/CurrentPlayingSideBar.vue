@@ -10,11 +10,11 @@
       <ChevronRight :class="computeNextPlaylistButtonClasses" @click.stop="seekPlaybackHistory(1)" />
     </div>
     <div class="trackRowsContainer">
-      <VirtualList v-model="tracksVModel" data-key="id" @drop="handleDrop">
+      <VirtualList v-model="tracksVModel" data-key="listItemId" @drop="handleDrop">
 
         <template v-slot:item="{ record, index, dataKey }">
           <div :class="{ currentlyPlayingRow: index == currentIndex, trackRow: true }"
-            @contextmenu.prevent="openContextMenu($event, track)" @click.stop="handleClick(index)">
+            @contextmenu.prevent="openContextMenu($event, record, index)" @click.stop="handleClick(index)">
             <MultiSourceImage class="trackImage scaleClickFeedback" :urls="record ? record.imageUrls : []"
               @click.stop="handleClickOnTrackImage(record)" />
             <div class="namesColumn">
@@ -28,7 +28,7 @@
       </VirtualList>
     </div>
 
-    <TrackContextMenu ref="trackContextMenuRef" />
+    <TrackContextMenu ref="trackContextMenuRef" :canRemoveFromQueue="true" />
   </div>
 </template>
 <script setup>
@@ -67,8 +67,9 @@ const handleClickOnTrackImage = (track) => {
 
 const trackContextMenuRef = ref(null);
 
-const openContextMenu = (event, track) => {
-  trackContextMenuRef.value.openMenu(event, track);
+const openContextMenu = (event, track, trackIndex) => {
+  console.log('Open track context menu:', track, trackIndex);
+  trackContextMenuRef.value.openMenu(event, track, trackIndex);
 }
 
 const seekPlaybackHistory = (direction) => {
@@ -124,7 +125,11 @@ watch(
       }
       playingContext.value.text = playingContextText;
 
+      const seenTrackCounter = {};
       tracksVModel.value = playlist.tracks.map((track) => {
+        const seenCount = seenTrackCounter[track.id] || 0;
+        seenTrackCounter[track.id] = seenCount + 1;
+        track.listItemId = track.id + seenCount;
         return track;
       });
     } else {

@@ -1,8 +1,8 @@
 <template>
   <div v-if="isOpen" ref="menu" class="container" :style="{ top: `${adjustedY}px`, left: `${adjustedX}px` }">
-    <div v-for="item in items" :key="item.name" class="contextMenuItem"
+    <div v-for="(item, index) in items" :key="item.name" class="contextMenuItem"
       @mouseenter="item.subMenu && startHoverTimer(item)" @mouseleave="clearHoverTimer"
-      @click.stop="executeItemAction(item)">
+      @click.stop="executeItemAction([index, item])">
 
       <component :is="item.icon" v-if="item.icon" class="smallIcon" style="fill: #ddd" />
 
@@ -12,8 +12,8 @@
 
       <div v-if="isSubMenuOpen && currentSubMenu === item" class="subMenu"
         :style="{ top: `${subMenuY}px`, left: `${subMenuX}px` }">
-        <div class="contextMenuItem" v-for="subItem in item.subMenu()" :key="subItem.name"
-          @click.stop="executeSubItemAction(subItem)">
+        <div class="contextMenuItem" v-for="(subItem, subIndex) in item.subMenu()" :key="subItem.name"
+          @click.stop="executeSubItemAction([index, item], [subIndex, subItem])">
           {{ subItem.name }}
         </div>
       </div>
@@ -42,21 +42,21 @@ const contextData = ref({
 
 const isOpen = computed(() => contextData.value.isOpen);
 
-const executeItemAction = (item) => {
+const executeItemAction = ([index, item]) => {
   const hasSubmenu = item.subMenu !== undefined;
   console.log("Executing item '" + item.name + "' action (hasSubmenu: " + hasSubmenu + ")");
   if (hasSubmenu) return;
 
-  item.action();
+  item.action([index, item]);
   contextData.value.isOpen = false;
 };
 
-const executeSubItemAction = (subItem) => {
+const executeSubItemAction = ([index, item], [subIndex, subItem]) => {
   const hasSubmenu = subItem.subMenu !== undefined;
   console.log("Executing subItem '" + subItem.name + "' action " + (hasSubmenu ? " (hasSubmenu)" : ""));
   if (hasSubmenu) return;
 
-  subItem.action();
+  subItem.action([index, item], [subIndex, subItem]);
   isSubMenuOpen.value = false;
   contextData.value.isOpen = false;
 };

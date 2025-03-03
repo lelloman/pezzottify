@@ -137,6 +137,7 @@ export const usePlayerStore = defineStore('player', () => {
       context: {
         name: response.album.name,
         id: response.album.id,
+        edited: false,
       },
       tracks: allTracks,
       type: PLAYBACK_CONTEXTS.album,
@@ -158,7 +159,7 @@ export const usePlayerStore = defineStore('player', () => {
       }
     });
     return {
-      context: playlist,
+      context: { ...playlist, edited: false },
       tracks: tracks,
       type: PLAYBACK_CONTEXTS.userPlaylist,
     };
@@ -166,7 +167,9 @@ export const usePlayerStore = defineStore('player', () => {
 
   const makePlaylistFromTrack = (quakTrack) => {
     return {
-      context: null,
+      context: {
+        edited: false,
+      },
       tracks: [
         {
           id: quakTrack.id,
@@ -556,6 +559,34 @@ export const usePlayerStore = defineStore('player', () => {
     }
   }
 
+  const removeTrackFromPlaylist = (index) => {
+    console.log("player removeTrackFromPlaylist() index: " + index);
+    if (!currentPlaylist.value) {
+      return;
+    }
+    let pushNewHistory = false;
+    const newTracks = [...currentPlaylist.value.tracks];
+    newTracks.splice(index, 1);
+    const newPlaylist = {
+      ...currentPlaylist.value,
+      tracks: newTracks,
+    }
+    if (currentPlaylist.value.type === PLAYBACK_CONTEXTS.album) {
+      newPlaylist.type = PLAYBACK_CONTEXTS.userMix;
+      console.log("player removeTrackFromPlaylist() changing context type from album to userMix");
+      pushNewHistory = true;
+    } else if (currentPlaylist.value.type == PLAYBACK_CONTEXTS.userPlaylist) {
+      newPlaylist.context.edited = true;
+    }
+
+    if (pushNewHistory) {
+      setNewPlaylingPlaylist(newPlaylist);
+    } else {
+      playlistsHistory.value[currentPlaylistIndex.value] = newPlaylist;
+      savePlaylistHistory(playlistsHistory.value);
+    }
+  }
+
   /* ACTIONS */
 
   return {
@@ -589,5 +620,6 @@ export const usePlayerStore = defineStore('player', () => {
     goToNextPlaylist,
     moveTrack,
     addTracksToPlaylist,
+    removeTrackFromPlaylist,
   };
 });

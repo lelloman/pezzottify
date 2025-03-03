@@ -16,7 +16,7 @@
       </div>
       <div class="tracksSection">
         <div v-for="(trackId, trackIndex) in playlist.tracks" :key="trackIndex + trackId" class="track"
-          @contextmenu.prevent="openTrackContextMenu($event, track)">
+          @contextmenu.prevent="openTrackContextMenu($event, trackId, trackIndex)">
           <LoadTrackListItem :trackId="trackId" :trackNumber="trackIndex + 1" @track-clicked="handleTrackSelection" />
         </div>
       </div>
@@ -46,6 +46,8 @@
 
     </ConfirmationDialog>
   </Transition>
+
+  <TrackContextMenu :contextId="playlistId" :canRemoveFromPlaylist="true" ref="trackContextMenuRef" />
 </template>
 
 <script setup>
@@ -56,8 +58,10 @@ import ConfirmationDialog from '@/components/common/ConfirmationDialog.vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useUserStore } from '@/store/user';
 import EditIcon from '@/components/icons/EditIcon.vue';
-import LoadTrackListItem from '@/components/common/LoadTrackListItem.vue'; import { usePlayerStore } from '@/store/player';
-1
+import LoadTrackListItem from '@/components/common/LoadTrackListItem.vue';
+import { usePlayerStore } from '@/store/player';
+import TrackContextMenu from '@/components/common/contextmenu/TrackContextMenu.vue';
+import { useRemoteStore } from '@/store/remote';
 
 // Define playlistId prop
 const props = defineProps({
@@ -71,10 +75,12 @@ const router = useRouter();
 const route = useRoute();
 const userStore = useUserStore();
 const player = usePlayerStore();
+const remote = useRemoteStore();
 
 const loading = ref(true);
 const error = ref(null);
 const playlistRef = ref(null);
+const trackContextMenuRef = ref(null);
 
 const deleteConfirmationDialogOpen = ref(false);
 const isEditMode = ref(false);
@@ -86,6 +92,13 @@ const handleEditButtonClick = () => {
 const playlist = computed(() => {
   return playlistRef.value?.value;
 });
+
+const openTrackContextMenu = (event, trackId, trackIndex) => {
+  console.log('Open track context menu:', trackId, trackIndex);
+  remote.fetchTrackData(trackId).then((track) => {
+    trackContextMenuRef.value.openMenu(event, track, trackIndex);
+  });
+};
 
 const handleChangeNameButtonClicked = async () => {
   const newName = document.getElementById("editPlaylistNameInput").value;

@@ -171,6 +171,22 @@ export const useUserStore = defineStore('user', () => {
     callback(success);
   }
 
+  const removeTracksFromPlaylist = async (playlistId, tracksPositions, callback) => {
+    const success = await remoteStore.removeTracksFromPlaylist(playlistId, tracksPositions);
+    if (success && playlistsData.value && playlistsData.value.by_id[playlistId]) {
+      const playlist = playlistsData.value.by_id[playlistId];
+
+      const newTracks = [];
+      playlist.tracks.forEach((trackId, index) => {
+        if (!tracksPositions.includes(index)) {
+          newTracks.push(trackId);
+        }
+      });
+      playlist.tracks = newTracks;
+    }
+    callback(success);
+  }
+
   return {
     likedAlbumIds,
     likedArtistsIds,
@@ -185,6 +201,7 @@ export const useUserStore = defineStore('user', () => {
     loadPlaylistData,
     updatePlaylistName,
     addTracksToPlaylist,
+    removeTracksFromPlaylist,
     getPlaylistRef,
     putPlaylistRef,
   };

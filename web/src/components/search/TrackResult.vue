@@ -42,7 +42,7 @@ const router = useRouter();
 
 const trackContextMenuRef = ref(null);
 const openContextMenu = (event, track) => {
-  trackContextMenuRef.value.openMenu(event, track);
+  trackContextMenuRef.value.openMenu(event, track, 0);
 }
 
 const handleTrackClick = (event) => {
