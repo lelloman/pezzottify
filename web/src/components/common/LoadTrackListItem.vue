@@ -76,7 +76,7 @@ const loadTrackData = async () => {
   error.value = null;
 
   try {
-    resolvedData.value = await remoteStore.fetchTrackData(props.trackId);
+    resolvedData.value = await remoteStore.fetchTrack(props.trackId);
     if (!resolvedData.value) {
       error.value = 'Failed to load track data';
     }

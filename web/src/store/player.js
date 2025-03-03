@@ -38,7 +38,7 @@ export const usePlayerStore = defineStore('player', () => {
   const savedPlaylistsHistory = localStorage.getItem("playlistsHistory");
   if (savedPlaylistsHistory) {
     playlistsHistory.value = JSON.parse(savedPlaylistsHistory);
-    if (playlistsHistory.value) {
+    if (playlistsHistory.value && playlistsHistory.value.length > 0) {
 
       const savedCurrentPlaylistIndex = localStorage.getItem("currentPlaylistIndex") || playlistsHistory.value.length - 1;
       currentPlaylistIndex.value = Number.parseInt(savedCurrentPlaylistIndex);

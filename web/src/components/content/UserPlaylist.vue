@@ -95,7 +95,7 @@ const playlist = computed(() => {
 
 const openTrackContextMenu = (event, trackId, trackIndex) => {
   console.log('Open track context menu:', trackId, trackIndex);
-  remote.fetchTrackData(trackId).then((track) => {
+  remote.fetchTrack(trackId).then((track) => {
     trackContextMenuRef.value.openMenu(event, track, trackIndex);
   });
 };

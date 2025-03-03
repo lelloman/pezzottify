@@ -24,9 +24,9 @@ const artistData = ref(null);
 const loading = ref(true);
 const error = ref(null);
 
-const fetchArtistData = async (id) => {
+const fetchArtist = async (id) => {
   try {
-    artistData.value = await remoteStore.fetchArtistData(id);
+    artistData.value = await remoteStore.fetchArtist(id);
     if (!artistData.value) {
       error.value = "Failed to load artist data";
     }
@@ -38,7 +38,7 @@ const fetchArtistData = async (id) => {
 };
 
 onMounted(() => {
-  fetchArtistData(props.artistId);
+  fetchArtist(props.artistId);
 });
 
 </script>

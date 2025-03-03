@@ -146,7 +146,7 @@ export const useRemoteStore = defineStore('remote', () => {
   }
 
   // Track operations
-  const fetchTrackData = async (trackId) => {
+  const fetchTrack = async (trackId) => {
     try {
       const response = await axios.get(`/v1/content/track/${trackId}`);
       return response.data;
@@ -177,8 +177,18 @@ export const useRemoteStore = defineStore('remote', () => {
     }
   };
 
+  const fetchAlbum = async (albumId) => {
+    try {
+      const response = await axios.get(`/v1/content/album/${albumId}`);
+      return response.data;
+    } catch (error) {
+      console.error('Error fetching album data:', error);
+      return null;
+    }
+  };
+
   // Artist operations
-  const fetchArtistData = async (artistId) => {
+  const fetchArtist = async (artistId) => {
     try {
       const response = await axios.get(`/v1/content/artist/${artistId}`);
       return response.data;
@@ -211,10 +221,11 @@ export const useRemoteStore = defineStore('remote', () => {
     updatePlaylistName,
     addTracksToPlaylist,
     removeTracksFromPlaylist,
-    fetchTrackData,
+    fetchTrack,
     fetchResolvedTrack,
     fetchResolvedAlbum,
-    fetchArtistData,
+    fetchAlbum,
+    fetchArtist,
     fetchArtistAlbums,
   };
 });

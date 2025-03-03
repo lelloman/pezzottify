@@ -26,7 +26,7 @@ const artistsIdsNames = ref(null);
 onMounted(async () => {
   isLoading.value = true;
   const artistsPromises = props.artistsIds.map(async (artistId) => {
-    const response = await remoteStore.fetchArtistData(artistId);
+    const response = await remoteStore.fetchArtist(artistId);
     return [artistId, response.name];
   });
   console.log("LoadClickableArtistsName starting to wait...");

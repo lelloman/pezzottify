@@ -49,7 +49,7 @@ const remoteStore = useRemoteStore();
 const fetchData = async (id) => {
   if (!id) return;
   data.value = null;
-  data.value = await remoteStore.fetchArtistData(id);
+  data.value = await remoteStore.fetchArtist(id);
 };
 
 watch([() => userStore.likedArtistsIds, data],

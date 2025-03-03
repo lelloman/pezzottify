@@ -9,7 +9,7 @@
       <div class="centralPanel">
         <UserContentSideBar @select-item="handleSelect" class="sideBar userContentSideBar" />
         <MainContent :search-query="searchQuery" />
-        <CurrentPlayingSideBar class="sideBar currentPlayingSideBar" />
+        <CurrentlyPlayingSideBar class="sideBar currentlyPlayingSideBar" />
       </div>
       <BottomPlayer />
     </template>
@@ -24,7 +24,7 @@ import MainContent from '@/components/content/MainContent.vue';
 import BottomPlayer from '@/components/BottomPlayer.vue';
 import { useRoute } from 'vue-router';
 import UserContentSideBar from '@/components/UserContentSideBar.vue';
-import CurrentPlayingSideBar from '@/components/CurrentPlayingSideBar.vue';
+import CurrentlyPlayingSideBar from '@/components/CurrentlyPlayingSideBar.vue';
 import { useUserStore } from '@/store/user';
 
 // Access the user store
@@ -97,7 +97,7 @@ body {
   margin-right: 8px;
 }
 
-.currentPlayingSideBar {
+.currentlyPlayingSideBar {
   overflow-y: auto;
   overflow-x: hidden;
   box-sizing: border-box;
