@@ -81,6 +81,11 @@ struct AddTracksToPlaylistBody {
     pub tracks_ids: Vec<String>,
 }
 
+#[derive(Deserialize, Debug)]
+struct RemoveTracksFromPlaylist {
+    pub tracks_positions: Vec<usize>,
+}
+
 async fn home(session: Option<Session>, State(state): State<ServerState>) -> impl IntoResponse {
     let stats = ServerStats {
         uptime: format_uptime(state.start_time.elapsed()),
@@ -326,6 +331,22 @@ async fn add_playlist_tracks(
     }
 }
 
+async fn remove_tracks_from_playlist(
+    session: Session,
+    State(user_manager): State<GuardedUserManager>,
+    Path(id): Path<String>,
+    Json(body): Json<RemoveTracksFromPlaylist>,
+) -> Response {
+    match user_manager.lock().unwrap().remove_tracks_from_playlist(
+        &id,
+        session.user_id,
+        body.tracks_positions,
+    ) {
+        Ok(_) => StatusCode::OK.into_response(),
+        Err(_) => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+    }
+}
+
 async fn get_user_playlists(
     session: Session,
     State(user_manager): State<GuardedUserManager>,
@@ -469,6 +490,7 @@ fn make_app(
         .route("/playlist/{id}", delete(delete_playlist))
         .route("/playlist/{id}", get(get_playlist))
         .route("/playlist/{id}/add", put(add_playlist_tracks))
+        .route("/playlist/{id}/remove", put(remove_tracks_from_playlist))
         .route("/playlists", get(get_user_playlists))
         .with_state(state.clone());
 

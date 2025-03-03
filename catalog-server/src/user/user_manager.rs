@@ -263,4 +263,33 @@ impl UserManager {
         new_tracks.extend(track_ids);
         self.update_user_playlist(playlist_id, user_id, None, Some(new_tracks))
     }
+
+    pub fn remove_tracks_from_playlist(
+        &self,
+        playlist_id: &str,
+        user_id: usize,
+        tracks_positions: Vec<usize>,
+    ) -> Result<()> {
+        let playlist = self
+            .user_store
+            .lock()
+            .unwrap()
+            .get_user_playlist(playlist_id, user_id)?;
+
+        if playlist.user_id != user_id {
+            bail!(
+                "User {} is not the owner of playlist {}.",
+                user_id,
+                playlist_id
+            );
+        }
+
+        let mut new_tracks: Vec<String> = vec![];
+        for (i, track_id) in playlist.tracks.iter().enumerate() {
+            if !tracks_positions.contains(&i) {
+                new_tracks.push(track_id.clone());
+            }
+        }
+        self.update_user_playlist(playlist_id, user_id, None, Some(new_tracks))
+    }
 }
