@@ -17,7 +17,8 @@
       <div class="tracksSection">
         <div v-for="(trackId, trackIndex) in playlist.tracks" :key="trackIndex + trackId" class="track"
           @contextmenu.prevent="openTrackContextMenu($event, trackId, trackIndex)">
-          <LoadTrackListItem :trackId="trackId" :trackNumber="trackIndex + 1" @track-clicked="handleTrackSelection" />
+          <LoadTrackListItem :contextId="playlistId" :trackId="trackId" :trackNumber="trackIndex + 1"
+            @track-clicked="handleTrackSelection" />
         </div>
       </div>
     </div>
@@ -60,8 +61,8 @@ import { useUserStore } from '@/store/user';
 import EditIcon from '@/components/icons/EditIcon.vue';
 import LoadTrackListItem from '@/components/common/LoadTrackListItem.vue';
 import { usePlayerStore } from '@/store/player';
+import { useStaticsStore } from '@/store/statics';
 import TrackContextMenu from '@/components/common/contextmenu/TrackContextMenu.vue';
-import { useRemoteStore } from '@/store/remote';
 
 // Define playlistId prop
 const props = defineProps({
@@ -75,7 +76,7 @@ const router = useRouter();
 const route = useRoute();
 const userStore = useUserStore();
 const player = usePlayerStore();
-const remote = useRemoteStore();
+const staticsStore = useStaticsStore();
 
 const loading = ref(true);
 const error = ref(null);
@@ -95,9 +96,10 @@ const playlist = computed(() => {
 
 const openTrackContextMenu = (event, trackId, trackIndex) => {
   console.log('Open track context menu:', trackId, trackIndex);
-  remote.fetchTrack(trackId).then((track) => {
-    trackContextMenuRef.value.openMenu(event, track, trackIndex);
-  });
+  const trackData = staticsStore.getTrackData(trackId)
+  if (trackData) {
+    trackContextMenuRef.value.openMenu(event, trackData, trackIndex);
+  };
 };
 
 const handleChangeNameButtonClicked = async () => {

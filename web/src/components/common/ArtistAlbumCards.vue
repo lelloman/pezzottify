@@ -11,7 +11,7 @@
 </template>
 
 <script setup>
-import { onMounted, ref } from 'vue';
+import { onMounted, watch, ref } from 'vue';
 import AlbumCard from '@/components/common/AlbumCard.vue';
 import { useRemoteStore } from '@/store/remote';
 
@@ -39,7 +39,9 @@ const loadAlbumIds = async (artistId) => {
 };
 
 onMounted(() => {
-  loadAlbumIds(props.artistId);
+  watch(() => props.artistId, () => {
+    loadAlbumIds(props.artistId);
+  }, { immediate: true });
 })
 
 </script>

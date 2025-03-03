@@ -16,6 +16,7 @@ app.use(router)
 
 window.config = useDebugStore();
 const remoteStore = useRemoteStore();
+
 app.mount('#app')
 
 remoteStore.setBlockHttpCache(window.config.blockHttpCache);

@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia';
-import { ref } from 'vue';
+import { reactive, ref } from 'vue';
 import { useRemoteStore } from './remote';
 
 
@@ -19,61 +19,57 @@ export const useStaticsStore = defineStore('statics', () => {
 
   const loadFetchItemFromStorage = (itemType, itemId) => {
     const item = localStorage.getItem(getStoredItemKey(itemType, itemId));
-    console.log(`Loaded ${itemType} ${itemId} from storage`, item);
     if (item) {
       return JSON.parse(item);
     }
     return null;
   }
 
-  const fetchItemFromRemote = async (itemType, itemId) => {
-    let item = null;
+  const fetchItemFromRemote = (itemType, itemId) => {
+    let itemPromise = null;
     if (itemType === 'albums') {
-      item = await remoteStore.fetchAlbum(itemId);
+      itemPromise = remoteStore.fetchAlbum(itemId);
     } else if (itemType === 'artists') {
-      item = await remoteStore.fetchArtist(itemId);
+      itemPromise = remoteStore.fetchArtist(itemId);
     } else if (itemType === 'tracks') {
-      item = await remoteStore.fetchTrack(itemId);
+      itemPromise = remoteStore.fetchTrack(itemId);
     }
-
-    console.log(`Fetched ${itemType} ${itemId}`, item);
-    if (item) {
-      localStorage.setItem(getStoredItemKey(itemType, itemId), JSON.stringify(item));
-    }
+    console.log("staticsStore fetchItemFromRemote itemPromise", itemPromise);
+    const item = Promise.resolve(itemPromise);
+    console.log("staticsStore fetchItemFromRemote item", item);
 
     return item;
   }
 
   const triggerStaticItemFetch = (itemType, itemId) => {
-    statics[itemType][itemId].ref.value.loading = true;
-    let fetchedItem = loadFetchItemFromStorage(itemType, itemId);
-    if (!fetchedItem) {
-      fetchedItem = fetchItemFromRemote(itemType, itemId);
+    const storedItem = loadFetchItemFromStorage(itemType, itemId);
+    if (storedItem) {
+      statics[itemType][itemId].ref.item = storedItem;
+      return;
     }
-
-    if (fetchedItem) {
-      statics[itemType][itemId].ref.value.item = fetchedItem;
-    } else {
-      statics[itemType][itemId].ref.value.error = 'Failed to fetch item';
-    }
-    statics[itemType][itemId].ref.value.loading = false;
+    fetchItemFromRemote(itemType, itemId)
+      .then((fetchedItem) => {
+        localStorage.setItem(getStoredItemKey(itemType, itemId), JSON.stringify(fetchedItem));
+        statics[itemType][itemId].ref.item = fetchedItem;
+      })
+      .catch((e) => {
+        console.log("triggerStaticsItemFetch error:", e);
+        statics[itemType][itemId].ref.error = 'Failed to fetch item';
+      });
   }
 
   const getItem = (type, id) => {
     let entry = statics[type][id];
     if (entry) {
-      console.log("getItem", type, id, "found entry", entry);
-      if (!entry.item && !entry.loading) {
+      if (!entry.item) {
         triggerStaticItemFetch(type, id);
       }
       return entry.ref;
     }
-    console.log("getItem", type, id, "entry not found returning default");
 
     entry = {
       id: id,
-      ref: ref({
-        loading: false,
+      ref: reactive({
         error: null,
         item: null,
       })
@@ -83,6 +79,16 @@ export const useStaticsStore = defineStore('statics', () => {
     return entry.ref;
   }
 
+  const getItemData = (type, id) => {
+    let entry = statics[type][id];
+    if (entry) {
+      return entry.ref.item;
+    }
+    return null;
+  }
+  const getTrackData = (trackId) => {
+    return getItemData('tracks', trackId);
+  }
 
   const getAlbum = (albumId) => {
     return getItem('albums', albumId);
@@ -100,5 +106,6 @@ export const useStaticsStore = defineStore('statics', () => {
     getAlbum,
     getArtist,
     getTrack,
+    getTrackData,
   }
 });

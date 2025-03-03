@@ -5,7 +5,7 @@
       <MultiSourceImage :urls="chooseAlbumCoverImageUrl(album)" class="searchResultImage scaleClickFeedback" />
       <div class="column">
         <h3 class="title">{{ album.name }}</h3>
-        <ClickableArtistsNames v-if="showArtists" class="artistsNames" :artistsIdsNames="artistsIdsNames" />
+        <LoadClickableArtistsNames v-if="showArtists" class="artistsNames" :artistsIds="album.artists_ids" />
       </div>
 
       <PlayIcon class="searchResultPlayIcon scaleClickFeedback bigIcon" :data-id="album.id"
@@ -19,13 +19,13 @@
 import '@/assets/base.css'
 import '@/assets/search.css'
 import '@/assets/icons.css'
-import { ref, onMounted, computed, watch } from 'vue';
+import { ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { chooseAlbumCoverImageUrl } from '@/utils';
 import MultiSourceImage from './MultiSourceImage.vue';
 import PlayIcon from '@/components/icons/PlayIcon.vue';
 import { usePlayerStore } from '@/store/player';
-import ClickableArtistsNames from './ClickableArtistsNames.vue';
+import LoadClickableArtistsNames from '@/components/common/LoadClickableArtistsName.vue';
 import { useStaticsStore } from '@/store/statics';
 
 const router = useRouter();
@@ -46,33 +46,20 @@ const props = defineProps({
 
 const album = ref(null);
 const artistsRefs = ref(null);
-const artistsIdsNames = ref([]);
 const loading = ref(true);
 const error = ref(null);
 
 
-watch(() => staticsStore.getAlbum(props.albumId), (newData) => {
-  console.log("AlbumCard got new AlbumData", newData.value);
-  loading.value = newData.value && newData.value.loading;
-  if (newData.value && typeof newData.value.item === 'object') {
-    artistsRefs.value = newData.value.item.artists_ids.map((artistId) => staticsStore.getArtist(artistId));
-    album.value = newData.value.item;
+watch(staticsStore.getAlbum(props.albumId), (newData) => {
+  loading.value = newData && newData.loading;
+  if (newData && newData.item && typeof newData.item === 'object') {
+    artistsRefs.value = newData.item.artists_ids.map((artistId) => staticsStore.getArtist(artistId));
+    album.value = newData.item;
   }
 }, { immediate: true });
 
-watch(artistsRefs, (newRefs) => {
-  console.log("AlbumCard got new ArtistsRefs", newRefs);
-  if (newRefs) {
-    if (newRefs.every((ref) => typeof ref.value.item === 'object')) {
-      artistsIdsNames.value = newRefs.map((ref) => [ref.value.item.id, ref.value.item.name]);
-      console.log("AlbumCard got new ArtistsRefs wrote artists ids names", artistsIdsNames.value);
-    }
-  }
-}, { immediate: true });
 
 const handlePlayClick = (event) => {
-  console.log("play click");
-  console.log(event);
   playerStore.setAlbumId(event);
   playerStore.setIsPlaying(true);
 }

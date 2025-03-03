@@ -1,9 +1,9 @@
 <template>
-  <div v-if="data">
+  <div v-if="album">
     <div class="topSection">
       <MultiSourceImage class="coverImage" :urls="coverUrls" />
       <div class="albumInfoColum">
-        <h1 class="albumName"> {{ data.album.name }}</h1>
+        <h1 class="albumName"> {{ album.name }}</h1>
       </div>
     </div>
     <div class="commandsSection">
@@ -11,15 +11,15 @@
       <ToggableFavoriteIcon :toggled="isAlbumLiked" :clickCallback="handleClickOnFavoriteIcon" />
     </div>
     <div class="artistsContainer">
-      <LoadArtistListItem v-for="artistId in data.album.artists_ids" :key="artistId" :artistId="artistId" />
+      <LoadArtistListItem v-for="artistId in album.artists_ids" :key="artistId" :artistId="artistId" />
     </div>
     <div class="tracksContainer">
-      <div v-for="(disc, discIndex) in data.album.discs" :key="disc" class="discContainer">
-        <h1 v-if="data.album.discs.length > 1">Disc {{ discIndex + 1 }}<span v-if="disc.name">- {{ disc.name }}</span>
+      <div v-for="(disc, discIndex) in album.discs" :key="disc" class="discContainer">
+        <h1 v-if="album.discs.length > 1">Disc {{ discIndex + 1 }}<span v-if="disc.name">- {{ disc.name }}</span>
         </h1>
         <div v-for="(trackId, trackIndex) in disc.tracks" :key="trackId" class="track"
           @contextmenu.prevent="openTrackContextMenu($event, data.tracks[trackId], trackIndex)">
-          <LoadTrackListItem :trackId="trackId" :resolvedTrack="data.tracks[trackId]" :trackNumber="trackIndex + 1"
+          <LoadTrackListItem :contextId="albumId" :trackId="trackId" :trackNumber="trackIndex + 1"
             @track-clicked="handleClickOnTrack(trackId)" />
         </div>
       </div>
@@ -38,11 +38,11 @@ import MultiSourceImage from '@/components/common/MultiSourceImage.vue';
 import PlayIcon from '@/components/icons/PlayIcon.vue';
 import { usePlayerStore } from '@/store/player';
 import { useUserStore } from '@/store/user';
-import { useRemoteStore } from '@/store/remote';
 import ToggableFavoriteIcon from '@/components/common/ToggableFavoriteIcon.vue';
 import LoadArtistListItem from '@/components/common/LoadArtistListItem.vue';
 import TrackContextMenu from '@/components/common/contextmenu/TrackContextMenu.vue';
 import LoadTrackListItem from '../common/LoadTrackListItem.vue';
+import { useStaticsStore } from '@/store/statics';
 
 const props = defineProps({
   albumId: {
@@ -51,28 +51,21 @@ const props = defineProps({
   }
 });
 
-const data = ref(null);
+const album = ref(null);
 const coverUrls = ref(null);
 
 const player = usePlayerStore();
 const userStore = useUserStore();
-const remoteStore = useRemoteStore();
+const staticsStore = useStaticsStore();
 
 const currentTrackId = ref(null);
 const isAlbumLiked = ref(false);
 
+let albumDataUnwatcher = null;
+
 const trackContextMenuRef = ref(null);
 const openTrackContextMenu = (event, track, index) => {
   trackContextMenuRef.value.openMenu(event, track, index);
-}
-
-const computeTrackRowClasses = (trackId) => {
-  const isCurrentTrack = trackId == currentTrackId.value;
-  return {
-    trackRow: true,
-    nonPlayingTrack: !isCurrentTrack,
-    playingTrack: isCurrentTrack,
-  };
 }
 
 watch(() => player.currentTrack,
@@ -86,31 +79,43 @@ watch(() => player.currentTrack,
 );
 
 const fetchData = async (id) => {
+  if (albumDataUnwatcher) {
+    albumDataUnwatcher();
+    albumDataUnwatcher = null;
+  }
   if (!id) return;
-  data.value = null;
-  data.value = await remoteStore.fetchResolvedAlbum(id);
+
+  albumDataUnwatcher = watch(
+    staticsStore.getAlbum(id),
+    (newData) => {
+      if (newData && newData.item && typeof newData.item === 'object') {
+        coverUrls.value = chooseAlbumCoverImageUrl(newData.item);
+        album.value = newData.item;
+      }
+    },
+    { immediate: true });
 };
 
 const handleClickOnFavoriteIcon = () => {
-  userStore.setAlbumIsLiked(data.value.album.id, !isAlbumLiked.value);
+  userStore.setAlbumIsLiked(props.albumId, !isAlbumLiked.value);
 }
 
 const handleClickOnPlayAlbum = () => {
-  player.setResolvedAlbum(data.value);
+  player.setAlbumId(props.albumId);
 }
 
 const handleClickOnTrack = (trackId) => {
   if (trackId != currentTrackId.value) {
-    const discIndex = data.value.album.discs.findIndex((disc) => disc.tracks.includes(trackId));
-    const trackIndex = data.value.album.discs[discIndex].tracks.indexOf(trackId);
-    player.setResolvedAlbum(data.value, discIndex, trackIndex);
+    const discIndex = album.value.discs.findIndex((disc) => disc.tracks.includes(trackId));
+    const trackIndex = album.value.discs[discIndex].tracks.indexOf(trackId);
+    player.setAlbumId(props.albumId, discIndex, trackIndex);
   }
 }
 
-watch(data,
-  (newData) => {
-    if (newData) {
-      coverUrls.value = chooseAlbumCoverImageUrl(newData.album);
+watch(album,
+  (newAlbum) => {
+    if (newAlbum) {
+      coverUrls.value = chooseAlbumCoverImageUrl(newAlbum);
     }
   },
   { immediate: true }
@@ -120,11 +125,11 @@ watch(() => props.albumId, (newId) => {
   fetchData(newId);
 });
 
-watch([() => userStore.likedAlbumIds, data],
-  ([likedAlbums, albumData], [oldLikedAlbums, oldAlbumData]) => {
-    console.log("watch liked albums and album data, new stuff incoming: " + likedAlbums + " " + albumData);
-    if (likedAlbums && albumData) {
-      isAlbumLiked.value = likedAlbums.includes(albumData.album.id);
+watch(() => userStore.likedAlbumIds,
+  (likedAlbums) => {
+    console.log("watch liked albums and album data, new stuff incoming: " + likedAlbums);
+    if (likedAlbums) {
+      isAlbumLiked.value = likedAlbums.includes(props.albumId);
       console.log("isAlbumLiked: " + isAlbumLiked.value);
       console.log("likedAlbums: " + likedAlbums);
     }

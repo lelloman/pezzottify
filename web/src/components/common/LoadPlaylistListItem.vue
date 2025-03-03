@@ -46,13 +46,6 @@ const playlist = computed(() => {
   return playlistRef.value?.value;
 });
 
-watch(playlist, (newPlaylist) => {
-  console.log("New playlist value: ", newPlaylist);
-}, {
-  immediate: true,
-  deep: true,
-});
-
 const handleClick = () => {
   if (playlist.value) {
     router.push(`/playlist/${playlist.value.id}`);

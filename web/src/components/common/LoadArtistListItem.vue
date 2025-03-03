@@ -7,11 +7,11 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue';
+import { ref, watch } from 'vue';
 import ArtistListItem from '@/components/common/ArtistListItem.vue';
-import { useRemoteStore } from '@/store/remote';
+import { useStaticsStore } from '@/store/statics';
 
-const remoteStore = useRemoteStore();
+const staticsStore = useStaticsStore();
 
 const props = defineProps({
   artistId: {
@@ -24,22 +24,12 @@ const artistData = ref(null);
 const loading = ref(true);
 const error = ref(null);
 
-const fetchArtist = async (id) => {
-  try {
-    artistData.value = await remoteStore.fetchArtist(id);
-    if (!artistData.value) {
-      error.value = "Failed to load artist data";
-    }
-  } catch (err) {
-    error.value = err.message;
-  } finally {
-    loading.value = false;
+watch(staticsStore.getArtist(props.artistId), (newData) => {
+  loading.value = newData && newData.loading;
+  if (newData && newData.item && typeof newData.item === 'object') {
+    artistData.value = newData.item;
   }
-};
-
-onMounted(() => {
-  fetchArtist(props.artistId);
-});
+}, { immediate: true });
 
 </script>
 

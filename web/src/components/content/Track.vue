@@ -1,10 +1,10 @@
 <template>
-  <div v-if="data">
+  <div v-if="track">
     <div class="topSection">
       <MultiSourceImage class="coverImage" :urls="coverUrls" />
       <div class="trackInfoColum">
         <h1 class="trackName">{{ track.name }} </h1>
-        <h3>From: <span class="albumName" @click.stop="handleClickOnAlbumName">{{ album.name }} - {{
+        <h3 v-if="album">From: <span class="albumName" @click.stop="handleClickOnAlbumName">{{ album.name }} - {{
           getYearFromTimestamp(album.date) }}</span></h3>
         <p>Duration: {{ formatDuration(track.duration) }}</p>
         <p v-if="track.is_explicit">Explicit!</p>
@@ -31,10 +31,10 @@ import { ref, watch, onMounted } from 'vue';
 import MultiSourceImage from '@/components/common/MultiSourceImage.vue';
 import PlayIcon from '../icons/PlayIcon.vue';
 import { usePlayerStore } from '@/store/player';
-import { useRemoteStore } from '@/store/remote';
 import { chooseAlbumCoverImageUrl, chooseAlbumCoverImageIds, formatDuration, getYearFromTimestamp } from '@/utils';
 import { useRouter } from 'vue-router';
 import LoadArtistListItem from '../common/LoadArtistListItem.vue';
+import { useStaticsStore } from '@/store/statics';
 
 const props = defineProps({
   trackId: {
@@ -43,23 +43,24 @@ const props = defineProps({
   }
 });
 
-const data = ref(null);
 const track = ref(null);
 const album = ref(null);
-const artists = ref(null);
 const coverUrls = ref([]);
 
 const router = useRouter();
 const player = usePlayerStore();
-const remote = useRemoteStore();
+const staticsStore = useStaticsStore();
+
+let trackDataUnwatcher = null;
+let albumDataUnwatcher = null;
 
 const handleClickOnPlayTrack = () => {
-  if (data.value) {
+  if (track.value) {
     const imagesIds = chooseAlbumCoverImageIds(album.value);
     player.setTrack({
       id: track.value.id,
       name: track.value.name,
-      artists: artists.value.map((artist) => artist.name),
+      artists: track.value.artists_ids,
       image_id: imagesIds.length ? imagesIds[0] : null,
       duration: track.value.duration,
       albumId: track.value.album_id,
@@ -72,17 +73,35 @@ const handleClickOnAlbumName = () => {
 };
 
 const fetchTrack = async (id) => {
+  if (trackDataUnwatcher) {
+    trackDataUnwatcher();
+    trackDataUnwatcher = null;
+  }
+  if (albumDataUnwatcher) {
+    albumDataUnwatcher();
+    albumDataUnwatcher = null;
+  }
+  track.value = null
+  coverUrls.value = [];
+
   if (!id) return;
-  data.value = await remote.fetchResolvedTrack(id);
+
+  trackDataUnwatcher = watch(
+    staticsStore.getTrack(id),
+    (newData) => {
+      if (newData && newData.item && typeof newData.item === 'object') {
+        track.value = newData.item;
+        albumDataUnwatcher = watch(staticsStore.getAlbum(newData.item.album_id), (newAlbumData) => {
+          if (newAlbumData && newAlbumData.item && typeof newAlbumData.item === 'object') {
+            album.value = newAlbumData.item;
+            coverUrls.value = chooseAlbumCoverImageUrl(newAlbumData.item);
+          }
+        }, { immediate: true });
+      }
+    },
+    { immediate: true }
+  )
 };
-
-watch(data, (newData) => {
-  coverUrls.value = chooseAlbumCoverImageUrl(newData.album);
-  track.value = data.value.tracks[props.trackId];
-  album.value = data.value.album;
-  artists.value = track.value.artists_ids.map((artistId) => newData.artists[artistId]);
-})
-
 watch(() => props.trackId, (newId) => {
   fetchTrack(newId);
 });

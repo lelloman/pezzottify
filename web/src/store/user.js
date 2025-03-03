@@ -101,15 +101,12 @@ export const useUserStore = defineStore('user', () => {
   };
 
   const loadPlaylistData = async (playlistId) => {
-    console.log("userStore loadPlaylistData playlistId: " + playlistId);
     if (playlistsData.value && playlistsData.value.by_id[playlistId]) {
       return;
     }
 
     const playlistData = await remoteStore.fetchPlaylistData(playlistId);
     if (playlistData && playlistsData.value) {
-      console.log("Writing new data to playlistData");
-      console.log(playlistData);
       playlistsData.value.list = playlistsData.value.list.map(playlist => {
         if (playlist.id === playlistId) {
           return playlistData;

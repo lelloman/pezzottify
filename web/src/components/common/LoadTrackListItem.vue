@@ -16,23 +16,23 @@
 </template>
 
 <script setup>
-import { ref, onMounted, computed, watch } from 'vue';
+import { ref, onMounted, watch } from 'vue';
 import { usePlayerStore } from '@/store/player';
-import { useRemoteStore } from '@/store/remote';
 import { formatDuration } from '@/utils';
 import TrackName from '@/components/common/TrackName.vue';
 import LoadClickableArtistsNames from '@/components/common/LoadClickableArtistsName.vue';
+import { useStaticsStore } from '@/store/statics';
 
 const player = usePlayerStore();
-const remoteStore = useRemoteStore();
+const staticsStore = useStaticsStore();
 
 const props = defineProps({
   trackId: {
     type: String,
     required: true,
   },
-  resolvedTrack: {
-    type: Object,
+  contextId: {
+    type: String,
     default: null
   },
   trackNumber: {
@@ -47,15 +47,9 @@ const currentTrackId = ref(null);
 
 const loading = ref(false);
 const error = ref(null);
-const resolvedData = ref(null);
+const track = ref(null);
 
-const track = computed(() => {
-  // Use resolved track if provided, otherwise use fetched data
-  if (props.resolvedTrack) {
-    return props.resolvedTrack;
-  }
-  return resolvedData.value;
-});
+let trackDataUnWatcher = null;
 
 watch(() => player.currentTrack,
   (newTrack) => {
@@ -69,23 +63,29 @@ watch(() => player.currentTrack,
 
 
 const loadTrackData = async () => {
-  // If we already have resolved track data or no trackId, don't fetch
-  if (props.resolvedTrack || !props.trackId) return;
-
+  if (trackDataUnWatcher) {
+    trackDataUnWatcher();
+    trackDataUnWatcher = null;
+  }
   loading.value = true;
   error.value = null;
+  track.value = null;
+  trackDataUnWatcher = watch(staticsStore.getTrack(props.trackId),
+    (newTrack) => {
+      console.log('LoadTrackListItem New track:', newTrack);
+      if (newTrack && newTrack.item) {
+        loading.value = false;
 
-  try {
-    resolvedData.value = await remoteStore.fetchTrack(props.trackId);
-    if (!resolvedData.value) {
-      error.value = 'Failed to load track data';
-    }
-  } catch (err) {
-    console.error('Failed to load track data:', err);
-    error.value = 'Failed to load track data';
-  } finally {
-    loading.value = false;
-  }
+        if (newTrack.error) {
+          error.value = newTrack.error;
+        }
+        if (typeof newTrack.item === 'object') {
+          track.value = newTrack.item;
+        }
+      }
+    },
+    { immediate: true }
+  );
 };
 
 const computeTrackRowClasses = (trackId) => {
@@ -105,18 +105,13 @@ const handleTrackClick = () => {
 
 // Load track data if needed when component mounts
 onMounted(() => {
-  const shouldResolve = !props.resolvedTrack
-  console.log("LoadTrackListItem onMounted shouldResolve: ", shouldResolve + " track: " + props.resolvedTrack + " trackId: " + props.trackId);
-  console.log(props.resolvedTrack);
-  if (shouldResolve) {
-    loadTrackData();
-  }
+  loadTrackData();
 });
 
 // Watch for changes to trackId and reload if necessary
 watch(() => props.trackId, (newId, oldId) => {
-  if (newId !== oldId && !props.resolvedTrack) {
-    loadTrackData();
+  if (newId != oldId) {
+    //loadTrackData();
   }
 });
 

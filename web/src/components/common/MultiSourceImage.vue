@@ -4,10 +4,10 @@
 </template>
 
 <script setup>
-import { useConfigStore } from '@/store/config';
+import { useDebugStore } from '@/store/debug';
 import { ref, watch } from 'vue';
 
-const configStore = useConfigStore();
+const configStore = useDebugStore();
 
 const props = defineProps({
   urls: {

@@ -1,12 +1,18 @@
 <template>
-  <div v-if="isLoading">...</div>
-  <ClickableArtistsNames v-else-if="artistsIdsNames" :prefix="prefix" :artistsIdsNames="artistsIdsNames" />
+  <div>
+    <ClickableArtistsNames v-if="loadedArtistsIdsNames.length > 0" :prefix="prefix"
+      :artistsIdsNames="loadedArtistsIdsNames" />
+    <div v-if="isLoading">
+      <span v-if="loadedArtistsIdsNames.length > 0">Loading more artists...</span>
+      <span v-else>Loading artists...</span>
+    </div>
+  </div>
 </template>
 
 <script setup>
-import { onMounted, ref } from 'vue';
+import { onMounted, ref, watch, reactive } from 'vue';
 import ClickableArtistsNames from './ClickableArtistsNames.vue';
-import { useRemoteStore } from '@/store/remote';
+import { useStaticsStore } from '@/store/statics';
 
 const props = defineProps({
   prefix: {
@@ -18,21 +24,36 @@ const props = defineProps({
   }
 });
 
-const remoteStore = useRemoteStore();
+const staticsStore = useStaticsStore();
 
-const isLoading = ref(false);
-const artistsIdsNames = ref(null);
+const isLoading = ref(true);
+const loadedArtistsIdsNames = ref([]);
+const artistsRefs = reactive([]);
 
-onMounted(async () => {
+// Watch the reactive array for changes to detect when artists load
+watch(artistsRefs, (refs) => {
+  if (refs.length === 0) return;
+
+  // Update loaded artists immediately when any artist loads
+  loadedArtistsIdsNames.value = refs
+    .filter(ref => ref.item && typeof ref.item === 'object')
+    .map(ref => [ref.item.id, ref.item.name]);
+
+  // Update loading state when all artists are loaded
+  isLoading.value = !refs.every(ref => ref.item && typeof ref.item === 'object');
+
+}, { deep: true, immediate: true });
+
+onMounted(() => {
   isLoading.value = true;
-  const artistsPromises = props.artistsIds.map(async (artistId) => {
-    const response = await remoteStore.fetchArtist(artistId);
-    return [artistId, response.name];
-  });
-  console.log("LoadClickableArtistsName starting to wait...");
-  artistsIdsNames.value = await Promise.all(artistsPromises);
-  console.log("LoadClickableArtistsName starting to Waited");
-  isLoading.value = false;
-});
+  loadedArtistsIdsNames.value = [];
 
+  // Clear any previous refs
+  artistsRefs.length = 0;
+
+  // Add new reactive refs to our array
+  props.artistsIds.forEach(artistId => {
+    artistsRefs.push(staticsStore.getArtist(artistId));
+  });
+});
 </script>
