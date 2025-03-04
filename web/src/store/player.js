@@ -107,7 +107,6 @@ export const usePlayerStore = defineStore('player', () => {
   });
   /* PERSISTENCE */
 
-  /* ACTIONS */
   const formatTrackUrl = (trackId) => "/v1/content/stream/" + trackId;
 
   const PLAYBACK_CONTEXTS = {
@@ -217,30 +216,19 @@ export const usePlayerStore = defineStore('player', () => {
     return trackIndex + previousDiscsTracks;
   }
 
-  const setResolvedAlbum = (data, discIndex, trackIndex) => {
-    console.log("player.setResolvedAlbum() data:");
-    console.log(data);
-    pendingPercentSeek = null;
-    if (!currentPlaylist.value || !currentPlaylist.value.album || currentPlaylist.value.album.id != data.album.id) {
-      const albumPlaylist = makePlaylistFromResolvedAlbumResponse(data);
-      setNewPlaylingPlaylist(albumPlaylist);
-    }
-    if (Number.isInteger(discIndex) && Number.isInteger(trackIndex)) {
-      const desiredTrackIndex = findTrackIndex(data.album, discIndex, trackIndex);
-      loadTrack(desiredTrackIndex);
-    } else {
-      loadTrack(0);
-    }
-    play();
-  }
-
-  const setAlbumId = async (albumId) => {
+  /* Playlist starters */
+  const setAlbumId = async (albumId, discIndex, trackIndex) => {
     try {
       const albumData = await remoteStore.fetchResolvedAlbum(albumId);
       if (albumData) {
         const albumPlaylist = makePlaylistFromResolvedAlbumResponse(albumData);
         setNewPlaylingPlaylist(albumPlaylist);
-        loadTrack(0);
+        if (Number.isInteger(discIndex) && Number.isInteger(trackIndex)) {
+          const desiredTrackIndex = findTrackIndex(albumData.album, discIndex, trackIndex);
+          loadTrack(desiredTrackIndex);
+        } else {
+          loadTrack(0);
+        }
         play();
       }
     } catch (error) {
@@ -278,6 +266,7 @@ export const usePlayerStore = defineStore('player', () => {
     loadTrack(0);
     play();
   }
+  /* Playlist starters */
 
   const loadTrack = (index) => {
 
@@ -343,6 +332,7 @@ export const usePlayerStore = defineStore('player', () => {
     }
   }
 
+  /* Playback controls */
   const skipNextTrack = () => {
     let nextIndex = currentTrackIndex.value + 1;
     if (nextIndex >= currentPlaylist.value.tracks.length) {
@@ -401,6 +391,7 @@ export const usePlayerStore = defineStore('player', () => {
       pause();
     }
   };
+
   const setIsPlaying = (newIsPlaying) => {
     if (isPlaying.value != newIsPlaying) {
       isPlaying.value = newIsPlaying;
@@ -443,21 +434,6 @@ export const usePlayerStore = defineStore('player', () => {
     }
   }
 
-  const stop = () => {
-    if (sound) {
-      sound.unload();
-    }
-    sound = null;
-    isPlaying.value = false;
-    progressPercent.value = 0.0;
-    progressSec.value = 0;
-    currentTrack.value = null;
-    pendingPercentSeek = null;
-    currentTrackIndex.value = null;
-    currentPlaylistIndex.value = null
-    playlistsHistory.value = [];
-  }
-
   const setVolume = (newVolume) => {
     if (sound) {
       sound.volume(newVolume);
@@ -481,6 +457,23 @@ export const usePlayerStore = defineStore('player', () => {
         play();
       }
     }
+  }
+  /* Playback controls */
+
+  /* Playing playlist controls */
+  const stop = () => {
+    if (sound) {
+      sound.unload();
+    }
+    sound = null;
+    isPlaying.value = false;
+    progressPercent.value = 0.0;
+    progressSec.value = 0;
+    currentTrack.value = null;
+    pendingPercentSeek = null;
+    currentTrackIndex.value = null;
+    currentPlaylistIndex.value = null
+    playlistsHistory.value = [];
   }
 
   const goToPreviousPlaylist = () => {
@@ -586,8 +579,7 @@ export const usePlayerStore = defineStore('player', () => {
       savePlaylistHistory(playlistsHistory.value);
     }
   }
-
-  /* ACTIONS */
+  /* Playing playlist controls */
 
   return {
     currentPlaylist,
@@ -603,7 +595,6 @@ export const usePlayerStore = defineStore('player', () => {
     PLAYBACK_CONTEXTS,
     setTrack,
     setPlaylist,
-    setResolvedAlbum,
     setAlbumId,
     seekToPercentage,
     setIsPlaying,
