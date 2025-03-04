@@ -68,12 +68,10 @@ const openTrackContextMenu = (event, track, index) => {
   trackContextMenuRef.value.openMenu(event, track, index);
 }
 
-watch(() => player.currentTrack,
-  (newTrack) => {
-    if (newTrack) {
-      console.log("CurrentTrackId: " + newTrack.id);
-      currentTrackId.value = newTrack.id;
-    }
+watch(() => player.currentTrackId,
+  (newTrackId) => {
+    console.log("CurrentTrackId: " + newTrackId);
+    currentTrackId.value = newTrackId;
   },
   { immediate: true }
 );

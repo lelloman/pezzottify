@@ -14,9 +14,9 @@
 
         <template v-slot:item="{ record, index, dataKey }">
           <div :class="{ currentlyPlayingRow: index == currentIndex, trackRow: true }"
-            @contextmenu.prevent="openContextMenu($event, record, index)" @click.stop="handleClick(index)">
-            <MultiSourceImage class="trackImage scaleClickFeedback" :urls="record ? record.imageUrls : []"
-              @click.stop="handleClickOnTrackImage(record)" />
+            @contextmenu.prevent="openContextMenu($event, record.id, index)" @click.stop="handleClick(index)">
+            <!--<MultiSourceImage class="trackImage scaleClickFeedback" :urls="record.imageUrls ? record.imageUrls : []"
+              @click.stop="handleClickOnTrackImage(record)" />-->
             <div class="namesColumn">
               <TrackName v-if="record" :track="record" :hoverAnimation="true" />
               <ClickableArtistsNames :artistsIdsNames="record ? record.artists : []" />
@@ -113,7 +113,7 @@ watch(
 watch(
   () => player.currentPlaylist,
   (playlist) => {
-    if (playlist && playlist.tracks) {
+    if (playlist && playlist.tracksIds) {
 
       let playingContextText = playlist.type;
       if (playlist.type == player.PLAYBACK_CONTEXTS.album) {
@@ -126,11 +126,14 @@ watch(
       playingContext.value.text = playingContextText;
 
       const seenTrackCounter = {};
-      tracksVModel.value = playlist.tracks.map((track) => {
-        const seenCount = seenTrackCounter[track.id] || 0;
-        seenTrackCounter[track.id] = seenCount + 1;
-        track.listItemId = track.id + seenCount;
-        return track;
+      console.log("CurrentlyPlayingSidebar new playlist with .tracksIds", playlist.tracksIds);
+      tracksVModel.value = playlist.tracksIds.map((trackId) => {
+        const seenCount = seenTrackCounter[trackId] || 0;
+        seenTrackCounter[trackId] = seenCount + 1;
+        return {
+          id: trackId,
+          listItemId: trackId + seenCount,
+        };
       });
     } else {
       tracksVModel.value = [];

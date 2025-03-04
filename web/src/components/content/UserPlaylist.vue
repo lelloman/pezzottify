@@ -119,7 +119,7 @@ const handleDeletePlaylistConfirmation = async () => {
 
 const handleClickOnPlay = () => {
   console.log('Play playlist:', props.playlistId);
-  player.setPlaylist(playlist.value);
+  player.setUserPlaylist(playlist.value);
 };
 
 const handleClickOnDelete = () => {

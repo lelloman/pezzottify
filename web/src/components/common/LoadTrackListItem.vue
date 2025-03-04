@@ -43,7 +43,7 @@ const props = defineProps({
 
 const emit = defineEmits(['track-clicked']);
 
-const currentTrackId = ref(null);
+const localCurrentTrackId = ref(null);
 
 const loading = ref(false);
 const error = ref(null);
@@ -51,12 +51,10 @@ const track = ref(null);
 
 let trackDataUnWatcher = null;
 
-watch(() => player.currentTrack,
-  (newTrack) => {
-    if (newTrack) {
-      console.log("CurrentTrackId: " + newTrack.id);
-      currentTrackId.value = newTrack.id;
-    }
+watch(() => player.currentTrackId,
+  (newTrackId) => {
+    console.log("CurrentTrackId: " + newTrackId);
+    localCurrentTrackId.value = newTrackId;
   },
   { immediate: true }
 );
@@ -89,7 +87,7 @@ const loadTrackData = async () => {
 };
 
 const computeTrackRowClasses = (trackId) => {
-  const isCurrentTrack = trackId == currentTrackId.value;
+  const isCurrentTrack = trackId == localCurrentTrackId.value;
   return {
     trackRow: true,
     nonPlayingTrack: !isCurrentTrack,

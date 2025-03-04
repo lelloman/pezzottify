@@ -86,6 +86,10 @@ export const useStaticsStore = defineStore('statics', () => {
     }
     return null;
   }
+
+  const getAlbumData = (albumId) => {
+    return getItemData('albums', albumId);
+  }
   const getTrackData = (trackId) => {
     return getItemData('tracks', trackId);
   }
@@ -106,6 +110,7 @@ export const useStaticsStore = defineStore('statics', () => {
     getAlbum,
     getArtist,
     getTrack,
+    getAlbumData,
     getTrackData,
   }
 });

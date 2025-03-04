@@ -89,7 +89,7 @@ const computedVolumePercent = computed(() => {
   return draggingVolumePercent.value || (isMuted.value ? 0.0 : volumePercent.value);
 })
 
-const { currentTrack, isPlaying, progressPercent, progressSec, volume, muted } = storeToRefs(player);
+const { currentTrackId, isPlaying, progressPercent, progressSec, volume, muted } = storeToRefs(player);
 
 const songName = ref('');
 const artists = ref([]);
@@ -109,8 +109,8 @@ const formatTime = (timeInSeconds) => {
 };
 
 const handleClickOnAlbumCover = () => {
-  console.log(currentTrack.value);
-  router.push("/album/" + currentTrack.value.albumId);
+  console.log(currentTrackId.value);
+  router.push("/album/" + currentTrackId.value.albumId);
 }
 
 const startDraggingTrackProgress = () => {
@@ -203,7 +203,7 @@ watch(progressSec,
   },
   { immediate: true }
 )
-watch(currentTrack,
+watch(currentTrackId,
   (newCurrentTrack) => {
     console.log("BottomPlayer newCurrentTrack:");
     console.log(newCurrentTrack);
@@ -212,7 +212,7 @@ watch(currentTrack,
       songName.value = newCurrentTrack.name;
       artists.value = newCurrentTrack.artists;
       imageUrls.value = newCurrentTrack.imageUrls;
-      duration.value = formatDuration(newCurrentTrack.duration);
+      duration.value = newCurrentTrack.duration ? formatDuration(newCurrentTrack.duration) : '';
     } else {
       localCurrentTrack.value = null;
       songName.value = '';

@@ -1,11 +1,10 @@
 import { defineStore } from 'pinia';
 import { computed, ref, watch } from 'vue';
 import { Howl } from 'howler';
-import { formatImageUrl, chooseAlbumCoverImageUrl } from '@/utils';
-import { useRemoteStore } from './remote';
+import { useStaticsStore } from './statics';
 
 export const usePlayerStore = defineStore('player', () => {
-  const remoteStore = useRemoteStore();
+  const staticsStore = useStaticsStore();
 
   /* PROPS */
   const MAX_PLAYLISTS_HISTORY = 20;
@@ -13,7 +12,7 @@ export const usePlayerStore = defineStore('player', () => {
   const currentPlaylistIndex = ref(null);
 
   const currentTrackIndex = ref(null);
-  const currentTrack = ref(null);
+  const currentTrackId = ref(null);
   const isPlaying = ref(false);
   const progressPercent = ref(0.0);
   const progressSec = ref(0);
@@ -47,9 +46,9 @@ export const usePlayerStore = defineStore('player', () => {
       if (loadedTrackIndex) {
         const indexValue = Number.parseInt(loadedTrackIndex);
         console.log("Loaded currenTrackIndex " + indexValue);
-        if (Number.isInteger(indexValue) && !Number.isNaN(indexValue) && indexValue >= 0 && indexValue < currentPlaylist.value.tracks.length) {
+        if (Number.isInteger(indexValue) && !Number.isNaN(indexValue) && indexValue >= 0 && indexValue < currentPlaylist.value.tracksIds.length) {
           currentTrackIndex.value = indexValue;
-          currentTrack.value = currentPlaylist.value.tracks[indexValue]
+          currentTrackId.value = currentPlaylist.value.tracksIds[indexValue]
         }
       }
       const savedPercent = Number.parseFloat(localStorage.getItem("progressPercent"));
@@ -116,70 +115,31 @@ export const usePlayerStore = defineStore('player', () => {
   };
 
   /* Playlist creation */
-  const makePlaylistFromResolvedAlbumResponse = (response) => {
-    const albumImageUrls = chooseAlbumCoverImageUrl(response.album);
-    const allTracks = response.album.discs.flatMap(disc => disc.tracks).map((trackId) => {
-      const track = response.tracks[trackId];
-      const artistsIdsNames = track.artists_ids.map((artistId) => [artistId, response.artists[artistId].name]);
-      return {
-        id: trackId,
-        url: formatTrackUrl(trackId),
-        name: track.name,
-        artists: artistsIdsNames,
-        imageUrls: albumImageUrls,
-        duration: track.duration,
-        albumId: response.album.id,
-      };
-    });
-
+  const makePlaylistFromAlbumData = (album) => {
     return {
       context: {
-        name: response.album.name,
-        id: response.album.id,
+        name: album.name,
+        id: album.id,
         edited: false,
       },
-      tracks: allTracks,
+      tracksIds: album.discs.flatMap(disc => disc.tracks).map((trackId) => trackId),
       type: PLAYBACK_CONTEXTS.album,
     }
   }
-
-  const makePlaylistFromResolvedTracksAndPlaylist = (resolvedTracks, playlist) => {
-    const tracks = resolvedTracks.map((resolvedTrackData) => {
-      const track = Object.values(resolvedTrackData.tracks)[0];
-      const artistsIdsNames = track.artists_ids.map((artistId) => [artistId, resolvedTrackData.artists[artistId].name]);
-      return {
-        id: track.id,
-        url: formatTrackUrl(track.id),
-        name: track.name,
-        artists: artistsIdsNames,
-        imageUrls: [formatImageUrl(track.image_id)],
-        duration: track.duration,
-        albumId: track.album_id,
-      }
-    });
+  const makePlaylistFromUserPlaylist = (playlist) => {
     return {
       context: { ...playlist, edited: false },
-      tracks: tracks,
+      tracksIds: playlist.tracks.map((trackId) => trackId),
       type: PLAYBACK_CONTEXTS.userPlaylist,
     };
   }
 
-  const makePlaylistFromTrack = (quakTrack) => {
+  const makePlaylistFromTrackId = (trackId) => {
     return {
       context: {
         edited: false,
       },
-      tracks: [
-        {
-          id: quakTrack.id,
-          url: formatTrackUrl(quakTrack.id),
-          name: quakTrack.name,
-          artists: quakTrack.artists_ids_names,
-          imageUrls: [formatImageUrl(quakTrack.image_id)],
-          duration: quakTrack.duration,
-          albumId: quakTrack.album_id,
-        }
-      ],
+      tracksIds: [trackId],
       type: PLAYBACK_CONTEXTS.userMix,
     };
   }
@@ -217,51 +177,37 @@ export const usePlayerStore = defineStore('player', () => {
   }
 
   /* Playlist starters */
-  const setAlbumId = async (albumId, discIndex, trackIndex) => {
-    try {
-      const albumData = await remoteStore.fetchResolvedAlbum(albumId);
-      if (albumData) {
-        const albumPlaylist = makePlaylistFromResolvedAlbumResponse(albumData);
-        setNewPlaylingPlaylist(albumPlaylist);
-        if (Number.isInteger(discIndex) && Number.isInteger(trackIndex)) {
-          const desiredTrackIndex = findTrackIndex(albumData.album, discIndex, trackIndex);
-          loadTrack(desiredTrackIndex);
-        } else {
-          loadTrack(0);
-        }
-        play();
+  const setAlbumId = (albumId, discIndex, trackIndex) => {
+    const album = staticsStore.getAlbumData(albumId);
+    if (album) {
+      const albumPlaylist = makePlaylistFromAlbumData(album);
+      setNewPlaylingPlaylist(albumPlaylist);
+      if (Number.isInteger(discIndex) && Number.isInteger(trackIndex)) {
+        const desiredTrackIndex = findTrackIndex(album, discIndex, trackIndex);
+        loadTrack(desiredTrackIndex);
+      } else {
+        loadTrack(0);
       }
-    } catch (error) {
-      console.error('Error setting album:', error);
+      play();
+    } else {
+      console.error("Album", albumId, "not found in staticsStore");
     }
   }
 
   const setTrack = (newTrack) => {
-    const trackPlaylist = makePlaylistFromTrack(newTrack)
-    console.log("PlayerStore setTrack:");
-    console.log(trackPlaylist);
+    const trackPlaylist = makePlaylistFromTrackId(newTrack.id)
     setNewPlaylingPlaylist(trackPlaylist);
     loadTrack(0);
     play();
   };
 
-  const setPlaylist = async (newPlaylist) => {
-    console.log("player setPlaylist:");
+  const setUserPlaylist = async (newPlaylist) => {
+    console.log("player setUserPlaylist:");
     console.log(newPlaylist);
     if (newPlaylist.tracks.length === 0) {
       return;
     }
-    const resolvedTracks = newPlaylist.tracks.map(async (track) => {
-      console.log("fetching track data for track:");
-      console.log(track);
-      const resolvedTrack = remoteStore.fetchResolvedTrack(track);
-      console.log(resolvedTrack);
-      return resolvedTrack;
-    });
-    const waitedTracks = await Promise.all(resolvedTracks);
-    console.log("resolved tracks:");
-    console.log(waitedTracks);
-    const userPlaylistPlaylist = makePlaylistFromResolvedTracksAndPlaylist(waitedTracks, newPlaylist);
+    const userPlaylistPlaylist = makePlaylistFromUserPlaylist(newPlaylist);
     setNewPlaylingPlaylist(userPlaylistPlaylist);
     loadTrack(0);
     play();
@@ -277,10 +223,10 @@ export const usePlayerStore = defineStore('player', () => {
     currentTrackIndex.value = index;
     console.log("loadTrack() playlist:");
     console.log(currentPlaylist.value);
-    const track = currentPlaylist.value.tracks[index]
-    currentTrack.value = track;
+    const trackId = currentPlaylist.value.tracksIds[index];
+    currentTrackId.value = trackId;
     sound = new Howl({
-      src: [track.url],
+      src: [formatTrackUrl(trackId)],
       html5: true,
       preload: true,
       volume: muted.value ? 0.0 : volume.value,
@@ -335,7 +281,7 @@ export const usePlayerStore = defineStore('player', () => {
   /* Playback controls */
   const skipNextTrack = () => {
     let nextIndex = currentTrackIndex.value + 1;
-    if (nextIndex >= currentPlaylist.value.tracks.length) {
+    if (nextIndex >= currentPlaylist.value.tracksIds.length) {
       if (sound) {
         sound.unload();
       }
@@ -450,7 +396,7 @@ export const usePlayerStore = defineStore('player', () => {
 
   const loadTrackIndex = (index) => {
     pendingPercentSeek = null;
-    if (currentPlaylist.value.tracks.length && index >= 0 && index < currentPlaylist.value.tracks.length) {
+    if (currentPlaylist.value.tracksIds.length && index >= 0 && index < currentPlaylist.value.tracksIds.length) {
       currentTrackIndex.value = index;
       loadTrack(index);
       if (isPlaying.value) {
@@ -469,7 +415,7 @@ export const usePlayerStore = defineStore('player', () => {
     isPlaying.value = false;
     progressPercent.value = 0.0;
     progressSec.value = 0;
-    currentTrack.value = null;
+    currentTrackId.value = null;
     pendingPercentSeek = null;
     currentTrackIndex.value = null;
     currentPlaylistIndex.value = null
@@ -584,7 +530,7 @@ export const usePlayerStore = defineStore('player', () => {
   return {
     currentPlaylist,
     currentTrackIndex,
-    currentTrack,
+    currentTrackId,
     isPlaying,
     progressPercent,
     progressSec,
@@ -594,7 +540,7 @@ export const usePlayerStore = defineStore('player', () => {
     canGoToNextPlaylist,
     PLAYBACK_CONTEXTS,
     setTrack,
-    setPlaylist,
+    setUserPlaylist,
     setAlbumId,
     seekToPercentage,
     setIsPlaying,
