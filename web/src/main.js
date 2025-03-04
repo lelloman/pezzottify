@@ -4,7 +4,7 @@ import { createApp, watch } from 'vue'
 import App from './App.vue'
 import router from './router'
 import { createPinia } from 'pinia'
-import { useConfigStore } from './store/config'
+import { useDebugStore } from './store/debug'
 import { useRemoteStore } from './store/remote'
 
 const pinia = createPinia();
@@ -14,7 +14,7 @@ const app = createApp(App);
 app.use(pinia)
 app.use(router)
 
-window.config = useConfigStore();
+window.config = useDebugStore();
 const remoteStore = useRemoteStore();
 app.mount('#app')
 
