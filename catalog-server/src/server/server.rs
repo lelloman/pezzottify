@@ -129,12 +129,12 @@ async fn get_resolved_album(
     }
 }
 
-async fn get_artist_albums(
+async fn get_artist_discography(
     _session: Session,
     State(catalog): State<GuardedCatalog>,
     Path(id): Path<String>,
 ) -> Response {
-    match catalog.lock().unwrap().get_artist_albums(id) {
+    match catalog.lock().unwrap().get_artist_discography(id) {
         None => StatusCode::NOT_FOUND.into_response(),
         Some(albums_ids) => Json(albums_ids).into_response(),
     }
@@ -470,7 +470,7 @@ fn make_app(
         .route("/artist/{id}", get(get_artist))
         .route("/album/{id}", get(get_album))
         .route("/album/{id}/resolved", get(get_resolved_album))
-        .route("/artist/{id}/albums", get(get_artist_albums))
+        .route("/artist/{id}/discography", get(get_artist_discography))
         .route("/track/{id}", get(get_track))
         .route("/track/{id}/resolved", get(get_resolved_track))
         .route("/image/{id}", get(get_image))
@@ -571,9 +571,10 @@ mod tests {
         let protected_routes = vec![
             "/v1/content/artist/123",
             "/v1/content/album/123",
-            "/v1/content/artist/123/albums",
             "/v1/content/album/123/resolved",
+            "/v1/content/artist/123/discography",
             "/v1/content/track/123",
+            "/v1/content/track/123/resolved",
             "/v1/content/image/123",
             "/v1/content/stream/123",
             "/v1/auth/logout",

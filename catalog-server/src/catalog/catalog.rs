@@ -1,4 +1,5 @@
 use super::album::{ResolvedAlbum, ResolvedTrack};
+use super::artist::ArtistDiscography;
 use super::track::ArtistWithRole;
 use super::{Album, Artist, Disc, Image, Track};
 use anyhow::{bail, Context, Result};
@@ -553,23 +554,36 @@ impl Catalog {
         get_track_audio_path(&self.dirs, album_id, track_id)
     }
 
-    pub fn get_artist_albums(&self, artist_id: String) -> Option<Vec<String>> {
+    pub fn get_artist_discography(&self, artist_id: String) -> Option<ArtistDiscography> {
         if let None = self.get_artist(&artist_id) {
             return None;
         }
-
-        let album_ids = self
-            .albums
-            .values()
-            .filter_map(|album| {
-                if album.artists_ids.contains(&artist_id) {
-                    Some(album.id.clone())
-                } else {
-                    None
+        let mut albums: Vec<String> = Vec::new();
+        let mut features: HashSet<String> = HashSet::new();
+        for album in self.albums.values() {
+            if album.artists_ids.contains(&artist_id) {
+                albums.push(album.id.clone());
+                continue;
+            }
+            let mut done_with_album = false;
+            for disc in album.discs.iter() {
+                for track_id in disc.tracks.iter() {
+                    let track = self.get_track(&track_id).unwrap();
+                    if track.artists_ids.contains(&artist_id) {
+                        features.insert(album.id.clone());
+                        done_with_album = true;
+                        break;
+                    }
                 }
-            })
-            .collect();
-        Some(album_ids)
+                if done_with_album {
+                    break;
+                }
+            }
+        }
+        Some(ArtistDiscography {
+            albums,
+            features: features.into_iter().collect(),
+        })
     }
 
     pub fn get_resolved_track(&self, track_id: &str) -> Result<Option<ResolvedTrack>> {

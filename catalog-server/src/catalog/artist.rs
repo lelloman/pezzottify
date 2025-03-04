@@ -21,6 +21,12 @@ pub struct Artist {
     pub portrait_group: Vec<Image>,
 }
 
+#[derive(Clone, Serialize)]
+pub struct ArtistDiscography {
+    pub albums: Vec<String>,
+    pub features: Vec<String>,
+}
+
 #[cfg(test)]
 mod tests {
     use crate::catalog::image::ImageSize;
