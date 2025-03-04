@@ -1,6 +1,15 @@
 <template>
-  <div v-if="albumIds" class="albumsContainer">
-    <AlbumCard v-for="albumId in albumIds" :key="albumId" :albumId="albumId" />
+  <div v-if="albumIds && albumIds.length > 0">
+    <h1>Albums:</h1>
+    <div class="albumsContainer">
+      <AlbumCard v-for="albumId in albumIds" :key="albumId" :albumId="albumId" />
+    </div>
+  </div>
+  <div v-if="featuresIds && featuresIds.length > 0">
+    <h1>Features:</h1>
+    <div class="albumsContainer">
+      <AlbumCard v-for="albumId in featuresIds" :key="albumId" :albumId="albumId" />
+    </div>
   </div>
   <div v-else-if="isLoading">
     Loading...
@@ -24,14 +33,16 @@ const props = defineProps({
 
 const remoteStore = useRemoteStore();
 const albumIds = ref(null);
+const featuresIds = ref(null);
 const error = ref(null);
 const isLoading = ref(false);
 
 const loadAlbumIds = async (artistId) => {
   isLoading.value = true;
-  const artistsAlbumsResponse = await remoteStore.fetchArtistAlbums(artistId);
+  const artistsAlbumsResponse = await remoteStore.fetchArtistDiscography(artistId);
   if (artistsAlbumsResponse) {
-    albumIds.value = artistsAlbumsResponse;
+    albumIds.value = artistsAlbumsResponse.albums;
+    featuresIds.value = artistsAlbumsResponse.features;
   } else {
     error.value = "Error fetching artist albums";
   }

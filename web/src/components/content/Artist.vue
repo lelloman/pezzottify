@@ -12,8 +12,7 @@
       <LoadArtistListItem v-for="artistId in artist.related" :key="artistId" :artistId="artistId" />
     </div>
     <div class="discographyContainer">
-      <h1>Discography:</h1>
-      <ArtistAlbumCards :artistId="artistId" />
+      <ArtistDiscography :artistId="artistId" />
     </div>
   </div>
 
@@ -28,9 +27,9 @@ import { chooseArtistCoverImageUrl } from '@/utils';
 import { useUserStore } from '@/store/user.js';
 import { useStaticsStore } from '@/store/statics.js';
 import MultiSourceImage from '@/components/common/MultiSourceImage.vue';
-import ArtistAlbumCards from '@/components/common/ArtistAlbumCards.vue';
 import ToggableFavoriteIcon from '@/components/common/ToggableFavoriteIcon.vue';
 import LoadArtistListItem from '@/components/common/LoadArtistListItem.vue';
+import ArtistDiscography from '@/components/common/ArtistDiscography.vue';
 
 const props = defineProps({
   artistId: {

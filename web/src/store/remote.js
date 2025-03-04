@@ -198,9 +198,9 @@ export const useRemoteStore = defineStore('remote', () => {
     }
   };
 
-  const fetchArtistAlbums = async (artistId) => {
+  const fetchArtistDiscography = async (artistId) => {
     try {
-      const response = await axios.get(`/v1/content/artist/${artistId}/albums`);
+      const response = await axios.get(`/v1/content/artist/${artistId}/discography`);
       return response.data;
     } catch (error) {
       console.error('Error fetching artist albums:', error);
@@ -226,6 +226,6 @@ export const useRemoteStore = defineStore('remote', () => {
     fetchResolvedAlbum,
     fetchAlbum,
     fetchArtist,
-    fetchArtistAlbums,
+    fetchArtistDiscography,
   };
 });
