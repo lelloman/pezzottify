@@ -18,7 +18,7 @@
         <div v-for="(trackId, trackIndex) in playlist.tracks" :key="trackIndex + trackId" class="track"
           @contextmenu.prevent="openTrackContextMenu($event, trackId, trackIndex)">
           <LoadTrackListItem :contextId="playlistId" :trackId="trackId" :trackNumber="trackIndex + 1"
-            @track-clicked="handleTrackSelection" />
+            @track-clicked="handleTrackSelection" :isCurrentlyPlaying="trackIndex == currentTrackIndex" />
         </div>
       </div>
     </div>
@@ -61,7 +61,6 @@ import { useUserStore } from '@/store/user';
 import EditIcon from '@/components/icons/EditIcon.vue';
 import LoadTrackListItem from '@/components/common/LoadTrackListItem.vue';
 import { usePlayerStore } from '@/store/player';
-import { useStaticsStore } from '@/store/statics';
 import TrackContextMenu from '@/components/common/contextmenu/TrackContextMenu.vue';
 
 // Define playlistId prop
@@ -81,6 +80,7 @@ const loading = ref(true);
 const error = ref(null);
 const playlistRef = ref(null);
 const trackContextMenuRef = ref(null);
+const currentTrackIndex = ref(null);
 
 const deleteConfirmationDialogOpen = ref(false);
 const isEditMode = ref(false);
@@ -126,6 +126,18 @@ const handleClickOnDelete = () => {
 const handleTrackSelection = (track) => {
   console.log('Selected track:', track);
 };
+
+watch([() => player.currentTrackIndex, () => player.currentPlaylist],
+  ([newTrackIndex, newPlaylist]) => {
+    console.log("CurrentTrackIndex: ", newTrackIndex, "CurrentPlaylist: ", newPlaylist.context);
+    if (newPlaylist && newPlaylist.context.id === props.playlistId && newPlaylist.context.edited === false && Number.isInteger(newTrackIndex)) {
+      currentTrackIndex.value = newTrackIndex;
+    } else {
+      currentTrackIndex.value = null;
+    }
+  },
+  { immediate: true }
+)
 
 watch(
   route,

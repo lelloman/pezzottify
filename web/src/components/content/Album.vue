@@ -20,7 +20,7 @@
         <div v-for="(trackId, trackIndex) in disc.tracks" :key="trackId" class="track"
           @contextmenu.prevent="openTrackContextMenu($event, trackId, trackIndex)">
           <LoadTrackListItem :contextId="albumId" :trackId="trackId" :trackNumber="trackIndex + 1"
-            @track-clicked="handleClickOnTrack(trackId)" />
+            @track-clicked="handleClickOnTrack(trackId)" :isCurrentlyPlaying="trackIndex == currentTrackIndex" />
         </div>
       </div>
     </div>
@@ -59,6 +59,7 @@ const userStore = useUserStore();
 const staticsStore = useStaticsStore();
 
 const currentTrackId = ref(null);
+const currentTrackIndex = ref(null);
 const isAlbumLiked = ref(false);
 
 let albumDataUnwatcher = null;
@@ -75,6 +76,18 @@ watch(() => player.currentTrackId,
   },
   { immediate: true }
 );
+
+watch([() => player.currentTrackIndex, () => player.currentPlaylist],
+  ([newTrackIndex, newPlaylist]) => {
+    console.log("CurrentTrackIndex: ", newTrackIndex, "CurrentPlaylist: ", newPlaylist.context);
+    if (newPlaylist && newPlaylist.context.id === props.albumId && Number.isInteger(newTrackIndex)) {
+      currentTrackIndex.value = newTrackIndex;
+    } else {
+      currentTrackIndex.value = null;
+    }
+  },
+  { immediate: true }
+)
 
 const fetchData = async (id) => {
   if (albumDataUnwatcher) {

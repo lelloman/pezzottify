@@ -21,14 +21,12 @@
 
 <script setup>
 import { ref, onMounted, computed, watch } from 'vue';
-import { usePlayerStore } from '@/store/player';
 import { formatDuration } from '@/utils';
 import TrackName from '@/components/common/TrackName.vue';
 import LoadClickableArtistsNames from '@/components/common/LoadClickableArtistsNames.vue';
 import { useStaticsStore } from '@/store/statics';
 import MultiSourceImage from '@/components/common/MultiSourceImage.vue';
 
-const player = usePlayerStore();
 const staticsStore = useStaticsStore();
 
 const props = defineProps({
@@ -43,27 +41,20 @@ const props = defineProps({
   trackNumber: {
     type: Number,
     default: 0
+  },
+  isCurrentlyPlaying: {
+    type: Boolean,
+    default: false
   }
 });
 
 const emit = defineEmits(['track-clicked', 'track-image-clicked']);
-
-const localCurrentTrackId = ref(null);
 
 const loading = ref(false);
 const error = ref(null);
 const track = ref(null);
 
 let trackDataUnWatcher = null;
-
-watch(() => player.currentTrackId,
-  (newTrackId) => {
-    console.log("CurrentTrackId: " + newTrackId);
-    localCurrentTrackId.value = newTrackId;
-  },
-  { immediate: true }
-);
-
 
 const loadTrackData = async () => {
   if (trackDataUnWatcher) {
@@ -75,7 +66,6 @@ const loadTrackData = async () => {
   track.value = null;
   trackDataUnWatcher = watch(staticsStore.getTrack(props.trackId),
     (newTrack) => {
-      console.log('LoadTrackListItem New track:', newTrack);
       if (newTrack && newTrack.item) {
         loading.value = false;
 
@@ -92,11 +82,10 @@ const loadTrackData = async () => {
 };
 
 const computeTrackRowClasses = computed(() => {
-  const isCurrentTrack = track.value && track.value.id == localCurrentTrackId.value;
   return {
     trackRow: true,
-    nonPlayingTrack: !isCurrentTrack,
-    playingTrack: isCurrentTrack,
+    nonPlayingTrack: !props.isCurrentlyPlaying,
+    playingTrack: props.isCurrentlyPlaying,
   };
 });
 

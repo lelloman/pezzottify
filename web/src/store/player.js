@@ -450,14 +450,18 @@ export const usePlayerStore = defineStore('player', () => {
     newTracks.splice(toIndex, 0, removedTrack);
 
     let pushNewHistory = false;
+
     const newPlaylist = {
       ...currentPlaylist.value,
+      context: { ...currentPlaylist.value.context },
       tracksIds: newTracks,
     }
     if (currentPlaylist.value.type === PLAYBACK_CONTEXTS.album) {
       newPlaylist.type = PLAYBACK_CONTEXTS.userMix;
-      console.log("player moveTrack() changing context type from album to userMix");
+      newPlaylist.context = { name: null, id: null, edited: false };
       pushNewHistory = true;
+    } else if (currentPlaylist.value.type == PLAYBACK_CONTEXTS.userPlaylist) {
+      newPlaylist.context.edited = true;
     }
 
     if (pushNewHistory) {
@@ -485,12 +489,15 @@ export const usePlayerStore = defineStore('player', () => {
     const newTracks = [...currentPlaylist.value.tracksIds, ...tracksIds];
     const newPlaylist = {
       ...currentPlaylist.value,
+      context: { ...currentPlaylist.value.context },
       tracksIds: newTracks,
     }
     if (currentPlaylist.value.type === PLAYBACK_CONTEXTS.album) {
       newPlaylist.type = PLAYBACK_CONTEXTS.userMix;
-      console.log("player addTracksToPlaylist() changing context type from album to userMix");
+      newPlaylist.context = { name: null, id: null, edited: false };
       pushNewHistory = true;
+    } else if (currentPlaylist.value.type == PLAYBACK_CONTEXTS.userPlaylist) {
+      newPlaylist.context.edited = true;
     }
 
     if (pushNewHistory) {
@@ -511,11 +518,12 @@ export const usePlayerStore = defineStore('player', () => {
     newTracks.splice(index, 1);
     const newPlaylist = {
       ...currentPlaylist.value,
+      context: { ...currentPlaylist.value.context },
       tracksIds: newTracks,
     }
     if (currentPlaylist.value.type === PLAYBACK_CONTEXTS.album) {
       newPlaylist.type = PLAYBACK_CONTEXTS.userMix;
-      console.log("player removeTrackFromPlaylist() changing context type from album to userMix");
+      newPlaylist.context = { name: null, id: null, edited: false };
       pushNewHistory = true;
     } else if (currentPlaylist.value.type == PLAYBACK_CONTEXTS.userPlaylist) {
       newPlaylist.context.edited = true;

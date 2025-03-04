@@ -27,7 +27,6 @@
 import '@/assets/main.css';
 import { watch, ref, computed } from 'vue';
 import { usePlayerStore } from '@/store/player';
-import { useRouter } from 'vue-router';
 import TrackContextMenu from '@/components/common/contextmenu/TrackContextMenu.vue';
 import ChevronLeft from '@/components/icons/ChevronLeft.vue';
 import ChevronRight from '@/components/icons/ChevronRight.vue';
@@ -41,7 +40,6 @@ const playingContext = ref({
   text: 'Currently Playing'
 });
 
-const router = useRouter();
 const player = usePlayerStore();
 
 const tracksVModel = ref([]);

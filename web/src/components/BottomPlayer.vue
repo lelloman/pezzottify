@@ -210,8 +210,6 @@ watch(progressSec,
 )
 watch(currentTrackId,
   (newCurrentTrackId) => {
-    console.log("BottomPlayer newCurrentTrack:");
-    console.log(newCurrentTrackId);
     if (localCurrentTrackUnwatcher) {
       localCurrentTrackUnwatcher();
       localCurrentTrackUnwatcher = null;
@@ -222,7 +220,6 @@ watch(currentTrackId,
         (newCurrentTrackRef) => {
           if (newCurrentTrackRef.item) {
             const newCurrentTrack = newCurrentTrackRef.item;
-            console.log("BottomPlayer newCurrentTrack:");
             console.log(newCurrentTrack);
 
             localCurrentTrack.value = newCurrentTrack;
