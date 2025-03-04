@@ -9,6 +9,8 @@ import { ref, markRaw } from 'vue';
 import PlaylistPlusIcon from '@/components/icons/PlaylistPlusIcon.vue';
 import { useUserStore } from '@/store/user';
 import { usePlayerStore } from '@/store/player';
+import PlaylistCancelIcon from '@/components/icons/PlaylistCancelIcon.vue';
+import TrashOutlineIcon from '@/components/icons/TrashOutlineIcon.vue';
 
 const props = defineProps({
   canRemoveFromQueue: {
@@ -29,13 +31,13 @@ const contextMenu = ref(null);
 const userStore = useUserStore();
 const player = usePlayerStore();
 
-const track = ref(null);
+const trackId = ref(null);
 const trackIndex = ref(null);
 
 const handleAddToQueueClick = () => {
-  console.log("TrackContextMenu handleAddToQueueClick" + track.value);
-  if (track.value) {
-    player.addTracksToPlaylist([track.value]);
+  console.log("TrackContextMenu handleAddToQueueClick" + trackId.value);
+  if (trackId.value) {
+    player.addTracksToPlaylist([trackId.value]);
   }
 };
 
@@ -44,7 +46,7 @@ const makeAddToPlaylistSubMenu = () => {
   return userStore.playlistsData.list.map(playlistId => (
     {
       name: userStore.playlistsData.by_id[playlistId].name,
-      action: () => userStore.addTracksToPlaylist(playlistId, [track.value.id], () => { })
+      action: () => userStore.addTracksToPlaylist(playlistId, [trackId.value], () => { })
     }
   ));
 }
@@ -55,29 +57,12 @@ const menuItems = ref([
     name: 'Add to playlist',
     subMenu: makeAddToPlaylistSubMenu
   },
-  {
-    icon: markRaw(PlaylistPlusIcon),
-    name: 'Add to queue',
-    action: () => handleAddToQueueClick()
-  }
 ]);
-
-if (props.canRemoveFromQueue) {
-  menuItems.value.push({
-    icon: markRaw(PlaylistPlusIcon),
-    name: 'Remove from queue',
-    action: ([index, track]) => {
-      if (Number.isInteger(trackIndex.value)) {
-        player.removeTrackFromPlaylist(trackIndex.value);
-      }
-    }
-  });
-}
 
 if (props.canRemoveFromPlaylist) {
   menuItems.value.push({
-    icon: markRaw(PlaylistPlusIcon),
-    name: 'Remove from playlist',
+    icon: markRaw(TrashOutlineIcon),
+    name: 'Remove from this playlist',
     action: ([index, track]) => {
       console.log("TrackContextMenu remove from playlist track index:" + trackIndex.value + " contextId:" + props.contextId);
       if (Number.isInteger(trackIndex.value) && props.contextId) {
@@ -87,8 +72,26 @@ if (props.canRemoveFromPlaylist) {
   });
 }
 
-const openMenu = (event, selectedTrack, selectedTrackIndex) => {
-  track.value = selectedTrack;
+menuItems.value.push({
+  icon: markRaw(PlaylistPlusIcon),
+  name: 'Add to queue',
+  action: () => handleAddToQueueClick()
+});
+
+if (props.canRemoveFromQueue) {
+  menuItems.value.push({
+    icon: markRaw(PlaylistCancelIcon),
+    name: 'Remove from queue',
+    action: ([index, track]) => {
+      if (Number.isInteger(trackIndex.value)) {
+        player.removeTrackFromPlaylist(trackIndex.value);
+      }
+    }
+  });
+}
+
+const openMenu = (event, selectedTrackId, selectedTrackIndex) => {
+  trackId.value = selectedTrackId;
   trackIndex.value = selectedTrackIndex;
   contextMenu.value.openMenu(event);
 };

@@ -5,7 +5,7 @@
         @click.stop="handleClickOnAlbumCover" />
       <div class="trackNamesColumn">
         <TrackName :track="localCurrentTrack" :infiniteAnimation="true" />
-        <ClickableArtistsNames :artistsIdsNames="artists" />
+        <LoadClickableArtistsNames :artistsIds="artists" />
       </div>
     </div>
     <div class="playerControlsColumn">
@@ -52,9 +52,10 @@ import StopIcon from './icons/StopIcon.vue';
 import VolumeOnIcon from './icons/VolumeOnIcon.vue';
 import VolumeOffIcon from './icons/VolumeOffIcon.vue';
 import MultiSourceImage from './common/MultiSourceImage.vue';
-import ClickableArtistsNames from './common/ClickableArtistsNames.vue';
+import LoadClickableArtistsNames from '@/components/common/LoadClickableArtistsNames.vue';
 import { useRouter } from 'vue-router';
 import TrackName from './common/TrackName.vue';
+import { useStaticsStore } from '@/store/statics';
 
 const ControlIconButton = {
   props: ["icon", "action", "big"],
@@ -73,6 +74,8 @@ const ControlIconButton = {
 
 const router = useRouter();
 const player = usePlayerStore();
+const staticsStore = useStaticsStore();
+
 const localCurrentTrack = ref(null);
 const localProgressPercent = ref(0);
 
@@ -97,6 +100,8 @@ const imageUrls = ref([]);
 const duration = ref('');
 
 const currentTimeSec = ref(0);
+
+let localCurrentTrackUnwatcher = null;
 
 const formatTime = (timeInSeconds) => {
   const hours = Math.floor(timeInSeconds / 3600);
@@ -204,15 +209,29 @@ watch(progressSec,
   { immediate: true }
 )
 watch(currentTrackId,
-  (newCurrentTrack) => {
+  (newCurrentTrackId) => {
     console.log("BottomPlayer newCurrentTrack:");
-    console.log(newCurrentTrack);
-    if (newCurrentTrack) {
-      localCurrentTrack.value = newCurrentTrack;
-      songName.value = newCurrentTrack.name;
-      artists.value = newCurrentTrack.artists;
-      imageUrls.value = newCurrentTrack.imageUrls;
-      duration.value = newCurrentTrack.duration ? formatDuration(newCurrentTrack.duration) : '';
+    console.log(newCurrentTrackId);
+    if (localCurrentTrackUnwatcher) {
+      localCurrentTrackUnwatcher();
+      localCurrentTrackUnwatcher = null;
+    }
+
+    if (newCurrentTrackId) {
+      localCurrentTrackUnwatcher = watch(staticsStore.getTrack(newCurrentTrackId),
+        (newCurrentTrackRef) => {
+          if (newCurrentTrackRef.item) {
+            const newCurrentTrack = newCurrentTrackRef.item;
+            console.log("BottomPlayer newCurrentTrack:");
+            console.log(newCurrentTrack);
+
+            localCurrentTrack.value = newCurrentTrack;
+            songName.value = newCurrentTrack.name;
+            artists.value = newCurrentTrack.artists_ids;
+            //imageUrls.value = newCurrentTrack.imageUrls;
+            duration.value = newCurrentTrack.duration ? formatDuration(newCurrentTrack.duration) : '';
+          }
+        }, { immediate: true });
     } else {
       localCurrentTrack.value = null;
       songName.value = '';

@@ -76,7 +76,6 @@ const router = useRouter();
 const route = useRoute();
 const userStore = useUserStore();
 const player = usePlayerStore();
-const staticsStore = useStaticsStore();
 
 const loading = ref(true);
 const error = ref(null);
@@ -96,10 +95,7 @@ const playlist = computed(() => {
 
 const openTrackContextMenu = (event, trackId, trackIndex) => {
   console.log('Open track context menu:', trackId, trackIndex);
-  const trackData = staticsStore.getTrackData(trackId)
-  if (trackData) {
-    trackContextMenuRef.value.openMenu(event, trackData, trackIndex);
-  };
+  trackContextMenuRef.value.openMenu(event, trackId, trackIndex);
 };
 
 const handleChangeNameButtonClicked = async () => {

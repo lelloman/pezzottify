@@ -25,7 +25,7 @@ import { chooseAlbumCoverImageUrl } from '@/utils';
 import MultiSourceImage from './MultiSourceImage.vue';
 import PlayIcon from '@/components/icons/PlayIcon.vue';
 import { usePlayerStore } from '@/store/player';
-import LoadClickableArtistsNames from '@/components/common/LoadClickableArtistsName.vue';
+import LoadClickableArtistsNames from '@/components/common/LoadClickableArtistsNames.vue';
 import { useStaticsStore } from '@/store/statics';
 
 const router = useRouter();

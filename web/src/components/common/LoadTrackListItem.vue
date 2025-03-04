@@ -2,26 +2,31 @@
   <div class="trackWrapper">
     <div v-if="loading" class="track-loading">Loading...</div>
     <div v-else-if="error" class="track-error">Error: {{ error }}</div>
-    <div v-else-if="track" @click="handleTrackClick" :class="computeTrackRowClasses(props.trackId)">
-      <div class="trackIndexSpan">
-        <p>{{ trackNumber }} </p>
+    <div v-else-if="track" @click="handleTrackClick" :class="computeTrackRowClasses">
+      <div class="track-item-content">
+        <div class="trackIndexSpan">
+          <p>{{ trackNumber }} </p>
+        </div>
+        <MultiSourceImage v-if="track.image_urls" class="trackImage scaleClickFeedback" :urls="track.image_urls"
+          @click.stop="$emit('track-image-clicked', track)" />
+        <TrackName :track="track" class="trackNameSpan" :hoverAnimation="true" />
+        <div class="trackArtistsSpan">
+          <LoadClickableArtistsNames :artistsIds="track.artists_ids" />
+        </div>
+        <div class="track-duration">{{ formatDuration(track.duration) }}</div>
       </div>
-      <TrackName :track="track" class="trackNameSpan" :hoverAnimation="true" />
-      <div class="trackArtistsSpan">
-        <LoadClickableArtistsNames :artistsIds="track.artists_ids" />
-      </div>
-      <div class="track-duration">{{ formatDuration(track.duration) }}</div>
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted, watch } from 'vue';
+import { ref, onMounted, computed, watch } from 'vue';
 import { usePlayerStore } from '@/store/player';
 import { formatDuration } from '@/utils';
 import TrackName from '@/components/common/TrackName.vue';
-import LoadClickableArtistsNames from '@/components/common/LoadClickableArtistsName.vue';
+import LoadClickableArtistsNames from '@/components/common/LoadClickableArtistsNames.vue';
 import { useStaticsStore } from '@/store/statics';
+import MultiSourceImage from '@/components/common/MultiSourceImage.vue';
 
 const player = usePlayerStore();
 const staticsStore = useStaticsStore();
@@ -41,7 +46,7 @@ const props = defineProps({
   }
 });
 
-const emit = defineEmits(['track-clicked']);
+const emit = defineEmits(['track-clicked', 'track-image-clicked']);
 
 const localCurrentTrackId = ref(null);
 
@@ -86,14 +91,14 @@ const loadTrackData = async () => {
   );
 };
 
-const computeTrackRowClasses = (trackId) => {
-  const isCurrentTrack = trackId == localCurrentTrackId.value;
+const computeTrackRowClasses = computed(() => {
+  const isCurrentTrack = track.value && track.value.id == localCurrentTrackId.value;
   return {
     trackRow: true,
     nonPlayingTrack: !isCurrentTrack,
     playingTrack: isCurrentTrack,
   };
-}
+});
 
 const handleTrackClick = () => {
   if (track.value) {
@@ -179,5 +184,19 @@ defineExpose({
 .trackNameSpan {
   flex: 1;
   size: 14px !important;
+}
+
+.track-item-content {
+  display: flex;
+  flex-direction: row;
+  width: 100%;
+  align-items: center;
+  padding: 4px 0;
+}
+
+.trackImage {
+  width: 40px;
+  height: 40px;
+  margin-right: 8px;
 }
 </style>

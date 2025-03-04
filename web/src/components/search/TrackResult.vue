@@ -1,6 +1,6 @@
 <template>
   <div class="searchResultRow" :data-id="result" @click.stop="handleTrackClick(result)"
-    @contextmenu.prevent="openContextMenu($event, track)">
+    @contextmenu.prevent="openContextMenu($event, result.id)">
     <MultiSourceImage :urls="[imageUrl]" alt="Image" class="searchResultImage scaleClickFeedback"
       @click.stop="handleImageClick" />
     <div class="column">
@@ -41,8 +41,8 @@ const playerStore = usePlayerStore();
 const router = useRouter();
 
 const trackContextMenuRef = ref(null);
-const openContextMenu = (event, track) => {
-  trackContextMenuRef.value.openMenu(event, track, 0);
+const openContextMenu = (event, trackId) => {
+  trackContextMenuRef.value.openMenu(event, trackId, 0);
 }
 
 const handleTrackClick = (event) => {

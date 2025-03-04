@@ -445,14 +445,14 @@ export const usePlayerStore = defineStore('player', () => {
     if (fromIndex === toIndex) {
       return;
     }
-    const newTracks = [...currentPlaylist.value.tracks];
+    const newTracks = [...currentPlaylist.value.tracksIds];
     const [removedTrack] = newTracks.splice(fromIndex, 1);
     newTracks.splice(toIndex, 0, removedTrack);
 
     let pushNewHistory = false;
     const newPlaylist = {
       ...currentPlaylist.value,
-      tracks: newTracks,
+      tracksIds: newTracks,
     }
     if (currentPlaylist.value.type === PLAYBACK_CONTEXTS.album) {
       newPlaylist.type = PLAYBACK_CONTEXTS.userMix;
@@ -462,6 +462,9 @@ export const usePlayerStore = defineStore('player', () => {
 
     if (pushNewHistory) {
       setNewPlaylingPlaylist(newPlaylist);
+    } else {
+      playlistsHistory.value[currentPlaylistIndex.value] = newPlaylist;
+      savePlaylistHistory(playlistsHistory.value);
     }
 
     if (fromIndex === currentTrackIndex.value) {
@@ -474,15 +477,15 @@ export const usePlayerStore = defineStore('player', () => {
     savePlaylistHistory(playlistsHistory.value);
   }
 
-  const addTracksToPlaylist = (tracks) => {
+  const addTracksToPlaylist = (tracksIds) => {
     if (!currentPlaylist.value) {
       return;
     }
     let pushNewHistory = false;
-    const newTracks = [...currentPlaylist.value.tracks, ...tracks];
+    const newTracks = [...currentPlaylist.value.tracksIds, ...tracksIds];
     const newPlaylist = {
       ...currentPlaylist.value,
-      tracks: newTracks,
+      tracksIds: newTracks,
     }
     if (currentPlaylist.value.type === PLAYBACK_CONTEXTS.album) {
       newPlaylist.type = PLAYBACK_CONTEXTS.userMix;
@@ -504,11 +507,11 @@ export const usePlayerStore = defineStore('player', () => {
       return;
     }
     let pushNewHistory = false;
-    const newTracks = [...currentPlaylist.value.tracks];
+    const newTracks = [...currentPlaylist.value.tracksIds];
     newTracks.splice(index, 1);
     const newPlaylist = {
       ...currentPlaylist.value,
-      tracks: newTracks,
+      tracksIds: newTracks,
     }
     if (currentPlaylist.value.type === PLAYBACK_CONTEXTS.album) {
       newPlaylist.type = PLAYBACK_CONTEXTS.userMix;
@@ -516,6 +519,12 @@ export const usePlayerStore = defineStore('player', () => {
       pushNewHistory = true;
     } else if (currentPlaylist.value.type == PLAYBACK_CONTEXTS.userPlaylist) {
       newPlaylist.context.edited = true;
+    }
+
+    if (index === currentTrackIndex.value) {
+      skipNextTrack();
+    } else if (index < currentTrackIndex.value) {
+      currentTrackIndex.value -= 1;
     }
 
     if (pushNewHistory) {

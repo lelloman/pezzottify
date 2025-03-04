@@ -11,20 +11,12 @@
     </div>
     <div class="trackRowsContainer">
       <VirtualList v-model="tracksVModel" data-key="listItemId" @drop="handleDrop">
-
         <template v-slot:item="{ record, index, dataKey }">
           <div :class="{ currentlyPlayingRow: index == currentIndex, trackRow: true }"
-            @contextmenu.prevent="openContextMenu($event, record.id, index)" @click.stop="handleClick(index)">
-            <!--<MultiSourceImage class="trackImage scaleClickFeedback" :urls="record.imageUrls ? record.imageUrls : []"
-              @click.stop="handleClickOnTrackImage(record)" />-->
-            <div class="namesColumn">
-              <TrackName v-if="record" :track="record" :hoverAnimation="true" />
-              <ClickableArtistsNames :artistsIdsNames="record ? record.artists : []" />
-            </div>
-            <p>{{ record ? formatDuration(record.duration) : '' }} </p>
+            @contextmenu.prevent="openContextMenu($event, record.id, index)">
+            <LoadTrackListItem :trackId="record.id" :trackNumber="index + 1" @track-clicked="handleClick(index)" />
           </div>
         </template>
-
       </VirtualList>
     </div>
 
@@ -35,16 +27,13 @@
 import '@/assets/main.css';
 import { watch, ref, computed } from 'vue';
 import { usePlayerStore } from '@/store/player';
-import { formatDuration } from '@/utils';
 import { useRouter } from 'vue-router';
-import MultiSourceImage from '@/components/common/MultiSourceImage.vue';
-import ClickableArtistsNames from '@/components/common/ClickableArtistsNames.vue';
-import TrackName from '@/components/common/TrackName.vue';
 import TrackContextMenu from '@/components/common/contextmenu/TrackContextMenu.vue';
 import ChevronLeft from '@/components/icons/ChevronLeft.vue';
 import ChevronRight from '@/components/icons/ChevronRight.vue';
 import SlidingText from '@/components/common/SlidingText.vue';
 import VirtualList from 'vue-virtual-draglist';
+import LoadTrackListItem from './common/LoadTrackListItem.vue';
 
 const panelVisible = computed(() => tracksVModel.value.length);
 const currentIndex = ref(null);
@@ -59,10 +48,6 @@ const tracksVModel = ref([]);
 
 const handleClick = (index) => {
   player.loadTrackIndex(index);
-}
-
-const handleClickOnTrackImage = (track) => {
-  router.push("/album/" + track.albumId);
 }
 
 const trackContextMenuRef = ref(null);

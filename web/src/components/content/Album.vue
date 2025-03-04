@@ -18,7 +18,7 @@
         <h1 v-if="album.discs.length > 1">Disc {{ discIndex + 1 }}<span v-if="disc.name">- {{ disc.name }}</span>
         </h1>
         <div v-for="(trackId, trackIndex) in disc.tracks" :key="trackId" class="track"
-          @contextmenu.prevent="openTrackContextMenu($event, data.tracks[trackId], trackIndex)">
+          @contextmenu.prevent="openTrackContextMenu($event, trackId, trackIndex)">
           <LoadTrackListItem :contextId="albumId" :trackId="trackId" :trackNumber="trackIndex + 1"
             @track-clicked="handleClickOnTrack(trackId)" />
         </div>
@@ -64,8 +64,8 @@ const isAlbumLiked = ref(false);
 let albumDataUnwatcher = null;
 
 const trackContextMenuRef = ref(null);
-const openTrackContextMenu = (event, track, index) => {
-  trackContextMenuRef.value.openMenu(event, track, index);
+const openTrackContextMenu = (event, trackId, index) => {
+  trackContextMenuRef.value.openMenu(event, trackId, index);
 }
 
 watch(() => player.currentTrackId,
