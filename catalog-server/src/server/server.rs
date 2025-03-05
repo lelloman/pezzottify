@@ -467,9 +467,9 @@ fn make_app(
         .with_state(state.clone());
 
     let mut content_routes: Router = Router::new()
-        .route("/artist/{id}", get(get_artist))
         .route("/album/{id}", get(get_album))
         .route("/album/{id}/resolved", get(get_resolved_album))
+        .route("/artist/{id}", get(get_artist))
         .route("/artist/{id}/discography", get(get_artist_discography))
         .route("/track/{id}", get(get_track))
         .route("/track/{id}/resolved", get(get_resolved_track))
