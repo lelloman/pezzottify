@@ -2,12 +2,14 @@ package com.lelloman.pezzottify.android.remoteapi
 
 import com.lelloman.pezzottify.android.remoteapi.internal.RemoteApiClientImpl
 import com.lelloman.pezzottify.android.remoteapi.response.AlbumResponse
-import com.lelloman.pezzottify.android.remoteapi.response.ArtistDiscography
+import com.lelloman.pezzottify.android.remoteapi.response.ArtistDiscographyResponse
 import com.lelloman.pezzottify.android.remoteapi.response.ArtistResponse
 import com.lelloman.pezzottify.android.remoteapi.response.ImageResponse
 import com.lelloman.pezzottify.android.remoteapi.response.LoginSuccessResponse
 import com.lelloman.pezzottify.android.remoteapi.response.RemoteApiResponse
+import com.lelloman.pezzottify.android.remoteapi.response.SearchResponse
 import com.lelloman.pezzottify.android.remoteapi.response.TrackResponse
+import kotlinx.serialization.Serializable
 import okhttp3.OkHttpClient
 
 
@@ -17,7 +19,7 @@ interface RemoteApiClient {
 
     suspend fun getArtist(artistId: String): RemoteApiResponse<ArtistResponse>
 
-    suspend fun getArtistDiscography(artistId: String): RemoteApiResponse<List<ArtistDiscography>>
+    suspend fun getArtistDiscography(artistId: String): RemoteApiResponse<ArtistDiscographyResponse>
 
     suspend fun getAlbum(albumId: String): RemoteApiResponse<AlbumResponse>
 
@@ -28,7 +30,7 @@ interface RemoteApiClient {
     suspend fun search(
         query: String,
         filters: List<SearchFilter>? = null
-    ): RemoteApiResponse<List<String>>
+    ): RemoteApiResponse<SearchResponse>
 
     object Factory {
         fun create(
@@ -41,6 +43,7 @@ interface RemoteApiClient {
         )
     }
 
+    @Serializable
     enum class SearchFilter {
         Album,
         Artist,

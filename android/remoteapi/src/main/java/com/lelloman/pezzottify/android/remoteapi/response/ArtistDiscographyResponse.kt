@@ -1,6 +1,9 @@
 package com.lelloman.pezzottify.android.remoteapi.response
 
-data class ArtistDiscography(
+import kotlinx.serialization.Serializable
+
+@Serializable
+data class ArtistDiscographyResponse(
     val albums: List<String>,
     val features: List<String>,
 )

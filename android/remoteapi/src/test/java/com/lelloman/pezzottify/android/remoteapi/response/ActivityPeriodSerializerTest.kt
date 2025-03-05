@@ -5,7 +5,6 @@ import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.json.Json
 import org.junit.Test
 
-@OptIn(ExperimentalSerializationApi::class)
 class ActivityPeriodSerializerTest {
 
     @Test

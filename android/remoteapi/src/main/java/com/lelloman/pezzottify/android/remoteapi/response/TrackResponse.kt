@@ -1,7 +1,9 @@
 package com.lelloman.pezzottify.android.remoteapi.response
 
 import kotlinx.serialization.SerialName
+import kotlinx.serialization.Serializable
 
+@Serializable
 enum class ArtistRole {
     ARTIST_ROLE_UNKNOWN,
     ARTIST_ROLE_MAIN_ARTIST,
@@ -13,12 +15,14 @@ enum class ArtistRole {
     ARTIST_ROLE_ORCHESTRA,
 }
 
+@Serializable
 data class ArtistWithRole(
     val artistId: String,
     val name: String,
     val role: ArtistRole,
 )
 
+@Serializable
 data class TrackResponse(
 
     val id: String,

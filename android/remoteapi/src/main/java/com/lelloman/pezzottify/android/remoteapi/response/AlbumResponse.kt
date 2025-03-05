@@ -1,7 +1,9 @@
 package com.lelloman.pezzottify.android.remoteapi.response
 
 import kotlinx.serialization.SerialName
+import kotlinx.serialization.Serializable
 
+@Serializable
 enum class AlbumType {
     ALBUM,
     SINGLE,
@@ -11,12 +13,14 @@ enum class AlbumType {
     PODCAST,
 }
 
+@Serializable
 data class Disc(
     val number: Int,
     val name: String,
     val tracks: List<String>,
 )
 
+@Serializable
 data class AlbumResponse(
     val id: String,
 
