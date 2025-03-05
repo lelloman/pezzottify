@@ -10,6 +10,9 @@
 - Add admin panel (after user roles)
 - Make all list items lazily loaded (RecyclerView/LazyColumn behavior)
 - Implement track selection (instead of play command), so that group of tracks can be added/removed
+- Implement playlist reordering from playlist content page
+- Add save/cancel button and show edited state in currently playing side bar
+- Add async track image fetching
 - ~Add current playing context (as in Album, Playlist, User's mix)~
 - ~Implement UNDO or history for playback playlists~
 - ~Make right-click contextual menu for track~
