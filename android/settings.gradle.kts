@@ -21,4 +21,9 @@ dependencyResolutionManagement {
 
 rootProject.name = "Pezzottify"
 include(":app")
- 
+include(":ui")
+include(":remoteapi")
+include(":localdata")
+include(":debuginterface")
+include(":player")
+include(":logger")
