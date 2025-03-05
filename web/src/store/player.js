@@ -177,8 +177,9 @@ export const usePlayerStore = defineStore('player', () => {
   }
 
   /* Playlist starters */
-  const setAlbumId = (albumId, discIndex, trackIndex) => {
-    const album = staticsStore.getAlbumData(albumId);
+  const setAlbumId = async (albumId, discIndex, trackIndex) => {
+    const album = await Promise.resolve(staticsStore.waitAlbumData(albumId));
+    console.log("setAlbumId() waited album: ", album);
     if (album) {
       const albumPlaylist = makePlaylistFromAlbumData(album);
       setNewPlaylingPlaylist(albumPlaylist);

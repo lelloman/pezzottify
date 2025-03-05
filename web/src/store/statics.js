@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia';
-import { reactive, ref } from 'vue';
+import { reactive, ref, watch } from 'vue';
 import { useRemoteStore } from './remote';
 
 
@@ -87,6 +87,59 @@ export const useStaticsStore = defineStore('statics', () => {
     return null;
   }
 
+  // If the item is not present, it waits for it to be fetched
+  const waitItemData = (type, id) => {
+    let entry = statics[type][id];
+    if (entry && entry.ref.item) {
+      return Promise.resolve(entry.ref.item);
+    }
+
+    if (entry && !entry.ref.item) {
+      return new Promise((resolve, reject) => {
+        const stopWatchItem = watch(() => entry.ref.item, (newValue) => {
+          if (newValue) {
+            stopWatchItem();
+            stopWatchError();
+            resolve(newValue);
+          }
+        });
+
+        const stopWatchError = watch(() => entry.ref.error, (newValue) => {
+          if (newValue) {
+            stopWatchItem();
+            stopWatchError();
+            reject(newValue);
+          }
+        });
+      });
+    }
+
+    entry = {
+      id: id,
+      ref: reactive({
+        error: null,
+        item: null,
+      })
+    };
+    statics[type][id] = entry;
+    return new Promise((resolve, reject) => {
+      fetchItemFromRemote(type, id)
+        .then((item) => {
+          localStorage.setItem(getStoredItemKey(type, id), JSON.stringify(item));
+          entry.ref.item = item;
+          resolve(item);
+        })
+        .catch((e) => {
+          entry.ref.error = 'Failed to fetch item';
+          reject(e);
+        });
+    });
+  }
+
+  const waitAlbumData = (albumId) => {
+    return waitItemData('albums', albumId);
+  }
+
   const getAlbumData = (albumId) => {
     return getItemData('albums', albumId);
   }
@@ -112,5 +165,6 @@ export const useStaticsStore = defineStore('statics', () => {
     getTrack,
     getAlbumData,
     getTrackData,
+    waitAlbumData,
   }
 });
