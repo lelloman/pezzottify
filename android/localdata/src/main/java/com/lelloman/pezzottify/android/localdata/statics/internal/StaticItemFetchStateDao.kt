@@ -10,15 +10,16 @@ import kotlinx.coroutines.flow.Flow
 internal interface StaticItemFetchStateDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
-    fun insert(record: StaticItemFetchStateRecord)
+    fun insert(record: StaticItemFetchStateRecord): Long
 
     @Suppress("MaxLineLength")
     @Query("SELECT * FROM ${StaticItemFetchStateRecord.TABLE_NAME} WHERE ${StaticItemFetchStateRecord.COLUMN_ITEM_ID} = :itemId")
     fun get(itemId: String): Flow<StaticItemFetchStateRecord?>
 
+    @Query("SELECT * FROM ${StaticItemFetchStateRecord.TABLE_NAME}")
+    fun getAll(): Flow<List<StaticItemFetchStateRecord>>
+
     @Suppress("MaxLineLength")
     @Query("DELETE FROM ${StaticItemFetchStateRecord.TABLE_NAME} WHERE ${StaticItemFetchStateRecord.COLUMN_ITEM_ID} = :itemId")
-    fun delete(itemId: String)
-
-
+    fun delete(itemId: String): Int
 }

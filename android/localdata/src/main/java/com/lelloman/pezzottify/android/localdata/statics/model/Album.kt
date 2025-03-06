@@ -36,7 +36,7 @@ data class Album(
     val portraitGroupImagesIds: List<String>,
 ) {
     companion object {
-        const val TABLE_NAME = "Album"
+        const val TABLE_NAME = "album"
 
         const val COLUMN_ID = "id"
     }

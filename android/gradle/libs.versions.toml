@@ -19,6 +19,7 @@ serialization = "1.6.2"
 coroutines-core = "1.10.1"
 room = "2.6.1"
 ksp = "2.0.21-1.0.27"
+securityCryptoKtx = "1.0.0"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -52,6 +53,7 @@ room-runtime = { group = "androidx.room", name = "room-runtime", version.ref = "
 room-ksp-compiler = { group = "androidx.room", name = "room-compiler", version.ref = "room" }
 room-ktx = { group = "androidx.room", name = "room-ktx", version.ref = "room" }
 room-testing = { group = "androidx.room", name = "room-testing", version.ref = "room" }
+androidx-security-crypto-ktx = { group = "androidx.security", name = "security-crypto", version.ref = "securityCryptoKtx" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

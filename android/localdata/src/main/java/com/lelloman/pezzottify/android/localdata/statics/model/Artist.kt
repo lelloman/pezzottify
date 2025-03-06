@@ -14,7 +14,7 @@ data class Artist(
     val name: String,
 ) {
     companion object {
-        const val TABLE_NAME = "Artist"
+        const val TABLE_NAME = "artist"
 
         const val COLUMN_ID = "id"
     }

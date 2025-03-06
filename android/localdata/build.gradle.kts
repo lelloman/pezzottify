@@ -42,6 +42,7 @@ dependencies {
     implementation(libs.kotlinx.serialization.json)
 
     implementation(libs.room.runtime)
+    implementation(libs.androidx.security.crypto.ktx)
     ksp(libs.room.ksp.compiler)
     implementation(libs.room.ktx)
 

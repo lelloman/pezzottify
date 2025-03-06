@@ -1,10 +1,10 @@
 package com.lelloman.pezzottify.android.localdata.auth
 
-import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.StateFlow
 
 interface AuthStore {
 
-    fun getAuthState(): Flow<AuthState>
+    fun getAuthState(): StateFlow<AuthState>
 
-    suspend fun storeAuthState(newAuthState: AuthState): Result<Void>
+    suspend fun storeAuthState(newAuthState: AuthState): Result<Unit>
 }

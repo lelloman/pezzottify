@@ -4,7 +4,16 @@ enum class ErrorReason {
     Network,
     NotFound,
     Client,
-    Unknown,
+    Unknown;
+
+    companion object {
+        fun fromString(string: String) = when (string.lowercase()) {
+            "network" -> Network
+            "notfound" -> NotFound
+            "client" -> Client
+            else -> Unknown
+        }
+    }
 }
 
 sealed interface StaticItemFetchState {

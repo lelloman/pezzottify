@@ -15,11 +15,12 @@ interface StaticsStore {
 
     fun getDiscography(artistId: String): StaticsItemFlow<ArtistDiscography>
 
-    suspend fun storeArtist(artist: Artist): Result<Void>
+    suspend fun storeArtist(artist: Artist): Result<Unit>
 
-    suspend fun storeTrack(track: Track): Result<Void>
+    suspend fun storeTrack(track: Track): Result<Unit>
 
-    suspend fun storeAlbum(album: Album): Result<Void>
+    suspend fun storeAlbum(album: Album): Result<Unit>
 
-    suspend fun storeDiscography(artistDiscography: ArtistDiscography): Result<Void>
+    suspend fun storeDiscography(artistDiscography: ArtistDiscography): Result<Unit>
+
 }
