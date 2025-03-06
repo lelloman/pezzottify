@@ -5,7 +5,6 @@ import com.lelloman.pezzottify.android.remoteapi.RemoteApiClient
 import com.lelloman.pezzottify.android.remoteapi.RemoteApiCredentialsProvider
 import com.lelloman.pezzottify.android.remoteapi.response.HashedItemType
 import com.lelloman.pezzottify.android.remoteapi.response.RemoteApiResponse
-import com.lelloman.pezzottify.android.remoteapi.response.SearchResult
 import kotlinx.coroutines.test.runTest
 import org.junit.Test
 
