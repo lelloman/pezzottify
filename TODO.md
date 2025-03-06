@@ -30,6 +30,7 @@
 ## [catalog-server]
 - Add user roles
 - Create catalog db
+- Set last used to auth token
 - Check UserStore return type, we should not swallow errors
 - Verify that all sqlite operations are performed within a transaction
 - Delete cli_search and clean up unused stuff and format and warnings
