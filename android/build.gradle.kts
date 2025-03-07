@@ -7,4 +7,6 @@ plugins {
     alias(libs.plugins.android.library) apply false
     alias(libs.plugins.jetbrains.kotlin.jvm) apply false
     alias(libs.plugins.google.ksp) apply false
+    alias(libs.plugins.hilt) apply false
+    id("org.jetbrains.kotlin.kapt") version "2.1.10" apply false
 }

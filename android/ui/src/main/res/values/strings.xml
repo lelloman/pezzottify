@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- ABOUT SCREEN -->
+    <string name="version">App version: %1$s</string>
+    <string name="commit">Commit hash: %1$s</string>
+</resources>

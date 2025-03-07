@@ -1,0 +1,13 @@
+package com.lelloman.pezzottify.android.ui.screen.login
+
+interface LoginScreenActions {
+
+    fun updateHost(host: String)
+
+    fun updateEmail(email: String)
+
+    fun updatePassword(password: String)
+
+    fun clockOnLoginButton()
+}
+
