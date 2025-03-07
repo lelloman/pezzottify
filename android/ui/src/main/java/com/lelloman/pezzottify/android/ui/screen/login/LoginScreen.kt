@@ -17,6 +17,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -30,24 +31,44 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.navigation.NavController
+import androidx.navigation.compose.rememberNavController
+import com.lelloman.pezzottify.android.ui.fromLoginToMain
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.launch
 
 @Composable
-fun LoginScreen() {
-    val viewModel = remember { LoginViewModel() }
+fun LoginScreen(navController: NavController) {
+    val viewModel = hiltViewModel<LoginViewModel>()
+
     LoginScreenInternal(
         state = viewModel.state.collectAsState().value,
         actions = viewModel,
+        events = viewModel.events,
+        navController = navController,
     )
 }
 
 @Composable
 private fun LoginScreenInternal(
     state: LoginScreenState,
+    events: Flow<LoginScreenEvents>,
     actions: LoginScreenActions,
+    navController: NavController,
 ) {
+
+    LaunchedEffect(Unit) {
+        events.collect {
+            when (it) {
+                LoginScreenEvents.NavigateToMain -> navController.fromLoginToMain()
+            }
+        }
+    }
+
     var host by remember { mutableStateOf("") }
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
@@ -131,6 +152,7 @@ private fun LoginScreenInternal(
 @Composable
 private fun LoginPreview() {
     val coroutineScope = rememberCoroutineScope()
+    val navController = rememberNavController()
 
     var mutableState by remember {
         mutableStateOf(
@@ -147,6 +169,8 @@ private fun LoginPreview() {
     }
     LoginScreenInternal(
         state = mutableState,
+        events = flow {},
+        navController = navController,
         actions = object : LoginScreenActions {
             override fun updateHost(host: String) {
                 mutableState = mutableState.copy(host = host)

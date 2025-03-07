@@ -1,6 +1,29 @@
 package com.lelloman.pezzottify.android.ui
 
+import androidx.navigation.NavController
+import androidx.navigation.PopUpToBuilder
+import com.lelloman.pezzottify.android.ui.Screen.Login
+import com.lelloman.pezzottify.android.ui.Screen.Main
+import com.lelloman.pezzottify.android.ui.Screen.Splash
 import kotlinx.serialization.Serializable
+
+private fun inclusive(): PopUpToBuilder.() -> Unit = { inclusive = true }
+
+fun NavController.fromSplashToMain() = navigate(Main.Home) {
+    popUpTo(Splash, inclusive())
+}
+
+fun NavController.fromSplashToLogin() = navigate(Login) {
+    popUpTo(Splash, inclusive())
+}
+
+fun NavController.fromLoginToMain() = navigate(Main.Home) {
+    popUpTo(Login, inclusive())
+}
+
+fun NavController.fromMainBackToLogin() = navigate(Login) {
+    popUpTo(Main.Home, inclusive())
+}
 
 sealed interface Screen {
 
@@ -13,6 +36,15 @@ sealed interface Screen {
     @Serializable
     data object About : Screen
 
-    @Serializable
-    data object Main : Screen
+    sealed interface Main : Screen {
+
+        @Serializable
+        data object Home : Screen
+
+        @Serializable
+        data object Search : Screen
+
+        @Serializable
+        data object Library : Screen
+    }
 }

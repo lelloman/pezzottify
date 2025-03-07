@@ -18,16 +18,16 @@ fun AppUi() {
         startDestination = Screen.Splash,
     ) {
         composable<Screen.Splash> {
-            SplashScreen()
+            SplashScreen(navController)
         }
         composable<Screen.Login> {
-            LoginScreen()
+            LoginScreen(navController)
         }
         composable<Screen.About> {
             AboutScreen()
         }
-        composable<Screen.Main> {
-            MainScreen()
+        composable<Screen.Main.Home> {
+            MainScreen(navController)
         }
     }
 }

@@ -1,5 +1,7 @@
 package com.lelloman.pezzottify.android.ui.screen.login
 
+import kotlinx.coroutines.flow.Flow
+
 interface LoginScreenActions {
 
     fun updateHost(host: String)

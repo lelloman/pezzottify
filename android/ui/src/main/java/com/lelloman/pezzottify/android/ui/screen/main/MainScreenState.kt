@@ -1,6 +1,6 @@
 package com.lelloman.pezzottify.android.ui.screen.main
 
-data class MainState(
+data class MainScreenState(
     val tab: Tab = Tab.Home,
 ) {
 
