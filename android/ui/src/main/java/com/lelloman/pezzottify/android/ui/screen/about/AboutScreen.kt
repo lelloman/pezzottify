@@ -16,8 +16,12 @@ import androidx.compose.ui.unit.dp
 import com.lelloman.pezzottify.android.ui.R
 
 @Composable
-fun AboutScreen(state: AboutScreenState) {
+fun AboutScreen() {
 
+}
+
+@Composable
+fun AboutScreenInternal(state: AboutScreenState) {
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -34,7 +38,7 @@ fun AboutScreen(state: AboutScreenState) {
 @Composable
 @Preview
 fun AboutScreenPreview() {
-    AboutScreen(
+    AboutScreenInternal(
         AboutScreenState(
             appName = "Pezzottify",
             version = "1.0.0",

@@ -17,6 +17,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -34,7 +35,16 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 @Composable
-fun Login(
+fun LoginScreen() {
+    val viewModel = remember { LoginViewModel() }
+    LoginScreenInternal(
+        state = viewModel.state.collectAsState().value,
+        actions = viewModel,
+    )
+}
+
+@Composable
+private fun LoginScreenInternal(
     state: LoginScreenState,
     actions: LoginScreenActions,
 ) {
@@ -135,7 +145,7 @@ private fun LoginPreview() {
             )
         )
     }
-    Login(
+    LoginScreenInternal(
         state = mutableState,
         actions = object : LoginScreenActions {
             override fun updateHost(host: String) {
