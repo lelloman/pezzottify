@@ -8,6 +8,7 @@ import androidx.navigation.compose.rememberNavController
 import com.lelloman.pezzottify.android.ui.screen.about.AboutScreen
 import com.lelloman.pezzottify.android.ui.screen.login.LoginScreen
 import com.lelloman.pezzottify.android.ui.screen.main.MainScreen
+import com.lelloman.pezzottify.android.ui.screen.main.profile.ProfileScreen
 import com.lelloman.pezzottify.android.ui.screen.splash.SplashScreen
 
 @Composable
@@ -28,6 +29,9 @@ fun AppUi() {
         }
         composable<Screen.Main.Home> {
             MainScreen(navController)
+        }
+        composable<Screen.Main.Home.Profile> {
+            ProfileScreen(navController)
         }
     }
 }

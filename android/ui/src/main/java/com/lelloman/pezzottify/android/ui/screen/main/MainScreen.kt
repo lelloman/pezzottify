@@ -4,7 +4,6 @@ import androidx.annotation.StringRes
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Icon
@@ -30,7 +29,7 @@ import com.lelloman.pezzottify.android.ui.screen.main.library.LibraryScreen
 import com.lelloman.pezzottify.android.ui.screen.main.search.SearchScreen
 
 enum class BottomNavigationRoute(
-    val route: Screen,
+    val route: Screen.Main,
     val icon: ImageVector,
     @StringRes val description: Int,
 ) {
@@ -48,7 +47,9 @@ enum class BottomNavigationRoute(
         route = Screen.Main.Library,
         icon = Icons.Filled.Menu,
         description = R.string.library_navigation_item_description,
-    ),
+    );
+
+    val routeString: String = route::class.qualifiedName.orEmpty()
 }
 
 @Composable
@@ -57,9 +58,10 @@ fun MainScreen(parentNavController: NavController) {
     Scaffold(
         bottomBar = {
             NavigationBar {
-                val navBackStackEntry by navController.currentBackStackEntryAsState()
-                val currentDestination = navBackStackEntry?.destination
+                val backStackEntry by navController.currentBackStackEntryAsState()
+                val currentDestination = backStackEntry?.destination
                 BottomNavigationRoute.entries.forEach {
+                    val isSelected = currentDestination?.route == it.routeString
                     NavigationBarItem(
                         icon = {
                             Icon(
@@ -68,19 +70,13 @@ fun MainScreen(parentNavController: NavController) {
                             )
                         },
                         label = { Text(stringResource(it.description)) },
-                        selected = currentDestination?.route == it.route.toString(),
+                        selected = isSelected,
                         onClick = {
                             navController.navigate(it.route) {
-                                // Pop up to the start destination of the graph to
-                                // avoid building up a large stack of destinations
-                                // on the back stack as users select items
                                 popUpTo(navController.graph.findStartDestination().id) {
                                     saveState = true
                                 }
-                                // Avoid multiple copies of the same destination when
-                                // reselecting the same item
                                 launchSingleTop = true
-                                // Restore state when reselecting a previously selected item
                                 restoreState = true
                             }
                         }
@@ -92,9 +88,11 @@ fun MainScreen(parentNavController: NavController) {
         NavHost(
             navController = navController,
             startDestination = Screen.Main.Home,
-            modifier = Modifier.padding(innerPadding),
+            modifier = Modifier.padding(bottom = innerPadding.calculateBottomPadding()),
         ) {
-            composable<Screen.Main.Home> { HomeScreen(Modifier, parentNavController) }
+            composable<Screen.Main.Home> {
+                HomeScreen(parentNavController = parentNavController)
+            }
             composable<Screen.Main.Search> { SearchScreen() }
             composable<Screen.Main.Library> { LibraryScreen() }
         }

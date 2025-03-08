@@ -1,6 +1,7 @@
 package com.lelloman.pezzottify.android.ui
 
 import com.lelloman.pezzottify.android.ui.screen.login.LoginViewModel
+import com.lelloman.pezzottify.android.ui.screen.main.profile.ProfileScreenViewModel
 import com.lelloman.pezzottify.android.ui.screen.splash.SplashViewModel
 import dagger.Module
 import dagger.Provides
@@ -17,10 +18,10 @@ class InteractorsModule {
     @Provides
     fun provideSplashInteractor(): SplashViewModel.Interactor =
         object : SplashViewModel.Interactor {
-            override suspend fun isLoggedIn(): Boolean {
+            override suspend fun isLoggedIn(): Boolean = true/*{
                 delay(1.seconds)
                 return false
-            }
+            }*/
         }
 
     @Provides
@@ -32,6 +33,13 @@ class InteractorsModule {
         ): LoginViewModel.Interactor.LoginResult {
             delay(500.milliseconds)
             return LoginViewModel.Interactor.LoginResult.Success
+        }
+    }
+
+    @Provides
+    fun provideProfileScreenInteractor() = object : ProfileScreenViewModel.Interactor {
+        override suspend fun logout() {
+            delay(2.seconds)
         }
     }
 }
