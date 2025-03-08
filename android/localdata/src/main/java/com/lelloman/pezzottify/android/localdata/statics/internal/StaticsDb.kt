@@ -28,5 +28,6 @@ internal abstract class StaticsDb : RoomDatabase() {
 
     companion object {
         const val VERSION = 1
+        const val NAME = "StaticsDb"
     }
 }

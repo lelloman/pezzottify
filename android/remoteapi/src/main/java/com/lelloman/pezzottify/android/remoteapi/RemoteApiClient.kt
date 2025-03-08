@@ -9,6 +9,7 @@ import com.lelloman.pezzottify.android.remoteapi.response.LoginSuccessResponse
 import com.lelloman.pezzottify.android.remoteapi.response.RemoteApiResponse
 import com.lelloman.pezzottify.android.remoteapi.response.SearchResponse
 import com.lelloman.pezzottify.android.remoteapi.response.TrackResponse
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.serialization.Serializable
 import okhttp3.OkHttpClient
 
@@ -34,10 +35,10 @@ interface RemoteApiClient {
 
     object Factory {
         fun create(
-            baseUrl: String,
+            hostUrlProvider: HostUrlProvider,
             credentialsProvider: RemoteApiCredentialsProvider
         ): RemoteApiClient = RemoteApiClientImpl(
-            baseUrl = baseUrl,
+            hostUrlProvider = hostUrlProvider,
             okhttpClientBuilder = OkHttpClient.Builder(),
             credentialsProvider = credentialsProvider,
         )
@@ -48,5 +49,9 @@ interface RemoteApiClient {
         Album,
         Artist,
         Track,
+    }
+
+    interface HostUrlProvider {
+        val hostUrl: StateFlow<String>
     }
 }

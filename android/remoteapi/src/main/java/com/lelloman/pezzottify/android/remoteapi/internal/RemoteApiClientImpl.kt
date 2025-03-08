@@ -12,8 +12,11 @@ import com.lelloman.pezzottify.android.remoteapi.response.LoginSuccessResponse
 import com.lelloman.pezzottify.android.remoteapi.response.RemoteApiResponse
 import com.lelloman.pezzottify.android.remoteapi.response.SearchResponse
 import com.lelloman.pezzottify.android.remoteapi.response.TrackResponse
-import kotlinx.coroutines.CoroutineDispatcher
-import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonNamingStrategy
@@ -21,17 +24,15 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import retrofit2.Response
 import retrofit2.Retrofit
-import retrofit2.awaitResponse
 import retrofit2.converter.kotlinx.serialization.asConverterFactory
 
 internal class RemoteApiClientImpl(
-    baseUrl: String,
-    okhttpClientBuilder: OkHttpClient.Builder,
+    hostUrlProvider: RemoteApiClient.HostUrlProvider,
+    private val okhttpClientBuilder: OkHttpClient.Builder,
     private val credentialsProvider: RemoteApiCredentialsProvider,
-    private val coroutineDispatcher: CoroutineDispatcher = Dispatchers.IO,
+    coroutineScope: CoroutineScope = GlobalScope,
 ) : RemoteApiClient {
 
-    private val okHttpClient = okhttpClientBuilder.build()
     private val authToken get() = credentialsProvider.authToken
 
     @OptIn(ExperimentalSerializationApi::class)
@@ -39,15 +40,9 @@ internal class RemoteApiClientImpl(
         ignoreUnknownKeys = true
         namingStrategy = JsonNamingStrategy.SnakeCase
     }
-    private val retrofit = Retrofit.Builder()
-        .client(okHttpClient)
-        .baseUrl(baseUrl)
-        .addConverterFactory(jsonConverter.asConverterFactory("application/json".toMediaType()))
-        .build()
-        .create(RetrofitApiClient::class.java)
 
-    @Suppress("UNCHECKED_CAST")
-    private fun <T> RemoteApiResponse.Error.cast() = this as RemoteApiResponse<T>
+    private val retrofitFlow = hostUrlProvider.hostUrl.map(::makeRetrofit)
+        .stateIn(coroutineScope, SharingStarted.Eagerly, null)
 
     private val <T>Response<T>.commonError
         get() = if (!isSuccessful) {
@@ -60,16 +55,25 @@ internal class RemoteApiClientImpl(
             null
         }
 
+    private val noUrlRetrofit by lazy { makeRetrofit("http://localhost") }
+    private val retrofit get() = retrofitFlow.value ?: noUrlRetrofit
+
     private val <T>Response<T>.parsedBody: RemoteApiResponse<T>
         get() = try {
             RemoteApiResponse.Success(body()!!)
         } catch (t: Throwable) {
-            RemoteApiResponse.Error.Unknown(t.message ?: "Unknown error").cast()
+            RemoteApiResponse.Error.Unknown(t.message ?: "Unknown error")
         }
 
-    private fun <T> Response<T>.returnFromRetrofitResponse(): RemoteApiResponse<T> = commonError
-        ?.cast()
-        ?: parsedBody
+    private fun <T> Response<T>.returnFromRetrofitResponse(): RemoteApiResponse<T> =
+        commonError ?: parsedBody
+
+    private fun makeRetrofit(baseUrl: String) = Retrofit.Builder()
+        .client(okhttpClientBuilder.build())
+        .baseUrl(baseUrl)
+        .addConverterFactory(jsonConverter.asConverterFactory("application/json".toMediaType()))
+        .build()
+        .create(RetrofitApiClient::class.java)
 
     override suspend fun login(
         userHandle: String,
@@ -98,16 +102,18 @@ internal class RemoteApiClientImpl(
 
     override suspend fun getImage(imageId: String): RemoteApiResponse<ImageResponse> {
         val retrofitResponse = retrofit.getImage(authToken = authToken, imageId = imageId)
-        retrofitResponse.commonError?.let { return it.cast() }
+        retrofitResponse.commonError?.let { return it }
         val imageBytes = retrofitResponse.body()?.bytes()
-            ?: return RemoteApiResponse.Error.Unknown("No body").cast()
+            ?: return RemoteApiResponse.Error.Unknown("No body")
 
         val mimeType = retrofitResponse.headers()["Content-Type"] ?: "image/*"
 
-        return RemoteApiResponse.Success(ImageResponse(
-            mimeType = mimeType,
-            content = imageBytes,
-        ))
+        return RemoteApiResponse.Success(
+            ImageResponse(
+                mimeType = mimeType,
+                content = imageBytes,
+            )
+        )
     }
 
     override suspend fun search(
