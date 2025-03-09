@@ -1,17 +1,17 @@
 package com.lelloman.pezzottify.android.remoteapi.internal
 
-import com.lelloman.pezzottify.android.remoteapi.RemoteApiClient
-import com.lelloman.pezzottify.android.remoteapi.RemoteApiCredentialsProvider
+import com.lelloman.pezzottify.android.domain.remoteapi.RemoteApiClient
+import com.lelloman.pezzottify.android.domain.remoteapi.RemoteApiCredentialsProvider
 import com.lelloman.pezzottify.android.remoteapi.internal.requests.LoginRequest
 import com.lelloman.pezzottify.android.remoteapi.internal.requests.SearchRequest
-import com.lelloman.pezzottify.android.remoteapi.response.AlbumResponse
-import com.lelloman.pezzottify.android.remoteapi.response.ArtistDiscographyResponse
-import com.lelloman.pezzottify.android.remoteapi.response.ArtistResponse
-import com.lelloman.pezzottify.android.remoteapi.response.ImageResponse
-import com.lelloman.pezzottify.android.remoteapi.response.LoginSuccessResponse
-import com.lelloman.pezzottify.android.remoteapi.response.RemoteApiResponse
-import com.lelloman.pezzottify.android.remoteapi.response.SearchResponse
-import com.lelloman.pezzottify.android.remoteapi.response.TrackResponse
+import com.lelloman.pezzottify.android.domain.remoteapi.response.AlbumResponse
+import com.lelloman.pezzottify.android.domain.remoteapi.response.ArtistDiscographyResponse
+import com.lelloman.pezzottify.android.domain.remoteapi.response.ArtistResponse
+import com.lelloman.pezzottify.android.domain.remoteapi.response.ImageResponse
+import com.lelloman.pezzottify.android.domain.remoteapi.response.LoginSuccessResponse
+import com.lelloman.pezzottify.android.domain.remoteapi.response.RemoteApiResponse
+import com.lelloman.pezzottify.android.domain.remoteapi.response.SearchResponse
+import com.lelloman.pezzottify.android.domain.remoteapi.response.TrackResponse
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.flow.SharingStarted

@@ -1,10 +1,10 @@
 package com.lelloman.pezzottify.android.remoteapi.internal
 
 import com.google.common.truth.Truth.assertThat
-import com.lelloman.pezzottify.android.remoteapi.RemoteApiClient
-import com.lelloman.pezzottify.android.remoteapi.RemoteApiCredentialsProvider
-import com.lelloman.pezzottify.android.remoteapi.response.HashedItemType
-import com.lelloman.pezzottify.android.remoteapi.response.RemoteApiResponse
+import com.lelloman.pezzottify.android.domain.remoteapi.RemoteApiClient
+import com.lelloman.pezzottify.android.domain.remoteapi.RemoteApiCredentialsProvider
+import com.lelloman.pezzottify.android.domain.remoteapi.response.HashedItemType
+import com.lelloman.pezzottify.android.domain.remoteapi.response.RemoteApiResponse
 import kotlinx.coroutines.test.runTest
 import org.junit.Test
 

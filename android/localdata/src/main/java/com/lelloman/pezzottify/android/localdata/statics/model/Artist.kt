@@ -9,13 +9,19 @@ data class Artist(
 
     @ColumnInfo(name = COLUMN_ID)
     @PrimaryKey
-    val id: String,
+    override val id: String,
 
-    val name: String,
-) {
+    override val name: String,
+) : com.lelloman.pezzottify.android.domain.statics.Artist {
+
     companion object {
         const val TABLE_NAME = "artist"
 
         const val COLUMN_ID = "id"
     }
 }
+
+fun com.lelloman.pezzottify.android.domain.statics.Artist.quack(): Artist = Artist(
+    id = id,
+    name = name,
+)

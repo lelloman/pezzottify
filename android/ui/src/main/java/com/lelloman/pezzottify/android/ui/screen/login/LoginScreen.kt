@@ -69,10 +69,6 @@ private fun LoginScreenInternal(
         }
     }
 
-    var host by remember { mutableStateOf("") }
-    var email by remember { mutableStateOf("") }
-    var password by remember { mutableStateOf("") }
-
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -82,19 +78,8 @@ private fun LoginScreenInternal(
     ) {
         OutlinedTextField(
             enabled = !state.isLoading,
-            value = host,
-            onValueChange = { host = it },
-            label = { Text("Host") },
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = 8.dp)
-        )
-
-        OutlinedTextField(
-            enabled = !state.isLoading,
-            value = email,
-            onValueChange = { email = it },
+            value = state.email,
+            onValueChange = actions::updateEmail,
             label = { Text("Email") },
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
             modifier = Modifier
@@ -104,8 +89,8 @@ private fun LoginScreenInternal(
 
         OutlinedTextField(
             enabled = !state.isLoading,
-            value = password,
-            onValueChange = { password = it },
+            value = state.password,
+            onValueChange = actions::updatePassword,
             label = { Text("Password") },
             visualTransformation = PasswordVisualTransformation(),
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),

@@ -22,14 +22,14 @@ data class ArtistDiscography(
 
     @PrimaryKey
     @ColumnInfo(name = COLUMN_ARTIST_ID)
-    val artistId: String,
+    override val artistId: String,
 
-    val albumsIds: List<String>,
+    override val albumsIds: List<String>,
 
-    val featuresIds: List<String>,
+    override val featuresIds: List<String>,
 
     val created: Long,
-) {
+) : com.lelloman.pezzottify.android.domain.statics.ArtistDiscography {
 
     val id: String get() = getId(artistId)
 
@@ -41,3 +41,11 @@ data class ArtistDiscography(
         fun getId(artistId: String) = "${artistId}_discography"
     }
 }
+
+fun com.lelloman.pezzottify.android.domain.statics.ArtistDiscography.quack(): ArtistDiscography =
+    ArtistDiscography(
+        artistId = artistId,
+        albumsIds = albumsIds,
+        featuresIds = featuresIds,
+        created = System.currentTimeMillis(),
+    )

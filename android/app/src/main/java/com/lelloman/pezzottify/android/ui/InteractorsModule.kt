@@ -1,9 +1,7 @@
 package com.lelloman.pezzottify.android.ui
 
-import com.lelloman.pezzottify.android.localdata.auth.AuthState
-import com.lelloman.pezzottify.android.localdata.auth.AuthStore
-import com.lelloman.pezzottify.android.remoteapi.RemoteApiClient
-import com.lelloman.pezzottify.android.remoteapi.response.RemoteApiResponse
+import com.lelloman.pezzottify.android.domain.usecase.IsLoggedInUseCase
+import com.lelloman.pezzottify.android.domain.usecase.PerformLoginUseCase
 import com.lelloman.pezzottify.android.ui.screen.login.LoginViewModel
 import com.lelloman.pezzottify.android.ui.screen.main.profile.ProfileScreenViewModel
 import com.lelloman.pezzottify.android.ui.screen.splash.SplashViewModel
@@ -19,40 +17,24 @@ import kotlin.time.Duration.Companion.seconds
 class InteractorsModule {
 
     @Provides
-    fun provideSplashInteractor(): SplashViewModel.Interactor =
+    fun provideSplashInteractor(isLoggedIn: IsLoggedInUseCase): SplashViewModel.Interactor =
         object : SplashViewModel.Interactor {
-            override suspend fun isLoggedIn(): Boolean = true/*{
-                delay(1.seconds)
-                return false
-            }*/
+            override suspend fun isLoggedIn() = isLoggedIn()
         }
 
     @Provides
     fun provideLoginInteractor(
-        remoteApiClient: RemoteApiClient,
-        authStore: AuthStore,
+        performLogin: PerformLoginUseCase,
     ): LoginViewModel.Interactor = object : LoginViewModel.Interactor {
         override suspend fun login(
-            host: String,
             email: String,
             password: String
-        ): LoginViewModel.Interactor.LoginResult {
-            return when (val loginResult = remoteApiClient
-                .login(email, password)) {
-                is RemoteApiResponse.Success -> {
-                    authStore.storeAuthState(
-                        AuthState.LoggedIn(
-                            email,
-                            loginResult.data.token,
-                            host
-                        )
-                    )
-                    return LoginViewModel.Interactor.LoginResult.Success
-                }
-                RemoteApiResponse.Error.Unauthorized -> LoginViewModel.Interactor.LoginResult.Failure.InvalidCredentials
-                else -> LoginViewModel.Interactor.LoginResult.Failure.Unknown
+        ): LoginViewModel.Interactor.LoginResult =
+            when (performLogin(email, password)) {
+                PerformLoginUseCase.LoginResult.Success -> LoginViewModel.Interactor.LoginResult.Success
+                PerformLoginUseCase.LoginResult.WrongCredentials -> LoginViewModel.Interactor.LoginResult.Failure.InvalidCredentials
+                PerformLoginUseCase.LoginResult.Error -> LoginViewModel.Interactor.LoginResult.Failure.Unknown
             }
-        }
     }
 
     @Provides

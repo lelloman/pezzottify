@@ -23,21 +23,30 @@ data class Album(
 
     @ColumnInfo(name = COLUMN_ID)
     @PrimaryKey
-    val id: String,
+    override val id: String,
 
-    val name: String,
+    override val name: String,
 
-    val genre: List<String>,
+    override val genre: List<String>,
 
-    val portraitsImagesIds: List<String>,
+    override val portraitsImagesIds: List<String>,
 
-    val related: List<String>,
+    override val related: List<String>,
 
-    val portraitGroupImagesIds: List<String>,
-) {
+    override val portraitGroupImagesIds: List<String>,
+) : com.lelloman.pezzottify.android.domain.statics.Album {
     companion object {
         const val TABLE_NAME = "album"
 
         const val COLUMN_ID = "id"
     }
 }
+
+fun com.lelloman.pezzottify.android.domain.statics.Album.quack(): Album = Album(
+    id = id,
+    name = name,
+    genre = genre,
+    portraitsImagesIds = portraitsImagesIds,
+    related = related,
+    portraitGroupImagesIds = portraitGroupImagesIds,
+)

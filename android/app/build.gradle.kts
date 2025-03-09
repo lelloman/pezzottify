@@ -55,10 +55,10 @@ dependencies {
     kapt(libs.hilt.compiler)
 
     implementation(project(":ui"))
-    implementation(project(":localdata"))
+    implementation(project(":domain"))
     implementation(project(":remoteapi"))
+    implementation(project(":localdata"))
     implementation(project(":logger"))
-    implementation(project(":player"))
     debugImplementation(project(":debuginterface"))
 
     testImplementation(libs.junit)

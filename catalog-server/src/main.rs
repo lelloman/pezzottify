@@ -117,7 +117,7 @@ async fn main() -> Result<()> {
     #[cfg(feature = "no_search")]
     let search_vault: Box<dyn SearchVault> = Box::new(NoOpSearchVault {});
 
-    info!("Ready to serve!");
+    info!("Ready to serve at port {}!", cli_args.port);
     run_server(
         catalog,
         search_vault,

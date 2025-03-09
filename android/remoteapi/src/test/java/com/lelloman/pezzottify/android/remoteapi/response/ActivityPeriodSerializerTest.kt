@@ -1,6 +1,7 @@
 package com.lelloman.pezzottify.android.remoteapi.response
 
 import com.google.common.truth.Truth.assertThat
+import com.lelloman.pezzottify.android.domain.remoteapi.response.ActivityPeriod
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.json.Json
 import org.junit.Test

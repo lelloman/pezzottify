@@ -39,7 +39,6 @@ class LoginViewModel @Inject constructor(
             mutableState.value = mutableState.value.copy(isLoading = true)
             viewModelScope.launch {
                 val loginResult = interactor.login(
-                    host = mutableState.value.host,
                     email = mutableState.value.email,
                     password = mutableState.value.password,
                 )
@@ -65,7 +64,7 @@ class LoginViewModel @Inject constructor(
 
     interface Interactor {
 
-        suspend fun login(host: String, email: String, password: String): LoginResult
+        suspend fun login(email: String, password: String): LoginResult
 
         sealed interface LoginResult {
 

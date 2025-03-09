@@ -9,15 +9,21 @@ data class Track(
 
     @ColumnInfo(name = COLUMN_ID)
     @PrimaryKey
-    val id: String,
+    override val id: String,
 
-    val name: String,
+    override val name: String,
 
-    val albumId: String,
-) {
+    override val albumId: String,
+) : com.lelloman.pezzottify.android.domain.statics.Track {
     companion object {
         const val TABLE_NAME = "Track"
 
         const val COLUMN_ID = "id"
     }
 }
+
+fun com.lelloman.pezzottify.android.domain.statics.Track.quack(): Track = Track(
+    id = id,
+    name = name,
+    albumId = albumId,
+)

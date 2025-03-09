@@ -47,6 +47,7 @@ dependencies {
     implementation(libs.androidx.security.crypto.ktx)
     ksp(libs.room.ksp.compiler)
     implementation(libs.room.ktx)
+    implementation(project(":domain"))
 
     implementation(libs.hilt)
     kapt(libs.hilt.compiler)

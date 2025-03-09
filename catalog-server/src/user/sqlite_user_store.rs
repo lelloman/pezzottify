@@ -821,8 +821,8 @@ impl UserAuthTokenStore for SqliteUserStore {
         let rows = stmt
             .query_map(params![user_handle], |row| {
                 Ok(AuthToken {
-                    value: AuthTokenValue(row.get(0)?),
-                    user_id: row.get(1)?,
+                    user_id: row.get(0)?,
+                    value: AuthTokenValue(row.get(1)?),
                     created: system_time_from_column_result(row.get(2)?),
                     last_used: row
                         .get::<usize, Option<i64>>(3)?

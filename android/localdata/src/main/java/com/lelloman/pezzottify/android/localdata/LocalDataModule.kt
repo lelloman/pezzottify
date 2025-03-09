@@ -2,11 +2,10 @@ package com.lelloman.pezzottify.android.localdata
 
 import android.content.Context
 import androidx.room.Room
-import com.lelloman.pezzottify.android.localdata.auth.AuthStore
-import com.lelloman.pezzottify.android.localdata.auth.internal.AuthStoreImpl
-import com.lelloman.pezzottify.android.localdata.config.ConfigStore
-import com.lelloman.pezzottify.android.localdata.config.internal.ConfigStoreImpl
-import com.lelloman.pezzottify.android.localdata.statics.StaticsStore
+import com.lelloman.pezzottify.android.domain.auth.AuthStore
+import com.lelloman.pezzottify.android.domain.statics.StaticsStore
+import com.lelloman.pezzottify.android.localdata.internal.AuthStoreImpl
+import com.lelloman.pezzottify.android.localdata.internal.ConfigStoreImpl
 import com.lelloman.pezzottify.android.localdata.statics.internal.StaticsDb
 import com.lelloman.pezzottify.android.localdata.statics.internal.StaticsStoreImpl
 import dagger.Module
@@ -26,8 +25,14 @@ class LocalDataModule {
 
     @Provides
     @Singleton
-    fun provideConfigStore(@ApplicationContext context: Context): ConfigStore =
-        ConfigStoreImpl(context)
+    fun provideConfigStore(
+        @ApplicationContext context: Context,
+        @DefaultHostUrl defaultHostUrl: String
+    ): com.lelloman.pezzottify.android.domain.config.ConfigStore =
+        ConfigStoreImpl(
+            context = context,
+            defaultHostUrl = defaultHostUrl,
+        )
 
     @Provides
     @Singleton
@@ -37,8 +42,9 @@ class LocalDataModule {
 
     @Provides
     @Singleton
-    internal fun provideStaticsStore(staticsDb: StaticsDb): StaticsStore = StaticsStoreImpl(
-        staticsDao = staticsDb.staticsDao(),
-        staticItemFetchStateDao = staticsDb.staticItemFetchStateDao(),
-    )
+    internal fun provideStaticsStore(staticsDb: StaticsDb): StaticsStore =
+        StaticsStoreImpl(
+            staticsDao = staticsDb.staticsDao(),
+            staticItemFetchStateDao = staticsDb.staticItemFetchStateDao(),
+        )
 }
