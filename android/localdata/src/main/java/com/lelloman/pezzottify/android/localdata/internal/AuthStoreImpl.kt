@@ -1,6 +1,7 @@
 package com.lelloman.pezzottify.android.localdata.internal
 
 import android.content.Context
+import android.util.Log
 import androidx.security.crypto.EncryptedSharedPreferences
 import com.lelloman.pezzottify.android.domain.auth.AuthState
 import com.lelloman.pezzottify.android.domain.auth.AuthStore
@@ -55,11 +56,12 @@ internal class AuthStoreImpl(
                 }
                 Result.success(Unit)
             } catch (throwable: Throwable) {
+                Log.e("AuthStore", "Error storing auth state", throwable)
                 Result.failure(throwable)
             }
         }
 
-    suspend fun initialize() {
+    override suspend fun initialize() {
         withContext(dispatcher) {
             if (!initialized) {
                 val state = try {

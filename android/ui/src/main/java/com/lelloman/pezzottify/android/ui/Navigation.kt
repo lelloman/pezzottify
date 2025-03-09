@@ -28,7 +28,7 @@ fun NavController.fromMainBackToLogin() = navigate(Login) {
 fun NavController.toProfile() = navigate(Main.Home.Profile)
 
 fun NavController.fromProfileBackToLogin() = navigate(Login) {
-    popUpTo(Main.Home.Profile, inclusive())
+    popUpTo(Main.Home, inclusive())
 }
 
 sealed interface Screen {

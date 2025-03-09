@@ -18,4 +18,5 @@ interface StaticsStore {
 
     suspend fun storeDiscography(artistDiscography: ArtistDiscography): Result<Unit>
 
+    suspend fun deleteAll(): Result<Unit>
 }

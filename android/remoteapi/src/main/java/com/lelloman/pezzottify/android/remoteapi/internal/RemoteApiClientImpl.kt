@@ -2,8 +2,6 @@ package com.lelloman.pezzottify.android.remoteapi.internal
 
 import com.lelloman.pezzottify.android.domain.remoteapi.RemoteApiClient
 import com.lelloman.pezzottify.android.domain.remoteapi.RemoteApiCredentialsProvider
-import com.lelloman.pezzottify.android.remoteapi.internal.requests.LoginRequest
-import com.lelloman.pezzottify.android.remoteapi.internal.requests.SearchRequest
 import com.lelloman.pezzottify.android.domain.remoteapi.response.AlbumResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.ArtistDiscographyResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.ArtistResponse
@@ -12,6 +10,8 @@ import com.lelloman.pezzottify.android.domain.remoteapi.response.LoginSuccessRes
 import com.lelloman.pezzottify.android.domain.remoteapi.response.RemoteApiResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.SearchResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.TrackResponse
+import com.lelloman.pezzottify.android.remoteapi.internal.requests.LoginRequest
+import com.lelloman.pezzottify.android.remoteapi.internal.requests.SearchRequest
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.flow.SharingStarted
@@ -80,6 +80,10 @@ internal class RemoteApiClientImpl(
         password: String
     ): RemoteApiResponse<LoginSuccessResponse> = retrofit
         .login(LoginRequest(userHandle = userHandle, password = password))
+        .returnFromRetrofitResponse()
+
+    override suspend fun logout(): RemoteApiResponse<Unit> = retrofit
+        .logout(authToken = authToken)
         .returnFromRetrofitResponse()
 
     override suspend fun getArtist(artistId: String): RemoteApiResponse<ArtistResponse> =

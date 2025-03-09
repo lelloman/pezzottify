@@ -16,6 +16,8 @@ interface RemoteApiClient {
 
     suspend fun login(userHandle: String, password: String): RemoteApiResponse<LoginSuccessResponse>
 
+    suspend fun logout(): RemoteApiResponse<Unit>
+
     suspend fun getArtist(artistId: String): RemoteApiResponse<ArtistResponse>
 
     suspend fun getArtistDiscography(artistId: String): RemoteApiResponse<ArtistDiscographyResponse>

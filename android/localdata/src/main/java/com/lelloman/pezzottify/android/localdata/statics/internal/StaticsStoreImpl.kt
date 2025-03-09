@@ -17,9 +17,11 @@ private typealias IAlbum = com.lelloman.pezzottify.android.domain.statics.Album
 private typealias IArtistDiscography = com.lelloman.pezzottify.android.domain.statics.ArtistDiscography
 
 internal class StaticsStoreImpl(
-    private val staticsDao: StaticsDao,
-    private val staticItemFetchStateDao: StaticItemFetchStateDao,
+    private val db: StaticsDb,
 ) : StaticsStore {
+
+    private val staticsDao = db.staticsDao()
+    private val staticItemFetchStateDao = db.staticItemFetchStateDao()
 
     private fun <T> Flow<T?>.withFetchState(
         id: String,
@@ -152,6 +154,14 @@ internal class StaticsStoreImpl(
     override suspend fun storeDiscography(artistDiscography: IArtistDiscography): Result<Unit> =
         try {
             staticsDao.insertArtistDiscography(artistDiscography.quack())
+            Result.success(Unit)
+        } catch (throwable: Throwable) {
+            Result.failure(throwable)
+        }
+
+    override suspend fun deleteAll(): Result<Unit> =
+        try {
+            db.clearAllTables()
             Result.success(Unit)
         } catch (throwable: Throwable) {
             Result.failure(throwable)

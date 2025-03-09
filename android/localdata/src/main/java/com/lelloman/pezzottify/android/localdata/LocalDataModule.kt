@@ -43,8 +43,5 @@ class LocalDataModule {
     @Provides
     @Singleton
     internal fun provideStaticsStore(staticsDb: StaticsDb): StaticsStore =
-        StaticsStoreImpl(
-            staticsDao = staticsDb.staticsDao(),
-            staticItemFetchStateDao = staticsDb.staticItemFetchStateDao(),
-        )
+        StaticsStoreImpl(staticsDb)
 }

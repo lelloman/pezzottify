@@ -7,7 +7,7 @@ import com.lelloman.pezzottify.android.domain.remoteapi.RemoteApiClient
 import com.lelloman.pezzottify.android.domain.remoteapi.response.RemoteApiResponse
 import javax.inject.Inject
 
-class PerformLoginUseCase @Inject constructor(
+class PerformLogin @Inject constructor(
     private val remoteApiClient: RemoteApiClient,
     private val authStore: AuthStore,
     private val configStore: ConfigStore,
