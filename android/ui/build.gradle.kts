@@ -51,6 +51,8 @@ dependencies {
     implementation(libs.androidx.navigation.compose)
     implementation(libs.kotlinx.serialization.core)
     implementation(libs.kotlinx.serialization.json)
+    implementation(libs.coil)
+    implementation(libs.coil.network)
 
     implementation(libs.hilt)
     implementation(libs.hilt.navigation.compose)

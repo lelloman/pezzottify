@@ -5,7 +5,9 @@ import com.lelloman.pezzottify.android.domain.remoteapi.RemoteApiClient
 import com.lelloman.pezzottify.android.domain.remoteapi.RemoteApiCredentialsProvider
 import com.lelloman.pezzottify.android.domain.remoteapi.response.HashedItemType
 import com.lelloman.pezzottify.android.domain.remoteapi.response.RemoteApiResponse
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.runTest
+import okhttp3.OkHttpClient
 import org.junit.Test
 
 class RemoteApiClientImplTest {
@@ -19,8 +21,12 @@ class RemoteApiClientImplTest {
         val credentialsProvider = object : RemoteApiCredentialsProvider {
             override var authToken: String = ""
         }
-        val client = RemoteApiClient.Factory.create(
-            baseUrl = baseUrl,
+        val hostUrlProvider = object : RemoteApiClient.HostUrlProvider {
+            override val hostUrl = MutableStateFlow(baseUrl)
+        }
+        val client = RemoteApiClientImpl(
+            hostUrlProvider = hostUrlProvider,
+            okhttpClientBuilder = OkHttpClient.Builder(),
             credentialsProvider = credentialsProvider,
         )
 

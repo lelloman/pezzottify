@@ -27,6 +27,7 @@ runtimeAndroid = "1.7.8"
 uiTooling = "1.7.8"
 navigation = "2.8.8"
 firebaseCrashlyticsBuildtools = "3.0.3"
+coil = "3.1.0"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -68,7 +69,8 @@ androidx-runtime-android = { group = "androidx.compose.runtime", name = "runtime
 ui-tooling = { group = "androidx.compose.ui", name = "ui-tooling", version.ref = "uiTooling" }
 androidx-navigation-common = { group = "androidx.navigation", name = "navigation-common", version.ref = "navigation" }
 androidx-navigation-compose = { group = "androidx.navigation", name = "navigation-compose", version.ref = "navigation" }
-firebase-crashlytics-buildtools = { group = "com.google.firebase", name = "firebase-crashlytics-buildtools", version.ref = "firebaseCrashlyticsBuildtools" }
+coil = { group = "io.coil-kt.coil3", name = "coil-compose", version.ref = "coil" }
+coil-network = { group = "io.coil-kt.coil3", name = "coil-network-okhttp", version.ref = "coil" }
 
 
 [plugins]

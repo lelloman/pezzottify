@@ -3,8 +3,10 @@ package com.lelloman.pezzottify.android.ui
 import com.lelloman.pezzottify.android.domain.usecase.IsLoggedIn
 import com.lelloman.pezzottify.android.domain.usecase.PerformLogin
 import com.lelloman.pezzottify.android.domain.usecase.PerformLogout
+import com.lelloman.pezzottify.android.domain.usecase.PerformSearch
 import com.lelloman.pezzottify.android.ui.screen.login.LoginViewModel
 import com.lelloman.pezzottify.android.ui.screen.main.profile.ProfileScreenViewModel
+import com.lelloman.pezzottify.android.ui.screen.main.search.SearchScreenViewModel
 import com.lelloman.pezzottify.android.ui.screen.splash.SplashViewModel
 import dagger.Module
 import dagger.Provides
@@ -44,4 +46,10 @@ class InteractorsModule {
             performLogout()
         }
     }
+
+    @Provides
+    fun provideSearchScreenInteractor(performSearch: PerformSearch): SearchScreenViewModel.Interactor =
+        object : SearchScreenViewModel.Interactor {
+            override suspend fun search(query: String): Result<List<String>> = performSearch(query)
+        }
 }

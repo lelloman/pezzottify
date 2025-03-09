@@ -1,6 +1,6 @@
 package com.lelloman.pezzottify.android.domain.statics
 
-interface Album {
+interface Album : StaticItemType {
     val id: String
     val name: String
     val genre: List<String>

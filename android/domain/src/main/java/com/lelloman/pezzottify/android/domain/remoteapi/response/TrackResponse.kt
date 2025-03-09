@@ -40,7 +40,8 @@ data class TrackResponse(
     @SerialName("disc_number")
     val discNumber: Int,
 
-    val duration: Long,
+    @SerialName("duration")
+    val durationMillis: Long,
 
     @SerialName("is_explicit")
     val isExplicit: Boolean,

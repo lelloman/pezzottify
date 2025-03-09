@@ -14,6 +14,10 @@ data class Track(
     override val name: String,
 
     override val albumId: String,
+
+    override val artistsIds: List<String>,
+
+    override val durationSeconds: Int,
 ) : com.lelloman.pezzottify.android.domain.statics.Track {
     companion object {
         const val TABLE_NAME = "Track"
@@ -26,4 +30,6 @@ fun com.lelloman.pezzottify.android.domain.statics.Track.quack(): Track = Track(
     id = id,
     name = name,
     albumId = albumId,
+    artistsIds = artistsIds,
+    durationSeconds = durationSeconds,
 )
