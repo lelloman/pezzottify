@@ -1,6 +1,7 @@
 package com.lelloman.pezzottify.android.ui.screen.main.search
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -19,30 +20,48 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.SearchBar
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.navigation.NavController
 import com.lelloman.pezzottify.android.ui.component.DurationText
 import com.lelloman.pezzottify.android.ui.component.PezzottifyImagePlaceholder
 import com.lelloman.pezzottify.android.ui.component.SquarePezzottifyImage
 import com.lelloman.pezzottify.android.ui.component.SquarePezzottifyImageSize
 import com.lelloman.pezzottify.android.ui.content.Content
 import com.lelloman.pezzottify.android.ui.content.SearchResultContent
+import com.lelloman.pezzottify.android.ui.toArtist
+import kotlinx.coroutines.flow.Flow
 
 @Composable
-fun SearchScreen() {
+fun SearchScreen(navController: NavController) {
     val viewModel = hiltViewModel<SearchScreenViewModel>()
     SearchScreenContent(
         state = viewModel.state.collectAsState().value,
         actions = viewModel,
+        events = viewModel.events,
+        navController = navController,
     )
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SearchScreenContent(state: SearchScreenState, actions: SearchScreenActions) {
+fun SearchScreenContent(
+    state: SearchScreenState,
+    actions: SearchScreenActions,
+    events: Flow<SearchScreensEvents>,
+    navController: NavController,
+) {
+    LaunchedEffect(Unit) {
+        events.collect {
+            when (it) {
+                is SearchScreensEvents.NavigateToArtistScreen -> navController.toArtist(it.artistId)
+            }
+        }
+    }
     Column(
         modifier = Modifier.fillMaxSize(),
     ) {
@@ -79,7 +98,10 @@ fun SearchScreenContent(state: SearchScreenState, actions: SearchScreenActions) 
                         is Content.Resolved -> when (result.data) {
                             is SearchResultContent.Album -> AlbumSearchResult(result.data)
                             is SearchResultContent.Track -> TrackSearchResult(result.data)
-                            is SearchResultContent.Artist -> ArtistSearchResult(result.data)
+                            is SearchResultContent.Artist -> ArtistSearchResult(
+                                result.data,
+                                actions
+                            )
                         }
 
                         null, is Content.Loading -> LoadingSearchResult()
@@ -147,12 +169,16 @@ private fun TrackSearchResult(searchResult: SearchResultContent.Track) {
 }
 
 @Composable
-private fun ArtistSearchResult(searchResult: SearchResultContent.Artist) {
+private fun ArtistSearchResult(
+    searchResult: SearchResultContent.Artist,
+    actions: SearchScreenActions
+) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .padding(8.dp)
             .height(SquarePezzottifyImageSize.Small.value)
+            .clickable { actions.clickOnArtistSearchResult(searchResult.id) }
     ) {
         SquarePezzottifyImage(
             url = searchResult.imageUrl,

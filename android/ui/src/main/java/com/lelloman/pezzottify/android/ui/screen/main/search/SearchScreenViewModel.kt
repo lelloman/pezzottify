@@ -5,9 +5,11 @@ import androidx.lifecycle.viewModelScope
 import com.lelloman.pezzottify.android.ui.content.ContentResolver
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -21,6 +23,9 @@ class SearchScreenViewModel @Inject constructor(
 
     private val mutableState = MutableStateFlow(SearchScreenState())
     val state = mutableState.asStateFlow()
+
+    private val mutableEvents = MutableSharedFlow<SearchScreensEvents>()
+    val events = mutableEvents.asSharedFlow()
 
     private var previousSearchJob: Job? = null
 
@@ -50,6 +55,12 @@ class SearchScreenViewModel @Inject constructor(
                 searchResults = null,
                 searchError = null
             )
+        }
+    }
+
+    override fun clickOnArtistSearchResult(artistId: String) {
+        viewModelScope.launch {
+            mutableEvents.emit(SearchScreensEvents.NavigateToArtistScreen(artistId))
         }
     }
 

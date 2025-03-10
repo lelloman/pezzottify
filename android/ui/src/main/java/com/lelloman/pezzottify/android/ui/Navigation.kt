@@ -31,6 +31,8 @@ fun NavController.fromProfileBackToLogin() = navigate(Login) {
     popUpTo(Main.Home, inclusive())
 }
 
+fun NavController.toArtist(artistId: String) = navigate(Main.Artist(artistId))
+
 sealed interface Screen {
 
     @Serializable
@@ -56,5 +58,8 @@ sealed interface Screen {
 
         @Serializable
         data object Library : Main
+
+        @Serializable
+        data class Artist(val artistId: String) : Main
     }
 }

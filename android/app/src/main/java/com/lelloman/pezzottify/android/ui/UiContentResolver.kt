@@ -2,6 +2,7 @@ package com.lelloman.pezzottify.android.ui
 
 import com.lelloman.pezzottify.android.domain.statics.StaticsItem
 import com.lelloman.pezzottify.android.domain.statics.StaticsProvider
+import com.lelloman.pezzottify.android.ui.content.Artist
 import com.lelloman.pezzottify.android.ui.content.Content
 import com.lelloman.pezzottify.android.ui.content.ContentResolver
 import com.lelloman.pezzottify.android.ui.content.SearchResultContent
@@ -10,6 +11,20 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
 class UiContentResolver(private val staticsProvider: StaticsProvider) : ContentResolver {
+
+    override fun resolveArtist(artistId: String): Flow<Content<Artist>> =
+        staticsProvider.provideArtist(artistId).map {
+            when (it) {
+                is StaticsItem.Error -> Content.Error(it.id)
+                is StaticsItem.Loading -> Content.Loading(it.id)
+                is StaticsItem.Loaded -> Content.Resolved(
+                    it.id, Artist(
+                        id = it.id,
+                        name = it.data.name,
+                    )
+                )
+            }
+        }
 
     override fun resolveSearchResult(
         itemId: String,

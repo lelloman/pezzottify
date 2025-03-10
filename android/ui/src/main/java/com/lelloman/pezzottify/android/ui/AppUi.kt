@@ -5,9 +5,11 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.toRoute
 import com.lelloman.pezzottify.android.ui.screen.about.AboutScreen
 import com.lelloman.pezzottify.android.ui.screen.login.LoginScreen
 import com.lelloman.pezzottify.android.ui.screen.main.MainScreen
+import com.lelloman.pezzottify.android.ui.screen.main.content.artist.ArtistScreen
 import com.lelloman.pezzottify.android.ui.screen.main.profile.ProfileScreen
 import com.lelloman.pezzottify.android.ui.screen.splash.SplashScreen
 import com.lelloman.pezzottify.android.ui.theme.PezzottifyTheme
@@ -34,6 +36,9 @@ fun AppUi() {
             }
             composable<Screen.Main.Home.Profile> {
                 ProfileScreen(navController)
+            }
+            composable<Screen.Main.Artist> {
+                ArtistScreen(it.toRoute<Screen.Main.Artist>().artistId)
             }
         }
     }

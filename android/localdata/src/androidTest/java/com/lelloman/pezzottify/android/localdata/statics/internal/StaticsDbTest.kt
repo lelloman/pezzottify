@@ -4,6 +4,7 @@ import android.database.sqlite.SQLiteConstraintException
 import androidx.room.Room
 import androidx.test.platform.app.InstrumentationRegistry
 import com.google.common.truth.Truth.assertThat
+import com.lelloman.pezzottify.android.domain.statics.StaticItemType
 import com.lelloman.pezzottify.android.localdata.statics.model.Album
 import com.lelloman.pezzottify.android.localdata.statics.model.Artist
 import com.lelloman.pezzottify.android.localdata.statics.model.ArtistDiscography
@@ -207,7 +208,8 @@ class StaticsDbTest {
         val artistDiscographyValues = mutableListOf<ArtistDiscography?>()
         val flowCollectorDispatcher = StandardTestDispatcher(testScheduler)
         backgroundScope.launch(flowCollectorDispatcher) {
-            staticsDao.getArtistDiscography(artistDiscographyArtistId).toList(artistDiscographyValues)
+            staticsDao.getArtistDiscography(artistDiscographyArtistId)
+                .toList(artistDiscographyValues)
         }
         artistDiscographyValues.awaitSize(1)
         assertThat(artistDiscographyValues).isEqualTo(listOf(null))
@@ -235,27 +237,43 @@ class StaticsDbTest {
         assertThat(staticsDao.insertArtistDiscography(newArtistDiscography)).isEqualTo(2)
 
         artistDiscographyValues.awaitSize(3)
-        assertThat(artistDiscographyValues).isEqualTo(listOf(null, artistDiscography, newArtistDiscography))
+        assertThat(artistDiscographyValues).isEqualTo(
+            listOf(
+                null,
+                artistDiscography,
+                newArtistDiscography
+            )
+        )
 
         // Delete artist 1
         assertThat(staticsDao.deleteArtist(artistDiscographyArtistId)).isEqualTo(1)
         artistDiscographyValues.awaitSize(4)
-        assertThat(artistDiscographyValues).isEqualTo(listOf(null, artistDiscography, newArtistDiscography, null))
+        assertThat(artistDiscographyValues).isEqualTo(
+            listOf(
+                null,
+                artistDiscography,
+                newArtistDiscography,
+                null
+            )
+        )
     }
 
     private fun randomAlbum() = Album(
         id = Random.nextLong().toString(),
         name = Random.nextLong().toString(),
         genre = emptyList(),
-        portraitsImagesIds = emptyList(),
         related = emptyList(),
-        portraitGroupImagesIds = emptyList()
+        coverGroup = emptyList(),
+        covers = emptyList(),
+        artistsIds = emptyList(),
     )
 
     private fun randomTrack() = Track(
         id = Random.nextLong().toString(),
         name = Random.nextLong().toString(),
-        albumId = Random.nextLong().toString()
+        albumId = Random.nextLong().toString(),
+        artistsIds = emptyList(),
+        durationSeconds = 0,
     )
 
     private fun randomArtist() = Artist(
@@ -266,9 +284,8 @@ class StaticsDbTest {
     private fun randomStaticItemFetchStateRecord() = StaticItemFetchStateRecord(
         itemId = Random.nextLong().toString(),
         loading = Random.nextBoolean(),
-        errorReason = Random.nextLong().toString(),
-        lastUpdated = Random.nextLong(),
-        created = Random.nextLong(),
+        errorReason = null,
+        itemType = StaticItemType.Artist,
     )
 
     private fun randomArtistDiscography() = ArtistDiscography(

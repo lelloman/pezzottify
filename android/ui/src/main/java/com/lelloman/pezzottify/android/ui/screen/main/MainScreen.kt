@@ -93,7 +93,7 @@ fun MainScreen(parentNavController: NavController) {
             composable<Screen.Main.Home> {
                 HomeScreen(parentNavController = parentNavController)
             }
-            composable<Screen.Main.Search> { SearchScreen() }
+            composable<Screen.Main.Search> { SearchScreen(parentNavController) }
             composable<Screen.Main.Library> { LibraryScreen() }
         }
     }
