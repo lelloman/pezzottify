@@ -30,17 +30,25 @@ class SearchScreenViewModel @Inject constructor(
             isLoading = true,
         )
         previousSearchJob?.cancel()
-        previousSearchJob = viewModelScope.launch {
-            delay(400)
-            if (!isActive) {
-                return@launch
+        if (query.isNotEmpty()) {
+            previousSearchJob = viewModelScope.launch {
+                delay(400)
+                if (!isActive) {
+                    return@launch
+                }
+                val searchResultsResult = interactor.search(query)
+                mutableState.value = mutableState.value.copy(
+                    isLoading = false,
+                    searchResults = searchResultsResult.getOrNull()
+                        ?.map { contentResolver.resolveSearchResult(it.first, it.second) },
+                    searchError = searchResultsResult.exceptionOrNull()?.let { "Error" }
+                )
             }
-            val searchResultsResult = interactor.search(query)
+        } else {
             mutableState.value = mutableState.value.copy(
                 isLoading = false,
-                searchResults = searchResultsResult.getOrNull()
-                    ?.map { contentResolver.resolveSearchResult(it.first, it.second) },
-                searchError = searchResultsResult.exceptionOrNull()?.let { "Error" }
+                searchResults = null,
+                searchError = null
             )
         }
     }
