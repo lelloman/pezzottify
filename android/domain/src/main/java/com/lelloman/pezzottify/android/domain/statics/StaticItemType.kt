@@ -1,3 +1,7 @@
 package com.lelloman.pezzottify.android.domain.statics
 
-sealed interface StaticItemType
+enum class StaticItemType {
+    Artist,
+    Album,
+    Track,
+}

@@ -29,11 +29,13 @@ data class Album(
 
     override val genre: List<String>,
 
-    override val portraitsImagesIds: List<String>,
+    override val covers: List<String>,
+
+    override val coverGroup: List<String>,
 
     override val related: List<String>,
 
-    override val portraitGroupImagesIds: List<String>,
+    override val artistsIds: List<String>,
 ) : com.lelloman.pezzottify.android.domain.statics.Album {
     companion object {
         const val TABLE_NAME = "album"
@@ -46,7 +48,8 @@ fun com.lelloman.pezzottify.android.domain.statics.Album.quack(): Album = Album(
     id = id,
     name = name,
     genre = genre,
-    portraitsImagesIds = portraitsImagesIds,
+    covers = covers,
     related = related,
-    portraitGroupImagesIds = portraitGroupImagesIds,
+    coverGroup = coverGroup,
+    artistsIds = artistsIds,
 )

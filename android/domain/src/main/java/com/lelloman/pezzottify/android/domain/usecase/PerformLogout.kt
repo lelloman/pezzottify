@@ -6,7 +6,7 @@ import com.lelloman.pezzottify.android.domain.remoteapi.RemoteApiClient
 import com.lelloman.pezzottify.android.domain.statics.StaticsStore
 import javax.inject.Inject
 
-class PerformLogout @Inject constructor(
+class PerformLogout @Inject internal constructor(
     private val authStore: AuthStore,
     private val remoteApiClient: RemoteApiClient,
     private val staticsStore: StaticsStore,

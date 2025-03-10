@@ -56,11 +56,26 @@ class InteractorsModule {
         object : SearchScreenViewModel.Interactor {
             private val logger = loggerFactory.getLogger("SearchScreenViewModel.Interactor")
 
-            override suspend fun search(query: String): Result<List<String>> {
+            override suspend fun search(query: String): Result<List<Pair<String, SearchScreenViewModel.SearchedItemType>>> {
                 logger.debug("search($query)")
-                return performSearch(query).apply {
-                    logger.debug("search($query) returning $this")
+                val performSearchResult = performSearch(query)
+                if (performSearchResult.isFailure) {
+                    logger.debug("search($query) returning failure")
+                    return Result.failure(
+                        performSearchResult.exceptionOrNull() ?: Throwable("PerformSearch failed")
+                    )
                 }
+                val searchResult = performSearchResult.getOrNull() ?: emptyList()
+                val mappedResult = searchResult.map {
+                    it.first to when (it.second) {
+                        com.lelloman.pezzottify.android.domain.remoteapi.response.SearchedItemType.Album -> SearchScreenViewModel.SearchedItemType.Album
+                        com.lelloman.pezzottify.android.domain.remoteapi.response.SearchedItemType.Track -> SearchScreenViewModel.SearchedItemType.Track
+                        com.lelloman.pezzottify.android.domain.remoteapi.response.SearchedItemType.Artist -> SearchScreenViewModel.SearchedItemType.Artist
+
+                    }
+                }
+                logger.debug("search($query) returning $mappedResult")
+                return Result.success(mappedResult)
             }
         }
 }

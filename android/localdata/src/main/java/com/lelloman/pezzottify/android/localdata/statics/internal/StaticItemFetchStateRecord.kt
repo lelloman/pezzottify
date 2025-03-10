@@ -3,8 +3,9 @@ package com.lelloman.pezzottify.android.localdata.statics.internal
 import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.PrimaryKey
-import com.lelloman.pezzottify.android.localdata.statics.model.ErrorReason
-import com.lelloman.pezzottify.android.localdata.statics.model.StaticItemFetchState
+import com.lelloman.pezzottify.android.domain.statics.StaticItemType
+import com.lelloman.pezzottify.android.domain.statics.fetchstate.ErrorReason
+import com.lelloman.pezzottify.android.domain.statics.fetchstate.StaticItemFetchState
 
 @Entity(tableName = StaticItemFetchStateRecord.TABLE_NAME)
 internal data class StaticItemFetchStateRecord(
@@ -17,23 +18,33 @@ internal data class StaticItemFetchStateRecord(
 
     val errorReason: String?,
 
-    val lastUpdated: Long,
+    val itemType: StaticItemType,
 
-    val created: Long,
-) {
+    ) {
     companion object {
         const val TABLE_NAME = "static_item_fetch_state"
 
         const val COLUMN_ITEM_ID = "item_id"
+        const val COLUMN_LOADING = "loading"
 
-        fun StaticItemFetchStateRecord.toState() = when {
-            this.loading -> StaticItemFetchState.Loading(this.itemId)
-            this.errorReason != null -> StaticItemFetchState.Error(
-                this.itemId,
-                ErrorReason.fromString(errorReason)
-            )
+        fun StaticItemFetchState.toRecord() = StaticItemFetchStateRecord(
+            itemId = itemId,
+            loading = isLoading,
+            itemType = itemType,
+            errorReason = errorReason?.toString(),
+        )
 
-            else -> StaticItemFetchState.Requested(this.itemId)
-        }
+        fun StaticItemFetchStateRecord.toDomain() = StaticItemFetchState(
+            itemId = itemId,
+            isLoading = loading,
+            itemType = itemType,
+            errorReason = errorReason?.let {
+                try {
+                    ErrorReason.fromString(it)
+                } catch (_: Throwable) {
+                    ErrorReason.Unknown
+                }
+            },
+        )
     }
 }

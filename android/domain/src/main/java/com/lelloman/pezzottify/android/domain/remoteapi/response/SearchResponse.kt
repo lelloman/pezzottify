@@ -4,7 +4,7 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
 @Serializable
-enum class HashedItemType {
+enum class SearchedItemType {
     Track,
     Artist,
     Album,
@@ -13,7 +13,7 @@ enum class HashedItemType {
 @Serializable
 data class SearchResult(
     @SerialName("item_type")
-    val itemType: HashedItemType,
+    val itemType: SearchedItemType,
 
     @SerialName("item_id")
     val itemId: String,

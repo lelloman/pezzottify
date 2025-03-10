@@ -7,6 +7,8 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -29,17 +31,27 @@ class SearchScreenViewModel @Inject constructor(
         )
         previousSearchJob?.cancel()
         previousSearchJob = viewModelScope.launch {
+            delay(400)
+            if (!isActive) {
+                return@launch
+            }
             val searchResultsResult = interactor.search(query)
             mutableState.value = mutableState.value.copy(
                 isLoading = false,
                 searchResults = searchResultsResult.getOrNull()
-                    ?.map { contentResolver.resolveSearchResult(it) },
+                    ?.map { contentResolver.resolveSearchResult(it.first, it.second) },
                 searchError = searchResultsResult.exceptionOrNull()?.let { "Error" }
             )
         }
     }
 
     interface Interactor {
-        suspend fun search(query: String): Result<List<String>>
+        suspend fun search(query: String): Result<List<Pair<String, SearchedItemType>>>
+    }
+
+    enum class SearchedItemType {
+        Album,
+        Track,
+        Artist,
     }
 }

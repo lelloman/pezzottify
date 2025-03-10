@@ -48,6 +48,7 @@ dependencies {
     ksp(libs.room.ksp.compiler)
     implementation(libs.room.ktx)
     implementation(project(":domain"))
+    implementation(project(":logger"))
 
     implementation(libs.hilt)
     kapt(libs.hilt.compiler)

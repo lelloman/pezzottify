@@ -1,14 +1,16 @@
 package com.lelloman.pezzottify.android.domain.statics
 
+import kotlinx.coroutines.flow.Flow
+
 interface StaticsStore {
 
-    fun getArtist(artistId: String): StaticsItemFlow<Artist>
+    fun getArtist(artistId: String): Flow<Artist?>
 
-    fun getTrack(trackId: String): StaticsItemFlow<Track>
+    fun getTrack(trackId: String): Flow<Track?>
 
-    fun getAlbum(albumId: String): StaticsItemFlow<Album>
+    fun getAlbum(albumId: String): Flow<Album?>
 
-    fun getDiscography(artistId: String): StaticsItemFlow<ArtistDiscography>
+    fun getDiscography(artistId: String): Flow<ArtistDiscography?>
 
     suspend fun storeArtist(artist: Artist): Result<Unit>
 

@@ -3,7 +3,7 @@ package com.lelloman.pezzottify.android.remoteapi.internal
 import com.google.common.truth.Truth.assertThat
 import com.lelloman.pezzottify.android.domain.remoteapi.RemoteApiClient
 import com.lelloman.pezzottify.android.domain.remoteapi.RemoteApiCredentialsProvider
-import com.lelloman.pezzottify.android.domain.remoteapi.response.HashedItemType
+import com.lelloman.pezzottify.android.domain.remoteapi.response.SearchedItemType
 import com.lelloman.pezzottify.android.domain.remoteapi.response.RemoteApiResponse
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.runTest
@@ -73,7 +73,7 @@ class RemoteApiClientImplTest {
         assertThat(searchResults).isNotEmpty()
         with(searchResults.first()) {
             assertThat(itemId).isEqualTo(princeId)
-            assertThat(itemType).isEqualTo(HashedItemType.Artist)
+            assertThat(itemType).isEqualTo(SearchedItemType.Artist)
         }
 
         // What if we only want only albums?
@@ -82,7 +82,7 @@ class RemoteApiClientImplTest {
         val albumSearchResults = (albumSearchResponse as RemoteApiResponse.Success).data
         assertThat(albumSearchResults).isNotEmpty()
         albumSearchResults.forEach {
-            assertThat(it.itemType).isEqualTo(HashedItemType.Album)
+            assertThat(it.itemType).isEqualTo(SearchedItemType.Album)
         }
 
         // With an image, we tested all the available static types so far

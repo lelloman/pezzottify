@@ -1,5 +1,6 @@
 package com.lelloman.pezzottify.android.domain.remoteapi.response
 
+import com.lelloman.pezzottify.android.domain.statics.Album
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
@@ -36,7 +37,8 @@ data class AlbumResponse(
 
     val date: Long,
 
-    val genres: List<String>,
+    @SerialName("genres")
+    val genre: List<String>,
 
     val covers: List<Image>,
 
@@ -55,3 +57,16 @@ data class AlbumResponse(
 
     val typeStr: String,
 )
+
+fun AlbumResponse.toDomain() = object : Album {
+    override val id: String
+        get() = this@toDomain.id
+    override val name: String
+        get() = this@toDomain.name
+    override val artistsIds: List<String>
+        get() = this@toDomain.artistsIds
+    override val coverGroup: List<String> = this@toDomain.coverGroup.map { it.id }
+    override val covers: List<String> = this@toDomain.covers.map { it.id }
+    override val genre: List<String> = this@toDomain.genre
+    override val related: List<String> = this@toDomain.related
+}

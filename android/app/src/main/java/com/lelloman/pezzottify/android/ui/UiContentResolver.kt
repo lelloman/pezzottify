@@ -1,14 +1,64 @@
 package com.lelloman.pezzottify.android.ui
 
+import com.lelloman.pezzottify.android.domain.statics.StaticsItem
+import com.lelloman.pezzottify.android.domain.statics.StaticsProvider
 import com.lelloman.pezzottify.android.ui.content.Content
 import com.lelloman.pezzottify.android.ui.content.ContentResolver
 import com.lelloman.pezzottify.android.ui.content.SearchResultContent
+import com.lelloman.pezzottify.android.ui.screen.main.search.SearchScreenViewModel
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.map
 
-class UiContentResolver : ContentResolver {
+class UiContentResolver(private val staticsProvider: StaticsProvider) : ContentResolver {
 
-    override fun resolveSearchResult(itemId: String): Flow<Content<SearchResultContent>> {
-        TODO("Not yet implemented")
+    override fun resolveSearchResult(
+        itemId: String,
+        itemType: SearchScreenViewModel.SearchedItemType
+    ): Flow<Content<SearchResultContent>> = when (itemType) {
+        SearchScreenViewModel.SearchedItemType.Album -> staticsProvider.provideAlbum(itemId)
+            .map {
+                when (it) {
+                    is StaticsItem.Error -> Content.Error(it.id)
+                    is StaticsItem.Loading -> Content.Loading(it.id)
+                    is StaticsItem.Loaded -> Content.Resolved(
+                        it.id, SearchResultContent.Album(
+                            id = it.id,
+                            name = it.data.name,
+                            artistsIds = it.data.artistsIds,
+                            imageUrl = "",
+                        )
+                    )
+                }
+            }
+
+        SearchScreenViewModel.SearchedItemType.Track -> staticsProvider.provideTrack(itemId).map {
+            when (it) {
+                is StaticsItem.Error -> Content.Error(it.id)
+                is StaticsItem.Loading -> Content.Loading(it.id)
+                is StaticsItem.Loaded -> Content.Resolved(
+                    it.id, SearchResultContent.Track(
+                        id = it.id,
+                        name = it.data.name,
+                        artistsIds = it.data.artistsIds,
+                        durationSeconds = it.data.durationSeconds,
+                        albumId = it.data.albumId,
+                    )
+                )
+            }
+        }
+
+        SearchScreenViewModel.SearchedItemType.Artist -> staticsProvider.provideArtist(itemId).map {
+            when (it) {
+                is StaticsItem.Error -> Content.Error(it.id)
+                is StaticsItem.Loading -> Content.Loading(it.id)
+                is StaticsItem.Loaded -> Content.Resolved(
+                    it.id, SearchResultContent.Artist(
+                        id = it.id,
+                        name = it.data.name,
+                        imageUrl = "",
+                    )
+                )
+            }
+        }
     }
-
 }

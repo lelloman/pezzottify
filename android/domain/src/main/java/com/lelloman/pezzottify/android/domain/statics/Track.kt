@@ -1,6 +1,6 @@
 package com.lelloman.pezzottify.android.domain.statics
 
-interface Track : StaticItemType {
+interface Track : StaticItem {
     val id: String
     val name: String
     val albumId: String

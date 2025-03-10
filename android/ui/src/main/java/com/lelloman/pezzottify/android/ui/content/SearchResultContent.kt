@@ -18,5 +18,6 @@ sealed class SearchResultContent {
         val name: String,
         val artistsIds: List<String>,
         val durationSeconds: Int,
+        val albumId: String,
     ) : SearchResultContent()
 }

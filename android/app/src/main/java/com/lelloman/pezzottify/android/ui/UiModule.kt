@@ -1,5 +1,6 @@
 package com.lelloman.pezzottify.android.ui
 
+import com.lelloman.pezzottify.android.domain.statics.StaticsProvider
 import com.lelloman.pezzottify.android.ui.content.ContentResolver
 import dagger.Module
 import dagger.Provides
@@ -13,5 +14,6 @@ class UiModule {
 
     @Provides
     @Singleton
-    fun provideContentResolver(): ContentResolver = UiContentResolver()
+    fun provideContentResolver(staticsProvider: StaticsProvider): ContentResolver =
+        UiContentResolver(staticsProvider)
 }

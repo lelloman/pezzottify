@@ -1,5 +1,6 @@
 package com.lelloman.pezzottify.android.domain.remoteapi.response
 
+import com.lelloman.pezzottify.android.domain.statics.Track
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
@@ -65,3 +66,15 @@ data class TrackResponse(
     @SerialName("artists_with_role")
     val artistsWithRole: List<ArtistWithRole>,
 )
+
+fun TrackResponse.toDomain() = object : Track {
+    override val id: String
+        get() = this@toDomain.id
+    override val name: String
+        get() = this@toDomain.name
+    override val albumId: String
+        get() = this@toDomain.albumId
+    override val artistsIds: List<String>
+        get() = this@toDomain.artistsIds
+    override val durationSeconds: Int = (this@toDomain.durationMillis / 1000L).toInt()
+}
