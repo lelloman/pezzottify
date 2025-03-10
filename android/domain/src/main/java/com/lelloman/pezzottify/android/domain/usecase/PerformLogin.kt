@@ -18,9 +18,9 @@ class PerformLogin @Inject constructor(
             is RemoteApiResponse.Success -> {
                 authStore.storeAuthState(
                     AuthState.LoggedIn(
-                        email,
-                        configStore.baseUrl.value,
-                        remoteResponse.data.token
+                        userHandle = email,
+                        remoteUrl = configStore.baseUrl.value,
+                        authToken = remoteResponse.data.token,
                     )
                 )
                 return LoginResult.Success

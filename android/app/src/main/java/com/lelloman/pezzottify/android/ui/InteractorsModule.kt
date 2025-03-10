@@ -4,6 +4,7 @@ import com.lelloman.pezzottify.android.domain.usecase.IsLoggedIn
 import com.lelloman.pezzottify.android.domain.usecase.PerformLogin
 import com.lelloman.pezzottify.android.domain.usecase.PerformLogout
 import com.lelloman.pezzottify.android.domain.usecase.PerformSearch
+import com.lelloman.pezzottify.android.logger.LoggerFactory
 import com.lelloman.pezzottify.android.ui.screen.login.LoginViewModel
 import com.lelloman.pezzottify.android.ui.screen.main.profile.ProfileScreenViewModel
 import com.lelloman.pezzottify.android.ui.screen.main.search.SearchScreenViewModel
@@ -48,8 +49,18 @@ class InteractorsModule {
     }
 
     @Provides
-    fun provideSearchScreenInteractor(performSearch: PerformSearch): SearchScreenViewModel.Interactor =
+    fun provideSearchScreenInteractor(
+        performSearch: PerformSearch,
+        loggerFactory: LoggerFactory
+    ): SearchScreenViewModel.Interactor =
         object : SearchScreenViewModel.Interactor {
-            override suspend fun search(query: String): Result<List<String>> = performSearch(query)
+            private val logger = loggerFactory.getLogger("SearchScreenViewModel.Interactor")
+
+            override suspend fun search(query: String): Result<List<String>> {
+                logger.debug("search($query)")
+                return performSearch(query).apply {
+                    logger.debug("search($query) returning $this")
+                }
+            }
         }
 }

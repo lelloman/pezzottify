@@ -41,6 +41,7 @@ dependencies {
     implementation(libs.material)
     implementation(libs.kotlinx.serialization.core)
     implementation(libs.kotlinx.serialization.json)
+    implementation(project(":logger"))
 
     implementation(libs.hilt)
     kapt(libs.hilt.compiler)
