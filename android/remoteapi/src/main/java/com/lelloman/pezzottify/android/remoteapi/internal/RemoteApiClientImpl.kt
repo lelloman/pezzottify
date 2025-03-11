@@ -78,52 +78,76 @@ internal class RemoteApiClientImpl(
     override suspend fun login(
         userHandle: String,
         password: String
-    ): RemoteApiResponse<LoginSuccessResponse> = retrofit
-        .login(LoginRequest(userHandle = userHandle, password = password))
-        .returnFromRetrofitResponse()
+    ): RemoteApiResponse<LoginSuccessResponse> = catchingNetworkError {
+        retrofit
+            .login(LoginRequest(userHandle = userHandle, password = password))
+            .returnFromRetrofitResponse()
+    }
 
-    override suspend fun logout(): RemoteApiResponse<Unit> = retrofit
-        .logout(authToken = authToken)
-        .returnFromRetrofitResponse()
+    override suspend fun logout(): RemoteApiResponse<Unit> = catchingNetworkError {
+        retrofit
+            .logout(authToken = authToken)
+            .returnFromRetrofitResponse()
+    }
 
     override suspend fun getArtist(artistId: String): RemoteApiResponse<ArtistResponse> =
-        retrofit
-            .getArtist(authToken = authToken, artistId = artistId)
-            .returnFromRetrofitResponse()
+        catchingNetworkError {
+            retrofit
+                .getArtist(authToken = authToken, artistId = artistId)
+                .returnFromRetrofitResponse()
+        }
 
     override suspend fun getArtistDiscography(artistId: String): RemoteApiResponse<ArtistDiscographyResponse> =
-        retrofit
-            .getArtistDiscography(authToken = authToken, artistId = artistId)
-            .returnFromRetrofitResponse()
+        catchingNetworkError {
+            retrofit
+                .getArtistDiscography(authToken = authToken, artistId = artistId)
+                .returnFromRetrofitResponse()
+        }
 
-    override suspend fun getAlbum(albumId: String): RemoteApiResponse<AlbumResponse> = retrofit
-        .getAlbum(authToken = authToken, albumId = albumId)
-        .returnFromRetrofitResponse()
+    override suspend fun getAlbum(albumId: String): RemoteApiResponse<AlbumResponse> =
+        catchingNetworkError {
+            retrofit
+                .getAlbum(authToken = authToken, albumId = albumId)
+                .returnFromRetrofitResponse()
+        }
 
-    override suspend fun getTrack(trackId: String): RemoteApiResponse<TrackResponse> = retrofit
-        .getTrack(authToken = authToken, trackId = trackId)
-        .returnFromRetrofitResponse()
+    override suspend fun getTrack(trackId: String): RemoteApiResponse<TrackResponse> =
+        catchingNetworkError {
+            retrofit
+                .getTrack(authToken = authToken, trackId = trackId)
+                .returnFromRetrofitResponse()
+        }
 
-    override suspend fun getImage(imageId: String): RemoteApiResponse<ImageResponse> {
-        val retrofitResponse = retrofit.getImage(authToken = authToken, imageId = imageId)
-        retrofitResponse.commonError?.let { return it }
-        val imageBytes = retrofitResponse.body()?.bytes()
-            ?: return RemoteApiResponse.Error.Unknown("No body")
+    override suspend fun getImage(imageId: String): RemoteApiResponse<ImageResponse> =
+        catchingNetworkError {
+            val retrofitResponse = retrofit.getImage(authToken = authToken, imageId = imageId)
+            retrofitResponse.commonError?.let { return@catchingNetworkError it }
+            val imageBytes = retrofitResponse.body()?.bytes()
+                ?: return@catchingNetworkError RemoteApiResponse.Error.Unknown("No body")
 
-        val mimeType = retrofitResponse.headers()["Content-Type"] ?: "image/*"
+            val mimeType = retrofitResponse.headers()["Content-Type"] ?: "image/*"
 
-        return RemoteApiResponse.Success(
-            ImageResponse(
-                mimeType = mimeType,
-                content = imageBytes,
+            return@catchingNetworkError RemoteApiResponse.Success(
+                ImageResponse(
+                    mimeType = mimeType,
+                    content = imageBytes,
+                )
             )
-        )
-    }
+        }
 
     override suspend fun search(
         query: String,
         filters: List<RemoteApiClient.SearchFilter>?
-    ): RemoteApiResponse<SearchResponse> = retrofit
-        .search(authToken, SearchRequest(query, filters?.map { it.name.lowercase() }))
-        .returnFromRetrofitResponse()
+    ): RemoteApiResponse<SearchResponse> = catchingNetworkError {
+        retrofit
+            .search(authToken, SearchRequest(query, filters?.map { it.name.lowercase() }))
+            .returnFromRetrofitResponse()
+    }
+
+    private suspend fun <T> catchingNetworkError(block: suspend () -> RemoteApiResponse<T>): RemoteApiResponse<T> =
+        try {
+            block()
+        } catch (t: Throwable) {
+            RemoteApiResponse.Error.Network
+        }
 }
