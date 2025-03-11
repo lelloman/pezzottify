@@ -58,6 +58,7 @@ dependencies {
     implementation(project(":domain"))
     implementation(project(":remoteapi"))
     implementation(project(":localdata"))
+    implementation(project(":player"))
     implementation(project(":logger"))
     debugImplementation(project(":debuginterface"))
 

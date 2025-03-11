@@ -15,6 +15,7 @@
             <option value="$PROJECT_DIR$/domain" />
             <option value="$PROJECT_DIR$/localdata" />
             <option value="$PROJECT_DIR$/logger" />
+            <option value="$PROJECT_DIR$/platform-player" />
             <option value="$PROJECT_DIR$/player" />
             <option value="$PROJECT_DIR$/remoteapi" />
             <option value="$PROJECT_DIR$/ui" />

@@ -1,8 +1,9 @@
 package com.lelloman.pezzottify.android.domain.player
 
+import com.lelloman.pezzottify.android.domain.app.AppInitializer
 import kotlinx.coroutines.flow.StateFlow
 
-interface Player {
+interface Player : AppInitializer{
 
     val playbackPlaylist: StateFlow<PlaybackPlaylist?>
     val volumeState: StateFlow<VolumeState>

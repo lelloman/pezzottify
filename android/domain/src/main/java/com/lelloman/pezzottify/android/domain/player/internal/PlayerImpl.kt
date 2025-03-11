@@ -1,5 +1,10 @@
 package com.lelloman.pezzottify.android.domain.player.internal
 
+import android.os.Handler
+import android.os.HandlerThread
+import android.os.Looper
+import com.lelloman.pezzottify.android.domain.config.ConfigStore
+import com.lelloman.pezzottify.android.domain.player.PlatformPlayer
 import com.lelloman.pezzottify.android.domain.player.PlaybackPlaylist
 import com.lelloman.pezzottify.android.domain.player.PlaybackPlaylistContext
 import com.lelloman.pezzottify.android.domain.player.Player
@@ -12,13 +17,17 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.DelicateCoroutinesApi
 import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.android.asCoroutineDispatcher
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filterIsInstance
+import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.newSingleThreadContext
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.coroutines.CoroutineContext
 import kotlin.time.Duration.Companion.seconds
@@ -27,7 +36,9 @@ import kotlin.time.Duration.Companion.seconds
 internal class PlayerImpl(
     private val staticsProvider: StaticsProvider,
     loggerFactory: LoggerFactory,
-    private val coroutineContext: CoroutineContext = newSingleThreadContext("PlayerImplThread"),
+    private val platformPlayerFactory: PlatformPlayer.Factory,
+    private val configStore: ConfigStore,
+//    private val coroutineContext: CoroutineContext = newSingleThreadContext("PlayerImplThread"),
     private val coroutineScope: CoroutineScope = GlobalScope,
 ) : Player {
 
@@ -50,10 +61,58 @@ internal class PlayerImpl(
     override val canGoToNextPlaylist: StateFlow<Boolean>
         get() = TODO("Not yet implemented")
 
-    override fun loadAlbum(albumId: String) {
+    private val mutableUserSoughtTrackPercent = MutableSharedFlow<Float>()
+    private val coroutineContext: CoroutineContext
+    private val looper: Looper
+
+    init {
+        val handlerThread = HandlerThread("MyThread")
+        handlerThread.start()
+        val handler = Handler(handlerThread.looper)
+        coroutineContext = handler.asCoroutineDispatcher()
+        looper = handler.looper
+    }
+
+    private fun runOnPlayerThread(block: suspend () -> Unit) =
         coroutineScope.launch(coroutineContext) {
+            block()
+        }
+
+    override fun initialize() {
+        runOnPlayerThread {
+            val platformPlayer = platformPlayerFactory.create(looper)
+
+            runOnPlayerThread { isPlaying.collect { platformPlayer.setIsPlaying(it) } }
+            runOnPlayerThread {
+                playbackPlaylist
+                    .map { it?.tracksIds }
+                    .filterNotNull()
+                    .distinctUntilChanged()
+                    .collect { trackId ->
+                        val baseUrl = configStore.baseUrl.value
+                        val urls = trackId.map { "$baseUrl/v1/content/stream/$it" }
+                        platformPlayer.loadPlaylist(urls)
+                    }
+            }
+            runOnPlayerThread {
+                playbackPlaylist
+                    .map { it?.currentTrackIndex }
+                    .filterNotNull()
+                    .distinctUntilChanged()
+                    .collect {
+                        platformPlayer.loadTrackIndex(it)
+                    }
+            }
+            runOnPlayerThread {
+                mutableUserSoughtTrackPercent.collect { platformPlayer.seekTrackProgressPercent(it) }
+            }
+        }
+    }
+
+    override fun loadAlbum(albumId: String) {
+        runOnPlayerThread {
             loadNexPlaylistJob?.cancel()
-            loadNexPlaylistJob = launch {
+            loadNexPlaylistJob = runOnPlayerThread {
 
                 val loadedAlbum = withTimeoutOrNull(2.seconds) {
                     staticsProvider.provideAlbum(albumId)
@@ -88,7 +147,9 @@ internal class PlayerImpl(
     }
 
     override fun seekToPercentage(percentage: Float) {
-        TODO("Not yet implemented")
+        runOnPlayerThread {
+            mutableUserSoughtTrackPercent.emit(percentage)
+        }
     }
 
     override fun setIsPlaying(isPlaying: Boolean) {
