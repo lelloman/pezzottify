@@ -87,7 +87,7 @@ internal class Synchronizer(
             }
             itemsToFetch.forEach { item -> fetchItemFromRemote(item.itemId, item.itemType) }
 
-            logger.debug("mainLoop() going to sleep for $sleepDuration")
+            logger.debug("mainLoop() going to wait for $sleepDuration")
             delay(sleepDuration)
             sleepDuration *= 1.4
             if (sleepDuration > MAX_SLEEP_DURATION) {
@@ -106,15 +106,22 @@ internal class Synchronizer(
                 StaticItemType.Track -> remoteApiClient.getTrack(itemId)
             }
             if (remoteData is RemoteApiResponse.Success) {
-                fetchStateStore.delete(itemId)
-                when (remoteData.data) {
-                    is AlbumResponse -> staticsStore.storeAlbum(remoteData.data.toDomain())
-                    is ArtistResponse -> staticsStore.storeArtist(remoteData.data.toDomain())
-                    is TrackResponse -> staticsStore.storeTrack(remoteData.data.toDomain())
-                    else -> logger.error("Cannot store unknown response data of type ${remoteData.javaClass} -> ${remoteData.data}")
+                try {
+                    when (remoteData.data) {
+                        is AlbumResponse -> staticsStore.storeAlbum(remoteData.data.toDomain())
+                        is ArtistResponse -> staticsStore.storeArtist(remoteData.data.toDomain())
+                        is TrackResponse -> staticsStore.storeTrack(remoteData.data.toDomain())
+                        else -> logger.error("Cannot store unknown response data of type ${remoteData.javaClass} -> ${remoteData.data}")
+                    }
+                    fetchStateStore.delete(itemId)
+                    logger.debug("Fetched and stored data for $itemId: ${remoteData.data}")
+                } catch (throwable: Throwable) {
+                    logger.error("Error while storing remote-fetched data into StaticsStore", throwable)
+                    fetchStateStore.store(StaticItemFetchState.error(itemId, type))
                 }
             } else {
-              fetchStateStore.store(StaticItemFetchState.error(itemId, type))
+                logger.debug("Remote API returned error: $remoteData")
+                fetchStateStore.store(StaticItemFetchState.error(itemId, type))
             }
         }
     }

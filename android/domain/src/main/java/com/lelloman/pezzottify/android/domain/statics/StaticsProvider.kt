@@ -6,7 +6,6 @@ import com.lelloman.pezzottify.android.domain.sync.Synchronizer
 import com.lelloman.pezzottify.android.logger.LoggerFactory
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
 import kotlin.coroutines.CoroutineContext

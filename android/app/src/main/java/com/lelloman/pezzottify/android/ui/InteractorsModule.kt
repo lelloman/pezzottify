@@ -3,9 +3,11 @@ package com.lelloman.pezzottify.android.ui
 import com.lelloman.pezzottify.android.domain.auth.usecase.IsLoggedIn
 import com.lelloman.pezzottify.android.domain.auth.usecase.PerformLogin
 import com.lelloman.pezzottify.android.domain.auth.usecase.PerformLogout
+import com.lelloman.pezzottify.android.domain.player.Player
 import com.lelloman.pezzottify.android.domain.statics.usecase.PerformSearch
 import com.lelloman.pezzottify.android.logger.LoggerFactory
 import com.lelloman.pezzottify.android.ui.screen.login.LoginViewModel
+import com.lelloman.pezzottify.android.ui.screen.main.content.album.AlbumScreenViewModel
 import com.lelloman.pezzottify.android.ui.screen.main.profile.ProfileScreenViewModel
 import com.lelloman.pezzottify.android.ui.screen.main.search.SearchScreenViewModel
 import com.lelloman.pezzottify.android.ui.screen.splash.SplashViewModel
@@ -78,4 +80,13 @@ class InteractorsModule {
                 return Result.success(mappedResult)
             }
         }
+
+    @Provides
+    fun provideAlbumScreenInteractor(
+        player: Player
+    ): AlbumScreenViewModel.Interactor = object : AlbumScreenViewModel.Interactor {
+        override fun playAlbum(albumId: String) {
+            player.loadAlbum(albumId)
+        }
+    }
 }

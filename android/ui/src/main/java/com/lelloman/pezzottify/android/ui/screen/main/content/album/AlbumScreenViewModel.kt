@@ -14,9 +14,10 @@ import kotlinx.coroutines.flow.stateIn
 
 @HiltViewModel(assistedFactory = AlbumScreenViewModel.Factory::class)
 class AlbumScreenViewModel @AssistedInject constructor(
+    private val interactor: Interactor,
     private val contentResolver: ContentResolver,
     @Assisted private val albumId: String,
-) : ViewModel() {
+) : ViewModel(), AlbumScreenActions {
 
     val state = contentResolver.resolveAlbum(albumId)
         .map {
@@ -35,6 +36,14 @@ class AlbumScreenViewModel @AssistedInject constructor(
             }
         }
         .stateIn(viewModelScope, SharingStarted.Eagerly, AlbumScreenState())
+
+    override fun clickOnPlayAlbum(albumId: String) {
+        interactor.playAlbum(albumId)
+    }
+
+    interface Interactor {
+        fun playAlbum(albumId: String)
+    }
 
     @AssistedFactory
     interface Factory {

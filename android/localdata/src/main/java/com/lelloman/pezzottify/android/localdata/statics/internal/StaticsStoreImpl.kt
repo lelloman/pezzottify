@@ -57,6 +57,7 @@ internal class StaticsStoreImpl(
         staticsDao.insertAlbum(album.quack())
         Result.success(Unit)
     } catch (throwable: Throwable) {
+        logger.error("Error while storing album: $album", throwable)
         Result.failure(throwable)
     }
 

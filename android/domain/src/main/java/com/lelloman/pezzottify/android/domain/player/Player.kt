@@ -4,8 +4,9 @@ import kotlinx.coroutines.flow.StateFlow
 
 interface Player {
 
-    val currentPlayback: StateFlow<PlaybackPlaylist?>
-    val playbackState: StateFlow<PlaybackState?>
+    val playbackPlaylist: StateFlow<PlaybackPlaylist?>
+    val volumeState: StateFlow<VolumeState>
+    val isPlaying: StateFlow<Boolean>
     val canGoToPreviousPlaylist: StateFlow<Boolean>
     val canGoToNextPlaylist: StateFlow<Boolean>
 

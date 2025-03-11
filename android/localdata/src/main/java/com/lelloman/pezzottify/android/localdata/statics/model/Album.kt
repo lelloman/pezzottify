@@ -3,6 +3,7 @@ package com.lelloman.pezzottify.android.localdata.statics.model
 import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.PrimaryKey
+import kotlinx.serialization.Serializable
 
 sealed interface ActivityPeriod {
 
@@ -17,6 +18,12 @@ sealed interface ActivityPeriod {
         val value: Int,
     ) : ActivityPeriod
 }
+
+@Serializable
+data class Disc(
+    override val name: String?,
+    override val tracksIds: List<String>,
+) : com.lelloman.pezzottify.android.domain.statics.Disc
 
 @Entity
 data class Album(
@@ -36,7 +43,11 @@ data class Album(
     override val related: List<String>,
 
     override val artistsIds: List<String>,
-) : com.lelloman.pezzottify.android.domain.statics.Album {
+
+    override val discs: List<Disc>,
+
+    ) : com.lelloman.pezzottify.android.domain.statics.Album {
+
     companion object {
         const val TABLE_NAME = "album"
 
@@ -52,4 +63,5 @@ fun com.lelloman.pezzottify.android.domain.statics.Album.quack(): Album = Album(
     related = related,
     coverGroup = coverGroup,
     artistsIds = artistsIds,
+    discs = discs.map { Disc(it.name, tracksIds = it.tracksIds) },
 )

@@ -69,4 +69,11 @@ fun AlbumResponse.toDomain() = object : Album {
     override val covers: List<String> = this@toDomain.covers.map { it.id }
     override val genre: List<String> = this@toDomain.genre
     override val related: List<String> = this@toDomain.related
+    override val discs: List<com.lelloman.pezzottify.android.domain.statics.Disc> =
+        this@toDomain.discs.map {
+            object : com.lelloman.pezzottify.android.domain.statics.Disc {
+                override val name: String = it.name
+                override val tracksIds: List<String> = it.tracks
+            }
+        }
 }

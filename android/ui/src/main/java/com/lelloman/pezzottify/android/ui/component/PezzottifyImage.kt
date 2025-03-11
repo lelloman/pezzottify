@@ -1,35 +1,47 @@
 package com.lelloman.pezzottify.android.ui.component
 
+import android.annotation.SuppressLint
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import androidx.compose.ui.res.vectorResource
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import com.lelloman.pezzottify.android.ui.R
 
 @Composable
-fun SquarePezzottifyImage(
+fun PezzottifyImage(
     modifier: Modifier = Modifier,
     url: String,
-    size: SquarePezzottifyImageSize = SquarePezzottifyImageSize.Small,
+    shape: PezzottifyImageShape = PezzottifyImageShape.SmallSquare,
     placeholder: PezzottifyImagePlaceholder = PezzottifyImagePlaceholder.GenericImage,
     contentDescription: String? = null
 ) {
     AsyncImage(
         model = url,
         contentDescription = contentDescription,
-        modifier = modifier.size(size.value),
+        modifier = shape.modifier(modifier),
         placeholder = rememberVectorPainter(placeholder.getIcon()),
         error = rememberVectorPainter(placeholder.getIcon()),
     )
 }
 
-enum class SquarePezzottifyImageSize(val value: Dp) {
-    Small(96.dp)
+@SuppressLint("ModifierFactoryExtensionFunction")
+sealed interface PezzottifyImageShape {
+
+    fun modifier(modifier: Modifier): Modifier
+
+    data object SmallSquare : PezzottifyImageShape {
+        val size = 96.dp
+        override fun modifier(modifier: Modifier) = modifier.size(size)
+    }
+
+    data object FullWidthPoster : PezzottifyImageShape {
+        override fun modifier(modifier: Modifier) = modifier.fillMaxWidth()
+    }
 }
 
 enum class PezzottifyImagePlaceholder {
@@ -37,7 +49,7 @@ enum class PezzottifyImagePlaceholder {
     GenericImage;
 
     @Composable
-    fun getIcon() = when (this) {
+    fun getIcon () = when (this) {
         Head -> ImageVector.vectorResource(R.drawable.baseline_face_24)
         GenericImage -> ImageVector.vectorResource(R.drawable.baseline_image_24)
     }

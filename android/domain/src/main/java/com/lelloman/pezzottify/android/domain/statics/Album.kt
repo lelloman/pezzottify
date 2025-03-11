@@ -8,4 +8,10 @@ interface Album : StaticItem {
     val related: List<String>
     val coverGroup: List<String>
     val artistsIds: List<String>
+    val discs: List<Disc>
+}
+
+interface Disc {
+    val name: String?
+    val tracksIds: List<String>
 }
