@@ -2,6 +2,7 @@ package com.lelloman.pezzottify.android.ui
 
 import com.lelloman.pezzottify.android.domain.statics.StaticsItem
 import com.lelloman.pezzottify.android.domain.statics.StaticsProvider
+import com.lelloman.pezzottify.android.ui.content.Album
 import com.lelloman.pezzottify.android.ui.content.Artist
 import com.lelloman.pezzottify.android.ui.content.Content
 import com.lelloman.pezzottify.android.ui.content.ContentResolver
@@ -21,6 +22,21 @@ class UiContentResolver(private val staticsProvider: StaticsProvider) : ContentR
                     it.id, Artist(
                         id = it.id,
                         name = it.data.name,
+                    )
+                )
+            }
+        }
+
+    override fun resolveAlbum(albumId: String): Flow<Content<Album>> =
+        staticsProvider.provideAlbum(albumId).map {
+            when (it) {
+                is StaticsItem.Error -> Content.Error(it.id)
+                is StaticsItem.Loading -> Content.Loading(it.id)
+                is StaticsItem.Loaded -> Content.Resolved(
+                    it.id, Album(
+                        id = it.id,
+                        name = it.data.name,
+                        artistsIds = it.data.artistsIds,
                     )
                 )
             }

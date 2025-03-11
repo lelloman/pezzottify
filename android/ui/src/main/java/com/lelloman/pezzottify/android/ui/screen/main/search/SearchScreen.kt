@@ -33,7 +33,9 @@ import com.lelloman.pezzottify.android.ui.component.SquarePezzottifyImage
 import com.lelloman.pezzottify.android.ui.component.SquarePezzottifyImageSize
 import com.lelloman.pezzottify.android.ui.content.Content
 import com.lelloman.pezzottify.android.ui.content.SearchResultContent
+import com.lelloman.pezzottify.android.ui.toAlbum
 import com.lelloman.pezzottify.android.ui.toArtist
+import com.lelloman.pezzottify.android.ui.toTrack
 import kotlinx.coroutines.flow.Flow
 
 @Composable
@@ -59,6 +61,8 @@ fun SearchScreenContent(
         events.collect {
             when (it) {
                 is SearchScreensEvents.NavigateToArtistScreen -> navController.toArtist(it.artistId)
+                is SearchScreensEvents.NavigateToAlbumScreen -> navController.toAlbum(it.albumId)
+                is SearchScreensEvents.NavigateToTrackScreen -> navController.toTrack(it.trackId)
             }
         }
     }
@@ -96,8 +100,8 @@ fun SearchScreenContent(
                 items(searchResults) { searchResult ->
                     when (val result = searchResult.collectAsState(initial = null).value) {
                         is Content.Resolved -> when (result.data) {
-                            is SearchResultContent.Album -> AlbumSearchResult(result.data)
-                            is SearchResultContent.Track -> TrackSearchResult(result.data)
+                            is SearchResultContent.Album -> AlbumSearchResult(result.data, actions)
+                            is SearchResultContent.Track -> TrackSearchResult(result.data, actions)
                             is SearchResultContent.Artist -> ArtistSearchResult(
                                 result.data,
                                 actions
@@ -114,12 +118,16 @@ fun SearchScreenContent(
 }
 
 @Composable
-private fun AlbumSearchResult(searchResult: SearchResultContent.Album) {
+private fun AlbumSearchResult(
+    searchResult: SearchResultContent.Album,
+    actions: SearchScreenActions
+) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .padding(8.dp)
             .height(SquarePezzottifyImageSize.Small.value)
+            .clickable { actions.clickOnAlbumSearchResult(searchResult.id) }
     ) {
         SquarePezzottifyImage(url = searchResult.imageUrl)
         Column(modifier = Modifier.weight(1f)) {
@@ -138,12 +146,16 @@ private fun AlbumSearchResult(searchResult: SearchResultContent.Album) {
 }
 
 @Composable
-private fun TrackSearchResult(searchResult: SearchResultContent.Track) {
+private fun TrackSearchResult(
+    searchResult: SearchResultContent.Track,
+    actions: SearchScreenActions
+) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .padding(8.dp)
             .height(SquarePezzottifyImageSize.Small.value)
+            .clickable { actions.clickOnTrackSearchResult(searchResult.id) }
     ) {
         SquarePezzottifyImage(url = "")
         Column(

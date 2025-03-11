@@ -33,6 +33,10 @@ fun NavController.fromProfileBackToLogin() = navigate(Login) {
 
 fun NavController.toArtist(artistId: String) = navigate(Main.Artist(artistId))
 
+fun NavController.toTrack(trackId: String) = navigate(Main.Track(trackId))
+
+fun NavController.toAlbum(albumId: String) = navigate(Main.Album(albumId))
+
 sealed interface Screen {
 
     @Serializable
@@ -61,5 +65,11 @@ sealed interface Screen {
 
         @Serializable
         data class Artist(val artistId: String) : Main
+
+        @Serializable
+        data class Track(val trackId: String) : Main
+
+        @Serializable
+        data class Album(val albumId: String) : Main
     }
 }

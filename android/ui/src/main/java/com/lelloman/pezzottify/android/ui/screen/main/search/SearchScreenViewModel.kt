@@ -64,6 +64,18 @@ class SearchScreenViewModel @Inject constructor(
         }
     }
 
+    override fun clickOnAlbumSearchResult(albumId: String) {
+        viewModelScope.launch {
+            mutableEvents.emit(SearchScreensEvents.NavigateToAlbumScreen(albumId))
+        }
+    }
+
+    override fun clickOnTrackSearchResult(trackId: String) {
+        viewModelScope.launch {
+            mutableEvents.emit(SearchScreensEvents.NavigateToTrackScreen(trackId))
+        }
+    }
+
     interface Interactor {
         suspend fun search(query: String): Result<List<Pair<String, SearchedItemType>>>
     }

@@ -1,4 +1,43 @@
 package com.lelloman.pezzottify.android.ui.screen.main.content.album
 
-class AlbumScreenViewModel {
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import com.lelloman.pezzottify.android.ui.content.Content
+import com.lelloman.pezzottify.android.ui.content.ContentResolver
+import dagger.assisted.Assisted
+import dagger.assisted.AssistedFactory
+import dagger.assisted.AssistedInject
+import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
+
+@HiltViewModel(assistedFactory = AlbumScreenViewModel.Factory::class)
+class AlbumScreenViewModel @AssistedInject constructor(
+    private val contentResolver: ContentResolver,
+    @Assisted private val albumId: String,
+) : ViewModel() {
+
+    val state = contentResolver.resolveAlbum(albumId)
+        .map {
+            when (it) {
+                is Content.Loading -> AlbumScreenState()
+                is Content.Error -> AlbumScreenState(
+                    isError = true,
+                    isLoading = false,
+                )
+
+                is Content.Resolved -> AlbumScreenState(
+                    album = it.data,
+                    isError = false,
+                    isLoading = false,
+                )
+            }
+        }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, AlbumScreenState())
+
+    @AssistedFactory
+    interface Factory {
+        fun create(albumId: String): AlbumScreenViewModel
+    }
 }

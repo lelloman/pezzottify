@@ -1,4 +1,7 @@
 package com.lelloman.pezzottify.android.ui.screen.main.content.track
 
-class TrackScreen {
+import androidx.compose.runtime.Composable
+
+@Composable
+fun TrackScreen(trackId: String) {
 }

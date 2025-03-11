@@ -9,7 +9,9 @@ import androidx.navigation.toRoute
 import com.lelloman.pezzottify.android.ui.screen.about.AboutScreen
 import com.lelloman.pezzottify.android.ui.screen.login.LoginScreen
 import com.lelloman.pezzottify.android.ui.screen.main.MainScreen
+import com.lelloman.pezzottify.android.ui.screen.main.content.album.AlbumScreen
 import com.lelloman.pezzottify.android.ui.screen.main.content.artist.ArtistScreen
+import com.lelloman.pezzottify.android.ui.screen.main.content.track.TrackScreen
 import com.lelloman.pezzottify.android.ui.screen.main.profile.ProfileScreen
 import com.lelloman.pezzottify.android.ui.screen.splash.SplashScreen
 import com.lelloman.pezzottify.android.ui.theme.PezzottifyTheme
@@ -39,6 +41,14 @@ fun AppUi() {
             }
             composable<Screen.Main.Artist> {
                 ArtistScreen(it.toRoute<Screen.Main.Artist>().artistId)
+            }
+
+            composable<Screen.Main.Album> {
+                AlbumScreen(it.toRoute<Screen.Main.Album>().albumId)
+            }
+
+            composable<Screen.Main.Track> {
+                TrackScreen(it.toRoute<Screen.Main.Track>().trackId)
             }
         }
     }

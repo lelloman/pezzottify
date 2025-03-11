@@ -10,7 +10,7 @@ interface ContentResolver {
         itemType: SearchScreenViewModel.SearchedItemType
     ): Flow<Content<SearchResultContent>>
 
-    fun resolveArtist(
-        artistId: String
-    ): Flow<Content<Artist>>
+    fun resolveArtist(artistId: String): Flow<Content<Artist>>
+
+    fun resolveAlbum(albumId: String): Flow<Content<Album>>
 }
