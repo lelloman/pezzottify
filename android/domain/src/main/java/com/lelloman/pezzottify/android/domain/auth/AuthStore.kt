@@ -1,10 +1,9 @@
 package com.lelloman.pezzottify.android.domain.auth
 
+import com.lelloman.pezzottify.android.domain.app.AppInitializer
 import kotlinx.coroutines.flow.StateFlow
 
-interface AuthStore {
-
-    suspend fun initialize()
+interface AuthStore : AppInitializer {
 
     fun getAuthState(): StateFlow<AuthState>
 

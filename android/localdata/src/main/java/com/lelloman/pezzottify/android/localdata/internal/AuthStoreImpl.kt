@@ -10,6 +10,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
@@ -61,25 +62,27 @@ internal class AuthStoreImpl(
             }
         }
 
-    override suspend fun initialize() {
-        withContext(dispatcher) {
-            if (!initialized) {
-                val state = try {
-                    val jsonState = sharedPrefs.getString(KEY_AUTH_STATE, null)
-                    if (jsonState != null) {
-                        Json.decodeFromString<AuthState.LoggedIn>(
-                            jsonState
-                        )
-                    } else {
+    override fun initialize() {
+        runBlocking {
+            withContext(dispatcher) {
+                if (!initialized) {
+                    val state = try {
+                        val jsonState = sharedPrefs.getString(KEY_AUTH_STATE, null)
+                        if (jsonState != null) {
+                            Json.decodeFromString<AuthState.LoggedIn>(
+                                jsonState
+                            )
+                        } else {
+                            AuthState.LoggedOut
+                        }
+                    } catch (e: Exception) {
+                        e.printStackTrace()
                         AuthState.LoggedOut
+                    } finally {
+                        initialized = true
                     }
-                } catch (e: Exception) {
-                    e.printStackTrace()
-                    AuthState.LoggedOut
-                } finally {
-                    initialized = true
+                    mutableAuthStateFlow.value = state
                 }
-                mutableAuthStateFlow.value = state
             }
         }
     }

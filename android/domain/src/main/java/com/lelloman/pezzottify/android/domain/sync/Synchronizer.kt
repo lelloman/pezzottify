@@ -1,5 +1,6 @@
 package com.lelloman.pezzottify.android.domain.sync
 
+import com.lelloman.pezzottify.android.domain.app.AppInitializer
 import com.lelloman.pezzottify.android.domain.remoteapi.RemoteApiClient
 import com.lelloman.pezzottify.android.domain.remoteapi.response.AlbumResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.ArtistResponse
@@ -33,7 +34,7 @@ internal class Synchronizer(
     loggerFactory: LoggerFactory,
     private val dispatcher: CoroutineDispatcher,
     private val scope: CoroutineScope,
-) {
+) : AppInitializer {
 
     @Inject
     constructor(
@@ -56,7 +57,7 @@ internal class Synchronizer(
 
     private val logger by loggerFactory
 
-    fun initialize() {
+    override fun initialize() {
         scope.launch(dispatcher) {
             if (!initialized) {
                 initialized = true
@@ -116,7 +117,10 @@ internal class Synchronizer(
                     fetchStateStore.delete(itemId)
                     logger.debug("Fetched and stored data for $itemId: ${remoteData.data}")
                 } catch (throwable: Throwable) {
-                    logger.error("Error while storing remote-fetched data into StaticsStore", throwable)
+                    logger.error(
+                        "Error while storing remote-fetched data into StaticsStore",
+                        throwable
+                    )
                     fetchStateStore.store(StaticItemFetchState.error(itemId, type))
                 }
             } else {
