@@ -1,8 +1,9 @@
-package com.lelloman.pezzottify.android.domain.usecase
+package com.lelloman.pezzottify.android.domain.statics.usecase
 
 import com.lelloman.pezzottify.android.domain.remoteapi.RemoteApiClient
 import com.lelloman.pezzottify.android.domain.remoteapi.response.RemoteApiResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.SearchedItemType
+import com.lelloman.pezzottify.android.domain.usecase.UseCase
 import javax.inject.Inject
 
 

@@ -1,9 +1,9 @@
 package com.lelloman.pezzottify.android.ui
 
-import com.lelloman.pezzottify.android.domain.usecase.IsLoggedIn
-import com.lelloman.pezzottify.android.domain.usecase.PerformLogin
-import com.lelloman.pezzottify.android.domain.usecase.PerformLogout
-import com.lelloman.pezzottify.android.domain.usecase.PerformSearch
+import com.lelloman.pezzottify.android.domain.auth.usecase.IsLoggedIn
+import com.lelloman.pezzottify.android.domain.auth.usecase.PerformLogin
+import com.lelloman.pezzottify.android.domain.auth.usecase.PerformLogout
+import com.lelloman.pezzottify.android.domain.statics.usecase.PerformSearch
 import com.lelloman.pezzottify.android.logger.LoggerFactory
 import com.lelloman.pezzottify.android.ui.screen.login.LoginViewModel
 import com.lelloman.pezzottify.android.ui.screen.main.profile.ProfileScreenViewModel
