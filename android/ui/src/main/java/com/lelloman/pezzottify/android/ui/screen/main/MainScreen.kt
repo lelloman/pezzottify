@@ -28,7 +28,6 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
-import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
@@ -95,7 +94,7 @@ private fun MainScreenContent(state: MainScreenState, actions: MainScreenActions
                         selected = isSelected,
                         onClick = {
                             navController.navigate(it.route) {
-                                popUpTo(navController.graph.findStartDestination().id) {
+                                popUpTo(Screen.Main.Home) {
                                     saveState = true
                                 }
                                 launchSingleTop = true
