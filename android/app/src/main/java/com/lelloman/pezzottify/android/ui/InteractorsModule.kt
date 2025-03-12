@@ -5,6 +5,8 @@ import com.lelloman.pezzottify.android.domain.auth.usecase.PerformLogin
 import com.lelloman.pezzottify.android.domain.auth.usecase.PerformLogout
 import com.lelloman.pezzottify.android.domain.player.Player
 import com.lelloman.pezzottify.android.domain.statics.usecase.PerformSearch
+import com.lelloman.pezzottify.android.domain.user.LogViewedContentUseCase
+import com.lelloman.pezzottify.android.domain.user.ViewedContent
 import com.lelloman.pezzottify.android.logger.LoggerFactory
 import com.lelloman.pezzottify.android.ui.screen.login.LoginViewModel
 import com.lelloman.pezzottify.android.ui.screen.main.MainScreenViewModel
@@ -56,7 +58,8 @@ class InteractorsModule {
     @Provides
     fun provideSearchScreenInteractor(
         performSearch: PerformSearch,
-        loggerFactory: LoggerFactory
+        loggerFactory: LoggerFactory,
+        logViewedContentUseCase: LogViewedContentUseCase,
     ): SearchScreenViewModel.Interactor =
         object : SearchScreenViewModel.Interactor {
             private val logger = loggerFactory.getLogger("SearchScreenViewModel.Interactor")
@@ -81,6 +84,18 @@ class InteractorsModule {
                 }
                 logger.debug("search($query) returning $mappedResult")
                 return Result.success(mappedResult)
+            }
+
+            override suspend fun logViewedContent(
+                contentId: String,
+                contentType: SearchScreenViewModel.SearchedItemType
+            ) {
+                val mappedType = when (contentType) {
+                    SearchScreenViewModel.SearchedItemType.Album -> ViewedContent.Type.Album
+                    SearchScreenViewModel.SearchedItemType.Track -> ViewedContent.Type.Track
+                    SearchScreenViewModel.SearchedItemType.Artist -> ViewedContent.Type.Artist
+                }
+                logViewedContentUseCase(contentId, mappedType)
             }
         }
 
