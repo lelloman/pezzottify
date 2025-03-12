@@ -268,6 +268,7 @@ class StaticsDbTest {
         coverGroup = emptyList(),
         covers = emptyList(),
         artistsIds = emptyList(),
+        discs = emptyList(),
     )
 
     private fun randomTrack() = Track(
