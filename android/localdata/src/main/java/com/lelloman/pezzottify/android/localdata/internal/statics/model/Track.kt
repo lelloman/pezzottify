@@ -1,11 +1,11 @@
-package com.lelloman.pezzottify.android.localdata.statics.model
+package com.lelloman.pezzottify.android.localdata.internal.statics.model
 
 import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.PrimaryKey
 
 @Entity(tableName = Track.TABLE_NAME)
-data class Track(
+internal data class Track(
 
     @ColumnInfo(name = COLUMN_ID)
     @PrimaryKey
@@ -26,7 +26,7 @@ data class Track(
     }
 }
 
-fun com.lelloman.pezzottify.android.domain.statics.Track.quack(): Track = Track(
+internal fun com.lelloman.pezzottify.android.domain.statics.Track.quack(): Track = Track(
     id = id,
     name = name,
     albumId = albumId,

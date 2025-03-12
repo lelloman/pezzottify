@@ -1,10 +1,10 @@
-package com.lelloman.pezzottify.android.localdata.statics.model
+package com.lelloman.pezzottify.android.localdata.internal.statics.model
 
 import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.ForeignKey
 import androidx.room.PrimaryKey
-import com.lelloman.pezzottify.android.localdata.statics.model.ArtistDiscography.Companion.COLUMN_ARTIST_ID
+import com.lelloman.pezzottify.android.localdata.internal.statics.model.ArtistDiscography.Companion.COLUMN_ARTIST_ID
 
 @Entity(
     tableName = ArtistDiscography.TABLE_NAME,
@@ -18,7 +18,7 @@ import com.lelloman.pezzottify.android.localdata.statics.model.ArtistDiscography
         )
     ]
 )
-data class ArtistDiscography(
+internal data class ArtistDiscography(
 
     @PrimaryKey
     @ColumnInfo(name = COLUMN_ARTIST_ID)
@@ -42,7 +42,7 @@ data class ArtistDiscography(
     }
 }
 
-fun com.lelloman.pezzottify.android.domain.statics.ArtistDiscography.quack(): ArtistDiscography =
+internal fun com.lelloman.pezzottify.android.domain.statics.ArtistDiscography.quack(): ArtistDiscography =
     ArtistDiscography(
         artistId = artistId,
         albumsIds = albumsIds,

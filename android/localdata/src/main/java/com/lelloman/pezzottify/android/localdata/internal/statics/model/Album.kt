@@ -1,4 +1,4 @@
-package com.lelloman.pezzottify.android.localdata.statics.model
+package com.lelloman.pezzottify.android.localdata.internal.statics.model
 
 import androidx.room.ColumnInfo
 import androidx.room.Entity
@@ -26,7 +26,7 @@ data class Disc(
 ) : com.lelloman.pezzottify.android.domain.statics.Disc
 
 @Entity
-data class Album(
+internal data class Album(
 
     @ColumnInfo(name = COLUMN_ID)
     @PrimaryKey
@@ -55,7 +55,7 @@ data class Album(
     }
 }
 
-fun com.lelloman.pezzottify.android.domain.statics.Album.quack(): Album = Album(
+internal fun com.lelloman.pezzottify.android.domain.statics.Album.quack(): Album = Album(
     id = id,
     name = name,
     genre = genre,

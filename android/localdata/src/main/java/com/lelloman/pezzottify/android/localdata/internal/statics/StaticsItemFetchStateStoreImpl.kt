@@ -1,9 +1,9 @@
-package com.lelloman.pezzottify.android.localdata.statics.internal
+package com.lelloman.pezzottify.android.localdata.internal.statics
 
 import com.lelloman.pezzottify.android.domain.statics.fetchstate.StaticItemFetchState
 import com.lelloman.pezzottify.android.domain.statics.fetchstate.StaticItemFetchStateStore
-import com.lelloman.pezzottify.android.localdata.statics.internal.StaticItemFetchStateRecord.Companion.toDomain
-import com.lelloman.pezzottify.android.localdata.statics.internal.StaticItemFetchStateRecord.Companion.toRecord
+import com.lelloman.pezzottify.android.localdata.internal.statics.StaticItemFetchStateRecord.Companion.toDomain
+import com.lelloman.pezzottify.android.localdata.internal.statics.StaticItemFetchStateRecord.Companion.toRecord
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 

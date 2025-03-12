@@ -1,12 +1,12 @@
-package com.lelloman.pezzottify.android.localdata.statics.internal
+package com.lelloman.pezzottify.android.localdata.internal.statics
 
 import com.lelloman.pezzottify.android.domain.statics.StaticsItem
 import com.lelloman.pezzottify.android.domain.statics.StaticsStore
-import com.lelloman.pezzottify.android.localdata.statics.model.Album
-import com.lelloman.pezzottify.android.localdata.statics.model.Artist
-import com.lelloman.pezzottify.android.localdata.statics.model.ArtistDiscography
-import com.lelloman.pezzottify.android.localdata.statics.model.Track
-import com.lelloman.pezzottify.android.localdata.statics.model.quack
+import com.lelloman.pezzottify.android.localdata.internal.statics.model.Album
+import com.lelloman.pezzottify.android.localdata.internal.statics.model.Artist
+import com.lelloman.pezzottify.android.localdata.internal.statics.model.ArtistDiscography
+import com.lelloman.pezzottify.android.localdata.internal.statics.model.Track
+import com.lelloman.pezzottify.android.localdata.internal.statics.model.quack
 import com.lelloman.pezzottify.android.logger.LoggerFactory
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine

@@ -1,4 +1,4 @@
-package com.lelloman.pezzottify.android.localdata.internal
+package com.lelloman.pezzottify.android.localdata.internal.auth
 
 import android.content.Context
 import android.util.Log

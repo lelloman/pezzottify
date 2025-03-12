@@ -1,7 +1,7 @@
-package com.lelloman.pezzottify.android.localdata.statics.internal
+package com.lelloman.pezzottify.android.localdata.internal.statics
 
 import androidx.room.TypeConverter
-import com.lelloman.pezzottify.android.localdata.statics.model.Disc
+import com.lelloman.pezzottify.android.localdata.internal.statics.model.Disc
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 

@@ -1,4 +1,4 @@
-package com.lelloman.pezzottify.android.localdata.statics.internal
+package com.lelloman.pezzottify.android.localdata.internal.statics
 
 import androidx.room.Dao
 import androidx.room.Insert

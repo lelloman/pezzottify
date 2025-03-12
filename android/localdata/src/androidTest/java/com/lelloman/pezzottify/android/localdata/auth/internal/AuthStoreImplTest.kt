@@ -3,8 +3,7 @@ package com.lelloman.pezzottify.android.localdata.auth.internal
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import com.google.common.truth.Truth.assertThat
-import com.lelloman.pezzottify.android.domain.auth.AuthState
-import com.lelloman.pezzottify.android.localdata.internal.AuthStoreImpl
+import com.lelloman.pezzottify.android.localdata.internal.auth.AuthStoreImpl
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher

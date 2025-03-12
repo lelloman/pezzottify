@@ -1,4 +1,4 @@
-package com.lelloman.pezzottify.android.localdata.internal
+package com.lelloman.pezzottify.android.localdata.internal.config
 
 import android.content.Context
 import com.lelloman.pezzottify.android.domain.config.ConfigStore

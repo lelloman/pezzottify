@@ -5,10 +5,12 @@ import androidx.room.Room
 import androidx.test.platform.app.InstrumentationRegistry
 import com.google.common.truth.Truth.assertThat
 import com.lelloman.pezzottify.android.domain.statics.StaticItemType
-import com.lelloman.pezzottify.android.localdata.statics.model.Album
-import com.lelloman.pezzottify.android.localdata.statics.model.Artist
-import com.lelloman.pezzottify.android.localdata.statics.model.ArtistDiscography
-import com.lelloman.pezzottify.android.localdata.statics.model.Track
+import com.lelloman.pezzottify.android.localdata.internal.statics.StaticItemFetchStateRecord
+import com.lelloman.pezzottify.android.localdata.internal.statics.StaticsDb
+import com.lelloman.pezzottify.android.localdata.internal.statics.model.Album
+import com.lelloman.pezzottify.android.localdata.internal.statics.model.Artist
+import com.lelloman.pezzottify.android.localdata.internal.statics.model.ArtistDiscography
+import com.lelloman.pezzottify.android.localdata.internal.statics.model.Track
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.toList

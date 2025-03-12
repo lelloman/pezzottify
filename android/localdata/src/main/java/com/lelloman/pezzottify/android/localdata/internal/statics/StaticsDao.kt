@@ -1,13 +1,13 @@
-package com.lelloman.pezzottify.android.localdata.statics.internal
+package com.lelloman.pezzottify.android.localdata.internal.statics
 
 import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
-import com.lelloman.pezzottify.android.localdata.statics.model.Album
-import com.lelloman.pezzottify.android.localdata.statics.model.Artist
-import com.lelloman.pezzottify.android.localdata.statics.model.ArtistDiscography
-import com.lelloman.pezzottify.android.localdata.statics.model.Track
+import com.lelloman.pezzottify.android.localdata.internal.statics.model.Album
+import com.lelloman.pezzottify.android.localdata.internal.statics.model.Artist
+import com.lelloman.pezzottify.android.localdata.internal.statics.model.ArtistDiscography
+import com.lelloman.pezzottify.android.localdata.internal.statics.model.Track
 import kotlinx.coroutines.flow.Flow
 
 @Dao

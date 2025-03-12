@@ -1,11 +1,11 @@
-package com.lelloman.pezzottify.android.localdata.statics.model
+package com.lelloman.pezzottify.android.localdata.internal.statics.model
 
 import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.PrimaryKey
 
 @Entity(tableName = Artist.TABLE_NAME)
-data class Artist(
+internal data class Artist(
 
     @ColumnInfo(name = COLUMN_ID)
     @PrimaryKey
@@ -21,7 +21,7 @@ data class Artist(
     }
 }
 
-fun com.lelloman.pezzottify.android.domain.statics.Artist.quack(): Artist = Artist(
+internal fun com.lelloman.pezzottify.android.domain.statics.Artist.quack(): Artist = Artist(
     id = id,
     name = name,
 )
