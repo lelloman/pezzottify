@@ -39,7 +39,7 @@ fun AppUi() {
                     AboutScreen()
                 }
                 composable<Screen.Main.Home> {
-                    MainScreen(navController)
+                    MainScreen()
                 }
             }
         }

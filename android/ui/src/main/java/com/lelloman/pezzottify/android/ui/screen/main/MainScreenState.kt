@@ -1,12 +1,9 @@
 package com.lelloman.pezzottify.android.ui.screen.main
 
 data class MainScreenState(
-    val tab: Tab = Tab.Home,
+    val bottomPlayerVisible: Boolean = false,
+    val playerTrackName: String = "",
+    val playerIsPlaying: Boolean = false,
 ) {
 
-    enum class Tab {
-        Home,
-        Search,
-        Library,
-    }
 }

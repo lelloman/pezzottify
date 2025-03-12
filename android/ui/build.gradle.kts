@@ -53,6 +53,7 @@ dependencies {
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.coil)
     implementation(libs.coil.network)
+    implementation(project(":logger"))
 
     implementation(libs.hilt)
     implementation(libs.hilt.navigation.compose)

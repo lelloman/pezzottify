@@ -2,7 +2,9 @@ package com.lelloman.pezzottify.android.ui.screen.main
 
 interface MainScreenActions {
 
-    fun clickOnTab(tab: MainScreenState.Tab)
+    fun clickOnPlayPause()
+    
+    fun clickOnSkipToNext()
 
-    suspend fun clickOnProfile()
+    fun clickOnSkipToPrevious()
 }

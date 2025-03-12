@@ -7,6 +7,7 @@ import com.lelloman.pezzottify.android.domain.player.Player
 import com.lelloman.pezzottify.android.domain.statics.usecase.PerformSearch
 import com.lelloman.pezzottify.android.logger.LoggerFactory
 import com.lelloman.pezzottify.android.ui.screen.login.LoginViewModel
+import com.lelloman.pezzottify.android.ui.screen.main.MainScreenViewModel
 import com.lelloman.pezzottify.android.ui.screen.main.content.album.AlbumScreenViewModel
 import com.lelloman.pezzottify.android.ui.screen.main.profile.ProfileScreenViewModel
 import com.lelloman.pezzottify.android.ui.screen.main.search.SearchScreenViewModel
@@ -15,6 +16,8 @@ import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.android.components.ViewModelComponent
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.combine
 
 @InstallIn(ViewModelComponent::class)
 @Module
@@ -89,4 +92,33 @@ class InteractorsModule {
             player.loadAlbum(albumId)
         }
     }
+
+    @Provides
+    fun provideMainScreenInteractor(
+        loggerFactory: LoggerFactory,
+        player: Player
+    ): MainScreenViewModel.Interactor =
+        object : MainScreenViewModel.Interactor {
+
+            val logger = loggerFactory.getLogger(MainScreenViewModel.Interactor::class)
+            override fun getPlaybackState(): Flow<MainScreenViewModel.PlaybackState?> = player
+                .playbackPlaylist.combine(player.isPlaying) { playlist, isPlaying ->
+                    logger.debug("Combining new playlist + isPlaying $playlist - $isPlaying")
+                    if (playlist != null) {
+                        MainScreenViewModel.PlaybackState(
+                            isPlaying = isPlaying,
+                            trackId = playlist.tracksIds[playlist.currentTrackIndex ?: 0],
+                            trackPercent = 0f,
+                        )
+                    } else {
+                        null
+                    }
+                }
+
+            override fun clickOnPlayPause() = player.togglePlayPause()
+
+            override fun clickOnSkipToNext() = player.skipToNextTrack()
+
+            override fun clickOnSkipToPrevious() = player.skipToPreviousTrack()
+        }
 }

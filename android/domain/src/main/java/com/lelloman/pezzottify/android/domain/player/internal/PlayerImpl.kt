@@ -38,7 +38,6 @@ internal class PlayerImpl(
     loggerFactory: LoggerFactory,
     private val platformPlayerFactory: PlatformPlayer.Factory,
     private val configStore: ConfigStore,
-//    private val coroutineContext: CoroutineContext = newSingleThreadContext("PlayerImplThread"),
     private val coroutineScope: CoroutineScope = GlobalScope,
 ) : Player {
 
@@ -143,7 +142,7 @@ internal class PlayerImpl(
     }
 
     override fun togglePlayPause() {
-        TODO("Not yet implemented")
+        mutableIsPlaying.value = mutableIsPlaying.value.not()
     }
 
     override fun seekToPercentage(percentage: Float) {
@@ -201,10 +200,20 @@ internal class PlayerImpl(
     }
 
     override fun skipToNextTrack() {
-        TODO("Not yet implemented")
+        val playbackPlaylist = playbackPlaylist.value ?: return
+        val currentIndex = playbackPlaylist.currentTrackIndex ?: return
+        if (currentIndex == playbackPlaylist.tracksIds.lastIndex) {
+            return
+        }
+        mutablePlaybackPlaylist.value = playbackPlaylist.copy(currentTrackIndex = currentIndex + 1)
     }
 
     override fun skipToPreviousTrack() {
-        TODO("Not yet implemented")
+        val playbackPlaylist = playbackPlaylist.value ?: return
+        val currentIndex = playbackPlaylist.currentTrackIndex ?: return
+        if (currentIndex == 0) {
+            return
+        }
+        mutablePlaybackPlaylist.value = playbackPlaylist.copy(currentTrackIndex = currentIndex - 1)
     }
 }
