@@ -89,6 +89,7 @@ internal class PlayerImpl(
                     .filterNotNull()
                     .distinctUntilChanged()
                     .collect { trackId ->
+                        logger.info("Loading new track list into platform player.")
                         val baseUrl = configStore.baseUrl.value
                         val urls = trackId.map { "$baseUrl/v1/content/stream/$it" }
                         platformPlayer.loadPlaylist(urls)
@@ -113,7 +114,6 @@ internal class PlayerImpl(
         runOnPlayerThread {
             loadNexPlaylistJob?.cancel()
             loadNexPlaylistJob = runOnPlayerThread {
-
                 val loadedAlbum = withTimeoutOrNull(2.seconds) {
                     staticsProvider.provideAlbum(albumId)
                         .filterIsInstance<StaticsItem.Loaded<Album>>()

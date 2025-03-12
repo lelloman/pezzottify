@@ -1,6 +1,9 @@
 package com.lelloman.pezzottify.android.ui
 
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -20,35 +23,24 @@ import com.lelloman.pezzottify.android.ui.theme.PezzottifyTheme
 fun AppUi() {
     val navController = rememberNavController()
     PezzottifyTheme {
-        NavHost(
-            navController = navController,
-            startDestination = Screen.Splash,
-        ) {
-            composable<Screen.Splash> {
-                SplashScreen(navController)
-            }
-            composable<Screen.Login> {
-                LoginScreen(navController)
-            }
-            composable<Screen.About> {
-                AboutScreen()
-            }
-            composable<Screen.Main.Home> {
-                MainScreen(navController)
-            }
-            composable<Screen.Main.Home.Profile> {
-                ProfileScreen(navController)
-            }
-            composable<Screen.Main.Artist> {
-                ArtistScreen(it.toRoute<Screen.Main.Artist>().artistId)
-            }
-
-            composable<Screen.Main.Album> {
-                AlbumScreen(it.toRoute<Screen.Main.Album>().albumId)
-            }
-
-            composable<Screen.Main.Track> {
-                TrackScreen(it.toRoute<Screen.Main.Track>().trackId)
+        Box(modifier = Modifier.fillMaxSize()) {
+            NavHost(
+                modifier = Modifier.fillMaxSize(),
+                navController = navController,
+                startDestination = Screen.Splash,
+            ) {
+                composable<Screen.Splash> {
+                    SplashScreen(navController)
+                }
+                composable<Screen.Login> {
+                    LoginScreen(navController)
+                }
+                composable<Screen.About> {
+                    AboutScreen()
+                }
+                composable<Screen.Main.Home> {
+                    MainScreen(navController)
+                }
             }
         }
     }

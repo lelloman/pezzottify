@@ -5,7 +5,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Person
-import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -22,17 +21,16 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import androidx.navigation.compose.rememberNavController
-import com.lelloman.pezzottify.android.ui.fromMainBackToLogin
 import com.lelloman.pezzottify.android.ui.toProfile
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.launch
 
 
 @Composable
-fun HomeScreen(parentNavController: NavController) {
+fun HomeScreen(navController: NavController) {
     val viewModel = hiltViewModel<HomeScreenViewModel>()
     HomeScreenContent(
-        parentNavController = parentNavController,
+        navController = navController,
         actions = viewModel,
         events = viewModel.events
     )
@@ -41,7 +39,7 @@ fun HomeScreen(parentNavController: NavController) {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun HomeScreenContent(
-    parentNavController: NavController,
+    navController: NavController,
     events: Flow<HomeScreenEvents>,
     actions: HomeScreenActions,
 ) {
@@ -51,7 +49,7 @@ private fun HomeScreenContent(
         events.collect {
             when (it) {
                 HomeScreenEvents.NavigateToProfileScreen -> {
-                    parentNavController.toProfile()
+                    navController.toProfile()
                 }
             }
         }
@@ -86,11 +84,6 @@ private fun HomeScreenContent(
                 modifier = Modifier.align(Alignment.Center),
                 style = MaterialTheme.typography.headlineLarge
             )
-            Button(
-                modifier = Modifier.align(Alignment.BottomCenter),
-                onClick = { parentNavController.fromMainBackToLogin() }) {
-                Text("LOGOUT")
-            }
         }
     }
 }
@@ -99,5 +92,5 @@ private fun HomeScreenContent(
 @Preview
 private fun HomeScreenPreview() {
     val navController = rememberNavController()
-    HomeScreen(parentNavController = navController)
+    HomeScreen(navController = navController)
 }

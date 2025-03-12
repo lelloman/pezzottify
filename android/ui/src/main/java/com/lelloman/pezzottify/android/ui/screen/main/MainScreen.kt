@@ -22,10 +22,15 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.toRoute
 import com.lelloman.pezzottify.android.ui.R
 import com.lelloman.pezzottify.android.ui.Screen
+import com.lelloman.pezzottify.android.ui.screen.main.content.album.AlbumScreen
+import com.lelloman.pezzottify.android.ui.screen.main.content.artist.ArtistScreen
+import com.lelloman.pezzottify.android.ui.screen.main.content.track.TrackScreen
 import com.lelloman.pezzottify.android.ui.screen.main.home.HomeScreen
 import com.lelloman.pezzottify.android.ui.screen.main.library.LibraryScreen
+import com.lelloman.pezzottify.android.ui.screen.main.profile.ProfileScreen
 import com.lelloman.pezzottify.android.ui.screen.main.search.SearchScreen
 
 enum class BottomNavigationRoute(
@@ -91,10 +96,23 @@ fun MainScreen(parentNavController: NavController) {
             modifier = Modifier.padding(bottom = innerPadding.calculateBottomPadding()),
         ) {
             composable<Screen.Main.Home> {
-                HomeScreen(parentNavController = parentNavController)
+                HomeScreen(navController = navController)
             }
-            composable<Screen.Main.Search> { SearchScreen(parentNavController) }
+            composable<Screen.Main.Search> { SearchScreen(navController) }
             composable<Screen.Main.Library> { LibraryScreen() }
+
+            composable<Screen.Main.Home.Profile> {
+                ProfileScreen(navController)
+            }
+            composable<Screen.Main.Artist> {
+                ArtistScreen(it.toRoute<Screen.Main.Artist>().artistId)
+            }
+            composable<Screen.Main.Album> {
+                AlbumScreen(it.toRoute<Screen.Main.Album>().albumId)
+            }
+            composable<Screen.Main.Track> {
+                TrackScreen(it.toRoute<Screen.Main.Track>().trackId)
+            }
         }
     }
 }
