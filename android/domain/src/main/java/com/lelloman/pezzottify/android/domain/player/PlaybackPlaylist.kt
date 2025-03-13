@@ -1,7 +1,5 @@
 package com.lelloman.pezzottify.android.domain.player
 
-import androidx.annotation.FloatRange
-
 
 sealed interface PlaybackPlaylistContext {
 
@@ -16,7 +14,4 @@ sealed interface PlaybackPlaylistContext {
 data class PlaybackPlaylist(
     val context: PlaybackPlaylistContext,
     val tracksIds: List<String>,
-    val currentTrackIndex: Int?,
-    @FloatRange(0.0, 1.0) val currentTrackPercent: Float,
-    val progressSec: Int?,
 )

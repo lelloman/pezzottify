@@ -40,6 +40,7 @@ dependencies {
     implementation(libs.material)
     implementation(libs.exoplayer)
     implementation(libs.exoplayer.okhttp)
+    implementation(libs.androidx.media3.session)
     implementation(project(":logger"))
     implementation(project(":domain"))
 

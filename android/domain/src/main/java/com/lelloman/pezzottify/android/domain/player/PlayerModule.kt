@@ -19,12 +19,12 @@ class PlayerModule {
     fun providePlayer(
         staticsProvider: StaticsProvider,
         loggerFactory: LoggerFactory,
-        platformPlayerFactory: PlatformPlayer.Factory,
+        platformPlayer: PlatformPlayer,
         configStore: ConfigStore,
-    ): Player = PlayerImpl(
+    ): PezzottifyPlayer = PlayerImpl(
         staticsProvider = staticsProvider,
         loggerFactory = loggerFactory,
-        platformPlayerFactory = platformPlayerFactory,
+        platformPlayer = platformPlayer,
         configStore = configStore,
     )
 }

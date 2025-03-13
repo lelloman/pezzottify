@@ -74,6 +74,7 @@ coil = { group = "io.coil-kt.coil3", name = "coil-compose", version.ref = "coil"
 coil-network = { group = "io.coil-kt.coil3", name = "coil-network-okhttp", version.ref = "coil" }
 exoplayer = { group = "androidx.media3", name = "media3-exoplayer", version.ref = "exoplayer" }
 exoplayer-okhttp = { group = "androidx.media3", name = "media3-datasource-okhttp", version.ref = "exoplayer" }
+androidx-media3-session = { group = "androidx.media3", name = "media3-session", version.ref = "exoplayer" }
 
 
 [plugins]

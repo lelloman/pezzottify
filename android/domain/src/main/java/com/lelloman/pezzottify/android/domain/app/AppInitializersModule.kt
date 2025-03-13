@@ -1,7 +1,7 @@
 package com.lelloman.pezzottify.android.domain.app
 
 import com.lelloman.pezzottify.android.domain.auth.AuthStore
-import com.lelloman.pezzottify.android.domain.player.Player
+import com.lelloman.pezzottify.android.domain.player.PezzottifyPlayer
 import com.lelloman.pezzottify.android.domain.sync.Synchronizer
 import dagger.Binds
 import dagger.Module
@@ -23,5 +23,5 @@ abstract class AppInitializersModule {
 
     @Binds
     @IntoSet
-    internal abstract fun bindsPlayer(player: Player): AppInitializer
+    internal abstract fun bindsPlayer(player: PezzottifyPlayer): AppInitializer
 }

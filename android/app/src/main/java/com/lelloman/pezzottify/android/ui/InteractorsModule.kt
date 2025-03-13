@@ -3,7 +3,7 @@ package com.lelloman.pezzottify.android.ui
 import com.lelloman.pezzottify.android.domain.auth.usecase.IsLoggedIn
 import com.lelloman.pezzottify.android.domain.auth.usecase.PerformLogin
 import com.lelloman.pezzottify.android.domain.auth.usecase.PerformLogout
-import com.lelloman.pezzottify.android.domain.player.Player
+import com.lelloman.pezzottify.android.domain.player.PezzottifyPlayer
 import com.lelloman.pezzottify.android.domain.statics.usecase.PerformSearch
 import com.lelloman.pezzottify.android.domain.user.GetRecentlyViewedContentUseCase
 import com.lelloman.pezzottify.android.domain.user.LogViewedContentUseCase
@@ -106,7 +106,7 @@ class InteractorsModule {
 
     @Provides
     fun provideAlbumScreenInteractor(
-        player: Player
+        player: PezzottifyPlayer
     ): AlbumScreenViewModel.Interactor = object : AlbumScreenViewModel.Interactor {
         override fun playAlbum(albumId: String) {
             player.loadAlbum(albumId)
@@ -116,24 +116,26 @@ class InteractorsModule {
     @Provides
     fun provideMainScreenInteractor(
         loggerFactory: LoggerFactory,
-        player: Player
+        player: PezzottifyPlayer
     ): MainScreenViewModel.Interactor =
         object : MainScreenViewModel.Interactor {
 
             val logger = loggerFactory.getLogger(MainScreenViewModel.Interactor::class)
-            override fun getPlaybackState(): Flow<MainScreenViewModel.PlaybackState?> = player
-                .playbackPlaylist.combine(player.isPlaying) { playlist, isPlaying ->
-                    logger.debug("Combining new playlist + isPlaying $playlist - $isPlaying")
-                    if (playlist != null) {
-                        MainScreenViewModel.PlaybackState(
-                            isPlaying = isPlaying,
-                            trackId = playlist.tracksIds[playlist.currentTrackIndex ?: 0],
-                            trackPercent = 0f,
-                        )
-                    } else {
-                        null
+            override fun getPlaybackState(): Flow<MainScreenViewModel.PlaybackState?> =
+                player
+                    .playbackPlaylist.combine(player.isPlaying) { playlist, isPlaying -> playlist to isPlaying }
+                    .combine(player.currentTrackIndex) { (playlist, isPlaying), currentTrackIndex ->
+                        logger.debug("Combining new playlist + isPlaying + currentTrackIndex $playlist - $isPlaying - $currentTrackIndex")
+                        if (playlist != null) {
+                            MainScreenViewModel.PlaybackState(
+                                isPlaying = isPlaying,
+                                trackId = playlist.tracksIds[currentTrackIndex ?: 0],
+                                trackPercent = 0f,
+                            )
+                        } else {
+                            null
+                        }
                     }
-                }
 
             override fun clickOnPlayPause() = player.togglePlayPause()
 
