@@ -13,4 +13,6 @@ interface ContentResolver {
     fun resolveArtist(artistId: String): Flow<Content<Artist>>
 
     fun resolveAlbum(albumId: String): Flow<Content<Album>>
+
+    fun resolveTrack(trackId: String): Flow<Content<Track>>
 }

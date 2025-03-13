@@ -5,12 +5,16 @@ import com.lelloman.pezzottify.android.domain.auth.usecase.PerformLogin
 import com.lelloman.pezzottify.android.domain.auth.usecase.PerformLogout
 import com.lelloman.pezzottify.android.domain.player.Player
 import com.lelloman.pezzottify.android.domain.statics.usecase.PerformSearch
+import com.lelloman.pezzottify.android.domain.user.GetRecentlyViewedContentUseCase
 import com.lelloman.pezzottify.android.domain.user.LogViewedContentUseCase
 import com.lelloman.pezzottify.android.domain.user.ViewedContent
 import com.lelloman.pezzottify.android.logger.LoggerFactory
 import com.lelloman.pezzottify.android.ui.screen.login.LoginViewModel
 import com.lelloman.pezzottify.android.ui.screen.main.MainScreenViewModel
 import com.lelloman.pezzottify.android.ui.screen.main.content.album.AlbumScreenViewModel
+import com.lelloman.pezzottify.android.ui.screen.main.home.HomeScreenState
+import com.lelloman.pezzottify.android.ui.screen.main.home.HomeScreenViewModel
+import com.lelloman.pezzottify.android.ui.screen.main.home.ViewedContentType
 import com.lelloman.pezzottify.android.ui.screen.main.profile.ProfileScreenViewModel
 import com.lelloman.pezzottify.android.ui.screen.main.search.SearchScreenViewModel
 import com.lelloman.pezzottify.android.ui.screen.splash.SplashViewModel
@@ -20,6 +24,7 @@ import dagger.hilt.InstallIn
 import dagger.hilt.android.components.ViewModelComponent
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.map
 
 @InstallIn(ViewModelComponent::class)
 @Module
@@ -135,5 +140,22 @@ class InteractorsModule {
             override fun clickOnSkipToNext() = player.skipToNextTrack()
 
             override fun clickOnSkipToPrevious() = player.skipToPreviousTrack()
+        }
+
+    @Provides
+    fun provideHomeScreenInteractor(getRecentlyViewedContent: GetRecentlyViewedContentUseCase) =
+        object : HomeScreenViewModel.Interactor {
+            override suspend fun getRecentlyViewedContent(maxCount: Int): Flow<List<HomeScreenState.RecentlyViewedContent>> =
+                getRecentlyViewedContent(maxCount).map {
+                    it.map { item ->
+                        val type = when (item.type) {
+                            ViewedContent.Type.Album -> ViewedContentType.Album
+                            ViewedContent.Type.Artist -> ViewedContentType.Artist
+                            ViewedContent.Type.Track -> ViewedContentType.Track
+                            ViewedContent.Type.UserPlaylist -> ViewedContentType.Playlist
+                        }
+                        HomeScreenState.RecentlyViewedContent(item.contentId, type)
+                    }
+                }
         }
 }

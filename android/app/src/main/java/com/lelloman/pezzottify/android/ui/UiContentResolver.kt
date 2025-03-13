@@ -7,6 +7,7 @@ import com.lelloman.pezzottify.android.ui.content.Artist
 import com.lelloman.pezzottify.android.ui.content.Content
 import com.lelloman.pezzottify.android.ui.content.ContentResolver
 import com.lelloman.pezzottify.android.ui.content.SearchResultContent
+import com.lelloman.pezzottify.android.ui.content.Track
 import com.lelloman.pezzottify.android.ui.screen.main.search.SearchScreenViewModel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
@@ -37,6 +38,21 @@ class UiContentResolver(private val staticsProvider: StaticsProvider) : ContentR
                         id = it.id,
                         name = it.data.name,
                         artistsIds = it.data.artistsIds,
+                    )
+                )
+            }
+        }
+
+    override fun resolveTrack(trackId: String): Flow<Content<Track>> =
+        staticsProvider.provideTrack(trackId).map {
+            when (it) {
+                is StaticsItem.Error -> Content.Error(it.id)
+                is StaticsItem.Loading -> Content.Loading(it.id)
+                is StaticsItem.Loaded -> Content.Resolved(
+                    it.id, Track(
+                        id = it.id,
+                        name = it.data.name,
+                        albumId = it.data.albumId,
                     )
                 )
             }
