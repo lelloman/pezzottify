@@ -9,7 +9,7 @@ plugins {
 
 android {
     namespace = "com.lelloman.pezzottify.android.localdata"
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
         minSdk = 24

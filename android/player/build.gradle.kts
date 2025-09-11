@@ -7,7 +7,7 @@ plugins {
 
 android {
     namespace = "com.lelloman.pezzottify.android.player"
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
         minSdk = 24
