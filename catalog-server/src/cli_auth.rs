@@ -82,8 +82,9 @@ fn main() -> Result<()> {
     let cli_args = CliArgs::parse();
     let auth_store_file_path = match cli_args.path {
         Some(path) => path,
-        None => SqliteUserStore::infer_path()
-            .with_context(|| "Could not infer DB file path, please specify it explicitly.")?,
+        None => SqliteUserStore::infer_path().with_context(|| {
+            "Could not infer UserStore DB file path, please specify it explicitly."
+        })?,
     };
     let user_store = SqliteUserStore::new(auth_store_file_path)?;
     let catalog = Arc::new(Mutex::new(Catalog::dummy()));

@@ -105,8 +105,9 @@ async fn main() -> Result<()> {
 
     let user_store_file_path = match cli_args.user_store_file_path {
         Some(path) => path,
-        None => SqliteUserStore::infer_path()
-            .with_context(|| "Could not infer DB file path, please specify it explicitly.")?,
+        None => SqliteUserStore::infer_path().with_context(|| {
+            "Could not infer UserStore DB file path, please specify it explicitly."
+        })?,
     };
     let user_store = Box::new(SqliteUserStore::new(&user_store_file_path)?);
     info!("Indexing content for search...");
