@@ -44,6 +44,10 @@
 - ~Show requests in logs~
 - ~Create User identity/authentication db~
 
+## [android]
+- Create a db for logout operations so that if a user logsout, the server call doesn't need to
+happen immediately, plus in case of immediate error it can be retried
+
 ## [agents]
 - Make artist info retrieval agent
 - Make music score retrieval agent
