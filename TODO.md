@@ -48,10 +48,15 @@
 - Create a db for logout operations so that if a user logsout, the server call doesn't need to
 happen immediately, plus in case of immediate error it can be retried
 - ~Show track/artists info in small player~
-- Add an in-memory immediate cache layer in ContentResolver
+- Make a component to load an album's and an artists picture (try it in the recently viewed stuff in home screen)
+- Show tracks list in the album screen
+- In the album screen, somehow highlight a track if it's currently playing 
+- Show all albums in the artist screen
+- Show related artists in the artist screen
 - Add a player screen
 - Show tracks list in album page
-- Show albums and picture in artist screen
+- Create a "memory pressure" component that can detect how much memory can we use for caches and such (imagine caching stuff from the db, pre-loading audio, images)
+- Add an in-memory immediate cache layer in ContentResolver, only after a "memory pressure" component
 
 ## [agents]
 - Make artist info retrieval agent
