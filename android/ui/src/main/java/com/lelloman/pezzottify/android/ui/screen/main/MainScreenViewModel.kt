@@ -11,9 +11,11 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.filterIsInstance
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.take
 import kotlinx.coroutines.launch
@@ -80,8 +82,25 @@ class MainScreenViewModel @Inject constructor(
                             oldState.copy(bottomPlayer = oldState.bottomPlayer.copy(trackName = it.data.name))
                     }
                 }
-                .collect {
-
+                .flatMapLatest { track ->
+                    val artistsFlows = track.data.artistsIds.map { artistId ->
+                        contentResolver.resolveArtist(artistId)
+                            .map { resolveArtistState ->
+                                (resolveArtistState as? Content.Resolved)?.data?.name ?: ""
+                            }
+                    }
+                    combine(artistsFlows) {
+                        track.itemId to it.toList()
+                    }
+                }
+                .collect { (trackId, artistsNames) ->
+                    if (mutableState.value.bottomPlayer.trackId == trackId) {
+                        mutableState.value = mutableState.value.copy(
+                            bottomPlayer = mutableState.value.bottomPlayer.copy(
+                                artistsNames = artistsNames.joinToString(", ")
+                            )
+                        )
+                    }
                 }
         }
     }

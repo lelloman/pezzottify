@@ -1,7 +1,9 @@
 package com.lelloman.pezzottify.android.ui.screen.main
 
 import androidx.annotation.StringRes
+import androidx.compose.foundation.MarqueeAnimationMode
 import androidx.compose.foundation.background
+import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -21,11 +23,13 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.compose.NavHost
@@ -133,36 +137,88 @@ private fun MainScreenContent(state: MainScreenState, actions: MainScreenActions
                 }
             }
             if (state.bottomPlayer.isVisible) {
-                Row(
-                    modifier = Modifier
-                        .height(64.dp)
-                        .fillMaxWidth()
-                        .background(color = Color.Red)
-                ) {
-                    Text(state.bottomPlayer.trackName, modifier = Modifier.weight(1f))
-                    IconButton(onClick = actions::clickOnSkipToPrevious) {
-                        Icon(
-                            modifier = Modifier.size(48.dp),
-                            painter = painterResource(R.drawable.baseline_skip_previous_24),
-                            contentDescription = null,
-                        )
-                    }
-                    IconButton(onClick = actions::clickOnPlayPause) {
-                        Icon(
-                            modifier = Modifier.size(48.dp),
-                            painter = painterResource(if (state.bottomPlayer.isPlaying) R.drawable.baseline_pause_circle_24 else R.drawable.baseline_play_circle_24),
-                            contentDescription = null,
-                        )
-                    }
-                    IconButton(onClick = actions::clickOnSkipToNext) {
-                        Icon(
-                            modifier = Modifier.size(48.dp),
-                            painter = painterResource(R.drawable.baseline_skip_next_24),
-                            contentDescription = null,
-                        )
-                    }
-                }
+                BottomPlayer(state.bottomPlayer, actions)
             }
         }
     }
+}
+
+@Composable
+private fun BottomPlayerText(text: String, modifier: Modifier = Modifier) {
+    Text(
+        text = text,
+        maxLines = 1,
+        modifier = Modifier
+            .padding(horizontal = 8.dp)
+            .basicMarquee(
+                animationMode = MarqueeAnimationMode.Immediately,
+                initialDelayMillis = 500
+            )
+            .then(modifier)
+    )
+}
+
+@Composable
+private fun BottomPlayer(state: MainScreenState.BottomPlayer, actions: MainScreenActions) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .height(64.dp)
+            .fillMaxWidth()
+            .background(Color.Gray)
+    ) {
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .background(Color.Red)
+        ) {
+            BottomPlayerText(
+                text = state.trackName,
+                modifier = Modifier
+            )
+            BottomPlayerText(
+                text = state.artistsNames,
+                modifier = Modifier
+            )
+        }
+        IconButton(onClick = actions::clickOnSkipToPrevious) {
+            Icon(
+                modifier = Modifier.size(48.dp),
+                painter = painterResource(R.drawable.baseline_skip_previous_24),
+                contentDescription = null,
+            )
+        }
+        IconButton(onClick = actions::clickOnPlayPause) {
+            Icon(
+                modifier = Modifier.size(48.dp),
+                painter = painterResource(if (state.isPlaying) R.drawable.baseline_pause_circle_24 else R.drawable.baseline_play_circle_24),
+                contentDescription = null,
+            )
+        }
+        IconButton(onClick = actions::clickOnSkipToNext) {
+            Icon(
+                modifier = Modifier.size(48.dp),
+                painter = painterResource(R.drawable.baseline_skip_next_24),
+                contentDescription = null,
+            )
+        }
+    }
+}
+
+@Preview
+@Composable
+private fun PreviewBottomPlayer() {
+    BottomPlayer(
+        state = MainScreenState.BottomPlayer(
+            isVisible = true,
+            trackName = "A very long track name to see what happens when it is very very long",
+            artistsNames = "An artist",
+            isPlaying = true,
+        ),
+        actions = object : MainScreenActions {
+            override fun clickOnPlayPause() = Unit
+            override fun clickOnSkipToNext() = Unit
+            override fun clickOnSkipToPrevious() = Unit
+        }
+    )
 }
