@@ -4,4 +4,5 @@ data class Track(
     val id: String,
     val name: String,
     val albumId: String,
+    val artistsIds: List<String>,
 )

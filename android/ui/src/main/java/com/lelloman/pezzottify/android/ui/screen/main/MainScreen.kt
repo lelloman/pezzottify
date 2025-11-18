@@ -132,14 +132,14 @@ private fun MainScreenContent(state: MainScreenState, actions: MainScreenActions
                     TrackScreen(it.toRoute<Screen.Main.Track>().trackId)
                 }
             }
-            if (state.bottomPlayerVisible) {
+            if (state.bottomPlayer.isVisible) {
                 Row(
                     modifier = Modifier
                         .height(64.dp)
                         .fillMaxWidth()
                         .background(color = Color.Red)
                 ) {
-                    Text(state.playerTrackName, modifier = Modifier.weight(1f))
+                    Text(state.bottomPlayer.trackName, modifier = Modifier.weight(1f))
                     IconButton(onClick = actions::clickOnSkipToPrevious) {
                         Icon(
                             modifier = Modifier.size(48.dp),
@@ -150,7 +150,7 @@ private fun MainScreenContent(state: MainScreenState, actions: MainScreenActions
                     IconButton(onClick = actions::clickOnPlayPause) {
                         Icon(
                             modifier = Modifier.size(48.dp),
-                            painter = painterResource(if (state.playerIsPlaying) R.drawable.baseline_pause_circle_24 else R.drawable.baseline_play_circle_24),
+                            painter = painterResource(if (state.bottomPlayer.isPlaying) R.drawable.baseline_pause_circle_24 else R.drawable.baseline_play_circle_24),
                             contentDescription = null,
                         )
                     }

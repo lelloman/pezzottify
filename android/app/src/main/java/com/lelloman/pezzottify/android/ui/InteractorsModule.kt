@@ -121,13 +121,13 @@ class InteractorsModule {
         object : MainScreenViewModel.Interactor {
 
             val logger = loggerFactory.getLogger(MainScreenViewModel.Interactor::class)
-            override fun getPlaybackState(): Flow<MainScreenViewModel.PlaybackState?> =
+            override fun getPlaybackState(): Flow<MainScreenViewModel.Interactor.PlaybackState?> =
                 player
                     .playbackPlaylist.combine(player.isPlaying) { playlist, isPlaying -> playlist to isPlaying }
                     .combine(player.currentTrackIndex) { (playlist, isPlaying), currentTrackIndex ->
                         logger.debug("Combining new playlist + isPlaying + currentTrackIndex $playlist - $isPlaying - $currentTrackIndex")
                         if (playlist != null) {
-                            MainScreenViewModel.PlaybackState(
+                            MainScreenViewModel.Interactor.PlaybackState.Loaded(
                                 isPlaying = isPlaying,
                                 trackId = playlist.tracksIds[currentTrackIndex ?: 0],
                                 trackPercent = 0f,

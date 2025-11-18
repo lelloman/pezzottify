@@ -47,6 +47,10 @@
 ## [android]
 - Create a db for logout operations so that if a user logsout, the server call doesn't need to
 happen immediately, plus in case of immediate error it can be retried
+- Show track/artists info in small player
+- Add a player screen
+- Show tracks list in album page
+- Show albums and picture in artist screen
 
 ## [agents]
 - Make artist info retrieval agent

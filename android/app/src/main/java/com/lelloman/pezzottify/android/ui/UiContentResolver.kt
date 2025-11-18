@@ -53,6 +53,7 @@ class UiContentResolver(private val staticsProvider: StaticsProvider) : ContentR
                         id = it.id,
                         name = it.data.name,
                         albumId = it.data.albumId,
+                        artistsIds = it.data.artistsIds,
                     )
                 )
             }

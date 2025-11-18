@@ -1,11 +1,13 @@
 package com.lelloman.pezzottify.android.ui.content
 
 
-sealed class Content<out T>(val itemId: String) {
+sealed class Content<out T>() {
 
-    class Loading(itemId: String) : Content<Nothing>(itemId)
+    abstract val itemId: String
 
-    class Error(itemId: String) : Content<Nothing>(itemId)
+    data class Loading(override val itemId: String) : Content<Nothing>()
 
-    class Resolved<T>(itemId: String, val data: T) : Content<T>(itemId)
+    data class Error(override val itemId: String) : Content<Nothing>()
+
+    data class Resolved<T>(override val itemId: String, val data: T) : Content<T>()
 }
