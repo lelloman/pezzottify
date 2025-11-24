@@ -1,7 +1,7 @@
 # ------------------------------------------
 # 1️⃣ Build stage
 # ------------------------------------------
-FROM rust:1.82 as builder
+FROM rust:1.82 AS builder
 
 WORKDIR /catalog-server
 COPY . .
@@ -20,7 +20,9 @@ RUN apt-get update && apt-get install -y libsqlite3-dev && rm -rf /var/lib/apt/l
 
 WORKDIR /catalog-server
 
-# Copy your binary from the builder stage
+# Copy the binaries from the builder stage
+COPY --from=builder /catalog-server/target/release/cli-auth /usr/local/bin/cli-auth
+COPY --from=builder /catalog-server/target/release/cli-search /usr/local/bin/cli-search
 COPY --from=builder /catalog-server/target/release/catalog-server /usr/local/bin/catalog-server
 
 # App will expect these directories
@@ -30,10 +32,10 @@ RUN mkdir -p /data/catalog
 EXPOSE 3001
 
 # Start the server
-CMD ["catalog-server", "/data/catalog", "/data/db/test.db", "--content-cache-age-sec=60", "--logging-level", "path"]
+CMD ["catalog-server", "/data/catalog", "/data/db/user.db", "--content-cache-age-sec=60", "--logging-level", "path"]
 
 # Build with:
 # docker build -t catalog-server .
 
 # Run with:
-# docker run -p 3001:3001 -v /home/lelloman:/data/db -v /home/lelloman/pezzottify-catalog:/data/catalog catalog-server
+# docker run -d -p 3001:3001 -v /home/lelloman/pezzottify-catalog/:/data/db -v /home/lelloman/pezzottify-catalog:/data/catalog catalog-server
