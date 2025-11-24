@@ -1260,4 +1260,123 @@ mod tests {
 
         assert_eq!(store.get_user_playlists(test_user_id).unwrap().len(), 0,);
     }
+
+    #[test]
+    fn test_migration_v3_to_v4() {
+        let temp_dir = TempDir::new().unwrap();
+        let temp_file_path = temp_dir.path().join("test_migration.db");
+
+        // Create a V3 database manually
+        {
+            let conn = Connection::open(&temp_file_path).unwrap();
+            VERSIONED_SCHEMAS[3].create(&conn).unwrap(); // V3 is at index 3
+
+            // Add some test data
+            conn.execute("INSERT INTO user (handle) VALUES (?1)", params!["test_user"])
+                .unwrap();
+            let user_id = conn.last_insert_rowid();
+
+            conn.execute(
+                "INSERT INTO liked_content (user_id, content_id, content_type) VALUES (?1, ?2, ?3)",
+                params![user_id, "test_content_id", 1],
+            )
+            .unwrap();
+
+            conn.execute(
+                "INSERT INTO user_playlist (id, user_id, name, creator_id) VALUES (?1, ?2, ?3, ?4)",
+                params!["playlist123", user_id, "Test Playlist", user_id],
+            )
+            .unwrap();
+
+            // Verify we're at V3
+            let db_version: i64 = conn
+                .query_row("PRAGMA user_version;", [], |row| row.get(0))
+                .unwrap();
+            assert_eq!(db_version, BASE_DB_VERSION as i64 + 3);
+        }
+
+        // Now open with SqliteUserStore, which should trigger migration to V4
+        let store = SqliteUserStore::new(&temp_file_path).unwrap();
+
+        // Verify we're now at V4
+        {
+            let conn = store.conn.lock().unwrap();
+            let db_version: i64 = conn
+                .query_row("PRAGMA user_version;", [], |row| row.get(0))
+                .unwrap();
+            assert_eq!(db_version, BASE_DB_VERSION as i64 + 4);
+
+            // Verify new tables exist
+            let user_role_table_exists: i64 = conn
+                .query_row(
+                    "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='user_role'",
+                    [],
+                    |row| row.get(0),
+                )
+                .unwrap();
+            assert_eq!(user_role_table_exists, 1);
+
+            let user_extra_permission_table_exists: i64 = conn
+                .query_row(
+                    "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='user_extra_permission'",
+                    [],
+                    |row| row.get(0),
+                )
+                .unwrap();
+            assert_eq!(user_extra_permission_table_exists, 1);
+
+            // Verify indices exist with correct names
+            let role_index_exists: i64 = conn
+                .query_row(
+                    "SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND name='idx_user_role_user_id'",
+                    [],
+                    |row| row.get(0),
+                )
+                .unwrap();
+            assert_eq!(role_index_exists, 1);
+
+            let permission_index_exists: i64 = conn
+                .query_row(
+                    "SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND name='idx_user_extra_permission_user_id'",
+                    [],
+                    |row| row.get(0),
+                )
+                .unwrap();
+            assert_eq!(permission_index_exists, 1);
+        }
+
+        // Verify old data is still intact
+        let user_id = store.get_user_id("test_user").unwrap();
+        assert_eq!(user_id, 1);
+
+        let liked_content = store
+            .is_user_liked_content(user_id, "test_content_id")
+            .unwrap();
+        assert!(liked_content);
+
+        let playlists = store.get_user_playlists(user_id).unwrap();
+        assert_eq!(playlists.len(), 1);
+        assert_eq!(playlists[0], "playlist123");
+
+        // Test new permission functionality
+        store.add_user_role(user_id, UserRole::Regular).unwrap();
+        let roles = store.get_user_roles(user_id).unwrap();
+        assert_eq!(roles.len(), 1);
+        assert_eq!(roles[0], UserRole::Regular);
+
+        // Test adding extra permission
+        let grant = PermissionGrant::Extra {
+            start_time: SystemTime::now(),
+            end_time: None,
+            permission: Permission::EditCatalog,
+            countdown: None,
+        };
+        let permission_id = store.add_user_extra_permission(user_id, grant).unwrap();
+        assert!(permission_id > 0);
+
+        // Test resolving permissions
+        let permissions = store.resolve_user_permissions(user_id).unwrap();
+        assert!(permissions.contains(&Permission::AccessCatalog)); // From Regular role
+        assert!(permissions.contains(&Permission::EditCatalog)); // From extra permission
+    }
 }
