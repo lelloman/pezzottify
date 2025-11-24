@@ -1,5 +1,6 @@
 use super::state::ServerState;
 use crate::user::auth::AuthTokenValue;
+use crate::user::Permission;
 
 use axum::{
     extract::FromRequestParts,
@@ -13,6 +14,13 @@ use tracing::debug;
 pub struct Session {
     pub user_id: usize,
     pub token: String,
+    pub permissions: Vec<Permission>,
+}
+
+impl Session {
+    pub fn has_permission(&self, permission: Permission) -> bool {
+        self.permissions.contains(&permission)
+    }
 }
 
 pub const COOKIE_SESSION_TOKEN_KEY: &str = "session_token";
@@ -71,14 +79,15 @@ async fn extract_session_from_request_parts(
     };
 
     debug!("Got session token {}", token);
-    ctx.user_manager
-        .lock()
-        .unwrap()
-        .get_auth_token(&AuthTokenValue(token))
-        .map(|t| Session {
-            user_id: t.user_id,
-            token: t.value.0,
-        })
+    let user_manager = ctx.user_manager.lock().unwrap();
+    let auth_token = user_manager.get_auth_token(&AuthTokenValue(token.clone()))?;
+    let permissions = user_manager.get_user_permissions(auth_token.user_id).ok()?;
+
+    Some(Session {
+        user_id: auth_token.user_id,
+        token: auth_token.value.0,
+        permissions,
+    })
 }
 
 impl FromRequestParts<ServerState> for Session {

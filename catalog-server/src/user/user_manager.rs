@@ -1,7 +1,10 @@
 use crate::catalog::{self, Catalog};
 
 use super::{
-    auth::PezzottifyHasher, user_models::LikedContentType, AuthToken, AuthTokenValue,
+    auth::PezzottifyHasher,
+    permissions::{Permission, PermissionGrant, UserRole},
+    user_models::LikedContentType,
+    AuthToken, AuthTokenValue,
     UserAuthCredentials, UserPlaylist, UserStore, UsernamePasswordCredentials,
 };
 use anyhow::{bail, Context, Result};
@@ -335,5 +338,29 @@ impl UserManager {
             }
         }
         self.update_user_playlist(playlist_id, user_id, None, Some(new_tracks))
+    }
+
+    pub fn get_user_permissions(&self, user_id: usize) -> Result<Vec<Permission>> {
+        self.user_store.lock().unwrap().resolve_user_permissions(user_id)
+    }
+
+    pub fn get_user_roles(&self, user_id: usize) -> Result<Vec<UserRole>> {
+        self.user_store.lock().unwrap().get_user_roles(user_id)
+    }
+
+    pub fn add_user_role(&self, user_id: usize, role: UserRole) -> Result<()> {
+        self.user_store.lock().unwrap().add_user_role(user_id, role)
+    }
+
+    pub fn remove_user_role(&self, user_id: usize, role: UserRole) -> Result<()> {
+        self.user_store.lock().unwrap().remove_user_role(user_id, role)
+    }
+
+    pub fn add_user_extra_permission(&self, user_id: usize, grant: PermissionGrant) -> Result<usize> {
+        self.user_store.lock().unwrap().add_user_extra_permission(user_id, grant)
+    }
+
+    pub fn remove_user_extra_permission(&self, permission_id: usize) -> Result<()> {
+        self.user_store.lock().unwrap().remove_user_extra_permission(permission_id)
     }
 }
