@@ -10,7 +10,7 @@ use tracing::{debug, error};
 
 use crate::{
     catalog::Catalog,
-    user::{user_models::LikedContentType, UserStore},
+    user::{user_models::LikedContentType, Permission, UserStore},
 };
 use crate::{search::SearchVault, user::UserManager};
 use axum_extra::extract::cookie::{Cookie, SameSite};
@@ -35,6 +35,8 @@ use super::{
 use super::{session, stream_track};
 use crate::server::session::Session;
 use crate::user::auth::{AuthTokenValue, UserAuthCredentials};
+use axum::extract::Request;
+use axum::middleware::Next;
 #[derive(Serialize)]
 struct ServerStats {
     pub uptime: String,
@@ -51,6 +53,39 @@ fn format_uptime(duration: Duration) -> String {
     let seconds = total_seconds % 60;
 
     format!("{}d {:02}:{:02}:{:02}", days, hours, minutes, seconds)
+}
+
+async fn require_access_catalog(
+    session: Session,
+    mut request: Request<Body>,
+    next: Next,
+) -> impl IntoResponse {
+    if !session.has_permission(Permission::AccessCatalog) {
+        return StatusCode::FORBIDDEN.into_response();
+    }
+    next.run(request).await
+}
+
+async fn require_like_content(
+    session: Session,
+    mut request: Request<Body>,
+    next: Next,
+) -> impl IntoResponse {
+    if !session.has_permission(Permission::LikeContent) {
+        return StatusCode::FORBIDDEN.into_response();
+    }
+    next.run(request).await
+}
+
+async fn require_own_playlists(
+    session: Session,
+    mut request: Request<Body>,
+    next: Next,
+) -> impl IntoResponse {
+    if !session.has_permission(Permission::OwnPlaylists) {
+        return StatusCode::FORBIDDEN.into_response();
+    }
+    next.run(request).await
 }
 
 #[derive(Deserialize, Debug)]
@@ -475,16 +510,27 @@ fn make_app(
         .route("/track/{id}/resolved", get(get_resolved_track))
         .route("/image/{id}", get(get_image))
         .route("/stream/{id}", get(stream_track))
+        .route_layer(middleware::from_fn_with_state(
+            state.clone(),
+            require_access_catalog,
+        ))
         .layer(middleware::from_fn_with_state(
             config.content_cache_age_sec,
             http_cache,
         ))
         .with_state(state.clone());
 
-    let user_routes: Router = Router::new()
+    let liked_content_routes: Router = Router::new()
         .route("/liked/{content_id}", post(add_user_liked_content))
         .route("/liked/{content_id}", delete(delete_user_liked_content))
         .route("/liked/{content_id}", get(get_user_liked_content))
+        .route_layer(middleware::from_fn_with_state(
+            state.clone(),
+            require_like_content,
+        ))
+        .with_state(state.clone());
+
+    let playlist_routes: Router = Router::new()
         .route("/playlist", post(post_playlist))
         .route("/playlist/{id}", put(put_playlist))
         .route("/playlist/{id}", delete(delete_playlist))
@@ -492,11 +538,17 @@ fn make_app(
         .route("/playlist/{id}/add", put(add_playlist_tracks))
         .route("/playlist/{id}/remove", put(remove_tracks_from_playlist))
         .route("/playlists", get(get_user_playlists))
+        .route_layer(middleware::from_fn_with_state(
+            state.clone(),
+            require_own_playlists,
+        ))
         .with_state(state.clone());
 
     if let Some(search_routes) = make_search_routes(state.clone()) {
         content_routes = content_routes.merge(search_routes);
     }
+
+    let user_routes = liked_content_routes.merge(playlist_routes);
 
     let home_router: Router = match config.frontend_dir_path {
         Some(frontend_path) => {
@@ -686,7 +738,11 @@ mod tests {
             todo!()
         }
 
-        fn add_user_extra_permission(&self, user_id: usize, grant: crate::user::PermissionGrant) -> Result<usize> {
+        fn add_user_extra_permission(
+            &self,
+            user_id: usize,
+            grant: crate::user::PermissionGrant,
+        ) -> Result<usize> {
             todo!()
         }
 
