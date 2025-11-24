@@ -13,11 +13,6 @@ pub struct User {
     pub playlists: HashMap<String, UserPlaylist>,
 }
 
-pub struct UserSessionView {
-    pub id: String,
-    pub permissions: Vec<Permission>,
-}
-
 pub enum LikedContentType {
     Artist,
     Album,

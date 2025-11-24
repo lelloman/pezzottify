@@ -1,6 +1,6 @@
 use super::auth::{AuthToken, AuthTokenValue, UserAuthCredentials};
 use super::permissions::{Permission, PermissionGrant, UserRole};
-use super::user_models::{LikedContentType, UserPlaylist, UserSessionView};
+use super::user_models::{LikedContentType, UserPlaylist};
 use anyhow::Result;
 
 pub trait UserAuthCredentialsStore: Send + Sync {
@@ -73,10 +73,6 @@ pub trait UserStore: UserAuthTokenStore + UserAuthCredentialsStore + Send + Sync
         user_id: usize,
         content_type: LikedContentType,
     ) -> Result<Vec<String>>;
-
-    // Returns a user object to be used for session management.
-    // Returns None if the user does not exist.
-    //fn get_user_session_view(&self, user_id: &str) -> Option<UserSessionView>;
 
     /// Creates a new user playlist.
     fn create_user_playlist(

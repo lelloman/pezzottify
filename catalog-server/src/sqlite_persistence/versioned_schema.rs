@@ -32,6 +32,7 @@ pub enum SqlType {
     Blob,
 }
 
+#[allow(unused)]
 pub enum ForeignKeyOnChange {
     NoAction,
     Restrict,
@@ -116,7 +117,10 @@ impl Table {
 
         for (index_name, column_name) in self.indices {
             conn.execute(
-                &format!("CREATE INDEX {} ON {}({});", index_name, self.name, column_name),
+                &format!(
+                    "CREATE INDEX {} ON {}({});",
+                    index_name, self.name, column_name
+                ),
                 params![],
             )?;
         }

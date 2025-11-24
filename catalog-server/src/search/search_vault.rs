@@ -29,6 +29,7 @@ pub struct SearchResult {
 }
 
 #[derive(Debug, Serialize)]
+#[feature(nosearch)]
 pub struct SearchedAlbum {
     pub id: String,
     pub name: String,

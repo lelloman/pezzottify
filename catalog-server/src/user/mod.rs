@@ -9,5 +9,5 @@ pub use auth::{AuthToken, AuthTokenValue, UserAuthCredentials, UsernamePasswordC
 pub use permissions::{Permission, PermissionGrant, UserRole};
 pub use sqlite_user_store::SqliteUserStore;
 pub use user_manager::UserManager;
-pub use user_models::{LikedContentType, User, UserPlaylist, UserSessionView};
+pub use user_models::{LikedContentType, User, UserPlaylist};
 pub use user_store::{UserAuthCredentialsStore, UserAuthTokenStore, UserStore};

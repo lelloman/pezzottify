@@ -10,6 +10,7 @@ use tracing::{debug, error};
 
 use crate::{
     catalog::Catalog,
+    server::stream_track::stream_track,
     user::{user_models::LikedContentType, Permission, UserStore},
 };
 use crate::{search::SearchVault, user::UserManager};
@@ -26,15 +27,14 @@ use axum::{
     Json, Router,
 };
 use serde::{Deserialize, Serialize};
-use tower::{Service, ServiceExt}; // for `call`, `oneshot`, and `ready
 
+#[cfg(slow)]
+use super::slowdown_request;
 use super::{
-    http_cache, log_requests, make_search_routes, slowdown_request, state::*, RequestsLoggingLevel,
-    ServerConfig,
+    http_cache, log_requests, make_search_routes, state::*, RequestsLoggingLevel, ServerConfig,
 };
-use super::{session, stream_track};
 use crate::server::session::Session;
-use crate::user::auth::{AuthTokenValue, UserAuthCredentials};
+use crate::user::auth::AuthTokenValue;
 use axum::extract::Request;
 use axum::middleware::Next;
 #[derive(Serialize)]
@@ -603,11 +603,13 @@ pub async fn run_server(
 mod tests {
     use super::*;
     use crate::search::NoOpSearchVault;
+    use crate::user::auth::UserAuthCredentials;
     use crate::user::auth::{ActiveChallenge, AuthToken, AuthTokenValue};
     use crate::user::user_models::LikedContentType;
     use crate::user::{UserAuthCredentialsStore, UserAuthTokenStore};
     use axum::{body::Body, http::Request};
     use std::collections::HashMap;
+    use tower::ServiceExt; // for `call`, `oneshot`, and `ready
 
     #[tokio::test]
     async fn responds_forbidden_on_protected_routes() {
@@ -652,32 +654,32 @@ mod tests {
     struct InMemoryUserStore {}
 
     impl UserStore for InMemoryUserStore {
-        fn create_user(&self, user_handle: &str) -> Result<usize> {
+        fn create_user(&self, _user_handle: &str) -> Result<usize> {
             todo!()
         }
 
-        fn get_user_handle(&self, user_id: usize) -> Option<String> {
+        fn get_user_handle(&self, _user_id: usize) -> Option<String> {
             todo!()
         }
 
-        fn get_user_id(&self, user_handle: &str) -> Option<usize> {
+        fn get_user_id(&self, _user_handle: &str) -> Option<usize> {
             todo!()
         }
 
-        fn get_user_playlists(&self, user_id: usize) -> Result<Vec<String>> {
+        fn get_user_playlists(&self, _user_id: usize) -> Result<Vec<String>> {
             todo!()
         }
 
-        fn is_user_liked_content(&self, user_id: usize, content_id: &str) -> Option<bool> {
+        fn is_user_liked_content(&self, _user_id: usize, _content_id: &str) -> Option<bool> {
             todo!()
         }
 
         fn set_user_liked_content(
             &self,
-            user_id: usize,
-            content_id: &str,
-            content_type: LikedContentType,
-            liked: bool,
+            _user_id: usize,
+            _content_id: &str,
+            _content_type: LikedContentType,
+            _liked: bool,
         ) -> Result<()> {
             todo!()
         }
@@ -688,113 +690,112 @@ mod tests {
 
         fn get_user_liked_content(
             &self,
-            user_id: usize,
-            content_type: LikedContentType,
+            _user_id: usize,
+            _content_type: LikedContentType,
         ) -> Result<Vec<String>> {
             todo!()
         }
 
         fn create_user_playlist(
             &self,
-            user_id: usize,
-            playlist_name: &str,
-            creator_id: usize,
-            track_ids: Vec<String>,
+            _user_id: usize,
+            _playlist_name: &str,
+            _creator_id: usize,
+            _track_ids: Vec<String>,
         ) -> Result<String> {
             todo!()
         }
 
-        fn delete_user_playlist(&self, playlist_id: &str, user_id: usize) -> Result<()> {
+        fn delete_user_playlist(&self, _playlist_id: &str, _user_id: usize) -> Result<()> {
             todo!()
         }
 
         fn update_user_playlist(
             &self,
-            playlist_id: &str,
-            user_id: usize,
-            playlist_name: Option<String>,
-            track_ids: Option<Vec<String>>,
+            _playlist_id: &str,
+            _user_id: usize,
+            _playlist_name: Option<String>,
+            _track_ids: Option<Vec<String>>,
         ) -> Result<()> {
             todo!()
         }
 
         fn get_user_playlist(
             &self,
-            playlist_id: &str,
-            user_id: usize,
+            _playlist_id: &str,
+            _user_id: usize,
         ) -> Result<crate::user::UserPlaylist> {
             todo!()
         }
 
-        fn get_user_roles(&self, user_id: usize) -> Result<Vec<crate::user::UserRole>> {
+        fn get_user_roles(&self, _user_id: usize) -> Result<Vec<crate::user::UserRole>> {
             todo!()
         }
 
-        fn add_user_role(&self, user_id: usize, role: crate::user::UserRole) -> Result<()> {
+        fn add_user_role(&self, _user_id: usize, _role: crate::user::UserRole) -> Result<()> {
             todo!()
         }
 
-        fn remove_user_role(&self, user_id: usize, role: crate::user::UserRole) -> Result<()> {
+        fn remove_user_role(&self, _user_id: usize, _role: crate::user::UserRole) -> Result<()> {
             todo!()
         }
 
         fn add_user_extra_permission(
             &self,
-            user_id: usize,
-            grant: crate::user::PermissionGrant,
+            _user_id: usize,
+            _grant: crate::user::PermissionGrant,
         ) -> Result<usize> {
             todo!()
         }
 
-        fn remove_user_extra_permission(&self, permission_id: usize) -> Result<()> {
+        fn remove_user_extra_permission(&self, _permission_id: usize) -> Result<()> {
             todo!()
         }
 
-        fn decrement_permission_countdown(&self, permission_id: usize) -> Result<bool> {
+        fn decrement_permission_countdown(&self, _permission_id: usize) -> Result<bool> {
             todo!()
         }
 
-        fn resolve_user_permissions(&self, user_id: usize) -> Result<Vec<crate::user::Permission>> {
+        fn resolve_user_permissions(
+            &self,
+            _user_id: usize,
+        ) -> Result<Vec<crate::user::Permission>> {
             Ok(vec![])
         }
     }
 
     impl UserAuthTokenStore for InMemoryUserStore {
-        fn get_user_auth_token(&self, token: &AuthTokenValue) -> Option<AuthToken> {
+        fn get_user_auth_token(&self, _token: &AuthTokenValue) -> Option<AuthToken> {
             todo!()
         }
 
-        fn delete_user_auth_token(&self, token: &AuthTokenValue) -> Option<AuthToken> {
+        fn delete_user_auth_token(&self, _token: &AuthTokenValue) -> Option<AuthToken> {
             todo!()
         }
 
-        fn update_user_auth_token_last_used_timestamp(&self, token: &AuthTokenValue) -> Result<()> {
+        fn update_user_auth_token_last_used_timestamp(
+            &self,
+            _token: &AuthTokenValue,
+        ) -> Result<()> {
             todo!()
         }
 
-        fn add_user_auth_token(&self, token: AuthToken) -> Result<()> {
+        fn add_user_auth_token(&self, _token: AuthToken) -> Result<()> {
             todo!()
         }
 
-        fn get_all_user_auth_tokens(&self, user_handle: &str) -> Vec<AuthToken> {
+        fn get_all_user_auth_tokens(&self, _user_handle: &str) -> Vec<AuthToken> {
             todo!()
         }
     }
 
     impl UserAuthCredentialsStore for InMemoryUserStore {
-        fn get_user_auth_credentials(&self, user_handle: &str) -> Option<UserAuthCredentials> {
+        fn get_user_auth_credentials(&self, _user_handle: &str) -> Option<UserAuthCredentials> {
             todo!()
         }
 
-        fn update_user_auth_credentials(&self, credentials: UserAuthCredentials) -> Result<()> {
+        fn update_user_auth_credentials(&self, _credentials: UserAuthCredentials) -> Result<()> {
             todo!()
         }
-    }
-
-    #[derive(Default)]
-    struct InMemoryAuthStore {
-        auth_credentials: HashMap<String, UserAuthCredentials>,
-        active_challenges: Vec<ActiveChallenge>,
-        auth_tokens: HashMap<AuthTokenValue, AuthToken>,
     }
 }

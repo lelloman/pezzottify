@@ -4,8 +4,8 @@ use super::{
     auth::PezzottifyHasher,
     permissions::{Permission, PermissionGrant, UserRole},
     user_models::LikedContentType,
-    AuthToken, AuthTokenValue,
-    UserAuthCredentials, UserPlaylist, UserStore, UsernamePasswordCredentials,
+    AuthToken, AuthTokenValue, UserAuthCredentials, UserPlaylist, UserStore,
+    UsernamePasswordCredentials,
 };
 use anyhow::{bail, Context, Result};
 use std::{
@@ -178,7 +178,8 @@ impl UserManager {
                 if &removed.user_id == user_id {
                     Ok(())
                 } else {
-                    self.user_store
+                    let _ = self
+                        .user_store
                         .lock()
                         .unwrap()
                         .add_user_auth_token(removed.clone());
@@ -341,7 +342,10 @@ impl UserManager {
     }
 
     pub fn get_user_permissions(&self, user_id: usize) -> Result<Vec<Permission>> {
-        self.user_store.lock().unwrap().resolve_user_permissions(user_id)
+        self.user_store
+            .lock()
+            .unwrap()
+            .resolve_user_permissions(user_id)
     }
 
     pub fn get_user_roles(&self, user_id: usize) -> Result<Vec<UserRole>> {
@@ -353,14 +357,27 @@ impl UserManager {
     }
 
     pub fn remove_user_role(&self, user_id: usize, role: UserRole) -> Result<()> {
-        self.user_store.lock().unwrap().remove_user_role(user_id, role)
+        self.user_store
+            .lock()
+            .unwrap()
+            .remove_user_role(user_id, role)
     }
 
-    pub fn add_user_extra_permission(&self, user_id: usize, grant: PermissionGrant) -> Result<usize> {
-        self.user_store.lock().unwrap().add_user_extra_permission(user_id, grant)
+    pub fn add_user_extra_permission(
+        &self,
+        user_id: usize,
+        grant: PermissionGrant,
+    ) -> Result<usize> {
+        self.user_store
+            .lock()
+            .unwrap()
+            .add_user_extra_permission(user_id, grant)
     }
 
     pub fn remove_user_extra_permission(&self, permission_id: usize) -> Result<()> {
-        self.user_store.lock().unwrap().remove_user_extra_permission(permission_id)
+        self.user_store
+            .lock()
+            .unwrap()
+            .remove_user_extra_permission(permission_id)
     }
 }
