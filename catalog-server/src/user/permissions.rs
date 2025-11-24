@@ -5,13 +5,13 @@ pub enum Permission {
     LikeContent,
     OwnPlaylists,
     EditCatalog,
-    TransferPermission,
+    ManagePermissions,
     IssueContentDownload,
     RebootServer,
 }
 const ADMIN_PERMISSIONS: &'static [Permission] = &[
     Permission::EditCatalog,
-    Permission::TransferPermission,
+    Permission::ManagePermissions,
     Permission::IssueContentDownload,
     Permission::RebootServer,
 ];
