@@ -1,7 +1,7 @@
-
 ## [web]
+
 - Implement a Toast/Snackbar like messages visualization component
-- Make right-click contextual menu for albums and artists (after user playlists) 
+- Make right-click contextual menu for albums and artists (after user playlists)
 - Make left and right panel collapsable
 - Make titles and texts on single line and sliding if too long
 - Use a logger instead console.logging all over the place
@@ -28,17 +28,18 @@
 - ~Log requests/responses to stdout~
 
 ## [catalog-server]
+
 - Create admin API endpoints for managing user roles and permissions (ManagePermissions permission)
 - Implement catalog editing endpoints (EditCatalog permission)
 - Implement content download functionality (IssueContentDownload permission)
 - Implement server reboot endpoint (RebootServer permission)
-- ~Add user roles~
 - Create catalog db
 - Set last used to auth token
 - Check UserStore return type, we should not swallow errors
 - Verify that all sqlite operations are performed within a transaction
 - Delete cli_search and clean up unused stuff and format and warnings
 - Add more unit tests (expecially to db, like migrations?)
+- ~Add user roles~
 - ~Add hard limit for playlist size (150?)~
 - ~Add user playlists~
 - ~Make no_checks a cli args rather than build feature~
@@ -49,12 +50,13 @@
 - ~Create User identity/authentication db~
 
 ## [android]
+
 - Create a db for logout operations so that if a user logsout, the server call doesn't need to
-happen immediately, plus in case of immediate error it can be retried
+  happen immediately, plus in case of immediate error it can be retried
 - ~Show track/artists info in small player~
 - Make a component to load an album's and an artists picture (try it in the recently viewed stuff in home screen)
 - Show tracks list in the album screen
-- In the album screen, somehow highlight a track if it's currently playing 
+- In the album screen, somehow highlight a track if it's currently playing
 - Show all albums in the artist screen
 - Show related artists in the artist screen
 - Add a player screen
@@ -63,5 +65,6 @@ happen immediately, plus in case of immediate error it can be retried
 - Add an in-memory immediate cache layer in ContentResolver, only after a "memory pressure" component
 
 ## [agents]
+
 - Make artist info retrieval agent
 - Make music score retrieval agent
