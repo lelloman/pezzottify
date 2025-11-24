@@ -38,4 +38,4 @@ CMD ["catalog-server", "/data/catalog", "/data/db/user.db", "--content-cache-age
 # docker build -t catalog-server .
 
 # Run with:
-# docker run -d -p 3001:3001 -v /home/lelloman/pezzottify-catalog/:/data/db -v /home/lelloman/pezzottify-catalog:/data/catalog catalog-server
+# sh -c "docker stop pezzottify-catalog-server || true" && sh -c "docker rm pezzottify-catalog-server || true" && docker run -d --rm --name pezzottify-catalog-server -p 3001:3001 -v /home/lelloman/pezzottify-catalog/:/data/db -v /home/lelloman/pezzottify-catalog:/data/catalog catalog-server
