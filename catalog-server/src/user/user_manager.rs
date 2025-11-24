@@ -10,6 +10,8 @@ use std::{
     time::SystemTime,
 };
 
+const MAX_PLAYLIST_SIZE: usize = 300;
+
 pub struct UserManager {
     catalog: Arc<Mutex<Catalog>>,
     user_store: Arc<Mutex<Box<dyn UserStore>>>,
@@ -213,6 +215,13 @@ impl UserManager {
         creator_id: usize,
         track_ids: Vec<String>,
     ) -> Result<String> {
+        if track_ids.len() > MAX_PLAYLIST_SIZE {
+            bail!(
+                "Playlist size exceeds maximum limit of {} songs (attempted: {}).",
+                MAX_PLAYLIST_SIZE,
+                track_ids.len()
+            );
+        }
         self.user_store.lock().unwrap().create_user_playlist(
             user_id,
             playlist_name,
@@ -228,6 +237,15 @@ impl UserManager {
         playlist_name: Option<String>,
         track_ids: Option<Vec<String>>,
     ) -> Result<()> {
+        if let Some(ref tracks) = track_ids {
+            if tracks.len() > MAX_PLAYLIST_SIZE {
+                bail!(
+                    "Playlist size exceeds maximum limit of {} songs (attempted: {}).",
+                    MAX_PLAYLIST_SIZE,
+                    tracks.len()
+                );
+            }
+        }
         self.user_store.lock().unwrap().update_user_playlist(
             playlist_id,
             user_id,
@@ -265,6 +283,18 @@ impl UserManager {
             .lock()
             .unwrap()
             .get_user_playlist(playlist_id, user_id)?;
+
+        // Check if resulting playlist size would exceed the limit
+        let resulting_size = playlist.tracks.len() + track_ids.len();
+        if resulting_size > MAX_PLAYLIST_SIZE {
+            bail!(
+                "Adding {} tracks would exceed maximum playlist limit of {} songs (current: {}, resulting: {}).",
+                track_ids.len(),
+                MAX_PLAYLIST_SIZE,
+                playlist.tracks.len(),
+                resulting_size
+            );
+        }
 
         // verify that all tracks to add exist
         for track_id in &track_ids {
