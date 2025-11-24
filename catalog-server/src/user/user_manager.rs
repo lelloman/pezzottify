@@ -23,6 +23,20 @@ impl UserManager {
         }
     }
 
+    pub fn add_user<T: AsRef<str>>(&self, user_handle: T) -> Result<usize> {
+        let locked_store = self.user_store.lock().unwrap();
+
+        if let Some(_) = locked_store.get_user_id(&user_handle.as_ref()) {
+            bail!("User handle already exists.");
+        }
+
+        if user_handle.as_ref().is_empty() {
+            bail!("The user handle cannot be empty.")
+        }
+
+        Ok(locked_store.create_user(&user_handle.as_ref().to_owned())?)
+    }
+
     pub fn set_user_liked_content(
         &self,
         user_id: usize,

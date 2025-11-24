@@ -1,5 +1,6 @@
 use anyhow::{Context, Result};
 use clap::{CommandFactory, Parser, Subcommand};
+use sha2::digest::crypto_common::InnerUser;
 use std::{
     io::{self, BufRead, Write},
     path::PathBuf,
@@ -44,6 +45,9 @@ struct InnerCli {
 
 #[derive(Subcommand)]
 enum InnerCommand {
+    /// Creates a user with the given handle.
+    AddUser { user_handle: String },
+
     /// Creates a password authentication for the given user id.
     /// Fails if the user already has a password set.
     AddLogin {
@@ -114,6 +118,12 @@ fn main() -> Result<()> {
 
         match cli {
             Ok(cli) => match cli.command {
+                InnerCommand::AddUser { user_handle } => {
+                    if let Err(err) = user_manager.add_user(&user_handle) {
+                        eprintln!("Something went wrong: {}", err);
+                        continue;
+                    }
+                }
                 InnerCommand::AddLogin {
                     user_handle,
                     password,
