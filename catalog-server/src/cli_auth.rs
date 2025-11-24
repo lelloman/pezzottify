@@ -1,4 +1,4 @@
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
 use clap::{CommandFactory, Parser, Subcommand};
 use sha2::digest::crypto_common::InnerUser;
 use std::{
@@ -19,6 +19,15 @@ use user::UserManager;
 
 use catalog::Catalog;
 use user::SqliteUserStore;
+
+use rustyline::{
+    completion::Completer,
+    highlight::Highlighter,
+    hint::Hinter,
+    history::{FileHistory, History},
+    validate::Validator,
+    CompletionType, Config, DefaultEditor, Editor, Helper,
+};
 
 fn parse_path(s: &str) -> Result<PathBuf> {
     let original_path = PathBuf::from(s);
@@ -78,50 +87,42 @@ enum InnerCommand {
     /// Shows all user handles.
     UserHandles,
 
+    /// Shows the path of the current auth db.
+    Where,
+
     /// Close this program.
     Exit,
 }
 
-fn main() -> Result<()> {
-    let cli_args = CliArgs::parse();
-    let auth_store_file_path = match cli_args.path {
-        Some(path) => path,
-        None => SqliteUserStore::infer_path().with_context(|| {
-            "Could not infer UserStore DB file path, please specify it explicitly."
-        })?,
-    };
-    let user_store = SqliteUserStore::new(auth_store_file_path)?;
-    let catalog = Arc::new(Mutex::new(Catalog::dummy()));
-    let mut user_manager = UserManager::new(catalog, Box::new(user_store));
+enum CommandExecutionResult {
+    Ok,
+    Exit,
+    Error(String),
+}
 
-    let stdin = io::stdin();
-    let mut reader = stdin.lock();
+const PROMPT: &str = ">> ";
 
-    InnerCli::command().print_long_help()?;
-    loop {
-        print!("> ");
-        io::stdout().flush().context("Failed to flush stdout")?;
+fn execute_command(
+    line: String,
+    user_manager: &mut UserManager,
+    db_path: String,
+) -> CommandExecutionResult {
+    if line.is_empty() {
+        return CommandExecutionResult::Ok;
+    }
 
-        let mut line = String::new();
-        reader.read_line(&mut line).context("Failed to read line")?;
-        let line = line.trim();
+    let args =
+        shlex::split(&line).unwrap_or_else(|| line.split_whitespace().map(String::from).collect());
 
-        if line.is_empty() {
-            continue;
-        }
+    let cli = InnerCli::try_parse_from(std::iter::once(" ").chain(args.iter().map(String::as_str)));
 
-        let args = shlex::split(line)
-            .unwrap_or_else(|| line.split_whitespace().map(String::from).collect());
-
-        let cli =
-            InnerCli::try_parse_from(std::iter::once(" ").chain(args.iter().map(String::as_str)));
-
-        match cli {
-            Ok(cli) => match cli.command {
+    match cli {
+        Ok(cli) => {
+            println!("{} {}", PROMPT, &line);
+            match cli.command {
                 InnerCommand::AddUser { user_handle } => {
                     if let Err(err) = user_manager.add_user(&user_handle) {
-                        eprintln!("Something went wrong: {}", err);
-                        continue;
+                        return CommandExecutionResult::Error(format!("{}", err));
                     }
                 }
                 InnerCommand::AddLogin {
@@ -131,8 +132,7 @@ fn main() -> Result<()> {
                     if let Err(err) =
                         user_manager.create_password_credentials(&user_handle, password)
                     {
-                        eprintln!("Something went wrong: {}", err);
-                        continue;
+                        return CommandExecutionResult::Error(format!("{}", err));
                     }
                 }
                 InnerCommand::UpdateLogin {
@@ -142,14 +142,12 @@ fn main() -> Result<()> {
                     if let Err(err) =
                         user_manager.update_password_credentials(&user_handle, password)
                     {
-                        eprintln!("Something went wrong: {}", err);
-                        continue;
+                        return CommandExecutionResult::Error(format!("{}", err));
                     }
                 }
                 InnerCommand::DeleteLogin { user_handle } => {
                     if let Err(err) = user_manager.delete_password_credentials(&user_handle) {
-                        eprintln!("Something went wrong: {}", err);
-                        continue;
+                        return CommandExecutionResult::Error(format!("{}", err));
                     }
                 }
                 InnerCommand::Show { user_handle } => {
@@ -163,6 +161,9 @@ fn main() -> Result<()> {
                 InnerCommand::UserHandles => {
                     println!("{:#?}", user_manager.get_all_user_handles());
                 }
+                InnerCommand::Where => {
+                    println!("{}", db_path);
+                }
                 InnerCommand::CheckPassword {
                     user_handle,
                     password,
@@ -170,15 +171,19 @@ fn main() -> Result<()> {
                     let user_credentials = match user_manager.get_user_credentials(&user_handle) {
                         Some(x) => x,
                         None => {
-                            eprintln!("User {} not found.", user_handle);
-                            continue;
+                            return CommandExecutionResult::Error(format!(
+                                "User {} not found.",
+                                user_handle
+                            ));
                         }
                     };
                     let password_credentials = match user_credentials.username_password {
                         Some(x) => x,
                         None => {
-                            eprintln!("User {} has no password set.", user_handle);
-                            continue;
+                            return CommandExecutionResult::Error(format!(
+                                "User {} has no password set.",
+                                user_handle
+                            ));
                         }
                     };
                     let msg = match password_credentials.hasher.verify(
@@ -195,13 +200,119 @@ fn main() -> Result<()> {
                     };
                     println!("{}", msg);
                 }
-                InnerCommand::Exit => break,
-            },
-            Err(e) => {
-                if let Err(_) = e.print() {
-                    println!("{}", e);
+                InnerCommand::Exit => return CommandExecutionResult::Exit,
+            }
+        }
+
+        Err(e) => {
+            if let Err(_) = e.print() {
+                println!("{}", e);
+            }
+        }
+    }
+    CommandExecutionResult::Ok
+}
+
+#[derive(rustyline_derive::Hinter)]
+struct MyHelper {
+    commands_names: Vec<String>,
+}
+
+impl MyHelper {
+    pub fn new() -> Self {
+        let commands_names: Vec<String> = InnerCli::command()
+            .get_subcommands()
+            .map(|sc| sc.get_name().to_string())
+            .collect();
+
+        MyHelper { commands_names }
+    }
+}
+
+impl Completer for MyHelper {
+    type Candidate = String;
+
+    fn complete(
+        &self,
+        line: &str,
+        _pos: usize,
+        _ctx: &rustyline::Context<'_>,
+    ) -> rustyline::Result<(usize, Vec<String>)> {
+        if line.contains(" ") {
+            return Ok((0, Vec::with_capacity(0)));
+        }
+        let matches = self
+            .commands_names
+            .iter()
+            .filter(|c| c.starts_with(line))
+            .map(|c| c.to_string())
+            .collect::<Vec<_>>();
+
+        Ok((0, matches))
+    }
+}
+
+impl Highlighter for MyHelper {}
+impl Validator for MyHelper {}
+impl Helper for MyHelper {}
+
+fn main() -> Result<()> {
+    let cli_args = CliArgs::parse();
+    let auth_store_file_path = match cli_args.path {
+        Some(path) => path,
+        None => SqliteUserStore::infer_path().with_context(|| {
+            "Could not infer UserStore DB file path, please specify it explicitly."
+        })?,
+    };
+    let user_store = SqliteUserStore::new(auth_store_file_path.clone())?;
+    let catalog = Arc::new(Mutex::new(Catalog::dummy()));
+    let mut user_manager = UserManager::new(catalog, Box::new(user_store));
+
+    InnerCli::command().print_long_help()?;
+
+    let config = Config::builder()
+        .completion_type(CompletionType::List)
+        .build();
+
+    let mut rl = Editor::<MyHelper, FileHistory>::with_config(config)?;
+
+    let helper = MyHelper::new();
+    rl.set_helper(Some(helper));
+    let _ = rl.clear_screen();
+
+    loop {
+        let readline = rl.readline(PROMPT);
+
+        let _ = rl.clear_screen();
+        match readline {
+            Ok(line) => {
+                let _ = rl.add_history_entry(&line);
+                match execute_command(
+                    line,
+                    &mut user_manager,
+                    auth_store_file_path.display().to_string(),
+                ) {
+                    CommandExecutionResult::Ok => {}
+                    CommandExecutionResult::Exit => {
+                        break;
+                    }
+                    CommandExecutionResult::Error(err) => {
+                        eprintln!("Error: {:?}", err);
+                        continue;
+                    }
                 }
-                continue;
+            }
+            Err(rustyline::error::ReadlineError::Interrupted) => {
+                println!("CTRL-C");
+                break;
+            }
+            Err(rustyline::error::ReadlineError::Eof) => {
+                println!("CTRL-D: exiting.");
+                break;
+            }
+            Err(e) => {
+                println!("Error: {:?}", e);
+                break;
             }
         }
     }
