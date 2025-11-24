@@ -1,7 +1,7 @@
 # ------------------------------------------
 # 1️⃣ Build stage
 # ------------------------------------------
-FROM rust:1.82 AS builder
+FROM rust:1.91.1 AS builder
 
 WORKDIR /catalog-server
 COPY . .
