@@ -37,7 +37,7 @@ const USER_TABLE_V_0: Table = Table {
         ),
     ],
     unique_constraints: &[],
-    indices: &["handle"],
+    indices: &[("idx_user_handle", "handle")],
 };
 const LIKED_CONTENT_TABLE_V_0: Table = Table {
     name: "liked_content",
@@ -91,7 +91,7 @@ const AUTH_TOKEN_TABLE_V_0: Table = Table {
         sqlite_column!("last_used", &SqlType::Integer),
     ],
     unique_constraints: &[],
-    indices: &["value"],
+    indices: &[("idx_auth_token_value", "value")],
 };
 const USER_PASSWORD_CREDENTIALS_V_0: Table = Table {
     name: "user_password_credentials",
@@ -286,7 +286,7 @@ const USER_ROLE_TABLE_V_4: Table = Table {
         ),
     ],
     unique_constraints: &[&["user_id", "role"]],
-    indices: &["user_id"],
+    indices: &[("idx_user_role_user_id", "user_id")],
 };
 const USER_EXTRA_PERMISSION_TABLE_V_4: Table = Table {
     name: "user_extra_permission",
@@ -318,7 +318,7 @@ const USER_EXTRA_PERMISSION_TABLE_V_4: Table = Table {
         ),
     ],
     unique_constraints: &[],
-    indices: &["user_id"],
+    indices: &[("idx_user_extra_permission_user_id", "user_id")],
 };
 
 pub const VERSIONED_SCHEMAS: &[VersionedSchema] = &[

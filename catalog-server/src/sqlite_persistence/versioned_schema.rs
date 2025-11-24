@@ -59,7 +59,7 @@ pub struct Column<'a, S: AsRef<str>> {
 pub struct Table {
     pub name: &'static str,
     pub columns: &'static [Column<'static, &'static str>],
-    pub indices: &'static [&'static str],
+    pub indices: &'static [(&'static str, &'static str)],
     pub unique_constraints: &'static [&'static [&'static str]],
 }
 
@@ -114,9 +114,9 @@ impl Table {
         create_sql.push_str(");");
         conn.execute(&create_sql, params![])?;
 
-        for index in self.indices {
+        for (index_name, column_name) in self.indices {
             conn.execute(
-                &format!("CREATE INDEX {} ON {}({});", index, self.name, index),
+                &format!("CREATE INDEX {} ON {}({});", index_name, self.name, column_name),
                 params![],
             )?;
         }

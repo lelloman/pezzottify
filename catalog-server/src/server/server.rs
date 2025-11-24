@@ -673,6 +673,34 @@ mod tests {
         ) -> Result<crate::user::UserPlaylist> {
             todo!()
         }
+
+        fn get_user_roles(&self, user_id: usize) -> Result<Vec<crate::user::UserRole>> {
+            todo!()
+        }
+
+        fn add_user_role(&self, user_id: usize, role: crate::user::UserRole) -> Result<()> {
+            todo!()
+        }
+
+        fn remove_user_role(&self, user_id: usize, role: crate::user::UserRole) -> Result<()> {
+            todo!()
+        }
+
+        fn add_user_extra_permission(&self, user_id: usize, grant: crate::user::PermissionGrant) -> Result<usize> {
+            todo!()
+        }
+
+        fn remove_user_extra_permission(&self, permission_id: usize) -> Result<()> {
+            todo!()
+        }
+
+        fn decrement_permission_countdown(&self, permission_id: usize) -> Result<bool> {
+            todo!()
+        }
+
+        fn resolve_user_permissions(&self, user_id: usize) -> Result<Vec<crate::user::Permission>> {
+            Ok(vec![])
+        }
     }
 
     impl UserAuthTokenStore for InMemoryUserStore {
