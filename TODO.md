@@ -29,6 +29,9 @@
 
 ## [catalog-server]
 - Add user roles
+- Implement catalog editing endpoints (EditCatalog permission)
+- Implement content download functionality (IssueContentDownload permission)
+- Implement server reboot endpoint (RebootServer permission)
 - Create catalog db
 - Set last used to auth token
 - Check UserStore return type, we should not swallow errors
