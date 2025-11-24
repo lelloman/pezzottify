@@ -28,10 +28,11 @@
 - ~Log requests/responses to stdout~
 
 ## [catalog-server]
-- Add user roles
+- Create admin API endpoints for managing user roles and permissions (ManagePermissions permission)
 - Implement catalog editing endpoints (EditCatalog permission)
 - Implement content download functionality (IssueContentDownload permission)
 - Implement server reboot endpoint (RebootServer permission)
+- ~Add user roles~
 - Create catalog db
 - Set last used to auth token
 - Check UserStore return type, we should not swallow errors
