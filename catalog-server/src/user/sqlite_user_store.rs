@@ -416,8 +416,12 @@ impl SqliteUserStore {
     }
 
     pub fn infer_path() -> Option<PathBuf> {
-        let mut current_dir = std::env::current_dir().ok()?;
+        let db_data_dir = PathBuf::from("/data/db/user.db");
+        if db_data_dir.exists() {
+            return Some(db_data_dir);
+        }
 
+        let mut current_dir = std::env::current_dir().ok()?;
         loop {
             if let Ok(entries) = std::fs::read_dir(&current_dir) {
                 for entry in entries.flatten() {
@@ -425,7 +429,7 @@ impl SqliteUserStore {
 
                     if path.is_file() {
                         if let Some(s) = path.file_name() {
-                            if s.to_string_lossy() == "pezzottify_store.db" {
+                            if s.to_string_lossy() == "user.db" {
                                 return Some(s.into());
                             }
                         }
@@ -438,6 +442,7 @@ impl SqliteUserStore {
                 break;
             }
         }
+
         None
     }
 
