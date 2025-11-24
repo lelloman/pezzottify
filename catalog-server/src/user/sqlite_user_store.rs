@@ -264,6 +264,63 @@ const USER_PLAYLIST_TRACKS_TABLE_V_3: Table = Table {
     indices: &[],
 };
 
+/// V 4
+const USER_ROLE_TABLE_V_4: Table = Table {
+    name: "user_role",
+    columns: &[
+        sqlite_column!(
+            "user_id",
+            &SqlType::Integer,
+            non_null = true,
+            foreign_key = Some(&ForeignKey {
+                foreign_table: "user",
+                foreign_column: "id",
+                on_delete: ForeignKeyOnChange::Cascade,
+            })
+        ),
+        sqlite_column!("role", &SqlType::Text, non_null = true),
+        sqlite_column!(
+            "created",
+            &SqlType::Integer,
+            default_value = Some(DEFAULT_TIMESTAMP)
+        ),
+    ],
+    unique_constraints: &[&["user_id", "role"]],
+    indices: &["user_id"],
+};
+const USER_EXTRA_PERMISSION_TABLE_V_4: Table = Table {
+    name: "user_extra_permission",
+    columns: &[
+        sqlite_column!(
+            "id",
+            &SqlType::Integer,
+            is_primary_key = true,
+            is_unique = true
+        ),
+        sqlite_column!(
+            "user_id",
+            &SqlType::Integer,
+            non_null = true,
+            foreign_key = Some(&ForeignKey {
+                foreign_table: "user",
+                foreign_column: "id",
+                on_delete: ForeignKeyOnChange::Cascade,
+            })
+        ),
+        sqlite_column!("permission", &SqlType::Integer, non_null = true),
+        sqlite_column!("start_time", &SqlType::Integer, non_null = true),
+        sqlite_column!("end_time", &SqlType::Integer),
+        sqlite_column!("countdown", &SqlType::Integer),
+        sqlite_column!(
+            "created",
+            &SqlType::Integer,
+            default_value = Some(DEFAULT_TIMESTAMP)
+        ),
+    ],
+    unique_constraints: &[],
+    indices: &["user_id"],
+};
+
 pub const VERSIONED_SCHEMAS: &[VersionedSchema] = &[
     VersionedSchema {
         version: 0,
@@ -350,6 +407,24 @@ pub const VERSIONED_SCHEMAS: &[VersionedSchema] = &[
         migration: Some(|conn: &Connection| {
             USER_PLAYLIST_TABLE_V_3.create(&conn)?;
             USER_PLAYLIST_TRACKS_TABLE_V_3.create(&conn)?;
+            Ok(())
+        }),
+    },
+    VersionedSchema {
+        version: 4,
+        tables: &[
+            USER_TABLE_V_0,
+            LIKED_CONTENT_TABLE_V_2,
+            AUTH_TOKEN_TABLE_V_0,
+            USER_PASSWORD_CREDENTIALS_V_0,
+            USER_PLAYLIST_TABLE_V_3,
+            USER_PLAYLIST_TRACKS_TABLE_V_3,
+            USER_ROLE_TABLE_V_4,
+            USER_EXTRA_PERMISSION_TABLE_V_4,
+        ],
+        migration: Some(|conn: &Connection| {
+            USER_ROLE_TABLE_V_4.create(&conn)?;
+            USER_EXTRA_PERMISSION_TABLE_V_4.create(&conn)?;
             Ok(())
         }),
     },
@@ -757,6 +832,167 @@ impl UserStore for SqliteUserStore {
 
         playlist.tracks = track_ids;
         Ok(playlist)
+    }
+
+    fn get_user_roles(&self, user_id: usize) -> Result<Vec<UserRole>> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare(&format!(
+            "SELECT role FROM {} WHERE user_id = ?1",
+            USER_ROLE_TABLE_V_4.name
+        ))?;
+        let roles = stmt
+            .query_map(params![user_id], |row| {
+                let role_str: String = row.get(0)?;
+                Ok(role_str)
+            })?
+            .filter_map(|r| r.ok().and_then(|s| UserRole::from_str(&s)))
+            .collect();
+        Ok(roles)
+    }
+
+    fn add_user_role(&self, user_id: usize, role: UserRole) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            &format!(
+                "INSERT OR IGNORE INTO {} (user_id, role) VALUES (?1, ?2)",
+                USER_ROLE_TABLE_V_4.name
+            ),
+            params![user_id, role.to_string()],
+        )?;
+        Ok(())
+    }
+
+    fn remove_user_role(&self, user_id: usize, role: UserRole) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            &format!(
+                "DELETE FROM {} WHERE user_id = ?1 AND role = ?2",
+                USER_ROLE_TABLE_V_4.name
+            ),
+            params![user_id, role.to_string()],
+        )?;
+        Ok(())
+    }
+
+    fn add_user_extra_permission(&self, user_id: usize, grant: PermissionGrant) -> Result<usize> {
+        match grant {
+            PermissionGrant::ByRole(_) => {
+                bail!("Cannot add ByRole grant as extra permission");
+            }
+            PermissionGrant::Extra {
+                start_time,
+                end_time,
+                permission,
+                countdown,
+            } => {
+                let conn = self.conn.lock().unwrap();
+                let start_time_secs = start_time
+                    .duration_since(SystemTime::UNIX_EPOCH)
+                    .unwrap()
+                    .as_secs() as i64;
+                let end_time_secs = end_time.map(|t| {
+                    t.duration_since(SystemTime::UNIX_EPOCH)
+                        .unwrap()
+                        .as_secs() as i64
+                });
+                let countdown_i64 = countdown.map(|c| c as i64);
+
+                conn.execute(
+                    &format!(
+                        "INSERT INTO {} (user_id, permission, start_time, end_time, countdown) VALUES (?1, ?2, ?3, ?4, ?5)",
+                        USER_EXTRA_PERMISSION_TABLE_V_4.name
+                    ),
+                    params![user_id, permission.to_int(), start_time_secs, end_time_secs, countdown_i64],
+                )?;
+                Ok(conn.last_insert_rowid() as usize)
+            }
+        }
+    }
+
+    fn remove_user_extra_permission(&self, permission_id: usize) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            &format!(
+                "DELETE FROM {} WHERE id = ?1",
+                USER_EXTRA_PERMISSION_TABLE_V_4.name
+            ),
+            params![permission_id],
+        )?;
+        Ok(())
+    }
+
+    fn decrement_permission_countdown(&self, permission_id: usize) -> Result<bool> {
+        let conn = self.conn.lock().unwrap();
+
+        // Get current countdown
+        let current_countdown: Option<i64> = conn.query_row(
+            &format!(
+                "SELECT countdown FROM {} WHERE id = ?1",
+                USER_EXTRA_PERMISSION_TABLE_V_4.name
+            ),
+            params![permission_id],
+            |row| row.get(0),
+        )?;
+
+        match current_countdown {
+            None => Ok(true), // No countdown, permission remains valid
+            Some(count) if count <= 1 => {
+                // Last use, delete the permission
+                self.remove_user_extra_permission(permission_id)?;
+                Ok(false)
+            }
+            Some(count) => {
+                // Decrement the countdown
+                conn.execute(
+                    &format!(
+                        "UPDATE {} SET countdown = ?1 WHERE id = ?2",
+                        USER_EXTRA_PERMISSION_TABLE_V_4.name
+                    ),
+                    params![count - 1, permission_id],
+                )?;
+                Ok(true)
+            }
+        }
+    }
+
+    fn resolve_user_permissions(&self, user_id: usize) -> Result<Vec<Permission>> {
+        use std::collections::HashSet;
+
+        let mut permissions = HashSet::new();
+
+        // Add permissions from roles
+        let roles = self.get_user_roles(user_id)?;
+        for role in roles {
+            for permission in role.permissions() {
+                permissions.insert(*permission);
+            }
+        }
+
+        // Add active extra permissions
+        let conn = self.conn.lock().unwrap();
+        let now = SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .unwrap()
+            .as_secs() as i64;
+
+        let mut stmt = conn.prepare(&format!(
+            "SELECT permission FROM {} WHERE user_id = ?1 AND start_time <= ?2 AND (end_time IS NULL OR end_time >= ?2) AND (countdown IS NULL OR countdown > 0)",
+            USER_EXTRA_PERMISSION_TABLE_V_4.name
+        ))?;
+
+        let extra_perms = stmt
+            .query_map(params![user_id, now], |row| {
+                let perm_int: i32 = row.get(0)?;
+                Ok(perm_int)
+            })?
+            .filter_map(|r| r.ok().and_then(|i| Permission::from_int(i)))
+            .collect::<Vec<_>>();
+
+        for perm in extra_perms {
+            permissions.insert(perm);
+        }
+
+        Ok(permissions.into_iter().collect())
     }
 }
 

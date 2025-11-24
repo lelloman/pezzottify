@@ -1,4 +1,5 @@
 use super::auth::{AuthToken, AuthTokenValue, UserAuthCredentials};
+use super::permissions::{Permission, PermissionGrant, UserRole};
 use super::user_models::{LikedContentType, UserPlaylist, UserSessionView};
 use anyhow::Result;
 
@@ -100,4 +101,26 @@ pub trait UserStore: UserAuthTokenStore + UserAuthCredentialsStore + Send + Sync
 
     /// Get a user playlist given the playlist id and its owner's id.
     fn get_user_playlist(&self, playlist_id: &str, user_id: usize) -> Result<UserPlaylist>;
+
+    /// Returns all roles assigned to a user.
+    fn get_user_roles(&self, user_id: usize) -> Result<Vec<UserRole>>;
+
+    /// Assigns a role to a user.
+    fn add_user_role(&self, user_id: usize, role: UserRole) -> Result<()>;
+
+    /// Removes a role from a user.
+    fn remove_user_role(&self, user_id: usize, role: UserRole) -> Result<()>;
+
+    /// Adds an extra permission grant to a user. Returns the grant id.
+    fn add_user_extra_permission(&self, user_id: usize, grant: PermissionGrant) -> Result<usize>;
+
+    /// Removes an extra permission grant by its id.
+    fn remove_user_extra_permission(&self, permission_id: usize) -> Result<()>;
+
+    /// Decrements the countdown of an extra permission grant.
+    /// Returns true if the permission still has uses remaining, false otherwise.
+    fn decrement_permission_countdown(&self, permission_id: usize) -> Result<bool>;
+
+    /// Resolves all permissions for a user (roles + active extra permissions).
+    fn resolve_user_permissions(&self, user_id: usize) -> Result<Vec<Permission>>;
 }
