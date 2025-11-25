@@ -93,7 +93,21 @@ internal class PlayerImpl(
     }
 
     override fun loadTrack(trackId: String) {
-        TODO("Not yet implemented")
+        runOnPlayerThread {
+            loadNexPlaylistJob?.cancel()
+            loadNexPlaylistJob = runOnPlayerThread {
+                mutablePlaybackPlaylist.value = PlaybackPlaylist(
+                    context = PlaybackPlaylistContext.UserMix,
+                    tracksIds = listOf(trackId),
+                )
+                platformPlayer.setIsPlaying(true)
+                logger.info("Loading track into platform player.")
+                val baseUrl = configStore.baseUrl.value
+                val url = "$baseUrl/v1/content/stream/$trackId"
+                platformPlayer.loadPlaylist(listOf(url))
+                logger.info("Loaded track $trackId")
+            }
+        }
     }
 
     override fun forward10Sec() {
