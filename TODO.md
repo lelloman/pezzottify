@@ -29,6 +29,8 @@
 
 ## [catalog-server]
 
+- Update cli-auth to include user roles
+- Implement a rate limiting of some sort
 - Create admin API endpoints for managing user roles and permissions (ManagePermissions permission)
 - Implement catalog editing endpoints (EditCatalog permission)
 - Implement content download functionality (IssueContentDownload permission)
@@ -51,6 +53,7 @@
 
 ## [android]
 
+- The synchronizer seems to have a bug, when the server responds 403 it keeps hammering the endpoint in an infinite loop
 - Create a db for logout operations so that if a user logsout, the server call doesn't need to
   happen immediately, plus in case of immediate error it can be retried
 - ~Show track/artists info in small player~
