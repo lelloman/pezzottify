@@ -38,6 +38,12 @@ class UiContentResolver(private val staticsProvider: StaticsProvider) : ContentR
                         id = it.id,
                         name = it.data.name,
                         artistsIds = it.data.artistsIds,
+                        discs = it.data.discs.map { disc ->
+                            com.lelloman.pezzottify.android.ui.content.Disc(
+                                name = disc.name,
+                                tracksIds = disc.tracksIds,
+                            )
+                        }
                     )
                 )
             }

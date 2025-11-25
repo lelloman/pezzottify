@@ -111,6 +111,10 @@ class InteractorsModule {
         override fun playAlbum(albumId: String) {
             player.loadAlbum(albumId)
         }
+
+        override fun playTrack(trackId: String) {
+            player.loadTrack(trackId)
+        }
     }
 
     @Provides

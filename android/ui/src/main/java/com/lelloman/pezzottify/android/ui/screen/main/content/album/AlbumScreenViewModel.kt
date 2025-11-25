@@ -28,11 +28,16 @@ class AlbumScreenViewModel @AssistedInject constructor(
                     isLoading = false,
                 )
 
-                is Content.Resolved -> AlbumScreenState(
-                    album = it.data,
-                    isError = false,
-                    isLoading = false,
-                )
+                is Content.Resolved -> {
+                    val trackIds = it.data.discs.flatMap { disc -> disc.tracksIds }
+                    val tracks = trackIds.map { trackId -> contentResolver.resolveTrack(trackId) }
+                    AlbumScreenState(
+                        album = it.data,
+                        tracks = tracks,
+                        isError = false,
+                        isLoading = false,
+                    )
+                }
             }
         }
         .stateIn(viewModelScope, SharingStarted.Eagerly, AlbumScreenState())
@@ -41,8 +46,13 @@ class AlbumScreenViewModel @AssistedInject constructor(
         interactor.playAlbum(albumId)
     }
 
+    override fun clickOnTrack(trackId: String) {
+        interactor.playTrack(trackId)
+    }
+
     interface Interactor {
         fun playAlbum(albumId: String)
+        fun playTrack(trackId: String)
     }
 
     @AssistedFactory
