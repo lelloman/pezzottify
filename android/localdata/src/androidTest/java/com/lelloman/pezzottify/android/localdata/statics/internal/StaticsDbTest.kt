@@ -260,6 +260,109 @@ class StaticsDbTest {
         )
     }
 
+    @Test
+    fun getAllIdleFiltersByTryNextTime() = runTest {
+        val currentTime = System.currentTimeMillis()
+
+        // Item 1: Not loading, no tryNextTime (should be included)
+        val item1 = StaticItemFetchStateRecord(
+            itemId = "item1",
+            loading = false,
+            errorReason = null,
+            itemType = StaticItemType.Artist,
+            lastAttemptTime = currentTime - 1000,
+            tryNextTime = null,
+        )
+
+        // Item 2: Not loading, tryNextTime in the past (should be included)
+        val item2 = StaticItemFetchStateRecord(
+            itemId = "item2",
+            loading = false,
+            errorReason = "Network",
+            itemType = StaticItemType.Album,
+            lastAttemptTime = currentTime - 5000,
+            tryNextTime = currentTime - 1000, // Already past
+        )
+
+        // Item 3: Not loading, tryNextTime in the future (should NOT be included)
+        val item3 = StaticItemFetchStateRecord(
+            itemId = "item3",
+            loading = false,
+            errorReason = "Client",
+            itemType = StaticItemType.Track,
+            lastAttemptTime = currentTime - 100,
+            tryNextTime = currentTime + 10_000, // 10 seconds in future
+        )
+
+        // Item 4: Loading (should NOT be included regardless of tryNextTime)
+        val item4 = StaticItemFetchStateRecord(
+            itemId = "item4",
+            loading = true,
+            errorReason = null,
+            itemType = StaticItemType.Artist,
+            lastAttemptTime = currentTime,
+            tryNextTime = null,
+        )
+
+        // Insert all items
+        assertThat(staticItemFetchStateDao.insert(item1)).isEqualTo(1)
+        assertThat(staticItemFetchStateDao.insert(item2)).isEqualTo(2)
+        assertThat(staticItemFetchStateDao.insert(item3)).isEqualTo(3)
+        assertThat(staticItemFetchStateDao.insert(item4)).isEqualTo(4)
+
+        // Get idle items
+        val idleItems = staticItemFetchStateDao.getAllIdle(currentTime)
+
+        // Verify only item1 and item2 are returned
+        assertThat(idleItems).hasSize(2)
+        assertThat(idleItems.map { it.itemId }).containsExactly("item1", "item2")
+    }
+
+    @Test
+    fun getAllIdleRespectsExactTryNextTimeBoundary() = runTest {
+        val currentTime = 1000000L
+
+        // Item with tryNextTime exactly equal to currentTime (should be included)
+        val itemAtBoundary = StaticItemFetchStateRecord(
+            itemId = "boundary",
+            loading = false,
+            errorReason = "Unknown",
+            itemType = StaticItemType.Track,
+            lastAttemptTime = currentTime - 5000,
+            tryNextTime = currentTime, // Exactly at current time
+        )
+
+        // Item with tryNextTime just before currentTime (should be included)
+        val itemJustBefore = StaticItemFetchStateRecord(
+            itemId = "before",
+            loading = false,
+            errorReason = "Network",
+            itemType = StaticItemType.Album,
+            lastAttemptTime = currentTime - 6000,
+            tryNextTime = currentTime - 1, // Just before current time
+        )
+
+        // Item with tryNextTime just after currentTime (should NOT be included)
+        val itemJustAfter = StaticItemFetchStateRecord(
+            itemId = "after",
+            loading = false,
+            errorReason = "NotFound",
+            itemType = StaticItemType.Artist,
+            lastAttemptTime = currentTime - 7000,
+            tryNextTime = currentTime + 1, // Just after current time
+        )
+
+        assertThat(staticItemFetchStateDao.insert(itemAtBoundary)).isEqualTo(1)
+        assertThat(staticItemFetchStateDao.insert(itemJustBefore)).isEqualTo(2)
+        assertThat(staticItemFetchStateDao.insert(itemJustAfter)).isEqualTo(3)
+
+        val idleItems = staticItemFetchStateDao.getAllIdle(currentTime)
+
+        // Verify boundary and before are included, after is not
+        assertThat(idleItems).hasSize(2)
+        assertThat(idleItems.map { it.itemId }).containsExactly("boundary", "before")
+    }
+
     private fun randomAlbum() = Album(
         id = Random.nextLong().toString(),
         name = Random.nextLong().toString(),
@@ -268,6 +371,7 @@ class StaticsDbTest {
         coverGroup = emptyList(),
         covers = emptyList(),
         artistsIds = emptyList(),
+        date = 123L,
         discs = emptyList(),
     )
 
@@ -289,6 +393,8 @@ class StaticsDbTest {
         loading = Random.nextBoolean(),
         errorReason = null,
         itemType = StaticItemType.Artist,
+        lastAttemptTime = null,
+        tryNextTime = null,
     )
 
     private fun randomArtistDiscography() = ArtistDiscography(

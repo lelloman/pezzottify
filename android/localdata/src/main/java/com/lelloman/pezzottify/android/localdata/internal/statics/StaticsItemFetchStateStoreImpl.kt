@@ -1,5 +1,6 @@
 package com.lelloman.pezzottify.android.localdata.internal.statics
 
+import com.lelloman.pezzottify.android.domain.app.TimeProvider
 import com.lelloman.pezzottify.android.domain.statics.fetchstate.StaticItemFetchState
 import com.lelloman.pezzottify.android.domain.statics.fetchstate.StaticItemFetchStateStore
 import com.lelloman.pezzottify.android.localdata.internal.statics.StaticItemFetchStateRecord.Companion.toDomain
@@ -9,6 +10,7 @@ import kotlinx.coroutines.flow.map
 
 internal class StaticsItemFetchStateStoreImpl(
     private val dao: StaticItemFetchStateDao,
+    private val timeProvider: TimeProvider,
 ) : StaticItemFetchStateStore {
 
     override suspend fun store(record: StaticItemFetchState): Result<Unit> {
@@ -28,7 +30,7 @@ internal class StaticsItemFetchStateStoreImpl(
     }
 
     override suspend fun getIdle(): List<StaticItemFetchState> =
-        dao.getAllIdle().map { it.toDomain() }
+        dao.getAllIdle(currentTime = timeProvider.nowUtcMs()).map { it.toDomain() }
 
     override suspend fun getLoadingItemsCount(): Int = dao.getLoadingItemsCount()
 

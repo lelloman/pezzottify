@@ -1,6 +1,7 @@
 package com.lelloman.pezzottify.android.domain.sync
 
 import com.lelloman.pezzottify.android.domain.app.AppInitializer
+import com.lelloman.pezzottify.android.domain.app.TimeProvider
 import com.lelloman.pezzottify.android.domain.remoteapi.RemoteApiClient
 import com.lelloman.pezzottify.android.domain.remoteapi.response.AlbumResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.ArtistResponse
@@ -9,6 +10,7 @@ import com.lelloman.pezzottify.android.domain.remoteapi.response.TrackResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.toDomain
 import com.lelloman.pezzottify.android.domain.statics.StaticItemType
 import com.lelloman.pezzottify.android.domain.statics.StaticsStore
+import com.lelloman.pezzottify.android.domain.statics.fetchstate.ErrorReason
 import com.lelloman.pezzottify.android.domain.statics.fetchstate.StaticItemFetchState
 import com.lelloman.pezzottify.android.domain.statics.fetchstate.StaticItemFetchStateStore
 import com.lelloman.pezzottify.android.logger.LoggerFactory
@@ -31,6 +33,7 @@ internal class Synchronizer(
     private val fetchStateStore: StaticItemFetchStateStore,
     private val remoteApiClient: RemoteApiClient,
     private val staticsStore: StaticsStore,
+    private val timeProvider: TimeProvider,
     loggerFactory: LoggerFactory,
     private val dispatcher: CoroutineDispatcher,
     private val scope: CoroutineScope,
@@ -41,11 +44,13 @@ internal class Synchronizer(
         fetchStateStore: StaticItemFetchStateStore,
         remoteApiClient: RemoteApiClient,
         staticsStore: StaticsStore,
+        timeProvider: TimeProvider,
         loggerFactory: LoggerFactory,
     ) : this(
         fetchStateStore,
         remoteApiClient,
         staticsStore,
+        timeProvider,
         loggerFactory,
         Dispatchers.IO,
         GlobalScope
@@ -99,7 +104,8 @@ internal class Synchronizer(
 
     private suspend fun fetchItemFromRemote(itemId: String, type: StaticItemType) {
         withContext(coroutineContext) {
-            val loadingState = StaticItemFetchState.loading(itemId, type)
+            val attemptTime = timeProvider.nowUtcMs()
+            val loadingState = StaticItemFetchState.loading(itemId, type, attemptTime)
             fetchStateStore.store(loadingState)
             val remoteData = when (type) {
                 StaticItemType.Album -> remoteApiClient.getAlbum(itemId)
@@ -121,17 +127,53 @@ internal class Synchronizer(
                         "Error while storing remote-fetched data into StaticsStore",
                         throwable
                     )
-                    fetchStateStore.store(StaticItemFetchState.error(itemId, type))
+                    val tryNextTime = attemptTime + RETRY_DELAY_CLIENT_ERROR_MS
+                    fetchStateStore.store(
+                        StaticItemFetchState.error(
+                            itemId = itemId,
+                            itemType = type,
+                            errorReason = ErrorReason.Client,
+                            lastAttemptTime = attemptTime,
+                            tryNextTime = tryNextTime
+                        )
+                    )
                 }
             } else {
                 logger.debug("Remote API returned error: $remoteData")
-                fetchStateStore.store(StaticItemFetchState.error(itemId, type))
+                val (errorReason, retryDelayMs) = mapErrorToReasonAndDelay(remoteData)
+                val tryNextTime = attemptTime + retryDelayMs
+                fetchStateStore.store(
+                    StaticItemFetchState.error(
+                        itemId = itemId,
+                        itemType = type,
+                        errorReason = errorReason,
+                        lastAttemptTime = attemptTime,
+                        tryNextTime = tryNextTime
+                    )
+                )
             }
+        }
+    }
+
+    private fun mapErrorToReasonAndDelay(error: RemoteApiResponse<*>): Pair<ErrorReason, Long> {
+        return when (error) {
+            is RemoteApiResponse.Error.Network -> ErrorReason.Network to RETRY_DELAY_NETWORK_ERROR_MS
+            is RemoteApiResponse.Error.Unauthorized -> ErrorReason.Client to RETRY_DELAY_UNAUTHORIZED_ERROR_MS
+            is RemoteApiResponse.Error.NotFound -> ErrorReason.NotFound to RETRY_DELAY_NOT_FOUND_ERROR_MS
+            is RemoteApiResponse.Error.Unknown -> ErrorReason.Unknown to RETRY_DELAY_UNKNOWN_ERROR_MS
+            else -> ErrorReason.Unknown to RETRY_DELAY_UNKNOWN_ERROR_MS
         }
     }
 
     private companion object {
         val MIN_SLEEP_DURATION = 5.milliseconds
         val MAX_SLEEP_DURATION = 10.seconds
+
+        // Retry delay constants in milliseconds
+        const val RETRY_DELAY_NETWORK_ERROR_MS = 60_000L // 1 minute for network errors
+        const val RETRY_DELAY_UNAUTHORIZED_ERROR_MS = 1_800_000L // 30 minutes for 403/unauthorized
+        const val RETRY_DELAY_NOT_FOUND_ERROR_MS = 3_600_000L // 1 hour for 404/not found
+        const val RETRY_DELAY_UNKNOWN_ERROR_MS = 300_000L // 5 minutes for unknown errors
+        const val RETRY_DELAY_CLIENT_ERROR_MS = 300_000L // 5 minutes for client errors
     }
 }

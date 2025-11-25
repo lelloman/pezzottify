@@ -1,6 +1,7 @@
 package com.lelloman.pezzottify.android.localdata
 
 import android.content.Context
+import com.lelloman.pezzottify.android.domain.app.TimeProvider
 import com.lelloman.pezzottify.android.domain.auth.AuthStore
 import com.lelloman.pezzottify.android.domain.config.ConfigStore
 import com.lelloman.pezzottify.android.domain.statics.StaticsStore
@@ -49,9 +50,10 @@ class LocalDataModule {
     @Provides
     @Singleton
     internal fun provideStaticItemFetchStateStore(
-        staticsDb: StaticsDb
+        staticsDb: StaticsDb,
+        timeProvider: TimeProvider,
     ): StaticItemFetchStateStore =
-        StaticsItemFetchStateStoreImpl(staticsDb.staticItemFetchStateDao())
+        StaticsItemFetchStateStoreImpl(staticsDb.staticItemFetchStateDao(), timeProvider)
 
     @Provides
     @Singleton

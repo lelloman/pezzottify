@@ -24,11 +24,19 @@ internal class DbModule {
         }
     }
 
+    private val MIGRATION_2_3 = object : Migration(2, 3) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            // Add timestamp columns to static_item_fetch_state table
+            db.execSQL("ALTER TABLE static_item_fetch_state ADD COLUMN lastAttemptTime INTEGER")
+            db.execSQL("ALTER TABLE static_item_fetch_state ADD COLUMN tryNextTime INTEGER")
+        }
+    }
+
     @Provides
     @Singleton
     internal fun provideStaticsDb(@ApplicationContext context: Context): StaticsDb = Room
         .databaseBuilder(context, StaticsDb::class.java, StaticsDb.NAME)
-        .addMigrations(MIGRATION_1_2)
+        .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
         .build()
 
     @Provides

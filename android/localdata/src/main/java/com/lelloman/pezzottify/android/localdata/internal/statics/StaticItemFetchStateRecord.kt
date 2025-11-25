@@ -20,18 +20,25 @@ internal data class StaticItemFetchStateRecord(
 
     val itemType: StaticItemType,
 
+    val lastAttemptTime: Long?,
+
+    val tryNextTime: Long?,
+
     ) {
     companion object {
         const val TABLE_NAME = "static_item_fetch_state"
 
         const val COLUMN_ITEM_ID = "item_id"
         const val COLUMN_LOADING = "loading"
+        const val COLUMN_TRY_NEXT_TIME = "tryNextTime"
 
         fun StaticItemFetchState.toRecord() = StaticItemFetchStateRecord(
             itemId = itemId,
             loading = isLoading,
             itemType = itemType,
             errorReason = errorReason?.toString(),
+            lastAttemptTime = lastAttemptTime,
+            tryNextTime = tryNextTime,
         )
 
         fun StaticItemFetchStateRecord.toDomain() = StaticItemFetchState(
@@ -45,6 +52,8 @@ internal data class StaticItemFetchStateRecord(
                     ErrorReason.Unknown
                 }
             },
+            lastAttemptTime = lastAttemptTime,
+            tryNextTime = tryNextTime,
         )
     }
 }

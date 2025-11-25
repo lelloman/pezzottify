@@ -25,8 +25,9 @@ internal interface StaticItemFetchStateDao {
     @Query("UPDATE ${StaticItemFetchStateRecord.TABLE_NAME} SET ${StaticItemFetchStateRecord.COLUMN_LOADING} = 0")
     suspend fun resetLoadingStates()
 
-    @Query("SELECT * FROM ${StaticItemFetchStateRecord.TABLE_NAME} WHERE ${StaticItemFetchStateRecord.COLUMN_LOADING} = 0")
-    suspend fun getAllIdle(): List<StaticItemFetchStateRecord>
+    @Suppress("MaxLineLength")
+    @Query("SELECT * FROM ${StaticItemFetchStateRecord.TABLE_NAME} WHERE ${StaticItemFetchStateRecord.COLUMN_LOADING} = 0 AND (${StaticItemFetchStateRecord.COLUMN_TRY_NEXT_TIME} IS NULL OR ${StaticItemFetchStateRecord.COLUMN_TRY_NEXT_TIME} <= :currentTime)")
+    suspend fun getAllIdle(currentTime: Long): List<StaticItemFetchStateRecord>
 
     @Suppress("MaxLineLength")
     @Query("DELETE FROM ${StaticItemFetchStateRecord.TABLE_NAME} WHERE ${StaticItemFetchStateRecord.COLUMN_ITEM_ID} = :itemId")
