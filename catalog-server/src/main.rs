@@ -8,7 +8,7 @@ mod catalog;
 use catalog::Catalog;
 
 mod search;
-use search::{PezzotHashSearchVault, SearchVault};
+use search::{NoOpSearchVault, PezzotHashSearchVault, SearchVault};
 
 mod server;
 use server::{run_server, RequestsLoggingLevel};

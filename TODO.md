@@ -32,6 +32,8 @@
 - Add extra permission management to cli-auth (time-based and countdown-based grants)
 - Create custom, flashy, modern looking CLI interface style for cli-auth
 - Implement a rate limiting of some sort
+- Setup alerts infrastructure (emails or telegram bot for rate limit violations, errors, etc.)
+- Setup metrics infrastructure for monitoring and observability
 - Create admin API endpoints for managing user roles and permissions (ManagePermissions permission)
 - Implement catalog editing endpoints (EditCatalog permission)
 - Implement content download functionality (IssueContentDownload permission)
@@ -55,6 +57,7 @@
 
 ## [android]
 
+- When loading a track in the player from album screen, the next button doesn't work
 - The synchronizer seems to have a bug, when the server responds 403 it keeps hammering the endpoint in an infinite loop
 - Create a db for logout operations so that if a user logsout, the server call doesn't need to
   happen immediately, plus in case of immediate error it can be retried

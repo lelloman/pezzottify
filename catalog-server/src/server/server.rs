@@ -7,6 +7,7 @@ use anyhow::Result;
 use std::{
     fs::File,
     io::Read,
+    net::SocketAddr,
     sync::{Arc, Mutex},
     time::{Duration, Instant},
 };
@@ -24,7 +25,7 @@ use tower_http::services::ServeDir;
 
 use axum::{
     body::Body,
-    extract::{Path, State},
+    extract::{ConnectInfo, Path, State},
     http::{header, response, HeaderValue, StatusCode},
     middleware,
     response::{IntoResponse, Response},
@@ -32,12 +33,17 @@ use axum::{
     Json, Router,
 };
 use serde::{Deserialize, Serialize};
+use tower_governor::GovernorLayer;
 
 #[cfg(feature = "slowdown")]
 use super::slowdown_request;
 use super::{
-    http_cache, log_requests, make_search_routes, state::*, RequestsLoggingLevel, ServerConfig,
+    extract_user_id_for_rate_limit, http_cache, log_requests, make_search_routes, state::*,
+    IpKeyExtractor, RequestsLoggingLevel, ServerConfig, UserOrIpKeyExtractor,
+    CONTENT_READ_PER_MINUTE, GLOBAL_PER_MINUTE, LOGIN_PER_MINUTE, SEARCH_PER_MINUTE,
+    STREAM_PER_MINUTE, WRITE_PER_MINUTE,
 };
+use tower_governor::governor::GovernorConfigBuilder;
 use crate::server::session::Session;
 use crate::user::auth::AuthTokenValue;
 use axum::extract::Request;
@@ -523,14 +529,57 @@ fn make_app(
     let user_manager = UserManager::new(guarded_catalog.clone(), user_store);
     let state = ServerState::new(config.clone(), guarded_catalog, search_vault, user_manager);
 
-    let auth_routes: Router = Router::new()
+    // Login route with strict IP-based rate limiting
+    // For rates < 60/min, we use per_second(1) and rely on burst_size to enforce the limit
+    let login_rate_limit = Arc::new(
+        GovernorConfigBuilder::default()
+            .per_second(std::cmp::max(1, (LOGIN_PER_MINUTE / 60) as u64))
+            .burst_size(LOGIN_PER_MINUTE)
+            .key_extractor(IpKeyExtractor)
+            .finish()
+            .unwrap(),
+    );
+
+    let login_routes: Router = Router::new()
         .route("/login", post(login))
+        .layer(GovernorLayer::new(login_rate_limit))
+        .with_state(state.clone());
+
+    // Other auth routes without rate limiting (already authenticated)
+    let other_auth_routes: Router = Router::new()
         .route("/logout", get(logout))
         .route("/challenge", get(get_challenge))
         .route("/challenge", post(post_challenge))
         .with_state(state.clone());
 
-    let mut content_routes: Router = Router::new()
+    let auth_routes = login_routes.merge(other_auth_routes);
+
+    // Separate stream routes for different rate limiting
+    let stream_rate_limit = Arc::new(
+        GovernorConfigBuilder::default()
+            .per_second(std::cmp::max(1, (STREAM_PER_MINUTE / 60) as u64))
+            .burst_size(STREAM_PER_MINUTE)
+            .key_extractor(UserOrIpKeyExtractor)
+            .finish()
+            .unwrap(),
+    );
+
+    let stream_routes: Router = Router::new()
+        .route("/stream/{id}", get(stream_track))
+        .layer(GovernorLayer::new(stream_rate_limit))
+        .with_state(state.clone());
+
+    // Content read routes (album, artist, track, image)
+    let content_read_rate_limit = Arc::new(
+        GovernorConfigBuilder::default()
+            .per_second(std::cmp::max(1, (CONTENT_READ_PER_MINUTE / 60) as u64))
+            .burst_size(CONTENT_READ_PER_MINUTE)
+            .key_extractor(UserOrIpKeyExtractor)
+            .finish()
+            .unwrap(),
+    );
+
+    let content_read_routes: Router = Router::new()
         .route("/album/{id}", get(get_album))
         .route("/album/{id}/resolved", get(get_resolved_album))
         .route("/artist/{id}", get(get_artist))
@@ -538,7 +587,12 @@ fn make_app(
         .route("/track/{id}", get(get_track))
         .route("/track/{id}/resolved", get(get_resolved_track))
         .route("/image/{id}", get(get_image))
-        .route("/stream/{id}", get(stream_track))
+        .layer(GovernorLayer::new(content_read_rate_limit))
+        .with_state(state.clone());
+
+    // Merge content routes and apply common middleware
+    let mut content_routes: Router = stream_routes
+        .merge(content_read_routes)
         .route_layer(middleware::from_fn_with_state(
             state.clone(),
             require_access_catalog,
@@ -546,35 +600,91 @@ fn make_app(
         .layer(middleware::from_fn_with_state(
             config.content_cache_age_sec,
             http_cache,
-        ))
-        .with_state(state.clone());
+        ));
 
-    let liked_content_routes: Router = Router::new()
-        .route("/liked/{content_id}", post(add_user_liked_content))
-        .route("/liked/{content_id}", delete(delete_user_liked_content))
+    // Write rate limiting for user content modifications
+    let write_rate_limit = Arc::new(
+        GovernorConfigBuilder::default()
+            .per_second(std::cmp::max(1, (WRITE_PER_MINUTE / 60) as u64))
+            .burst_size(WRITE_PER_MINUTE)
+            .key_extractor(UserOrIpKeyExtractor)
+            .finish()
+            .unwrap(),
+    );
+
+    // Create a separate rate limit config for user content reads (same as general content reads)
+    let user_content_read_rate_limit = Arc::new(
+        GovernorConfigBuilder::default()
+            .per_second(std::cmp::max(1, (CONTENT_READ_PER_MINUTE / 60) as u64))
+            .burst_size(CONTENT_READ_PER_MINUTE)
+            .key_extractor(UserOrIpKeyExtractor)
+            .finish()
+            .unwrap(),
+    );
+
+    // Liked content READ routes (higher limit)
+    let liked_content_read_routes: Router = Router::new()
         .route("/liked/{content_id}", get(get_user_liked_content))
+        .layer(GovernorLayer::new(user_content_read_rate_limit.clone()))
         .route_layer(middleware::from_fn_with_state(
             state.clone(),
             require_like_content,
         ))
         .with_state(state.clone());
 
-    let playlist_routes: Router = Router::new()
-        .route("/playlist", post(post_playlist))
-        .route("/playlist/{id}", put(put_playlist))
-        .route("/playlist/{id}", delete(delete_playlist))
+    // Liked content WRITE routes (stricter limit)
+    let liked_content_write_routes: Router = Router::new()
+        .route("/liked/{content_id}", post(add_user_liked_content))
+        .route("/liked/{content_id}", delete(delete_user_liked_content))
+        .layer(GovernorLayer::new(write_rate_limit.clone()))
+        .route_layer(middleware::from_fn_with_state(
+            state.clone(),
+            require_like_content,
+        ))
+        .with_state(state.clone());
+
+    let liked_content_routes = liked_content_read_routes.merge(liked_content_write_routes);
+
+    // Playlist READ routes (higher limit)
+    let playlist_read_routes: Router = Router::new()
         .route("/playlist/{id}", get(get_playlist))
-        .route("/playlist/{id}/add", put(add_playlist_tracks))
-        .route("/playlist/{id}/remove", put(remove_tracks_from_playlist))
         .route("/playlists", get(get_user_playlists))
+        .layer(GovernorLayer::new(user_content_read_rate_limit))
         .route_layer(middleware::from_fn_with_state(
             state.clone(),
             require_own_playlists,
         ))
         .with_state(state.clone());
 
+    // Playlist WRITE routes (stricter limit)
+    let playlist_write_routes: Router = Router::new()
+        .route("/playlist", post(post_playlist))
+        .route("/playlist/{id}", put(put_playlist))
+        .route("/playlist/{id}", delete(delete_playlist))
+        .route("/playlist/{id}/add", put(add_playlist_tracks))
+        .route("/playlist/{id}/remove", put(remove_tracks_from_playlist))
+        .layer(GovernorLayer::new(write_rate_limit))
+        .route_layer(middleware::from_fn_with_state(
+            state.clone(),
+            require_own_playlists,
+        ))
+        .with_state(state.clone());
+
+    let playlist_routes = playlist_read_routes.merge(playlist_write_routes);
+
+    // Apply search rate limiting to search routes if they exist
     if let Some(search_routes) = make_search_routes(state.clone()) {
-        content_routes = content_routes.merge(search_routes);
+        let search_rate_limit = Arc::new(
+            GovernorConfigBuilder::default()
+                .per_second(std::cmp::max(1, (SEARCH_PER_MINUTE / 60) as u64))
+                .burst_size(SEARCH_PER_MINUTE)
+                .key_extractor(UserOrIpKeyExtractor)
+                .finish()
+                .unwrap(),
+        );
+
+        let rate_limited_search_routes = search_routes.layer(GovernorLayer::new(search_rate_limit));
+        content_routes = content_routes.merge(rate_limited_search_routes);
     }
 
     let user_routes = liked_content_routes.merge(playlist_routes);
@@ -599,6 +709,19 @@ fn make_app(
     {
         app = app.layer(middleware::from_fn(slowdown_request));
     }
+
+    // Apply global rate limit to entire app (protects against overall abuse)
+    let global_rate_limit = Arc::new(
+        GovernorConfigBuilder::default()
+            .per_second(std::cmp::max(1, (GLOBAL_PER_MINUTE / 60) as u64))
+            .burst_size(GLOBAL_PER_MINUTE)
+            .key_extractor(UserOrIpKeyExtractor)
+            .finish()
+            .unwrap(),
+    );
+
+    app = app.layer(GovernorLayer::new(global_rate_limit));
+
     app = app.layer(middleware::from_fn_with_state(state.clone(), log_requests));
 
     Ok(app)
@@ -625,7 +748,12 @@ pub async fn run_server(
         .await
         .unwrap();
 
-    Ok(axum::serve(listener, app).await?)
+    // Use into_make_service_with_connect_info to provide IP address for rate limiting
+    Ok(axum::serve(
+        listener,
+        app.into_make_service_with_connect_info::<SocketAddr>(),
+    )
+    .await?)
 }
 
 #[cfg(test)]
@@ -650,6 +778,9 @@ mod tests {
         )
         .unwrap();
 
+        // Create a test socket address for rate limiting
+        let test_addr: SocketAddr = "127.0.0.1:3000".parse().unwrap();
+
         let protected_routes = vec![
             "/v1/content/artist/123",
             "/v1/content/album/123",
@@ -664,16 +795,20 @@ mod tests {
 
         for route in protected_routes.into_iter() {
             println!("Trying route {}", route);
-            let request = Request::builder().uri(route).body(Body::empty()).unwrap();
+            let mut request = Request::builder().uri(route).body(Body::empty()).unwrap();
+            // Add ConnectInfo extension for rate limiting
+            request.extensions_mut().insert(ConnectInfo(test_addr));
             let response = app.oneshot(request).await.unwrap();
             assert_eq!(response.status(), StatusCode::FORBIDDEN);
         }
 
-        let request = Request::builder()
+        let mut request = Request::builder()
             .method("POST")
             .uri("/v1/content/search")
             .body(Body::empty())
             .unwrap();
+        // Add ConnectInfo extension for rate limiting
+        request.extensions_mut().insert(ConnectInfo(test_addr));
         let response = app.oneshot(request).await.unwrap();
         assert_eq!(response.status(), StatusCode::FORBIDDEN);
     }
