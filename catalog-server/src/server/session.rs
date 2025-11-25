@@ -80,8 +80,27 @@ async fn extract_session_from_request_parts(
 
     debug!("Got session token {}", token);
     let user_manager = ctx.user_manager.lock().unwrap();
-    let auth_token = user_manager.get_auth_token(&AuthTokenValue(token.clone()))?;
-    let permissions = user_manager.get_user_permissions(auth_token.user_id).ok()?;
+    let auth_token = match user_manager.get_auth_token(&AuthTokenValue(token.clone())) {
+        Some(token) => {
+            debug!("Found auth token for user_id={}", token.user_id);
+            token
+        }
+        None => {
+            debug!("Auth token not found in database");
+            return None;
+        }
+    };
+
+    let permissions = match user_manager.get_user_permissions(auth_token.user_id) {
+        Ok(perms) => {
+            debug!("Resolved permissions for user_id={}: {:?}", auth_token.user_id, perms);
+            perms
+        }
+        Err(e) => {
+            debug!("Failed to resolve permissions for user_id={}: {}", auth_token.user_id, e);
+            return None;
+        }
+    };
 
     Some(Session {
         user_id: auth_token.user_id,

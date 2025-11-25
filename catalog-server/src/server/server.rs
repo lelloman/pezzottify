@@ -65,9 +65,17 @@ async fn require_access_catalog(
     request: Request<Body>,
     next: Next,
 ) -> impl IntoResponse {
+    debug!(
+        "require_access_catalog: user_id={}, has_permission={}, permissions={:?}",
+        session.user_id,
+        session.has_permission(Permission::AccessCatalog),
+        session.permissions
+    );
     if !session.has_permission(Permission::AccessCatalog) {
+        debug!("require_access_catalog: FORBIDDEN - user_id={} lacks AccessCatalog permission", session.user_id);
         return StatusCode::FORBIDDEN.into_response();
     }
+    debug!("require_access_catalog: ALLOWED - user_id={}", session.user_id);
     next.run(request).await
 }
 
@@ -76,9 +84,17 @@ async fn require_like_content(
     request: Request<Body>,
     next: Next,
 ) -> impl IntoResponse {
+    debug!(
+        "require_like_content: user_id={}, has_permission={}, permissions={:?}",
+        session.user_id,
+        session.has_permission(Permission::LikeContent),
+        session.permissions
+    );
     if !session.has_permission(Permission::LikeContent) {
+        debug!("require_like_content: FORBIDDEN - user_id={} lacks LikeContent permission", session.user_id);
         return StatusCode::FORBIDDEN.into_response();
     }
+    debug!("require_like_content: ALLOWED - user_id={}", session.user_id);
     next.run(request).await
 }
 
@@ -87,9 +103,17 @@ async fn require_own_playlists(
     request: Request<Body>,
     next: Next,
 ) -> impl IntoResponse {
+    debug!(
+        "require_own_playlists: user_id={}, has_permission={}, permissions={:?}",
+        session.user_id,
+        session.has_permission(Permission::OwnPlaylists),
+        session.permissions
+    );
     if !session.has_permission(Permission::OwnPlaylists) {
+        debug!("require_own_playlists: FORBIDDEN - user_id={} lacks OwnPlaylists permission", session.user_id);
         return StatusCode::FORBIDDEN.into_response();
     }
+    debug!("require_own_playlists: ALLOWED - user_id={}", session.user_id);
     next.run(request).await
 }
 

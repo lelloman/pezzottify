@@ -834,6 +834,7 @@ impl UserStore for SqliteUserStore {
     }
 
     fn get_user_roles(&self, user_id: usize) -> Result<Vec<UserRole>> {
+        debug!("get_user_roles: querying roles for user_id={}", user_id);
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(&format!(
             "SELECT role FROM {} WHERE user_id = ?1",
@@ -842,34 +843,110 @@ impl UserStore for SqliteUserStore {
         let roles = stmt
             .query_map(params![user_id], |row| {
                 let role_str: String = row.get(0)?;
+                debug!("get_user_roles: found role string '{}' for user_id={}", role_str, user_id);
                 Ok(role_str)
             })?
-            .filter_map(|r| r.ok().and_then(|s| UserRole::from_str(&s)))
+            .filter_map(|r| r.ok())
+            .flat_map(|s| {
+                s.split(',')
+                    .map(|part| part.trim())
+                    .filter_map(|part| UserRole::from_str(part))
+                    .collect::<Vec<_>>()
+            })
             .collect();
+        debug!("get_user_roles: returning {:?} for user_id={}", roles, user_id);
         Ok(roles)
     }
 
     fn add_user_role(&self, user_id: usize, role: UserRole) -> Result<()> {
         let conn = self.conn.lock().unwrap();
-        conn.execute(
-            &format!(
-                "INSERT OR IGNORE INTO {} (user_id, role) VALUES (?1, ?2)",
-                USER_ROLE_TABLE_V_4.name
-            ),
-            params![user_id, role.to_string()],
-        )?;
+
+        // Try to get existing roles for this user
+        let existing_roles: Option<String> = conn
+            .query_row(
+                &format!("SELECT role FROM {} WHERE user_id = ?1", USER_ROLE_TABLE_V_4.name),
+                params![user_id],
+                |row| row.get(0),
+            )
+            .ok();
+
+        if let Some(existing) = existing_roles {
+            // Parse existing roles and check if this role is already present
+            let mut roles: Vec<UserRole> = existing
+                .split(',')
+                .map(|s| s.trim())
+                .filter_map(|s| UserRole::from_str(s))
+                .collect();
+
+            if !roles.contains(&role) {
+                roles.push(role);
+                let roles_str = roles
+                    .iter()
+                    .map(|r| r.to_string())
+                    .collect::<Vec<_>>()
+                    .join(",");
+
+                conn.execute(
+                    &format!("UPDATE {} SET role = ?1 WHERE user_id = ?2", USER_ROLE_TABLE_V_4.name),
+                    params![roles_str, user_id],
+                )?;
+            }
+        } else {
+            // No existing roles, insert new row
+            conn.execute(
+                &format!(
+                    "INSERT INTO {} (user_id, role) VALUES (?1, ?2)",
+                    USER_ROLE_TABLE_V_4.name
+                ),
+                params![user_id, role.to_string()],
+            )?;
+        }
+
         Ok(())
     }
 
     fn remove_user_role(&self, user_id: usize, role: UserRole) -> Result<()> {
         let conn = self.conn.lock().unwrap();
-        conn.execute(
-            &format!(
-                "DELETE FROM {} WHERE user_id = ?1 AND role = ?2",
-                USER_ROLE_TABLE_V_4.name
-            ),
-            params![user_id, role.to_string()],
-        )?;
+
+        // Get existing roles for this user
+        let existing_roles: Option<String> = conn
+            .query_row(
+                &format!("SELECT role FROM {} WHERE user_id = ?1", USER_ROLE_TABLE_V_4.name),
+                params![user_id],
+                |row| row.get(0),
+            )
+            .ok();
+
+        if let Some(existing) = existing_roles {
+            // Parse and filter out the role to remove
+            let roles: Vec<UserRole> = existing
+                .split(',')
+                .map(|s| s.trim())
+                .filter_map(|s| UserRole::from_str(s))
+                .filter(|r| r != &role)
+                .collect();
+
+            if roles.is_empty() {
+                // No roles left, delete the row
+                conn.execute(
+                    &format!("DELETE FROM {} WHERE user_id = ?1", USER_ROLE_TABLE_V_4.name),
+                    params![user_id],
+                )?;
+            } else {
+                // Update with remaining roles
+                let roles_str = roles
+                    .iter()
+                    .map(|r| r.to_string())
+                    .collect::<Vec<_>>()
+                    .join(",");
+
+                conn.execute(
+                    &format!("UPDATE {} SET role = ?1 WHERE user_id = ?2", USER_ROLE_TABLE_V_4.name),
+                    params![roles_str, user_id],
+                )?;
+            }
+        }
+
         Ok(())
     }
 
@@ -954,12 +1031,16 @@ impl UserStore for SqliteUserStore {
     fn resolve_user_permissions(&self, user_id: usize) -> Result<Vec<Permission>> {
         use std::collections::HashSet;
 
+        debug!("resolve_user_permissions: starting for user_id={}", user_id);
         let mut permissions = HashSet::new();
 
         // Add permissions from roles
         let roles = self.get_user_roles(user_id)?;
-        for role in roles {
-            for permission in role.permissions() {
+        debug!("resolve_user_permissions: user_id={} has roles: {:?}", user_id, roles);
+        for role in &roles {
+            let role_perms = role.permissions();
+            debug!("resolve_user_permissions: adding {:?} permissions from role {:?}", role_perms.len(), role);
+            for permission in role_perms {
                 permissions.insert(*permission);
             }
         }
@@ -970,6 +1051,8 @@ impl UserStore for SqliteUserStore {
             .duration_since(SystemTime::UNIX_EPOCH)
             .unwrap()
             .as_secs() as i64;
+
+        debug!("resolve_user_permissions: checking extra permissions for user_id={} at timestamp={}", user_id, now);
 
         let mut stmt = conn.prepare(&format!(
             "SELECT permission FROM {} WHERE user_id = ?1 AND start_time <= ?2 AND (end_time IS NULL OR end_time >= ?2) AND (countdown IS NULL OR countdown > 0)",
@@ -984,11 +1067,15 @@ impl UserStore for SqliteUserStore {
             .filter_map(|r| r.ok().and_then(|i| Permission::from_int(i)))
             .collect::<Vec<_>>();
 
-        for perm in extra_perms {
-            permissions.insert(perm);
+        debug!("resolve_user_permissions: found {} extra permissions for user_id={}", extra_perms.len(), user_id);
+        for perm in &extra_perms {
+            debug!("resolve_user_permissions: adding extra permission {:?}", perm);
+            permissions.insert(*perm);
         }
 
-        Ok(permissions.into_iter().collect())
+        let final_permissions: Vec<Permission> = permissions.into_iter().collect();
+        debug!("resolve_user_permissions: final permissions for user_id={}: {:?}", user_id, final_permissions);
+        Ok(final_permissions)
     }
 }
 
@@ -1377,5 +1464,184 @@ mod tests {
         let permissions = store.resolve_user_permissions(user_id).unwrap();
         assert!(permissions.contains(&Permission::AccessCatalog)); // From Regular role
         assert!(permissions.contains(&Permission::EditCatalog)); // From extra permission
+    }
+
+    #[test]
+    fn test_add_single_role() {
+        let (store, _temp_dir) = create_tmp_store();
+        let user_id = store.create_user("test_user").unwrap();
+
+        // Add a single role
+        store.add_user_role(user_id, UserRole::Regular).unwrap();
+
+        // Verify the role was added
+        let roles = store.get_user_roles(user_id).unwrap();
+        assert_eq!(roles.len(), 1);
+        assert_eq!(roles[0], UserRole::Regular);
+    }
+
+    #[test]
+    fn test_add_multiple_roles() {
+        let (store, _temp_dir) = create_tmp_store();
+        let user_id = store.create_user("test_user").unwrap();
+
+        // Add multiple roles
+        store.add_user_role(user_id, UserRole::Regular).unwrap();
+        store.add_user_role(user_id, UserRole::Admin).unwrap();
+
+        // Verify both roles were added
+        let roles = store.get_user_roles(user_id).unwrap();
+        assert_eq!(roles.len(), 2);
+        assert!(roles.contains(&UserRole::Regular));
+        assert!(roles.contains(&UserRole::Admin));
+    }
+
+    #[test]
+    fn test_add_duplicate_role() {
+        let (store, _temp_dir) = create_tmp_store();
+        let user_id = store.create_user("test_user").unwrap();
+
+        // Add the same role twice
+        store.add_user_role(user_id, UserRole::Regular).unwrap();
+        store.add_user_role(user_id, UserRole::Regular).unwrap();
+
+        // Verify the role is only present once
+        let roles = store.get_user_roles(user_id).unwrap();
+        assert_eq!(roles.len(), 1);
+        assert_eq!(roles[0], UserRole::Regular);
+    }
+
+    #[test]
+    fn test_remove_role_with_multiple_roles() {
+        let (store, _temp_dir) = create_tmp_store();
+        let user_id = store.create_user("test_user").unwrap();
+
+        // Add multiple roles
+        store.add_user_role(user_id, UserRole::Regular).unwrap();
+        store.add_user_role(user_id, UserRole::Admin).unwrap();
+
+        // Remove one role
+        store.remove_user_role(user_id, UserRole::Regular).unwrap();
+
+        // Verify only Admin remains
+        let roles = store.get_user_roles(user_id).unwrap();
+        assert_eq!(roles.len(), 1);
+        assert_eq!(roles[0], UserRole::Admin);
+    }
+
+    #[test]
+    fn test_remove_last_role() {
+        let (store, _temp_dir) = create_tmp_store();
+        let user_id = store.create_user("test_user").unwrap();
+
+        // Add a single role
+        store.add_user_role(user_id, UserRole::Regular).unwrap();
+
+        // Remove the role
+        store.remove_user_role(user_id, UserRole::Regular).unwrap();
+
+        // Verify no roles remain
+        let roles = store.get_user_roles(user_id).unwrap();
+        assert_eq!(roles.len(), 0);
+
+        // Verify the database row was deleted
+        let conn = store.conn.lock().unwrap();
+        let count: i64 = conn
+            .query_row(
+                &format!("SELECT COUNT(*) FROM {} WHERE user_id = ?1", USER_ROLE_TABLE_V_4.name),
+                params![user_id],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(count, 0);
+    }
+
+    #[test]
+    fn test_remove_nonexistent_role() {
+        let (store, _temp_dir) = create_tmp_store();
+        let user_id = store.create_user("test_user").unwrap();
+
+        // Add Regular role
+        store.add_user_role(user_id, UserRole::Regular).unwrap();
+
+        // Try to remove Admin role (not present)
+        store.remove_user_role(user_id, UserRole::Admin).unwrap();
+
+        // Verify Regular is still there
+        let roles = store.get_user_roles(user_id).unwrap();
+        assert_eq!(roles.len(), 1);
+        assert_eq!(roles[0], UserRole::Regular);
+    }
+
+    #[test]
+    fn test_get_roles_with_comma_separated_string() {
+        let (store, _temp_dir) = create_tmp_store();
+        let user_id = store.create_user("test_user").unwrap();
+
+        // Manually insert comma-separated roles into the database
+        let conn = store.conn.lock().unwrap();
+        conn.execute(
+            &format!("INSERT INTO {} (user_id, role) VALUES (?1, ?2)", USER_ROLE_TABLE_V_4.name),
+            params![user_id, "Admin,Regular"],
+        )
+        .unwrap();
+        drop(conn);
+
+        // Verify both roles are parsed correctly
+        let roles = store.get_user_roles(user_id).unwrap();
+        assert_eq!(roles.len(), 2);
+        assert!(roles.contains(&UserRole::Admin));
+        assert!(roles.contains(&UserRole::Regular));
+    }
+
+    #[test]
+    fn test_get_roles_with_spaces_in_comma_separated_string() {
+        let (store, _temp_dir) = create_tmp_store();
+        let user_id = store.create_user("test_user").unwrap();
+
+        // Manually insert comma-separated roles with spaces
+        let conn = store.conn.lock().unwrap();
+        conn.execute(
+            &format!("INSERT INTO {} (user_id, role) VALUES (?1, ?2)", USER_ROLE_TABLE_V_4.name),
+            params![user_id, "Admin, Regular"],
+        )
+        .unwrap();
+        drop(conn);
+
+        // Verify both roles are parsed correctly (spaces are trimmed)
+        let roles = store.get_user_roles(user_id).unwrap();
+        assert_eq!(roles.len(), 2);
+        assert!(roles.contains(&UserRole::Admin));
+        assert!(roles.contains(&UserRole::Regular));
+    }
+
+    #[test]
+    fn test_role_permissions_resolution() {
+        let (store, _temp_dir) = create_tmp_store();
+        let user_id = store.create_user("test_user").unwrap();
+
+        // Add Regular role
+        store.add_user_role(user_id, UserRole::Regular).unwrap();
+
+        // Verify Regular permissions
+        let permissions = store.resolve_user_permissions(user_id).unwrap();
+        assert!(permissions.contains(&Permission::AccessCatalog));
+        assert!(permissions.contains(&Permission::LikeContent));
+        assert!(permissions.contains(&Permission::OwnPlaylists));
+        assert!(!permissions.contains(&Permission::EditCatalog));
+        assert!(!permissions.contains(&Permission::ManagePermissions));
+
+        // Add Admin role
+        store.add_user_role(user_id, UserRole::Admin).unwrap();
+
+        // Verify Admin permissions are now present
+        let permissions = store.resolve_user_permissions(user_id).unwrap();
+        assert!(permissions.contains(&Permission::AccessCatalog));
+        assert!(permissions.contains(&Permission::LikeContent));
+        assert!(permissions.contains(&Permission::OwnPlaylists));
+        assert!(permissions.contains(&Permission::EditCatalog));
+        assert!(permissions.contains(&Permission::ManagePermissions));
+        assert!(permissions.contains(&Permission::IssueContentDownload));
+        assert!(permissions.contains(&Permission::RebootServer));
     }
 }
