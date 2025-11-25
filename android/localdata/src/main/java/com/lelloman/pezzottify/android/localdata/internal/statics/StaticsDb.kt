@@ -27,7 +27,7 @@ internal abstract class StaticsDb : RoomDatabase() {
     abstract fun staticItemFetchStateDao(): StaticItemFetchStateDao
 
     companion object {
-        const val VERSION = 1
+        const val VERSION = 2
         const val NAME = "StaticsDb"
     }
 }

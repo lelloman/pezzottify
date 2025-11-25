@@ -34,6 +34,8 @@ internal data class Album(
 
     override val name: String,
 
+    override val date: Long,
+
     override val genre: List<String>,
 
     override val covers: List<String>,
@@ -58,6 +60,7 @@ internal data class Album(
 internal fun com.lelloman.pezzottify.android.domain.statics.Album.quack(): Album = Album(
     id = id,
     name = name,
+    date = date,
     genre = genre,
     covers = covers,
     related = related,

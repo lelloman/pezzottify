@@ -1,9 +1,12 @@
 package com.lelloman.pezzottify.android.ui
 
+import com.lelloman.pezzottify.android.domain.remoteapi.RemoteApiClient
+import com.lelloman.pezzottify.android.domain.remoteapi.response.RemoteApiResponse
 import com.lelloman.pezzottify.android.domain.statics.StaticsItem
 import com.lelloman.pezzottify.android.domain.statics.StaticsProvider
 import com.lelloman.pezzottify.android.ui.content.Album
 import com.lelloman.pezzottify.android.ui.content.Artist
+import com.lelloman.pezzottify.android.ui.content.ArtistDiscography
 import com.lelloman.pezzottify.android.ui.content.Content
 import com.lelloman.pezzottify.android.ui.content.ContentResolver
 import com.lelloman.pezzottify.android.ui.content.SearchResultContent
@@ -12,7 +15,10 @@ import com.lelloman.pezzottify.android.ui.screen.main.search.SearchScreenViewMod
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
-class UiContentResolver(private val staticsProvider: StaticsProvider) : ContentResolver {
+class UiContentResolver(
+    private val staticsProvider: StaticsProvider,
+    private val remoteApiClient: RemoteApiClient
+) : ContentResolver {
 
     override fun resolveArtist(artistId: String): Flow<Content<Artist>> =
         staticsProvider.provideArtist(artistId).map {
@@ -37,6 +43,7 @@ class UiContentResolver(private val staticsProvider: StaticsProvider) : ContentR
                     it.id, Album(
                         id = it.id,
                         name = it.data.name,
+                        date = it.data.date,
                         artistsIds = it.data.artistsIds,
                         discs = it.data.discs.map { disc ->
                             com.lelloman.pezzottify.android.ui.content.Disc(
@@ -113,6 +120,16 @@ class UiContentResolver(private val staticsProvider: StaticsProvider) : ContentR
                     )
                 )
             }
+        }
+    }
+
+    override suspend fun getArtistDiscography(artistId: String): ArtistDiscography? {
+        return when (val response = remoteApiClient.getArtistDiscography(artistId)) {
+            is RemoteApiResponse.Success -> ArtistDiscography(
+                albums = response.data.albums,
+                features = response.data.features
+            )
+            else -> null
         }
     }
 }

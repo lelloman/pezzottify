@@ -127,7 +127,7 @@ private fun MainScreenContent(state: MainScreenState, actions: MainScreenActions
                     ProfileScreen(rootNavController)
                 }
                 composable<Screen.Main.Artist> {
-                    ArtistScreen(it.toRoute<Screen.Main.Artist>().artistId)
+                    ArtistScreen(it.toRoute<Screen.Main.Artist>().artistId, navController)
                 }
                 composable<Screen.Main.Album> {
                     AlbumScreen(it.toRoute<Screen.Main.Album>().albumId)

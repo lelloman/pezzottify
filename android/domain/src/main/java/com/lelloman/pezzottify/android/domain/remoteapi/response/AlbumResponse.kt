@@ -63,6 +63,8 @@ fun AlbumResponse.toDomain() = object : Album {
         get() = this@toDomain.id
     override val name: String
         get() = this@toDomain.name
+    override val date: Long
+        get() = this@toDomain.date
     override val artistsIds: List<String>
         get() = this@toDomain.artistsIds
     override val coverGroup: List<String> = this@toDomain.coverGroup.map { it.id }
