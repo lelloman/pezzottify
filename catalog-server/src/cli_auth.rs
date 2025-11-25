@@ -84,6 +84,21 @@ enum InnerCommand {
     /// Shows all user handles.
     UserHandles,
 
+    /// Shows all available roles and their permissions.
+    ListRoles,
+
+    /// Adds a role to a user.
+    AddRole {
+        user_handle: String,
+        role: String,
+    },
+
+    /// Removes a role from a user.
+    RemoveRole {
+        user_handle: String,
+        role: String,
+    },
+
     /// Shows the path of the current auth db.
     Where,
 
@@ -150,13 +165,122 @@ fn execute_command(
                 InnerCommand::Show { user_handle } => {
                     let user_credentials = user_manager.get_user_credentials(&user_handle);
                     let user_token = user_manager.get_user_tokens(&user_handle);
+
+                    println!("User Credentials:");
                     println!("{:#?}", user_credentials);
+
+                    println!("\nAuth Tokens:");
                     for token in user_token.iter() {
                         println!("{:#?}", token);
+                    }
+
+                    // Get user_id to fetch roles and permissions
+                    if let Some(creds) = user_credentials {
+                        let user_id = creds.user_id;
+
+                        // Show roles
+                        match user_manager.get_user_roles(user_id) {
+                            Ok(roles) => {
+                                println!("\nRoles:");
+                                if roles.is_empty() {
+                                    println!("  (no roles assigned)");
+                                } else {
+                                    for role in roles.iter() {
+                                        println!("  - {}", role.to_string());
+                                    }
+                                }
+                            }
+                            Err(err) => {
+                                println!("\nFailed to get roles: {}", err);
+                            }
+                        }
+
+                        // Show resolved permissions
+                        match user_manager.get_user_permissions(user_id) {
+                            Ok(permissions) => {
+                                println!("\nResolved Permissions:");
+                                if permissions.is_empty() {
+                                    println!("  (no permissions)");
+                                } else {
+                                    for permission in permissions.iter() {
+                                        println!("  - {:?}", permission);
+                                    }
+                                }
+                            }
+                            Err(err) => {
+                                println!("\nFailed to get permissions: {}", err);
+                            }
+                        }
                     }
                 }
                 InnerCommand::UserHandles => {
                     println!("{:#?}", user_manager.get_all_user_handles());
+                }
+                InnerCommand::ListRoles => {
+                    use user::UserRole;
+                    println!("Available Roles:\n");
+                    for role in &[UserRole::Admin, UserRole::Regular] {
+                        println!("Role: {}", role.to_string());
+                        println!("Permissions:");
+                        for permission in role.permissions() {
+                            println!("  - {:?}", permission);
+                        }
+                        println!();
+                    }
+                }
+                InnerCommand::AddRole { user_handle, role } => {
+                    use user::UserRole;
+                    let role_enum = match UserRole::from_str(&role) {
+                        Some(r) => r,
+                        None => {
+                            return CommandExecutionResult::Error(format!(
+                                "Invalid role '{}'. Valid roles are: Admin, Regular",
+                                role
+                            ));
+                        }
+                    };
+
+                    let user_id = match user_manager.get_user_credentials(&user_handle) {
+                        Some(creds) => creds.user_id,
+                        None => {
+                            return CommandExecutionResult::Error(format!(
+                                "User '{}' not found",
+                                user_handle
+                            ));
+                        }
+                    };
+
+                    if let Err(err) = user_manager.add_user_role(user_id, role_enum) {
+                        return CommandExecutionResult::Error(format!("{}", err));
+                    }
+                    println!("Role '{}' added to user '{}'", role, user_handle);
+                }
+                InnerCommand::RemoveRole { user_handle, role } => {
+                    use user::UserRole;
+                    let role_enum = match UserRole::from_str(&role) {
+                        Some(r) => r,
+                        None => {
+                            return CommandExecutionResult::Error(format!(
+                                "Invalid role '{}'. Valid roles are: Admin, Regular",
+                                role
+                            ));
+                        }
+                    };
+
+                    let user_id = match user_manager.get_user_credentials(&user_handle) {
+                        Some(creds) => creds.user_id,
+                        None => {
+                            return CommandExecutionResult::Error(format!(
+                                "User '{}' not found",
+                                user_handle
+                            ));
+                        }
+                    };
+
+                    if let Err(err) = user_manager.remove_user_role(user_id, role_enum) {
+                        return CommandExecutionResult::Error(format!("{}", err));
+                    }
+                    println!("Role '{}' removed from user '{}'", role, user_handle);
                 }
                 InnerCommand::Where => {
                     println!("{}", db_path);

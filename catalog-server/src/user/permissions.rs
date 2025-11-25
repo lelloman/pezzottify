@@ -40,8 +40,6 @@ impl Permission {
 
 const ADMIN_PERMISSIONS: &'static [Permission] = &[
     Permission::AccessCatalog,
-    Permission::LikeContent,
-    Permission::OwnPlaylists,
     Permission::EditCatalog,
     Permission::ManagePermissions,
     Permission::IssueContentDownload,

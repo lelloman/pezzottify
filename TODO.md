@@ -29,7 +29,8 @@
 
 ## [catalog-server]
 
-- Update cli-auth to include user roles
+- Add extra permission management to cli-auth (time-based and countdown-based grants)
+- Create custom, flashy, modern looking CLI interface style for cli-auth
 - Implement a rate limiting of some sort
 - Create admin API endpoints for managing user roles and permissions (ManagePermissions permission)
 - Implement catalog editing endpoints (EditCatalog permission)
@@ -39,9 +40,10 @@
 - Set last used to auth token
 - Check UserStore return type, we should not swallow errors
 - Verify that all sqlite operations are performed within a transaction
-- Delete cli_search and clean up unused stuff and format and warnings
 - Add more unit tests (expecially to db, like migrations?)
+- ~Delete cli_search and clean up unused stuff and format and warnings~
 - ~Add user roles~
+- ~Update cli-auth to include user roles~
 - ~Add hard limit for playlist size (150?)~
 - ~Add user playlists~
 - ~Make no_checks a cli args rather than build feature~
