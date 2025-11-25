@@ -597,7 +597,7 @@ pub async fn run_server(
     };
     let app = make_app(config, catalog, search_vault, user_store)?;
 
-    let listener = tokio::net::TcpListener::bind(format!("127.0.0.1:{}", port))
+    let listener = tokio::net::TcpListener::bind(format!("0.0.0.0:{}", port))
         .await
         .unwrap();
 
