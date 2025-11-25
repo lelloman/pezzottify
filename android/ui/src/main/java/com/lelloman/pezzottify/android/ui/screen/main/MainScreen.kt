@@ -72,13 +72,13 @@ enum class BottomNavigationRoute(
 }
 
 @Composable
-fun MainScreen() {
+fun MainScreen(rootNavController: androidx.navigation.NavController) {
     val viewModel = hiltViewModel<MainScreenViewModel>()
-    MainScreenContent(state = viewModel.state.collectAsState().value, viewModel)
+    MainScreenContent(state = viewModel.state.collectAsState().value, viewModel, rootNavController)
 }
 
 @Composable
-private fun MainScreenContent(state: MainScreenState, actions: MainScreenActions) {
+private fun MainScreenContent(state: MainScreenState, actions: MainScreenActions, rootNavController: androidx.navigation.NavController) {
     val navController = rememberNavController()
     Scaffold(
         bottomBar = {
@@ -124,7 +124,7 @@ private fun MainScreenContent(state: MainScreenState, actions: MainScreenActions
                 composable<Screen.Main.Library> { LibraryScreen() }
 
                 composable<Screen.Main.Home.Profile> {
-                    ProfileScreen(navController)
+                    ProfileScreen(rootNavController)
                 }
                 composable<Screen.Main.Artist> {
                     ArtistScreen(it.toRoute<Screen.Main.Artist>().artistId)
