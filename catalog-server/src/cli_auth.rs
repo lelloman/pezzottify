@@ -1,8 +1,6 @@
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result};
 use clap::{CommandFactory, Parser, Subcommand};
-use sha2::digest::crypto_common::InnerUser;
 use std::{
-    io::{self, BufRead, Write},
     path::PathBuf,
     sync::{Arc, Mutex},
 };
@@ -23,10 +21,9 @@ use user::SqliteUserStore;
 use rustyline::{
     completion::Completer,
     highlight::Highlighter,
-    hint::Hinter,
-    history::{FileHistory, History},
+    history::FileHistory,
     validate::Validator,
-    CompletionType, Config, DefaultEditor, Editor, Helper,
+    CompletionType, Config, Editor, Helper,
 };
 
 fn parse_path(s: &str) -> Result<PathBuf> {

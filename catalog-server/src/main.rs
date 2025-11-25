@@ -2,15 +2,13 @@ use anyhow::{Context, Result};
 use clap::Parser;
 use std::{fmt::Debug, path::PathBuf};
 use tracing::{info, level_filters::LevelFilter};
-use tracing_subscriber::{
-    filter::Directive, layer::SubscriberExt, util::SubscriberInitExt, EnvFilter,
-};
+use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
 
 mod catalog;
 use catalog::Catalog;
 
 mod search;
-use search::{NoOpSearchVault, PezzotHashSearchVault, SearchVault};
+use search::{PezzotHashSearchVault, SearchVault};
 
 mod server;
 use server::{run_server, RequestsLoggingLevel};

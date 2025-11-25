@@ -1,3 +1,8 @@
+//! HTTP server implementation with route handlers
+//! Note: Many functions appear unused but are registered as route handlers
+
+#![allow(dead_code)] // Route handlers registered dynamically
+
 use anyhow::Result;
 use std::{
     fs::File,
@@ -28,7 +33,7 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 
-#[cfg(slow)]
+#[cfg(feature = "slowdown")]
 use super::slowdown_request;
 use super::{
     http_cache, log_requests, make_search_routes, state::*, RequestsLoggingLevel, ServerConfig,
@@ -57,7 +62,7 @@ fn format_uptime(duration: Duration) -> String {
 
 async fn require_access_catalog(
     session: Session,
-    mut request: Request<Body>,
+    request: Request<Body>,
     next: Next,
 ) -> impl IntoResponse {
     if !session.has_permission(Permission::AccessCatalog) {
@@ -68,7 +73,7 @@ async fn require_access_catalog(
 
 async fn require_like_content(
     session: Session,
-    mut request: Request<Body>,
+    request: Request<Body>,
     next: Next,
 ) -> impl IntoResponse {
     if !session.has_permission(Permission::LikeContent) {
@@ -79,7 +84,7 @@ async fn require_like_content(
 
 async fn require_own_playlists(
     session: Session,
-    mut request: Request<Body>,
+    request: Request<Body>,
     next: Next,
 ) -> impl IntoResponse {
     if !session.has_permission(Permission::OwnPlaylists) {
@@ -131,7 +136,7 @@ async fn home(session: Option<Session>, State(state): State<ServerState>) -> imp
 }
 
 async fn get_artist(
-    session: Session,
+    _session: Session,
     State(catalog): State<GuardedCatalog>,
     Path(id): Path<String>,
 ) -> Response {
@@ -142,7 +147,7 @@ async fn get_artist(
 }
 
 async fn get_album(
-    session: Session,
+    _session: Session,
     State(catalog): State<GuardedCatalog>,
     Path(id): Path<String>,
 ) -> Response {
@@ -458,11 +463,11 @@ async fn logout(State(user_manager): State<GuardedUserManager>, session: Session
     }
 }
 
-async fn get_challenge(State(state): State<ServerState>) -> Response {
+async fn get_challenge(State(_state): State<ServerState>) -> Response {
     todo!()
 }
 
-async fn post_challenge(State(state): State<ServerState>) -> Response {
+async fn post_challenge(State(_state): State<ServerState>) -> Response {
     todo!()
 }
 
@@ -604,11 +609,10 @@ mod tests {
     use super::*;
     use crate::search::NoOpSearchVault;
     use crate::user::auth::UserAuthCredentials;
-    use crate::user::auth::{ActiveChallenge, AuthToken, AuthTokenValue};
+    use crate::user::auth::{AuthToken, AuthTokenValue};
     use crate::user::user_models::LikedContentType;
     use crate::user::{UserAuthCredentialsStore, UserAuthTokenStore};
     use axum::{body::Body, http::Request};
-    use std::collections::HashMap;
     use tower::ServiceExt; // for `call`, `oneshot`, and `ready
 
     #[tokio::test]

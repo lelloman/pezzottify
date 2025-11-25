@@ -1,10 +1,10 @@
+//! User data models
+#![allow(dead_code)] // Models for future API endpoints
+
 use std::collections::HashMap;
-use std::str::Chars;
 use std::time::SystemTime;
 
-use serde::{Deserialize, Serialize};
-
-use super::permissions::Permission;
+use serde::Serialize;
 
 pub struct User {
     pub id: String,

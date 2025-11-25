@@ -1,3 +1,8 @@
+//! Search API routes
+//! Note: Functions are feature-gated and used as route handlers
+
+#![allow(dead_code)] // Feature-gated search functionality
+
 use crate::search::{
     HashedItemType, ResolvedSearchResult, SearchResult, SearchedAlbum, SearchedArtist,
     SearchedTrack,
@@ -7,8 +12,7 @@ use axum::{extract::State, response::IntoResponse, routing::post, Json, Router};
 use chrono::Datelike;
 
 use super::{session::Session, state::ServerState};
-use crate::catalog::{Album, Artist, Catalog, Track};
-use crate::search::SearchVault;
+use crate::catalog::{Artist, Catalog};
 use serde::Deserialize;
 
 #[derive(Deserialize)]
@@ -149,7 +153,7 @@ impl IntoResponse for SearchResponse {
 
 #[cfg(not(feature = "no_search"))]
 async fn search(
-    session: Session,
+    _session: Session,
     State(server_state): State<ServerState>,
     Json(payload): Json<SearchBody>,
 ) -> impl IntoResponse {

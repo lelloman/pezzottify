@@ -1,11 +1,13 @@
+//! Request logging middleware
+#![allow(dead_code)] // Used as middleware
+
 use super::super::ServerConfig;
 use axum::extract::State;
 use axum::{
     body::Body,
     http::{header::HeaderMap, Request, Response},
-    middleware::{self, Next},
+    middleware::Next,
     response::IntoResponse,
-    Router,
 };
 use std::time::Instant;
 use tracing::{error, info};

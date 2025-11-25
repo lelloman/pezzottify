@@ -1,4 +1,4 @@
-use crate::catalog::{self, Catalog};
+use crate::catalog::Catalog;
 
 use super::{
     auth::PezzottifyHasher,

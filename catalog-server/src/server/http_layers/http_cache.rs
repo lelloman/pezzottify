@@ -1,8 +1,11 @@
+//! HTTP caching middleware
+#![allow(dead_code)] // Used as middleware
+
 use axum::{body::Body, extract::State, http::Request, middleware::Next, response::IntoResponse};
 
 pub async fn http_cache(
     State(max_age_sec): State<usize>,
-    mut request: Request<Body>,
+    request: Request<Body>,
     next: Next,
 ) -> impl IntoResponse {
     let response = next.run(request).await.into_response();

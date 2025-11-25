@@ -1,3 +1,6 @@
+//! Catalog data structures
+#![allow(dead_code)] // Some fields/methods for future use
+
 use super::album::{ResolvedAlbum, ResolvedTrack};
 use super::artist::ArtistDiscography;
 use super::track::ArtistWithRole;
@@ -488,7 +491,7 @@ impl Catalog {
                 for entry in entries.flatten() {
                     let path = entry.path();
 
-                    if let Ok(d) = Dirs::from_root(&path, &mut vec![]) {
+                    if let Ok(_d) = Dirs::from_root(&path, &mut vec![]) {
                         return Some(path);
                     }
                 }

@@ -1,3 +1,6 @@
+//! Custom hashing for search functionality
+#![allow(dead_code)] // Feature-gated search functionality
+
 use sha2::{Digest, Sha256};
 use std::{ops::Sub, u32};
 use unicode_segmentation::UnicodeSegmentation;

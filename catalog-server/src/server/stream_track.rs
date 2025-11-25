@@ -1,3 +1,6 @@
+//! Audio streaming functionality
+#![allow(dead_code)] // Used as route handler
+
 use super::{
     session::Session,
     state::{GuardedCatalog, ServerState},
@@ -9,7 +12,6 @@ use axum::{
     response::{IntoResponse, Response},
 };
 
-use serde::de;
 use tokio::{
     fs::File,
     io::{AsyncSeekExt, BufReader, SeekFrom},

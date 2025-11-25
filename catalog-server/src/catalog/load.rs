@@ -1,3 +1,6 @@
+//! Catalog loading functionality
+#![allow(dead_code)] // Validation functions for future use
+
 use super::{Catalog, LoadCatalogProblem, Track};
 use anyhow::{bail, Context, Result};
 use rayon::iter::ParallelIterator;

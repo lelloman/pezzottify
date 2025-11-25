@@ -1,3 +1,6 @@
+//! Search vault implementations
+#![allow(dead_code)] // Feature-gated search functionality
+
 use serde::Serialize;
 
 use super::pezzott_hash::PezzottHash;
@@ -29,7 +32,6 @@ pub struct SearchResult {
 }
 
 #[derive(Debug, Serialize)]
-#[feature(nosearch)]
 pub struct SearchedAlbum {
     pub id: String,
     pub name: String,
@@ -183,7 +185,7 @@ impl SearchVault for NoOpSearchVault {
         &self,
         _query: &str,
         _max_results: usize,
-        filter: Option<Vec<HashedItemType>>,
+        _filter: Option<Vec<HashedItemType>>,
     ) -> Vec<SearchResult> {
         Vec::new()
     }

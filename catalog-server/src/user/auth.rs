@@ -1,13 +1,14 @@
-use anyhow::{bail, Context, Result};
+//! Authentication and authorization
+#![allow(dead_code)] // Challenge system for future use
 
-use rand::{thread_rng, Rng};
+use anyhow::{bail, Result};
+
+use rand::Rng;
 use rand_distr::Alphanumeric;
 use serde::{Deserialize, Serialize};
 
 use std::str::FromStr;
-use std::{collections::HashMap, sync::Mutex, time::SystemTime};
-
-use super::UserStore;
+use std::time::SystemTime;
 
 #[derive(Clone, PartialEq, Eq, Hash, Serialize, Deserialize, Debug)]
 pub struct AuthTokenValue(pub String);
@@ -22,7 +23,7 @@ pub struct AuthToken {
 
 impl AuthTokenValue {
     pub fn generate() -> AuthTokenValue {
-        let rng = thread_rng();
+        let rng = rand::rng();
         let random_string: String = rng
             .sample_iter(&Alphanumeric)
             .take(64)
@@ -101,7 +102,7 @@ impl PezzottifyHasher {
         }
     }
 
-    pub fn verify<T: AsRef<str>>(&self, plain_pw: T, target_hash: T, salt: T) -> Result<bool> {
+    pub fn verify<T: AsRef<str>>(&self, plain_pw: T, target_hash: T, _salt: T) -> Result<bool> {
         match self {
             PezzottifyHasher::Argon2 => {
                 pezzottify_argon2::verify(plain_pw.as_ref().as_bytes(), target_hash)

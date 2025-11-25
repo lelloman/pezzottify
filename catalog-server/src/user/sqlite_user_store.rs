@@ -13,7 +13,6 @@ use std::{
     time::SystemTime,
 };
 use tracing::{debug, info};
-use tracing_subscriber::field::debug;
 
 use super::auth::PezzottifyHasher;
 use rand::{rng, Rng};
