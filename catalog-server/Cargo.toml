@@ -53,9 +53,5 @@ name = "catalog-server"
 path = "src/main.rs"
 
 [[bin]]
-name = "cli-search"
-path = "src/cli_search.rs"
-
-[[bin]]
 name = "cli-auth"
 path = "src/cli_auth.rs"

@@ -890,11 +890,8 @@ impl UserStore for SqliteUserStore {
                     .duration_since(SystemTime::UNIX_EPOCH)
                     .unwrap()
                     .as_secs() as i64;
-                let end_time_secs = end_time.map(|t| {
-                    t.duration_since(SystemTime::UNIX_EPOCH)
-                        .unwrap()
-                        .as_secs() as i64
-                });
+                let end_time_secs = end_time
+                    .map(|t| t.duration_since(SystemTime::UNIX_EPOCH).unwrap().as_secs() as i64);
                 let countdown_i64 = countdown.map(|c| c as i64);
 
                 conn.execute(
@@ -1272,8 +1269,11 @@ mod tests {
             VERSIONED_SCHEMAS[3].create(&conn).unwrap(); // V3 is at index 3
 
             // Add some test data
-            conn.execute("INSERT INTO user (handle) VALUES (?1)", params!["test_user"])
-                .unwrap();
+            conn.execute(
+                "INSERT INTO user (handle) VALUES (?1)",
+                params!["test_user"],
+            )
+            .unwrap();
             let user_id = conn.last_insert_rowid();
 
             conn.execute(

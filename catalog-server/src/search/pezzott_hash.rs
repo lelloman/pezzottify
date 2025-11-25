@@ -48,7 +48,7 @@ impl PezzottHash {
         let avg_score = total / min_scores_count;
 
         let length_adjustment = if self.hashed_text.len() > query.hashed_text.len() {
-           1.0f64
+            1.0f64
         } else {
             let diff = query.hashed_text.len() - self.hashed_text.len();
             1.0 + diff as f64 * 0.1f64
