@@ -2,6 +2,7 @@ package com.lelloman.pezzottify.android.ui.component
 
 import android.annotation.SuppressLint
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
@@ -12,6 +13,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.rememberVectorPainter
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.vectorResource
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
@@ -51,6 +53,7 @@ fun PezzottifyImage(
             model = urls[currentUrlIndex],
             contentDescription = contentDescription,
             modifier = shape.modifier(modifier),
+            contentScale = shape.contentScale,
             placeholder = rememberVectorPainter(placeholder.getIcon()),
             error = rememberVectorPainter(placeholder.getIcon()),
             onError = {
@@ -95,6 +98,7 @@ fun PezzottifyImage(
 sealed interface PezzottifyImageShape {
 
     fun modifier(modifier: Modifier): Modifier
+    val contentScale: ContentScale get() = ContentScale.Fit
 
     data object SmallSquare : PezzottifyImageShape {
         val size = 96.dp
@@ -103,6 +107,11 @@ sealed interface PezzottifyImageShape {
 
     data object FullWidthPoster : PezzottifyImageShape {
         override fun modifier(modifier: Modifier) = modifier.fillMaxWidth()
+    }
+
+    data object FullSize : PezzottifyImageShape {
+        override fun modifier(modifier: Modifier) = modifier.fillMaxSize()
+        override val contentScale: ContentScale = ContentScale.Crop
     }
 }
 
