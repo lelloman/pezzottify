@@ -1249,7 +1249,7 @@ impl UserAuthCredentialsStore for SqliteUserStore {
         match credentials.username_password.as_ref() {
             Some(password_credentials) => {
                 let updated = tx.execute(
-                    "UPDATE user_password_credentials SET salt = ?1, hash = ?2, hasher = ?3, user_id = ?4",
+                    "UPDATE user_password_credentials SET salt = ?1, hash = ?2, hasher = ?3 WHERE user_id = ?4",
                     params![
                         password_credentials.salt,
                         password_credentials.hash,

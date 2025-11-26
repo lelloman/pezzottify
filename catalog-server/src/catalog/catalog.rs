@@ -206,7 +206,8 @@ fn parse_artists(dirs: &Dirs, problems: &mut Vec<Problem>) -> HashMap<String, Ar
         };
 
         let file_text = std::fs::read_to_string(&path).unwrap_or_default();
-        let mut parsed_artist: Artist = match serde_json::from_str(&file_text) {
+        let json_read: Result<Artist, _> = serde_json::from_str(&file_text);
+        let mut parsed_artist: Artist = match json_read {
             Ok(x) => x,
             Err(x) => {
                 problems.push(Problem::InvalidArtistFile(format!(
@@ -375,10 +376,14 @@ fn parse_albums_and_tracks(
                 e
             )));
 
-        let json_read = serde_json::from_str(&album_json_string);
-        let mut album: Album = problemo!(json_read, problems, |e| {
-            Problem::InvalidAlbumFile(format!("Could not parse album.\n{}", e))
-        });
+        let json_read: Result<Album, _> = serde_json::from_str(&album_json_string);
+        let mut album: Album = match json_read {
+            Ok(a) => a,
+            Err(e) => {
+                problems.push(Problem::InvalidAlbumFile(format!("Could not parse album.\n{}", e)));
+                continue;
+            }
+        };
         album.id = format!("A{}", album.id);
         album.artists_ids = album
             .artists_ids

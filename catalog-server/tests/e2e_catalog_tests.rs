@@ -27,7 +27,6 @@ async fn test_get_artist_returns_correct_data() {
     let artist: serde_json::Value = response.json().await.unwrap();
     assert_eq!(artist["id"], ARTIST_1_ID);
     assert_eq!(artist["name"], ARTIST_1_NAME);
-    assert_eq!(artist["image_id"], IMAGE_1_ID);
 }
 
 #[tokio::test]
@@ -49,8 +48,13 @@ async fn test_get_artist_discography() {
 
     assert_eq!(response.status(), StatusCode::OK);
 
-    let albums: Vec<String> = response.json().await.unwrap();
-    assert!(albums.contains(&ALBUM_1_ID.to_string()));
+    let discography: serde_json::Value = response.json().await.unwrap();
+    let albums = discography["albums"].as_array().unwrap();
+    let album_ids: Vec<String> = albums
+        .iter()
+        .map(|v| v.as_str().unwrap().to_string())
+        .collect();
+    assert!(album_ids.contains(&ALBUM_1_ID.to_string()));
 }
 
 #[tokio::test]
@@ -86,11 +90,18 @@ async fn test_get_album_returns_correct_data() {
 
     let album: serde_json::Value = response.json().await.unwrap();
     assert_eq!(album["id"], ALBUM_1_ID);
-    assert_eq!(album["title"], ALBUM_1_TITLE);
-    assert_eq!(album["artist_id"], ARTIST_1_ID);
+    assert_eq!(album["name"], ALBUM_1_TITLE);
 
-    // Verify tracks are included
-    let tracks = album["tracks"].as_array().unwrap();
+    // Verify artist is included
+    let artists = album["artists_ids"].as_array().unwrap();
+    assert_eq!(artists[0], ARTIST_1_ID);
+
+    // Verify discs are included
+    let discs = album["discs"].as_array().unwrap();
+    assert_eq!(discs.len(), 1);
+
+    // Verify tracks in first disc
+    let tracks = discs[0]["tracks"].as_array().unwrap();
     assert_eq!(tracks.len(), 3);
 }
 
@@ -113,13 +124,13 @@ async fn test_get_multiple_albums() {
     let response = client.get_album(ALBUM_1_ID).await;
     assert_eq!(response.status(), StatusCode::OK);
     let album1: serde_json::Value = response.json().await.unwrap();
-    assert_eq!(album1["title"], ALBUM_1_TITLE);
+    assert_eq!(album1["name"], ALBUM_1_TITLE);
 
     // Get second album
     let response = client.get_album(ALBUM_2_ID).await;
     assert_eq!(response.status(), StatusCode::OK);
     let album2: serde_json::Value = response.json().await.unwrap();
-    assert_eq!(album2["title"], ALBUM_2_TITLE);
+    assert_eq!(album2["name"], ALBUM_2_TITLE);
 }
 
 // =============================================================================
@@ -137,7 +148,7 @@ async fn test_get_track_returns_correct_data() {
 
     let track: serde_json::Value = response.json().await.unwrap();
     assert_eq!(track["id"], TRACK_1_ID);
-    assert_eq!(track["title"], TRACK_1_TITLE);
+    assert_eq!(track["name"], TRACK_1_TITLE);
 }
 
 #[tokio::test]
@@ -149,11 +160,11 @@ async fn test_get_resolved_track() {
 
     assert_eq!(response.status(), StatusCode::OK);
 
-    let track: serde_json::Value = response.json().await.unwrap();
-    assert_eq!(track["id"], TRACK_1_ID);
-    // Resolved track should include artist and album info
-    assert!(track.get("artist").is_some());
-    assert!(track.get("album").is_some());
+    let resolved: serde_json::Value = response.json().await.unwrap();
+    // Resolved track returns album with tracks and artists
+    assert!(resolved.get("album").is_some());
+    assert!(resolved.get("tracks").is_some());
+    assert!(resolved.get("artists").is_some());
 }
 
 #[tokio::test]

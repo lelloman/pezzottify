@@ -13,7 +13,7 @@ use pezzottify_catalog_server::user::auth::PezzottifyHasher;
 use serde_json::json;
 use std::fs;
 use std::time::SystemTime;
-use tempfile::{NamedTempFile, TempDir};
+use tempfile::TempDir;
 
 /// Test audio file embedded at compile time
 const TEST_AUDIO_BYTES: &[u8] = include_bytes!("../fixtures/test-audio.mp3");
@@ -30,18 +30,12 @@ pub fn create_test_catalog() -> Result<TempDir> {
     fs::create_dir_all(dir.path().join("artists"))?;
     fs::create_dir_all(dir.path().join("images"))?;
 
-    // Copy audio files (all same content, different filenames)
-    for i in 1..=5 {
-        fs::write(
-            dir.path().join(format!("albums/track-{}.mp3", i)),
-            TEST_AUDIO_BYTES,
-        )?;
-    }
+    // Audio files will be created per-album in write_album_json
 
-    // Copy images
+    // Copy images (without extension - ID is the full filename)
     for i in 1..=3 {
         fs::write(
-            dir.path().join(format!("images/image-{}.jpg", i)),
+            dir.path().join(format!("images/image-{}", i)),
             TEST_IMAGE_BYTES,
         )?;
     }
@@ -58,9 +52,9 @@ pub fn create_test_catalog() -> Result<TempDir> {
         ARTIST_1_ID,
         IMAGE_1_ID,
         &[
-            (TRACK_1_ID, TRACK_1_TITLE, "track-1.mp3", 120000),
-            (TRACK_2_ID, TRACK_2_TITLE, "track-2.mp3", 180000),
-            (TRACK_3_ID, TRACK_3_TITLE, "track-3.mp3", 150000),
+            (TRACK_1_ID, TRACK_1_TITLE, "track_1.mp3", 120000),
+            (TRACK_2_ID, TRACK_2_TITLE, "track_2.mp3", 180000),
+            (TRACK_3_ID, TRACK_3_TITLE, "track_3.mp3", 150000),
         ],
     )?;
 
@@ -71,8 +65,8 @@ pub fn create_test_catalog() -> Result<TempDir> {
         ARTIST_2_ID,
         IMAGE_2_ID,
         &[
-            (TRACK_4_ID, TRACK_4_TITLE, "track-4.mp3", 200000),
-            (TRACK_5_ID, TRACK_5_TITLE, "track-5.mp3", 160000),
+            (TRACK_4_ID, TRACK_4_TITLE, "track_4.mp3", 200000),
+            (TRACK_5_ID, TRACK_5_TITLE, "track_5.mp3", 160000),
         ],
     )?;
 
@@ -80,20 +74,28 @@ pub fn create_test_catalog() -> Result<TempDir> {
 }
 
 /// Writes an artist JSON file to the catalog
+/// ID should be the catalog ID with prefix (e.g., "R1"), which will be stripped for the filename and JSON
 fn write_artist_json(
     dir: &TempDir,
     id: &str,
     name: &str,
     image_id: &str,
 ) -> Result<()> {
+    // Strip the "R" prefix from the ID for the JSON and filename
+    let json_id = id.strip_prefix("R").unwrap_or(id);
+
     let artist = json!({
-        "id": id,
+        "id": json_id,
         "name": name,
-        "image_id": image_id
+        "genre": [],
+        "portraits": [],
+        "activity_periods": [],
+        "related": [],
+        "portrait_group": []
     });
 
     fs::write(
-        dir.path().join(format!("artists/{}.json", id)),
+        dir.path().join(format!("artists/artist_{}.json", json_id)),
         serde_json::to_string_pretty(&artist)?,
     )?;
 
@@ -101,36 +103,92 @@ fn write_artist_json(
 }
 
 /// Writes an album JSON file to the catalog
+/// IDs should be catalog IDs with prefixes (e.g., "A1", "R1", "T1"), which will be stripped for JSON
 fn write_album_json(
     dir: &TempDir,
     id: &str,
     title: &str,
     artist_id: &str,
-    image_id: &str,
+    _image_id: &str,
     tracks: &[(&str, &str, &str, u64)],
 ) -> Result<()> {
-    let tracks_json: Vec<_> = tracks
+    // Strip the "A" prefix from album ID and "R" from artist ID for the JSON
+    let json_album_id = id.strip_prefix("A").unwrap_or(id);
+    let json_artist_id = artist_id.strip_prefix("R").unwrap_or(artist_id);
+
+    // Create album directory
+    let album_dir = dir.path().join(format!("albums/album_{}", json_album_id));
+    fs::create_dir_all(&album_dir)?;
+
+    // Collect track IDs for the disc
+    let track_ids: Vec<String> = tracks
         .iter()
-        .map(|(id, title, file, duration)| {
-            json!({
-                "id": id,
-                "title": title,
-                "file_name": file,
-                "duration_ms": duration
-            })
+        .map(|(id, _, _, _)| {
+            // Strip the "T" prefix from track ID
+            id.strip_prefix("T").unwrap_or(id).to_string()
         })
         .collect();
 
+    // Write individual track JSON files and audio files
+    for (track_id, track_title, file_name, duration_ms) in tracks {
+        let json_track_id = track_id.strip_prefix("T").unwrap_or(track_id);
+
+        // Write audio file
+        fs::write(album_dir.join(file_name), TEST_AUDIO_BYTES)?;
+
+        // Write track JSON file
+        let track_json = json!({
+            "id": json_track_id,
+            "name": track_title,
+            "album_id": json_album_id,
+            "artists_ids": [json_artist_id],
+            "number": 1,
+            "disc_number": 1,
+            "duration": duration_ms / 1000,  // Convert ms to seconds
+            "is_explicit": false,
+            "files": {
+                "MP3_320": file_name
+            },
+            "alternatives": [],
+            "tags": [],
+            "earliest_live_timestamp": 0,
+            "has_lyrics": false,
+            "language_of_performance": [],
+            "original_title": "",
+            "version_title": "",
+            "artists_with_role": []
+        });
+
+        fs::write(
+            album_dir.join(format!("track_{}.json", json_track_id)),
+            serde_json::to_string_pretty(&track_json)?,
+        )?;
+    }
+
+    // Write album JSON with discs structure
     let album = json!({
-        "id": id,
-        "title": title,
-        "artist_id": artist_id,
-        "image_id": image_id,
-        "tracks": tracks_json
+        "id": json_album_id,
+        "name": title,
+        "album_type": "ALBUM",
+        "artists_ids": [json_artist_id],
+        "label": "",
+        "date": 0,
+        "genres": [],
+        "covers": [],
+        "discs": [{
+            "number": 1,
+            "name": "",
+            "tracks": track_ids
+        }],
+        "related": [],
+        "cover_group": [],
+        "original_title": "",
+        "version_title": "",
+        "type_str": ""
     });
 
     fs::write(
-        dir.path().join(format!("albums/{}.json", id)),
+        album_dir.join(format!("album_{}.json", json_album_id)),
         serde_json::to_string_pretty(&album)?,
     )?;
 
@@ -143,15 +201,19 @@ pub fn create_test_db_with_users() -> Result<(TempDir, String)> {
     let temp_dir = TempDir::new()?;
     let db_path = temp_dir.path().join("test.db");
 
-    let store = SqliteUserStore::new(&db_path)?;
+    {
+        let store = SqliteUserStore::new(&db_path)?;
 
-    // Create regular test user
-    let user_id = create_user_with_password_and_role(&store, TEST_USER, TEST_PASS, UserRole::Regular)?;
-    eprintln!("Created test user {} with id {}", TEST_USER, user_id);
+        // Create regular test user
+        let user_id = create_user_with_password_and_role(&store, TEST_USER, TEST_PASS, UserRole::Regular)?;
+        eprintln!("Created test user {} with id {}", TEST_USER, user_id);
 
-    // Create admin test user
-    let admin_id = create_user_with_password_and_role(&store, ADMIN_USER, ADMIN_PASS, UserRole::Admin)?;
-    eprintln!("Created admin user {} with id {}", ADMIN_USER, admin_id);
+        // Create admin test user
+        let admin_id = create_user_with_password_and_role(&store, ADMIN_USER, ADMIN_PASS, UserRole::Admin)?;
+        eprintln!("Created admin user {} with id {}", ADMIN_USER, admin_id);
+
+        // Store is dropped here, ensuring connection is closed
+    }
 
     let db_path_str = db_path.to_string_lossy().to_string();
     eprintln!("Created test database at: {}", db_path_str);

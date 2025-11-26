@@ -142,7 +142,7 @@ pub async fn stream_track(
         Some(ByteRange {
             start_inclusive: Some(start),
             end_inclusive: Some(end),
-        }) => end - start,
+        }) => end - start + 1,
     };
     let status_code = match byte_range {
         None

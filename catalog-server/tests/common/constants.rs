@@ -24,32 +24,32 @@ pub const ADMIN_PASS: &str = "adminpass123";
 // Test Catalog IDs
 // ============================================================================
 
-/// Artist ID for "The Test Band"
-pub const ARTIST_1_ID: &str = "artist-1";
+/// Artist ID for "The Test Band" (catalog ID will be R1)
+pub const ARTIST_1_ID: &str = "R1";
 
-/// Artist ID for "Jazz Ensemble"
-pub const ARTIST_2_ID: &str = "artist-2";
+/// Artist ID for "Jazz Ensemble" (catalog ID will be R2)
+pub const ARTIST_2_ID: &str = "R2";
 
-/// Album ID for "First Album" by The Test Band
-pub const ALBUM_1_ID: &str = "album-1";
+/// Album ID for "First Album" by The Test Band (catalog ID will be A1)
+pub const ALBUM_1_ID: &str = "A1";
 
-/// Album ID for "Jazz Collection" by Jazz Ensemble
-pub const ALBUM_2_ID: &str = "album-2";
+/// Album ID for "Jazz Collection" by Jazz Ensemble (catalog ID will be A2)
+pub const ALBUM_2_ID: &str = "A2";
 
-/// Track ID for "Opening Track" on First Album
-pub const TRACK_1_ID: &str = "track-1";
+/// Track ID for "Opening Track" on First Album (catalog ID will be T1)
+pub const TRACK_1_ID: &str = "T1";
 
-/// Track ID for "Middle Track" on First Album
-pub const TRACK_2_ID: &str = "track-2";
+/// Track ID for "Middle Track" on First Album (catalog ID will be T2)
+pub const TRACK_2_ID: &str = "T2";
 
-/// Track ID for "Closing Track" on First Album
-pub const TRACK_3_ID: &str = "track-3";
+/// Track ID for "Closing Track" on First Album (catalog ID will be T3)
+pub const TRACK_3_ID: &str = "T3";
 
-/// Track ID for "Smooth Jazz" on Jazz Collection
-pub const TRACK_4_ID: &str = "track-4";
+/// Track ID for "Smooth Jazz" on Jazz Collection (catalog ID will be T4)
+pub const TRACK_4_ID: &str = "T4";
 
-/// Track ID for "Upbeat Jazz" on Jazz Collection
-pub const TRACK_5_ID: &str = "track-5";
+/// Track ID for "Upbeat Jazz" on Jazz Collection (catalog ID will be T5)
+pub const TRACK_5_ID: &str = "T5";
 
 /// Image ID for artist-1 and album-1
 pub const IMAGE_1_ID: &str = "image-1";
