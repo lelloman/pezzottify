@@ -91,3 +91,215 @@ pub enum PermissionGrant {
         countdown: Option<u64>,
     },
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn permission_to_int_all_variants() {
+        assert_eq!(Permission::AccessCatalog.to_int(), 1);
+        assert_eq!(Permission::LikeContent.to_int(), 2);
+        assert_eq!(Permission::OwnPlaylists.to_int(), 3);
+        assert_eq!(Permission::EditCatalog.to_int(), 4);
+        assert_eq!(Permission::ManagePermissions.to_int(), 5);
+        assert_eq!(Permission::IssueContentDownload.to_int(), 6);
+        assert_eq!(Permission::RebootServer.to_int(), 7);
+    }
+
+    #[test]
+    fn permission_from_int_valid_values() {
+        assert_eq!(Permission::from_int(1), Some(Permission::AccessCatalog));
+        assert_eq!(Permission::from_int(2), Some(Permission::LikeContent));
+        assert_eq!(Permission::from_int(3), Some(Permission::OwnPlaylists));
+        assert_eq!(Permission::from_int(4), Some(Permission::EditCatalog));
+        assert_eq!(Permission::from_int(5), Some(Permission::ManagePermissions));
+        assert_eq!(Permission::from_int(6), Some(Permission::IssueContentDownload));
+        assert_eq!(Permission::from_int(7), Some(Permission::RebootServer));
+    }
+
+    #[test]
+    fn permission_from_int_invalid_values() {
+        assert_eq!(Permission::from_int(0), None);
+        assert_eq!(Permission::from_int(8), None);
+        assert_eq!(Permission::from_int(-1), None);
+        assert_eq!(Permission::from_int(100), None);
+        assert_eq!(Permission::from_int(i32::MAX), None);
+        assert_eq!(Permission::from_int(i32::MIN), None);
+    }
+
+    #[test]
+    fn permission_roundtrip() {
+        let permissions = [
+            Permission::AccessCatalog,
+            Permission::LikeContent,
+            Permission::OwnPlaylists,
+            Permission::EditCatalog,
+            Permission::ManagePermissions,
+            Permission::IssueContentDownload,
+            Permission::RebootServer,
+        ];
+
+        for permission in &permissions {
+            let int_val = permission.to_int();
+            let recovered = Permission::from_int(int_val);
+            assert_eq!(recovered, Some(*permission));
+        }
+    }
+
+    #[test]
+    fn user_role_admin_permissions() {
+        let admin_perms = UserRole::Admin.permissions();
+
+        assert_eq!(admin_perms.len(), 5);
+        assert!(admin_perms.contains(&Permission::AccessCatalog));
+        assert!(admin_perms.contains(&Permission::EditCatalog));
+        assert!(admin_perms.contains(&Permission::ManagePermissions));
+        assert!(admin_perms.contains(&Permission::IssueContentDownload));
+        assert!(admin_perms.contains(&Permission::RebootServer));
+
+        assert!(!admin_perms.contains(&Permission::LikeContent));
+        assert!(!admin_perms.contains(&Permission::OwnPlaylists));
+    }
+
+    #[test]
+    fn user_role_regular_permissions() {
+        let regular_perms = UserRole::Regular.permissions();
+
+        assert_eq!(regular_perms.len(), 3);
+        assert!(regular_perms.contains(&Permission::AccessCatalog));
+        assert!(regular_perms.contains(&Permission::LikeContent));
+        assert!(regular_perms.contains(&Permission::OwnPlaylists));
+
+        assert!(!regular_perms.contains(&Permission::EditCatalog));
+        assert!(!regular_perms.contains(&Permission::ManagePermissions));
+        assert!(!regular_perms.contains(&Permission::IssueContentDownload));
+        assert!(!regular_perms.contains(&Permission::RebootServer));
+    }
+
+    #[test]
+    fn user_role_to_string() {
+        assert_eq!(UserRole::Admin.to_string(), "Admin");
+        assert_eq!(UserRole::Regular.to_string(), "Regular");
+    }
+
+    #[test]
+    fn user_role_from_str_valid() {
+        assert_eq!(UserRole::from_str("Admin"), Some(UserRole::Admin));
+        assert_eq!(UserRole::from_str("Regular"), Some(UserRole::Regular));
+    }
+
+    #[test]
+    fn user_role_from_str_invalid() {
+        assert_eq!(UserRole::from_str("admin"), None);
+        assert_eq!(UserRole::from_str("regular"), None);
+        assert_eq!(UserRole::from_str("ADMIN"), None);
+        assert_eq!(UserRole::from_str(""), None);
+        assert_eq!(UserRole::from_str("User"), None);
+        assert_eq!(UserRole::from_str("SuperAdmin"), None);
+    }
+
+    #[test]
+    fn user_role_roundtrip() {
+        let admin = UserRole::Admin;
+        assert_eq!(UserRole::from_str(admin.to_string()), Some(admin));
+
+        let regular = UserRole::Regular;
+        assert_eq!(UserRole::from_str(regular.to_string()), Some(regular));
+    }
+
+    #[test]
+    fn permission_grant_by_role() {
+        let grant = PermissionGrant::ByRole(UserRole::Admin);
+
+        match grant {
+            PermissionGrant::ByRole(role) => {
+                assert_eq!(role, UserRole::Admin);
+            }
+            _ => panic!("Expected ByRole variant"),
+        }
+    }
+
+    #[test]
+    fn permission_grant_extra_with_end_time() {
+        let start = SystemTime::now();
+        let end = start + std::time::Duration::from_secs(3600);
+
+        let grant = PermissionGrant::Extra {
+            start_time: start,
+            end_time: Some(end),
+            permission: Permission::EditCatalog,
+            countdown: None,
+        };
+
+        match grant {
+            PermissionGrant::Extra {
+                start_time,
+                end_time,
+                permission,
+                countdown,
+            } => {
+                assert_eq!(start_time, start);
+                assert_eq!(end_time, Some(end));
+                assert_eq!(permission, Permission::EditCatalog);
+                assert_eq!(countdown, None);
+            }
+            _ => panic!("Expected Extra variant"),
+        }
+    }
+
+    #[test]
+    fn permission_grant_extra_with_countdown() {
+        let start = SystemTime::now();
+
+        let grant = PermissionGrant::Extra {
+            start_time: start,
+            end_time: None,
+            permission: Permission::RebootServer,
+            countdown: Some(5),
+        };
+
+        match grant {
+            PermissionGrant::Extra {
+                start_time,
+                end_time,
+                permission,
+                countdown,
+            } => {
+                assert_eq!(start_time, start);
+                assert_eq!(end_time, None);
+                assert_eq!(permission, Permission::RebootServer);
+                assert_eq!(countdown, Some(5));
+            }
+            _ => panic!("Expected Extra variant"),
+        }
+    }
+
+    #[test]
+    fn permission_grant_extra_with_both_time_and_countdown() {
+        let start = SystemTime::now();
+        let end = start + std::time::Duration::from_secs(7200);
+
+        let grant = PermissionGrant::Extra {
+            start_time: start,
+            end_time: Some(end),
+            permission: Permission::IssueContentDownload,
+            countdown: Some(10),
+        };
+
+        match grant {
+            PermissionGrant::Extra {
+                start_time,
+                end_time,
+                permission,
+                countdown,
+            } => {
+                assert_eq!(start_time, start);
+                assert_eq!(end_time, Some(end));
+                assert_eq!(permission, Permission::IssueContentDownload);
+                assert_eq!(countdown, Some(10));
+            }
+            _ => panic!("Expected Extra variant"),
+        }
+    }
+}
