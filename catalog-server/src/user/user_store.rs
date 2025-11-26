@@ -32,6 +32,10 @@ pub trait UserAuthTokenStore: Send + Sync {
 
     /// Returns all user's authentication tokens.
     fn get_all_user_auth_tokens(&self, user_handle: &str) -> Vec<AuthToken>;
+
+    /// Prunes unused auth tokens that haven't been used for the specified duration.
+    /// Returns the number of tokens that were deleted.
+    fn prune_unused_auth_tokens(&self, unused_for_days: u64) -> Result<usize>;
 }
 
 pub trait UserStore: UserAuthTokenStore + UserAuthCredentialsStore + Send + Sync {

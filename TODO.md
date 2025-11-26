@@ -38,9 +38,9 @@
 - Implement server reboot endpoint (RebootServer permission)
 - Create catalog db
 - After the catalog has been migrated to a db, modify artist, album and track models to have the reference to one "display image" id, then provide, if available other images
-- Set last used to auth token
 - Check UserStore return type, we should not swallow errors
 - Add more unit tests (expecially to db, like migrations?)
+- ~Set last used to auth token and implement token pruning~
 - ~Verify that all sqlite operations are performed within a transaction~
 - ~Implement a rate limiting of some sort~
 - ~Add extra permission management to cli-auth (time-based and countdown-based grants)~

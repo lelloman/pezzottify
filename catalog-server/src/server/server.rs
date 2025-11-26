@@ -950,6 +950,10 @@ mod tests {
         fn get_all_user_auth_tokens(&self, _user_handle: &str) -> Vec<AuthToken> {
             todo!()
         }
+
+        fn prune_unused_auth_tokens(&self, _unused_for_days: u64) -> Result<usize> {
+            todo!()
+        }
     }
 
     impl UserAuthCredentialsStore for InMemoryUserStore {

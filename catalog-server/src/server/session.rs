@@ -80,9 +80,17 @@ async fn extract_session_from_request_parts(
 
     debug!("Got session token {}", token);
     let user_manager = ctx.user_manager.lock().unwrap();
-    let auth_token = match user_manager.get_auth_token(&AuthTokenValue(token.clone())) {
+    let auth_token_value = AuthTokenValue(token.clone());
+    let auth_token = match user_manager.get_auth_token(&auth_token_value) {
         Some(token) => {
             debug!("Found auth token for user_id={}", token.user_id);
+
+            // Update last_used timestamp
+            if let Err(e) = user_manager.update_auth_token_last_used(&auth_token_value) {
+                debug!("Failed to update auth token last_used timestamp: {}", e);
+                // Continue anyway, as this is not critical for authentication
+            }
+
             token
         }
         None => {

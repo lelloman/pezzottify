@@ -61,6 +61,13 @@ impl UserManager {
         self.user_store.lock().unwrap().get_user_auth_token(value)
     }
 
+    pub fn update_auth_token_last_used(&self, value: &AuthTokenValue) -> Result<()> {
+        self.user_store
+            .lock()
+            .unwrap()
+            .update_user_auth_token_last_used_timestamp(value)
+    }
+
     pub fn generate_auth_token(&mut self, credentials: &UserAuthCredentials) -> Result<AuthToken> {
         let token = AuthToken {
             user_id: credentials.user_id.clone(),
@@ -379,5 +386,12 @@ impl UserManager {
             .lock()
             .unwrap()
             .remove_user_extra_permission(permission_id)
+    }
+
+    pub fn prune_unused_auth_tokens(&self, unused_for_days: u64) -> Result<usize> {
+        self.user_store
+            .lock()
+            .unwrap()
+            .prune_unused_auth_tokens(unused_for_days)
     }
 }

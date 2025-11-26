@@ -1152,11 +1152,14 @@ impl UserAuthTokenStore for SqliteUserStore {
 
     fn update_user_auth_token_last_used_timestamp(&self, token: &AuthTokenValue) -> Result<()> {
         let conn = self.conn.lock().unwrap();
-        let mut stmt = conn
-            .prepare("UPDATE auth_token SET last_used = CURRENT_TIMESTAMP WHERE value = ?1")
-            .ok()
-            .unwrap();
-        let _ = stmt.execute(params![token.0])?;
+        let now = SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .unwrap()
+            .as_secs() as i64;
+        conn.execute(
+            "UPDATE auth_token SET last_used = ?1 WHERE value = ?2",
+            params![now, token.0],
+        )?;
         Ok(())
     }
 
@@ -1195,6 +1198,24 @@ impl UserAuthTokenStore for SqliteUserStore {
             .unwrap();
 
         rows
+    }
+
+    fn prune_unused_auth_tokens(&self, unused_for_days: u64) -> Result<usize> {
+        let conn = self.conn.lock().unwrap();
+        let now = SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .unwrap()
+            .as_secs() as i64;
+        let cutoff_secs = now - (unused_for_days * 24 * 60 * 60) as i64;
+
+        // Delete tokens that have never been used and are older than the cutoff
+        // OR have been used but the last use is older than the cutoff
+        let deleted = conn.execute(
+            "DELETE FROM auth_token WHERE (last_used IS NULL AND created < ?1) OR (last_used IS NOT NULL AND last_used < ?1)",
+            params![cutoff_secs],
+        )?;
+
+        Ok(deleted)
     }
 }
 
@@ -1680,5 +1701,125 @@ mod tests {
         assert!(permissions.contains(&Permission::ManagePermissions));
         assert!(permissions.contains(&Permission::IssueContentDownload));
         assert!(permissions.contains(&Permission::RebootServer));
+    }
+
+    #[test]
+    fn test_auth_token_last_used_update() {
+        let (store, _temp_dir) = create_tmp_store();
+        let user_id = store.create_user("test_user").unwrap();
+
+        // Create a token
+        let token = AuthToken {
+            user_id,
+            value: AuthTokenValue::generate(),
+            created: SystemTime::now(),
+            last_used: None,
+        };
+
+        store.add_user_auth_token(token.clone()).unwrap();
+
+        // Verify last_used is initially None
+        let retrieved_token = store.get_user_auth_token(&token.value).unwrap();
+        assert!(retrieved_token.last_used.is_none());
+
+        // Update last_used timestamp
+        store
+            .update_user_auth_token_last_used_timestamp(&token.value)
+            .unwrap();
+
+        // Verify last_used is now set
+        let updated_token = store.get_user_auth_token(&token.value).unwrap();
+        assert!(updated_token.last_used.is_some());
+    }
+
+    #[test]
+    fn test_prune_unused_auth_tokens() {
+        let (store, _temp_dir) = create_tmp_store();
+        let user_id = store.create_user("test_user").unwrap();
+
+        // Create an old token (simulate by manually inserting with old timestamp)
+        let old_token = AuthToken {
+            user_id,
+            value: AuthTokenValue::generate(),
+            created: SystemTime::now(),
+            last_used: None,
+        };
+        store.add_user_auth_token(old_token.clone()).unwrap();
+
+        // Manually set the created timestamp to 10 days ago
+        let conn = store.conn.lock().unwrap();
+        let ten_days_ago = SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .unwrap()
+            .as_secs()
+            - (10 * 24 * 60 * 60);
+        conn.execute(
+            "UPDATE auth_token SET created = ?1 WHERE value = ?2",
+            params![ten_days_ago as i64, old_token.value.0],
+        )
+        .unwrap();
+        drop(conn);
+
+        // Create a recent token
+        let recent_token = AuthToken {
+            user_id,
+            value: AuthTokenValue::generate(),
+            created: SystemTime::now(),
+            last_used: None,
+        };
+        store.add_user_auth_token(recent_token.clone()).unwrap();
+
+        // Verify both tokens exist
+        assert!(store.get_user_auth_token(&old_token.value).is_some());
+        assert!(store.get_user_auth_token(&recent_token.value).is_some());
+
+        // Prune tokens older than 7 days
+        let pruned = store.prune_unused_auth_tokens(7).unwrap();
+        assert_eq!(pruned, 1);
+
+        // Verify old token is gone and recent token remains
+        assert!(store.get_user_auth_token(&old_token.value).is_none());
+        assert!(store.get_user_auth_token(&recent_token.value).is_some());
+    }
+
+    #[test]
+    fn test_prune_respects_last_used() {
+        let (store, _temp_dir) = create_tmp_store();
+        let user_id = store.create_user("test_user").unwrap();
+
+        // Create an old token
+        let token = AuthToken {
+            user_id,
+            value: AuthTokenValue::generate(),
+            created: SystemTime::now(),
+            last_used: None,
+        };
+        store.add_user_auth_token(token.clone()).unwrap();
+
+        // Manually set the created timestamp to 10 days ago
+        let conn = store.conn.lock().unwrap();
+        let ten_days_ago = SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .unwrap()
+            .as_secs()
+            - (10 * 24 * 60 * 60);
+        conn.execute(
+            "UPDATE auth_token SET created = ?1 WHERE value = ?2",
+            params![ten_days_ago as i64, token.value.0],
+        )
+        .unwrap();
+        drop(conn);
+
+        // Update last_used to now (recent usage)
+        store
+            .update_user_auth_token_last_used_timestamp(&token.value)
+            .unwrap();
+
+        // Prune tokens older than 7 days
+        let pruned = store.prune_unused_auth_tokens(7).unwrap();
+        assert_eq!(pruned, 0);
+
+        // Verify token still exists because it was recently used
+        assert!(store.get_user_auth_token(&token.value).is_some());
     }
 }
