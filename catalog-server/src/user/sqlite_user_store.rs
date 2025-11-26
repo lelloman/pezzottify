@@ -1122,34 +1122,35 @@ impl UserAuthTokenStore for SqliteUserStore {
         }
     }
 
-    fn delete_user_auth_token(&self, token: &AuthTokenValue) -> Option<AuthToken> {
+    fn delete_user_auth_token(&self, token: &AuthTokenValue) -> Result<Option<AuthToken>> {
         let mut conn = self.conn.lock().unwrap();
-        let tx = conn.transaction().ok()?;
+        let tx = conn.transaction()?;
 
         // Get the token data before deleting
-        let auth_token = {
-            let mut stmt = tx
-                .prepare("SELECT * FROM auth_token WHERE value = ?1")
-                .ok()?;
-            stmt.query_row(params![token.0], |row| {
-                Ok(AuthToken {
-                    user_id: row.get(0)?,
-                    value: AuthTokenValue(row.get(1)?),
-                    created: system_time_from_column_result(row.get(2)?),
-                    last_used: row
-                        .get::<usize, Option<i64>>(3)?
-                        .map(|v| system_time_from_column_result(v)),
+        let auth_token = match tx
+            .prepare("SELECT * FROM auth_token WHERE value = ?1")
+            .and_then(|mut stmt| {
+                stmt.query_row(params![token.0], |row| {
+                    Ok(AuthToken {
+                        user_id: row.get(0)?,
+                        value: AuthTokenValue(row.get(1)?),
+                        created: system_time_from_column_result(row.get(2)?),
+                        last_used: row
+                            .get::<usize, Option<i64>>(3)?
+                            .map(|v| system_time_from_column_result(v)),
+                    })
                 })
-            })
-            .ok()?
-        };
+            }) {
+                Ok(token) => token,
+                Err(rusqlite::Error::QueryReturnedNoRows) => return Ok(None),
+                Err(e) => return Err(e.into()),
+            };
 
         // Delete the token
-        tx.execute("DELETE FROM auth_token WHERE value = ?1", params![token.0])
-            .ok()?;
+        tx.execute("DELETE FROM auth_token WHERE value = ?1", params![token.0])?;
 
-        tx.commit().ok()?;
-        Some(auth_token)
+        tx.commit()?;
+        Ok(Some(auth_token))
     }
 
     fn update_user_auth_token_last_used_timestamp(&self, token: &AuthTokenValue) -> Result<()> {

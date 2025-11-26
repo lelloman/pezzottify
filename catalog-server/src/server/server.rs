@@ -982,7 +982,7 @@ mod tests {
             todo!()
         }
 
-        fn delete_user_auth_token(&self, _token: &AuthTokenValue) -> Option<AuthToken> {
+        fn delete_user_auth_token(&self, _token: &AuthTokenValue) -> Result<Option<AuthToken>> {
             todo!()
         }
 

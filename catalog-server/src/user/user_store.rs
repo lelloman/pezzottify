@@ -21,8 +21,9 @@ pub trait UserAuthTokenStore: Send + Sync {
     fn get_user_auth_token(&self, token: &AuthTokenValue) -> Result<Option<AuthToken>>;
 
     /// Deletes an auth token given the token value.
-    /// Returns None if the token does not exist.
-    fn delete_user_auth_token(&self, token: &AuthTokenValue) -> Option<AuthToken>;
+    /// Returns Ok(None) if the token does not exist.
+    /// Returns Err if there is a database error.
+    fn delete_user_auth_token(&self, token: &AuthTokenValue) -> Result<Option<AuthToken>>;
 
     /// Updates an auth token with the laatest timestamp.
     /// Returns None if the token does not exist.

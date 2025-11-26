@@ -179,7 +179,7 @@ impl UserManager {
             .user_store
             .lock()
             .unwrap()
-            .delete_user_auth_token(token_value);
+            .delete_user_auth_token(token_value)?;
         match removed {
             Some(removed) => {
                 if &removed.user_id == user_id {
