@@ -1102,12 +1102,11 @@ fn system_time_from_column_result(value: i64) -> SystemTime {
 }
 
 impl UserAuthTokenStore for SqliteUserStore {
-    fn get_user_auth_token(&self, value: &AuthTokenValue) -> Option<AuthToken> {
+    fn get_user_auth_token(&self, value: &AuthTokenValue) -> Result<Option<AuthToken>> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn
-            .prepare("SELECT * FROM auth_token WHERE value = ?1")
-            .ok()?;
-        stmt.query_row(params![value.0], |row| {
+            .prepare("SELECT * FROM auth_token WHERE value = ?1")?;
+        match stmt.query_row(params![value.0], |row| {
             Ok(AuthToken {
                 user_id: row.get(0)?,
                 value: AuthTokenValue(row.get(1)?),
@@ -1116,8 +1115,11 @@ impl UserAuthTokenStore for SqliteUserStore {
                     .get::<usize, Option<i64>>(3)?
                     .map(|v| system_time_from_column_result(v)),
             })
-        })
-        .ok()
+        }) {
+            Ok(token) => Ok(Some(token)),
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+            Err(e) => Err(e.into()),
+        }
     }
 
     fn delete_user_auth_token(&self, token: &AuthTokenValue) -> Option<AuthToken> {
@@ -1724,7 +1726,7 @@ mod tests {
         store.add_user_auth_token(token.clone()).unwrap();
 
         // Verify last_used is initially None
-        let retrieved_token = store.get_user_auth_token(&token.value).unwrap();
+        let retrieved_token = store.get_user_auth_token(&token.value).unwrap().unwrap();
         assert!(retrieved_token.last_used.is_none());
 
         // Update last_used timestamp
@@ -1733,7 +1735,7 @@ mod tests {
             .unwrap();
 
         // Verify last_used is now set
-        let updated_token = store.get_user_auth_token(&token.value).unwrap();
+        let updated_token = store.get_user_auth_token(&token.value).unwrap().unwrap();
         assert!(updated_token.last_used.is_some());
     }
 
@@ -1775,16 +1777,16 @@ mod tests {
         store.add_user_auth_token(recent_token.clone()).unwrap();
 
         // Verify both tokens exist
-        assert!(store.get_user_auth_token(&old_token.value).is_some());
-        assert!(store.get_user_auth_token(&recent_token.value).is_some());
+        assert!(store.get_user_auth_token(&old_token.value).unwrap().is_some());
+        assert!(store.get_user_auth_token(&recent_token.value).unwrap().is_some());
 
         // Prune tokens older than 7 days
         let pruned = store.prune_unused_auth_tokens(7).unwrap();
         assert_eq!(pruned, 1);
 
         // Verify old token is gone and recent token remains
-        assert!(store.get_user_auth_token(&old_token.value).is_none());
-        assert!(store.get_user_auth_token(&recent_token.value).is_some());
+        assert!(store.get_user_auth_token(&old_token.value).unwrap().is_none());
+        assert!(store.get_user_auth_token(&recent_token.value).unwrap().is_some());
     }
 
     #[test]
@@ -1825,6 +1827,6 @@ mod tests {
         assert_eq!(pruned, 0);
 
         // Verify token still exists because it was recently used
-        assert!(store.get_user_auth_token(&token.value).is_some());
+        assert!(store.get_user_auth_token(&token.value).unwrap().is_some());
     }
 }

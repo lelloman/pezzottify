@@ -16,8 +16,9 @@ pub trait UserAuthCredentialsStore: Send + Sync {
 
 pub trait UserAuthTokenStore: Send + Sync {
     /// Returns a user's authentication token given an AuthTokenValue.
-    /// Returns None if the token does not exist.
-    fn get_user_auth_token(&self, token: &AuthTokenValue) -> Option<AuthToken>;
+    /// Returns Ok(None) if the token does not exist.
+    /// Returns Err if there is a database error.
+    fn get_user_auth_token(&self, token: &AuthTokenValue) -> Result<Option<AuthToken>>;
 
     /// Deletes an auth token given the token value.
     /// Returns None if the token does not exist.

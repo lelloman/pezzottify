@@ -82,7 +82,7 @@ async fn extract_session_from_request_parts(
     let user_manager = ctx.user_manager.lock().unwrap();
     let auth_token_value = AuthTokenValue(token.clone());
     let auth_token = match user_manager.get_auth_token(&auth_token_value) {
-        Some(token) => {
+        Ok(Some(token)) => {
             debug!("Found auth token for user_id={}", token.user_id);
 
             // Update last_used timestamp
@@ -93,8 +93,12 @@ async fn extract_session_from_request_parts(
 
             token
         }
-        None => {
+        Ok(None) => {
             debug!("Auth token not found in database");
+            return None;
+        }
+        Err(e) => {
+            debug!("Failed to get auth token from database: {}", e);
             return None;
         }
     };

@@ -978,7 +978,7 @@ mod tests {
     }
 
     impl UserAuthTokenStore for InMemoryUserStore {
-        fn get_user_auth_token(&self, _token: &AuthTokenValue) -> Option<AuthToken> {
+        fn get_user_auth_token(&self, _token: &AuthTokenValue) -> Result<Option<AuthToken>> {
             todo!()
         }
 

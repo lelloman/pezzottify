@@ -57,7 +57,7 @@ impl UserManager {
         )
     }
 
-    pub fn get_auth_token(&self, value: &AuthTokenValue) -> Option<AuthToken> {
+    pub fn get_auth_token(&self, value: &AuthTokenValue) -> Result<Option<AuthToken>> {
         self.user_store.lock().unwrap().get_user_auth_token(value)
     }
 
