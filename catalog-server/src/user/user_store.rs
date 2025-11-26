@@ -54,8 +54,9 @@ pub trait UserStore: UserAuthTokenStore + UserAuthCredentialsStore + Send + Sync
     fn get_all_user_handles(&self) -> Vec<String>;
 
     /// Returns a user's handle given the user id.
-    /// Returns None if the user does not exist.
-    fn get_user_id(&self, user_handle: &str) -> Option<usize>;
+    /// Returns Ok(None) if the user does not exist.
+    /// Returns Err if there is a database error.
+    fn get_user_id(&self, user_handle: &str) -> Result<Option<usize>>;
 
     /// Returns if the user liked the content with the given id,
     /// returns None if the user does not exist.

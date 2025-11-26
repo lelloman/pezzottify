@@ -31,7 +31,7 @@ impl UserManager {
     pub fn add_user<T: AsRef<str>>(&self, user_handle: T) -> Result<usize> {
         let locked_store = self.user_store.lock().unwrap();
 
-        if let Some(_) = locked_store.get_user_id(&user_handle.as_ref()) {
+        if let Some(_) = locked_store.get_user_id(&user_handle.as_ref())? {
             bail!("User handle already exists.");
         }
 
@@ -114,7 +114,7 @@ impl UserManager {
         }
 
         let user_id = user_store
-            .get_user_id(&user_handle)
+            .get_user_id(&user_handle)?
             .with_context(|| format!("User with handle {} not found.", user_handle))?;
 
         let mut new_credentials = user_store

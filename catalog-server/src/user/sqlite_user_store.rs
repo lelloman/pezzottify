@@ -598,19 +598,21 @@ impl UserStore for SqliteUserStore {
         rows
     }
 
-    fn get_user_id(&self, user_handle: &str) -> Option<usize> {
+    fn get_user_id(&self, user_handle: &str) -> Result<Option<usize>> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn
             .prepare(&format!(
                 "SELECT id FROM {} WHERE handle = ?1",
                 USER_TABLE_V_0.name
-            ))
-            .ok()?;
-        let id: i32 = stmt
-            .query_row(params![user_handle], |row| row.get(0))
-            .ok()?;
-
-        Some(id as usize)
+            ))?;
+        match stmt.query_row(params![user_handle], |row| row.get(0)) {
+            Ok(id) => {
+                let id: i32 = id;
+                Ok(Some(id as usize))
+            }
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+            Err(e) => Err(e.into()),
+        }
     }
 
     fn is_user_liked_content(&self, user_id: usize, content_id: &str) -> Option<bool> {
@@ -1225,7 +1227,7 @@ impl UserAuthTokenStore for SqliteUserStore {
 
 impl UserAuthCredentialsStore for SqliteUserStore {
     fn get_user_auth_credentials(&self, user_handle: &str) -> Result<Option<UserAuthCredentials>> {
-        let user_id = match self.get_user_id(user_handle) {
+        let user_id = match self.get_user_id(user_handle)? {
             Some(id) => id,
             None => return Ok(None),
         };
@@ -1499,7 +1501,7 @@ mod tests {
         }
 
         // Verify old data is still intact
-        let user_id = store.get_user_id("test_user").unwrap();
+        let user_id = store.get_user_id("test_user").unwrap().unwrap();
         assert_eq!(user_id, 1);
 
         let liked_content = store

@@ -875,7 +875,7 @@ mod tests {
             todo!()
         }
 
-        fn get_user_id(&self, _user_handle: &str) -> Option<usize> {
+        fn get_user_id(&self, _user_handle: &str) -> Result<Option<usize>> {
             todo!()
         }
 
