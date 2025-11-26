@@ -37,10 +37,11 @@
 - Implement content download functionality (IssueContentDownload permission)
 - Implement server reboot endpoint (RebootServer permission)
 - Create catalog db
+- After the catalog has been migrated to a db, modify artist, album and track models to have the reference to one "display image" id, then provide, if available other images
 - Set last used to auth token
 - Check UserStore return type, we should not swallow errors
-- ~Verify that all sqlite operations are performed within a transaction~
 - Add more unit tests (expecially to db, like migrations?)
+- ~Verify that all sqlite operations are performed within a transaction~
 - ~Implement a rate limiting of some sort~
 - ~Add extra permission management to cli-auth (time-based and countdown-based grants)~
 - ~Delete cli_search and clean up unused stuff and format and warnings~
@@ -58,7 +59,7 @@
 ## [android]
 
 - When loading a track in the player from album screen, the next button doesn't work
-- Make a component to load an album's and an artists picture (try it in the recently viewed stuff in home screen)
+- Remove all database migrations and reset StaticsDb version to 1 (clean slate for development)
 - Implement runtime theme/palette selection (allow users to choose from multiple color schemes in settings)
 - The synchronizer seems to have a bug, when the server responds 403 it keeps hammering the endpoint in an infinite loop
 - Artist discography static is not persisted and is re-fetched every time from the server
@@ -72,6 +73,7 @@
 - Add an in-memory immediate cache layer in ContentResolver, only after a "memory pressure" component
 - Make the scroll behavior in album screen collapse the album image. There's too little room for seeing the tracks, once the user start scroll down the image should collapse into a bar.
 - Show related artists in the artist screen
+- ~Make a component to load an album's and an artists picture with intelligent size selection and fallback~
 - ~Show tracks list in album page~
 - ~Show all albums in the artist screen~
 - ~Show track/artists info in small player~

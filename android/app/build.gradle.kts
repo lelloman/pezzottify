@@ -54,6 +54,11 @@ dependencies {
     implementation(libs.hilt)
     kapt(libs.hilt.compiler)
 
+    implementation(libs.coil)
+    implementation(libs.coil.network)
+    implementation(platform(libs.okhttp.bom))
+    implementation(libs.okhttp)
+
     implementation(project(":ui"))
     implementation(project(":domain"))
     implementation(project(":remoteapi"))

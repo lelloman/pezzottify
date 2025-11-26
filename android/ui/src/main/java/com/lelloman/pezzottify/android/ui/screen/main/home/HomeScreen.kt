@@ -183,7 +183,7 @@ private fun RecentlyViewedItem(
                     verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
                 ) {
                     PezzottifyImage(
-                        url = item.data.contentImageUrl,
+                        urls = item.data.contentImageUrls,
                         shape = PezzottifyImageShape.SmallSquare,
                         modifier = Modifier.size(ComponentSize.ImageThumbSmall)
                     )

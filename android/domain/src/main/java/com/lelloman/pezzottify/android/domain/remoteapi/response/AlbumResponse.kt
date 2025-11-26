@@ -67,8 +67,10 @@ fun AlbumResponse.toDomain() = object : Album {
         get() = this@toDomain.date
     override val artistsIds: List<String>
         get() = this@toDomain.artistsIds
-    override val coverGroup: List<String> = this@toDomain.coverGroup.map { it.id }
-    override val covers: List<String> = this@toDomain.covers.map { it.id }
+    override val coverGroup: List<com.lelloman.pezzottify.android.domain.statics.Image> =
+        this@toDomain.coverGroup.map { it.toDomain() }
+    override val covers: List<com.lelloman.pezzottify.android.domain.statics.Image> =
+        this@toDomain.covers.map { it.toDomain() }
     override val genre: List<String> = this@toDomain.genre
     override val related: List<String> = this@toDomain.related
     override val discs: List<com.lelloman.pezzottify.android.domain.statics.Disc> =
@@ -79,3 +81,14 @@ fun AlbumResponse.toDomain() = object : Album {
             }
         }
 }
+
+private fun Image.toDomain() = com.lelloman.pezzottify.android.domain.statics.Image(
+    id = id,
+    size = when (size) {
+        ImageSize.DEFAULT -> com.lelloman.pezzottify.android.domain.statics.ImageSize.DEFAULT
+        ImageSize.SMALL -> com.lelloman.pezzottify.android.domain.statics.ImageSize.SMALL
+        ImageSize.MEDIUM -> com.lelloman.pezzottify.android.domain.statics.ImageSize.MEDIUM
+        ImageSize.LARGE -> com.lelloman.pezzottify.android.domain.statics.ImageSize.LARGE
+        ImageSize.XLARGE -> com.lelloman.pezzottify.android.domain.statics.ImageSize.XLARGE
+    }
+)

@@ -135,6 +135,7 @@ private fun AlbumGrid(
                                 modifier = Modifier.weight(1f),
                                 albumName = album.data.name,
                                 albumDate = album.data.date,
+                                albumCoverUrl = album.data.imageUrls.firstOrNull() ?: "",
                                 onClick = { navController.toAlbum(albumId) }
                             )
                         }

@@ -32,11 +32,30 @@ internal class DbModule {
         }
     }
 
+    private val MIGRATION_3_4 = object : Migration(3, 4) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            // Add image columns to Artist table (portraits and portraitGroup)
+            // Using empty JSON array as default value
+            db.execSQL("ALTER TABLE artist ADD COLUMN portraits TEXT NOT NULL DEFAULT '[]'")
+            db.execSQL("ALTER TABLE artist ADD COLUMN portraitGroup TEXT NOT NULL DEFAULT '[]'")
+
+            // Add image columns to Album table (covers and coverGroup were likely missing too)
+            // Check if they exist first, if not add them
+            db.execSQL("ALTER TABLE album ADD COLUMN covers TEXT NOT NULL DEFAULT '[]'")
+            db.execSQL("ALTER TABLE album ADD COLUMN coverGroup TEXT NOT NULL DEFAULT '[]'")
+
+            // Clear cached data to force re-sync from server with proper image data
+            db.execSQL("DELETE FROM artist")
+            db.execSQL("DELETE FROM album")
+            db.execSQL("DELETE FROM static_item_fetch_state")
+        }
+    }
+
     @Provides
     @Singleton
     internal fun provideStaticsDb(@ApplicationContext context: Context): StaticsDb = Room
         .databaseBuilder(context, StaticsDb::class.java, StaticsDb.NAME)
-        .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
+        .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
         .build()
 
     @Provides

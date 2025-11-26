@@ -1,5 +1,6 @@
 package com.lelloman.pezzottify.android.ui
 
+import com.lelloman.pezzottify.android.domain.config.ConfigStore
 import com.lelloman.pezzottify.android.domain.remoteapi.RemoteApiClient
 import com.lelloman.pezzottify.android.domain.remoteapi.response.RemoteApiResponse
 import com.lelloman.pezzottify.android.domain.statics.StaticsItem
@@ -17,7 +18,8 @@ import kotlinx.coroutines.flow.map
 
 class UiContentResolver(
     private val staticsProvider: StaticsProvider,
-    private val remoteApiClient: RemoteApiClient
+    private val remoteApiClient: RemoteApiClient,
+    private val configStore: ConfigStore
 ) : ContentResolver {
 
     override fun resolveArtist(artistId: String): Flow<Content<Artist>> =
@@ -29,6 +31,11 @@ class UiContentResolver(
                     it.id, Artist(
                         id = it.id,
                         name = it.data.name,
+                        imageUrls = ImageUrlProvider.selectImageUrls(
+                            configStore.baseUrl.value,
+                            it.data.portraits,
+                            secondaryImages = it.data.portraitGroup,
+                        )
                     )
                 )
             }
@@ -45,6 +52,11 @@ class UiContentResolver(
                         name = it.data.name,
                         date = it.data.date,
                         artistsIds = it.data.artistsIds,
+                        imageUrls = ImageUrlProvider.selectImageUrls(
+                            configStore.baseUrl.value,
+                            it.data.covers,
+                            secondaryImages = it.data.coverGroup,
+                        ),
                         discs = it.data.discs.map { disc ->
                             com.lelloman.pezzottify.android.ui.content.Disc(
                                 name = disc.name,
@@ -86,7 +98,11 @@ class UiContentResolver(
                             id = it.id,
                             name = it.data.name,
                             artistsIds = it.data.artistsIds,
-                            imageUrl = "",
+                            imageUrl = ImageUrlProvider.selectImageUrls(
+                                baseUrl = configStore.baseUrl.value,
+                                primaryImages = it.data.covers,
+                                secondaryImages = it.data.coverGroup,
+                            ).firstOrNull() ?: "",
                         )
                     )
                 }
@@ -116,7 +132,11 @@ class UiContentResolver(
                     it.id, SearchResultContent.Artist(
                         id = it.id,
                         name = it.data.name,
-                        imageUrl = "",
+                        imageUrl = ImageUrlProvider.selectImageUrls(
+                            baseUrl = configStore.baseUrl.value,
+                            primaryImages = it.data.portraits,
+                            secondaryImages = it.data.portraitGroup,
+                        ).firstOrNull() ?: "",
                     )
                 )
             }
@@ -129,6 +149,7 @@ class UiContentResolver(
                 albums = response.data.albums,
                 features = response.data.features
             )
+
             else -> null
         }
     }

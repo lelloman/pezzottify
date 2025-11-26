@@ -85,7 +85,7 @@ class HomeScreenViewModel(
                             data = ResolvedRecentlyViewedContent(
                                 contentState.data.id,
                                 contentState.data.name,
-                                "",
+                                contentState.data.imageUrls,
                                 ViewedContentType.Artist,
                             )
                         )
@@ -102,7 +102,7 @@ class HomeScreenViewModel(
                             data = ResolvedRecentlyViewedContent(
                                 contentState.data.id,
                                 contentState.data.name,
-                                "",
+                                contentState.data.imageUrls,
                                 ViewedContentType.Album,
                             )
                         )
@@ -119,7 +119,7 @@ class HomeScreenViewModel(
                             data = ResolvedRecentlyViewedContent(
                                 contentState.data.id,
                                 contentState.data.name,
-                                "",
+                                emptyList(),
                                 ViewedContentType.Track,
                             )
                         )

@@ -53,7 +53,7 @@ private fun AlbumScreenContent(state: AlbumScreenState, actions: AlbumScreenActi
 fun AlbumLoadedScreen(album: Album, tracks: List<kotlinx.coroutines.flow.Flow<Content<Track>>>?, actions: AlbumScreenActions) {
     Column(modifier = Modifier.fillMaxSize()) {
         PezzottifyImage(
-            url = "",
+            urls = album.imageUrls,
             placeholder = PezzottifyImagePlaceholder.GenericImage,
             shape = PezzottifyImageShape.FullWidthPoster,
         )

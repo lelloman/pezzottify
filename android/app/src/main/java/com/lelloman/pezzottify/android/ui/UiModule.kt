@@ -1,5 +1,6 @@
 package com.lelloman.pezzottify.android.ui
 
+import com.lelloman.pezzottify.android.domain.config.ConfigStore
 import com.lelloman.pezzottify.android.domain.remoteapi.RemoteApiClient
 import com.lelloman.pezzottify.android.domain.statics.StaticsProvider
 import com.lelloman.pezzottify.android.ui.content.ContentResolver
@@ -17,6 +18,7 @@ class UiModule {
     @Singleton
     fun provideContentResolver(
         staticsProvider: StaticsProvider,
-        remoteApiClient: RemoteApiClient
-    ): ContentResolver = UiContentResolver(staticsProvider, remoteApiClient)
+        remoteApiClient: RemoteApiClient,
+        configStore: ConfigStore
+    ): ContentResolver = UiContentResolver(staticsProvider, remoteApiClient, configStore)
 }
