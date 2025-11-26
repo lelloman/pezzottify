@@ -12,7 +12,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use tracing::{debug, error};
+use tracing::{debug, error, info};
 
 use crate::{
     catalog::Catalog,
@@ -120,6 +120,25 @@ async fn require_own_playlists(
         return StatusCode::FORBIDDEN.into_response();
     }
     debug!("require_own_playlists: ALLOWED - user_id={}", session.user_id);
+    next.run(request).await
+}
+
+async fn require_reboot_server(
+    session: Session,
+    request: Request<Body>,
+    next: Next,
+) -> impl IntoResponse {
+    debug!(
+        "require_reboot_server: user_id={}, has_permission={}, permissions={:?}",
+        session.user_id,
+        session.has_permission(Permission::RebootServer),
+        session.permissions
+    );
+    if !session.has_permission(Permission::RebootServer) {
+        debug!("require_reboot_server: FORBIDDEN - user_id={} lacks RebootServer permission", session.user_id);
+        return StatusCode::FORBIDDEN.into_response();
+    }
+    debug!("require_reboot_server: ALLOWED - user_id={}", session.user_id);
     next.run(request).await
 }
 
@@ -493,6 +512,22 @@ async fn logout(State(user_manager): State<GuardedUserManager>, session: Session
     }
 }
 
+async fn reboot_server(session: Session) -> Response {
+    info!(
+        "Server reboot requested by user_id={}, initiating shutdown...",
+        session.user_id
+    );
+
+    // Spawn a task to exit the process after responding
+    tokio::spawn(async {
+        tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+        info!("Server shutting down for reboot");
+        std::process::exit(0);
+    });
+
+    (StatusCode::ACCEPTED, "Server reboot initiated").into_response()
+}
+
 async fn get_challenge(State(_state): State<ServerState>) -> Response {
     todo!()
 }
@@ -663,7 +698,7 @@ pub fn make_app(
         .route("/playlist/{id}", delete(delete_playlist))
         .route("/playlist/{id}/add", put(add_playlist_tracks))
         .route("/playlist/{id}/remove", put(remove_tracks_from_playlist))
-        .layer(GovernorLayer::new(write_rate_limit))
+        .layer(GovernorLayer::new(write_rate_limit.clone()))
         .route_layer(middleware::from_fn_with_state(
             state.clone(),
             require_own_playlists,
@@ -689,6 +724,16 @@ pub fn make_app(
 
     let user_routes = liked_content_routes.merge(playlist_routes);
 
+    // Admin routes with write rate limiting
+    let admin_routes: Router = Router::new()
+        .route("/reboot", post(reboot_server))
+        .layer(GovernorLayer::new(write_rate_limit.clone()))
+        .route_layer(middleware::from_fn_with_state(
+            state.clone(),
+            require_reboot_server,
+        ))
+        .with_state(state.clone());
+
     let home_router: Router = match config.frontend_dir_path {
         Some(frontend_path) => {
             let static_files_service =
@@ -703,7 +748,8 @@ pub fn make_app(
     let mut app: Router = home_router
         .nest("/v1/auth", auth_routes)
         .nest("/v1/content", content_routes)
-        .nest("/v1/user", user_routes);
+        .nest("/v1/user", user_routes)
+        .nest("/v1/admin", admin_routes);
 
     #[cfg(feature = "slowdown")]
     {

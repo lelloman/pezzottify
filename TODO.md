@@ -35,11 +35,11 @@
 - Create admin API endpoints for managing user roles and permissions (ManagePermissions permission)
 - Implement catalog editing endpoints (EditCatalog permission)
 - Implement content download functionality (IssueContentDownload permission)
-- Implement server reboot endpoint (RebootServer permission)
 - Create catalog db
 - After the catalog has been migrated to a db, modify artist, album and track models to have the reference to one "display image" id, then provide, if available other images
 - Check UserStore return type, we should not swallow errors
 - Add more unit tests (expecially to db, like migrations?)
+- ~Implement server reboot endpoint (RebootServer permission)~
 - ~Set last used to auth token and implement token pruning~
 - ~Verify that all sqlite operations are performed within a transaction~
 - ~Implement a rate limiting of some sort~
