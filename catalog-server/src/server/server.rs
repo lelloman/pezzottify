@@ -470,7 +470,7 @@ async fn login(
             }
         }
     }
-    StatusCode::FORBIDDEN.into_response()
+    StatusCode::UNAUTHORIZED.into_response()
 }
 
 async fn logout(State(user_manager): State<GuardedUserManager>, session: Session) -> Response {
