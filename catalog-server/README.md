@@ -551,6 +551,113 @@ catalog-server/
 └── README.md
 ```
 
+## Monitoring & Alerting
+
+The catalog server includes a full monitoring stack with Prometheus metrics, Grafana dashboards, and Alertmanager for notifications.
+
+### Quick Start
+
+```bash
+# From the repository root
+docker-compose up -d
+```
+
+This starts:
+- **catalog-server** on port 3001
+- **Prometheus** on port 9090
+- **Grafana** on port 3000
+- **Alertmanager** on port 9093
+
+### Accessing Grafana
+
+1. Open http://localhost:3000
+2. Login with username `admin` and password `admin`
+3. Navigate to Dashboards to view the Pezzottify dashboard
+
+### Prometheus Metrics
+
+The server exposes metrics at `/metrics` endpoint. Available metrics:
+
+| Metric | Type | Description |
+|--------|------|-------------|
+| `http_requests_total` | Counter | Total HTTP requests by method, path, status |
+| `http_request_duration_seconds` | Histogram | Request duration by method and path |
+| `auth_login_attempts_total` | Counter | Login attempts by status (success/failure) |
+| `auth_login_duration_seconds` | Histogram | Login request duration |
+| `auth_active_sessions` | Gauge | Number of active sessions |
+| `rate_limit_hits_total` | Counter | Rate limit violations by endpoint |
+| `db_query_duration_seconds` | Histogram | Database query duration by operation |
+| `db_connection_errors_total` | Counter | Database connection errors |
+| `catalog_items_total` | Gauge | Catalog items by type (artist/album/track) |
+| `process_memory_bytes` | Gauge | Process memory usage |
+
+### Alert Rules
+
+The following alerts are configured in `monitoring/alerts.yml`:
+
+**Critical:**
+- `ServiceDown` - Catalog server unreachable
+- `LoginBruteForceAttempt` - Possible brute force attack on login
+- `HighErrorRate` - High HTTP 5xx error rate
+- `DatabaseErrors` - Database connection failures
+
+**Warning:**
+- `HighRateLimitViolations` - Excessive rate limiting
+- `HighLoginFailureRate` - Many failed login attempts
+- `SlowLoginPerformance` - Login latency above threshold
+- `SlowDatabaseQueries` - Database queries taking too long
+- `HighMemoryUsage` - Memory usage above 1GB
+
+### Configuring Alertmanager
+
+Edit `monitoring/alertmanager.yml` to configure notifications:
+
+**Email notifications:**
+```yaml
+global:
+  smtp_smarthost: 'smtp.gmail.com:587'
+  smtp_from: 'your-email@gmail.com'
+  smtp_auth_username: 'your-email@gmail.com'
+  smtp_auth_password: 'your-app-password'  # Use Gmail app password
+```
+
+**Telegram notifications:**
+Update the environment variables in `docker-compose.yml`:
+```yaml
+telegram-webhook:
+  environment:
+    - TELEGRAM_TOKEN=your_bot_token
+    - TELEGRAM_ADMIN=your_chat_id
+```
+
+### Running Individual Services
+
+```bash
+# Start only the catalog server
+docker-compose up -d catalog-server
+
+# Start server with monitoring (no alerting)
+docker-compose up -d catalog-server prometheus grafana
+
+# Start the full stack
+docker-compose up -d
+```
+
+### Viewing Metrics Directly
+
+```bash
+# Raw Prometheus metrics
+curl http://localhost:3001/metrics
+
+# Prometheus query interface
+open http://localhost:9090
+
+# Example PromQL queries
+# Request rate: rate(http_requests_total[5m])
+# Login failures: auth_login_attempts_total{status="failure"}
+# P95 latency: histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[5m]))
+```
+
 ## License
 
 See the root project LICENSE file.

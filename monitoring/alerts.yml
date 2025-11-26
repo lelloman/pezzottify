@@ -1,0 +1,98 @@
+groups:
+  - name: catalog_server_alerts
+    interval: 30s
+    rules:
+      # Service Availability
+      - alert: ServiceDown
+        expr: up{job="catalog-server"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          category: availability
+        annotations:
+          summary: "Catalog server is down"
+          description: "Prometheus cannot scrape catalog-server metrics."
+
+      # Security Alerts
+      - alert: LoginBruteForceAttempt
+        expr: rate(rate_limit_hits_total{endpoint="/v1/auth/login"}[1m]) > 2
+        for: 2m
+        labels:
+          severity: critical
+          category: security
+        annotations:
+          summary: "Possible brute force login attack"
+          description: "Login rate limiting triggered {{ $value }} times/sec."
+
+      - alert: HighRateLimitViolations
+        expr: rate(rate_limit_hits_total[5m]) > 10
+        for: 5m
+        labels:
+          severity: warning
+          category: security
+        annotations:
+          summary: "High rate of rate limit violations"
+          description: "{{ $labels.endpoint }} experiencing {{ $value }} violations/sec."
+
+      - alert: HighLoginFailureRate
+        expr: rate(auth_login_attempts_total{status="failure"}[5m]) > 0.5
+        for: 5m
+        labels:
+          severity: warning
+          category: security
+        annotations:
+          summary: "High login failure rate"
+          description: "{{ $value }} failed logins per second over 5 minutes."
+
+      # Error Alerts
+      - alert: HighErrorRate
+        expr: rate(http_requests_total{status=~"5.."}[5m]) > 0.1
+        for: 5m
+        labels:
+          severity: critical
+          category: availability
+        annotations:
+          summary: "High HTTP 5xx error rate"
+          description: "{{ $value }} server errors per second."
+
+      - alert: DatabaseErrors
+        expr: rate(db_connection_errors_total[5m]) > 0
+        for: 2m
+        labels:
+          severity: critical
+          category: availability
+        annotations:
+          summary: "Database connection errors detected"
+          description: "{{ $value }} database errors/sec. Check SQLite."
+
+      # Performance Alerts
+      - alert: SlowLoginPerformance
+        expr: histogram_quantile(0.95, rate(auth_login_duration_seconds_bucket[5m])) > 2
+        for: 5m
+        labels:
+          severity: warning
+          category: performance
+        annotations:
+          summary: "Slow login performance"
+          description: "95th percentile login duration is {{ $value }}s (threshold: 2s)."
+
+      - alert: SlowDatabaseQueries
+        expr: histogram_quantile(0.95, rate(db_query_duration_seconds_bucket[5m])) > 1
+        for: 5m
+        labels:
+          severity: warning
+          category: performance
+        annotations:
+          summary: "Slow database queries"
+          description: "95th percentile DB query duration is {{ $value }}s."
+
+      # Resource Alerts
+      - alert: HighMemoryUsage
+        expr: process_memory_bytes > 1073741824  # 1GB
+        for: 10m
+        labels:
+          severity: warning
+          category: resources
+        annotations:
+          summary: "High memory usage"
+          description: "Server using {{ $value | humanize }}B of memory."
