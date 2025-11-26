@@ -5,4 +5,5 @@ interface Artist : StaticItem {
     val name: String
     val portraits: List<Image>
     val portraitGroup: List<Image>
+    val related: List<String>
 }

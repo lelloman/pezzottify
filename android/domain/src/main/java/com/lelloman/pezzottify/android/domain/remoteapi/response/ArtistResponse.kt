@@ -32,6 +32,8 @@ fun ArtistResponse.toDomain() = object : Artist {
         get() = this@toDomain.portraits?.map { it.toDomain() } ?: emptyList()
     override val portraitGroup: List<com.lelloman.pezzottify.android.domain.statics.Image>
         get() = this@toDomain.portraitGroup?.map { it.toDomain() } ?: emptyList()
+    override val related: List<String>
+        get() = this@toDomain.related ?: emptyList()
 }
 
 private fun Image.toDomain() = com.lelloman.pezzottify.android.domain.statics.Image(

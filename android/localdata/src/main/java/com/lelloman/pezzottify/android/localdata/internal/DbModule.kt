@@ -51,11 +51,19 @@ internal class DbModule {
         }
     }
 
+    private val MIGRATION_4_5 = object : Migration(4, 5) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            // Add related column to Artist table for related artists
+            // Using empty JSON array as default value
+            db.execSQL("ALTER TABLE artist ADD COLUMN related TEXT NOT NULL DEFAULT '[]'")
+        }
+    }
+
     @Provides
     @Singleton
     internal fun provideStaticsDb(@ApplicationContext context: Context): StaticsDb = Room
         .databaseBuilder(context, StaticsDb::class.java, StaticsDb.NAME)
-        .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
+        .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
         .build()
 
     @Provides

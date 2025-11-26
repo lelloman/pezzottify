@@ -72,7 +72,7 @@
 - Create a "memory pressure" component that can detect how much memory can we use for caches and such (imagine caching stuff from the db, pre-loading audio, images)
 - Add an in-memory immediate cache layer in ContentResolver, only after a "memory pressure" component
 - Make the scroll behavior in album screen collapse the album image. There's too little room for seeing the tracks, once the user start scroll down the image should collapse into a bar.
-- Show related artists in the artist screen
+- ~Show related artists in the artist screen~
 - ~Make a component to load an album's and an artists picture with intelligent size selection and fallback~
 - ~Show tracks list in album page~
 - ~Show all albums in the artist screen~

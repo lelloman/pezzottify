@@ -17,6 +17,8 @@ internal data class Artist(
     override val portraits: List<Image>,
 
     override val portraitGroup: List<Image>,
+
+    override val related: List<String>,
 ) : com.lelloman.pezzottify.android.domain.statics.Artist {
 
     companion object {
@@ -31,4 +33,5 @@ internal fun com.lelloman.pezzottify.android.domain.statics.Artist.quack(): Arti
     name = name,
     portraits = portraits,
     portraitGroup = portraitGroup,
+    related = related,
 )

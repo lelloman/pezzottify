@@ -35,7 +35,8 @@ class UiContentResolver(
                             configStore.baseUrl.value,
                             it.data.portraits,
                             secondaryImages = it.data.portraitGroup,
-                        )
+                        ),
+                        related = it.data.related,
                     )
                 )
             }

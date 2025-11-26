@@ -39,6 +39,7 @@ class ArtistScreenViewModel @AssistedInject constructor(
                 artist = artistContent.data,
                 albums = discography?.albums ?: emptyList(),
                 features = discography?.features ?: emptyList(),
+                relatedArtists = artistContent.data.related,
                 isError = false,
                 isLoading = false,
             )
