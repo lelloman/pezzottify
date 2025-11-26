@@ -669,3 +669,363 @@ impl Catalog {
         Ok(Some(resolved_album))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+
+    fn create_temp_dir() -> tempfile::TempDir {
+        tempfile::tempdir().expect("Failed to create temp dir")
+    }
+
+    fn create_valid_catalog_structure(root: &Path) {
+        fs::create_dir(root.join("albums")).unwrap();
+        fs::create_dir(root.join("artists")).unwrap();
+        fs::create_dir(root.join("images")).unwrap();
+    }
+
+    #[test]
+    fn test_invalid_root_dir() {
+        let temp = create_temp_dir();
+        let non_existent = temp.path().join("does_not_exist");
+
+        let result = Catalog::build(&non_existent);
+
+        assert!(result.catalog.is_none());
+        assert_eq!(result.problems.len(), 1);
+        assert!(matches!(result.problems[0], Problem::InvalidRootDir));
+    }
+
+    #[test]
+    fn test_missing_albums_directory() {
+        let temp = create_temp_dir();
+        let root = temp.path();
+
+        // Create only artists and images directories
+        fs::create_dir(root.join("artists")).unwrap();
+        fs::create_dir(root.join("images")).unwrap();
+
+        let result = Catalog::build(root);
+
+        assert!(result.catalog.is_none());
+        assert!(result.problems.len() >= 1);
+        assert!(result
+            .problems
+            .iter()
+            .any(|p| matches!(p, Problem::MissingCatalogDir(dir) if dir == "albums")));
+    }
+
+    #[test]
+    fn test_missing_artists_directory() {
+        let temp = create_temp_dir();
+        let root = temp.path();
+
+        fs::create_dir(root.join("albums")).unwrap();
+        fs::create_dir(root.join("images")).unwrap();
+
+        let result = Catalog::build(root);
+
+        assert!(result.catalog.is_none());
+        assert!(result.problems.len() >= 1);
+        assert!(result
+            .problems
+            .iter()
+            .any(|p| matches!(p, Problem::MissingCatalogDir(dir) if dir == "artists")));
+    }
+
+    #[test]
+    fn test_missing_images_directory() {
+        let temp = create_temp_dir();
+        let root = temp.path();
+
+        fs::create_dir(root.join("albums")).unwrap();
+        fs::create_dir(root.join("artists")).unwrap();
+
+        let result = Catalog::build(root);
+
+        assert!(result.catalog.is_none());
+        assert!(result.problems.len() >= 1);
+        assert!(result
+            .problems
+            .iter()
+            .any(|p| matches!(p, Problem::MissingCatalogDir(dir) if dir == "images")));
+    }
+
+    #[test]
+    fn test_missing_all_subdirectories() {
+        let temp = create_temp_dir();
+        let root = temp.path();
+
+        let result = Catalog::build(root);
+
+        assert!(result.catalog.is_none());
+        assert_eq!(result.problems.len(), 3);
+        assert!(result
+            .problems
+            .iter()
+            .any(|p| matches!(p, Problem::MissingCatalogDir(dir) if dir == "albums")));
+        assert!(result
+            .problems
+            .iter()
+            .any(|p| matches!(p, Problem::MissingCatalogDir(dir) if dir == "artists")));
+        assert!(result
+            .problems
+            .iter()
+            .any(|p| matches!(p, Problem::MissingCatalogDir(dir) if dir == "images")));
+    }
+
+    #[test]
+    fn test_invalid_artist_filename() {
+        let temp = create_temp_dir();
+        let root = temp.path();
+        create_valid_catalog_structure(root);
+
+        // Create artist file with invalid name (missing "artist_" prefix)
+        let invalid_artist_file = root.join("artists").join("bad_filename.json");
+        fs::write(
+            &invalid_artist_file,
+            r#"{"id": "123", "name": "Test Artist", "genre": [], "related": [], "portrait_group": [], "portraits": [], "activity_periods": []}"#,
+        )
+        .unwrap();
+
+        let result = Catalog::build(root);
+
+        assert!(result.catalog.is_some());
+        assert!(result.problems.len() >= 1);
+        assert!(result
+            .problems
+            .iter()
+            .any(|p| matches!(p, Problem::InvalidArtistFile(_))));
+    }
+
+    #[test]
+    fn test_invalid_artist_json() {
+        let temp = create_temp_dir();
+        let root = temp.path();
+        create_valid_catalog_structure(root);
+
+        // Create artist file with invalid JSON
+        let invalid_artist_file = root.join("artists").join("artist_123.json");
+        fs::write(&invalid_artist_file, "not valid json {{{").unwrap();
+
+        let result = Catalog::build(root);
+
+        assert!(result.catalog.is_some());
+        assert!(result.problems.len() >= 1);
+        assert!(result
+            .problems
+            .iter()
+            .any(|p| matches!(p, Problem::InvalidArtistFile(_))));
+    }
+
+    #[test]
+    fn test_artist_id_mismatch_with_filename() {
+        let temp = create_temp_dir();
+        let root = temp.path();
+        create_valid_catalog_structure(root);
+
+        // Create artist file where ID doesn't match filename
+        let artist_file = root.join("artists").join("artist_123.json");
+        fs::write(
+            &artist_file,
+            r#"{"id": "456", "name": "Test Artist", "genre": [], "related": [], "portrait_group": [], "portraits": [], "activity_periods": []}"#,
+        )
+        .unwrap();
+
+        let result = Catalog::build(root);
+
+        assert!(result.catalog.is_some());
+        assert!(result.problems.len() >= 1);
+        assert!(result
+            .problems
+            .iter()
+            .any(|p| matches!(p, Problem::InvalidArtistFile(msg) if msg.contains("123") && msg.contains("456"))));
+    }
+
+    #[test]
+    fn test_missing_referenced_artist_id() {
+        let temp = create_temp_dir();
+        let root = temp.path();
+        create_valid_catalog_structure(root);
+
+        // Create artist with reference to non-existent artist
+        let artist_file = root.join("artists").join("artist_123.json");
+        fs::write(
+            &artist_file,
+            r#"{"id": "123", "name": "Test Artist", "genre": [], "related": ["999"], "portrait_group": [], "portraits": [], "activity_periods": []}"#,
+        )
+        .unwrap();
+
+        let result = Catalog::build(root);
+
+        assert!(result.catalog.is_some());
+        assert!(result.problems.len() >= 1);
+        assert!(result
+            .problems
+            .iter()
+            .any(|p| matches!(p, Problem::MissingReferencedId(msg) if msg.contains("999"))));
+    }
+
+    #[test]
+    fn test_missing_image_reference() {
+        let temp = create_temp_dir();
+        let root = temp.path();
+        create_valid_catalog_structure(root);
+
+        // Create artist with reference to non-existent image
+        let artist_file = root.join("artists").join("artist_123.json");
+        fs::write(
+            &artist_file,
+            r#"{
+                "id": "123",
+                "name": "Test Artist",
+                "genre": [],
+                "related": [],
+                "portrait_group": [{"id": "missing_image.jpg", "size": "DEFAULT", "width": 100, "height": 100}],
+                "portraits": [],
+                "activity_periods": []
+            }"#,
+        )
+        .unwrap();
+
+        let result = Catalog::build(root);
+
+        assert!(result.catalog.is_some());
+        assert!(result.problems.len() >= 1);
+        assert!(result
+            .problems
+            .iter()
+            .any(|p| matches!(p, Problem::MissingImage(_))));
+    }
+
+    #[test]
+    fn test_invalid_album_dirname() {
+        let temp = create_temp_dir();
+        let root = temp.path();
+        create_valid_catalog_structure(root);
+
+        // Create album directory with invalid name
+        fs::create_dir(root.join("albums").join("bad_dirname")).unwrap();
+
+        let result = Catalog::build(root);
+
+        assert!(result.catalog.is_some());
+        assert!(result.problems.len() >= 1);
+        assert!(result
+            .problems
+            .iter()
+            .any(|p| matches!(p, Problem::InvalidAlbumDirName(_))));
+    }
+
+    #[test]
+    fn test_problem_accumulation() {
+        let temp = create_temp_dir();
+        let root = temp.path();
+        create_valid_catalog_structure(root);
+
+        // Create multiple problematic files
+        // Invalid artist filename
+        fs::write(
+            root.join("artists").join("bad_name.json"),
+            r#"{"id": "123", "name": "Test", "genre": [], "related": [], "portrait_group": [], "portraits": [], "activity_periods": []}"#,
+        )
+        .unwrap();
+
+        // Invalid artist JSON
+        fs::write(root.join("artists").join("artist_456.json"), "bad json")
+            .unwrap();
+
+        // Artist with missing reference
+        fs::write(
+            root.join("artists").join("artist_789.json"),
+            r#"{"id": "789", "name": "Test", "genre": [], "related": ["missing"], "portrait_group": [], "portraits": [], "activity_periods": []}"#,
+        )
+        .unwrap();
+
+        // Invalid album directory name
+        fs::create_dir(root.join("albums").join("invalid_album")).unwrap();
+
+        let result = Catalog::build(root);
+
+        assert!(result.catalog.is_some());
+        // Should have accumulated multiple problems
+        assert!(result.problems.len() >= 3);
+
+        // Verify different problem types are present
+        let has_invalid_artist = result
+            .problems
+            .iter()
+            .any(|p| matches!(p, Problem::InvalidArtistFile(_)));
+        let has_missing_ref = result
+            .problems
+            .iter()
+            .any(|p| matches!(p, Problem::MissingReferencedId(_)));
+        let has_invalid_album = result
+            .problems
+            .iter()
+            .any(|p| matches!(p, Problem::InvalidAlbumDirName(_)));
+
+        assert!(has_invalid_artist || has_missing_ref || has_invalid_album);
+    }
+
+    #[test]
+    fn test_valid_empty_catalog() {
+        let temp = create_temp_dir();
+        let root = temp.path();
+        create_valid_catalog_structure(root);
+
+        let result = Catalog::build(root);
+
+        assert!(result.catalog.is_some());
+        assert_eq!(result.problems.len(), 0);
+
+        let catalog = result.catalog.unwrap();
+        assert_eq!(catalog.get_artists_count(), 0);
+        assert_eq!(catalog.get_albums_count(), 0);
+        assert_eq!(catalog.get_tracks_count(), 0);
+    }
+
+    #[test]
+    fn test_dirs_get_image_path() {
+        let temp = create_temp_dir();
+        let root = temp.path();
+        create_valid_catalog_structure(root);
+
+        let mut problems = Vec::new();
+        let dirs = Dirs::from_root(root, &mut problems).unwrap();
+
+        let image_path = dirs.get_image_path("test_image.jpg".to_string());
+        assert!(image_path.ends_with("images/test_image.jpg"));
+    }
+
+    #[test]
+    fn test_get_artist_id_from_filename_valid() {
+        let filename = Cow::Borrowed("artist_abc123.json");
+        let result = get_artist_id_from_filename(&filename);
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), "abc123");
+    }
+
+    #[test]
+    fn test_get_artist_id_from_filename_missing_prefix() {
+        let filename = Cow::Borrowed("abc123.json");
+        let result = get_artist_id_from_filename(&filename);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_get_artist_id_from_filename_missing_suffix() {
+        let filename = Cow::Borrowed("artist_abc123");
+        let result = get_artist_id_from_filename(&filename);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_catalog_dummy_creates_empty_catalog() {
+        let catalog = Catalog::dummy();
+        assert_eq!(catalog.get_artists_count(), 0);
+        assert_eq!(catalog.get_albums_count(), 0);
+        assert_eq!(catalog.get_tracks_count(), 0);
+    }
+}
