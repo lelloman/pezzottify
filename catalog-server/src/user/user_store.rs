@@ -46,8 +46,9 @@ pub trait UserStore: UserAuthTokenStore + UserAuthCredentialsStore + Send + Sync
     fn create_user(&self, user_handle: &str) -> Result<usize>;
 
     // Returns a full user object for the given user id.
-    // Returns None if the user does not exist.
-    fn get_user_handle(&self, user_id: usize) -> Option<String>;
+    // Returns Ok(None) if the user does not exist.
+    // Returns Err if there is a database error.
+    fn get_user_handle(&self, user_id: usize) -> Result<Option<String>>;
 
     /// Returns all users' handles.
     fn get_all_user_handles(&self) -> Vec<String>;

@@ -871,7 +871,7 @@ mod tests {
             todo!()
         }
 
-        fn get_user_handle(&self, _user_id: usize) -> Option<String> {
+        fn get_user_handle(&self, _user_id: usize) -> Result<Option<String>> {
             todo!()
         }
 

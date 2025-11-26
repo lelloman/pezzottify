@@ -567,17 +567,18 @@ impl UserStore for SqliteUserStore {
         Ok(playlists)
     }
 
-    fn get_user_handle(&self, user_id: usize) -> Option<String> {
+    fn get_user_handle(&self, user_id: usize) -> Result<Option<String>> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn
             .prepare(&format!(
                 "SELECT handle FROM {} WHERE id = ?1",
                 USER_TABLE_V_0.name
-            ))
-            .ok()?;
-        let handle: String = stmt.query_row(params![user_id], |row| row.get(0)).ok()?;
-
-        Some(handle)
+            ))?;
+        match stmt.query_row(params![user_id], |row| row.get(0)) {
+            Ok(handle) => Ok(Some(handle)),
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+            Err(e) => Err(e.into()),
+        }
     }
 
     fn get_all_user_handles(&self) -> Vec<String> {
