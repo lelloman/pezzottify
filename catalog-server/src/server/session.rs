@@ -144,3 +144,158 @@ impl FromRequestParts<ServerState> for Option<Session> {
         Ok(extract_session_from_request_parts(parts, ctx).await)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use axum::http::{HeaderMap, HeaderValue, Method};
+
+    #[test]
+    fn session_has_permission_returns_true_when_permission_exists() {
+        let session = Session {
+            user_id: 1,
+            token: "test-token".to_string(),
+            permissions: vec![
+                Permission::AccessCatalog,
+                Permission::LikeContent,
+                Permission::OwnPlaylists,
+            ],
+        };
+
+        assert!(session.has_permission(Permission::AccessCatalog));
+        assert!(session.has_permission(Permission::LikeContent));
+        assert!(session.has_permission(Permission::OwnPlaylists));
+    }
+
+    #[test]
+    fn session_has_permission_returns_false_when_permission_missing() {
+        let session = Session {
+            user_id: 1,
+            token: "test-token".to_string(),
+            permissions: vec![Permission::AccessCatalog, Permission::LikeContent],
+        };
+
+        assert!(!session.has_permission(Permission::EditCatalog));
+        assert!(!session.has_permission(Permission::ManagePermissions));
+        assert!(!session.has_permission(Permission::RebootServer));
+    }
+
+    #[test]
+    fn session_has_permission_returns_false_for_empty_permissions() {
+        let session = Session {
+            user_id: 1,
+            token: "test-token".to_string(),
+            permissions: vec![],
+        };
+
+        assert!(!session.has_permission(Permission::AccessCatalog));
+        assert!(!session.has_permission(Permission::LikeContent));
+        assert!(!session.has_permission(Permission::EditCatalog));
+    }
+
+    fn create_parts_with_headers(headers: HeaderMap) -> Parts {
+        let request = axum::http::Request::builder()
+            .method(Method::GET)
+            .uri("/")
+            .body(())
+            .unwrap();
+
+        let (mut parts, _) = request.into_parts();
+        parts.headers = headers;
+        parts
+    }
+
+    #[test]
+    fn extract_session_token_from_headers_with_valid_token() {
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            HEADER_SESSION_TOKEN_KEY,
+            HeaderValue::from_static("test-auth-token-123"),
+        );
+
+        let mut parts = create_parts_with_headers(headers);
+        let token = extract_session_token_from_headers(&mut parts);
+        assert_eq!(token, Some("test-auth-token-123".to_string()));
+    }
+
+    #[test]
+    fn extract_session_token_from_headers_without_token() {
+        let headers = HeaderMap::new();
+        let mut parts = create_parts_with_headers(headers);
+        let token = extract_session_token_from_headers(&mut parts);
+        assert_eq!(token, None);
+    }
+
+    #[test]
+    fn extract_session_token_from_headers_with_empty_value() {
+        let mut headers = HeaderMap::new();
+        headers.insert(HEADER_SESSION_TOKEN_KEY, HeaderValue::from_static(""));
+
+        let mut parts = create_parts_with_headers(headers);
+        let token = extract_session_token_from_headers(&mut parts);
+        assert_eq!(token, Some("".to_string()));
+    }
+
+    #[test]
+    fn extract_session_token_from_headers_with_special_characters() {
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            HEADER_SESSION_TOKEN_KEY,
+            HeaderValue::from_static("token-with-dashes_and_underscores.123"),
+        );
+
+        let mut parts = create_parts_with_headers(headers);
+        let token = extract_session_token_from_headers(&mut parts);
+        assert_eq!(
+            token,
+            Some("token-with-dashes_and_underscores.123".to_string())
+        );
+    }
+
+    #[test]
+    fn extract_session_token_from_headers_case_sensitive() {
+        let mut headers = HeaderMap::new();
+        headers.insert("authorization", HeaderValue::from_static("lowercase-header"));
+
+        let mut parts = create_parts_with_headers(headers);
+        let token = extract_session_token_from_headers(&mut parts);
+        // HTTP headers are case-insensitive, so this should work
+        assert_eq!(token, Some("lowercase-header".to_string()));
+    }
+
+    #[test]
+    fn session_extraction_error_access_denied_status_code() {
+        let error = SessionExtractionError::AccessDenied;
+        let response = error.into_response();
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
+    }
+
+    #[test]
+    fn session_extraction_error_internal_error_status_code() {
+        let error = SessionExtractionError::InternalError;
+        let response = error.into_response();
+        assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+    }
+
+    #[test]
+    fn session_debug_format() {
+        let session = Session {
+            user_id: 42,
+            token: "secret-token".to_string(),
+            permissions: vec![Permission::AccessCatalog],
+        };
+
+        let debug_str = format!("{:?}", session);
+        assert!(debug_str.contains("user_id"));
+        assert!(debug_str.contains("42"));
+        assert!(debug_str.contains("token"));
+        assert!(debug_str.contains("secret-token"));
+        assert!(debug_str.contains("permissions"));
+    }
+
+    #[test]
+    fn cookie_and_header_constants() {
+        assert_eq!(COOKIE_SESSION_TOKEN_KEY, "session_token");
+        assert_eq!(HEADER_SESSION_TOKEN_KEY, "Authorization");
+    }
+}
