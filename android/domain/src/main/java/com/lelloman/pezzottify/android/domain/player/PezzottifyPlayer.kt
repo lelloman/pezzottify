@@ -9,9 +9,8 @@ interface PezzottifyPlayer : ControlsAndStatePlayer, AppInitializer{
     val canGoToPreviousPlaylist: StateFlow<Boolean>
     val canGoToNextPlaylist: StateFlow<Boolean>
 
-    fun loadAlbum(albumId: String)
+    fun loadAlbum(albumId: String, startTrackId: String? = null)
     fun loadUserPlaylist(userPlaylistId: String)
-    fun loadTrack(trackId: String)
 
 
     fun goToPreviousPlaylist()

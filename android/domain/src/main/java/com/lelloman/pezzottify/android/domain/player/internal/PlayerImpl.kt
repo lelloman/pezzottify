@@ -62,7 +62,7 @@ internal class PlayerImpl(
         }
     }
 
-    override fun loadAlbum(albumId: String) {
+    override fun loadAlbum(albumId: String, startTrackId: String?) {
         runOnPlayerThread {
             loadNexPlaylistJob?.cancel()
             loadNexPlaylistJob = runOnPlayerThread {
@@ -82,6 +82,18 @@ internal class PlayerImpl(
                     val baseUrl = configStore.baseUrl.value
                     val urls = tracksIds.map { "$baseUrl/v1/content/stream/$it" }
                     platformPlayer.loadPlaylist(urls)
+
+                    // If a specific track was requested, start from that track
+                    if (startTrackId != null) {
+                        val startIndex = tracksIds.indexOf(startTrackId)
+                        if (startIndex >= 0) {
+                            platformPlayer.loadTrackIndex(startIndex)
+                            logger.info("Starting album $albumId at track index $startIndex (trackId: $startTrackId)")
+                        } else {
+                            logger.warn("Start track $startTrackId not found in album $albumId, starting from beginning")
+                        }
+                    }
+
                     logger.info("Loaded album $albumId")
                 }
             }
@@ -90,24 +102,6 @@ internal class PlayerImpl(
 
     override fun loadUserPlaylist(userPlaylistId: String) {
         TODO("Not yet implemented")
-    }
-
-    override fun loadTrack(trackId: String) {
-        runOnPlayerThread {
-            loadNexPlaylistJob?.cancel()
-            loadNexPlaylistJob = runOnPlayerThread {
-                mutablePlaybackPlaylist.value = PlaybackPlaylist(
-                    context = PlaybackPlaylistContext.UserMix,
-                    tracksIds = listOf(trackId),
-                )
-                platformPlayer.setIsPlaying(true)
-                logger.info("Loading track into platform player.")
-                val baseUrl = configStore.baseUrl.value
-                val url = "$baseUrl/v1/content/stream/$trackId"
-                platformPlayer.loadPlaylist(listOf(url))
-                logger.info("Loaded track $trackId")
-            }
-        }
     }
 
     override fun forward10Sec() {

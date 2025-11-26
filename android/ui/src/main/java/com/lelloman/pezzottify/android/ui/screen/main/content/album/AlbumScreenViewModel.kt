@@ -47,12 +47,12 @@ class AlbumScreenViewModel @AssistedInject constructor(
     }
 
     override fun clickOnTrack(trackId: String) {
-        interactor.playTrack(trackId)
+        interactor.playTrack(albumId, trackId)
     }
 
     interface Interactor {
         fun playAlbum(albumId: String)
-        fun playTrack(trackId: String)
+        fun playTrack(albumId: String, trackId: String)
     }
 
     @AssistedFactory

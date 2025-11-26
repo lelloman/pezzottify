@@ -112,8 +112,8 @@ class InteractorsModule {
             player.loadAlbum(albumId)
         }
 
-        override fun playTrack(trackId: String) {
-            player.loadTrack(trackId)
+        override fun playTrack(albumId: String, trackId: String) {
+            player.loadAlbum(albumId, trackId)
         }
     }
 

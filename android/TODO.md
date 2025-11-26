@@ -1,8 +1,8 @@
 ## [android]
 
-- When loading a track in the player from album screen, the next button doesn't work
 - Remove all database migrations and reset StaticsDb version to 1 (clean slate for development)
 - Implement runtime theme/palette selection (allow users to choose from multiple color schemes in settings)
+- Create a settings screen with configurable player behavior (e.g., playlist loading when clicking tracks/albums)
 - The synchronizer seems to have a bug, when the server responds 403 it keeps hammering the endpoint in an infinite loop
 - Artist discography static is not persisted and is re-fetched every time from the server
 - Create a db for logout operations so that if a user logsout, the server call doesn't need to
@@ -14,6 +14,7 @@
 - Create a "memory pressure" component that can detect how much memory can we use for caches and such (imagine caching stuff from the db, pre-loading audio, images)
 - Add an in-memory immediate cache layer in ContentResolver, only after a "memory pressure" component
 - Make the scroll behavior in album screen collapse the album image. There's too little room for seeing the tracks, once the user start scroll down the image should collapse into a bar.
+- ~When loading a track in the player from album screen, the next button doesn't work~
 - ~Show related artists in the artist screen~
 - ~Make a component to load an album's and an artists picture with intelligent size selection and fallback~
 - ~Show tracks list in album page~
