@@ -8,10 +8,10 @@
 - Implement content download functionality (IssueContentDownload permission)
 - Create catalog db
 - After the catalog has been migrated to a db, modify artist, album and track models to have the reference to one "display image" id, then provide, if available other images
-- Add unit tests for permissions system (to_int/from_int, UserRole permissions, permission grants)
-- Add unit tests for session management (token extraction, permission checking, invalid tokens)
-- Add unit tests for catalog loading error cases (missing files, invalid references, problem accumulation)
-- Add unit tests for rate limiting behavior
+- ~Add unit tests for permissions system (to_int/from_int, UserRole permissions, permission grants)~
+- ~Add unit tests for session management (token extraction, permission checking, invalid tokens)~
+- ~Add unit tests for catalog loading error cases (missing files, invalid references, problem accumulation)~
+- ~Add unit tests for rate limiting behavior~
 - ~Check UserStore return type, we should not swallow errors~
 - ~Implement server reboot endpoint (RebootServer permission)~
 - ~Set last used to auth token~
