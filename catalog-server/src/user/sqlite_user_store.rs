@@ -550,7 +550,9 @@ impl UserStore for SqliteUserStore {
             "INSERT INTO user (handle) VALUES (?1)",
             params![user_handle],
         )
-        .with_context(|| format!("Failed to create user {}", user_handle))
+        .with_context(|| format!("Failed to create user {}", user_handle))?;
+
+        Ok(conn.last_insert_rowid() as usize)
     }
 
     fn get_user_playlists(&self, user_id: usize) -> Result<Vec<String>> {

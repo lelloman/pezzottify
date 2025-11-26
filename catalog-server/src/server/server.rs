@@ -519,7 +519,7 @@ impl ServerState {
     }
 }
 
-fn make_app(
+pub fn make_app(
     config: ServerConfig,
     catalog: Catalog,
     search_vault: Box<dyn SearchVault>,
