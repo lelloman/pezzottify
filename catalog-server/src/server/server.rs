@@ -753,7 +753,8 @@ pub fn make_app(
         .nest("/v1/auth", auth_routes)
         .nest("/v1/content", content_routes)
         .nest("/v1/user", user_routes)
-        .nest("/v1/admin", admin_routes);
+        .nest("/v1/admin", admin_routes)
+        .route("/metrics", get(super::metrics::metrics_handler));
 
     #[cfg(feature = "slowdown")]
     {

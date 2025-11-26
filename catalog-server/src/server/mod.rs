@@ -1,5 +1,6 @@
 pub mod config;
 mod http_layers;
+pub mod metrics;
 mod search;
 pub mod server;
 pub(self) mod session;

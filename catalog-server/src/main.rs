@@ -101,6 +101,15 @@ async fn main() -> Result<()> {
         return Ok(());
     }
 
+    // Initialize metrics system
+    info!("Initializing metrics...");
+    server::metrics::init_metrics();
+    server::metrics::init_catalog_metrics(
+        catalog.get_artists_count(),
+        catalog.get_albums_count(),
+        catalog.get_tracks_count(),
+    );
+
     let user_store_file_path = match cli_args.user_store_file_path {
         Some(path) => path,
         None => SqliteUserStore::infer_path().with_context(|| {
