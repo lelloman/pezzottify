@@ -445,7 +445,7 @@ pub struct SqliteUserStore {
 
 impl SqliteUserStore {
     pub fn new<T: AsRef<Path>>(db_path: T) -> Result<Self> {
-        let conn = if db_path.as_ref().exists() {
+        let mut conn = if db_path.as_ref().exists() {
             Connection::open_with_flags(
                 db_path,
                 rusqlite::OpenFlags::SQLITE_OPEN_READ_WRITE
@@ -482,7 +482,7 @@ impl SqliteUserStore {
                 .validate(&conn)?;
         }
 
-        Self::migrate_if_needed(&conn, version)?;
+        Self::migrate_if_needed(&mut conn, version)?;
 
         Ok(SqliteUserStore {
             conn: Arc::new(Mutex::new(conn)),
@@ -520,7 +520,8 @@ impl SqliteUserStore {
         None
     }
 
-    fn migrate_if_needed(conn: &Connection, version: usize) -> Result<()> {
+    fn migrate_if_needed(conn: &mut Connection, version: usize) -> Result<()> {
+        let tx = conn.transaction()?;
         let mut latest_from = version;
         for schema in VERSIONED_SCHEMAS.iter().skip(version + 1) {
             if let Some(migration_fn) = schema.migration {
@@ -528,15 +529,16 @@ impl SqliteUserStore {
                     "Migrating db from version {} to {}",
                     latest_from, schema.version
                 );
-                migration_fn(conn)?;
+                migration_fn(&tx)?;
                 latest_from = schema.version;
             }
         }
-        conn.execute(
+        tx.execute(
             &format!("PRAGMA user_version = {}", BASE_DB_VERSION + latest_from),
             [],
         )?;
 
+        tx.commit()?;
         Ok(())
     }
 }
@@ -859,10 +861,11 @@ impl UserStore for SqliteUserStore {
     }
 
     fn add_user_role(&self, user_id: usize, role: UserRole) -> Result<()> {
-        let conn = self.conn.lock().unwrap();
+        let mut conn = self.conn.lock().unwrap();
+        let tx = conn.transaction()?;
 
         // Try to get existing roles for this user
-        let existing_roles: Option<String> = conn
+        let existing_roles: Option<String> = tx
             .query_row(
                 &format!("SELECT role FROM {} WHERE user_id = ?1", USER_ROLE_TABLE_V_4.name),
                 params![user_id],
@@ -886,14 +889,14 @@ impl UserStore for SqliteUserStore {
                     .collect::<Vec<_>>()
                     .join(",");
 
-                conn.execute(
+                tx.execute(
                     &format!("UPDATE {} SET role = ?1 WHERE user_id = ?2", USER_ROLE_TABLE_V_4.name),
                     params![roles_str, user_id],
                 )?;
             }
         } else {
             // No existing roles, insert new row
-            conn.execute(
+            tx.execute(
                 &format!(
                     "INSERT INTO {} (user_id, role) VALUES (?1, ?2)",
                     USER_ROLE_TABLE_V_4.name
@@ -902,14 +905,16 @@ impl UserStore for SqliteUserStore {
             )?;
         }
 
+        tx.commit()?;
         Ok(())
     }
 
     fn remove_user_role(&self, user_id: usize, role: UserRole) -> Result<()> {
-        let conn = self.conn.lock().unwrap();
+        let mut conn = self.conn.lock().unwrap();
+        let tx = conn.transaction()?;
 
         // Get existing roles for this user
-        let existing_roles: Option<String> = conn
+        let existing_roles: Option<String> = tx
             .query_row(
                 &format!("SELECT role FROM {} WHERE user_id = ?1", USER_ROLE_TABLE_V_4.name),
                 params![user_id],
@@ -928,7 +933,7 @@ impl UserStore for SqliteUserStore {
 
             if roles.is_empty() {
                 // No roles left, delete the row
-                conn.execute(
+                tx.execute(
                     &format!("DELETE FROM {} WHERE user_id = ?1", USER_ROLE_TABLE_V_4.name),
                     params![user_id],
                 )?;
@@ -940,13 +945,14 @@ impl UserStore for SqliteUserStore {
                     .collect::<Vec<_>>()
                     .join(",");
 
-                conn.execute(
+                tx.execute(
                     &format!("UPDATE {} SET role = ?1 WHERE user_id = ?2", USER_ROLE_TABLE_V_4.name),
                     params![roles_str, user_id],
                 )?;
             }
         }
 
+        tx.commit()?;
         Ok(())
     }
 
@@ -995,10 +1001,11 @@ impl UserStore for SqliteUserStore {
     }
 
     fn decrement_permission_countdown(&self, permission_id: usize) -> Result<bool> {
-        let conn = self.conn.lock().unwrap();
+        let mut conn = self.conn.lock().unwrap();
+        let tx = conn.transaction()?;
 
         // Get current countdown
-        let current_countdown: Option<i64> = conn.query_row(
+        let current_countdown: Option<i64> = tx.query_row(
             &format!(
                 "SELECT countdown FROM {} WHERE id = ?1",
                 USER_EXTRA_PERMISSION_TABLE_V_4.name
@@ -1007,16 +1014,22 @@ impl UserStore for SqliteUserStore {
             |row| row.get(0),
         )?;
 
-        match current_countdown {
+        let result = match current_countdown {
             None => Ok(true), // No countdown, permission remains valid
             Some(count) if count <= 1 => {
                 // Last use, delete the permission
-                self.remove_user_extra_permission(permission_id)?;
+                tx.execute(
+                    &format!(
+                        "DELETE FROM {} WHERE id = ?1",
+                        USER_EXTRA_PERMISSION_TABLE_V_4.name
+                    ),
+                    params![permission_id],
+                )?;
                 Ok(false)
             }
             Some(count) => {
                 // Decrement the countdown
-                conn.execute(
+                tx.execute(
                     &format!(
                         "UPDATE {} SET countdown = ?1 WHERE id = ?2",
                         USER_EXTRA_PERMISSION_TABLE_V_4.name
@@ -1025,7 +1038,10 @@ impl UserStore for SqliteUserStore {
                 )?;
                 Ok(true)
             }
-        }
+        };
+
+        tx.commit()?;
+        result
     }
 
     fn resolve_user_permissions(&self, user_id: usize) -> Result<Vec<Permission>> {
@@ -1103,16 +1119,33 @@ impl UserAuthTokenStore for SqliteUserStore {
     }
 
     fn delete_user_auth_token(&self, token: &AuthTokenValue) -> Option<AuthToken> {
-        let token = self.get_user_auth_token(token)?;
-        let conn = self.conn.lock().unwrap();
-        let mut stmt = conn
-            .prepare("DELETE FROM auth_token WHERE value = ?1")
-            .ok()
-            .unwrap();
-        match stmt.execute(params![token.value.0]) {
-            Ok(_) => Some(token),
-            Err(_) => None,
-        }
+        let mut conn = self.conn.lock().unwrap();
+        let tx = conn.transaction().ok()?;
+
+        // Get the token data before deleting
+        let auth_token = {
+            let mut stmt = tx
+                .prepare("SELECT * FROM auth_token WHERE value = ?1")
+                .ok()?;
+            stmt.query_row(params![token.0], |row| {
+                Ok(AuthToken {
+                    user_id: row.get(0)?,
+                    value: AuthTokenValue(row.get(1)?),
+                    created: system_time_from_column_result(row.get(2)?),
+                    last_used: row
+                        .get::<usize, Option<i64>>(3)?
+                        .map(|v| system_time_from_column_result(v)),
+                })
+            })
+            .ok()?
+        };
+
+        // Delete the token
+        tx.execute("DELETE FROM auth_token WHERE value = ?1", params![token.0])
+            .ok()?;
+
+        tx.commit().ok()?;
+        Some(auth_token)
     }
 
     fn update_user_auth_token_last_used_timestamp(&self, token: &AuthTokenValue) -> Result<()> {
@@ -1208,11 +1241,12 @@ impl UserAuthCredentialsStore for SqliteUserStore {
     }
 
     fn update_user_auth_credentials(&self, credentials: UserAuthCredentials) -> Result<()> {
-        let conn = self.conn.lock().unwrap();
+        let mut conn = self.conn.lock().unwrap();
+        let tx = conn.transaction()?;
         let user_id = credentials.user_id;
         match credentials.username_password.as_ref() {
             Some(password_credentials) => {
-                let updated = conn.execute(
+                let updated = tx.execute(
                     "UPDATE user_password_credentials SET salt = ?1, hash = ?2, hasher = ?3, user_id = ?4",
                     params![
                         password_credentials.salt,
@@ -1222,7 +1256,7 @@ impl UserAuthCredentialsStore for SqliteUserStore {
                     ],
                 )?;
                 if updated == 0 {
-                    conn.execute(
+                    tx.execute(
                         "INSERT INTO user_password_credentials (salt, hash, hasher, user_id) VALUES (?1, ?2, ?3, ?4)",
                         params![
                             password_credentials.salt,
@@ -1234,12 +1268,13 @@ impl UserAuthCredentialsStore for SqliteUserStore {
                 }
             }
             None => {
-                conn.execute(
+                tx.execute(
                     "DELETE FROM user_password_credentials WHERE user_id = ?1",
                     params![user_id],
                 )?;
             }
         };
+        tx.commit()?;
         Ok(())
     }
 }

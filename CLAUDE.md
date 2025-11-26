@@ -194,7 +194,8 @@ Multi-module Gradle project with clean architecture layers:
 - Schema managed via `VersionedSchema` in `sqlite_persistence/`
 - Migrations tracked with version numbers
 - Foreign keys enforced (cascade deletes for user content)
-- TODO mentions verifying all operations use transactions
+- All multi-step operations use transactions (role management, permission countdown, auth credentials, migrations)
+- Single operations rely on SQLite's default atomicity
 
 **Search indexing:**
 - Built at startup from catalog
