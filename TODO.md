@@ -61,6 +61,7 @@
 - Make a component to load an album's and an artists picture (try it in the recently viewed stuff in home screen)
 - Implement runtime theme/palette selection (allow users to choose from multiple color schemes in settings)
 - The synchronizer seems to have a bug, when the server responds 403 it keeps hammering the endpoint in an infinite loop
+- Artist discography static is not persisted and is re-fetched every time from the server
 - Create a db for logout operations so that if a user logsout, the server call doesn't need to
   happen immediately, plus in case of immediate error it can be retried
 - Show tracks list in the album screen
