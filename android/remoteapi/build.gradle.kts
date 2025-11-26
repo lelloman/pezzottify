@@ -52,3 +52,8 @@ dependencies {
     testImplementation(libs.truth)
     testImplementation(libs.kotlinx.coroutines.test)
 }
+
+// Integration test configuration
+// Note: Integration tests are located in src/integrationTest/java
+// These tests require external dependencies (Docker, test database, catalog data)
+// Run using: ./run-integration-tests.sh script from the android/ directory

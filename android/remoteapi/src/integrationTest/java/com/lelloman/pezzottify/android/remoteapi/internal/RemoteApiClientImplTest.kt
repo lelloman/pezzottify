@@ -17,7 +17,7 @@ class RemoteApiClientImplTest {
         // Setup
         val userHandle = "android-test"
         val password = "asdasd"
-        val baseUrl = "http://localhost:3001"
+        val baseUrl = "http://localhost:3002"
         val credentialsProvider = object : RemoteApiCredentialsProvider {
             override var authToken: String = ""
         }
@@ -28,7 +28,13 @@ class RemoteApiClientImplTest {
             hostUrlProvider = hostUrlProvider,
             okhttpClientBuilder = OkHttpClient.Builder(),
             credentialsProvider = credentialsProvider,
+            coroutineScope = this.backgroundScope, // Use background scope so it gets cancelled when test finishes
         )
+
+        // Give retrofit flow time to initialize with the correct URL
+        // Background scope coroutines need explicit time advancement
+        testScheduler.advanceUntilIdle()
+        testScheduler.runCurrent()
 
         // Can't get artist without auth token
         val princeId = "R5a2EaR3hamoenG9rDuVn8j"

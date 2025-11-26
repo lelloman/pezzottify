@@ -40,7 +40,10 @@ cd android
 ./gradlew testDebugUnitTest        # Run debug unit tests
 ./gradlew connectedAndroidTest     # Run instrumented tests (requires device/emulator)
 ./gradlew :{module}:test           # Run tests for specific module
+./run-integration-tests.sh         # Run integration tests (requires Docker)
 ```
+
+**Integration tests** are located in `remoteapi/src/integrationTest/` and test the remote API client against a real catalog-server instance. The `run-integration-tests.sh` script handles all setup (Docker container, test database, sample catalog) and cleanup automatically. Integration tests are kept separate from unit tests to maintain fast test execution with `./gradlew test`.
 
 ### Running
 

@@ -122,6 +122,45 @@ app
 
 All feature modules depend on the `domain` module, ensuring business logic remains centralized and testable. The `app` module ties everything together through dependency injection.
 
+## Development
+
+### Building
+
+```bash
+./gradlew build               # Build all modules
+./gradlew assembleDebug       # Build debug APK
+./gradlew assembleRelease     # Build release APK
+```
+
+### Testing
+
+```bash
+./gradlew test                # Run all unit tests
+./run-integration-tests.sh    # Run integration tests (requires Docker)
+```
+
+**Unit tests** are located in each module's `src/test/` directory and test individual components in isolation.
+
+**Integration tests** are located in `remoteapi/src/integrationTest/` and test the remote API client against a real backend server. The `run-integration-tests.sh` script:
+- Creates a test catalog with sample data (artist, album, track, image)
+- Builds and runs a catalog-server Docker container
+- Creates a test database with authentication credentials
+- Runs the integration test suite
+- Cleans up all resources automatically
+
+Integration tests require Docker to be installed and running.
+
+### Running
+
+```bash
+./gradlew installDebug        # Install debug APK on connected device/emulator
+```
+
+The app can be launched from the device or via:
+```bash
+adb shell am start -n com.lelloman.pezzottify.android/.MainActivity
+```
+
 ## Backend
 
 The Android app requires the Pezzottify catalog server to be running. See the main project README for instructions on setting up the backend server.

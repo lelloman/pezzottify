@@ -73,11 +73,18 @@ npm run format                # Format with Prettier
 ```bash
 cd android
 ./gradlew build               # Build all modules
-./gradlew test                # Run tests
+./gradlew test                # Run unit tests
 ./gradlew assembleDebug       # Build debug APK
+./run-integration-tests.sh    # Run integration tests (requires Docker)
 ```
 
 The Android project uses a multi-module Gradle setup with modules: `app`, `ui`, `domain`, `localdata`, `logger`, `player`, `remoteapi`, `debuginterface`.
+
+**Integration tests:**
+- Located in `remoteapi/src/integrationTest/`
+- Require Docker to run (spins up test catalog-server instance)
+- Run via `./run-integration-tests.sh` script
+- Not included in `./gradlew test` to keep unit tests fast
 
 ## Architecture
 
