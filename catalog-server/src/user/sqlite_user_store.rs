@@ -581,21 +581,15 @@ impl UserStore for SqliteUserStore {
         }
     }
 
-    fn get_all_user_handles(&self) -> Vec<String> {
+    fn get_all_user_handles(&self) -> Result<Vec<String>> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn
-            .prepare(&format!("SELECT handle FROM {}", USER_TABLE_V_0.name))
-            .ok()
-            .unwrap();
+            .prepare(&format!("SELECT handle FROM {}", USER_TABLE_V_0.name))?;
         let rows = stmt
-            .query_map([], |row| row.get(0))
-            .ok()
-            .unwrap()
-            .collect::<Result<Vec<String>, _>>()
-            .ok()
-            .unwrap();
+            .query_map([], |row| row.get(0))?
+            .collect::<Result<Vec<String>, _>>()?;
 
-        rows
+        Ok(rows)
     }
 
     fn get_user_id(&self, user_handle: &str) -> Result<Option<usize>> {

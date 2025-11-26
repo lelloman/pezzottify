@@ -897,7 +897,7 @@ mod tests {
             todo!()
         }
 
-        fn get_all_user_handles(&self) -> Vec<String> {
+        fn get_all_user_handles(&self) -> Result<Vec<String>> {
             todo!()
         }
 

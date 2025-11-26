@@ -224,7 +224,12 @@ fn execute_command(
                     }
                 }
                 InnerCommand::UserHandles => {
-                    println!("{:#?}", user_manager.get_all_user_handles());
+                    match user_manager.get_all_user_handles() {
+                        Ok(handles) => println!("{:#?}", handles),
+                        Err(err) => {
+                            return CommandExecutionResult::Error(format!("Failed to get user handles: {}", err));
+                        }
+                    }
                 }
                 InnerCommand::ListRoles => {
                     use user::UserRole;

@@ -204,7 +204,7 @@ impl UserManager {
             .get_all_user_auth_tokens(user_handle)
     }
 
-    pub fn get_all_user_handles(&self) -> Vec<String> {
+    pub fn get_all_user_handles(&self) -> Result<Vec<String>> {
         self.user_store.lock().unwrap().get_all_user_handles()
     }
 
