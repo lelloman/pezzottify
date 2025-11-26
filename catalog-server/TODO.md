@@ -1,0 +1,28 @@
+## [catalog-server]
+
+- Create custom, flashy, modern looking CLI interface style for cli-auth
+- Setup alerts infrastructure (emails or telegram bot for rate limit violations, errors, etc.)
+- Setup metrics infrastructure for monitoring and observability
+- Create admin API endpoints for managing user roles and permissions (ManagePermissions permission)
+- Implement catalog editing endpoints (EditCatalog permission)
+- Implement content download functionality (IssueContentDownload permission)
+- Create catalog db
+- After the catalog has been migrated to a db, modify artist, album and track models to have the reference to one "display image" id, then provide, if available other images
+- Check UserStore return type, we should not swallow errors
+- Add more unit tests (expecially to db, like migrations?)
+- ~Implement server reboot endpoint (RebootServer permission)~
+- ~Set last used to auth token~
+- ~Verify that all sqlite operations are performed within a transaction~
+- ~Implement a rate limiting of some sort~
+- ~Add extra permission management to cli-auth (time-based and countdown-based grants)~
+- ~Delete cli_search and clean up unused stuff and format and warnings~
+- ~Add user roles~
+- ~Update cli-auth to include user roles~
+- ~Add hard limit for playlist size (150?)~
+- ~Add user playlists~
+- ~Make no_checks a cli args rather than build feature~
+- ~Add cache directive to responses~
+- ~Wrap ids so that the type can be embedded in them~
+- ~Add user saved albums, tracks and artists~
+- ~Show requests in logs~
+- ~Create User identity/authentication db~
