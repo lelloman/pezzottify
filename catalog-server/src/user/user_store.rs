@@ -59,8 +59,9 @@ pub trait UserStore: UserAuthTokenStore + UserAuthCredentialsStore + Send + Sync
     fn get_user_id(&self, user_handle: &str) -> Result<Option<usize>>;
 
     /// Returns if the user liked the content with the given id,
-    /// returns None if the user does not exist.
-    fn is_user_liked_content(&self, user_id: usize, content_id: &str) -> Option<bool>;
+    /// Returns Ok(None) if the user does not exist.
+    /// Returns Err if there is a database error.
+    fn is_user_liked_content(&self, user_id: usize, content_id: &str) -> Result<Option<bool>>;
 
     /// Sets the liked status of the content with the given id.
     /// Returns None if the user does not exist.

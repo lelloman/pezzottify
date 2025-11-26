@@ -883,7 +883,7 @@ mod tests {
             todo!()
         }
 
-        fn is_user_liked_content(&self, _user_id: usize, _content_id: &str) -> Option<bool> {
+        fn is_user_liked_content(&self, _user_id: usize, _content_id: &str) -> Result<Option<bool>> {
             todo!()
         }
 

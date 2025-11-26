@@ -615,19 +615,17 @@ impl UserStore for SqliteUserStore {
         }
     }
 
-    fn is_user_liked_content(&self, user_id: usize, content_id: &str) -> Option<bool> {
+    fn is_user_liked_content(&self, user_id: usize, content_id: &str) -> Result<Option<bool>> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn
             .prepare(&format!(
                 "SELECT COUNT(*) FROM {} WHERE user_id = ?1 AND content_id = ?2",
                 LIKED_CONTENT_TABLE_V_2.name
-            ))
-            .ok()?;
+            ))?;
         let count: i32 = stmt
-            .query_row(params![user_id, content_id], |row| row.get(0))
-            .ok()?;
+            .query_row(params![user_id, content_id], |row| row.get(0))?;
 
-        Some(count > 0)
+        Ok(Some(count > 0))
     }
 
     fn set_user_liked_content(
@@ -1356,6 +1354,7 @@ mod tests {
 
         assert!(store
             .is_user_liked_content(test_user_id, "test_content")
+            .unwrap()
             .unwrap());
 
         store
@@ -1364,6 +1363,7 @@ mod tests {
 
         assert!(!store
             .is_user_liked_content(test_user_id, "test_content")
+            .unwrap()
             .unwrap());
     }
 
@@ -1506,6 +1506,7 @@ mod tests {
 
         let liked_content = store
             .is_user_liked_content(user_id, "test_content_id")
+            .unwrap()
             .unwrap();
         assert!(liked_content);
 
