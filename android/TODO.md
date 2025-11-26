@@ -11,8 +11,8 @@
 - Create a "memory pressure" component that can detect how much memory can we use for caches and such (imagine caching stuff from the db, pre-loading audio, images)
 - Add an in-memory immediate cache layer in ContentResolver, only after a "memory pressure" component
 - Make the play button accent color
-- Put picture in artist screen and make the screen scroll behave like album (collapsing the picture)
 - In the album screen, remove the pictures from the track, remove the id, and make it a row, in the first space there should be track name above and artists compound names component below, then on the right there should be the duration
+- ~Put picture in artist screen and make the screen scroll behave like album (collapsing the picture)~
 - ~Improve artist screen appearance: load actual artist picture and make scroll behavior collapse the image as user scrolls down~
 - ~Make the scroll behavior in album screen collapse the album image. There's too little room for seeing the tracks, once the user start scroll down the image should collapse into a bar.~
 - ~Remove all database migrations and reset StaticsDb version to 1 (clean slate for development)~
