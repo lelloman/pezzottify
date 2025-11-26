@@ -169,7 +169,12 @@ fn execute_command(
                             return CommandExecutionResult::Error(format!("Failed to get user credentials: {}", err));
                         }
                     };
-                    let user_token = user_manager.get_user_tokens(&user_handle);
+                    let user_token = match user_manager.get_user_tokens(&user_handle) {
+                        Ok(tokens) => tokens,
+                        Err(err) => {
+                            return CommandExecutionResult::Error(format!("Failed to get user tokens: {}", err));
+                        }
+                    };
 
                     println!("User Credentials:");
                     println!("{:#?}", user_credentials);

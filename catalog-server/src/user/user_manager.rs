@@ -197,7 +197,7 @@ impl UserManager {
         }
     }
 
-    pub fn get_user_tokens(&self, user_handle: &String) -> Vec<AuthToken> {
+    pub fn get_user_tokens(&self, user_handle: &String) -> Result<Vec<AuthToken>> {
         self.user_store
             .lock()
             .unwrap()

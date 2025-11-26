@@ -34,7 +34,8 @@ pub trait UserAuthTokenStore: Send + Sync {
     fn add_user_auth_token(&self, token: AuthToken) -> Result<()>;
 
     /// Returns all user's authentication tokens.
-    fn get_all_user_auth_tokens(&self, user_handle: &str) -> Vec<AuthToken>;
+    /// Returns Err if there is a database error.
+    fn get_all_user_auth_tokens(&self, user_handle: &str) -> Result<Vec<AuthToken>>;
 
     /// Prunes unused auth tokens that haven't been used for the specified duration.
     /// Returns the number of tokens that were deleted.

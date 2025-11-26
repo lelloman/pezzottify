@@ -997,7 +997,7 @@ mod tests {
             todo!()
         }
 
-        fn get_all_user_auth_tokens(&self, _user_handle: &str) -> Vec<AuthToken> {
+        fn get_all_user_auth_tokens(&self, _user_handle: &str) -> Result<Vec<AuthToken>> {
             todo!()
         }
 

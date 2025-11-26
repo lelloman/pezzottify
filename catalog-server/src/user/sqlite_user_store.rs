@@ -1176,14 +1176,12 @@ impl UserAuthTokenStore for SqliteUserStore {
         Ok(())
     }
 
-    fn get_all_user_auth_tokens(&self, user_handle: &str) -> Vec<AuthToken> {
+    fn get_all_user_auth_tokens(&self, user_handle: &str) -> Result<Vec<AuthToken>> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn
             .prepare(
                 "SELECT * FROM auth_token WHERE user_id = (SELECT id FROM user WHERE handle = ?1)",
-            )
-            .ok()
-            .unwrap();
+            )?;
         let rows = stmt
             .query_map(params![user_handle], |row| {
                 Ok(AuthToken {
@@ -1194,14 +1192,10 @@ impl UserAuthTokenStore for SqliteUserStore {
                         .get::<usize, Option<i64>>(3)?
                         .map(|v| system_time_from_column_result(v)),
                 })
-            })
-            .ok()
-            .unwrap()
-            .collect::<Result<Vec<AuthToken>, _>>()
-            .ok()
-            .unwrap();
+            })?
+            .collect::<Result<Vec<AuthToken>, _>>()?;
 
-        rows
+        Ok(rows)
     }
 
     fn prune_unused_auth_tokens(&self, unused_for_days: u64) -> Result<usize> {
