@@ -29,9 +29,7 @@
 
 ## [catalog-server]
 
-- Add extra permission management to cli-auth (time-based and countdown-based grants)
 - Create custom, flashy, modern looking CLI interface style for cli-auth
-- Implement a rate limiting of some sort
 - Setup alerts infrastructure (emails or telegram bot for rate limit violations, errors, etc.)
 - Setup metrics infrastructure for monitoring and observability
 - Create admin API endpoints for managing user roles and permissions (ManagePermissions permission)
@@ -43,6 +41,8 @@
 - Check UserStore return type, we should not swallow errors
 - Verify that all sqlite operations are performed within a transaction
 - Add more unit tests (expecially to db, like migrations?)
+- ~Implement a rate limiting of some sort~
+- ~Add extra permission management to cli-auth (time-based and countdown-based grants)~
 - ~Delete cli_search and clean up unused stuff and format and warnings~
 - ~Add user roles~
 - ~Update cli-auth to include user roles~
