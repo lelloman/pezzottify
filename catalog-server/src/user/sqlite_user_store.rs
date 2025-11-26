@@ -1220,14 +1220,16 @@ impl UserAuthTokenStore for SqliteUserStore {
 }
 
 impl UserAuthCredentialsStore for SqliteUserStore {
-    fn get_user_auth_credentials(&self, user_handle: &str) -> Option<UserAuthCredentials> {
-        let user_id = self.get_user_id(user_handle)?;
+    fn get_user_auth_credentials(&self, user_handle: &str) -> Result<Option<UserAuthCredentials>> {
+        let user_id = match self.get_user_id(user_handle) {
+            Some(id) => id,
+            None => return Ok(None),
+        };
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn
-            .prepare("SELECT * FROM user_password_credentials WHERE user_id = ?1")
-            .ok()?;
+            .prepare("SELECT * FROM user_password_credentials WHERE user_id = ?1")?;
 
-        let password_credentials = stmt
+        let password_credentials = match stmt
             .query_row(params![user_id], |row| {
                 let hasher = match PezzottifyHasher::from_str(&row.get::<usize, String>(3)?) {
                     Ok(x) => x,
@@ -1253,14 +1255,17 @@ impl UserAuthCredentialsStore for SqliteUserStore {
                         .get::<usize, Option<i64>>(6)?
                         .map(|v| system_time_from_column_result(v)),
                 })
-            })
-            .ok();
+            }) {
+                Ok(creds) => Some(creds),
+                Err(rusqlite::Error::QueryReturnedNoRows) => None,
+                Err(e) => return Err(e.into()),
+            };
 
-        Some(UserAuthCredentials {
+        Ok(Some(UserAuthCredentials {
             user_id,
             username_password: password_credentials,
             keys: vec![],
-        })
+        }))
     }
 
     fn update_user_auth_credentials(&self, credentials: UserAuthCredentials) -> Result<()> {

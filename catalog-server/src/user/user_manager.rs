@@ -107,7 +107,7 @@ impl UserManager {
     ) -> Result<()> {
         let user_store = self.user_store.lock().unwrap();
         if let Some(true) = user_store
-            .get_user_auth_credentials(user_handle)
+            .get_user_auth_credentials(user_handle)?
             .map(|x| x.username_password.is_some())
         {
             bail!("User with handle {} already has password credentials method. Maybe you want to modify it?", user_handle);
@@ -118,7 +118,7 @@ impl UserManager {
             .with_context(|| format!("User with handle {} not found.", user_handle))?;
 
         let mut new_credentials = user_store
-            .get_user_auth_credentials(user_handle)
+            .get_user_auth_credentials(user_handle)?
             .unwrap_or_else(|| UserAuthCredentials {
                 user_id,
                 username_password: None,
@@ -136,7 +136,7 @@ impl UserManager {
     ) -> Result<()> {
         let user_store = self.user_store.lock().unwrap();
         let mut credentials = user_store
-            .get_user_auth_credentials(user_handle)
+            .get_user_auth_credentials(user_handle)?
             .with_context(|| format!("User with handle {} not found.", user_handle))?;
         if let None = credentials.username_password {
             bail!(
@@ -154,7 +154,7 @@ impl UserManager {
             .user_store
             .lock()
             .unwrap()
-            .get_user_auth_credentials(user_handle)
+            .get_user_auth_credentials(user_handle)?
             .with_context(|| format!("User with handle {} not found.", user_handle))?;
         credentials.username_password = None;
         self.user_store
@@ -163,7 +163,7 @@ impl UserManager {
             .update_user_auth_credentials(credentials.clone())
     }
 
-    pub fn get_user_credentials(&self, user_handle: &String) -> Option<UserAuthCredentials> {
+    pub fn get_user_credentials(&self, user_handle: &String) -> Result<Option<UserAuthCredentials>> {
         self.user_store
             .lock()
             .unwrap()

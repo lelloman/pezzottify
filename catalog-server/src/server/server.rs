@@ -456,8 +456,13 @@ async fn login(
 ) -> Response {
     debug!("login() called with {:?}", body);
     let mut locked_manager = user_manager.lock().unwrap();
-    if let Some(credentials) = locked_manager.get_user_credentials(&body.user_handle) {
-        if let Some(password_credentials) = &credentials.username_password {
+    let credentials = match locked_manager.get_user_credentials(&body.user_handle) {
+        Ok(Some(creds)) => creds,
+        Ok(None) => return StatusCode::UNAUTHORIZED.into_response(),
+        Err(_) => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+    };
+
+    if let Some(password_credentials) = &credentials.username_password {
             if let Ok(true) = password_credentials.hasher.verify(
                 &body.password,
                 &password_credentials.hash,
@@ -488,7 +493,6 @@ async fn login(
                 };
             }
         }
-    }
     StatusCode::UNAUTHORIZED.into_response()
 }
 
@@ -1003,7 +1007,7 @@ mod tests {
     }
 
     impl UserAuthCredentialsStore for InMemoryUserStore {
-        fn get_user_auth_credentials(&self, _user_handle: &str) -> Option<UserAuthCredentials> {
+        fn get_user_auth_credentials(&self, _user_handle: &str) -> Result<Option<UserAuthCredentials>> {
             todo!()
         }
 

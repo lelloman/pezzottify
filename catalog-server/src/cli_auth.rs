@@ -163,7 +163,12 @@ fn execute_command(
                     }
                 }
                 InnerCommand::Show { user_handle } => {
-                    let user_credentials = user_manager.get_user_credentials(&user_handle);
+                    let user_credentials = match user_manager.get_user_credentials(&user_handle) {
+                        Ok(creds) => creds,
+                        Err(err) => {
+                            return CommandExecutionResult::Error(format!("Failed to get user credentials: {}", err));
+                        }
+                    };
                     let user_token = user_manager.get_user_tokens(&user_handle);
 
                     println!("User Credentials:");
@@ -241,11 +246,17 @@ fn execute_command(
                     };
 
                     let user_id = match user_manager.get_user_credentials(&user_handle) {
-                        Some(creds) => creds.user_id,
-                        None => {
+                        Ok(Some(creds)) => creds.user_id,
+                        Ok(None) => {
                             return CommandExecutionResult::Error(format!(
                                 "User '{}' not found",
                                 user_handle
+                            ));
+                        }
+                        Err(err) => {
+                            return CommandExecutionResult::Error(format!(
+                                "Failed to get user credentials: {}",
+                                err
                             ));
                         }
                     };
@@ -268,11 +279,17 @@ fn execute_command(
                     };
 
                     let user_id = match user_manager.get_user_credentials(&user_handle) {
-                        Some(creds) => creds.user_id,
-                        None => {
+                        Ok(Some(creds)) => creds.user_id,
+                        Ok(None) => {
                             return CommandExecutionResult::Error(format!(
                                 "User '{}' not found",
                                 user_handle
+                            ));
+                        }
+                        Err(err) => {
+                            return CommandExecutionResult::Error(format!(
+                                "Failed to get user credentials: {}",
+                                err
                             ));
                         }
                     };
@@ -290,11 +307,17 @@ fn execute_command(
                     password,
                 } => {
                     let user_credentials = match user_manager.get_user_credentials(&user_handle) {
-                        Some(x) => x,
-                        None => {
+                        Ok(Some(x)) => x,
+                        Ok(None) => {
                             return CommandExecutionResult::Error(format!(
                                 "User {} not found.",
                                 user_handle
+                            ));
+                        }
+                        Err(err) => {
+                            return CommandExecutionResult::Error(format!(
+                                "Failed to get user credentials: {}",
+                                err
                             ));
                         }
                     };

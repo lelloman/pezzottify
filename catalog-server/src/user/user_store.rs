@@ -5,8 +5,9 @@ use anyhow::Result;
 
 pub trait UserAuthCredentialsStore: Send + Sync {
     /// Returns the user's authentication credentials given the user handle.
-    /// Returns None if the user does not exist.
-    fn get_user_auth_credentials(&self, user_handle: &str) -> Option<UserAuthCredentials>;
+    /// Returns Ok(None) if the user does not exist.
+    /// Returns Err if there is a database error.
+    fn get_user_auth_credentials(&self, user_handle: &str) -> Result<Option<UserAuthCredentials>>;
 
     /// Updates the user's authentication credentials.
     /// Returns None if the user does not exist.
