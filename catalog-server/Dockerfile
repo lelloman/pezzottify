@@ -22,7 +22,6 @@ WORKDIR /catalog-server
 
 # Copy the binaries from the builder stage
 COPY --from=builder /catalog-server/target/release/cli-auth /usr/local/bin/cli-auth
-COPY --from=builder /catalog-server/target/release/cli-search /usr/local/bin/cli-search
 COPY --from=builder /catalog-server/target/release/catalog-server /usr/local/bin/catalog-server
 
 # App will expect these directories
