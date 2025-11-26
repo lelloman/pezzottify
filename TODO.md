@@ -57,6 +57,7 @@
 
 ## [android]
 
+- Implement runtime theme/palette selection (allow users to choose from multiple color schemes in settings)
 - When loading a track in the player from album screen, the next button doesn't work
 - The synchronizer seems to have a bug, when the server responds 403 it keeps hammering the endpoint in an infinite loop
 - Create a db for logout operations so that if a user logsout, the server call doesn't need to

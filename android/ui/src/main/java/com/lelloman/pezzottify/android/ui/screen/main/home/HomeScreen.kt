@@ -2,6 +2,7 @@ package com.lelloman.pezzottify.android.ui.screen.main.home
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -9,11 +10,17 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -38,6 +45,10 @@ import com.lelloman.pezzottify.android.ui.R
 import com.lelloman.pezzottify.android.ui.component.PezzottifyImage
 import com.lelloman.pezzottify.android.ui.component.PezzottifyImageShape
 import com.lelloman.pezzottify.android.ui.content.Content
+import com.lelloman.pezzottify.android.ui.theme.ComponentSize
+import com.lelloman.pezzottify.android.ui.theme.CornerRadius
+import com.lelloman.pezzottify.android.ui.theme.Elevation
+import com.lelloman.pezzottify.android.ui.theme.Spacing
 import com.lelloman.pezzottify.android.ui.toAlbum
 import com.lelloman.pezzottify.android.ui.toArtist
 import com.lelloman.pezzottify.android.ui.toProfile
@@ -104,17 +115,23 @@ private fun HomeScreenContent(
             modifier = Modifier
                 .padding(innerPadding)
                 .fillMaxSize()
-                .verticalScroll(rememberScrollState()),
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = Spacing.Medium),
         ) {
             state.recentlyViewedContent?.let { recentlyViewedItems ->
+                Spacer(modifier = Modifier.height(Spacing.Medium))
                 Text(
                     stringResource(R.string.recently_viewed_item_header),
                     style = MaterialTheme.typography.headlineSmall
                 )
+                Spacer(modifier = Modifier.height(Spacing.Medium))
 
                 val maxGroupSize = 2
                 recentlyViewedItems.forEachGroup(maxGroupSize) { items ->
-                    Row(modifier = Modifier.fillMaxWidth()) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(Spacing.Small)
+                    ) {
                         for (i in 0 until maxGroupSize) {
                             val item = items.getOrNull(i)
                             val itemState = item?.collectAsState(null)
@@ -130,6 +147,7 @@ private fun HomeScreenContent(
                             }
                         }
                     }
+                    Spacer(modifier = Modifier.height(Spacing.Small))
                 }
             }
         }
@@ -142,29 +160,87 @@ private fun RecentlyViewedItem(
     item: Content<ResolvedRecentlyViewedContent>,
     actions: HomeScreenActions
 ) {
-    Box(modifier = modifier) {
-        when (item) {
-            is Content.Resolved -> {
+    when (item) {
+        is Content.Resolved -> {
+            Card(
+                modifier = modifier
+                    .fillMaxWidth()
+                    .clickable {
+                        actions.clickOnRecentlyViewedItem(
+                            item.itemId,
+                            item.data.contentType
+                        )
+                    },
+                shape = RoundedCornerShape(CornerRadius.Medium),
+                elevation = CardDefaults.cardElevation(
+                    defaultElevation = Elevation.Small
+                )
+            ) {
                 Row(
                     modifier = Modifier
-                        .fillMaxSize()
-                        .clickable {
-                            actions.clickOnRecentlyViewedItem(
-                                item.itemId,
-                                item.data.contentType
-                            )
-                        }) {
-                    PezzottifyImage(url = "", shape = PezzottifyImageShape.SmallSquare)
-                    Text(modifier = Modifier.weight(1f), text = item.data.contentName)
+                        .fillMaxWidth()
+                        .padding(Spacing.Small),
+                    verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+                ) {
+                    PezzottifyImage(
+                        url = item.data.contentImageUrl,
+                        shape = PezzottifyImageShape.SmallSquare,
+                        modifier = Modifier.size(ComponentSize.ImageThumbSmall)
+                    )
+                    Spacer(modifier = Modifier.width(Spacing.Small))
+                    Column(
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text(
+                            text = item.data.contentName,
+                            style = MaterialTheme.typography.titleMedium,
+                            maxLines = 1,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Text(
+                            text = item.data.contentType.name,
+                            style = MaterialTheme.typography.bodySmall,
+                            maxLines = 1,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
             }
+        }
 
-            is Content.Loading -> {
+        is Content.Loading -> {
+            Box(
+                modifier = modifier
+                    .fillMaxWidth()
+                    .height(ComponentSize.ImageThumbSmall),
+                contentAlignment = androidx.compose.ui.Alignment.Center
+            ) {
                 CircularProgressIndicator()
             }
+        }
 
-            is Content.Error -> {
-                Text(text = ":(")
+        is Content.Error -> {
+            Card(
+                modifier = modifier
+                    .fillMaxWidth(),
+                shape = RoundedCornerShape(CornerRadius.Medium),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.errorContainer
+                )
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(ComponentSize.ImageThumbSmall)
+                        .padding(Spacing.Small),
+                    contentAlignment = androidx.compose.ui.Alignment.Center
+                ) {
+                    Text(
+                        text = ":(",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onErrorContainer
+                    )
+                }
             }
         }
     }

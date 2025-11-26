@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Spacing Scale -->
+    <dimen name="spacing_xs">4dp</dimen>
+    <dimen name="spacing_sm">8dp</dimen>
+    <dimen name="spacing_md">16dp</dimen>
+    <dimen name="spacing_lg">24dp</dimen>
+    <dimen name="spacing_xl">32dp</dimen>
+    <dimen name="spacing_xxl">48dp</dimen>
+
+    <!-- Corner Radius -->
+    <dimen name="corner_radius_xs">4dp</dimen>
+    <dimen name="corner_radius_sm">8dp</dimen>
+    <dimen name="corner_radius_md">12dp</dimen>
+    <dimen name="corner_radius_lg">16dp</dimen>
+    <dimen name="corner_radius_xl">24dp</dimen>
+
+    <!-- Elevation -->
+    <dimen name="elevation_sm">2dp</dimen>
+    <dimen name="elevation_md">4dp</dimen>
+    <dimen name="elevation_lg">8dp</dimen>
+
+    <!-- Common Component Sizes -->
+    <dimen name="image_thumb_small">48dp</dimen>
+    <dimen name="image_thumb_medium">72dp</dimen>
+    <dimen name="image_thumb_large">120dp</dimen>
+    <dimen name="image_album_grid">160dp</dimen>
+    <dimen name="image_full_width">200dp</dimen>
+
+    <!-- Touch Targets -->
+    <dimen name="min_touch_target">48dp</dimen>
+
+    <!-- Bottom Navigation / App Bar -->
+    <dimen name="bottom_nav_height">56dp</dimen>
+    <dimen name="app_bar_height">56dp</dimen>
+</resources>
