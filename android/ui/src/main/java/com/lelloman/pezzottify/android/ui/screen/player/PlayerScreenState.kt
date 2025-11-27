@@ -2,6 +2,12 @@ package com.lelloman.pezzottify.android.ui.screen.player
 
 import com.lelloman.pezzottify.android.ui.content.ArtistInfo
 
+enum class RepeatModeUi {
+    OFF,
+    ALL,
+    ONE
+}
+
 data class PlayerScreenState(
     val isLoading: Boolean = true,
     val trackName: String = "",
@@ -17,4 +23,6 @@ data class PlayerScreenState(
     val hasPreviousTrack: Boolean = false,
     val volume: Float = 0.5f,
     val isMuted: Boolean = false,
+    val shuffleEnabled: Boolean = false,
+    val repeatMode: RepeatModeUi = RepeatModeUi.OFF,
 )

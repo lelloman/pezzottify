@@ -220,4 +220,12 @@ internal class PlayerImpl(
             logger.info("Removed track $trackId (index $trackIndex) from playlist")
         }
     }
+
+    override fun toggleShuffle() {
+        platformPlayer.toggleShuffle()
+    }
+
+    override fun cycleRepeatMode() {
+        platformPlayer.cycleRepeatMode()
+    }
 }

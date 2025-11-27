@@ -48,6 +48,8 @@ class PlayerScreenViewModel @Inject constructor(
                             hasPreviousTrack = playbackState.hasPreviousTrack,
                             volume = playbackState.volume,
                             isMuted = playbackState.isMuted,
+                            shuffleEnabled = playbackState.shuffleEnabled,
+                            repeatMode = playbackState.repeatMode,
                         )
                     }
                 }
@@ -104,6 +106,10 @@ class PlayerScreenViewModel @Inject constructor(
 
     override fun toggleMute() = interactor.toggleMute()
 
+    override fun clickOnShuffle() = interactor.toggleShuffle()
+
+    override fun clickOnRepeat() = interactor.cycleRepeatMode()
+
     interface Interactor {
         fun getPlaybackState(): Flow<PlaybackState?>
         fun togglePlayPause()
@@ -112,6 +118,8 @@ class PlayerScreenViewModel @Inject constructor(
         fun seekToPercent(percent: Float)
         fun setVolume(volume: Float)
         fun toggleMute()
+        fun toggleShuffle()
+        fun cycleRepeatMode()
 
         sealed interface PlaybackState {
             data object Idle : PlaybackState
@@ -125,6 +133,8 @@ class PlayerScreenViewModel @Inject constructor(
                 val hasPreviousTrack: Boolean,
                 val volume: Float,
                 val isMuted: Boolean,
+                val shuffleEnabled: Boolean,
+                val repeatMode: RepeatModeUi,
             ) : PlaybackState
         }
     }

@@ -7,6 +7,8 @@ import com.lelloman.pezzottify.android.domain.auth.usecase.PerformLogin
 import com.lelloman.pezzottify.android.domain.auth.usecase.PerformLogout
 import com.lelloman.pezzottify.android.domain.config.ConfigStore
 import com.lelloman.pezzottify.android.domain.player.PezzottifyPlayer
+import com.lelloman.pezzottify.android.domain.player.RepeatMode
+import com.lelloman.pezzottify.android.ui.screen.player.RepeatModeUi
 import com.lelloman.pezzottify.android.domain.settings.PlayBehavior
 import com.lelloman.pezzottify.android.domain.settings.ThemeMode
 import com.lelloman.pezzottify.android.domain.settings.UserSettingsStore
@@ -267,10 +269,40 @@ class InteractorsModule {
                         TempState2(tempState.playlist, tempState.isPlaying, tempState.currentTrackIndex, tempState.trackPercent, progressSec)
                     }
                     .combine(player.volumeState) { tempState, volumeState ->
+                        data class TempState3(
+                            val playlist: com.lelloman.pezzottify.android.domain.player.PlaybackPlaylist?,
+                            val isPlaying: Boolean,
+                            val currentTrackIndex: Int?,
+                            val trackPercent: Float?,
+                            val progressSec: Int?,
+                            val volume: Float,
+                            val isMuted: Boolean,
+                        )
+                        TempState3(tempState.playlist, tempState.isPlaying, tempState.currentTrackIndex, tempState.trackPercent, tempState.progressSec, volumeState.volume, volumeState.isMuted)
+                    }
+                    .combine(player.shuffleEnabled) { tempState, shuffleEnabled ->
+                        data class TempState4(
+                            val playlist: com.lelloman.pezzottify.android.domain.player.PlaybackPlaylist?,
+                            val isPlaying: Boolean,
+                            val currentTrackIndex: Int?,
+                            val trackPercent: Float?,
+                            val progressSec: Int?,
+                            val volume: Float,
+                            val isMuted: Boolean,
+                            val shuffleEnabled: Boolean,
+                        )
+                        TempState4(tempState.playlist, tempState.isPlaying, tempState.currentTrackIndex, tempState.trackPercent, tempState.progressSec, tempState.volume, tempState.isMuted, shuffleEnabled)
+                    }
+                    .combine(player.repeatMode) { tempState, repeatMode ->
                         if (tempState.playlist != null) {
                             val index = tempState.currentTrackIndex ?: 0
                             val hasNext = index < tempState.playlist.tracksIds.lastIndex
                             val hasPrevious = index > 0
+                            val repeatModeUi = when (repeatMode) {
+                                RepeatMode.OFF -> RepeatModeUi.OFF
+                                RepeatMode.ALL -> RepeatModeUi.ALL
+                                RepeatMode.ONE -> RepeatModeUi.ONE
+                            }
                             PlayerScreenViewModel.Interactor.PlaybackState.Loaded(
                                 isPlaying = tempState.isPlaying,
                                 trackId = tempState.playlist.tracksIds[index],
@@ -278,8 +310,10 @@ class InteractorsModule {
                                 trackProgressSec = tempState.progressSec ?: 0,
                                 hasNextTrack = hasNext,
                                 hasPreviousTrack = hasPrevious,
-                                volume = volumeState.volume,
-                                isMuted = volumeState.isMuted,
+                                volume = tempState.volume,
+                                isMuted = tempState.isMuted,
+                                shuffleEnabled = tempState.shuffleEnabled,
+                                repeatMode = repeatModeUi,
                             )
                         } else {
                             null
@@ -300,6 +334,10 @@ class InteractorsModule {
                 val currentState = player.volumeState.value
                 player.setMuted(!currentState.isMuted)
             }
+
+            override fun toggleShuffle() = player.toggleShuffle()
+
+            override fun cycleRepeatMode() = player.cycleRepeatMode()
         }
 
     @Provides

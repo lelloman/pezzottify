@@ -10,6 +10,8 @@ interface ControlsAndStatePlayer {
     val currentTrackIndex: StateFlow<Int?>
     val currentTrackPercent: StateFlow<Float?>
     val currentTrackProgressSec: StateFlow<Int?>
+    val shuffleEnabled: StateFlow<Boolean>
+    val repeatMode: StateFlow<RepeatMode>
 
     fun togglePlayPause()
     fun seekToPercentage(percentage: Float)
@@ -22,4 +24,6 @@ interface ControlsAndStatePlayer {
     fun loadTrackIndex(index: Int)
     fun skipToNextTrack()
     fun skipToPreviousTrack()
+    fun toggleShuffle()
+    fun cycleRepeatMode()
 }
