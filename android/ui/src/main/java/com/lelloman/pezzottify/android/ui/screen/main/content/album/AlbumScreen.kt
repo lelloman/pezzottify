@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
@@ -81,6 +82,7 @@ fun AlbumLoadedScreen(
     val maxHeaderHeight = 300.dp
     val minHeaderHeight = 80.dp
     val collapseRange = (maxHeaderHeight - minHeaderHeight).value
+    val playButtonSize = 56.dp
 
     // Calculate scroll-based values
     val scrollOffset by remember {
@@ -114,23 +116,9 @@ fun AlbumLoadedScreen(
             modifier = Modifier.fillMaxSize(),
             state = listState
         ) {
-            // Spacer for header
+            // Spacer for header (extra space for play button overlap)
             item {
-                Spacer(modifier = Modifier.height(maxHeaderHeight))
-            }
-
-            // Play button
-            item {
-                IconButton(
-                    onClick = { actions.clickOnPlayAlbum(album.id) },
-                    modifier = Modifier.padding(start = 16.dp, top = 8.dp, bottom = 8.dp)
-                ) {
-                    Icon(
-                        modifier = Modifier.size(72.dp),
-                        painter = painterResource(R.drawable.baseline_play_circle_24),
-                        contentDescription = null,
-                    )
-                }
+                Spacer(modifier = Modifier.height(maxHeaderHeight + playButtonSize / 2))
             }
 
             // Track list
@@ -196,6 +184,33 @@ fun AlbumLoadedScreen(
                     modifier = Modifier
                         .align(Alignment.BottomStart)
                         .padding(16.dp)
+                )
+            }
+        }
+
+        // Floating play button - positioned at bottom-right of header, straddling the boundary
+        IconButton(
+            onClick = { actions.clickOnPlayAlbum(album.id) },
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .offset(y = headerHeight - playButtonSize / 2)
+                .padding(end = 16.dp)
+                .size(playButtonSize)
+        ) {
+            Box {
+                // Background circle to fill the triangle
+                Icon(
+                    modifier = Modifier.size(playButtonSize),
+                    painter = painterResource(R.drawable.baseline_circle_24),
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.surface,
+                )
+                // Play icon on top
+                Icon(
+                    modifier = Modifier.size(playButtonSize),
+                    painter = painterResource(R.drawable.baseline_play_circle_24),
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
                 )
             }
         }
