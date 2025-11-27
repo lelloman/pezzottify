@@ -4,6 +4,7 @@ import com.lelloman.pezzottify.android.domain.app.AppInitializer
 import com.lelloman.pezzottify.android.domain.app.TimeProvider
 import com.lelloman.pezzottify.android.domain.remoteapi.RemoteApiClient
 import com.lelloman.pezzottify.android.domain.remoteapi.response.AlbumResponse
+import com.lelloman.pezzottify.android.domain.remoteapi.response.ArtistDiscographyResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.ArtistResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.RemoteApiResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.TrackResponse
@@ -111,6 +112,7 @@ internal class Synchronizer(
                 StaticItemType.Album -> remoteApiClient.getAlbum(itemId)
                 StaticItemType.Artist -> remoteApiClient.getArtist(itemId)
                 StaticItemType.Track -> remoteApiClient.getTrack(itemId)
+                StaticItemType.Discography -> remoteApiClient.getArtistDiscography(itemId)
             }
             if (remoteData is RemoteApiResponse.Success) {
                 try {
@@ -118,6 +120,7 @@ internal class Synchronizer(
                         is AlbumResponse -> staticsStore.storeAlbum(remoteData.data.toDomain())
                         is ArtistResponse -> staticsStore.storeArtist(remoteData.data.toDomain())
                         is TrackResponse -> staticsStore.storeTrack(remoteData.data.toDomain())
+                        is ArtistDiscographyResponse -> staticsStore.storeDiscography(remoteData.data.toDomain(itemId))
                         else -> logger.error("Cannot store unknown response data of type ${remoteData.javaClass} -> ${remoteData.data}")
                     }
                     fetchStateStore.delete(itemId)

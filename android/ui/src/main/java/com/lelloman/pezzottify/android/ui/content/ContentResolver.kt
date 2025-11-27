@@ -21,5 +21,5 @@ interface ContentResolver {
 
     fun resolveTrack(trackId: String): Flow<Content<Track>>
 
-    suspend fun getArtistDiscography(artistId: String): ArtistDiscography?
+    fun resolveArtistDiscography(artistId: String): Flow<Content<ArtistDiscography>>
 }
