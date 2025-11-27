@@ -78,6 +78,19 @@ private fun LoginScreenInternal(
     ) {
         OutlinedTextField(
             enabled = !state.isLoading,
+            value = state.host,
+            onValueChange = actions::updateHost,
+            label = { Text("Server URL") },
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 8.dp),
+            isError = state.hostError != null,
+            supportingText = state.hostError?.let { { Text(it) } },
+        )
+
+        OutlinedTextField(
+            enabled = !state.isLoading,
             value = state.email,
             onValueChange = actions::updateEmail,
             label = { Text("Email") },

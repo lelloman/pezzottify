@@ -4,9 +4,9 @@ We can consider V1 ready once all of the task without V2 mark are completed.
 
 ### [ready for coding]
 
-- In the login screen, there should be a field to set the base url
 - Check the styling of the login screen, I now see a light text color in the email input even if the theme is light
 - We should somehow insert into the code A) the build variant B) the build version C) The git commit, then we can show it in the profile screen for now
+- BUG when the user logs out the music keeps playing!
 
 ### [to refine]
 
@@ -28,6 +28,7 @@ We can consider V1 ready once all of the task without V2 mark are completed.
 
 ### [done]
 
+- ~Add base URL field to login screen for configuring server URL~
 - ~Add a confirmation dialog to the logout operation~
 - ~Add a small right padding to the bottom player track and artists column, when swiping, the 2 track info basically touch~
 - ~Update the play/pause button to have just the triangle or the 2 bars in contrast color (white in dark theme, black in light theme)~
