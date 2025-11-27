@@ -1,7 +1,12 @@
 package com.lelloman.pezzottify.android.ui.screen.player
 
+import androidx.activity.compose.BackHandler
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -33,12 +38,17 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.layout.VerticalAlignmentLine
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -54,6 +64,8 @@ import com.lelloman.pezzottify.android.ui.component.ScrollingArtistsRow
 import com.lelloman.pezzottify.android.ui.toAlbum
 import com.lelloman.pezzottify.android.ui.toArtist
 import com.lelloman.pezzottify.android.ui.toQueue
+import kotlinx.coroutines.launch
+import kotlin.math.abs
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -63,6 +75,8 @@ fun PlayerScreen(navController: NavController) {
     PlayerScreenContent(state = state, actions = viewModel, navController = navController)
 }
 
+private const val DISMISS_THRESHOLD = 0.3f
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun PlayerScreenContent(
@@ -70,45 +84,114 @@ private fun PlayerScreenContent(
     actions: PlayerScreenActions,
     navController: NavController,
 ) {
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = {
-                    Text(
-                        text = state.albumName,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.clickable {
-                            if (state.albumId.isNotEmpty()) {
-                                navController.toAlbum(state.albumId)
-                            }
-                        }
-                    )
-                },
-                navigationIcon = {
-                    IconButton(onClick = { navController.popBackStack() }) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.KeyboardArrowLeft,
-                            contentDescription = "Back",
-                            modifier = Modifier.size(32.dp)
-                        )
-                    }
-                },
-                actions = {
-                    IconButton(onClick = { navController.toQueue() }) {
-                        Icon(
-                            painter = painterResource(R.drawable.baseline_queue_music_24),
-                            contentDescription = "Queue",
-                            modifier = Modifier.size(24.dp)
-                        )
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface,
-                )
-            )
+    var dismissOffsetY by remember { mutableFloatStateOf(0f) }
+    var isDraggingToDismiss by remember { mutableStateOf(false) }
+
+    val scope = rememberCoroutineScope()
+    val density = LocalDensity.current
+    val configuration = LocalConfiguration.current
+    val screenHeightPx = with(density) { configuration.screenHeightDp.dp.toPx() }
+
+    val dismissOffsetAnimatable = remember { Animatable(0f) }
+
+    val backgroundAlpha = if (isDraggingToDismiss || dismissOffsetY > 0f) {
+        (1f - dismissOffsetY / screenHeightPx).coerceIn(0f, 1f)
+    } else {
+        1f
+    }
+
+    fun dismiss() {
+        navController.popBackStack()
+    }
+
+    fun animateSnapBack() {
+        scope.launch {
+            dismissOffsetAnimatable.snapTo(dismissOffsetY)
+            dismissOffsetAnimatable.animateTo(
+                0f,
+                animationSpec = spring(stiffness = Spring.StiffnessMedium)
+            ) {
+                dismissOffsetY = value
+            }
         }
-    ) { innerPadding ->
+    }
+
+    BackHandler {
+        dismiss()
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.scrim.copy(alpha = backgroundAlpha * 0.32f))
+            .pointerInput(Unit) {
+                detectVerticalDragGestures(
+                    onDragStart = { isDraggingToDismiss = true },
+                    onDragEnd = {
+                        isDraggingToDismiss = false
+                        val dismissThresholdPx = screenHeightPx * DISMISS_THRESHOLD
+                        if (dismissOffsetY > dismissThresholdPx) {
+                            dismiss()
+                        } else {
+                            animateSnapBack()
+                        }
+                    },
+                    onDragCancel = {
+                        isDraggingToDismiss = false
+                        animateSnapBack()
+                    },
+                    onVerticalDrag = { _, dragAmount ->
+                        // Only allow dragging down (positive direction)
+                        val newOffset = dismissOffsetY + dragAmount
+                        dismissOffsetY = newOffset.coerceAtLeast(0f)
+                    }
+                )
+            }
+    ) {
+        Scaffold(
+            modifier = Modifier
+                .graphicsLayer {
+                    translationY = dismissOffsetY
+                    alpha = backgroundAlpha
+                },
+            topBar = {
+                TopAppBar(
+                    title = {
+                        Text(
+                            text = state.albumName,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.clickable {
+                                if (state.albumId.isNotEmpty()) {
+                                    navController.toAlbum(state.albumId)
+                                }
+                            }
+                        )
+                    },
+                    navigationIcon = {
+                        IconButton(onClick = { dismiss() }) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowLeft,
+                                contentDescription = "Back",
+                                modifier = Modifier.size(32.dp)
+                            )
+                        }
+                    },
+                    actions = {
+                        IconButton(onClick = { navController.toQueue() }) {
+                            Icon(
+                                painter = painterResource(R.drawable.baseline_queue_music_24),
+                                contentDescription = "Queue",
+                                modifier = Modifier.size(24.dp)
+                            )
+                        }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.surface,
+                    )
+                )
+            }
+        ) { innerPadding ->
         if (state.isLoading) {
             LoadingScreen()
         } else {
@@ -194,6 +277,7 @@ private fun PlayerScreenContent(
 
                 Spacer(modifier = Modifier.height(24.dp))
             }
+        }
         }
     }
 }
