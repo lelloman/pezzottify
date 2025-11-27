@@ -142,6 +142,25 @@ async fn require_reboot_server(
     next.run(request).await
 }
 
+async fn require_manage_permissions(
+    session: Session,
+    request: Request<Body>,
+    next: Next,
+) -> impl IntoResponse {
+    debug!(
+        "require_manage_permissions: user_id={}, has_permission={}, permissions={:?}",
+        session.user_id,
+        session.has_permission(Permission::ManagePermissions),
+        session.permissions
+    );
+    if !session.has_permission(Permission::ManagePermissions) {
+        debug!("require_manage_permissions: FORBIDDEN - user_id={} lacks ManagePermissions permission", session.user_id);
+        return StatusCode::FORBIDDEN.into_response();
+    }
+    debug!("require_manage_permissions: ALLOWED - user_id={}", session.user_id);
+    next.run(request).await
+}
+
 #[derive(Deserialize, Debug)]
 struct LoginBody {
     pub user_handle: String,
@@ -550,6 +569,258 @@ async fn post_challenge(State(_state): State<ServerState>) -> Response {
     todo!()
 }
 
+// Admin endpoint types and handlers
+
+#[derive(Serialize)]
+struct UserInfo {
+    pub user_handle: String,
+    pub user_id: usize,
+}
+
+#[derive(Serialize)]
+struct UserRolesResponse {
+    pub user_handle: String,
+    pub roles: Vec<String>,
+}
+
+#[derive(Serialize)]
+struct UserPermissionsResponse {
+    pub user_handle: String,
+    pub permissions: Vec<String>,
+}
+
+#[derive(Deserialize, Debug)]
+struct AddRoleBody {
+    pub role: String,
+}
+
+#[derive(Deserialize, Debug)]
+struct AddExtraPermissionBody {
+    pub permission: String,
+    pub duration_seconds: Option<u64>,
+    pub countdown: Option<u64>,
+}
+
+#[derive(Serialize)]
+struct AddExtraPermissionResponse {
+    pub permission_id: usize,
+}
+
+async fn admin_get_users(
+    _session: Session,
+    State(user_manager): State<GuardedUserManager>,
+) -> Response {
+    match user_manager.lock().unwrap().get_all_user_handles() {
+        Ok(handles) => {
+            let mut users: Vec<UserInfo> = vec![];
+            let manager = user_manager.lock().unwrap();
+            for handle in handles {
+                if let Ok(Some(user_id)) = manager.get_user_id(&handle) {
+                    users.push(UserInfo {
+                        user_handle: handle,
+                        user_id,
+                    });
+                }
+            }
+            Json(users).into_response()
+        }
+        Err(err) => {
+            error!("Error getting users: {}", err);
+            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+        }
+    }
+}
+
+async fn admin_get_user_roles(
+    _session: Session,
+    State(user_manager): State<GuardedUserManager>,
+    Path(user_handle): Path<String>,
+) -> Response {
+    let manager = user_manager.lock().unwrap();
+    let user_id = match manager.get_user_id(&user_handle) {
+        Ok(Some(id)) => id,
+        Ok(None) => return StatusCode::NOT_FOUND.into_response(),
+        Err(err) => {
+            error!("Error getting user id: {}", err);
+            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+        }
+    };
+
+    match manager.get_user_roles(user_id) {
+        Ok(roles) => {
+            let role_strings: Vec<String> = roles.iter().map(|r| r.to_string().to_owned()).collect();
+            Json(UserRolesResponse {
+                user_handle,
+                roles: role_strings,
+            })
+            .into_response()
+        }
+        Err(err) => {
+            error!("Error getting user roles: {}", err);
+            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+        }
+    }
+}
+
+async fn admin_add_user_role(
+    _session: Session,
+    State(user_manager): State<GuardedUserManager>,
+    Path(user_handle): Path<String>,
+    Json(body): Json<AddRoleBody>,
+) -> Response {
+    let role = match crate::user::UserRole::from_str(&body.role) {
+        Some(r) => r,
+        None => return (StatusCode::BAD_REQUEST, "Invalid role").into_response(),
+    };
+
+    let manager = user_manager.lock().unwrap();
+    let user_id = match manager.get_user_id(&user_handle) {
+        Ok(Some(id)) => id,
+        Ok(None) => return StatusCode::NOT_FOUND.into_response(),
+        Err(err) => {
+            error!("Error getting user id: {}", err);
+            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+        }
+    };
+
+    match manager.add_user_role(user_id, role) {
+        Ok(()) => StatusCode::CREATED.into_response(),
+        Err(err) => {
+            error!("Error adding user role: {}", err);
+            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+        }
+    }
+}
+
+async fn admin_remove_user_role(
+    _session: Session,
+    State(user_manager): State<GuardedUserManager>,
+    Path((user_handle, role_name)): Path<(String, String)>,
+) -> Response {
+    let role = match crate::user::UserRole::from_str(&role_name) {
+        Some(r) => r,
+        None => return (StatusCode::BAD_REQUEST, "Invalid role").into_response(),
+    };
+
+    let manager = user_manager.lock().unwrap();
+    let user_id = match manager.get_user_id(&user_handle) {
+        Ok(Some(id)) => id,
+        Ok(None) => return StatusCode::NOT_FOUND.into_response(),
+        Err(err) => {
+            error!("Error getting user id: {}", err);
+            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+        }
+    };
+
+    match manager.remove_user_role(user_id, role) {
+        Ok(()) => StatusCode::OK.into_response(),
+        Err(err) => {
+            error!("Error removing user role: {}", err);
+            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+        }
+    }
+}
+
+async fn admin_get_user_permissions(
+    _session: Session,
+    State(user_manager): State<GuardedUserManager>,
+    Path(user_handle): Path<String>,
+) -> Response {
+    let manager = user_manager.lock().unwrap();
+    let user_id = match manager.get_user_id(&user_handle) {
+        Ok(Some(id)) => id,
+        Ok(None) => return StatusCode::NOT_FOUND.into_response(),
+        Err(err) => {
+            error!("Error getting user id: {}", err);
+            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+        }
+    };
+
+    match manager.get_user_permissions(user_id) {
+        Ok(permissions) => {
+            let perm_strings: Vec<String> = permissions.iter().map(|p| format!("{:?}", p)).collect();
+            Json(UserPermissionsResponse {
+                user_handle,
+                permissions: perm_strings,
+            })
+            .into_response()
+        }
+        Err(err) => {
+            error!("Error getting user permissions: {}", err);
+            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+        }
+    }
+}
+
+async fn admin_add_user_extra_permission(
+    _session: Session,
+    State(user_manager): State<GuardedUserManager>,
+    Path(user_handle): Path<String>,
+    Json(body): Json<AddExtraPermissionBody>,
+) -> Response {
+    use crate::user::{Permission, PermissionGrant};
+    use std::time::{Duration, SystemTime};
+
+    let permission = match body.permission.as_str() {
+        "AccessCatalog" => Permission::AccessCatalog,
+        "LikeContent" => Permission::LikeContent,
+        "OwnPlaylists" => Permission::OwnPlaylists,
+        "EditCatalog" => Permission::EditCatalog,
+        "ManagePermissions" => Permission::ManagePermissions,
+        "IssueContentDownload" => Permission::IssueContentDownload,
+        "RebootServer" => Permission::RebootServer,
+        _ => return (StatusCode::BAD_REQUEST, "Invalid permission").into_response(),
+    };
+
+    let manager = user_manager.lock().unwrap();
+    let user_id = match manager.get_user_id(&user_handle) {
+        Ok(Some(id)) => id,
+        Ok(None) => return StatusCode::NOT_FOUND.into_response(),
+        Err(err) => {
+            error!("Error getting user id: {}", err);
+            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+        }
+    };
+
+    let start_time = SystemTime::now();
+    let end_time = body.duration_seconds.map(|secs| start_time + Duration::from_secs(secs));
+
+    let grant = PermissionGrant::Extra {
+        start_time,
+        end_time,
+        permission,
+        countdown: body.countdown,
+    };
+
+    match manager.add_user_extra_permission(user_id, grant) {
+        Ok(permission_id) => {
+            (StatusCode::CREATED, Json(AddExtraPermissionResponse { permission_id })).into_response()
+        }
+        Err(err) => {
+            error!("Error adding extra permission: {}", err);
+            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+        }
+    }
+}
+
+async fn admin_remove_extra_permission(
+    _session: Session,
+    State(user_manager): State<GuardedUserManager>,
+    Path(permission_id): Path<usize>,
+) -> Response {
+    match user_manager
+        .lock()
+        .unwrap()
+        .remove_user_extra_permission(permission_id)
+    {
+        Ok(()) => StatusCode::OK.into_response(),
+        Err(err) => {
+            error!("Error removing extra permission: {}", err);
+            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+        }
+    }
+}
+
 impl ServerState {
     fn new(
         config: ServerConfig,
@@ -738,8 +1009,8 @@ pub fn make_app(
 
     let user_routes = liked_content_routes.merge(playlist_routes);
 
-    // Admin routes with write rate limiting
-    let admin_routes: Router = Router::new()
+    // Admin reboot route (requires RebootServer permission)
+    let admin_reboot_routes: Router = Router::new()
         .route("/reboot", post(reboot_server))
         .layer(GovernorLayer::new(write_rate_limit.clone()))
         .route_layer(middleware::from_fn_with_state(
@@ -747,6 +1018,24 @@ pub fn make_app(
             require_reboot_server,
         ))
         .with_state(state.clone());
+
+    // Admin user management routes (requires ManagePermissions permission)
+    let admin_user_routes: Router = Router::new()
+        .route("/users", get(admin_get_users))
+        .route("/users/{user_handle}/roles", get(admin_get_user_roles))
+        .route("/users/{user_handle}/roles", post(admin_add_user_role))
+        .route("/users/{user_handle}/roles/{role}", delete(admin_remove_user_role))
+        .route("/users/{user_handle}/permissions", get(admin_get_user_permissions))
+        .route("/users/{user_handle}/permissions", post(admin_add_user_extra_permission))
+        .route("/permissions/{permission_id}", delete(admin_remove_extra_permission))
+        .layer(GovernorLayer::new(write_rate_limit.clone()))
+        .route_layer(middleware::from_fn_with_state(
+            state.clone(),
+            require_manage_permissions,
+        ))
+        .with_state(state.clone());
+
+    let admin_routes = admin_reboot_routes.merge(admin_user_routes);
 
     let home_router: Router = match config.frontend_dir_path {
         Some(frontend_path) => {
@@ -866,6 +1155,10 @@ mod tests {
             "/v1/content/image/123",
             "/v1/content/stream/123",
             "/v1/auth/logout",
+            // Admin routes (require ManagePermissions)
+            "/v1/admin/users",
+            "/v1/admin/users/testuser/roles",
+            "/v1/admin/users/testuser/permissions",
         ];
 
         for route in protected_routes.into_iter() {
@@ -1039,5 +1332,235 @@ mod tests {
         fn update_user_auth_credentials(&self, _credentials: UserAuthCredentials) -> Result<()> {
             todo!()
         }
+    }
+
+    // Tests for admin endpoints using SqliteUserStore
+    mod admin_endpoint_tests {
+        use super::*;
+        use crate::user::SqliteUserStore;
+        use std::time::SystemTime;
+        use tempfile::TempDir;
+
+        fn create_test_store() -> (SqliteUserStore, TempDir) {
+            let temp_dir = TempDir::new().unwrap();
+            let temp_file_path = temp_dir.path().join("test.db");
+            let store = SqliteUserStore::new(&temp_file_path).unwrap();
+            (store, temp_dir)
+        }
+
+        fn create_test_store_with_admin_user() -> (SqliteUserStore, usize, TempDir) {
+            let (store, temp_dir) = create_test_store();
+            let user_id = store.create_user("admin_user").unwrap();
+            store.add_user_role(user_id, crate::user::UserRole::Admin).unwrap();
+            (store, user_id, temp_dir)
+        }
+
+        #[allow(dead_code)]
+        fn create_test_store_with_regular_user() -> (SqliteUserStore, usize, TempDir) {
+            let (store, temp_dir) = create_test_store();
+            let user_id = store.create_user("regular_user").unwrap();
+            store.add_user_role(user_id, crate::user::UserRole::Regular).unwrap();
+            (store, user_id, temp_dir)
+        }
+
+        #[test]
+        fn test_get_all_user_handles() {
+            let (store, _temp_dir) = create_test_store();
+            store.create_user("user1").unwrap();
+            store.create_user("user2").unwrap();
+            store.create_user("user3").unwrap();
+
+            let handles = store.get_all_user_handles().unwrap();
+            assert_eq!(handles.len(), 3);
+            assert!(handles.contains(&"user1".to_string()));
+            assert!(handles.contains(&"user2".to_string()));
+            assert!(handles.contains(&"user3".to_string()));
+        }
+
+        #[test]
+        fn test_get_user_id() {
+            let (store, _temp_dir) = create_test_store();
+            let user_id = store.create_user("testuser").unwrap();
+
+            let found_id = store.get_user_id("testuser").unwrap();
+            assert_eq!(found_id, Some(user_id));
+
+            let not_found = store.get_user_id("nonexistent").unwrap();
+            assert_eq!(not_found, None);
+        }
+
+        #[test]
+        fn test_get_user_roles() {
+            let (store, user_id, _temp_dir) = create_test_store_with_admin_user();
+
+            let roles = store.get_user_roles(user_id).unwrap();
+            assert_eq!(roles.len(), 1);
+            assert_eq!(roles[0], crate::user::UserRole::Admin);
+        }
+
+        #[test]
+        fn test_add_and_remove_user_role() {
+            let (store, _temp_dir) = create_test_store();
+            let user_id = store.create_user("testuser").unwrap();
+
+            // Add Admin role
+            store.add_user_role(user_id, crate::user::UserRole::Admin).unwrap();
+            let roles = store.get_user_roles(user_id).unwrap();
+            assert!(roles.contains(&crate::user::UserRole::Admin));
+
+            // Add Regular role
+            store.add_user_role(user_id, crate::user::UserRole::Regular).unwrap();
+            let roles = store.get_user_roles(user_id).unwrap();
+            assert_eq!(roles.len(), 2);
+            assert!(roles.contains(&crate::user::UserRole::Admin));
+            assert!(roles.contains(&crate::user::UserRole::Regular));
+
+            // Remove Admin role
+            store.remove_user_role(user_id, crate::user::UserRole::Admin).unwrap();
+            let roles = store.get_user_roles(user_id).unwrap();
+            assert_eq!(roles.len(), 1);
+            assert!(roles.contains(&crate::user::UserRole::Regular));
+        }
+
+        #[test]
+        fn test_add_duplicate_role_is_idempotent() {
+            let (store, _temp_dir) = create_test_store();
+            let user_id = store.create_user("testuser").unwrap();
+
+            store.add_user_role(user_id, crate::user::UserRole::Admin).unwrap();
+            store.add_user_role(user_id, crate::user::UserRole::Admin).unwrap();
+
+            let roles = store.get_user_roles(user_id).unwrap();
+            // Should still only have one Admin role
+            assert_eq!(roles.iter().filter(|r| **r == crate::user::UserRole::Admin).count(), 1);
+        }
+
+        #[test]
+        fn test_resolve_user_permissions_from_role() {
+            let (store, user_id, _temp_dir) = create_test_store_with_admin_user();
+
+            let permissions = store.resolve_user_permissions(user_id).unwrap();
+            // Admin should have: AccessCatalog, EditCatalog, ManagePermissions, IssueContentDownload, RebootServer
+            assert!(permissions.contains(&crate::user::Permission::AccessCatalog));
+            assert!(permissions.contains(&crate::user::Permission::EditCatalog));
+            assert!(permissions.contains(&crate::user::Permission::ManagePermissions));
+            assert!(permissions.contains(&crate::user::Permission::IssueContentDownload));
+            assert!(permissions.contains(&crate::user::Permission::RebootServer));
+        }
+
+        #[test]
+        fn test_add_extra_permission_with_countdown() {
+            let (store, _temp_dir) = create_test_store();
+            let user_id = store.create_user("testuser").unwrap();
+
+            let grant = crate::user::PermissionGrant::Extra {
+                start_time: SystemTime::now(),
+                end_time: None,
+                permission: crate::user::Permission::EditCatalog,
+                countdown: Some(5),
+            };
+
+            let permission_id = store.add_user_extra_permission(user_id, grant).unwrap();
+            assert!(permission_id > 0);
+
+            // Verify permission is resolved
+            let permissions = store.resolve_user_permissions(user_id).unwrap();
+            assert!(permissions.contains(&crate::user::Permission::EditCatalog));
+        }
+
+        #[test]
+        fn test_add_extra_permission_with_time_limit() {
+            use std::time::Duration;
+
+            let (store, _temp_dir) = create_test_store();
+            let user_id = store.create_user("testuser").unwrap();
+
+            let start_time = SystemTime::now();
+            let end_time = start_time + Duration::from_secs(3600); // 1 hour from now
+
+            let grant = crate::user::PermissionGrant::Extra {
+                start_time,
+                end_time: Some(end_time),
+                permission: crate::user::Permission::RebootServer,
+                countdown: None,
+            };
+
+            let permission_id = store.add_user_extra_permission(user_id, grant).unwrap();
+            assert!(permission_id > 0);
+
+            // Verify permission is resolved (still within time limit)
+            let permissions = store.resolve_user_permissions(user_id).unwrap();
+            assert!(permissions.contains(&crate::user::Permission::RebootServer));
+        }
+
+        #[test]
+        fn test_remove_extra_permission() {
+            let (store, _temp_dir) = create_test_store();
+            let user_id = store.create_user("testuser").unwrap();
+
+            let grant = crate::user::PermissionGrant::Extra {
+                start_time: SystemTime::now(),
+                end_time: None,
+                permission: crate::user::Permission::EditCatalog,
+                countdown: None,
+            };
+
+            let permission_id = store.add_user_extra_permission(user_id, grant).unwrap();
+
+            // Verify permission exists
+            let permissions = store.resolve_user_permissions(user_id).unwrap();
+            assert!(permissions.contains(&crate::user::Permission::EditCatalog));
+
+            // Remove it
+            store.remove_user_extra_permission(permission_id).unwrap();
+
+            // Verify permission is gone
+            let permissions = store.resolve_user_permissions(user_id).unwrap();
+            assert!(!permissions.contains(&crate::user::Permission::EditCatalog));
+        }
+
+        #[test]
+        fn test_countdown_decrements_and_removes_permission() {
+            let (store, _temp_dir) = create_test_store();
+            let user_id = store.create_user("testuser").unwrap();
+
+            let grant = crate::user::PermissionGrant::Extra {
+                start_time: SystemTime::now(),
+                end_time: None,
+                permission: crate::user::Permission::EditCatalog,
+                countdown: Some(2),
+            };
+
+            let permission_id = store.add_user_extra_permission(user_id, grant).unwrap();
+
+            // First decrement - should still have uses remaining
+            let has_remaining = store.decrement_permission_countdown(permission_id).unwrap();
+            assert!(has_remaining);
+
+            // Second decrement - should be last use, permission removed
+            let has_remaining = store.decrement_permission_countdown(permission_id).unwrap();
+            assert!(!has_remaining);
+
+            // Verify permission is gone
+            let permissions = store.resolve_user_permissions(user_id).unwrap();
+            assert!(!permissions.contains(&crate::user::Permission::EditCatalog));
+        }
+
+        #[test]
+        fn test_user_manager_get_user_id() {
+            let (store, _temp_dir) = create_test_store();
+            let user_id = store.create_user("testuser").unwrap();
+
+            let catalog = crate::catalog::Catalog::dummy();
+            let guarded_catalog = std::sync::Arc::new(std::sync::Mutex::new(catalog));
+            let user_manager = crate::user::UserManager::new(guarded_catalog, Box::new(store));
+
+            let found_id = user_manager.get_user_id("testuser").unwrap();
+            assert_eq!(found_id, Some(user_id));
+
+            let not_found = user_manager.get_user_id("nonexistent").unwrap();
+            assert_eq!(not_found, None);
+        }
+
     }
 }

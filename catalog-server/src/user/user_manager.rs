@@ -208,6 +208,10 @@ impl UserManager {
         self.user_store.lock().unwrap().get_all_user_handles()
     }
 
+    pub fn get_user_id(&self, user_handle: &str) -> Result<Option<usize>> {
+        self.user_store.lock().unwrap().get_user_id(user_handle)
+    }
+
     pub fn get_user_liked_content(
         &self,
         user_id: usize,

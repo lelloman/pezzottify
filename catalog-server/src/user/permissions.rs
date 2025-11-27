@@ -191,12 +191,23 @@ mod tests {
 
     #[test]
     fn user_role_from_str_invalid() {
-        assert_eq!(UserRole::from_str("admin"), None);
-        assert_eq!(UserRole::from_str("regular"), None);
-        assert_eq!(UserRole::from_str("ADMIN"), None);
+        // Note: from_str is case-insensitive, so "admin", "ADMIN" etc are valid
         assert_eq!(UserRole::from_str(""), None);
         assert_eq!(UserRole::from_str("User"), None);
         assert_eq!(UserRole::from_str("SuperAdmin"), None);
+        assert_eq!(UserRole::from_str("moderator"), None);
+        assert_eq!(UserRole::from_str("guest"), None);
+    }
+
+    #[test]
+    fn user_role_from_str_case_insensitive() {
+        // Verify case-insensitive parsing works
+        assert_eq!(UserRole::from_str("admin"), Some(UserRole::Admin));
+        assert_eq!(UserRole::from_str("Admin"), Some(UserRole::Admin));
+        assert_eq!(UserRole::from_str("ADMIN"), Some(UserRole::Admin));
+        assert_eq!(UserRole::from_str("regular"), Some(UserRole::Regular));
+        assert_eq!(UserRole::from_str("Regular"), Some(UserRole::Regular));
+        assert_eq!(UserRole::from_str("REGULAR"), Some(UserRole::Regular));
     }
 
     #[test]
