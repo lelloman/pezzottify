@@ -4,7 +4,6 @@ We can consider V1 ready once all of the task without V2 mark are completed.
 
 ### [ready for coding]
 
-- Update the play/pause button to have just the triangle or the 2 bars in contrast color (white in dark theme, black in light theme)
 - Add a small right padding to the bottom player track and artists column, when swiping, the 2 track info basically touch
 - Add a confirmation dialog to the logout operation
 - In the login screen, there should be a field to set the base url
@@ -31,6 +30,7 @@ We can consider V1 ready once all of the task without V2 mark are completed.
 
 ### [done]
 
+- ~Update the play/pause button to have just the triangle or the 2 bars in contrast color (white in dark theme, black in light theme)~
 - ~Artist discography static is not persisted and is re-fetched every time from the server~
 - ~Add shuffle and repeat functionality to the player (both domain logic and UI controls)~
 - ~Make the player screen collapsable with a swipe down~

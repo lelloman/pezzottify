@@ -3,7 +3,6 @@ package com.lelloman.pezzottify.android.ui.screen.main
 import androidx.annotation.StringRes
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -37,7 +36,6 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -288,9 +286,9 @@ private fun BottomPlayer(state: MainScreenState.BottomPlayer, actions: MainScree
                 IconButton(onClick = actions::clickOnPlayPause) {
                     Icon(
                         modifier = Modifier.size(48.dp),
-                        painter = painterResource(if (state.isPlaying) R.drawable.baseline_pause_circle_24 else R.drawable.baseline_play_circle_24),
+                        painter = painterResource(if (state.isPlaying) R.drawable.baseline_pause_24 else R.drawable.baseline_play_arrow_24),
                         contentDescription = null,
-                        tint = if (isSystemInDarkTheme()) Color.White else Color.Black,
+                        tint = MaterialTheme.colorScheme.onSurface,
                     )
                 }
             }
