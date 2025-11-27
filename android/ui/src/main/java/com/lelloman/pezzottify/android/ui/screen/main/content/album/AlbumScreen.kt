@@ -48,9 +48,9 @@ import com.lelloman.pezzottify.android.ui.content.Content
 import com.lelloman.pezzottify.android.ui.content.Track
 
 @Composable
-fun AlbumScreen(albumId: String) {
+fun AlbumScreen(albumId: String, navController: androidx.navigation.NavController) {
     val viewModel = hiltViewModel<AlbumScreenViewModel, AlbumScreenViewModel.Factory>(
-        creationCallback = { factory -> factory.create(albumId = albumId) }
+        creationCallback = { factory -> factory.create(albumId = albumId, navController = navController) }
     )
     AlbumScreenContent(viewModel.state.collectAsState().value, viewModel)
 }
@@ -150,6 +150,7 @@ fun AlbumLoadedScreen(
                     modifier = Modifier
                         .fillMaxSize()
                         .alpha(imageAlpha)
+                        .clickable { actions.clickOnAlbumImage(album.imageUrls) }
                 ) {
                     PezzottifyImage(
                         urls = album.imageUrls,

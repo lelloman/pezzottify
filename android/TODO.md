@@ -6,14 +6,15 @@
 - Artist discography static is not persisted and is re-fetched every time from the server
 - Create a db for logout operations so that if a user logsout, the server call doesn't need to
   happen immediately, plus in case of immediate error it can be retried
-- Add a player screen
+- Add a player screen that is open when the user clicks on the bottom player
 - Create a "memory pressure" component that can detect how much memory can we use for caches and such (imagine caching stuff from the db, pre-loading audio, images)
 - Add an in-memory immediate cache layer in ContentResolver, only after a "memory pressure" component
-- Make the album's image clickable and shown in full screen
 - The search screen is dangerously empty, maybe show latest searches? or what?
-- ~BUG, when first opening an album screen, if you click on any track different than the first one, it still starts the first one. AFter that, it works normally on any albums, i suspect the cause to be in the player, not the UI~
 - Implement a "current-playback" playlist, like the web does. So, a user can start the playback of an album, ok, but then, it should be able to QUEUE albums and tracks.
 - Once "current-playback" playlist is in place, add a screen for it so that the user can see it, modify it directly, save it as user-playlist
+
+- ~Make the album's image clickable and shown in full screen~
+- ~BUG, when first opening an album screen, if you click on any track different than the first one, it still starts the first one. AFter that, it works normally on any albums, i suspect the cause to be in the player, not the UI~
 - ~In the album screen, somehow highlight a track if it's currently playing~
 - ~Make the play button accent color~
 - ~Not all statics screen views are counted into recently viewed element, only the searched on.~

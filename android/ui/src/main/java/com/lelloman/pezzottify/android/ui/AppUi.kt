@@ -12,6 +12,7 @@ import androidx.navigation.toRoute
 import com.lelloman.pezzottify.android.ui.screen.about.AboutScreen
 import com.lelloman.pezzottify.android.ui.screen.login.LoginScreen
 import com.lelloman.pezzottify.android.ui.screen.main.MainScreen
+import com.lelloman.pezzottify.android.ui.screen.main.content.fullscreenimage.FullScreenImageScreen
 import com.lelloman.pezzottify.android.ui.screen.main.content.album.AlbumScreen
 import com.lelloman.pezzottify.android.ui.screen.main.content.artist.ArtistScreen
 import com.lelloman.pezzottify.android.ui.screen.main.content.track.TrackScreen
@@ -40,6 +41,12 @@ fun AppUi() {
                 }
                 composable<Screen.Main.Home> {
                     MainScreen(rootNavController = navController)
+                }
+                composable<Screen.FullScreenImage> {
+                    FullScreenImageScreen(
+                        encodedImageUrls = it.toRoute<Screen.FullScreenImage>().imageUrls,
+                        navController = navController
+                    )
                 }
             }
         }

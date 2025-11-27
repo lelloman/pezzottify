@@ -2,8 +2,10 @@ package com.lelloman.pezzottify.android.ui.screen.main.content.album
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.navigation.NavController
 import com.lelloman.pezzottify.android.ui.content.Content
 import com.lelloman.pezzottify.android.ui.content.ContentResolver
+import com.lelloman.pezzottify.android.ui.toFullScreenImage
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedFactory
 import dagger.assisted.AssistedInject
@@ -19,6 +21,7 @@ class AlbumScreenViewModel @AssistedInject constructor(
     private val interactor: Interactor,
     private val contentResolver: ContentResolver,
     @Assisted private val albumId: String,
+    @Assisted private val navController: NavController,
 ) : ViewModel(), AlbumScreenActions {
 
     private var hasLoggedView = false
@@ -63,6 +66,10 @@ class AlbumScreenViewModel @AssistedInject constructor(
         interactor.playTrack(albumId, trackId)
     }
 
+    override fun clickOnAlbumImage(imageUrls: List<String>) {
+        navController.toFullScreenImage(imageUrls)
+    }
+
     interface Interactor {
         fun playAlbum(albumId: String)
         fun playTrack(albumId: String, trackId: String)
@@ -72,6 +79,6 @@ class AlbumScreenViewModel @AssistedInject constructor(
 
     @AssistedFactory
     interface Factory {
-        fun create(albumId: String): AlbumScreenViewModel
+        fun create(albumId: String, navController: NavController): AlbumScreenViewModel
     }
 }
