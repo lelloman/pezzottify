@@ -6,8 +6,6 @@ We can consider V1 ready once all of the task without V2 mark are completed.
 
 - Check the styling of the login screen, I now see a light text color in the email input even if the theme is light
 - We should somehow insert into the code A) the build variant B) the build version C) The git commit, then we can show it in the profile screen for now
-- BUG when the user logs out the music keeps playing!
-
 ### [to refine]
 
 - Add custom theme palettes beyond system/light/dark (e.g., Material colors like blue, green, purple, or themed palettes like 'Midnight', 'Sunset', 'Forest')
@@ -28,6 +26,7 @@ We can consider V1 ready once all of the task without V2 mark are completed.
 
 ### [done]
 
+- ~BUG when the user logs out the music keeps playing!~
 - ~Add base URL field to login screen for configuring server URL~
 - ~Add a confirmation dialog to the logout operation~
 - ~Add a small right padding to the bottom player track and artists column, when swiping, the 2 track info basically touch~
