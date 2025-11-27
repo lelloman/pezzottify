@@ -259,7 +259,7 @@ mod tests {
         let metrics = REGISTRY.gather();
         let http_metrics = metrics
             .iter()
-            .find(|m| m.get_name() == "http_requests_total");
+            .find(|m| m.get_name() == "pezzottify_http_requests_total");
 
         assert!(http_metrics.is_some(), "HTTP request metrics should exist");
     }
@@ -276,7 +276,7 @@ mod tests {
         let metrics = REGISTRY.gather();
         let login_metrics = metrics
             .iter()
-            .find(|m| m.get_name() == "auth_login_attempts_total");
+            .find(|m| m.get_name() == "pezzottify_auth_login_attempts_total");
 
         assert!(login_metrics.is_some(), "Login metrics should exist");
     }
@@ -291,7 +291,7 @@ mod tests {
         let metrics = REGISTRY.gather();
         let rate_limit_metrics = metrics
             .iter()
-            .find(|m| m.get_name() == "rate_limit_hits_total");
+            .find(|m| m.get_name() == "pezzottify_rate_limit_hits_total");
 
         assert!(rate_limit_metrics.is_some(), "Rate limit metrics should exist");
     }
@@ -306,7 +306,7 @@ mod tests {
         let metrics = REGISTRY.gather();
         let catalog_metrics = metrics
             .iter()
-            .find(|m| m.get_name() == "catalog_items_total");
+            .find(|m| m.get_name() == "pezzottify_catalog_items_total");
 
         assert!(catalog_metrics.is_some(), "Catalog metrics should exist");
     }
@@ -322,7 +322,7 @@ mod tests {
         let metrics = REGISTRY.gather();
         let db_metrics = metrics
             .iter()
-            .find(|m| m.get_name() == "db_query_duration_seconds");
+            .find(|m| m.get_name() == "pezzottify_db_query_duration_seconds");
 
         assert!(db_metrics.is_some(), "DB query metrics should exist");
     }
