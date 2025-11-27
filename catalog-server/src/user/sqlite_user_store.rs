@@ -1,3 +1,4 @@
+use crate::server::metrics::record_db_query;
 use crate::sqlite_column;
 use crate::sqlite_persistence::{
     Column, ForeignKey, ForeignKeyOnChange, SqlType, Table, VersionedSchema, BASE_DB_VERSION,
@@ -10,7 +11,7 @@ use std::{
     path::{Path, PathBuf},
     str::FromStr,
     sync::{Arc, Mutex},
-    time::SystemTime,
+    time::{Instant, SystemTime},
 };
 use tracing::{debug, info};
 
@@ -1098,10 +1099,11 @@ fn system_time_from_column_result(value: i64) -> SystemTime {
 
 impl UserAuthTokenStore for SqliteUserStore {
     fn get_user_auth_token(&self, value: &AuthTokenValue) -> Result<Option<AuthToken>> {
+        let start = Instant::now();
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn
             .prepare("SELECT * FROM auth_token WHERE value = ?1")?;
-        match stmt.query_row(params![value.0], |row| {
+        let result = match stmt.query_row(params![value.0], |row| {
             Ok(AuthToken {
                 user_id: row.get(0)?,
                 value: AuthTokenValue(row.get(1)?),
@@ -1114,7 +1116,9 @@ impl UserAuthTokenStore for SqliteUserStore {
             Ok(token) => Ok(Some(token)),
             Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
             Err(e) => Err(e.into()),
-        }
+        };
+        record_db_query("get_user_auth_token", start.elapsed());
+        result
     }
 
     fn delete_user_auth_token(&self, token: &AuthTokenValue) -> Result<Option<AuthToken>> {
@@ -1162,11 +1166,13 @@ impl UserAuthTokenStore for SqliteUserStore {
     }
 
     fn add_user_auth_token(&self, token: AuthToken) -> Result<()> {
+        let start = Instant::now();
         let conn = self.conn.lock().unwrap();
         conn.execute(
             "INSERT INTO auth_token (value, user_id) VALUES (?1, ?2)",
             params![token.value.0, token.user_id,],
         )?;
+        record_db_query("add_user_auth_token", start.elapsed());
         Ok(())
     }
 
@@ -1213,9 +1219,13 @@ impl UserAuthTokenStore for SqliteUserStore {
 
 impl UserAuthCredentialsStore for SqliteUserStore {
     fn get_user_auth_credentials(&self, user_handle: &str) -> Result<Option<UserAuthCredentials>> {
+        let start = Instant::now();
         let user_id = match self.get_user_id(user_handle)? {
             Some(id) => id,
-            None => return Ok(None),
+            None => {
+                record_db_query("get_user_auth_credentials", start.elapsed());
+                return Ok(None);
+            }
         };
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn
@@ -1253,6 +1263,7 @@ impl UserAuthCredentialsStore for SqliteUserStore {
                 Err(e) => return Err(e.into()),
             };
 
+        record_db_query("get_user_auth_credentials", start.elapsed());
         Ok(Some(UserAuthCredentials {
             user_id,
             username_password: password_credentials,

@@ -454,12 +454,19 @@ async fn login(
     State(user_manager): State<GuardedUserManager>,
     Json(body): Json<LoginBody>,
 ) -> Response {
+    let start = Instant::now();
     debug!("login() called with {:?}", body);
     let mut locked_manager = user_manager.lock().unwrap();
     let credentials = match locked_manager.get_user_credentials(&body.user_handle) {
         Ok(Some(creds)) => creds,
-        Ok(None) => return StatusCode::UNAUTHORIZED.into_response(),
-        Err(_) => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+        Ok(None) => {
+            super::metrics::record_login_attempt("failure", start.elapsed());
+            return StatusCode::UNAUTHORIZED.into_response();
+        }
+        Err(_) => {
+            super::metrics::record_login_attempt("error", start.elapsed());
+            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+        }
     };
 
     if let Some(password_credentials) = &credentials.username_password {
@@ -470,6 +477,7 @@ async fn login(
             ) {
                 return match locked_manager.generate_auth_token(&credentials) {
                     Ok(auth_token) => {
+                        super::metrics::record_login_attempt("success", start.elapsed());
                         let response_body = LoginSuccessResponse {
                             token: auth_token.value.0.clone(),
                         };
@@ -488,11 +496,13 @@ async fn login(
                     }
                     Err(err) => {
                         error!("Error with auth token generation: {}", err);
+                        super::metrics::record_login_attempt("error", start.elapsed());
                         StatusCode::INTERNAL_SERVER_ERROR.into_response()
                     }
                 };
             }
         }
+    super::metrics::record_login_attempt("failure", start.elapsed());
     StatusCode::UNAUTHORIZED.into_response()
 }
 

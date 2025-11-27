@@ -4,6 +4,7 @@
 //! for different route groups. Uses IP-based limiting for login endpoints and
 //! user-based limiting for authenticated endpoints.
 
+use crate::server::metrics::record_rate_limit_hit;
 use axum::{
     body::Body,
     extract::{ConnectInfo, Request},
@@ -116,14 +117,14 @@ pub fn rate_limit_error_handler(err: GovernorError, req: Request<Body>) -> Respo
             let path = req.uri().path();
             let method = req.method().as_str();
 
-            // Try to extract user_id or IP for logging
-            let identifier = if let Some(user_id) = req.extensions().get::<usize>() {
-                format!("user_id={}", user_id)
+            // Try to extract user_id or IP for logging and metrics
+            let (identifier, identifier_type) = if let Some(user_id) = req.extensions().get::<usize>() {
+                (format!("user_id={}", user_id), "user")
             } else if let Some(ConnectInfo(addr)) = req.extensions().get::<ConnectInfo<SocketAddr>>()
             {
-                format!("ip={}", addr.ip())
+                (format!("ip={}", addr.ip()), "ip")
             } else {
-                "unknown".to_string()
+                ("unknown".to_string(), "unknown")
             };
 
             // Log rate limit violation
@@ -131,6 +132,9 @@ pub fn rate_limit_error_handler(err: GovernorError, req: Request<Body>) -> Respo
                 "Rate limit exceeded: {} {} {}",
                 method, path, identifier
             );
+
+            // Record metric for Prometheus
+            record_rate_limit_hit(path, identifier_type);
 
             // Return 429 with simple message
             StatusCode::TOO_MANY_REQUESTS.into_response()

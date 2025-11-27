@@ -2,6 +2,7 @@
 #![allow(dead_code)] // Used as middleware
 
 use super::super::ServerConfig;
+use crate::server::metrics::record_http_request;
 use axum::extract::State;
 use axum::{
     body::Body,
@@ -145,6 +146,9 @@ pub async fn log_requests(
     let status = response.status().as_u16();
     let duration: std::time::Duration = start.elapsed();
     info!("<<< {} ({}ms)", status, duration.as_millis());
+
+    // Record metrics for Prometheus
+    record_http_request(&method, &uri, status, duration);
 
     response
 }

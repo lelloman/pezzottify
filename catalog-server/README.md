@@ -576,20 +576,20 @@ This starts:
 
 ### Prometheus Metrics
 
-The server exposes metrics at `/metrics` endpoint. Available metrics:
+The server exposes metrics at `/metrics` endpoint. All custom metrics use the `pezzottify_` prefix for easy filtering in Grafana.
 
 | Metric | Type | Description |
 |--------|------|-------------|
-| `http_requests_total` | Counter | Total HTTP requests by method, path, status |
-| `http_request_duration_seconds` | Histogram | Request duration by method and path |
-| `auth_login_attempts_total` | Counter | Login attempts by status (success/failure) |
-| `auth_login_duration_seconds` | Histogram | Login request duration |
-| `auth_active_sessions` | Gauge | Number of active sessions |
-| `rate_limit_hits_total` | Counter | Rate limit violations by endpoint |
-| `db_query_duration_seconds` | Histogram | Database query duration by operation |
-| `db_connection_errors_total` | Counter | Database connection errors |
-| `catalog_items_total` | Gauge | Catalog items by type (artist/album/track) |
-| `process_memory_bytes` | Gauge | Process memory usage |
+| `pezzottify_http_requests_total` | Counter | Total HTTP requests by method, path, status |
+| `pezzottify_http_request_duration_seconds` | Histogram | Request duration by method and path |
+| `pezzottify_auth_login_attempts_total` | Counter | Login attempts by status (success/failure) |
+| `pezzottify_auth_login_duration_seconds` | Histogram | Login request duration |
+| `pezzottify_auth_active_sessions` | Gauge | Number of active sessions |
+| `pezzottify_rate_limit_hits_total` | Counter | Rate limit violations by endpoint |
+| `pezzottify_db_query_duration_seconds` | Histogram | Database query duration by operation |
+| `pezzottify_db_connection_errors_total` | Counter | Database connection errors |
+| `pezzottify_catalog_items_total` | Gauge | Catalog items by type (artist/album/track) |
+| `pezzottify_process_memory_bytes` | Gauge | Process memory usage |
 
 ### Alert Rules
 
@@ -649,13 +649,16 @@ docker-compose up -d
 # Raw Prometheus metrics
 curl http://localhost:3001/metrics
 
+# Filter to only Pezzottify metrics
+curl http://localhost:3001/metrics | grep pezzottify_
+
 # Prometheus query interface
 open http://localhost:9090
 
 # Example PromQL queries
-# Request rate: rate(http_requests_total[5m])
-# Login failures: auth_login_attempts_total{status="failure"}
-# P95 latency: histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[5m]))
+# Request rate: rate(pezzottify_http_requests_total[5m])
+# Login failures: pezzottify_auth_login_attempts_total{status="failure"}
+# P95 latency: histogram_quantile(0.95, rate(pezzottify_http_request_duration_seconds_bucket[5m]))
 ```
 
 ## License

@@ -2,6 +2,7 @@
 
 - Create custom, flashy, modern looking CLI interface style for cli-auth
 - Secure /metrics endpoint (add authentication, separate port, or network-level restrictions)
+- Implement bandwidth usage statistics collection and persistence (track data transfer per user/endpoint)
 - ~Setup alerts infrastructure (emails or telegram bot for rate limit violations, errors, etc.)~
 - ~Setup metrics infrastructure for monitoring and observability~
 - Create admin API endpoints for managing user roles and permissions (ManagePermissions permission)

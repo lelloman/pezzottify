@@ -15,7 +15,7 @@ groups:
 
       # Security Alerts
       - alert: LoginBruteForceAttempt
-        expr: rate(rate_limit_hits_total{endpoint="/v1/auth/login"}[1m]) > 2
+        expr: rate(pezzottify_rate_limit_hits_total{endpoint="/v1/auth/login"}[1m]) > 2
         for: 2m
         labels:
           severity: critical
@@ -25,7 +25,7 @@ groups:
           description: "Login rate limiting triggered {{ $value }} times/sec."
 
       - alert: HighRateLimitViolations
-        expr: rate(rate_limit_hits_total[5m]) > 10
+        expr: rate(pezzottify_rate_limit_hits_total[5m]) > 10
         for: 5m
         labels:
           severity: warning
@@ -35,7 +35,7 @@ groups:
           description: "{{ $labels.endpoint }} experiencing {{ $value }} violations/sec."
 
       - alert: HighLoginFailureRate
-        expr: rate(auth_login_attempts_total{status="failure"}[5m]) > 0.5
+        expr: rate(pezzottify_auth_login_attempts_total{status="failure"}[5m]) > 0.5
         for: 5m
         labels:
           severity: warning
@@ -46,7 +46,7 @@ groups:
 
       # Error Alerts
       - alert: HighErrorRate
-        expr: rate(http_requests_total{status=~"5.."}[5m]) > 0.1
+        expr: rate(pezzottify_http_requests_total{status=~"5.."}[5m]) > 0.1
         for: 5m
         labels:
           severity: critical
@@ -56,7 +56,7 @@ groups:
           description: "{{ $value }} server errors per second."
 
       - alert: DatabaseErrors
-        expr: rate(db_connection_errors_total[5m]) > 0
+        expr: rate(pezzottify_db_connection_errors_total[5m]) > 0
         for: 2m
         labels:
           severity: critical
@@ -67,7 +67,7 @@ groups:
 
       # Performance Alerts
       - alert: SlowLoginPerformance
-        expr: histogram_quantile(0.95, rate(auth_login_duration_seconds_bucket[5m])) > 2
+        expr: histogram_quantile(0.95, rate(pezzottify_auth_login_duration_seconds_bucket[5m])) > 2
         for: 5m
         labels:
           severity: warning
@@ -77,7 +77,7 @@ groups:
           description: "95th percentile login duration is {{ $value }}s (threshold: 2s)."
 
       - alert: SlowDatabaseQueries
-        expr: histogram_quantile(0.95, rate(db_query_duration_seconds_bucket[5m])) > 1
+        expr: histogram_quantile(0.95, rate(pezzottify_db_query_duration_seconds_bucket[5m])) > 1
         for: 5m
         labels:
           severity: warning
@@ -88,7 +88,7 @@ groups:
 
       # Resource Alerts
       - alert: HighMemoryUsage
-        expr: process_memory_bytes > 1073741824  # 1GB
+        expr: pezzottify_process_memory_bytes > 1073741824  # 1GB
         for: 10m
         labels:
           severity: warning

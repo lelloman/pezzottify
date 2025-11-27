@@ -6,19 +6,22 @@ use prometheus::{
 };
 use std::time::Duration;
 
+/// Metric name prefix for all Pezzottify metrics
+const PREFIX: &str = "pezzottify";
+
 lazy_static! {
     // Global Prometheus registry
     pub static ref REGISTRY: Registry = Registry::new();
 
     // HTTP Request Metrics
     pub static ref HTTP_REQUESTS_TOTAL: CounterVec = CounterVec::new(
-        Opts::new("http_requests_total", "Total number of HTTP requests"),
+        Opts::new(format!("{PREFIX}_http_requests_total"), "Total number of HTTP requests"),
         &["method", "path", "status"]
     ).expect("Failed to create http_requests_total metric");
 
     pub static ref HTTP_REQUEST_DURATION_SECONDS: HistogramVec = HistogramVec::new(
         HistogramOpts::new(
-            "http_request_duration_seconds",
+            format!("{PREFIX}_http_request_duration_seconds"),
             "HTTP request duration in seconds"
         )
         .buckets(vec![0.001, 0.01, 0.05, 0.1, 0.5, 1.0, 2.0, 5.0, 10.0]),
@@ -27,33 +30,33 @@ lazy_static! {
 
     // Authentication Metrics
     pub static ref AUTH_LOGIN_ATTEMPTS_TOTAL: CounterVec = CounterVec::new(
-        Opts::new("auth_login_attempts_total", "Total login attempts"),
+        Opts::new(format!("{PREFIX}_auth_login_attempts_total"), "Total login attempts"),
         &["status"]
     ).expect("Failed to create auth_login_attempts_total metric");
 
     pub static ref AUTH_LOGIN_DURATION_SECONDS: Histogram = Histogram::with_opts(
         HistogramOpts::new(
-            "auth_login_duration_seconds",
+            format!("{PREFIX}_auth_login_duration_seconds"),
             "Login request duration in seconds"
         )
         .buckets(vec![0.1, 0.5, 1.0, 2.0, 5.0, 10.0])
     ).expect("Failed to create auth_login_duration_seconds metric");
 
     pub static ref AUTH_ACTIVE_SESSIONS: Gauge = Gauge::new(
-        "auth_active_sessions",
+        format!("{PREFIX}_auth_active_sessions"),
         "Number of active authentication sessions"
     ).expect("Failed to create auth_active_sessions metric");
 
     // Rate Limiting Metrics
     pub static ref RATE_LIMIT_HITS_TOTAL: CounterVec = CounterVec::new(
-        Opts::new("rate_limit_hits_total", "Rate limit violations"),
+        Opts::new(format!("{PREFIX}_rate_limit_hits_total"), "Rate limit violations"),
         &["endpoint", "identifier_type"]
     ).expect("Failed to create rate_limit_hits_total metric");
 
     // Database Metrics
     pub static ref DB_QUERY_DURATION_SECONDS: HistogramVec = HistogramVec::new(
         HistogramOpts::new(
-            "db_query_duration_seconds",
+            format!("{PREFIX}_db_query_duration_seconds"),
             "Database query duration in seconds"
         )
         .buckets(vec![0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1.0]),
@@ -61,30 +64,30 @@ lazy_static! {
     ).expect("Failed to create db_query_duration_seconds metric");
 
     pub static ref DB_CONNECTION_ERRORS_TOTAL: Counter = Counter::new(
-        "db_connection_errors_total",
+        format!("{PREFIX}_db_connection_errors_total"),
         "Total database connection errors"
     ).expect("Failed to create db_connection_errors_total metric");
 
     // Catalog Metrics
     pub static ref CATALOG_ITEMS_TOTAL: GaugeVec = GaugeVec::new(
-        Opts::new("catalog_items_total", "Total items in catalog"),
+        Opts::new(format!("{PREFIX}_catalog_items_total"), "Total items in catalog"),
         &["type"]
     ).expect("Failed to create catalog_items_total metric");
 
     pub static ref CATALOG_SIZE_BYTES: Gauge = Gauge::new(
-        "catalog_size_bytes",
+        format!("{PREFIX}_catalog_size_bytes"),
         "Catalog size in bytes"
     ).expect("Failed to create catalog_size_bytes metric");
 
     // Error Metrics
     pub static ref ERRORS_TOTAL: CounterVec = CounterVec::new(
-        Opts::new("errors_total", "Total errors by type and endpoint"),
+        Opts::new(format!("{PREFIX}_errors_total"), "Total errors by type and endpoint"),
         &["error_type", "endpoint"]
     ).expect("Failed to create errors_total metric");
 
     // Process Metrics (memory/CPU will be added later if needed)
     pub static ref PROCESS_MEMORY_BYTES: Gauge = Gauge::new(
-        "process_memory_bytes",
+        format!("{PREFIX}_process_memory_bytes"),
         "Process memory usage in bytes"
     ).expect("Failed to create process_memory_bytes metric");
 }
