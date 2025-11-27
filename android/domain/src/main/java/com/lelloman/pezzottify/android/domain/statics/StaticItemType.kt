@@ -4,4 +4,5 @@ enum class StaticItemType {
     Artist,
     Album,
     Track,
+    Discography,
 }

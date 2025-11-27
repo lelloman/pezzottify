@@ -119,4 +119,32 @@ class StaticsProvider internal constructor(
                 output
             }
     }
+
+    fun provideDiscography(artistId: String): StaticsItemFlow<ArtistDiscography> {
+        return staticsStore.getDiscography(artistId)
+            .combine(staticItemFetchStateStore.get(artistId)) { discography, fetchState ->
+                val output = when {
+                    discography != null -> StaticsItem.Loaded(
+                        artistId,
+                        discography
+                    )
+
+                    fetchState?.isLoading == true -> StaticsItem.Loading(artistId)
+                    fetchState?.errorReason != null -> {
+                        scheduleItemFetch(artistId, StaticItemType.Discography)
+                        StaticsItem.Error(
+                            artistId,
+                            Throwable("${fetchState.errorReason}")
+                        )
+                    }
+
+                    else -> {
+                        scheduleItemFetch(artistId, StaticItemType.Discography)
+                        StaticsItem.Loading(artistId)
+                    }
+                }
+                logger.debug("provideDiscography($artistId) newOutput = $output")
+                output
+            }
+    }
 }

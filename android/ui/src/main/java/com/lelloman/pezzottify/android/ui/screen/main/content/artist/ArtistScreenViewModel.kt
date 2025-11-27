@@ -10,7 +10,6 @@ import dagger.assisted.AssistedInject
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
 
@@ -23,30 +22,27 @@ class ArtistScreenViewModel @AssistedInject constructor(
 
     private var hasLoggedView = false
 
-    private val discographyFlow = flow {
-        emit(null) // Start with null
-        val discography = contentResolver.getArtistDiscography(artistId)
-        emit(discography)
-    }
-
     val state = combine(
         contentResolver.resolveArtist(artistId),
-        discographyFlow
-    ) { artistContent, discography ->
+        contentResolver.resolveArtistDiscography(artistId)
+    ) { artistContent, discographyContent ->
         when (artistContent) {
             is Content.Loading -> ArtistScreenState()
             is Content.Error -> ArtistScreenState(
                 isError = true,
                 isLoading = false,
             )
-            is Content.Resolved -> ArtistScreenState(
-                artist = artistContent.data,
-                albums = discography?.albums ?: emptyList(),
-                features = discography?.features ?: emptyList(),
-                relatedArtists = artistContent.data.related,
-                isError = false,
-                isLoading = false,
-            )
+            is Content.Resolved -> {
+                val discography = (discographyContent as? Content.Resolved)?.data
+                ArtistScreenState(
+                    artist = artistContent.data,
+                    albums = discography?.albums ?: emptyList(),
+                    features = discography?.features ?: emptyList(),
+                    relatedArtists = artistContent.data.related,
+                    isError = false,
+                    isLoading = false,
+                )
+            }
         }
     }.onEach { state ->
         if (!state.isLoading && !state.isError && !hasLoggedView) {

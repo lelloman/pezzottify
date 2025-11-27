@@ -1,8 +1,6 @@
 package com.lelloman.pezzottify.android.ui
 
 import com.lelloman.pezzottify.android.domain.config.ConfigStore
-import com.lelloman.pezzottify.android.domain.remoteapi.RemoteApiClient
-import com.lelloman.pezzottify.android.domain.remoteapi.response.RemoteApiResponse
 import com.lelloman.pezzottify.android.domain.statics.StaticsItem
 import com.lelloman.pezzottify.android.domain.statics.StaticsProvider
 import com.lelloman.pezzottify.android.ui.content.Album
@@ -22,7 +20,6 @@ import kotlinx.coroutines.flow.map
 
 class UiContentResolver(
     private val staticsProvider: StaticsProvider,
-    private val remoteApiClient: RemoteApiClient,
     private val configStore: ConfigStore
 ) : ContentResolver {
 
@@ -175,14 +172,17 @@ class UiContentResolver(
         }
     }
 
-    override suspend fun getArtistDiscography(artistId: String): ArtistDiscography? {
-        return when (val response = remoteApiClient.getArtistDiscography(artistId)) {
-            is RemoteApiResponse.Success -> ArtistDiscography(
-                albums = response.data.albums,
-                features = response.data.features
-            )
-
-            else -> null
+    override fun resolveArtistDiscography(artistId: String): Flow<Content<ArtistDiscography>> =
+        staticsProvider.provideDiscography(artistId).map {
+            when (it) {
+                is StaticsItem.Error -> Content.Error(it.id)
+                is StaticsItem.Loading -> Content.Loading(it.id)
+                is StaticsItem.Loaded -> Content.Resolved(
+                    it.id, ArtistDiscography(
+                        albums = it.data.albumsIds,
+                        features = it.data.featuresIds
+                    )
+                )
+            }
         }
-    }
 }
