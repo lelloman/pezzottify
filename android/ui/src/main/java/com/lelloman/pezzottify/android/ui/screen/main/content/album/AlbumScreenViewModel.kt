@@ -50,6 +50,9 @@ class AlbumScreenViewModel @AssistedInject constructor(
         .combine(interactor.getCurrentPlayingTrackId()) { albumState, currentTrackId ->
             albumState.copy(currentPlayingTrackId = currentTrackId)
         }
+        .combine(interactor.getIsAddToQueueMode()) { albumState, isAddToQueue ->
+            albumState.copy(isAddToQueueMode = isAddToQueue)
+        }
         .onEach { state ->
             if (!state.isLoading && !state.isError && !hasLoggedView) {
                 hasLoggedView = true
@@ -75,6 +78,7 @@ class AlbumScreenViewModel @AssistedInject constructor(
         fun playTrack(albumId: String, trackId: String)
         fun logViewedAlbum(albumId: String)
         fun getCurrentPlayingTrackId(): kotlinx.coroutines.flow.Flow<String?>
+        fun getIsAddToQueueMode(): kotlinx.coroutines.flow.Flow<Boolean>
     }
 
     @AssistedFactory

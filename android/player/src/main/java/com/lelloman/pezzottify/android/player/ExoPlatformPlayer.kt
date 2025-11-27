@@ -256,4 +256,12 @@ internal class ExoPlatformPlayer(
     override fun skipToPreviousTrack() {
         mediaController?.seekToPrevious()
     }
+
+    override fun addMediaItems(tracksUrls: List<String>) {
+        mediaController?.let { controller ->
+            tracksUrls.forEach { url ->
+                controller.addMediaItem(MediaItem.fromUri(url))
+            }
+        }
+    }
 }

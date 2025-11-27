@@ -19,6 +19,10 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Snackbar
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -26,6 +30,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -35,6 +40,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import kotlin.math.min
+import kotlinx.coroutines.launch
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.lelloman.pezzottify.android.ui.R
 import com.lelloman.pezzottify.android.ui.component.DurationText
@@ -57,15 +63,31 @@ fun AlbumScreen(albumId: String, navController: androidx.navigation.NavControlle
 
 @Composable
 private fun AlbumScreenContent(state: AlbumScreenState, actions: AlbumScreenActions) {
+    val snackbarHostState = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
 
-    when {
-        state.isLoading -> LoadingScreen()
-        state.album != null -> AlbumLoadedScreen(
-            album = state.album,
-            tracks = state.tracks,
-            currentPlayingTrackId = state.currentPlayingTrackId,
-            actions = actions,
-        )
+    val showAddedToQueueSnackbar: (String) -> Unit = { message ->
+        scope.launch {
+            snackbarHostState.showSnackbar(message)
+        }
+    }
+
+    Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) }
+    ) { paddingValues ->
+        Box(modifier = Modifier.padding(paddingValues)) {
+            when {
+                state.isLoading -> LoadingScreen()
+                state.album != null -> AlbumLoadedScreen(
+                    album = state.album,
+                    tracks = state.tracks,
+                    currentPlayingTrackId = state.currentPlayingTrackId,
+                    isAddToQueueMode = state.isAddToQueueMode,
+                    actions = actions,
+                    onAddedToQueue = showAddedToQueueSnackbar,
+                )
+            }
+        }
     }
 }
 
@@ -74,7 +96,9 @@ fun AlbumLoadedScreen(
     album: Album,
     tracks: List<kotlinx.coroutines.flow.Flow<Content<Track>>>?,
     currentPlayingTrackId: String?,
+    isAddToQueueMode: Boolean,
     actions: AlbumScreenActions,
+    onAddedToQueue: (String) -> Unit = {},
 ) {
     val listState = rememberLazyListState()
 
@@ -128,7 +152,9 @@ fun AlbumLoadedScreen(
                         is Content.Resolved -> TrackItem(
                             track = track.data,
                             isPlaying = track.data.id == currentPlayingTrackId,
+                            isAddToQueueMode = isAddToQueueMode,
                             actions = actions,
+                            onAddedToQueue = onAddedToQueue,
                         )
                         null, is Content.Loading -> LoadingTrackItem()
                         is Content.Error -> ErrorTrackItem()
@@ -191,27 +217,35 @@ fun AlbumLoadedScreen(
 
         // Floating play button - positioned at bottom-right of header, straddling the boundary
         IconButton(
-            onClick = { actions.clickOnPlayAlbum(album.id) },
+            onClick = {
+                actions.clickOnPlayAlbum(album.id)
+                if (isAddToQueueMode) {
+                    onAddedToQueue("Album added to queue")
+                }
+            },
             modifier = Modifier
                 .align(Alignment.TopEnd)
                 .offset(y = headerHeight - playButtonSize / 2)
                 .padding(end = 16.dp)
                 .size(playButtonSize)
         ) {
-            Box {
-                // Background circle to fill the triangle
+            Box(contentAlignment = Alignment.Center) {
+                // Background circle
                 Icon(
                     modifier = Modifier.size(playButtonSize),
                     painter = painterResource(R.drawable.baseline_circle_24),
                     contentDescription = null,
-                    tint = MaterialTheme.colorScheme.surface,
-                )
-                // Play icon on top
-                Icon(
-                    modifier = Modifier.size(playButtonSize),
-                    painter = painterResource(R.drawable.baseline_play_circle_24),
-                    contentDescription = null,
                     tint = MaterialTheme.colorScheme.primary,
+                )
+                // Icon on top - play or add-to-queue based on mode
+                Icon(
+                    modifier = Modifier.size(28.dp),
+                    painter = painterResource(
+                        if (isAddToQueueMode) R.drawable.baseline_playlist_add_24
+                        else R.drawable.baseline_play_arrow_24
+                    ),
+                    contentDescription = if (isAddToQueueMode) "Add to queue" else "Play",
+                    tint = MaterialTheme.colorScheme.onPrimary,
                 )
             }
         }
@@ -219,7 +253,13 @@ fun AlbumLoadedScreen(
 }
 
 @Composable
-private fun TrackItem(track: Track, isPlaying: Boolean, actions: AlbumScreenActions) {
+private fun TrackItem(
+    track: Track,
+    isPlaying: Boolean,
+    isAddToQueueMode: Boolean,
+    actions: AlbumScreenActions,
+    onAddedToQueue: (String) -> Unit,
+) {
     val backgroundColor = if (isPlaying) {
         MaterialTheme.colorScheme.primaryContainer
     } else {
@@ -235,7 +275,12 @@ private fun TrackItem(track: Track, isPlaying: Boolean, actions: AlbumScreenActi
         modifier = Modifier
             .fillMaxWidth()
             .background(backgroundColor)
-            .clickable { actions.clickOnTrack(track.id) }
+            .clickable {
+                actions.clickOnTrack(track.id)
+                if (isAddToQueueMode) {
+                    onAddedToQueue("Added to queue")
+                }
+            }
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {

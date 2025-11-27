@@ -53,6 +53,7 @@ import com.lelloman.pezzottify.android.ui.component.PezzottifyImageShape
 import com.lelloman.pezzottify.android.ui.component.ScrollingArtistsRow
 import com.lelloman.pezzottify.android.ui.toAlbum
 import com.lelloman.pezzottify.android.ui.toArtist
+import com.lelloman.pezzottify.android.ui.toQueue
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -90,6 +91,15 @@ private fun PlayerScreenContent(
                             imageVector = Icons.AutoMirrored.Filled.KeyboardArrowLeft,
                             contentDescription = "Back",
                             modifier = Modifier.size(32.dp)
+                        )
+                    }
+                },
+                actions = {
+                    IconButton(onClick = { navController.toQueue() }) {
+                        Icon(
+                            painter = painterResource(R.drawable.baseline_queue_music_24),
+                            contentDescription = "Queue",
+                            modifier = Modifier.size(24.dp)
                         )
                     }
                 },

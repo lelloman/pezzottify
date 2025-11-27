@@ -100,6 +100,21 @@ internal class PlayerImpl(
         }
     }
 
+    override fun addAlbumToPlaylist(albumId: String) {
+        runOnPlayerThread {
+            val loadedAlbum = withTimeoutOrNull(2.seconds) {
+                staticsProvider.provideAlbum(albumId)
+                    .filterIsInstance<StaticsItem.Loaded<Album>>()
+                    .first()
+            }
+            if (loadedAlbum != null) {
+                val tracksIds = loadedAlbum.data.discs.flatMap { it.tracksIds }
+                addTracksToPlaylist(tracksIds)
+                logger.info("Added album $albumId (${tracksIds.size} tracks) to playlist")
+            }
+        }
+    }
+
     override fun loadUserPlaylist(userPlaylistId: String) {
         TODO("Not yet implemented")
     }
@@ -141,7 +156,38 @@ internal class PlayerImpl(
     }
 
     override fun addTracksToPlaylist(tracksIds: List<String>) {
-        TODO("Not yet implemented")
+        runOnPlayerThread {
+            val currentPlaylist = mutablePlaybackPlaylist.value
+            if (currentPlaylist != null) {
+                // Add tracks to the existing playlist
+                val newTracksIds = currentPlaylist.tracksIds + tracksIds
+                val newContext = when (val ctx = currentPlaylist.context) {
+                    is PlaybackPlaylistContext.Album -> PlaybackPlaylistContext.UserMix
+                    is PlaybackPlaylistContext.UserPlaylist -> ctx.copy(isEdited = true)
+                    is PlaybackPlaylistContext.UserMix -> ctx
+                }
+                mutablePlaybackPlaylist.value = PlaybackPlaylist(
+                    context = newContext,
+                    tracksIds = newTracksIds,
+                )
+                // Add new tracks to platform player
+                val baseUrl = configStore.baseUrl.value
+                val urls = tracksIds.map { "$baseUrl/v1/content/stream/$it" }
+                platformPlayer.addMediaItems(urls)
+                logger.info("Added ${tracksIds.size} tracks to playlist")
+            } else {
+                // No playlist exists, create a new UserMix playlist
+                mutablePlaybackPlaylist.value = PlaybackPlaylist(
+                    context = PlaybackPlaylistContext.UserMix,
+                    tracksIds = tracksIds,
+                )
+                platformPlayer.setIsPlaying(true)
+                val baseUrl = configStore.baseUrl.value
+                val urls = tracksIds.map { "$baseUrl/v1/content/stream/$it" }
+                platformPlayer.loadPlaylist(urls)
+                logger.info("Created new UserMix playlist with ${tracksIds.size} tracks")
+            }
+        }
     }
 
     override fun removeTrackFromPlaylist(trackId: String) {

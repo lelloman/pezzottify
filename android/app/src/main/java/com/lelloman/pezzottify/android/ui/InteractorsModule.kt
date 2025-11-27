@@ -25,6 +25,7 @@ import com.lelloman.pezzottify.android.ui.screen.main.home.ViewedContentType
 import com.lelloman.pezzottify.android.ui.screen.main.profile.ProfileScreenViewModel
 import com.lelloman.pezzottify.android.ui.screen.main.search.SearchScreenViewModel
 import com.lelloman.pezzottify.android.ui.screen.player.PlayerScreenViewModel
+import com.lelloman.pezzottify.android.ui.screen.queue.QueueScreenViewModel
 import com.lelloman.pezzottify.android.ui.screen.splash.SplashViewModel
 import dagger.Module
 import dagger.Provides
@@ -133,13 +134,20 @@ class InteractorsModule {
     fun provideAlbumScreenInteractor(
         player: PezzottifyPlayer,
         logViewedContentUseCase: LogViewedContentUseCase,
+        userSettingsStore: UserSettingsStore,
     ): AlbumScreenViewModel.Interactor = object : AlbumScreenViewModel.Interactor {
         override fun playAlbum(albumId: String) {
-            player.loadAlbum(albumId)
+            when (userSettingsStore.playBehavior.value) {
+                PlayBehavior.ReplacePlaylist -> player.loadAlbum(albumId)
+                PlayBehavior.AddToPlaylist -> player.addAlbumToPlaylist(albumId)
+            }
         }
 
         override fun playTrack(albumId: String, trackId: String) {
-            player.loadAlbum(albumId, trackId)
+            when (userSettingsStore.playBehavior.value) {
+                PlayBehavior.ReplacePlaylist -> player.loadAlbum(albumId, trackId)
+                PlayBehavior.AddToPlaylist -> player.addTracksToPlaylist(listOf(trackId))
+            }
         }
 
         override fun logViewedAlbum(albumId: String) {
@@ -154,6 +162,9 @@ class InteractorsModule {
                     null
                 }
             }
+
+        override fun getIsAddToQueueMode(): Flow<Boolean> =
+            userSettingsStore.playBehavior.map { it == PlayBehavior.AddToPlaylist }
     }
 
     @Provides
@@ -289,5 +300,21 @@ class InteractorsModule {
                 val currentState = player.volumeState.value
                 player.setMuted(!currentState.isMuted)
             }
+        }
+
+    @Provides
+    fun provideQueueScreenInteractor(
+        player: PezzottifyPlayer
+    ): QueueScreenViewModel.Interactor =
+        object : QueueScreenViewModel.Interactor {
+            override fun getPlaybackPlaylist() = player.playbackPlaylist
+
+            override fun getCurrentTrackIndex() = player.currentTrackIndex
+
+            override fun playTrackAtIndex(index: Int) = player.loadTrackIndex(index)
+
+            override fun moveTrack(fromIndex: Int, toIndex: Int) = player.moveTrack(fromIndex, toIndex)
+
+            override fun removeTrack(trackId: String) = player.removeTrackFromPlaylist(trackId)
         }
 }

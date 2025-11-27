@@ -4,4 +4,6 @@ interface PlatformPlayer : ControlsAndStatePlayer {
 
     fun loadPlaylist(tracksUrls: List<String>)
 
+    fun addMediaItems(tracksUrls: List<String>)
+
 }

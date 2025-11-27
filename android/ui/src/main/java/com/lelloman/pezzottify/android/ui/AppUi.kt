@@ -15,6 +15,7 @@ import com.lelloman.pezzottify.android.ui.screen.login.LoginScreen
 import com.lelloman.pezzottify.android.ui.screen.main.MainScreen
 import com.lelloman.pezzottify.android.ui.screen.main.content.fullscreenimage.FullScreenImageScreen
 import com.lelloman.pezzottify.android.ui.screen.player.PlayerScreen
+import com.lelloman.pezzottify.android.ui.screen.queue.QueueScreen
 import com.lelloman.pezzottify.android.ui.screen.main.content.album.AlbumScreen
 import com.lelloman.pezzottify.android.ui.screen.main.content.artist.ArtistScreen
 import com.lelloman.pezzottify.android.ui.screen.main.content.track.TrackScreen
@@ -52,6 +53,9 @@ fun AppUi(darkTheme: Boolean = isSystemInDarkTheme()) {
                 }
                 composable<Screen.Player> {
                     PlayerScreen(navController = navController)
+                }
+                composable<Screen.Queue> {
+                    QueueScreen(navController = navController)
                 }
             }
         }
