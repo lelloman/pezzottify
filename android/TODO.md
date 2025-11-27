@@ -10,8 +10,8 @@
 - The search screen is dangerously empty, maybe show latest searches? or what?
 - Add a contextual menu to queue albums and tracks (add to current playlist instead of replacing)
 - Add shuffle and repeat functionality to the player (both domain logic and UI controls)
-- When clicking on "Home" the navigation doesn't reset to root. 
 
+- ~When clicking on "Home" the navigation doesn't reset to root.~
 - ~Once "current-playback" playlist is in place, add a screen for it so that the user can see it, modify it directly, save it as user-playlist~
 - ~Add a player screen that is open when the user clicks on the bottom player~
 - ~Implement a "current-playback" playlist, like the web does. So, a user can start the playback of an album, ok, but then, it should be able to QUEUE albums and tracks.~

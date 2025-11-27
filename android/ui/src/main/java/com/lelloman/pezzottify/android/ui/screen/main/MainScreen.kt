@@ -116,12 +116,17 @@ private fun MainScreenContent(state: MainScreenState, actions: MainScreenActions
                         label = { Text(stringResource(it.description)) },
                         selected = isSelected,
                         onClick = {
-                            navController.navigate(it.route) {
-                                popUpTo(Screen.Main.Home) {
-                                    saveState = true
+                            // Try to pop to this tab's root first (handles re-clicking current tab)
+                            val popped = navController.popBackStack(it.route, inclusive = false)
+                            if (!popped) {
+                                // Tab not in back stack - navigate to it
+                                navController.navigate(it.route) {
+                                    popUpTo(Screen.Main.Home) {
+                                        saveState = true
+                                    }
+                                    launchSingleTop = true
+                                    restoreState = true
                                 }
-                                launchSingleTop = true
-                                restoreState = true
                             }
                         }
                     )
