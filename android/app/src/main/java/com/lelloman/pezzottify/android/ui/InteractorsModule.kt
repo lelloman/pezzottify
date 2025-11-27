@@ -18,6 +18,7 @@ import com.lelloman.pezzottify.android.ui.screen.main.home.HomeScreenViewModel
 import com.lelloman.pezzottify.android.ui.screen.main.home.ViewedContentType
 import com.lelloman.pezzottify.android.ui.screen.main.profile.ProfileScreenViewModel
 import com.lelloman.pezzottify.android.ui.screen.main.search.SearchScreenViewModel
+import com.lelloman.pezzottify.android.ui.screen.player.PlayerScreenViewModel
 import com.lelloman.pezzottify.android.ui.screen.splash.SplashViewModel
 import dagger.Module
 import dagger.Provides
@@ -186,5 +187,71 @@ class InteractorsModule {
                         HomeScreenState.RecentlyViewedContent(item.contentId, type)
                     }
                 }
+        }
+
+    @Provides
+    fun providePlayerScreenInteractor(
+        player: PezzottifyPlayer
+    ): PlayerScreenViewModel.Interactor =
+        object : PlayerScreenViewModel.Interactor {
+            override fun getPlaybackState(): Flow<PlayerScreenViewModel.Interactor.PlaybackState?> =
+                player.playbackPlaylist
+                    .combine(player.isPlaying) { playlist, isPlaying -> playlist to isPlaying }
+                    .combine(player.currentTrackIndex) { (playlist, isPlaying), currentTrackIndex ->
+                        Triple(playlist, isPlaying, currentTrackIndex)
+                    }
+                    .combine(player.currentTrackPercent) { (playlist, isPlaying, currentTrackIndex), trackPercent ->
+                        data class TempState(
+                            val playlist: com.lelloman.pezzottify.android.domain.player.PlaybackPlaylist?,
+                            val isPlaying: Boolean,
+                            val currentTrackIndex: Int?,
+                            val trackPercent: Float?,
+                        )
+                        TempState(playlist, isPlaying, currentTrackIndex, trackPercent)
+                    }
+                    .combine(player.currentTrackProgressSec) { tempState, progressSec ->
+                        data class TempState2(
+                            val playlist: com.lelloman.pezzottify.android.domain.player.PlaybackPlaylist?,
+                            val isPlaying: Boolean,
+                            val currentTrackIndex: Int?,
+                            val trackPercent: Float?,
+                            val progressSec: Int?,
+                        )
+                        TempState2(tempState.playlist, tempState.isPlaying, tempState.currentTrackIndex, tempState.trackPercent, progressSec)
+                    }
+                    .combine(player.volumeState) { tempState, volumeState ->
+                        if (tempState.playlist != null) {
+                            val index = tempState.currentTrackIndex ?: 0
+                            val hasNext = index < tempState.playlist.tracksIds.lastIndex
+                            val hasPrevious = index > 0
+                            PlayerScreenViewModel.Interactor.PlaybackState.Loaded(
+                                isPlaying = tempState.isPlaying,
+                                trackId = tempState.playlist.tracksIds[index],
+                                trackPercent = tempState.trackPercent ?: 0f,
+                                trackProgressSec = tempState.progressSec ?: 0,
+                                hasNextTrack = hasNext,
+                                hasPreviousTrack = hasPrevious,
+                                volume = volumeState.volume,
+                                isMuted = volumeState.isMuted,
+                            )
+                        } else {
+                            null
+                        }
+                    }
+
+            override fun togglePlayPause() = player.togglePlayPause()
+
+            override fun skipToNext() = player.skipToNextTrack()
+
+            override fun skipToPrevious() = player.skipToPreviousTrack()
+
+            override fun seekToPercent(percent: Float) = player.seekToPercentage(percent)
+
+            override fun setVolume(volume: Float) = player.setVolume(volume)
+
+            override fun toggleMute() {
+                val currentState = player.volumeState.value
+                player.setMuted(!currentState.isMuted)
+            }
         }
 }

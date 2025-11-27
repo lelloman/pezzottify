@@ -105,27 +105,27 @@ internal class PlayerImpl(
     }
 
     override fun forward10Sec() {
-        TODO("Not yet implemented")
+        platformPlayer.forward10Sec( )
     }
 
     override fun rewind10Sec() {
-        TODO("Not yet implemented")
+        platformPlayer.rewind10Sec()
     }
 
     override fun stop() {
-        TODO("Not yet implemented")
+        platformPlayer.stop()
     }
 
     override fun setVolume(volume: Float) {
-        TODO("Not yet implemented")
+        platformPlayer.setVolume(volume)
     }
 
     override fun setMuted(isMuted: Boolean) {
-        TODO("Not yet implemented")
+        platformPlayer.setMuted(isMuted)
     }
 
     override fun loadTrackIndex(index: Int) {
-        TODO("Not yet implemented")
+        platformPlayer.loadTrackIndex(index)
     }
 
     override fun goToPreviousPlaylist() {

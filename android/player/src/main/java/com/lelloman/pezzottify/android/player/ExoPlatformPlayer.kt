@@ -210,27 +210,43 @@ internal class ExoPlatformPlayer(
     }
 
     override fun seekToPercentage(percentage: Float) {
-        TODO("Not yet implemented")
+        mediaController?.let { controller ->
+            val duration = controller.duration
+            if (duration > 0) {
+                val position = (duration * percentage / 100f).toLong()
+                controller.seekTo(position)
+            }
+        }
     }
 
     override fun forward10Sec() {
-        TODO("Not yet implemented")
+        mediaController?.let { controller ->
+            val newPosition = (controller.currentPosition + 10_000).coerceAtMost(controller.duration)
+            controller.seekTo(newPosition)
+        }
     }
 
     override fun rewind10Sec() {
-        TODO("Not yet implemented")
+        mediaController?.let { controller ->
+            val newPosition = (controller.currentPosition - 10_000).coerceAtLeast(0)
+            controller.seekTo(newPosition)
+        }
     }
 
     override fun stop() {
-        TODO("Not yet implemented")
+        mediaController?.stop()
+        mutableIsPlaying.value = false
+        stopProgressPolling()
     }
 
     override fun setVolume(volume: Float) {
-        TODO("Not yet implemented")
+        mediaController?.volume = volume.coerceIn(0f, 1f)
+        mutableVolumeState.value = mutableVolumeState.value.copy(volume = volume.coerceIn(0f, 1f))
     }
 
     override fun setMuted(isMuted: Boolean) {
-        TODO("Not yet implemented")
+        mediaController?.volume = if (isMuted) 0f else mutableVolumeState.value.volume
+        mutableVolumeState.value = mutableVolumeState.value.copy(isMuted = isMuted)
     }
 
     override fun skipToNextTrack() {

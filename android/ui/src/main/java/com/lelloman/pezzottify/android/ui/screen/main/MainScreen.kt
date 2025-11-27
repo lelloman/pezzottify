@@ -2,6 +2,7 @@ package com.lelloman.pezzottify.android.ui.screen.main
 
 import androidx.annotation.StringRes
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -59,6 +60,7 @@ import com.lelloman.pezzottify.android.ui.content.ArtistInfo
 import com.lelloman.pezzottify.android.ui.screen.main.content.album.AlbumScreen
 import com.lelloman.pezzottify.android.ui.screen.main.content.artist.ArtistScreen
 import com.lelloman.pezzottify.android.ui.screen.main.content.track.TrackScreen
+import com.lelloman.pezzottify.android.ui.toPlayer
 import com.lelloman.pezzottify.android.ui.screen.main.home.HomeScreen
 import com.lelloman.pezzottify.android.ui.screen.main.library.LibraryScreen
 import com.lelloman.pezzottify.android.ui.screen.main.profile.ProfileScreen
@@ -154,7 +156,7 @@ private fun MainScreenContent(state: MainScreenState, actions: MainScreenActions
                 }
             }
             if (state.bottomPlayer.isVisible) {
-                BottomPlayer(state.bottomPlayer, actions)
+                BottomPlayer(state.bottomPlayer, actions, onClickPlayer = { rootNavController.toPlayer() })
             }
         }
     }
@@ -189,7 +191,7 @@ private fun TrackInfoPage(
 }
 
 @Composable
-private fun BottomPlayer(state: MainScreenState.BottomPlayer, actions: MainScreenActions) {
+private fun BottomPlayer(state: MainScreenState.BottomPlayer, actions: MainScreenActions, onClickPlayer: () -> Unit) {
     // Build the list of tracks for the pager: [previous?, current, next?]
     val hasPrevious = state.previousTrackName != null
     val hasNext = state.nextTrackName != null
@@ -247,26 +249,33 @@ private fun BottomPlayer(state: MainScreenState.BottomPlayer, actions: MainScree
                     .height(56.dp)
                     .fillMaxWidth()
             ) {
-                PezzottifyImage(
-                    urls = state.albumImageUrls,
-                    shape = PezzottifyImageShape.MiniPlayer,
-                    modifier = Modifier.clip(RoundedCornerShape(4.dp))
-                )
-
-                HorizontalPager(
-                    state = pagerState,
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier
                         .weight(1f)
-                        .padding(horizontal = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) { page ->
-                    val trackInfo = pagerTracks.getOrNull(page)
-                    if (trackInfo != null) {
-                        TrackInfoPage(
-                            trackName = trackInfo.trackName,
-                            artists = trackInfo.artists,
-                            modifier = Modifier.fillMaxSize()
-                        )
+                        .clickable(onClick = onClickPlayer)
+                ) {
+                    PezzottifyImage(
+                        urls = state.albumImageUrls,
+                        shape = PezzottifyImageShape.MiniPlayer,
+                        modifier = Modifier.clip(RoundedCornerShape(4.dp))
+                    )
+
+                    HorizontalPager(
+                        state = pagerState,
+                        modifier = Modifier
+                            .weight(1f)
+                            .padding(horizontal = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) { page ->
+                        val trackInfo = pagerTracks.getOrNull(page)
+                        if (trackInfo != null) {
+                            TrackInfoPage(
+                                trackName = trackInfo.trackName,
+                                artists = trackInfo.artists,
+                                modifier = Modifier.fillMaxSize()
+                            )
+                        }
                     }
                 }
 
@@ -315,6 +324,7 @@ private fun PreviewBottomPlayer() {
             override fun clickOnPlayPause() = Unit
             override fun clickOnSkipToNext() = Unit
             override fun clickOnSkipToPrevious() = Unit
-        }
+        },
+        onClickPlayer = {}
     )
 }

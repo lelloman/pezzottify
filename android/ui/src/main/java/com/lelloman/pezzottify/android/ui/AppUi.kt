@@ -13,6 +13,7 @@ import com.lelloman.pezzottify.android.ui.screen.about.AboutScreen
 import com.lelloman.pezzottify.android.ui.screen.login.LoginScreen
 import com.lelloman.pezzottify.android.ui.screen.main.MainScreen
 import com.lelloman.pezzottify.android.ui.screen.main.content.fullscreenimage.FullScreenImageScreen
+import com.lelloman.pezzottify.android.ui.screen.player.PlayerScreen
 import com.lelloman.pezzottify.android.ui.screen.main.content.album.AlbumScreen
 import com.lelloman.pezzottify.android.ui.screen.main.content.artist.ArtistScreen
 import com.lelloman.pezzottify.android.ui.screen.main.content.track.TrackScreen
@@ -47,6 +48,9 @@ fun AppUi() {
                         encodedImageUrls = it.toRoute<Screen.FullScreenImage>().imageUrls,
                         navController = navController
                     )
+                }
+                composable<Screen.Player> {
+                    PlayerScreen(navController = navController)
                 }
             }
         }

@@ -6,12 +6,13 @@
 - Artist discography static is not persisted and is re-fetched every time from the server
 - Create a db for logout operations so that if a user logsout, the server call doesn't need to
   happen immediately, plus in case of immediate error it can be retried
-- Add a player screen that is open when the user clicks on the bottom player
+- ~Add a player screen that is open when the user clicks on the bottom player~
 - Create a "memory pressure" component that can detect how much memory can we use for caches and such (imagine caching stuff from the db, pre-loading audio, images)
 - Add an in-memory immediate cache layer in ContentResolver, only after a "memory pressure" component
 - The search screen is dangerously empty, maybe show latest searches? or what?
 - Add a contextual menu to queue albums and tracks (add to current playlist instead of replacing)
 - Once "current-playback" playlist is in place, add a screen for it so that the user can see it, modify it directly, save it as user-playlist
+- Add shuffle and repeat functionality to the player (both domain logic and UI controls)
 
 - ~Implement a "current-playback" playlist, like the web does. So, a user can start the playback of an album, ok, but then, it should be able to QUEUE albums and tracks.~
 - ~Make the album's image clickable and shown in full screen~
