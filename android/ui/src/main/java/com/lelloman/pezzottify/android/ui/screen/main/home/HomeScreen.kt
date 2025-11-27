@@ -104,7 +104,7 @@ private fun HomeScreenContent(
                         Icon(
                             imageVector = Icons.Default.Person,
                             contentDescription = null,
-                            tint = MaterialTheme.typography.headlineLarge.color
+                            tint = MaterialTheme.colorScheme.onSurface
                         )
                     }
                 }

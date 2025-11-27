@@ -4,10 +4,6 @@ We can consider V1 ready once all of the task without V2 mark are completed.
 
 ### [ready for coding]
 
-- Artist discography static is not persisted and is re-fetched every time from the server
-- Add shuffle and repeat functionality to the player (both domain logic and UI controls)
-- Make the player screen collapsable with a swipe down
-- Make the profile icon adapt to the themes, for instance I see it black even if the theme is dark
 - Update the play/pause button to have just the triangle or the 2 bars in contrast color (white in dark theme, black in light theme)
 - Add a small right padding to the bottom player track and artists column, when swiping, the 2 track info basically touch
 - Add a confirmation dialog to the logout operation
@@ -35,6 +31,10 @@ We can consider V1 ready once all of the task without V2 mark are completed.
 
 ### [done]
 
+- ~Artist discography static is not persisted and is re-fetched every time from the server~
+- ~Add shuffle and repeat functionality to the player (both domain logic and UI controls)~
+- ~Make the player screen collapsable with a swipe down~
+- ~Make the profile icon adapt to the themes, for instance I see it black even if the theme is dark~
 - ~When clicking on "Home" the navigation doesn't reset to root.~
 - ~Once "current-playback" playlist is in place, add a screen for it so that the user can see it, modify it directly, save it as user-playlist~
 - ~Add a player screen that is open when the user clicks on the bottom player~
