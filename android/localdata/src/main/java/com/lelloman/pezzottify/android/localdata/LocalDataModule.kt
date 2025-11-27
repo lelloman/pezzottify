@@ -4,11 +4,13 @@ import android.content.Context
 import com.lelloman.pezzottify.android.domain.app.TimeProvider
 import com.lelloman.pezzottify.android.domain.auth.AuthStore
 import com.lelloman.pezzottify.android.domain.config.ConfigStore
+import com.lelloman.pezzottify.android.domain.settings.UserSettingsStore
 import com.lelloman.pezzottify.android.domain.statics.StaticsStore
 import com.lelloman.pezzottify.android.domain.statics.fetchstate.StaticItemFetchStateStore
 import com.lelloman.pezzottify.android.domain.user.UserDataStore
 import com.lelloman.pezzottify.android.localdata.internal.auth.AuthStoreImpl
 import com.lelloman.pezzottify.android.localdata.internal.config.ConfigStoreImpl
+import com.lelloman.pezzottify.android.localdata.internal.settings.UserSettingsStoreImpl
 import com.lelloman.pezzottify.android.localdata.internal.statics.StaticsDb
 import com.lelloman.pezzottify.android.localdata.internal.statics.StaticsItemFetchStateStoreImpl
 import com.lelloman.pezzottify.android.localdata.internal.statics.StaticsStoreImpl
@@ -60,4 +62,10 @@ class LocalDataModule {
     internal fun provideUserDataStore(
         userDataDb: UserDataDb
     ): UserDataStore = UserDataStoreImpl(userDataDb.viewedContentDao())
+
+    @Provides
+    @Singleton
+    fun provideUserSettingsStore(
+        @ApplicationContext context: Context
+    ): UserSettingsStore = UserSettingsStoreImpl(context)
 }

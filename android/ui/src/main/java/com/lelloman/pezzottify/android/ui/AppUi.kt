@@ -1,5 +1,6 @@
 package com.lelloman.pezzottify.android.ui
 
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
@@ -22,9 +23,9 @@ import com.lelloman.pezzottify.android.ui.screen.splash.SplashScreen
 import com.lelloman.pezzottify.android.ui.theme.PezzottifyTheme
 
 @Composable
-fun AppUi() {
+fun AppUi(darkTheme: Boolean = isSystemInDarkTheme()) {
     val navController = rememberNavController()
-    PezzottifyTheme {
+    PezzottifyTheme(darkTheme = darkTheme) {
         Box(modifier = Modifier.fillMaxSize()) {
             NavHost(
                 modifier = Modifier.fillMaxSize(),

@@ -1,0 +1,128 @@
+package com.lelloman.pezzottify.android.localdata.internal.settings
+
+import android.content.Context
+import androidx.test.core.app.ApplicationProvider
+import com.google.common.truth.Truth.assertThat
+import com.lelloman.pezzottify.android.domain.settings.PlayBehavior
+import com.lelloman.pezzottify.android.domain.settings.ThemeMode
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.runTest
+import org.junit.Before
+import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+
+@OptIn(ExperimentalCoroutinesApi::class)
+@RunWith(RobolectricTestRunner::class)
+class UserSettingsStoreImplTest {
+
+    private lateinit var context: Context
+    private val testDispatcher = StandardTestDispatcher()
+
+    @Before
+    fun setup() {
+        context = ApplicationProvider.getApplicationContext()
+        // Clear shared preferences before each test
+        context.getSharedPreferences(
+            UserSettingsStoreImpl.SHARED_PREF_FILE_NAME,
+            Context.MODE_PRIVATE
+        ).edit().clear().commit()
+    }
+
+    @Test
+    fun `playBehavior returns default value when not set`() {
+        val store = UserSettingsStoreImpl(context, testDispatcher)
+
+        assertThat(store.playBehavior.value).isEqualTo(PlayBehavior.Default)
+        assertThat(store.playBehavior.value).isEqualTo(PlayBehavior.ReplacePlaylist)
+    }
+
+    @Test
+    fun `themeMode returns default value when not set`() {
+        val store = UserSettingsStoreImpl(context, testDispatcher)
+
+        assertThat(store.themeMode.value).isEqualTo(ThemeMode.Default)
+        assertThat(store.themeMode.value).isEqualTo(ThemeMode.System)
+    }
+
+    @Test
+    fun `setPlayBehavior persists value`() = runTest(testDispatcher) {
+        val store = UserSettingsStoreImpl(context, testDispatcher)
+
+        store.setPlayBehavior(PlayBehavior.AddToPlaylist)
+
+        assertThat(store.playBehavior.value).isEqualTo(PlayBehavior.AddToPlaylist)
+    }
+
+    @Test
+    fun `setThemeMode persists value`() = runTest(testDispatcher) {
+        val store = UserSettingsStoreImpl(context, testDispatcher)
+
+        store.setThemeMode(ThemeMode.Dark)
+
+        assertThat(store.themeMode.value).isEqualTo(ThemeMode.Dark)
+    }
+
+    @Test
+    fun `playBehavior value survives store recreation`() = runTest(testDispatcher) {
+        val store1 = UserSettingsStoreImpl(context, testDispatcher)
+        store1.setPlayBehavior(PlayBehavior.AddToPlaylist)
+
+        val store2 = UserSettingsStoreImpl(context, testDispatcher)
+
+        assertThat(store2.playBehavior.value).isEqualTo(PlayBehavior.AddToPlaylist)
+    }
+
+    @Test
+    fun `themeMode value survives store recreation`() = runTest(testDispatcher) {
+        val store1 = UserSettingsStoreImpl(context, testDispatcher)
+        store1.setThemeMode(ThemeMode.Light)
+
+        val store2 = UserSettingsStoreImpl(context, testDispatcher)
+
+        assertThat(store2.themeMode.value).isEqualTo(ThemeMode.Light)
+    }
+
+    @Test
+    fun `setting all theme modes works correctly`() = runTest(testDispatcher) {
+        val store = UserSettingsStoreImpl(context, testDispatcher)
+
+        store.setThemeMode(ThemeMode.System)
+        assertThat(store.themeMode.value).isEqualTo(ThemeMode.System)
+
+        store.setThemeMode(ThemeMode.Light)
+        assertThat(store.themeMode.value).isEqualTo(ThemeMode.Light)
+
+        store.setThemeMode(ThemeMode.Dark)
+        assertThat(store.themeMode.value).isEqualTo(ThemeMode.Dark)
+    }
+
+    @Test
+    fun `setting both play behaviors works correctly`() = runTest(testDispatcher) {
+        val store = UserSettingsStoreImpl(context, testDispatcher)
+
+        store.setPlayBehavior(PlayBehavior.ReplacePlaylist)
+        assertThat(store.playBehavior.value).isEqualTo(PlayBehavior.ReplacePlaylist)
+
+        store.setPlayBehavior(PlayBehavior.AddToPlaylist)
+        assertThat(store.playBehavior.value).isEqualTo(PlayBehavior.AddToPlaylist)
+    }
+
+    @Test
+    fun `invalid stored value falls back to default`() {
+        // Manually write invalid value
+        context.getSharedPreferences(
+            UserSettingsStoreImpl.SHARED_PREF_FILE_NAME,
+            Context.MODE_PRIVATE
+        ).edit()
+            .putString(UserSettingsStoreImpl.KEY_PLAY_BEHAVIOR, "InvalidValue")
+            .putString(UserSettingsStoreImpl.KEY_THEME_MODE, "InvalidValue")
+            .commit()
+
+        val store = UserSettingsStoreImpl(context, testDispatcher)
+
+        assertThat(store.playBehavior.value).isEqualTo(PlayBehavior.Default)
+        assertThat(store.themeMode.value).isEqualTo(ThemeMode.Default)
+    }
+}

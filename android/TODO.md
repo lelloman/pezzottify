@@ -1,7 +1,6 @@
 ## [android]
 
-- Implement runtime theme/palette selection (allow users to choose from multiple color schemes in settings)
-- Create a settings screen with configurable player behavior (e.g., playlist loading when clicking tracks/albums)
+- Add custom theme palettes beyond system/light/dark (e.g., Material colors like blue, green, purple, or themed palettes like 'Midnight', 'Sunset', 'Forest')
 - The synchronizer seems to have a bug, when the server responds 403 it keeps hammering the endpoint in an infinite loop
 - Artist discography static is not persisted and is re-fetched every time from the server
 - Create a db for logout operations so that if a user logsout, the server call doesn't need to

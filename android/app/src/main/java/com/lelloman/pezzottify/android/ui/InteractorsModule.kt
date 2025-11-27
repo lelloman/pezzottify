@@ -1,9 +1,15 @@
 package com.lelloman.pezzottify.android.ui
 
+import com.lelloman.pezzottify.android.domain.auth.AuthState
+import com.lelloman.pezzottify.android.domain.auth.AuthStore
 import com.lelloman.pezzottify.android.domain.auth.usecase.IsLoggedIn
 import com.lelloman.pezzottify.android.domain.auth.usecase.PerformLogin
 import com.lelloman.pezzottify.android.domain.auth.usecase.PerformLogout
+import com.lelloman.pezzottify.android.domain.config.ConfigStore
 import com.lelloman.pezzottify.android.domain.player.PezzottifyPlayer
+import com.lelloman.pezzottify.android.domain.settings.PlayBehavior
+import com.lelloman.pezzottify.android.domain.settings.ThemeMode
+import com.lelloman.pezzottify.android.domain.settings.UserSettingsStore
 import com.lelloman.pezzottify.android.domain.statics.usecase.PerformSearch
 import com.lelloman.pezzottify.android.domain.user.GetRecentlyViewedContentUseCase
 import com.lelloman.pezzottify.android.domain.user.LogViewedContentUseCase
@@ -56,9 +62,39 @@ class InteractorsModule {
     @Provides
     fun provideProfileScreenInteractor(
         performLogout: PerformLogout,
+        authStore: AuthStore,
+        configStore: ConfigStore,
+        userSettingsStore: UserSettingsStore,
     ): ProfileScreenViewModel.Interactor = object : ProfileScreenViewModel.Interactor {
         override suspend fun logout() {
             performLogout()
+        }
+
+        override fun getUserName(): String {
+            val authState = authStore.getAuthState().value
+            return if (authState is AuthState.LoggedIn) {
+                authState.userHandle
+            } else {
+                ""
+            }
+        }
+
+        override fun getBaseUrl(): String = configStore.baseUrl.value
+
+        override fun getPlayBehavior(): PlayBehavior = userSettingsStore.playBehavior.value
+
+        override fun getThemeMode(): ThemeMode = userSettingsStore.themeMode.value
+
+        override fun observePlayBehavior() = userSettingsStore.playBehavior
+
+        override fun observeThemeMode() = userSettingsStore.themeMode
+
+        override suspend fun setPlayBehavior(playBehavior: PlayBehavior) {
+            userSettingsStore.setPlayBehavior(playBehavior)
+        }
+
+        override suspend fun setThemeMode(themeMode: ThemeMode) {
+            userSettingsStore.setThemeMode(themeMode)
         }
     }
 
