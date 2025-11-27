@@ -9,4 +9,5 @@ data class ProfileScreenState(
     val playBehavior: PlayBehavior = PlayBehavior.Default,
     val themeMode: ThemeMode = ThemeMode.Default,
     val isLoggingOut: Boolean = false,
+    val showLogoutConfirmation: Boolean = false,
 )

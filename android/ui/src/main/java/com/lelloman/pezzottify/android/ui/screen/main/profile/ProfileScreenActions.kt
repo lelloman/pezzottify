@@ -7,6 +7,10 @@ interface ProfileScreenActions {
 
     fun clickOnLogout()
 
+    fun confirmLogout()
+
+    fun dismissLogoutConfirmation()
+
     fun selectPlayBehavior(playBehavior: PlayBehavior)
 
     fun selectThemeMode(themeMode: ThemeMode)

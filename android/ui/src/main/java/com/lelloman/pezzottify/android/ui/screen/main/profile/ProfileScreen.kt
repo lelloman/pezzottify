@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -18,6 +19,7 @@ import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -68,6 +70,29 @@ private fun ProfileScreenInternal(
                 }
             }
         }
+    }
+
+    if (currentState.showLogoutConfirmation) {
+        AlertDialog(
+            onDismissRequest = actions::dismissLogoutConfirmation,
+            title = { Text("Logout") },
+            text = { Text("Are you sure you want to logout?") },
+            confirmButton = {
+                TextButton(
+                    onClick = actions::confirmLogout,
+                    colors = ButtonDefaults.textButtonColors(
+                        contentColor = MaterialTheme.colorScheme.error
+                    )
+                ) {
+                    Text("Logout")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = actions::dismissLogoutConfirmation) {
+                    Text("Cancel")
+                }
+            }
+        )
     }
 
     Scaffold(
@@ -220,6 +245,8 @@ private fun ProfileScreenPreview() {
             navController = rememberNavController(),
             actions = object : ProfileScreenActions {
                 override fun clickOnLogout() {}
+                override fun confirmLogout() {}
+                override fun dismissLogoutConfirmation() {}
                 override fun selectPlayBehavior(playBehavior: PlayBehavior) {}
                 override fun selectThemeMode(themeMode: ThemeMode) {}
             },
@@ -244,6 +271,8 @@ private fun ProfileScreenPreviewDark() {
             navController = rememberNavController(),
             actions = object : ProfileScreenActions {
                 override fun clickOnLogout() {}
+                override fun confirmLogout() {}
+                override fun dismissLogoutConfirmation() {}
                 override fun selectPlayBehavior(playBehavior: PlayBehavior) {}
                 override fun selectThemeMode(themeMode: ThemeMode) {}
             },

@@ -51,13 +51,23 @@ class ProfileScreenViewModel @Inject constructor(
 
     override fun clickOnLogout() {
         if (!mutableState.value.isLoggingOut) {
-            mutableState.update { it.copy(isLoggingOut = true) }
+            mutableState.update { it.copy(showLogoutConfirmation = true) }
+        }
+    }
+
+    override fun confirmLogout() {
+        if (!mutableState.value.isLoggingOut) {
+            mutableState.update { it.copy(showLogoutConfirmation = false, isLoggingOut = true) }
             viewModelScope.launch {
                 interactor.logout()
                 mutableState.update { it.copy(isLoggingOut = false) }
                 mutableEvents.emit(ProfileScreenEvents.NavigateToLoginScreen)
             }
         }
+    }
+
+    override fun dismissLogoutConfirmation() {
+        mutableState.update { it.copy(showLogoutConfirmation = false) }
     }
 
     override fun selectPlayBehavior(playBehavior: PlayBehavior) {

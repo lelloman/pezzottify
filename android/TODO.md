@@ -4,8 +4,6 @@ We can consider V1 ready once all of the task without V2 mark are completed.
 
 ### [ready for coding]
 
-- Add a small right padding to the bottom player track and artists column, when swiping, the 2 track info basically touch
-- Add a confirmation dialog to the logout operation
 - In the login screen, there should be a field to set the base url
 - Check the styling of the login screen, I now see a light text color in the email input even if the theme is light
 - We should somehow insert into the code A) the build variant B) the build version C) The git commit, then we can show it in the profile screen for now
@@ -30,6 +28,8 @@ We can consider V1 ready once all of the task without V2 mark are completed.
 
 ### [done]
 
+- ~Add a confirmation dialog to the logout operation~
+- ~Add a small right padding to the bottom player track and artists column, when swiping, the 2 track info basically touch~
 - ~Update the play/pause button to have just the triangle or the 2 bars in contrast color (white in dark theme, black in light theme)~
 - ~Artist discography static is not persisted and is re-fetched every time from the server~
 - ~Add shuffle and repeat functionality to the player (both domain logic and UI controls)~
