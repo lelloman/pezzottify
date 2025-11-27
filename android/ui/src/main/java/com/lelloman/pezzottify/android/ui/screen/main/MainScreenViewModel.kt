@@ -11,12 +11,9 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.filterIsInstance
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.flatMapLatest
-import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.take
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -74,30 +71,15 @@ class MainScreenViewModel @Inject constructor(
                         .filterIsInstance<Content.Resolved<Track>>()
                         .take(1)
                 }
-                .onEach {
-                    logger.debug("BottomPlayer resolved track name -> $it")
+                .collect { resolved ->
+                    logger.debug("BottomPlayer resolved track -> $resolved")
                     val oldState = mutableState.value
-                    if (oldState.bottomPlayer.trackId == it.itemId) {
-                        mutableState.value =
-                            oldState.copy(bottomPlayer = oldState.bottomPlayer.copy(trackName = it.data.name))
-                    }
-                }
-                .flatMapLatest { track ->
-                    val artistsFlows = track.data.artistsIds.map { artistId ->
-                        contentResolver.resolveArtist(artistId)
-                            .map { resolveArtistState ->
-                                (resolveArtistState as? Content.Resolved)?.data?.name ?: ""
-                            }
-                    }
-                    combine(artistsFlows) {
-                        track.itemId to it.toList()
-                    }
-                }
-                .collect { (trackId, artistsNames) ->
-                    if (mutableState.value.bottomPlayer.trackId == trackId) {
-                        mutableState.value = mutableState.value.copy(
-                            bottomPlayer = mutableState.value.bottomPlayer.copy(
-                                artistsNames = artistsNames.joinToString(", ")
+                    if (oldState.bottomPlayer.trackId == resolved.itemId) {
+                        val artistsNames = resolved.data.artists.joinToString(", ") { it.name }
+                        mutableState.value = oldState.copy(
+                            bottomPlayer = oldState.bottomPlayer.copy(
+                                trackName = resolved.data.name,
+                                artistsNames = artistsNames
                             )
                         )
                     }

@@ -12,8 +12,12 @@ import com.lelloman.pezzottify.android.ui.content.Content
 import com.lelloman.pezzottify.android.ui.content.ContentResolver
 import com.lelloman.pezzottify.android.ui.content.SearchResultContent
 import com.lelloman.pezzottify.android.ui.content.Track
+import com.lelloman.pezzottify.android.ui.content.ArtistInfo
 import com.lelloman.pezzottify.android.ui.screen.main.search.SearchScreenViewModel
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 
 class UiContentResolver(
@@ -70,18 +74,45 @@ class UiContentResolver(
         }
 
     override fun resolveTrack(trackId: String): Flow<Content<Track>> =
-        staticsProvider.provideTrack(trackId).map {
-            when (it) {
-                is StaticsItem.Error -> Content.Error(it.id)
-                is StaticsItem.Loading -> Content.Loading(it.id)
-                is StaticsItem.Loaded -> Content.Resolved(
-                    it.id, Track(
-                        id = it.id,
-                        name = it.data.name,
-                        albumId = it.data.albumId,
-                        artistsIds = it.data.artistsIds,
-                    )
-                )
+        staticsProvider.provideTrack(trackId).flatMapLatest { trackItem ->
+            when (trackItem) {
+                is StaticsItem.Error -> flowOf(Content.Error(trackItem.id))
+                is StaticsItem.Loading -> flowOf(Content.Loading(trackItem.id))
+                is StaticsItem.Loaded -> {
+                    val artistFlows = trackItem.data.artistsIds.map { artistId ->
+                        staticsProvider.provideArtist(artistId).map { artistItem ->
+                            when (artistItem) {
+                                is StaticsItem.Loaded -> ArtistInfo(artistId, artistItem.data.name)
+                                else -> ArtistInfo(artistId, "")
+                            }
+                        }
+                    }
+                    if (artistFlows.isEmpty()) {
+                        flowOf(
+                            Content.Resolved(
+                                trackItem.id, Track(
+                                    id = trackItem.id,
+                                    name = trackItem.data.name,
+                                    albumId = trackItem.data.albumId,
+                                    artists = emptyList(),
+                                    durationSeconds = trackItem.data.durationSeconds,
+                                )
+                            )
+                        )
+                    } else {
+                        combine(artistFlows) { artists ->
+                            Content.Resolved(
+                                trackItem.id, Track(
+                                    id = trackItem.id,
+                                    name = trackItem.data.name,
+                                    albumId = trackItem.data.albumId,
+                                    artists = artists.toList(),
+                                    durationSeconds = trackItem.data.durationSeconds,
+                                )
+                            )
+                        }
+                    }
+                }
             }
         }
 

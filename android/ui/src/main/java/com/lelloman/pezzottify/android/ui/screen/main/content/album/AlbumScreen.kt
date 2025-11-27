@@ -41,6 +41,7 @@ import com.lelloman.pezzottify.android.ui.component.LoadingScreen
 import com.lelloman.pezzottify.android.ui.component.PezzottifyImage
 import com.lelloman.pezzottify.android.ui.component.PezzottifyImagePlaceholder
 import com.lelloman.pezzottify.android.ui.component.PezzottifyImageShape
+import com.lelloman.pezzottify.android.ui.component.ScrollingArtistsRow
 import com.lelloman.pezzottify.android.ui.content.Album
 import com.lelloman.pezzottify.android.ui.content.Content
 import com.lelloman.pezzottify.android.ui.content.Track
@@ -192,31 +193,27 @@ private fun TrackItem(track: Track, actions: AlbumScreenActions) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(8.dp)
-            .height(PezzottifyImageShape.SmallSquare.size)
             .clickable { actions.clickOnTrack(track.id) }
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        PezzottifyImage(
-            url = "",
-            placeholder = PezzottifyImagePlaceholder.GenericImage,
-            shape = PezzottifyImageShape.SmallSquare
-        )
         Column(
-            modifier = Modifier
-                .weight(1f)
-                .padding(horizontal = 16.dp)
+            modifier = Modifier.weight(1f)
         ) {
             Text(
-                track.name,
+                text = track.name,
                 style = MaterialTheme.typography.bodyLarge,
-                modifier = Modifier.fillMaxWidth()
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
-            Text(
-                track.artistsIds.joinToString(", "),
-                style = MaterialTheme.typography.bodyMedium,
-                modifier = Modifier.fillMaxWidth()
+            ScrollingArtistsRow(
+                artists = track.artists
             )
         }
+        DurationText(
+            durationSeconds = track.durationSeconds,
+            modifier = Modifier.padding(start = 16.dp)
+        )
     }
 }
 
@@ -225,10 +222,10 @@ private fun LoadingTrackItem() {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(8.dp)
-            .height(PezzottifyImageShape.SmallSquare.size)
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        CircularProgressIndicator()
+        CircularProgressIndicator(modifier = Modifier.size(24.dp))
     }
 }
 
@@ -237,8 +234,8 @@ private fun ErrorTrackItem() {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(8.dp)
-            .height(PezzottifyImageShape.SmallSquare.size)
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
         Text("Error loading track")
     }
