@@ -1,15 +1,39 @@
 ## [android]
 
-- Add custom theme palettes beyond system/light/dark (e.g., Material colors like blue, green, purple, or themed palettes like 'Midnight', 'Sunset', 'Forest')
-- The synchronizer seems to have a bug, when the server responds 403 it keeps hammering the endpoint in an infinite loop
+We can consider V1 ready once all of the task without V2 mark are completed.
+
+### [ready for coding]
+
 - Artist discography static is not persisted and is re-fetched every time from the server
-- Create a db for logout operations so that if a user logsout, the server call doesn't need to
-  happen immediately, plus in case of immediate error it can be retried
+- Add shuffle and repeat functionality to the player (both domain logic and UI controls)
+- Make the player screen collapsable with a swipe down
+- Make the profile icon adapt to the themes, for instance I see it black even if the theme is dark
+- Update the play/pause button to have just the triangle or the 2 bars in contrast color (white in dark theme, black in light theme)
+- Add a small right padding to the bottom player track and artists column, when swiping, the 2 track info basically touch
+- Add a confirmation dialog to the logout operation
+- In the login screen, there should be a field to set the base url
+- Check the styling of the login screen, I now see a light text color in the email input even if the theme is light
+- We should somehow insert into the code A) the build variant B) the build version C) The git commit, then we can show it in the profile screen for now
+
+### [to refine]
+
+- Add custom theme palettes beyond system/light/dark (e.g., Material colors like blue, green, purple, or themed palettes like 'Midnight', 'Sunset', 'Forest')
+- The synchronizer seems to have a bug (skim through the git log though, maybe we fix it already), when the server responds 403 it keeps hammering the endpoint in an infinite loop
+- Create a db for logout operations so that if a user logout, the server call doesn't need to happen immediately, plus in case of immediate error it can be retried
 - Create a "memory pressure" component that can detect how much memory can we use for caches and such (imagine caching stuff from the db, pre-loading audio, images)
 - Add an in-memory immediate cache layer in ContentResolver, only after a "memory pressure" component
 - The search screen is dangerously empty, maybe show latest searches? or what?
 - Add a contextual menu to queue albums and tracks (add to current playlist instead of replacing)
-- Add shuffle and repeat functionality to the player (both domain logic and UI controls)
+- We should probably think about collecting information about storage used and how it is used. For instance, it would be cool to cache audio files, but the feature needs to be storage-aware.
+- We need to plan a "download" feature for albums and tracks
+- Check that the behavior of the audio playback is system-friendly in terms of audio events (pause on focus lost, pause on headphones unplugged and such)
+- We should gather statistics on what's being listened. Like what track, how long. This will be useful for discovery features.
+- We should introduce user's liked content, this will populate the library's screen. (what do we show when the user doesn't have anything yet?)
+- Make a plan to introduce the user's playlist feature
+- I want E2E tests for the UI module. The reason the app is architected this way, is that we can test the UI only, without any other dependencies, making the ui a puppet basically.
+- Once the listening stats are implemented, we can add a "jump back in" component in the home screen
+
+### [done]
 
 - ~When clicking on "Home" the navigation doesn't reset to root.~
 - ~Once "current-playback" playlist is in place, add a screen for it so that the user can see it, modify it directly, save it as user-playlist~

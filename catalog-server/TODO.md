@@ -1,10 +1,18 @@
 ## [catalog-server]
 
-- Create catalog db
-- Implement catalog editing endpoints (EditCatalog permission)
-- Implement content download functionality (IssueContentDownload permission)
-- After the catalog has been migrated to a db, modify artist, album and track models to have the reference to one "display image" id, then provide, if available other images
-- Once catalog is migrated to db and catalog modification endpoints are in place, create a catalog change log to be shown to users.
+### [ready for coding]
+
+### [to refine]
+
+V1 - Create catalog db
+V1 - Implement catalog editing endpoints (EditCatalog permission)
+V1 - After the catalog has been migrated to a db, modify artist, album and track models to have the reference to one "display image" id, then provide, if available other images
+V1 - Once catalog is migrated to db and catalog modification endpoints are in place, create a catalog change log to be shown to users.
+V1 - We should plan a feature to gather listening stats from users
+
+- Plan how are we going to put our catalog agent. This agent has the responsability to provide information to users, and if the info is not available yet in the catalog, it should be able to find it in external sources
+
+### [done]
 
 - ~Implement bandwidth usage statistics collection and persistence (track data transfer per user/endpoint)~
 - ~Create admin API endpoints for managing user roles and permissions (ManagePermissions permission)~
