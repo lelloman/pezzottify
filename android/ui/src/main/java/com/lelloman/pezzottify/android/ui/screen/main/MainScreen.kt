@@ -3,6 +3,7 @@ package com.lelloman.pezzottify.android.ui.screen.main
 import androidx.annotation.StringRes
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -289,6 +290,7 @@ private fun BottomPlayer(state: MainScreenState.BottomPlayer, actions: MainScree
                         modifier = Modifier.size(48.dp),
                         painter = painterResource(if (state.isPlaying) R.drawable.baseline_pause_circle_24 else R.drawable.baseline_play_circle_24),
                         contentDescription = null,
+                        tint = if (isSystemInDarkTheme()) Color.White else Color.Black,
                     )
                 }
             }
