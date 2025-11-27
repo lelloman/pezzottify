@@ -1,12 +1,10 @@
 use anyhow::{Context, Result};
 use clap::{CommandFactory, Parser, Subcommand};
 use crossterm::style::Stylize;
-use std::{
-    path::PathBuf,
-    sync::{Arc, Mutex},
-};
+use std::{path::PathBuf, sync::Arc};
 
 mod catalog;
+mod catalog_store;
 mod cli_style;
 mod search;
 mod server;
@@ -22,6 +20,7 @@ use cli_style::{
 use user::UserManager;
 
 use catalog::Catalog;
+use catalog_store::{CatalogStore, LegacyCatalogAdapter};
 use user::SqliteUserStore;
 
 use rustyline::{
@@ -664,8 +663,8 @@ fn main() -> Result<()> {
         })?,
     };
     let user_store = SqliteUserStore::new(auth_store_file_path.clone())?;
-    let catalog = Arc::new(Mutex::new(Catalog::dummy()));
-    let mut user_manager = UserManager::new(catalog, Box::new(user_store));
+    let catalog_store: Arc<dyn CatalogStore> = Arc::new(LegacyCatalogAdapter::new(Catalog::dummy()));
+    let mut user_manager = UserManager::new(catalog_store, Box::new(user_store));
 
     // Print welcome screen instead of clap help
     print_welcome(&auth_store_file_path.display().to_string());

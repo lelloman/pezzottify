@@ -4,9 +4,10 @@
 use serde::Serialize;
 
 use super::pezzott_hash::PezzottHash;
-use crate::catalog::Catalog;
+use crate::catalog_store::{CatalogStore, SearchableContentType};
 
 use std::iter;
+use std::sync::Arc;
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize)]
 pub enum HashedItemType {
@@ -196,32 +197,24 @@ pub struct PezzotHashSearchVault {
 }
 
 impl PezzotHashSearchVault {
-    pub fn new(catalog: &Catalog) -> PezzotHashSearchVault {
+    pub fn new(catalog_store: Arc<dyn CatalogStore>) -> PezzotHashSearchVault {
         let mut items: Vec<HashedItem> = vec![];
 
-        for artist in catalog.iter_artists() {
-            let item = HashedItem {
-                item_type: HashedItemType::Artist,
-                item_id: artist.id.clone(),
-                hash: PezzottHash::calc(&artist.name),
-            };
-            items.push(item);
-        }
+        // Get searchable content from the catalog store
+        let searchable_items = catalog_store
+            .get_searchable_content()
+            .unwrap_or_default();
 
-        for album in catalog.iter_albums() {
-            let item = HashedItem {
-                item_type: HashedItemType::Album,
-                item_id: album.id.clone(),
-                hash: PezzottHash::calc(&album.name),
+        for searchable_item in searchable_items {
+            let item_type = match searchable_item.content_type {
+                SearchableContentType::Artist => HashedItemType::Artist,
+                SearchableContentType::Album => HashedItemType::Album,
+                SearchableContentType::Track => HashedItemType::Track,
             };
-            items.push(item);
-        }
-
-        for track in catalog.iter_tracks() {
             let item = HashedItem {
-                item_type: HashedItemType::Track,
-                item_id: track.id.clone(),
-                hash: PezzottHash::calc(&track.name),
+                item_type,
+                item_id: searchable_item.id,
+                hash: PezzottHash::calc(&searchable_item.name),
             };
             items.push(item);
         }

@@ -3,7 +3,7 @@
 
 use super::{
     session::Session,
-    state::{GuardedCatalog, ServerState},
+    state::{GuardedCatalogStore, ServerState},
 };
 use axum::{
     body::Body,
@@ -88,21 +88,19 @@ impl FromRequestParts<ServerState> for Option<ByteRange> {
 pub async fn stream_track(
     _session: Session,
     byte_range: Option<ByteRange>,
-    State(catalog): State<GuardedCatalog>,
+    State(catalog_store): State<GuardedCatalogStore>,
     Path(id): Path<String>,
 ) -> Response {
-    let track = catalog.lock().unwrap().get_track(&id);
-
-    let track = match track {
-        None => return StatusCode::NOT_FOUND.into_response(),
-        Some(x) => x,
+    // Get track name for logging (we just need to check it exists)
+    let track_json = catalog_store.get_track_json(&id);
+    let track_name = match track_json {
+        Ok(Some(track)) => track.get("name").and_then(|n| n.as_str()).unwrap_or("Unknown").to_string(),
+        Ok(None) => return StatusCode::NOT_FOUND.into_response(),
+        Err(_) => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
     };
-    debug!("Streaming track: {}", track.name);
-    let path = match catalog
-        .lock()
-        .unwrap()
-        .get_track_audio_path(&track.album_id, id.as_str())
-    {
+    debug!("Streaming track: {}", track_name);
+
+    let path = match catalog_store.get_track_audio_path(&id) {
         None => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
         Some(x) => x,
     };

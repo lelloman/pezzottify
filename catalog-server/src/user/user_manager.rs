@@ -1,4 +1,4 @@
-use crate::catalog::Catalog;
+use crate::catalog_store::CatalogStore;
 
 use super::{
     auth::PezzottifyHasher,
@@ -16,14 +16,14 @@ use std::{
 const MAX_PLAYLIST_SIZE: usize = 300;
 
 pub struct UserManager {
-    catalog: Arc<Mutex<Catalog>>,
+    catalog_store: Arc<dyn CatalogStore>,
     user_store: Arc<Mutex<Box<dyn FullUserStore>>>,
 }
 
 impl UserManager {
-    pub fn new(catalog: Arc<Mutex<Catalog>>, user_store: Box<dyn FullUserStore>) -> Self {
+    pub fn new(catalog_store: Arc<dyn CatalogStore>, user_store: Box<dyn FullUserStore>) -> Self {
         Self {
-            catalog,
+            catalog_store,
             user_store: Arc::new(Mutex::new(user_store)),
         }
     }
@@ -313,8 +313,11 @@ impl UserManager {
 
         // verify that all tracks to add exist
         for track_id in &track_ids {
-            if let None = self.catalog.lock().unwrap().get_track(track_id) {
-                bail!("Track with id {} does not exist.", track_id);
+            match self.catalog_store.get_track_json(track_id) {
+                Ok(None) | Err(_) => {
+                    bail!("Track with id {} does not exist.", track_id);
+                }
+                Ok(Some(_)) => {}
             }
         }
 

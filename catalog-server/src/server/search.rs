@@ -3,6 +3,7 @@
 
 #![allow(dead_code)] // Feature-gated search functionality
 
+use crate::catalog_store::CatalogStore;
 use crate::search::{
     HashedItemType, ResolvedSearchResult, SearchResult, SearchedAlbum, SearchedArtist,
     SearchedTrack,
@@ -10,9 +11,9 @@ use crate::search::{
 
 use axum::{extract::State, response::IntoResponse, routing::post, Json, Router};
 use chrono::Datelike;
+use std::sync::Arc;
 
 use super::{session::Session, state::ServerState};
-use crate::catalog::{Artist, Catalog};
 use serde::Deserialize;
 
 #[derive(Deserialize)]
@@ -33,44 +34,89 @@ struct SearchBody {
     pub filters: Option<Vec<SearchFilter>>,
 }
 
-fn resolve_album(catalog: &Catalog, album_id: &str) -> Option<ResolvedSearchResult> {
-    let album = catalog.get_album(album_id)?;
+fn resolve_album(
+    catalog_store: &Arc<dyn CatalogStore>,
+    album_id: &str,
+) -> Option<ResolvedSearchResult> {
+    let album_json = catalog_store.get_album_json(album_id).ok()??;
 
-    let year = chrono::DateTime::from_timestamp(album.date, 0)
-        .map(|d| d.year())
-        .map(|y| y as i64);
+    let name = album_json.get("name")?.as_str()?.to_string();
+
+    // Get release date/year from the album
+    let year = album_json
+        .get("date")
+        .and_then(|d| d.as_i64())
+        .and_then(|ts| chrono::DateTime::from_timestamp(ts, 0))
+        .map(|d| d.year() as i64);
+
+    // Get artist IDs and resolve their names
+    let artists_ids: Vec<String> = album_json
+        .get("artists_ids")
+        .and_then(|a| a.as_array())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|v| v.as_str().map(String::from))
+                .collect()
+        })
+        .unwrap_or_default();
+
+    let artists_ids_names: Vec<(String, String)> = artists_ids
+        .iter()
+        .filter_map(|a_id| {
+            let artist_json = catalog_store.get_artist_json(a_id).ok()??;
+            let name = artist_json.get("name")?.as_str()?.to_string();
+            Some((a_id.clone(), name))
+        })
+        .collect();
+
+    // Get image ID from covers or cover_group
+    let image_id = album_json
+        .get("covers")
+        .and_then(|c| c.as_array())
+        .and_then(|arr| arr.first())
+        .or_else(|| {
+            album_json
+                .get("cover_group")
+                .and_then(|c| c.as_array())
+                .and_then(|arr| arr.first())
+        })
+        .and_then(|img| img.get("id").and_then(|id| id.as_str()))
+        .map(String::from);
 
     let resolved_album = SearchedAlbum {
         id: album_id.to_owned(),
-        name: album.name,
-        artists_ids_names: album
-            .artists_ids
-            .iter()
-            .filter_map(|a_id| catalog.get_artist(a_id))
-            .map(|a| (a.id, a.name))
-            .collect(),
-        image_id: album
-            .covers
-            .first()
-            .or_else(|| album.cover_group.first())
-            .map(|i| i.id.to_owned()),
+        name,
+        artists_ids_names,
+        image_id,
         year,
     };
 
     Some(ResolvedSearchResult::Album(resolved_album))
 }
 
-fn resolve_artist(catalog: &Catalog, artist_id: &str) -> Option<ResolvedSearchResult> {
-    let artist = catalog.get_artist(artist_id)?;
+fn resolve_artist(
+    catalog_store: &Arc<dyn CatalogStore>,
+    artist_id: &str,
+) -> Option<ResolvedSearchResult> {
+    let artist_json = catalog_store.get_artist_json(artist_id).ok()??;
 
-    let image_id = artist
-        .portraits
-        .first()
-        .or_else(|| artist.portrait_group.first())
-        .map(|i| i.id.to_owned());
+    let name = artist_json.get("name")?.as_str()?.to_string();
+
+    let image_id = artist_json
+        .get("portraits")
+        .and_then(|p| p.as_array())
+        .and_then(|arr| arr.first())
+        .or_else(|| {
+            artist_json
+                .get("portrait_group")
+                .and_then(|p| p.as_array())
+                .and_then(|arr| arr.first())
+        })
+        .and_then(|img| img.get("id").and_then(|id| id.as_str()))
+        .map(String::from);
 
     let resolved_artist = SearchedArtist {
-        name: artist.name,
+        name,
         id: artist_id.to_owned(),
         image_id,
     };
@@ -78,61 +124,97 @@ fn resolve_artist(catalog: &Catalog, artist_id: &str) -> Option<ResolvedSearchRe
     Some(ResolvedSearchResult::Artist(resolved_artist))
 }
 
-fn resolve_track(catalog: &Catalog, track_id: &str) -> Option<ResolvedSearchResult> {
-    let track = catalog.get_track(track_id)?;
+fn resolve_track(
+    catalog_store: &Arc<dyn CatalogStore>,
+    track_id: &str,
+) -> Option<ResolvedSearchResult> {
+    let track_json = catalog_store.get_track_json(track_id).ok()??;
 
-    let artists: Vec<Artist> = track
-        .artists_ids
+    let id = track_json.get("id")?.as_str()?.to_string();
+    let name = track_json.get("name")?.as_str()?.to_string();
+    let duration = track_json.get("duration").and_then(|d| d.as_u64()).unwrap_or(0) as u32;
+    let album_id = track_json.get("album_id")?.as_str()?.to_string();
+
+    // Get artist IDs and resolve their names
+    let artists_ids: Vec<String> = track_json
+        .get("artists_ids")
+        .and_then(|a| a.as_array())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|v| v.as_str().map(String::from))
+                .collect()
+        })
+        .unwrap_or_default();
+
+    let artists_ids_names: Vec<(String, String)> = artists_ids
         .iter()
-        .filter_map(|artist_id| catalog.get_artist(artist_id))
+        .filter_map(|a_id| {
+            let artist_json = catalog_store.get_artist_json(a_id).ok()??;
+            let artist_name = artist_json.get("name")?.as_str()?.to_string();
+            Some((a_id.clone(), artist_name))
+        })
         .collect();
 
-    let artists_ids_names = artists
-        .iter()
-        .map(|a| (a.id.clone(), a.name.clone()))
-        .collect();
-
-    let image_id = catalog
-        .get_album(&track.album_id)
-        .map(|a| {
-            a.covers
-                .first()
-                .cloned()
-                .or_else(|| a.cover_group.first().cloned())
+    // Try to get image from album first, then from artist
+    let image_id = catalog_store
+        .get_album_json(&album_id)
+        .ok()
+        .flatten()
+        .and_then(|album| {
+            album
+                .get("covers")
+                .and_then(|c| c.as_array())
+                .and_then(|arr| arr.first())
+                .or_else(|| {
+                    album
+                        .get("cover_group")
+                        .and_then(|c| c.as_array())
+                        .and_then(|arr| arr.first())
+                })
+                .and_then(|img| img.get("id").and_then(|id| id.as_str()))
+                .map(String::from)
         })
         .or_else(|| {
-            let artist = artists
-                .iter()
-                .find(|a| !a.portraits.is_empty() || !a.portrait_group.is_empty());
-            artist
-                .map(|a| a.portraits.first().cloned())
-                .or_else(|| artist.map(|a| a.portrait_group.first().cloned()))
-        })
-        .flatten()
-        .map(|i| i.id);
+            // Try to get image from first artist with an image
+            artists_ids.iter().find_map(|a_id| {
+                let artist_json = catalog_store.get_artist_json(a_id).ok()??;
+                artist_json
+                    .get("portraits")
+                    .and_then(|p| p.as_array())
+                    .and_then(|arr| arr.first())
+                    .or_else(|| {
+                        artist_json
+                            .get("portrait_group")
+                            .and_then(|p| p.as_array())
+                            .and_then(|arr| arr.first())
+                    })
+                    .and_then(|img| img.get("id").and_then(|id| id.as_str()))
+                    .map(String::from)
+            })
+        });
 
     let resolved_track = SearchedTrack {
-        id: track.id,
-        name: track.name,
-        duration: track.duration as u32,
+        id,
+        name,
+        duration,
         image_id,
         artists_ids_names,
-        album_id: track.album_id,
+        album_id,
     };
 
     Some(ResolvedSearchResult::Track(resolved_track))
 }
 
 fn resolve_search_results(
-    catalog: &Catalog,
+    catalog_store: &Arc<dyn CatalogStore>,
     results: Vec<SearchResult>,
 ) -> Vec<ResolvedSearchResult> {
     results
         .iter()
         .filter_map(|result| match result.item_type {
-            HashedItemType::Album => resolve_album(catalog, &result.item_id),
-            HashedItemType::Artist => resolve_artist(catalog, &result.item_id),
-            HashedItemType::Track => resolve_track(catalog, &result.item_id),
+            HashedItemType::Album => resolve_album(catalog_store, &result.item_id),
+            HashedItemType::Artist => resolve_artist(catalog_store, &result.item_id),
+            HashedItemType::Track => resolve_track(catalog_store, &result.item_id),
         })
         .collect()
 }
@@ -174,7 +256,7 @@ async fn search(
             .search(payload.query.as_str(), 30, filters);
     if payload.resolve {
         SearchResponse::Resolved(Json(resolve_search_results(
-            &server_state.catalog.lock().unwrap(),
+            &server_state.catalog_store,
             search_results,
         )))
     } else {

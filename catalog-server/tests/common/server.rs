@@ -6,10 +6,12 @@
 use super::constants::*;
 use super::fixtures::{create_test_catalog, create_test_db_with_users};
 use pezzottify_catalog_server::catalog;
+use pezzottify_catalog_server::catalog_store::{CatalogStore, LegacyCatalogAdapter};
 use pezzottify_catalog_server::search::{NoOpSearchVault, SearchVault};
-use pezzottify_catalog_server::server::{server::make_app, ServerConfig, RequestsLoggingLevel};
+use pezzottify_catalog_server::server::{server::make_app, RequestsLoggingLevel, ServerConfig};
 use pezzottify_catalog_server::user::{FullUserStore, SqliteUserStore};
 use std::net::SocketAddr;
+use std::sync::Arc;
 use std::time::Duration;
 use tempfile::TempDir;
 use tokio::net::TcpListener;
@@ -58,6 +60,9 @@ impl TestServer {
         let catalog = catalog::load_catalog(temp_catalog_dir.path(), false)
             .expect("Failed to load test catalog");
 
+        // Wrap catalog in the adapter for the CatalogStore trait
+        let catalog_store: Arc<dyn CatalogStore> = Arc::new(LegacyCatalogAdapter::new(catalog));
+
         // Create user store
         let user_store: Box<dyn FullUserStore> =
             Box::new(SqliteUserStore::new(&db_path).expect("Failed to open user store"));
@@ -88,7 +93,7 @@ impl TestServer {
             frontend_dir_path: None,
         };
 
-        let app = make_app(config, catalog, search_vault, user_store)
+        let app = make_app(config, catalog_store, search_vault, user_store)
             .expect("Failed to build app");
 
         // Spawn server in background task with graceful shutdown

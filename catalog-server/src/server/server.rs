@@ -14,8 +14,8 @@ use std::{
 
 use tracing::{debug, error, info};
 
+use crate::catalog_store::CatalogStore;
 use crate::{
-    catalog::Catalog,
     server::stream_track::stream_track,
     user::{user_models::LikedContentType, FullUserStore, Permission},
 };
@@ -205,32 +205,34 @@ async fn home(session: Option<Session>, State(state): State<ServerState>) -> imp
 
 async fn get_artist(
     _session: Session,
-    State(catalog): State<GuardedCatalog>,
+    State(catalog_store): State<GuardedCatalogStore>,
     Path(id): Path<String>,
 ) -> Response {
-    match catalog.lock().unwrap().get_artist(&id) {
-        Some(artist) => Json(artist).into_response(),
-        None => StatusCode::NOT_FOUND.into_response(),
+    match catalog_store.get_artist_json(&id) {
+        Ok(Some(artist)) => Json(artist).into_response(),
+        Ok(None) => StatusCode::NOT_FOUND.into_response(),
+        Err(err) => (StatusCode::INTERNAL_SERVER_ERROR, format!("{}", err)).into_response(),
     }
 }
 
 async fn get_album(
     _session: Session,
-    State(catalog): State<GuardedCatalog>,
+    State(catalog_store): State<GuardedCatalogStore>,
     Path(id): Path<String>,
 ) -> Response {
-    match catalog.lock().unwrap().get_album(&id) {
-        Some(album) => Json(album).into_response(),
-        None => StatusCode::NOT_FOUND.into_response(),
+    match catalog_store.get_album_json(&id) {
+        Ok(Some(album)) => Json(album).into_response(),
+        Ok(None) => StatusCode::NOT_FOUND.into_response(),
+        Err(err) => (StatusCode::INTERNAL_SERVER_ERROR, format!("{}", err)).into_response(),
     }
 }
 
 async fn get_resolved_album(
     _session: Session,
-    State(catalog): State<GuardedCatalog>,
+    State(catalog_store): State<GuardedCatalogStore>,
     Path(id): Path<String>,
 ) -> Response {
-    match catalog.lock().unwrap().get_resolved_album(&id) {
+    match catalog_store.get_resolved_album_json(&id) {
         Ok(Some(album)) => Json(album).into_response(),
         Ok(None) => StatusCode::NOT_FOUND.into_response(),
         Err(err) => (StatusCode::INTERNAL_SERVER_ERROR, format!("{}", err)).into_response(),
@@ -239,32 +241,34 @@ async fn get_resolved_album(
 
 async fn get_artist_discography(
     _session: Session,
-    State(catalog): State<GuardedCatalog>,
+    State(catalog_store): State<GuardedCatalogStore>,
     Path(id): Path<String>,
 ) -> Response {
-    match catalog.lock().unwrap().get_artist_discography(id) {
-        None => StatusCode::NOT_FOUND.into_response(),
-        Some(albums_ids) => Json(albums_ids).into_response(),
+    match catalog_store.get_artist_discography_json(&id) {
+        Ok(None) => StatusCode::NOT_FOUND.into_response(),
+        Ok(Some(discography)) => Json(discography).into_response(),
+        Err(err) => (StatusCode::INTERNAL_SERVER_ERROR, format!("{}", err)).into_response(),
     }
 }
 
 pub async fn get_track(
     _session: Session,
-    State(catalog): State<GuardedCatalog>,
+    State(catalog_store): State<GuardedCatalogStore>,
     Path(id): Path<String>,
 ) -> Response {
-    match catalog.lock().unwrap().get_track(&id) {
-        Some(track) => Json(track).into_response(),
-        None => StatusCode::NOT_FOUND.into_response(),
+    match catalog_store.get_track_json(&id) {
+        Ok(Some(track)) => Json(track).into_response(),
+        Ok(None) => StatusCode::NOT_FOUND.into_response(),
+        Err(err) => (StatusCode::INTERNAL_SERVER_ERROR, format!("{}", err)).into_response(),
     }
 }
 
 pub async fn get_resolved_track(
     _session: Session,
-    State(catalog): State<GuardedCatalog>,
+    State(catalog_store): State<GuardedCatalogStore>,
     Path(id): Path<String>,
 ) -> Response {
-    match catalog.lock().unwrap().get_resolved_track(&id) {
+    match catalog_store.get_resolved_track_json(&id) {
         Ok(Some(track)) => Json(track).into_response(),
         Ok(None) => StatusCode::NOT_FOUND.into_response(),
         Err(err) => (StatusCode::INTERNAL_SERVER_ERROR, format!("{}", err)).into_response(),
@@ -273,10 +277,10 @@ pub async fn get_resolved_track(
 
 async fn get_image(
     _session: Session,
-    State(catalog): State<GuardedCatalog>,
+    State(catalog_store): State<GuardedCatalogStore>,
     Path(id): Path<String>,
 ) -> Response {
-    let file_path = catalog.lock().unwrap().get_image_path(id);
+    let file_path = catalog_store.get_image_path(&id);
     if !file_path.exists() {
         return StatusCode::NOT_FOUND.into_response();
     }
@@ -924,14 +928,14 @@ async fn admin_get_user_bandwidth_usage(
 impl ServerState {
     fn new(
         config: ServerConfig,
-        catalog: Arc<Mutex<Catalog>>,
+        catalog_store: Arc<dyn CatalogStore>,
         search_vault: Box<dyn SearchVault>,
         user_manager: UserManager,
     ) -> ServerState {
         ServerState {
             config,
             start_time: Instant::now(),
-            catalog: catalog,
+            catalog_store,
             search_vault: Arc::new(Mutex::new(search_vault)),
             user_manager: Arc::new(Mutex::new(user_manager)),
             hash: "123456".to_owned(),
@@ -941,13 +945,12 @@ impl ServerState {
 
 pub fn make_app(
     config: ServerConfig,
-    catalog: Catalog,
+    catalog_store: Arc<dyn CatalogStore>,
     search_vault: Box<dyn SearchVault>,
     user_store: Box<dyn FullUserStore>,
 ) -> Result<Router> {
-    let guarded_catalog = Arc::new(Mutex::new(catalog));
-    let user_manager = UserManager::new(guarded_catalog.clone(), user_store);
-    let state = ServerState::new(config.clone(), guarded_catalog, search_vault, user_manager);
+    let user_manager = UserManager::new(catalog_store.clone(), user_store);
+    let state = ServerState::new(config.clone(), catalog_store, search_vault, user_manager);
 
     // Login route with strict IP-based rate limiting
     // For rates < 60/min, we use per_second(1) and rely on burst_size to enforce the limit
@@ -1182,7 +1185,7 @@ pub fn make_app(
 }
 
 pub async fn run_server(
-    catalog: Catalog,
+    catalog_store: Arc<dyn CatalogStore>,
     search_vault: Box<dyn SearchVault>,
     user_store: Box<dyn FullUserStore>,
     requests_logging_level: RequestsLoggingLevel,
@@ -1197,7 +1200,7 @@ pub async fn run_server(
         content_cache_age_sec,
         frontend_dir_path,
     };
-    let app = make_app(config, catalog, search_vault, user_store)?;
+    let app = make_app(config, catalog_store, search_vault, user_store)?;
 
     let main_listener = tokio::net::TcpListener::bind(format!("0.0.0.0:{}", port))
         .await
@@ -1228,6 +1231,8 @@ pub async fn run_server(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::catalog::Catalog;
+    use crate::catalog_store::LegacyCatalogAdapter;
     use crate::search::NoOpSearchVault;
     use crate::user::auth::UserAuthCredentials;
     use crate::user::auth::{AuthToken, AuthTokenValue};
@@ -1239,9 +1244,11 @@ mod tests {
     #[tokio::test]
     async fn responds_forbidden_on_protected_routes() {
         let user_store = Box::new(InMemoryUserStore::default());
+        let catalog_store: Arc<dyn CatalogStore> =
+            Arc::new(LegacyCatalogAdapter::new(Catalog::dummy()));
         let app = &mut make_app(
             ServerConfig::default(),
-            Catalog::dummy(),
+            catalog_store,
             Box::new(NoOpSearchVault {}),
             user_store,
         )
@@ -1718,8 +1725,9 @@ mod tests {
             let user_id = store.create_user("testuser").unwrap();
 
             let catalog = crate::catalog::Catalog::dummy();
-            let guarded_catalog = std::sync::Arc::new(std::sync::Mutex::new(catalog));
-            let user_manager = crate::user::UserManager::new(guarded_catalog, Box::new(store));
+            let catalog_store: std::sync::Arc<dyn crate::catalog_store::CatalogStore> =
+                std::sync::Arc::new(crate::catalog_store::LegacyCatalogAdapter::new(catalog));
+            let user_manager = crate::user::UserManager::new(catalog_store, Box::new(store));
 
             let found_id = user_manager.get_user_id("testuser").unwrap();
             assert_eq!(found_id, Some(user_id));

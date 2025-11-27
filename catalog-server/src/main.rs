@@ -1,11 +1,15 @@
 use anyhow::{Context, Result};
 use clap::Parser;
+use std::sync::Arc;
 use std::{fmt::Debug, path::PathBuf};
 use tracing::{info, level_filters::LevelFilter};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
 
 mod catalog;
 use catalog::Catalog;
+
+mod catalog_store;
+use catalog_store::LegacyCatalogAdapter;
 
 mod search;
 use search::{NoOpSearchVault, PezzotHashSearchVault, SearchVault};
@@ -105,13 +109,17 @@ async fn main() -> Result<()> {
         return Ok(());
     }
 
+    // Wrap catalog in the adapter for the CatalogStore trait
+    let catalog_store: Arc<dyn catalog_store::CatalogStore> =
+        Arc::new(LegacyCatalogAdapter::new(catalog));
+
     // Initialize metrics system
     info!("Initializing metrics...");
     server::metrics::init_metrics();
     server::metrics::init_catalog_metrics(
-        catalog.get_artists_count(),
-        catalog.get_albums_count(),
-        catalog.get_tracks_count(),
+        catalog_store.get_artists_count(),
+        catalog_store.get_albums_count(),
+        catalog_store.get_tracks_count(),
     );
 
     let user_store_file_path = match cli_args.user_store_file_path {
@@ -124,7 +132,8 @@ async fn main() -> Result<()> {
     info!("Indexing content for search...");
 
     #[cfg(not(feature = "no_search"))]
-    let search_vault: Box<dyn SearchVault> = Box::new(PezzotHashSearchVault::new(&catalog));
+    let search_vault: Box<dyn SearchVault> =
+        Box::new(PezzotHashSearchVault::new(catalog_store.clone()));
 
     #[cfg(feature = "no_search")]
     let search_vault: Box<dyn SearchVault> = Box::new(NoOpSearchVault {});
@@ -132,7 +141,7 @@ async fn main() -> Result<()> {
     info!("Ready to serve at port {}!", cli_args.port);
     info!("Metrics available at port {}!", cli_args.metrics_port);
     run_server(
-        catalog,
+        catalog_store,
         search_vault,
         user_store,
         cli_args.logging_level,

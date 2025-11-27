@@ -1,20 +1,21 @@
 use axum::extract::FromRef;
 
+use crate::catalog_store::CatalogStore;
+use crate::search::SearchVault;
 use crate::user::UserManager;
-use crate::{catalog::Catalog, search::SearchVault};
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
 use super::ServerConfig;
 
-pub type GuardedCatalog = Arc<Mutex<Catalog>>;
+pub type GuardedCatalogStore = Arc<dyn CatalogStore>;
 pub type GuardedUserManager = Arc<Mutex<UserManager>>;
 
 #[derive(Clone)]
 pub struct ServerState {
     pub config: ServerConfig,
     pub start_time: Instant,
-    pub catalog: GuardedCatalog,
+    pub catalog_store: GuardedCatalogStore,
     pub search_vault: Arc<Mutex<Box<dyn SearchVault>>>,
     pub user_manager: GuardedUserManager,
     pub hash: String,
@@ -23,9 +24,9 @@ pub struct ServerState {
 unsafe impl Send for ServerState {}
 unsafe impl Sync for ServerState {}
 
-impl FromRef<ServerState> for GuardedCatalog {
+impl FromRef<ServerState> for GuardedCatalogStore {
     fn from_ref(input: &ServerState) -> Self {
-        input.catalog.clone()
+        input.catalog_store.clone()
     }
 }
 
