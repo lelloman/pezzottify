@@ -140,12 +140,24 @@ class InteractorsModule {
                 player
                     .playbackPlaylist.combine(player.isPlaying) { playlist, isPlaying -> playlist to isPlaying }
                     .combine(player.currentTrackIndex) { (playlist, isPlaying), currentTrackIndex ->
-                        logger.debug("Combining new playlist + isPlaying + currentTrackIndex $playlist - $isPlaying - $currentTrackIndex")
+                        Triple(playlist, isPlaying, currentTrackIndex)
+                    }
+                    .combine(player.currentTrackPercent) { (playlist, isPlaying, currentTrackIndex), trackPercent ->
+                        logger.debug("Combining new playlist + isPlaying + currentTrackIndex + trackPercent $playlist - $isPlaying - $currentTrackIndex - $trackPercent")
                         if (playlist != null) {
+                            val index = currentTrackIndex ?: 0
+                            val nextTrackId = if (index < playlist.tracksIds.lastIndex) {
+                                playlist.tracksIds[index + 1]
+                            } else null
+                            val previousTrackId = if (index > 0) {
+                                playlist.tracksIds[index - 1]
+                            } else null
                             MainScreenViewModel.Interactor.PlaybackState.Loaded(
                                 isPlaying = isPlaying,
-                                trackId = playlist.tracksIds[currentTrackIndex ?: 0],
-                                trackPercent = 0f,
+                                trackId = playlist.tracksIds[index],
+                                trackPercent = trackPercent ?: 0f,
+                                nextTrackId = nextTrackId,
+                                previousTrackId = previousTrackId,
                             )
                         } else {
                             null

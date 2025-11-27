@@ -1,5 +1,7 @@
 package com.lelloman.pezzottify.android.ui.screen.main
 
+import com.lelloman.pezzottify.android.ui.content.ArtistInfo
+
 data class MainScreenState(
     val bottomPlayer: BottomPlayer = BottomPlayer(),
 ) {
@@ -8,7 +10,14 @@ data class MainScreenState(
         val isVisible: Boolean = false,
         val trackId: String = "",
         val trackName: String = "",
-        val artistsNames: String = "",
+        val albumName: String = "",
+        val albumImageUrls: List<String> = emptyList(),
+        val artists: List<ArtistInfo> = emptyList(),
         val isPlaying: Boolean = false,
+        val trackPercent: Float = 0f,
+        val nextTrackName: String? = null,
+        val nextTrackArtists: List<ArtistInfo> = emptyList(),
+        val previousTrackName: String? = null,
+        val previousTrackArtists: List<ArtistInfo> = emptyList(),
     )
 }

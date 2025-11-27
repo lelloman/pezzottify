@@ -105,6 +105,12 @@ sealed interface PezzottifyImageShape {
         override fun modifier(modifier: Modifier) = modifier.size(size)
     }
 
+    data object MiniPlayer : PezzottifyImageShape {
+        val size = 52.dp
+        override fun modifier(modifier: Modifier) = modifier.size(size)
+        override val contentScale: ContentScale = ContentScale.Crop
+    }
+
     data object FullWidthPoster : PezzottifyImageShape {
         override fun modifier(modifier: Modifier) = modifier.fillMaxWidth()
     }

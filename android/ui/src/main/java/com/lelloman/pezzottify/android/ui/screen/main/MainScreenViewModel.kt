@@ -3,6 +3,7 @@ package com.lelloman.pezzottify.android.ui.screen.main
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.lelloman.pezzottify.android.logger.LoggerFactory
+import com.lelloman.pezzottify.android.ui.content.Album
 import com.lelloman.pezzottify.android.ui.content.Content
 import com.lelloman.pezzottify.android.ui.content.ContentResolver
 import com.lelloman.pezzottify.android.ui.content.Track
@@ -18,6 +19,12 @@ import kotlinx.coroutines.flow.take
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
+private data class AdjacentTracksInfo(
+    val currentTrackId: String,
+    val nextTrackId: String?,
+    val previousTrackId: String?,
+)
+
 @OptIn(ExperimentalCoroutinesApi::class)
 @HiltViewModel
 class MainScreenViewModel @Inject constructor(
@@ -32,6 +39,7 @@ class MainScreenViewModel @Inject constructor(
     val state = mutableState.asStateFlow()
 
     private val playingTrackId = MutableStateFlow<String?>(null)
+    private val adjacentTracksInfo = MutableStateFlow<AdjacentTracksInfo?>(null)
 
     init {
         viewModelScope.launch {
@@ -43,17 +51,24 @@ class MainScreenViewModel @Inject constructor(
                         is Interactor.PlaybackState.Idle, null -> MainScreenState.BottomPlayer()
                         is Interactor.PlaybackState.Loaded -> {
                             playingTrackId.value = it.trackId
+                            adjacentTracksInfo.value = AdjacentTracksInfo(
+                                currentTrackId = it.trackId,
+                                nextTrackId = it.nextTrackId,
+                                previousTrackId = it.previousTrackId,
+                            )
                             if (oldBottomPlayerState.trackId != it.trackId) {
                                 MainScreenState.BottomPlayer(
                                     isVisible = true,
                                     trackId = it.trackId,
                                     trackName = "",
                                     isPlaying = it.isPlaying,
+                                    trackPercent = it.trackPercent,
                                 )
                             } else {
                                 oldBottomPlayerState.copy(
                                     isVisible = true,
                                     isPlaying = it.isPlaying,
+                                    trackPercent = it.trackPercent,
                                 )
                             }
                         }
@@ -71,15 +86,87 @@ class MainScreenViewModel @Inject constructor(
                         .filterIsInstance<Content.Resolved<Track>>()
                         .take(1)
                 }
-                .collect { resolved ->
+                .flatMapLatest { resolved ->
                     logger.debug("BottomPlayer resolved track -> $resolved")
                     val oldState = mutableState.value
                     if (oldState.bottomPlayer.trackId == resolved.itemId) {
-                        val artistsNames = resolved.data.artists.joinToString(", ") { it.name }
                         mutableState.value = oldState.copy(
                             bottomPlayer = oldState.bottomPlayer.copy(
                                 trackName = resolved.data.name,
-                                artistsNames = artistsNames
+                                artists = resolved.data.artists,
+                            )
+                        )
+                    }
+                    contentResolver.resolveAlbum(resolved.data.albumId)
+                        .filterIsInstance<Content.Resolved<Album>>()
+                        .take(1)
+                }
+                .collect { resolved ->
+                    logger.debug("BottomPlayer resolved album -> $resolved")
+                    val oldState = mutableState.value
+                    mutableState.value = oldState.copy(
+                        bottomPlayer = oldState.bottomPlayer.copy(
+                            albumName = resolved.data.name,
+                            albumImageUrls = resolved.data.imageUrls,
+                        )
+                    )
+                }
+        }
+
+        viewModelScope.launch {
+            adjacentTracksInfo.filterNotNull()
+                .collect { info ->
+                    info.nextTrackId?.let { nextId ->
+                        contentResolver.resolveTrack(nextId)
+                            .filterIsInstance<Content.Resolved<Track>>()
+                            .take(1)
+                            .collect { resolved ->
+                                val oldState = mutableState.value
+                                if (oldState.bottomPlayer.trackId == info.currentTrackId) {
+                                    mutableState.value = oldState.copy(
+                                        bottomPlayer = oldState.bottomPlayer.copy(
+                                            nextTrackName = resolved.data.name,
+                                            nextTrackArtists = resolved.data.artists,
+                                        )
+                                    )
+                                }
+                            }
+                    } ?: run {
+                        val oldState = mutableState.value
+                        mutableState.value = oldState.copy(
+                            bottomPlayer = oldState.bottomPlayer.copy(
+                                nextTrackName = null,
+                                nextTrackArtists = emptyList(),
+                            )
+                        )
+                    }
+                }
+        }
+
+        viewModelScope.launch {
+            adjacentTracksInfo.filterNotNull()
+                .collect { info ->
+                    info.previousTrackId?.let { prevId ->
+                        contentResolver.resolveTrack(prevId)
+                            .filterIsInstance<Content.Resolved<Track>>()
+                            .take(1)
+                            .collect { resolved ->
+                                val oldState = mutableState.value
+                                if (oldState.bottomPlayer.trackId == info.currentTrackId) {
+                                    mutableState.value = oldState.copy(
+                                        bottomPlayer = oldState.bottomPlayer.copy(
+                                            previousTrackName = resolved.data.name,
+                                            previousTrackArtists = resolved.data.artists,
+                                        )
+                                    )
+                                }
+                            }
+                    } ?: run {
+                        val oldState = mutableState.value
+                        mutableState.value = oldState.copy(
+                            bottomPlayer = oldState.bottomPlayer.copy(
+                                previousTrackName = null,
+                                previousTrackArtists = emptyList(),
                             )
                         )
                     }
@@ -110,6 +197,8 @@ class MainScreenViewModel @Inject constructor(
                 val isPlaying: Boolean,
                 val trackId: String,
                 val trackPercent: Float,
+                val nextTrackId: String?,
+                val previousTrackId: String?,
             ) : PlaybackState
         }
     }

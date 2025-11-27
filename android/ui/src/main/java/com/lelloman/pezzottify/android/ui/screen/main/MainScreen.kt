@@ -1,37 +1,48 @@
 package com.lelloman.pezzottify.android.ui.screen.main
 
 import androidx.annotation.StringRes
-import androidx.compose.foundation.MarqueeAnimationMode
 import androidx.compose.foundation.background
-import androidx.compose.foundation.basicMarquee
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.launch
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -40,6 +51,11 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.toRoute
 import com.lelloman.pezzottify.android.ui.R
 import com.lelloman.pezzottify.android.ui.Screen
+import com.lelloman.pezzottify.android.ui.component.PezzottifyImage
+import com.lelloman.pezzottify.android.ui.component.PezzottifyImageShape
+import com.lelloman.pezzottify.android.ui.component.ScrollingArtistsRow
+import com.lelloman.pezzottify.android.ui.component.ScrollingTextRow
+import com.lelloman.pezzottify.android.ui.content.ArtistInfo
 import com.lelloman.pezzottify.android.ui.screen.main.content.album.AlbumScreen
 import com.lelloman.pezzottify.android.ui.screen.main.content.artist.ArtistScreen
 import com.lelloman.pezzottify.android.ui.screen.main.content.track.TrackScreen
@@ -144,63 +160,132 @@ private fun MainScreenContent(state: MainScreenState, actions: MainScreenActions
     }
 }
 
+private data class PagerTrackInfo(
+    val trackName: String,
+    val artists: List<ArtistInfo>,
+)
+
 @Composable
-private fun BottomPlayerText(text: String, modifier: Modifier = Modifier) {
-    Text(
-        text = text,
-        maxLines = 1,
-        modifier = Modifier
-            .padding(horizontal = 8.dp)
-            .basicMarquee(
-                animationMode = MarqueeAnimationMode.Immediately,
-                initialDelayMillis = 500
-            )
-            .then(modifier)
-    )
+private fun TrackInfoPage(
+    trackName: String,
+    artists: List<ArtistInfo>,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier = modifier,
+        verticalArrangement = androidx.compose.foundation.layout.Arrangement.Center,
+    ) {
+        ScrollingTextRow(
+            text = trackName,
+            textStyle = MaterialTheme.typography.bodyMedium,
+            textColor = MaterialTheme.colorScheme.onSurface,
+        )
+        ScrollingArtistsRow(
+            artists = artists,
+            textStyle = MaterialTheme.typography.bodySmall,
+            textColor = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
 }
 
 @Composable
 private fun BottomPlayer(state: MainScreenState.BottomPlayer, actions: MainScreenActions) {
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier
-            .height(64.dp)
-            .fillMaxWidth()
-            .background(Color.Gray)
+    // Build the list of tracks for the pager: [previous?, current, next?]
+    val hasPrevious = state.previousTrackName != null
+    val hasNext = state.nextTrackName != null
+
+    val pagerTracks = remember(
+        state.trackName,
+        state.artists,
+        state.previousTrackName,
+        state.previousTrackArtists,
+        state.nextTrackName,
+        state.nextTrackArtists
     ) {
-        Column(
-            modifier = Modifier
-                .weight(1f)
-                .background(Color.Red)
-        ) {
-            BottomPlayerText(
-                text = state.trackName,
+        buildList {
+            if (state.previousTrackName != null) {
+                add(PagerTrackInfo(state.previousTrackName, state.previousTrackArtists))
+            }
+            add(PagerTrackInfo(state.trackName, state.artists))
+            if (state.nextTrackName != null) {
+                add(PagerTrackInfo(state.nextTrackName, state.nextTrackArtists))
+            }
+        }
+    }
+
+    // Current track is at index 0 if no previous, or index 1 if there's a previous track
+    val currentPageIndex = if (hasPrevious) 1 else 0
+
+    // Use trackId + hasPrevious as key to recreate pager when track or structure changes
+    val pagerState = key(state.trackId, hasPrevious) {
+        rememberPagerState(
+            initialPage = currentPageIndex,
+            pageCount = { pagerTracks.size }
+        )
+    }
+
+    // Handle swipe gestures - trigger skip when user settles on a different page
+    LaunchedEffect(pagerState, currentPageIndex) {
+        snapshotFlow { pagerState.settledPage }
+            .collectLatest { settledPage ->
+                when {
+                    settledPage < currentPageIndex -> actions.clickOnSkipToPrevious()
+                    settledPage > currentPageIndex -> actions.clickOnSkipToNext()
+                }
+            }
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(MaterialTheme.colorScheme.surfaceContainer)
+    ) {
+        Column {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier
-            )
-            BottomPlayerText(
-                text = state.artistsNames,
+                    .height(56.dp)
+                    .fillMaxWidth()
+            ) {
+                PezzottifyImage(
+                    urls = state.albumImageUrls,
+                    shape = PezzottifyImageShape.MiniPlayer,
+                    modifier = Modifier.clip(RoundedCornerShape(4.dp))
+                )
+
+                HorizontalPager(
+                    state = pagerState,
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(horizontal = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) { page ->
+                    val trackInfo = pagerTracks.getOrNull(page)
+                    if (trackInfo != null) {
+                        TrackInfoPage(
+                            trackName = trackInfo.trackName,
+                            artists = trackInfo.artists,
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    }
+                }
+
+                IconButton(onClick = actions::clickOnPlayPause) {
+                    Icon(
+                        modifier = Modifier.size(48.dp),
+                        painter = painterResource(if (state.isPlaying) R.drawable.baseline_pause_circle_24 else R.drawable.baseline_play_circle_24),
+                        contentDescription = null,
+                    )
+                }
+            }
+
+            LinearProgressIndicator(
+                progress = { state.trackPercent / 100f },
                 modifier = Modifier
-            )
-        }
-        IconButton(onClick = actions::clickOnSkipToPrevious) {
-            Icon(
-                modifier = Modifier.size(48.dp),
-                painter = painterResource(R.drawable.baseline_skip_previous_24),
-                contentDescription = null,
-            )
-        }
-        IconButton(onClick = actions::clickOnPlayPause) {
-            Icon(
-                modifier = Modifier.size(48.dp),
-                painter = painterResource(if (state.isPlaying) R.drawable.baseline_pause_circle_24 else R.drawable.baseline_play_circle_24),
-                contentDescription = null,
-            )
-        }
-        IconButton(onClick = actions::clickOnSkipToNext) {
-            Icon(
-                modifier = Modifier.size(48.dp),
-                painter = painterResource(R.drawable.baseline_skip_next_24),
-                contentDescription = null,
+                    .fillMaxWidth()
+                    .height(2.dp),
+                color = MaterialTheme.colorScheme.primary,
+                trackColor = MaterialTheme.colorScheme.surfaceContainerHighest,
             )
         }
     }
@@ -213,8 +298,18 @@ private fun PreviewBottomPlayer() {
         state = MainScreenState.BottomPlayer(
             isVisible = true,
             trackName = "A very long track name to see what happens when it is very very long",
-            artistsNames = "An artist",
+            albumName = "Album Name",
+            albumImageUrls = emptyList(),
+            artists = listOf(
+                ArtistInfo("1", "Artist One"),
+                ArtistInfo("2", "Artist Two"),
+            ),
             isPlaying = true,
+            trackPercent = 35f,
+            nextTrackName = "Next Track Name",
+            nextTrackArtists = listOf(ArtistInfo("3", "Next Artist")),
+            previousTrackName = "Previous Track Name",
+            previousTrackArtists = listOf(ArtistInfo("4", "Previous Artist")),
         ),
         actions = object : MainScreenActions {
             override fun clickOnPlayPause() = Unit

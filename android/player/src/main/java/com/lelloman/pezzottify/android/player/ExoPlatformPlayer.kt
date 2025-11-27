@@ -15,9 +15,12 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.DelicateCoroutinesApi
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 @OptIn(DelicateCoroutinesApi::class)
@@ -25,12 +28,16 @@ import kotlinx.coroutines.launch
 internal class ExoPlatformPlayer(
     private val context: Context,
     playerServiceEventsEmitter: PlayerServiceEventsEmitter,
-    coroutineScope: CoroutineScope = GlobalScope,
+    private val coroutineScope: CoroutineScope = GlobalScope,
 ) : PlatformPlayer {
 
     private var mediaController: MediaController? = null
 
     private var sessionToken: SessionToken? = null
+
+    private var progressPollingJob: Job? = null
+
+    private var pendingTrackIndex: Int? = null
 
     private val mutableIsActive = MutableStateFlow(false)
     override val isActive = mutableIsActive.asStateFlow()
@@ -60,6 +67,7 @@ internal class ExoPlatformPlayer(
                 val eventName = when (event) {
                     Player.EVENT_PLAY_WHEN_READY_CHANGED -> {
                         mutableIsPlaying.value = player.playWhenReady
+                        updateProgressPolling(player.playWhenReady)
                         "EVENT_PLAY_WHEN_READY_CHANGED"
                     }
 
@@ -92,11 +100,46 @@ internal class ExoPlatformPlayer(
         }
     }
 
+    private fun updateProgressPolling(isPlaying: Boolean) {
+        if (isPlaying) {
+            startProgressPolling()
+        } else {
+            stopProgressPolling()
+        }
+    }
+
+    private fun startProgressPolling() {
+        if (progressPollingJob?.isActive == true) return
+        progressPollingJob = coroutineScope.launch(Dispatchers.Main) {
+            while (isActive) {
+                updateProgress()
+                delay(500)
+            }
+        }
+    }
+
+    private fun stopProgressPolling() {
+        progressPollingJob?.cancel()
+        progressPollingJob = null
+    }
+
+    private fun updateProgress() {
+        val controller = mediaController ?: return
+        val duration = controller.duration
+        val position = controller.currentPosition
+        if (duration > 0) {
+            val percent = (position.toFloat() / duration.toFloat()) * 100f
+            mutableCurrentTrackPercent.value = percent
+            mutableCurrentTrackProgressSec.value = (position / 1000).toInt()
+        }
+    }
+
     init {
         coroutineScope.launch(Dispatchers.Main) {
             playerServiceEventsEmitter.events.collect {
                 when (it) {
                     PlayerServiceEventsEmitter.Event.Shutdown -> {
+                        stopProgressPolling()
                         mediaController?.removeListener(playerListener)
                         mediaController?.release()
                         mediaController = null
@@ -114,6 +157,7 @@ internal class ExoPlatformPlayer(
 
     override fun loadPlaylist(tracksUrls: List<String>) {
         mutableIsPlaying.value = true
+        pendingTrackIndex = null
         if (sessionToken == null) {
             sessionToken =
                 SessionToken(context, ComponentName(context, PlaybackService::class.java))
@@ -140,11 +184,24 @@ internal class ExoPlatformPlayer(
             mediaController?.prepare()
             mediaController?.playWhenReady = isPlaying.value
             mutableIsActive.value = true
+            if (isPlaying.value) {
+                startProgressPolling()
+            }
+            // Apply pending track index if one was set before playlist was ready
+            pendingTrackIndex?.let { index ->
+                mediaController?.seekTo(index, 0)
+                pendingTrackIndex = null
+            }
         }
     }
 
     override fun loadTrackIndex(loadTrackIndex: Int) {
-        mediaController?.seekTo(loadTrackIndex, 0)
+        if (mediaController != null) {
+            mediaController?.seekTo(loadTrackIndex, 0)
+        } else {
+            // Store for later when mediaController is ready
+            pendingTrackIndex = loadTrackIndex
+        }
     }
 
     override fun togglePlayPause() {
