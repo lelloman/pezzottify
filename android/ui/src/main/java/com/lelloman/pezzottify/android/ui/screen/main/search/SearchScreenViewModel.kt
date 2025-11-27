@@ -4,7 +4,6 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.lelloman.pezzottify.android.ui.content.ContentResolver
 import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -14,20 +13,13 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import javax.inject.Inject
-import kotlin.coroutines.CoroutineContext
 
 @HiltViewModel
-class SearchScreenViewModel internal constructor(
+class SearchScreenViewModel @Inject constructor(
     private val interactor: Interactor,
     private val contentResolver: ContentResolver,
-    private val coroutineContext: CoroutineContext,
 ) : ViewModel(),
     SearchScreenActions {
-    @Inject
-    constructor(
-        interactor: Interactor,
-        contentResolver: ContentResolver
-    ) : this(interactor, contentResolver, Dispatchers.IO)
 
 
     private val mutableState = MutableStateFlow(SearchScreenState())
@@ -71,33 +63,22 @@ class SearchScreenViewModel internal constructor(
         viewModelScope.launch {
             mutableEvents.emit(SearchScreensEvents.NavigateToArtistScreen(artistId))
         }
-        logViewed(artistId, SearchedItemType.Artist)
     }
 
     override fun clickOnAlbumSearchResult(albumId: String) {
         viewModelScope.launch {
             mutableEvents.emit(SearchScreensEvents.NavigateToAlbumScreen(albumId))
         }
-        logViewed(albumId, SearchedItemType.Album)
     }
 
     override fun clickOnTrackSearchResult(trackId: String) {
         viewModelScope.launch {
             mutableEvents.emit(SearchScreensEvents.NavigateToTrackScreen(trackId))
         }
-        logViewed(trackId, SearchedItemType.Track)
-    }
-
-    private fun logViewed(contentId: String, contentType: SearchedItemType) {
-        viewModelScope.launch(coroutineContext) {
-            interactor.logViewedContent(contentId, contentType)
-        }
     }
 
     interface Interactor {
         suspend fun search(query: String): Result<List<Pair<String, SearchedItemType>>>
-
-        suspend fun logViewedContent(contentId: String, contentType: SearchedItemType)
     }
 
     enum class SearchedItemType {

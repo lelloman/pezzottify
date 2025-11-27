@@ -11,13 +11,17 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
 
 @HiltViewModel(assistedFactory = ArtistScreenViewModel.Factory::class)
 class ArtistScreenViewModel @AssistedInject constructor(
+    private val interactor: Interactor,
     val contentResolver: ContentResolver,
     @Assisted private val artistId: String,
 ) : ViewModel() {
+
+    private var hasLoggedView = false
 
     private val discographyFlow = flow {
         emit(null) // Start with null
@@ -44,7 +48,16 @@ class ArtistScreenViewModel @AssistedInject constructor(
                 isLoading = false,
             )
         }
+    }.onEach { state ->
+        if (!state.isLoading && !state.isError && !hasLoggedView) {
+            hasLoggedView = true
+            interactor.logViewedArtist(artistId)
+        }
     }.stateIn(viewModelScope, SharingStarted.Eagerly, ArtistScreenState())
+
+    interface Interactor {
+        fun logViewedArtist(artistId: String)
+    }
 
     @AssistedFactory
     interface Factory {

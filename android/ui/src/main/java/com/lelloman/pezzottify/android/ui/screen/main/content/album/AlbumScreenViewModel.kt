@@ -10,6 +10,7 @@ import dagger.assisted.AssistedInject
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
 
 @HiltViewModel(assistedFactory = AlbumScreenViewModel.Factory::class)
@@ -18,6 +19,8 @@ class AlbumScreenViewModel @AssistedInject constructor(
     private val contentResolver: ContentResolver,
     @Assisted private val albumId: String,
 ) : ViewModel(), AlbumScreenActions {
+
+    private var hasLoggedView = false
 
     val state = contentResolver.resolveAlbum(albumId)
         .map {
@@ -40,6 +43,12 @@ class AlbumScreenViewModel @AssistedInject constructor(
                 }
             }
         }
+        .onEach { state ->
+            if (!state.isLoading && !state.isError && !hasLoggedView) {
+                hasLoggedView = true
+                interactor.logViewedAlbum(albumId)
+            }
+        }
         .stateIn(viewModelScope, SharingStarted.Eagerly, AlbumScreenState())
 
     override fun clickOnPlayAlbum(albumId: String) {
@@ -53,6 +62,7 @@ class AlbumScreenViewModel @AssistedInject constructor(
     interface Interactor {
         fun playAlbum(albumId: String)
         fun playTrack(albumId: String, trackId: String)
+        fun logViewedAlbum(albumId: String)
     }
 
     @AssistedFactory

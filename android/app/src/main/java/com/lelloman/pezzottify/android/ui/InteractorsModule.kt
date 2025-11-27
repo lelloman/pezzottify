@@ -12,6 +12,7 @@ import com.lelloman.pezzottify.android.logger.LoggerFactory
 import com.lelloman.pezzottify.android.ui.screen.login.LoginViewModel
 import com.lelloman.pezzottify.android.ui.screen.main.MainScreenViewModel
 import com.lelloman.pezzottify.android.ui.screen.main.content.album.AlbumScreenViewModel
+import com.lelloman.pezzottify.android.ui.screen.main.content.artist.ArtistScreenViewModel
 import com.lelloman.pezzottify.android.ui.screen.main.home.HomeScreenState
 import com.lelloman.pezzottify.android.ui.screen.main.home.HomeScreenViewModel
 import com.lelloman.pezzottify.android.ui.screen.main.home.ViewedContentType
@@ -64,7 +65,6 @@ class InteractorsModule {
     fun provideSearchScreenInteractor(
         performSearch: PerformSearch,
         loggerFactory: LoggerFactory,
-        logViewedContentUseCase: LogViewedContentUseCase,
     ): SearchScreenViewModel.Interactor =
         object : SearchScreenViewModel.Interactor {
             private val logger = loggerFactory.getLogger("SearchScreenViewModel.Interactor")
@@ -90,23 +90,12 @@ class InteractorsModule {
                 logger.debug("search($query) returning $mappedResult")
                 return Result.success(mappedResult)
             }
-
-            override suspend fun logViewedContent(
-                contentId: String,
-                contentType: SearchScreenViewModel.SearchedItemType
-            ) {
-                val mappedType = when (contentType) {
-                    SearchScreenViewModel.SearchedItemType.Album -> ViewedContent.Type.Album
-                    SearchScreenViewModel.SearchedItemType.Track -> ViewedContent.Type.Track
-                    SearchScreenViewModel.SearchedItemType.Artist -> ViewedContent.Type.Artist
-                }
-                logViewedContentUseCase(contentId, mappedType)
-            }
         }
 
     @Provides
     fun provideAlbumScreenInteractor(
-        player: PezzottifyPlayer
+        player: PezzottifyPlayer,
+        logViewedContentUseCase: LogViewedContentUseCase,
     ): AlbumScreenViewModel.Interactor = object : AlbumScreenViewModel.Interactor {
         override fun playAlbum(albumId: String) {
             player.loadAlbum(albumId)
@@ -114,6 +103,19 @@ class InteractorsModule {
 
         override fun playTrack(albumId: String, trackId: String) {
             player.loadAlbum(albumId, trackId)
+        }
+
+        override fun logViewedAlbum(albumId: String) {
+            logViewedContentUseCase(albumId, ViewedContent.Type.Album)
+        }
+    }
+
+    @Provides
+    fun provideArtistScreenInteractor(
+        logViewedContentUseCase: LogViewedContentUseCase,
+    ): ArtistScreenViewModel.Interactor = object : ArtistScreenViewModel.Interactor {
+        override fun logViewedArtist(artistId: String) {
+            logViewedContentUseCase(artistId, ViewedContent.Type.Artist)
         }
     }
 
