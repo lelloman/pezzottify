@@ -848,6 +848,165 @@ impl<'a> ImportTransaction<'a> {
     }
 }
 
+// =========================================================================
+// CatalogStore trait implementation
+// =========================================================================
+
+use super::trait_def::{CatalogStore, SearchableContentType, SearchableItem};
+
+impl CatalogStore for SqliteCatalogStore {
+    fn get_artist_json(&self, id: &str) -> Result<Option<serde_json::Value>> {
+        match self.get_resolved_artist(id)? {
+            Some(artist) => Ok(Some(serde_json::to_value(artist)?)),
+            None => Ok(None),
+        }
+    }
+
+    fn get_album_json(&self, id: &str) -> Result<Option<serde_json::Value>> {
+        match self.get_album(id)? {
+            Some(album) => Ok(Some(serde_json::to_value(album)?)),
+            None => Ok(None),
+        }
+    }
+
+    fn get_track_json(&self, id: &str) -> Result<Option<serde_json::Value>> {
+        match self.get_track(id)? {
+            Some(track) => Ok(Some(serde_json::to_value(track)?)),
+            None => Ok(None),
+        }
+    }
+
+    fn get_resolved_album_json(&self, id: &str) -> Result<Option<serde_json::Value>> {
+        match self.get_resolved_album(id)? {
+            Some(album) => Ok(Some(serde_json::to_value(album)?)),
+            None => Ok(None),
+        }
+    }
+
+    fn get_resolved_track_json(&self, id: &str) -> Result<Option<serde_json::Value>> {
+        match self.get_resolved_track(id)? {
+            Some(track) => Ok(Some(serde_json::to_value(track)?)),
+            None => Ok(None),
+        }
+    }
+
+    fn get_artist_discography_json(&self, id: &str) -> Result<Option<serde_json::Value>> {
+        match self.get_artist_discography(id)? {
+            Some(discography) => Ok(Some(serde_json::to_value(discography)?)),
+            None => Ok(None),
+        }
+    }
+
+    fn get_image_path(&self, id: &str) -> PathBuf {
+        // For SQLite store, we need to look up the image URI and resolve it
+        match self.get_image(id) {
+            Ok(Some(image)) => self.resolve_image_uri(&image),
+            _ => self.media_base_path.join("images").join(id),
+        }
+    }
+
+    fn get_track_audio_path(&self, track_id: &str) -> Option<PathBuf> {
+        self.get_track(track_id)
+            .ok()
+            .flatten()
+            .map(|track| self.resolve_audio_uri(&track))
+    }
+
+    fn get_track_album_id(&self, track_id: &str) -> Option<String> {
+        self.get_track(track_id)
+            .ok()
+            .flatten()
+            .map(|track| track.album_id)
+    }
+
+    fn get_artists_count(&self) -> usize {
+        self.get_counts().map(|(a, _, _, _)| a).unwrap_or(0)
+    }
+
+    fn get_albums_count(&self) -> usize {
+        self.get_counts().map(|(_, a, _, _)| a).unwrap_or(0)
+    }
+
+    fn get_tracks_count(&self) -> usize {
+        self.get_counts().map(|(_, _, t, _)| t).unwrap_or(0)
+    }
+
+    fn get_searchable_content(&self) -> Result<Vec<SearchableItem>> {
+        let mut items = Vec::new();
+
+        // Get all artists
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare("SELECT id, name, genres FROM artists")?;
+        let artists = stmt.query_map([], |row| {
+            let id: String = row.get(0)?;
+            let name: String = row.get(1)?;
+            let genres_json: Option<String> = row.get(2)?;
+            let genres: Vec<String> = genres_json
+                .and_then(|s| serde_json::from_str(&s).ok())
+                .unwrap_or_default();
+            Ok((id, name, genres))
+        })?;
+
+        for artist_result in artists {
+            let (id, name, genres) = artist_result?;
+            items.push(SearchableItem {
+                id,
+                name,
+                content_type: SearchableContentType::Artist,
+                additional_text: genres,
+            });
+        }
+        drop(stmt);
+
+        // Get all albums
+        let mut stmt = conn.prepare("SELECT id, name, genres FROM albums")?;
+        let albums = stmt.query_map([], |row| {
+            let id: String = row.get(0)?;
+            let name: String = row.get(1)?;
+            let genres_json: Option<String> = row.get(2)?;
+            let genres: Vec<String> = genres_json
+                .and_then(|s| serde_json::from_str(&s).ok())
+                .unwrap_or_default();
+            Ok((id, name, genres))
+        })?;
+
+        for album_result in albums {
+            let (id, name, genres) = album_result?;
+            items.push(SearchableItem {
+                id,
+                name,
+                content_type: SearchableContentType::Album,
+                additional_text: genres,
+            });
+        }
+        drop(stmt);
+
+        // Get all tracks
+        let mut stmt = conn.prepare("SELECT id, name, tags FROM tracks")?;
+        let tracks = stmt.query_map([], |row| {
+            let id: String = row.get(0)?;
+            let name: String = row.get(1)?;
+            let tags_json: Option<String> = row.get(2)?;
+            let tags: Vec<String> = tags_json
+                .and_then(|s| serde_json::from_str(&s).ok())
+                .unwrap_or_default();
+            Ok((id, name, tags))
+        })?;
+
+        for track_result in tracks {
+            let (id, name, tags) = track_result?;
+            items.push(SearchableItem {
+                id,
+                name,
+                content_type: SearchableContentType::Track,
+                additional_text: tags,
+            });
+        }
+
+        Ok(items)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
