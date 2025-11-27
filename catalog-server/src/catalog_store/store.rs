@@ -656,6 +656,196 @@ impl SqliteCatalogStore {
             images as usize,
         ))
     }
+
+    // =========================================================================
+    // Write Operations - Core Entities
+    // =========================================================================
+
+    /// Insert an artist.
+    pub fn insert_artist(&self, artist: &Artist) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        let genres_json = serde_json::to_string(&artist.genres)?;
+        let activity_periods_json = serde_json::to_string(&artist.activity_periods)?;
+
+        conn.execute(
+            "INSERT INTO artists (id, name, genres, activity_periods) VALUES (?1, ?2, ?3, ?4)",
+            params![artist.id, artist.name, genres_json, activity_periods_json],
+        )?;
+        Ok(())
+    }
+
+    /// Insert an album.
+    pub fn insert_album(&self, album: &Album) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        let genres_json = serde_json::to_string(&album.genres)?;
+
+        conn.execute(
+            "INSERT INTO albums (id, name, album_type, label, release_date, genres, original_title, version_title)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+            params![
+                album.id,
+                album.name,
+                album.album_type.to_db_str(),
+                album.label,
+                album.release_date,
+                genres_json,
+                album.original_title,
+                album.version_title,
+            ],
+        )?;
+        Ok(())
+    }
+
+    /// Insert a track.
+    pub fn insert_track(&self, track: &Track) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        let tags_json = serde_json::to_string(&track.tags)?;
+        let languages_json = serde_json::to_string(&track.languages)?;
+
+        conn.execute(
+            "INSERT INTO tracks (id, name, album_id, disc_number, track_number, duration_secs,
+                    is_explicit, audio_uri, format, tags, has_lyrics, languages, original_title, version_title)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
+            params![
+                track.id,
+                track.name,
+                track.album_id,
+                track.disc_number,
+                track.track_number,
+                track.duration_secs,
+                track.is_explicit as i32,
+                track.audio_uri,
+                track.format.to_db_str(),
+                tags_json,
+                track.has_lyrics as i32,
+                languages_json,
+                track.original_title,
+                track.version_title,
+            ],
+        )?;
+        Ok(())
+    }
+
+    /// Insert an image.
+    pub fn insert_image(&self, image: &Image) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "INSERT INTO images (id, uri, size, width, height) VALUES (?1, ?2, ?3, ?4, ?5)",
+            params![
+                image.id,
+                image.uri,
+                image.size.to_db_str(),
+                image.width as i32,
+                image.height as i32,
+            ],
+        )?;
+        Ok(())
+    }
+
+    // =========================================================================
+    // Write Operations - Relationships
+    // =========================================================================
+
+    /// Add an artist to an album.
+    pub fn add_album_artist(&self, album_id: &str, artist_id: &str, position: i32) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "INSERT INTO album_artists (album_id, artist_id, position) VALUES (?1, ?2, ?3)",
+            params![album_id, artist_id, position],
+        )?;
+        Ok(())
+    }
+
+    /// Add an artist to a track with a role.
+    pub fn add_track_artist(
+        &self,
+        track_id: &str,
+        artist_id: &str,
+        role: &ArtistRole,
+        position: i32,
+    ) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "INSERT INTO track_artists (track_id, artist_id, role, position) VALUES (?1, ?2, ?3, ?4)",
+            params![track_id, artist_id, role.to_db_str(), position],
+        )?;
+        Ok(())
+    }
+
+    /// Add a related artist.
+    pub fn add_related_artist(&self, artist_id: &str, related_artist_id: &str) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "INSERT INTO related_artists (artist_id, related_artist_id) VALUES (?1, ?2)",
+            params![artist_id, related_artist_id],
+        )?;
+        Ok(())
+    }
+
+    /// Add an image to an artist.
+    pub fn add_artist_image(
+        &self,
+        artist_id: &str,
+        image_id: &str,
+        image_type: &ImageType,
+        position: i32,
+    ) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "INSERT INTO artist_images (artist_id, image_id, image_type, position) VALUES (?1, ?2, ?3, ?4)",
+            params![artist_id, image_id, image_type.to_db_str(), position],
+        )?;
+        Ok(())
+    }
+
+    /// Add an image to an album.
+    pub fn add_album_image(
+        &self,
+        album_id: &str,
+        image_id: &str,
+        image_type: &ImageType,
+        position: i32,
+    ) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "INSERT INTO album_images (album_id, image_id, image_type, position) VALUES (?1, ?2, ?3, ?4)",
+            params![album_id, image_id, image_type.to_db_str(), position],
+        )?;
+        Ok(())
+    }
+
+    // =========================================================================
+    // Batch Import Operations
+    // =========================================================================
+
+    /// Begin a transaction for batch import operations.
+    /// Returns a transaction guard that must be committed.
+    pub fn begin_import(&self) -> Result<ImportTransaction<'_>> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute("BEGIN TRANSACTION", [])?;
+        Ok(ImportTransaction { store: self })
+    }
+}
+
+/// Transaction guard for batch import operations.
+pub struct ImportTransaction<'a> {
+    store: &'a SqliteCatalogStore,
+}
+
+impl<'a> ImportTransaction<'a> {
+    /// Commit the import transaction.
+    pub fn commit(self) -> Result<()> {
+        let conn = self.store.conn.lock().unwrap();
+        conn.execute("COMMIT", [])?;
+        Ok(())
+    }
+
+    /// Rollback the import transaction.
+    pub fn rollback(self) -> Result<()> {
+        let conn = self.store.conn.lock().unwrap();
+        conn.execute("ROLLBACK", [])?;
+        Ok(())
+    }
 }
 
 #[cfg(test)]

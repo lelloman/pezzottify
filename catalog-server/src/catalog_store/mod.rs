@@ -4,4 +4,4 @@ mod store;
 
 pub use models::*;
 pub use schema::CATALOG_VERSIONED_SCHEMAS;
-pub use store::SqliteCatalogStore;
+pub use store::{ImportTransaction, SqliteCatalogStore};
