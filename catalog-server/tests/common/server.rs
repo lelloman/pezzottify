@@ -8,7 +8,7 @@ use super::fixtures::{create_test_catalog, create_test_db_with_users};
 use pezzottify_catalog_server::catalog;
 use pezzottify_catalog_server::search::{NoOpSearchVault, SearchVault};
 use pezzottify_catalog_server::server::{server::make_app, ServerConfig, RequestsLoggingLevel};
-use pezzottify_catalog_server::user::{SqliteUserStore, UserStore};
+use pezzottify_catalog_server::user::{FullUserStore, SqliteUserStore};
 use std::net::SocketAddr;
 use std::time::Duration;
 use tempfile::TempDir;
@@ -59,7 +59,7 @@ impl TestServer {
             .expect("Failed to load test catalog");
 
         // Create user store
-        let user_store: Box<dyn UserStore> =
+        let user_store: Box<dyn FullUserStore> =
             Box::new(SqliteUserStore::new(&db_path).expect("Failed to open user store"));
 
         // Create search vault (use NoOp for speed in tests)

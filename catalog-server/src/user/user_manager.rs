@@ -3,8 +3,8 @@ use crate::catalog::Catalog;
 use super::{
     auth::PezzottifyHasher,
     permissions::{Permission, PermissionGrant, UserRole},
-    user_models::LikedContentType,
-    AuthToken, AuthTokenValue, UserAuthCredentials, UserPlaylist, UserStore,
+    user_models::{BandwidthSummary, BandwidthUsage, LikedContentType},
+    AuthToken, AuthTokenValue, FullUserStore, UserAuthCredentials, UserPlaylist,
     UsernamePasswordCredentials,
 };
 use anyhow::{bail, Context, Result};
@@ -17,11 +17,11 @@ const MAX_PLAYLIST_SIZE: usize = 300;
 
 pub struct UserManager {
     catalog: Arc<Mutex<Catalog>>,
-    user_store: Arc<Mutex<Box<dyn UserStore>>>,
+    user_store: Arc<Mutex<Box<dyn FullUserStore>>>,
 }
 
 impl UserManager {
-    pub fn new(catalog: Arc<Mutex<Catalog>>, user_store: Box<dyn UserStore>) -> Self {
+    pub fn new(catalog: Arc<Mutex<Catalog>>, user_store: Box<dyn FullUserStore>) -> Self {
         Self {
             catalog,
             user_store: Arc::new(Mutex::new(user_store)),
@@ -397,5 +397,77 @@ impl UserManager {
             .lock()
             .unwrap()
             .prune_unused_auth_tokens(unused_for_days)
+    }
+
+    // Bandwidth tracking methods
+
+    pub fn record_bandwidth_usage(
+        &self,
+        user_id: usize,
+        date: u32,
+        endpoint_category: &str,
+        bytes_sent: u64,
+        request_count: u64,
+    ) -> Result<()> {
+        self.user_store.lock().unwrap().record_bandwidth_usage(
+            user_id,
+            date,
+            endpoint_category,
+            bytes_sent,
+            request_count,
+        )
+    }
+
+    pub fn get_user_bandwidth_usage(
+        &self,
+        user_id: usize,
+        start_date: u32,
+        end_date: u32,
+    ) -> Result<Vec<BandwidthUsage>> {
+        self.user_store
+            .lock()
+            .unwrap()
+            .get_user_bandwidth_usage(user_id, start_date, end_date)
+    }
+
+    pub fn get_user_bandwidth_summary(
+        &self,
+        user_id: usize,
+        start_date: u32,
+        end_date: u32,
+    ) -> Result<BandwidthSummary> {
+        self.user_store
+            .lock()
+            .unwrap()
+            .get_user_bandwidth_summary(user_id, start_date, end_date)
+    }
+
+    pub fn get_all_bandwidth_usage(
+        &self,
+        start_date: u32,
+        end_date: u32,
+    ) -> Result<Vec<BandwidthUsage>> {
+        self.user_store
+            .lock()
+            .unwrap()
+            .get_all_bandwidth_usage(start_date, end_date)
+    }
+
+    pub fn get_total_bandwidth_summary(
+        &self,
+        start_date: u32,
+        end_date: u32,
+    ) -> Result<BandwidthSummary> {
+        self.user_store
+            .lock()
+            .unwrap()
+            .get_total_bandwidth_summary(start_date, end_date)
+    }
+
+    pub fn prune_bandwidth_usage(&self, older_than_days: u32) -> Result<usize> {
+        self.user_store
+            .lock()
+            .unwrap()
+            .prune_bandwidth_usage(older_than_days)
     }
 }

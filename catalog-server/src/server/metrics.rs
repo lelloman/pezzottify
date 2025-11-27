@@ -90,6 +90,17 @@ lazy_static! {
         format!("{PREFIX}_process_memory_bytes"),
         "Process memory usage in bytes"
     ).expect("Failed to create process_memory_bytes metric");
+
+    // Bandwidth Metrics
+    pub static ref BANDWIDTH_BYTES_TOTAL: CounterVec = CounterVec::new(
+        Opts::new(format!("{PREFIX}_bandwidth_bytes_total"), "Total bytes transferred"),
+        &["user_id", "endpoint_category", "direction"]
+    ).expect("Failed to create bandwidth_bytes_total metric");
+
+    pub static ref BANDWIDTH_REQUESTS_TOTAL: CounterVec = CounterVec::new(
+        Opts::new(format!("{PREFIX}_bandwidth_requests_total"), "Total requests by user and endpoint category"),
+        &["user_id", "endpoint_category"]
+    ).expect("Failed to create bandwidth_requests_total metric");
 }
 
 /// Initialize all metrics and register them with the Prometheus registry
@@ -107,6 +118,8 @@ pub fn init_metrics() {
     let _ = REGISTRY.register(Box::new(CATALOG_SIZE_BYTES.clone()));
     let _ = REGISTRY.register(Box::new(ERRORS_TOTAL.clone()));
     let _ = REGISTRY.register(Box::new(PROCESS_MEMORY_BYTES.clone()));
+    let _ = REGISTRY.register(Box::new(BANDWIDTH_BYTES_TOTAL.clone()));
+    let _ = REGISTRY.register(Box::new(BANDWIDTH_REQUESTS_TOTAL.clone()));
 
     tracing::info!("Metrics system initialized successfully");
 }
@@ -181,6 +194,42 @@ pub fn record_db_connection_error() {
 pub fn record_error(error_type: &str, endpoint: &str) {
     ERRORS_TOTAL
         .with_label_values(&[error_type, endpoint])
+        .inc();
+}
+
+/// Categorize an endpoint path into a high-level category for bandwidth tracking
+pub fn categorize_endpoint(path: &str) -> &'static str {
+    if path.starts_with("/v1/content/stream") || path.starts_with("/v1/playback") {
+        "stream"
+    } else if path.starts_with("/v1/content/image") {
+        "image"
+    } else if path.starts_with("/v1/content") || path.starts_with("/v1/catalog") {
+        "catalog"
+    } else if path.starts_with("/v1/search") {
+        "search"
+    } else if path.starts_with("/v1/auth") {
+        "auth"
+    } else if path.starts_with("/v1/user") {
+        "user"
+    } else if path.starts_with("/v1/admin") {
+        "admin"
+    } else {
+        "other"
+    }
+}
+
+/// Record bandwidth usage for a request/response
+pub fn record_bandwidth(user_id: Option<usize>, endpoint_category: &str, response_bytes: u64) {
+    let user_id_str = user_id
+        .map(|id| id.to_string())
+        .unwrap_or_else(|| "anonymous".to_string());
+
+    BANDWIDTH_BYTES_TOTAL
+        .with_label_values(&[&user_id_str, endpoint_category, "response"])
+        .inc_by(response_bytes as f64);
+
+    BANDWIDTH_REQUESTS_TOTAL
+        .with_label_values(&[&user_id_str, endpoint_category])
         .inc();
 }
 
@@ -325,5 +374,64 @@ mod tests {
             .find(|m| m.get_name() == "pezzottify_db_query_duration_seconds");
 
         assert!(db_metrics.is_some(), "DB query metrics should exist");
+    }
+
+    #[test]
+    fn test_categorize_endpoint() {
+        // Stream endpoints
+        assert_eq!(categorize_endpoint("/v1/content/stream/track123"), "stream");
+        assert_eq!(categorize_endpoint("/v1/playback/queue"), "stream");
+
+        // Image endpoints
+        assert_eq!(categorize_endpoint("/v1/content/image/abc123"), "image");
+
+        // Catalog endpoints
+        assert_eq!(categorize_endpoint("/v1/content/track/123"), "catalog");
+        assert_eq!(categorize_endpoint("/v1/content/album/456"), "catalog");
+        assert_eq!(categorize_endpoint("/v1/content/artist/789"), "catalog");
+        assert_eq!(categorize_endpoint("/v1/catalog/artists"), "catalog");
+
+        // Search endpoints
+        assert_eq!(categorize_endpoint("/v1/search/query"), "search");
+
+        // Auth endpoints
+        assert_eq!(categorize_endpoint("/v1/auth/login"), "auth");
+        assert_eq!(categorize_endpoint("/v1/auth/logout"), "auth");
+
+        // User endpoints
+        assert_eq!(categorize_endpoint("/v1/user/playlists"), "user");
+        assert_eq!(categorize_endpoint("/v1/user/liked"), "user");
+
+        // Admin endpoints
+        assert_eq!(categorize_endpoint("/v1/admin/users"), "admin");
+
+        // Other endpoints
+        assert_eq!(categorize_endpoint("/"), "other");
+        assert_eq!(categorize_endpoint("/health"), "other");
+        assert_eq!(categorize_endpoint("/metrics"), "other");
+    }
+
+    #[test]
+    fn test_record_bandwidth() {
+        // Ensure metrics are initialized
+        init_metrics();
+
+        // Record bandwidth for authenticated user
+        record_bandwidth(Some(42), "stream", 1024 * 1024);
+
+        // Record bandwidth for anonymous user
+        record_bandwidth(None, "catalog", 512);
+
+        // Verify metrics exist
+        let metrics = REGISTRY.gather();
+        let bandwidth_bytes = metrics
+            .iter()
+            .find(|m| m.get_name() == "pezzottify_bandwidth_bytes_total");
+        assert!(bandwidth_bytes.is_some(), "Bandwidth bytes metric should exist");
+
+        let bandwidth_requests = metrics
+            .iter()
+            .find(|m| m.get_name() == "pezzottify_bandwidth_requests_total");
+        assert!(bandwidth_requests.is_some(), "Bandwidth requests metric should exist");
     }
 }

@@ -68,3 +68,31 @@ pub struct UserPlaylist {
     pub created: SystemTime,
     pub tracks: Vec<String>,
 }
+
+/// Bandwidth usage record for a specific user, date, and endpoint category
+#[derive(Serialize, Debug, Clone)]
+pub struct BandwidthUsage {
+    pub user_id: usize,
+    /// Date in YYYYMMDD format
+    pub date: u32,
+    pub endpoint_category: String,
+    pub bytes_sent: u64,
+    pub request_count: u64,
+}
+
+/// Summary of bandwidth usage across multiple records
+#[derive(Serialize, Debug, Clone)]
+pub struct BandwidthSummary {
+    pub user_id: Option<usize>,
+    pub total_bytes_sent: u64,
+    pub total_requests: u64,
+    /// Breakdown by endpoint category
+    pub by_category: HashMap<String, CategoryBandwidth>,
+}
+
+/// Bandwidth stats for a specific category
+#[derive(Serialize, Debug, Clone)]
+pub struct CategoryBandwidth {
+    pub bytes_sent: u64,
+    pub request_count: u64,
+}

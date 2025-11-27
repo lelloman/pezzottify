@@ -17,7 +17,7 @@ use tracing::{debug, error, info};
 use crate::{
     catalog::Catalog,
     server::stream_track::stream_track,
-    user::{user_models::LikedContentType, Permission, UserStore},
+    user::{user_models::LikedContentType, FullUserStore, Permission},
 };
 use crate::{search::SearchVault, user::UserManager};
 use axum_extra::extract::cookie::{Cookie, SameSite};
@@ -25,7 +25,7 @@ use tower_http::services::ServeDir;
 
 use axum::{
     body::Body,
-    extract::{ConnectInfo, Path, State},
+    extract::{ConnectInfo, Path, Query, State},
     http::{header, response, HeaderValue, StatusCode},
     middleware,
     response::{IntoResponse, Response},
@@ -821,6 +821,106 @@ async fn admin_remove_extra_permission(
     }
 }
 
+// Bandwidth statistics endpoints
+
+#[derive(Deserialize, Debug)]
+struct BandwidthQueryParams {
+    /// Start date in YYYYMMDD format
+    start_date: u32,
+    /// End date in YYYYMMDD format
+    end_date: u32,
+}
+
+/// Get bandwidth summary for all users (admin only)
+async fn admin_get_bandwidth_summary(
+    _session: Session,
+    State(user_manager): State<GuardedUserManager>,
+    Query(params): Query<BandwidthQueryParams>,
+) -> Response {
+    match user_manager
+        .lock()
+        .unwrap()
+        .get_total_bandwidth_summary(params.start_date, params.end_date)
+    {
+        Ok(summary) => Json(summary).into_response(),
+        Err(err) => {
+            error!("Error getting bandwidth summary: {}", err);
+            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+        }
+    }
+}
+
+/// Get detailed bandwidth usage for all users (admin only)
+async fn admin_get_bandwidth_usage(
+    _session: Session,
+    State(user_manager): State<GuardedUserManager>,
+    Query(params): Query<BandwidthQueryParams>,
+) -> Response {
+    match user_manager
+        .lock()
+        .unwrap()
+        .get_all_bandwidth_usage(params.start_date, params.end_date)
+    {
+        Ok(usage) => Json(usage).into_response(),
+        Err(err) => {
+            error!("Error getting bandwidth usage: {}", err);
+            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+        }
+    }
+}
+
+/// Get bandwidth summary for a specific user (admin only)
+async fn admin_get_user_bandwidth_summary(
+    _session: Session,
+    State(user_manager): State<GuardedUserManager>,
+    Path(user_handle): Path<String>,
+    Query(params): Query<BandwidthQueryParams>,
+) -> Response {
+    let manager = user_manager.lock().unwrap();
+    let user_id = match manager.get_user_id(&user_handle) {
+        Ok(Some(id)) => id,
+        Ok(None) => return StatusCode::NOT_FOUND.into_response(),
+        Err(err) => {
+            error!("Error getting user id: {}", err);
+            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+        }
+    };
+
+    match manager.get_user_bandwidth_summary(user_id, params.start_date, params.end_date) {
+        Ok(summary) => Json(summary).into_response(),
+        Err(err) => {
+            error!("Error getting user bandwidth summary: {}", err);
+            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+        }
+    }
+}
+
+/// Get detailed bandwidth usage for a specific user (admin only)
+async fn admin_get_user_bandwidth_usage(
+    _session: Session,
+    State(user_manager): State<GuardedUserManager>,
+    Path(user_handle): Path<String>,
+    Query(params): Query<BandwidthQueryParams>,
+) -> Response {
+    let manager = user_manager.lock().unwrap();
+    let user_id = match manager.get_user_id(&user_handle) {
+        Ok(Some(id)) => id,
+        Ok(None) => return StatusCode::NOT_FOUND.into_response(),
+        Err(err) => {
+            error!("Error getting user id: {}", err);
+            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+        }
+    };
+
+    match manager.get_user_bandwidth_usage(user_id, params.start_date, params.end_date) {
+        Ok(usage) => Json(usage).into_response(),
+        Err(err) => {
+            error!("Error getting user bandwidth usage: {}", err);
+            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+        }
+    }
+}
+
 impl ServerState {
     fn new(
         config: ServerConfig,
@@ -843,7 +943,7 @@ pub fn make_app(
     config: ServerConfig,
     catalog: Catalog,
     search_vault: Box<dyn SearchVault>,
-    user_store: Box<dyn UserStore>,
+    user_store: Box<dyn FullUserStore>,
 ) -> Result<Router> {
     let guarded_catalog = Arc::new(Mutex::new(catalog));
     let user_manager = UserManager::new(guarded_catalog.clone(), user_store);
@@ -1028,6 +1128,11 @@ pub fn make_app(
         .route("/users/{user_handle}/permissions", get(admin_get_user_permissions))
         .route("/users/{user_handle}/permissions", post(admin_add_user_extra_permission))
         .route("/permissions/{permission_id}", delete(admin_remove_extra_permission))
+        // Bandwidth statistics routes
+        .route("/bandwidth/summary", get(admin_get_bandwidth_summary))
+        .route("/bandwidth/usage", get(admin_get_bandwidth_usage))
+        .route("/bandwidth/users/{user_handle}/summary", get(admin_get_user_bandwidth_summary))
+        .route("/bandwidth/users/{user_handle}/usage", get(admin_get_user_bandwidth_usage))
         .layer(GovernorLayer::new(write_rate_limit.clone()))
         .route_layer(middleware::from_fn_with_state(
             state.clone(),
@@ -1079,7 +1184,7 @@ pub fn make_app(
 pub async fn run_server(
     catalog: Catalog,
     search_vault: Box<dyn SearchVault>,
-    user_store: Box<dyn UserStore>,
+    user_store: Box<dyn FullUserStore>,
     requests_logging_level: RequestsLoggingLevel,
     port: u16,
     metrics_port: u16,
@@ -1126,8 +1231,8 @@ mod tests {
     use crate::search::NoOpSearchVault;
     use crate::user::auth::UserAuthCredentials;
     use crate::user::auth::{AuthToken, AuthTokenValue};
-    use crate::user::user_models::LikedContentType;
-    use crate::user::{UserAuthCredentialsStore, UserAuthTokenStore};
+    use crate::user::user_models::{BandwidthSummary, BandwidthUsage, LikedContentType};
+    use crate::user::{UserAuthCredentialsStore, UserAuthTokenStore, UserBandwidthStore, UserStore};
     use axum::{body::Body, http::Request};
     use tower::ServiceExt; // for `call`, `oneshot`, and `ready
 
@@ -1331,6 +1436,67 @@ mod tests {
 
         fn update_user_auth_credentials(&self, _credentials: UserAuthCredentials) -> Result<()> {
             todo!()
+        }
+    }
+
+    impl UserBandwidthStore for InMemoryUserStore {
+        fn record_bandwidth_usage(
+            &self,
+            _user_id: usize,
+            _date: u32,
+            _endpoint_category: &str,
+            _bytes_sent: u64,
+            _request_count: u64,
+        ) -> Result<()> {
+            Ok(()) // No-op for tests
+        }
+
+        fn get_user_bandwidth_usage(
+            &self,
+            _user_id: usize,
+            _start_date: u32,
+            _end_date: u32,
+        ) -> Result<Vec<BandwidthUsage>> {
+            Ok(vec![])
+        }
+
+        fn get_user_bandwidth_summary(
+            &self,
+            _user_id: usize,
+            _start_date: u32,
+            _end_date: u32,
+        ) -> Result<BandwidthSummary> {
+            Ok(BandwidthSummary {
+                user_id: Some(_user_id),
+                total_bytes_sent: 0,
+                total_requests: 0,
+                by_category: std::collections::HashMap::new(),
+            })
+        }
+
+        fn get_all_bandwidth_usage(
+            &self,
+            _start_date: u32,
+            _end_date: u32,
+        ) -> Result<Vec<BandwidthUsage>> {
+            Ok(vec![])
+        }
+
+        fn get_total_bandwidth_summary(
+            &self,
+            _start_date: u32,
+            _end_date: u32,
+        ) -> Result<BandwidthSummary> {
+            Ok(BandwidthSummary {
+                user_id: None,
+                total_bytes_sent: 0,
+                total_requests: 0,
+                by_category: std::collections::HashMap::new(),
+            })
+        }
+
+        fn prune_bandwidth_usage(&self, _older_than_days: u32) -> Result<usize> {
+            Ok(0)
         }
     }
 

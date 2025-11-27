@@ -1,6 +1,6 @@
 use super::auth::{AuthToken, AuthTokenValue, UserAuthCredentials};
 use super::permissions::{Permission, PermissionGrant, UserRole};
-use super::user_models::{LikedContentType, UserPlaylist};
+use super::user_models::{BandwidthSummary, BandwidthUsage, LikedContentType, UserPlaylist};
 use anyhow::Result;
 
 pub trait UserAuthCredentialsStore: Send + Sync {
@@ -132,3 +132,49 @@ pub trait UserStore: UserAuthTokenStore + UserAuthCredentialsStore + Send + Sync
     /// Resolves all permissions for a user (roles + active extra permissions).
     fn resolve_user_permissions(&self, user_id: usize) -> Result<Vec<Permission>>;
 }
+
+/// Trait for bandwidth usage tracking operations
+pub trait UserBandwidthStore: Send + Sync {
+    /// Records bandwidth usage for a user. Uses upsert to aggregate with existing data for the same day/category.
+    fn record_bandwidth_usage(
+        &self,
+        user_id: usize,
+        date: u32,
+        endpoint_category: &str,
+        bytes_sent: u64,
+        request_count: u64,
+    ) -> Result<()>;
+
+    /// Gets bandwidth usage records for a user within a date range.
+    /// Both start_date and end_date are inclusive and in YYYYMMDD format.
+    fn get_user_bandwidth_usage(
+        &self,
+        user_id: usize,
+        start_date: u32,
+        end_date: u32,
+    ) -> Result<Vec<BandwidthUsage>>;
+
+    /// Gets summarized bandwidth usage for a user within a date range.
+    fn get_user_bandwidth_summary(
+        &self,
+        user_id: usize,
+        start_date: u32,
+        end_date: u32,
+    ) -> Result<BandwidthSummary>;
+
+    /// Gets bandwidth usage for all users (admin only) within a date range.
+    fn get_all_bandwidth_usage(&self, start_date: u32, end_date: u32) -> Result<Vec<BandwidthUsage>>;
+
+    /// Gets the total bandwidth summary across all users within a date range.
+    fn get_total_bandwidth_summary(&self, start_date: u32, end_date: u32) -> Result<BandwidthSummary>;
+
+    /// Prunes bandwidth usage records older than the specified number of days.
+    /// Returns the number of records deleted.
+    fn prune_bandwidth_usage(&self, older_than_days: u32) -> Result<usize>;
+}
+
+/// Combined trait for user storage with bandwidth tracking
+pub trait FullUserStore: UserStore + UserBandwidthStore {}
+
+// Blanket implementation for any type that implements both UserStore and UserBandwidthStore
+impl<T: UserStore + UserBandwidthStore> FullUserStore for T {}

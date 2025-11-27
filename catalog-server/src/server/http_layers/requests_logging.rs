@@ -1,8 +1,8 @@
 //! Request logging middleware
 #![allow(dead_code)] // Used as middleware
 
-use super::super::ServerConfig;
-use crate::server::metrics::record_http_request;
+use super::super::state::ServerState;
+use crate::server::metrics::{categorize_endpoint, record_bandwidth, record_http_request};
 use axum::extract::State;
 use axum::{
     body::Body,
@@ -10,8 +10,9 @@ use axum::{
     middleware::Next,
     response::IntoResponse,
 };
+use chrono::Datelike;
 use std::time::Instant;
-use tracing::{error, info};
+use tracing::{debug, error, info};
 
 #[derive(PartialEq, PartialOrd, Clone, Debug, clap::ValueEnum)]
 pub enum RequestsLoggingLevel {
@@ -56,20 +57,24 @@ fn parse_content_length(headers: &HeaderMap) -> ContentLengthParseResult {
 }
 
 pub async fn log_requests(
-    State(config): State<ServerConfig>,
+    State(state): State<ServerState>,
     mut request: Request<Body>,
     next: Next,
 ) -> impl IntoResponse {
-    let level = config.requests_logging_level;
-    if level <= RequestsLoggingLevel::None {
-        return next.run(request).await;
-    }
+    let level = state.config.requests_logging_level.clone();
+
+    // Extract user_id from request extensions (set by earlier middleware like extract_user_id_for_rate_limit)
+    let user_id = request.extensions().get::<usize>().copied();
 
     let start = Instant::now();
 
     let method = request.method().to_string();
     let uri = request.uri().to_string();
-    info!(">>> {} {}", method, uri);
+    let path = request.uri().path().to_string();
+
+    if level > RequestsLoggingLevel::None {
+        info!(">>> {} {}", method, uri);
+    }
 
     if level >= RequestsLoggingLevel::Headers {
         info!("  Req Headers:");
@@ -145,10 +150,40 @@ pub async fn log_requests(
 
     let status = response.status().as_u16();
     let duration: std::time::Duration = start.elapsed();
-    info!("<<< {} ({}ms)", status, duration.as_millis());
 
-    // Record metrics for Prometheus
+    if level > RequestsLoggingLevel::None {
+        info!("<<< {} ({}ms)", status, duration.as_millis());
+    }
+
+    // Record HTTP request metrics for Prometheus
     record_http_request(&method, &uri, status, duration);
+
+    // Record bandwidth metrics
+    let response_bytes = match parse_content_length(response.headers()) {
+        ContentLengthParseResult::Ok(size) => size as u64,
+        ContentLengthParseResult::No(_) => 0,
+    };
+
+    // Get endpoint category for aggregation
+    let endpoint_category = categorize_endpoint(&path);
+
+    // Record to Prometheus
+    record_bandwidth(user_id, endpoint_category, response_bytes);
+
+    // Record to database if user is authenticated
+    if let Some(uid) = user_id {
+        if response_bytes > 0 {
+            // Get current date in YYYYMMDD format
+            let today = chrono::Utc::now();
+            let date = today.year() as u32 * 10000 + today.month() * 100 + today.day();
+
+            // Record to database (fire and forget - don't block the response)
+            let user_manager = state.user_manager.lock().unwrap();
+            if let Err(e) = user_manager.record_bandwidth_usage(uid, date, endpoint_category, response_bytes, 1) {
+                debug!("Failed to record bandwidth usage to database: {}", e);
+            }
+        }
+    }
 
     response
 }

@@ -1,12 +1,13 @@
 ## [catalog-server]
 
-- Implement bandwidth usage statistics collection and persistence (track data transfer per user/endpoint)
-- ~Create admin API endpoints for managing user roles and permissions (ManagePermissions permission)~
+- Create catalog db
 - Implement catalog editing endpoints (EditCatalog permission)
 - Implement content download functionality (IssueContentDownload permission)
-- Create catalog db
 - After the catalog has been migrated to a db, modify artist, album and track models to have the reference to one "display image" id, then provide, if available other images
 - Once catalog is migrated to db and catalog modification endpoints are in place, create a catalog change log to be shown to users.
+
+- ~Implement bandwidth usage statistics collection and persistence (track data transfer per user/endpoint)~
+- ~Create admin API endpoints for managing user roles and permissions (ManagePermissions permission)~
 - ~Create custom, flashy, modern looking CLI interface style for cli-auth~
 - ~Secure /metrics endpoint (add authentication, separate port, or network-level restrictions)~
 - ~Setup alerts infrastructure (emails or telegram bot for rate limit violations, errors, etc.)~

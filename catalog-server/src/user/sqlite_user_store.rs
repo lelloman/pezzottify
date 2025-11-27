@@ -4,6 +4,8 @@ use crate::sqlite_persistence::{
     Column, ForeignKey, ForeignKeyOnChange, SqlType, Table, VersionedSchema, BASE_DB_VERSION,
     DEFAULT_TIMESTAMP,
 };
+use crate::user::user_models::{BandwidthUsage, CategoryBandwidth, BandwidthSummary};
+use crate::user::user_store::UserBandwidthStore;
 use crate::user::*;
 use anyhow::{bail, Context, Result};
 use rusqlite::{params, Connection};
@@ -321,6 +323,49 @@ const USER_EXTRA_PERMISSION_TABLE_V_4: Table = Table {
     indices: &[("idx_user_extra_permission_user_id", "user_id")],
 };
 
+/// V 5
+/// Bandwidth usage tracking table - stores aggregated bandwidth data per user per day per endpoint category
+const BANDWIDTH_USAGE_TABLE_V_5: Table = Table {
+    name: "bandwidth_usage",
+    columns: &[
+        sqlite_column!(
+            "id",
+            &SqlType::Integer,
+            is_primary_key = true,
+            is_unique = true
+        ),
+        sqlite_column!(
+            "user_id",
+            &SqlType::Integer,
+            non_null = true,
+            foreign_key = Some(&ForeignKey {
+                foreign_table: "user",
+                foreign_column: "id",
+                on_delete: ForeignKeyOnChange::Cascade,
+            })
+        ),
+        // Date stored as YYYYMMDD integer for easy grouping and querying
+        sqlite_column!("date", &SqlType::Integer, non_null = true),
+        // Endpoint category: "stream", "image", "catalog", "search", "auth", "user", "admin", "other"
+        sqlite_column!("endpoint_category", &SqlType::Text, non_null = true),
+        // Total bytes sent in responses
+        sqlite_column!("bytes_sent", &SqlType::Integer, non_null = true),
+        // Total number of requests
+        sqlite_column!("request_count", &SqlType::Integer, non_null = true),
+        sqlite_column!(
+            "updated",
+            &SqlType::Integer,
+            default_value = Some(DEFAULT_TIMESTAMP)
+        ),
+    ],
+    // Unique constraint ensures one row per user per day per endpoint category
+    unique_constraints: &[&["user_id", "date", "endpoint_category"]],
+    indices: &[
+        ("idx_bandwidth_usage_user_id", "user_id"),
+        ("idx_bandwidth_usage_date", "date"),
+    ],
+};
+
 pub const VERSIONED_SCHEMAS: &[VersionedSchema] = &[
     VersionedSchema {
         version: 0,
@@ -425,6 +470,24 @@ pub const VERSIONED_SCHEMAS: &[VersionedSchema] = &[
         migration: Some(|conn: &Connection| {
             USER_ROLE_TABLE_V_4.create(&conn)?;
             USER_EXTRA_PERMISSION_TABLE_V_4.create(&conn)?;
+            Ok(())
+        }),
+    },
+    VersionedSchema {
+        version: 5,
+        tables: &[
+            USER_TABLE_V_0,
+            LIKED_CONTENT_TABLE_V_2,
+            AUTH_TOKEN_TABLE_V_0,
+            USER_PASSWORD_CREDENTIALS_V_0,
+            USER_PLAYLIST_TABLE_V_3,
+            USER_PLAYLIST_TRACKS_TABLE_V_3,
+            USER_ROLE_TABLE_V_4,
+            USER_EXTRA_PERMISSION_TABLE_V_4,
+            BANDWIDTH_USAGE_TABLE_V_5,
+        ],
+        migration: Some(|conn: &Connection| {
+            BANDWIDTH_USAGE_TABLE_V_5.create(&conn)?;
             Ok(())
         }),
     },
@@ -1310,6 +1373,188 @@ impl UserAuthCredentialsStore for SqliteUserStore {
     }
 }
 
+impl UserBandwidthStore for SqliteUserStore {
+    fn record_bandwidth_usage(
+        &self,
+        user_id: usize,
+        date: u32,
+        endpoint_category: &str,
+        bytes_sent: u64,
+        request_count: u64,
+    ) -> Result<()> {
+        let start = Instant::now();
+        let conn = self.conn.lock().unwrap();
+
+        // Use INSERT OR REPLACE to upsert - if the unique constraint (user_id, date, endpoint_category) exists,
+        // we need to add to existing values, so we use a subquery
+        conn.execute(
+            &format!(
+                "INSERT INTO {} (user_id, date, endpoint_category, bytes_sent, request_count)
+                 VALUES (?1, ?2, ?3, ?4, ?5)
+                 ON CONFLICT(user_id, date, endpoint_category) DO UPDATE SET
+                 bytes_sent = bytes_sent + excluded.bytes_sent,
+                 request_count = request_count + excluded.request_count,
+                 updated = (cast(strftime('%s','now') as int))",
+                BANDWIDTH_USAGE_TABLE_V_5.name
+            ),
+            params![user_id, date, endpoint_category, bytes_sent as i64, request_count as i64],
+        )?;
+
+        record_db_query("record_bandwidth_usage", start.elapsed());
+        Ok(())
+    }
+
+    fn get_user_bandwidth_usage(
+        &self,
+        user_id: usize,
+        start_date: u32,
+        end_date: u32,
+    ) -> Result<Vec<BandwidthUsage>> {
+        let start = Instant::now();
+        let conn = self.conn.lock().unwrap();
+
+        let mut stmt = conn.prepare(&format!(
+            "SELECT user_id, date, endpoint_category, bytes_sent, request_count
+             FROM {} WHERE user_id = ?1 AND date >= ?2 AND date <= ?3
+             ORDER BY date DESC, endpoint_category",
+            BANDWIDTH_USAGE_TABLE_V_5.name
+        ))?;
+
+        let records = stmt
+            .query_map(params![user_id, start_date, end_date], |row| {
+                Ok(BandwidthUsage {
+                    user_id: row.get::<_, i64>(0)? as usize,
+                    date: row.get::<_, i64>(1)? as u32,
+                    endpoint_category: row.get(2)?,
+                    bytes_sent: row.get::<_, i64>(3)? as u64,
+                    request_count: row.get::<_, i64>(4)? as u64,
+                })
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+
+        record_db_query("get_user_bandwidth_usage", start.elapsed());
+        Ok(records)
+    }
+
+    fn get_user_bandwidth_summary(
+        &self,
+        user_id: usize,
+        start_date: u32,
+        end_date: u32,
+    ) -> Result<BandwidthSummary> {
+        let records = self.get_user_bandwidth_usage(user_id, start_date, end_date)?;
+
+        let mut summary = BandwidthSummary {
+            user_id: Some(user_id),
+            total_bytes_sent: 0,
+            total_requests: 0,
+            by_category: std::collections::HashMap::new(),
+        };
+
+        for record in records {
+            summary.total_bytes_sent += record.bytes_sent;
+            summary.total_requests += record.request_count;
+
+            let cat_entry = summary
+                .by_category
+                .entry(record.endpoint_category)
+                .or_insert(CategoryBandwidth {
+                    bytes_sent: 0,
+                    request_count: 0,
+                });
+            cat_entry.bytes_sent += record.bytes_sent;
+            cat_entry.request_count += record.request_count;
+        }
+
+        Ok(summary)
+    }
+
+    fn get_all_bandwidth_usage(&self, start_date: u32, end_date: u32) -> Result<Vec<BandwidthUsage>> {
+        let start = Instant::now();
+        let conn = self.conn.lock().unwrap();
+
+        let mut stmt = conn.prepare(&format!(
+            "SELECT user_id, date, endpoint_category, bytes_sent, request_count
+             FROM {} WHERE date >= ?1 AND date <= ?2
+             ORDER BY user_id, date DESC, endpoint_category",
+            BANDWIDTH_USAGE_TABLE_V_5.name
+        ))?;
+
+        let records = stmt
+            .query_map(params![start_date, end_date], |row| {
+                Ok(BandwidthUsage {
+                    user_id: row.get::<_, i64>(0)? as usize,
+                    date: row.get::<_, i64>(1)? as u32,
+                    endpoint_category: row.get(2)?,
+                    bytes_sent: row.get::<_, i64>(3)? as u64,
+                    request_count: row.get::<_, i64>(4)? as u64,
+                })
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+
+        record_db_query("get_all_bandwidth_usage", start.elapsed());
+        Ok(records)
+    }
+
+    fn get_total_bandwidth_summary(&self, start_date: u32, end_date: u32) -> Result<BandwidthSummary> {
+        let records = self.get_all_bandwidth_usage(start_date, end_date)?;
+
+        let mut summary = BandwidthSummary {
+            user_id: None,
+            total_bytes_sent: 0,
+            total_requests: 0,
+            by_category: std::collections::HashMap::new(),
+        };
+
+        for record in records {
+            summary.total_bytes_sent += record.bytes_sent;
+            summary.total_requests += record.request_count;
+
+            let cat_entry = summary
+                .by_category
+                .entry(record.endpoint_category)
+                .or_insert(CategoryBandwidth {
+                    bytes_sent: 0,
+                    request_count: 0,
+                });
+            cat_entry.bytes_sent += record.bytes_sent;
+            cat_entry.request_count += record.request_count;
+        }
+
+        Ok(summary)
+    }
+
+    fn prune_bandwidth_usage(&self, older_than_days: u32) -> Result<usize> {
+        let start = Instant::now();
+        let conn = self.conn.lock().unwrap();
+
+        // Calculate the cutoff date in YYYYMMDD format
+        let now = SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+        let cutoff_secs = now - (older_than_days as u64 * 24 * 60 * 60);
+
+        // Convert to YYYYMMDD format
+        let cutoff_date = {
+            let datetime = chrono::DateTime::from_timestamp(cutoff_secs as i64, 0)
+                .unwrap_or_else(|| chrono::Utc::now());
+            datetime.format("%Y%m%d").to_string().parse::<u32>().unwrap_or(0)
+        };
+
+        let deleted = conn.execute(
+            &format!(
+                "DELETE FROM {} WHERE date < ?1",
+                BANDWIDTH_USAGE_TABLE_V_5.name
+            ),
+            params![cutoff_date],
+        )?;
+
+        record_db_query("prune_bandwidth_usage", start.elapsed());
+        Ok(deleted)
+    }
+}
+
 #[cfg(test)]
 mod tests {
 
@@ -1449,16 +1694,16 @@ mod tests {
             assert_eq!(db_version, BASE_DB_VERSION as i64 + 3);
         }
 
-        // Now open with SqliteUserStore, which should trigger migration to V4
+        // Now open with SqliteUserStore, which should trigger migration to latest (V5)
         let store = SqliteUserStore::new(&temp_file_path).unwrap();
 
-        // Verify we're now at V4
+        // Verify we're now at the latest version (V5)
         {
             let conn = store.conn.lock().unwrap();
             let db_version: i64 = conn
                 .query_row("PRAGMA user_version;", [], |row| row.get(0))
                 .unwrap();
-            assert_eq!(db_version, BASE_DB_VERSION as i64 + 4);
+            assert_eq!(db_version, BASE_DB_VERSION as i64 + 5);
 
             // Verify new tables exist
             let user_role_table_exists: i64 = conn
@@ -1832,5 +2077,224 @@ mod tests {
 
         // Verify token still exists because it was recently used
         assert!(store.get_user_auth_token(&token.value).unwrap().is_some());
+    }
+
+    // Bandwidth tracking tests
+
+    #[test]
+    fn test_record_bandwidth_usage() {
+        let (store, _temp_dir) = create_tmp_store();
+        let user_id = store.create_user("test_user").unwrap();
+
+        // Record initial bandwidth usage
+        store
+            .record_bandwidth_usage(user_id, 20241127, "stream", 1024, 1)
+            .unwrap();
+
+        // Verify the record was created
+        let records = store
+            .get_user_bandwidth_usage(user_id, 20241127, 20241127)
+            .unwrap();
+        assert_eq!(records.len(), 1);
+        assert_eq!(records[0].user_id, user_id);
+        assert_eq!(records[0].date, 20241127);
+        assert_eq!(records[0].endpoint_category, "stream");
+        assert_eq!(records[0].bytes_sent, 1024);
+        assert_eq!(records[0].request_count, 1);
+    }
+
+    #[test]
+    fn test_record_bandwidth_aggregates_same_day_category() {
+        let (store, _temp_dir) = create_tmp_store();
+        let user_id = store.create_user("test_user").unwrap();
+
+        // Record bandwidth usage twice for same day/category
+        store
+            .record_bandwidth_usage(user_id, 20241127, "stream", 1024, 1)
+            .unwrap();
+        store
+            .record_bandwidth_usage(user_id, 20241127, "stream", 2048, 2)
+            .unwrap();
+
+        // Verify values were aggregated (not duplicated)
+        let records = store
+            .get_user_bandwidth_usage(user_id, 20241127, 20241127)
+            .unwrap();
+        assert_eq!(records.len(), 1);
+        assert_eq!(records[0].bytes_sent, 3072); // 1024 + 2048
+        assert_eq!(records[0].request_count, 3); // 1 + 2
+    }
+
+    #[test]
+    fn test_record_bandwidth_different_categories() {
+        let (store, _temp_dir) = create_tmp_store();
+        let user_id = store.create_user("test_user").unwrap();
+
+        // Record bandwidth for different categories on same day
+        store
+            .record_bandwidth_usage(user_id, 20241127, "stream", 1024, 1)
+            .unwrap();
+        store
+            .record_bandwidth_usage(user_id, 20241127, "catalog", 512, 5)
+            .unwrap();
+        store
+            .record_bandwidth_usage(user_id, 20241127, "image", 2048, 2)
+            .unwrap();
+
+        // Verify separate records for each category
+        let records = store
+            .get_user_bandwidth_usage(user_id, 20241127, 20241127)
+            .unwrap();
+        assert_eq!(records.len(), 3);
+    }
+
+    #[test]
+    fn test_get_user_bandwidth_summary() {
+        let (store, _temp_dir) = create_tmp_store();
+        let user_id = store.create_user("test_user").unwrap();
+
+        // Record bandwidth for different categories
+        store
+            .record_bandwidth_usage(user_id, 20241127, "stream", 10000, 10)
+            .unwrap();
+        store
+            .record_bandwidth_usage(user_id, 20241127, "catalog", 5000, 100)
+            .unwrap();
+        store
+            .record_bandwidth_usage(user_id, 20241128, "stream", 15000, 15)
+            .unwrap();
+
+        // Get summary
+        let summary = store
+            .get_user_bandwidth_summary(user_id, 20241127, 20241128)
+            .unwrap();
+
+        assert_eq!(summary.user_id, Some(user_id));
+        assert_eq!(summary.total_bytes_sent, 30000); // 10000 + 5000 + 15000
+        assert_eq!(summary.total_requests, 125); // 10 + 100 + 15
+
+        // Check category breakdown
+        let stream_stats = summary.by_category.get("stream").unwrap();
+        assert_eq!(stream_stats.bytes_sent, 25000); // 10000 + 15000
+        assert_eq!(stream_stats.request_count, 25); // 10 + 15
+
+        let catalog_stats = summary.by_category.get("catalog").unwrap();
+        assert_eq!(catalog_stats.bytes_sent, 5000);
+        assert_eq!(catalog_stats.request_count, 100);
+    }
+
+    #[test]
+    fn test_get_all_bandwidth_usage() {
+        let (store, _temp_dir) = create_tmp_store();
+        let user1_id = store.create_user("user1").unwrap();
+        let user2_id = store.create_user("user2").unwrap();
+
+        // Record bandwidth for different users
+        store
+            .record_bandwidth_usage(user1_id, 20241127, "stream", 1000, 1)
+            .unwrap();
+        store
+            .record_bandwidth_usage(user2_id, 20241127, "catalog", 2000, 2)
+            .unwrap();
+
+        // Get all bandwidth usage
+        let records = store
+            .get_all_bandwidth_usage(20241127, 20241127)
+            .unwrap();
+
+        assert_eq!(records.len(), 2);
+        // Records should include both users
+        let user_ids: Vec<usize> = records.iter().map(|r| r.user_id).collect();
+        assert!(user_ids.contains(&user1_id));
+        assert!(user_ids.contains(&user2_id));
+    }
+
+    #[test]
+    fn test_get_total_bandwidth_summary() {
+        let (store, _temp_dir) = create_tmp_store();
+        let user1_id = store.create_user("user1").unwrap();
+        let user2_id = store.create_user("user2").unwrap();
+
+        // Record bandwidth for different users
+        store
+            .record_bandwidth_usage(user1_id, 20241127, "stream", 1000, 10)
+            .unwrap();
+        store
+            .record_bandwidth_usage(user2_id, 20241127, "stream", 2000, 20)
+            .unwrap();
+        store
+            .record_bandwidth_usage(user2_id, 20241127, "catalog", 500, 5)
+            .unwrap();
+
+        // Get total summary
+        let summary = store
+            .get_total_bandwidth_summary(20241127, 20241127)
+            .unwrap();
+
+        assert_eq!(summary.user_id, None); // Total summary has no specific user
+        assert_eq!(summary.total_bytes_sent, 3500); // 1000 + 2000 + 500
+        assert_eq!(summary.total_requests, 35); // 10 + 20 + 5
+    }
+
+    #[test]
+    fn test_bandwidth_date_range_filter() {
+        let (store, _temp_dir) = create_tmp_store();
+        let user_id = store.create_user("test_user").unwrap();
+
+        // Record bandwidth on different days
+        store
+            .record_bandwidth_usage(user_id, 20241125, "stream", 1000, 1)
+            .unwrap();
+        store
+            .record_bandwidth_usage(user_id, 20241126, "stream", 2000, 2)
+            .unwrap();
+        store
+            .record_bandwidth_usage(user_id, 20241127, "stream", 3000, 3)
+            .unwrap();
+        store
+            .record_bandwidth_usage(user_id, 20241128, "stream", 4000, 4)
+            .unwrap();
+
+        // Query for subset of dates
+        let records = store
+            .get_user_bandwidth_usage(user_id, 20241126, 20241127)
+            .unwrap();
+
+        assert_eq!(records.len(), 2);
+        let dates: Vec<u32> = records.iter().map(|r| r.date).collect();
+        assert!(dates.contains(&20241126));
+        assert!(dates.contains(&20241127));
+        assert!(!dates.contains(&20241125));
+        assert!(!dates.contains(&20241128));
+    }
+
+    #[test]
+    fn test_bandwidth_usage_deleted_on_user_delete() {
+        let (store, _temp_dir) = create_tmp_store();
+        let user_id = store.create_user("test_user").unwrap();
+
+        // Record bandwidth usage
+        store
+            .record_bandwidth_usage(user_id, 20241127, "stream", 1024, 1)
+            .unwrap();
+
+        // Verify record exists
+        let records = store
+            .get_user_bandwidth_usage(user_id, 20241127, 20241127)
+            .unwrap();
+        assert_eq!(records.len(), 1);
+
+        // Delete user (bandwidth_usage has ON DELETE CASCADE foreign key)
+        {
+            let conn = store.conn.lock().unwrap();
+            conn.execute("DELETE FROM user WHERE id = ?1", params![user_id])
+                .unwrap();
+        }
+
+        // Verify bandwidth records were deleted with user
+        let all_records = store
+            .get_all_bandwidth_usage(20241127, 20241127)
+            .unwrap();
+        assert_eq!(all_records.len(), 0);
     }
 }
