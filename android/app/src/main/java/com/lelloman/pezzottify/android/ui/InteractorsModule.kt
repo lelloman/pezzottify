@@ -108,6 +108,15 @@ class InteractorsModule {
         override fun logViewedAlbum(albumId: String) {
             logViewedContentUseCase(albumId, ViewedContent.Type.Album)
         }
+
+        override fun getCurrentPlayingTrackId(): Flow<String?> =
+            player.playbackPlaylist.combine(player.currentTrackIndex) { playlist, currentTrackIndex ->
+                if (playlist != null && currentTrackIndex != null && currentTrackIndex in playlist.tracksIds.indices) {
+                    playlist.tracksIds[currentTrackIndex]
+                } else {
+                    null
+                }
+            }
     }
 
     @Provides

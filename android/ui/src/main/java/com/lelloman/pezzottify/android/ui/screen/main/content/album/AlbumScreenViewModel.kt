@@ -9,6 +9,7 @@ import dagger.assisted.AssistedFactory
 import dagger.assisted.AssistedInject
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
@@ -43,6 +44,9 @@ class AlbumScreenViewModel @AssistedInject constructor(
                 }
             }
         }
+        .combine(interactor.getCurrentPlayingTrackId()) { albumState, currentTrackId ->
+            albumState.copy(currentPlayingTrackId = currentTrackId)
+        }
         .onEach { state ->
             if (!state.isLoading && !state.isError && !hasLoggedView) {
                 hasLoggedView = true
@@ -63,6 +67,7 @@ class AlbumScreenViewModel @AssistedInject constructor(
         fun playAlbum(albumId: String)
         fun playTrack(albumId: String, trackId: String)
         fun logViewedAlbum(albumId: String)
+        fun getCurrentPlayingTrackId(): kotlinx.coroutines.flow.Flow<String?>
     }
 
     @AssistedFactory

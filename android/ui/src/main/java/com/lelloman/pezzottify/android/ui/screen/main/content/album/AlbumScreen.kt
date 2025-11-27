@@ -59,12 +59,22 @@ private fun AlbumScreenContent(state: AlbumScreenState, actions: AlbumScreenActi
 
     when {
         state.isLoading -> LoadingScreen()
-        state.album != null -> AlbumLoadedScreen(state.album, state.tracks, actions)
+        state.album != null -> AlbumLoadedScreen(
+            album = state.album,
+            tracks = state.tracks,
+            currentPlayingTrackId = state.currentPlayingTrackId,
+            actions = actions,
+        )
     }
 }
 
 @Composable
-fun AlbumLoadedScreen(album: Album, tracks: List<kotlinx.coroutines.flow.Flow<Content<Track>>>?, actions: AlbumScreenActions) {
+fun AlbumLoadedScreen(
+    album: Album,
+    tracks: List<kotlinx.coroutines.flow.Flow<Content<Track>>>?,
+    currentPlayingTrackId: String?,
+    actions: AlbumScreenActions,
+) {
     val listState = rememberLazyListState()
 
     // Define header dimensions
@@ -127,7 +137,11 @@ fun AlbumLoadedScreen(album: Album, tracks: List<kotlinx.coroutines.flow.Flow<Co
             tracks?.let { trackFlows ->
                 items(trackFlows) { trackFlow ->
                     when (val track = trackFlow.collectAsState(initial = null).value) {
-                        is Content.Resolved -> TrackItem(track.data, actions)
+                        is Content.Resolved -> TrackItem(
+                            track = track.data,
+                            isPlaying = track.data.id == currentPlayingTrackId,
+                            actions = actions,
+                        )
                         null, is Content.Loading -> LoadingTrackItem()
                         is Content.Error -> ErrorTrackItem()
                     }
@@ -189,10 +203,22 @@ fun AlbumLoadedScreen(album: Album, tracks: List<kotlinx.coroutines.flow.Flow<Co
 }
 
 @Composable
-private fun TrackItem(track: Track, actions: AlbumScreenActions) {
+private fun TrackItem(track: Track, isPlaying: Boolean, actions: AlbumScreenActions) {
+    val backgroundColor = if (isPlaying) {
+        MaterialTheme.colorScheme.primaryContainer
+    } else {
+        Color.Transparent
+    }
+    val textColor = if (isPlaying) {
+        MaterialTheme.colorScheme.primary
+    } else {
+        MaterialTheme.colorScheme.onSurface
+    }
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .background(backgroundColor)
             .clickable { actions.clickOnTrack(track.id) }
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically
@@ -203,6 +229,7 @@ private fun TrackItem(track: Track, actions: AlbumScreenActions) {
             Text(
                 text = track.name,
                 style = MaterialTheme.typography.bodyLarge,
+                color = textColor,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )

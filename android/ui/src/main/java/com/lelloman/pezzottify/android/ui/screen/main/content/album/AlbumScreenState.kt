@@ -10,4 +10,5 @@ data class AlbumScreenState(
     val tracks: List<Flow<Content<Track>>>? = null,
     val isLoading: Boolean = true,
     val isError: Boolean = false,
+    val currentPlayingTrackId: String? = null,
 )
