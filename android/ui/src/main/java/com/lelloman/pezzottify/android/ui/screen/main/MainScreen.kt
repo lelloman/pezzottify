@@ -178,7 +178,7 @@ private fun TrackInfoPage(
     modifier: Modifier = Modifier,
 ) {
     Column(
-        modifier = modifier,
+        modifier = modifier.padding(end = 12.dp),
         verticalArrangement = androidx.compose.foundation.layout.Arrangement.Center,
     ) {
         ScrollingTextRow(
