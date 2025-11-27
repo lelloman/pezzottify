@@ -22,7 +22,10 @@ class QueueScreenViewModel @Inject constructor(
         .combine(interactor.getCurrentTrackIndex()) { playlist, currentIndex ->
             if (playlist != null) {
                 val tracks = playlist.tracksIds.map { trackId ->
-                    contentResolver.resolveTrack(trackId)
+                    QueueTrackItem(
+                        trackId = trackId,
+                        trackFlow = contentResolver.resolveTrack(trackId),
+                    )
                 }
                 val playlistContext = playlist.context
                 val (contextType, contextName, canSave) = when (playlistContext) {

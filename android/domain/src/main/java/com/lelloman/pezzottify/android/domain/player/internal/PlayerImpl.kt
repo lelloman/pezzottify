@@ -191,6 +191,33 @@ internal class PlayerImpl(
     }
 
     override fun removeTrackFromPlaylist(trackId: String) {
-        TODO("Not yet implemented")
+        runOnPlayerThread {
+            val currentPlaylist = mutablePlaybackPlaylist.value ?: return@runOnPlayerThread
+            val trackIndex = currentPlaylist.tracksIds.indexOf(trackId)
+            if (trackIndex < 0) {
+                logger.warn("Track $trackId not found in playlist, cannot remove")
+                return@runOnPlayerThread
+            }
+
+            val newTracksIds = currentPlaylist.tracksIds.toMutableList().apply {
+                removeAt(trackIndex)
+            }
+
+            // Update context to reflect the playlist has been modified
+            val newContext = when (val ctx = currentPlaylist.context) {
+                is PlaybackPlaylistContext.Album -> PlaybackPlaylistContext.UserMix
+                is PlaybackPlaylistContext.UserPlaylist -> ctx.copy(isEdited = true)
+                is PlaybackPlaylistContext.UserMix -> ctx
+            }
+
+            mutablePlaybackPlaylist.value = PlaybackPlaylist(
+                context = newContext,
+                tracksIds = newTracksIds,
+            )
+
+            // Remove from platform player
+            platformPlayer.removeMediaItem(trackIndex)
+            logger.info("Removed track $trackId (index $trackIndex) from playlist")
+        }
     }
 }

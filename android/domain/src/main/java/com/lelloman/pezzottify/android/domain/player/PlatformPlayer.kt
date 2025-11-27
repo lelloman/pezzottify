@@ -6,4 +6,6 @@ interface PlatformPlayer : ControlsAndStatePlayer {
 
     fun addMediaItems(tracksUrls: List<String>)
 
+    fun removeMediaItem(index: Int)
+
 }

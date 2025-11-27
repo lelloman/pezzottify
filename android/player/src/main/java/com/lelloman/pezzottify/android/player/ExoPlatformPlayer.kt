@@ -264,4 +264,8 @@ internal class ExoPlatformPlayer(
             }
         }
     }
+
+    override fun removeMediaItem(index: Int) {
+        mediaController?.removeMediaItem(index)
+    }
 }

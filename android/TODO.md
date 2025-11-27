@@ -13,7 +13,6 @@
 - When clicking on "Home" the navigation doesn't reset to root. 
 
 - ~Once "current-playback" playlist is in place, add a screen for it so that the user can see it, modify it directly, save it as user-playlist~
-
 - ~Add a player screen that is open when the user clicks on the bottom player~
 - ~Implement a "current-playback" playlist, like the web does. So, a user can start the playback of an album, ok, but then, it should be able to QUEUE albums and tracks.~
 - ~Make the album's image clickable and shown in full screen~
@@ -32,4 +31,4 @@
 - ~Make a component to load an album's and an artists picture with intelligent size selection and fallback~
 - ~Show tracks list in album page~
 - ~Show all albums in the artist screen~
-- ~Show track/artists info in small player~
+  - ~Show track/artists info in small player~
