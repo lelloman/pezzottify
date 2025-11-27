@@ -19,6 +19,7 @@ A high-performance Rust backend server for the Pezzottify music streaming platfo
 - [CLI Auth Tool](#cli-auth-tool)
 - [Testing](#testing)
 - [Development Tips](#development-tips)
+- [Monitoring & Alerting](#monitoring--alerting)
 
 ## Overview
 
@@ -556,24 +557,100 @@ catalog-server/
 
 The catalog server includes a full monitoring stack with Prometheus metrics, Grafana dashboards, and Alertmanager for notifications.
 
-### Quick Start
+### Quick Start (Fresh Clone)
 
-```bash
-# From the repository root
-docker-compose up -d
-```
+1. **Create the environment file:**
+   ```bash
+   cp monitoring/.env.example monitoring/.env
+   ```
+
+2. **Configure your credentials** in `monitoring/.env`:
+   ```bash
+   # Telegram Bot (get token from @BotFather, chat ID from @userinfobot)
+   TELEGRAM_BOT_TOKEN=your_bot_token_here
+   TELEGRAM_CHAT_ID=your_chat_id_here
+
+   # Optional: Generic webhook for custom integrations
+   GENERIC_WEBHOOK_URL=https://your-webhook-endpoint.com/alerts
+
+   # Grafana admin password
+   GF_SECURITY_ADMIN_PASSWORD=your_secure_password
+   ```
+
+3. **Start the stack:**
+   ```bash
+   docker-compose up -d
+   ```
 
 This starts:
 - **catalog-server** on port 3001
 - **Prometheus** on port 9090
 - **Grafana** on port 3000
 - **Alertmanager** on port 9093
+- **telegram-bot** (internal, for Telegram notifications)
+
+### Environment Variables
+
+All sensitive configuration is stored in `monitoring/.env` (git-ignored). Available variables:
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `TELEGRAM_BOT_TOKEN` | Yes* | Telegram bot token from @BotFather |
+| `TELEGRAM_CHAT_ID` | Yes* | Chat ID to receive alerts (get from @userinfobot) |
+| `GENERIC_WEBHOOK_URL` | No | External webhook URL for custom integrations |
+| `GF_SECURITY_ADMIN_PASSWORD` | No | Grafana admin password (default: `admin`) |
+
+*Required for Telegram alerts. If not set, the telegram-bot container will fail to start (other services work fine).
+
+### Setting Up Telegram Alerts
+
+1. **Create a Telegram bot:**
+   - Message [@BotFather](https://t.me/BotFather) on Telegram
+   - Send `/newbot` and follow the prompts
+   - Copy the bot token (looks like `123456789:ABCdefGHIjklMNOpqrsTUVwxyz`)
+
+2. **Get your chat ID:**
+   - Message [@userinfobot](https://t.me/userinfobot) on Telegram
+   - It will reply with your user ID (numeric)
+
+3. **Start a conversation with your bot:**
+   - Find your bot by username and send `/start`
+   - This is required before the bot can send you messages
+
+4. **Add credentials to `.env`:**
+   ```bash
+   TELEGRAM_BOT_TOKEN=123456789:ABCdefGHIjklMNOpqrsTUVwxyz
+   TELEGRAM_CHAT_ID=987654321
+   ```
+
+5. **Restart the stack:**
+   ```bash
+   docker-compose up -d
+   ```
+
+### Generic Webhook
+
+For custom integrations (Slack, Discord, PagerDuty, etc.), set `GENERIC_WEBHOOK_URL` in your `.env` file. Alertmanager will POST alert JSON to this URL.
+
+Example payload:
+```json
+{
+  "status": "firing",
+  "alerts": [
+    {
+      "labels": {"alertname": "ServiceDown", "severity": "critical"},
+      "annotations": {"summary": "Catalog server is down"},
+      "startsAt": "2024-01-15T10:00:00Z"
+    }
+  ]
+}
+```
 
 ### Accessing Grafana
 
 1. Open http://localhost:3000
-2. Login with username `admin` and password `admin`
-3. Navigate to Dashboards to view the Pezzottify dashboard
+2. Login with username `admin` and password from `GF_SECURITY_ADMIN_PASSWORD` (default: `admin`)
+3. Navigate to Dashboards → Pezzottify to view metrics
 
 ### Prometheus Metrics
 
@@ -609,50 +686,22 @@ The following alerts are configured in `monitoring/alerts.yml`:
 - `SlowDatabaseQueries` - Database queries taking too long
 - `HighMemoryUsage` - Memory usage above 1GB
 
-### Configuring Alertmanager
-
-Edit `monitoring/alertmanager.yml` to configure notifications:
-
-**Email notifications:**
-```yaml
-global:
-  smtp_smarthost: 'smtp.gmail.com:587'
-  smtp_from: 'your-email@gmail.com'
-  smtp_auth_username: 'your-email@gmail.com'
-  smtp_auth_password: 'your-app-password'  # Use Gmail app password
-```
-
-**Telegram notifications:**
-Update the environment variables in `docker-compose.yml`:
-```yaml
-telegram-webhook:
-  environment:
-    - TELEGRAM_TOKEN=your_bot_token
-    - TELEGRAM_ADMIN=your_chat_id
-```
-
 ### Running Individual Services
 
 ```bash
-# Start only the catalog server
+# Start only the catalog server (no monitoring)
 docker-compose up -d catalog-server
 
 # Start server with monitoring (no alerting)
 docker-compose up -d catalog-server prometheus grafana
 
-# Start the full stack
+# Start the full stack including alerts
 docker-compose up -d
 ```
 
 ### Viewing Metrics Directly
 
 ```bash
-# Raw Prometheus metrics (local development)
-curl http://localhost:9091/metrics
-
-# Filter to only Pezzottify metrics
-curl http://localhost:9091/metrics | grep pezzottify_
-
 # Prometheus query interface
 open http://localhost:9090
 
@@ -663,6 +712,69 @@ open http://localhost:9090
 ```
 
 **Note:** In Docker, the metrics port (9091) is only accessible within the Docker network. Prometheus scrapes it internally. For local development without Docker, metrics are available at `localhost:9091`.
+
+### Troubleshooting
+
+**telegram-bot keeps restarting:**
+- Ensure `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` are set in `monitoring/.env`
+- Verify you've started a conversation with your bot on Telegram
+
+**No alerts in Telegram:**
+- Check Alertmanager status: http://localhost:9093
+- Verify Prometheus targets: http://localhost:9090/targets
+- Check telegram-bot logs: `docker logs telegram-bot`
+
+**Grafana shows "No data":**
+- Wait 1-2 minutes for metrics to be scraped
+- Verify Prometheus datasource at http://localhost:3000/connections/datasources
+
+### Testing Alerts
+
+After deploying to production, you should verify alerts are working correctly.
+
+**Test Telegram connectivity:**
+```bash
+# Load your credentials and send a test message
+source monitoring/.env
+curl -s "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage?chat_id=${TELEGRAM_CHAT_ID}&text=Test%20alert%20from%20Pezzottify"
+```
+
+**Trigger a real alert (ServiceDown):**
+```bash
+# Stop the catalog server to trigger the ServiceDown alert
+docker-compose stop catalog-server
+
+# Wait ~1 minute for the alert to fire (has a 1-minute threshold)
+# You should receive a Telegram notification
+
+# Check alert status in Prometheus
+open http://localhost:9090/alerts
+
+# Restart the server (you'll get a "resolved" notification)
+docker-compose start catalog-server
+```
+
+**Send a test alert directly to Alertmanager:**
+```bash
+# This bypasses Prometheus and sends directly to Alertmanager
+curl -X POST http://localhost:9093/api/v2/alerts \
+  -H "Content-Type: application/json" \
+  -d '[{
+    "labels": {
+      "alertname": "TestAlert",
+      "severity": "warning"
+    },
+    "annotations": {
+      "summary": "This is a test alert",
+      "description": "Testing the alerting pipeline"
+    }
+  }]'
+```
+
+**Verify alert routing:**
+- Prometheus targets: http://localhost:9090/targets (should show catalog-server as UP)
+- Active alerts: http://localhost:9090/alerts
+- Alertmanager status: http://localhost:9093/#/alerts
 
 ## License
 

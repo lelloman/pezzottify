@@ -6,3 +6,6 @@ api_test/
 pezzottify-android/.idea/
 
 .aider*
+
+# Monitoring secrets
+monitoring/.env

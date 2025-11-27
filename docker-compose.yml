@@ -1,3 +1,6 @@
+# Load environment variables from monitoring/.env
+# Copy monitoring/.env.example to monitoring/.env and configure your credentials
+
 services:
   catalog-server:
     build: ./catalog-server
@@ -42,8 +45,10 @@ services:
       - grafana-data:/var/lib/grafana
       - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards
       - ./monitoring/grafana/datasources:/etc/grafana/provisioning/datasources
+    env_file:
+      - ./monitoring/.env
     environment:
-      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_SECURITY_ADMIN_PASSWORD=${GF_SECURITY_ADMIN_PASSWORD:-admin}
       - GF_SERVER_ROOT_URL=http://localhost:3000
       - GF_INSTALL_PLUGINS=
     networks:
@@ -58,27 +63,39 @@ services:
     ports:
       - "9093:9093"
     volumes:
-      - ./monitoring/alertmanager.yml:/etc/alertmanager/alertmanager.yml
+      - ./monitoring/alertmanager-entrypoint.sh:/alertmanager-entrypoint.sh:ro
       - alertmanager-data:/alertmanager
-    command:
-      - '--config.file=/etc/alertmanager/alertmanager.yml'
-      - '--storage.path=/alertmanager'
+    env_file:
+      - ./monitoring/.env
+    entrypoint: ["/alertmanager-entrypoint.sh"]
     networks:
       - monitoring
     restart: unless-stopped
 
-  telegram-webhook:
+  # Telegram Bot for alerts
+  # Requires TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID in .env
+  telegram-bot:
     image: metalmatze/alertmanager-bot:0.4.3
-    container_name: telegram-webhook
-    environment:
-      - TELEGRAM_TOKEN=YOUR_BOT_TOKEN # UPDATE THIS
-      - TELEGRAM_ADMIN=YOUR_CHAT_ID # UPDATE THIS
-      - LISTEN_ADDR=0.0.0.0:8080
-    ports:
-      - "8080:8080"
+    container_name: telegram-bot
+    env_file:
+      - ./monitoring/.env
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        /usr/bin/alertmanager-bot \
+          --telegram.admin=$$TELEGRAM_CHAT_ID \
+          --telegram.token=$$TELEGRAM_BOT_TOKEN \
+          --store=bolt \
+          --bolt.path=/data/bot.db \
+          --alertmanager.url=http://alertmanager:9093 \
+          --listen.addr=0.0.0.0:8080
+    volumes:
+      - telegram-bot-data:/data
     networks:
       - monitoring
     restart: unless-stopped
+    depends_on:
+      - alertmanager
 
 networks:
   monitoring:
@@ -88,3 +105,4 @@ volumes:
   prometheus-data:
   grafana-data:
   alertmanager-data:
+  telegram-bot-data:

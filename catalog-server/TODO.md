@@ -8,6 +8,7 @@
 - Implement content download functionality (IssueContentDownload permission)
 - Create catalog db
 - After the catalog has been migrated to a db, modify artist, album and track models to have the reference to one "display image" id, then provide, if available other images
+- Once catalog is migrated to db and catalog modification endpoints are in place, create a catalog change log to be shown to users.
 - ~Setup alerts infrastructure (emails or telegram bot for rate limit violations, errors, etc.)~
 - ~Setup metrics infrastructure for monitoring and observability~
 - ~Add unit tests for permissions system (to_int/from_int, UserRole permissions, permission grants)~
