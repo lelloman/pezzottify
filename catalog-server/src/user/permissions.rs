@@ -73,9 +73,9 @@ impl UserRole {
     }
 
     pub fn from_str(s: &str) -> Option<Self> {
-        match s {
-            "Admin" => Some(UserRole::Admin),
-            "Regular" => Some(UserRole::Regular),
+        match s.to_lowercase().as_str() {
+            "admin" => Some(UserRole::Admin),
+            "regular" => Some(UserRole::Regular),
             _ => None,
         }
     }
