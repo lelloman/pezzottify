@@ -1,5 +1,3 @@
-version: '3.9'
-
 services:
   catalog-server:
     build: ./catalog-server
