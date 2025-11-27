@@ -1,6 +1,6 @@
 ## [catalog-server]
 
-- Create custom, flashy, modern looking CLI interface style for cli-auth
+- ~Create custom, flashy, modern looking CLI interface style for cli-auth~
 - ~Secure /metrics endpoint (add authentication, separate port, or network-level restrictions)~
 - Implement bandwidth usage statistics collection and persistence (track data transfer per user/endpoint)
 - Create admin API endpoints for managing user roles and permissions (ManagePermissions permission)

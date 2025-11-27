@@ -1,5 +1,6 @@
 use anyhow::{Context, Result};
 use clap::{CommandFactory, Parser, Subcommand};
+use crossterm::style::Stylize;
 use std::{
     path::PathBuf,
     sync::{Arc, Mutex},
@@ -12,7 +13,12 @@ mod server;
 mod sqlite_persistence;
 mod user;
 
-use cli_style::get_styles;
+use cli_style::{
+    box_chars, colors, get_prompt, get_styles, print_command_echo, print_empty_list, print_error,
+    print_goodbye, print_help, print_key_value, print_key_value_highlight, print_list_item,
+    print_section_footer, print_section_header, print_success, print_warning, print_welcome,
+    CommandHelp, TableBuilder,
+};
 use user::UserManager;
 
 use catalog::Catalog;
@@ -43,7 +49,7 @@ struct CliArgs {
 }
 
 #[derive(Parser)]
-#[command(styles=get_styles(),name = "")]
+#[command(styles=get_styles(), name = "", disable_help_subcommand = true)]
 struct InnerCli {
     #[command(subcommand)]
     command: InnerCommand,
@@ -102,6 +108,9 @@ enum InnerCommand {
     /// Shows the path of the current auth db.
     Where,
 
+    /// Show available commands.
+    Help,
+
     /// Close this program.
     Exit,
 }
@@ -112,7 +121,88 @@ enum CommandExecutionResult {
     Error(String),
 }
 
-const PROMPT: &str = ">> ";
+fn get_commands_help() -> Vec<CommandHelp> {
+    vec![
+        CommandHelp {
+            name: "add-user",
+            args: "<handle>",
+            description: "Create a new user",
+        },
+        CommandHelp {
+            name: "user-handles",
+            args: "",
+            description: "List all user handles",
+        },
+        CommandHelp {
+            name: "show",
+            args: "<handle>",
+            description: "Show user details",
+        },
+        CommandHelp {
+            name: "add-login",
+            args: "<handle> <password>",
+            description: "Set password for user",
+        },
+        CommandHelp {
+            name: "update-login",
+            args: "<handle> <password>",
+            description: "Update user password",
+        },
+        CommandHelp {
+            name: "delete-login",
+            args: "<handle>",
+            description: "Remove password auth",
+        },
+        CommandHelp {
+            name: "check-password",
+            args: "<handle> <password>",
+            description: "Verify password",
+        },
+        CommandHelp {
+            name: "add-role",
+            args: "<handle> <role>",
+            description: "Assign role to user",
+        },
+        CommandHelp {
+            name: "remove-role",
+            args: "<handle> <role>",
+            description: "Remove role from user",
+        },
+        CommandHelp {
+            name: "list-roles",
+            args: "",
+            description: "Show available roles",
+        },
+        CommandHelp {
+            name: "where",
+            args: "",
+            description: "Show database path",
+        },
+        CommandHelp {
+            name: "help",
+            args: "",
+            description: "Show this help",
+        },
+        CommandHelp {
+            name: "exit",
+            args: "",
+            description: "Exit the CLI",
+        },
+    ]
+}
+
+fn format_timestamp(time: &std::time::SystemTime) -> String {
+    let duration = time
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default();
+    let secs = duration.as_secs();
+
+    // Convert to a readable format
+    let datetime = chrono::DateTime::from_timestamp(secs as i64, 0)
+        .map(|dt| dt.format("%Y-%m-%d %H:%M:%S UTC").to_string())
+        .unwrap_or_else(|| "Unknown".to_string());
+    datetime
+}
 
 fn execute_command(
     line: String,
@@ -130,12 +220,15 @@ fn execute_command(
 
     match cli {
         Ok(cli) => {
-            println!("{} {}", PROMPT, &line);
+            print_command_echo(&line);
+            println!();
+
             match cli.command {
                 InnerCommand::AddUser { user_handle } => {
                     if let Err(err) = user_manager.add_user(&user_handle) {
                         return CommandExecutionResult::Error(format!("{}", err));
                     }
+                    print_success(&format!("User '{}' created successfully", user_handle));
                 }
                 InnerCommand::AddLogin {
                     user_handle,
@@ -146,6 +239,10 @@ fn execute_command(
                     {
                         return CommandExecutionResult::Error(format!("{}", err));
                     }
+                    print_success(&format!(
+                        "Password credentials set for user '{}'",
+                        user_handle
+                    ));
                 }
                 InnerCommand::UpdateLogin {
                     user_handle,
@@ -156,92 +253,216 @@ fn execute_command(
                     {
                         return CommandExecutionResult::Error(format!("{}", err));
                     }
+                    print_success(&format!("Password updated for user '{}'", user_handle));
                 }
                 InnerCommand::DeleteLogin { user_handle } => {
                     if let Err(err) = user_manager.delete_password_credentials(&user_handle) {
                         return CommandExecutionResult::Error(format!("{}", err));
                     }
+                    print_success(&format!(
+                        "Password credentials deleted for user '{}'",
+                        user_handle
+                    ));
                 }
                 InnerCommand::Show { user_handle } => {
                     let user_credentials = match user_manager.get_user_credentials(&user_handle) {
                         Ok(creds) => creds,
                         Err(err) => {
-                            return CommandExecutionResult::Error(format!("Failed to get user credentials: {}", err));
+                            return CommandExecutionResult::Error(format!(
+                                "Failed to get user credentials: {}",
+                                err
+                            ));
                         }
                     };
-                    let user_token = match user_manager.get_user_tokens(&user_handle) {
+                    let user_tokens = match user_manager.get_user_tokens(&user_handle) {
                         Ok(tokens) => tokens,
                         Err(err) => {
-                            return CommandExecutionResult::Error(format!("Failed to get user tokens: {}", err));
+                            return CommandExecutionResult::Error(format!(
+                                "Failed to get user tokens: {}",
+                                err
+                            ));
                         }
                     };
 
-                    println!("User Credentials:");
-                    println!("{:#?}", user_credentials);
-
-                    println!("\nAuth Tokens:");
-                    for token in user_token.iter() {
-                        println!("{:#?}", token);
-                    }
-
-                    // Get user_id to fetch roles and permissions
                     if let Some(creds) = user_credentials {
                         let user_id = creds.user_id;
 
-                        // Show roles
-                        match user_manager.get_user_roles(user_id) {
-                            Ok(roles) => {
-                                println!("\nRoles:");
-                                if roles.is_empty() {
-                                    println!("  (no roles assigned)");
-                                } else {
-                                    for role in roles.iter() {
-                                        println!("  - {}", role.to_string());
-                                    }
-                                }
+                        // User Info Section
+                        print_section_header(&format!("User: {}", user_handle));
+                        println!();
+                        print_key_value_highlight("User ID", &user_id.to_string());
+
+                        // Credentials Section
+                        println!();
+                        println!(
+                            "  {} {}",
+                            box_chars::DIAMOND.with(colors::MAGENTA),
+                            "Credentials".with(colors::MAGENTA).bold()
+                        );
+
+                        if let Some(ref pwd_creds) = creds.username_password {
+                            print_key_value("  Hasher", &format!("{:?}", pwd_creds.hasher));
+                            print_key_value("  Created", &format_timestamp(&pwd_creds.created));
+                            if let Some(ref last_tried) = pwd_creds.last_tried {
+                                print_key_value("  Last Tried", &format_timestamp(last_tried));
                             }
-                            Err(err) => {
-                                println!("\nFailed to get roles: {}", err);
+                            if let Some(ref last_used) = pwd_creds.last_used {
+                                print_key_value("  Last Used", &format_timestamp(last_used));
+                            }
+                        } else {
+                            print_empty_list("No password credentials set");
+                        }
+
+                        // API Keys Section
+                        println!();
+                        println!(
+                            "  {} {}",
+                            box_chars::DIAMOND.with(colors::CYAN),
+                            "API Keys".with(colors::CYAN).bold()
+                        );
+                        if creds.keys.is_empty() {
+                            print_empty_list("No API keys");
+                        } else {
+                            for key in &creds.keys {
+                                print_list_item(&format!("{:?}", key), 2);
                             }
                         }
 
-                        // Show resolved permissions
-                        match user_manager.get_user_permissions(user_id) {
-                            Ok(permissions) => {
-                                println!("\nResolved Permissions:");
-                                if permissions.is_empty() {
-                                    println!("  (no permissions)");
+                        // Auth Tokens Section
+                        println!();
+                        println!(
+                            "  {} {}",
+                            box_chars::DIAMOND.with(colors::PURPLE),
+                            "Auth Tokens".with(colors::PURPLE).bold()
+                        );
+                        if user_tokens.is_empty() {
+                            print_empty_list("No active tokens");
+                        } else {
+                            for token in user_tokens.iter() {
+                                println!();
+                                print_key_value("    User ID", &token.user_id.to_string());
+                                print_key_value("    Created", &format_timestamp(&token.created));
+                                if let Some(ref last_used) = token.last_used {
+                                    print_key_value("    Last Used", &format_timestamp(last_used));
+                                }
+                                // Show truncated token value for security
+                                let token_preview = if token.value.0.len() > 16 {
+                                    format!("{}...", &token.value.0[..16])
                                 } else {
-                                    for permission in permissions.iter() {
-                                        println!("  - {:?}", permission);
+                                    token.value.0.clone()
+                                };
+                                print_key_value("    Token", &token_preview);
+                            }
+                        }
+
+                        // Roles Section
+                        println!();
+                        println!(
+                            "  {} {}",
+                            box_chars::DIAMOND.with(colors::ORANGE),
+                            "Roles".with(colors::ORANGE).bold()
+                        );
+                        match user_manager.get_user_roles(user_id) {
+                            Ok(roles) => {
+                                if roles.is_empty() {
+                                    print_empty_list("No roles assigned");
+                                } else {
+                                    for role in roles.iter() {
+                                        print_list_item(&role.to_string(), 2);
                                     }
                                 }
                             }
                             Err(err) => {
-                                println!("\nFailed to get permissions: {}", err);
+                                print_error(&format!("Failed to get roles: {}", err));
                             }
                         }
+
+                        // Permissions Section
+                        println!();
+                        println!(
+                            "  {} {}",
+                            box_chars::DIAMOND.with(colors::GREEN),
+                            "Resolved Permissions".with(colors::GREEN).bold()
+                        );
+                        match user_manager.get_user_permissions(user_id) {
+                            Ok(permissions) => {
+                                if permissions.is_empty() {
+                                    print_empty_list("No permissions");
+                                } else {
+                                    for permission in permissions.iter() {
+                                        print_list_item(&format!("{:?}", permission), 2);
+                                    }
+                                }
+                            }
+                            Err(err) => {
+                                print_error(&format!("Failed to get permissions: {}", err));
+                            }
+                        }
+
+                        print_section_footer();
+                    } else {
+                        print_warning(&format!("User '{}' not found", user_handle));
                     }
                 }
                 InnerCommand::UserHandles => {
                     match user_manager.get_all_user_handles() {
-                        Ok(handles) => println!("{:#?}", handles),
+                        Ok(handles) => {
+                            print_section_header("Registered Users");
+                            println!();
+
+                            if handles.is_empty() {
+                                print_empty_list("No users registered");
+                            } else {
+                                let mut table = TableBuilder::new(vec!["#", "Handle"]);
+                                for (i, handle) in handles.iter().enumerate() {
+                                    table.add_row(vec![&(i + 1).to_string(), handle]);
+                                }
+                                table.print();
+                            }
+
+                            println!();
+                            println!(
+                                "  {} {}",
+                                "Total:".with(colors::DIM),
+                                format!("{} user(s)", handles.len())
+                                    .with(colors::CYAN)
+                                    .bold()
+                            );
+                            print_section_footer();
+                        }
                         Err(err) => {
-                            return CommandExecutionResult::Error(format!("Failed to get user handles: {}", err));
+                            return CommandExecutionResult::Error(format!(
+                                "Failed to get user handles: {}",
+                                err
+                            ));
                         }
                     }
                 }
                 InnerCommand::ListRoles => {
                     use user::UserRole;
-                    println!("Available Roles:\n");
+
+                    print_section_header("Available Roles");
+                    println!();
+
                     for role in &[UserRole::Admin, UserRole::Regular] {
-                        println!("Role: {}", role.to_string());
-                        println!("Permissions:");
-                        for permission in role.permissions() {
-                            println!("  - {:?}", permission);
+                        println!(
+                            "  {} {}",
+                            box_chars::STAR.with(colors::YELLOW),
+                            role.to_string().with(colors::CYAN).bold()
+                        );
+
+                        let permissions = role.permissions();
+                        if permissions.is_empty() {
+                            print_empty_list("No permissions");
+                        } else {
+                            for permission in permissions {
+                                print_list_item(&format!("{:?}", permission), 2);
+                            }
                         }
                         println!();
                     }
+
+                    print_section_footer();
                 }
                 InnerCommand::AddRole { user_handle, role } => {
                     use user::UserRole;
@@ -274,7 +495,11 @@ fn execute_command(
                     if let Err(err) = user_manager.add_user_role(user_id, role_enum) {
                         return CommandExecutionResult::Error(format!("{}", err));
                     }
-                    println!("Role '{}' added to user '{}'", role, user_handle);
+                    print_success(&format!(
+                        "Role '{}' added to user '{}'",
+                        role.with(colors::CYAN).bold(),
+                        user_handle.with(colors::GREEN).bold()
+                    ));
                 }
                 InnerCommand::RemoveRole { user_handle, role } => {
                     use user::UserRole;
@@ -307,10 +532,17 @@ fn execute_command(
                     if let Err(err) = user_manager.remove_user_role(user_id, role_enum) {
                         return CommandExecutionResult::Error(format!("{}", err));
                     }
-                    println!("Role '{}' removed from user '{}'", role, user_handle);
+                    print_success(&format!(
+                        "Role '{}' removed from user '{}'",
+                        role.with(colors::CYAN).bold(),
+                        user_handle.with(colors::GREEN).bold()
+                    ));
                 }
                 InnerCommand::Where => {
-                    println!("{}", db_path);
+                    print_section_header("Database Location");
+                    println!();
+                    print_key_value_highlight("Path", &db_path);
+                    print_section_footer();
                 }
                 InnerCommand::CheckPassword {
                     user_handle,
@@ -320,7 +552,7 @@ fn execute_command(
                         Ok(Some(x)) => x,
                         Ok(None) => {
                             return CommandExecutionResult::Error(format!(
-                                "User {} not found.",
+                                "User '{}' not found",
                                 user_handle
                             ));
                         }
@@ -335,33 +567,46 @@ fn execute_command(
                         Some(x) => x,
                         None => {
                             return CommandExecutionResult::Error(format!(
-                                "User {} has no password set.",
+                                "User '{}' has no password set",
                                 user_handle
                             ));
                         }
                     };
-                    let msg = match password_credentials.hasher.verify(
+                    match password_credentials.hasher.verify(
                         password,
                         password_credentials.hash,
                         password_credentials.salt,
                     ) {
-                        Ok(true) => "The password provided is correct!",
-                        Ok(false) => "Wrong password.",
-                        Err(err) => &format!(
-                            "Could not verify the password, something went wrong: {}",
-                            err
-                        ),
-                    };
-                    println!("{}", msg);
+                        Ok(true) => {
+                            print_success("Password is correct!");
+                        }
+                        Ok(false) => {
+                            print_error("Wrong password");
+                        }
+                        Err(err) => {
+                            return CommandExecutionResult::Error(format!(
+                                "Could not verify password: {}",
+                                err
+                            ));
+                        }
+                    }
+                }
+                InnerCommand::Help => {
+                    print_help(&get_commands_help());
                 }
                 InnerCommand::Exit => return CommandExecutionResult::Exit,
             }
         }
 
         Err(e) => {
-            if let Err(_) = e.print() {
-                println!("{}", e);
-            }
+            // For parse errors, show a styled error
+            print_error(&format!("Invalid command: {}", e.kind()));
+            println!();
+            println!(
+                "  {} Type '{}' for available commands",
+                box_chars::ARROW_RIGHT.with(colors::DIM),
+                "help".with(colors::GREEN).bold()
+            );
         }
     }
     CommandExecutionResult::Ok
@@ -422,7 +667,8 @@ fn main() -> Result<()> {
     let catalog = Arc::new(Mutex::new(Catalog::dummy()));
     let mut user_manager = UserManager::new(catalog, Box::new(user_store));
 
-    InnerCli::command().print_long_help()?;
+    // Print welcome screen instead of clap help
+    print_welcome(&auth_store_file_path.display().to_string());
 
     let config = Config::builder()
         .completion_type(CompletionType::List)
@@ -432,12 +678,13 @@ fn main() -> Result<()> {
 
     let helper = MyHelper::new();
     rl.set_helper(Some(helper));
-    let _ = rl.clear_screen();
+
+    // Use the styled prompt
+    let prompt = get_prompt();
 
     loop {
-        let readline = rl.readline(PROMPT);
+        let readline = rl.readline(&prompt);
 
-        let _ = rl.clear_screen();
         match readline {
             Ok(line) => {
                 let _ = rl.add_history_entry(&line);
@@ -448,24 +695,26 @@ fn main() -> Result<()> {
                 ) {
                     CommandExecutionResult::Ok => {}
                     CommandExecutionResult::Exit => {
+                        print_goodbye();
                         break;
                     }
                     CommandExecutionResult::Error(err) => {
-                        eprintln!("Error: {:?}", err);
+                        print_error(&err);
+                        println!();
                         continue;
                     }
                 }
             }
             Err(rustyline::error::ReadlineError::Interrupted) => {
-                println!("CTRL-C");
+                print_goodbye();
                 break;
             }
             Err(rustyline::error::ReadlineError::Eof) => {
-                println!("CTRL-D: exiting.");
+                print_goodbye();
                 break;
             }
             Err(e) => {
-                println!("Error: {:?}", e);
+                print_error(&format!("Error: {:?}", e));
                 break;
             }
         }
