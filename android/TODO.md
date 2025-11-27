@@ -6,6 +6,8 @@ We can consider V1 ready once all of the task without V2 mark are completed.
 
 - Check the styling of the login screen, I now see a light text color in the email input even if the theme is light
 - We should somehow insert into the code A) the build variant B) the build version C) The git commit, then we can show it in the profile screen for now
+- In the album screen, when the user clicks on the album, instead of openeing the album screen, the app crashes
+
 ### [to refine]
 
 - Add custom theme palettes beyond system/light/dark (e.g., Material colors like blue, green, purple, or themed palettes like 'Midnight', 'Sunset', 'Forest')
