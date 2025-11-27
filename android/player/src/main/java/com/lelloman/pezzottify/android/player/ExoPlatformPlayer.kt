@@ -10,6 +10,7 @@ import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
 import com.google.common.util.concurrent.MoreExecutors
 import com.lelloman.pezzottify.android.domain.player.PlatformPlayer
+import com.lelloman.pezzottify.android.domain.player.RepeatMode
 import com.lelloman.pezzottify.android.domain.player.VolumeState
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.DelicateCoroutinesApi
@@ -56,6 +57,12 @@ internal class ExoPlatformPlayer(
 
     private val mutableVolumeState = MutableStateFlow(VolumeState(0.5f, false))
     override val volumeState: StateFlow<VolumeState> = mutableVolumeState.asStateFlow()
+
+    private val mutableShuffleEnabled = MutableStateFlow(false)
+    override val shuffleEnabled: StateFlow<Boolean> = mutableShuffleEnabled.asStateFlow()
+
+    private val mutableRepeatMode = MutableStateFlow(RepeatMode.OFF)
+    override val repeatMode: StateFlow<RepeatMode> = mutableRepeatMode.asStateFlow()
 
 
     private val playerListener = object : Player.Listener {
@@ -267,5 +274,25 @@ internal class ExoPlatformPlayer(
 
     override fun removeMediaItem(index: Int) {
         mediaController?.removeMediaItem(index)
+    }
+
+    override fun toggleShuffle() {
+        val newShuffleEnabled = !mutableShuffleEnabled.value
+        mutableShuffleEnabled.value = newShuffleEnabled
+        mediaController?.shuffleModeEnabled = newShuffleEnabled
+    }
+
+    override fun cycleRepeatMode() {
+        val newMode = when (mutableRepeatMode.value) {
+            RepeatMode.OFF -> RepeatMode.ALL
+            RepeatMode.ALL -> RepeatMode.ONE
+            RepeatMode.ONE -> RepeatMode.OFF
+        }
+        mutableRepeatMode.value = newMode
+        mediaController?.repeatMode = when (newMode) {
+            RepeatMode.OFF -> Player.REPEAT_MODE_OFF
+            RepeatMode.ALL -> Player.REPEAT_MODE_ALL
+            RepeatMode.ONE -> Player.REPEAT_MODE_ONE
+        }
     }
 }

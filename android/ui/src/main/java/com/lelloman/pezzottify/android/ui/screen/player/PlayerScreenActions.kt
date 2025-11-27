@@ -7,4 +7,6 @@ interface PlayerScreenActions {
     fun seekToPercent(percent: Float)
     fun setVolume(volume: Float)
     fun toggleMute()
+    fun clickOnShuffle()
+    fun clickOnRepeat()
 }

@@ -177,9 +177,13 @@ private fun PlayerScreenContent(
                     isPlaying = state.isPlaying,
                     hasNext = state.hasNextTrack,
                     hasPrevious = state.hasPreviousTrack,
+                    shuffleEnabled = state.shuffleEnabled,
+                    repeatMode = state.repeatMode,
                     onPlayPause = actions::clickOnPlayPause,
                     onSkipNext = actions::clickOnSkipNext,
                     onSkipPrevious = actions::clickOnSkipPrevious,
+                    onShuffle = actions::clickOnShuffle,
+                    onRepeat = actions::clickOnRepeat,
                 )
 
                 Spacer(modifier = Modifier.weight(1f))
@@ -287,25 +291,46 @@ private fun PlaybackControls(
     isPlaying: Boolean,
     hasNext: Boolean,
     hasPrevious: Boolean,
+    shuffleEnabled: Boolean,
+    repeatMode: RepeatModeUi,
     onPlayPause: () -> Unit,
     onSkipNext: () -> Unit,
     onSkipPrevious: () -> Unit,
+    onShuffle: () -> Unit,
+    onRepeat: () -> Unit,
 ) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.Center,
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        // Shuffle
+        IconButton(
+            onClick = onShuffle,
+            modifier = Modifier.size(48.dp),
+        ) {
+            Icon(
+                painter = painterResource(R.drawable.baseline_shuffle_24),
+                contentDescription = "Shuffle",
+                modifier = Modifier.size(24.dp),
+                tint = if (shuffleEnabled) {
+                    MaterialTheme.colorScheme.primary
+                } else {
+                    MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                }
+            )
+        }
+
         // Skip previous
         IconButton(
             onClick = onSkipPrevious,
             enabled = hasPrevious,
-            modifier = Modifier.size(64.dp),
+            modifier = Modifier.size(56.dp),
         ) {
             Icon(
                 painter = painterResource(R.drawable.baseline_skip_previous_24),
                 contentDescription = "Previous",
-                modifier = Modifier.size(40.dp),
+                modifier = Modifier.size(36.dp),
                 tint = if (hasPrevious) {
                     MaterialTheme.colorScheme.onSurface
                 } else {
@@ -314,7 +339,7 @@ private fun PlaybackControls(
             )
         }
 
-        Spacer(modifier = Modifier.width(16.dp))
+        Spacer(modifier = Modifier.width(8.dp))
 
         // Play/Pause
         IconButton(
@@ -333,22 +358,44 @@ private fun PlaybackControls(
             )
         }
 
-        Spacer(modifier = Modifier.width(16.dp))
+        Spacer(modifier = Modifier.width(8.dp))
 
         // Skip next
         IconButton(
             onClick = onSkipNext,
             enabled = hasNext,
-            modifier = Modifier.size(64.dp),
+            modifier = Modifier.size(56.dp),
         ) {
             Icon(
                 painter = painterResource(R.drawable.baseline_skip_next_24),
                 contentDescription = "Next",
-                modifier = Modifier.size(40.dp),
+                modifier = Modifier.size(36.dp),
                 tint = if (hasNext) {
                     MaterialTheme.colorScheme.onSurface
                 } else {
                     MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+                }
+            )
+        }
+
+        // Repeat
+        IconButton(
+            onClick = onRepeat,
+            modifier = Modifier.size(48.dp),
+        ) {
+            Icon(
+                painter = painterResource(
+                    when (repeatMode) {
+                        RepeatModeUi.OFF -> R.drawable.baseline_repeat_24
+                        RepeatModeUi.ALL -> R.drawable.baseline_repeat_24
+                        RepeatModeUi.ONE -> R.drawable.baseline_repeat_one_24
+                    }
+                ),
+                contentDescription = "Repeat",
+                modifier = Modifier.size(24.dp),
+                tint = when (repeatMode) {
+                    RepeatModeUi.OFF -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                    RepeatModeUi.ALL, RepeatModeUi.ONE -> MaterialTheme.colorScheme.primary
                 }
             )
         }
