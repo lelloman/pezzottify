@@ -235,6 +235,7 @@ cargo run --release -- \
 | Argument | Default | Description |
 |----------|---------|-------------|
 | `--port <PORT>` | `3001` | Server port to bind to |
+| `--metrics-port <PORT>` | `9091` | Metrics server port (Prometheus scraping) |
 | `--logging-level <LEVEL>` | `path` | Request logging level (`path`, `full`, `none`) |
 | `--content-cache-age-sec <SECONDS>` | `3600` | HTTP cache duration in seconds |
 | `--frontend-dir-path <PATH>` | None | Serve static frontend files from this path |
@@ -576,7 +577,7 @@ This starts:
 
 ### Prometheus Metrics
 
-The server exposes metrics at `/metrics` endpoint. All custom metrics use the `pezzottify_` prefix for easy filtering in Grafana.
+The server exposes metrics on a separate port (default: 9091) for security. This port is only exposed internally within the Docker network, not to the host. All custom metrics use the `pezzottify_` prefix for easy filtering in Grafana.
 
 | Metric | Type | Description |
 |--------|------|-------------|
@@ -646,11 +647,11 @@ docker-compose up -d
 ### Viewing Metrics Directly
 
 ```bash
-# Raw Prometheus metrics
-curl http://localhost:3001/metrics
+# Raw Prometheus metrics (local development)
+curl http://localhost:9091/metrics
 
 # Filter to only Pezzottify metrics
-curl http://localhost:3001/metrics | grep pezzottify_
+curl http://localhost:9091/metrics | grep pezzottify_
 
 # Prometheus query interface
 open http://localhost:9090
@@ -660,6 +661,8 @@ open http://localhost:9090
 # Login failures: pezzottify_auth_login_attempts_total{status="failure"}
 # P95 latency: histogram_quantile(0.95, rate(pezzottify_http_request_duration_seconds_bucket[5m]))
 ```
+
+**Note:** In Docker, the metrics port (9091) is only accessible within the Docker network. Prometheus scrapes it internally. For local development without Docker, metrics are available at `localhost:9091`.
 
 ## License
 

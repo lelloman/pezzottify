@@ -3,6 +3,8 @@ services:
     build: ./catalog-server
     ports:
       - "3001:3001"
+    expose:
+      - "9091"  # Metrics port - internal only, not exposed to host
     volumes:
       - /home/lelloman/pezzottify-catalog/:/data/catalog
       - /home/lelloman/pezzottify-catalog/:/data/db

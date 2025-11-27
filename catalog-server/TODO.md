@@ -1,15 +1,15 @@
 ## [catalog-server]
 
 - Create custom, flashy, modern looking CLI interface style for cli-auth
-- Secure /metrics endpoint (add authentication, separate port, or network-level restrictions)
+- ~Secure /metrics endpoint (add authentication, separate port, or network-level restrictions)~
 - Implement bandwidth usage statistics collection and persistence (track data transfer per user/endpoint)
-- ~Setup alerts infrastructure (emails or telegram bot for rate limit violations, errors, etc.)~
-- ~Setup metrics infrastructure for monitoring and observability~
 - Create admin API endpoints for managing user roles and permissions (ManagePermissions permission)
 - Implement catalog editing endpoints (EditCatalog permission)
 - Implement content download functionality (IssueContentDownload permission)
 - Create catalog db
 - After the catalog has been migrated to a db, modify artist, album and track models to have the reference to one "display image" id, then provide, if available other images
+- ~Setup alerts infrastructure (emails or telegram bot for rate limit violations, errors, etc.)~
+- ~Setup metrics infrastructure for monitoring and observability~
 - ~Add unit tests for permissions system (to_int/from_int, UserRole permissions, permission grants)~
 - ~Add unit tests for session management (token extraction, permission checking, invalid tokens)~
 - ~Add unit tests for catalog loading error cases (missing files, invalid references, problem accumulation)~

@@ -55,6 +55,10 @@ struct CliArgs {
     #[clap(short, long, default_value_t = 3001)]
     pub port: u16,
 
+    /// The port for the metrics server (Prometheus scraping).
+    #[clap(long, default_value_t = 9091)]
+    pub metrics_port: u16,
+
     /// The level of logging to perform on each request.
     #[clap(long, default_value = "path")]
     pub logging_level: RequestsLoggingLevel,
@@ -126,12 +130,14 @@ async fn main() -> Result<()> {
     let search_vault: Box<dyn SearchVault> = Box::new(NoOpSearchVault {});
 
     info!("Ready to serve at port {}!", cli_args.port);
+    info!("Metrics available at port {}!", cli_args.metrics_port);
     run_server(
         catalog,
         search_vault,
         user_store,
         cli_args.logging_level,
         cli_args.port,
+        cli_args.metrics_port,
         cli_args.content_cache_age_sec,
         cli_args.frontend_dir_path,
     )

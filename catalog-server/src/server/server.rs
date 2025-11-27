@@ -763,8 +763,7 @@ pub fn make_app(
         .nest("/v1/auth", auth_routes)
         .nest("/v1/content", content_routes)
         .nest("/v1/user", user_routes)
-        .nest("/v1/admin", admin_routes)
-        .route("/metrics", get(super::metrics::metrics_handler));
+        .nest("/v1/admin", admin_routes);
 
     #[cfg(feature = "slowdown")]
     {
@@ -794,6 +793,7 @@ pub async fn run_server(
     user_store: Box<dyn UserStore>,
     requests_logging_level: RequestsLoggingLevel,
     port: u16,
+    metrics_port: u16,
     content_cache_age_sec: usize,
     frontend_dir_path: Option<String>,
 ) -> Result<()> {
@@ -805,16 +805,30 @@ pub async fn run_server(
     };
     let app = make_app(config, catalog, search_vault, user_store)?;
 
-    let listener = tokio::net::TcpListener::bind(format!("0.0.0.0:{}", port))
+    let main_listener = tokio::net::TcpListener::bind(format!("0.0.0.0:{}", port))
         .await
         .unwrap();
 
-    // Use into_make_service_with_connect_info to provide IP address for rate limiting
-    Ok(axum::serve(
-        listener,
-        app.into_make_service_with_connect_info::<SocketAddr>(),
-    )
-    .await?)
+    // Create a minimal metrics-only server
+    let metrics_app = Router::new().route("/metrics", get(super::metrics::metrics_handler));
+    let metrics_listener = tokio::net::TcpListener::bind(format!("0.0.0.0:{}", metrics_port))
+        .await
+        .unwrap();
+
+    // Run both servers concurrently
+    tokio::select! {
+        result = axum::serve(
+            main_listener,
+            app.into_make_service_with_connect_info::<SocketAddr>(),
+        ) => {
+            result?;
+        }
+        result = axum::serve(metrics_listener, metrics_app) => {
+            result?;
+        }
+    }
+
+    Ok(())
 }
 
 #[cfg(test)]

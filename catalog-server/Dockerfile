@@ -29,6 +29,7 @@ RUN mkdir -p /data/db
 RUN mkdir -p /data/catalog
 
 EXPOSE 3001
+EXPOSE 9091
 
 # Start the server
 CMD ["catalog-server", "/data/catalog", "/data/db/user.db", "--content-cache-age-sec=60", "--logging-level", "path"]
