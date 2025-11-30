@@ -27,6 +27,7 @@ internal class UserContentStoreImpl(
         type: LikedContent.ContentType,
         liked: Boolean,
         modifiedAt: Long,
+        syncStatus: SyncStatus,
     ) {
         likedContentDao.upsert(
             LikedContentEntity(

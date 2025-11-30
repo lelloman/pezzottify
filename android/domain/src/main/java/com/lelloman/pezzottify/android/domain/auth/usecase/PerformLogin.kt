@@ -6,12 +6,14 @@ import com.lelloman.pezzottify.android.domain.config.ConfigStore
 import com.lelloman.pezzottify.android.domain.remoteapi.RemoteApiClient
 import com.lelloman.pezzottify.android.domain.remoteapi.response.RemoteApiResponse
 import com.lelloman.pezzottify.android.domain.usecase.UseCase
+import com.lelloman.pezzottify.android.domain.usercontent.UserContentSynchronizer
 import javax.inject.Inject
 
 class PerformLogin @Inject constructor(
     private val remoteApiClient: RemoteApiClient,
     private val authStore: AuthStore,
     private val configStore: ConfigStore,
+    private val userContentSynchronizer: UserContentSynchronizer,
 ) : UseCase() {
 
     suspend operator fun invoke(email: String, password: String): LoginResult {
@@ -28,6 +30,7 @@ class PerformLogin @Inject constructor(
                         authToken = remoteResponse.data.token,
                     )
                 )
+                userContentSynchronizer.fetchRemoteLikedContent()
                 return LoginResult.Success
             }
 

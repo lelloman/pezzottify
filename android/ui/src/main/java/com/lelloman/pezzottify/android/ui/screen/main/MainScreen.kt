@@ -162,7 +162,7 @@ private fun MainScreenContent(state: MainScreenState, actions: MainScreenActions
                     HomeScreen(navController = navController)
                 }
                 composable<Screen.Main.Search> { SearchScreen(navController) }
-                composable<Screen.Main.Library> { LibraryScreen() }
+                composable<Screen.Main.Library> { LibraryScreen(navController) }
 
                 composable<Screen.Main.Home.Profile> {
                     ProfileScreen(navController, rootNavController)

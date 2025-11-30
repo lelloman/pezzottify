@@ -54,6 +54,75 @@ class UserContentSynchronizer internal constructor(
         }
     }
 
+    suspend fun fetchRemoteLikedContent() {
+        logger.info("fetchRemoteLikedContent() starting")
+
+        val contentTypes = listOf(
+            LikedContent.ContentType.Album to "album",
+            LikedContent.ContentType.Artist to "artist",
+        )
+
+        for ((type, apiType) in contentTypes) {
+            when (val result = remoteApiClient.getLikedContent(apiType)) {
+                is RemoteApiResponse.Success -> {
+                    val remoteIds = result.data.toSet()
+                    logger.info("fetchRemoteLikedContent() got ${remoteIds.size} remote $apiType items")
+
+                    // Get current local items of this type
+                    val localItems = userContentStore.getLikedContent(listOf(type)).first()
+                    val localIds = localItems.associate { it.contentId to it }
+
+                    // Add remote items that aren't in local DB
+                    for (remoteId in remoteIds) {
+                        val localItem = localIds[remoteId]
+                        if (localItem == null) {
+                            // Not in local DB, add as synced
+                            logger.debug("fetchRemoteLikedContent() adding remote item $remoteId")
+                            userContentStore.setLiked(
+                                contentId = remoteId,
+                                type = type,
+                                liked = true,
+                                modifiedAt = System.currentTimeMillis(),
+                                syncStatus = SyncStatus.Synced,
+                            )
+                        }
+                        // If local item exists, keep it (local state is authoritative for pending items)
+                    }
+
+                    // Mark local "liked" items not on server as pending sync
+                    // (they were liked offline and need to be synced)
+                    for (localItem in localItems) {
+                        if (localItem.isLiked &&
+                            localItem.syncStatus == SyncStatus.Synced &&
+                            localItem.contentId !in remoteIds
+                        ) {
+                            // Local says liked + synced, but server doesn't have it
+                            // This means it was unliked on another device, update local
+                            logger.debug("fetchRemoteLikedContent() removing unliked item ${localItem.contentId}")
+                            userContentStore.setLiked(
+                                contentId = localItem.contentId,
+                                type = type,
+                                liked = false,
+                                modifiedAt = System.currentTimeMillis(),
+                                syncStatus = SyncStatus.Synced,
+                            )
+                        }
+                    }
+                }
+                is RemoteApiResponse.Error.Unauthorized -> {
+                    logger.warn("fetchRemoteLikedContent() unauthorized for $apiType")
+                }
+                is RemoteApiResponse.Error.Network -> {
+                    logger.warn("fetchRemoteLikedContent() network error for $apiType, will retry on next sync")
+                }
+                else -> {
+                    logger.error("fetchRemoteLikedContent() error for $apiType: $result")
+                }
+            }
+        }
+        logger.info("fetchRemoteLikedContent() done")
+    }
+
     fun wakeUp() {
         logger.info("wakeUp()")
         wakeUpSignal.complete(Unit)

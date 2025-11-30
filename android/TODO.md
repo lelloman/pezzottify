@@ -18,12 +18,13 @@ We can consider V1 ready once all of the task without V2 mark are completed.
 - We need to plan a "download" feature for albums and tracks
 - Check that the behavior of the audio playback is system-friendly in terms of audio events (pause on focus lost, pause on headphones unplugged and such)
 - We should gather statistics on what's being listened. Like what track, how long. This will be useful for discovery features.
-- We should introduce user's liked content, this will populate the library's screen. (what do we show when the user doesn't have anything yet?)
 - Make a plan to introduce the user's playlist feature
 - Once the listening stats are implemented, we can add a "jump back in" component in the home screen
+- Consider if we have more than one "Synchronizers" to unify the code and make it reusable
 
 ### [done]
 
+- ~We should introduce user's liked content, this will populate the library's screen. (what do we show when the user doesn't have anything yet?)~
 - ~The synchronizer seems to have a bug (skim through the git log though, maybe we fix it already), when the server responds 403 it keeps hammering the endpoint in an infinite loop~
 - ~Check that all persisted user info are deleted at logout. Right now, I still see recently viewed items after re-logging in.~
 - ~When the user performs a login, the username should be persisted so that if the user logs out, the username field of the login screen can be pre-filled~

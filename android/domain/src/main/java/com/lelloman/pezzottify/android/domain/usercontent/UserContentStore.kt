@@ -13,6 +13,7 @@ interface UserContentStore {
         type: LikedContent.ContentType,
         liked: Boolean,
         modifiedAt: Long,
+        syncStatus: SyncStatus = SyncStatus.PendingSync,
     )
 
     suspend fun updateSyncStatus(contentId: String, status: SyncStatus)

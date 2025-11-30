@@ -22,6 +22,7 @@ import com.lelloman.pezzottify.android.domain.user.ViewedContent
 import com.lelloman.pezzottify.android.domain.usercontent.GetLikedStateUseCase
 import com.lelloman.pezzottify.android.domain.usercontent.LikedContent
 import com.lelloman.pezzottify.android.domain.usercontent.ToggleLikeUseCase
+import com.lelloman.pezzottify.android.domain.usercontent.UserContentStore
 import com.lelloman.pezzottify.android.logger.LoggerFactory
 import com.lelloman.pezzottify.android.ui.screen.login.LoginViewModel
 import com.lelloman.pezzottify.android.ui.screen.main.MainScreenViewModel
@@ -30,6 +31,7 @@ import com.lelloman.pezzottify.android.ui.screen.main.content.artist.ArtistScree
 import com.lelloman.pezzottify.android.ui.screen.main.home.HomeScreenState
 import com.lelloman.pezzottify.android.ui.screen.main.home.HomeScreenViewModel
 import com.lelloman.pezzottify.android.ui.screen.main.home.ViewedContentType
+import com.lelloman.pezzottify.android.ui.screen.main.library.LibraryScreenViewModel
 import com.lelloman.pezzottify.android.ui.screen.main.profile.ProfileScreenViewModel
 import com.lelloman.pezzottify.android.ui.screen.main.profile.stylesettings.StyleSettingsViewModel
 import com.lelloman.pezzottify.android.ui.screen.main.search.SearchScreenViewModel
@@ -443,5 +445,14 @@ class InteractorsModule {
             override fun moveTrack(fromIndex: Int, toIndex: Int) = player.moveTrack(fromIndex, toIndex)
 
             override fun removeTrack(trackId: String) = player.removeTrackFromPlaylist(trackId)
+        }
+
+    @Provides
+    fun provideLibraryScreenInteractor(
+        userContentStore: UserContentStore,
+    ): LibraryScreenViewModel.Interactor =
+        object : LibraryScreenViewModel.Interactor {
+            override fun getLikedContent(): Flow<List<LikedContent>> =
+                userContentStore.getLikedContent()
         }
 }
