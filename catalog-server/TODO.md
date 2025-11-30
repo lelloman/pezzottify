@@ -2,6 +2,8 @@
 
 ### [ready for coding]
 
+- Verify that web interface works with the docker setup
+
 ### [to refine]
 
 V1 - Create catalog db

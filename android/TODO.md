@@ -21,11 +21,11 @@ We can consider V1 ready once all of the task without V2 mark are completed.
 - We should gather statistics on what's being listened. Like what track, how long. This will be useful for discovery features.
 - We should introduce user's liked content, this will populate the library's screen. (what do we show when the user doesn't have anything yet?)
 - Make a plan to introduce the user's playlist feature
-- I want E2E tests for the UI module. The reason the app is architected this way, is that we can test the UI only, without any other dependencies, making the ui a puppet basically.
 - Once the listening stats are implemented, we can add a "jump back in" component in the home screen
 
 ### [done]
 
+- ~I want E2E tests for the UI module. The reason the app is architected this way, is that we can test the UI only, without any other dependencies, making the ui a puppet basically.~
 - ~In the player screen, when the user clicks on the album's image, instead of openeing the album screen, the app crashes~
 - ~Add build info (variant, version, git commit) to profile screen, including dirty flag for uncommitted changes~
 - ~Check the styling of the login screen, I now see a light text color in the email input even if the theme is light~
@@ -58,4 +58,4 @@ We can consider V1 ready once all of the task without V2 mark are completed.
 - ~Make a component to load an album's and an artists picture with intelligent size selection and fallback~
 - ~Show tracks list in album page~
 - ~Show all albums in the artist screen~
-  - ~Show track/artists info in small player~
+- ~Show track/artists info in small player~
