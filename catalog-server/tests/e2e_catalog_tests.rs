@@ -158,6 +158,11 @@ async fn test_get_resolved_track() {
     assert!(resolved.get("album").is_some());
     assert!(resolved.get("artists").is_some());
     assert_eq!(resolved["track"]["id"], TRACK_1_ID);
+
+    // Verify duration_secs is present and correct (test fixture sets 120 for TRACK_1)
+    let duration = resolved["track"]["duration_secs"].as_i64();
+    assert!(duration.is_some(), "duration_secs should be present in response");
+    assert_eq!(duration.unwrap(), 120, "duration_secs should be 120 seconds");
 }
 
 #[tokio::test]
