@@ -255,19 +255,71 @@ impl SqliteCatalogStore {
     // Read Operations - Resolved/Composite Types
     // =========================================================================
 
-    /// Get a fully resolved artist with images and related artists.
+    /// Get a fully resolved artist with display image and related artists.
     pub fn get_resolved_artist(&self, id: &str) -> Result<Option<ResolvedArtist>> {
-        let artist = match self.get_artist(id)? {
-            Some(a) => a,
-            None => return Ok(None),
+        let conn = self.conn.lock().unwrap();
+
+        // Query artist with display_image_id
+        let mut stmt = conn.prepare(
+            "SELECT id, name, genres, activity_periods, display_image_id FROM artists WHERE id = ?1",
+        )?;
+
+        let result = stmt.query_row(params![id], |row| {
+            let genres_json: Option<String> = row.get(2)?;
+            let activity_periods_json: Option<String> = row.get(3)?;
+            let display_image_id: Option<String> = row.get(4)?;
+
+            Ok((
+                Artist {
+                    id: row.get(0)?,
+                    name: row.get(1)?,
+                    genres: genres_json
+                        .and_then(|s| serde_json::from_str(&s).ok())
+                        .unwrap_or_default(),
+                    activity_periods: activity_periods_json
+                        .and_then(|s| serde_json::from_str(&s).ok())
+                        .unwrap_or_default(),
+                },
+                display_image_id,
+            ))
+        });
+
+        let (artist, display_image_id) = match result {
+            Ok(data) => data,
+            Err(rusqlite::Error::QueryReturnedNoRows) => return Ok(None),
+            Err(e) => return Err(e.into()),
         };
 
-        let images = self.get_artist_images(id)?;
-        let related_artists = self.get_related_artists(id)?;
+        // Fetch display image if set
+        let display_image = if let Some(img_id) = display_image_id {
+            let mut img_stmt = conn.prepare(
+                "SELECT id, uri, size, width, height FROM images WHERE id = ?1",
+            )?;
+            img_stmt
+                .query_row(params![img_id], |row| {
+                    let size_str: String = row.get(2)?;
+                    let width: i32 = row.get(3)?;
+                    let height: i32 = row.get(4)?;
+                    Ok(Image {
+                        id: row.get(0)?,
+                        uri: row.get(1)?,
+                        size: ImageSize::from_db_str(&size_str),
+                        width: width as u16,
+                        height: height as u16,
+                    })
+                })
+                .ok()
+        } else {
+            None
+        };
+
+        drop(stmt);
+
+        let related_artists = Self::get_related_artists_inner(&conn, id)?;
 
         Ok(Some(ResolvedArtist {
             artist,
-            images,
+            display_image,
             related_artists,
         }))
     }
@@ -348,22 +400,77 @@ impl SqliteCatalogStore {
         Ok(Some(ArtistDiscography { albums, features }))
     }
 
-    /// Get a fully resolved album with tracks, artists, and images.
+    /// Get a fully resolved album with tracks, artists, and display image.
     pub fn get_resolved_album(&self, id: &str) -> Result<Option<ResolvedAlbum>> {
-        let album = match self.get_album(id)? {
-            Some(a) => a,
-            None => return Ok(None),
+        let conn = self.conn.lock().unwrap();
+
+        // Query album with display_image_id
+        let mut stmt = conn.prepare(
+            "SELECT id, name, album_type, label, release_date, genres, original_title, version_title, display_image_id
+             FROM albums WHERE id = ?1",
+        )?;
+
+        let result = stmt.query_row(params![id], |row| {
+            let album_type_str: String = row.get(2)?;
+            let genres_json: Option<String> = row.get(5)?;
+            let display_image_id: Option<String> = row.get(8)?;
+
+            Ok((
+                Album {
+                    id: row.get(0)?,
+                    name: row.get(1)?,
+                    album_type: AlbumType::from_db_str(&album_type_str),
+                    label: row.get(3)?,
+                    release_date: row.get(4)?,
+                    genres: genres_json
+                        .and_then(|s| serde_json::from_str(&s).ok())
+                        .unwrap_or_default(),
+                    original_title: row.get(6)?,
+                    version_title: row.get(7)?,
+                },
+                display_image_id,
+            ))
+        });
+
+        let (album, display_image_id) = match result {
+            Ok(data) => data,
+            Err(rusqlite::Error::QueryReturnedNoRows) => return Ok(None),
+            Err(e) => return Err(e.into()),
         };
 
-        let artists = self.get_album_artists(id)?;
-        let discs = self.get_album_discs(id)?;
-        let images = self.get_album_images(id)?;
+        // Fetch display image if set
+        let display_image = if let Some(img_id) = display_image_id {
+            let mut img_stmt = conn.prepare(
+                "SELECT id, uri, size, width, height FROM images WHERE id = ?1",
+            )?;
+            img_stmt
+                .query_row(params![img_id], |row| {
+                    let size_str: String = row.get(2)?;
+                    let width: i32 = row.get(3)?;
+                    let height: i32 = row.get(4)?;
+                    Ok(Image {
+                        id: row.get(0)?,
+                        uri: row.get(1)?,
+                        size: ImageSize::from_db_str(&size_str),
+                        width: width as u16,
+                        height: height as u16,
+                    })
+                })
+                .ok()
+        } else {
+            None
+        };
+
+        drop(stmt);
+
+        let artists = Self::get_album_artists_inner(&conn, id)?;
+        let discs = Self::get_album_discs_inner(&conn, id)?;
 
         Ok(Some(ResolvedAlbum {
             album,
             artists,
             discs,
-            images,
+            display_image,
         }))
     }
 
@@ -391,39 +498,11 @@ impl SqliteCatalogStore {
     // Read Operations - Relationships
     // =========================================================================
 
-    /// Get images for an artist.
-    fn get_artist_images(&self, artist_id: &str) -> Result<Vec<Image>> {
-        let conn = self.conn.lock().unwrap();
-        let mut stmt = conn.prepare(
-            "SELECT i.id, i.uri, i.size, i.width, i.height
-             FROM images i
-             INNER JOIN artist_images ai ON i.id = ai.image_id
-             WHERE ai.artist_id = ?1
-             ORDER BY ai.position",
-        )?;
-
-        let images: Vec<Image> = stmt
-            .query_map(params![artist_id], |row| {
-                let size_str: String = row.get(2)?;
-                let width: i32 = row.get(3)?;
-                let height: i32 = row.get(4)?;
-
-                Ok(Image {
-                    id: row.get(0)?,
-                    uri: row.get(1)?,
-                    size: ImageSize::from_db_str(&size_str),
-                    width: width as u16,
-                    height: height as u16,
-                })
-            })?
-            .collect::<Result<Vec<_>, _>>()?;
-
-        Ok(images)
-    }
-
-    /// Get related artists for an artist.
-    fn get_related_artists(&self, artist_id: &str) -> Result<Vec<Artist>> {
-        let conn = self.conn.lock().unwrap();
+    /// Get related artists for an artist (inner version that takes connection).
+    fn get_related_artists_inner(
+        conn: &std::sync::MutexGuard<'_, Connection>,
+        artist_id: &str,
+    ) -> Result<Vec<Artist>> {
         let mut stmt = conn.prepare(
             "SELECT a.id, a.name, a.genres, a.activity_periods
              FROM artists a
@@ -452,9 +531,11 @@ impl SqliteCatalogStore {
         Ok(artists)
     }
 
-    /// Get artists for an album.
-    fn get_album_artists(&self, album_id: &str) -> Result<Vec<Artist>> {
-        let conn = self.conn.lock().unwrap();
+    /// Get artists for an album (inner version that takes connection).
+    fn get_album_artists_inner(
+        conn: &std::sync::MutexGuard<'_, Connection>,
+        album_id: &str,
+    ) -> Result<Vec<Artist>> {
         let mut stmt = conn.prepare(
             "SELECT a.id, a.name, a.genres, a.activity_periods
              FROM artists a
@@ -484,39 +565,11 @@ impl SqliteCatalogStore {
         Ok(artists)
     }
 
-    /// Get images for an album.
-    fn get_album_images(&self, album_id: &str) -> Result<Vec<Image>> {
-        let conn = self.conn.lock().unwrap();
-        let mut stmt = conn.prepare(
-            "SELECT i.id, i.uri, i.size, i.width, i.height
-             FROM images i
-             INNER JOIN album_images ai ON i.id = ai.image_id
-             WHERE ai.album_id = ?1
-             ORDER BY ai.position",
-        )?;
-
-        let images: Vec<Image> = stmt
-            .query_map(params![album_id], |row| {
-                let size_str: String = row.get(2)?;
-                let width: i32 = row.get(3)?;
-                let height: i32 = row.get(4)?;
-
-                Ok(Image {
-                    id: row.get(0)?,
-                    uri: row.get(1)?,
-                    size: ImageSize::from_db_str(&size_str),
-                    width: width as u16,
-                    height: height as u16,
-                })
-            })?
-            .collect::<Result<Vec<_>, _>>()?;
-
-        Ok(images)
-    }
-
-    /// Get tracks for an album grouped by disc.
-    fn get_album_discs(&self, album_id: &str) -> Result<Vec<Disc>> {
-        let conn = self.conn.lock().unwrap();
+    /// Get tracks for an album grouped by disc (inner version that takes connection).
+    fn get_album_discs_inner(
+        conn: &std::sync::MutexGuard<'_, Connection>,
+        album_id: &str,
+    ) -> Result<Vec<Disc>> {
         let mut stmt = conn.prepare(
             "SELECT id, name, album_id, disc_number, track_number, duration_secs, is_explicit,
                     audio_uri, format, tags, has_lyrics, languages, original_title, version_title
@@ -1601,17 +1654,18 @@ mod tests {
                 params!["R1", "R2"],
             )
             .unwrap();
+            // Set display_image_id on the artist
             conn.execute(
-                "INSERT INTO artist_images (artist_id, image_id, image_type, position)
-                 VALUES (?1, ?2, ?3, ?4)",
-                params!["R1", "I1", "portrait", 0],
+                "UPDATE artists SET display_image_id = ?1 WHERE id = ?2",
+                params!["I1", "R1"],
             )
             .unwrap();
         }
 
         let resolved = store.get_resolved_artist("R1").unwrap().unwrap();
         assert_eq!(resolved.artist.name, "Artist 1");
-        assert_eq!(resolved.images.len(), 1);
+        assert!(resolved.display_image.is_some());
+        assert_eq!(resolved.display_image.as_ref().unwrap().id, "I1");
         assert_eq!(resolved.related_artists.len(), 1);
         assert_eq!(resolved.related_artists[0].name, "Artist 2");
     }
@@ -1633,10 +1687,10 @@ mod tests {
                 params!["A1", "R1", 0],
             )
             .unwrap();
+            // Set display_image_id on the album
             conn.execute(
-                "INSERT INTO album_images (album_id, image_id, image_type, position)
-                 VALUES (?1, ?2, ?3, ?4)",
-                params!["A1", "I1", "cover", 0],
+                "UPDATE albums SET display_image_id = ?1 WHERE id = ?2",
+                params!["I1", "A1"],
             )
             .unwrap();
         }
@@ -1647,7 +1701,8 @@ mod tests {
         assert_eq!(resolved.artists[0].name, "Artist 1");
         assert_eq!(resolved.discs.len(), 1);
         assert_eq!(resolved.discs[0].tracks.len(), 2);
-        assert_eq!(resolved.images.len(), 1);
+        assert!(resolved.display_image.is_some());
+        assert_eq!(resolved.display_image.as_ref().unwrap().id, "I1");
     }
 
     #[test]

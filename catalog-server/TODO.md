@@ -2,21 +2,19 @@
 
 ### [ready for coding]
 
-- Verify that web interface works with the docker setup
-- Mmodify artist, album and track models to have the reference to one "display image" id, then provide, if available other images
-
 ### [to refine]
 
 - Consider switching Docker deployment to use a separate nginx service for web frontend serving (Option C) instead of serving from catalog-server. This would allow independent frontend deployments and better static file optimization.
-V1 - After the catalog has been migrated to a db, modify artist, album and track models to have the reference to one "display image" id, then provide, if available other images
-V1 - Once catalog is migrated to db and catalog modification endpoints are in place, create a catalog change log to be shown to users.
-V1 - Create a catalog change log to be shown to users. We should somehow "batch" catalog changes.
-V1 - We should plan a feature to gather listening stats from users
+  V1 - Once catalog is migrated to db and catalog modification endpoints are in place, create a catalog change log to be shown to users.
+  V1 - Create a catalog change log to be shown to users. We should somehow "batch" catalog changes.
+  V1 - We should plan a feature to gather listening stats from users
 
 - Plan how are we going to put our catalog agent. This agent has the responsability to provide information to users, and if the info is not available yet in the catalog, it should be able to find it in external sources
 
 ### [done]
 
+- ~Add display_image_id to Artist and Album models (schema v1 migration) with Python script for populating from largest image~
+- ~Verify that web interface works with the docker setup~
 - ~Complete SQLite catalog migration (Phase 1-6) - See MIGRATION_PROGRESS.md~
 - ~Create catalog db (SQLite-backed CatalogStore with --catalog-db CLI flag)~
 - ~Implement catalog editing endpoints (EditCatalog permission) - CRUD for artists, albums, tracks, images~

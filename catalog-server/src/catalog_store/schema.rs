@@ -248,6 +248,71 @@ const ALBUM_IMAGES_TABLE_V0: Table = Table {
 };
 
 // =============================================================================
+// Version 1 - Add display_image_id to artists and albums
+// =============================================================================
+
+/// Artists table with display_image_id - Version 1
+const ARTISTS_TABLE_V1: Table = Table {
+    name: "artists",
+    columns: &[
+        sqlite_column!("id", &SqlType::Text, is_primary_key = true),
+        sqlite_column!("name", &SqlType::Text, non_null = true),
+        sqlite_column!("genres", &SqlType::Text), // JSON array: ["rock", "metal"]
+        sqlite_column!("activity_periods", &SqlType::Text), // JSON array of ActivityPeriod
+        sqlite_column!(
+            "display_image_id",
+            &SqlType::Text,
+            foreign_key = Some(&ForeignKey {
+                foreign_table: "images",
+                foreign_column: "id",
+                on_delete: ForeignKeyOnChange::SetNull,
+            })
+        ),
+    ],
+    indices: &[],
+    unique_constraints: &[],
+};
+
+/// Albums table with display_image_id - Version 1
+const ALBUMS_TABLE_V1: Table = Table {
+    name: "albums",
+    columns: &[
+        sqlite_column!("id", &SqlType::Text, is_primary_key = true),
+        sqlite_column!("name", &SqlType::Text, non_null = true),
+        sqlite_column!("album_type", &SqlType::Text, non_null = true), // 'ALBUM', 'SINGLE', 'EP', etc.
+        sqlite_column!("label", &SqlType::Text),
+        sqlite_column!("release_date", &SqlType::Integer), // Unix timestamp
+        sqlite_column!("genres", &SqlType::Text),          // JSON array
+        sqlite_column!("original_title", &SqlType::Text),
+        sqlite_column!("version_title", &SqlType::Text),
+        sqlite_column!(
+            "display_image_id",
+            &SqlType::Text,
+            foreign_key = Some(&ForeignKey {
+                foreign_table: "images",
+                foreign_column: "id",
+                on_delete: ForeignKeyOnChange::SetNull,
+            })
+        ),
+    ],
+    indices: &[],
+    unique_constraints: &[],
+};
+
+/// Migration from version 0 to version 1: add display_image_id columns
+fn migrate_v0_to_v1(conn: &rusqlite::Connection) -> anyhow::Result<()> {
+    conn.execute(
+        "ALTER TABLE artists ADD COLUMN display_image_id TEXT REFERENCES images(id) ON DELETE SET NULL",
+        [],
+    )?;
+    conn.execute(
+        "ALTER TABLE albums ADD COLUMN display_image_id TEXT REFERENCES images(id) ON DELETE SET NULL",
+        [],
+    )?;
+    Ok(())
+}
+
+// =============================================================================
 // Versioned Schema Definition
 // =============================================================================
 
@@ -255,23 +320,43 @@ const ALBUM_IMAGES_TABLE_V0: Table = Table {
 ///
 /// The catalog database uses a separate version namespace from the user database.
 /// Initial version (0) contains all core tables and relationship tables.
-pub const CATALOG_VERSIONED_SCHEMAS: &[VersionedSchema] = &[VersionedSchema {
-    version: 0,
-    tables: &[
-        // Core tables first (order matters for foreign keys)
-        ARTISTS_TABLE_V0,
-        ALBUMS_TABLE_V0,
-        IMAGES_TABLE_V0,
-        TRACKS_TABLE_V0,
-        // Relationship tables
-        ALBUM_ARTISTS_TABLE_V0,
-        TRACK_ARTISTS_TABLE_V0,
-        RELATED_ARTISTS_TABLE_V0,
-        ARTIST_IMAGES_TABLE_V0,
-        ALBUM_IMAGES_TABLE_V0,
-    ],
-    migration: None, // Initial version has no migration
-}];
+/// Version 1 adds display_image_id to artists and albums.
+pub const CATALOG_VERSIONED_SCHEMAS: &[VersionedSchema] = &[
+    VersionedSchema {
+        version: 0,
+        tables: &[
+            // Core tables first (order matters for foreign keys)
+            ARTISTS_TABLE_V0,
+            ALBUMS_TABLE_V0,
+            IMAGES_TABLE_V0,
+            TRACKS_TABLE_V0,
+            // Relationship tables
+            ALBUM_ARTISTS_TABLE_V0,
+            TRACK_ARTISTS_TABLE_V0,
+            RELATED_ARTISTS_TABLE_V0,
+            ARTIST_IMAGES_TABLE_V0,
+            ALBUM_IMAGES_TABLE_V0,
+        ],
+        migration: None, // Initial version has no migration
+    },
+    VersionedSchema {
+        version: 1,
+        tables: &[
+            // Core tables first (order matters for foreign keys)
+            ARTISTS_TABLE_V1,
+            ALBUMS_TABLE_V1,
+            IMAGES_TABLE_V0,
+            TRACKS_TABLE_V0,
+            // Relationship tables
+            ALBUM_ARTISTS_TABLE_V0,
+            TRACK_ARTISTS_TABLE_V0,
+            RELATED_ARTISTS_TABLE_V0,
+            ARTIST_IMAGES_TABLE_V0,
+            ALBUM_IMAGES_TABLE_V0,
+        ],
+        migration: Some(migrate_v0_to_v1),
+    },
+];
 
 #[cfg(test)]
 mod tests {

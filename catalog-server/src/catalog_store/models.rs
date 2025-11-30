@@ -304,7 +304,7 @@ pub struct Disc {
 #[derive(Clone, Debug, Serialize)]
 pub struct ResolvedArtist {
     pub artist: Artist,
-    pub images: Vec<Image>,
+    pub display_image: Option<Image>,
     pub related_artists: Vec<Artist>,
 }
 
@@ -314,7 +314,7 @@ pub struct ResolvedAlbum {
     pub album: Album,
     pub artists: Vec<Artist>,
     pub discs: Vec<Disc>,
-    pub images: Vec<Image>,
+    pub display_image: Option<Image>,
 }
 
 /// Track with its artists and album info
