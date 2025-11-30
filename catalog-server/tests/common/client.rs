@@ -12,8 +12,10 @@ use std::time::Duration;
 
 /// HTTP test client with cookie-based session management
 pub struct TestClient {
-    client: reqwest::Client,
-    base_url: String,
+    /// The underlying reqwest client (public for custom requests in tests)
+    pub client: reqwest::Client,
+    /// The base URL of the test server
+    pub base_url: String,
 }
 
 impl TestClient {
@@ -200,10 +202,10 @@ impl TestClient {
     // User Content Endpoints
     // ========================================================================
 
-    /// PUT /v1/user/liked/{content_id}
+    /// POST /v1/user/liked/{content_id}
     pub async fn add_liked_content(&self, content_id: &str) -> Response {
         self.client
-            .put(format!("{}/v1/user/liked/{}", self.base_url, content_id))
+            .post(format!("{}/v1/user/liked/{}", self.base_url, content_id))
             .send()
             .await
             .expect("Add liked content request failed")
@@ -242,17 +244,137 @@ impl TestClient {
     }
 
     // ========================================================================
+    // Playlist Endpoints
+    // ========================================================================
+
+    /// POST /v1/user/playlist
+    pub async fn create_playlist(&self, name: &str, track_ids: Vec<&str>) -> Response {
+        self.client
+            .post(format!("{}/v1/user/playlist", self.base_url))
+            .json(&serde_json::json!({
+                "name": name,
+                "track_ids": track_ids
+            }))
+            .send()
+            .await
+            .expect("Create playlist request failed")
+    }
+
+    /// GET /v1/user/playlists
+    pub async fn get_playlists(&self) -> Response {
+        self.client
+            .get(format!("{}/v1/user/playlists", self.base_url))
+            .send()
+            .await
+            .expect("Get playlists request failed")
+    }
+
+    /// GET /v1/user/playlist/{id}
+    pub async fn get_playlist(&self, id: &str) -> Response {
+        self.client
+            .get(format!("{}/v1/user/playlist/{}", self.base_url, id))
+            .send()
+            .await
+            .expect("Get playlist request failed")
+    }
+
+    /// PUT /v1/user/playlist/{id}
+    pub async fn update_playlist(
+        &self,
+        id: &str,
+        name: Option<&str>,
+        track_ids: Option<Vec<&str>>,
+    ) -> Response {
+        let mut body = serde_json::Map::new();
+        if let Some(n) = name {
+            body.insert("name".to_string(), serde_json::json!(n));
+        }
+        if let Some(tracks) = track_ids {
+            body.insert("track_ids".to_string(), serde_json::json!(tracks));
+        }
+        self.client
+            .put(format!("{}/v1/user/playlist/{}", self.base_url, id))
+            .json(&body)
+            .send()
+            .await
+            .expect("Update playlist request failed")
+    }
+
+    /// DELETE /v1/user/playlist/{id}
+    pub async fn delete_playlist(&self, id: &str) -> Response {
+        self.client
+            .delete(format!("{}/v1/user/playlist/{}", self.base_url, id))
+            .send()
+            .await
+            .expect("Delete playlist request failed")
+    }
+
+    /// PUT /v1/user/playlist/{id}/add
+    pub async fn add_tracks_to_playlist(&self, id: &str, track_ids: Vec<&str>) -> Response {
+        self.client
+            .put(format!("{}/v1/user/playlist/{}/add", self.base_url, id))
+            .json(&serde_json::json!({
+                "tracks_ids": track_ids
+            }))
+            .send()
+            .await
+            .expect("Add tracks to playlist request failed")
+    }
+
+    /// PUT /v1/user/playlist/{id}/remove
+    pub async fn remove_tracks_from_playlist(&self, id: &str, positions: Vec<usize>) -> Response {
+        self.client
+            .put(format!("{}/v1/user/playlist/{}/remove", self.base_url, id))
+            .json(&serde_json::json!({
+                "tracks_positions": positions
+            }))
+            .send()
+            .await
+            .expect("Remove tracks from playlist request failed")
+    }
+
+    // ========================================================================
     // Search Endpoints
     // ========================================================================
 
-    /// GET /v1/search?q={query}
+    /// POST /v1/content/search
     pub async fn search(&self, query: &str) -> Response {
         self.client
-            .get(format!("{}/v1/search", self.base_url))
-            .query(&[("q", query)])
+            .post(format!("{}/v1/content/search", self.base_url))
+            .json(&serde_json::json!({
+                "query": query,
+                "resolve": false
+            }))
             .send()
             .await
             .expect("Search request failed")
+    }
+
+    /// POST /v1/content/search with resolve=true
+    pub async fn search_resolved(&self, query: &str) -> Response {
+        self.client
+            .post(format!("{}/v1/content/search", self.base_url))
+            .json(&serde_json::json!({
+                "query": query,
+                "resolve": true
+            }))
+            .send()
+            .await
+            .expect("Search resolved request failed")
+    }
+
+    /// POST /v1/content/search with filters
+    pub async fn search_with_filters(&self, query: &str, filters: Vec<&str>) -> Response {
+        self.client
+            .post(format!("{}/v1/content/search", self.base_url))
+            .json(&serde_json::json!({
+                "query": query,
+                "resolve": true,
+                "filters": filters
+            }))
+            .send()
+            .await
+            .expect("Search with filters request failed")
     }
 
     // ========================================================================
