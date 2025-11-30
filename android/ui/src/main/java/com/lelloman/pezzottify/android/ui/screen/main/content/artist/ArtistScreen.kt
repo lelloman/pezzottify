@@ -3,6 +3,7 @@ package com.lelloman.pezzottify.android.ui.screen.main.content.artist
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -28,10 +29,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import kotlin.math.min
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -102,36 +105,44 @@ fun ArtistLoadedScreen(
     actions: ArtistScreenActions
 ) {
     val listState = rememberLazyListState()
+    val density = LocalDensity.current
 
     // Define header dimensions
     val maxHeaderHeight = 300.dp
     val minHeaderHeight = 80.dp
-    val collapseRange = (maxHeaderHeight - minHeaderHeight).value
+    val collapseRangeDp = maxHeaderHeight - minHeaderHeight
+    val collapseRangePx = with(density) { collapseRangeDp.toPx() }
     val likeButtonSize = 56.dp
 
-    // Calculate scroll-based values
-    val scrollOffset by remember {
+    // Calculate scroll-based values (in pixels)
+    val scrollOffsetPx by remember {
         derivedStateOf {
             if (listState.firstVisibleItemIndex == 0) {
-                min(listState.firstVisibleItemScrollOffset.toFloat(), collapseRange)
+                min(listState.firstVisibleItemScrollOffset.toFloat(), collapseRangePx)
             } else {
-                collapseRange
+                collapseRangePx
             }
+        }
+    }
+
+    // Calculate collapse progress (0 = expanded, 1 = collapsed)
+    val collapseProgress by remember {
+        derivedStateOf {
+            scrollOffsetPx / collapseRangePx
         }
     }
 
     // Calculate header height (gradual collapse)
     val headerHeight by remember {
         derivedStateOf {
-            (maxHeaderHeight.value - scrollOffset).dp
+            maxHeaderHeight - (collapseRangeDp * collapseProgress)
         }
     }
 
     // Calculate image alpha (fade out as it collapses)
     val imageAlpha by remember {
         derivedStateOf {
-            val progress = scrollOffset / collapseRange
-            1f - progress
+            1f - collapseProgress
         }
     }
 
@@ -222,12 +233,13 @@ fun ArtistLoadedScreen(
                     )
                 }
 
-                // Gradient scrim for text readability
+                // Gradient scrim for text readability (fades with image)
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(120.dp)
                         .align(Alignment.BottomStart)
+                        .alpha(imageAlpha)
                         .background(
                             Brush.verticalGradient(
                                 colors = listOf(
@@ -238,11 +250,16 @@ fun ArtistLoadedScreen(
                         )
                 )
 
-                // Artist name
+                // Artist name - color transitions from white (over image) to onSurface (collapsed)
+                val textColor = lerp(
+                    MaterialTheme.colorScheme.onSurface,
+                    Color.White,
+                    imageAlpha
+                )
                 Text(
                     text = artist.name,
                     style = MaterialTheme.typography.headlineLarge,
-                    color = Color.White,
+                    color = textColor,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier
@@ -290,30 +307,32 @@ private fun AlbumGrid(
     contentResolver: ContentResolver,
     navController: NavController
 ) {
-    val maxGroupSize = 2
-    albumIds.forEachGroup(maxGroupSize) { ids ->
-        Row(modifier = Modifier.fillMaxWidth()) {
-            for (i in 0 until maxGroupSize) {
-                val albumId = ids.getOrNull(i)
-                if (albumId != null) {
-                    val albumFlow = contentResolver.resolveAlbum(albumId)
-                    val albumState = albumFlow.collectAsState(Content.Loading(albumId))
-                    when (val album = albumState.value) {
-                        is Content.Resolved -> {
-                            AlbumGridItem(
-                                modifier = Modifier.weight(1f),
-                                albumName = album.data.name,
-                                albumDate = album.data.date,
-                                albumCoverUrl = album.data.imageUrl,
-                                onClick = { navController.toAlbum(albumId) }
-                            )
+    Column(modifier = Modifier.padding(horizontal = 12.dp)) {
+        val maxGroupSize = 2
+        albumIds.forEachGroup(maxGroupSize) { ids ->
+            Row(modifier = Modifier.fillMaxWidth()) {
+                for (i in 0 until maxGroupSize) {
+                    val albumId = ids.getOrNull(i)
+                    if (albumId != null) {
+                        val albumFlow = contentResolver.resolveAlbum(albumId)
+                        val albumState = albumFlow.collectAsState(Content.Loading(albumId))
+                        when (val album = albumState.value) {
+                            is Content.Resolved -> {
+                                AlbumGridItem(
+                                    modifier = Modifier.weight(1f),
+                                    albumName = album.data.name,
+                                    albumDate = album.data.date,
+                                    albumCoverUrl = album.data.imageUrl,
+                                    onClick = { navController.toAlbum(albumId) }
+                                )
+                            }
+                            is Content.Loading, is Content.Error -> {
+                                Spacer(modifier = Modifier.weight(1f))
+                            }
                         }
-                        is Content.Loading, is Content.Error -> {
-                            Spacer(modifier = Modifier.weight(1f))
-                        }
+                    } else {
+                        Spacer(modifier = Modifier.weight(1f))
                     }
-                } else {
-                    Spacer(modifier = Modifier.weight(1f))
                 }
             }
         }

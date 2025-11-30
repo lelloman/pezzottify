@@ -2,6 +2,7 @@ package com.lelloman.pezzottify.android.ui.component
 
 import android.annotation.SuppressLint
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.size
@@ -164,6 +165,13 @@ sealed interface PezzottifyImageShape {
     data object SmallSquare : PezzottifyImageShape {
         val size = 96.dp
         override fun modifier(modifier: Modifier) = modifier.size(size)
+    }
+
+    data object FillWidthSquare : PezzottifyImageShape {
+        override fun modifier(modifier: Modifier) = modifier
+            .fillMaxWidth()
+            .aspectRatio(1f)
+        override val contentScale: ContentScale = ContentScale.Crop
     }
 
     data object SmallCircle : PezzottifyImageShape {

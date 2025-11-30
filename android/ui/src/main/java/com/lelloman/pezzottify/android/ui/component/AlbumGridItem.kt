@@ -26,26 +26,27 @@ fun AlbumGridItem(
         modifier = modifier
             .fillMaxWidth()
             .clickable(onClick = onClick)
-            .padding(8.dp)
+            .padding(horizontal = 12.dp, vertical = 8.dp)
     ) {
         NullablePezzottifyImage(
             url = albumCoverUrl,
-            shape = PezzottifyImageShape.SmallSquare,
+            shape = PezzottifyImageShape.FillWidthSquare,
             placeholder = PezzottifyImagePlaceholder.GenericImage,
         )
 
         Text(
             text = albumName,
-            style = MaterialTheme.typography.bodyMedium,
+            style = MaterialTheme.typography.titleSmall,
             maxLines = 2,
             overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.padding(top = 4.dp)
+            modifier = Modifier.padding(top = 8.dp)
         )
 
         Text(
             text = formatYear(albumDate),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 2.dp)
         )
     }
 }
