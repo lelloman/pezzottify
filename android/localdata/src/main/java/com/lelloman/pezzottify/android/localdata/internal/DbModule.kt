@@ -27,6 +27,7 @@ internal class DbModule {
     @Singleton
     internal fun provideUserDataDb(@ApplicationContext context: Context): UserDataDb = Room
         .databaseBuilder(context, UserDataDb::class.java, UserDataDb.NAME)
+        .addMigrations(UserDataDb.MIGRATION_1_2)
         .build()
 
     @Provides

@@ -13,4 +13,6 @@ interface SearchScreenActions {
     fun clickOnTrackSearchResult(trackId: String)
 
     fun clickOnRecentlyViewedItem(itemId: String, itemType: ViewedContentType)
+
+    fun clickOnSearchHistoryItem(itemId: String, itemType: ViewedContentType)
 }

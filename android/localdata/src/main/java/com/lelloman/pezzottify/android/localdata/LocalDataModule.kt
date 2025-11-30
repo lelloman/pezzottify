@@ -63,8 +63,13 @@ class LocalDataModule {
     @Provides
     @Singleton
     internal fun provideUserDataStore(
-        userDataDb: UserDataDb
-    ): UserDataStore = UserDataStoreImpl(userDataDb.viewedContentDao())
+        userDataDb: UserDataDb,
+        timeProvider: TimeProvider,
+    ): UserDataStore = UserDataStoreImpl(
+        viewedContentDao = userDataDb.viewedContentDao(),
+        searchHistoryEntryDao = userDataDb.searchHistoryEntryDao(),
+        timeProvider = { timeProvider.nowUtcMs() },
+    )
 
     @Provides
     @Singleton

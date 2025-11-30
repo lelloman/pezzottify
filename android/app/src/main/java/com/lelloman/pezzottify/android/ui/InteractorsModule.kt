@@ -17,7 +17,10 @@ import com.lelloman.pezzottify.android.domain.settings.ThemeMode
 import com.lelloman.pezzottify.android.domain.settings.UserSettingsStore
 import com.lelloman.pezzottify.android.domain.statics.usecase.PerformSearch
 import com.lelloman.pezzottify.android.domain.user.GetRecentlyViewedContentUseCase
+import com.lelloman.pezzottify.android.domain.user.GetSearchHistoryEntriesUseCase
+import com.lelloman.pezzottify.android.domain.user.LogSearchHistoryEntryUseCase
 import com.lelloman.pezzottify.android.domain.user.LogViewedContentUseCase
+import com.lelloman.pezzottify.android.domain.user.SearchHistoryEntry
 import com.lelloman.pezzottify.android.domain.user.ViewedContent
 import com.lelloman.pezzottify.android.domain.usercontent.GetLikedStateUseCase
 import com.lelloman.pezzottify.android.domain.usercontent.LikedContent
@@ -179,6 +182,8 @@ class InteractorsModule {
         performSearch: PerformSearch,
         loggerFactory: LoggerFactory,
         getRecentlyViewedContent: GetRecentlyViewedContentUseCase,
+        getSearchHistoryEntries: GetSearchHistoryEntriesUseCase,
+        logSearchHistoryEntry: LogSearchHistoryEntryUseCase,
     ): SearchScreenViewModel.Interactor =
         object : SearchScreenViewModel.Interactor {
             private val logger = loggerFactory.getLogger("SearchScreenViewModel.Interactor")
@@ -217,6 +222,31 @@ class InteractorsModule {
                         SearchScreenViewModel.RecentlyViewedContent(item.contentId, type)
                     }
                 }
+
+            override fun getSearchHistoryEntries(maxCount: Int): Flow<List<SearchScreenViewModel.SearchHistoryEntry>> =
+                getSearchHistoryEntries(maxCount).map {
+                    it.map { item ->
+                        val type = when (item.contentType) {
+                            SearchHistoryEntry.Type.Album -> ViewedContentType.Album
+                            SearchHistoryEntry.Type.Artist -> ViewedContentType.Artist
+                            SearchHistoryEntry.Type.Track -> ViewedContentType.Track
+                        }
+                        SearchScreenViewModel.SearchHistoryEntry(item.query, item.contentId, type)
+                    }
+                }
+
+            override fun logSearchHistoryEntry(
+                query: String,
+                contentType: SearchScreenViewModel.SearchHistoryEntryType,
+                contentId: String
+            ) {
+                val domainType = when (contentType) {
+                    SearchScreenViewModel.SearchHistoryEntryType.Album -> SearchHistoryEntry.Type.Album
+                    SearchScreenViewModel.SearchHistoryEntryType.Artist -> SearchHistoryEntry.Type.Artist
+                    SearchScreenViewModel.SearchHistoryEntryType.Track -> SearchHistoryEntry.Type.Track
+                }
+                logSearchHistoryEntry(query, domainType, contentId)
+            }
         }
 
     @Provides

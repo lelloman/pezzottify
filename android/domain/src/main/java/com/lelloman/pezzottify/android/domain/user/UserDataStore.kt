@@ -11,6 +11,14 @@ interface UserDataStore {
         limit: Int,
     ): Flow<List<ViewedContent>>
 
+    suspend fun addSearchHistoryEntry(
+        query: String,
+        contentType: SearchHistoryEntry.Type,
+        contentId: String,
+    )
+
+    fun getSearchHistoryEntries(limit: Int): Flow<List<SearchHistoryEntry>>
+
     suspend fun deleteAll()
 
 }

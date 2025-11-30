@@ -6,6 +6,7 @@ import com.lelloman.pezzottify.android.domain.player.PezzottifyPlayer
 import com.lelloman.pezzottify.android.domain.remoteapi.RemoteApiClient
 import com.lelloman.pezzottify.android.domain.statics.StaticsStore
 import com.lelloman.pezzottify.android.domain.user.UserDataStore
+import com.lelloman.pezzottify.android.domain.usercontent.UserContentStore
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.mockk
@@ -19,6 +20,7 @@ class PerformLogoutTest {
     private lateinit var remoteApiClient: RemoteApiClient
     private lateinit var staticsStore: StaticsStore
     private lateinit var userDataStore: UserDataStore
+    private lateinit var userContentStore: UserContentStore
     private lateinit var player: PezzottifyPlayer
 
     private lateinit var performLogout: PerformLogout
@@ -29,6 +31,7 @@ class PerformLogoutTest {
         remoteApiClient = mockk(relaxed = true)
         staticsStore = mockk(relaxed = true)
         userDataStore = mockk(relaxed = true)
+        userContentStore = mockk(relaxed = true)
         player = mockk(relaxed = true)
 
         performLogout = PerformLogout(
@@ -36,6 +39,7 @@ class PerformLogoutTest {
             remoteApiClient = remoteApiClient,
             staticsStore = staticsStore,
             userDataStore = userDataStore,
+            userContentStore = userContentStore,
             player = player,
         )
     }
@@ -76,6 +80,13 @@ class PerformLogoutTest {
     }
 
     @Test
+    fun `invoke deletes all user content`() = runTest {
+        performLogout()
+
+        coVerify { userContentStore.deleteAll() }
+    }
+
+    @Test
     fun `invoke calls all cleanup operations`() = runTest {
         performLogout()
 
@@ -85,6 +96,7 @@ class PerformLogoutTest {
             remoteApiClient.logout()
             staticsStore.deleteAll()
             userDataStore.deleteAll()
+            userContentStore.deleteAll()
         }
     }
 }

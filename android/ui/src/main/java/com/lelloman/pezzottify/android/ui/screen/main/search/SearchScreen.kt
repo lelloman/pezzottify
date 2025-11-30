@@ -106,11 +106,19 @@ fun SearchScreenContent(
 
         }
         if (state.query.isEmpty()) {
-            RecentlyViewedSection(
-                modifier = Modifier.weight(1f),
-                recentlyViewedContent = state.recentlyViewedContent,
-                actions = actions
-            )
+            if (!state.searchHistoryItems.isNullOrEmpty()) {
+                SearchHistorySection(
+                    modifier = Modifier.weight(1f),
+                    searchHistoryItems = state.searchHistoryItems,
+                    actions = actions
+                )
+            } else {
+                RecentlyViewedSection(
+                    modifier = Modifier.weight(1f),
+                    recentlyViewedContent = state.recentlyViewedContent,
+                    actions = actions
+                )
+            }
         } else {
             LazyColumn(
                 modifier = Modifier
@@ -133,6 +141,134 @@ fun SearchScreenContent(
                             is Content.Error -> ErrorSearchResult()
                         }
                     }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SearchHistorySection(
+    modifier: Modifier,
+    searchHistoryItems: List<Flow<Content<SearchHistoryItem>>>,
+    actions: SearchScreenActions
+) {
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = Spacing.Medium)
+            .padding(top = Spacing.Medium)
+    ) {
+        val maxGroupSize = 2
+        searchHistoryItems.forEachGroup(maxGroupSize) { items ->
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(Spacing.Small)
+            ) {
+                for (i in 0 until maxGroupSize) {
+                    val item = items.getOrNull(i)
+                    val itemState = item?.collectAsState(null)
+                    itemState?.value?.let {
+                        SearchHistoryItemCard(
+                            modifier = Modifier.weight(1f),
+                            item = it,
+                            actions = actions
+                        )
+                    } ?: run {
+                        Spacer(modifier = Modifier.weight(1f))
+                    }
+                }
+            }
+            Spacer(modifier = Modifier.height(Spacing.Small))
+        }
+    }
+}
+
+@Composable
+private fun SearchHistoryItemCard(
+    modifier: Modifier,
+    item: Content<SearchHistoryItem>,
+    actions: SearchScreenActions
+) {
+    when (item) {
+        is Content.Resolved -> {
+            Card(
+                modifier = modifier
+                    .fillMaxWidth()
+                    .clickable {
+                        actions.clickOnSearchHistoryItem(
+                            item.itemId,
+                            item.data.contentType
+                        )
+                    },
+                shape = RoundedCornerShape(CornerRadius.Medium),
+                elevation = CardDefaults.cardElevation(
+                    defaultElevation = Elevation.Small
+                )
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(Spacing.Small),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    NullablePezzottifyImage(
+                        url = item.data.contentImageUrl,
+                        shape = PezzottifyImageShape.SmallSquare,
+                        modifier = Modifier.size(ComponentSize.ImageThumbSmall)
+                    )
+                    Spacer(modifier = Modifier.width(Spacing.Small))
+                    Column(
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text(
+                            text = item.data.contentName,
+                            style = MaterialTheme.typography.titleMedium,
+                            maxLines = 1,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Text(
+                            text = "\"${item.data.query}\"",
+                            style = MaterialTheme.typography.bodySmall,
+                            maxLines = 1,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+        }
+
+        is Content.Loading -> {
+            Box(
+                modifier = modifier
+                    .fillMaxWidth()
+                    .height(ComponentSize.ImageThumbSmall),
+                contentAlignment = Alignment.Center
+            ) {
+                CircularProgressIndicator()
+            }
+        }
+
+        is Content.Error -> {
+            Card(
+                modifier = modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(CornerRadius.Medium),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.errorContainer
+                )
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(ComponentSize.ImageThumbSmall)
+                        .padding(Spacing.Small),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = ":(",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onErrorContainer
+                    )
                 }
             }
         }

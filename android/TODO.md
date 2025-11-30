@@ -12,7 +12,7 @@ We can consider V1 ready once all of the task without V2 mark are completed.
 - Create a "memory pressure" component that can detect how much memory can we use for caches and such (imagine caching stuff from the db, pre-loading audio, images)
 - Add an in-memory immediate cache layer in ContentResolver, only after a "memory pressure" component
 - Add recent searches component to the search screen (store and display user's search history)
-- The search screen shows recently viewed items when query is empty (V1, done), add recent searches too (V2)
+- ~The search screen shows recently viewed items when query is empty (V1, done), add recent searches too (V2)~
 - Add a contextual menu to queue albums and tracks (add to current playlist instead of replacing)
 - We should probably think about collecting information about storage used and how it is used. For instance, it would be cool to cache audio files, but the feature needs to be storage-aware.
 - We need to plan a "download" feature for albums and tracks
