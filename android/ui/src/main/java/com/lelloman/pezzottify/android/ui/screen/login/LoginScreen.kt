@@ -57,7 +57,7 @@ fun LoginScreen(navController: NavController) {
 }
 
 @Composable
-private fun LoginScreenInternal(
+internal fun LoginScreenInternal(
     state: LoginScreenState,
     events: Flow<LoginScreenEvents>,
     actions: LoginScreenActions,
