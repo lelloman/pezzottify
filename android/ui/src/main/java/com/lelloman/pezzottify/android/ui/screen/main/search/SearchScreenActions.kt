@@ -1,5 +1,7 @@
 package com.lelloman.pezzottify.android.ui.screen.main.search
 
+import com.lelloman.pezzottify.android.ui.screen.main.home.ViewedContentType
+
 interface SearchScreenActions {
 
     fun updateQuery(query: String)
@@ -9,4 +11,6 @@ interface SearchScreenActions {
     fun clickOnAlbumSearchResult(albumId: String)
 
     fun clickOnTrackSearchResult(trackId: String)
+
+    fun clickOnRecentlyViewedItem(itemId: String, itemType: ViewedContentType)
 }

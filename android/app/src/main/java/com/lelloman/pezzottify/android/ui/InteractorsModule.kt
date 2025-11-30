@@ -178,6 +178,7 @@ class InteractorsModule {
     fun provideSearchScreenInteractor(
         performSearch: PerformSearch,
         loggerFactory: LoggerFactory,
+        getRecentlyViewedContent: GetRecentlyViewedContentUseCase,
     ): SearchScreenViewModel.Interactor =
         object : SearchScreenViewModel.Interactor {
             private val logger = loggerFactory.getLogger("SearchScreenViewModel.Interactor")
@@ -203,6 +204,19 @@ class InteractorsModule {
                 logger.debug("search($query) returning $mappedResult")
                 return Result.success(mappedResult)
             }
+
+            override suspend fun getRecentlyViewedContent(maxCount: Int): Flow<List<SearchScreenViewModel.RecentlyViewedContent>> =
+                getRecentlyViewedContent(maxCount).map {
+                    it.map { item ->
+                        val type = when (item.type) {
+                            ViewedContent.Type.Album -> ViewedContentType.Album
+                            ViewedContent.Type.Artist -> ViewedContentType.Artist
+                            ViewedContent.Type.Track -> ViewedContentType.Track
+                            ViewedContent.Type.UserPlaylist -> ViewedContentType.Playlist
+                        }
+                        SearchScreenViewModel.RecentlyViewedContent(item.contentId, type)
+                    }
+                }
         }
 
     @Provides
