@@ -20,6 +20,12 @@ internal class UserSettingsStoreImpl(
 
     private val prefs = context.getSharedPreferences(SHARED_PREF_FILE_NAME, Context.MODE_PRIVATE)
 
+    // Migration: if user had AmoledBlack palette (now removed), migrate to Amoled theme mode
+    private val shouldMigrateToAmoledTheme: Boolean by lazy {
+        val storedPalette = prefs.getString(KEY_COLOR_PALETTE, null)
+        storedPalette == LEGACY_AMOLED_BLACK_PALETTE
+    }
+
     private val mutablePlayBehavior by lazy {
         val storedValue = prefs.getString(KEY_PLAY_BEHAVIOR, null)
         val playBehavior = storedValue?.let { parsePlayBehavior(it) } ?: PlayBehavior.Default
@@ -29,14 +35,26 @@ internal class UserSettingsStoreImpl(
 
     private val mutableThemeMode by lazy {
         val storedValue = prefs.getString(KEY_THEME_MODE, null)
-        val themeMode = storedValue?.let { parseThemeMode(it) } ?: ThemeMode.Default
+        val themeMode = if (shouldMigrateToAmoledTheme) {
+            // Migrate user from AmoledBlack palette to Amoled theme mode
+            prefs.edit().putString(KEY_THEME_MODE, ThemeMode.Amoled.name).apply()
+            ThemeMode.Amoled
+        } else {
+            storedValue?.let { parseThemeMode(it) } ?: ThemeMode.Default
+        }
         MutableStateFlow(themeMode)
     }
     override val themeMode: StateFlow<ThemeMode> = mutableThemeMode.asStateFlow()
 
     private val mutableColorPalette by lazy {
         val storedValue = prefs.getString(KEY_COLOR_PALETTE, null)
-        val colorPalette = storedValue?.let { parseColorPalette(it) } ?: ColorPalette.Default
+        val colorPalette = if (shouldMigrateToAmoledTheme) {
+            // Migrate user from AmoledBlack palette to Classic palette
+            prefs.edit().putString(KEY_COLOR_PALETTE, ColorPalette.Classic.name).apply()
+            ColorPalette.Classic
+        } else {
+            storedValue?.let { parseColorPalette(it) } ?: ColorPalette.Default
+        }
         MutableStateFlow(colorPalette)
     }
     override val colorPalette: StateFlow<ColorPalette> = mutableColorPalette.asStateFlow()
@@ -106,5 +124,7 @@ internal class UserSettingsStoreImpl(
         const val KEY_THEME_MODE = "ThemeMode"
         const val KEY_COLOR_PALETTE = "ColorPalette"
         const val KEY_FONT_FAMILY = "FontFamily"
+        // Legacy value for migration - AmoledBlack was removed and converted to Amoled theme mode
+        const val LEGACY_AMOLED_BLACK_PALETTE = "AmoledBlack"
     }
 }

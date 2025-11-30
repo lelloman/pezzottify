@@ -27,7 +27,8 @@ enum class PlayBehavior {
 enum class ThemeMode {
     System,
     Light,
-    Dark;
+    Dark,
+    Amoled;  // True black for OLED screens
 
     companion object {
         val Default = System
@@ -39,7 +40,9 @@ enum class ColorPalette {
     OceanBlue,    // Cool blue tones
     SunsetCoral,  // Warm coral/orange tones
     PurpleHaze,   // Violet/purple theme
-    AmoledBlack;  // True black for OLED screens
+    RoseGold,     // Warm pink/rose tones
+    Midnight,     // Deep navy/indigo tones
+    Forest;       // Earthy green/brown tones
 
     companion object {
         val Default = Classic

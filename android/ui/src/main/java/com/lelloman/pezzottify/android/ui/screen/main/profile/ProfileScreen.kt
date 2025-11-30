@@ -16,12 +16,12 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
-import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -185,33 +185,6 @@ private fun ProfileScreenInternal(
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            // Theme Setting
-            SettingsLabel(text = "Theme")
-            Spacer(modifier = Modifier.height(8.dp))
-            SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
-                ThemeMode.entries.forEachIndexed { index, themeMode ->
-                    SegmentedButton(
-                        shape = SegmentedButtonDefaults.itemShape(
-                            index = index,
-                            count = ThemeMode.entries.size
-                        ),
-                        onClick = { actions.selectThemeMode(themeMode) },
-                        selected = currentState.themeMode == themeMode
-                    ) {
-                        Text(
-                            text = when (themeMode) {
-                                ThemeMode.System -> "System"
-                                ThemeMode.Light -> "Light"
-                                ThemeMode.Dark -> "Dark"
-                            },
-                            maxLines = 1
-                        )
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(24.dp))
-
             // Appearance Settings Navigation
             Row(
                 modifier = Modifier
@@ -227,7 +200,7 @@ private fun ProfileScreenInternal(
                         color = MaterialTheme.colorScheme.onSurface
                     )
                     Text(
-                        text = "Color palette and font",
+                        text = "Theme, color palette and font",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )

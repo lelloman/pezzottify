@@ -12,6 +12,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.lelloman.pezzottify.android.domain.settings.AppFontFamily
 import com.lelloman.pezzottify.android.domain.settings.ColorPalette
+import com.lelloman.pezzottify.android.domain.settings.ThemeMode
 
 private val AppShapes = Shapes(
     extraSmall = RoundedCornerShape(4.dp),
@@ -24,6 +25,7 @@ private val AppShapes = Shapes(
 @Composable
 fun PezzottifyTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
+    themeMode: ThemeMode = ThemeMode.System,
     colorPalette: ColorPalette = ColorPalette.Classic,
     fontFamily: AppFontFamily = AppFontFamily.System,
     // Dynamic color is available on Android 12+
@@ -31,13 +33,25 @@ fun PezzottifyTheme(
     dynamicColor: Boolean = false,
     content: @Composable () -> Unit
 ) {
+    // Determine if we should use dark theme based on ThemeMode
+    val useDarkTheme = when (themeMode) {
+        ThemeMode.System -> darkTheme
+        ThemeMode.Light -> false
+        ThemeMode.Dark -> true
+        ThemeMode.Amoled -> true  // AMOLED is always dark
+    }
+
     val colorScheme = when {
         dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
             val context = LocalContext.current
-            if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
+            val scheme = if (useDarkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
+            if (themeMode == ThemeMode.Amoled) scheme.withAmoledBlacks() else scheme
         }
 
-        else -> getColorScheme(colorPalette, darkTheme)
+        else -> {
+            val scheme = getColorScheme(colorPalette, useDarkTheme)
+            if (themeMode == ThemeMode.Amoled) scheme.withAmoledBlacks() else scheme
+        }
     }
 
     val typography = createTypography(fontFamily)

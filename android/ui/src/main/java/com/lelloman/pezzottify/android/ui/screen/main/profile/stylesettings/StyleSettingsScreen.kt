@@ -27,6 +27,9 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
@@ -44,6 +47,7 @@ import androidx.navigation.NavController
 import androidx.navigation.compose.rememberNavController
 import com.lelloman.pezzottify.android.domain.settings.AppFontFamily
 import com.lelloman.pezzottify.android.domain.settings.ColorPalette
+import com.lelloman.pezzottify.android.domain.settings.ThemeMode
 import com.lelloman.pezzottify.android.ui.theme.PezzottifyTheme
 import com.lelloman.pezzottify.android.ui.theme.getPalettePreviewColors
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -89,13 +93,53 @@ private fun StyleSettingsScreenInternal(
                 .padding(innerPadding)
                 .padding(horizontal = 16.dp)
         ) {
+            // Theme Mode Section
+            item {
+                Text(
+                    text = "Theme",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(vertical = 16.dp)
+                )
+            }
+
+            item {
+                SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+                    ThemeMode.entries.forEachIndexed { index, themeMode ->
+                        SegmentedButton(
+                            shape = SegmentedButtonDefaults.itemShape(
+                                index = index,
+                                count = ThemeMode.entries.size
+                            ),
+                            onClick = { actions.selectThemeMode(themeMode) },
+                            selected = currentState.themeMode == themeMode
+                        ) {
+                            Text(
+                                text = getThemeModeName(themeMode),
+                                maxLines = 1
+                            )
+                        }
+                    }
+                }
+                Text(
+                    text = getThemeModeDescription(currentState.themeMode),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 4.dp)
+                )
+            }
+
+            item {
+                HorizontalDivider(modifier = Modifier.padding(vertical = 24.dp))
+            }
+
             // Color Palette Section
             item {
                 Text(
                     text = "Color Palette",
                     style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.padding(vertical = 16.dp)
+                    modifier = Modifier.padding(bottom = 16.dp)
                 )
             }
 
@@ -286,12 +330,28 @@ private fun FontFamilyItem(
     Spacer(modifier = Modifier.height(8.dp))
 }
 
+private fun getThemeModeName(themeMode: ThemeMode): String = when (themeMode) {
+    ThemeMode.System -> "System"
+    ThemeMode.Light -> "Light"
+    ThemeMode.Dark -> "Dark"
+    ThemeMode.Amoled -> "AMOLED"
+}
+
+private fun getThemeModeDescription(themeMode: ThemeMode): String = when (themeMode) {
+    ThemeMode.System -> "Follow system theme settings"
+    ThemeMode.Light -> "Always use light theme"
+    ThemeMode.Dark -> "Always use dark theme"
+    ThemeMode.Amoled -> "True black for OLED screens"
+}
+
 private fun getPaletteName(palette: ColorPalette): String = when (palette) {
     ColorPalette.Classic -> "Classic Green"
     ColorPalette.OceanBlue -> "Ocean Blue"
     ColorPalette.SunsetCoral -> "Sunset Coral"
     ColorPalette.PurpleHaze -> "Purple Haze"
-    ColorPalette.AmoledBlack -> "AMOLED Black"
+    ColorPalette.RoseGold -> "Rose Gold"
+    ColorPalette.Midnight -> "Midnight"
+    ColorPalette.Forest -> "Forest"
 }
 
 private fun getPaletteDescription(palette: ColorPalette): String = when (palette) {
@@ -299,7 +359,9 @@ private fun getPaletteDescription(palette: ColorPalette): String = when (palette
     ColorPalette.OceanBlue -> "Cool, calming blue tones"
     ColorPalette.SunsetCoral -> "Warm coral and orange"
     ColorPalette.PurpleHaze -> "Rich violet and purple"
-    ColorPalette.AmoledBlack -> "True black for OLED screens"
+    ColorPalette.RoseGold -> "Warm pink and rose tones"
+    ColorPalette.Midnight -> "Deep navy and indigo"
+    ColorPalette.Forest -> "Earthy green and brown"
 }
 
 private fun getFontFamilyName(fontFamily: AppFontFamily): String = when (fontFamily) {
@@ -323,12 +385,14 @@ private fun StyleSettingsScreenPreview() {
         StyleSettingsScreenInternal(
             state = MutableStateFlow(
                 StyleSettingsState(
+                    themeMode = ThemeMode.System,
                     colorPalette = ColorPalette.Classic,
                     fontFamily = AppFontFamily.System,
                 )
             ),
             navController = rememberNavController(),
             actions = object : StyleSettingsActions {
+                override fun selectThemeMode(themeMode: ThemeMode) {}
                 override fun selectColorPalette(colorPalette: ColorPalette) {}
                 override fun selectFontFamily(fontFamily: AppFontFamily) {}
             },
@@ -339,16 +403,18 @@ private fun StyleSettingsScreenPreview() {
 @Composable
 @Preview(showBackground = true)
 private fun StyleSettingsScreenPreviewDark() {
-    PezzottifyTheme(darkTheme = true, colorPalette = ColorPalette.PurpleHaze) {
+    PezzottifyTheme(themeMode = ThemeMode.Dark, colorPalette = ColorPalette.PurpleHaze) {
         StyleSettingsScreenInternal(
             state = MutableStateFlow(
                 StyleSettingsState(
+                    themeMode = ThemeMode.Amoled,
                     colorPalette = ColorPalette.PurpleHaze,
                     fontFamily = AppFontFamily.Monospace,
                 )
             ),
             navController = rememberNavController(),
             actions = object : StyleSettingsActions {
+                override fun selectThemeMode(themeMode: ThemeMode) {}
                 override fun selectColorPalette(colorPalette: ColorPalette) {}
                 override fun selectFontFamily(fontFamily: AppFontFamily) {}
             },

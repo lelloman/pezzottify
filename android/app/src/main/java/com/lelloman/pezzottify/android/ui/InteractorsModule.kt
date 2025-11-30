@@ -144,13 +144,21 @@ class InteractorsModule {
     fun provideStyleSettingsInteractor(
         userSettingsStore: UserSettingsStore,
     ): StyleSettingsViewModel.Interactor = object : StyleSettingsViewModel.Interactor {
+        override fun getThemeMode(): ThemeMode = userSettingsStore.themeMode.value
+
         override fun getColorPalette(): ColorPalette = userSettingsStore.colorPalette.value
 
         override fun getFontFamily(): AppFontFamily = userSettingsStore.fontFamily.value
 
+        override fun observeThemeMode() = userSettingsStore.themeMode
+
         override fun observeColorPalette() = userSettingsStore.colorPalette
 
         override fun observeFontFamily() = userSettingsStore.fontFamily
+
+        override suspend fun setThemeMode(themeMode: ThemeMode) {
+            userSettingsStore.setThemeMode(themeMode)
+        }
 
         override suspend fun setColorPalette(colorPalette: ColorPalette) {
             userSettingsStore.setColorPalette(colorPalette)

@@ -11,6 +11,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.lelloman.pezzottify.android.domain.settings.AppFontFamily
 import com.lelloman.pezzottify.android.domain.settings.ColorPalette
+import com.lelloman.pezzottify.android.domain.settings.ThemeMode
 import com.lelloman.pezzottify.android.ui.screen.about.AboutScreen
 import com.lelloman.pezzottify.android.ui.screen.login.LoginScreen
 import com.lelloman.pezzottify.android.ui.screen.main.MainScreen
@@ -20,12 +21,14 @@ import com.lelloman.pezzottify.android.ui.theme.PezzottifyTheme
 @Composable
 fun AppUi(
     darkTheme: Boolean = isSystemInDarkTheme(),
+    themeMode: ThemeMode = ThemeMode.System,
     colorPalette: ColorPalette = ColorPalette.Classic,
     fontFamily: AppFontFamily = AppFontFamily.System,
 ) {
     val navController = rememberNavController()
     PezzottifyTheme(
         darkTheme = darkTheme,
+        themeMode = themeMode,
         colorPalette = colorPalette,
         fontFamily = fontFamily,
     ) {

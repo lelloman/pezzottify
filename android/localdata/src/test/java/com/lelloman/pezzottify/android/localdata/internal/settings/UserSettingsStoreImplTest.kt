@@ -98,6 +98,9 @@ class UserSettingsStoreImplTest {
 
         store.setThemeMode(ThemeMode.Dark)
         assertThat(store.themeMode.value).isEqualTo(ThemeMode.Dark)
+
+        store.setThemeMode(ThemeMode.Amoled)
+        assertThat(store.themeMode.value).isEqualTo(ThemeMode.Amoled)
     }
 
     @Test
@@ -161,9 +164,9 @@ class UserSettingsStoreImplTest {
     fun `setFontFamily persists value`() = runTest(testDispatcher) {
         val store = UserSettingsStoreImpl(context, testDispatcher)
 
-        store.setFontFamily(AppFontFamily.RobotoMono)
+        store.setFontFamily(AppFontFamily.Monospace)
 
-        assertThat(store.fontFamily.value).isEqualTo(AppFontFamily.RobotoMono)
+        assertThat(store.fontFamily.value).isEqualTo(AppFontFamily.Monospace)
     }
 
     @Test
@@ -179,11 +182,11 @@ class UserSettingsStoreImplTest {
     @Test
     fun `fontFamily value survives store recreation`() = runTest(testDispatcher) {
         val store1 = UserSettingsStoreImpl(context, testDispatcher)
-        store1.setFontFamily(AppFontFamily.Inter)
+        store1.setFontFamily(AppFontFamily.Serif)
 
         val store2 = UserSettingsStoreImpl(context, testDispatcher)
 
-        assertThat(store2.fontFamily.value).isEqualTo(AppFontFamily.Inter)
+        assertThat(store2.fontFamily.value).isEqualTo(AppFontFamily.Serif)
     }
 
     @Test
@@ -204,5 +207,41 @@ class UserSettingsStoreImplTest {
             store.setFontFamily(fontFamily)
             assertThat(store.fontFamily.value).isEqualTo(fontFamily)
         }
+    }
+
+    @Test
+    fun `legacy AmoledBlack palette migrates to Amoled theme mode`() {
+        // Manually write the legacy AmoledBlack value
+        context.getSharedPreferences(
+            UserSettingsStoreImpl.SHARED_PREF_FILE_NAME,
+            Context.MODE_PRIVATE
+        ).edit()
+            .putString(UserSettingsStoreImpl.KEY_COLOR_PALETTE, "AmoledBlack")
+            .putString(UserSettingsStoreImpl.KEY_THEME_MODE, "System")
+            .commit()
+
+        val store = UserSettingsStoreImpl(context, testDispatcher)
+
+        // Should migrate to Amoled theme mode and Classic palette
+        assertThat(store.themeMode.value).isEqualTo(ThemeMode.Amoled)
+        assertThat(store.colorPalette.value).isEqualTo(ColorPalette.Classic)
+    }
+
+    @Test
+    fun `normal palette does not trigger migration`() {
+        // Write a normal palette value
+        context.getSharedPreferences(
+            UserSettingsStoreImpl.SHARED_PREF_FILE_NAME,
+            Context.MODE_PRIVATE
+        ).edit()
+            .putString(UserSettingsStoreImpl.KEY_COLOR_PALETTE, "OceanBlue")
+            .putString(UserSettingsStoreImpl.KEY_THEME_MODE, "Dark")
+            .commit()
+
+        val store = UserSettingsStoreImpl(context, testDispatcher)
+
+        // Should keep the stored values
+        assertThat(store.themeMode.value).isEqualTo(ThemeMode.Dark)
+        assertThat(store.colorPalette.value).isEqualTo(ColorPalette.OceanBlue)
     }
 }
