@@ -128,7 +128,7 @@ class UiContentResolver(
                             imageUrl = ImageUrlProvider.buildImageUrl(
                                 baseUrl = configStore.baseUrl.value,
                                 displayImageId = it.data.displayImageId,
-                            ),
+                            ) ?: "",
                         )
                     )
                 }
@@ -161,7 +161,7 @@ class UiContentResolver(
                         imageUrl = ImageUrlProvider.buildImageUrl(
                             baseUrl = configStore.baseUrl.value,
                             displayImageId = it.data.displayImageId,
-                        ),
+                        ) ?: "",
                     )
                 )
             }

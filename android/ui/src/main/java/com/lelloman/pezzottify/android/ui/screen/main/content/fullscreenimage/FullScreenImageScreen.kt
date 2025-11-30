@@ -228,12 +228,20 @@ fun FullScreenImageScreen(
             },
         contentAlignment = Alignment.Center
     ) {
-        AsyncImage(
-            model = imageUrl,
-            contentDescription = null,
-            contentScale = ContentScale.Fit,
-            modifier = Modifier.fillMaxSize(),
-            error = painterResource(R.drawable.baseline_image_24),
-        )
+        if (imageUrl.isBlank()) {
+            androidx.compose.material3.Icon(
+                painter = painterResource(R.drawable.baseline_image_24),
+                contentDescription = null,
+                tint = Color.White.copy(alpha = 0.5f),
+                modifier = Modifier.fillMaxSize(0.3f)
+            )
+        } else {
+            AsyncImage(
+                model = imageUrl,
+                contentDescription = null,
+                contentScale = ContentScale.Fit,
+                modifier = Modifier.fillMaxSize(),
+            )
+        }
     }
 }

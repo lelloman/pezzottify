@@ -101,6 +101,8 @@ fun PezzottifyImage(
  * Image component for a nullable URL.
  *
  * Shows placeholder if URL is null, otherwise loads the image.
+ * Convenience overload for when the URL might be null (no image available).
+ * Shows the placeholder if url is null.
  *
  * @param url Nullable image URL
  * @param modifier Modifier for the image

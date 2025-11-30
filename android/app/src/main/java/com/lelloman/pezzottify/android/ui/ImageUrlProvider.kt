@@ -6,11 +6,11 @@ package com.lelloman.pezzottify.android.ui
 object ImageUrlProvider {
 
     /**
-     * Builds a complete image URL from a display image ID.
+     * Builds an image URL from a display image ID.
      *
      * @param baseUrl The base URL of the server (e.g., "http://10.0.2.2:3001")
-     * @param displayImageId The image ID from the catalog, or null if no image
-     * @return The complete URL for fetching the image, or null if no image ID
+     * @param displayImageId The display image ID from the catalog, or null if no image
+     * @return The image URL, or null if no display image ID is provided
      */
     fun buildImageUrl(baseUrl: String, displayImageId: String?): String? {
         if (displayImageId == null) return null

@@ -70,7 +70,9 @@ class AlbumScreenViewModel @AssistedInject constructor(
     }
 
     override fun clickOnAlbumImage(imageUrl: String?) {
-        navController.toFullScreenImage(imageUrl)
+        if (imageUrl != null) {
+            navController.toFullScreenImage(imageUrl)
+        }
     }
 
     interface Interactor {

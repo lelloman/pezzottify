@@ -17,7 +17,7 @@ data class ArtistData(
 )
 
 /**
- * Server's ResolvedArtist response - nested structure with artist, display_image, and related artists.
+ * Server's ResolvedArtist response - nested structure with artist, display image, and related artists.
  */
 @Serializable
 data class ArtistResponse(
