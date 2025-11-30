@@ -42,7 +42,9 @@ import androidx.compose.ui.unit.dp
 import kotlin.math.min
 import kotlinx.coroutines.launch
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.navigation.NavController
 import com.lelloman.pezzottify.android.ui.R
+import com.lelloman.pezzottify.android.ui.component.ArtistAvatarRow
 import com.lelloman.pezzottify.android.ui.component.DurationText
 import com.lelloman.pezzottify.android.ui.component.LoadingScreen
 import com.lelloman.pezzottify.android.ui.component.NullablePezzottifyImage
@@ -51,18 +53,30 @@ import com.lelloman.pezzottify.android.ui.component.PezzottifyImageShape
 import com.lelloman.pezzottify.android.ui.component.ScrollingArtistsRow
 import com.lelloman.pezzottify.android.ui.content.Album
 import com.lelloman.pezzottify.android.ui.content.Content
+import com.lelloman.pezzottify.android.ui.content.ContentResolver
 import com.lelloman.pezzottify.android.ui.content.Track
+import com.lelloman.pezzottify.android.ui.toArtist
 
 @Composable
-fun AlbumScreen(albumId: String, navController: androidx.navigation.NavController) {
+fun AlbumScreen(albumId: String, navController: NavController) {
     val viewModel = hiltViewModel<AlbumScreenViewModel, AlbumScreenViewModel.Factory>(
         creationCallback = { factory -> factory.create(albumId = albumId, navController = navController) }
     )
-    AlbumScreenContent(viewModel.state.collectAsState().value, viewModel)
+    AlbumScreenContent(
+        state = viewModel.state.collectAsState().value,
+        contentResolver = viewModel.contentResolver,
+        navController = navController,
+        actions = viewModel
+    )
 }
 
 @Composable
-private fun AlbumScreenContent(state: AlbumScreenState, actions: AlbumScreenActions) {
+private fun AlbumScreenContent(
+    state: AlbumScreenState,
+    contentResolver: ContentResolver,
+    navController: NavController,
+    actions: AlbumScreenActions
+) {
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
 
@@ -84,8 +98,10 @@ private fun AlbumScreenContent(state: AlbumScreenState, actions: AlbumScreenActi
                     currentPlayingTrackId = state.currentPlayingTrackId,
                     isAddToQueueMode = state.isAddToQueueMode,
                     isLiked = state.isLiked,
+                    contentResolver = contentResolver,
                     actions = actions,
                     onAddedToQueue = showAddedToQueueSnackbar,
+                    onArtistClick = { navController.toArtist(it) },
                 )
             }
         }
@@ -99,8 +115,10 @@ fun AlbumLoadedScreen(
     currentPlayingTrackId: String?,
     isAddToQueueMode: Boolean,
     isLiked: Boolean,
+    contentResolver: ContentResolver,
     actions: AlbumScreenActions,
     onAddedToQueue: (String) -> Unit = {},
+    onArtistClick: (String) -> Unit = {},
 ) {
     val listState = rememberLazyListState()
 
@@ -145,6 +163,24 @@ fun AlbumLoadedScreen(
             // Spacer for header (extra space for play button overlap)
             item {
                 Spacer(modifier = Modifier.height(maxHeaderHeight + playButtonSize / 2))
+            }
+
+            // Artists row
+            if (album.artistsIds.isNotEmpty()) {
+                item {
+                    Text(
+                        text = "Artists",
+                        style = MaterialTheme.typography.headlineSmall,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                    )
+                }
+                item {
+                    ArtistAvatarRow(
+                        artistIds = album.artistsIds,
+                        contentResolver = contentResolver,
+                        onArtistClick = onArtistClick
+                    )
+                }
             }
 
             // Track list

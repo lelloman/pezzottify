@@ -19,7 +19,7 @@ import kotlinx.coroutines.flow.stateIn
 @HiltViewModel(assistedFactory = AlbumScreenViewModel.Factory::class)
 class AlbumScreenViewModel @AssistedInject constructor(
     private val interactor: Interactor,
-    private val contentResolver: ContentResolver,
+    val contentResolver: ContentResolver,
     @Assisted private val albumId: String,
     @Assisted private val navController: NavController,
 ) : ViewModel(), AlbumScreenActions {

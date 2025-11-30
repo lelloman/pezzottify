@@ -2,9 +2,7 @@ package com.lelloman.pezzottify.android.ui.screen.main.content.artist
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -13,12 +11,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.ui.draw.clip
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -45,6 +39,7 @@ import androidx.navigation.NavController
 import androidx.navigation.compose.rememberNavController
 import com.lelloman.pezzottify.android.ui.R
 import com.lelloman.pezzottify.android.ui.component.AlbumGridItem
+import com.lelloman.pezzottify.android.ui.component.ArtistAvatarRow
 import com.lelloman.pezzottify.android.ui.component.LoadingScreen
 import com.lelloman.pezzottify.android.ui.component.NullablePezzottifyImage
 import com.lelloman.pezzottify.android.ui.component.PezzottifyImagePlaceholder
@@ -161,10 +156,10 @@ fun ArtistLoadedScreen(
                     )
                 }
                 item {
-                    RelatedArtistsList(
+                    ArtistAvatarRow(
                         artistIds = relatedArtists,
                         contentResolver = contentResolver,
-                        navController = navController
+                        onArtistClick = { navController.toArtist(it) }
                     )
                 }
             }
@@ -332,69 +327,6 @@ private fun <T> List<T>.forEachGroup(maxGroupSize: Int, action: @Composable (Lis
         val start = i * maxGroupSize
         val end = minOf(start + maxGroupSize, size)
         action(subList(start, end))
-    }
-}
-
-@Composable
-private fun RelatedArtistsList(
-    artistIds: List<String>,
-    contentResolver: ContentResolver,
-    navController: NavController
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .horizontalScroll(rememberScrollState())
-            .padding(horizontal = 16.dp)
-    ) {
-        artistIds.forEach { artistId ->
-            RelatedArtistItem(
-                artistId = artistId,
-                contentResolver = contentResolver,
-                onClick = { navController.toArtist(artistId) }
-            )
-        }
-    }
-}
-
-@Composable
-private fun RelatedArtistItem(
-    artistId: String,
-    contentResolver: ContentResolver,
-    onClick: () -> Unit
-) {
-    val artistFlow = contentResolver.resolveArtist(artistId)
-    val artistState = artistFlow.collectAsState(Content.Loading(artistId))
-
-    when (val artist = artistState.value) {
-        is Content.Resolved -> {
-            Column(
-                modifier = Modifier
-                    .width(96.dp)
-                    .clickable(onClick = onClick)
-                    .padding(end = 16.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                NullablePezzottifyImage(
-                    url = artist.data.imageUrl,
-                    shape = PezzottifyImageShape.SmallSquare,
-                    placeholder = PezzottifyImagePlaceholder.Head,
-                    modifier = Modifier.clip(CircleShape)
-                )
-
-                Text(
-                    text = artist.data.name,
-                    style = MaterialTheme.typography.bodyMedium,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.padding(top = 8.dp)
-                )
-            }
-        }
-        is Content.Loading, is Content.Error -> {
-            // Don't show anything for loading or error states
-        }
     }
 }
 
