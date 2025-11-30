@@ -9,7 +9,6 @@ We can consider V1 ready once all of the task without V2 mark are completed.
 ### [to refine]
 
 - Add custom theme palettes beyond system/light/dark (e.g., Material colors like blue, green, purple, or themed palettes like 'Midnight', 'Sunset', 'Forest')
-- The synchronizer seems to have a bug (skim through the git log though, maybe we fix it already), when the server responds 403 it keeps hammering the endpoint in an infinite loop
 - Create a db for logout operations so that if a user logout, the server call doesn't need to happen immediately, plus in case of immediate error it can be retried
 - Create a "memory pressure" component that can detect how much memory can we use for caches and such (imagine caching stuff from the db, pre-loading audio, images)
 - Add an in-memory immediate cache layer in ContentResolver, only after a "memory pressure" component
@@ -25,6 +24,7 @@ We can consider V1 ready once all of the task without V2 mark are completed.
 
 ### [done]
 
+- ~The synchronizer seems to have a bug (skim through the git log though, maybe we fix it already), when the server responds 403 it keeps hammering the endpoint in an infinite loop~
 - ~Check that all persisted user info are deleted at logout. Right now, I still see recently viewed items after re-logging in.~
 - ~When the user performs a login, the username should be persisted so that if the user logs out, the username field of the login screen can be pre-filled~
 - ~I want E2E tests for the UI module. The reason the app is architected this way, is that we can test the UI only, without any other dependencies, making the ui a puppet basically.~
