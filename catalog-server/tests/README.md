@@ -50,10 +50,7 @@ tests/
 │   └── test-image.jpg           # 224B gray 32x32 JPEG
 ├── e2e_auth_tests.rs            # Authentication: login, logout, sessions
 ├── e2e_catalog_tests.rs         # Catalog endpoints: artists, albums, tracks
-├── e2e_streaming_tests.rs       # Audio streaming, range requests
-├── e2e_search_tests.rs          # Search functionality
-├── e2e_user_content_tests.rs    # User playlists, liked content
-└── e2e_permissions_tests.rs     # Permission-based access control
+└── e2e_streaming_tests.rs       # Audio streaming, range requests
 ```
 
 ### Test Catalog Structure
