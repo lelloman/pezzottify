@@ -2,12 +2,12 @@
 
 ### [ready for coding]
 
+- Once catalog is migrated to db and catalog modification endpoints are in place, create a catalog change log to be shown to users, see CHANGELOG_FEATURE_PLAN.md for details.
+- We should plan a feature to gather listening stats from users, see LISTENING_STATS_PLAN.md for details.
+
 ### [to refine]
 
 - Consider switching Docker deployment to use a separate nginx service for web frontend serving (Option C) instead of serving from catalog-server. This would allow independent frontend deployments and better static file optimization.
-  V1 - Once catalog is migrated to db and catalog modification endpoints are in place, create a catalog change log to be shown to users.
-  V1 - Create a catalog change log to be shown to users. We should somehow "batch" catalog changes.
-  V1 - We should plan a feature to gather listening stats from users
 
 - Plan how are we going to put our catalog agent. This agent has the responsability to provide information to users, and if the info is not available yet in the catalog, it should be able to find it in external sources
 
