@@ -15,6 +15,8 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -35,6 +37,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import androidx.navigation.compose.rememberNavController
 import com.lelloman.pezzottify.android.ui.fromLoginToMain
+import com.lelloman.pezzottify.android.ui.theme.PezzottifyTheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
@@ -69,78 +72,93 @@ private fun LoginScreenInternal(
         }
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(16.dp),
-        verticalArrangement = Arrangement.Center,
-        horizontalAlignment = Alignment.CenterHorizontally
+    val textFieldColors = OutlinedTextFieldDefaults.colors(
+        focusedTextColor = MaterialTheme.colorScheme.onSurface,
+        unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
+        focusedLabelColor = MaterialTheme.colorScheme.primary,
+        unfocusedLabelColor = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+
+    Surface(
+        modifier = Modifier.fillMaxSize(),
+        color = MaterialTheme.colorScheme.background,
     ) {
-        OutlinedTextField(
-            enabled = !state.isLoading,
-            value = state.host,
-            onValueChange = actions::updateHost,
-            label = { Text("Server URL") },
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
+        Column(
             modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = 8.dp),
-            isError = state.hostError != null,
-            supportingText = state.hostError?.let { { Text(it) } },
-        )
+                .fillMaxSize()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.Center,
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            OutlinedTextField(
+                enabled = !state.isLoading,
+                value = state.host,
+                onValueChange = actions::updateHost,
+                label = { Text("Server URL") },
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 8.dp),
+                isError = state.hostError != null,
+                supportingText = state.hostError?.let { { Text(it) } },
+                colors = textFieldColors,
+            )
 
-        OutlinedTextField(
-            enabled = !state.isLoading,
-            value = state.email,
-            onValueChange = actions::updateEmail,
-            label = { Text("Email") },
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = 8.dp)
-        )
+            OutlinedTextField(
+                enabled = !state.isLoading,
+                value = state.email,
+                onValueChange = actions::updateEmail,
+                label = { Text("Email") },
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 8.dp),
+                colors = textFieldColors,
+            )
 
-        OutlinedTextField(
-            enabled = !state.isLoading,
-            value = state.password,
-            onValueChange = actions::updatePassword,
-            label = { Text("Password") },
-            visualTransformation = PasswordVisualTransformation(),
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = 16.dp)
-        )
+            OutlinedTextField(
+                enabled = !state.isLoading,
+                value = state.password,
+                onValueChange = actions::updatePassword,
+                label = { Text("Password") },
+                visualTransformation = PasswordVisualTransformation(),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 16.dp),
+                colors = textFieldColors,
+            )
 
-        Box(modifier = Modifier.fillMaxWidth()) {
-            val loaderAlpha: Float by animateFloatAsState(
-                targetValue = if (state.isLoading) 1f else 0f,
-                animationSpec = tween(
-                    durationMillis = 200,
-                    easing = LinearEasing,
+            Box(modifier = Modifier.fillMaxWidth()) {
+                val loaderAlpha: Float by animateFloatAsState(
+                    targetValue = if (state.isLoading) 1f else 0f,
+                    animationSpec = tween(
+                        durationMillis = 200,
+                        easing = LinearEasing,
+                    )
                 )
-            )
 
-            LinearProgressIndicator(
-                modifier = Modifier
-                    .height(4.dp)
-                    .fillMaxWidth()
-                    .align(Alignment.Center)
-                    .alpha(loaderAlpha),
-                color = MaterialTheme.colorScheme.secondary,
-                trackColor = MaterialTheme.colorScheme.surfaceVariant,
-            )
-            Button(
-                onClick = {
-                    if (!state.isLoading) {
-                        actions.clockOnLoginButton()
-                    }
-                },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .alpha(1f - loaderAlpha),
-            ) {
-                Text("Login")
+                LinearProgressIndicator(
+                    modifier = Modifier
+                        .height(4.dp)
+                        .fillMaxWidth()
+                        .align(Alignment.Center)
+                        .alpha(loaderAlpha),
+                    color = MaterialTheme.colorScheme.secondary,
+                    trackColor = MaterialTheme.colorScheme.surfaceVariant,
+                )
+                Button(
+                    onClick = {
+                        if (!state.isLoading) {
+                            actions.clockOnLoginButton()
+                        }
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .alpha(1f - loaderAlpha),
+                ) {
+                    Text("Login")
+                }
             }
         }
     }
@@ -165,32 +183,34 @@ private fun LoginPreview() {
             )
         )
     }
-    LoginScreenInternal(
-        state = mutableState,
-        events = flow {},
-        navController = navController,
-        actions = object : LoginScreenActions {
-            override fun updateHost(host: String) {
-                mutableState = mutableState.copy(host = host)
-            }
+    PezzottifyTheme {
+        LoginScreenInternal(
+            state = mutableState,
+            events = flow {},
+            navController = navController,
+            actions = object : LoginScreenActions {
+                override fun updateHost(host: String) {
+                    mutableState = mutableState.copy(host = host)
+                }
 
-            override fun updateEmail(email: String) {
-                mutableState = mutableState.copy(email = email)
-            }
+                override fun updateEmail(email: String) {
+                    mutableState = mutableState.copy(email = email)
+                }
 
-            override fun updatePassword(password: String) {
-                mutableState = mutableState.copy(password = password)
-            }
+                override fun updatePassword(password: String) {
+                    mutableState = mutableState.copy(password = password)
+                }
 
-            override fun clockOnLoginButton() {
-                if (!mutableState.isLoading) {
-                    mutableState = mutableState.copy(isLoading = true)
-                    coroutineScope.launch(Dispatchers.IO) {
-                        delay(2000)
-                        mutableState = mutableState.copy(isLoading = false)
+                override fun clockOnLoginButton() {
+                    if (!mutableState.isLoading) {
+                        mutableState = mutableState.copy(isLoading = true)
+                        coroutineScope.launch(Dispatchers.IO) {
+                            delay(2000)
+                            mutableState = mutableState.copy(isLoading = false)
+                        }
                     }
                 }
             }
-        }
-    )
+        )
+    }
 }
