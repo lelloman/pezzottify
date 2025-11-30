@@ -123,6 +123,25 @@ async fn require_own_playlists(
     next.run(request).await
 }
 
+async fn require_edit_catalog(
+    session: Session,
+    request: Request<Body>,
+    next: Next,
+) -> impl IntoResponse {
+    debug!(
+        "require_edit_catalog: user_id={}, has_permission={}, permissions={:?}",
+        session.user_id,
+        session.has_permission(Permission::EditCatalog),
+        session.permissions
+    );
+    if !session.has_permission(Permission::EditCatalog) {
+        debug!("require_edit_catalog: FORBIDDEN - user_id={} lacks EditCatalog permission", session.user_id);
+        return StatusCode::FORBIDDEN.into_response();
+    }
+    debug!("require_edit_catalog: ALLOWED - user_id={}", session.user_id);
+    next.run(request).await
+}
+
 async fn require_reboot_server(
     session: Session,
     request: Request<Body>,
@@ -299,6 +318,194 @@ async fn get_image(
         }
     }
     StatusCode::NOT_FOUND.into_response()
+}
+
+// =============================================================================
+// Catalog Editing Handlers
+// =============================================================================
+
+async fn create_artist(
+    _session: Session,
+    State(catalog_store): State<GuardedCatalogStore>,
+    Json(data): Json<serde_json::Value>,
+) -> Response {
+    match catalog_store.create_artist(data) {
+        Ok(artist) => (StatusCode::CREATED, Json(artist)).into_response(),
+        Err(err) => (StatusCode::BAD_REQUEST, format!("{}", err)).into_response(),
+    }
+}
+
+async fn update_artist(
+    _session: Session,
+    State(catalog_store): State<GuardedCatalogStore>,
+    Path(id): Path<String>,
+    Json(data): Json<serde_json::Value>,
+) -> Response {
+    match catalog_store.update_artist(&id, data) {
+        Ok(artist) => Json(artist).into_response(),
+        Err(err) => {
+            if err.to_string().contains("not found") {
+                StatusCode::NOT_FOUND.into_response()
+            } else {
+                (StatusCode::BAD_REQUEST, format!("{}", err)).into_response()
+            }
+        }
+    }
+}
+
+async fn delete_artist(
+    _session: Session,
+    State(catalog_store): State<GuardedCatalogStore>,
+    Path(id): Path<String>,
+) -> Response {
+    match catalog_store.delete_artist(&id) {
+        Ok(()) => StatusCode::NO_CONTENT.into_response(),
+        Err(err) => {
+            if err.to_string().contains("not found") {
+                StatusCode::NOT_FOUND.into_response()
+            } else {
+                (StatusCode::INTERNAL_SERVER_ERROR, format!("{}", err)).into_response()
+            }
+        }
+    }
+}
+
+async fn create_album(
+    _session: Session,
+    State(catalog_store): State<GuardedCatalogStore>,
+    Json(data): Json<serde_json::Value>,
+) -> Response {
+    match catalog_store.create_album(data) {
+        Ok(album) => (StatusCode::CREATED, Json(album)).into_response(),
+        Err(err) => (StatusCode::BAD_REQUEST, format!("{}", err)).into_response(),
+    }
+}
+
+async fn update_album(
+    _session: Session,
+    State(catalog_store): State<GuardedCatalogStore>,
+    Path(id): Path<String>,
+    Json(data): Json<serde_json::Value>,
+) -> Response {
+    match catalog_store.update_album(&id, data) {
+        Ok(album) => Json(album).into_response(),
+        Err(err) => {
+            if err.to_string().contains("not found") {
+                StatusCode::NOT_FOUND.into_response()
+            } else {
+                (StatusCode::BAD_REQUEST, format!("{}", err)).into_response()
+            }
+        }
+    }
+}
+
+async fn delete_album(
+    _session: Session,
+    State(catalog_store): State<GuardedCatalogStore>,
+    Path(id): Path<String>,
+) -> Response {
+    match catalog_store.delete_album(&id) {
+        Ok(()) => StatusCode::NO_CONTENT.into_response(),
+        Err(err) => {
+            if err.to_string().contains("not found") {
+                StatusCode::NOT_FOUND.into_response()
+            } else {
+                (StatusCode::INTERNAL_SERVER_ERROR, format!("{}", err)).into_response()
+            }
+        }
+    }
+}
+
+async fn create_track(
+    _session: Session,
+    State(catalog_store): State<GuardedCatalogStore>,
+    Json(data): Json<serde_json::Value>,
+) -> Response {
+    match catalog_store.create_track(data) {
+        Ok(track) => (StatusCode::CREATED, Json(track)).into_response(),
+        Err(err) => (StatusCode::BAD_REQUEST, format!("{}", err)).into_response(),
+    }
+}
+
+async fn update_track(
+    _session: Session,
+    State(catalog_store): State<GuardedCatalogStore>,
+    Path(id): Path<String>,
+    Json(data): Json<serde_json::Value>,
+) -> Response {
+    match catalog_store.update_track(&id, data) {
+        Ok(track) => Json(track).into_response(),
+        Err(err) => {
+            if err.to_string().contains("not found") {
+                StatusCode::NOT_FOUND.into_response()
+            } else {
+                (StatusCode::BAD_REQUEST, format!("{}", err)).into_response()
+            }
+        }
+    }
+}
+
+async fn delete_track(
+    _session: Session,
+    State(catalog_store): State<GuardedCatalogStore>,
+    Path(id): Path<String>,
+) -> Response {
+    match catalog_store.delete_track(&id) {
+        Ok(()) => StatusCode::NO_CONTENT.into_response(),
+        Err(err) => {
+            if err.to_string().contains("not found") {
+                StatusCode::NOT_FOUND.into_response()
+            } else {
+                (StatusCode::INTERNAL_SERVER_ERROR, format!("{}", err)).into_response()
+            }
+        }
+    }
+}
+
+async fn create_image(
+    _session: Session,
+    State(catalog_store): State<GuardedCatalogStore>,
+    Json(data): Json<serde_json::Value>,
+) -> Response {
+    match catalog_store.create_image(data) {
+        Ok(image) => (StatusCode::CREATED, Json(image)).into_response(),
+        Err(err) => (StatusCode::BAD_REQUEST, format!("{}", err)).into_response(),
+    }
+}
+
+async fn update_image(
+    _session: Session,
+    State(catalog_store): State<GuardedCatalogStore>,
+    Path(id): Path<String>,
+    Json(data): Json<serde_json::Value>,
+) -> Response {
+    match catalog_store.update_image(&id, data) {
+        Ok(image) => Json(image).into_response(),
+        Err(err) => {
+            if err.to_string().contains("not found") {
+                StatusCode::NOT_FOUND.into_response()
+            } else {
+                (StatusCode::BAD_REQUEST, format!("{}", err)).into_response()
+            }
+        }
+    }
+}
+
+async fn delete_image(
+    _session: Session,
+    State(catalog_store): State<GuardedCatalogStore>,
+    Path(id): Path<String>,
+) -> Response {
+    match catalog_store.delete_image(&id) {
+        Ok(()) => StatusCode::NO_CONTENT.into_response(),
+        Err(err) => {
+            if err.to_string().contains("not found") {
+                StatusCode::NOT_FOUND.into_response()
+            } else {
+                (StatusCode::INTERNAL_SERVER_ERROR, format!("{}", err)).into_response()
+            }
+        }
+    }
 }
 
 fn update_user_liked_content(
@@ -1111,6 +1318,34 @@ pub fn make_app(
     }
 
     let user_routes = liked_content_routes.merge(playlist_routes);
+
+    // Catalog editing routes (requires EditCatalog permission)
+    let catalog_edit_routes: Router = Router::new()
+        // Artist CRUD
+        .route("/artist", post(create_artist))
+        .route("/artist/{id}", put(update_artist))
+        .route("/artist/{id}", delete(delete_artist))
+        // Album CRUD
+        .route("/album", post(create_album))
+        .route("/album/{id}", put(update_album))
+        .route("/album/{id}", delete(delete_album))
+        // Track CRUD
+        .route("/track", post(create_track))
+        .route("/track/{id}", put(update_track))
+        .route("/track/{id}", delete(delete_track))
+        // Image CRUD
+        .route("/image", post(create_image))
+        .route("/image/{id}", put(update_image))
+        .route("/image/{id}", delete(delete_image))
+        .layer(GovernorLayer::new(write_rate_limit.clone()))
+        .route_layer(middleware::from_fn_with_state(
+            state.clone(),
+            require_edit_catalog,
+        ))
+        .with_state(state.clone());
+
+    // Merge catalog edit routes into content routes
+    content_routes = content_routes.merge(catalog_edit_routes);
 
     // Admin reboot route (requires RebootServer permission)
     let admin_reboot_routes: Router = Router::new()

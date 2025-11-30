@@ -139,4 +139,56 @@ impl CatalogStore for LegacyCatalogAdapter {
 
         Ok(items)
     }
+
+    // =========================================================================
+    // Write Operations - Not supported in legacy adapter
+    // =========================================================================
+
+    fn create_artist(&self, _data: serde_json::Value) -> Result<serde_json::Value> {
+        anyhow::bail!("Write operations not supported in legacy catalog adapter. Use --catalog-db to enable SQLite backend.")
+    }
+
+    fn update_artist(&self, _id: &str, _data: serde_json::Value) -> Result<serde_json::Value> {
+        anyhow::bail!("Write operations not supported in legacy catalog adapter. Use --catalog-db to enable SQLite backend.")
+    }
+
+    fn delete_artist(&self, _id: &str) -> Result<()> {
+        anyhow::bail!("Write operations not supported in legacy catalog adapter. Use --catalog-db to enable SQLite backend.")
+    }
+
+    fn create_album(&self, _data: serde_json::Value) -> Result<serde_json::Value> {
+        anyhow::bail!("Write operations not supported in legacy catalog adapter. Use --catalog-db to enable SQLite backend.")
+    }
+
+    fn update_album(&self, _id: &str, _data: serde_json::Value) -> Result<serde_json::Value> {
+        anyhow::bail!("Write operations not supported in legacy catalog adapter. Use --catalog-db to enable SQLite backend.")
+    }
+
+    fn delete_album(&self, _id: &str) -> Result<()> {
+        anyhow::bail!("Write operations not supported in legacy catalog adapter. Use --catalog-db to enable SQLite backend.")
+    }
+
+    fn create_track(&self, _data: serde_json::Value) -> Result<serde_json::Value> {
+        anyhow::bail!("Write operations not supported in legacy catalog adapter. Use --catalog-db to enable SQLite backend.")
+    }
+
+    fn update_track(&self, _id: &str, _data: serde_json::Value) -> Result<serde_json::Value> {
+        anyhow::bail!("Write operations not supported in legacy catalog adapter. Use --catalog-db to enable SQLite backend.")
+    }
+
+    fn delete_track(&self, _id: &str) -> Result<()> {
+        anyhow::bail!("Write operations not supported in legacy catalog adapter. Use --catalog-db to enable SQLite backend.")
+    }
+
+    fn create_image(&self, _data: serde_json::Value) -> Result<serde_json::Value> {
+        anyhow::bail!("Write operations not supported in legacy catalog adapter. Use --catalog-db to enable SQLite backend.")
+    }
+
+    fn update_image(&self, _id: &str, _data: serde_json::Value) -> Result<serde_json::Value> {
+        anyhow::bail!("Write operations not supported in legacy catalog adapter. Use --catalog-db to enable SQLite backend.")
+    }
+
+    fn delete_image(&self, _id: &str) -> Result<()> {
+        anyhow::bail!("Write operations not supported in legacy catalog adapter. Use --catalog-db to enable SQLite backend.")
+    }
 }

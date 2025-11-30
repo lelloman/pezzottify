@@ -70,6 +70,46 @@ pub trait CatalogStore: Send + Sync {
     /// Get all searchable content for building the search index.
     /// Returns a vector of (id, name, content_type) tuples.
     fn get_searchable_content(&self) -> Result<Vec<SearchableItem>>;
+
+    // =========================================================================
+    // Write Operations
+    // =========================================================================
+
+    /// Create a new artist. Returns the created artist as JSON.
+    fn create_artist(&self, data: serde_json::Value) -> Result<serde_json::Value>;
+
+    /// Update an existing artist. Returns the updated artist as JSON.
+    fn update_artist(&self, id: &str, data: serde_json::Value) -> Result<serde_json::Value>;
+
+    /// Delete an artist by ID.
+    fn delete_artist(&self, id: &str) -> Result<()>;
+
+    /// Create a new album. Returns the created album as JSON.
+    fn create_album(&self, data: serde_json::Value) -> Result<serde_json::Value>;
+
+    /// Update an existing album. Returns the updated album as JSON.
+    fn update_album(&self, id: &str, data: serde_json::Value) -> Result<serde_json::Value>;
+
+    /// Delete an album by ID.
+    fn delete_album(&self, id: &str) -> Result<()>;
+
+    /// Create a new track. Returns the created track as JSON.
+    fn create_track(&self, data: serde_json::Value) -> Result<serde_json::Value>;
+
+    /// Update an existing track. Returns the updated track as JSON.
+    fn update_track(&self, id: &str, data: serde_json::Value) -> Result<serde_json::Value>;
+
+    /// Delete a track by ID.
+    fn delete_track(&self, id: &str) -> Result<()>;
+
+    /// Create a new image. Returns the created image as JSON.
+    fn create_image(&self, data: serde_json::Value) -> Result<serde_json::Value>;
+
+    /// Update an existing image. Returns the updated image as JSON.
+    fn update_image(&self, id: &str, data: serde_json::Value) -> Result<serde_json::Value>;
+
+    /// Delete an image by ID.
+    fn delete_image(&self, id: &str) -> Result<()>;
 }
 
 /// A searchable item for the search index.

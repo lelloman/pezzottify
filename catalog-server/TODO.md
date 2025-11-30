@@ -7,9 +7,6 @@
 ### [to refine]
 
 - Consider switching Docker deployment to use a separate nginx service for web frontend serving (Option C) instead of serving from catalog-server. This would allow independent frontend deployments and better static file optimization.
-
-V1 - Create catalog db
-V1 - Implement catalog editing endpoints (EditCatalog permission)
 V1 - After the catalog has been migrated to a db, modify artist, album and track models to have the reference to one "display image" id, then provide, if available other images
 V1 - Once catalog is migrated to db and catalog modification endpoints are in place, create a catalog change log to be shown to users.
 V1 - We should plan a feature to gather listening stats from users
@@ -18,6 +15,8 @@ V1 - We should plan a feature to gather listening stats from users
 
 ### [done]
 
+- ~Create catalog db (SQLite-backed CatalogStore with --catalog-db CLI flag)~
+- ~Implement catalog editing endpoints (EditCatalog permission) - CRUD for artists, albums, tracks, images~
 - ~Implement bandwidth usage statistics collection and persistence (track data transfer per user/endpoint)~
 - ~Create admin API endpoints for managing user roles and permissions (ManagePermissions permission)~
 - ~Create custom, flashy, modern looking CLI interface style for cli-auth~

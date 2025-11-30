@@ -23,11 +23,15 @@ Based on the design doc: `CATALOG_SQLITE_DESIGN.md`
 
 ### Phase 4: Write Operations
 - [x] **4.11** Implement write operations in SqliteCatalogStore (insert_*, add_* methods)
+- [x] **4.12** Add catalog editing API endpoints
+  - Added CRUD endpoints for artists, albums, tracks, and images
+  - Endpoints: POST/PUT/DELETE for `/v1/content/artist`, `/v1/content/album`, `/v1/content/track`, `/v1/content/image`
+  - Protected by `EditCatalog` permission
+  - LegacyCatalogAdapter returns error (write operations require SQLite backend)
 
 ## Pending Tasks
 
 ### Phase 4 (continued)
-- [ ] **4.12** Add catalog editing API endpoints
 - [ ] **4.13** Add validation for write operations
 
 ### Phase 5: Search
@@ -72,6 +76,7 @@ Based on the design doc: `CATALOG_SQLITE_DESIGN.md`
 5. `[catalog-server] Add CatalogStore trait and implementations`
 6. `[catalog-server] Update server handlers to use CatalogStore trait`
 7. `[catalog-server] Add --catalog-db CLI flag to enable SQLite catalog backend`
+8. `[catalog-server] Add catalog editing API endpoints`
 
 ## Notes
 - The server now supports both catalog backends via CLI flags:

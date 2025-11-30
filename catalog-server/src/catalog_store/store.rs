@@ -815,6 +815,147 @@ impl SqliteCatalogStore {
     }
 
     // =========================================================================
+    // Update Operations
+    // =========================================================================
+
+    /// Update an artist.
+    pub fn update_artist_record(&self, artist: &Artist) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        let genres_json = serde_json::to_string(&artist.genres)?;
+        let activity_periods_json = serde_json::to_string(&artist.activity_periods)?;
+
+        let rows = conn.execute(
+            "UPDATE artists SET name = ?2, genres = ?3, activity_periods = ?4 WHERE id = ?1",
+            params![artist.id, artist.name, genres_json, activity_periods_json],
+        )?;
+        if rows == 0 {
+            anyhow::bail!("Artist not found: {}", artist.id);
+        }
+        Ok(())
+    }
+
+    /// Update an album.
+    pub fn update_album_record(&self, album: &Album) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        let genres_json = serde_json::to_string(&album.genres)?;
+
+        let rows = conn.execute(
+            "UPDATE albums SET name = ?2, album_type = ?3, label = ?4, release_date = ?5,
+             genres = ?6, original_title = ?7, version_title = ?8 WHERE id = ?1",
+            params![
+                album.id,
+                album.name,
+                album.album_type.to_db_str(),
+                album.label,
+                album.release_date,
+                genres_json,
+                album.original_title,
+                album.version_title,
+            ],
+        )?;
+        if rows == 0 {
+            anyhow::bail!("Album not found: {}", album.id);
+        }
+        Ok(())
+    }
+
+    /// Update a track.
+    pub fn update_track_record(&self, track: &Track) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        let tags_json = serde_json::to_string(&track.tags)?;
+        let languages_json = serde_json::to_string(&track.languages)?;
+
+        let rows = conn.execute(
+            "UPDATE tracks SET name = ?2, album_id = ?3, disc_number = ?4, track_number = ?5,
+             duration_secs = ?6, is_explicit = ?7, audio_uri = ?8, format = ?9, tags = ?10,
+             has_lyrics = ?11, languages = ?12, original_title = ?13, version_title = ?14 WHERE id = ?1",
+            params![
+                track.id,
+                track.name,
+                track.album_id,
+                track.disc_number,
+                track.track_number,
+                track.duration_secs,
+                track.is_explicit as i32,
+                track.audio_uri,
+                track.format.to_db_str(),
+                tags_json,
+                track.has_lyrics as i32,
+                languages_json,
+                track.original_title,
+                track.version_title,
+            ],
+        )?;
+        if rows == 0 {
+            anyhow::bail!("Track not found: {}", track.id);
+        }
+        Ok(())
+    }
+
+    /// Update an image.
+    pub fn update_image_record(&self, image: &Image) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        let rows = conn.execute(
+            "UPDATE images SET uri = ?2, size = ?3, width = ?4, height = ?5 WHERE id = ?1",
+            params![
+                image.id,
+                image.uri,
+                image.size.to_db_str(),
+                image.width as i32,
+                image.height as i32,
+            ],
+        )?;
+        if rows == 0 {
+            anyhow::bail!("Image not found: {}", image.id);
+        }
+        Ok(())
+    }
+
+    // =========================================================================
+    // Delete Operations
+    // =========================================================================
+
+    /// Delete an artist by ID.
+    pub fn delete_artist_record(&self, id: &str) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        let rows = conn.execute("DELETE FROM artists WHERE id = ?1", params![id])?;
+        if rows == 0 {
+            anyhow::bail!("Artist not found: {}", id);
+        }
+        Ok(())
+    }
+
+    /// Delete an album by ID.
+    pub fn delete_album_record(&self, id: &str) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        let rows = conn.execute("DELETE FROM albums WHERE id = ?1", params![id])?;
+        if rows == 0 {
+            anyhow::bail!("Album not found: {}", id);
+        }
+        Ok(())
+    }
+
+    /// Delete a track by ID.
+    pub fn delete_track_record(&self, id: &str) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        let rows = conn.execute("DELETE FROM tracks WHERE id = ?1", params![id])?;
+        if rows == 0 {
+            anyhow::bail!("Track not found: {}", id);
+        }
+        Ok(())
+    }
+
+    /// Delete an image by ID.
+    pub fn delete_image_record(&self, id: &str) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        let rows = conn.execute("DELETE FROM images WHERE id = ?1", params![id])?;
+        if rows == 0 {
+            anyhow::bail!("Image not found: {}", id);
+        }
+        Ok(())
+    }
+
+    // =========================================================================
     // Batch Import Operations
     // =========================================================================
 
@@ -1004,6 +1145,79 @@ impl CatalogStore for SqliteCatalogStore {
         }
 
         Ok(items)
+    }
+
+    // =========================================================================
+    // Write Operations (CatalogStore trait)
+    // =========================================================================
+
+    fn create_artist(&self, data: serde_json::Value) -> Result<serde_json::Value> {
+        let artist: Artist = serde_json::from_value(data)?;
+        self.insert_artist(&artist)?;
+        Ok(serde_json::to_value(&artist)?)
+    }
+
+    fn update_artist(&self, id: &str, data: serde_json::Value) -> Result<serde_json::Value> {
+        let mut artist: Artist = serde_json::from_value(data)?;
+        // Ensure the ID matches the path parameter
+        artist.id = id.to_string();
+        self.update_artist_record(&artist)?;
+        Ok(serde_json::to_value(&artist)?)
+    }
+
+    fn delete_artist(&self, id: &str) -> Result<()> {
+        self.delete_artist_record(id)
+    }
+
+    fn create_album(&self, data: serde_json::Value) -> Result<serde_json::Value> {
+        let album: Album = serde_json::from_value(data)?;
+        self.insert_album(&album)?;
+        Ok(serde_json::to_value(&album)?)
+    }
+
+    fn update_album(&self, id: &str, data: serde_json::Value) -> Result<serde_json::Value> {
+        let mut album: Album = serde_json::from_value(data)?;
+        album.id = id.to_string();
+        self.update_album_record(&album)?;
+        Ok(serde_json::to_value(&album)?)
+    }
+
+    fn delete_album(&self, id: &str) -> Result<()> {
+        self.delete_album_record(id)
+    }
+
+    fn create_track(&self, data: serde_json::Value) -> Result<serde_json::Value> {
+        let track: Track = serde_json::from_value(data)?;
+        self.insert_track(&track)?;
+        Ok(serde_json::to_value(&track)?)
+    }
+
+    fn update_track(&self, id: &str, data: serde_json::Value) -> Result<serde_json::Value> {
+        let mut track: Track = serde_json::from_value(data)?;
+        track.id = id.to_string();
+        self.update_track_record(&track)?;
+        Ok(serde_json::to_value(&track)?)
+    }
+
+    fn delete_track(&self, id: &str) -> Result<()> {
+        self.delete_track_record(id)
+    }
+
+    fn create_image(&self, data: serde_json::Value) -> Result<serde_json::Value> {
+        let image: Image = serde_json::from_value(data)?;
+        self.insert_image(&image)?;
+        Ok(serde_json::to_value(&image)?)
+    }
+
+    fn update_image(&self, id: &str, data: serde_json::Value) -> Result<serde_json::Value> {
+        let mut image: Image = serde_json::from_value(data)?;
+        image.id = id.to_string();
+        self.update_image_record(&image)?;
+        Ok(serde_json::to_value(&image)?)
+    }
+
+    fn delete_image(&self, id: &str) -> Result<()> {
+        self.delete_image_record(id)
     }
 }
 
