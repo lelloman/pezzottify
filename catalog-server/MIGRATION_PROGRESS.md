@@ -16,16 +16,15 @@ Based on the design doc: `CATALOG_SQLITE_DESIGN.md`
 ### Phase 3: Server Integration
 - [x] **3.8** Replace GuardedCatalog with Arc<dyn CatalogStore> (`src/server/state.rs`)
 - [x] **3.9** Update server handlers to use new store (`src/server/server.rs`, `src/server/search.rs`, etc.)
+- [x] **3.10** Add --catalog-db CLI argument to switch between legacy and SQLite catalog stores
+  - Added `--catalog-db` flag to main.rs for specifying SQLite catalog database path
+  - When provided, server uses SqliteCatalogStore with new model shapes (breaking API change)
+  - When not provided, falls back to LegacyCatalogAdapter for backward compatibility
 
 ### Phase 4: Write Operations
 - [x] **4.11** Implement write operations in SqliteCatalogStore (insert_*, add_* methods)
 
 ## Pending Tasks
-
-### Phase 3 (continued)
-- [ ] **3.10** Update response serialization for new model shapes
-  - Note: Currently using LegacyCatalogAdapter which serializes old Catalog models
-  - When switching to SqliteCatalogStore directly, may need API response adjustments
 
 ### Phase 4 (continued)
 - [ ] **4.12** Add catalog editing API endpoints
@@ -72,9 +71,14 @@ Based on the design doc: `CATALOG_SQLITE_DESIGN.md`
 4. `[catalog-server] Add catalog-import binary and write operations`
 5. `[catalog-server] Add CatalogStore trait and implementations`
 6. `[catalog-server] Update server handlers to use CatalogStore trait`
+7. `[catalog-server] Add --catalog-db CLI flag to enable SQLite catalog backend`
 
 ## Notes
-- The server currently uses `LegacyCatalogAdapter` which wraps the old filesystem-based `Catalog`
-- To switch to SQLite, change `main.rs` to use `SqliteCatalogStore` instead of `LegacyCatalogAdapter`
-- The `catalog-import` binary can import an existing filesystem catalog to SQLite
+- The server now supports both catalog backends via CLI flags:
+  - Default (no --catalog-db): Uses `LegacyCatalogAdapter` with filesystem-based catalog
+  - With `--catalog-db <path>`: Uses `SqliteCatalogStore` with new model shapes
+- To use SQLite catalog:
+  1. First import filesystem catalog: `cargo run --bin catalog-import -- <catalog-path> <output-db-path>`
+  2. Run server with: `cargo run -- <catalog-path> <user-db-path> --catalog-db <catalog-db-path>`
+- **API Breaking Change**: SqliteCatalogStore returns different JSON response shapes (e.g., `genres` instead of `genre`, nested structures for resolved entities)
 - All tests pass with the current implementation

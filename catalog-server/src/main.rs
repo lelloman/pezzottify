@@ -9,7 +9,7 @@ mod catalog;
 use catalog::Catalog;
 
 mod catalog_store;
-use catalog_store::LegacyCatalogAdapter;
+use catalog_store::{LegacyCatalogAdapter, SqliteCatalogStore};
 
 mod search;
 use search::{NoOpSearchVault, PezzotHashSearchVault, SearchVault};
@@ -78,6 +78,12 @@ struct CliArgs {
     /// Perform a full check of the catalog, including all files.
     #[clap(long)]
     pub check_all: bool,
+
+    /// Path to the SQLite catalog database file. When provided, uses the new
+    /// SQLite-backed catalog store instead of the filesystem-based catalog.
+    /// The catalog database must be populated using the catalog-import tool first.
+    #[clap(long, value_parser = parse_path)]
+    pub catalog_db: Option<PathBuf>,
 }
 
 #[tokio::main]
@@ -95,23 +101,41 @@ async fn main() -> Result<()> {
         .try_init()
         .unwrap();
 
-    let catalog_path = match cli_args.catalog_path {
-        Some(path) => path,
-        None => Catalog::infer_path().with_context(|| {
-            "Could not infer catalog directory, please specifiy it explicityly."
-        })?,
+    // Determine catalog store based on whether --catalog-db is provided
+    let catalog_store: Arc<dyn catalog_store::CatalogStore> = if let Some(catalog_db_path) =
+        cli_args.catalog_db
+    {
+        // Use the new SQLite-backed catalog store
+        let catalog_path = match cli_args.catalog_path {
+            Some(path) => path,
+            None => Catalog::infer_path().with_context(|| {
+                "Could not infer catalog directory for media paths, please specify it explicitly."
+            })?,
+        };
+
+        info!(
+            "Opening SQLite catalog database at {:?}...",
+            catalog_db_path
+        );
+        Arc::new(SqliteCatalogStore::new(&catalog_db_path, &catalog_path)?)
+    } else {
+        // Use the legacy filesystem-based catalog
+        let catalog_path = match cli_args.catalog_path {
+            Some(path) => path,
+            None => Catalog::infer_path().with_context(|| {
+                "Could not infer catalog directory, please specify it explicitly."
+            })?,
+        };
+
+        info!("Loading catalog from filesystem...");
+        let catalog = catalog::load_catalog(catalog_path, cli_args.check_all)?;
+
+        if cli_args.check_only {
+            return Ok(());
+        }
+
+        Arc::new(LegacyCatalogAdapter::new(catalog))
     };
-
-    info!("Loading catalog...");
-    let catalog = catalog::load_catalog(catalog_path, cli_args.check_all)?;
-
-    if cli_args.check_only {
-        return Ok(());
-    }
-
-    // Wrap catalog in the adapter for the CatalogStore trait
-    let catalog_store: Arc<dyn catalog_store::CatalogStore> =
-        Arc::new(LegacyCatalogAdapter::new(catalog));
 
     // Initialize metrics system
     info!("Initializing metrics...");
