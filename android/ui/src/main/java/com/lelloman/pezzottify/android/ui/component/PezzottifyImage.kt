@@ -20,7 +20,8 @@ import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.vectorResource
 import androidx.compose.ui.unit.dp
-import coil3.compose.AsyncImage
+import coil3.compose.SubcomposeAsyncImage
+import coil3.compose.SubcomposeAsyncImageContent
 import com.lelloman.pezzottify.android.ui.R
 
 /**
@@ -54,18 +55,34 @@ fun PezzottifyImage(
             colorFilter = ColorFilter.tint(MaterialTheme.colorScheme.onSurfaceVariant)
         )
     } else {
-        AsyncImage(
+        val tintColor = MaterialTheme.colorScheme.onSurfaceVariant
+        SubcomposeAsyncImage(
             model = urls[currentUrlIndex],
             contentDescription = contentDescription,
             modifier = shape.modifier(modifier),
             contentScale = shape.contentScale,
-            placeholder = rememberVectorPainter(placeholder.getIcon()),
-            error = rememberVectorPainter(placeholder.getIcon()),
             onError = {
                 // On error, try next URL
                 if (currentUrlIndex < urls.size - 1) {
                     currentUrlIndex++
                 }
+            },
+            loading = {
+                Image(
+                    painter = rememberVectorPainter(placeholder.getIcon()),
+                    contentDescription = contentDescription,
+                    colorFilter = ColorFilter.tint(tintColor)
+                )
+            },
+            error = {
+                Image(
+                    painter = rememberVectorPainter(placeholder.getIcon()),
+                    contentDescription = contentDescription,
+                    colorFilter = ColorFilter.tint(tintColor)
+                )
+            },
+            success = {
+                SubcomposeAsyncImageContent()
             }
         )
     }
