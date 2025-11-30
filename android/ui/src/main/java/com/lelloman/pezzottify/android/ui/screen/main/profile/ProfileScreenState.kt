@@ -10,4 +10,7 @@ data class ProfileScreenState(
     val themeMode: ThemeMode = ThemeMode.Default,
     val isLoggingOut: Boolean = false,
     val showLogoutConfirmation: Boolean = false,
+    val buildVariant: String = "",
+    val versionName: String = "",
+    val gitCommit: String = "",
 )

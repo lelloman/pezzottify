@@ -199,6 +199,31 @@ private fun ProfileScreenInternal(
                 }
             }
 
+            HorizontalDivider(modifier = Modifier.padding(vertical = 24.dp))
+
+            // About Section
+            Text(
+                text = "About",
+                style = MaterialTheme.typography.titleLarge,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Spacer(modifier = Modifier.height(16.dp))
+
+            SettingsLabel(text = "Version")
+            Text(
+                text = "${currentState.versionName} (${currentState.buildVariant})",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+
+            SettingsLabel(text = "Git Commit")
+            Text(
+                text = currentState.gitCommit,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+
             Spacer(modifier = Modifier.weight(1f))
 
             // Logout Button
@@ -239,6 +264,9 @@ private fun ProfileScreenPreview() {
                     baseUrl = "http://10.0.2.2:3001",
                     playBehavior = PlayBehavior.ReplacePlaylist,
                     themeMode = ThemeMode.System,
+                    buildVariant = "debug",
+                    versionName = "1.0",
+                    gitCommit = "abc1234",
                 )
             ),
             events = flow {},
@@ -265,6 +293,9 @@ private fun ProfileScreenPreviewDark() {
                     baseUrl = "http://10.0.2.2:3001",
                     playBehavior = PlayBehavior.AddToPlaylist,
                     themeMode = ThemeMode.Dark,
+                    buildVariant = "release",
+                    versionName = "1.0",
+                    gitCommit = "def5678",
                 )
             ),
             events = flow {},

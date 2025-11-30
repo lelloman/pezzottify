@@ -5,6 +5,7 @@ import com.lelloman.pezzottify.android.domain.auth.AuthStore
 import com.lelloman.pezzottify.android.domain.auth.usecase.IsLoggedIn
 import com.lelloman.pezzottify.android.domain.auth.usecase.PerformLogin
 import com.lelloman.pezzottify.android.domain.auth.usecase.PerformLogout
+import com.lelloman.pezzottify.android.domain.config.BuildInfo
 import com.lelloman.pezzottify.android.domain.config.ConfigStore
 import com.lelloman.pezzottify.android.domain.player.PezzottifyPlayer
 import com.lelloman.pezzottify.android.domain.player.RepeatMode
@@ -75,6 +76,7 @@ class InteractorsModule {
         authStore: AuthStore,
         configStore: ConfigStore,
         userSettingsStore: UserSettingsStore,
+        buildInfo: BuildInfo,
     ): ProfileScreenViewModel.Interactor = object : ProfileScreenViewModel.Interactor {
         override suspend fun logout() {
             performLogout()
@@ -106,6 +108,12 @@ class InteractorsModule {
         override suspend fun setThemeMode(themeMode: ThemeMode) {
             userSettingsStore.setThemeMode(themeMode)
         }
+
+        override fun getBuildVariant(): String = buildInfo.buildVariant
+
+        override fun getVersionName(): String = buildInfo.versionName
+
+        override fun getGitCommit(): String = buildInfo.gitCommit
     }
 
     @Provides

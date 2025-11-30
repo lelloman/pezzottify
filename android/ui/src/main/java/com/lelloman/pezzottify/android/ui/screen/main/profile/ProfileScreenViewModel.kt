@@ -33,6 +33,9 @@ class ProfileScreenViewModel @Inject constructor(
                 baseUrl = interactor.getBaseUrl(),
                 playBehavior = interactor.getPlayBehavior(),
                 themeMode = interactor.getThemeMode(),
+                buildVariant = interactor.getBuildVariant(),
+                versionName = interactor.getVersionName(),
+                gitCommit = interactor.getGitCommit(),
             )
             mutableState.value = initialState
 
@@ -92,5 +95,8 @@ class ProfileScreenViewModel @Inject constructor(
         fun observeThemeMode(): kotlinx.coroutines.flow.Flow<ThemeMode>
         suspend fun setPlayBehavior(playBehavior: PlayBehavior)
         suspend fun setThemeMode(themeMode: ThemeMode)
+        fun getBuildVariant(): String
+        fun getVersionName(): String
+        fun getGitCommit(): String
     }
 }

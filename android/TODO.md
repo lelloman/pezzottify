@@ -4,7 +4,6 @@ We can consider V1 ready once all of the task without V2 mark are completed.
 
 ### [ready for coding]
 
-- We should somehow insert into the code A) the build variant B) the build version C) The git commit, then we can show it in the profile screen for now
 - In the album screen, when the user clicks on the album, instead of openeing the album screen, the app crashes
 - When the user performs a login, the username should be persisted so that if the user logs out, the username field of the login screen can be pre-filled
 
@@ -28,6 +27,7 @@ We can consider V1 ready once all of the task without V2 mark are completed.
 
 ### [done]
 
+- ~Add build info (variant, version, git commit) to profile screen, including dirty flag for uncommitted changes~
 - ~Check the styling of the login screen, I now see a light text color in the email input even if the theme is light~
 - ~BUG when the user logs out the music keeps playing!~
 - ~Add base URL field to login screen for configuring server URL~

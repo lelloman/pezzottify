@@ -7,6 +7,7 @@ import coil3.network.httpHeaders
 import coil3.request.ImageResult
 import com.lelloman.pezzottify.android.domain.auth.AuthState
 import com.lelloman.pezzottify.android.domain.auth.AuthStore
+import com.lelloman.pezzottify.android.domain.config.BuildInfo
 import com.lelloman.pezzottify.android.logger.LogLevel
 import com.lelloman.pezzottify.android.logger.LoggerFactory
 import dagger.Module
@@ -43,6 +44,14 @@ class ApplicationModule {
                 add(CoilAuthTokenInterceptor(authStore))
             }
             .build()
+    }
+
+    @Provides
+    @Singleton
+    fun provideBuildInfo(): BuildInfo = object : BuildInfo {
+        override val buildVariant: String = BuildConfig.BUILD_TYPE
+        override val versionName: String = BuildConfig.VERSION_NAME
+        override val gitCommit: String = BuildConfig.GIT_COMMIT
     }
 }
 

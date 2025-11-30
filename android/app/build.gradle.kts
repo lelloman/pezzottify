@@ -38,7 +38,30 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
+}
+
+fun getGitCommit(): String {
+    return try {
+        val commitProcess = ProcessBuilder("git", "rev-parse", "--short", "HEAD")
+            .redirectErrorStream(true)
+            .start()
+        val commit = commitProcess.inputStream.bufferedReader().readText().trim()
+
+        val statusProcess = ProcessBuilder("git", "status", "--porcelain")
+            .redirectErrorStream(true)
+            .start()
+        val isDirty = statusProcess.inputStream.bufferedReader().readText().isNotBlank()
+
+        if (isDirty) "$commit-dirty" else commit
+    } catch (e: Exception) {
+        "unknown"
+    }
+}
+
+android.defaultConfig {
+    buildConfigField("String", "GIT_COMMIT", "\"${getGitCommit()}\"")
 }
 
 dependencies {
