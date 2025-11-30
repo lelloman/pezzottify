@@ -71,23 +71,23 @@ sealed interface Screen {
 
         @Serializable
         data class Album(val albumId: String) : Main
+
+        @Serializable
+        data class FullScreenImage(val imageUrls: String) : Main
+
+        @Serializable
+        data object Player : Main
+
+        @Serializable
+        data object Queue : Main
     }
-
-    @Serializable
-    data class FullScreenImage(val imageUrls: String) : Screen
-
-    @Serializable
-    data object Player : Screen
-
-    @Serializable
-    data object Queue : Screen
 }
 
 fun NavController.toFullScreenImage(imageUrls: List<String>) {
     val encoded = imageUrls.joinToString(separator = "|")
-    navigate(Screen.FullScreenImage(encoded))
+    navigate(Screen.Main.FullScreenImage(encoded))
 }
 
-fun NavController.toPlayer() = navigate(Screen.Player)
+fun NavController.toPlayer() = navigate(Screen.Main.Player)
 
-fun NavController.toQueue() = navigate(Screen.Queue)
+fun NavController.toQueue() = navigate(Screen.Main.Queue)

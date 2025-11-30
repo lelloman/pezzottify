@@ -58,7 +58,10 @@ import com.lelloman.pezzottify.android.ui.component.ScrollingTextRow
 import com.lelloman.pezzottify.android.ui.content.ArtistInfo
 import com.lelloman.pezzottify.android.ui.screen.main.content.album.AlbumScreen
 import com.lelloman.pezzottify.android.ui.screen.main.content.artist.ArtistScreen
+import com.lelloman.pezzottify.android.ui.screen.main.content.fullscreenimage.FullScreenImageScreen
 import com.lelloman.pezzottify.android.ui.screen.main.content.track.TrackScreen
+import com.lelloman.pezzottify.android.ui.screen.player.PlayerScreen
+import com.lelloman.pezzottify.android.ui.screen.queue.QueueScreen
 import com.lelloman.pezzottify.android.ui.toPlayer
 import com.lelloman.pezzottify.android.ui.screen.main.home.HomeScreen
 import com.lelloman.pezzottify.android.ui.screen.main.library.LibraryScreen
@@ -95,45 +98,59 @@ fun MainScreen(rootNavController: androidx.navigation.NavController) {
     MainScreenContent(state = viewModel.state.collectAsState().value, viewModel, rootNavController)
 }
 
+// Routes where bottom navigation and bottom player should be hidden
+private val overlayRoutes = setOf(
+    Screen.Main.Player::class.qualifiedName,
+    Screen.Main.Queue::class.qualifiedName,
+    Screen.Main.FullScreenImage::class.qualifiedName,
+)
+
 @Composable
 private fun MainScreenContent(state: MainScreenState, actions: MainScreenActions, rootNavController: androidx.navigation.NavController) {
     val navController = rememberNavController()
+    val backStackEntry by navController.currentBackStackEntryAsState()
+    val currentRoute = backStackEntry?.destination?.route
+
+    // Hide bottom bars for overlay screens (Player, Queue, FullScreenImage)
+    val isOverlayScreen = overlayRoutes.any { currentRoute?.startsWith(it ?: "") == true }
+
     Scaffold(
         bottomBar = {
-            NavigationBar {
-                val backStackEntry by navController.currentBackStackEntryAsState()
-                val currentDestination = backStackEntry?.destination
-                BottomNavigationRoute.entries.forEach {
-                    val isSelected = currentDestination?.route == it.routeString
-                    NavigationBarItem(
-                        icon = {
-                            Icon(
-                                it.icon,
-                                contentDescription = stringResource(it.description)
-                            )
-                        },
-                        label = { Text(stringResource(it.description)) },
-                        selected = isSelected,
-                        onClick = {
-                            // Try to pop to this tab's root first (handles re-clicking current tab)
-                            val popped = navController.popBackStack(it.route, inclusive = false)
-                            if (!popped) {
-                                // Tab not in back stack - navigate to it
-                                navController.navigate(it.route) {
-                                    popUpTo(Screen.Main.Home) {
-                                        saveState = true
+            if (!isOverlayScreen) {
+                NavigationBar {
+                    val currentDestination = backStackEntry?.destination
+                    BottomNavigationRoute.entries.forEach {
+                        val isSelected = currentDestination?.route == it.routeString
+                        NavigationBarItem(
+                            icon = {
+                                Icon(
+                                    it.icon,
+                                    contentDescription = stringResource(it.description)
+                                )
+                            },
+                            label = { Text(stringResource(it.description)) },
+                            selected = isSelected,
+                            onClick = {
+                                // Try to pop to this tab's root first (handles re-clicking current tab)
+                                val popped = navController.popBackStack(it.route, inclusive = false)
+                                if (!popped) {
+                                    // Tab not in back stack - navigate to it
+                                    navController.navigate(it.route) {
+                                        popUpTo(Screen.Main.Home) {
+                                            saveState = true
+                                        }
+                                        launchSingleTop = true
+                                        restoreState = true
                                     }
-                                    launchSingleTop = true
-                                    restoreState = true
                                 }
                             }
-                        }
-                    )
+                        )
+                    }
                 }
             }
         }
     ) { innerPadding ->
-        Column(modifier = Modifier.padding(bottom = innerPadding.calculateBottomPadding())) {
+        Column(modifier = Modifier.padding(bottom = if (isOverlayScreen) 0.dp else innerPadding.calculateBottomPadding())) {
 
             NavHost(
                 modifier = Modifier.weight(1f),
@@ -153,14 +170,28 @@ private fun MainScreenContent(state: MainScreenState, actions: MainScreenActions
                     ArtistScreen(it.toRoute<Screen.Main.Artist>().artistId, navController)
                 }
                 composable<Screen.Main.Album> {
-                    AlbumScreen(it.toRoute<Screen.Main.Album>().albumId, rootNavController)
+                    AlbumScreen(it.toRoute<Screen.Main.Album>().albumId, navController)
                 }
                 composable<Screen.Main.Track> {
                     TrackScreen(it.toRoute<Screen.Main.Track>().trackId)
                 }
+
+                // Overlay screens (no bottom nav/player)
+                composable<Screen.Main.Player> {
+                    PlayerScreen(navController = navController)
+                }
+                composable<Screen.Main.Queue> {
+                    QueueScreen(navController = navController)
+                }
+                composable<Screen.Main.FullScreenImage> {
+                    FullScreenImageScreen(
+                        encodedImageUrls = it.toRoute<Screen.Main.FullScreenImage>().imageUrls,
+                        navController = navController
+                    )
+                }
             }
-            if (state.bottomPlayer.isVisible) {
-                BottomPlayer(state.bottomPlayer, actions, onClickPlayer = { rootNavController.toPlayer() })
+            if (state.bottomPlayer.isVisible && !isOverlayScreen) {
+                BottomPlayer(state.bottomPlayer, actions, onClickPlayer = { navController.toPlayer() })
             }
         }
     }
