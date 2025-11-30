@@ -30,6 +30,7 @@ firebaseCrashlyticsBuildtools = "3.0.3"
 coil = "3.3.0"
 exoplayer = "1.8.0"
 robolectric = "4.14.1"
+mockk = "1.13.13"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -81,6 +82,7 @@ androidx-media3-session = { group = "androidx.media3", name = "media3-session", 
 androidx-compose-material-icons = { group = "androidx.compose.material", name = "material-icons-core" }
 robolectric = { group = "org.robolectric", name = "robolectric", version.ref = "robolectric" }
 androidx-test-core = { group = "androidx.test", name = "core", version = "1.6.1" }
+mockk = { group = "io.mockk", name = "mockk", version.ref = "mockk" }
 
 
 

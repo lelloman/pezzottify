@@ -24,11 +24,10 @@ object ImageUrlProvider {
      * Prefers larger images for better quality.
      */
     private val BIG_IMAGE_SIZE_PREFS = mapOf(
-        ImageSize.XLARGE to 5,
-        ImageSize.LARGE to 4,
+        ImageSize.XLARGE to 4,
+        ImageSize.LARGE to 3,
         ImageSize.DEFAULT to 2,
         ImageSize.SMALL to 1,
-        ImageSize.MEDIUM to 0
     )
 
     /**
@@ -40,7 +39,6 @@ object ImageUrlProvider {
         ImageSize.DEFAULT to 3,
         ImageSize.LARGE to 2,
         ImageSize.XLARGE to 1,
-        ImageSize.MEDIUM to 0
     )
 
     /**

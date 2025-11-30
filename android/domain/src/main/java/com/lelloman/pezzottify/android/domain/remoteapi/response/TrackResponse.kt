@@ -6,75 +6,44 @@ import kotlinx.serialization.Serializable
 
 @Serializable
 enum class ArtistRole {
-    ARTIST_ROLE_UNKNOWN,
-    ARTIST_ROLE_MAIN_ARTIST,
-    ARTIST_ROLE_FEATURED_ARTIST,
-    ARTIST_ROLE_REMIXER,
-    ARTIST_ROLE_ACTOR,
-    ARTIST_ROLE_COMPOSER,
-    ARTIST_ROLE_CONDUCTOR,
-    ARTIST_ROLE_ORCHESTRA,
+    MainArtist,
+    FeaturedArtist,
+    Remixer,
+    Composer,
+    Conductor,
+    Orchestra,
+    Actor,
+    Unknown,
 }
 
+/**
+ * Artist with their role on a track.
+ */
 @Serializable
-data class ArtistWithRole(
-    val artistId: String,
-    val name: String,
+data class TrackArtist(
+    val artist: ArtistData,
     val role: ArtistRole,
 )
 
+/**
+ * Server's ResolvedTrack response - nested structure with track, album, and artists.
+ */
 @Serializable
 data class TrackResponse(
-
-    val id: String,
-
-    val name: String,
-
-    @SerialName("album_id")
-    val albumId: String,
-
-    @SerialName("artists_ids")
-    val artistsIds: List<String>,
-
-    val number: Int,
-
-    @SerialName("disc_number")
-    val discNumber: Int,
-
-    @SerialName("duration")
-    val durationMillis: Long,
-
-    @SerialName("is_explicit")
-    val isExplicit: Boolean,
-
-    val alternatives: List<String>,
-
-    val tags: List<String>,
-
-    @SerialName("has_lyrics")
-    val hasLyrics: Boolean,
-
-    @SerialName("language_of_performance")
-    val languageOfPerformance: List<String>,
-
-    @SerialName("original_title")
-    val originalTitle: String,
-
-    @SerialName("version_title")
-    val versionTitle: String,
-
-    @SerialName("artists_with_role")
-    val artistsWithRole: List<ArtistWithRole>,
+    val track: TrackData,
+    val album: AlbumData,
+    val artists: List<TrackArtist>,
 )
 
 fun TrackResponse.toDomain() = object : Track {
     override val id: String
-        get() = this@toDomain.id
+        get() = this@toDomain.track.id
     override val name: String
-        get() = this@toDomain.name
+        get() = this@toDomain.track.name
     override val albumId: String
-        get() = this@toDomain.albumId
+        get() = this@toDomain.track.albumId
     override val artistsIds: List<String>
-        get() = this@toDomain.artistsIds
-    override val durationSeconds: Int = (this@toDomain.durationMillis / 1000L).toInt()
+        get() = this@toDomain.artists.map { it.artist.id }
+    override val durationSeconds: Int
+        get() = this@toDomain.track.durationSecs ?: 0
 }

@@ -37,13 +37,13 @@ internal interface RetrofitApiClient {
         @Path("artistId") artistId: String
     ): Response<ArtistDiscographyResponse>
 
-    @GET("/v1/content/album/{albumId}")
+    @GET("/v1/content/album/{albumId}/resolved")
     suspend fun getAlbum(
         @Header("Authorization") authToken: String,
         @Path("albumId") albumId: String
     ): Response<AlbumResponse>
 
-    @GET("/v1/content/track/{trackId}")
+    @GET("/v1/content/track/{trackId}/resolved")
     suspend fun getTrack(
         @Header("Authorization") authToken: String,
         @Path("trackId") trackId: String

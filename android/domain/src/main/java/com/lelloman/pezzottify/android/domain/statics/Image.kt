@@ -17,9 +17,8 @@ data class Image(
  */
 @Serializable
 enum class ImageSize {
-    DEFAULT,
     SMALL,
-    MEDIUM,
+    DEFAULT,
     LARGE,
     XLARGE,
 }

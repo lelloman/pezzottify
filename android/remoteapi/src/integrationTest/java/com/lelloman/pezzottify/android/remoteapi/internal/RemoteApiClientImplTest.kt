@@ -50,7 +50,7 @@ class RemoteApiClientImplTest {
         val princeResponse = client.getArtist(princeId)
         assertThat(princeResponse).isInstanceOf(RemoteApiResponse.Success::class.java)
         val prince = (princeResponse as RemoteApiResponse.Success).data
-        assertThat(prince.name).isEqualTo("Prince")
+        assertThat(prince.artist.name).isEqualTo("Prince")
 
         // Let's see the discography
         val princeDiscography = client.getArtistDiscography(princeId)
@@ -59,18 +59,18 @@ class RemoteApiClientImplTest {
         assertThat(discography.albums).isNotEmpty()
 
         // Let's see an album
-        val albumId = discography.albums.first()
+        val albumId = discography.albums.first().id
         val albumResponse = client.getAlbum(albumId)
         assertThat(albumResponse).isInstanceOf(RemoteApiResponse.Success::class.java)
         val album = (albumResponse as RemoteApiResponse.Success).data
-        assertThat(album.artistsIds).contains(princeId)
+        assertThat(album.artists.map { it.id }).contains(princeId)
 
         // Let's see a track
-        val trackId = album.discs.first().tracks.first()
+        val trackId = album.discs.first().tracks.first().id
         val trackResponse = client.getTrack(trackId)
         assertThat(trackResponse).isInstanceOf(RemoteApiResponse.Success::class.java)
         val track = (trackResponse as RemoteApiResponse.Success).data
-        assertThat(track.artistsIds).contains(princeId)
+        assertThat(track.artists.map { it.artist.id }).contains(princeId)
 
         // Let's search for prince now
         val searchResponse = client.search("prince")

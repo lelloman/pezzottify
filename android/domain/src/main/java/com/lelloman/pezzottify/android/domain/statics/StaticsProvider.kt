@@ -1,5 +1,6 @@
 package com.lelloman.pezzottify.android.domain.statics
 
+import com.lelloman.pezzottify.android.domain.app.TimeProvider
 import com.lelloman.pezzottify.android.domain.statics.fetchstate.StaticItemFetchState
 import com.lelloman.pezzottify.android.domain.statics.fetchstate.StaticItemFetchStateStore
 import com.lelloman.pezzottify.android.domain.sync.Synchronizer
@@ -14,6 +15,7 @@ class StaticsProvider internal constructor(
     private val staticsStore: StaticsStore,
     private val staticItemFetchStateStore: StaticItemFetchStateStore,
     private val synchronizer: Synchronizer,
+    private val timeProvider: TimeProvider,
     loggerFactory: LoggerFactory,
     private val coroutineContext: CoroutineContext,
 ) {
@@ -23,10 +25,16 @@ class StaticsProvider internal constructor(
         staticsStore: StaticsStore,
         staticItemFetchStateStore: StaticItemFetchStateStore,
         synchronizer: Synchronizer,
+        timeProvider: TimeProvider,
         loggerFactory: LoggerFactory,
-    ) : this(staticsStore, staticItemFetchStateStore, synchronizer, loggerFactory, Dispatchers.IO)
+    ) : this(staticsStore, staticItemFetchStateStore, synchronizer, timeProvider, loggerFactory, Dispatchers.IO)
 
     private val logger by loggerFactory
+
+    private fun StaticItemFetchState.isBackoffExpired(): Boolean {
+        val tryNext = tryNextTime ?: return true
+        return tryNext <= timeProvider.nowUtcMs()
+    }
 
     private suspend fun scheduleItemFetch(itemId: String, type: StaticItemType) {
         withContext(coroutineContext) {
@@ -47,7 +55,9 @@ class StaticsProvider internal constructor(
 
                     fetchState?.isLoading == true -> StaticsItem.Loading(itemId)
                     fetchState?.errorReason != null -> {
-                        scheduleItemFetch(itemId, StaticItemType.Artist)
+                        if (fetchState.isBackoffExpired()) {
+                            scheduleItemFetch(itemId, StaticItemType.Artist)
+                        }
                         StaticsItem.Error(
                             itemId,
                             Throwable("${fetchState.errorReason}")
@@ -75,7 +85,9 @@ class StaticsProvider internal constructor(
 
                     fetchState?.isLoading == true -> StaticsItem.Loading(itemId)
                     fetchState?.errorReason != null -> {
-                        scheduleItemFetch(itemId, StaticItemType.Track)
+                        if (fetchState.isBackoffExpired()) {
+                            scheduleItemFetch(itemId, StaticItemType.Track)
+                        }
                         StaticsItem.Error(
                             itemId,
                             Throwable("${fetchState.errorReason}")
@@ -103,7 +115,9 @@ class StaticsProvider internal constructor(
 
                     fetchState?.isLoading == true -> StaticsItem.Loading(itemId)
                     fetchState?.errorReason != null -> {
-                        scheduleItemFetch(itemId, StaticItemType.Album)
+                        if (fetchState.isBackoffExpired()) {
+                            scheduleItemFetch(itemId, StaticItemType.Album)
+                        }
                         StaticsItem.Error(
                             itemId,
                             Throwable("${fetchState.errorReason}")
@@ -131,7 +145,9 @@ class StaticsProvider internal constructor(
 
                     fetchState?.isLoading == true -> StaticsItem.Loading(artistId)
                     fetchState?.errorReason != null -> {
-                        scheduleItemFetch(artistId, StaticItemType.Discography)
+                        if (fetchState.isBackoffExpired()) {
+                            scheduleItemFetch(artistId, StaticItemType.Discography)
+                        }
                         StaticsItem.Error(
                             artistId,
                             Throwable("${fetchState.errorReason}")
