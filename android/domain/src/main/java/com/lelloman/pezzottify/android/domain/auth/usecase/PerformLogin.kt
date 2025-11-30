@@ -15,6 +15,10 @@ class PerformLogin @Inject constructor(
 ) : UseCase() {
 
     suspend operator fun invoke(email: String, password: String): LoginResult {
+        authStore.storeLastUsedCredentials(
+            handle = email,
+            baseUrl = configStore.baseUrl.value,
+        )
         when (val remoteResponse = remoteApiClient.login(email, password)) {
             is RemoteApiResponse.Success -> {
                 authStore.storeAuthState(

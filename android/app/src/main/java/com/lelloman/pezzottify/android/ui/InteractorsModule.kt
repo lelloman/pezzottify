@@ -52,8 +52,13 @@ class InteractorsModule {
     fun provideLoginInteractor(
         performLogin: PerformLogin,
         configStore: ConfigStore,
+        authStore: AuthStore,
     ): LoginViewModel.Interactor = object : LoginViewModel.Interactor {
-        override fun getInitialHost(): String = configStore.baseUrl.value
+        override fun getInitialHost(): String =
+            authStore.getLastUsedBaseUrl() ?: configStore.baseUrl.value
+
+        override fun getInitialEmail(): String =
+            authStore.getLastUsedHandle() ?: ""
 
         override suspend fun setHost(host: String) {
             configStore.setBaseUrl(host)

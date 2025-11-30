@@ -16,7 +16,12 @@ class LoginViewModel @Inject constructor(
 ) : ViewModel(), LoginScreenActions {
 
     private val mutableState: MutableStateFlow<LoginScreenState> =
-        MutableStateFlow(LoginScreenState(host = interactor.getInitialHost()))
+        MutableStateFlow(
+            LoginScreenState(
+                host = interactor.getInitialHost(),
+                email = interactor.getInitialEmail(),
+            )
+        )
     val state = mutableState.asStateFlow()
 
     private val mutableEvents = MutableSharedFlow<LoginScreenEvents>()
@@ -68,6 +73,8 @@ class LoginViewModel @Inject constructor(
     interface Interactor {
 
         fun getInitialHost(): String
+
+        fun getInitialEmail(): String
 
         suspend fun setHost(host: String)
 
