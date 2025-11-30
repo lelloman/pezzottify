@@ -5,8 +5,7 @@
 
 use super::constants::*;
 use super::fixtures::{create_test_catalog, create_test_db_with_users};
-use pezzottify_catalog_server::catalog;
-use pezzottify_catalog_server::catalog_store::{CatalogStore, LegacyCatalogAdapter};
+use pezzottify_catalog_server::catalog_store::SqliteCatalogStore;
 use pezzottify_catalog_server::search::{NoOpSearchVault, SearchVault};
 use pezzottify_catalog_server::server::{server::make_app, RequestsLoggingLevel, ServerConfig};
 use pezzottify_catalog_server::user::{FullUserStore, SqliteUserStore};
@@ -52,16 +51,16 @@ impl TestServer {
     /// - Server doesn't become ready within timeout
     pub async fn spawn() -> Self {
         // Create temporary test resources
-        let temp_catalog_dir = create_test_catalog().expect("Failed to create test catalog");
+        let (temp_catalog_dir, catalog_db_path, media_path) =
+            create_test_catalog().expect("Failed to create test catalog");
         let (temp_db_dir, db_path) =
             create_test_db_with_users().expect("Failed to create test database");
 
-        // Load catalog (skip expensive checks for speed)
-        let catalog = catalog::load_catalog(temp_catalog_dir.path(), false)
-            .expect("Failed to load test catalog");
-
-        // Wrap catalog in the adapter for the CatalogStore trait
-        let catalog_store: Arc<dyn CatalogStore> = Arc::new(LegacyCatalogAdapter::new(catalog));
+        // Open SQLite catalog store
+        let catalog_store = Arc::new(
+            SqliteCatalogStore::new(&catalog_db_path, &media_path)
+                .expect("Failed to open catalog store"),
+        );
 
         // Create user store
         let user_store: Box<dyn FullUserStore> =

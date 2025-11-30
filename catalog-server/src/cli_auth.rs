@@ -3,7 +3,6 @@ use clap::{CommandFactory, Parser, Subcommand};
 use crossterm::style::Stylize;
 use std::{path::PathBuf, sync::Arc};
 
-mod catalog;
 mod catalog_store;
 mod cli_style;
 mod search;
@@ -19,8 +18,7 @@ use cli_style::{
 };
 use user::UserManager;
 
-use catalog::Catalog;
-use catalog_store::{CatalogStore, LegacyCatalogAdapter};
+use catalog_store::NullCatalogStore;
 use user::SqliteUserStore;
 
 use rustyline::{
@@ -663,7 +661,7 @@ fn main() -> Result<()> {
         })?,
     };
     let user_store = SqliteUserStore::new(auth_store_file_path.clone())?;
-    let catalog_store: Arc<dyn CatalogStore> = Arc::new(LegacyCatalogAdapter::new(Catalog::dummy()));
+    let catalog_store = Arc::new(NullCatalogStore);
     let mut user_manager = UserManager::new(catalog_store, Box::new(user_store));
 
     // Print welcome screen instead of clap help

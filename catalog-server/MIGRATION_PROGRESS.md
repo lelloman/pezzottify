@@ -11,15 +11,12 @@ Based on the design doc: `CATALOG_SQLITE_DESIGN.md`
 - [x] **1.3** Implement SqliteCatalogStore with read operations (`src/catalog_store/store.rs`)
 
 ### Phase 2: Import Tool
-- [x] **2** Create catalog-import binary (`src/catalog_import.rs`)
+- [x] **2** Create catalog-import binary (`src/catalog_import.rs`) - *Removed in Phase 6*
 
 ### Phase 3: Server Integration
 - [x] **3.8** Replace GuardedCatalog with Arc<dyn CatalogStore> (`src/server/state.rs`)
 - [x] **3.9** Update server handlers to use new store (`src/server/server.rs`, `src/server/search.rs`, etc.)
 - [x] **3.10** Add --catalog-db CLI argument to switch between legacy and SQLite catalog stores
-  - Added `--catalog-db` flag to main.rs for specifying SQLite catalog database path
-  - When provided, server uses SqliteCatalogStore with new model shapes (breaking API change)
-  - When not provided, falls back to LegacyCatalogAdapter for backward compatibility
 
 ### Phase 4: Write Operations
 - [x] **4.11** Implement write operations in SqliteCatalogStore (insert_*, add_* methods)
@@ -27,66 +24,90 @@ Based on the design doc: `CATALOG_SQLITE_DESIGN.md`
   - Added CRUD endpoints for artists, albums, tracks, and images
   - Endpoints: POST/PUT/DELETE for `/v1/content/artist`, `/v1/content/album`, `/v1/content/track`, `/v1/content/image`
   - Protected by `EditCatalog` permission
-  - LegacyCatalogAdapter returns error (write operations require SQLite backend)
 - [x] **4.13** Add validation for write operations
   - Created validation module (`src/catalog_store/validation.rs`)
   - Field validation: required fields, positive values, non-empty strings
   - Foreign key validation: track.album_id must reference existing album
   - Duplicate ID detection before insert
-
-## Pending Tasks
+  - All write operations wrapped in `BEGIN IMMEDIATE` transactions
 
 ### Phase 5: Search
-- [ ] **5.14** Evaluate search approach (PezzotHash vs FTS5)
-- [ ] **5.15** Implement chosen search solution
-- [ ] **5.16** Update search endpoints
+- [x] **5.14-5.16** Search evaluation deferred
+  - PezzotHashSearchVault already works with SqliteCatalogStore
+  - FTS5 migration is optional future optimization
 
 ### Phase 6: Cleanup
-- [ ] **6.17** Remove filesystem catalog loading code
-- [ ] **6.18** Remove old model definitions
-- [ ] **6.19** Update tests
-- [ ] **6.20** Update documentation
+- [x] **6.17** Remove filesystem catalog loading code
+  - Removed `src/catalog/` directory
+  - Removed `catalog-import` binary
+- [x] **6.18** Remove old model definitions
+  - Removed `LegacyCatalogAdapter`
+  - Added `NullCatalogStore` for CLI tools that don't need catalog
+- [x] **6.19** Update tests
+  - Updated test fixtures to create SQLite catalog database
+  - Updated e2e tests for new JSON response shapes
+- [x] **6.20** Update documentation
 
-## Key Files Created/Modified
+## Migration Complete
 
-### New Files
+The SQLite catalog migration is now complete. The server requires a SQLite catalog database.
+
+### Current CLI Usage
+
+```bash
+# Run server (SQLite catalog is now required)
+cargo run -- <catalog-db-path> <user-db-path> [options]
+
+# Options:
+#   --media-path <path>     Path to media files (audio/images), defaults to parent of catalog-db
+#   --port <port>           Server port (default: 3001)
+#   --metrics-port <port>   Metrics port (default: 9091)
+#   --logging-level <level> Request logging level (default: path)
+#   --content-cache-age-sec <seconds>  Cache duration (default: 3600)
+#   --frontend-dir-path <path>  Serve static frontend files
+```
+
+### API Response Shapes
+
+The new API returns different JSON structures than the old filesystem-based catalog:
+
+- **Artist endpoint** (`/v1/content/artist/{id}`): Returns `ResolvedArtist` with nested `artist` field
+  ```json
+  { "artist": { "id": "...", "name": "..." }, "images": [...], "related_artists": [...] }
+  ```
+
+- **Album endpoint** (`/v1/content/album/{id}`): Returns `Album` directly
+  ```json
+  { "id": "...", "name": "...", "album_type": "Album", ... }
+  ```
+
+- **Track endpoint** (`/v1/content/track/{id}`): Returns `Track` directly
+  ```json
+  { "id": "...", "name": "...", "album_id": "...", ... }
+  ```
+
+- **Resolved Track** (`/v1/content/track/{id}/resolved`): Returns `ResolvedTrack`
+  ```json
+  { "track": {...}, "album": {...}, "artists": [...] }
+  ```
+
+- **Discography** (`/v1/content/artist/{id}/discography`): Returns `ArtistDiscography`
+  ```json
+  { "albums": [{ "id": "...", "name": "..." }, ...], "features": [...] }
+  ```
+
+## Key Files
+
+### Current Structure
 - `src/catalog_store/mod.rs` - Module root
 - `src/catalog_store/schema.rs` - SQLite schema definitions
-- `src/catalog_store/models.rs` - New model structs
+- `src/catalog_store/models.rs` - Model structs (Artist, Album, Track, etc.)
 - `src/catalog_store/store.rs` - SqliteCatalogStore implementation
 - `src/catalog_store/trait_def.rs` - CatalogStore trait
-- `src/catalog_store/legacy_adapter.rs` - LegacyCatalogAdapter for backward compatibility
-- `src/catalog_import.rs` - Import binary
+- `src/catalog_store/null_store.rs` - NullCatalogStore for CLI tools
+- `src/catalog_store/validation.rs` - Validation for write operations
 
-### Modified Files
-- `src/main.rs` - Uses LegacyCatalogAdapter
-- `src/server/state.rs` - Changed GuardedCatalog to GuardedCatalogStore
-- `src/server/server.rs` - Updated handlers to use CatalogStore
-- `src/server/stream_track.rs` - Updated to use CatalogStore
-- `src/server/search.rs` - Updated resolve functions for JSON-based queries
-- `src/search/search_vault.rs` - Updated PezzotHashSearchVault to use CatalogStore
-- `src/user/user_manager.rs` - Changed to accept Arc<dyn CatalogStore>
-- `src/cli_auth.rs` - Updated to use LegacyCatalogAdapter
-- `tests/common/server.rs` - Updated e2e tests to use LegacyCatalogAdapter
-- `Cargo.toml` - Added catalog-import binary
-
-## Git Commits (in order)
-1. `[catalog-server] Add SQLite schema for catalog database`
-2. `[catalog-server] Add new catalog model structs for SQLite storage`
-3. `[catalog-server] Implement SqliteCatalogStore with read operations`
-4. `[catalog-server] Add catalog-import binary and write operations`
-5. `[catalog-server] Add CatalogStore trait and implementations`
-6. `[catalog-server] Update server handlers to use CatalogStore trait`
-7. `[catalog-server] Add --catalog-db CLI flag to enable SQLite catalog backend`
-8. `[catalog-server] Add catalog editing API endpoints`
-9. `[catalog-server] Add validation for catalog write operations`
-
-## Notes
-- The server now supports both catalog backends via CLI flags:
-  - Default (no --catalog-db): Uses `LegacyCatalogAdapter` with filesystem-based catalog
-  - With `--catalog-db <path>`: Uses `SqliteCatalogStore` with new model shapes
-- To use SQLite catalog:
-  1. First import filesystem catalog: `cargo run --bin catalog-import -- <catalog-path> <output-db-path>`
-  2. Run server with: `cargo run -- <catalog-path> <user-db-path> --catalog-db <catalog-db-path>`
-- **API Breaking Change**: SqliteCatalogStore returns different JSON response shapes (e.g., `genres` instead of `genre`, nested structures for resolved entities)
-- All tests pass with the current implementation
+### Removed Files
+- `src/catalog/` - Old filesystem-based catalog (removed)
+- `src/catalog_import.rs` - Import binary (removed)
+- `src/catalog_store/legacy_adapter.rs` - LegacyCatalogAdapter (removed)

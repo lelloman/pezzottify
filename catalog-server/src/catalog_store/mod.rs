@@ -1,12 +1,12 @@
-mod legacy_adapter;
 mod models;
+mod null_store;
 mod schema;
 mod store;
 mod trait_def;
 mod validation;
 
-pub use legacy_adapter::LegacyCatalogAdapter;
 pub use models::*;
+pub use null_store::NullCatalogStore;
 pub use schema::CATALOG_VERSIONED_SCHEMAS;
-pub use store::{ImportTransaction, SqliteCatalogStore};
+pub use store::SqliteCatalogStore;
 pub use trait_def::{CatalogStore, SearchableContentType, SearchableItem};

@@ -25,7 +25,7 @@ A high-performance Rust backend server for the Pezzottify music streaming platfo
 
 The catalog server is the backend component of Pezzottify that provides:
 
-- **Music Catalog Management**: Loads and serves music metadata from JSON files
+- **Music Catalog Management**: SQLite-backed catalog with CRUD operations
 - **Audio Streaming**: HTTP range request support for efficient audio playback
 - **User Authentication**: Token-based authentication with Argon2 password hashing
 - **Authorization**: Role-based permissions system (Admin/Regular users)
@@ -37,11 +37,11 @@ The catalog server is the backend component of Pezzottify that provides:
 
 ### Core Modules
 
-- **`catalog/`**: Music catalog management
-  - Loads artists, albums, and tracks from JSON files
-  - Validates entity references (artist IDs, album IDs, image IDs)
-  - Resolves relationships between tracks, albums, and artists
-  - In-memory storage with HashMap-based lookups
+- **`catalog_store/`**: SQLite-backed catalog management
+  - `SqliteCatalogStore`: Main store implementation with CRUD operations
+  - `CatalogStore` trait: Abstract interface for catalog access
+  - Validation for write operations (foreign keys, duplicates)
+  - Transactional writes with `BEGIN IMMEDIATE`
 
 - **`user/`**: Authentication and authorization
   - `SqliteUserStore`: User persistence in SQLite database
@@ -64,17 +64,17 @@ The catalog server is the backend component of Pezzottify that provides:
 
 ### Key Types
 
-- **`Catalog`**: In-memory catalog with HashMaps for artists, albums, tracks
-- **`Dirs`**: Catalog directory paths (root, albums, artists, images)
+- **`SqliteCatalogStore`**: SQLite-backed catalog with CRUD operations
+- **`CatalogStore`**: Trait for catalog access (read and write operations)
 - **`Session`**: Request session containing user ID, token, and permissions
 - **`Permission`**: Enum for access control:
   - `AccessCatalog`: View catalog content
   - `LikeContent`: Like/unlike content
   - `OwnPlaylists`: Create and manage playlists
-  - `EditCatalog`: Modify catalog (not yet implemented)
-  - `ManagePermissions`: Manage user permissions (not yet implemented)
-  - `IssueContentDownload`: Issue download tokens (not yet implemented)
-  - `RebootServer`: Reboot server (not yet implemented)
+  - `EditCatalog`: Create, update, delete catalog entries
+  - `ManagePermissions`: Manage user permissions
+  - `IssueContentDownload`: Issue download tokens
+  - `RebootServer`: Reboot server
 - **`UserRole`**: Admin (all permissions) or Regular (basic permissions)
 
 ## Prerequisites
@@ -96,67 +96,22 @@ The catalog server is the backend component of Pezzottify that provides:
    cargo build --release
    ```
 
-## Catalog Directory Structure
+## Media Directory Structure
 
-The server expects a catalog directory with the following structure:
+The server expects a media directory (specified via `--media-path`) with audio files and images:
 
 ```
-<catalog-root>/
+<media-root>/
 ├── albums/
-│   ├── album_<id>.json      # Album metadata files
-│   └── album_<id>/          # Album audio directories
+│   └── <album-id>/          # Album audio directories
 │       ├── <track-file>.mp3
 │       ├── <track-file>.flac
 │       └── ...
-├── artists/
-│   └── artist_<id>.json     # Artist metadata files
 └── images/
     └── <image-id>           # Image files (jpg, png, etc.)
 ```
 
-### Metadata File Formats
-
-**Artist JSON** (`artist_<id>.json`):
-```json
-{
-  "id": "a123",
-  "name": "Artist Name",
-  "images": [
-    {"id": "image123", "width": 500, "height": 500}
-  ]
-}
-```
-
-**Album JSON** (`album_<id>.json`):
-```json
-{
-  "id": "b123",
-  "name": "Album Name",
-  "artist_id": "a123",
-  "release_date": "2024-01-01",
-  "images": [
-    {"id": "image456", "width": 1000, "height": 1000}
-  ],
-  "discs": [
-    {
-      "number": 1,
-      "tracks": [
-        {
-          "id": "t123",
-          "name": "Track Name",
-          "track_number": 1,
-          "disc_number": 1,
-          "duration_ms": 180000,
-          "artists": [
-            {"id": "a123", "role": "Main"}
-          ],
-          "file": "01-track-name.mp3"
-        }
-      ]
-    }
-  ]
-}
-```
+The catalog metadata (artists, albums, tracks) is stored in the SQLite catalog database.
 
 ## Building
 
@@ -189,15 +144,16 @@ cargo build --features slowdown
 ### Basic Usage
 
 ```bash
-cargo run --release -- <catalog-path> <user-db-path>
+cargo run --release -- <catalog-db-path> <user-db-path>
 ```
 
 ### Example
 
 ```bash
 cargo run --release -- \
-  /path/to/pezzottify-catalog \
+  /path/to/catalog.db \
   /path/to/user.db \
+  --media-path /path/to/media \
   --port 3001 \
   --content-cache-age-sec 60 \
   --logging-level path
@@ -207,8 +163,9 @@ cargo run --release -- \
 
 ```bash
 cargo run --features fast -- \
-  ../../pezzottify-catalog \
+  ../../catalog.db \
   ../../test.db \
+  --media-path ../../pezzottify-catalog \
   --content-cache-age-sec 60 \
   --logging-level path
 ```
@@ -219,7 +176,7 @@ To serve the web frontend from the server:
 
 ```bash
 cargo run --release -- \
-  /path/to/catalog \
+  /path/to/catalog.db \
   /path/to/user.db \
   --frontend-dir-path /path/to/web/dist
 ```
@@ -228,20 +185,19 @@ cargo run --release -- \
 
 ### Required Arguments
 
-- `<catalog-path>`: Path to the catalog directory
+- `<catalog-db-path>`: Path to the SQLite catalog database file
 - `<user-db-path>`: Path to the SQLite database file for user storage
 
 ### Optional Arguments
 
 | Argument | Default | Description |
 |----------|---------|-------------|
+| `--media-path <PATH>` | Parent of catalog-db | Path to media files (audio/images) |
 | `--port <PORT>` | `3001` | Server port to bind to |
 | `--metrics-port <PORT>` | `9091` | Metrics server port (Prometheus scraping) |
 | `--logging-level <LEVEL>` | `path` | Request logging level (`path`, `full`, `none`) |
 | `--content-cache-age-sec <SECONDS>` | `3600` | HTTP cache duration in seconds |
 | `--frontend-dir-path <PATH>` | None | Serve static frontend files from this path |
-| `--check-only` | false | Validate catalog without starting the server |
-| `--check-all` | false | Perform full catalog validation including ffprobe checks |
 
 ### Environment Variables
 
@@ -472,18 +428,6 @@ cargo test <test_name>
    cargo run --features slowdown -- <catalog> <db>
    ```
 
-### Validating Catalog Changes
-
-Before starting the server, validate catalog integrity:
-
-```bash
-# Quick validation (structure and references only)
-cargo run -- <catalog> <db> --check-only
-
-# Full validation (includes ffprobe on all audio files)
-cargo run -- <catalog> <db> --check-only --check-all
-```
-
 ### Debugging
 
 Enable detailed logging:
@@ -517,14 +461,14 @@ catalog-server/
 ├── src/
 │   ├── main.rs              # Main server entry point
 │   ├── cli_auth.rs          # CLI auth tool entry point
-│   ├── catalog/             # Catalog models and loading
+│   ├── catalog_store/       # SQLite catalog storage
 │   │   ├── mod.rs
-│   │   ├── catalog.rs       # Core catalog type
-│   │   ├── load.rs          # Catalog loading logic
-│   │   ├── artist.rs
-│   │   ├── album.rs
-│   │   ├── track.rs
-│   │   └── image.rs
+│   │   ├── store.rs         # SqliteCatalogStore implementation
+│   │   ├── trait_def.rs     # CatalogStore trait
+│   │   ├── models.rs        # Artist, Album, Track models
+│   │   ├── schema.rs        # SQLite schema definitions
+│   │   ├── validation.rs    # Write operation validation
+│   │   └── null_store.rs    # NullCatalogStore for CLI tools
 │   ├── server/              # HTTP server
 │   │   ├── mod.rs
 │   │   ├── server.rs        # Route handlers

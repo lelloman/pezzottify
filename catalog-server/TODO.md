@@ -15,8 +15,11 @@ V1 - We should plan a feature to gather listening stats from users
 
 ### [done]
 
+- ~Complete SQLite catalog migration (Phase 1-6) - See MIGRATION_PROGRESS.md~
 - ~Create catalog db (SQLite-backed CatalogStore with --catalog-db CLI flag)~
 - ~Implement catalog editing endpoints (EditCatalog permission) - CRUD for artists, albums, tracks, images~
+- ~Add validation for catalog write operations (transactional, foreign key checks)~
+- ~Remove legacy filesystem catalog code (now SQLite-only)~
 - ~Implement bandwidth usage statistics collection and persistence (track data transfer per user/endpoint)~
 - ~Create admin API endpoints for managing user roles and permissions (ManagePermissions permission)~
 - ~Create custom, flashy, modern looking CLI interface style for cli-auth~

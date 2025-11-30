@@ -63,7 +63,3 @@ path = "src/main.rs"
 [[bin]]
 name = "cli-auth"
 path = "src/cli_auth.rs"
-
-[[bin]]
-name = "catalog-import"
-path = "src/catalog_import.rs"

@@ -2,7 +2,6 @@
 //!
 //! This library exposes the internal modules for testing and potential reuse.
 
-pub mod catalog;
 pub mod catalog_store;
 pub mod search;
 pub mod server;
@@ -10,7 +9,6 @@ pub mod sqlite_persistence;
 pub mod user;
 
 // Re-export commonly used types for convenience
-pub use catalog::Catalog;
 pub use search::{NoOpSearchVault, SearchVault};
 pub use server::{run_server, RequestsLoggingLevel};
 pub use user::{SqliteUserStore, UserRole, UserStore};

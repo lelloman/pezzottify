@@ -24,9 +24,10 @@ async fn test_get_artist_returns_correct_data() {
 
     assert_eq!(response.status(), StatusCode::OK);
 
-    let artist: serde_json::Value = response.json().await.unwrap();
-    assert_eq!(artist["id"], ARTIST_1_ID);
-    assert_eq!(artist["name"], ARTIST_1_NAME);
+    // Note: Response is ResolvedArtist with nested artist field
+    let resolved: serde_json::Value = response.json().await.unwrap();
+    assert_eq!(resolved["artist"]["id"], ARTIST_1_ID);
+    assert_eq!(resolved["artist"]["name"], ARTIST_1_NAME);
 }
 
 #[tokio::test]
@@ -48,11 +49,12 @@ async fn test_get_artist_discography() {
 
     assert_eq!(response.status(), StatusCode::OK);
 
+    // Note: Response is ArtistDiscography with albums as full Album objects
     let discography: serde_json::Value = response.json().await.unwrap();
     let albums = discography["albums"].as_array().unwrap();
     let album_ids: Vec<String> = albums
         .iter()
-        .map(|v| v.as_str().unwrap().to_string())
+        .map(|v| v["id"].as_str().unwrap().to_string())
         .collect();
     assert!(album_ids.contains(&ALBUM_1_ID.to_string()));
 }
@@ -66,13 +68,13 @@ async fn test_get_multiple_artists() {
     let response = client.get_artist(ARTIST_1_ID).await;
     assert_eq!(response.status(), StatusCode::OK);
     let artist1: serde_json::Value = response.json().await.unwrap();
-    assert_eq!(artist1["name"], ARTIST_1_NAME);
+    assert_eq!(artist1["artist"]["name"], ARTIST_1_NAME);
 
     // Get second artist
     let response = client.get_artist(ARTIST_2_ID).await;
     assert_eq!(response.status(), StatusCode::OK);
     let artist2: serde_json::Value = response.json().await.unwrap();
-    assert_eq!(artist2["name"], ARTIST_2_NAME);
+    assert_eq!(artist2["artist"]["name"], ARTIST_2_NAME);
 }
 
 // =============================================================================
@@ -88,21 +90,11 @@ async fn test_get_album_returns_correct_data() {
 
     assert_eq!(response.status(), StatusCode::OK);
 
+    // Note: New model returns Album directly (without artists/discs)
     let album: serde_json::Value = response.json().await.unwrap();
     assert_eq!(album["id"], ALBUM_1_ID);
     assert_eq!(album["name"], ALBUM_1_TITLE);
-
-    // Verify artist is included
-    let artists = album["artists_ids"].as_array().unwrap();
-    assert_eq!(artists[0], ARTIST_1_ID);
-
-    // Verify discs are included
-    let discs = album["discs"].as_array().unwrap();
-    assert_eq!(discs.len(), 1);
-
-    // Verify tracks in first disc
-    let tracks = discs[0]["tracks"].as_array().unwrap();
-    assert_eq!(tracks.len(), 3);
+    assert_eq!(album["album_type"], "Album");
 }
 
 #[tokio::test]
@@ -160,11 +152,12 @@ async fn test_get_resolved_track() {
 
     assert_eq!(response.status(), StatusCode::OK);
 
+    // ResolvedTrack has track, album, and artists (not tracks plural)
     let resolved: serde_json::Value = response.json().await.unwrap();
-    // Resolved track returns album with tracks and artists
+    assert!(resolved.get("track").is_some());
     assert!(resolved.get("album").is_some());
-    assert!(resolved.get("tracks").is_some());
     assert!(resolved.get("artists").is_some());
+    assert_eq!(resolved["track"]["id"], TRACK_1_ID);
 }
 
 #[tokio::test]

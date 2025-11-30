@@ -13,29 +13,28 @@ Pezzottify is a music streaming platform with three main components:
 
 ### Catalog Server (Rust)
 
-The catalog server expects a catalog directory structure with `albums/`, `artists/`, and `images/` subdirectories containing JSON files and audio files.
+The catalog server uses a SQLite database for catalog metadata and a media directory for audio files and images.
 
 **Running the server:**
 ```bash
 cd catalog-server
-cargo run -- <catalog-path> <user-db-path> --content-cache-age-sec=60 --logging-level path
+cargo run -- <catalog-db-path> <user-db-path> --media-path=<media-path> --content-cache-age-sec=60 --logging-level path
 ```
 
-Example from README:
+Example:
 ```bash
-cargo run -- ../../pezzottify-catalog ../../test.db --content-cache-age-sec=60 --logging-level path
+cargo run -- ../../catalog.db ../../test.db --media-path=../../pezzottify-catalog --content-cache-age-sec=60 --logging-level path
 ```
 
 **Build features:**
 - `--features no_search`: Faster builds without search index
-- `--features no_checks`: Skip expensive catalog integrity checks
-- `--features fast`: Combines both no_search and no_checks
+- `--features fast`: Alias for no_search (fastest for development)
 - `--features slowdown`: Adds slowdown layer for testing
 
 **CLI arguments:**
-- `--check-only`: Validate catalog without starting server
-- `--check-all`: Perform full catalog validation including all files
+- `--media-path <PATH>`: Path to media files (audio/images), defaults to parent of catalog-db
 - `--port <PORT>`: Server port (default: 3001)
+- `--metrics-port <PORT>`: Metrics server port (default: 9091)
 - `--logging-level <LEVEL>`: Request logging level (default: path)
 - `--content-cache-age-sec <SECONDS>`: HTTP cache duration (default: 3600)
 - `--frontend-dir-path <PATH>`: Serve static frontend files
@@ -53,7 +52,6 @@ cargo test <test_name>
 ```
 
 **Additional binaries:**
-- `cli-search`: Search interface (marked for deletion in TODO)
 - `cli-auth`: Authentication CLI tool
 
 ### Web Frontend (Vue 3)
@@ -91,10 +89,11 @@ The Android project uses a multi-module Gradle setup with modules: `app`, `ui`, 
 ### Catalog Server Architecture
 
 **Core modules:**
-- `catalog/`: Music catalog management (Artist, Album, Track, Image models)
-  - Loads from filesystem (JSON files in `albums/`, `artists/` directories)
-  - Validates references between entities (artist IDs, album IDs, image IDs)
-  - Resolves relationships (tracks → albums → artists)
+- `catalog_store/`: SQLite-backed catalog management
+  - `SqliteCatalogStore`: Main store with CRUD operations
+  - `CatalogStore` trait: Abstract interface for catalog access
+  - Validation for write operations (foreign keys, duplicates)
+  - Transactional writes with `BEGIN IMMEDIATE`
 - `user/`: Authentication and authorization
   - `SqliteUserStore`: User persistence in SQLite
   - `UserManager`: Authentication with Argon2 password hashing
@@ -112,8 +111,8 @@ The Android project uses a multi-module Gradle setup with modules: `app`, `ui`, 
   - `versioned_schema.rs`: Schema migrations with version tracking
 
 **Key types:**
-- `Catalog`: In-memory catalog with HashMaps for artists, albums, tracks
-- `Dirs`: Catalog directory paths (root, albums, artists, images)
+- `SqliteCatalogStore`: SQLite-backed catalog with CRUD operations
+- `CatalogStore`: Trait for catalog access (read and write)
 - `Session`: Request session with user permissions
 - `Permission`: Enum for access control (AccessCatalog, LikeContent, OwnPlaylists, EditCatalog, ManagePermissions, IssueContentDownload, RebootServer)
 - `UserRole`: Admin (all permissions) or Regular (basic permissions)
@@ -205,16 +204,15 @@ Multi-module Gradle project with clean architecture layers:
 - Single operations rely on SQLite's default atomicity
 
 **Search indexing:**
-- Built at startup from catalog
+- Built at startup from catalog database
 - Can be disabled with `no_search` feature for faster dev builds
 - Uses custom "PezzotHash" algorithm
 
-**Catalog loading:**
-- Validates directory structure (albums/, artists/, images/)
-- Parses JSON files for artists and albums
-- Checks all referenced IDs exist (artist IDs in albums, image IDs, etc.)
-- Can run expensive checks with `--check-all` (including ffprobe on audio files)
-- Reports problems without failing (continues after errors)
+**Catalog storage:**
+- SQLite database stores all catalog metadata (artists, albums, tracks, images)
+- Media files (audio, images) stored in filesystem at `--media-path`
+- CRUD operations available via `CatalogStore` trait
+- Write operations validated and transactional
 
 ### Web Frontend
 
@@ -239,12 +237,11 @@ Multi-module Gradle project with clean architecture layers:
 See TODO.md for comprehensive list. Key items:
 
 **catalog-server:**
-- Create admin API endpoints for permission management
-- Implement catalog editing endpoints
+- Display image references in artist/album/track models
+- Catalog change log for users
+- Listening stats collection
 - Content download functionality
-- Server reboot endpoint
-- Create catalog database (separate from user DB)
-- Enhanced unit test coverage especially for DB migrations
+- FTS5 search optimization (optional)
 
 **web:**
 - Toast/Snackbar notification system

@@ -1466,8 +1466,7 @@ pub async fn run_server(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::catalog::Catalog;
-    use crate::catalog_store::LegacyCatalogAdapter;
+    use crate::catalog_store::NullCatalogStore;
     use crate::search::NoOpSearchVault;
     use crate::user::auth::UserAuthCredentials;
     use crate::user::auth::{AuthToken, AuthTokenValue};
@@ -1479,8 +1478,7 @@ mod tests {
     #[tokio::test]
     async fn responds_forbidden_on_protected_routes() {
         let user_store = Box::new(InMemoryUserStore::default());
-        let catalog_store: Arc<dyn CatalogStore> =
-            Arc::new(LegacyCatalogAdapter::new(Catalog::dummy()));
+        let catalog_store: Arc<dyn CatalogStore> = Arc::new(NullCatalogStore);
         let app = &mut make_app(
             ServerConfig::default(),
             catalog_store,
@@ -1959,9 +1957,8 @@ mod tests {
             let (store, _temp_dir) = create_test_store();
             let user_id = store.create_user("testuser").unwrap();
 
-            let catalog = crate::catalog::Catalog::dummy();
             let catalog_store: std::sync::Arc<dyn crate::catalog_store::CatalogStore> =
-                std::sync::Arc::new(crate::catalog_store::LegacyCatalogAdapter::new(catalog));
+                std::sync::Arc::new(crate::catalog_store::NullCatalogStore);
             let user_manager = crate::user::UserManager::new(catalog_store, Box::new(store));
 
             let found_id = user_manager.get_user_id("testuser").unwrap();

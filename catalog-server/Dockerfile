@@ -41,17 +41,18 @@ COPY --from=web-builder /web/dist /app/web
 
 # App will expect these directories
 RUN mkdir -p /data/db
-RUN mkdir -p /data/catalog
+RUN mkdir -p /data/media
 
 EXPOSE 3001
 EXPOSE 9091
 
-# Start the server with frontend serving enabled
-CMD ["catalog-server", "/data/catalog", "/data/db/user.db", "--content-cache-age-sec=60", "--logging-level", "path", "--frontend-dir-path", "/app/web"]
+# Start the server
+# Args: <catalog-db-path> <user-db-path> [--media-path <path>] [options]
+CMD ["catalog-server", "/data/db/catalog.db", "/data/db/user.db", "--media-path", "/data/media", "--content-cache-age-sec=60", "--logging-level", "path", "--frontend-dir-path", "/app/web"]
 
 # NOTE: Build context must be the repository root (not catalog-server/)
 # Build with (from repo root):
 # docker build -t catalog-server -f catalog-server/Dockerfile .
 
 # Run with:
-# docker run -d --rm --name pezzottify-catalog-server -p 3001:3001 -v /path/to/catalog:/data/catalog -v /path/to/db:/data/db catalog-server
+# docker run -d --rm --name pezzottify-catalog-server -p 3001:3001 -v /path/to/catalog:/data/catalog -v /path/to/db:/data/db -v /path/to/media:/data/media catalog-server

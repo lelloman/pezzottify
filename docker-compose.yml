@@ -9,16 +9,17 @@ services:
     ports:
       - "3001:3001"
     expose:
-      - "9091"  # Metrics port - internal only, not exposed to host
+      - "9091" # Metrics port - internal only, not exposed to host
     volumes:
-      - /home/lelloman/pezzottify-catalog/:/data/catalog
-      - /home/lelloman/pezzottify-catalog/:/data/db
+      - /home/lelloman/pezzottify-catalog/:/data/db # Contains catalog.db and user.db
+      - /home/lelloman/pezzottify-catalog/:/data/media # Contains albums/ and images/
     networks:
       - monitoring
     environment:
       - LOG_LEVEL=info
     restart: unless-stopped
-    command: [ "catalog-server", "/data/catalog", "/data/db/user.db", "--content-cache-age-sec=60", "--logging-level", "path", "--frontend-dir-path", "/app/web" ]
+    # Args: <catalog-db-path> <user-db-path> [--media-path <path>] [options]
+    command: [ "catalog-server", "/data/db/catalog.db", "/data/db/user.db", "--media-path", "/data/media", "--content-cache-age-sec=60", "--logging-level", "path", "--frontend-dir-path", "/app/web" ]
 
   prometheus:
     image: prom/prometheus:v2.48.0
@@ -69,7 +70,7 @@ services:
       - alertmanager-data:/alertmanager
     env_file:
       - ./monitoring/.env
-    entrypoint: ["/alertmanager-entrypoint.sh"]
+    entrypoint: [ "/alertmanager-entrypoint.sh" ]
     networks:
       - monitoring
     restart: unless-stopped
@@ -81,7 +82,7 @@ services:
     container_name: telegram-bot
     env_file:
       - ./monitoring/.env
-    entrypoint: ["/bin/sh", "-c"]
+    entrypoint: [ "/bin/sh", "-c" ]
     command:
       - |
         /usr/bin/alertmanager-bot \
