@@ -17,12 +17,13 @@ data class ArtistData(
 )
 
 /**
- * Server's ResolvedArtist response - nested structure with artist, images, and related artists.
+ * Server's ResolvedArtist response - nested structure with artist, display_image, and related artists.
  */
 @Serializable
 data class ArtistResponse(
     val artist: ArtistData,
-    val images: List<Image>,
+    @SerialName("display_image")
+    val displayImage: Image?,
     @SerialName("related_artists")
     val relatedArtists: List<ArtistData>,
 )
@@ -32,20 +33,8 @@ fun ArtistResponse.toDomain() = object : Artist {
         get() = this@toDomain.artist.id
     override val name: String
         get() = this@toDomain.artist.name
-    override val portraits: List<com.lelloman.pezzottify.android.domain.statics.Image>
-        get() = this@toDomain.images.map { it.toDomain() }
-    override val portraitGroup: List<com.lelloman.pezzottify.android.domain.statics.Image>
-        get() = emptyList() // Server doesn't differentiate image types currently
+    override val displayImageId: String?
+        get() = this@toDomain.displayImage?.id
     override val related: List<String>
         get() = this@toDomain.relatedArtists.map { it.id }
 }
-
-private fun Image.toDomain() = com.lelloman.pezzottify.android.domain.statics.Image(
-    id = id,
-    size = when (size) {
-        ImageSize.Small -> com.lelloman.pezzottify.android.domain.statics.ImageSize.SMALL
-        ImageSize.Default -> com.lelloman.pezzottify.android.domain.statics.ImageSize.DEFAULT
-        ImageSize.Large -> com.lelloman.pezzottify.android.domain.statics.ImageSize.LARGE
-        ImageSize.XLarge -> com.lelloman.pezzottify.android.domain.statics.ImageSize.XLARGE
-    }
-)

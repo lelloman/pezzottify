@@ -88,7 +88,7 @@ class PlayerScreenViewModel @Inject constructor(
                 .collect { resolved ->
                     mutableState.value = mutableState.value.copy(
                         albumName = resolved.data.name,
-                        albumImageUrls = resolved.data.imageUrls,
+                        albumImageUrl = resolved.data.imageUrl,
                     )
                 }
         }

@@ -107,7 +107,7 @@ class MainScreenViewModel @Inject constructor(
                     mutableState.value = oldState.copy(
                         bottomPlayer = oldState.bottomPlayer.copy(
                             albumName = resolved.data.name,
-                            albumImageUrls = resolved.data.imageUrls,
+                            albumImageUrl = resolved.data.imageUrl,
                         )
                     )
                 }

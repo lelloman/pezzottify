@@ -5,9 +5,8 @@ interface Album : StaticItem {
     val name: String
     val date: Long
     val genre: List<String>
-    val covers: List<Image>
+    val displayImageId: String?
     val related: List<String>
-    val coverGroup: List<Image>
     val artistsIds: List<String>
     val discs: List<Disc>
 }

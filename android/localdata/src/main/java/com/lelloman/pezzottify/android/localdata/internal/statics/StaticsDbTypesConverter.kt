@@ -1,7 +1,6 @@
 package com.lelloman.pezzottify.android.localdata.internal.statics
 
 import androidx.room.TypeConverter
-import com.lelloman.pezzottify.android.domain.statics.Image
 import com.lelloman.pezzottify.android.localdata.internal.statics.model.Disc
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
@@ -25,16 +24,6 @@ internal object StaticsDbTypesConverter {
 
     @TypeConverter
     fun fromStringToDiscsList(value: String): List<Disc> {
-        return Json.decodeFromString(value)
-    }
-
-    @TypeConverter
-    fun fromImagesListToString(values: List<Image>): String {
-        return Json.encodeToString(values)
-    }
-
-    @TypeConverter
-    fun fromStringToImagesList(value: String): List<Image> {
         return Json.decodeFromString(value)
     }
 }

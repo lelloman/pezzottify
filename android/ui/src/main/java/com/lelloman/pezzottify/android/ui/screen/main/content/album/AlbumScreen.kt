@@ -45,7 +45,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.lelloman.pezzottify.android.ui.R
 import com.lelloman.pezzottify.android.ui.component.DurationText
 import com.lelloman.pezzottify.android.ui.component.LoadingScreen
-import com.lelloman.pezzottify.android.ui.component.PezzottifyImage
+import com.lelloman.pezzottify.android.ui.component.NullablePezzottifyImage
 import com.lelloman.pezzottify.android.ui.component.PezzottifyImagePlaceholder
 import com.lelloman.pezzottify.android.ui.component.PezzottifyImageShape
 import com.lelloman.pezzottify.android.ui.component.ScrollingArtistsRow
@@ -176,10 +176,10 @@ fun AlbumLoadedScreen(
                     modifier = Modifier
                         .fillMaxSize()
                         .alpha(imageAlpha)
-                        .clickable { actions.clickOnAlbumImage(album.imageUrls) }
+                        .clickable { actions.clickOnAlbumImage(album.imageUrl) }
                 ) {
-                    PezzottifyImage(
-                        urls = album.imageUrls,
+                    NullablePezzottifyImage(
+                        url = album.imageUrl,
                         placeholder = PezzottifyImagePlaceholder.GenericImage,
                         shape = PezzottifyImageShape.FullSize,
                     )

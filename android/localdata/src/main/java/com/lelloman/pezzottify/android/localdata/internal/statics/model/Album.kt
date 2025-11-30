@@ -3,7 +3,6 @@ package com.lelloman.pezzottify.android.localdata.internal.statics.model
 import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.PrimaryKey
-import com.lelloman.pezzottify.android.domain.statics.Image
 import kotlinx.serialization.Serializable
 
 sealed interface ActivityPeriod {
@@ -39,9 +38,7 @@ internal data class Album(
 
     override val genre: List<String>,
 
-    override val covers: List<Image>,
-
-    override val coverGroup: List<Image>,
+    override val displayImageId: String?,
 
     override val related: List<String>,
 
@@ -63,9 +60,8 @@ internal fun com.lelloman.pezzottify.android.domain.statics.Album.quack(): Album
     name = name,
     date = date,
     genre = genre,
-    covers = covers,
+    displayImageId = displayImageId,
     related = related,
-    coverGroup = coverGroup,
     artistsIds = artistsIds,
     discs = discs.map { Disc(it.name, tracksIds = it.tracksIds) },
 )

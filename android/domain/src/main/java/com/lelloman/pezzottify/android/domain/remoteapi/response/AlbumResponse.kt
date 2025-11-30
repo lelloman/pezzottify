@@ -71,14 +71,15 @@ data class AlbumData(
 )
 
 /**
- * Server's ResolvedAlbum response - nested structure with album, artists, discs, and images.
+ * Server's ResolvedAlbum response - nested structure with album, artists, discs, and display_image.
  */
 @Serializable
 data class AlbumResponse(
     val album: AlbumData,
     val artists: List<ArtistData>,
     val discs: List<Disc>,
-    val images: List<Image>,
+    @SerialName("display_image")
+    val displayImage: Image?,
 )
 
 fun AlbumResponse.toDomain() = object : Album {
@@ -90,10 +91,8 @@ fun AlbumResponse.toDomain() = object : Album {
         get() = this@toDomain.album.releaseDate ?: 0L
     override val artistsIds: List<String>
         get() = this@toDomain.artists.map { it.id }
-    override val coverGroup: List<com.lelloman.pezzottify.android.domain.statics.Image>
-        get() = emptyList() // Server doesn't differentiate image types currently
-    override val covers: List<com.lelloman.pezzottify.android.domain.statics.Image>
-        get() = this@toDomain.images.map { it.toDomain() }
+    override val displayImageId: String?
+        get() = this@toDomain.displayImage?.id
     override val genre: List<String>
         get() = this@toDomain.album.genres
     override val related: List<String>
@@ -106,13 +105,3 @@ fun AlbumResponse.toDomain() = object : Album {
             }
         }
 }
-
-private fun Image.toDomain() = com.lelloman.pezzottify.android.domain.statics.Image(
-    id = id,
-    size = when (size) {
-        ImageSize.Small -> com.lelloman.pezzottify.android.domain.statics.ImageSize.SMALL
-        ImageSize.Default -> com.lelloman.pezzottify.android.domain.statics.ImageSize.DEFAULT
-        ImageSize.Large -> com.lelloman.pezzottify.android.domain.statics.ImageSize.LARGE
-        ImageSize.XLarge -> com.lelloman.pezzottify.android.domain.statics.ImageSize.XLARGE
-    }
-)

@@ -28,8 +28,8 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import com.lelloman.pezzottify.android.ui.component.DurationText
+import com.lelloman.pezzottify.android.ui.component.NullablePezzottifyImage
 import com.lelloman.pezzottify.android.ui.component.PezzottifyImagePlaceholder
-import com.lelloman.pezzottify.android.ui.component.PezzottifyImage
 import com.lelloman.pezzottify.android.ui.component.PezzottifyImageShape
 import com.lelloman.pezzottify.android.ui.content.Content
 import com.lelloman.pezzottify.android.ui.content.SearchResultContent
@@ -129,7 +129,7 @@ private fun AlbumSearchResult(
             .height(PezzottifyImageShape.SmallSquare.size)
             .clickable { actions.clickOnAlbumSearchResult(searchResult.id) }
     ) {
-        PezzottifyImage(url = searchResult.imageUrl)
+        NullablePezzottifyImage(url = searchResult.imageUrl)
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 searchResult.name, modifier = Modifier
@@ -157,7 +157,7 @@ private fun TrackSearchResult(
             .height(PezzottifyImageShape.SmallSquare.size)
             .clickable { actions.clickOnTrackSearchResult(searchResult.id) }
     ) {
-        PezzottifyImage(url = "")
+        NullablePezzottifyImage(url = null)
         Column(
             modifier = Modifier
                 .weight(1f)
@@ -192,7 +192,7 @@ private fun ArtistSearchResult(
             .height(PezzottifyImageShape.SmallSquare.size)
             .clickable { actions.clickOnArtistSearchResult(searchResult.id) }
     ) {
-        PezzottifyImage(
+        NullablePezzottifyImage(
             url = searchResult.imageUrl,
             placeholder = PezzottifyImagePlaceholder.Head
         )

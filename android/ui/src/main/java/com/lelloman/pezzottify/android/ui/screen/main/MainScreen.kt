@@ -51,7 +51,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.toRoute
 import com.lelloman.pezzottify.android.ui.R
 import com.lelloman.pezzottify.android.ui.Screen
-import com.lelloman.pezzottify.android.ui.component.PezzottifyImage
+import com.lelloman.pezzottify.android.ui.component.NullablePezzottifyImage
 import com.lelloman.pezzottify.android.ui.component.PezzottifyImageShape
 import com.lelloman.pezzottify.android.ui.component.ScrollingArtistsRow
 import com.lelloman.pezzottify.android.ui.component.ScrollingTextRow
@@ -189,7 +189,7 @@ private fun MainScreenContent(state: MainScreenState, actions: MainScreenActions
                 }
                 composable<Screen.Main.FullScreenImage> {
                     FullScreenImageScreen(
-                        encodedImageUrls = it.toRoute<Screen.Main.FullScreenImage>().imageUrls,
+                        imageUrl = it.toRoute<Screen.Main.FullScreenImage>().imageUrl,
                         navController = navController
                     )
                 }
@@ -294,8 +294,8 @@ private fun BottomPlayer(state: MainScreenState.BottomPlayer, actions: MainScree
                         .weight(1f)
                         .clickable(onClick = onClickPlayer)
                 ) {
-                    PezzottifyImage(
-                        urls = state.albumImageUrls,
+                    NullablePezzottifyImage(
+                        url = state.albumImageUrl,
                         shape = PezzottifyImageShape.MiniPlayer,
                         modifier = Modifier.clip(RoundedCornerShape(4.dp))
                     )
@@ -348,7 +348,7 @@ private fun PreviewBottomPlayer() {
             isVisible = true,
             trackName = "A very long track name to see what happens when it is very very long",
             albumName = "Album Name",
-            albumImageUrls = emptyList(),
+            albumImageUrl = null,
             artists = listOf(
                 ArtistInfo("1", "Artist One"),
                 ArtistInfo("2", "Artist Two"),

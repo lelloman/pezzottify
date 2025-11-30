@@ -13,7 +13,7 @@ data class PlayerScreenState(
     val trackName: String = "",
     val albumId: String = "",
     val albumName: String = "",
-    val albumImageUrls: List<String> = emptyList(),
+    val albumImageUrl: String? = null,
     val artists: List<ArtistInfo> = emptyList(),
     val isPlaying: Boolean = false,
     val trackProgressPercent: Float = 0f,

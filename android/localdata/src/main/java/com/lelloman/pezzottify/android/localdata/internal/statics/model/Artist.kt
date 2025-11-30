@@ -3,7 +3,6 @@ package com.lelloman.pezzottify.android.localdata.internal.statics.model
 import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.PrimaryKey
-import com.lelloman.pezzottify.android.domain.statics.Image
 
 @Entity(tableName = Artist.TABLE_NAME)
 internal data class Artist(
@@ -14,9 +13,7 @@ internal data class Artist(
 
     override val name: String,
 
-    override val portraits: List<Image>,
-
-    override val portraitGroup: List<Image>,
+    override val displayImageId: String?,
 
     override val related: List<String>,
 ) : com.lelloman.pezzottify.android.domain.statics.Artist {
@@ -31,7 +28,6 @@ internal data class Artist(
 internal fun com.lelloman.pezzottify.android.domain.statics.Artist.quack(): Artist = Artist(
     id = id,
     name = name,
-    portraits = portraits,
-    portraitGroup = portraitGroup,
+    displayImageId = displayImageId,
     related = related,
 )

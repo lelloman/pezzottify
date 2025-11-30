@@ -42,7 +42,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import androidx.navigation.compose.rememberNavController
 import com.lelloman.pezzottify.android.ui.R
-import com.lelloman.pezzottify.android.ui.component.PezzottifyImage
+import com.lelloman.pezzottify.android.ui.component.NullablePezzottifyImage
 import com.lelloman.pezzottify.android.ui.component.PezzottifyImageShape
 import com.lelloman.pezzottify.android.ui.content.Content
 import com.lelloman.pezzottify.android.ui.theme.ComponentSize
@@ -182,8 +182,8 @@ private fun RecentlyViewedItem(
                         .padding(Spacing.Small),
                     verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
                 ) {
-                    PezzottifyImage(
-                        urls = item.data.contentImageUrls,
+                    NullablePezzottifyImage(
+                        url = item.data.contentImageUrl,
                         shape = PezzottifyImageShape.SmallSquare,
                         modifier = Modifier.size(ComponentSize.ImageThumbSmall)
                     )

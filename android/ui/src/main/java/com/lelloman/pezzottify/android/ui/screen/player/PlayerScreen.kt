@@ -57,7 +57,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import com.lelloman.pezzottify.android.ui.R
 import com.lelloman.pezzottify.android.ui.component.LoadingScreen
-import com.lelloman.pezzottify.android.ui.component.PezzottifyImage
+import com.lelloman.pezzottify.android.ui.component.NullablePezzottifyImage
 import com.lelloman.pezzottify.android.ui.component.PezzottifyImagePlaceholder
 import com.lelloman.pezzottify.android.ui.component.PezzottifyImageShape
 import com.lelloman.pezzottify.android.ui.component.ScrollingArtistsRow
@@ -216,8 +216,8 @@ private fun PlayerScreenContent(
                             }
                         }
                 ) {
-                    PezzottifyImage(
-                        urls = state.albumImageUrls,
+                    NullablePezzottifyImage(
+                        url = state.albumImageUrl,
                         placeholder = PezzottifyImagePlaceholder.GenericImage,
                         shape = PezzottifyImageShape.FullSize,
                     )

@@ -4,5 +4,5 @@ interface AlbumScreenActions {
 
     fun clickOnPlayAlbum(albumId: String)
     fun clickOnTrack(trackId: String)
-    fun clickOnAlbumImage(imageUrls: List<String>)
+    fun clickOnAlbumImage(imageUrl: String?)
 }

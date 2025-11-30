@@ -15,7 +15,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -46,14 +45,9 @@ private const val DOUBLE_TAP_TIMEOUT_MS = 300L
 
 @Composable
 fun FullScreenImageScreen(
-    encodedImageUrls: String,
+    imageUrl: String,
     navController: NavController,
 ) {
-    val imageUrls = remember(encodedImageUrls) {
-        encodedImageUrls.split("|").filter { it.isNotBlank() }
-    }
-
-    var currentUrlIndex by remember { mutableIntStateOf(0) }
     var scale by remember { mutableFloatStateOf(1f) }
     var offset by remember { mutableStateOf(Offset.Zero) }
     var dismissOffsetY by remember { mutableFloatStateOf(0f) }
@@ -234,25 +228,12 @@ fun FullScreenImageScreen(
             },
         contentAlignment = Alignment.Center
     ) {
-        if (imageUrls.isEmpty() || currentUrlIndex >= imageUrls.size) {
-            androidx.compose.material3.Icon(
-                painter = painterResource(R.drawable.baseline_image_24),
-                contentDescription = null,
-                tint = Color.White.copy(alpha = 0.5f),
-                modifier = Modifier.fillMaxSize(0.3f)
-            )
-        } else {
-            AsyncImage(
-                model = imageUrls[currentUrlIndex],
-                contentDescription = null,
-                contentScale = ContentScale.Fit,
-                modifier = Modifier.fillMaxSize(),
-                onError = {
-                    if (currentUrlIndex < imageUrls.size - 1) {
-                        currentUrlIndex++
-                    }
-                }
-            )
-        }
+        AsyncImage(
+            model = imageUrl,
+            contentDescription = null,
+            contentScale = ContentScale.Fit,
+            modifier = Modifier.fillMaxSize(),
+            error = painterResource(R.drawable.baseline_image_24),
+        )
     }
 }

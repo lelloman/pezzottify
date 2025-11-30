@@ -19,7 +19,7 @@ fun AlbumGridItem(
     modifier: Modifier = Modifier,
     albumName: String,
     albumDate: Long,
-    albumCoverUrl: String = "",
+    albumCoverUrl: String? = null,
     onClick: () -> Unit,
 ) {
     Column(
@@ -28,7 +28,7 @@ fun AlbumGridItem(
             .clickable(onClick = onClick)
             .padding(8.dp)
     ) {
-        PezzottifyImage(
+        NullablePezzottifyImage(
             url = albumCoverUrl,
             shape = PezzottifyImageShape.SmallSquare,
             placeholder = PezzottifyImagePlaceholder.GenericImage,

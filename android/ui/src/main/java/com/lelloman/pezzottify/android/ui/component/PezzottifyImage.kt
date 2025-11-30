@@ -97,6 +97,43 @@ fun PezzottifyImage(
     )
 }
 
+/**
+ * Image component for a nullable URL.
+ *
+ * Shows placeholder if URL is null, otherwise loads the image.
+ *
+ * @param url Nullable image URL
+ * @param modifier Modifier for the image
+ * @param shape Shape preset for the image (defines size/dimensions)
+ * @param placeholder Placeholder icon to show while loading, on error, or when URL is null
+ * @param contentDescription Accessibility description
+ */
+@Composable
+fun NullablePezzottifyImage(
+    url: String?,
+    modifier: Modifier = Modifier,
+    shape: PezzottifyImageShape = PezzottifyImageShape.SmallSquare,
+    placeholder: PezzottifyImagePlaceholder = PezzottifyImagePlaceholder.GenericImage,
+    contentDescription: String? = null
+) {
+    if (url == null) {
+        Image(
+            painter = rememberVectorPainter(placeholder.getIcon()),
+            contentDescription = contentDescription,
+            modifier = shape.modifier(modifier),
+            colorFilter = ColorFilter.tint(MaterialTheme.colorScheme.onSurfaceVariant)
+        )
+    } else {
+        PezzottifyImage(
+            url = url,
+            modifier = modifier,
+            shape = shape,
+            placeholder = placeholder,
+            contentDescription = contentDescription
+        )
+    }
+}
+
 @SuppressLint("ModifierFactoryExtensionFunction")
 sealed interface PezzottifyImageShape {
 

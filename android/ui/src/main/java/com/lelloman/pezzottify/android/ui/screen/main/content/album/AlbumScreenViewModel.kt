@@ -69,8 +69,8 @@ class AlbumScreenViewModel @AssistedInject constructor(
         interactor.playTrack(albumId, trackId)
     }
 
-    override fun clickOnAlbumImage(imageUrls: List<String>) {
-        navController.toFullScreenImage(imageUrls)
+    override fun clickOnAlbumImage(imageUrl: String?) {
+        navController.toFullScreenImage(imageUrl)
     }
 
     interface Interactor {

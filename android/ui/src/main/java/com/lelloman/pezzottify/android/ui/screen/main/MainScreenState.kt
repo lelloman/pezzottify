@@ -11,7 +11,7 @@ data class MainScreenState(
         val trackId: String = "",
         val trackName: String = "",
         val albumName: String = "",
-        val albumImageUrls: List<String> = emptyList(),
+        val albumImageUrl: String? = null,
         val artists: List<ArtistInfo> = emptyList(),
         val isPlaying: Boolean = false,
         val trackPercent: Float = 0f,

@@ -78,7 +78,7 @@ sealed interface Screen {
         data class Album(val albumId: String) : Main
 
         @Serializable
-        data class FullScreenImage(val imageUrls: String) : Main
+        data class FullScreenImage(val imageUrl: String) : Main
 
         @Serializable
         data object Player : Main
@@ -88,9 +88,10 @@ sealed interface Screen {
     }
 }
 
-fun NavController.toFullScreenImage(imageUrls: List<String>) {
-    val encoded = imageUrls.joinToString(separator = "|")
-    navigate(Screen.Main.FullScreenImage(encoded))
+fun NavController.toFullScreenImage(imageUrl: String?) {
+    if (imageUrl != null) {
+        navigate(Screen.Main.FullScreenImage(imageUrl))
+    }
 }
 
 fun NavController.toPlayer() = navigate(Screen.Main.Player)

@@ -15,7 +15,7 @@ data class HomeScreenState(
 data class ResolvedRecentlyViewedContent(
     val contentId: String,
     val contentName: String,
-    val contentImageUrls: List<String>,
+    val contentImageUrl: String?,
     val contentType: ViewedContentType,
 )
 

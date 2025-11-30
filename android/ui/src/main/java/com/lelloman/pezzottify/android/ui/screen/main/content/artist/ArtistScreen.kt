@@ -40,7 +40,7 @@ import androidx.navigation.NavController
 import androidx.navigation.compose.rememberNavController
 import com.lelloman.pezzottify.android.ui.component.AlbumGridItem
 import com.lelloman.pezzottify.android.ui.component.LoadingScreen
-import com.lelloman.pezzottify.android.ui.component.PezzottifyImage
+import com.lelloman.pezzottify.android.ui.component.NullablePezzottifyImage
 import com.lelloman.pezzottify.android.ui.component.PezzottifyImagePlaceholder
 import com.lelloman.pezzottify.android.ui.component.PezzottifyImageShape
 import com.lelloman.pezzottify.android.ui.content.Artist
@@ -207,8 +207,8 @@ fun ArtistLoadedScreen(
                         .fillMaxSize()
                         .alpha(imageAlpha)
                 ) {
-                    PezzottifyImage(
-                        urls = artist.imageUrls,
+                    NullablePezzottifyImage(
+                        url = artist.imageUrl,
                         placeholder = PezzottifyImagePlaceholder.Head,
                         shape = PezzottifyImageShape.FullSize,
                     )
@@ -266,7 +266,7 @@ private fun AlbumGrid(
                                 modifier = Modifier.weight(1f),
                                 albumName = album.data.name,
                                 albumDate = album.data.date,
-                                albumCoverUrl = album.data.imageUrls.firstOrNull() ?: "",
+                                albumCoverUrl = album.data.imageUrl,
                                 onClick = { navController.toAlbum(albumId) }
                             )
                         }
@@ -332,8 +332,8 @@ private fun RelatedArtistItem(
                     .padding(end = 16.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                PezzottifyImage(
-                    url = artist.data.imageUrls.firstOrNull() ?: "",
+                NullablePezzottifyImage(
+                    url = artist.data.imageUrl,
                     shape = PezzottifyImageShape.SmallSquare,
                     placeholder = PezzottifyImagePlaceholder.Head,
                     modifier = Modifier.clip(CircleShape)

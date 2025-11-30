@@ -32,10 +32,9 @@ class UiContentResolver(
                     it.id, Artist(
                         id = it.id,
                         name = it.data.name,
-                        imageUrls = ImageUrlProvider.selectImageUrls(
+                        imageUrl = ImageUrlProvider.buildImageUrl(
                             configStore.baseUrl.value,
-                            it.data.portraits,
-                            secondaryImages = it.data.portraitGroup,
+                            it.data.displayImageId,
                         ),
                         related = it.data.related,
                     )
@@ -54,10 +53,9 @@ class UiContentResolver(
                         name = it.data.name,
                         date = it.data.date,
                         artistsIds = it.data.artistsIds,
-                        imageUrls = ImageUrlProvider.selectImageUrls(
+                        imageUrl = ImageUrlProvider.buildImageUrl(
                             configStore.baseUrl.value,
-                            it.data.covers,
-                            secondaryImages = it.data.coverGroup,
+                            it.data.displayImageId,
                         ),
                         discs = it.data.discs.map { disc ->
                             com.lelloman.pezzottify.android.ui.content.Disc(
@@ -127,11 +125,10 @@ class UiContentResolver(
                             id = it.id,
                             name = it.data.name,
                             artistsIds = it.data.artistsIds,
-                            imageUrl = ImageUrlProvider.selectImageUrls(
+                            imageUrl = ImageUrlProvider.buildImageUrl(
                                 baseUrl = configStore.baseUrl.value,
-                                primaryImages = it.data.covers,
-                                secondaryImages = it.data.coverGroup,
-                            ).firstOrNull() ?: "",
+                                displayImageId = it.data.displayImageId,
+                            ),
                         )
                     )
                 }
@@ -161,11 +158,10 @@ class UiContentResolver(
                     it.id, SearchResultContent.Artist(
                         id = it.id,
                         name = it.data.name,
-                        imageUrl = ImageUrlProvider.selectImageUrls(
+                        imageUrl = ImageUrlProvider.buildImageUrl(
                             baseUrl = configStore.baseUrl.value,
-                            primaryImages = it.data.portraits,
-                            secondaryImages = it.data.portraitGroup,
-                        ).firstOrNull() ?: "",
+                            displayImageId = it.data.displayImageId,
+                        ),
                     )
                 )
             }
