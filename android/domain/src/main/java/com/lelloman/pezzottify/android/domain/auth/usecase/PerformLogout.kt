@@ -7,6 +7,7 @@ import com.lelloman.pezzottify.android.domain.remoteapi.RemoteApiClient
 import com.lelloman.pezzottify.android.domain.statics.StaticsStore
 import com.lelloman.pezzottify.android.domain.usecase.UseCase
 import com.lelloman.pezzottify.android.domain.user.UserDataStore
+import com.lelloman.pezzottify.android.domain.usercontent.UserContentStore
 import javax.inject.Inject
 
 class PerformLogout @Inject internal constructor(
@@ -14,6 +15,7 @@ class PerformLogout @Inject internal constructor(
     private val remoteApiClient: RemoteApiClient,
     private val staticsStore: StaticsStore,
     private val userDataStore: UserDataStore,
+    private val userContentStore: UserContentStore,
     private val player: PezzottifyPlayer,
 ) : UseCase() {
 
@@ -23,5 +25,6 @@ class PerformLogout @Inject internal constructor(
         remoteApiClient.logout()
         staticsStore.deleteAll()
         userDataStore.deleteAll()
+        userContentStore.deleteAll()
     }
 }

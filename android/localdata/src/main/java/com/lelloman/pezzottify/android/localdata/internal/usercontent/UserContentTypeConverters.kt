@@ -1,0 +1,21 @@
+package com.lelloman.pezzottify.android.localdata.internal.usercontent
+
+import androidx.room.TypeConverter
+import com.lelloman.pezzottify.android.domain.usercontent.LikedContent
+import com.lelloman.pezzottify.android.domain.usercontent.SyncStatus
+
+internal class UserContentTypeConverters {
+
+    @TypeConverter
+    fun fromContentType(contentType: LikedContent.ContentType): String = contentType.name
+
+    @TypeConverter
+    fun toContentType(value: String): LikedContent.ContentType =
+        LikedContent.ContentType.valueOf(value)
+
+    @TypeConverter
+    fun fromSyncStatus(syncStatus: SyncStatus): String = syncStatus.name
+
+    @TypeConverter
+    fun toSyncStatus(value: String): SyncStatus = SyncStatus.valueOf(value)
+}

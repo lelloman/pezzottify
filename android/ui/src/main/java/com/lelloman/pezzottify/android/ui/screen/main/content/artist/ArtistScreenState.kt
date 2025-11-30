@@ -9,4 +9,5 @@ data class ArtistScreenState(
     val relatedArtists: List<String> = emptyList(),
     val isLoading: Boolean = true,
     val isError: Boolean = false,
+    val isLiked: Boolean = false,
 )

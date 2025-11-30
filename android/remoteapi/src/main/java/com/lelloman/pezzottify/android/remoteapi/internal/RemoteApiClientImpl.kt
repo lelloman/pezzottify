@@ -144,6 +144,27 @@ internal class RemoteApiClientImpl(
             .returnFromRetrofitResponse()
     }
 
+    override suspend fun getLikedContent(contentType: String): RemoteApiResponse<List<String>> =
+        catchingNetworkError {
+            retrofit
+                .getLikedContent(authToken = authToken, contentType = contentType)
+                .returnFromRetrofitResponse()
+        }
+
+    override suspend fun likeContent(contentId: String): RemoteApiResponse<Unit> =
+        catchingNetworkError {
+            retrofit
+                .likeContent(authToken = authToken, contentId = contentId)
+                .returnFromRetrofitResponse()
+        }
+
+    override suspend fun unlikeContent(contentId: String): RemoteApiResponse<Unit> =
+        catchingNetworkError {
+            retrofit
+                .unlikeContent(authToken = authToken, contentId = contentId)
+                .returnFromRetrofitResponse()
+        }
+
     private suspend fun <T> catchingNetworkError(block: suspend () -> RemoteApiResponse<T>): RemoteApiResponse<T> =
         try {
             block()

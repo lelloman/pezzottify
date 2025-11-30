@@ -8,6 +8,7 @@ import com.lelloman.pezzottify.android.domain.settings.UserSettingsStore
 import com.lelloman.pezzottify.android.domain.statics.StaticsStore
 import com.lelloman.pezzottify.android.domain.statics.fetchstate.StaticItemFetchStateStore
 import com.lelloman.pezzottify.android.domain.user.UserDataStore
+import com.lelloman.pezzottify.android.domain.usercontent.UserContentStore
 import com.lelloman.pezzottify.android.localdata.internal.auth.AuthStoreImpl
 import com.lelloman.pezzottify.android.localdata.internal.config.ConfigStoreImpl
 import com.lelloman.pezzottify.android.localdata.internal.settings.UserSettingsStoreImpl
@@ -16,6 +17,8 @@ import com.lelloman.pezzottify.android.localdata.internal.statics.StaticsItemFet
 import com.lelloman.pezzottify.android.localdata.internal.statics.StaticsStoreImpl
 import com.lelloman.pezzottify.android.localdata.internal.user.UserDataDb
 import com.lelloman.pezzottify.android.localdata.internal.user.UserDataStoreImpl
+import com.lelloman.pezzottify.android.localdata.internal.usercontent.UserContentDb
+import com.lelloman.pezzottify.android.localdata.internal.usercontent.UserContentStoreImpl
 import com.lelloman.pezzottify.android.logger.LoggerFactory
 import dagger.Module
 import dagger.Provides
@@ -68,4 +71,10 @@ class LocalDataModule {
     fun provideUserSettingsStore(
         @ApplicationContext context: Context
     ): UserSettingsStore = UserSettingsStoreImpl(context)
+
+    @Provides
+    @Singleton
+    internal fun provideUserContentStore(
+        userContentDb: UserContentDb
+    ): UserContentStore = UserContentStoreImpl(userContentDb.likedContentDao())
 }

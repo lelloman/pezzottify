@@ -12,6 +12,7 @@ import com.lelloman.pezzottify.android.domain.remoteapi.response.TrackResponse
 import okhttp3.ResponseBody
 import retrofit2.Response
 import retrofit2.http.Body
+import retrofit2.http.DELETE
 import retrofit2.http.GET
 import retrofit2.http.Header
 import retrofit2.http.POST
@@ -60,4 +61,22 @@ internal interface RetrofitApiClient {
         @Header("Authorization") authToken: String,
         @Body request: SearchRequest,
     ): Response<SearchResponse>
+
+    @GET("/v1/user/liked/{contentType}")
+    suspend fun getLikedContent(
+        @Header("Authorization") authToken: String,
+        @Path("contentType") contentType: String,
+    ): Response<List<String>>
+
+    @POST("/v1/user/liked/{contentId}")
+    suspend fun likeContent(
+        @Header("Authorization") authToken: String,
+        @Path("contentId") contentId: String,
+    ): Response<Unit>
+
+    @DELETE("/v1/user/liked/{contentId}")
+    suspend fun unlikeContent(
+        @Header("Authorization") authToken: String,
+        @Path("contentId") contentId: String,
+    ): Response<Unit>
 }

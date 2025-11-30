@@ -1,0 +1,6 @@
+package com.lelloman.pezzottify.android.ui.screen.main.content.artist
+
+interface ArtistScreenActions {
+
+    fun clickOnLike()
+}

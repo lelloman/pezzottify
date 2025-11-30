@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.room.Room
 import com.lelloman.pezzottify.android.localdata.internal.statics.StaticsDb
 import com.lelloman.pezzottify.android.localdata.internal.user.UserDataDb
+import com.lelloman.pezzottify.android.localdata.internal.usercontent.UserContentDb
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -26,5 +27,11 @@ internal class DbModule {
     @Singleton
     internal fun provideUserDataDb(@ApplicationContext context: Context): UserDataDb = Room
         .databaseBuilder(context, UserDataDb::class.java, UserDataDb.NAME)
+        .build()
+
+    @Provides
+    @Singleton
+    internal fun provideUserContentDb(@ApplicationContext context: Context): UserContentDb = Room
+        .databaseBuilder(context, UserContentDb::class.java, UserContentDb.NAME)
         .build()
 }

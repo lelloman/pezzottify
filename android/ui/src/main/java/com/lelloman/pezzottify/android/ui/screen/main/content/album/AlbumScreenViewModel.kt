@@ -53,6 +53,9 @@ class AlbumScreenViewModel @AssistedInject constructor(
         .combine(interactor.getIsAddToQueueMode()) { albumState, isAddToQueue ->
             albumState.copy(isAddToQueueMode = isAddToQueue)
         }
+        .combine(interactor.isLiked(albumId)) { albumState, isLiked ->
+            albumState.copy(isLiked = isLiked)
+        }
         .onEach { state ->
             if (!state.isLoading && !state.isError && !hasLoggedView) {
                 hasLoggedView = true
@@ -75,12 +78,18 @@ class AlbumScreenViewModel @AssistedInject constructor(
         }
     }
 
+    override fun clickOnLike() {
+        interactor.toggleLike(albumId, state.value.isLiked)
+    }
+
     interface Interactor {
         fun playAlbum(albumId: String)
         fun playTrack(albumId: String, trackId: String)
         fun logViewedAlbum(albumId: String)
         fun getCurrentPlayingTrackId(): kotlinx.coroutines.flow.Flow<String?>
         fun getIsAddToQueueMode(): kotlinx.coroutines.flow.Flow<Boolean>
+        fun isLiked(contentId: String): kotlinx.coroutines.flow.Flow<Boolean>
+        fun toggleLike(contentId: String, currentlyLiked: Boolean)
     }
 
     @AssistedFactory

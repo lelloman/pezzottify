@@ -83,6 +83,7 @@ private fun AlbumScreenContent(state: AlbumScreenState, actions: AlbumScreenActi
                     tracks = state.tracks,
                     currentPlayingTrackId = state.currentPlayingTrackId,
                     isAddToQueueMode = state.isAddToQueueMode,
+                    isLiked = state.isLiked,
                     actions = actions,
                     onAddedToQueue = showAddedToQueueSnackbar,
                 )
@@ -97,6 +98,7 @@ fun AlbumLoadedScreen(
     tracks: List<kotlinx.coroutines.flow.Flow<Content<Track>>>?,
     currentPlayingTrackId: String?,
     isAddToQueueMode: Boolean,
+    isLiked: Boolean,
     actions: AlbumScreenActions,
     onAddedToQueue: (String) -> Unit = {},
 ) {
@@ -211,6 +213,36 @@ fun AlbumLoadedScreen(
                     modifier = Modifier
                         .align(Alignment.BottomStart)
                         .padding(16.dp)
+                )
+            }
+        }
+
+        // Floating like button - positioned to the left of play button
+        IconButton(
+            onClick = { actions.clickOnLike() },
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .offset(y = headerHeight - playButtonSize / 2)
+                .padding(end = 80.dp)
+                .size(playButtonSize)
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                // Background circle
+                Icon(
+                    modifier = Modifier.size(playButtonSize),
+                    painter = painterResource(R.drawable.baseline_circle_24),
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.surfaceVariant,
+                )
+                // Heart icon
+                Icon(
+                    modifier = Modifier.size(28.dp),
+                    painter = painterResource(
+                        if (isLiked) R.drawable.baseline_favorite_24
+                        else R.drawable.baseline_favorite_border_24
+                    ),
+                    contentDescription = if (isLiked) "Unlike" else "Like",
+                    tint = if (isLiked) Color.Red else MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
         }

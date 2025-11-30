@@ -12,4 +12,5 @@ data class AlbumScreenState(
     val isError: Boolean = false,
     val currentPlayingTrackId: String? = null,
     val isAddToQueueMode: Boolean = false,
+    val isLiked: Boolean = false,
 )

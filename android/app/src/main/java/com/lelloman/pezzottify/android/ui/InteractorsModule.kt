@@ -19,6 +19,9 @@ import com.lelloman.pezzottify.android.domain.statics.usecase.PerformSearch
 import com.lelloman.pezzottify.android.domain.user.GetRecentlyViewedContentUseCase
 import com.lelloman.pezzottify.android.domain.user.LogViewedContentUseCase
 import com.lelloman.pezzottify.android.domain.user.ViewedContent
+import com.lelloman.pezzottify.android.domain.usercontent.GetLikedStateUseCase
+import com.lelloman.pezzottify.android.domain.usercontent.LikedContent
+import com.lelloman.pezzottify.android.domain.usercontent.ToggleLikeUseCase
 import com.lelloman.pezzottify.android.logger.LoggerFactory
 import com.lelloman.pezzottify.android.ui.screen.login.LoginViewModel
 import com.lelloman.pezzottify.android.ui.screen.main.MainScreenViewModel
@@ -205,6 +208,8 @@ class InteractorsModule {
         player: PezzottifyPlayer,
         logViewedContentUseCase: LogViewedContentUseCase,
         userSettingsStore: UserSettingsStore,
+        getLikedStateUseCase: GetLikedStateUseCase,
+        toggleLikeUseCase: ToggleLikeUseCase,
     ): AlbumScreenViewModel.Interactor = object : AlbumScreenViewModel.Interactor {
         override fun playAlbum(albumId: String) {
             when (userSettingsStore.playBehavior.value) {
@@ -235,14 +240,30 @@ class InteractorsModule {
 
         override fun getIsAddToQueueMode(): Flow<Boolean> =
             userSettingsStore.playBehavior.map { it == PlayBehavior.AddToPlaylist }
+
+        override fun isLiked(contentId: String): Flow<Boolean> =
+            getLikedStateUseCase(contentId)
+
+        override fun toggleLike(contentId: String, currentlyLiked: Boolean) {
+            toggleLikeUseCase(contentId, LikedContent.ContentType.Album, currentlyLiked)
+        }
     }
 
     @Provides
     fun provideArtistScreenInteractor(
         logViewedContentUseCase: LogViewedContentUseCase,
+        getLikedStateUseCase: GetLikedStateUseCase,
+        toggleLikeUseCase: ToggleLikeUseCase,
     ): ArtistScreenViewModel.Interactor = object : ArtistScreenViewModel.Interactor {
         override fun logViewedArtist(artistId: String) {
             logViewedContentUseCase(artistId, ViewedContent.Type.Artist)
+        }
+
+        override fun isLiked(contentId: String): Flow<Boolean> =
+            getLikedStateUseCase(contentId)
+
+        override fun toggleLike(contentId: String, currentlyLiked: Boolean) {
+            toggleLikeUseCase(contentId, LikedContent.ContentType.Artist, currentlyLiked)
         }
     }
 

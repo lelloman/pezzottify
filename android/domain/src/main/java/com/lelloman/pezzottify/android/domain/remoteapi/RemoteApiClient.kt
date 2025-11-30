@@ -33,6 +33,12 @@ interface RemoteApiClient {
         filters: List<SearchFilter>? = null
     ): RemoteApiResponse<SearchResponse>
 
+    suspend fun getLikedContent(contentType: String): RemoteApiResponse<List<String>>
+
+    suspend fun likeContent(contentId: String): RemoteApiResponse<Unit>
+
+    suspend fun unlikeContent(contentId: String): RemoteApiResponse<Unit>
+
     @Serializable
     enum class SearchFilter {
         Album,

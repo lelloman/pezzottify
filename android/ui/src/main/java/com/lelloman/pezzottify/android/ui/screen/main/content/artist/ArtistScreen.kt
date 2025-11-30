@@ -10,13 +10,17 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -30,6 +34,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
@@ -38,6 +43,7 @@ import kotlin.math.min
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import androidx.navigation.compose.rememberNavController
+import com.lelloman.pezzottify.android.ui.R
 import com.lelloman.pezzottify.android.ui.component.AlbumGridItem
 import com.lelloman.pezzottify.android.ui.component.LoadingScreen
 import com.lelloman.pezzottify.android.ui.component.NullablePezzottifyImage
@@ -62,7 +68,8 @@ fun ArtistScreen(
     ArtistScreenContent(
         state = viewModel.state.collectAsState().value,
         contentResolver = viewModel.contentResolver,
-        navController = navController
+        navController = navController,
+        actions = viewModel
     )
 }
 
@@ -70,7 +77,8 @@ fun ArtistScreen(
 private fun ArtistScreenContent(
     state: ArtistScreenState,
     contentResolver: ContentResolver,
-    navController: NavController
+    navController: NavController,
+    actions: ArtistScreenActions
 ) {
     when {
         state.isLoading -> LoadingScreen()
@@ -79,8 +87,10 @@ private fun ArtistScreenContent(
             albums = state.albums,
             features = state.features,
             relatedArtists = state.relatedArtists,
+            isLiked = state.isLiked,
             contentResolver = contentResolver,
-            navController = navController
+            navController = navController,
+            actions = actions
         )
     }
 }
@@ -91,8 +101,10 @@ fun ArtistLoadedScreen(
     albums: List<String>,
     features: List<String>,
     relatedArtists: List<String>,
+    isLiked: Boolean,
     contentResolver: ContentResolver,
-    navController: NavController
+    navController: NavController,
+    actions: ArtistScreenActions
 ) {
     val listState = rememberLazyListState()
 
@@ -100,6 +112,7 @@ fun ArtistLoadedScreen(
     val maxHeaderHeight = 300.dp
     val minHeaderHeight = 80.dp
     val collapseRange = (maxHeaderHeight - minHeaderHeight).value
+    val likeButtonSize = 56.dp
 
     // Calculate scroll-based values
     val scrollOffset by remember {
@@ -133,9 +146,9 @@ fun ArtistLoadedScreen(
             modifier = Modifier.fillMaxSize(),
             state = listState
         ) {
-            // Spacer for header
+            // Spacer for header (extra space for like button overlap)
             item {
-                Spacer(modifier = Modifier.height(maxHeaderHeight))
+                Spacer(modifier = Modifier.height(maxHeaderHeight + likeButtonSize / 2))
             }
 
             // Related Artists
@@ -240,6 +253,36 @@ fun ArtistLoadedScreen(
                     modifier = Modifier
                         .align(Alignment.BottomStart)
                         .padding(16.dp)
+                )
+            }
+        }
+
+        // Floating like button - positioned at bottom-right of header, straddling the boundary
+        IconButton(
+            onClick = { actions.clickOnLike() },
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .offset(y = headerHeight - likeButtonSize / 2)
+                .padding(end = 16.dp)
+                .size(likeButtonSize)
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                // Background circle
+                Icon(
+                    modifier = Modifier.size(likeButtonSize),
+                    painter = painterResource(R.drawable.baseline_circle_24),
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.surfaceVariant,
+                )
+                // Heart icon
+                Icon(
+                    modifier = Modifier.size(28.dp),
+                    painter = painterResource(
+                        if (isLiked) R.drawable.baseline_favorite_24
+                        else R.drawable.baseline_favorite_border_24
+                    ),
+                    contentDescription = if (isLiked) "Unlike" else "Like",
+                    tint = if (isLiked) Color.Red else MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
         }

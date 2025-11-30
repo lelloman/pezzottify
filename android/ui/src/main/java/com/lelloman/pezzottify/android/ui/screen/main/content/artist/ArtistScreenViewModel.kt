@@ -8,6 +8,7 @@ import dagger.assisted.Assisted
 import dagger.assisted.AssistedFactory
 import dagger.assisted.AssistedInject
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.onEach
@@ -18,7 +19,7 @@ class ArtistScreenViewModel @AssistedInject constructor(
     private val interactor: Interactor,
     val contentResolver: ContentResolver,
     @Assisted private val artistId: String,
-) : ViewModel() {
+) : ViewModel(), ArtistScreenActions {
 
     private var hasLoggedView = false
 
@@ -44,6 +45,8 @@ class ArtistScreenViewModel @AssistedInject constructor(
                 )
             }
         }
+    }.combine(interactor.isLiked(artistId)) { artistState, isLiked ->
+        artistState.copy(isLiked = isLiked)
     }.onEach { state ->
         if (!state.isLoading && !state.isError && !hasLoggedView) {
             hasLoggedView = true
@@ -51,8 +54,14 @@ class ArtistScreenViewModel @AssistedInject constructor(
         }
     }.stateIn(viewModelScope, SharingStarted.Eagerly, ArtistScreenState())
 
+    override fun clickOnLike() {
+        interactor.toggleLike(artistId, state.value.isLiked)
+    }
+
     interface Interactor {
         fun logViewedArtist(artistId: String)
+        fun isLiked(contentId: String): Flow<Boolean>
+        fun toggleLike(contentId: String, currentlyLiked: Boolean)
     }
 
     @AssistedFactory
