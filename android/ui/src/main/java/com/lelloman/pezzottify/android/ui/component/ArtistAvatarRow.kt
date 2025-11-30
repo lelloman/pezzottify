@@ -8,14 +8,12 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -57,16 +55,15 @@ private fun ArtistAvatarItem(
         is Content.Resolved -> {
             Column(
                 modifier = Modifier
+                    .padding(end = 16.dp)
                     .width(96.dp)
-                    .clickable(onClick = onClick)
-                    .padding(end = 16.dp),
+                    .clickable(onClick = onClick),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 NullablePezzottifyImage(
                     url = artist.data.imageUrl,
-                    shape = PezzottifyImageShape.SmallSquare,
+                    shape = PezzottifyImageShape.SmallCircle,
                     placeholder = PezzottifyImagePlaceholder.Head,
-                    modifier = Modifier.clip(CircleShape)
                 )
 
                 Text(

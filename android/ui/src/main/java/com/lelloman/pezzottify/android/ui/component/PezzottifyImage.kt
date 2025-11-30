@@ -5,6 +5,8 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.draw.clip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -140,11 +142,18 @@ fun NullablePezzottifyImage(
 sealed interface PezzottifyImageShape {
 
     fun modifier(modifier: Modifier): Modifier
-    val contentScale: ContentScale get() = ContentScale.Fit
+    open val contentScale: ContentScale get() = ContentScale.Fit
 
     data object SmallSquare : PezzottifyImageShape {
         val size = 96.dp
         override fun modifier(modifier: Modifier) = modifier.size(size)
+    }
+
+    data object SmallCircle : PezzottifyImageShape {
+        val size = 96.dp
+        override val contentScale: ContentScale
+            get() = ContentScale.Crop
+        override fun modifier(modifier: Modifier) = modifier.size(size).clip(CircleShape)
     }
 
     data object MiniPlayer : PezzottifyImageShape {
