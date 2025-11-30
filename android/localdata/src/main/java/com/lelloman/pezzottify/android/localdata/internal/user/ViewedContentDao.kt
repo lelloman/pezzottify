@@ -24,4 +24,7 @@ internal interface ViewedContentDao {
 
     @Query("SELECT * FROM ${ViewedContent.TABLE_NAME} WHERE synced = 0;")
     fun getNotSynced(): Flow<List<ViewedContent>>
+
+    @Query("DELETE FROM ${ViewedContent.TABLE_NAME};")
+    suspend fun deleteAll()
 }

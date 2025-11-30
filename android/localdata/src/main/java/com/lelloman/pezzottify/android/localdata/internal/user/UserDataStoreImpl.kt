@@ -22,4 +22,8 @@ internal class UserDataStoreImpl(
 
         return viewedContentDao.getRecentlyViewedContent(allowedTypes.map { it.dbValue }, limit)
     }
+
+    override suspend fun deleteAll() {
+        viewedContentDao.deleteAll()
+    }
 }

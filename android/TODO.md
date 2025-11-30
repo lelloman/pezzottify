@@ -4,8 +4,7 @@ We can consider V1 ready once all of the task without V2 mark are completed.
 
 ### [ready for coding]
 
-- When the user performs a login, the username should be persisted so that if the user logs out, the username field of the login screen can be pre-filled
-- Check that all persisted user info are deleted at logout. Right now, I still see recently viewed items after re-logging in.
+- Check the related artists picture logic. For instance, when visiting Prince artist screen, you don't see George Michael's picture, but if you go into George Michael screen you do have a picture
 
 ### [to refine]
 
@@ -26,6 +25,8 @@ We can consider V1 ready once all of the task without V2 mark are completed.
 
 ### [done]
 
+- ~Check that all persisted user info are deleted at logout. Right now, I still see recently viewed items after re-logging in.~
+- ~When the user performs a login, the username should be persisted so that if the user logs out, the username field of the login screen can be pre-filled~
 - ~I want E2E tests for the UI module. The reason the app is architected this way, is that we can test the UI only, without any other dependencies, making the ui a puppet basically.~
 - ~In the player screen, when the user clicks on the album's image, instead of openeing the album screen, the app crashes~
 - ~Add build info (variant, version, git commit) to profile screen, including dirty flag for uncommitted changes~
