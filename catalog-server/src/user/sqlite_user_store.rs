@@ -697,7 +697,7 @@ impl UserStore for SqliteUserStore {
         if liked {
             conn.execute(
                 &format!(
-                    "INSERT INTO {} (user_id, content_id, content_type) VALUES (?1, ?2, ?3)",
+                    "INSERT OR IGNORE INTO {} (user_id, content_id, content_type) VALUES (?1, ?2, ?3)",
                     LIKED_CONTENT_TABLE_V_2.name
                 ),
                 params![user_id, content_id, content_type.to_int()],
