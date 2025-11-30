@@ -28,11 +28,13 @@ Based on the design doc: `CATALOG_SQLITE_DESIGN.md`
   - Endpoints: POST/PUT/DELETE for `/v1/content/artist`, `/v1/content/album`, `/v1/content/track`, `/v1/content/image`
   - Protected by `EditCatalog` permission
   - LegacyCatalogAdapter returns error (write operations require SQLite backend)
+- [x] **4.13** Add validation for write operations
+  - Created validation module (`src/catalog_store/validation.rs`)
+  - Field validation: required fields, positive values, non-empty strings
+  - Foreign key validation: track.album_id must reference existing album
+  - Duplicate ID detection before insert
 
 ## Pending Tasks
-
-### Phase 4 (continued)
-- [ ] **4.13** Add validation for write operations
 
 ### Phase 5: Search
 - [ ] **5.14** Evaluate search approach (PezzotHash vs FTS5)
@@ -77,6 +79,7 @@ Based on the design doc: `CATALOG_SQLITE_DESIGN.md`
 6. `[catalog-server] Update server handlers to use CatalogStore trait`
 7. `[catalog-server] Add --catalog-db CLI flag to enable SQLite catalog backend`
 8. `[catalog-server] Add catalog editing API endpoints`
+9. `[catalog-server] Add validation for catalog write operations`
 
 ## Notes
 - The server now supports both catalog backends via CLI flags:

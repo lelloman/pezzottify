@@ -3,6 +3,7 @@ mod models;
 mod schema;
 mod store;
 mod trait_def;
+mod validation;
 
 pub use legacy_adapter::LegacyCatalogAdapter;
 pub use models::*;

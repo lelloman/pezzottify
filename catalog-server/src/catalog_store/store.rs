@@ -6,6 +6,9 @@
 
 use super::models::*;
 use super::schema::CATALOG_VERSIONED_SCHEMAS;
+use super::validation::{
+    validate_album, validate_artist, validate_image, validate_track, ValidationError,
+};
 use crate::sqlite_persistence::BASE_DB_VERSION;
 use anyhow::{bail, Context, Result};
 use rusqlite::{params, Connection};
@@ -658,6 +661,50 @@ impl SqliteCatalogStore {
     }
 
     // =========================================================================
+    // Existence Checks (for validation)
+    // =========================================================================
+
+    /// Check if an artist exists by ID.
+    pub fn artist_exists(&self, id: &str) -> Result<bool> {
+        let conn = self.conn.lock().unwrap();
+        let count: i64 =
+            conn.query_row("SELECT COUNT(*) FROM artists WHERE id = ?1", params![id], |r| {
+                r.get(0)
+            })?;
+        Ok(count > 0)
+    }
+
+    /// Check if an album exists by ID.
+    pub fn album_exists(&self, id: &str) -> Result<bool> {
+        let conn = self.conn.lock().unwrap();
+        let count: i64 =
+            conn.query_row("SELECT COUNT(*) FROM albums WHERE id = ?1", params![id], |r| {
+                r.get(0)
+            })?;
+        Ok(count > 0)
+    }
+
+    /// Check if a track exists by ID.
+    pub fn track_exists(&self, id: &str) -> Result<bool> {
+        let conn = self.conn.lock().unwrap();
+        let count: i64 =
+            conn.query_row("SELECT COUNT(*) FROM tracks WHERE id = ?1", params![id], |r| {
+                r.get(0)
+            })?;
+        Ok(count > 0)
+    }
+
+    /// Check if an image exists by ID.
+    pub fn image_exists(&self, id: &str) -> Result<bool> {
+        let conn = self.conn.lock().unwrap();
+        let count: i64 =
+            conn.query_row("SELECT COUNT(*) FROM images WHERE id = ?1", params![id], |r| {
+                r.get(0)
+            })?;
+        Ok(count > 0)
+    }
+
+    // =========================================================================
     // Write Operations - Core Entities
     // =========================================================================
 
@@ -1149,18 +1196,46 @@ impl CatalogStore for SqliteCatalogStore {
 
     // =========================================================================
     // Write Operations (CatalogStore trait)
+    // All write operations are performed within a single transaction to ensure
+    // atomicity of validation checks and the actual write.
     // =========================================================================
 
     fn create_artist(&self, data: serde_json::Value) -> Result<serde_json::Value> {
         let artist: Artist = serde_json::from_value(data)?;
-        self.insert_artist(&artist)?;
+        validate_artist(&artist)?;
+
+        let conn = self.conn.lock().unwrap();
+        conn.execute("BEGIN IMMEDIATE", [])?;
+
+        // Check for duplicate ID within transaction
+        let count: i64 = conn.query_row(
+            "SELECT COUNT(*) FROM artists WHERE id = ?1",
+            params![&artist.id],
+            |r| r.get(0),
+        )?;
+        if count > 0 {
+            conn.execute("ROLLBACK", [])?;
+            return Err(ValidationError::DuplicateId {
+                entity_type: "artist",
+                id: artist.id.clone(),
+            }
+            .into());
+        }
+
+        let genres_json = serde_json::to_string(&artist.genres)?;
+        let activity_periods_json = serde_json::to_string(&artist.activity_periods)?;
+        conn.execute(
+            "INSERT INTO artists (id, name, genres, activity_periods) VALUES (?1, ?2, ?3, ?4)",
+            params![artist.id, artist.name, genres_json, activity_periods_json],
+        )?;
+        conn.execute("COMMIT", [])?;
         Ok(serde_json::to_value(&artist)?)
     }
 
     fn update_artist(&self, id: &str, data: serde_json::Value) -> Result<serde_json::Value> {
         let mut artist: Artist = serde_json::from_value(data)?;
-        // Ensure the ID matches the path parameter
         artist.id = id.to_string();
+        validate_artist(&artist)?;
         self.update_artist_record(&artist)?;
         Ok(serde_json::to_value(&artist)?)
     }
@@ -1171,13 +1246,49 @@ impl CatalogStore for SqliteCatalogStore {
 
     fn create_album(&self, data: serde_json::Value) -> Result<serde_json::Value> {
         let album: Album = serde_json::from_value(data)?;
-        self.insert_album(&album)?;
+        validate_album(&album)?;
+
+        let conn = self.conn.lock().unwrap();
+        conn.execute("BEGIN IMMEDIATE", [])?;
+
+        // Check for duplicate ID within transaction
+        let count: i64 = conn.query_row(
+            "SELECT COUNT(*) FROM albums WHERE id = ?1",
+            params![&album.id],
+            |r| r.get(0),
+        )?;
+        if count > 0 {
+            conn.execute("ROLLBACK", [])?;
+            return Err(ValidationError::DuplicateId {
+                entity_type: "album",
+                id: album.id.clone(),
+            }
+            .into());
+        }
+
+        let genres_json = serde_json::to_string(&album.genres)?;
+        conn.execute(
+            "INSERT INTO albums (id, name, album_type, label, release_date, genres, original_title, version_title)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+            params![
+                album.id,
+                album.name,
+                album.album_type.to_db_str(),
+                album.label,
+                album.release_date,
+                genres_json,
+                album.original_title,
+                album.version_title,
+            ],
+        )?;
+        conn.execute("COMMIT", [])?;
         Ok(serde_json::to_value(&album)?)
     }
 
     fn update_album(&self, id: &str, data: serde_json::Value) -> Result<serde_json::Value> {
         let mut album: Album = serde_json::from_value(data)?;
         album.id = id.to_string();
+        validate_album(&album)?;
         self.update_album_record(&album)?;
         Ok(serde_json::to_value(&album)?)
     }
@@ -1188,14 +1299,119 @@ impl CatalogStore for SqliteCatalogStore {
 
     fn create_track(&self, data: serde_json::Value) -> Result<serde_json::Value> {
         let track: Track = serde_json::from_value(data)?;
-        self.insert_track(&track)?;
+        validate_track(&track)?;
+
+        let conn = self.conn.lock().unwrap();
+        conn.execute("BEGIN IMMEDIATE", [])?;
+
+        // Check for duplicate ID within transaction
+        let count: i64 = conn.query_row(
+            "SELECT COUNT(*) FROM tracks WHERE id = ?1",
+            params![&track.id],
+            |r| r.get(0),
+        )?;
+        if count > 0 {
+            conn.execute("ROLLBACK", [])?;
+            return Err(ValidationError::DuplicateId {
+                entity_type: "track",
+                id: track.id.clone(),
+            }
+            .into());
+        }
+
+        // Validate foreign key: album must exist (within transaction)
+        let album_count: i64 = conn.query_row(
+            "SELECT COUNT(*) FROM albums WHERE id = ?1",
+            params![&track.album_id],
+            |r| r.get(0),
+        )?;
+        if album_count == 0 {
+            conn.execute("ROLLBACK", [])?;
+            return Err(ValidationError::ForeignKeyViolation {
+                entity_type: "album",
+                id: track.album_id.clone(),
+            }
+            .into());
+        }
+
+        let tags_json = serde_json::to_string(&track.tags)?;
+        let languages_json = serde_json::to_string(&track.languages)?;
+        conn.execute(
+            "INSERT INTO tracks (id, name, album_id, disc_number, track_number, duration_secs,
+                    is_explicit, audio_uri, format, tags, has_lyrics, languages, original_title, version_title)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
+            params![
+                track.id,
+                track.name,
+                track.album_id,
+                track.disc_number,
+                track.track_number,
+                track.duration_secs,
+                track.is_explicit as i32,
+                track.audio_uri,
+                track.format.to_db_str(),
+                tags_json,
+                track.has_lyrics as i32,
+                languages_json,
+                track.original_title,
+                track.version_title,
+            ],
+        )?;
+        conn.execute("COMMIT", [])?;
         Ok(serde_json::to_value(&track)?)
     }
 
     fn update_track(&self, id: &str, data: serde_json::Value) -> Result<serde_json::Value> {
         let mut track: Track = serde_json::from_value(data)?;
         track.id = id.to_string();
-        self.update_track_record(&track)?;
+        validate_track(&track)?;
+
+        let conn = self.conn.lock().unwrap();
+        conn.execute("BEGIN IMMEDIATE", [])?;
+
+        // Validate foreign key: album must exist (within transaction)
+        let album_count: i64 = conn.query_row(
+            "SELECT COUNT(*) FROM albums WHERE id = ?1",
+            params![&track.album_id],
+            |r| r.get(0),
+        )?;
+        if album_count == 0 {
+            conn.execute("ROLLBACK", [])?;
+            return Err(ValidationError::ForeignKeyViolation {
+                entity_type: "album",
+                id: track.album_id.clone(),
+            }
+            .into());
+        }
+
+        let tags_json = serde_json::to_string(&track.tags)?;
+        let languages_json = serde_json::to_string(&track.languages)?;
+        let rows = conn.execute(
+            "UPDATE tracks SET name = ?2, album_id = ?3, disc_number = ?4, track_number = ?5,
+             duration_secs = ?6, is_explicit = ?7, audio_uri = ?8, format = ?9, tags = ?10,
+             has_lyrics = ?11, languages = ?12, original_title = ?13, version_title = ?14 WHERE id = ?1",
+            params![
+                track.id,
+                track.name,
+                track.album_id,
+                track.disc_number,
+                track.track_number,
+                track.duration_secs,
+                track.is_explicit as i32,
+                track.audio_uri,
+                track.format.to_db_str(),
+                tags_json,
+                track.has_lyrics as i32,
+                languages_json,
+                track.original_title,
+                track.version_title,
+            ],
+        )?;
+        if rows == 0 {
+            conn.execute("ROLLBACK", [])?;
+            bail!("Track not found: {}", id);
+        }
+        conn.execute("COMMIT", [])?;
         Ok(serde_json::to_value(&track)?)
     }
 
@@ -1205,13 +1421,44 @@ impl CatalogStore for SqliteCatalogStore {
 
     fn create_image(&self, data: serde_json::Value) -> Result<serde_json::Value> {
         let image: Image = serde_json::from_value(data)?;
-        self.insert_image(&image)?;
+        validate_image(&image)?;
+
+        let conn = self.conn.lock().unwrap();
+        conn.execute("BEGIN IMMEDIATE", [])?;
+
+        // Check for duplicate ID within transaction
+        let count: i64 = conn.query_row(
+            "SELECT COUNT(*) FROM images WHERE id = ?1",
+            params![&image.id],
+            |r| r.get(0),
+        )?;
+        if count > 0 {
+            conn.execute("ROLLBACK", [])?;
+            return Err(ValidationError::DuplicateId {
+                entity_type: "image",
+                id: image.id.clone(),
+            }
+            .into());
+        }
+
+        conn.execute(
+            "INSERT INTO images (id, uri, size, width, height) VALUES (?1, ?2, ?3, ?4, ?5)",
+            params![
+                image.id,
+                image.uri,
+                image.size.to_db_str(),
+                image.width as i32,
+                image.height as i32,
+            ],
+        )?;
+        conn.execute("COMMIT", [])?;
         Ok(serde_json::to_value(&image)?)
     }
 
     fn update_image(&self, id: &str, data: serde_json::Value) -> Result<serde_json::Value> {
         let mut image: Image = serde_json::from_value(data)?;
         image.id = id.to_string();
+        validate_image(&image)?;
         self.update_image_record(&image)?;
         Ok(serde_json::to_value(&image)?)
     }
@@ -1514,5 +1761,178 @@ mod tests {
 
         let counts = store.get_counts().unwrap();
         assert_eq!(counts, (2, 1, 1, 0));
+    }
+
+    // =========================================================================
+    // CatalogStore Trait Validation Tests
+    // =========================================================================
+
+    #[test]
+    fn test_create_artist_success() {
+        let (store, _temp_dir) = create_test_store();
+        let data = serde_json::json!({
+            "id": "R1",
+            "name": "Test Artist",
+            "genres": ["rock"],
+            "activity_periods": [{"Decade": 1990}]
+        });
+
+        let result = store.create_artist(data);
+        assert!(result.is_ok());
+
+        let artist = store.get_artist("R1").unwrap().unwrap();
+        assert_eq!(artist.name, "Test Artist");
+    }
+
+    #[test]
+    fn test_create_artist_duplicate_id_fails() {
+        let (store, _temp_dir) = create_test_store();
+        insert_test_artist(&store, "R1", "Existing Artist");
+
+        let data = serde_json::json!({
+            "id": "R1",
+            "name": "New Artist",
+            "genres": [],
+            "activity_periods": []
+        });
+
+        let result = store.create_artist(data);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("already exists"));
+    }
+
+    #[test]
+    fn test_create_artist_empty_name_fails() {
+        let (store, _temp_dir) = create_test_store();
+        let data = serde_json::json!({
+            "id": "R1",
+            "name": "",
+            "genres": [],
+            "activity_periods": []
+        });
+
+        let result = store.create_artist(data);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("required"));
+    }
+
+    #[test]
+    fn test_create_track_success() {
+        let (store, _temp_dir) = create_test_store();
+        insert_test_album(&store, "A1", "Test Album");
+
+        let data = serde_json::json!({
+            "id": "T1",
+            "name": "Test Track",
+            "album_id": "A1",
+            "disc_number": 1,
+            "track_number": 1,
+            "is_explicit": false,
+            "audio_uri": "albums/A1/track.mp3",
+            "format": "Mp3_320",
+            "tags": [],
+            "has_lyrics": false,
+            "languages": []
+        });
+
+        let result = store.create_track(data);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_create_track_nonexistent_album_fails() {
+        let (store, _temp_dir) = create_test_store();
+
+        let data = serde_json::json!({
+            "id": "T1",
+            "name": "Test Track",
+            "album_id": "NONEXISTENT",
+            "disc_number": 1,
+            "track_number": 1,
+            "is_explicit": false,
+            "audio_uri": "albums/A1/track.mp3",
+            "format": "Mp3_320",
+            "tags": [],
+            "has_lyrics": false,
+            "languages": []
+        });
+
+        let result = store.create_track(data);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("does not exist"));
+    }
+
+    #[test]
+    fn test_create_track_duplicate_id_fails() {
+        let (store, _temp_dir) = create_test_store();
+        insert_test_album(&store, "A1", "Test Album");
+        insert_test_track(&store, "T1", "Existing Track", "A1");
+
+        let data = serde_json::json!({
+            "id": "T1",
+            "name": "New Track",
+            "album_id": "A1",
+            "disc_number": 1,
+            "track_number": 2,
+            "is_explicit": false,
+            "audio_uri": "albums/A1/track2.mp3",
+            "format": "Mp3_320",
+            "tags": [],
+            "has_lyrics": false,
+            "languages": []
+        });
+
+        let result = store.create_track(data);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("already exists"));
+    }
+
+    #[test]
+    fn test_create_track_invalid_track_number_fails() {
+        let (store, _temp_dir) = create_test_store();
+        insert_test_album(&store, "A1", "Test Album");
+
+        let data = serde_json::json!({
+            "id": "T1",
+            "name": "Test Track",
+            "album_id": "A1",
+            "disc_number": 1,
+            "track_number": 0,  // Invalid: must be positive
+            "is_explicit": false,
+            "audio_uri": "albums/A1/track.mp3",
+            "format": "Mp3_320",
+            "tags": [],
+            "has_lyrics": false,
+            "languages": []
+        });
+
+        let result = store.create_track(data);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("must be positive"));
+    }
+
+    #[test]
+    fn test_update_track_nonexistent_album_fails() {
+        let (store, _temp_dir) = create_test_store();
+        insert_test_album(&store, "A1", "Test Album");
+        insert_test_track(&store, "T1", "Test Track", "A1");
+
+        let data = serde_json::json!({
+            "id": "T1",
+            "name": "Updated Track",
+            "album_id": "NONEXISTENT",
+            "disc_number": 1,
+            "track_number": 1,
+            "is_explicit": false,
+            "audio_uri": "albums/A1/track.mp3",
+            "format": "Mp3_320",
+            "tags": [],
+            "has_lyrics": false,
+            "languages": []
+        });
+
+        let result = store.update_track("T1", data);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("does not exist"));
     }
 }
