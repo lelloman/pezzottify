@@ -66,6 +66,7 @@ import com.lelloman.pezzottify.android.ui.toPlayer
 import com.lelloman.pezzottify.android.ui.screen.main.home.HomeScreen
 import com.lelloman.pezzottify.android.ui.screen.main.library.LibraryScreen
 import com.lelloman.pezzottify.android.ui.screen.main.profile.ProfileScreen
+import com.lelloman.pezzottify.android.ui.screen.main.profile.stylesettings.StyleSettingsScreen
 import com.lelloman.pezzottify.android.ui.screen.main.search.SearchScreen
 
 enum class BottomNavigationRoute(
@@ -164,7 +165,10 @@ private fun MainScreenContent(state: MainScreenState, actions: MainScreenActions
                 composable<Screen.Main.Library> { LibraryScreen() }
 
                 composable<Screen.Main.Home.Profile> {
-                    ProfileScreen(rootNavController)
+                    ProfileScreen(navController, rootNavController)
+                }
+                composable<Screen.Main.Home.StyleSettings> {
+                    StyleSettingsScreen(navController)
                 }
                 composable<Screen.Main.Artist> {
                     ArtistScreen(it.toRoute<Screen.Main.Artist>().artistId, navController)

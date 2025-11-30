@@ -1,6 +1,8 @@
 package com.lelloman.pezzottify.android.localdata.internal.settings
 
 import android.content.Context
+import com.lelloman.pezzottify.android.domain.settings.AppFontFamily
+import com.lelloman.pezzottify.android.domain.settings.ColorPalette
 import com.lelloman.pezzottify.android.domain.settings.PlayBehavior
 import com.lelloman.pezzottify.android.domain.settings.ThemeMode
 import com.lelloman.pezzottify.android.domain.settings.UserSettingsStore
@@ -32,6 +34,20 @@ internal class UserSettingsStoreImpl(
     }
     override val themeMode: StateFlow<ThemeMode> = mutableThemeMode.asStateFlow()
 
+    private val mutableColorPalette by lazy {
+        val storedValue = prefs.getString(KEY_COLOR_PALETTE, null)
+        val colorPalette = storedValue?.let { parseColorPalette(it) } ?: ColorPalette.Default
+        MutableStateFlow(colorPalette)
+    }
+    override val colorPalette: StateFlow<ColorPalette> = mutableColorPalette.asStateFlow()
+
+    private val mutableFontFamily by lazy {
+        val storedValue = prefs.getString(KEY_FONT_FAMILY, null)
+        val fontFamily = storedValue?.let { parseFontFamily(it) } ?: AppFontFamily.Default
+        MutableStateFlow(fontFamily)
+    }
+    override val fontFamily: StateFlow<AppFontFamily> = mutableFontFamily.asStateFlow()
+
     override suspend fun setPlayBehavior(playBehavior: PlayBehavior) {
         withContext(dispatcher) {
             mutablePlayBehavior.value = playBehavior
@@ -43,6 +59,20 @@ internal class UserSettingsStoreImpl(
         withContext(dispatcher) {
             mutableThemeMode.value = themeMode
             prefs.edit().putString(KEY_THEME_MODE, themeMode.name).commit()
+        }
+    }
+
+    override suspend fun setColorPalette(colorPalette: ColorPalette) {
+        withContext(dispatcher) {
+            mutableColorPalette.value = colorPalette
+            prefs.edit().putString(KEY_COLOR_PALETTE, colorPalette.name).commit()
+        }
+    }
+
+    override suspend fun setFontFamily(fontFamily: AppFontFamily) {
+        withContext(dispatcher) {
+            mutableFontFamily.value = fontFamily
+            prefs.edit().putString(KEY_FONT_FAMILY, fontFamily.name).commit()
         }
     }
 
@@ -58,9 +88,23 @@ internal class UserSettingsStoreImpl(
         null
     }
 
+    private fun parseColorPalette(value: String): ColorPalette? = try {
+        ColorPalette.valueOf(value)
+    } catch (e: IllegalArgumentException) {
+        null
+    }
+
+    private fun parseFontFamily(value: String): AppFontFamily? = try {
+        AppFontFamily.valueOf(value)
+    } catch (e: IllegalArgumentException) {
+        null
+    }
+
     internal companion object {
         const val SHARED_PREF_FILE_NAME = "UserSettingsStore"
         const val KEY_PLAY_BEHAVIOR = "PlayBehavior"
         const val KEY_THEME_MODE = "ThemeMode"
+        const val KEY_COLOR_PALETTE = "ColorPalette"
+        const val KEY_FONT_FAMILY = "FontFamily"
     }
 }

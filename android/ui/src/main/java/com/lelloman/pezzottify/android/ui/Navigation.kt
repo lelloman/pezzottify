@@ -27,6 +27,8 @@ fun NavController.fromMainBackToLogin() = navigate(Login) {
 
 fun NavController.toProfile() = navigate(Main.Home.Profile)
 
+fun NavController.toStyleSettings() = navigate(Main.Home.StyleSettings)
+
 fun NavController.fromProfileBackToLogin() = navigate(Login) {
     popUpTo(Main.Home, inclusive())
 }
@@ -55,6 +57,9 @@ sealed interface Screen {
 
             @Serializable
             data object Profile : Main
+
+            @Serializable
+            data object StyleSettings : Main
         }
 
         @Serializable

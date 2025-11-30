@@ -6,9 +6,13 @@ interface UserSettingsStore {
 
     val playBehavior: StateFlow<PlayBehavior>
     val themeMode: StateFlow<ThemeMode>
+    val colorPalette: StateFlow<ColorPalette>
+    val fontFamily: StateFlow<AppFontFamily>
 
     suspend fun setPlayBehavior(playBehavior: PlayBehavior)
     suspend fun setThemeMode(themeMode: ThemeMode)
+    suspend fun setColorPalette(colorPalette: ColorPalette)
+    suspend fun setFontFamily(fontFamily: AppFontFamily)
 }
 
 enum class PlayBehavior {
@@ -24,6 +28,29 @@ enum class ThemeMode {
     System,
     Light,
     Dark;
+
+    companion object {
+        val Default = System
+    }
+}
+
+enum class ColorPalette {
+    Classic,      // Original green theme
+    OceanBlue,    // Cool blue tones
+    SunsetCoral,  // Warm coral/orange tones
+    PurpleHaze,   // Violet/purple theme
+    AmoledBlack;  // True black for OLED screens
+
+    companion object {
+        val Default = Classic
+    }
+}
+
+enum class AppFontFamily {
+    System,       // Default system fonts
+    SansSerif,    // Clean sans-serif
+    Serif,        // Classic serif style
+    Monospace;    // Monospace for a developer feel
 
     companion object {
         val Default = System

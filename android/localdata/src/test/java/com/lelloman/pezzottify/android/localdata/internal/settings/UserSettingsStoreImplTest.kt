@@ -3,6 +3,8 @@ package com.lelloman.pezzottify.android.localdata.internal.settings
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import com.google.common.truth.Truth.assertThat
+import com.lelloman.pezzottify.android.domain.settings.AppFontFamily
+import com.lelloman.pezzottify.android.domain.settings.ColorPalette
 import com.lelloman.pezzottify.android.domain.settings.PlayBehavior
 import com.lelloman.pezzottify.android.domain.settings.ThemeMode
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -118,11 +120,89 @@ class UserSettingsStoreImplTest {
         ).edit()
             .putString(UserSettingsStoreImpl.KEY_PLAY_BEHAVIOR, "InvalidValue")
             .putString(UserSettingsStoreImpl.KEY_THEME_MODE, "InvalidValue")
+            .putString(UserSettingsStoreImpl.KEY_COLOR_PALETTE, "InvalidValue")
+            .putString(UserSettingsStoreImpl.KEY_FONT_FAMILY, "InvalidValue")
             .commit()
 
         val store = UserSettingsStoreImpl(context, testDispatcher)
 
         assertThat(store.playBehavior.value).isEqualTo(PlayBehavior.Default)
         assertThat(store.themeMode.value).isEqualTo(ThemeMode.Default)
+        assertThat(store.colorPalette.value).isEqualTo(ColorPalette.Default)
+        assertThat(store.fontFamily.value).isEqualTo(AppFontFamily.Default)
+    }
+
+    @Test
+    fun `colorPalette returns default value when not set`() {
+        val store = UserSettingsStoreImpl(context, testDispatcher)
+
+        assertThat(store.colorPalette.value).isEqualTo(ColorPalette.Default)
+        assertThat(store.colorPalette.value).isEqualTo(ColorPalette.Classic)
+    }
+
+    @Test
+    fun `fontFamily returns default value when not set`() {
+        val store = UserSettingsStoreImpl(context, testDispatcher)
+
+        assertThat(store.fontFamily.value).isEqualTo(AppFontFamily.Default)
+        assertThat(store.fontFamily.value).isEqualTo(AppFontFamily.System)
+    }
+
+    @Test
+    fun `setColorPalette persists value`() = runTest(testDispatcher) {
+        val store = UserSettingsStoreImpl(context, testDispatcher)
+
+        store.setColorPalette(ColorPalette.OceanBlue)
+
+        assertThat(store.colorPalette.value).isEqualTo(ColorPalette.OceanBlue)
+    }
+
+    @Test
+    fun `setFontFamily persists value`() = runTest(testDispatcher) {
+        val store = UserSettingsStoreImpl(context, testDispatcher)
+
+        store.setFontFamily(AppFontFamily.RobotoMono)
+
+        assertThat(store.fontFamily.value).isEqualTo(AppFontFamily.RobotoMono)
+    }
+
+    @Test
+    fun `colorPalette value survives store recreation`() = runTest(testDispatcher) {
+        val store1 = UserSettingsStoreImpl(context, testDispatcher)
+        store1.setColorPalette(ColorPalette.PurpleHaze)
+
+        val store2 = UserSettingsStoreImpl(context, testDispatcher)
+
+        assertThat(store2.colorPalette.value).isEqualTo(ColorPalette.PurpleHaze)
+    }
+
+    @Test
+    fun `fontFamily value survives store recreation`() = runTest(testDispatcher) {
+        val store1 = UserSettingsStoreImpl(context, testDispatcher)
+        store1.setFontFamily(AppFontFamily.Inter)
+
+        val store2 = UserSettingsStoreImpl(context, testDispatcher)
+
+        assertThat(store2.fontFamily.value).isEqualTo(AppFontFamily.Inter)
+    }
+
+    @Test
+    fun `setting all color palettes works correctly`() = runTest(testDispatcher) {
+        val store = UserSettingsStoreImpl(context, testDispatcher)
+
+        ColorPalette.entries.forEach { palette ->
+            store.setColorPalette(palette)
+            assertThat(store.colorPalette.value).isEqualTo(palette)
+        }
+    }
+
+    @Test
+    fun `setting all font families works correctly`() = runTest(testDispatcher) {
+        val store = UserSettingsStoreImpl(context, testDispatcher)
+
+        AppFontFamily.entries.forEach { fontFamily ->
+            store.setFontFamily(fontFamily)
+            assertThat(store.fontFamily.value).isEqualTo(fontFamily)
+        }
     }
 }

@@ -30,12 +30,18 @@ class MainActivity : ComponentActivity() {
         setContent {
             setSingletonImageLoaderFactory { imageLoader }
             val themeMode by userSettingsStore.themeMode.collectAsState()
+            val colorPalette by userSettingsStore.colorPalette.collectAsState()
+            val fontFamily by userSettingsStore.fontFamily.collectAsState()
             val isDarkTheme = when (themeMode) {
                 ThemeMode.System -> isSystemInDarkTheme()
                 ThemeMode.Light -> false
                 ThemeMode.Dark -> true
             }
-            AppUi(darkTheme = isDarkTheme)
+            AppUi(
+                darkTheme = isDarkTheme,
+                colorPalette = colorPalette,
+                fontFamily = fontFamily,
+            )
         }
     }
 }

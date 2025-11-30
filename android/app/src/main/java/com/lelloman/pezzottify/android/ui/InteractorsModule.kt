@@ -10,6 +10,8 @@ import com.lelloman.pezzottify.android.domain.config.ConfigStore
 import com.lelloman.pezzottify.android.domain.player.PezzottifyPlayer
 import com.lelloman.pezzottify.android.domain.player.RepeatMode
 import com.lelloman.pezzottify.android.ui.screen.player.RepeatModeUi
+import com.lelloman.pezzottify.android.domain.settings.AppFontFamily
+import com.lelloman.pezzottify.android.domain.settings.ColorPalette
 import com.lelloman.pezzottify.android.domain.settings.PlayBehavior
 import com.lelloman.pezzottify.android.domain.settings.ThemeMode
 import com.lelloman.pezzottify.android.domain.settings.UserSettingsStore
@@ -26,6 +28,7 @@ import com.lelloman.pezzottify.android.ui.screen.main.home.HomeScreenState
 import com.lelloman.pezzottify.android.ui.screen.main.home.HomeScreenViewModel
 import com.lelloman.pezzottify.android.ui.screen.main.home.ViewedContentType
 import com.lelloman.pezzottify.android.ui.screen.main.profile.ProfileScreenViewModel
+import com.lelloman.pezzottify.android.ui.screen.main.profile.stylesettings.StyleSettingsViewModel
 import com.lelloman.pezzottify.android.ui.screen.main.search.SearchScreenViewModel
 import com.lelloman.pezzottify.android.ui.screen.player.PlayerScreenViewModel
 import com.lelloman.pezzottify.android.ui.screen.queue.QueueScreenViewModel
@@ -102,9 +105,17 @@ class InteractorsModule {
 
         override fun getThemeMode(): ThemeMode = userSettingsStore.themeMode.value
 
+        override fun getColorPalette(): ColorPalette = userSettingsStore.colorPalette.value
+
+        override fun getFontFamily(): AppFontFamily = userSettingsStore.fontFamily.value
+
         override fun observePlayBehavior() = userSettingsStore.playBehavior
 
         override fun observeThemeMode() = userSettingsStore.themeMode
+
+        override fun observeColorPalette() = userSettingsStore.colorPalette
+
+        override fun observeFontFamily() = userSettingsStore.fontFamily
 
         override suspend fun setPlayBehavior(playBehavior: PlayBehavior) {
             userSettingsStore.setPlayBehavior(playBehavior)
@@ -114,11 +125,40 @@ class InteractorsModule {
             userSettingsStore.setThemeMode(themeMode)
         }
 
+        override suspend fun setColorPalette(colorPalette: ColorPalette) {
+            userSettingsStore.setColorPalette(colorPalette)
+        }
+
+        override suspend fun setFontFamily(fontFamily: AppFontFamily) {
+            userSettingsStore.setFontFamily(fontFamily)
+        }
+
         override fun getBuildVariant(): String = buildInfo.buildVariant
 
         override fun getVersionName(): String = buildInfo.versionName
 
         override fun getGitCommit(): String = buildInfo.gitCommit
+    }
+
+    @Provides
+    fun provideStyleSettingsInteractor(
+        userSettingsStore: UserSettingsStore,
+    ): StyleSettingsViewModel.Interactor = object : StyleSettingsViewModel.Interactor {
+        override fun getColorPalette(): ColorPalette = userSettingsStore.colorPalette.value
+
+        override fun getFontFamily(): AppFontFamily = userSettingsStore.fontFamily.value
+
+        override fun observeColorPalette() = userSettingsStore.colorPalette
+
+        override fun observeFontFamily() = userSettingsStore.fontFamily
+
+        override suspend fun setColorPalette(colorPalette: ColorPalette) {
+            userSettingsStore.setColorPalette(colorPalette)
+        }
+
+        override suspend fun setFontFamily(fontFamily: AppFontFamily) {
+            userSettingsStore.setFontFamily(fontFamily)
+        }
     }
 
     @Provides

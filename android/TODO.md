@@ -5,6 +5,7 @@ We can consider V1 ready once all of the task without V2 mark are completed.
 ### [ready for coding]
 
 - When the user performs a login, the username should be persisted so that if the user logs out, the username field of the login screen can be pre-filled
+- Check that all persisted user info are deleted at logout. Right now, I still see recently viewed items after re-logging in.
 
 ### [to refine]
 

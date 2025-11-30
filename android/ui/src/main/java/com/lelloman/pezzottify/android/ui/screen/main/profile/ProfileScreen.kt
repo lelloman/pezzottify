@@ -1,11 +1,14 @@
 package com.lelloman.pezzottify.android.ui.screen.main.profile
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
@@ -18,9 +21,12 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -32,9 +38,12 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import androidx.navigation.compose.rememberNavController
+import com.lelloman.pezzottify.android.domain.settings.AppFontFamily
+import com.lelloman.pezzottify.android.domain.settings.ColorPalette
 import com.lelloman.pezzottify.android.domain.settings.PlayBehavior
 import com.lelloman.pezzottify.android.domain.settings.ThemeMode
 import com.lelloman.pezzottify.android.ui.fromProfileBackToLogin
+import com.lelloman.pezzottify.android.ui.toStyleSettings
 import com.lelloman.pezzottify.android.ui.theme.PezzottifyTheme
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -42,12 +51,13 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.flow
 
 @Composable
-fun ProfileScreen(navController: NavController) {
+fun ProfileScreen(navController: NavController, rootNavController: NavController) {
     val viewModel = hiltViewModel<ProfileScreenViewModel>()
     ProfileScreenInternal(
         state = viewModel.state,
         events = viewModel.events,
         navController = navController,
+        rootNavController = rootNavController,
         actions = viewModel,
     )
 }
@@ -59,6 +69,7 @@ private fun ProfileScreenInternal(
     actions: ProfileScreenActions,
     events: Flow<ProfileScreenEvents>,
     navController: NavController,
+    rootNavController: NavController,
 ) {
     val currentState by state.collectAsState()
 
@@ -66,7 +77,7 @@ private fun ProfileScreenInternal(
         events.collect {
             when (it) {
                 ProfileScreenEvents.NavigateToLoginScreen -> {
-                    navController.fromProfileBackToLogin()
+                    rootNavController.fromProfileBackToLogin()
                 }
             }
         }
@@ -199,6 +210,36 @@ private fun ProfileScreenInternal(
                 }
             }
 
+            Spacer(modifier = Modifier.height(24.dp))
+
+            // Appearance Settings Navigation
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { navController.toStyleSettings() }
+                    .padding(vertical = 12.dp),
+                verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Appearance",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        text = "Color palette and font",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                    contentDescription = "Open appearance settings",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(24.dp)
+                )
+            }
+
             HorizontalDivider(modifier = Modifier.padding(vertical = 24.dp))
 
             // About Section
@@ -264,6 +305,8 @@ private fun ProfileScreenPreview() {
                     baseUrl = "http://10.0.2.2:3001",
                     playBehavior = PlayBehavior.ReplacePlaylist,
                     themeMode = ThemeMode.System,
+                    colorPalette = ColorPalette.Classic,
+                    fontFamily = AppFontFamily.System,
                     buildVariant = "debug",
                     versionName = "1.0",
                     gitCommit = "abc1234",
@@ -271,12 +314,15 @@ private fun ProfileScreenPreview() {
             ),
             events = flow {},
             navController = rememberNavController(),
+            rootNavController = rememberNavController(),
             actions = object : ProfileScreenActions {
                 override fun clickOnLogout() {}
                 override fun confirmLogout() {}
                 override fun dismissLogoutConfirmation() {}
                 override fun selectPlayBehavior(playBehavior: PlayBehavior) {}
                 override fun selectThemeMode(themeMode: ThemeMode) {}
+                override fun selectColorPalette(colorPalette: ColorPalette) {}
+                override fun selectFontFamily(fontFamily: AppFontFamily) {}
             },
         )
     }
@@ -285,7 +331,7 @@ private fun ProfileScreenPreview() {
 @Composable
 @Preview(showBackground = true)
 private fun ProfileScreenPreviewDark() {
-    PezzottifyTheme(darkTheme = true) {
+    PezzottifyTheme(darkTheme = true, colorPalette = ColorPalette.PurpleHaze) {
         ProfileScreenInternal(
             state = MutableStateFlow(
                 ProfileScreenState(
@@ -293,6 +339,8 @@ private fun ProfileScreenPreviewDark() {
                     baseUrl = "http://10.0.2.2:3001",
                     playBehavior = PlayBehavior.AddToPlaylist,
                     themeMode = ThemeMode.Dark,
+                    colorPalette = ColorPalette.PurpleHaze,
+                    fontFamily = AppFontFamily.Monospace,
                     buildVariant = "release",
                     versionName = "1.0",
                     gitCommit = "def5678",
@@ -300,12 +348,15 @@ private fun ProfileScreenPreviewDark() {
             ),
             events = flow {},
             navController = rememberNavController(),
+            rootNavController = rememberNavController(),
             actions = object : ProfileScreenActions {
                 override fun clickOnLogout() {}
                 override fun confirmLogout() {}
                 override fun dismissLogoutConfirmation() {}
                 override fun selectPlayBehavior(playBehavior: PlayBehavior) {}
                 override fun selectThemeMode(themeMode: ThemeMode) {}
+                override fun selectColorPalette(colorPalette: ColorPalette) {}
+                override fun selectFontFamily(fontFamily: AppFontFamily) {}
             },
         )
     }
