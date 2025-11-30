@@ -1,28 +1,43 @@
 # ------------------------------------------
-# 1️⃣ Build stage
+# 1️⃣ Web build stage
 # ------------------------------------------
-FROM rust:1.91.1 AS builder
+FROM node:20-alpine AS web-builder
+
+WORKDIR /web
+COPY web/package*.json ./
+RUN npm ci
+COPY web/ .
+RUN npm run build
+
+
+# ------------------------------------------
+# 2️⃣ Rust build stage
+# ------------------------------------------
+FROM rust:1.91.1 AS rust-builder
 
 WORKDIR /catalog-server
-COPY . .
+COPY catalog-server/ .
 
 # Build the release binary
 RUN cargo build --release
 
 
 # ------------------------------------------
-# 2️⃣ Runtime stage (slim, ~20MB)
+# 3️⃣ Runtime stage (slim)
 # ------------------------------------------
 FROM debian:stable-slim
 
 # Install SQLite if your app loads sqlite dynamically
 RUN apt-get update && apt-get install -y libsqlite3-dev && rm -rf /var/lib/apt/lists/*
 
-WORKDIR /catalog-server
+WORKDIR /app
 
 # Copy the binaries from the builder stage
-COPY --from=builder /catalog-server/target/release/cli-auth /usr/local/bin/cli-auth
-COPY --from=builder /catalog-server/target/release/catalog-server /usr/local/bin/catalog-server
+COPY --from=rust-builder /catalog-server/target/release/cli-auth /usr/local/bin/cli-auth
+COPY --from=rust-builder /catalog-server/target/release/catalog-server /usr/local/bin/catalog-server
+
+# Copy the web frontend from the web builder stage
+COPY --from=web-builder /web/dist /app/web
 
 # App will expect these directories
 RUN mkdir -p /data/db
@@ -31,11 +46,12 @@ RUN mkdir -p /data/catalog
 EXPOSE 3001
 EXPOSE 9091
 
-# Start the server
-CMD ["catalog-server", "/data/catalog", "/data/db/user.db", "--content-cache-age-sec=60", "--logging-level", "path"]
+# Start the server with frontend serving enabled
+CMD ["catalog-server", "/data/catalog", "/data/db/user.db", "--content-cache-age-sec=60", "--logging-level", "path", "--frontend-dir-path", "/app/web"]
 
-# Build with:
-# docker build -t catalog-server .
+# NOTE: Build context must be the repository root (not catalog-server/)
+# Build with (from repo root):
+# docker build -t catalog-server -f catalog-server/Dockerfile .
 
 # Run with:
-# sh -c "docker stop pezzottify-catalog-server || true" && sh -c "docker rm pezzottify-catalog-server || true" && docker run -d --rm --name pezzottify-catalog-server -p 3001:3001 -v /home/lelloman/pezzottify-catalog/:/data/db -v /home/lelloman/pezzottify-catalog:/data/catalog catalog-server
+# docker run -d --rm --name pezzottify-catalog-server -p 3001:3001 -v /path/to/catalog:/data/catalog -v /path/to/db:/data/db catalog-server

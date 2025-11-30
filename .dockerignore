@@ -1,0 +1,30 @@
+# Rust build artifacts (can be 10+ GB)
+catalog-server/target/
+
+# Node modules (rebuilt in container)
+web/node_modules/
+web/dist/
+
+# Android build artifacts
+android/.gradle/
+android/*/build/
+android/build/
+
+# IDE and editor files
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Git
+.git/
+
+# Docker files (prevent recursion)
+docker-compose*.yml
+
+# Monitoring data volumes
+monitoring/*.db
+
+# OS files
+.DS_Store
+Thumbs.db

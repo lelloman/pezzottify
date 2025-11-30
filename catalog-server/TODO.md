@@ -6,6 +6,8 @@
 
 ### [to refine]
 
+- Consider switching Docker deployment to use a separate nginx service for web frontend serving (Option C) instead of serving from catalog-server. This would allow independent frontend deployments and better static file optimization.
+
 V1 - Create catalog db
 V1 - Implement catalog editing endpoints (EditCatalog permission)
 V1 - After the catalog has been migrated to a db, modify artist, album and track models to have the reference to one "display image" id, then provide, if available other images

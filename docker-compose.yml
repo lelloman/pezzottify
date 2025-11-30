@@ -3,7 +3,9 @@
 
 services:
   catalog-server:
-    build: ./catalog-server
+    build:
+      context: .
+      dockerfile: catalog-server/Dockerfile
     ports:
       - "3001:3001"
     expose:
@@ -16,7 +18,7 @@ services:
     environment:
       - LOG_LEVEL=info
     restart: unless-stopped
-    command: [ "catalog-server", "/data/catalog", "/data/db/user.db", "--content-cache-age-sec=60", "--logging-level", "path" ]
+    command: [ "catalog-server", "/data/catalog", "/data/db/user.db", "--content-cache-age-sec=60", "--logging-level", "path", "--frontend-dir-path", "/app/web" ]
 
   prometheus:
     image: prom/prometheus:v2.48.0
