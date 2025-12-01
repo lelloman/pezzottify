@@ -11,13 +11,20 @@ Implement a catalog change log system that:
 
 ## Design Decisions
 
-| Decision             | Choice                                               |
-| -------------------- | ---------------------------------------------------- |
-| Batch states         | Two states: Open → Closed (closing = published)      |
-| Concurrent batches   | One active batch at a time                           |
-| Unbatched changes    | Not allowed - require active batch for modifications |
-| Field-level tracking | JSON blob for diffs (matches existing patterns)      |
-| User attribution     | Not tracked                                          |
+| Decision                  | Choice                                                              |
+| ------------------------- | ------------------------------------------------------------------- |
+| Batch ID format           | UUID                                                                |
+| Batch states              | Two states: Open → Closed (closing = published)                     |
+| Concurrent batches        | One active batch at a time (409 Conflict if trying to create another) |
+| Unbatched changes         | Not allowed - require active batch for modifications                |
+| Field-level tracking      | JSON blob for diffs (matches existing patterns)                     |
+| User attribution          | Not tracked                                                         |
+| Entity snapshot           | Always populated (full JSON of entity after change)                 |
+| Delete batch              | Only allowed if batch is empty (no changes recorded)                |
+| Batch closing             | Explicit only (no auto-close)                                       |
+| Stale batch alert         | Telegram alert after 1 hour of inactivity on open batch             |
+| Display summary (add/del) | List individual names for artists/albums, counts for tracks         |
+| Display summary (update)  | Counts only (e.g., "updated 3 artists")                             |
 
 ## Database Schema (Version 2)
 
@@ -30,7 +37,8 @@ CREATE TABLE catalog_batches (
     description TEXT,
     is_open INTEGER NOT NULL DEFAULT 1,  -- 1 = open, 0 = closed
     created_at INTEGER NOT NULL,
-    closed_at INTEGER
+    closed_at INTEGER,
+    last_activity_at INTEGER NOT NULL    -- Updated on each change, used for stale batch alerts
 );
 
 CREATE INDEX idx_batches_is_open ON catalog_batches(is_open);
@@ -47,7 +55,7 @@ CREATE TABLE catalog_change_log (
     entity_id TEXT NOT NULL,
     operation TEXT NOT NULL,        -- 'create', 'update', 'delete'
     field_changes TEXT NOT NULL,    -- JSON: {"field": {"old": X, "new": Y}, ...}
-    entity_snapshot TEXT,           -- Full entity JSON after change
+    entity_snapshot TEXT NOT NULL,  -- Full entity JSON after change (before for deletes)
     display_summary TEXT,           -- Human-readable summary
     created_at INTEGER NOT NULL
 );
@@ -82,6 +90,7 @@ pub struct CatalogBatch {
     pub is_open: bool,
     pub created_at: i64,
     pub closed_at: Option<i64>,
+    pub last_activity_at: i64,
 }
 
 pub struct ChangeEntry {
@@ -91,7 +100,7 @@ pub struct ChangeEntry {
     pub entity_id: String,
     pub operation: ChangeOperation,
     pub field_changes: serde_json::Value,
-    pub entity_snapshot: Option<serde_json::Value>,
+    pub entity_snapshot: serde_json::Value,  // Always populated
     pub display_summary: Option<String>,
     pub created_at: i64,
 }
@@ -268,9 +277,29 @@ Response:
     "name": "December 2024 Releases",
     "closed_at": 1733500000,
     "summary": {
-      "artists_added": 3,
-      "albums_added": 5,
-      "tracks_added": 42
+      "artists": {
+        "added": [
+          {"id": "R123", "name": "The Beatles"},
+          {"id": "R456", "name": "Pink Floyd"}
+        ],
+        "updated_count": 2,
+        "deleted": []
+      },
+      "albums": {
+        "added": [
+          {"id": "A789", "name": "Abbey Road"},
+          {"id": "A012", "name": "Dark Side of the Moon"}
+        ],
+        "updated_count": 1,
+        "deleted": [
+          {"id": "A999", "name": "Removed Album"}
+        ]
+      },
+      "tracks": {
+        "added_count": 42,
+        "updated_count": 5,
+        "deleted_count": 0
+      }
     }
   }]
 }
@@ -343,7 +372,24 @@ pub enum CatalogError {
     BatchNotFound(String),
     BatchAlreadyClosed(String),
     BatchAlreadyActive(String),
+    BatchNotEmpty(String),  // Cannot delete batch with changes
 }
 ```
 
-When no batch is active and a catalog modification is attempted, return HTTP 409 Conflict with message explaining that a batch must be created first.
+HTTP status codes:
+- `NoBatchActive`: 409 Conflict - must create a batch before catalog modifications
+- `BatchNotFound`: 404 Not Found
+- `BatchAlreadyClosed`: 409 Conflict - cannot modify or re-close a closed batch
+- `BatchAlreadyActive`: 409 Conflict - cannot create a new batch while one is open
+- `BatchNotEmpty`: 400 Bad Request - cannot delete batch that has recorded changes
+
+## Stale Batch Alerting
+
+When a batch remains open with no activity for 1 hour, trigger a Telegram alert via the existing alerts infrastructure.
+
+**Implementation:**
+- Background task checks for open batches where `now - last_activity_at > 1 hour`
+- `last_activity_at` is set to `created_at` when batch is created
+- `last_activity_at` is updated whenever a change is recorded to the batch
+- Alert includes batch name, creation time, and time since last activity
+- Alert is sent once per stale batch (track sent alerts to avoid spam)
