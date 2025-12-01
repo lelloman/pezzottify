@@ -2,7 +2,7 @@ package com.lelloman.pezzottify.android.domain.app
 
 import com.lelloman.pezzottify.android.domain.auth.AuthStore
 import com.lelloman.pezzottify.android.domain.player.PezzottifyPlayer
-import com.lelloman.pezzottify.android.domain.sync.Synchronizer
+import com.lelloman.pezzottify.android.domain.sync.StaticsSynchronizer
 import com.lelloman.pezzottify.android.domain.usercontent.UserContentSynchronizer
 import dagger.Binds
 import dagger.Module
@@ -20,7 +20,7 @@ abstract class AppInitializersModule {
 
     @Binds
     @IntoSet
-    internal abstract fun bindsSynchronizer(synchronizer: Synchronizer): AppInitializer
+    internal abstract fun bindsStaticsSynchronizer(staticsSynchronizer: StaticsSynchronizer): AppInitializer
 
     @Binds
     @IntoSet

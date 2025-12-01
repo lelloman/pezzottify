@@ -26,7 +26,7 @@ import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 
 @Singleton
-internal class Synchronizer(
+internal class StaticsSynchronizer(
     private val fetchStateStore: StaticItemFetchStateStore,
     private val remoteApiClient: RemoteApiClient,
     private val staticsStore: StaticsStore,
@@ -35,7 +35,7 @@ internal class Synchronizer(
     dispatcher: CoroutineDispatcher,
     scope: CoroutineScope,
 ) : BaseSynchronizer<StaticItemFetchState>(
-    logger = loggerFactory.getLogger(Synchronizer::class),
+    logger = loggerFactory.getLogger(StaticsSynchronizer::class),
     dispatcher = dispatcher,
     scope = scope,
     minSleepDuration = MIN_SLEEP_DURATION,

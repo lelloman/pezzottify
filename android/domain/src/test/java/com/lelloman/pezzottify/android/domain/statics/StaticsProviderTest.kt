@@ -5,7 +5,7 @@ import com.lelloman.pezzottify.android.domain.app.TimeProvider
 import com.lelloman.pezzottify.android.domain.statics.fetchstate.ErrorReason
 import com.lelloman.pezzottify.android.domain.statics.fetchstate.StaticItemFetchState
 import com.lelloman.pezzottify.android.domain.statics.fetchstate.StaticItemFetchStateStore
-import com.lelloman.pezzottify.android.domain.sync.Synchronizer
+import com.lelloman.pezzottify.android.domain.sync.StaticsSynchronizer
 import com.lelloman.pezzottify.android.logger.Logger
 import com.lelloman.pezzottify.android.logger.LoggerFactory
 import io.mockk.coEvery
@@ -24,7 +24,7 @@ class StaticsProviderTest {
 
     private lateinit var staticsStore: StaticsStore
     private lateinit var fetchStateStore: StaticItemFetchStateStore
-    private lateinit var synchronizer: Synchronizer
+    private lateinit var staticsSynchronizer: StaticsSynchronizer
     private lateinit var timeProvider: TimeProvider
     private lateinit var loggerFactory: LoggerFactory
 
@@ -36,7 +36,7 @@ class StaticsProviderTest {
     fun setUp() {
         staticsStore = mockk()
         fetchStateStore = mockk()
-        synchronizer = mockk(relaxed = true)
+        staticsSynchronizer = mockk(relaxed = true)
         timeProvider = TimeProvider { currentTime }
 
         val mockLogger = mockk<Logger>(relaxed = true)
@@ -47,7 +47,7 @@ class StaticsProviderTest {
         staticsProvider = StaticsProvider(
             staticsStore = staticsStore,
             staticItemFetchStateStore = fetchStateStore,
-            synchronizer = synchronizer,
+            staticsSynchronizer = staticsSynchronizer,
             timeProvider = timeProvider,
             loggerFactory = loggerFactory,
             coroutineContext = Dispatchers.Unconfined,
@@ -81,7 +81,7 @@ class StaticsProviderTest {
         coVerify(exactly = 0) { fetchStateStore.store(any()) }
 
         // And: synchronizer should NOT have been woken up
-        verify(exactly = 0) { synchronizer.wakeUp() }
+        verify(exactly = 0) { staticsSynchronizer.wakeUp() }
     }
 
     @Test
@@ -108,7 +108,7 @@ class StaticsProviderTest {
         coVerify(exactly = 1) { fetchStateStore.store(any()) }
 
         // And: synchronizer SHOULD have been woken up
-        verify(exactly = 1) { synchronizer.wakeUp() }
+        verify(exactly = 1) { staticsSynchronizer.wakeUp() }
     }
 
     @Test
@@ -138,7 +138,7 @@ class StaticsProviderTest {
         coVerify(exactly = 0) { fetchStateStore.store(any()) }
 
         // And: synchronizer should NOT have been woken up
-        verify(exactly = 0) { synchronizer.wakeUp() }
+        verify(exactly = 0) { staticsSynchronizer.wakeUp() }
     }
 
     @Test
@@ -168,7 +168,7 @@ class StaticsProviderTest {
         coVerify(exactly = 0) { fetchStateStore.store(any()) }
 
         // And: synchronizer should NOT have been woken up
-        verify(exactly = 0) { synchronizer.wakeUp() }
+        verify(exactly = 0) { staticsSynchronizer.wakeUp() }
     }
 
     @Test
@@ -198,6 +198,6 @@ class StaticsProviderTest {
         coVerify(exactly = 0) { fetchStateStore.store(any()) }
 
         // And: synchronizer should NOT have been woken up
-        verify(exactly = 0) { synchronizer.wakeUp() }
+        verify(exactly = 0) { staticsSynchronizer.wakeUp() }
     }
 }

@@ -40,7 +40,7 @@ import org.junit.Before
 import org.junit.Test
 
 @OptIn(ExperimentalCoroutinesApi::class)
-class SynchronizerTest {
+class StaticsSynchronizerTest {
 
     private lateinit var fetchStateStore: StaticItemFetchStateStore
     private lateinit var remoteApiClient: RemoteApiClient
@@ -53,7 +53,7 @@ class SynchronizerTest {
     private val testDispatcher = UnconfinedTestDispatcher()
     private lateinit var testScope: CoroutineScope
 
-    private lateinit var synchronizer: Synchronizer
+    private lateinit var synchronizer: StaticsSynchronizer
 
     @Before
     fun setUp() {
@@ -90,8 +90,8 @@ class SynchronizerTest {
         Dispatchers.resetMain()
     }
 
-    private fun createSynchronizer(): Synchronizer {
-        return Synchronizer(
+    private fun createSynchronizer(): StaticsSynchronizer {
+        return StaticsSynchronizer(
             fetchStateStore = fetchStateStore,
             remoteApiClient = remoteApiClient,
             staticsStore = staticsStore,

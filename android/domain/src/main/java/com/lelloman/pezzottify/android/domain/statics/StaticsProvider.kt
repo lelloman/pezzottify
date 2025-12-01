@@ -3,7 +3,7 @@ package com.lelloman.pezzottify.android.domain.statics
 import com.lelloman.pezzottify.android.domain.app.TimeProvider
 import com.lelloman.pezzottify.android.domain.statics.fetchstate.StaticItemFetchState
 import com.lelloman.pezzottify.android.domain.statics.fetchstate.StaticItemFetchStateStore
-import com.lelloman.pezzottify.android.domain.sync.Synchronizer
+import com.lelloman.pezzottify.android.domain.sync.StaticsSynchronizer
 import com.lelloman.pezzottify.android.logger.LoggerFactory
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.combine
@@ -14,7 +14,7 @@ import kotlin.coroutines.CoroutineContext
 class StaticsProvider internal constructor(
     private val staticsStore: StaticsStore,
     private val staticItemFetchStateStore: StaticItemFetchStateStore,
-    private val synchronizer: Synchronizer,
+    private val staticsSynchronizer: StaticsSynchronizer,
     private val timeProvider: TimeProvider,
     loggerFactory: LoggerFactory,
     private val coroutineContext: CoroutineContext,
@@ -24,10 +24,10 @@ class StaticsProvider internal constructor(
     internal constructor(
         staticsStore: StaticsStore,
         staticItemFetchStateStore: StaticItemFetchStateStore,
-        synchronizer: Synchronizer,
+        staticsSynchronizer: StaticsSynchronizer,
         timeProvider: TimeProvider,
         loggerFactory: LoggerFactory,
-    ) : this(staticsStore, staticItemFetchStateStore, synchronizer, timeProvider, loggerFactory, Dispatchers.IO)
+    ) : this(staticsStore, staticItemFetchStateStore, staticsSynchronizer, timeProvider, loggerFactory, Dispatchers.IO)
 
     private val logger by loggerFactory
 
@@ -40,7 +40,7 @@ class StaticsProvider internal constructor(
         withContext(coroutineContext) {
             logger.debug("scheduleItemFetch($itemId, $type)")
             staticItemFetchStateStore.store(StaticItemFetchState.requested(itemId, type))
-            synchronizer.wakeUp()
+            staticsSynchronizer.wakeUp()
         }
     }
 
