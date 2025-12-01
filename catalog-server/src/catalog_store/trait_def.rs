@@ -28,6 +28,9 @@ pub trait CatalogStore: Send + Sync {
     // Resolved Entity Retrieval
     // =========================================================================
 
+    /// Get a resolved artist with all related data (including related artists).
+    fn get_resolved_artist_json(&self, id: &str) -> Result<Option<serde_json::Value>>;
+
     /// Get a resolved album with all related data.
     fn get_resolved_album_json(&self, id: &str) -> Result<Option<serde_json::Value>>;
 

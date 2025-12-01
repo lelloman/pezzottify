@@ -1644,6 +1644,13 @@ impl CatalogStore for SqliteCatalogStore {
         }
     }
 
+    fn get_resolved_artist_json(&self, id: &str) -> Result<Option<serde_json::Value>> {
+        match self.get_resolved_artist(id)? {
+            Some(artist) => Ok(Some(serde_json::to_value(artist)?)),
+            None => Ok(None),
+        }
+    }
+
     fn get_resolved_album_json(&self, id: &str) -> Result<Option<serde_json::Value>> {
         match self.get_resolved_album(id)? {
             Some(album) => Ok(Some(serde_json::to_value(album)?)),

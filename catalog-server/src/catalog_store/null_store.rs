@@ -24,6 +24,10 @@ impl CatalogStore for NullCatalogStore {
         Ok(None)
     }
 
+    fn get_resolved_artist_json(&self, _id: &str) -> Result<Option<serde_json::Value>> {
+        Ok(None)
+    }
+
     fn get_resolved_album_json(&self, _id: &str) -> Result<Option<serde_json::Value>> {
         Ok(None)
     }

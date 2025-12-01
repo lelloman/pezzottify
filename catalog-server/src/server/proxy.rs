@@ -27,7 +27,9 @@ fn strip_id_prefix(id: &str) -> &str {
 }
 
 use crate::catalog_store::CatalogStore;
-use crate::downloader::models::{DownloaderAlbum, DownloaderArtist, DownloaderImage, DownloaderTrack};
+use crate::downloader::models::{
+    DownloaderAlbum, DownloaderArtist, DownloaderImage, DownloaderTrack,
+};
 use crate::downloader::Downloader;
 
 /// Proxy for fetching and storing content from the downloader service.
@@ -70,18 +72,18 @@ impl CatalogProxy {
             return Ok(());
         }
 
-        // Check discography
-        let discography = self.catalog_store.get_artist_discography_json(id)?;
-        let has_albums = discography
+        // Check if artist has related artists
+        let resolved = self.catalog_store.get_resolved_artist_json(id)?;
+        let has_related_artists = resolved
             .as_ref()
-            .and_then(|d| d.get("albums"))
+            .and_then(|r| r.get("related_artists"))
             .and_then(|a| a.as_array())
             .map(|a| !a.is_empty())
             .unwrap_or(false);
 
-        if !has_albums {
-            info!("Artist {} has no albums, fetching from downloader", id);
-            self.fetch_artist_albums(id).await?;
+        if !has_related_artists {
+            info!("Artist {} has no related artists, fetching from downloader", id);
+            self.fetch_and_store_artist(id).await?;
         }
 
         Ok(())
@@ -155,7 +157,10 @@ impl CatalogProxy {
         //
         // TODO: Add endpoint to get artist's albums from downloader
 
-        info!("Artist {} albums would be fetched here (not implemented)", artist_id);
+        info!(
+            "Artist {} albums would be fetched here (not implemented)",
+            artist_id
+        );
 
         Ok(())
     }
@@ -237,7 +242,9 @@ impl CatalogProxy {
 
         // Download audio file
         info!("Downloading track {} audio to {:?}", id, audio_path);
-        self.downloader.download_track_audio(spotify_id, &audio_path).await?;
+        self.downloader
+            .download_track_audio(spotify_id, &audio_path)
+            .await?;
 
         // Store track in catalog
         self.store_track(&dl_track, relative_uri, format).await?;
@@ -328,7 +335,9 @@ impl CatalogProxy {
         let image_path = self.media_base_path.join(&relative_uri);
 
         // Download image file
-        self.downloader.download_image(&dl_image.id, &image_path).await?;
+        self.downloader
+            .download_image(&dl_image.id, &image_path)
+            .await?;
 
         // Create catalog image record
         let image = dl_image.to_catalog_image(relative_uri);
@@ -355,23 +364,35 @@ mod tests {
 
     #[test]
     fn test_strip_id_prefix_artist() {
-        assert_eq!(strip_id_prefix("R5a2EaR3hamoenG9rDuVn8j"), "5a2EaR3hamoenG9rDuVn8j");
+        assert_eq!(
+            strip_id_prefix("R5a2EaR3hamoenG9rDuVn8j"),
+            "5a2EaR3hamoenG9rDuVn8j"
+        );
     }
 
     #[test]
     fn test_strip_id_prefix_album() {
-        assert_eq!(strip_id_prefix("A2umoqwMrmjBBPeaqgYu6J9"), "2umoqwMrmjBBPeaqgYu6J9");
+        assert_eq!(
+            strip_id_prefix("A2umoqwMrmjBBPeaqgYu6J9"),
+            "2umoqwMrmjBBPeaqgYu6J9"
+        );
     }
 
     #[test]
     fn test_strip_id_prefix_track() {
-        assert_eq!(strip_id_prefix("T1uvyZBs4IZYRebHIB1747m"), "1uvyZBs4IZYRebHIB1747m");
+        assert_eq!(
+            strip_id_prefix("T1uvyZBs4IZYRebHIB1747m"),
+            "1uvyZBs4IZYRebHIB1747m"
+        );
     }
 
     #[test]
     fn test_strip_id_prefix_no_prefix() {
         // IDs without prefix should be returned as-is
-        assert_eq!(strip_id_prefix("5a2EaR3hamoenG9rDuVn8j"), "5a2EaR3hamoenG9rDuVn8j");
+        assert_eq!(
+            strip_id_prefix("5a2EaR3hamoenG9rDuVn8j"),
+            "5a2EaR3hamoenG9rDuVn8j"
+        );
     }
 
     #[test]
@@ -382,7 +403,10 @@ mod tests {
     #[test]
     fn test_strip_id_prefix_other_prefix() {
         // Other letters should not be stripped
-        assert_eq!(strip_id_prefix("X5a2EaR3hamoenG9rDuVn8j"), "X5a2EaR3hamoenG9rDuVn8j");
+        assert_eq!(
+            strip_id_prefix("X5a2EaR3hamoenG9rDuVn8j"),
+            "X5a2EaR3hamoenG9rDuVn8j"
+        );
     }
 
     use crate::catalog_store::SqliteCatalogStore;
@@ -411,7 +435,10 @@ mod tests {
         }
 
         pub fn add_artist(&self, artist: DownloaderArtist) {
-            self.artists.lock().unwrap().insert(artist.id.clone(), artist);
+            self.artists
+                .lock()
+                .unwrap()
+                .insert(artist.id.clone(), artist);
         }
 
         pub fn add_album(&self, album: DownloaderAlbum) {
@@ -559,9 +586,7 @@ mod tests {
     fn setup_test_env() -> (TempDir, Arc<SqliteCatalogStore>) {
         let temp_dir = TempDir::new().unwrap();
         let db_path = temp_dir.path().join("test_catalog.db");
-        let catalog_store = Arc::new(
-            SqliteCatalogStore::new(&db_path, temp_dir.path()).unwrap()
-        );
+        let catalog_store = Arc::new(SqliteCatalogStore::new(&db_path, temp_dir.path()).unwrap());
         (temp_dir, catalog_store)
     }
 
@@ -592,31 +617,32 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_ensure_artist_complete_skips_existing_artist_with_albums() {
+    async fn test_ensure_artist_complete_skips_existing_artist_with_related_artists() {
         let (temp_dir, catalog_store) = setup_test_env();
         let mock_downloader = Arc::new(MockDownloader::new());
 
-        // Add artist to mock as fallback (in case discography lookup triggers fetch)
+        // Add artist to mock as fallback (in case related artists check triggers fetch)
         mock_downloader.add_artist(create_test_artist("artist1", "Existing Artist"));
 
-        // Pre-populate catalog with artist (must include all required fields)
-        let artist_json = serde_json::json!({
+        // Pre-populate catalog with two artists
+        let artist1_json = serde_json::json!({
             "id": "artist1",
             "name": "Existing Artist",
             "genres": ["rock"],
             "activity_periods": []
         });
-        catalog_store.create_artist(artist_json).unwrap();
+        catalog_store.create_artist(artist1_json).unwrap();
 
-        // Add album for artist
-        let album_json = serde_json::json!({
-            "id": "album1",
-            "name": "Test Album",
-            "album_type": "Album",
-            "genres": [],
-            "artists_ids": ["artist1"]
+        let artist2_json = serde_json::json!({
+            "id": "artist2",
+            "name": "Related Artist",
+            "genres": ["rock"],
+            "activity_periods": []
         });
-        catalog_store.create_album(album_json).unwrap();
+        catalog_store.create_artist(artist2_json).unwrap();
+
+        // Add related artist relationship
+        catalog_store.add_related_artist("artist1", "artist2").unwrap();
 
         let proxy = CatalogProxy::new(
             mock_downloader.clone(),
@@ -624,13 +650,19 @@ mod tests {
             temp_dir.path().to_path_buf(),
         );
 
-        // Artist exists with albums, should not call fetch_and_store_artist
-        // (but may call fetch_artist_albums if discography check doesn't find albums)
+        // Artist exists with related artists, should not call fetch_and_store_artist
         let result = proxy.ensure_artist_complete("artist1").await;
         if let Err(ref e) = result {
             eprintln!("ensure_artist_complete error: {:?}", e);
         }
-        assert!(result.is_ok(), "ensure_artist_complete failed: {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "ensure_artist_complete failed: {:?}",
+            result.err()
+        );
+
+        // Verify downloader was NOT called since artist has related artists
+        assert_eq!(mock_downloader.get_call_count("get_artist"), 0);
     }
 
     #[tokio::test]
@@ -687,7 +719,11 @@ mod tests {
         if let Err(ref e) = result {
             eprintln!("Error: {:?}", e);
         }
-        assert!(result.is_ok(), "fetch_and_store_track failed: {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "fetch_and_store_track failed: {:?}",
+            result.err()
+        );
 
         // Verify audio file was "downloaded"
         assert_eq!(mock_downloader.get_call_count("download_track_audio"), 1);
