@@ -2,7 +2,7 @@
 
 ### [ready for coding]
 
-- Wire up the external downloader. Let's start with images, when the image endpoint is hit, and either the static item has no image, or the image file is empty, before returning 404 or an empty body we hit the downloader and try to fetch the image from there. If the image is fetched, then the content is saved to disk and returned in the body.
+- Wire up the external downloader.
 
 ### [to refine]
 
