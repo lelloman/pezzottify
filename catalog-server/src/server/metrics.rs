@@ -123,6 +123,31 @@ lazy_static! {
         format!("{PREFIX}_changelog_stale_batch_checks_total"),
         "Total number of stale batch checks performed"
     ).expect("Failed to create changelog_stale_batch_checks_total metric");
+
+    // Downloader Metrics
+    pub static ref DOWNLOADER_REQUESTS_TOTAL: CounterVec = CounterVec::new(
+        Opts::new(format!("{PREFIX}_downloader_requests_total"), "Total requests to downloader service"),
+        &["operation", "status"]
+    ).expect("Failed to create downloader_requests_total metric");
+
+    pub static ref DOWNLOADER_REQUEST_DURATION_SECONDS: HistogramVec = HistogramVec::new(
+        HistogramOpts::new(
+            format!("{PREFIX}_downloader_request_duration_seconds"),
+            "Downloader request duration in seconds"
+        )
+        .buckets(vec![0.1, 0.5, 1.0, 2.0, 5.0, 10.0, 30.0, 60.0, 120.0]),
+        &["operation"]
+    ).expect("Failed to create downloader_request_duration_seconds metric");
+
+    pub static ref DOWNLOADER_ERRORS_TOTAL: CounterVec = CounterVec::new(
+        Opts::new(format!("{PREFIX}_downloader_errors_total"), "Total downloader errors by type"),
+        &["operation", "error_type"]
+    ).expect("Failed to create downloader_errors_total metric");
+
+    pub static ref DOWNLOADER_BYTES_TOTAL: CounterVec = CounterVec::new(
+        Opts::new(format!("{PREFIX}_downloader_bytes_total"), "Total bytes downloaded from downloader service"),
+        &["content_type"]
+    ).expect("Failed to create downloader_bytes_total metric");
 }
 
 /// Initialize all metrics and register them with the Prometheus registry
@@ -146,6 +171,10 @@ pub fn init_metrics() {
     let _ = REGISTRY.register(Box::new(LISTENING_DURATION_SECONDS_TOTAL.clone()));
     let _ = REGISTRY.register(Box::new(CHANGELOG_STALE_BATCHES.clone()));
     let _ = REGISTRY.register(Box::new(CHANGELOG_STALE_BATCH_CHECKS_TOTAL.clone()));
+    let _ = REGISTRY.register(Box::new(DOWNLOADER_REQUESTS_TOTAL.clone()));
+    let _ = REGISTRY.register(Box::new(DOWNLOADER_REQUEST_DURATION_SECONDS.clone()));
+    let _ = REGISTRY.register(Box::new(DOWNLOADER_ERRORS_TOTAL.clone()));
+    let _ = REGISTRY.register(Box::new(DOWNLOADER_BYTES_TOTAL.clone()));
 
     tracing::info!("Metrics system initialized successfully");
 }
@@ -271,6 +300,35 @@ pub fn record_listening_event(client_type: Option<&str>, completed: bool, durati
     LISTENING_DURATION_SECONDS_TOTAL
         .with_label_values(&[client_type_str])
         .inc_by(duration_seconds as f64);
+}
+
+/// Record a successful downloader request
+pub fn record_downloader_request(operation: &str, duration: Duration) {
+    DOWNLOADER_REQUESTS_TOTAL
+        .with_label_values(&[operation, "success"])
+        .inc();
+
+    DOWNLOADER_REQUEST_DURATION_SECONDS
+        .with_label_values(&[operation])
+        .observe(duration.as_secs_f64());
+}
+
+/// Record a failed downloader request
+pub fn record_downloader_error(operation: &str, error_type: &str) {
+    DOWNLOADER_REQUESTS_TOTAL
+        .with_label_values(&[operation, "error"])
+        .inc();
+
+    DOWNLOADER_ERRORS_TOTAL
+        .with_label_values(&[operation, error_type])
+        .inc();
+}
+
+/// Record bytes downloaded from the downloader service
+pub fn record_downloader_bytes(content_type: &str, bytes: u64) {
+    DOWNLOADER_BYTES_TOTAL
+        .with_label_values(&[content_type])
+        .inc_by(bytes as f64);
 }
 
 /// Update process memory usage
@@ -500,5 +558,43 @@ mod tests {
             .iter()
             .find(|m| m.get_name() == "pezzottify_listening_duration_seconds_total");
         assert!(listening_duration.is_some(), "Listening duration metric should exist");
+    }
+
+    #[test]
+    fn test_record_downloader_request() {
+        // Ensure metrics are initialized
+        init_metrics();
+
+        // Record a successful request
+        record_downloader_request("get_artist", Duration::from_millis(500));
+
+        // Record an error
+        record_downloader_error("get_album", "connection");
+
+        // Record bytes downloaded
+        record_downloader_bytes("audio", 1024 * 1024);
+        record_downloader_bytes("image", 50000);
+
+        // Verify metrics exist
+        let metrics = REGISTRY.gather();
+        let requests = metrics
+            .iter()
+            .find(|m| m.get_name() == "pezzottify_downloader_requests_total");
+        assert!(requests.is_some(), "Downloader requests metric should exist");
+
+        let duration = metrics
+            .iter()
+            .find(|m| m.get_name() == "pezzottify_downloader_request_duration_seconds");
+        assert!(duration.is_some(), "Downloader duration metric should exist");
+
+        let errors = metrics
+            .iter()
+            .find(|m| m.get_name() == "pezzottify_downloader_errors_total");
+        assert!(errors.is_some(), "Downloader errors metric should exist");
+
+        let bytes = metrics
+            .iter()
+            .find(|m| m.get_name() == "pezzottify_downloader_bytes_total");
+        assert!(bytes.is_some(), "Downloader bytes metric should exist");
     }
 }

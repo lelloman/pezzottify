@@ -19,6 +19,7 @@ services:
       - LOG_LEVEL=info
     restart: unless-stopped
     # Args: <catalog-db-path> <user-db-path> [--media-path <path>] [options]
+    # Optional: Add "--downloader-url", "<URL>" to enable on-demand content fetching
     command: [ "catalog-server", "/data/db/catalog.db", "/data/db/user.db", "--media-path", "/data/media", "--content-cache-age-sec=60", "--logging-level", "path", "--frontend-dir-path", "/app/web" ]
 
   prometheus:

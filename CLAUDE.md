@@ -38,6 +38,8 @@ cargo run -- ../../catalog.db ../../test.db --media-path=../../pezzottify-catalo
 - `--logging-level <LEVEL>`: Request logging level (default: path)
 - `--content-cache-age-sec <SECONDS>`: HTTP cache duration (default: 3600)
 - `--frontend-dir-path <PATH>`: Serve static frontend files
+- `--downloader-url <URL>`: URL of the downloader service for fetching missing content (optional)
+- `--downloader-timeout-sec <SECONDS>`: Timeout for downloader requests (default: 300)
 
 **Running tests:**
 ```bash

@@ -244,8 +244,17 @@ async fn home(session: Option<Session>, State(state): State<ServerState>) -> imp
 async fn get_artist(
     _session: Session,
     State(catalog_store): State<GuardedCatalogStore>,
+    State(proxy): State<super::state::OptionalProxy>,
     Path(id): Path<String>,
 ) -> Response {
+    // If proxy is available, ensure artist has complete data
+    if let Some(ref proxy) = proxy {
+        if let Err(e) = proxy.ensure_artist_complete(&id).await {
+            warn!("Proxy fetch failed for artist {}: {}", id, e);
+            // Continue serving what we have
+        }
+    }
+
     match catalog_store.get_artist_json(&id) {
         Ok(Some(artist)) => Json(artist).into_response(),
         Ok(None) => StatusCode::NOT_FOUND.into_response(),
@@ -256,8 +265,17 @@ async fn get_artist(
 async fn get_album(
     _session: Session,
     State(catalog_store): State<GuardedCatalogStore>,
+    State(proxy): State<super::state::OptionalProxy>,
     Path(id): Path<String>,
 ) -> Response {
+    // If proxy is available, ensure album has complete data
+    if let Some(ref proxy) = proxy {
+        if let Err(e) = proxy.ensure_album_complete(&id).await {
+            warn!("Proxy fetch failed for album {}: {}", id, e);
+            // Continue serving what we have
+        }
+    }
+
     match catalog_store.get_album_json(&id) {
         Ok(Some(album)) => Json(album).into_response(),
         Ok(None) => StatusCode::NOT_FOUND.into_response(),
@@ -268,8 +286,16 @@ async fn get_album(
 async fn get_resolved_album(
     _session: Session,
     State(catalog_store): State<GuardedCatalogStore>,
+    State(proxy): State<super::state::OptionalProxy>,
     Path(id): Path<String>,
 ) -> Response {
+    // If proxy is available, ensure album has complete data
+    if let Some(ref proxy) = proxy {
+        if let Err(e) = proxy.ensure_album_complete(&id).await {
+            warn!("Proxy fetch failed for album {}: {}", id, e);
+        }
+    }
+
     match catalog_store.get_resolved_album_json(&id) {
         Ok(Some(album)) => Json(album).into_response(),
         Ok(None) => StatusCode::NOT_FOUND.into_response(),
@@ -280,8 +306,16 @@ async fn get_resolved_album(
 async fn get_artist_discography(
     _session: Session,
     State(catalog_store): State<GuardedCatalogStore>,
+    State(proxy): State<super::state::OptionalProxy>,
     Path(id): Path<String>,
 ) -> Response {
+    // If proxy is available, ensure artist has complete data
+    if let Some(ref proxy) = proxy {
+        if let Err(e) = proxy.ensure_artist_complete(&id).await {
+            warn!("Proxy fetch failed for artist discography {}: {}", id, e);
+        }
+    }
+
     match catalog_store.get_artist_discography_json(&id) {
         Ok(None) => StatusCode::NOT_FOUND.into_response(),
         Ok(Some(discography)) => Json(discography).into_response(),
@@ -1650,7 +1684,18 @@ impl ServerState {
         search_vault: Box<dyn SearchVault>,
         user_manager: UserManager,
         downloader: Option<Arc<crate::downloader::DownloaderClient>>,
+        media_base_path: Option<std::path::PathBuf>,
     ) -> ServerState {
+        // Create proxy if downloader and media_base_path are available
+        let proxy = match (&downloader, media_base_path) {
+            (Some(dl), Some(path)) => Some(Arc::new(super::proxy::CatalogProxy::new(
+                dl.clone(),
+                catalog_store.clone(),
+                path,
+            ))),
+            _ => None,
+        };
+
         ServerState {
             config,
             start_time: Instant::now(),
@@ -1658,6 +1703,7 @@ impl ServerState {
             search_vault: Arc::new(Mutex::new(search_vault)),
             user_manager: Arc::new(Mutex::new(user_manager)),
             downloader,
+            proxy,
             hash: "123456".to_owned(),
         }
     }
@@ -1669,9 +1715,10 @@ pub fn make_app(
     search_vault: Box<dyn SearchVault>,
     user_store: Box<dyn FullUserStore>,
     downloader: Option<Arc<crate::downloader::DownloaderClient>>,
+    media_base_path: Option<std::path::PathBuf>,
 ) -> Result<Router> {
     let user_manager = UserManager::new(catalog_store.clone(), user_store);
-    let state = ServerState::new(config.clone(), catalog_store, search_vault, user_manager, downloader);
+    let state = ServerState::new(config.clone(), catalog_store, search_vault, user_manager, downloader, media_base_path);
 
     // Login route with strict IP-based rate limiting
     // For rates < 60/min, we use per_second(1) and rely on burst_size to enforce the limit
@@ -2009,6 +2056,7 @@ pub async fn run_server(
     content_cache_age_sec: usize,
     frontend_dir_path: Option<String>,
     downloader: Option<Arc<crate::downloader::DownloaderClient>>,
+    media_base_path: Option<std::path::PathBuf>,
 ) -> Result<()> {
     let config = ServerConfig {
         port,
@@ -2016,7 +2064,7 @@ pub async fn run_server(
         content_cache_age_sec,
         frontend_dir_path,
     };
-    let app = make_app(config, catalog_store.clone(), search_vault, user_store, downloader)?;
+    let app = make_app(config, catalog_store.clone(), search_vault, user_store, downloader, media_base_path)?;
 
     let main_listener = tokio::net::TcpListener::bind(format!("0.0.0.0:{}", port))
         .await
@@ -2114,6 +2162,7 @@ mod tests {
             Box::new(NoOpSearchVault {}),
             user_store,
             None, // no downloader
+            None, // no media_base_path
         )
         .unwrap();
 

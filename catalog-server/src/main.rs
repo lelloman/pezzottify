@@ -142,6 +142,13 @@ async fn main() -> Result<()> {
         ))
     });
 
+    // Pass media_base_path for proxy if downloader is configured
+    let media_base_path_for_proxy = if downloader.is_some() {
+        Some(media_path.clone())
+    } else {
+        None
+    };
+
     info!("Ready to serve at port {}!", cli_args.port);
     info!("Metrics available at port {}!", cli_args.metrics_port);
     run_server(
@@ -154,6 +161,7 @@ async fn main() -> Result<()> {
         cli_args.content_cache_age_sec,
         cli_args.frontend_dir_path,
         downloader,
+        media_base_path_for_proxy,
     )
     .await
 }

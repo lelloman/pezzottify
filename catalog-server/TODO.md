@@ -2,8 +2,6 @@
 
 ### [ready for coding]
 
-- Wire up the external downloader.
-
 ### [to refine]
 
 - Consider switching Docker deployment to use a separate nginx service for web frontend serving (Option C) instead of serving from catalog-server. This would allow independent frontend deployments and better static file optimization.
@@ -12,6 +10,7 @@
 
 ### [done]
 
+- ~Wire up the external downloader (proxy pattern for on-demand content fetching with metrics)~
 - ~Once catalog is migrated to db and catalog modification endpoints are in place, create a catalog change log to be shown to users, see CHANGELOG_FEATURE_PLAN.md for details.~
 - ~We should plan a feature to gather listening stats from users, see LISTENING_STATS_PLAN.md for details.~
 - ~Add display_image_id to Artist and Album models (schema v1 migration) with Python script for populating from largest image~
