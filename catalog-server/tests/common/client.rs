@@ -378,6 +378,251 @@ impl TestClient {
     }
 
     // ========================================================================
+    // Listening Stats Endpoints
+    // ========================================================================
+
+    /// POST /v1/user/listening
+    pub async fn post_listening_event(
+        &self,
+        track_id: &str,
+        duration_seconds: u32,
+        track_duration_seconds: u32,
+    ) -> Response {
+        self.client
+            .post(format!("{}/v1/user/listening", self.base_url))
+            .json(&serde_json::json!({
+                "track_id": track_id,
+                "duration_seconds": duration_seconds,
+                "track_duration_seconds": track_duration_seconds
+            }))
+            .send()
+            .await
+            .expect("Post listening event request failed")
+    }
+
+    /// POST /v1/user/listening with full payload
+    pub async fn post_listening_event_full(
+        &self,
+        track_id: &str,
+        session_id: Option<&str>,
+        started_at: Option<u64>,
+        ended_at: Option<u64>,
+        duration_seconds: u32,
+        track_duration_seconds: u32,
+        seek_count: Option<u32>,
+        pause_count: Option<u32>,
+        playback_context: Option<&str>,
+        client_type: Option<&str>,
+    ) -> Response {
+        let mut body = serde_json::json!({
+            "track_id": track_id,
+            "duration_seconds": duration_seconds,
+            "track_duration_seconds": track_duration_seconds
+        });
+        if let Some(sid) = session_id {
+            body["session_id"] = serde_json::json!(sid);
+        }
+        if let Some(sa) = started_at {
+            body["started_at"] = serde_json::json!(sa);
+        }
+        if let Some(ea) = ended_at {
+            body["ended_at"] = serde_json::json!(ea);
+        }
+        if let Some(sc) = seek_count {
+            body["seek_count"] = serde_json::json!(sc);
+        }
+        if let Some(pc) = pause_count {
+            body["pause_count"] = serde_json::json!(pc);
+        }
+        if let Some(ctx) = playback_context {
+            body["playback_context"] = serde_json::json!(ctx);
+        }
+        if let Some(ct) = client_type {
+            body["client_type"] = serde_json::json!(ct);
+        }
+        self.client
+            .post(format!("{}/v1/user/listening", self.base_url))
+            .json(&body)
+            .send()
+            .await
+            .expect("Post listening event full request failed")
+    }
+
+    /// GET /v1/user/listening/summary
+    pub async fn get_listening_summary(
+        &self,
+        start_date: Option<u32>,
+        end_date: Option<u32>,
+    ) -> Response {
+        let mut url = format!("{}/v1/user/listening/summary", self.base_url);
+        let mut params = vec![];
+        if let Some(sd) = start_date {
+            params.push(format!("start_date={}", sd));
+        }
+        if let Some(ed) = end_date {
+            params.push(format!("end_date={}", ed));
+        }
+        if !params.is_empty() {
+            url = format!("{}?{}", url, params.join("&"));
+        }
+        self.client
+            .get(&url)
+            .send()
+            .await
+            .expect("Get listening summary request failed")
+    }
+
+    /// GET /v1/user/listening/history
+    pub async fn get_listening_history(&self, limit: Option<usize>) -> Response {
+        let mut url = format!("{}/v1/user/listening/history", self.base_url);
+        if let Some(l) = limit {
+            url = format!("{}?limit={}", url, l);
+        }
+        self.client
+            .get(&url)
+            .send()
+            .await
+            .expect("Get listening history request failed")
+    }
+
+    /// GET /v1/user/listening/events
+    pub async fn get_listening_events(
+        &self,
+        start_date: Option<u32>,
+        end_date: Option<u32>,
+        limit: Option<usize>,
+        offset: Option<usize>,
+    ) -> Response {
+        let mut url = format!("{}/v1/user/listening/events", self.base_url);
+        let mut params = vec![];
+        if let Some(sd) = start_date {
+            params.push(format!("start_date={}", sd));
+        }
+        if let Some(ed) = end_date {
+            params.push(format!("end_date={}", ed));
+        }
+        if let Some(l) = limit {
+            params.push(format!("limit={}", l));
+        }
+        if let Some(o) = offset {
+            params.push(format!("offset={}", o));
+        }
+        if !params.is_empty() {
+            url = format!("{}?{}", url, params.join("&"));
+        }
+        self.client
+            .get(&url)
+            .send()
+            .await
+            .expect("Get listening events request failed")
+    }
+
+    /// GET /v1/admin/listening/daily
+    pub async fn admin_get_daily_listening_stats(
+        &self,
+        start_date: Option<u32>,
+        end_date: Option<u32>,
+    ) -> Response {
+        let mut url = format!("{}/v1/admin/listening/daily", self.base_url);
+        let mut params = vec![];
+        if let Some(sd) = start_date {
+            params.push(format!("start_date={}", sd));
+        }
+        if let Some(ed) = end_date {
+            params.push(format!("end_date={}", ed));
+        }
+        if !params.is_empty() {
+            url = format!("{}?{}", url, params.join("&"));
+        }
+        self.client
+            .get(&url)
+            .send()
+            .await
+            .expect("Admin get daily listening stats request failed")
+    }
+
+    /// GET /v1/admin/listening/top-tracks
+    pub async fn admin_get_top_tracks(
+        &self,
+        start_date: Option<u32>,
+        end_date: Option<u32>,
+        limit: Option<usize>,
+    ) -> Response {
+        let mut url = format!("{}/v1/admin/listening/top-tracks", self.base_url);
+        let mut params = vec![];
+        if let Some(sd) = start_date {
+            params.push(format!("start_date={}", sd));
+        }
+        if let Some(ed) = end_date {
+            params.push(format!("end_date={}", ed));
+        }
+        if let Some(l) = limit {
+            params.push(format!("limit={}", l));
+        }
+        if !params.is_empty() {
+            url = format!("{}?{}", url, params.join("&"));
+        }
+        self.client
+            .get(&url)
+            .send()
+            .await
+            .expect("Admin get top tracks request failed")
+    }
+
+    /// GET /v1/admin/listening/track/{track_id}
+    pub async fn admin_get_track_listening_stats(
+        &self,
+        track_id: &str,
+        start_date: Option<u32>,
+        end_date: Option<u32>,
+    ) -> Response {
+        let mut url = format!("{}/v1/admin/listening/track/{}", self.base_url, track_id);
+        let mut params = vec![];
+        if let Some(sd) = start_date {
+            params.push(format!("start_date={}", sd));
+        }
+        if let Some(ed) = end_date {
+            params.push(format!("end_date={}", ed));
+        }
+        if !params.is_empty() {
+            url = format!("{}?{}", url, params.join("&"));
+        }
+        self.client
+            .get(&url)
+            .send()
+            .await
+            .expect("Admin get track listening stats request failed")
+    }
+
+    /// GET /v1/admin/listening/users/{handle}/summary
+    pub async fn admin_get_user_listening_summary(
+        &self,
+        handle: &str,
+        start_date: Option<u32>,
+        end_date: Option<u32>,
+    ) -> Response {
+        let mut url = format!(
+            "{}/v1/admin/listening/users/{}/summary",
+            self.base_url, handle
+        );
+        let mut params = vec![];
+        if let Some(sd) = start_date {
+            params.push(format!("start_date={}", sd));
+        }
+        if let Some(ed) = end_date {
+            params.push(format!("end_date={}", ed));
+        }
+        if !params.is_empty() {
+            url = format!("{}?{}", url, params.join("&"));
+        }
+        self.client
+            .get(&url)
+            .send()
+            .await
+            .expect("Admin get user listening summary request failed")
+    }
+
+    // ========================================================================
     // Health Check / System Endpoints
     // ========================================================================
 
