@@ -4,6 +4,10 @@
 //! catalog metadata from a SQLite database, with media files remaining on
 //! the filesystem.
 
+use super::changelog::{
+    calculate_field_diff, extract_entity_name, generate_display_summary, ChangeEntityType,
+    ChangeLogStore, ChangeOperation,
+};
 use super::models::*;
 use super::schema::CATALOG_VERSIONED_SCHEMAS;
 use super::validation::{
@@ -25,6 +29,7 @@ use tracing::info;
 pub struct SqliteCatalogStore {
     conn: Arc<Mutex<Connection>>,
     media_base_path: PathBuf,
+    changelog: ChangeLogStore,
 }
 
 impl SqliteCatalogStore {
@@ -77,10 +82,21 @@ impl SqliteCatalogStore {
 
         Self::migrate_if_needed(&mut conn, version)?;
 
+        let conn = Arc::new(Mutex::new(conn));
+        let changelog = ChangeLogStore::new(conn.clone());
+
         Ok(SqliteCatalogStore {
-            conn: Arc::new(Mutex::new(conn)),
+            conn,
             media_base_path: media_base_path.as_ref().to_path_buf(),
+            changelog,
         })
+    }
+
+    /// Get a reference to the changelog store.
+    ///
+    /// Use this to manage batches and query change history.
+    pub fn changelog(&self) -> &ChangeLogStore {
+        &self.changelog
     }
 
     fn migrate_if_needed(conn: &mut Connection, version: usize) -> Result<()> {
@@ -762,8 +778,17 @@ impl SqliteCatalogStore {
     // =========================================================================
 
     /// Insert an artist.
+    ///
+    /// Requires an active changelog batch.
     pub fn insert_artist(&self, artist: &Artist) -> Result<()> {
         let conn = self.conn.lock().unwrap();
+
+        // Check for active batch first
+        let batch = self.changelog.get_active_batch_internal(&conn)?;
+        if batch.is_none() {
+            anyhow::bail!("Cannot insert artist: no active changelog batch");
+        }
+
         let genres_json = serde_json::to_string(&artist.genres)?;
         let activity_periods_json = serde_json::to_string(&artist.activity_periods)?;
 
@@ -771,12 +796,41 @@ impl SqliteCatalogStore {
             "INSERT INTO artists (id, name, genres, activity_periods) VALUES (?1, ?2, ?3, ?4)",
             params![artist.id, artist.name, genres_json, activity_periods_json],
         )?;
+
+        // Record the change
+        let snapshot = serde_json::to_value(artist)?;
+        let diff = calculate_field_diff(None, Some(&snapshot));
+        let name = extract_entity_name(&snapshot);
+        let summary = generate_display_summary(
+            &ChangeEntityType::Artist,
+            &ChangeOperation::Create,
+            name.as_deref(),
+        );
+        self.changelog.record_change_internal(
+            &conn,
+            ChangeEntityType::Artist,
+            &artist.id,
+            ChangeOperation::Create,
+            &diff,
+            &snapshot,
+            Some(&summary),
+        )?;
+
         Ok(())
     }
 
     /// Insert an album.
+    ///
+    /// Requires an active changelog batch.
     pub fn insert_album(&self, album: &Album) -> Result<()> {
         let conn = self.conn.lock().unwrap();
+
+        // Check for active batch first
+        let batch = self.changelog.get_active_batch_internal(&conn)?;
+        if batch.is_none() {
+            anyhow::bail!("Cannot insert album: no active changelog batch");
+        }
+
         let genres_json = serde_json::to_string(&album.genres)?;
 
         conn.execute(
@@ -793,12 +847,41 @@ impl SqliteCatalogStore {
                 album.version_title,
             ],
         )?;
+
+        // Record the change
+        let snapshot = serde_json::to_value(album)?;
+        let diff = calculate_field_diff(None, Some(&snapshot));
+        let name = extract_entity_name(&snapshot);
+        let summary = generate_display_summary(
+            &ChangeEntityType::Album,
+            &ChangeOperation::Create,
+            name.as_deref(),
+        );
+        self.changelog.record_change_internal(
+            &conn,
+            ChangeEntityType::Album,
+            &album.id,
+            ChangeOperation::Create,
+            &diff,
+            &snapshot,
+            Some(&summary),
+        )?;
+
         Ok(())
     }
 
     /// Insert a track.
+    ///
+    /// Requires an active changelog batch.
     pub fn insert_track(&self, track: &Track) -> Result<()> {
         let conn = self.conn.lock().unwrap();
+
+        // Check for active batch first
+        let batch = self.changelog.get_active_batch_internal(&conn)?;
+        if batch.is_none() {
+            anyhow::bail!("Cannot insert track: no active changelog batch");
+        }
+
         let tags_json = serde_json::to_string(&track.tags)?;
         let languages_json = serde_json::to_string(&track.languages)?;
 
@@ -823,12 +906,41 @@ impl SqliteCatalogStore {
                 track.version_title,
             ],
         )?;
+
+        // Record the change
+        let snapshot = serde_json::to_value(track)?;
+        let diff = calculate_field_diff(None, Some(&snapshot));
+        let name = extract_entity_name(&snapshot);
+        let summary = generate_display_summary(
+            &ChangeEntityType::Track,
+            &ChangeOperation::Create,
+            name.as_deref(),
+        );
+        self.changelog.record_change_internal(
+            &conn,
+            ChangeEntityType::Track,
+            &track.id,
+            ChangeOperation::Create,
+            &diff,
+            &snapshot,
+            Some(&summary),
+        )?;
+
         Ok(())
     }
 
     /// Insert an image.
+    ///
+    /// Requires an active changelog batch.
     pub fn insert_image(&self, image: &Image) -> Result<()> {
         let conn = self.conn.lock().unwrap();
+
+        // Check for active batch first
+        let batch = self.changelog.get_active_batch_internal(&conn)?;
+        if batch.is_none() {
+            anyhow::bail!("Cannot insert image: no active changelog batch");
+        }
+
         conn.execute(
             "INSERT INTO images (id, uri, size, width, height) VALUES (?1, ?2, ?3, ?4, ?5)",
             params![
@@ -839,6 +951,25 @@ impl SqliteCatalogStore {
                 image.height as i32,
             ],
         )?;
+
+        // Record the change
+        let snapshot = serde_json::to_value(image)?;
+        let diff = calculate_field_diff(None, Some(&snapshot));
+        let summary = generate_display_summary(
+            &ChangeEntityType::Image,
+            &ChangeOperation::Create,
+            Some(&image.id), // Images don't have names, use ID
+        );
+        self.changelog.record_change_internal(
+            &conn,
+            ChangeEntityType::Image,
+            &image.id,
+            ChangeOperation::Create,
+            &diff,
+            &snapshot,
+            Some(&summary),
+        )?;
+
         Ok(())
     }
 
@@ -919,27 +1050,107 @@ impl SqliteCatalogStore {
     // =========================================================================
 
     /// Update an artist.
+    ///
+    /// Requires an active changelog batch.
     pub fn update_artist_record(&self, artist: &Artist) -> Result<()> {
         let conn = self.conn.lock().unwrap();
+
+        // Check for active batch first
+        let batch = self.changelog.get_active_batch_internal(&conn)?;
+        if batch.is_none() {
+            anyhow::bail!("Cannot update artist: no active changelog batch");
+        }
+
+        // Fetch old state for diff
+        let old_snapshot = self.get_artist_snapshot_internal(&conn, &artist.id)?;
+        if old_snapshot.is_none() {
+            anyhow::bail!("Artist not found: {}", artist.id);
+        }
+        let old_snapshot = old_snapshot.unwrap();
+
         let genres_json = serde_json::to_string(&artist.genres)?;
         let activity_periods_json = serde_json::to_string(&artist.activity_periods)?;
 
-        let rows = conn.execute(
+        conn.execute(
             "UPDATE artists SET name = ?2, genres = ?3, activity_periods = ?4 WHERE id = ?1",
             params![artist.id, artist.name, genres_json, activity_periods_json],
         )?;
-        if rows == 0 {
-            anyhow::bail!("Artist not found: {}", artist.id);
+
+        // Record the change
+        let new_snapshot = serde_json::to_value(artist)?;
+        let diff = calculate_field_diff(Some(&old_snapshot), Some(&new_snapshot));
+
+        // Only record if there are actual changes
+        if !diff.as_object().map_or(true, |o| o.is_empty()) {
+            let name = extract_entity_name(&new_snapshot);
+            let summary = generate_display_summary(
+                &ChangeEntityType::Artist,
+                &ChangeOperation::Update,
+                name.as_deref(),
+            );
+            self.changelog.record_change_internal(
+                &conn,
+                ChangeEntityType::Artist,
+                &artist.id,
+                ChangeOperation::Update,
+                &diff,
+                &new_snapshot,
+                Some(&summary),
+            )?;
         }
+
         Ok(())
     }
 
+    /// Get an artist snapshot for diff calculation (internal use).
+    fn get_artist_snapshot_internal(
+        &self,
+        conn: &Connection,
+        id: &str,
+    ) -> Result<Option<serde_json::Value>> {
+        let mut stmt = conn.prepare(
+            "SELECT id, name, genres, activity_periods FROM artists WHERE id = ?1",
+        )?;
+
+        match stmt.query_row(params![id], |row| {
+            let genres_json: Option<String> = row.get(2)?;
+            let activity_periods_json: Option<String> = row.get(3)?;
+
+            Ok(serde_json::json!({
+                "id": row.get::<_, String>(0)?,
+                "name": row.get::<_, String>(1)?,
+                "genres": genres_json.and_then(|s| serde_json::from_str::<serde_json::Value>(&s).ok()).unwrap_or(serde_json::json!([])),
+                "activity_periods": activity_periods_json.and_then(|s| serde_json::from_str::<serde_json::Value>(&s).ok()).unwrap_or(serde_json::json!([]))
+            }))
+        }) {
+            Ok(snapshot) => Ok(Some(snapshot)),
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+            Err(e) => Err(e.into()),
+        }
+    }
+
     /// Update an album.
+    ///
+    /// Requires an active changelog batch.
     pub fn update_album_record(&self, album: &Album) -> Result<()> {
         let conn = self.conn.lock().unwrap();
+
+        // Check for active batch first
+        let batch = self.changelog.get_active_batch_internal(&conn)?;
+        if batch.is_none() {
+            anyhow::bail!("Cannot update album: no active changelog batch");
+        }
+
+        // Fetch old state for diff
+        let old_snapshot = self.get_album_snapshot_internal(&conn, &album.id)?;
+        if old_snapshot.is_none() {
+            anyhow::bail!("Album not found: {}", album.id);
+        }
+        let old_snapshot = old_snapshot.unwrap();
+
         let genres_json = serde_json::to_string(&album.genres)?;
 
-        let rows = conn.execute(
+        conn.execute(
             "UPDATE albums SET name = ?2, album_type = ?3, label = ?4, release_date = ?5,
              genres = ?6, original_title = ?7, version_title = ?8 WHERE id = ?1",
             params![
@@ -953,19 +1164,87 @@ impl SqliteCatalogStore {
                 album.version_title,
             ],
         )?;
-        if rows == 0 {
-            anyhow::bail!("Album not found: {}", album.id);
+
+        // Record the change
+        let new_snapshot = serde_json::to_value(album)?;
+        let diff = calculate_field_diff(Some(&old_snapshot), Some(&new_snapshot));
+
+        // Only record if there are actual changes
+        if !diff.as_object().map_or(true, |o| o.is_empty()) {
+            let name = extract_entity_name(&new_snapshot);
+            let summary = generate_display_summary(
+                &ChangeEntityType::Album,
+                &ChangeOperation::Update,
+                name.as_deref(),
+            );
+            self.changelog.record_change_internal(
+                &conn,
+                ChangeEntityType::Album,
+                &album.id,
+                ChangeOperation::Update,
+                &diff,
+                &new_snapshot,
+                Some(&summary),
+            )?;
         }
+
         Ok(())
     }
 
+    /// Get an album snapshot for diff calculation (internal use).
+    fn get_album_snapshot_internal(
+        &self,
+        conn: &Connection,
+        id: &str,
+    ) -> Result<Option<serde_json::Value>> {
+        let mut stmt = conn.prepare(
+            "SELECT id, name, album_type, label, release_date, genres, original_title, version_title
+             FROM albums WHERE id = ?1",
+        )?;
+
+        match stmt.query_row(params![id], |row| {
+            let genres_json: Option<String> = row.get(5)?;
+
+            Ok(serde_json::json!({
+                "id": row.get::<_, String>(0)?,
+                "name": row.get::<_, String>(1)?,
+                "album_type": row.get::<_, String>(2)?,
+                "label": row.get::<_, Option<String>>(3)?,
+                "release_date": row.get::<_, Option<String>>(4)?,
+                "genres": genres_json.and_then(|s| serde_json::from_str::<serde_json::Value>(&s).ok()).unwrap_or(serde_json::json!([])),
+                "original_title": row.get::<_, Option<String>>(6)?,
+                "version_title": row.get::<_, Option<String>>(7)?
+            }))
+        }) {
+            Ok(snapshot) => Ok(Some(snapshot)),
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+            Err(e) => Err(e.into()),
+        }
+    }
+
     /// Update a track.
+    ///
+    /// Requires an active changelog batch.
     pub fn update_track_record(&self, track: &Track) -> Result<()> {
         let conn = self.conn.lock().unwrap();
+
+        // Check for active batch first
+        let batch = self.changelog.get_active_batch_internal(&conn)?;
+        if batch.is_none() {
+            anyhow::bail!("Cannot update track: no active changelog batch");
+        }
+
+        // Fetch old state for diff
+        let old_snapshot = self.get_track_snapshot_internal(&conn, &track.id)?;
+        if old_snapshot.is_none() {
+            anyhow::bail!("Track not found: {}", track.id);
+        }
+        let old_snapshot = old_snapshot.unwrap();
+
         let tags_json = serde_json::to_string(&track.tags)?;
         let languages_json = serde_json::to_string(&track.languages)?;
 
-        let rows = conn.execute(
+        conn.execute(
             "UPDATE tracks SET name = ?2, album_id = ?3, disc_number = ?4, track_number = ?5,
              duration_secs = ?6, is_explicit = ?7, audio_uri = ?8, format = ?9, tags = ?10,
              has_lyrics = ?11, languages = ?12, original_title = ?13, version_title = ?14 WHERE id = ?1",
@@ -986,16 +1265,92 @@ impl SqliteCatalogStore {
                 track.version_title,
             ],
         )?;
-        if rows == 0 {
-            anyhow::bail!("Track not found: {}", track.id);
+
+        // Record the change
+        let new_snapshot = serde_json::to_value(track)?;
+        let diff = calculate_field_diff(Some(&old_snapshot), Some(&new_snapshot));
+
+        // Only record if there are actual changes
+        if !diff.as_object().map_or(true, |o| o.is_empty()) {
+            let name = extract_entity_name(&new_snapshot);
+            let summary = generate_display_summary(
+                &ChangeEntityType::Track,
+                &ChangeOperation::Update,
+                name.as_deref(),
+            );
+            self.changelog.record_change_internal(
+                &conn,
+                ChangeEntityType::Track,
+                &track.id,
+                ChangeOperation::Update,
+                &diff,
+                &new_snapshot,
+                Some(&summary),
+            )?;
         }
+
         Ok(())
     }
 
+    /// Get a track snapshot for diff calculation (internal use).
+    fn get_track_snapshot_internal(
+        &self,
+        conn: &Connection,
+        id: &str,
+    ) -> Result<Option<serde_json::Value>> {
+        let mut stmt = conn.prepare(
+            "SELECT id, name, album_id, disc_number, track_number, duration_secs,
+                    is_explicit, audio_uri, format, tags, has_lyrics, languages, original_title, version_title
+             FROM tracks WHERE id = ?1",
+        )?;
+
+        match stmt.query_row(params![id], |row| {
+            let tags_json: Option<String> = row.get(9)?;
+            let languages_json: Option<String> = row.get(11)?;
+
+            Ok(serde_json::json!({
+                "id": row.get::<_, String>(0)?,
+                "name": row.get::<_, String>(1)?,
+                "album_id": row.get::<_, String>(2)?,
+                "disc_number": row.get::<_, i32>(3)?,
+                "track_number": row.get::<_, i32>(4)?,
+                "duration_secs": row.get::<_, f64>(5)?,
+                "is_explicit": row.get::<_, i32>(6)? != 0,
+                "audio_uri": row.get::<_, String>(7)?,
+                "format": row.get::<_, String>(8)?,
+                "tags": tags_json.and_then(|s| serde_json::from_str::<serde_json::Value>(&s).ok()).unwrap_or(serde_json::json!([])),
+                "has_lyrics": row.get::<_, i32>(10)? != 0,
+                "languages": languages_json.and_then(|s| serde_json::from_str::<serde_json::Value>(&s).ok()).unwrap_or(serde_json::json!([])),
+                "original_title": row.get::<_, Option<String>>(12)?,
+                "version_title": row.get::<_, Option<String>>(13)?
+            }))
+        }) {
+            Ok(snapshot) => Ok(Some(snapshot)),
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+            Err(e) => Err(e.into()),
+        }
+    }
+
     /// Update an image.
+    ///
+    /// Requires an active changelog batch.
     pub fn update_image_record(&self, image: &Image) -> Result<()> {
         let conn = self.conn.lock().unwrap();
-        let rows = conn.execute(
+
+        // Check for active batch first
+        let batch = self.changelog.get_active_batch_internal(&conn)?;
+        if batch.is_none() {
+            anyhow::bail!("Cannot update image: no active changelog batch");
+        }
+
+        // Fetch old state for diff
+        let old_snapshot = self.get_image_snapshot_internal(&conn, &image.id)?;
+        if old_snapshot.is_none() {
+            anyhow::bail!("Image not found: {}", image.id);
+        }
+        let old_snapshot = old_snapshot.unwrap();
+
+        conn.execute(
             "UPDATE images SET uri = ?2, size = ?3, width = ?4, height = ?5 WHERE id = ?1",
             params![
                 image.id,
@@ -1005,10 +1360,55 @@ impl SqliteCatalogStore {
                 image.height as i32,
             ],
         )?;
-        if rows == 0 {
-            anyhow::bail!("Image not found: {}", image.id);
+
+        // Record the change
+        let new_snapshot = serde_json::to_value(image)?;
+        let diff = calculate_field_diff(Some(&old_snapshot), Some(&new_snapshot));
+
+        // Only record if there are actual changes
+        if !diff.as_object().map_or(true, |o| o.is_empty()) {
+            let summary = generate_display_summary(
+                &ChangeEntityType::Image,
+                &ChangeOperation::Update,
+                Some(&image.id),
+            );
+            self.changelog.record_change_internal(
+                &conn,
+                ChangeEntityType::Image,
+                &image.id,
+                ChangeOperation::Update,
+                &diff,
+                &new_snapshot,
+                Some(&summary),
+            )?;
         }
+
         Ok(())
+    }
+
+    /// Get an image snapshot for diff calculation (internal use).
+    fn get_image_snapshot_internal(
+        &self,
+        conn: &Connection,
+        id: &str,
+    ) -> Result<Option<serde_json::Value>> {
+        let mut stmt = conn.prepare(
+            "SELECT id, uri, size, width, height FROM images WHERE id = ?1",
+        )?;
+
+        match stmt.query_row(params![id], |row| {
+            Ok(serde_json::json!({
+                "id": row.get::<_, String>(0)?,
+                "uri": row.get::<_, String>(1)?,
+                "size": row.get::<_, String>(2)?,
+                "width": row.get::<_, i32>(3)?,
+                "height": row.get::<_, i32>(4)?
+            }))
+        }) {
+            Ok(snapshot) => Ok(Some(snapshot)),
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+            Err(e) => Err(e.into()),
+        }
     }
 
     // =========================================================================
@@ -1016,42 +1416,169 @@ impl SqliteCatalogStore {
     // =========================================================================
 
     /// Delete an artist by ID.
+    ///
+    /// Requires an active changelog batch.
     pub fn delete_artist_record(&self, id: &str) -> Result<()> {
         let conn = self.conn.lock().unwrap();
-        let rows = conn.execute("DELETE FROM artists WHERE id = ?1", params![id])?;
-        if rows == 0 {
+
+        // Check for active batch first
+        let batch = self.changelog.get_active_batch_internal(&conn)?;
+        if batch.is_none() {
+            anyhow::bail!("Cannot delete artist: no active changelog batch");
+        }
+
+        // Fetch old state for the snapshot
+        let old_snapshot = self.get_artist_snapshot_internal(&conn, id)?;
+        if old_snapshot.is_none() {
             anyhow::bail!("Artist not found: {}", id);
         }
+        let old_snapshot = old_snapshot.unwrap();
+
+        conn.execute("DELETE FROM artists WHERE id = ?1", params![id])?;
+
+        // Record the change
+        let diff = calculate_field_diff(Some(&old_snapshot), None);
+        let name = extract_entity_name(&old_snapshot);
+        let summary = generate_display_summary(
+            &ChangeEntityType::Artist,
+            &ChangeOperation::Delete,
+            name.as_deref(),
+        );
+        self.changelog.record_change_internal(
+            &conn,
+            ChangeEntityType::Artist,
+            id,
+            ChangeOperation::Delete,
+            &diff,
+            &old_snapshot, // Store the state before deletion
+            Some(&summary),
+        )?;
+
         Ok(())
     }
 
     /// Delete an album by ID.
+    ///
+    /// Requires an active changelog batch.
     pub fn delete_album_record(&self, id: &str) -> Result<()> {
         let conn = self.conn.lock().unwrap();
-        let rows = conn.execute("DELETE FROM albums WHERE id = ?1", params![id])?;
-        if rows == 0 {
+
+        // Check for active batch first
+        let batch = self.changelog.get_active_batch_internal(&conn)?;
+        if batch.is_none() {
+            anyhow::bail!("Cannot delete album: no active changelog batch");
+        }
+
+        // Fetch old state for the snapshot
+        let old_snapshot = self.get_album_snapshot_internal(&conn, id)?;
+        if old_snapshot.is_none() {
             anyhow::bail!("Album not found: {}", id);
         }
+        let old_snapshot = old_snapshot.unwrap();
+
+        conn.execute("DELETE FROM albums WHERE id = ?1", params![id])?;
+
+        // Record the change
+        let diff = calculate_field_diff(Some(&old_snapshot), None);
+        let name = extract_entity_name(&old_snapshot);
+        let summary = generate_display_summary(
+            &ChangeEntityType::Album,
+            &ChangeOperation::Delete,
+            name.as_deref(),
+        );
+        self.changelog.record_change_internal(
+            &conn,
+            ChangeEntityType::Album,
+            id,
+            ChangeOperation::Delete,
+            &diff,
+            &old_snapshot,
+            Some(&summary),
+        )?;
+
         Ok(())
     }
 
     /// Delete a track by ID.
+    ///
+    /// Requires an active changelog batch.
     pub fn delete_track_record(&self, id: &str) -> Result<()> {
         let conn = self.conn.lock().unwrap();
-        let rows = conn.execute("DELETE FROM tracks WHERE id = ?1", params![id])?;
-        if rows == 0 {
+
+        // Check for active batch first
+        let batch = self.changelog.get_active_batch_internal(&conn)?;
+        if batch.is_none() {
+            anyhow::bail!("Cannot delete track: no active changelog batch");
+        }
+
+        // Fetch old state for the snapshot
+        let old_snapshot = self.get_track_snapshot_internal(&conn, id)?;
+        if old_snapshot.is_none() {
             anyhow::bail!("Track not found: {}", id);
         }
+        let old_snapshot = old_snapshot.unwrap();
+
+        conn.execute("DELETE FROM tracks WHERE id = ?1", params![id])?;
+
+        // Record the change
+        let diff = calculate_field_diff(Some(&old_snapshot), None);
+        let name = extract_entity_name(&old_snapshot);
+        let summary = generate_display_summary(
+            &ChangeEntityType::Track,
+            &ChangeOperation::Delete,
+            name.as_deref(),
+        );
+        self.changelog.record_change_internal(
+            &conn,
+            ChangeEntityType::Track,
+            id,
+            ChangeOperation::Delete,
+            &diff,
+            &old_snapshot,
+            Some(&summary),
+        )?;
+
         Ok(())
     }
 
     /// Delete an image by ID.
+    ///
+    /// Requires an active changelog batch.
     pub fn delete_image_record(&self, id: &str) -> Result<()> {
         let conn = self.conn.lock().unwrap();
-        let rows = conn.execute("DELETE FROM images WHERE id = ?1", params![id])?;
-        if rows == 0 {
+
+        // Check for active batch first
+        let batch = self.changelog.get_active_batch_internal(&conn)?;
+        if batch.is_none() {
+            anyhow::bail!("Cannot delete image: no active changelog batch");
+        }
+
+        // Fetch old state for the snapshot
+        let old_snapshot = self.get_image_snapshot_internal(&conn, id)?;
+        if old_snapshot.is_none() {
             anyhow::bail!("Image not found: {}", id);
         }
+        let old_snapshot = old_snapshot.unwrap();
+
+        conn.execute("DELETE FROM images WHERE id = ?1", params![id])?;
+
+        // Record the change
+        let diff = calculate_field_diff(Some(&old_snapshot), None);
+        let summary = generate_display_summary(
+            &ChangeEntityType::Image,
+            &ChangeOperation::Delete,
+            Some(id),
+        );
+        self.changelog.record_change_internal(
+            &conn,
+            ChangeEntityType::Image,
+            id,
+            ChangeOperation::Delete,
+            &diff,
+            &old_snapshot,
+            Some(&summary),
+        )?;
+
         Ok(())
     }
 

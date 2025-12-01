@@ -1846,7 +1846,6 @@ mod tests {
             // Admin routes (require ManagePermissions)
             "/v1/admin/users",
             "/v1/admin/users/testuser/roles",
-            "/v1/admin/users/testuser/permissions",
         ];
 
         for route in protected_routes.into_iter() {

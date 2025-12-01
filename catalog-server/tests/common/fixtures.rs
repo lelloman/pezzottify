@@ -51,6 +51,9 @@ pub fn create_test_catalog() -> Result<(TempDir, PathBuf, PathBuf)> {
     let catalog_db_path = dir.path().join("catalog.db");
     let store = SqliteCatalogStore::new(&catalog_db_path, &media_path)?;
 
+    // Create an active changelog batch for test data insertion
+    store.changelog().create_batch("Test Data Import", Some("Initial test fixture data"))?;
+
     // Insert artists (use IDs from constants: R1, R2)
     let artist1 = Artist {
         id: ARTIST_1_ID.to_string(),
@@ -147,6 +150,10 @@ pub fn create_test_catalog() -> Result<(TempDir, PathBuf, PathBuf)> {
         store.insert_track(&track)?;
         store.add_track_artist(id, ARTIST_2_ID, &ArtistRole::MainArtist, 0)?;
     }
+
+    // Note: We intentionally leave the batch open so that E2E tests that modify
+    // the catalog (create/update/delete) can work. Once the batch management API
+    // is implemented (Phase 4), tests should manage their own batches.
 
     Ok((dir, catalog_db_path, media_path))
 }
