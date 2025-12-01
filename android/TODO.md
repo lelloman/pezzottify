@@ -20,7 +20,7 @@ We can consider V1 ready once all of the task without V2 mark are completed.
 - ~Create a "memory pressure" component that can detect how much memory can we use for caches and such (imagine caching stuff from the db, pre-loading audio, images)~
 - ~Add an in-memory immediate cache layer in StaticsProvider, with LRU eviction, TTL expiration, user toggle setting, and performance metrics~
 - ~Add recent searches component to the search screen (store and display user's search history)~
-- ~Consider if we have more than one "Synchronizers" to unify the code and make it reusable~
+- ~Consider if we have more than one "Synchronizers" to unify +the code and make it reusable~
 - ~We should gather statistics on what's being listened. Like what track, how long. This will be useful for discovery features.~
 - ~The search screen shows recently viewed items when query is empty (V1, done), add recent searches too (V2)~
 - ~Check the related artists picture logic. For instance, when visiting Prince artist screen, you don't see George Michael's picture, but if you go into George Michael screen you do have a picture~
