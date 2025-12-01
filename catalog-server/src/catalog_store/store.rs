@@ -779,15 +779,12 @@ impl SqliteCatalogStore {
 
     /// Insert an artist.
     ///
-    /// Requires an active changelog batch.
+    /// Auto-creates a changelog batch if none exists.
     pub fn insert_artist(&self, artist: &Artist) -> Result<()> {
         let conn = self.conn.lock().unwrap();
 
-        // Check for active batch first
-        let batch = self.changelog.get_active_batch_internal(&conn)?;
-        if batch.is_none() {
-            anyhow::bail!("Cannot insert artist: no active changelog batch");
-        }
+        // Ensure we have an active batch (auto-create if needed)
+        self.changelog.ensure_active_batch_internal(&conn)?;
 
         let genres_json = serde_json::to_string(&artist.genres)?;
         let activity_periods_json = serde_json::to_string(&artist.activity_periods)?;
@@ -825,11 +822,8 @@ impl SqliteCatalogStore {
     pub fn insert_album(&self, album: &Album) -> Result<()> {
         let conn = self.conn.lock().unwrap();
 
-        // Check for active batch first
-        let batch = self.changelog.get_active_batch_internal(&conn)?;
-        if batch.is_none() {
-            anyhow::bail!("Cannot insert album: no active changelog batch");
-        }
+        // Ensure we have an active batch (auto-create if needed)
+        self.changelog.ensure_active_batch_internal(&conn)?;
 
         let genres_json = serde_json::to_string(&album.genres)?;
 
@@ -876,11 +870,8 @@ impl SqliteCatalogStore {
     pub fn insert_track(&self, track: &Track) -> Result<()> {
         let conn = self.conn.lock().unwrap();
 
-        // Check for active batch first
-        let batch = self.changelog.get_active_batch_internal(&conn)?;
-        if batch.is_none() {
-            anyhow::bail!("Cannot insert track: no active changelog batch");
-        }
+        // Ensure we have an active batch (auto-create if needed)
+        self.changelog.ensure_active_batch_internal(&conn)?;
 
         let tags_json = serde_json::to_string(&track.tags)?;
         let languages_json = serde_json::to_string(&track.languages)?;
@@ -935,11 +926,8 @@ impl SqliteCatalogStore {
     pub fn insert_image(&self, image: &Image) -> Result<()> {
         let conn = self.conn.lock().unwrap();
 
-        // Check for active batch first
-        let batch = self.changelog.get_active_batch_internal(&conn)?;
-        if batch.is_none() {
-            anyhow::bail!("Cannot insert image: no active changelog batch");
-        }
+        // Ensure we have an active batch (auto-create if needed)
+        self.changelog.ensure_active_batch_internal(&conn)?;
 
         conn.execute(
             "INSERT INTO images (id, uri, size, width, height) VALUES (?1, ?2, ?3, ?4, ?5)",
@@ -1055,11 +1043,8 @@ impl SqliteCatalogStore {
     pub fn update_artist_record(&self, artist: &Artist) -> Result<()> {
         let conn = self.conn.lock().unwrap();
 
-        // Check for active batch first
-        let batch = self.changelog.get_active_batch_internal(&conn)?;
-        if batch.is_none() {
-            anyhow::bail!("Cannot update artist: no active changelog batch");
-        }
+        // Ensure we have an active batch (auto-create if needed)
+        self.changelog.ensure_active_batch_internal(&conn)?;
 
         // Fetch old state for diff
         let old_snapshot = self.get_artist_snapshot_internal(&conn, &artist.id)?;
@@ -1135,11 +1120,8 @@ impl SqliteCatalogStore {
     pub fn update_album_record(&self, album: &Album) -> Result<()> {
         let conn = self.conn.lock().unwrap();
 
-        // Check for active batch first
-        let batch = self.changelog.get_active_batch_internal(&conn)?;
-        if batch.is_none() {
-            anyhow::bail!("Cannot update album: no active changelog batch");
-        }
+        // Ensure we have an active batch (auto-create if needed)
+        self.changelog.ensure_active_batch_internal(&conn)?;
 
         // Fetch old state for diff
         let old_snapshot = self.get_album_snapshot_internal(&conn, &album.id)?;
@@ -1228,11 +1210,8 @@ impl SqliteCatalogStore {
     pub fn update_track_record(&self, track: &Track) -> Result<()> {
         let conn = self.conn.lock().unwrap();
 
-        // Check for active batch first
-        let batch = self.changelog.get_active_batch_internal(&conn)?;
-        if batch.is_none() {
-            anyhow::bail!("Cannot update track: no active changelog batch");
-        }
+        // Ensure we have an active batch (auto-create if needed)
+        self.changelog.ensure_active_batch_internal(&conn)?;
 
         // Fetch old state for diff
         let old_snapshot = self.get_track_snapshot_internal(&conn, &track.id)?;
@@ -1337,11 +1316,8 @@ impl SqliteCatalogStore {
     pub fn update_image_record(&self, image: &Image) -> Result<()> {
         let conn = self.conn.lock().unwrap();
 
-        // Check for active batch first
-        let batch = self.changelog.get_active_batch_internal(&conn)?;
-        if batch.is_none() {
-            anyhow::bail!("Cannot update image: no active changelog batch");
-        }
+        // Ensure we have an active batch (auto-create if needed)
+        self.changelog.ensure_active_batch_internal(&conn)?;
 
         // Fetch old state for diff
         let old_snapshot = self.get_image_snapshot_internal(&conn, &image.id)?;
@@ -1421,11 +1397,8 @@ impl SqliteCatalogStore {
     pub fn delete_artist_record(&self, id: &str) -> Result<()> {
         let conn = self.conn.lock().unwrap();
 
-        // Check for active batch first
-        let batch = self.changelog.get_active_batch_internal(&conn)?;
-        if batch.is_none() {
-            anyhow::bail!("Cannot delete artist: no active changelog batch");
-        }
+        // Ensure we have an active batch (auto-create if needed)
+        self.changelog.ensure_active_batch_internal(&conn)?;
 
         // Fetch old state for the snapshot
         let old_snapshot = self.get_artist_snapshot_internal(&conn, id)?;
@@ -1463,11 +1436,8 @@ impl SqliteCatalogStore {
     pub fn delete_album_record(&self, id: &str) -> Result<()> {
         let conn = self.conn.lock().unwrap();
 
-        // Check for active batch first
-        let batch = self.changelog.get_active_batch_internal(&conn)?;
-        if batch.is_none() {
-            anyhow::bail!("Cannot delete album: no active changelog batch");
-        }
+        // Ensure we have an active batch (auto-create if needed)
+        self.changelog.ensure_active_batch_internal(&conn)?;
 
         // Fetch old state for the snapshot
         let old_snapshot = self.get_album_snapshot_internal(&conn, id)?;
@@ -1505,11 +1475,8 @@ impl SqliteCatalogStore {
     pub fn delete_track_record(&self, id: &str) -> Result<()> {
         let conn = self.conn.lock().unwrap();
 
-        // Check for active batch first
-        let batch = self.changelog.get_active_batch_internal(&conn)?;
-        if batch.is_none() {
-            anyhow::bail!("Cannot delete track: no active changelog batch");
-        }
+        // Ensure we have an active batch (auto-create if needed)
+        self.changelog.ensure_active_batch_internal(&conn)?;
 
         // Fetch old state for the snapshot
         let old_snapshot = self.get_track_snapshot_internal(&conn, id)?;
@@ -1547,11 +1514,8 @@ impl SqliteCatalogStore {
     pub fn delete_image_record(&self, id: &str) -> Result<()> {
         let conn = self.conn.lock().unwrap();
 
-        // Check for active batch first
-        let batch = self.changelog.get_active_batch_internal(&conn)?;
-        if batch.is_none() {
-            anyhow::bail!("Cannot delete image: no active changelog batch");
-        }
+        // Ensure we have an active batch (auto-create if needed)
+        self.changelog.ensure_active_batch_internal(&conn)?;
 
         // Fetch old state for the snapshot
         let old_snapshot = self.get_image_snapshot_internal(&conn, id)?;
@@ -2105,6 +2069,10 @@ impl CatalogStore for SqliteCatalogStore {
     fn get_stale_batches(&self, stale_threshold_hours: u64) -> Result<Vec<CatalogBatch>> {
         self.changelog.get_stale_batches(stale_threshold_hours)
     }
+
+    fn close_stale_batches(&self) -> Result<usize> {
+        self.changelog.close_stale_batches()
+    }
 }
 
 #[cfg(test)]
@@ -2166,56 +2134,56 @@ mod tests {
     #[test]
     fn test_get_artist() {
         let (store, _temp_dir) = create_test_store();
-        insert_test_artist(&store, "R1", "Test Artist");
+        insert_test_artist(&store, "test_artist_001", "Test Artist");
 
-        let artist = store.get_artist("R1").unwrap().unwrap();
-        assert_eq!(artist.id, "R1");
+        let artist = store.get_artist("test_artist_001").unwrap().unwrap();
+        assert_eq!(artist.id, "test_artist_001");
         assert_eq!(artist.name, "Test Artist");
         assert_eq!(artist.genres, vec!["rock", "metal"]);
         assert_eq!(artist.activity_periods.len(), 1);
 
         // Non-existent artist
-        assert!(store.get_artist("R999").unwrap().is_none());
+        assert!(store.get_artist("nonexistent_artist").unwrap().is_none());
     }
 
     #[test]
     fn test_get_album() {
         let (store, _temp_dir) = create_test_store();
-        insert_test_album(&store, "A1", "Test Album");
+        insert_test_album(&store, "test_album_001", "Test Album");
 
-        let album = store.get_album("A1").unwrap().unwrap();
-        assert_eq!(album.id, "A1");
+        let album = store.get_album("test_album_001").unwrap().unwrap();
+        assert_eq!(album.id, "test_album_001");
         assert_eq!(album.name, "Test Album");
         assert_eq!(album.album_type, AlbumType::Album);
         assert_eq!(album.genres, vec!["rock"]);
 
         // Non-existent album
-        assert!(store.get_album("A999").unwrap().is_none());
+        assert!(store.get_album("nonexistent_album").unwrap().is_none());
     }
 
     #[test]
     fn test_get_track() {
         let (store, _temp_dir) = create_test_store();
-        insert_test_album(&store, "A1", "Test Album");
-        insert_test_track(&store, "T1", "Test Track", "A1");
+        insert_test_album(&store, "test_album_001", "Test Album");
+        insert_test_track(&store, "test_track_001", "Test Track", "test_album_001");
 
-        let track = store.get_track("T1").unwrap().unwrap();
-        assert_eq!(track.id, "T1");
+        let track = store.get_track("test_track_001").unwrap().unwrap();
+        assert_eq!(track.id, "test_track_001");
         assert_eq!(track.name, "Test Track");
-        assert_eq!(track.album_id, "A1");
+        assert_eq!(track.album_id, "test_album_001");
         assert_eq!(track.format, Format::Mp3_320);
 
         // Non-existent track
-        assert!(store.get_track("T999").unwrap().is_none());
+        assert!(store.get_track("nonexistent_track").unwrap().is_none());
     }
 
     #[test]
     fn test_get_image() {
         let (store, _temp_dir) = create_test_store();
-        insert_test_image(&store, "I1", "images/test.jpg");
+        insert_test_image(&store, "test_image_001", "images/test.jpg");
 
-        let image = store.get_image("I1").unwrap().unwrap();
-        assert_eq!(image.id, "I1");
+        let image = store.get_image("test_image_001").unwrap().unwrap();
+        assert_eq!(image.id, "test_image_001");
         assert_eq!(image.uri, "images/test.jpg");
         assert_eq!(image.size, ImageSize::Default);
         assert_eq!(image.width, 300);
@@ -2228,30 +2196,30 @@ mod tests {
     #[test]
     fn test_get_resolved_artist() {
         let (store, _temp_dir) = create_test_store();
-        insert_test_artist(&store, "R1", "Artist 1");
-        insert_test_artist(&store, "R2", "Artist 2");
-        insert_test_image(&store, "I1", "images/portrait.jpg");
+        insert_test_artist(&store, "test_artist_001", "Artist 1");
+        insert_test_artist(&store, "test_artist_002", "Artist 2");
+        insert_test_image(&store, "test_image_001", "images/portrait.jpg");
 
         // Add relationships
         {
             let conn = store.conn.lock().unwrap();
             conn.execute(
                 "INSERT INTO related_artists (artist_id, related_artist_id) VALUES (?1, ?2)",
-                params!["R1", "R2"],
+                params!["test_artist_001", "test_artist_002"],
             )
             .unwrap();
             // Set display_image_id on the artist
             conn.execute(
                 "UPDATE artists SET display_image_id = ?1 WHERE id = ?2",
-                params!["I1", "R1"],
+                params!["test_image_001", "test_artist_001"],
             )
             .unwrap();
         }
 
-        let resolved = store.get_resolved_artist("R1").unwrap().unwrap();
+        let resolved = store.get_resolved_artist("test_artist_001").unwrap().unwrap();
         assert_eq!(resolved.artist.name, "Artist 1");
         assert!(resolved.display_image.is_some());
-        assert_eq!(resolved.display_image.as_ref().unwrap().id, "I1");
+        assert_eq!(resolved.display_image.as_ref().unwrap().id, "test_image_001");
         assert_eq!(resolved.related_artists.len(), 1);
         assert_eq!(resolved.related_artists[0].name, "Artist 2");
     }
@@ -2259,44 +2227,44 @@ mod tests {
     #[test]
     fn test_get_resolved_album() {
         let (store, _temp_dir) = create_test_store();
-        insert_test_artist(&store, "R1", "Artist 1");
-        insert_test_album(&store, "A1", "Album 1");
-        insert_test_track(&store, "T1", "Track 1", "A1");
-        insert_test_track(&store, "T2", "Track 2", "A1");
-        insert_test_image(&store, "I1", "images/cover.jpg");
+        insert_test_artist(&store, "test_artist_001", "Artist 1");
+        insert_test_album(&store, "test_album_001", "Album 1");
+        insert_test_track(&store, "test_track_001", "Track 1", "test_album_001");
+        insert_test_track(&store, "test_track_002", "Track 2", "test_album_001");
+        insert_test_image(&store, "test_image_001", "images/cover.jpg");
 
         // Add relationships
         {
             let conn = store.conn.lock().unwrap();
             conn.execute(
                 "INSERT INTO album_artists (album_id, artist_id, position) VALUES (?1, ?2, ?3)",
-                params!["A1", "R1", 0],
+                params!["test_album_001", "test_artist_001", 0],
             )
             .unwrap();
             // Set display_image_id on the album
             conn.execute(
                 "UPDATE albums SET display_image_id = ?1 WHERE id = ?2",
-                params!["I1", "A1"],
+                params!["test_image_001", "test_album_001"],
             )
             .unwrap();
         }
 
-        let resolved = store.get_resolved_album("A1").unwrap().unwrap();
+        let resolved = store.get_resolved_album("test_album_001").unwrap().unwrap();
         assert_eq!(resolved.album.name, "Album 1");
         assert_eq!(resolved.artists.len(), 1);
         assert_eq!(resolved.artists[0].name, "Artist 1");
         assert_eq!(resolved.discs.len(), 1);
         assert_eq!(resolved.discs[0].tracks.len(), 2);
         assert!(resolved.display_image.is_some());
-        assert_eq!(resolved.display_image.as_ref().unwrap().id, "I1");
+        assert_eq!(resolved.display_image.as_ref().unwrap().id, "test_image_001");
     }
 
     #[test]
     fn test_get_resolved_track() {
         let (store, _temp_dir) = create_test_store();
-        insert_test_artist(&store, "R1", "Artist 1");
-        insert_test_album(&store, "A1", "Album 1");
-        insert_test_track(&store, "T1", "Track 1", "A1");
+        insert_test_artist(&store, "test_artist_001", "Artist 1");
+        insert_test_album(&store, "test_album_001", "Album 1");
+        insert_test_track(&store, "test_track_001", "Track 1", "test_album_001");
 
         // Add track artist relationship
         {
@@ -2304,12 +2272,12 @@ mod tests {
             conn.execute(
                 "INSERT INTO track_artists (track_id, artist_id, role, position)
                  VALUES (?1, ?2, ?3, ?4)",
-                params!["T1", "R1", "MAIN_ARTIST", 0],
+                params!["test_track_001", "test_artist_001", "MAIN_ARTIST", 0],
             )
             .unwrap();
         }
 
-        let resolved = store.get_resolved_track("T1").unwrap().unwrap();
+        let resolved = store.get_resolved_track("test_track_001").unwrap().unwrap();
         assert_eq!(resolved.track.name, "Track 1");
         assert_eq!(resolved.album.name, "Album 1");
         assert_eq!(resolved.artists.len(), 1);
@@ -2320,11 +2288,11 @@ mod tests {
     #[test]
     fn test_get_artist_discography() {
         let (store, _temp_dir) = create_test_store();
-        insert_test_artist(&store, "R1", "Artist 1");
-        insert_test_artist(&store, "R2", "Artist 2");
-        insert_test_album(&store, "A1", "Album 1");
-        insert_test_album(&store, "A2", "Album 2");
-        insert_test_track(&store, "T1", "Track 1", "A2");
+        insert_test_artist(&store, "test_artist_001", "Artist 1");
+        insert_test_artist(&store, "test_artist_002", "Artist 2");
+        insert_test_album(&store, "test_album_001", "Album 1");
+        insert_test_album(&store, "test_album_002", "Album 2");
+        insert_test_track(&store, "test_track_001", "Track 1", "test_album_002");
 
         // R1 is album artist on A1
         // R1 is featured on a track in A2 (owned by R2)
@@ -2332,23 +2300,23 @@ mod tests {
             let conn = store.conn.lock().unwrap();
             conn.execute(
                 "INSERT INTO album_artists (album_id, artist_id, position) VALUES (?1, ?2, ?3)",
-                params!["A1", "R1", 0],
+                params!["test_album_001", "test_artist_001", 0],
             )
             .unwrap();
             conn.execute(
                 "INSERT INTO album_artists (album_id, artist_id, position) VALUES (?1, ?2, ?3)",
-                params!["A2", "R2", 0],
+                params!["test_album_002", "test_artist_002", 0],
             )
             .unwrap();
             conn.execute(
                 "INSERT INTO track_artists (track_id, artist_id, role, position)
                  VALUES (?1, ?2, ?3, ?4)",
-                params!["T1", "R1", "FEATURED_ARTIST", 0],
+                params!["test_track_001", "test_artist_001", "FEATURED_ARTIST", 0],
             )
             .unwrap();
         }
 
-        let discography = store.get_artist_discography("R1").unwrap().unwrap();
+        let discography = store.get_artist_discography("test_artist_001").unwrap().unwrap();
         assert_eq!(discography.albums.len(), 1);
         assert_eq!(discography.albums[0].name, "Album 1");
         assert_eq!(discography.features.len(), 1);
@@ -2363,9 +2331,9 @@ mod tests {
         let store = SqliteCatalogStore::new(&db_path, &media_base).unwrap();
 
         let track = Track {
-            id: "T1".to_string(),
+            id: "test_track_001".to_string(),
             name: "Test".to_string(),
-            album_id: "A1".to_string(),
+            album_id: "test_album_001".to_string(),
             disc_number: 1,
             track_number: 1,
             duration_secs: None,
@@ -2386,10 +2354,10 @@ mod tests {
     #[test]
     fn test_list_operations() {
         let (store, _temp_dir) = create_test_store();
-        insert_test_artist(&store, "R1", "Artist 1");
-        insert_test_artist(&store, "R2", "Artist 2");
-        insert_test_album(&store, "A1", "Album 1");
-        insert_test_track(&store, "T1", "Track 1", "A1");
+        insert_test_artist(&store, "test_artist_001", "Artist 1");
+        insert_test_artist(&store, "test_artist_002", "Artist 2");
+        insert_test_album(&store, "test_album_001", "Album 1");
+        insert_test_track(&store, "test_track_001", "Track 1", "test_album_001");
 
         let artist_ids = store.list_artist_ids().unwrap();
         assert_eq!(artist_ids.len(), 2);
@@ -2412,7 +2380,7 @@ mod tests {
     fn test_create_artist_success() {
         let (store, _temp_dir) = create_test_store();
         let data = serde_json::json!({
-            "id": "R1",
+            "id": "test_artist_001",
             "name": "Test Artist",
             "genres": ["rock"],
             "activity_periods": [{"Decade": 1990}]
@@ -2421,17 +2389,17 @@ mod tests {
         let result = store.create_artist(data);
         assert!(result.is_ok());
 
-        let artist = store.get_artist("R1").unwrap().unwrap();
+        let artist = store.get_artist("test_artist_001").unwrap().unwrap();
         assert_eq!(artist.name, "Test Artist");
     }
 
     #[test]
     fn test_create_artist_duplicate_id_fails() {
         let (store, _temp_dir) = create_test_store();
-        insert_test_artist(&store, "R1", "Existing Artist");
+        insert_test_artist(&store, "test_artist_001", "Existing Artist");
 
         let data = serde_json::json!({
-            "id": "R1",
+            "id": "test_artist_001",
             "name": "New Artist",
             "genres": [],
             "activity_periods": []
@@ -2446,7 +2414,7 @@ mod tests {
     fn test_create_artist_empty_name_fails() {
         let (store, _temp_dir) = create_test_store();
         let data = serde_json::json!({
-            "id": "R1",
+            "id": "test_artist_001",
             "name": "",
             "genres": [],
             "activity_periods": []
@@ -2460,12 +2428,12 @@ mod tests {
     #[test]
     fn test_create_track_success() {
         let (store, _temp_dir) = create_test_store();
-        insert_test_album(&store, "A1", "Test Album");
+        insert_test_album(&store, "test_album_001", "Test Album");
 
         let data = serde_json::json!({
-            "id": "T1",
+            "id": "test_track_001",
             "name": "Test Track",
-            "album_id": "A1",
+            "album_id": "test_album_001",
             "disc_number": 1,
             "track_number": 1,
             "is_explicit": false,
@@ -2485,7 +2453,7 @@ mod tests {
         let (store, _temp_dir) = create_test_store();
 
         let data = serde_json::json!({
-            "id": "T1",
+            "id": "test_track_001",
             "name": "Test Track",
             "album_id": "NONEXISTENT",
             "disc_number": 1,
@@ -2506,13 +2474,13 @@ mod tests {
     #[test]
     fn test_create_track_duplicate_id_fails() {
         let (store, _temp_dir) = create_test_store();
-        insert_test_album(&store, "A1", "Test Album");
-        insert_test_track(&store, "T1", "Existing Track", "A1");
+        insert_test_album(&store, "test_album_001", "Test Album");
+        insert_test_track(&store, "test_track_001", "Existing Track", "test_album_001");
 
         let data = serde_json::json!({
-            "id": "T1",
+            "id": "test_track_001",
             "name": "New Track",
-            "album_id": "A1",
+            "album_id": "test_album_001",
             "disc_number": 1,
             "track_number": 2,
             "is_explicit": false,
@@ -2531,12 +2499,12 @@ mod tests {
     #[test]
     fn test_create_track_invalid_track_number_fails() {
         let (store, _temp_dir) = create_test_store();
-        insert_test_album(&store, "A1", "Test Album");
+        insert_test_album(&store, "test_album_001", "Test Album");
 
         let data = serde_json::json!({
-            "id": "T1",
+            "id": "test_track_001",
             "name": "Test Track",
-            "album_id": "A1",
+            "album_id": "test_album_001",
             "disc_number": 1,
             "track_number": 0,  // Invalid: must be positive
             "is_explicit": false,
@@ -2555,11 +2523,11 @@ mod tests {
     #[test]
     fn test_update_track_nonexistent_album_fails() {
         let (store, _temp_dir) = create_test_store();
-        insert_test_album(&store, "A1", "Test Album");
-        insert_test_track(&store, "T1", "Test Track", "A1");
+        insert_test_album(&store, "test_album_001", "Test Album");
+        insert_test_track(&store, "test_track_001", "Test Track", "test_album_001");
 
         let data = serde_json::json!({
-            "id": "T1",
+            "id": "test_track_001",
             "name": "Updated Track",
             "album_id": "NONEXISTENT",
             "disc_number": 1,
@@ -2572,7 +2540,7 @@ mod tests {
             "languages": []
         });
 
-        let result = store.update_track("T1", data);
+        let result = store.update_track("test_track_001", data);
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("does not exist"));
     }

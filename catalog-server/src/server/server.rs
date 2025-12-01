@@ -596,46 +596,58 @@ async fn get_whats_new(
 fn update_user_liked_content(
     user_manager: GuardedUserManager,
     user_id: usize,
+    content_type: LikedContentType,
     content_id: &str,
     liked: bool,
 ) -> Response {
     match user_manager
         .lock()
         .unwrap()
-        .set_user_liked_content(user_id, content_id, liked)
+        .set_user_liked_content(user_id, content_id, content_type, liked)
     {
         Ok(_) => StatusCode::OK.into_response(),
         Err(_) => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
     }
 }
 
+fn parse_content_type(content_type_str: &str) -> Option<LikedContentType> {
+    match content_type_str {
+        "artist" => Some(LikedContentType::Artist),
+        "album" => Some(LikedContentType::Album),
+        "track" => Some(LikedContentType::Track),
+        _ => None,
+    }
+}
+
 async fn add_user_liked_content(
     session: Session,
     State(user_manager): State<GuardedUserManager>,
-    Path(content_id): Path<String>,
+    Path((content_type_str, content_id)): Path<(String, String)>,
 ) -> Response {
-    update_user_liked_content(user_manager, session.user_id, &content_id, true)
+    let Some(content_type) = parse_content_type(&content_type_str) else {
+        return StatusCode::BAD_REQUEST.into_response();
+    };
+    update_user_liked_content(user_manager, session.user_id, content_type, &content_id, true)
 }
 
 async fn delete_user_liked_content(
     session: Session,
     State(user_manager): State<GuardedUserManager>,
-    Path(content_id): Path<String>,
+    Path((content_type_str, content_id)): Path<(String, String)>,
 ) -> Response {
-    update_user_liked_content(user_manager, session.user_id, &content_id, false)
+    let Some(content_type) = parse_content_type(&content_type_str) else {
+        return StatusCode::BAD_REQUEST.into_response();
+    };
+    update_user_liked_content(user_manager, session.user_id, content_type, &content_id, false)
 }
 
 async fn get_user_liked_content(
     session: Session,
     State(user_manager): State<GuardedUserManager>,
-    Path(content_id): Path<String>,
+    Path(content_type_str): Path<String>,
 ) -> Response {
-    let content_type = content_id; // Other route methods are already registered with content_id.
-    let content_type = match content_type.as_str() {
-        "album" => LikedContentType::Album,
-        "artist" => LikedContentType::Artist,
-        "track" => LikedContentType::Track,
-        _ => return StatusCode::BAD_REQUEST.into_response(),
+    let Some(content_type) = parse_content_type(&content_type_str) else {
+        return StatusCode::BAD_REQUEST.into_response();
     };
 
     let user_manager = user_manager.lock().unwrap();
@@ -1815,8 +1827,9 @@ pub fn make_app(
     );
 
     // Liked content READ routes (higher limit)
+    // Route pattern: /liked/{content_type} - returns list of liked content IDs
     let liked_content_read_routes: Router = Router::new()
-        .route("/liked/{content_id}", get(get_user_liked_content))
+        .route("/liked/{content_type}", get(get_user_liked_content))
         .layer(GovernorLayer::new(user_content_read_rate_limit.clone()))
         .route_layer(middleware::from_fn_with_state(
             state.clone(),
@@ -1825,9 +1838,10 @@ pub fn make_app(
         .with_state(state.clone());
 
     // Liked content WRITE routes (stricter limit)
+    // Route pattern: /liked/{content_type}/{content_id}
     let liked_content_write_routes: Router = Router::new()
-        .route("/liked/{content_id}", post(add_user_liked_content))
-        .route("/liked/{content_id}", delete(delete_user_liked_content))
+        .route("/liked/{content_type}/{content_id}", post(add_user_liked_content))
+        .route("/liked/{content_type}/{content_id}", delete(delete_user_liked_content))
         .layer(GovernorLayer::new(write_rate_limit.clone()))
         .route_layer(middleware::from_fn_with_state(
             state.clone(),
@@ -2040,11 +2054,9 @@ pub fn make_app(
     Ok(app)
 }
 
-/// Default threshold for considering a batch "stale" (7 days in hours)
-const STALE_BATCH_THRESHOLD_HOURS: u64 = 168;
-
-/// Interval between stale batch checks (1 hour in seconds)
-const STALE_BATCH_CHECK_INTERVAL_SECS: u64 = 3600;
+/// Interval between stale batch checks (10 minutes in seconds)
+/// The actual staleness threshold is configured in ChangeLogStore (default 1 hour).
+const STALE_BATCH_CHECK_INTERVAL_SECS: u64 = 600;
 
 pub async fn run_server(
     catalog_store: Arc<dyn CatalogStore>,
@@ -2076,14 +2088,14 @@ pub async fn run_server(
         .await
         .unwrap();
 
-    // Spawn the stale batch alerting background task
+    // Spawn the stale batch auto-close background task
     let catalog_store_for_bg = catalog_store.clone();
     tokio::spawn(async move {
         let mut interval =
             tokio::time::interval(std::time::Duration::from_secs(STALE_BATCH_CHECK_INTERVAL_SECS));
         loop {
             interval.tick().await;
-            check_stale_batches(&catalog_store_for_bg);
+            check_and_close_stale_batches(&catalog_store_for_bg);
         }
     });
 
@@ -2103,39 +2115,24 @@ pub async fn run_server(
     Ok(())
 }
 
-/// Check for stale changelog batches and log warnings.
-fn check_stale_batches(catalog_store: &Arc<dyn CatalogStore>) {
+/// Close stale changelog batches automatically.
+fn check_and_close_stale_batches(catalog_store: &Arc<dyn CatalogStore>) {
     super::metrics::CHANGELOG_STALE_BATCH_CHECKS_TOTAL.inc();
 
-    match catalog_store.get_stale_batches(STALE_BATCH_THRESHOLD_HOURS) {
-        Ok(stale_batches) => {
-            let count = stale_batches.len();
-            super::metrics::CHANGELOG_STALE_BATCHES.set(count as f64);
-
-            if count > 0 {
-                warn!(
-                    "Found {} stale changelog batch(es) open for more than {} hours",
-                    count, STALE_BATCH_THRESHOLD_HOURS
+    match catalog_store.close_stale_batches() {
+        Ok(closed_count) => {
+            if closed_count > 0 {
+                info!(
+                    "Background task closed {} stale changelog batch(es)",
+                    closed_count
                 );
-                for batch in &stale_batches {
-                    let age_hours =
-                        (std::time::SystemTime::now()
-                            .duration_since(std::time::UNIX_EPOCH)
-                            .unwrap()
-                            .as_secs() as i64
-                            - batch.created_at)
-                            / 3600;
-                    warn!(
-                        "  - Batch '{}' (id: {}) has been open for {} hours",
-                        batch.name, batch.id, age_hours
-                    );
-                }
             } else {
-                debug!("No stale changelog batches found");
+                debug!("No stale changelog batches to close");
             }
+            super::metrics::CHANGELOG_STALE_BATCHES.set(0.0);
         }
         Err(e) => {
-            error!("Failed to check for stale batches: {}", e);
+            error!("Failed to close stale batches: {}", e);
         }
     }
 }
@@ -2193,15 +2190,19 @@ mod tests {
             assert_eq!(response.status(), StatusCode::FORBIDDEN);
         }
 
-        let mut request = Request::builder()
-            .method("POST")
-            .uri("/v1/content/search")
-            .body(Body::empty())
-            .unwrap();
-        // Add ConnectInfo extension for rate limiting
-        request.extensions_mut().insert(ConnectInfo(test_addr));
-        let response = app.oneshot(request).await.unwrap();
-        assert_eq!(response.status(), StatusCode::FORBIDDEN);
+        // Only test search route if search feature is enabled
+        #[cfg(not(feature = "no_search"))]
+        {
+            let mut request = Request::builder()
+                .method("POST")
+                .uri("/v1/content/search")
+                .body(Body::empty())
+                .unwrap();
+            // Add ConnectInfo extension for rate limiting
+            request.extensions_mut().insert(ConnectInfo(test_addr));
+            let response = app.oneshot(request).await.unwrap();
+            assert_eq!(response.status(), StatusCode::FORBIDDEN);
+        }
     }
 
     #[derive(Default)]

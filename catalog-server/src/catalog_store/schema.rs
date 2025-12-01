@@ -510,42 +510,42 @@ mod tests {
 
         // Insert an artist
         conn.execute(
-            "INSERT INTO artists (id, name) VALUES ('R1', 'Test Artist')",
+            "INSERT INTO artists (id, name) VALUES ('test_artist_001', 'Test Artist')",
             [],
         )
         .unwrap();
 
         // Insert an album
         conn.execute(
-            "INSERT INTO albums (id, name, album_type) VALUES ('A1', 'Test Album', 'ALBUM')",
+            "INSERT INTO albums (id, name, album_type) VALUES ('test_album_001', 'Test Album', 'ALBUM')",
             [],
         )
         .unwrap();
 
         // Insert album-artist relationship
         conn.execute(
-            "INSERT INTO album_artists (album_id, artist_id, position) VALUES ('A1', 'R1', 0)",
+            "INSERT INTO album_artists (album_id, artist_id, position) VALUES ('test_album_001', 'test_artist_001', 0)",
             [],
         )
         .unwrap();
 
         // Insert a track
         conn.execute(
-            "INSERT INTO tracks (id, name, album_id, track_number, audio_uri, format) VALUES ('T1', 'Test Track', 'A1', 1, 'albums/A1/track_T1.mp3', 'MP3_320')",
+            "INSERT INTO tracks (id, name, album_id, track_number, audio_uri, format) VALUES ('test_track_001', 'Test Track', 'test_album_001', 1, 'albums/test_album_001/test_track_001.mp3', 'MP3_320')",
             [],
         )
         .unwrap();
 
         // Verify track exists
         let track_count: i64 = conn
-            .query_row("SELECT COUNT(*) FROM tracks WHERE album_id = 'A1'", [], |r| {
+            .query_row("SELECT COUNT(*) FROM tracks WHERE album_id = 'test_album_001'", [], |r| {
                 r.get(0)
             })
             .unwrap();
         assert_eq!(track_count, 1);
 
         // Delete the album
-        conn.execute("DELETE FROM albums WHERE id = 'A1'", [])
+        conn.execute("DELETE FROM albums WHERE id = 'test_album_001'", [])
             .unwrap();
 
         // Verify track was cascade deleted
@@ -576,39 +576,39 @@ mod tests {
 
         // Insert artists
         conn.execute(
-            "INSERT INTO artists (id, name) VALUES ('R1', 'Artist 1')",
+            "INSERT INTO artists (id, name) VALUES ('test_artist_001', 'Artist 1')",
             [],
         )
         .unwrap();
         conn.execute(
-            "INSERT INTO artists (id, name) VALUES ('R2', 'Artist 2')",
+            "INSERT INTO artists (id, name) VALUES ('test_artist_002', 'Artist 2')",
             [],
         )
         .unwrap();
 
         // Insert related artists relationship
         conn.execute(
-            "INSERT INTO related_artists (artist_id, related_artist_id) VALUES ('R1', 'R2')",
+            "INSERT INTO related_artists (artist_id, related_artist_id) VALUES ('test_artist_001', 'test_artist_002')",
             [],
         )
         .unwrap();
 
         // Insert an image
         conn.execute(
-            "INSERT INTO images (id, uri, size, width, height) VALUES ('I1', 'images/test.jpg', 'DEFAULT', 300, 300)",
+            "INSERT INTO images (id, uri, size, width, height) VALUES ('test_image_001', 'images/test.jpg', 'DEFAULT', 300, 300)",
             [],
         )
         .unwrap();
 
         // Insert artist-image relationship
         conn.execute(
-            "INSERT INTO artist_images (artist_id, image_id, image_type, position) VALUES ('R1', 'I1', 'portrait', 0)",
+            "INSERT INTO artist_images (artist_id, image_id, image_type, position) VALUES ('test_artist_001', 'test_image_001', 'portrait', 0)",
             [],
         )
         .unwrap();
 
         // Delete artist R1
-        conn.execute("DELETE FROM artists WHERE id = 'R1'", [])
+        conn.execute("DELETE FROM artists WHERE id = 'test_artist_001'", [])
             .unwrap();
 
         // Verify related_artists was cascade deleted
@@ -645,26 +645,26 @@ mod tests {
 
         // Insert artist and album
         conn.execute(
-            "INSERT INTO artists (id, name) VALUES ('R1', 'Artist')",
+            "INSERT INTO artists (id, name) VALUES ('test_artist_001', 'Artist')",
             [],
         )
         .unwrap();
         conn.execute(
-            "INSERT INTO albums (id, name, album_type) VALUES ('A1', 'Album', 'ALBUM')",
+            "INSERT INTO albums (id, name, album_type) VALUES ('test_album_001', 'Album', 'ALBUM')",
             [],
         )
         .unwrap();
 
         // Insert album-artist relationship
         conn.execute(
-            "INSERT INTO album_artists (album_id, artist_id, position) VALUES ('A1', 'R1', 0)",
+            "INSERT INTO album_artists (album_id, artist_id, position) VALUES ('test_album_001', 'test_artist_001', 0)",
             [],
         )
         .unwrap();
 
         // Try to insert duplicate - should fail
         let result = conn.execute(
-            "INSERT INTO album_artists (album_id, artist_id, position) VALUES ('A1', 'R1', 1)",
+            "INSERT INTO album_artists (album_id, artist_id, position) VALUES ('test_album_001', 'test_artist_001', 1)",
             [],
         );
         assert!(result.is_err());
@@ -709,7 +709,7 @@ mod tests {
         // Insert a batch
         conn.execute(
             "INSERT INTO catalog_batches (id, name, is_open, created_at, last_activity_at)
-             VALUES ('B1', 'Test Batch', 1, 1700000000, 1700000000)",
+             VALUES ('test_batch_001', 'Test Batch', 1, 1700000000, 1700000000)",
             [],
         )
         .unwrap();
@@ -717,7 +717,7 @@ mod tests {
         // Insert a change log entry
         conn.execute(
             "INSERT INTO catalog_change_log (batch_id, entity_type, entity_id, operation, field_changes, entity_snapshot, created_at)
-             VALUES ('B1', 'artist', 'R1', 'create', '{}', '{\"id\":\"R1\",\"name\":\"Test\"}', 1700000000)",
+             VALUES ('test_batch_001', 'artist', 'test_artist_001', 'create', '{}', '{\"id\":\"R1\",\"name\":\"Test\"}', 1700000000)",
             [],
         )
         .unwrap();
@@ -729,7 +729,7 @@ mod tests {
         assert_eq!(change_count, 1);
 
         // Delete the batch
-        conn.execute("DELETE FROM catalog_batches WHERE id = 'B1'", [])
+        conn.execute("DELETE FROM catalog_batches WHERE id = 'test_batch_001'", [])
             .unwrap();
 
         // Verify change was cascade deleted

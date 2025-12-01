@@ -38,19 +38,6 @@ impl LikedContentType {
             _ => LikedContentType::Unknown,
         }
     }
-
-    pub fn from_id(id: &str) -> Self {
-        if id.is_empty() {
-            return LikedContentType::Unknown;
-        }
-        let first_char = id.chars().next().unwrap();
-        match first_char {
-            'R' => LikedContentType::Artist,
-            'A' => LikedContentType::Album,
-            'T' => LikedContentType::Track,
-            _ => LikedContentType::Unknown,
-        }
-    }
 }
 
 pub struct UserLikedContent {

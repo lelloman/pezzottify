@@ -156,6 +156,10 @@ pub trait CatalogStore: Send + Sync {
     /// Get batches that have been open longer than the specified threshold.
     /// Used for stale batch alerting.
     fn get_stale_batches(&self, stale_threshold_hours: u64) -> Result<Vec<super::CatalogBatch>>;
+
+    /// Close all stale batches (inactive for longer than the configured threshold).
+    /// Returns the number of batches closed.
+    fn close_stale_batches(&self) -> Result<usize>;
 }
 
 /// A searchable item for the search index.

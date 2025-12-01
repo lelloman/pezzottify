@@ -35,7 +35,7 @@ async fn test_unauthenticated_cannot_like_content() {
     let server = TestServer::spawn().await;
     let client = TestClient::new(server.base_url.clone());
 
-    let response = client.add_liked_content(TRACK_1_ID).await;
+    let response = client.add_liked_content("track", TRACK_1_ID).await;
     assert_eq!(response.status(), StatusCode::FORBIDDEN);
 }
 
@@ -85,7 +85,7 @@ async fn test_regular_user_can_like_content() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated(server.base_url.clone()).await;
 
-    let response = client.add_liked_content(TRACK_1_ID).await;
+    let response = client.add_liked_content("track", TRACK_1_ID).await;
     assert_eq!(response.status(), StatusCode::OK);
 }
 

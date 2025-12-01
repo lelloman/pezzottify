@@ -163,4 +163,8 @@ impl CatalogStore for NullCatalogStore {
     fn get_stale_batches(&self, _stale_threshold_hours: u64) -> Result<Vec<CatalogBatch>> {
         Ok(Vec::new())
     }
+
+    fn close_stale_batches(&self) -> Result<usize> {
+        Ok(0)
+    }
 }

@@ -49,9 +49,9 @@ impl UserManager {
         &self,
         user_id: usize,
         content_id: &str,
+        content_type: LikedContentType,
         liked: bool,
     ) -> anyhow::Result<()> {
-        let content_type = LikedContentType::from_id(content_id);
         self.user_store.lock().unwrap().set_user_liked_content(
             user_id,
             content_id,

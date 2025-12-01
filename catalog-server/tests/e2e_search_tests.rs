@@ -102,12 +102,11 @@ async fn test_search_filter_by_artist() {
     assert_eq!(response.status(), StatusCode::OK);
     let results: Vec<serde_json::Value> = response.json().await.unwrap();
 
-    // All results should be artists (have "id" starting with "R" based on test data)
+    // All results should be artists (have "id" starting with "test_artist" based on test data)
     for result in &results {
         if let Some(id) = result.get("id").and_then(|i| i.as_str()) {
-            // Artists in test data have IDs like "R1", "R2"
             assert!(
-                id.starts_with("R") || result.get("name").is_some(),
+                id.starts_with("test_artist") || result.get("name").is_some(),
                 "Filtered results should be artists"
             );
         }

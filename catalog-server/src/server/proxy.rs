@@ -8,24 +8,6 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use tracing::{info, warn};
 
-/// Strip the catalog ID prefix to get the raw Spotify ID.
-///
-/// Catalog IDs are prefixed with:
-/// - 'R' for artists
-/// - 'A' for albums
-/// - 'T' for tracks
-///
-/// The downloader service expects raw Spotify IDs without these prefixes.
-fn strip_id_prefix(id: &str) -> &str {
-    if id.is_empty() {
-        return id;
-    }
-    match id.chars().next() {
-        Some('R') | Some('A') | Some('T') => &id[1..],
-        _ => id,
-    }
-}
-
 use crate::catalog_store::CatalogStore;
 use crate::downloader::models::{
     DownloaderAlbum, DownloaderArtist, DownloaderImage, DownloaderTrack,
@@ -126,8 +108,17 @@ impl CatalogProxy {
 
     /// Fetch artist metadata and related artists from downloader.
     pub async fn fetch_and_store_artist(&self, id: &str) -> Result<()> {
-        let spotify_id = strip_id_prefix(id);
-        let dl_artist = self.downloader.get_artist(spotify_id).await?;
+        info!("Fetching artist {} from downloader...", id);
+        let dl_artist = self.downloader.get_artist(id).await?;
+
+        info!(
+            "Fetched artist '{}' (id: {}) - {} genres, {} portraits, {} related artists",
+            dl_artist.name,
+            dl_artist.id,
+            dl_artist.genre.len(),
+            dl_artist.portraits.len() + dl_artist.portrait_group.len(),
+            dl_artist.related.len()
+        );
 
         // Store the artist
         self.store_artist(&dl_artist).await?;
@@ -148,8 +139,7 @@ impl CatalogProxy {
     /// Fetch artist's albums from downloader.
     async fn fetch_artist_albums(&self, artist_id: &str) -> Result<()> {
         // Get artist from downloader to find album IDs
-        let spotify_id = strip_id_prefix(artist_id);
-        let dl_artist = self.downloader.get_artist(spotify_id).await?;
+        let dl_artist = self.downloader.get_artist(artist_id).await?;
 
         // The downloader artist response doesn't include album IDs directly,
         // so we need to fetch albums separately. For now, we'll skip this
@@ -167,8 +157,19 @@ impl CatalogProxy {
 
     /// Fetch and store an album with all its tracks.
     pub async fn fetch_and_store_album(&self, id: &str) -> Result<()> {
-        let spotify_id = strip_id_prefix(id);
-        let dl_album = self.downloader.get_album(spotify_id).await?;
+        info!("Fetching album {} from downloader...", id);
+        let dl_album = self.downloader.get_album(id).await?;
+
+        let track_count: usize = dl_album.discs.iter().map(|d| d.tracks.len()).sum();
+        info!(
+            "Fetched album '{}' (id: {}) - {} discs, {} tracks, {} artists, {} covers",
+            dl_album.name,
+            dl_album.id,
+            dl_album.discs.len(),
+            track_count,
+            dl_album.artists_ids.len(),
+            dl_album.covers.len() + dl_album.cover_group.len()
+        );
 
         // Ensure album artists exist
         for artist_id in &dl_album.artists_ids {
@@ -199,8 +200,7 @@ impl CatalogProxy {
     /// Fetch and store tracks for an album.
     async fn fetch_album_tracks(&self, album_id: &str) -> Result<()> {
         // Get album from downloader to find track IDs
-        let spotify_id = strip_id_prefix(album_id);
-        let dl_album = self.downloader.get_album(spotify_id).await?;
+        let dl_album = self.downloader.get_album(album_id).await?;
         let track_ids = dl_album.get_all_track_ids();
 
         for track_id in track_ids {
@@ -219,8 +219,18 @@ impl CatalogProxy {
             return Ok(());
         }
 
-        let spotify_id = strip_id_prefix(id);
-        let dl_track = self.downloader.get_track(spotify_id).await?;
+        info!("Fetching track {} from downloader...", id);
+        let dl_track = self.downloader.get_track(id).await?;
+
+        info!(
+            "Fetched track '{}' (id: {}) - disc {}, track {}, duration {}ms, {} formats available",
+            dl_track.name,
+            dl_track.id,
+            dl_track.disc_number,
+            dl_track.number,
+            dl_track.duration,
+            dl_track.files.len()
+        );
 
         // Get format info
         let (format_str, format) = dl_track
@@ -243,7 +253,7 @@ impl CatalogProxy {
         // Download audio file
         info!("Downloading track {} audio to {:?}", id, audio_path);
         self.downloader
-            .download_track_audio(spotify_id, &audio_path)
+            .download_track_audio(id, &audio_path)
             .await?;
 
         // Store track in catalog
@@ -260,8 +270,10 @@ impl CatalogProxy {
         // Check if already exists
         if self.catalog_store.get_artist_json(&artist.id)?.is_some() {
             self.catalog_store.update_artist(&artist.id, json)?;
+            info!("Updated artist '{}' (id: {}) in catalog", artist.name, artist.id);
         } else {
             self.catalog_store.create_artist(json)?;
+            info!("Created artist '{}' (id: {}) in catalog", artist.name, artist.id);
         }
 
         // Store related artists relationships
@@ -287,8 +299,10 @@ impl CatalogProxy {
         // Check if already exists
         if self.catalog_store.get_album_json(&album.id)?.is_some() {
             self.catalog_store.update_album(&album.id, json)?;
+            info!("Updated album '{}' (id: {}) in catalog", album.name, album.id);
         } else {
             self.catalog_store.create_album(json)?;
+            info!("Created album '{}' (id: {}) in catalog", album.name, album.id);
         }
 
         Ok(())
@@ -324,6 +338,10 @@ impl CatalogProxy {
         }
 
         self.catalog_store.create_track(json)?;
+        info!(
+            "Created track '{}' (id: {}) in catalog - format: {:?}",
+            track.name, track.id, track.format
+        );
 
         Ok(())
     }
@@ -361,53 +379,6 @@ mod tests {
     use std::collections::HashMap;
     use std::sync::Mutex;
     use tempfile::TempDir;
-
-    #[test]
-    fn test_strip_id_prefix_artist() {
-        assert_eq!(
-            strip_id_prefix("R5a2EaR3hamoenG9rDuVn8j"),
-            "5a2EaR3hamoenG9rDuVn8j"
-        );
-    }
-
-    #[test]
-    fn test_strip_id_prefix_album() {
-        assert_eq!(
-            strip_id_prefix("A2umoqwMrmjBBPeaqgYu6J9"),
-            "2umoqwMrmjBBPeaqgYu6J9"
-        );
-    }
-
-    #[test]
-    fn test_strip_id_prefix_track() {
-        assert_eq!(
-            strip_id_prefix("T1uvyZBs4IZYRebHIB1747m"),
-            "1uvyZBs4IZYRebHIB1747m"
-        );
-    }
-
-    #[test]
-    fn test_strip_id_prefix_no_prefix() {
-        // IDs without prefix should be returned as-is
-        assert_eq!(
-            strip_id_prefix("5a2EaR3hamoenG9rDuVn8j"),
-            "5a2EaR3hamoenG9rDuVn8j"
-        );
-    }
-
-    #[test]
-    fn test_strip_id_prefix_empty() {
-        assert_eq!(strip_id_prefix(""), "");
-    }
-
-    #[test]
-    fn test_strip_id_prefix_other_prefix() {
-        // Other letters should not be stripped
-        assert_eq!(
-            strip_id_prefix("X5a2EaR3hamoenG9rDuVn8j"),
-            "X5a2EaR3hamoenG9rDuVn8j"
-        );
-    }
 
     use crate::catalog_store::SqliteCatalogStore;
     use crate::downloader::client::Downloader;

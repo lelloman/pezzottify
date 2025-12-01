@@ -202,19 +202,19 @@ impl TestClient {
     // User Content Endpoints
     // ========================================================================
 
-    /// POST /v1/user/liked/{content_id}
-    pub async fn add_liked_content(&self, content_id: &str) -> Response {
+    /// POST /v1/user/liked/{content_type}/{content_id}
+    pub async fn add_liked_content(&self, content_type: &str, content_id: &str) -> Response {
         self.client
-            .post(format!("{}/v1/user/liked/{}", self.base_url, content_id))
+            .post(format!("{}/v1/user/liked/{}/{}", self.base_url, content_type, content_id))
             .send()
             .await
             .expect("Add liked content request failed")
     }
 
-    /// DELETE /v1/user/liked/{content_id}
-    pub async fn remove_liked_content(&self, content_id: &str) -> Response {
+    /// DELETE /v1/user/liked/{content_type}/{content_id}
+    pub async fn remove_liked_content(&self, content_type: &str, content_id: &str) -> Response {
         self.client
-            .delete(format!("{}/v1/user/liked/{}", self.base_url, content_id))
+            .delete(format!("{}/v1/user/liked/{}/{}", self.base_url, content_type, content_id))
             .send()
             .await
             .expect("Remove liked content request failed")

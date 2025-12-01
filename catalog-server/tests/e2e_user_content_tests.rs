@@ -19,7 +19,7 @@ async fn test_like_and_unlike_track() {
     let client = TestClient::authenticated(server.base_url.clone()).await;
 
     // Like a track
-    let response = client.add_liked_content(TRACK_1_ID).await;
+    let response = client.add_liked_content("track", TRACK_1_ID).await;
     assert_eq!(response.status(), StatusCode::OK);
 
     // Verify it appears in liked tracks
@@ -29,7 +29,7 @@ async fn test_like_and_unlike_track() {
     assert!(liked.contains(&TRACK_1_ID.to_string()));
 
     // Unlike the track
-    let response = client.remove_liked_content(TRACK_1_ID).await;
+    let response = client.remove_liked_content("track", TRACK_1_ID).await;
     assert_eq!(response.status(), StatusCode::OK);
 
     // Verify it's no longer in liked tracks
@@ -45,7 +45,7 @@ async fn test_like_album() {
     let client = TestClient::authenticated(server.base_url.clone()).await;
 
     // Like an album
-    let response = client.add_liked_content(ALBUM_1_ID).await;
+    let response = client.add_liked_content("album", ALBUM_1_ID).await;
     assert_eq!(response.status(), StatusCode::OK);
 
     // Verify it appears in liked albums
@@ -61,7 +61,7 @@ async fn test_like_artist() {
     let client = TestClient::authenticated(server.base_url.clone()).await;
 
     // Like an artist
-    let response = client.add_liked_content(ARTIST_1_ID).await;
+    let response = client.add_liked_content("artist", ARTIST_1_ID).await;
     assert_eq!(response.status(), StatusCode::OK);
 
     // Verify it appears in liked artists
@@ -77,9 +77,9 @@ async fn test_like_multiple_tracks() {
     let client = TestClient::authenticated(server.base_url.clone()).await;
 
     // Like multiple tracks
-    client.add_liked_content(TRACK_1_ID).await;
-    client.add_liked_content(TRACK_2_ID).await;
-    client.add_liked_content(TRACK_3_ID).await;
+    client.add_liked_content("track", TRACK_1_ID).await;
+    client.add_liked_content("track", TRACK_2_ID).await;
+    client.add_liked_content("track", TRACK_3_ID).await;
 
     // Verify all appear in liked tracks
     let response = client.get_liked_content("track").await;
@@ -106,7 +106,7 @@ async fn test_liked_content_requires_authentication() {
     let client = TestClient::new(server.base_url.clone());
 
     // Try to like content without authentication
-    let response = client.add_liked_content(TRACK_1_ID).await;
+    let response = client.add_liked_content("track", TRACK_1_ID).await;
     assert_eq!(response.status(), StatusCode::FORBIDDEN);
 }
 

@@ -343,18 +343,35 @@ fn calculate_object_diff(old: &serde_json::Value, new: &serde_json::Value) -> se
 // ChangeLogStore
 // =============================================================================
 
+/// Default inactivity threshold (in seconds) after which a batch is considered stale.
+/// Stale batches are automatically closed when a new change is recorded.
+pub const DEFAULT_BATCH_INACTIVITY_THRESHOLD_SECS: i64 = 3600; // 1 hour
+
 /// Store for managing catalog changelog batches and entries.
 ///
 /// Shares the same database connection as SqliteCatalogStore.
 #[derive(Clone)]
 pub struct ChangeLogStore {
     conn: Arc<Mutex<Connection>>,
+    /// Inactivity threshold in seconds for auto-closing batches.
+    batch_inactivity_threshold_secs: i64,
 }
 
 impl ChangeLogStore {
     /// Create a new ChangeLogStore with a shared connection.
     pub fn new(conn: Arc<Mutex<Connection>>) -> Self {
-        Self { conn }
+        Self {
+            conn,
+            batch_inactivity_threshold_secs: DEFAULT_BATCH_INACTIVITY_THRESHOLD_SECS,
+        }
+    }
+
+    /// Create a new ChangeLogStore with a custom inactivity threshold.
+    pub fn with_inactivity_threshold(conn: Arc<Mutex<Connection>>, threshold_secs: i64) -> Self {
+        Self {
+            conn,
+            batch_inactivity_threshold_secs: threshold_secs,
+        }
     }
 
     /// Get the current Unix timestamp.
@@ -491,6 +508,130 @@ impl ChangeLogStore {
         })
     }
 
+    /// Internal method to close a batch using an existing connection lock.
+    fn close_batch_internal(&self, conn: &Connection, id: &str) -> Result<CatalogBatch> {
+        let batch = self.get_batch_internal(conn, id)?;
+        let batch = match batch {
+            Some(b) => b,
+            None => bail!("Batch not found: {}", id),
+        };
+
+        if !batch.is_open {
+            bail!("Batch is already closed: {}", id);
+        }
+
+        let now = Self::now();
+        conn.execute(
+            "UPDATE catalog_batches SET is_open = 0, closed_at = ?1 WHERE id = ?2",
+            params![now, id],
+        )?;
+
+        Ok(CatalogBatch {
+            is_open: false,
+            closed_at: Some(now),
+            ..batch
+        })
+    }
+
+    /// Generate a date-based name for auto-created batches.
+    fn generate_auto_batch_name() -> String {
+        use chrono::{DateTime, Utc};
+        let now: DateTime<Utc> = Utc::now();
+        now.format("%Y-%m-%d").to_string()
+    }
+
+    /// Internal method to create a batch using an existing connection lock.
+    /// Does NOT check for existing open batches - caller is responsible.
+    fn create_batch_internal(
+        &self,
+        conn: &Connection,
+        name: &str,
+        description: Option<&str>,
+    ) -> Result<CatalogBatch> {
+        let id = Uuid::new_v4().to_string();
+        let now = Self::now();
+
+        conn.execute(
+            "INSERT INTO catalog_batches (id, name, description, is_open, created_at, last_activity_at)
+             VALUES (?1, ?2, ?3, 1, ?4, ?4)",
+            params![id, name, description, now],
+        )?;
+
+        Ok(CatalogBatch {
+            id,
+            name: name.to_string(),
+            description: description.map(|s| s.to_string()),
+            is_open: true,
+            created_at: now,
+            closed_at: None,
+            last_activity_at: now,
+        })
+    }
+
+    /// Ensure an active batch exists, creating one if needed.
+    ///
+    /// This method implements automatic batch management:
+    /// - If an open batch exists and is not stale, returns it
+    /// - If an open batch exists but is stale (inactive > threshold), closes it and creates a new one
+    /// - If no open batch exists, creates a new one
+    ///
+    /// Auto-created batches are named with the current date (YYYY-MM-DD).
+    pub fn ensure_active_batch_internal(&self, conn: &Connection) -> Result<CatalogBatch> {
+        // Check for existing open batch
+        if let Some(batch) = self.get_active_batch_internal(conn)? {
+            let now = Self::now();
+            let inactive_seconds = now - batch.last_activity_at;
+
+            if inactive_seconds > self.batch_inactivity_threshold_secs {
+                // Batch is stale, close it and create a new one
+                tracing::info!(
+                    "Closing stale batch '{}' (inactive for {} seconds)",
+                    batch.name,
+                    inactive_seconds
+                );
+                self.close_batch_internal(conn, &batch.id)?;
+            } else {
+                // Batch is still active
+                return Ok(batch);
+            }
+        }
+
+        // Create a new auto-batch
+        let name = Self::generate_auto_batch_name();
+        tracing::info!("Creating new auto-batch '{}'", name);
+        self.create_batch_internal(conn, &name, None)
+    }
+
+    /// Close any stale open batches.
+    ///
+    /// This is intended to be called periodically by a background task.
+    /// Returns the number of batches that were closed.
+    pub fn close_stale_batches(&self) -> Result<usize> {
+        let conn = self.conn.lock().unwrap();
+        let now = Self::now();
+        let cutoff = now - self.batch_inactivity_threshold_secs;
+
+        // Find and close stale open batches
+        let mut stmt = conn.prepare(
+            "SELECT id, name FROM catalog_batches WHERE is_open = 1 AND last_activity_at < ?1",
+        )?;
+
+        let stale_batches: Vec<(String, String)> = stmt
+            .query_map(params![cutoff], |row| Ok((row.get(0)?, row.get(1)?)))?
+            .collect::<Result<Vec<_>, _>>()?;
+
+        let count = stale_batches.len();
+        for (id, name) in stale_batches {
+            tracing::info!("Background task closing stale batch '{}'", name);
+            conn.execute(
+                "UPDATE catalog_batches SET is_open = 0, closed_at = ?1 WHERE id = ?2",
+                params![now, id],
+            )?;
+        }
+
+        Ok(count)
+    }
+
     /// List batches, optionally filtered by open/closed status.
     pub fn list_batches(&self, is_open: Option<bool>) -> Result<Vec<CatalogBatch>> {
         let conn = self.conn.lock().unwrap();
@@ -587,6 +728,10 @@ impl ChangeLogStore {
     /// This is the internal method called during catalog write operations.
     /// It requires an existing connection lock to participate in the same transaction.
     ///
+    /// If no active batch exists, one is automatically created with a date-based name.
+    /// If the active batch is stale (inactive for longer than the threshold), it is
+    /// closed and a new batch is created.
+    ///
     /// # Arguments
     /// * `conn` - Locked database connection (for transaction safety)
     /// * `entity_type` - Type of entity being changed
@@ -597,7 +742,7 @@ impl ChangeLogStore {
     /// * `display_summary` - Human-readable summary of the change
     ///
     /// # Returns
-    /// The ID of the inserted change entry, or an error if no batch is active.
+    /// The ID of the inserted change entry.
     pub fn record_change_internal(
         &self,
         conn: &Connection,
@@ -608,12 +753,8 @@ impl ChangeLogStore {
         entity_snapshot: &serde_json::Value,
         display_summary: Option<&str>,
     ) -> Result<i64> {
-        // Get active batch
-        let batch = self.get_active_batch_internal(conn)?;
-        let batch = match batch {
-            Some(b) => b,
-            None => bail!("Cannot record change: no active batch"),
-        };
+        // Ensure we have an active batch (auto-create if needed)
+        let batch = self.ensure_active_batch_internal(conn)?;
 
         let now = Self::now();
         let field_changes_str = serde_json::to_string(field_changes)?;
@@ -1198,7 +1339,7 @@ mod tests {
             let conn = store.conn.lock().unwrap();
             conn.execute(
                 "INSERT INTO catalog_change_log (batch_id, entity_type, entity_id, operation, field_changes, entity_snapshot, created_at)
-                 VALUES (?1, 'artist', 'R1', 'create', '{}', '{\"id\":\"R1\"}', ?2)",
+                 VALUES (?1, 'artist', 'test_artist_001', 'create', '{}', '{\"id\":\"test_artist_001\"}', ?2)",
                 params![batch.id, ChangeLogStore::now()],
             ).unwrap();
         }
@@ -1223,12 +1364,12 @@ mod tests {
             let now = ChangeLogStore::now();
             conn.execute(
                 "INSERT INTO catalog_change_log (batch_id, entity_type, entity_id, operation, field_changes, entity_snapshot, created_at)
-                 VALUES (?1, 'artist', 'R1', 'create', '{}', '{}', ?2)",
+                 VALUES (?1, 'artist', 'test_artist_001', 'create', '{}', '{}', ?2)",
                 params![batch.id, now],
             ).unwrap();
             conn.execute(
                 "INSERT INTO catalog_change_log (batch_id, entity_type, entity_id, operation, field_changes, entity_snapshot, created_at)
-                 VALUES (?1, 'album', 'A1', 'create', '{}', '{}', ?2)",
+                 VALUES (?1, 'album', 'test_album_001', 'create', '{}', '{}', ?2)",
                 params![batch.id, now],
             ).unwrap();
         }
@@ -1292,7 +1433,7 @@ mod tests {
             let now = ChangeLogStore::now();
             conn.execute(
                 "INSERT INTO catalog_change_log (batch_id, entity_type, entity_id, operation, field_changes, entity_snapshot, display_summary, created_at)
-                 VALUES (?1, 'artist', 'R1', 'create', '{\"name\":{\"old\":null,\"new\":\"Test Artist\"}}', '{\"id\":\"R1\",\"name\":\"Test Artist\"}', 'Created artist Test Artist', ?2)",
+                 VALUES (?1, 'artist', 'test_artist_001', 'create', '{\"name\":{\"old\":null,\"new\":\"Test Artist\"}}', '{\"id\":\"test_artist_001\",\"name\":\"Test Artist\"}', 'Created artist Test Artist', ?2)",
                 params![batch.id, now],
             ).unwrap();
         }
@@ -1303,7 +1444,7 @@ mod tests {
         let change = &changes[0];
         assert_eq!(change.batch_id, batch.id);
         assert_eq!(change.entity_type, ChangeEntityType::Artist);
-        assert_eq!(change.entity_id, "R1");
+        assert_eq!(change.entity_id, "test_artist_001");
         assert_eq!(change.operation, ChangeOperation::Create);
         assert_eq!(change.display_summary, Some("Created artist Test Artist".to_string()));
     }
@@ -1318,7 +1459,7 @@ mod tests {
             let conn = store.conn.lock().unwrap();
             conn.execute(
                 "INSERT INTO catalog_change_log (batch_id, entity_type, entity_id, operation, field_changes, entity_snapshot, created_at)
-                 VALUES (?1, 'artist', 'R1', 'create', '{}', '{}', 1000)",
+                 VALUES (?1, 'artist', 'test_artist_001', 'create', '{}', '{}', 1000)",
                 params![batch1.id],
             ).unwrap();
         }
@@ -1329,12 +1470,12 @@ mod tests {
             let conn = store.conn.lock().unwrap();
             conn.execute(
                 "INSERT INTO catalog_change_log (batch_id, entity_type, entity_id, operation, field_changes, entity_snapshot, created_at)
-                 VALUES (?1, 'artist', 'R1', 'update', '{}', '{}', 2000)",
+                 VALUES (?1, 'artist', 'test_artist_001', 'update', '{}', '{}', 2000)",
                 params![batch2.id],
             ).unwrap();
         }
 
-        let history = store.get_entity_history(ChangeEntityType::Artist, "R1").unwrap();
+        let history = store.get_entity_history(ChangeEntityType::Artist, "test_artist_001").unwrap();
         assert_eq!(history.len(), 2);
         // Should be ordered by created_at DESC (most recent first)
         assert_eq!(history[0].operation, ChangeOperation::Update);
@@ -1352,22 +1493,22 @@ mod tests {
             // Add artist change
             conn.execute(
                 "INSERT INTO catalog_change_log (batch_id, entity_type, entity_id, operation, field_changes, entity_snapshot, created_at)
-                 VALUES (?1, 'artist', 'R1', 'create', '{}', '{}', ?2)",
+                 VALUES (?1, 'artist', 'test_artist_001', 'create', '{}', '{}', ?2)",
                 params![batch.id, now],
             ).unwrap();
             // Add album change with same ID
             conn.execute(
                 "INSERT INTO catalog_change_log (batch_id, entity_type, entity_id, operation, field_changes, entity_snapshot, created_at)
-                 VALUES (?1, 'album', 'R1', 'create', '{}', '{}', ?2)",
+                 VALUES (?1, 'album', 'test_artist_001', 'create', '{}', '{}', ?2)",
                 params![batch.id, now],
             ).unwrap();
         }
 
-        let artist_history = store.get_entity_history(ChangeEntityType::Artist, "R1").unwrap();
+        let artist_history = store.get_entity_history(ChangeEntityType::Artist, "test_artist_001").unwrap();
         assert_eq!(artist_history.len(), 1);
         assert_eq!(artist_history[0].entity_type, ChangeEntityType::Artist);
 
-        let album_history = store.get_entity_history(ChangeEntityType::Album, "R1").unwrap();
+        let album_history = store.get_entity_history(ChangeEntityType::Album, "test_artist_001").unwrap();
         assert_eq!(album_history.len(), 1);
         assert_eq!(album_history[0].entity_type, ChangeEntityType::Album);
     }
@@ -1379,14 +1520,14 @@ mod tests {
     #[test]
     fn test_diff_create_operation() {
         let new_entity = serde_json::json!({
-            "id": "R1",
+            "id": "test_artist_001",
             "name": "The Beatles"
         });
 
         let diff = calculate_field_diff(None, Some(&new_entity));
 
         assert_eq!(diff["id"]["old"], serde_json::Value::Null);
-        assert_eq!(diff["id"]["new"], "R1");
+        assert_eq!(diff["id"]["new"], "test_artist_001");
         assert_eq!(diff["name"]["old"], serde_json::Value::Null);
         assert_eq!(diff["name"]["new"], "The Beatles");
     }
@@ -1394,13 +1535,13 @@ mod tests {
     #[test]
     fn test_diff_delete_operation() {
         let old_entity = serde_json::json!({
-            "id": "R1",
+            "id": "test_artist_001",
             "name": "The Beatles"
         });
 
         let diff = calculate_field_diff(Some(&old_entity), None);
 
-        assert_eq!(diff["id"]["old"], "R1");
+        assert_eq!(diff["id"]["old"], "test_artist_001");
         assert_eq!(diff["id"]["new"], serde_json::Value::Null);
         assert_eq!(diff["name"]["old"], "The Beatles");
         assert_eq!(diff["name"]["new"], serde_json::Value::Null);
@@ -1409,11 +1550,11 @@ mod tests {
     #[test]
     fn test_diff_update_operation_changed_fields() {
         let old_entity = serde_json::json!({
-            "id": "R1",
+            "id": "test_artist_001",
             "name": "The Beetles"
         });
         let new_entity = serde_json::json!({
-            "id": "R1",
+            "id": "test_artist_001",
             "name": "The Beatles"
         });
 
@@ -1429,7 +1570,7 @@ mod tests {
     #[test]
     fn test_diff_update_no_changes() {
         let entity = serde_json::json!({
-            "id": "R1",
+            "id": "test_artist_001",
             "name": "The Beatles"
         });
 
@@ -1442,10 +1583,10 @@ mod tests {
     #[test]
     fn test_diff_field_added() {
         let old_entity = serde_json::json!({
-            "id": "R1"
+            "id": "test_artist_001"
         });
         let new_entity = serde_json::json!({
-            "id": "R1",
+            "id": "test_artist_001",
             "name": "The Beatles"
         });
 
@@ -1459,11 +1600,11 @@ mod tests {
     #[test]
     fn test_diff_field_removed() {
         let old_entity = serde_json::json!({
-            "id": "R1",
+            "id": "test_artist_001",
             "name": "The Beatles"
         });
         let new_entity = serde_json::json!({
-            "id": "R1"
+            "id": "test_artist_001"
         });
 
         let diff = calculate_field_diff(Some(&old_entity), Some(&new_entity));
@@ -1526,7 +1667,7 @@ mod tests {
     #[test]
     fn test_extract_entity_name_from_name_field() {
         let snapshot = serde_json::json!({
-            "id": "R1",
+            "id": "test_artist_001",
             "name": "The Beatles"
         });
         assert_eq!(extract_entity_name(&snapshot), Some("The Beatles".to_string()));
@@ -1535,7 +1676,7 @@ mod tests {
     #[test]
     fn test_extract_entity_name_from_title_field() {
         let snapshot = serde_json::json!({
-            "id": "T1",
+            "id": "test_track_001",
             "title": "Come Together"
         });
         assert_eq!(extract_entity_name(&snapshot), Some("Come Together".to_string()));
@@ -1544,7 +1685,7 @@ mod tests {
     #[test]
     fn test_extract_entity_name_prefers_name() {
         let snapshot = serde_json::json!({
-            "id": "A1",
+            "id": "test_album_001",
             "name": "Abbey Road",
             "title": "Some Title"
         });
@@ -1572,12 +1713,12 @@ mod tests {
         let batch = store.create_batch("Test Batch", None).unwrap();
 
         // Record a change
-        let snapshot = serde_json::json!({"id": "R1", "name": "The Beatles"});
+        let snapshot = serde_json::json!({"id": "test_artist_001", "name": "The Beatles"});
         let diff = calculate_field_diff(None, Some(&snapshot));
 
         let change_id = store.record_change(
             ChangeEntityType::Artist,
-            "R1",
+            "test_artist_001",
             ChangeOperation::Create,
             &diff,
             &snapshot,
@@ -1589,28 +1730,40 @@ mod tests {
         // Verify the change was recorded
         let changes = store.get_batch_changes(&batch.id).unwrap();
         assert_eq!(changes.len(), 1);
-        assert_eq!(changes[0].entity_id, "R1");
+        assert_eq!(changes[0].entity_id, "test_artist_001");
         assert_eq!(changes[0].operation, ChangeOperation::Create);
     }
 
     #[test]
-    fn test_record_change_fails_without_batch() {
+    fn test_record_change_auto_creates_batch() {
         let store = create_test_store();
 
-        let snapshot = serde_json::json!({"id": "R1", "name": "The Beatles"});
+        // Initially no batch exists
+        assert!(store.get_active_batch().unwrap().is_none());
+
+        let snapshot = serde_json::json!({"id": "test_artist_001", "name": "The Beatles"});
         let diff = serde_json::json!({});
 
+        // Record a change - should auto-create a batch
         let result = store.record_change(
             ChangeEntityType::Artist,
-            "R1",
+            "test_artist_001",
             ChangeOperation::Create,
             &diff,
             &snapshot,
             None,
         );
 
-        assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("no active batch"));
+        assert!(result.is_ok());
+
+        // Verify batch was auto-created
+        let active_batch = store.get_active_batch().unwrap();
+        assert!(active_batch.is_some());
+        let batch = active_batch.unwrap();
+        // Batch name should be date-based (YYYY-MM-DD format)
+        assert!(batch.name.len() == 10);
+        assert!(batch.name.chars().nth(4) == Some('-'));
+        assert!(batch.name.chars().nth(7) == Some('-'));
     }
 
     #[test]
@@ -1624,10 +1777,10 @@ mod tests {
         std::thread::sleep(std::time::Duration::from_millis(10));
 
         // Record a change
-        let snapshot = serde_json::json!({"id": "R1"});
+        let snapshot = serde_json::json!({"id": "test_artist_001"});
         store.record_change(
             ChangeEntityType::Artist,
-            "R1",
+            "test_artist_001",
             ChangeOperation::Create,
             &serde_json::json!({}),
             &snapshot,
@@ -1724,5 +1877,130 @@ mod tests {
         assert_eq!(stale.len(), 1);
         assert_eq!(stale[0].id, batch.id);
         assert_eq!(stale[0].name, "Open Batch");
+    }
+
+    // =========================================================================
+    // Auto-batch and stale batch tests
+    // =========================================================================
+
+    #[test]
+    fn test_close_stale_batches_closes_inactive_batch() {
+        // Create store with 1 second threshold for testing
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute("PRAGMA foreign_keys = ON;", []).unwrap();
+        CATALOG_VERSIONED_SCHEMAS[2].create(&conn).unwrap();
+        let store = ChangeLogStore::with_inactivity_threshold(Arc::new(Mutex::new(conn)), 1);
+
+        // Create a batch
+        let batch = store.create_batch("Test Batch", None).unwrap();
+        assert!(store.get_active_batch().unwrap().is_some());
+
+        // Manually backdate the last_activity_at to make it stale
+        {
+            let conn = store.conn.lock().unwrap();
+            let old_time = ChangeLogStore::now() - 10; // 10 seconds ago
+            conn.execute(
+                "UPDATE catalog_batches SET last_activity_at = ?1 WHERE id = ?2",
+                params![old_time, batch.id],
+            ).unwrap();
+        }
+
+        // Close stale batches
+        let closed_count = store.close_stale_batches().unwrap();
+        assert_eq!(closed_count, 1);
+
+        // Batch should now be closed
+        let active = store.get_active_batch().unwrap();
+        assert!(active.is_none());
+
+        // Verify it's closed, not deleted
+        let closed_batch = store.get_batch(&batch.id).unwrap().unwrap();
+        assert!(!closed_batch.is_open);
+        assert!(closed_batch.closed_at.is_some());
+    }
+
+    #[test]
+    fn test_close_stale_batches_skips_active_batch() {
+        // Create store with 1 hour threshold (default)
+        let store = create_test_store();
+
+        // Create a batch (it's fresh, not stale)
+        store.create_batch("Active Batch", None).unwrap();
+
+        // Try to close stale batches
+        let closed_count = store.close_stale_batches().unwrap();
+        assert_eq!(closed_count, 0);
+
+        // Batch should still be open
+        let active = store.get_active_batch().unwrap();
+        assert!(active.is_some());
+    }
+
+    #[test]
+    fn test_ensure_active_batch_creates_new_when_none_exists() {
+        let store = create_test_store();
+
+        // No batch exists
+        assert!(store.get_active_batch().unwrap().is_none());
+
+        // Ensure active batch
+        let conn = store.conn.lock().unwrap();
+        let batch = store.ensure_active_batch_internal(&conn).unwrap();
+
+        // Batch was created with date-based name
+        assert!(batch.is_open);
+        assert!(batch.name.len() == 10);  // YYYY-MM-DD
+    }
+
+    #[test]
+    fn test_ensure_active_batch_returns_existing_non_stale_batch() {
+        let store = create_test_store();
+
+        // Create a batch manually
+        let created_batch = store.create_batch("My Batch", None).unwrap();
+
+        // Ensure active batch should return the same one
+        let conn = store.conn.lock().unwrap();
+        let batch = store.ensure_active_batch_internal(&conn).unwrap();
+
+        assert_eq!(batch.id, created_batch.id);
+        assert_eq!(batch.name, "My Batch");
+    }
+
+    #[test]
+    fn test_ensure_active_batch_closes_stale_and_creates_new() {
+        // Create store with 1 second threshold for testing
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute("PRAGMA foreign_keys = ON;", []).unwrap();
+        CATALOG_VERSIONED_SCHEMAS[2].create(&conn).unwrap();
+        let store = ChangeLogStore::with_inactivity_threshold(Arc::new(Mutex::new(conn)), 1);
+
+        // Create a batch
+        let old_batch = store.create_batch("Old Batch", None).unwrap();
+
+        // Manually backdate the last_activity_at to make it stale
+        {
+            let conn = store.conn.lock().unwrap();
+            let old_time = ChangeLogStore::now() - 10; // 10 seconds ago
+            conn.execute(
+                "UPDATE catalog_batches SET last_activity_at = ?1 WHERE id = ?2",
+                params![old_time, old_batch.id],
+            ).unwrap();
+        }
+
+        // Ensure active batch should close old one and create new
+        let conn = store.conn.lock().unwrap();
+        let new_batch = store.ensure_active_batch_internal(&conn).unwrap();
+
+        // Should be a different batch
+        assert_ne!(new_batch.id, old_batch.id);
+        // New batch should have date-based name
+        assert!(new_batch.name.len() == 10);  // YYYY-MM-DD
+        drop(conn);
+
+        // Old batch should be closed
+        let old_batch_now = store.get_batch(&old_batch.id).unwrap().unwrap();
+        assert!(!old_batch_now.is_open);
+        assert!(old_batch_now.closed_at.is_some());
     }
 }
