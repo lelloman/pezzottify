@@ -733,4 +733,21 @@ impl TestClient {
             .await
             .expect("Admin get changelog entity history request failed")
     }
+
+    // =========================================================================
+    // What's New (User) API
+    // =========================================================================
+
+    /// GET /v1/content/whatsnew
+    pub async fn get_whats_new(&self, limit: Option<usize>) -> Response {
+        let mut url = format!("{}/v1/content/whatsnew", self.base_url);
+        if let Some(limit) = limit {
+            url = format!("{}?limit={}", url, limit);
+        }
+        self.client
+            .get(url)
+            .send()
+            .await
+            .expect("Get what's new request failed")
+    }
 }

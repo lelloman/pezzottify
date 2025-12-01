@@ -741,6 +741,149 @@ impl ChangeLogStore {
 
         Ok(entries)
     }
+
+    // =========================================================================
+    // What's New Endpoint Support
+    // =========================================================================
+
+    /// Get a summary of changes in a batch.
+    ///
+    /// Aggregates all changes in the batch into a summary with:
+    /// - Artists: added (id, name), updated count, deleted (id, name)
+    /// - Albums: added (id, name), updated count, deleted (id, name)
+    /// - Tracks: added count, updated count, deleted count
+    /// - Images: added count, updated count, deleted count (not shown in What's New)
+    pub fn get_batch_summary(&self, batch_id: &str) -> Result<BatchChangeSummary> {
+        let changes = self.get_batch_changes(batch_id)?;
+        Ok(Self::aggregate_changes_to_summary(&changes))
+    }
+
+    /// Aggregate a list of changes into a summary.
+    fn aggregate_changes_to_summary(changes: &[ChangeEntry]) -> BatchChangeSummary {
+        let mut summary = BatchChangeSummary::default();
+
+        for change in changes {
+            // Extract name from entity snapshot
+            let name = change
+                .entity_snapshot
+                .get("name")
+                .and_then(|v| v.as_str())
+                .unwrap_or("Unknown")
+                .to_string();
+
+            let entity_ref = EntityRef {
+                id: change.entity_id.clone(),
+                name,
+            };
+
+            match change.entity_type {
+                ChangeEntityType::Artist => match change.operation {
+                    ChangeOperation::Create => summary.artists.added.push(entity_ref),
+                    ChangeOperation::Update => summary.artists.updated_count += 1,
+                    ChangeOperation::Delete => summary.artists.deleted.push(entity_ref),
+                },
+                ChangeEntityType::Album => match change.operation {
+                    ChangeOperation::Create => summary.albums.added.push(entity_ref),
+                    ChangeOperation::Update => summary.albums.updated_count += 1,
+                    ChangeOperation::Delete => summary.albums.deleted.push(entity_ref),
+                },
+                ChangeEntityType::Track => match change.operation {
+                    ChangeOperation::Create => summary.tracks.added_count += 1,
+                    ChangeOperation::Update => summary.tracks.updated_count += 1,
+                    ChangeOperation::Delete => summary.tracks.deleted_count += 1,
+                },
+                ChangeEntityType::Image => match change.operation {
+                    ChangeOperation::Create => summary.images.added.push(entity_ref),
+                    ChangeOperation::Update => summary.images.updated_count += 1,
+                    ChangeOperation::Delete => summary.images.deleted.push(entity_ref),
+                },
+            }
+        }
+
+        summary
+    }
+
+    /// Get closed batches with their summaries for the What's New endpoint.
+    ///
+    /// Returns batches in descending order by closed_at (most recent first).
+    pub fn get_whats_new_batches(&self, limit: usize) -> Result<Vec<WhatsNewBatch>> {
+        let conn = self.conn.lock().unwrap();
+
+        // Get closed batches
+        let mut stmt = conn.prepare(
+            "SELECT id, name, description, is_open, created_at, closed_at, last_activity_at
+             FROM catalog_batches
+             WHERE is_open = 0
+             ORDER BY closed_at DESC
+             LIMIT ?1",
+        )?;
+
+        let batches: Vec<CatalogBatch> = stmt
+            .query_map(params![limit as i64], |row| {
+                Ok(CatalogBatch {
+                    id: row.get(0)?,
+                    name: row.get(1)?,
+                    description: row.get(2)?,
+                    is_open: row.get::<_, i32>(3)? != 0,
+                    created_at: row.get(4)?,
+                    closed_at: row.get(5)?,
+                    last_activity_at: row.get(6)?,
+                })
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+
+        // Get summaries for each batch
+        let mut result = Vec::with_capacity(batches.len());
+        for batch in batches {
+            let changes = self.get_batch_changes_internal(&conn, &batch.id)?;
+            let summary = Self::aggregate_changes_to_summary(&changes);
+            result.push(WhatsNewBatch {
+                id: batch.id,
+                name: batch.name,
+                description: batch.description,
+                closed_at: batch.closed_at.unwrap_or(0),
+                summary,
+            });
+        }
+
+        Ok(result)
+    }
+
+    /// Internal method to get batch changes with an existing connection.
+    fn get_batch_changes_internal(
+        &self,
+        conn: &Connection,
+        batch_id: &str,
+    ) -> Result<Vec<ChangeEntry>> {
+        let mut stmt = conn.prepare(
+            "SELECT id, batch_id, entity_type, entity_id, operation, field_changes,
+                    entity_snapshot, display_summary, created_at
+             FROM catalog_change_log
+             WHERE batch_id = ?1
+             ORDER BY created_at ASC",
+        )?;
+
+        let entries = stmt
+            .query_map(params![batch_id], |row| {
+                let field_changes_str: String = row.get(5)?;
+                let entity_snapshot_str: String = row.get(6)?;
+
+                Ok(ChangeEntry {
+                    id: row.get(0)?,
+                    batch_id: row.get(1)?,
+                    entity_type: ChangeEntityType::from_db_str(&row.get::<_, String>(2)?),
+                    entity_id: row.get(3)?,
+                    operation: ChangeOperation::from_db_str(&row.get::<_, String>(4)?),
+                    field_changes: serde_json::from_str(&field_changes_str).unwrap_or_default(),
+                    entity_snapshot: serde_json::from_str(&entity_snapshot_str).unwrap_or_default(),
+                    display_summary: row.get(7)?,
+                    created_at: row.get(8)?,
+                })
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+
+        Ok(entries)
+    }
 }
 
 #[cfg(test)]

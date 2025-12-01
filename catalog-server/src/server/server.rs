@@ -527,6 +527,38 @@ async fn delete_image(
     }
 }
 
+// ============================================================================
+// What's New Endpoint (user-facing changelog)
+// ============================================================================
+
+#[derive(Deserialize)]
+struct WhatsNewQuery {
+    #[serde(default = "default_whats_new_limit")]
+    limit: usize,
+}
+
+fn default_whats_new_limit() -> usize {
+    10
+}
+
+/// GET /v1/content/whatsnew - List recent catalog updates
+async fn get_whats_new(
+    _session: Session,
+    State(catalog_store): State<GuardedCatalogStore>,
+    Query(query): Query<WhatsNewQuery>,
+) -> Response {
+    // Cap limit at 50 for performance
+    let limit = query.limit.min(50);
+
+    match catalog_store.get_whats_new_batches(limit) {
+        Ok(batches) => Json(serde_json::json!({ "batches": batches })).into_response(),
+        Err(err) => {
+            error!("Error getting what's new batches: {}", err);
+            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+        }
+    }
+}
+
 fn update_user_liked_content(
     user_manager: GuardedUserManager,
     user_id: usize,
@@ -1696,6 +1728,7 @@ pub fn make_app(
         .route("/track/{id}", get(get_track))
         .route("/track/{id}/resolved", get(get_resolved_track))
         .route("/image/{id}", get(get_image))
+        .route("/whatsnew", get(get_whats_new))
         .layer(GovernorLayer::new(content_read_rate_limit))
         .with_state(state.clone());
 

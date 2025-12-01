@@ -3,7 +3,7 @@
 //! A no-op implementation of CatalogStore for use cases where catalog
 //! functionality is not needed (e.g., CLI tools that only manage users).
 
-use super::changelog::{CatalogBatch, ChangeEntityType, ChangeEntry};
+use super::changelog::{CatalogBatch, ChangeEntityType, ChangeEntry, WhatsNewBatch};
 use super::trait_def::{CatalogStore, SearchableItem};
 use anyhow::Result;
 use std::path::PathBuf;
@@ -149,6 +149,10 @@ impl CatalogStore for NullCatalogStore {
         _entity_type: ChangeEntityType,
         _entity_id: &str,
     ) -> Result<Vec<ChangeEntry>> {
+        Ok(Vec::new())
+    }
+
+    fn get_whats_new_batches(&self, _limit: usize) -> Result<Vec<WhatsNewBatch>> {
         Ok(Vec::new())
     }
 }

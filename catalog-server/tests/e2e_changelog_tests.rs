@@ -390,3 +390,200 @@ async fn test_get_entity_history_all_types() {
         );
     }
 }
+
+// =============================================================================
+// What's New User Endpoint Tests
+// =============================================================================
+
+#[tokio::test]
+async fn test_whats_new_requires_authentication() {
+    let server = TestServer::spawn().await;
+    let client = TestClient::new(server.base_url.clone());
+
+    let response = client.get_whats_new(None).await;
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
+}
+
+#[tokio::test]
+async fn test_whats_new_regular_user_can_access() {
+    let server = TestServer::spawn().await;
+    let client = TestClient::authenticated(server.base_url.clone()).await;
+
+    let response = client.get_whats_new(None).await;
+    assert_eq!(response.status(), StatusCode::OK);
+}
+
+#[tokio::test]
+async fn test_whats_new_returns_empty_when_no_closed_batches() {
+    let server = TestServer::spawn().await;
+    let client = TestClient::authenticated(server.base_url.clone()).await;
+
+    let response = client.get_whats_new(None).await;
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let body: Value = response.json().await.unwrap();
+    let batches = body["batches"].as_array().unwrap();
+    assert!(batches.is_empty(), "Should have no closed batches initially");
+}
+
+#[tokio::test]
+async fn test_whats_new_returns_closed_batches() {
+    let server = TestServer::spawn().await;
+    let admin = TestClient::authenticated_admin(server.base_url.clone()).await;
+    let user = TestClient::authenticated(server.base_url.clone()).await;
+
+    // Close any existing active batch from fixtures
+    let response = admin.admin_list_changelog_batches(Some(true)).await;
+    let open_batches: Vec<Value> = response.json().await.unwrap();
+    for batch in open_batches {
+        let id = batch["id"].as_str().unwrap();
+        admin.admin_close_changelog_batch(id).await;
+    }
+
+    // Create a batch
+    let response = admin
+        .admin_create_changelog_batch("Test Release", Some("New music release"))
+        .await;
+    assert_eq!(response.status(), StatusCode::CREATED);
+    let batch: Value = response.json().await.unwrap();
+    let batch_id = batch["id"].as_str().unwrap();
+
+    // Close the batch
+    let response = admin.admin_close_changelog_batch(batch_id).await;
+    assert_eq!(response.status(), StatusCode::OK);
+
+    // Regular user should see the closed batch (only the one we created, not fixture batch)
+    let response = user.get_whats_new(None).await;
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let body: Value = response.json().await.unwrap();
+    let batches = body["batches"].as_array().unwrap();
+    // At least our test batch should be there
+    let test_batch = batches.iter().find(|b| b["name"] == "Test Release");
+    assert!(test_batch.is_some(), "Should find our test batch");
+    let test_batch = test_batch.unwrap();
+    assert_eq!(test_batch["description"], "New music release");
+    assert!(test_batch["closed_at"].is_number(), "Should have closed_at timestamp");
+}
+
+#[tokio::test]
+async fn test_whats_new_respects_limit_parameter() {
+    let server = TestServer::spawn().await;
+    let admin = TestClient::authenticated_admin(server.base_url.clone()).await;
+    let user = TestClient::authenticated(server.base_url.clone()).await;
+
+    // Close any existing active batch from fixtures
+    let response = admin.admin_list_changelog_batches(Some(true)).await;
+    let open_batches: Vec<Value> = response.json().await.unwrap();
+    for batch in open_batches {
+        let id = batch["id"].as_str().unwrap();
+        admin.admin_close_changelog_batch(id).await;
+    }
+
+    // Create and close 3 batches
+    for i in 1..=3 {
+        let response = admin
+            .admin_create_changelog_batch(&format!("Release {}", i), None)
+            .await;
+        assert_eq!(response.status(), StatusCode::CREATED);
+        let batch: Value = response.json().await.unwrap();
+        let batch_id = batch["id"].as_str().unwrap();
+
+        let response = admin.admin_close_changelog_batch(batch_id).await;
+        assert_eq!(response.status(), StatusCode::OK);
+    }
+
+    // Request with limit=2
+    let response = user.get_whats_new(Some(2)).await;
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let body: Value = response.json().await.unwrap();
+    let batches = body["batches"].as_array().unwrap();
+    assert_eq!(batches.len(), 2, "Should return only 2 batches");
+}
+
+#[tokio::test]
+async fn test_whats_new_default_limit() {
+    let server = TestServer::spawn().await;
+    let admin = TestClient::authenticated_admin(server.base_url.clone()).await;
+    let user = TestClient::authenticated(server.base_url.clone()).await;
+
+    // Close any existing active batch from fixtures
+    let response = admin.admin_list_changelog_batches(Some(true)).await;
+    let open_batches: Vec<Value> = response.json().await.unwrap();
+    for batch in open_batches {
+        let id = batch["id"].as_str().unwrap();
+        admin.admin_close_changelog_batch(id).await;
+    }
+
+    // Create and close 12 batches
+    for i in 1..=12 {
+        let response = admin
+            .admin_create_changelog_batch(&format!("Release {}", i), None)
+            .await;
+        assert_eq!(response.status(), StatusCode::CREATED);
+        let batch: Value = response.json().await.unwrap();
+        let batch_id = batch["id"].as_str().unwrap();
+
+        let response = admin.admin_close_changelog_batch(batch_id).await;
+        assert_eq!(response.status(), StatusCode::OK);
+    }
+
+    // Request without limit should use default (10)
+    let response = user.get_whats_new(None).await;
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let body: Value = response.json().await.unwrap();
+    let batches = body["batches"].as_array().unwrap();
+    assert_eq!(batches.len(), 10, "Should return default 10 batches");
+}
+
+#[tokio::test]
+async fn test_whats_new_orders_by_closed_at_desc() {
+    let server = TestServer::spawn().await;
+    let admin = TestClient::authenticated_admin(server.base_url.clone()).await;
+    let user = TestClient::authenticated(server.base_url.clone()).await;
+
+    // Close any existing active batch from fixtures
+    let response = admin.admin_list_changelog_batches(Some(true)).await;
+    let open_batches: Vec<Value> = response.json().await.unwrap();
+    for batch in open_batches {
+        let id = batch["id"].as_str().unwrap();
+        admin.admin_close_changelog_batch(id).await;
+    }
+
+    // Create and close batches
+    for i in 1..=3 {
+        let response = admin
+            .admin_create_changelog_batch(&format!("Release {}", i), None)
+            .await;
+        assert_eq!(response.status(), StatusCode::CREATED);
+        let batch: Value = response.json().await.unwrap();
+        let batch_id = batch["id"].as_str().unwrap();
+
+        let response = admin.admin_close_changelog_batch(batch_id).await;
+        assert_eq!(response.status(), StatusCode::OK);
+
+        // 1 second delay to ensure different closed_at timestamps (stored in seconds)
+        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    }
+
+    let response = user.get_whats_new(None).await;
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let body: Value = response.json().await.unwrap();
+    let batches = body["batches"].as_array().unwrap();
+
+    // Find the batches we created (they should be at the top since they're most recent)
+    let release_names: Vec<&str> = batches
+        .iter()
+        .filter_map(|b| b["name"].as_str())
+        .filter(|n| n.starts_with("Release "))
+        .collect();
+
+    // Most recent should be first (Release 3)
+    assert!(release_names.len() >= 3, "Should have at least 3 release batches");
+    assert_eq!(release_names[0], "Release 3");
+    assert_eq!(release_names[1], "Release 2");
+    assert_eq!(release_names[2], "Release 1");
+}

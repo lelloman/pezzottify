@@ -146,6 +146,9 @@ pub trait CatalogStore: Send + Sync {
         entity_type: super::ChangeEntityType,
         entity_id: &str,
     ) -> Result<Vec<super::ChangeEntry>>;
+
+    /// Get closed batches with summaries for the What's New endpoint.
+    fn get_whats_new_batches(&self, limit: usize) -> Result<Vec<super::WhatsNewBatch>>;
 }
 
 /// A searchable item for the search index.
