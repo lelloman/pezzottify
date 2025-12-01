@@ -1555,6 +1555,62 @@ async fn admin_delete_changelog_batch(
     }
 }
 
+/// Get all changes in a changelog batch
+async fn admin_get_changelog_batch_changes(
+    _session: Session,
+    State(catalog_store): State<GuardedCatalogStore>,
+    Path(batch_id): Path<String>,
+) -> Response {
+    // First check if batch exists
+    match catalog_store.get_changelog_batch(&batch_id) {
+        Ok(None) => return StatusCode::NOT_FOUND.into_response(),
+        Err(err) => {
+            error!("Error checking changelog batch: {}", err);
+            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+        }
+        Ok(Some(_)) => {}
+    }
+
+    match catalog_store.get_changelog_batch_changes(&batch_id) {
+        Ok(changes) => Json(changes).into_response(),
+        Err(err) => {
+            error!("Error getting changelog batch changes: {}", err);
+            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+        }
+    }
+}
+
+/// Get change history for a specific entity
+async fn admin_get_changelog_entity_history(
+    _session: Session,
+    State(catalog_store): State<GuardedCatalogStore>,
+    Path((entity_type, entity_id)): Path<(String, String)>,
+) -> Response {
+    use crate::catalog_store::ChangeEntityType;
+
+    let entity_type = match entity_type.to_lowercase().as_str() {
+        "artist" => ChangeEntityType::Artist,
+        "album" => ChangeEntityType::Album,
+        "track" => ChangeEntityType::Track,
+        "image" => ChangeEntityType::Image,
+        _ => {
+            return (
+                StatusCode::BAD_REQUEST,
+                "Invalid entity type. Must be one of: artist, album, track, image",
+            )
+                .into_response()
+        }
+    };
+
+    match catalog_store.get_changelog_entity_history(entity_type, &entity_id) {
+        Ok(changes) => Json(changes).into_response(),
+        Err(err) => {
+            error!("Error getting changelog entity history: {}", err);
+            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+        }
+    }
+}
+
 impl ServerState {
     fn new(
         config: ServerConfig,
@@ -1841,6 +1897,14 @@ pub fn make_app(
         .route(
             "/changelog/batch/{batch_id}",
             delete(admin_delete_changelog_batch),
+        )
+        .route(
+            "/changelog/batch/{batch_id}/changes",
+            get(admin_get_changelog_batch_changes),
+        )
+        .route(
+            "/changelog/entity/{entity_type}/{entity_id}",
+            get(admin_get_changelog_entity_history),
         )
         .layer(GovernorLayer::new(write_rate_limit.clone()))
         .route_layer(middleware::from_fn_with_state(
