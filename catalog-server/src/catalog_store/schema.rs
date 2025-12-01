@@ -313,6 +313,115 @@ fn migrate_v0_to_v1(conn: &rusqlite::Connection) -> anyhow::Result<()> {
 }
 
 // =============================================================================
+// Version 2 - Add catalog changelog tables
+// =============================================================================
+
+/// Catalog batches table - groups related catalog changes
+const CATALOG_BATCHES_TABLE_V2: Table = Table {
+    name: "catalog_batches",
+    columns: &[
+        sqlite_column!("id", &SqlType::Text, is_primary_key = true),
+        sqlite_column!("name", &SqlType::Text, non_null = true),
+        sqlite_column!("description", &SqlType::Text),
+        sqlite_column!("is_open", &SqlType::Integer, non_null = true, default_value = Some("1")),
+        sqlite_column!("created_at", &SqlType::Integer, non_null = true),
+        sqlite_column!("closed_at", &SqlType::Integer),
+        sqlite_column!("last_activity_at", &SqlType::Integer, non_null = true),
+    ],
+    indices: &[
+        ("idx_batches_is_open", "is_open"),
+        ("idx_batches_closed_at", "closed_at DESC"),
+    ],
+    unique_constraints: &[],
+};
+
+/// Catalog change log table - tracks individual entity changes
+const CATALOG_CHANGE_LOG_TABLE_V2: Table = Table {
+    name: "catalog_change_log",
+    columns: &[
+        sqlite_column!("id", &SqlType::Integer, is_primary_key = true), // AUTOINCREMENT via INTEGER PRIMARY KEY
+        sqlite_column!(
+            "batch_id",
+            &SqlType::Text,
+            non_null = true,
+            foreign_key = Some(&ForeignKey {
+                foreign_table: "catalog_batches",
+                foreign_column: "id",
+                on_delete: ForeignKeyOnChange::Cascade,
+            })
+        ),
+        sqlite_column!("entity_type", &SqlType::Text, non_null = true), // 'artist', 'album', 'track', 'image'
+        sqlite_column!("entity_id", &SqlType::Text, non_null = true),
+        sqlite_column!("operation", &SqlType::Text, non_null = true), // 'create', 'update', 'delete'
+        sqlite_column!("field_changes", &SqlType::Text, non_null = true), // JSON
+        sqlite_column!("entity_snapshot", &SqlType::Text, non_null = true), // JSON
+        sqlite_column!("display_summary", &SqlType::Text),
+        sqlite_column!("created_at", &SqlType::Integer, non_null = true),
+    ],
+    indices: &[
+        ("idx_changelog_batch", "batch_id"),
+        ("idx_changelog_entity", "entity_type, entity_id"),
+        ("idx_changelog_created", "created_at DESC"),
+    ],
+    unique_constraints: &[],
+};
+
+/// Migration from version 1 to version 2: add changelog tables
+fn migrate_v1_to_v2(conn: &rusqlite::Connection) -> anyhow::Result<()> {
+    // Create catalog_batches table
+    conn.execute(
+        "CREATE TABLE catalog_batches (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            description TEXT,
+            is_open INTEGER NOT NULL DEFAULT 1,
+            created_at INTEGER NOT NULL,
+            closed_at INTEGER,
+            last_activity_at INTEGER NOT NULL
+        )",
+        [],
+    )?;
+    conn.execute(
+        "CREATE INDEX idx_batches_is_open ON catalog_batches(is_open)",
+        [],
+    )?;
+    conn.execute(
+        "CREATE INDEX idx_batches_closed_at ON catalog_batches(closed_at DESC)",
+        [],
+    )?;
+
+    // Create catalog_change_log table
+    conn.execute(
+        "CREATE TABLE catalog_change_log (
+            id INTEGER PRIMARY KEY,
+            batch_id TEXT NOT NULL REFERENCES catalog_batches(id) ON DELETE CASCADE,
+            entity_type TEXT NOT NULL,
+            entity_id TEXT NOT NULL,
+            operation TEXT NOT NULL,
+            field_changes TEXT NOT NULL,
+            entity_snapshot TEXT NOT NULL,
+            display_summary TEXT,
+            created_at INTEGER NOT NULL
+        )",
+        [],
+    )?;
+    conn.execute(
+        "CREATE INDEX idx_changelog_batch ON catalog_change_log(batch_id)",
+        [],
+    )?;
+    conn.execute(
+        "CREATE INDEX idx_changelog_entity ON catalog_change_log(entity_type, entity_id)",
+        [],
+    )?;
+    conn.execute(
+        "CREATE INDEX idx_changelog_created ON catalog_change_log(created_at DESC)",
+        [],
+    )?;
+
+    Ok(())
+}
+
+// =============================================================================
 // Versioned Schema Definition
 // =============================================================================
 
@@ -321,6 +430,7 @@ fn migrate_v0_to_v1(conn: &rusqlite::Connection) -> anyhow::Result<()> {
 /// The catalog database uses a separate version namespace from the user database.
 /// Initial version (0) contains all core tables and relationship tables.
 /// Version 1 adds display_image_id to artists and albums.
+/// Version 2 adds catalog changelog tables (catalog_batches, catalog_change_log).
 pub const CATALOG_VERSIONED_SCHEMAS: &[VersionedSchema] = &[
     VersionedSchema {
         version: 0,
@@ -355,6 +465,26 @@ pub const CATALOG_VERSIONED_SCHEMAS: &[VersionedSchema] = &[
             ALBUM_IMAGES_TABLE_V0,
         ],
         migration: Some(migrate_v0_to_v1),
+    },
+    VersionedSchema {
+        version: 2,
+        tables: &[
+            // Core tables first (order matters for foreign keys)
+            ARTISTS_TABLE_V1,
+            ALBUMS_TABLE_V1,
+            IMAGES_TABLE_V0,
+            TRACKS_TABLE_V0,
+            // Relationship tables
+            ALBUM_ARTISTS_TABLE_V0,
+            TRACK_ARTISTS_TABLE_V0,
+            RELATED_ARTISTS_TABLE_V0,
+            ARTIST_IMAGES_TABLE_V0,
+            ALBUM_IMAGES_TABLE_V0,
+            // Changelog tables
+            CATALOG_BATCHES_TABLE_V2,
+            CATALOG_CHANGE_LOG_TABLE_V2,
+        ],
+        migration: Some(migrate_v1_to_v2),
     },
 ];
 
@@ -538,5 +668,74 @@ mod tests {
             [],
         );
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_v2_schema_creates_changelog_tables() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute("PRAGMA foreign_keys = ON;", []).unwrap();
+        let schema = &CATALOG_VERSIONED_SCHEMAS[2];
+        schema.create(&conn).unwrap();
+        schema.validate(&conn).unwrap();
+
+        // Verify catalog_batches table exists
+        let batch_exists: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='catalog_batches'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(batch_exists, 1);
+
+        // Verify catalog_change_log table exists
+        let changelog_exists: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='catalog_change_log'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(changelog_exists, 1);
+    }
+
+    #[test]
+    fn test_v2_changelog_cascade_delete_on_batch() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute("PRAGMA foreign_keys = ON;", []).unwrap();
+        let schema = &CATALOG_VERSIONED_SCHEMAS[2];
+        schema.create(&conn).unwrap();
+
+        // Insert a batch
+        conn.execute(
+            "INSERT INTO catalog_batches (id, name, is_open, created_at, last_activity_at)
+             VALUES ('B1', 'Test Batch', 1, 1700000000, 1700000000)",
+            [],
+        )
+        .unwrap();
+
+        // Insert a change log entry
+        conn.execute(
+            "INSERT INTO catalog_change_log (batch_id, entity_type, entity_id, operation, field_changes, entity_snapshot, created_at)
+             VALUES ('B1', 'artist', 'R1', 'create', '{}', '{\"id\":\"R1\",\"name\":\"Test\"}', 1700000000)",
+            [],
+        )
+        .unwrap();
+
+        // Verify change exists
+        let change_count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM catalog_change_log", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(change_count, 1);
+
+        // Delete the batch
+        conn.execute("DELETE FROM catalog_batches WHERE id = 'B1'", [])
+            .unwrap();
+
+        // Verify change was cascade deleted
+        let change_count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM catalog_change_log", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(change_count, 0);
     }
 }
