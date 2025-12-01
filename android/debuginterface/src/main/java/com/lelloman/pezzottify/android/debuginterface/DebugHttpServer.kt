@@ -7,7 +7,9 @@ import com.lelloman.pezzottify.android.domain.cache.StaticsCache
 import com.lelloman.pezzottify.android.domain.memory.MemoryInfo
 import com.lelloman.pezzottify.android.domain.memory.MemoryPressureLevel
 import com.lelloman.pezzottify.android.domain.memory.MemoryPressureMonitor
+import com.lelloman.pezzottify.android.domain.statics.StaticsStore
 import fi.iki.elonen.NanoHTTPD
+import kotlinx.coroutines.runBlocking
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -15,7 +17,8 @@ import javax.inject.Singleton
 class DebugHttpServer @Inject constructor(
     private val memoryPressureMonitor: MemoryPressureMonitor,
     private val staticsCache: StaticsCache,
-    private val cacheMetricsCollector: CacheMetricsCollector
+    private val cacheMetricsCollector: CacheMetricsCollector,
+    private val staticsStore: StaticsStore
 ) : NanoHTTPD(DEFAULT_PORT) {
 
     companion object {
@@ -26,6 +29,7 @@ class DebugHttpServer @Inject constructor(
         return when {
             session.method == Method.GET && session.uri == "/" -> serveDashboard()
             session.method == Method.POST && session.uri == "/action/clear-cache" -> handleClearCache()
+            session.method == Method.POST && session.uri == "/action/clear-statics-db" -> handleClearStaticsDb()
             session.method == Method.POST && session.uri == "/action/reset-metrics" -> handleResetMetrics()
             session.method == Method.POST && session.uri == "/action/refresh-memory" -> handleRefreshMemory()
             else -> newFixedLengthResponse(Response.Status.NOT_FOUND, MIME_PLAINTEXT, "Not Found")
@@ -43,6 +47,11 @@ class DebugHttpServer @Inject constructor(
 
     private fun handleClearCache(): Response {
         staticsCache.clearAll()
+        return redirectToDashboard()
+    }
+
+    private fun handleClearStaticsDb(): Response {
+        runBlocking { staticsStore.deleteAll() }
         return redirectToDashboard()
     }
 
@@ -203,6 +212,25 @@ class DebugHttpServer @Inject constructor(
 <body>
     <h1>Pezzottify Debug Dashboard</h1>
 
+    <!-- Actions Section -->
+    <div class="card">
+        <h2>Actions</h2>
+        <div class="actions">
+            <form method="POST" action="/action/clear-cache" style="margin: 0;">
+                <button type="submit" class="btn-danger">Clear Cache</button>
+            </form>
+            <form method="POST" action="/action/clear-statics-db" style="margin: 0;">
+                <button type="submit" class="btn-danger">Clear Statics DB</button>
+            </form>
+            <form method="POST" action="/action/reset-metrics" style="margin: 0;">
+                <button type="submit" class="btn-secondary">Reset Metrics</button>
+            </form>
+            <form method="GET" action="/" style="margin: 0;">
+                <button type="submit" class="btn-primary">Refresh Dashboard</button>
+            </form>
+        </div>
+    </div>
+    
     <!-- Memory Info Section -->
     <div class="card">
         <h2>Memory Status</h2>
@@ -244,22 +272,6 @@ class DebugHttpServer @Inject constructor(
         <div class="divider"></div>
         <div class="small" style="margin-bottom: 8px;">Latency Comparison (Cache vs DB):</div>
         ${buildLatencyComparisonHtml(performanceReport)}
-    </div>
-
-    <!-- Actions Section -->
-    <div class="card">
-        <h2>Actions</h2>
-        <div class="actions">
-            <form method="POST" action="/action/clear-cache" style="margin: 0;">
-                <button type="submit" class="btn-danger">Clear Cache</button>
-            </form>
-            <form method="POST" action="/action/reset-metrics" style="margin: 0;">
-                <button type="submit" class="btn-secondary">Reset Metrics</button>
-            </form>
-            <form method="GET" action="/" style="margin: 0;">
-                <button type="submit" class="btn-primary">Refresh Dashboard</button>
-            </form>
-        </div>
     </div>
 
     <p class="small" style="margin-top: 20px; text-align: center;">

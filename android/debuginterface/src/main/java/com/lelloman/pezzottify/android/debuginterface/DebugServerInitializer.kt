@@ -22,7 +22,7 @@ class DebugServerInitializer @Inject constructor(
             val localIp = getLocalIpAddress() ?: "localhost"
             Log.i(TAG, "Debug HTTP server started on port ${DebugHttpServer.DEFAULT_PORT}")
             Log.i(TAG, "From device browser: http://$localIp:${DebugHttpServer.DEFAULT_PORT}")
-            Log.i(TAG, "From host: run 'adb forward tcp:${DebugHttpServer.DEFAULT_PORT} tcp:${DebugHttpServer.DEFAULT_PORT}' then open http://localhost:8080")
+            Log.i(TAG, "From host: run 'adb forward tcp:${DebugHttpServer.DEFAULT_PORT} tcp:${DebugHttpServer.DEFAULT_PORT}' then open http://localhost:${DebugHttpServer.DEFAULT_PORT}")
         } catch (e: Exception) {
             Log.e(TAG, "Failed to start debug HTTP server", e)
         }
