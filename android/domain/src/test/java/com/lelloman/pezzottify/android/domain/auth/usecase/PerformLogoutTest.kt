@@ -2,15 +2,16 @@ package com.lelloman.pezzottify.android.domain.auth.usecase
 
 import com.lelloman.pezzottify.android.domain.auth.AuthState
 import com.lelloman.pezzottify.android.domain.auth.AuthStore
+import com.lelloman.pezzottify.android.domain.cache.StaticsCache
 import com.lelloman.pezzottify.android.domain.listening.ListeningEventStore
 import com.lelloman.pezzottify.android.domain.player.PezzottifyPlayer
 import com.lelloman.pezzottify.android.domain.remoteapi.RemoteApiClient
 import com.lelloman.pezzottify.android.domain.statics.StaticsStore
 import com.lelloman.pezzottify.android.domain.user.UserDataStore
 import com.lelloman.pezzottify.android.domain.usercontent.UserContentStore
-import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.mockk
+import io.mockk.verify
 import kotlinx.coroutines.test.runTest
 import org.junit.Before
 import org.junit.Test
@@ -20,6 +21,7 @@ class PerformLogoutTest {
     private lateinit var authStore: AuthStore
     private lateinit var remoteApiClient: RemoteApiClient
     private lateinit var staticsStore: StaticsStore
+    private lateinit var staticsCache: StaticsCache
     private lateinit var userDataStore: UserDataStore
     private lateinit var userContentStore: UserContentStore
     private lateinit var listeningEventStore: ListeningEventStore
@@ -32,6 +34,7 @@ class PerformLogoutTest {
         authStore = mockk(relaxed = true)
         remoteApiClient = mockk(relaxed = true)
         staticsStore = mockk(relaxed = true)
+        staticsCache = mockk(relaxed = true)
         userDataStore = mockk(relaxed = true)
         userContentStore = mockk(relaxed = true)
         listeningEventStore = mockk(relaxed = true)
@@ -41,6 +44,7 @@ class PerformLogoutTest {
             authStore = authStore,
             remoteApiClient = remoteApiClient,
             staticsStore = staticsStore,
+            staticsCache = staticsCache,
             userDataStore = userDataStore,
             userContentStore = userContentStore,
             listeningEventStore = listeningEventStore,
@@ -67,6 +71,13 @@ class PerformLogoutTest {
         performLogout()
 
         coVerify { remoteApiClient.logout() }
+    }
+
+    @Test
+    fun `invoke clears in-memory cache`() = runTest {
+        performLogout()
+
+        verify { staticsCache.clearAll() }
     }
 
     @Test
@@ -110,5 +121,6 @@ class PerformLogoutTest {
             userContentStore.deleteAll()
             listeningEventStore.deleteAll()
         }
+        verify { staticsCache.clearAll() }
     }
 }
