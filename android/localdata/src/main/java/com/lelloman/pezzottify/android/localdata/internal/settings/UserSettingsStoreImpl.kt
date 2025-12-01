@@ -66,6 +66,12 @@ internal class UserSettingsStoreImpl(
     }
     override val fontFamily: StateFlow<AppFontFamily> = mutableFontFamily.asStateFlow()
 
+    private val mutableInMemoryCacheEnabled by lazy {
+        val enabled = prefs.getBoolean(KEY_IN_MEMORY_CACHE_ENABLED, DEFAULT_IN_MEMORY_CACHE_ENABLED)
+        MutableStateFlow(enabled)
+    }
+    override val isInMemoryCacheEnabled: StateFlow<Boolean> = mutableInMemoryCacheEnabled.asStateFlow()
+
     override suspend fun setPlayBehavior(playBehavior: PlayBehavior) {
         withContext(dispatcher) {
             mutablePlayBehavior.value = playBehavior
@@ -91,6 +97,13 @@ internal class UserSettingsStoreImpl(
         withContext(dispatcher) {
             mutableFontFamily.value = fontFamily
             prefs.edit().putString(KEY_FONT_FAMILY, fontFamily.name).commit()
+        }
+    }
+
+    override suspend fun setInMemoryCacheEnabled(enabled: Boolean) {
+        withContext(dispatcher) {
+            mutableInMemoryCacheEnabled.value = enabled
+            prefs.edit().putBoolean(KEY_IN_MEMORY_CACHE_ENABLED, enabled).commit()
         }
     }
 
@@ -124,6 +137,8 @@ internal class UserSettingsStoreImpl(
         const val KEY_THEME_MODE = "ThemeMode"
         const val KEY_COLOR_PALETTE = "ColorPalette"
         const val KEY_FONT_FAMILY = "FontFamily"
+        const val KEY_IN_MEMORY_CACHE_ENABLED = "InMemoryCacheEnabled"
+        const val DEFAULT_IN_MEMORY_CACHE_ENABLED = true
         // Legacy value for migration - AmoledBlack was removed and converted to Amoled theme mode
         const val LEGACY_AMOLED_BLACK_PALETTE = "AmoledBlack"
     }
