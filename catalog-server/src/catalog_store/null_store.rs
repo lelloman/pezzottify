@@ -155,4 +155,8 @@ impl CatalogStore for NullCatalogStore {
     fn get_whats_new_batches(&self, _limit: usize) -> Result<Vec<WhatsNewBatch>> {
         Ok(Vec::new())
     }
+
+    fn get_stale_batches(&self, _stale_threshold_hours: u64) -> Result<Vec<CatalogBatch>> {
+        Ok(Vec::new())
+    }
 }

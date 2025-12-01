@@ -884,6 +884,42 @@ impl ChangeLogStore {
 
         Ok(entries)
     }
+
+    /// Get batches that have been open longer than the specified threshold.
+    ///
+    /// A batch is considered "stale" if:
+    /// - It is open (is_open = true)
+    /// - It was created more than `stale_threshold_hours` ago
+    ///
+    /// Returns the stale batches ordered by created_at ascending (oldest first).
+    pub fn get_stale_batches(&self, stale_threshold_hours: u64) -> Result<Vec<CatalogBatch>> {
+        let conn = self.conn.lock().unwrap();
+        let now = Self::now();
+        let cutoff = now - (stale_threshold_hours * 60 * 60) as i64;
+
+        let mut stmt = conn.prepare(
+            "SELECT id, name, description, is_open, created_at, closed_at, last_activity_at
+             FROM catalog_batches
+             WHERE is_open = 1 AND created_at < ?1
+             ORDER BY created_at ASC",
+        )?;
+
+        let batches = stmt
+            .query_map(params![cutoff], |row| {
+                Ok(CatalogBatch {
+                    id: row.get(0)?,
+                    name: row.get(1)?,
+                    description: row.get(2)?,
+                    is_open: row.get::<_, i32>(3)? != 0,
+                    created_at: row.get(4)?,
+                    closed_at: row.get(5)?,
+                    last_activity_at: row.get(6)?,
+                })
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+
+        Ok(batches)
+    }
 }
 
 #[cfg(test)]
@@ -1624,5 +1660,69 @@ mod tests {
 
         let batch = store.get_active_batch().unwrap().unwrap();
         assert_eq!(store.get_batch_change_count(&batch.id).unwrap(), 5);
+    }
+
+    // =========================================================================
+    // Stale batch tests
+    // =========================================================================
+
+    #[test]
+    fn test_get_stale_batches_empty() {
+        let store = create_test_store();
+
+        // No batches at all
+        let stale = store.get_stale_batches(24).unwrap();
+        assert!(stale.is_empty());
+    }
+
+    #[test]
+    fn test_get_stale_batches_recent_batch_not_stale() {
+        let store = create_test_store();
+
+        // Create a batch (it will be "recent" since we just created it)
+        store.create_batch("Recent Batch", None).unwrap();
+
+        // With a 24-hour threshold, the just-created batch shouldn't be stale
+        let stale = store.get_stale_batches(24).unwrap();
+        assert!(stale.is_empty());
+    }
+
+    #[test]
+    fn test_get_stale_batches_closed_batch_not_included() {
+        let store = create_test_store();
+
+        // Create and close a batch
+        let batch = store.create_batch("Closed Batch", None).unwrap();
+        store.close_batch(&batch.id).unwrap();
+
+        // Closed batches should not appear in stale list regardless of threshold
+        let stale = store.get_stale_batches(0).unwrap();
+        assert!(stale.is_empty());
+    }
+
+    #[test]
+    fn test_get_stale_batches_returns_open_batch_older_than_threshold() {
+        let store = create_test_store();
+
+        // Create an open batch
+        let batch = store.create_batch("Open Batch", None).unwrap();
+
+        // Manually update created_at to be older than the threshold
+        // Simulating a batch created 48 hours ago
+        {
+            let conn = store.conn.lock().unwrap();
+            let old_time = ChangeLogStore::now() - (48 * 3600);
+            conn.execute(
+                "UPDATE catalog_batches SET created_at = ?1 WHERE id = ?2",
+                params![old_time, batch.id],
+            )
+            .unwrap();
+        }
+
+        // With 24-hour threshold, the 48-hour-old batch should be stale
+        let stale = store.get_stale_batches(24).unwrap();
+        assert_eq!(stale.len(), 1);
+        assert_eq!(stale[0].id, batch.id);
+        assert_eq!(stale[0].name, "Open Batch");
     }
 }

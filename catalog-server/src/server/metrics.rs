@@ -112,6 +112,17 @@ lazy_static! {
         Opts::new(format!("{PREFIX}_listening_duration_seconds_total"), "Total listening duration in seconds"),
         &["client_type"]
     ).expect("Failed to create listening_duration_seconds_total metric");
+
+    // Changelog Batch Metrics
+    pub static ref CHANGELOG_STALE_BATCHES: Gauge = Gauge::new(
+        format!("{PREFIX}_changelog_stale_batches"),
+        "Number of changelog batches that have been open longer than the stale threshold"
+    ).expect("Failed to create changelog_stale_batches metric");
+
+    pub static ref CHANGELOG_STALE_BATCH_CHECKS_TOTAL: Counter = Counter::new(
+        format!("{PREFIX}_changelog_stale_batch_checks_total"),
+        "Total number of stale batch checks performed"
+    ).expect("Failed to create changelog_stale_batch_checks_total metric");
 }
 
 /// Initialize all metrics and register them with the Prometheus registry
@@ -133,6 +144,8 @@ pub fn init_metrics() {
     let _ = REGISTRY.register(Box::new(BANDWIDTH_REQUESTS_TOTAL.clone()));
     let _ = REGISTRY.register(Box::new(LISTENING_EVENTS_TOTAL.clone()));
     let _ = REGISTRY.register(Box::new(LISTENING_DURATION_SECONDS_TOTAL.clone()));
+    let _ = REGISTRY.register(Box::new(CHANGELOG_STALE_BATCHES.clone()));
+    let _ = REGISTRY.register(Box::new(CHANGELOG_STALE_BATCH_CHECKS_TOTAL.clone()));
 
     tracing::info!("Metrics system initialized successfully");
 }

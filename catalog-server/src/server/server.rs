@@ -12,7 +12,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use tracing::{debug, error, info};
+use tracing::{debug, error, info, warn};
 
 use crate::catalog_store::CatalogStore;
 use crate::{
@@ -1990,6 +1990,12 @@ pub fn make_app(
     Ok(app)
 }
 
+/// Default threshold for considering a batch "stale" (7 days in hours)
+const STALE_BATCH_THRESHOLD_HOURS: u64 = 168;
+
+/// Interval between stale batch checks (1 hour in seconds)
+const STALE_BATCH_CHECK_INTERVAL_SECS: u64 = 3600;
+
 pub async fn run_server(
     catalog_store: Arc<dyn CatalogStore>,
     search_vault: Box<dyn SearchVault>,
@@ -2006,7 +2012,7 @@ pub async fn run_server(
         content_cache_age_sec,
         frontend_dir_path,
     };
-    let app = make_app(config, catalog_store, search_vault, user_store)?;
+    let app = make_app(config, catalog_store.clone(), search_vault, user_store)?;
 
     let main_listener = tokio::net::TcpListener::bind(format!("0.0.0.0:{}", port))
         .await
@@ -2017,6 +2023,17 @@ pub async fn run_server(
     let metrics_listener = tokio::net::TcpListener::bind(format!("0.0.0.0:{}", metrics_port))
         .await
         .unwrap();
+
+    // Spawn the stale batch alerting background task
+    let catalog_store_for_bg = catalog_store.clone();
+    tokio::spawn(async move {
+        let mut interval =
+            tokio::time::interval(std::time::Duration::from_secs(STALE_BATCH_CHECK_INTERVAL_SECS));
+        loop {
+            interval.tick().await;
+            check_stale_batches(&catalog_store_for_bg);
+        }
+    });
 
     // Run both servers concurrently
     tokio::select! {
@@ -2032,6 +2049,43 @@ pub async fn run_server(
     }
 
     Ok(())
+}
+
+/// Check for stale changelog batches and log warnings.
+fn check_stale_batches(catalog_store: &Arc<dyn CatalogStore>) {
+    super::metrics::CHANGELOG_STALE_BATCH_CHECKS_TOTAL.inc();
+
+    match catalog_store.get_stale_batches(STALE_BATCH_THRESHOLD_HOURS) {
+        Ok(stale_batches) => {
+            let count = stale_batches.len();
+            super::metrics::CHANGELOG_STALE_BATCHES.set(count as f64);
+
+            if count > 0 {
+                warn!(
+                    "Found {} stale changelog batch(es) open for more than {} hours",
+                    count, STALE_BATCH_THRESHOLD_HOURS
+                );
+                for batch in &stale_batches {
+                    let age_hours =
+                        (std::time::SystemTime::now()
+                            .duration_since(std::time::UNIX_EPOCH)
+                            .unwrap()
+                            .as_secs() as i64
+                            - batch.created_at)
+                            / 3600;
+                    warn!(
+                        "  - Batch '{}' (id: {}) has been open for {} hours",
+                        batch.name, batch.id, age_hours
+                    );
+                }
+            } else {
+                debug!("No stale changelog batches found");
+            }
+        }
+        Err(e) => {
+            error!("Failed to check for stale batches: {}", e);
+        }
+    }
 }
 
 #[cfg(test)]

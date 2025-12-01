@@ -2094,6 +2094,10 @@ impl CatalogStore for SqliteCatalogStore {
     fn get_whats_new_batches(&self, limit: usize) -> Result<Vec<WhatsNewBatch>> {
         self.changelog.get_whats_new_batches(limit)
     }
+
+    fn get_stale_batches(&self, stale_threshold_hours: u64) -> Result<Vec<CatalogBatch>> {
+        self.changelog.get_stale_batches(stale_threshold_hours)
+    }
 }
 
 #[cfg(test)]

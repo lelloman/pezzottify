@@ -3,7 +3,6 @@
 ### [ready for coding]
 
 - Wire up the external downloader. Let's start with images, when the image endpoint is hit, and either the static item has no image, or the image file is empty, before returning 404 or an empty body we hit the downloader and try to fetch the image from there. If the image is fetched, then the content is saved to disk and returned in the body.
-- Once catalog is migrated to db and catalog modification endpoints are in place, create a catalog change log to be shown to users, see CHANGELOG_FEATURE_PLAN.md for details.
 
 ### [to refine]
 
@@ -13,6 +12,7 @@
 
 ### [done]
 
+- ~Once catalog is migrated to db and catalog modification endpoints are in place, create a catalog change log to be shown to users, see CHANGELOG_FEATURE_PLAN.md for details.~
 - ~We should plan a feature to gather listening stats from users, see LISTENING_STATS_PLAN.md for details.~
 - ~Add display_image_id to Artist and Album models (schema v1 migration) with Python script for populating from largest image~
 - ~Verify that web interface works with the docker setup~
