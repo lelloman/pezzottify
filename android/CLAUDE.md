@@ -101,10 +101,21 @@ The project uses a multi-module architecture with clear separation of concerns:
   - `user/`: User-related domain logic
   - `player/`: Playback domain logic
   - `statics/`: Static catalog data logic
+  - `cache/`: In-memory caching (LruCache, StaticsCache, CacheMetricsCollector)
+  - `memory/`: Memory pressure monitoring (MemoryPressureMonitor interface)
   - `remoteapi/`: API contracts and response models
   - `usecase/`: Use case implementations
   - `config/`: Configuration models
   - `sync/`: Data synchronization logic
+
+**In-Memory Cache System:**
+- `StaticsCache`: LRU cache for Artist, Album, Track objects with 5-minute TTL
+- `MemoryPressureMonitor`: Interface for detecting memory pressure levels (LOW/MEDIUM/HIGH/CRITICAL)
+- `AndroidMemoryPressureMonitor`: Platform implementation in app module using ComponentCallbacks2
+- Cache sizes dynamically adjust based on memory pressure (10MB at LOW to 512KB at CRITICAL)
+- User can toggle cache on/off in Profile > Performance settings
+- Cache is cleared on logout
+- `CacheMetricsCollector`: Tracks hit rates and latency for performance analysis
 
 **Testing**: Unit tests use JUnit, Truth assertions, and Coroutines Test
 

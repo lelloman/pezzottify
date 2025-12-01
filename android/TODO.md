@@ -8,8 +8,6 @@ We can consider V1 ready once all of the task without V2 mark are completed.
 ### [to refine]
 
 - Give the debuginterface module some love: implement an HTTP server for external monitoring (cache stats, memory pressure, performance metrics) accessible from a browser
-- ~~Create a "memory pressure" component that can detect how much memory can we use for caches and such (imagine caching stuff from the db, pre-loading audio, images)~~
-- ~~Add an in-memory immediate cache layer in ContentResolver, only after a "memory pressure" component~~
 - Add a contextual menu to queue albums and tracks (add to current playlist instead of replacing)
 - We should probably think about collecting information about storage used and how it is used. For instance, it would be cool to cache audio files, but the feature needs to be storage-aware.
 - We need to plan a "download" feature for albums and tracks
@@ -19,6 +17,8 @@ We can consider V1 ready once all of the task without V2 mark are completed.
 
 ### [done]
 
+- ~Create a "memory pressure" component that can detect how much memory can we use for caches and such (imagine caching stuff from the db, pre-loading audio, images)~
+- ~Add an in-memory immediate cache layer in StaticsProvider, with LRU eviction, TTL expiration, user toggle setting, and performance metrics~
 - ~Add recent searches component to the search screen (store and display user's search history)~
 - ~Consider if we have more than one "Synchronizers" to unify the code and make it reusable~
 - ~We should gather statistics on what's being listened. Like what track, how long. This will be useful for discovery features.~
