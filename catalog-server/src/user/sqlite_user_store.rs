@@ -366,6 +366,71 @@ const BANDWIDTH_USAGE_TABLE_V_5: Table = Table {
     ],
 };
 
+/// V 6
+/// Listening events table - stores individual playback events for analytics
+const LISTENING_EVENTS_TABLE_V_6: Table = Table {
+    name: "listening_events",
+    columns: &[
+        sqlite_column!(
+            "id",
+            &SqlType::Integer,
+            is_primary_key = true,
+            is_unique = true
+        ),
+        sqlite_column!(
+            "user_id",
+            &SqlType::Integer,
+            non_null = true,
+            foreign_key = Some(&ForeignKey {
+                foreign_table: "user",
+                foreign_column: "id",
+                on_delete: ForeignKeyOnChange::Cascade,
+            })
+        ),
+        // Track identifier (e.g., "tra_xxxxx")
+        sqlite_column!("track_id", &SqlType::Text, non_null = true),
+        // Client-generated UUID for deduplication (supports offline queue retry)
+        sqlite_column!("session_id", &SqlType::Text, is_unique = true),
+        // Unix timestamp when playback started
+        sqlite_column!("started_at", &SqlType::Integer, non_null = true),
+        // Unix timestamp when playback ended
+        sqlite_column!("ended_at", &SqlType::Integer),
+        // Actual listening time in seconds (excluding pauses)
+        sqlite_column!("duration_seconds", &SqlType::Integer, non_null = true),
+        // Total track duration in seconds (for completion calculation)
+        sqlite_column!("track_duration_seconds", &SqlType::Integer, non_null = true),
+        // 1 if >90% of track was played
+        sqlite_column!(
+            "completed",
+            &SqlType::Integer,
+            non_null = true,
+            default_value = Some("0")
+        ),
+        // Number of seek operations during playback
+        sqlite_column!("seek_count", &SqlType::Integer, default_value = Some("0")),
+        // Number of pause/resume cycles
+        sqlite_column!("pause_count", &SqlType::Integer, default_value = Some("0")),
+        // Context: "album", "playlist", "track", "search"
+        sqlite_column!("playback_context", &SqlType::Text),
+        // Client type: "web", "android", "ios"
+        sqlite_column!("client_type", &SqlType::Text),
+        // Date in YYYYMMDD format for efficient date-range queries
+        sqlite_column!("date", &SqlType::Integer, non_null = true),
+        sqlite_column!(
+            "created",
+            &SqlType::Integer,
+            default_value = Some(DEFAULT_TIMESTAMP)
+        ),
+    ],
+    unique_constraints: &[],
+    indices: &[
+        ("idx_listening_events_user_id", "user_id"),
+        ("idx_listening_events_track_id", "track_id"),
+        ("idx_listening_events_date", "date"),
+        ("idx_listening_events_session_id", "session_id"),
+    ],
+};
+
 pub const VERSIONED_SCHEMAS: &[VersionedSchema] = &[
     VersionedSchema {
         version: 0,
@@ -488,6 +553,25 @@ pub const VERSIONED_SCHEMAS: &[VersionedSchema] = &[
         ],
         migration: Some(|conn: &Connection| {
             BANDWIDTH_USAGE_TABLE_V_5.create(&conn)?;
+            Ok(())
+        }),
+    },
+    VersionedSchema {
+        version: 6,
+        tables: &[
+            USER_TABLE_V_0,
+            LIKED_CONTENT_TABLE_V_2,
+            AUTH_TOKEN_TABLE_V_0,
+            USER_PASSWORD_CREDENTIALS_V_0,
+            USER_PLAYLIST_TABLE_V_3,
+            USER_PLAYLIST_TRACKS_TABLE_V_3,
+            USER_ROLE_TABLE_V_4,
+            USER_EXTRA_PERMISSION_TABLE_V_4,
+            BANDWIDTH_USAGE_TABLE_V_5,
+            LISTENING_EVENTS_TABLE_V_6,
+        ],
+        migration: Some(|conn: &Connection| {
+            LISTENING_EVENTS_TABLE_V_6.create(&conn)?;
             Ok(())
         }),
     },
@@ -1694,16 +1778,16 @@ mod tests {
             assert_eq!(db_version, BASE_DB_VERSION as i64 + 3);
         }
 
-        // Now open with SqliteUserStore, which should trigger migration to latest (V5)
+        // Now open with SqliteUserStore, which should trigger migration to latest (V6)
         let store = SqliteUserStore::new(&temp_file_path).unwrap();
 
-        // Verify we're now at the latest version (V5)
+        // Verify we're now at the latest version (V6)
         {
             let conn = store.conn.lock().unwrap();
             let db_version: i64 = conn
                 .query_row("PRAGMA user_version;", [], |row| row.get(0))
                 .unwrap();
-            assert_eq!(db_version, BASE_DB_VERSION as i64 + 5);
+            assert_eq!(db_version, BASE_DB_VERSION as i64 + 6);
 
             // Verify new tables exist
             let user_role_table_exists: i64 = conn
@@ -1742,6 +1826,26 @@ mod tests {
                 )
                 .unwrap();
             assert_eq!(permission_index_exists, 1);
+
+            // Verify listening_events table exists (V6)
+            let listening_events_table_exists: i64 = conn
+                .query_row(
+                    "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='listening_events'",
+                    [],
+                    |row| row.get(0),
+                )
+                .unwrap();
+            assert_eq!(listening_events_table_exists, 1);
+
+            // Verify listening_events indices exist
+            let listening_events_user_id_index_exists: i64 = conn
+                .query_row(
+                    "SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND name='idx_listening_events_user_id'",
+                    [],
+                    |row| row.get(0),
+                )
+                .unwrap();
+            assert_eq!(listening_events_user_id_index_exists, 1);
         }
 
         // Verify old data is still intact
