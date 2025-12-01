@@ -258,7 +258,7 @@ pub static ref LISTENING_DURATION_SECONDS_TOTAL: CounterVec = CounterVec::new(
 12. ~~Register routes with rate limiting~~ ✅
 
 ### Phase 4: Metrics & Testing
-12. Add Prometheus metrics
+12. ~~Add Prometheus metrics~~ ✅
 13. Write unit tests for store methods
 14. Write API integration tests
 

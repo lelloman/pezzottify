@@ -723,6 +723,10 @@ async fn post_listening_event(
     // Calculate completion (>90% = complete)
     let completed = body.duration_seconds as f64 / body.track_duration_seconds as f64 >= 0.90;
 
+    // Capture values for metrics before moving into event
+    let client_type_for_metrics = body.client_type.clone();
+    let duration_for_metrics = body.duration_seconds;
+
     let event = crate::user::ListeningEvent {
         id: None,
         user_id: session.user_id,
@@ -741,7 +745,17 @@ async fn post_listening_event(
     };
 
     match user_manager.lock().unwrap().record_listening_event(event) {
-        Ok((id, created)) => Json(ListeningEventResponse { id, created }).into_response(),
+        Ok((id, created)) => {
+            // Record metrics only for newly created events
+            if created {
+                super::metrics::record_listening_event(
+                    client_type_for_metrics.as_deref(),
+                    completed,
+                    duration_for_metrics,
+                );
+            }
+            Json(ListeningEventResponse { id, created }).into_response()
+        }
         Err(err) => {
             error!("Error recording listening event: {}", err);
             StatusCode::INTERNAL_SERVER_ERROR.into_response()

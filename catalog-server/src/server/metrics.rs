@@ -101,6 +101,17 @@ lazy_static! {
         Opts::new(format!("{PREFIX}_bandwidth_requests_total"), "Total requests by user and endpoint category"),
         &["user_id", "endpoint_category"]
     ).expect("Failed to create bandwidth_requests_total metric");
+
+    // Listening Stats Metrics
+    pub static ref LISTENING_EVENTS_TOTAL: CounterVec = CounterVec::new(
+        Opts::new(format!("{PREFIX}_listening_events_total"), "Total listening events recorded"),
+        &["client_type", "completed"]
+    ).expect("Failed to create listening_events_total metric");
+
+    pub static ref LISTENING_DURATION_SECONDS_TOTAL: CounterVec = CounterVec::new(
+        Opts::new(format!("{PREFIX}_listening_duration_seconds_total"), "Total listening duration in seconds"),
+        &["client_type"]
+    ).expect("Failed to create listening_duration_seconds_total metric");
 }
 
 /// Initialize all metrics and register them with the Prometheus registry
@@ -120,6 +131,8 @@ pub fn init_metrics() {
     let _ = REGISTRY.register(Box::new(PROCESS_MEMORY_BYTES.clone()));
     let _ = REGISTRY.register(Box::new(BANDWIDTH_BYTES_TOTAL.clone()));
     let _ = REGISTRY.register(Box::new(BANDWIDTH_REQUESTS_TOTAL.clone()));
+    let _ = REGISTRY.register(Box::new(LISTENING_EVENTS_TOTAL.clone()));
+    let _ = REGISTRY.register(Box::new(LISTENING_DURATION_SECONDS_TOTAL.clone()));
 
     tracing::info!("Metrics system initialized successfully");
 }
@@ -231,6 +244,20 @@ pub fn record_bandwidth(user_id: Option<usize>, endpoint_category: &str, respons
     BANDWIDTH_REQUESTS_TOTAL
         .with_label_values(&[&user_id_str, endpoint_category])
         .inc();
+}
+
+/// Record a listening event
+pub fn record_listening_event(client_type: Option<&str>, completed: bool, duration_seconds: u32) {
+    let client_type_str = client_type.unwrap_or("unknown");
+    let completed_str = if completed { "true" } else { "false" };
+
+    LISTENING_EVENTS_TOTAL
+        .with_label_values(&[client_type_str, completed_str])
+        .inc();
+
+    LISTENING_DURATION_SECONDS_TOTAL
+        .with_label_values(&[client_type_str])
+        .inc_by(duration_seconds as f64);
 }
 
 /// Update process memory usage
@@ -433,5 +460,32 @@ mod tests {
             .iter()
             .find(|m| m.get_name() == "pezzottify_bandwidth_requests_total");
         assert!(bandwidth_requests.is_some(), "Bandwidth requests metric should exist");
+    }
+
+    #[test]
+    fn test_record_listening_event() {
+        // Ensure metrics are initialized
+        init_metrics();
+
+        // Record a completed listening event
+        record_listening_event(Some("android"), true, 180);
+
+        // Record an incomplete listening event
+        record_listening_event(Some("web"), false, 45);
+
+        // Record without client type
+        record_listening_event(None, true, 200);
+
+        // Verify metrics exist
+        let metrics = REGISTRY.gather();
+        let listening_events = metrics
+            .iter()
+            .find(|m| m.get_name() == "pezzottify_listening_events_total");
+        assert!(listening_events.is_some(), "Listening events metric should exist");
+
+        let listening_duration = metrics
+            .iter()
+            .find(|m| m.get_name() == "pezzottify_listening_duration_seconds_total");
+        assert!(listening_duration.is_some(), "Listening duration metric should exist");
     }
 }
