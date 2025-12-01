@@ -8,11 +8,13 @@ interface UserSettingsStore {
     val themeMode: StateFlow<ThemeMode>
     val colorPalette: StateFlow<ColorPalette>
     val fontFamily: StateFlow<AppFontFamily>
+    val isInMemoryCacheEnabled: StateFlow<Boolean>
 
     suspend fun setPlayBehavior(playBehavior: PlayBehavior)
     suspend fun setThemeMode(themeMode: ThemeMode)
     suspend fun setColorPalette(colorPalette: ColorPalette)
     suspend fun setFontFamily(fontFamily: AppFontFamily)
+    suspend fun setInMemoryCacheEnabled(enabled: Boolean)
 }
 
 enum class PlayBehavior {
