@@ -1683,7 +1683,7 @@ impl ServerState {
         catalog_store: Arc<dyn CatalogStore>,
         search_vault: Box<dyn SearchVault>,
         user_manager: UserManager,
-        downloader: Option<Arc<crate::downloader::DownloaderClient>>,
+        downloader: Option<Arc<dyn crate::downloader::Downloader>>,
         media_base_path: Option<std::path::PathBuf>,
     ) -> ServerState {
         // Create proxy if downloader and media_base_path are available
@@ -1714,7 +1714,7 @@ pub fn make_app(
     catalog_store: Arc<dyn CatalogStore>,
     search_vault: Box<dyn SearchVault>,
     user_store: Box<dyn FullUserStore>,
-    downloader: Option<Arc<crate::downloader::DownloaderClient>>,
+    downloader: Option<Arc<dyn crate::downloader::Downloader>>,
     media_base_path: Option<std::path::PathBuf>,
 ) -> Result<Router> {
     let user_manager = UserManager::new(catalog_store.clone(), user_store);
@@ -2055,7 +2055,7 @@ pub async fn run_server(
     metrics_port: u16,
     content_cache_age_sec: usize,
     frontend_dir_path: Option<String>,
-    downloader: Option<Arc<crate::downloader::DownloaderClient>>,
+    downloader: Option<Arc<dyn crate::downloader::Downloader>>,
     media_base_path: Option<std::path::PathBuf>,
 ) -> Result<()> {
     let config = ServerConfig {

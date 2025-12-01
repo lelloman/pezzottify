@@ -134,12 +134,12 @@ async fn main() -> Result<()> {
     let search_vault: Box<dyn SearchVault> = Box::new(NoOpSearchVault {});
 
     // Create downloader client if URL is configured
-    let downloader = cli_args.downloader_url.map(|url| {
+    let downloader: Option<Arc<dyn downloader::Downloader>> = cli_args.downloader_url.map(|url| {
         info!("Downloader service configured at {}", url);
         Arc::new(downloader::DownloaderClient::new(
             url,
             cli_args.downloader_timeout_sec,
-        ))
+        )) as Arc<dyn downloader::Downloader>
     });
 
     // Pass media_base_path for proxy if downloader is configured

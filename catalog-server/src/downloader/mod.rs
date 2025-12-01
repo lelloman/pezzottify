@@ -1,4 +1,4 @@
 pub mod client;
 pub mod models;
 
-pub use client::DownloaderClient;
+pub use client::{Downloader, DownloaderClient};

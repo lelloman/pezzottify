@@ -1,7 +1,7 @@
 use axum::extract::FromRef;
 
 use crate::catalog_store::CatalogStore;
-use crate::downloader::DownloaderClient;
+use crate::downloader::Downloader;
 use crate::search::SearchVault;
 use crate::user::UserManager;
 use std::sync::{Arc, Mutex};
@@ -12,7 +12,7 @@ use super::ServerConfig;
 
 pub type GuardedCatalogStore = Arc<dyn CatalogStore>;
 pub type GuardedUserManager = Arc<Mutex<UserManager>>;
-pub type OptionalDownloader = Option<Arc<DownloaderClient>>;
+pub type OptionalDownloader = Option<Arc<dyn Downloader>>;
 pub type OptionalProxy = Option<Arc<CatalogProxy>>;
 
 #[derive(Clone)]

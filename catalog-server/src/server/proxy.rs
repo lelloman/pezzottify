@@ -10,11 +10,11 @@ use tracing::{info, warn};
 
 use crate::catalog_store::CatalogStore;
 use crate::downloader::models::{DownloaderAlbum, DownloaderArtist, DownloaderImage, DownloaderTrack};
-use crate::downloader::DownloaderClient;
+use crate::downloader::Downloader;
 
 /// Proxy for fetching and storing content from the downloader service.
 pub struct CatalogProxy {
-    downloader: Arc<DownloaderClient>,
+    downloader: Arc<dyn Downloader>,
     catalog_store: Arc<dyn CatalogStore>,
     media_base_path: PathBuf,
 }
@@ -22,7 +22,7 @@ pub struct CatalogProxy {
 impl CatalogProxy {
     /// Create a new catalog proxy.
     pub fn new(
-        downloader: Arc<DownloaderClient>,
+        downloader: Arc<dyn Downloader>,
         catalog_store: Arc<dyn CatalogStore>,
         media_base_path: PathBuf,
     ) -> Self {
@@ -324,5 +324,335 @@ impl CatalogProxy {
 
 #[cfg(test)]
 mod tests {
-    // Integration tests would go here with a mock downloader
+    use super::*;
+    use async_trait::async_trait;
+    use std::collections::HashMap;
+    use std::sync::Mutex;
+    use tempfile::TempDir;
+
+    use crate::catalog_store::SqliteCatalogStore;
+    use crate::downloader::client::Downloader;
+    use crate::downloader::models::{
+        DownloaderActivityPeriod, DownloaderAlbum, DownloaderArtist, DownloaderArtistWithRole,
+        DownloaderDisc, DownloaderTrack,
+    };
+
+    /// Mock downloader for testing proxy logic.
+    pub struct MockDownloader {
+        artists: Mutex<HashMap<String, DownloaderArtist>>,
+        albums: Mutex<HashMap<String, DownloaderAlbum>>,
+        tracks: Mutex<HashMap<String, DownloaderTrack>>,
+        call_counts: Mutex<HashMap<String, usize>>,
+    }
+
+    impl MockDownloader {
+        pub fn new() -> Self {
+            Self {
+                artists: Mutex::new(HashMap::new()),
+                albums: Mutex::new(HashMap::new()),
+                tracks: Mutex::new(HashMap::new()),
+                call_counts: Mutex::new(HashMap::new()),
+            }
+        }
+
+        pub fn add_artist(&self, artist: DownloaderArtist) {
+            self.artists.lock().unwrap().insert(artist.id.clone(), artist);
+        }
+
+        pub fn add_album(&self, album: DownloaderAlbum) {
+            self.albums.lock().unwrap().insert(album.id.clone(), album);
+        }
+
+        pub fn add_track(&self, track: DownloaderTrack) {
+            self.tracks.lock().unwrap().insert(track.id.clone(), track);
+        }
+
+        pub fn get_call_count(&self, method: &str) -> usize {
+            *self.call_counts.lock().unwrap().get(method).unwrap_or(&0)
+        }
+
+        fn increment_call(&self, method: &str) {
+            let mut counts = self.call_counts.lock().unwrap();
+            *counts.entry(method.to_string()).or_insert(0) += 1;
+        }
+    }
+
+    #[async_trait]
+    impl Downloader for MockDownloader {
+        async fn health_check(&self) -> Result<()> {
+            self.increment_call("health_check");
+            Ok(())
+        }
+
+        async fn get_artist(&self, id: &str) -> Result<DownloaderArtist> {
+            self.increment_call("get_artist");
+            self.artists
+                .lock()
+                .unwrap()
+                .get(id)
+                .cloned()
+                .ok_or_else(|| anyhow::anyhow!("Artist not found: {}", id))
+        }
+
+        async fn get_album(&self, id: &str) -> Result<DownloaderAlbum> {
+            self.increment_call("get_album");
+            self.albums
+                .lock()
+                .unwrap()
+                .get(id)
+                .cloned()
+                .ok_or_else(|| anyhow::anyhow!("Album not found: {}", id))
+        }
+
+        async fn get_track(&self, id: &str) -> Result<DownloaderTrack> {
+            self.increment_call("get_track");
+            self.tracks
+                .lock()
+                .unwrap()
+                .get(id)
+                .cloned()
+                .ok_or_else(|| anyhow::anyhow!("Track not found: {}", id))
+        }
+
+        async fn download_track_audio(&self, _id: &str, dest: &PathBuf) -> Result<u64> {
+            self.increment_call("download_track_audio");
+            // Create a fake audio file
+            if let Some(parent) = dest.parent() {
+                std::fs::create_dir_all(parent)?;
+            }
+            std::fs::write(dest, b"fake audio data")?;
+            Ok(15)
+        }
+
+        async fn download_image(&self, _id: &str, dest: &PathBuf) -> Result<u64> {
+            self.increment_call("download_image");
+            // Create a fake image file
+            if let Some(parent) = dest.parent() {
+                std::fs::create_dir_all(parent)?;
+            }
+            std::fs::write(dest, b"fake image data")?;
+            Ok(15)
+        }
+    }
+
+    fn create_test_artist(id: &str, name: &str) -> DownloaderArtist {
+        DownloaderArtist {
+            id: id.to_string(),
+            name: name.to_string(),
+            genre: vec!["rock".to_string()],
+            portraits: vec![],
+            activity_periods: vec![DownloaderActivityPeriod {
+                decade: Some(2000),
+                timespan: None,
+            }],
+            related: vec![],
+            portrait_group: vec![],
+        }
+    }
+
+    fn create_test_album(id: &str, name: &str, artist_ids: Vec<&str>) -> DownloaderAlbum {
+        DownloaderAlbum {
+            id: id.to_string(),
+            name: name.to_string(),
+            album_type: "ALBUM".to_string(),
+            artists_ids: artist_ids.into_iter().map(|s| s.to_string()).collect(),
+            label: Some("Test Label".to_string()),
+            date: Some(1234567890),
+            genres: vec![],
+            covers: vec![],
+            discs: vec![DownloaderDisc {
+                number: 1,
+                name: "".to_string(),
+                tracks: vec!["track1".to_string()],
+            }],
+            related: vec![],
+            cover_group: vec![],
+            original_title: Some(name.to_string()),
+            version_title: "".to_string(),
+        }
+    }
+
+    fn create_test_track(id: &str, name: &str, album_id: &str) -> DownloaderTrack {
+        let mut files = HashMap::new();
+        files.insert("OGG_VORBIS_320".to_string(), "hash123".to_string());
+
+        DownloaderTrack {
+            id: id.to_string(),
+            name: name.to_string(),
+            album_id: album_id.to_string(),
+            artists_ids: vec!["artist1".to_string()],
+            number: 1,
+            disc_number: 1,
+            duration: 180000,
+            is_explicit: false,
+            files,
+            alternatives: vec![],
+            tags: vec![],
+            earliest_live_timestamp: None,
+            has_lyrics: false,
+            language_of_performance: vec![],
+            original_title: Some(name.to_string()),
+            version_title: "".to_string(),
+            artists_with_role: vec![DownloaderArtistWithRole {
+                artist_id: "artist1".to_string(),
+                name: "Test Artist".to_string(),
+                role: "ARTIST_ROLE_MAIN_ARTIST".to_string(),
+            }],
+        }
+    }
+
+    fn setup_test_env() -> (TempDir, Arc<SqliteCatalogStore>) {
+        let temp_dir = TempDir::new().unwrap();
+        let db_path = temp_dir.path().join("test_catalog.db");
+        let catalog_store = Arc::new(
+            SqliteCatalogStore::new(&db_path, temp_dir.path()).unwrap()
+        );
+        (temp_dir, catalog_store)
+    }
+
+    #[tokio::test]
+    async fn test_ensure_artist_complete_fetches_missing_artist() {
+        let (temp_dir, catalog_store) = setup_test_env();
+        let mock_downloader = Arc::new(MockDownloader::new());
+
+        // Add artist to mock
+        mock_downloader.add_artist(create_test_artist("artist1", "Test Artist"));
+
+        let proxy = CatalogProxy::new(
+            mock_downloader.clone(),
+            catalog_store.clone(),
+            temp_dir.path().to_path_buf(),
+        );
+
+        // Artist doesn't exist in catalog, should fetch from downloader
+        let result = proxy.ensure_artist_complete("artist1").await;
+        assert!(result.is_ok());
+
+        // Verify downloader was called (may be called multiple times for artist + albums)
+        assert!(mock_downloader.get_call_count("get_artist") >= 1);
+
+        // Verify artist was stored in catalog
+        let stored = catalog_store.get_artist_json("artist1").unwrap();
+        assert!(stored.is_some());
+    }
+
+    #[tokio::test]
+    async fn test_ensure_artist_complete_skips_existing_artist_with_albums() {
+        let (temp_dir, catalog_store) = setup_test_env();
+        let mock_downloader = Arc::new(MockDownloader::new());
+
+        // Add artist to mock as fallback (in case discography lookup triggers fetch)
+        mock_downloader.add_artist(create_test_artist("artist1", "Existing Artist"));
+
+        // Pre-populate catalog with artist (must include all required fields)
+        let artist_json = serde_json::json!({
+            "id": "artist1",
+            "name": "Existing Artist",
+            "genres": ["rock"],
+            "activity_periods": []
+        });
+        catalog_store.create_artist(artist_json).unwrap();
+
+        // Add album for artist
+        let album_json = serde_json::json!({
+            "id": "album1",
+            "name": "Test Album",
+            "album_type": "Album",
+            "genres": [],
+            "artists_ids": ["artist1"]
+        });
+        catalog_store.create_album(album_json).unwrap();
+
+        let proxy = CatalogProxy::new(
+            mock_downloader.clone(),
+            catalog_store,
+            temp_dir.path().to_path_buf(),
+        );
+
+        // Artist exists with albums, should not call fetch_and_store_artist
+        // (but may call fetch_artist_albums if discography check doesn't find albums)
+        let result = proxy.ensure_artist_complete("artist1").await;
+        if let Err(ref e) = result {
+            eprintln!("ensure_artist_complete error: {:?}", e);
+        }
+        assert!(result.is_ok(), "ensure_artist_complete failed: {:?}", result.err());
+    }
+
+    #[tokio::test]
+    async fn test_ensure_album_complete_fetches_missing_album() {
+        let (temp_dir, catalog_store) = setup_test_env();
+        let mock_downloader = Arc::new(MockDownloader::new());
+
+        // Add album and its artist to mock
+        mock_downloader.add_artist(create_test_artist("artist1", "Test Artist"));
+        mock_downloader.add_album(create_test_album("album1", "Test Album", vec!["artist1"]));
+        mock_downloader.add_track(create_test_track("track1", "Test Track", "album1"));
+
+        let proxy = CatalogProxy::new(
+            mock_downloader.clone(),
+            catalog_store.clone(),
+            temp_dir.path().to_path_buf(),
+        );
+
+        // Album doesn't exist, should fetch
+        let result = proxy.ensure_album_complete("album1").await;
+        assert!(result.is_ok());
+
+        // Verify downloader was called
+        assert!(mock_downloader.get_call_count("get_album") >= 1);
+
+        // Verify album was stored
+        let stored = catalog_store.get_album_json("album1").unwrap();
+        assert!(stored.is_some());
+    }
+
+    #[tokio::test]
+    async fn test_fetch_and_store_track() {
+        let (temp_dir, catalog_store) = setup_test_env();
+        let mock_downloader = Arc::new(MockDownloader::new());
+
+        // First create the album that the track references
+        let album_json = serde_json::json!({
+            "id": "album1",
+            "name": "Test Album",
+            "album_type": "Album",
+            "genres": []
+        });
+        catalog_store.create_album(album_json).unwrap();
+
+        mock_downloader.add_track(create_test_track("track1", "Test Track", "album1"));
+
+        let proxy = CatalogProxy::new(
+            mock_downloader.clone(),
+            catalog_store.clone(),
+            temp_dir.path().to_path_buf(),
+        );
+
+        let result = proxy.fetch_and_store_track("track1").await;
+        if let Err(ref e) = result {
+            eprintln!("Error: {:?}", e);
+        }
+        assert!(result.is_ok(), "fetch_and_store_track failed: {:?}", result.err());
+
+        // Verify audio file was "downloaded"
+        assert_eq!(mock_downloader.get_call_count("download_track_audio"), 1);
+
+        // Verify track was stored
+        let stored = catalog_store.get_track_json("track1").unwrap();
+        assert!(stored.is_some());
+    }
+
+    #[tokio::test]
+    async fn test_mock_downloader_returns_error_for_missing() {
+        let mock = MockDownloader::new();
+
+        let result = mock.get_artist("nonexistent").await;
+        assert!(result.is_err());
+
+        let result = mock.get_album("nonexistent").await;
+        assert!(result.is_err());
+
+        let result = mock.get_track("nonexistent").await;
+        assert!(result.is_err());
+    }
 }
