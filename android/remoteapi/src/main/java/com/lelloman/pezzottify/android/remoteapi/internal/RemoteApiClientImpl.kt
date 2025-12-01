@@ -154,17 +154,17 @@ internal class RemoteApiClientImpl(
                 .returnFromRetrofitResponse()
         }
 
-    override suspend fun likeContent(contentId: String): RemoteApiResponse<Unit> =
+    override suspend fun likeContent(contentType: String, contentId: String): RemoteApiResponse<Unit> =
         catchingNetworkError {
             retrofit
-                .likeContent(authToken = authToken, contentId = contentId)
+                .likeContent(authToken = authToken, contentType = contentType, contentId = contentId)
                 .returnFromRetrofitResponse()
         }
 
-    override suspend fun unlikeContent(contentId: String): RemoteApiResponse<Unit> =
+    override suspend fun unlikeContent(contentType: String, contentId: String): RemoteApiResponse<Unit> =
         catchingNetworkError {
             retrofit
-                .unlikeContent(authToken = authToken, contentId = contentId)
+                .unlikeContent(authToken = authToken, contentType = contentType, contentId = contentId)
                 .returnFromRetrofitResponse()
         }
 

@@ -70,15 +70,17 @@ internal interface RetrofitApiClient {
         @Path("contentType") contentType: String,
     ): Response<List<String>>
 
-    @POST("/v1/user/liked/{contentId}")
+    @POST("/v1/user/liked/{contentType}/{contentId}")
     suspend fun likeContent(
         @Header("Authorization") authToken: String,
+        @Path("contentType") contentType: String,
         @Path("contentId") contentId: String,
     ): Response<Unit>
 
-    @DELETE("/v1/user/liked/{contentId}")
+    @DELETE("/v1/user/liked/{contentType}/{contentId}")
     suspend fun unlikeContent(
         @Header("Authorization") authToken: String,
+        @Path("contentType") contentType: String,
         @Path("contentId") contentId: String,
     ): Response<Unit>
 

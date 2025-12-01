@@ -123,10 +123,16 @@ class UserContentSynchronizer internal constructor(
         logger.debug("syncItem() syncing ${item.contentId}, isLiked=${item.isLiked}")
         userContentStore.updateSyncStatus(item.contentId, SyncStatus.Syncing)
 
+        val contentType = when (item.contentType) {
+            LikedContent.ContentType.Album -> "album"
+            LikedContent.ContentType.Artist -> "artist"
+            LikedContent.ContentType.Track -> "track"
+        }
+
         val result = if (item.isLiked) {
-            remoteApiClient.likeContent(item.contentId)
+            remoteApiClient.likeContent(contentType, item.contentId)
         } else {
-            remoteApiClient.unlikeContent(item.contentId)
+            remoteApiClient.unlikeContent(contentType, item.contentId)
         }
 
         when (result) {

@@ -37,9 +37,9 @@ interface RemoteApiClient {
 
     suspend fun getLikedContent(contentType: String): RemoteApiResponse<List<String>>
 
-    suspend fun likeContent(contentId: String): RemoteApiResponse<Unit>
+    suspend fun likeContent(contentType: String, contentId: String): RemoteApiResponse<Unit>
 
-    suspend fun unlikeContent(contentId: String): RemoteApiResponse<Unit>
+    suspend fun unlikeContent(contentType: String, contentId: String): RemoteApiResponse<Unit>
 
     suspend fun recordListeningEvent(data: ListeningEventSyncData): RemoteApiResponse<ListeningEventRecordedResponse>
 

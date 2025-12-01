@@ -124,7 +124,7 @@ class UserContentSynchronizerTest {
                 flowOf(emptyList())
             }
         }
-        coEvery { remoteApiClient.likeContent(any()) } returns RemoteApiResponse.Success(Unit)
+        coEvery { remoteApiClient.likeContent(any(), any()) } returns RemoteApiResponse.Success(Unit)
 
         synchronizer = createSynchronizer()
         synchronizer.initialize()
@@ -145,13 +145,13 @@ class UserContentSynchronizerTest {
             flowOf(listOf(item)),
             flowOf(emptyList())
         )
-        coEvery { remoteApiClient.likeContent("content-123") } returns RemoteApiResponse.Success(Unit)
+        coEvery { remoteApiClient.likeContent("album", "content-123") } returns RemoteApiResponse.Success(Unit)
 
         synchronizer = createSynchronizer()
         synchronizer.initialize()
         advanceUntilIdle()
 
-        coVerify { remoteApiClient.likeContent("content-123") }
+        coVerify { remoteApiClient.likeContent("album", "content-123") }
         coVerify { userContentStore.updateSyncStatus("content-123", SyncStatus.Synced) }
     }
 
@@ -163,13 +163,13 @@ class UserContentSynchronizerTest {
             flowOf(listOf(item)),
             flowOf(emptyList())
         )
-        coEvery { remoteApiClient.unlikeContent("content-456") } returns RemoteApiResponse.Success(Unit)
+        coEvery { remoteApiClient.unlikeContent("album", "content-456") } returns RemoteApiResponse.Success(Unit)
 
         synchronizer = createSynchronizer()
         synchronizer.initialize()
         advanceUntilIdle()
 
-        coVerify { remoteApiClient.unlikeContent("content-456") }
+        coVerify { remoteApiClient.unlikeContent("album", "content-456") }
         coVerify { userContentStore.updateSyncStatus("content-456", SyncStatus.Synced) }
     }
 
@@ -181,7 +181,7 @@ class UserContentSynchronizerTest {
             flowOf(listOf(item)),
             flowOf(emptyList())
         )
-        coEvery { remoteApiClient.likeContent("content-789") } returns RemoteApiResponse.Success(Unit)
+        coEvery { remoteApiClient.likeContent("album", "content-789") } returns RemoteApiResponse.Success(Unit)
 
         synchronizer = createSynchronizer()
         synchronizer.initialize()
@@ -189,7 +189,7 @@ class UserContentSynchronizerTest {
 
         coVerifyOrder {
             userContentStore.updateSyncStatus("content-789", SyncStatus.Syncing)
-            remoteApiClient.likeContent("content-789")
+            remoteApiClient.likeContent("album", "content-789")
             userContentStore.updateSyncStatus("content-789", SyncStatus.Synced)
         }
     }
@@ -204,7 +204,7 @@ class UserContentSynchronizerTest {
             flowOf(listOf(item)),
             flowOf(emptyList())
         )
-        coEvery { remoteApiClient.likeContent("content-network") } returns RemoteApiResponse.Error.Network
+        coEvery { remoteApiClient.likeContent("album", "content-network") } returns RemoteApiResponse.Error.Network
 
         synchronizer = createSynchronizer()
         synchronizer.initialize()
@@ -222,7 +222,7 @@ class UserContentSynchronizerTest {
             flowOf(listOf(item)),
             flowOf(emptyList())
         )
-        coEvery { remoteApiClient.likeContent("content-unauth") } returns RemoteApiResponse.Error.Unauthorized
+        coEvery { remoteApiClient.likeContent("album", "content-unauth") } returns RemoteApiResponse.Error.Unauthorized
 
         synchronizer = createSynchronizer()
         synchronizer.initialize()
@@ -240,7 +240,7 @@ class UserContentSynchronizerTest {
             flowOf(listOf(item)),
             flowOf(emptyList())
         )
-        coEvery { remoteApiClient.likeContent("content-notfound") } returns RemoteApiResponse.Error.NotFound
+        coEvery { remoteApiClient.likeContent("album", "content-notfound") } returns RemoteApiResponse.Error.NotFound
 
         synchronizer = createSynchronizer()
         synchronizer.initialize()
@@ -258,7 +258,7 @@ class UserContentSynchronizerTest {
             flowOf(listOf(item)),
             flowOf(emptyList())
         )
-        coEvery { remoteApiClient.likeContent("content-unknown") } returns RemoteApiResponse.Error.Unknown("Something went wrong")
+        coEvery { remoteApiClient.likeContent("album", "content-unknown") } returns RemoteApiResponse.Error.Unknown("Something went wrong")
 
         synchronizer = createSynchronizer()
         synchronizer.initialize()
@@ -282,16 +282,16 @@ class UserContentSynchronizerTest {
             flowOf(items),
             flowOf(emptyList())
         )
-        coEvery { remoteApiClient.likeContent(any()) } returns RemoteApiResponse.Success(Unit)
-        coEvery { remoteApiClient.unlikeContent(any()) } returns RemoteApiResponse.Success(Unit)
+        coEvery { remoteApiClient.likeContent(any(), any()) } returns RemoteApiResponse.Success(Unit)
+        coEvery { remoteApiClient.unlikeContent(any(), any()) } returns RemoteApiResponse.Success(Unit)
 
         synchronizer = createSynchronizer()
         synchronizer.initialize()
         advanceUntilIdle()
 
-        coVerify { remoteApiClient.likeContent("item-1") }
-        coVerify { remoteApiClient.unlikeContent("item-2") }
-        coVerify { remoteApiClient.likeContent("item-3") }
+        coVerify { remoteApiClient.likeContent("album", "item-1") }
+        coVerify { remoteApiClient.unlikeContent("album", "item-2") }
+        coVerify { remoteApiClient.likeContent("album", "item-3") }
 
         coVerify { userContentStore.updateSyncStatus("item-1", SyncStatus.Synced) }
         coVerify { userContentStore.updateSyncStatus("item-2", SyncStatus.Synced) }
@@ -309,16 +309,16 @@ class UserContentSynchronizerTest {
             flowOf(items),
             flowOf(emptyList())
         )
-        coEvery { remoteApiClient.likeContent("item-fail") } returns RemoteApiResponse.Error.NotFound
-        coEvery { remoteApiClient.likeContent("item-success") } returns RemoteApiResponse.Success(Unit)
+        coEvery { remoteApiClient.likeContent("album", "item-fail") } returns RemoteApiResponse.Error.NotFound
+        coEvery { remoteApiClient.likeContent("album", "item-success") } returns RemoteApiResponse.Success(Unit)
 
         synchronizer = createSynchronizer()
         synchronizer.initialize()
         advanceUntilIdle()
 
         // Both should be processed
-        coVerify { remoteApiClient.likeContent("item-fail") }
-        coVerify { remoteApiClient.likeContent("item-success") }
+        coVerify { remoteApiClient.likeContent("album", "item-fail") }
+        coVerify { remoteApiClient.likeContent("album", "item-success") }
 
         // Failure should be marked as error, success should be synced
         coVerify { userContentStore.updateSyncStatus("item-fail", SyncStatus.SyncError) }
@@ -335,14 +335,14 @@ class UserContentSynchronizerTest {
             flowOf(listOf(item)),
             flowOf(emptyList())
         )
-        coEvery { remoteApiClient.likeContent("like-item") } returns RemoteApiResponse.Success(Unit)
+        coEvery { remoteApiClient.likeContent("album", "like-item") } returns RemoteApiResponse.Success(Unit)
 
         synchronizer = createSynchronizer()
         synchronizer.initialize()
         advanceUntilIdle()
 
-        coVerify(exactly = 1) { remoteApiClient.likeContent("like-item") }
-        coVerify(exactly = 0) { remoteApiClient.unlikeContent(any()) }
+        coVerify(exactly = 1) { remoteApiClient.likeContent("album", "like-item") }
+        coVerify(exactly = 0) { remoteApiClient.unlikeContent(any(), any()) }
     }
 
     @Test
@@ -353,14 +353,14 @@ class UserContentSynchronizerTest {
             flowOf(listOf(item)),
             flowOf(emptyList())
         )
-        coEvery { remoteApiClient.unlikeContent("unlike-item") } returns RemoteApiResponse.Success(Unit)
+        coEvery { remoteApiClient.unlikeContent("album", "unlike-item") } returns RemoteApiResponse.Success(Unit)
 
         synchronizer = createSynchronizer()
         synchronizer.initialize()
         advanceUntilIdle()
 
-        coVerify(exactly = 0) { remoteApiClient.likeContent(any()) }
-        coVerify(exactly = 1) { remoteApiClient.unlikeContent("unlike-item") }
+        coVerify(exactly = 0) { remoteApiClient.likeContent(any(), any()) }
+        coVerify(exactly = 1) { remoteApiClient.unlikeContent("album", "unlike-item") }
     }
 
     // ========== fetchRemoteLikedContent Tests ==========
