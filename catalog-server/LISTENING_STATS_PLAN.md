@@ -253,8 +253,9 @@ pub static ref LISTENING_DURATION_SECONDS_TOTAL: CounterVec = CounterVec::new(
 
 ### Phase 3: API Layer
 9. ~~Add request/response structs to `server.rs`~~ ✅
-10. Implement endpoint handlers
-11. Register routes with rate limiting
+10. ~~Implement user endpoint handlers~~ ✅
+11. Implement admin endpoint handlers
+12. Register routes with rate limiting
 
 ### Phase 4: Metrics & Testing
 12. Add Prometheus metrics

@@ -680,6 +680,143 @@ async fn get_user_playlists(
     }
 }
 
+// User listening stats endpoints
+
+async fn post_listening_event(
+    session: Session,
+    State(user_manager): State<GuardedUserManager>,
+    Json(body): Json<ListeningEventRequest>,
+) -> Response {
+    use std::time::SystemTime;
+
+    // Calculate date in YYYYMMDD format
+    let now_secs = SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+    let started_at = body.started_at.unwrap_or(now_secs);
+    let date = {
+        let datetime = chrono::DateTime::from_timestamp(started_at as i64, 0)
+            .unwrap_or_else(|| chrono::Utc::now());
+        datetime.format("%Y%m%d").to_string().parse::<u32>().unwrap_or(0)
+    };
+
+    // Calculate completion (>90% = complete)
+    let completed = body.duration_seconds as f64 / body.track_duration_seconds as f64 >= 0.90;
+
+    let event = crate::user::ListeningEvent {
+        id: None,
+        user_id: session.user_id,
+        track_id: body.track_id,
+        session_id: body.session_id,
+        started_at,
+        ended_at: body.ended_at,
+        duration_seconds: body.duration_seconds,
+        track_duration_seconds: body.track_duration_seconds,
+        completed,
+        seek_count: body.seek_count.unwrap_or(0),
+        pause_count: body.pause_count.unwrap_or(0),
+        playback_context: body.playback_context,
+        client_type: body.client_type,
+        date,
+    };
+
+    match user_manager.lock().unwrap().record_listening_event(event) {
+        Ok((id, created)) => Json(ListeningEventResponse { id, created }).into_response(),
+        Err(err) => {
+            error!("Error recording listening event: {}", err);
+            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+        }
+    }
+}
+
+async fn get_user_listening_summary(
+    session: Session,
+    State(user_manager): State<GuardedUserManager>,
+    Query(query): Query<DateRangeQuery>,
+) -> Response {
+    let (start_date, end_date) = get_default_date_range(query.start_date, query.end_date);
+
+    match user_manager
+        .lock()
+        .unwrap()
+        .get_user_listening_summary(session.user_id, start_date, end_date)
+    {
+        Ok(summary) => Json(summary).into_response(),
+        Err(err) => {
+            error!("Error getting listening summary: {}", err);
+            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+        }
+    }
+}
+
+async fn get_user_listening_history(
+    session: Session,
+    State(user_manager): State<GuardedUserManager>,
+    Query(query): Query<ListeningHistoryQuery>,
+) -> Response {
+    let limit = query.limit.unwrap_or(50).min(500);
+
+    match user_manager
+        .lock()
+        .unwrap()
+        .get_user_listening_history(session.user_id, limit)
+    {
+        Ok(history) => Json(history).into_response(),
+        Err(err) => {
+            error!("Error getting listening history: {}", err);
+            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+        }
+    }
+}
+
+async fn get_user_listening_events(
+    session: Session,
+    State(user_manager): State<GuardedUserManager>,
+    Query(query): Query<ListeningEventsQuery>,
+) -> Response {
+    let (start_date, end_date) = get_default_date_range(query.start_date, query.end_date);
+
+    match user_manager.lock().unwrap().get_user_listening_events(
+        session.user_id,
+        start_date,
+        end_date,
+        query.limit,
+        query.offset,
+    ) {
+        Ok(events) => Json(events).into_response(),
+        Err(err) => {
+            error!("Error getting listening events: {}", err);
+            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+        }
+    }
+}
+
+/// Helper to get default date range (last 30 days if not specified)
+fn get_default_date_range(start_date: Option<u32>, end_date: Option<u32>) -> (u32, u32) {
+    use std::time::SystemTime;
+
+    let now_secs = SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+
+    let end = end_date.unwrap_or_else(|| {
+        let datetime = chrono::DateTime::from_timestamp(now_secs as i64, 0)
+            .unwrap_or_else(|| chrono::Utc::now());
+        datetime.format("%Y%m%d").to_string().parse::<u32>().unwrap_or(0)
+    });
+
+    let start = start_date.unwrap_or_else(|| {
+        let thirty_days_ago = now_secs - (30 * 24 * 60 * 60);
+        let datetime = chrono::DateTime::from_timestamp(thirty_days_ago as i64, 0)
+            .unwrap_or_else(|| chrono::Utc::now());
+        datetime.format("%Y%m%d").to_string().parse::<u32>().unwrap_or(0)
+    });
+
+    (start, end)
+}
+
 async fn login(
     State(user_manager): State<GuardedUserManager>,
     Json(body): Json<LoginBody>,
@@ -1365,7 +1502,22 @@ pub fn make_app(
         content_routes = content_routes.merge(rate_limited_search_routes);
     }
 
-    let user_routes = liked_content_routes.merge(playlist_routes);
+    // Listening stats routes (requires AccessCatalog permission)
+    let listening_stats_routes: Router = Router::new()
+        .route("/listening", post(post_listening_event))
+        .route("/listening/summary", get(get_user_listening_summary))
+        .route("/listening/history", get(get_user_listening_history))
+        .route("/listening/events", get(get_user_listening_events))
+        .layer(GovernorLayer::new(write_rate_limit.clone()))
+        .route_layer(middleware::from_fn_with_state(
+            state.clone(),
+            require_access_catalog,
+        ))
+        .with_state(state.clone());
+
+    let user_routes = liked_content_routes
+        .merge(playlist_routes)
+        .merge(listening_stats_routes);
 
     // Catalog editing routes (requires EditCatalog permission)
     let catalog_edit_routes: Router = Router::new()
