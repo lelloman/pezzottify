@@ -2,6 +2,9 @@ package com.lelloman.pezzottify.android.domain.statics
 
 import com.google.common.truth.Truth.assertThat
 import com.lelloman.pezzottify.android.domain.app.TimeProvider
+import com.lelloman.pezzottify.android.domain.cache.CacheMetricsCollector
+import com.lelloman.pezzottify.android.domain.cache.StaticsCache
+import com.lelloman.pezzottify.android.domain.settings.UserSettingsStore
 import com.lelloman.pezzottify.android.domain.statics.fetchstate.ErrorReason
 import com.lelloman.pezzottify.android.domain.statics.fetchstate.StaticItemFetchState
 import com.lelloman.pezzottify.android.domain.statics.fetchstate.StaticItemFetchStateStore
@@ -27,6 +30,9 @@ class StaticsProviderTest {
     private lateinit var staticsSynchronizer: StaticsSynchronizer
     private lateinit var timeProvider: TimeProvider
     private lateinit var loggerFactory: LoggerFactory
+    private lateinit var staticsCache: StaticsCache
+    private lateinit var cacheMetricsCollector: CacheMetricsCollector
+    private lateinit var userSettingsStore: UserSettingsStore
 
     private var currentTime = 1_000_000L
 
@@ -38,6 +44,12 @@ class StaticsProviderTest {
         fetchStateStore = mockk()
         staticsSynchronizer = mockk(relaxed = true)
         timeProvider = TimeProvider { currentTime }
+        staticsCache = mockk(relaxed = true)
+        cacheMetricsCollector = mockk(relaxed = true)
+        userSettingsStore = mockk()
+
+        // Disable cache for these tests (testing Room flow behavior)
+        every { userSettingsStore.isInMemoryCacheEnabled } returns MutableStateFlow(false)
 
         val mockLogger = mockk<Logger>(relaxed = true)
         loggerFactory = mockk()
@@ -49,6 +61,9 @@ class StaticsProviderTest {
             staticItemFetchStateStore = fetchStateStore,
             staticsSynchronizer = staticsSynchronizer,
             timeProvider = timeProvider,
+            staticsCache = staticsCache,
+            cacheMetricsCollector = cacheMetricsCollector,
+            userSettingsStore = userSettingsStore,
             loggerFactory = loggerFactory,
             coroutineContext = Dispatchers.Unconfined,
         )
