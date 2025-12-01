@@ -1,6 +1,9 @@
 use super::auth::{AuthToken, AuthTokenValue, UserAuthCredentials};
 use super::permissions::{Permission, PermissionGrant, UserRole};
-use super::user_models::{BandwidthSummary, BandwidthUsage, LikedContentType, UserPlaylist};
+use super::user_models::{
+    BandwidthSummary, BandwidthUsage, DailyListeningStats, LikedContentType, ListeningEvent,
+    ListeningSummary, TrackListeningStats, UserListeningHistoryEntry, UserPlaylist,
+};
 use anyhow::Result;
 
 pub trait UserAuthCredentialsStore: Send + Sync {
@@ -173,8 +176,68 @@ pub trait UserBandwidthStore: Send + Sync {
     fn prune_bandwidth_usage(&self, older_than_days: u32) -> Result<usize>;
 }
 
-/// Combined trait for user storage with bandwidth tracking
-pub trait FullUserStore: UserStore + UserBandwidthStore {}
+/// Trait for listening statistics tracking operations
+pub trait UserListeningStore: Send + Sync {
+    /// Records a listening event. If session_id already exists, returns Ok without inserting
+    /// (idempotent for offline queue retry). Returns the event id and whether it was created.
+    fn record_listening_event(&self, event: ListeningEvent) -> Result<(usize, bool)>;
 
-// Blanket implementation for any type that implements both UserStore and UserBandwidthStore
-impl<T: UserStore + UserBandwidthStore> FullUserStore for T {}
+    /// Gets listening events for a user within a date range (paginated).
+    /// Both start_date and end_date are inclusive and in YYYYMMDD format.
+    fn get_user_listening_events(
+        &self,
+        user_id: usize,
+        start_date: u32,
+        end_date: u32,
+        limit: Option<usize>,
+        offset: Option<usize>,
+    ) -> Result<Vec<ListeningEvent>>;
+
+    /// Gets summarized listening stats for a user within a date range.
+    fn get_user_listening_summary(
+        &self,
+        user_id: usize,
+        start_date: u32,
+        end_date: u32,
+    ) -> Result<ListeningSummary>;
+
+    /// Gets a user's listening history (recently played tracks, aggregated by track).
+    fn get_user_listening_history(
+        &self,
+        user_id: usize,
+        limit: usize,
+    ) -> Result<Vec<UserListeningHistoryEntry>>;
+
+    /// Gets listening stats for a specific track within a date range (admin).
+    fn get_track_listening_stats(
+        &self,
+        track_id: &str,
+        start_date: u32,
+        end_date: u32,
+    ) -> Result<TrackListeningStats>;
+
+    /// Gets daily aggregated listening stats within a date range (admin).
+    fn get_daily_listening_stats(
+        &self,
+        start_date: u32,
+        end_date: u32,
+    ) -> Result<Vec<DailyListeningStats>>;
+
+    /// Gets top tracks by play count within a date range (admin).
+    fn get_top_tracks(
+        &self,
+        start_date: u32,
+        end_date: u32,
+        limit: usize,
+    ) -> Result<Vec<TrackListeningStats>>;
+
+    /// Prunes listening events older than the specified number of days.
+    /// Returns the number of events deleted.
+    fn prune_listening_events(&self, older_than_days: u32) -> Result<usize>;
+}
+
+/// Combined trait for user storage with bandwidth and listening tracking
+pub trait FullUserStore: UserStore + UserBandwidthStore + UserListeningStore {}
+
+// Blanket implementation for any type that implements UserStore, UserBandwidthStore, and UserListeningStore
+impl<T: UserStore + UserBandwidthStore + UserListeningStore> FullUserStore for T {}
