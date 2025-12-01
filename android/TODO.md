@@ -4,15 +4,12 @@ We can consider V1 ready once all of the task without V2 mark are completed.
 
 ### [ready for coding]
 
-- Check the related artists picture logic. For instance, when visiting Prince artist screen, you don't see George Michael's picture, but if you go into George Michael screen you do have a picture
 
 ### [to refine]
 
-- Create a db for logout operations so that if a user logout, the server call doesn't need to happen immediately, plus in case of immediate error it can be retried
 - Create a "memory pressure" component that can detect how much memory can we use for caches and such (imagine caching stuff from the db, pre-loading audio, images)
 - Add an in-memory immediate cache layer in ContentResolver, only after a "memory pressure" component
 - Add recent searches component to the search screen (store and display user's search history)
-- ~The search screen shows recently viewed items when query is empty (V1, done), add recent searches too (V2)~
 - Add a contextual menu to queue albums and tracks (add to current playlist instead of replacing)
 - We should probably think about collecting information about storage used and how it is used. For instance, it would be cool to cache audio files, but the feature needs to be storage-aware.
 - We need to plan a "download" feature for albums and tracks
@@ -24,6 +21,8 @@ We can consider V1 ready once all of the task without V2 mark are completed.
 
 ### [done]
 
+- ~The search screen shows recently viewed items when query is empty (V1, done), add recent searches too (V2)~
+- ~Check the related artists picture logic. For instance, when visiting Prince artist screen, you don't see George Michael's picture, but if you go into George Michael screen you do have a picture~
 - ~Add custom theme palettes beyond system/light/dark (e.g., Material colors like blue, green, purple, or themed palettes like 'Midnight', 'Sunset', 'Forest')~
 - ~We should introduce user's liked content, this will populate the library's screen. (what do we show when the user doesn't have anything yet?)~
 - ~The synchronizer seems to have a bug (skim through the git log though, maybe we fix it already), when the server responds 403 it keeps hammering the endpoint in an infinite loop~

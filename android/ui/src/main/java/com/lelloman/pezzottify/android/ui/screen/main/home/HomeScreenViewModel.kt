@@ -11,9 +11,14 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
+import java.util.Calendar
 import javax.inject.Inject
 import kotlin.coroutines.CoroutineContext
 
@@ -104,12 +109,15 @@ class HomeScreenViewModel(
                                 contentState.data.name,
                                 contentState.data.imageUrl,
                                 ViewedContentType.Album,
+                                contentState.data.artistsIds.map { ResolvedArtistInfo(it, "") },
+                                contentState.data.date.toYear(),
                             )
                         )
 
                         else -> contentState as Content<ResolvedRecentlyViewedContent>
                     }
                 }
+                .resolveArtists()
 
             ViewedContentType.Track -> contentResolver.resolveTrack(recentlyViewedContent.contentId)
                 .map { contentState ->
@@ -138,4 +146,41 @@ class HomeScreenViewModel(
     interface Interactor {
         suspend fun getRecentlyViewedContent(maxCount: Int): Flow<List<HomeScreenState.RecentlyViewedContent>>
     }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    private fun Flow<Content<ResolvedRecentlyViewedContent>>.resolveArtists(): Flow<Content<ResolvedRecentlyViewedContent>> =
+        flatMapLatest { content ->
+            when (content) {
+                is Content.Resolved -> {
+                    val artistFlows = content.data.artists.map { artistInfo ->
+                        contentResolver.resolveArtist(artistInfo.id).map { artistContent ->
+                            when (artistContent) {
+                                is Content.Resolved -> ResolvedArtistInfo(
+                                    artistContent.data.id,
+                                    artistContent.data.name
+                                )
+                                else -> artistInfo
+                            }
+                        }
+                    }
+                    if (artistFlows.isEmpty()) {
+                        flowOf(content)
+                    } else {
+                        combine(artistFlows) { artists ->
+                            Content.Resolved(
+                                itemId = content.itemId,
+                                data = content.data.copy(artists = artists.toList())
+                            )
+                        }
+                    }
+                }
+                else -> flowOf(content)
+            }
+        }
+}
+
+private fun Long.toYear(): Int {
+    val calendar = Calendar.getInstance()
+    calendar.timeInMillis = this
+    return calendar.get(Calendar.YEAR)
 }

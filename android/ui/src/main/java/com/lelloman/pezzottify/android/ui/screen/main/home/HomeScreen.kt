@@ -8,6 +8,8 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -17,6 +19,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.Card
@@ -34,9 +37,11 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
@@ -44,6 +49,8 @@ import androidx.navigation.compose.rememberNavController
 import com.lelloman.pezzottify.android.ui.R
 import com.lelloman.pezzottify.android.ui.component.NullablePezzottifyImage
 import com.lelloman.pezzottify.android.ui.component.PezzottifyImageShape
+import com.lelloman.pezzottify.android.ui.component.ScrollingArtistsRow
+import com.lelloman.pezzottify.android.ui.content.ArtistInfo
 import com.lelloman.pezzottify.android.ui.content.Content
 import com.lelloman.pezzottify.android.ui.theme.ComponentSize
 import com.lelloman.pezzottify.android.ui.theme.CornerRadius
@@ -122,7 +129,7 @@ private fun HomeScreenContent(
                 Spacer(modifier = Modifier.height(Spacing.Medium))
                 Text(
                     stringResource(R.string.recently_viewed_item_header),
-                    style = MaterialTheme.typography.headlineSmall
+                    style = MaterialTheme.typography.titleLarge
                 )
                 Spacer(modifier = Modifier.height(Spacing.Medium))
 
@@ -171,7 +178,7 @@ private fun RecentlyViewedItem(
                             item.data.contentType
                         )
                     },
-                shape = RoundedCornerShape(CornerRadius.Medium),
+                shape = RoundedCornerShape(CornerRadius.Small),
                 elevation = CardDefaults.cardElevation(
                     defaultElevation = Elevation.Small
                 )
@@ -179,30 +186,50 @@ private fun RecentlyViewedItem(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(Spacing.Small),
+                        .height(ComponentSize.ImageThumbMedium),
                     verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
                 ) {
                     NullablePezzottifyImage(
                         url = item.data.contentImageUrl,
-                        shape = PezzottifyImageShape.SmallSquare,
-                        modifier = Modifier.size(ComponentSize.ImageThumbSmall)
+                        shape = PezzottifyImageShape.FullSize,
+                        modifier = Modifier
+                            .fillMaxHeight()
+                            .aspectRatio(1f, matchHeightConstraintsFirst = true)
+                            .clip(
+                                RoundedCornerShape(
+                                    topStart = CornerRadius.Small,
+                                    bottomStart = CornerRadius.Small,
+                                    topEnd = 0.dp,
+                                    bottomEnd = 0.dp
+                                )
+                            )
                     )
-                    Spacer(modifier = Modifier.width(Spacing.Small))
                     Column(
-                        modifier = Modifier.weight(1f)
+                        modifier = Modifier
+                            .weight(1f)
+                            .padding(Spacing.Small)
                     ) {
                         Text(
                             text = item.data.contentName,
                             style = MaterialTheme.typography.titleMedium,
-                            maxLines = 1,
-                            color = MaterialTheme.colorScheme.onSurface
+                            maxLines = if (item.data.artists.isEmpty()) 2 else 1,
+                            overflow = TextOverflow.Ellipsis,
+                            color = MaterialTheme.colorScheme.onSurface,
                         )
-                        Text(
-                            text = item.data.contentType.name,
-                            style = MaterialTheme.typography.bodySmall,
-                            maxLines = 1,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+                        if (item.data.artists.isNotEmpty()) {
+                            ScrollingArtistsRow(
+                                artists = item.data.artists.map { ArtistInfo(it.id, it.name) },
+                                textStyle = MaterialTheme.typography.bodySmall,
+                            )
+                        }
+                        item.data.year?.let { year ->
+                            Text(
+                                text = year.toString(),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                            )
+                        }
                     }
                 }
             }
@@ -212,7 +239,7 @@ private fun RecentlyViewedItem(
             Box(
                 modifier = modifier
                     .fillMaxWidth()
-                    .height(ComponentSize.ImageThumbSmall),
+                    .height(ComponentSize.ImageThumbMedium),
                 contentAlignment = androidx.compose.ui.Alignment.Center
             ) {
                 CircularProgressIndicator()
@@ -223,7 +250,7 @@ private fun RecentlyViewedItem(
             Card(
                 modifier = modifier
                     .fillMaxWidth(),
-                shape = RoundedCornerShape(CornerRadius.Medium),
+                shape = RoundedCornerShape(CornerRadius.Small),
                 colors = CardDefaults.cardColors(
                     containerColor = MaterialTheme.colorScheme.errorContainer
                 )
@@ -231,7 +258,7 @@ private fun RecentlyViewedItem(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(ComponentSize.ImageThumbSmall)
+                        .height(ComponentSize.ImageThumbMedium)
                         .padding(Spacing.Small),
                     contentAlignment = androidx.compose.ui.Alignment.Center
                 ) {

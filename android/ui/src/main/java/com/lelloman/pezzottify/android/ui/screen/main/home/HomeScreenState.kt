@@ -17,6 +17,13 @@ data class ResolvedRecentlyViewedContent(
     val contentName: String,
     val contentImageUrl: String?,
     val contentType: ViewedContentType,
+    val artists: List<ResolvedArtistInfo> = emptyList(),
+    val year: Int? = null,
+)
+
+data class ResolvedArtistInfo(
+    val id: String,
+    val name: String,
 )
 
 enum class ViewedContentType {
