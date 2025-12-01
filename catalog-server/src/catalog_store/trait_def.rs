@@ -110,6 +110,42 @@ pub trait CatalogStore: Send + Sync {
 
     /// Delete an image by ID.
     fn delete_image(&self, id: &str) -> Result<()>;
+
+    // =========================================================================
+    // Changelog Operations
+    // =========================================================================
+
+    /// Create a new changelog batch. Returns error if a batch is already active.
+    fn create_changelog_batch(
+        &self,
+        name: &str,
+        description: Option<&str>,
+    ) -> Result<super::CatalogBatch>;
+
+    /// Get a changelog batch by ID.
+    fn get_changelog_batch(&self, id: &str) -> Result<Option<super::CatalogBatch>>;
+
+    /// Get the currently active (open) changelog batch, if any.
+    fn get_active_changelog_batch(&self) -> Result<Option<super::CatalogBatch>>;
+
+    /// Close a changelog batch by ID.
+    fn close_changelog_batch(&self, id: &str) -> Result<()>;
+
+    /// List changelog batches, optionally filtered by open/closed state.
+    fn list_changelog_batches(&self, is_open: Option<bool>) -> Result<Vec<super::CatalogBatch>>;
+
+    /// Delete a changelog batch. Only succeeds if the batch has no changes.
+    fn delete_changelog_batch(&self, id: &str) -> Result<()>;
+
+    /// Get all changes recorded in a batch.
+    fn get_changelog_batch_changes(&self, batch_id: &str) -> Result<Vec<super::ChangeEntry>>;
+
+    /// Get the change history for a specific entity.
+    fn get_changelog_entity_history(
+        &self,
+        entity_type: super::ChangeEntityType,
+        entity_id: &str,
+    ) -> Result<Vec<super::ChangeEntry>>;
 }
 
 /// A searchable item for the search index.

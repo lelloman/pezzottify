@@ -1445,6 +1445,116 @@ async fn admin_get_user_listening_summary(
     }
 }
 
+// ============================================================================
+// Changelog admin endpoints (requires EditCatalog permission)
+// ============================================================================
+
+#[derive(Deserialize)]
+struct CreateBatchBody {
+    name: String,
+    description: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct ListBatchesQuery {
+    is_open: Option<bool>,
+}
+
+/// Create a new changelog batch
+async fn admin_create_changelog_batch(
+    _session: Session,
+    State(catalog_store): State<GuardedCatalogStore>,
+    Json(body): Json<CreateBatchBody>,
+) -> Response {
+    match catalog_store.create_changelog_batch(&body.name, body.description.as_deref()) {
+        Ok(batch) => (StatusCode::CREATED, Json(batch)).into_response(),
+        Err(err) => {
+            let err_msg = err.to_string();
+            if err_msg.contains("already active") || err_msg.contains("already open") {
+                (StatusCode::CONFLICT, err_msg).into_response()
+            } else {
+                error!("Error creating changelog batch: {}", err);
+                StatusCode::INTERNAL_SERVER_ERROR.into_response()
+            }
+        }
+    }
+}
+
+/// List changelog batches with optional filter
+async fn admin_list_changelog_batches(
+    _session: Session,
+    State(catalog_store): State<GuardedCatalogStore>,
+    Query(query): Query<ListBatchesQuery>,
+) -> Response {
+    match catalog_store.list_changelog_batches(query.is_open) {
+        Ok(batches) => Json(batches).into_response(),
+        Err(err) => {
+            error!("Error listing changelog batches: {}", err);
+            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+        }
+    }
+}
+
+/// Get a specific changelog batch by ID
+async fn admin_get_changelog_batch(
+    _session: Session,
+    State(catalog_store): State<GuardedCatalogStore>,
+    Path(batch_id): Path<String>,
+) -> Response {
+    match catalog_store.get_changelog_batch(&batch_id) {
+        Ok(Some(batch)) => Json(batch).into_response(),
+        Ok(None) => StatusCode::NOT_FOUND.into_response(),
+        Err(err) => {
+            error!("Error getting changelog batch: {}", err);
+            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+        }
+    }
+}
+
+/// Close a changelog batch
+async fn admin_close_changelog_batch(
+    _session: Session,
+    State(catalog_store): State<GuardedCatalogStore>,
+    Path(batch_id): Path<String>,
+) -> Response {
+    match catalog_store.close_changelog_batch(&batch_id) {
+        Ok(()) => StatusCode::OK.into_response(),
+        Err(err) => {
+            let err_msg = err.to_string();
+            if err_msg.contains("not found") {
+                StatusCode::NOT_FOUND.into_response()
+            } else if err_msg.contains("already closed") {
+                (StatusCode::CONFLICT, err_msg).into_response()
+            } else {
+                error!("Error closing changelog batch: {}", err);
+                StatusCode::INTERNAL_SERVER_ERROR.into_response()
+            }
+        }
+    }
+}
+
+/// Delete a changelog batch (only if empty)
+async fn admin_delete_changelog_batch(
+    _session: Session,
+    State(catalog_store): State<GuardedCatalogStore>,
+    Path(batch_id): Path<String>,
+) -> Response {
+    match catalog_store.delete_changelog_batch(&batch_id) {
+        Ok(()) => StatusCode::NO_CONTENT.into_response(),
+        Err(err) => {
+            let err_msg = err.to_string();
+            if err_msg.contains("not found") {
+                StatusCode::NOT_FOUND.into_response()
+            } else if err_msg.contains("not empty") || err_msg.contains("has changes") {
+                (StatusCode::BAD_REQUEST, err_msg).into_response()
+            } else {
+                error!("Error deleting changelog batch: {}", err);
+                StatusCode::INTERNAL_SERVER_ERROR.into_response()
+            }
+        }
+    }
+}
+
 impl ServerState {
     fn new(
         config: ServerConfig,
@@ -1719,9 +1829,30 @@ pub fn make_app(
         ))
         .with_state(state.clone());
 
+    // Admin changelog routes (requires EditCatalog permission)
+    let admin_changelog_routes: Router = Router::new()
+        .route("/changelog/batch", post(admin_create_changelog_batch))
+        .route("/changelog/batches", get(admin_list_changelog_batches))
+        .route("/changelog/batch/{batch_id}", get(admin_get_changelog_batch))
+        .route(
+            "/changelog/batch/{batch_id}/close",
+            post(admin_close_changelog_batch),
+        )
+        .route(
+            "/changelog/batch/{batch_id}",
+            delete(admin_delete_changelog_batch),
+        )
+        .layer(GovernorLayer::new(write_rate_limit.clone()))
+        .route_layer(middleware::from_fn_with_state(
+            state.clone(),
+            require_edit_catalog,
+        ))
+        .with_state(state.clone());
+
     let admin_routes = admin_reboot_routes
         .merge(admin_user_routes)
-        .merge(admin_listening_routes);
+        .merge(admin_listening_routes)
+        .merge(admin_changelog_routes);
 
     let home_router: Router = match config.frontend_dir_path {
         Some(frontend_path) => {

@@ -5,8 +5,8 @@
 //! the filesystem.
 
 use super::changelog::{
-    calculate_field_diff, extract_entity_name, generate_display_summary, ChangeEntityType,
-    ChangeLogStore, ChangeOperation,
+    calculate_field_diff, extract_entity_name, generate_display_summary, CatalogBatch,
+    ChangeEntityType, ChangeEntry, ChangeLogStore, ChangeOperation,
 };
 use super::models::*;
 use super::schema::CATALOG_VERSIONED_SCHEMAS;
@@ -2045,6 +2045,50 @@ impl CatalogStore for SqliteCatalogStore {
 
     fn delete_image(&self, id: &str) -> Result<()> {
         self.delete_image_record(id)
+    }
+
+    // =========================================================================
+    // Changelog Operations
+    // =========================================================================
+
+    fn create_changelog_batch(
+        &self,
+        name: &str,
+        description: Option<&str>,
+    ) -> Result<CatalogBatch> {
+        self.changelog.create_batch(name, description)
+    }
+
+    fn get_changelog_batch(&self, id: &str) -> Result<Option<CatalogBatch>> {
+        self.changelog.get_batch(id)
+    }
+
+    fn get_active_changelog_batch(&self) -> Result<Option<CatalogBatch>> {
+        self.changelog.get_active_batch()
+    }
+
+    fn close_changelog_batch(&self, id: &str) -> Result<()> {
+        self.changelog.close_batch(id).map(|_| ())
+    }
+
+    fn list_changelog_batches(&self, is_open: Option<bool>) -> Result<Vec<CatalogBatch>> {
+        self.changelog.list_batches(is_open)
+    }
+
+    fn delete_changelog_batch(&self, id: &str) -> Result<()> {
+        self.changelog.delete_batch(id)
+    }
+
+    fn get_changelog_batch_changes(&self, batch_id: &str) -> Result<Vec<ChangeEntry>> {
+        self.changelog.get_batch_changes(batch_id)
+    }
+
+    fn get_changelog_entity_history(
+        &self,
+        entity_type: ChangeEntityType,
+        entity_id: &str,
+    ) -> Result<Vec<ChangeEntry>> {
+        self.changelog.get_entity_history(entity_type, entity_id)
     }
 }
 

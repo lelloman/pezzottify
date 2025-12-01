@@ -3,6 +3,7 @@
 //! A no-op implementation of CatalogStore for use cases where catalog
 //! functionality is not needed (e.g., CLI tools that only manage users).
 
+use super::changelog::{CatalogBatch, ChangeEntityType, ChangeEntry};
 use super::trait_def::{CatalogStore, SearchableItem};
 use anyhow::Result;
 use std::path::PathBuf;
@@ -109,5 +110,45 @@ impl CatalogStore for NullCatalogStore {
 
     fn delete_image(&self, _id: &str) -> Result<()> {
         anyhow::bail!("NullCatalogStore does not support write operations")
+    }
+
+    fn create_changelog_batch(
+        &self,
+        _name: &str,
+        _description: Option<&str>,
+    ) -> Result<CatalogBatch> {
+        anyhow::bail!("NullCatalogStore does not support changelog operations")
+    }
+
+    fn get_changelog_batch(&self, _id: &str) -> Result<Option<CatalogBatch>> {
+        Ok(None)
+    }
+
+    fn get_active_changelog_batch(&self) -> Result<Option<CatalogBatch>> {
+        Ok(None)
+    }
+
+    fn close_changelog_batch(&self, _id: &str) -> Result<()> {
+        anyhow::bail!("NullCatalogStore does not support changelog operations")
+    }
+
+    fn list_changelog_batches(&self, _is_open: Option<bool>) -> Result<Vec<CatalogBatch>> {
+        Ok(Vec::new())
+    }
+
+    fn delete_changelog_batch(&self, _id: &str) -> Result<()> {
+        anyhow::bail!("NullCatalogStore does not support changelog operations")
+    }
+
+    fn get_changelog_batch_changes(&self, _batch_id: &str) -> Result<Vec<ChangeEntry>> {
+        Ok(Vec::new())
+    }
+
+    fn get_changelog_entity_history(
+        &self,
+        _entity_type: ChangeEntityType,
+        _entity_id: &str,
+    ) -> Result<Vec<ChangeEntry>> {
+        Ok(Vec::new())
     }
 }
