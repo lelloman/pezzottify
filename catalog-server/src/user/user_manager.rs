@@ -3,7 +3,10 @@ use crate::catalog_store::CatalogStore;
 use super::{
     auth::PezzottifyHasher,
     permissions::{Permission, PermissionGrant, UserRole},
-    user_models::{BandwidthSummary, BandwidthUsage, LikedContentType},
+    user_models::{
+        BandwidthSummary, BandwidthUsage, DailyListeningStats, LikedContentType, ListeningEvent,
+        ListeningSummary, TrackListeningStats, UserListeningHistoryEntry,
+    },
     AuthToken, AuthTokenValue, FullUserStore, UserAuthCredentials, UserPlaylist,
     UsernamePasswordCredentials,
 };
@@ -472,5 +475,93 @@ impl UserManager {
             .lock()
             .unwrap()
             .prune_bandwidth_usage(older_than_days)
+    }
+
+    // Listening stats methods
+
+    pub fn record_listening_event(&self, event: ListeningEvent) -> Result<(usize, bool)> {
+        self.user_store
+            .lock()
+            .unwrap()
+            .record_listening_event(event)
+    }
+
+    pub fn get_user_listening_events(
+        &self,
+        user_id: usize,
+        start_date: u32,
+        end_date: u32,
+        limit: Option<usize>,
+        offset: Option<usize>,
+    ) -> Result<Vec<ListeningEvent>> {
+        self.user_store
+            .lock()
+            .unwrap()
+            .get_user_listening_events(user_id, start_date, end_date, limit, offset)
+    }
+
+    pub fn get_user_listening_summary(
+        &self,
+        user_id: usize,
+        start_date: u32,
+        end_date: u32,
+    ) -> Result<ListeningSummary> {
+        self.user_store
+            .lock()
+            .unwrap()
+            .get_user_listening_summary(user_id, start_date, end_date)
+    }
+
+    pub fn get_user_listening_history(
+        &self,
+        user_id: usize,
+        limit: usize,
+    ) -> Result<Vec<UserListeningHistoryEntry>> {
+        self.user_store
+            .lock()
+            .unwrap()
+            .get_user_listening_history(user_id, limit)
+    }
+
+    pub fn get_track_listening_stats(
+        &self,
+        track_id: &str,
+        start_date: u32,
+        end_date: u32,
+    ) -> Result<TrackListeningStats> {
+        self.user_store
+            .lock()
+            .unwrap()
+            .get_track_listening_stats(track_id, start_date, end_date)
+    }
+
+    pub fn get_daily_listening_stats(
+        &self,
+        start_date: u32,
+        end_date: u32,
+    ) -> Result<Vec<DailyListeningStats>> {
+        self.user_store
+            .lock()
+            .unwrap()
+            .get_daily_listening_stats(start_date, end_date)
+    }
+
+    pub fn get_top_tracks(
+        &self,
+        start_date: u32,
+        end_date: u32,
+        limit: usize,
+    ) -> Result<Vec<TrackListeningStats>> {
+        self.user_store
+            .lock()
+            .unwrap()
+            .get_top_tracks(start_date, end_date, limit)
+    }
+
+    pub fn prune_listening_events(&self, older_than_days: u32) -> Result<usize> {
+        self.user_store
+            .lock()
+            .unwrap()
+            .prune_listening_events(older_than_days)
     }
 }

@@ -248,7 +248,7 @@ pub static ref LISTENING_DURATION_SECONDS_TOTAL: CounterVec = CounterVec::new(
 6. ~~Implement `UserListeningStore` for `SqliteUserStore`~~ ✅
 
 ### Phase 2: Business Logic
-7. Add wrapper methods to `UserManager`
+7. ~~Add wrapper methods to `UserManager`~~ ✅
 8. ~~Update exports in `user/mod.rs`~~ ✅
 
 ### Phase 3: API Layer
