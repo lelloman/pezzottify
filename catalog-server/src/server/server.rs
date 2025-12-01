@@ -180,6 +180,25 @@ async fn require_manage_permissions(
     next.run(request).await
 }
 
+async fn require_view_analytics(
+    session: Session,
+    request: Request<Body>,
+    next: Next,
+) -> impl IntoResponse {
+    debug!(
+        "require_view_analytics: user_id={}, has_permission={}, permissions={:?}",
+        session.user_id,
+        session.has_permission(Permission::ViewAnalytics),
+        session.permissions
+    );
+    if !session.has_permission(Permission::ViewAnalytics) {
+        debug!("require_view_analytics: FORBIDDEN - user_id={} lacks ViewAnalytics permission", session.user_id);
+        return StatusCode::FORBIDDEN.into_response();
+    }
+    debug!("require_view_analytics: ALLOWED - user_id={}", session.user_id);
+    next.run(request).await
+}
+
 #[derive(Deserialize, Debug)]
 struct LoginBody {
     pub user_handle: String,
@@ -1317,6 +1336,101 @@ async fn admin_get_user_bandwidth_usage(
     }
 }
 
+// Listening statistics admin endpoints (requires ViewAnalytics permission)
+
+/// Get daily listening stats for the platform (admin only)
+async fn admin_get_daily_listening_stats(
+    _session: Session,
+    State(user_manager): State<GuardedUserManager>,
+    Query(query): Query<DateRangeQuery>,
+) -> Response {
+    let (start_date, end_date) = get_default_date_range(query.start_date, query.end_date);
+
+    match user_manager
+        .lock()
+        .unwrap()
+        .get_daily_listening_stats(start_date, end_date)
+    {
+        Ok(stats) => Json(stats).into_response(),
+        Err(err) => {
+            error!("Error getting daily listening stats: {}", err);
+            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+        }
+    }
+}
+
+/// Get top tracks by play count (admin only)
+async fn admin_get_top_tracks(
+    _session: Session,
+    State(user_manager): State<GuardedUserManager>,
+    Query(query): Query<TopTracksQuery>,
+) -> Response {
+    let (start_date, end_date) = get_default_date_range(query.start_date, query.end_date);
+    let limit = query.limit.unwrap_or(50).min(500);
+
+    match user_manager
+        .lock()
+        .unwrap()
+        .get_top_tracks(start_date, end_date, limit)
+    {
+        Ok(tracks) => Json(tracks).into_response(),
+        Err(err) => {
+            error!("Error getting top tracks: {}", err);
+            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+        }
+    }
+}
+
+/// Get listening stats for a specific track (admin only)
+async fn admin_get_track_listening_stats(
+    _session: Session,
+    State(user_manager): State<GuardedUserManager>,
+    Path(track_id): Path<String>,
+    Query(query): Query<DateRangeQuery>,
+) -> Response {
+    let (start_date, end_date) = get_default_date_range(query.start_date, query.end_date);
+
+    match user_manager
+        .lock()
+        .unwrap()
+        .get_track_listening_stats(&track_id, start_date, end_date)
+    {
+        Ok(stats) => Json(stats).into_response(),
+        Err(err) => {
+            error!("Error getting track listening stats: {}", err);
+            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+        }
+    }
+}
+
+/// Get listening summary for a specific user (admin only)
+async fn admin_get_user_listening_summary(
+    _session: Session,
+    State(user_manager): State<GuardedUserManager>,
+    Path(user_handle): Path<String>,
+    Query(query): Query<DateRangeQuery>,
+) -> Response {
+    let manager = user_manager.lock().unwrap();
+    let user_id = match manager.get_user_id(&user_handle) {
+        Ok(Some(id)) => id,
+        Ok(None) => return StatusCode::NOT_FOUND.into_response(),
+        Err(err) => {
+            error!("Error getting user id: {}", err);
+            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+        }
+    };
+
+    let (start_date, end_date) = get_default_date_range(query.start_date, query.end_date);
+
+    match manager.get_user_listening_summary(user_id, start_date, end_date) {
+        Ok(summary) => Json(summary).into_response(),
+        Err(err) => {
+            error!("Error getting user listening summary: {}", err);
+            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+        }
+    }
+}
+
 impl ServerState {
     fn new(
         config: ServerConfig,
@@ -1578,7 +1692,22 @@ pub fn make_app(
         ))
         .with_state(state.clone());
 
-    let admin_routes = admin_reboot_routes.merge(admin_user_routes);
+    // Admin listening stats routes (requires ViewAnalytics permission)
+    let admin_listening_routes: Router = Router::new()
+        .route("/listening/daily", get(admin_get_daily_listening_stats))
+        .route("/listening/top-tracks", get(admin_get_top_tracks))
+        .route("/listening/track/{track_id}", get(admin_get_track_listening_stats))
+        .route("/listening/users/{user_handle}/summary", get(admin_get_user_listening_summary))
+        .layer(GovernorLayer::new(write_rate_limit.clone()))
+        .route_layer(middleware::from_fn_with_state(
+            state.clone(),
+            require_view_analytics,
+        ))
+        .with_state(state.clone());
+
+    let admin_routes = admin_reboot_routes
+        .merge(admin_user_routes)
+        .merge(admin_listening_routes);
 
     let home_router: Router = match config.frontend_dir_path {
         Some(frontend_path) => {
