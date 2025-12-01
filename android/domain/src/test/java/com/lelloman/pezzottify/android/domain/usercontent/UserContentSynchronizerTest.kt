@@ -48,6 +48,7 @@ class UserContentSynchronizerTest {
         val mockLogger = mockk<Logger>(relaxed = true)
         loggerFactory = mockk()
         every { loggerFactory.getLogger(any<String>()) } returns mockLogger
+        every { loggerFactory.getLogger(any<kotlin.reflect.KClass<*>>()) } returns mockLogger
         every { loggerFactory.getValue(any(), any()) } returns mockLogger
 
         // Default behavior: no pending items

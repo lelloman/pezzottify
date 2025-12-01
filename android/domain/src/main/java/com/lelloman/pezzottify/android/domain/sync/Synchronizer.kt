@@ -1,6 +1,5 @@
 package com.lelloman.pezzottify.android.domain.sync
 
-import com.lelloman.pezzottify.android.domain.app.AppInitializer
 import com.lelloman.pezzottify.android.domain.app.TimeProvider
 import com.lelloman.pezzottify.android.domain.remoteapi.RemoteApiClient
 import com.lelloman.pezzottify.android.domain.remoteapi.response.AlbumResponse
@@ -15,13 +14,10 @@ import com.lelloman.pezzottify.android.domain.statics.fetchstate.ErrorReason
 import com.lelloman.pezzottify.android.domain.statics.fetchstate.StaticItemFetchState
 import com.lelloman.pezzottify.android.domain.statics.fetchstate.StaticItemFetchStateStore
 import com.lelloman.pezzottify.android.logger.LoggerFactory
-import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.GlobalScope
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -36,9 +32,15 @@ internal class Synchronizer(
     private val staticsStore: StaticsStore,
     private val timeProvider: TimeProvider,
     loggerFactory: LoggerFactory,
-    private val dispatcher: CoroutineDispatcher,
-    private val scope: CoroutineScope,
-) : AppInitializer {
+    dispatcher: CoroutineDispatcher,
+    scope: CoroutineScope,
+) : BaseSynchronizer<StaticItemFetchState>(
+    logger = loggerFactory.getLogger(Synchronizer::class),
+    dispatcher = dispatcher,
+    scope = scope,
+    minSleepDuration = MIN_SLEEP_DURATION,
+    maxSleepDuration = MAX_SLEEP_DURATION,
+) {
 
     @Inject
     constructor(
@@ -57,50 +59,22 @@ internal class Synchronizer(
         GlobalScope
     )
 
-    private var initialized = false
-    private var sleepDuration = 10.milliseconds
-    private var wakeUpSignal = CompletableDeferred<Unit>()
-
-    private val logger by loggerFactory
-
-    override fun initialize() {
-        scope.launch(dispatcher) {
-            if (!initialized) {
-                initialized = true
-                mainLoop()
-            }
-        }
-    }
-
-    fun wakeUp() {
-        logger.info("wakeUp()")
-        wakeUpSignal.complete(Unit)
-        sleepDuration = MIN_SLEEP_DURATION
-    }
-
-    private suspend fun mainLoop() {
+    override suspend fun onBeforeMainLoop() {
         fetchStateStore.resetLoadingStates()
-        while (true) {
-            logger.info("mainLoop() iteration")
-            val itemsToFetch = fetchStateStore.getIdle()
-            val loadingCount = fetchStateStore.getLoadingItemsCount()
-            logger.debug("mainLoop() got ${itemsToFetch.size} items to fetch and $loadingCount loading")
-            if (itemsToFetch.isEmpty() && loadingCount == 0) {
-                logger.info("mainLoop() going to sleep")
-                wakeUpSignal.await()
-                wakeUpSignal = CompletableDeferred()
-                sleepDuration = MIN_SLEEP_DURATION
-                continue
-            }
-            itemsToFetch.forEach { item -> fetchItemFromRemote(item.itemId, item.itemType) }
+    }
 
-            logger.debug("mainLoop() going to wait for $sleepDuration")
-            delay(sleepDuration)
-            sleepDuration *= 1.4
-            if (sleepDuration > MAX_SLEEP_DURATION) {
-                sleepDuration = MAX_SLEEP_DURATION
-            }
-        }
+    override suspend fun getItemsToProcess(): List<StaticItemFetchState> {
+        return fetchStateStore.getIdle()
+    }
+
+    override suspend fun shouldContinueWhenNoItems(): Boolean {
+        val loadingCount = fetchStateStore.getLoadingItemsCount()
+        logger.debug("shouldContinueWhenNoItems() loadingCount=$loadingCount")
+        return loadingCount > 0
+    }
+
+    override suspend fun processItem(item: StaticItemFetchState) {
+        fetchItemFromRemote(item.itemId, item.itemType)
     }
 
     private suspend fun fetchItemFromRemote(itemId: String, type: StaticItemType) {

@@ -1,17 +1,14 @@
 package com.lelloman.pezzottify.android.domain.usercontent
 
-import com.lelloman.pezzottify.android.domain.app.AppInitializer
 import com.lelloman.pezzottify.android.domain.remoteapi.RemoteApiClient
 import com.lelloman.pezzottify.android.domain.remoteapi.response.RemoteApiResponse
+import com.lelloman.pezzottify.android.domain.sync.BaseSynchronizer
 import com.lelloman.pezzottify.android.logger.LoggerFactory
-import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.GlobalScope
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.launch
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.time.Duration.Companion.milliseconds
@@ -22,9 +19,15 @@ class UserContentSynchronizer internal constructor(
     private val userContentStore: UserContentStore,
     private val remoteApiClient: RemoteApiClient,
     loggerFactory: LoggerFactory,
-    private val dispatcher: CoroutineDispatcher,
-    private val scope: CoroutineScope,
-) : AppInitializer {
+    dispatcher: CoroutineDispatcher,
+    scope: CoroutineScope,
+) : BaseSynchronizer<LikedContent>(
+    logger = loggerFactory.getLogger(UserContentSynchronizer::class),
+    dispatcher = dispatcher,
+    scope = scope,
+    minSleepDuration = MIN_SLEEP_DURATION,
+    maxSleepDuration = MAX_SLEEP_DURATION,
+) {
 
     @Inject
     constructor(
@@ -39,19 +42,12 @@ class UserContentSynchronizer internal constructor(
         GlobalScope
     )
 
-    private var initialized = false
-    private var sleepDuration = MIN_SLEEP_DURATION
-    private var wakeUpSignal = CompletableDeferred<Unit>()
+    override suspend fun getItemsToProcess(): List<LikedContent> {
+        return userContentStore.getPendingSyncItems().first()
+    }
 
-    private val logger by loggerFactory
-
-    override fun initialize() {
-        scope.launch(dispatcher) {
-            if (!initialized) {
-                initialized = true
-                mainLoop()
-            }
-        }
+    override suspend fun processItem(item: LikedContent) {
+        syncItem(item)
     }
 
     suspend fun fetchRemoteLikedContent() {
@@ -121,39 +117,6 @@ class UserContentSynchronizer internal constructor(
             }
         }
         logger.info("fetchRemoteLikedContent() done")
-    }
-
-    fun wakeUp() {
-        logger.info("wakeUp()")
-        wakeUpSignal.complete(Unit)
-        sleepDuration = MIN_SLEEP_DURATION
-    }
-
-    private suspend fun mainLoop() {
-        while (true) {
-            logger.debug("mainLoop() iteration")
-            val pendingItems = userContentStore.getPendingSyncItems().first()
-            logger.debug("mainLoop() got ${pendingItems.size} pending items")
-
-            if (pendingItems.isEmpty()) {
-                logger.info("mainLoop() going to sleep")
-                wakeUpSignal.await()
-                wakeUpSignal = CompletableDeferred()
-                sleepDuration = MIN_SLEEP_DURATION
-                continue
-            }
-
-            for (item in pendingItems) {
-                syncItem(item)
-            }
-
-            logger.debug("mainLoop() going to wait for $sleepDuration")
-            delay(sleepDuration)
-            sleepDuration *= 1.4
-            if (sleepDuration > MAX_SLEEP_DURATION) {
-                sleepDuration = MAX_SLEEP_DURATION
-            }
-        }
     }
 
     private suspend fun syncItem(item: LikedContent) {
