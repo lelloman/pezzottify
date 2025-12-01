@@ -634,4 +634,103 @@ impl TestClient {
             .await
             .expect("Get statics request failed")
     }
+
+    // ========================================================================
+    // Admin Changelog Endpoints
+    // ========================================================================
+
+    /// POST /v1/admin/changelog/batch
+    pub async fn admin_create_changelog_batch(
+        &self,
+        name: &str,
+        description: Option<&str>,
+    ) -> Response {
+        let mut body = serde_json::json!({ "name": name });
+        if let Some(desc) = description {
+            body["description"] = serde_json::json!(desc);
+        }
+        self.client
+            .post(format!("{}/v1/admin/changelog/batch", self.base_url))
+            .json(&body)
+            .send()
+            .await
+            .expect("Admin create changelog batch request failed")
+    }
+
+    /// GET /v1/admin/changelog/batches
+    pub async fn admin_list_changelog_batches(&self, is_open: Option<bool>) -> Response {
+        let mut url = format!("{}/v1/admin/changelog/batches", self.base_url);
+        if let Some(open) = is_open {
+            url = format!("{}?is_open={}", url, open);
+        }
+        self.client
+            .get(&url)
+            .send()
+            .await
+            .expect("Admin list changelog batches request failed")
+    }
+
+    /// GET /v1/admin/changelog/batch/{id}
+    pub async fn admin_get_changelog_batch(&self, batch_id: &str) -> Response {
+        self.client
+            .get(format!(
+                "{}/v1/admin/changelog/batch/{}",
+                self.base_url, batch_id
+            ))
+            .send()
+            .await
+            .expect("Admin get changelog batch request failed")
+    }
+
+    /// POST /v1/admin/changelog/batch/{id}/close
+    pub async fn admin_close_changelog_batch(&self, batch_id: &str) -> Response {
+        self.client
+            .post(format!(
+                "{}/v1/admin/changelog/batch/{}/close",
+                self.base_url, batch_id
+            ))
+            .send()
+            .await
+            .expect("Admin close changelog batch request failed")
+    }
+
+    /// DELETE /v1/admin/changelog/batch/{id}
+    pub async fn admin_delete_changelog_batch(&self, batch_id: &str) -> Response {
+        self.client
+            .delete(format!(
+                "{}/v1/admin/changelog/batch/{}",
+                self.base_url, batch_id
+            ))
+            .send()
+            .await
+            .expect("Admin delete changelog batch request failed")
+    }
+
+    /// GET /v1/admin/changelog/batch/{id}/changes
+    pub async fn admin_get_changelog_batch_changes(&self, batch_id: &str) -> Response {
+        self.client
+            .get(format!(
+                "{}/v1/admin/changelog/batch/{}/changes",
+                self.base_url, batch_id
+            ))
+            .send()
+            .await
+            .expect("Admin get changelog batch changes request failed")
+    }
+
+    /// GET /v1/admin/changelog/entity/{entity_type}/{entity_id}
+    pub async fn admin_get_changelog_entity_history(
+        &self,
+        entity_type: &str,
+        entity_id: &str,
+    ) -> Response {
+        self.client
+            .get(format!(
+                "{}/v1/admin/changelog/entity/{}/{}",
+                self.base_url, entity_type, entity_id
+            ))
+            .send()
+            .await
+            .expect("Admin get changelog entity history request failed")
+    }
 }

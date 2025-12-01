@@ -1545,7 +1545,7 @@ async fn admin_delete_changelog_batch(
             let err_msg = err.to_string();
             if err_msg.contains("not found") {
                 StatusCode::NOT_FOUND.into_response()
-            } else if err_msg.contains("not empty") || err_msg.contains("has changes") {
+            } else if err_msg.contains("recorded changes") || err_msg.contains("closed") {
                 (StatusCode::BAD_REQUEST, err_msg).into_response()
             } else {
                 error!("Error deleting changelog batch: {}", err);
