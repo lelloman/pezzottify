@@ -71,6 +71,14 @@ struct CliArgs {
     /// Path to the frontend directory to be statically served.
     #[clap(long)]
     pub frontend_dir_path: Option<String>,
+
+    /// URL of the downloader service for fetching missing content.
+    #[clap(long)]
+    pub downloader_url: Option<String>,
+
+    /// Timeout in seconds for downloader requests.
+    #[clap(long, default_value_t = 300)]
+    pub downloader_timeout_sec: u64,
 }
 
 #[tokio::main]
