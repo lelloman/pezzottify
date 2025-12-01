@@ -3,6 +3,7 @@
 //! This library exposes the internal modules for testing and potential reuse.
 
 pub mod catalog_store;
+pub mod downloader;
 pub mod search;
 pub mod server;
 pub mod sqlite_persistence;
