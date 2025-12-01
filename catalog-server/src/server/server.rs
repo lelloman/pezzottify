@@ -817,6 +817,54 @@ struct AddExtraPermissionResponse {
     pub permission_id: usize,
 }
 
+// Listening stats request/response structs
+
+#[derive(Deserialize, Debug)]
+struct ListeningEventRequest {
+    pub track_id: String,
+    pub session_id: Option<String>,
+    pub started_at: Option<u64>,
+    pub ended_at: Option<u64>,
+    pub duration_seconds: u32,
+    pub track_duration_seconds: u32,
+    pub seek_count: Option<u32>,
+    pub pause_count: Option<u32>,
+    pub playback_context: Option<String>,
+    pub client_type: Option<String>,
+}
+
+#[derive(Serialize)]
+struct ListeningEventResponse {
+    pub id: usize,
+    pub created: bool,
+}
+
+#[derive(Deserialize, Debug)]
+struct DateRangeQuery {
+    pub start_date: Option<u32>,
+    pub end_date: Option<u32>,
+}
+
+#[derive(Deserialize, Debug)]
+struct ListeningEventsQuery {
+    pub start_date: Option<u32>,
+    pub end_date: Option<u32>,
+    pub limit: Option<usize>,
+    pub offset: Option<usize>,
+}
+
+#[derive(Deserialize, Debug)]
+struct ListeningHistoryQuery {
+    pub limit: Option<usize>,
+}
+
+#[derive(Deserialize, Debug)]
+struct TopTracksQuery {
+    pub start_date: Option<u32>,
+    pub end_date: Option<u32>,
+    pub limit: Option<usize>,
+}
+
 async fn admin_get_users(
     _session: Session,
     State(user_manager): State<GuardedUserManager>,

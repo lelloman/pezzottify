@@ -252,7 +252,7 @@ pub static ref LISTENING_DURATION_SECONDS_TOTAL: CounterVec = CounterVec::new(
 8. ~~Update exports in `user/mod.rs`~~ ✅
 
 ### Phase 3: API Layer
-9. Add request/response structs to `server.rs`
+9. ~~Add request/response structs to `server.rs`~~ ✅
 10. Implement endpoint handlers
 11. Register routes with rate limiting
 
