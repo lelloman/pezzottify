@@ -241,7 +241,7 @@ pub static ref LISTENING_DURATION_SECONDS_TOTAL: CounterVec = CounterVec::new(
 
 ### Phase 1: Data Layer
 1. ~~Add `ViewAnalytics` permission to `permissions.rs`~~ ✅
-2. Add data models to `user_models.rs`
+2. ~~Add data models to `user_models.rs`~~ ✅
 3. Add `UserListeningStore` trait to `user_store.rs`
 4. Update `FullUserStore` trait
 5. Add V6 schema + migration to `sqlite_user_store.rs`

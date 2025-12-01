@@ -4,7 +4,7 @@
 use std::collections::HashMap;
 use std::time::SystemTime;
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 pub struct User {
     pub id: String,
@@ -95,4 +95,79 @@ pub struct BandwidthSummary {
 pub struct CategoryBandwidth {
     pub bytes_sent: u64,
     pub request_count: u64,
+}
+
+// ============================================================================
+// Listening Stats Models
+// ============================================================================
+
+/// Individual listening event recorded when a user plays a track
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct ListeningEvent {
+    pub id: Option<usize>,
+    pub user_id: usize,
+    pub track_id: String,
+    /// Client-generated UUID for deduplication (supports offline queue retry)
+    pub session_id: Option<String>,
+    /// Unix timestamp when playback started
+    pub started_at: u64,
+    /// Unix timestamp when playback ended
+    pub ended_at: Option<u64>,
+    /// Actual listening time in seconds (excluding pauses)
+    pub duration_seconds: u32,
+    /// Total track duration in seconds (for completion calculation)
+    pub track_duration_seconds: u32,
+    /// True if >90% of track was played
+    pub completed: bool,
+    /// Number of seek operations during playback
+    pub seek_count: u32,
+    /// Number of pause/resume cycles
+    pub pause_count: u32,
+    /// Context: "album", "playlist", "track", "search"
+    pub playback_context: Option<String>,
+    /// Client type: "web", "android", "ios"
+    pub client_type: Option<String>,
+    /// Date in YYYYMMDD format for efficient queries
+    pub date: u32,
+}
+
+/// Summary of listening activity for a user or platform
+#[derive(Serialize, Debug, Clone)]
+pub struct ListeningSummary {
+    pub user_id: Option<usize>,
+    pub total_plays: u64,
+    pub total_duration_seconds: u64,
+    pub completed_plays: u64,
+    pub unique_tracks: u64,
+}
+
+/// Per-track listening statistics
+#[derive(Serialize, Debug, Clone)]
+pub struct TrackListeningStats {
+    pub track_id: String,
+    pub play_count: u64,
+    pub total_duration_seconds: u64,
+    pub completed_count: u64,
+    pub unique_listeners: u64,
+}
+
+/// Entry in a user's listening history
+#[derive(Serialize, Debug, Clone)]
+pub struct UserListeningHistoryEntry {
+    pub track_id: String,
+    pub last_played_at: u64,
+    pub play_count: u64,
+    pub total_duration_seconds: u64,
+}
+
+/// Daily aggregated listening stats (for admin analytics)
+#[derive(Serialize, Debug, Clone)]
+pub struct DailyListeningStats {
+    /// Date in YYYYMMDD format
+    pub date: u32,
+    pub total_plays: u64,
+    pub total_duration_seconds: u64,
+    pub completed_plays: u64,
+    pub unique_users: u64,
+    pub unique_tracks: u64,
 }
