@@ -190,6 +190,156 @@ pub struct WhatsNewBatch {
 }
 
 // =============================================================================
+// Field Diff Calculation
+// =============================================================================
+
+/// Calculate the diff between two JSON values representing entity states.
+///
+/// For CREATE operations, pass `None` as `old`.
+/// For DELETE operations, pass `None` as `new`.
+/// For UPDATE operations, pass both values.
+///
+/// Returns a JSON object with changed fields: `{"field": {"old": X, "new": Y}}`
+pub fn calculate_field_diff(
+    old: Option<&serde_json::Value>,
+    new: Option<&serde_json::Value>,
+) -> serde_json::Value {
+    match (old, new) {
+        // CREATE: all fields are new
+        (None, Some(new_val)) => {
+            if let Some(obj) = new_val.as_object() {
+                let mut diff = serde_json::Map::new();
+                for (key, value) in obj {
+                    diff.insert(
+                        key.clone(),
+                        serde_json::json!({"old": null, "new": value}),
+                    );
+                }
+                serde_json::Value::Object(diff)
+            } else {
+                serde_json::json!({"value": {"old": null, "new": new_val}})
+            }
+        }
+        // DELETE: all fields are removed
+        (Some(old_val), None) => {
+            if let Some(obj) = old_val.as_object() {
+                let mut diff = serde_json::Map::new();
+                for (key, value) in obj {
+                    diff.insert(
+                        key.clone(),
+                        serde_json::json!({"old": value, "new": null}),
+                    );
+                }
+                serde_json::Value::Object(diff)
+            } else {
+                serde_json::json!({"value": {"old": old_val, "new": null}})
+            }
+        }
+        // UPDATE: compare fields
+        (Some(old_val), Some(new_val)) => {
+            calculate_object_diff(old_val, new_val)
+        }
+        // Both None - shouldn't happen, return empty diff
+        (None, None) => serde_json::json!({}),
+    }
+}
+
+/// Generate a human-readable display summary for a change.
+///
+/// # Arguments
+/// * `entity_type` - Type of entity (Artist, Album, Track, Image)
+/// * `operation` - Type of operation (Create, Update, Delete)
+/// * `entity_name` - Name of the entity (extracted from snapshot)
+/// * `field_changes` - The diff object (for updates, to summarize changed fields)
+///
+/// # Returns
+/// A human-readable summary string like "Created artist The Beatles" or "Updated album Abbey Road"
+pub fn generate_display_summary(
+    entity_type: &ChangeEntityType,
+    operation: &ChangeOperation,
+    entity_name: Option<&str>,
+) -> String {
+    let type_str = entity_type.to_db_str();
+    let name = entity_name.unwrap_or("(unknown)");
+
+    match operation {
+        ChangeOperation::Create => format!("Created {} '{}'", type_str, name),
+        ChangeOperation::Update => format!("Updated {} '{}'", type_str, name),
+        ChangeOperation::Delete => format!("Deleted {} '{}'", type_str, name),
+    }
+}
+
+/// Extract the name field from an entity snapshot.
+///
+/// Looks for common name fields: "name", "title" (for tracks/albums).
+pub fn extract_entity_name(snapshot: &serde_json::Value) -> Option<String> {
+    if let Some(obj) = snapshot.as_object() {
+        // Try "name" first (artists, albums)
+        if let Some(name) = obj.get("name").and_then(|v| v.as_str()) {
+            return Some(name.to_string());
+        }
+        // Try "title" (tracks might use this)
+        if let Some(title) = obj.get("title").and_then(|v| v.as_str()) {
+            return Some(title.to_string());
+        }
+    }
+    None
+}
+
+/// Calculate diff between two JSON objects, returning only changed fields.
+fn calculate_object_diff(old: &serde_json::Value, new: &serde_json::Value) -> serde_json::Value {
+    let mut diff = serde_json::Map::new();
+
+    let old_obj = old.as_object();
+    let new_obj = new.as_object();
+
+    match (old_obj, new_obj) {
+        (Some(old_map), Some(new_map)) => {
+            // Check all keys in old
+            for (key, old_value) in old_map {
+                match new_map.get(key) {
+                    Some(new_value) => {
+                        if old_value != new_value {
+                            diff.insert(
+                                key.clone(),
+                                serde_json::json!({"old": old_value, "new": new_value}),
+                            );
+                        }
+                    }
+                    None => {
+                        // Key was removed
+                        diff.insert(
+                            key.clone(),
+                            serde_json::json!({"old": old_value, "new": null}),
+                        );
+                    }
+                }
+            }
+            // Check for new keys
+            for (key, new_value) in new_map {
+                if !old_map.contains_key(key) {
+                    diff.insert(
+                        key.clone(),
+                        serde_json::json!({"old": null, "new": new_value}),
+                    );
+                }
+            }
+        }
+        _ => {
+            // Not both objects, treat as simple value change
+            if old != new {
+                diff.insert(
+                    "value".to_string(),
+                    serde_json::json!({"old": old, "new": new}),
+                );
+            }
+        }
+    }
+
+    serde_json::Value::Object(diff)
+}
+
+// =============================================================================
 // ChangeLogStore
 // =============================================================================
 
@@ -426,6 +576,96 @@ impl ChangeLogStore {
             params![now, batch_id],
         )?;
         Ok(())
+    }
+
+    // =========================================================================
+    // Change Recording
+    // =========================================================================
+
+    /// Record a change to an entity within the active batch.
+    ///
+    /// This is the internal method called during catalog write operations.
+    /// It requires an existing connection lock to participate in the same transaction.
+    ///
+    /// # Arguments
+    /// * `conn` - Locked database connection (for transaction safety)
+    /// * `entity_type` - Type of entity being changed
+    /// * `entity_id` - ID of the entity being changed
+    /// * `operation` - Type of operation (Create, Update, Delete)
+    /// * `field_changes` - JSON object with field-level changes
+    /// * `entity_snapshot` - Full JSON snapshot of the entity
+    /// * `display_summary` - Human-readable summary of the change
+    ///
+    /// # Returns
+    /// The ID of the inserted change entry, or an error if no batch is active.
+    pub fn record_change_internal(
+        &self,
+        conn: &Connection,
+        entity_type: ChangeEntityType,
+        entity_id: &str,
+        operation: ChangeOperation,
+        field_changes: &serde_json::Value,
+        entity_snapshot: &serde_json::Value,
+        display_summary: Option<&str>,
+    ) -> Result<i64> {
+        // Get active batch
+        let batch = self.get_active_batch_internal(conn)?;
+        let batch = match batch {
+            Some(b) => b,
+            None => bail!("Cannot record change: no active batch"),
+        };
+
+        let now = Self::now();
+        let field_changes_str = serde_json::to_string(field_changes)?;
+        let entity_snapshot_str = serde_json::to_string(entity_snapshot)?;
+
+        conn.execute(
+            "INSERT INTO catalog_change_log
+             (batch_id, entity_type, entity_id, operation, field_changes, entity_snapshot, display_summary, created_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+            params![
+                batch.id,
+                entity_type.to_db_str(),
+                entity_id,
+                operation.to_db_str(),
+                field_changes_str,
+                entity_snapshot_str,
+                display_summary,
+                now,
+            ],
+        )?;
+
+        let change_id = conn.last_insert_rowid();
+
+        // Update batch activity timestamp
+        self.update_batch_activity_internal(conn, &batch.id)?;
+
+        Ok(change_id)
+    }
+
+    /// Record a change using the store's own connection (for standalone use).
+    ///
+    /// This method acquires its own lock and is suitable for use outside of
+    /// existing transactions.
+    pub fn record_change(
+        &self,
+        entity_type: ChangeEntityType,
+        entity_id: &str,
+        operation: ChangeOperation,
+        field_changes: &serde_json::Value,
+        entity_snapshot: &serde_json::Value,
+        display_summary: Option<&str>,
+    ) -> Result<i64> {
+        let conn = self.conn.lock().unwrap();
+        self.record_change_internal(
+            &conn,
+            entity_type,
+            entity_id,
+            operation,
+            field_changes,
+            entity_snapshot,
+            display_summary,
+        )
     }
 
     // =========================================================================
@@ -951,5 +1191,295 @@ mod tests {
         let album_history = store.get_entity_history(ChangeEntityType::Album, "R1").unwrap();
         assert_eq!(album_history.len(), 1);
         assert_eq!(album_history[0].entity_type, ChangeEntityType::Album);
+    }
+
+    // =========================================================================
+    // Field diff calculation tests
+    // =========================================================================
+
+    #[test]
+    fn test_diff_create_operation() {
+        let new_entity = serde_json::json!({
+            "id": "R1",
+            "name": "The Beatles"
+        });
+
+        let diff = calculate_field_diff(None, Some(&new_entity));
+
+        assert_eq!(diff["id"]["old"], serde_json::Value::Null);
+        assert_eq!(diff["id"]["new"], "R1");
+        assert_eq!(diff["name"]["old"], serde_json::Value::Null);
+        assert_eq!(diff["name"]["new"], "The Beatles");
+    }
+
+    #[test]
+    fn test_diff_delete_operation() {
+        let old_entity = serde_json::json!({
+            "id": "R1",
+            "name": "The Beatles"
+        });
+
+        let diff = calculate_field_diff(Some(&old_entity), None);
+
+        assert_eq!(diff["id"]["old"], "R1");
+        assert_eq!(diff["id"]["new"], serde_json::Value::Null);
+        assert_eq!(diff["name"]["old"], "The Beatles");
+        assert_eq!(diff["name"]["new"], serde_json::Value::Null);
+    }
+
+    #[test]
+    fn test_diff_update_operation_changed_fields() {
+        let old_entity = serde_json::json!({
+            "id": "R1",
+            "name": "The Beetles"
+        });
+        let new_entity = serde_json::json!({
+            "id": "R1",
+            "name": "The Beatles"
+        });
+
+        let diff = calculate_field_diff(Some(&old_entity), Some(&new_entity));
+
+        // id unchanged, should not be in diff
+        assert!(diff.get("id").is_none());
+        // name changed
+        assert_eq!(diff["name"]["old"], "The Beetles");
+        assert_eq!(diff["name"]["new"], "The Beatles");
+    }
+
+    #[test]
+    fn test_diff_update_no_changes() {
+        let entity = serde_json::json!({
+            "id": "R1",
+            "name": "The Beatles"
+        });
+
+        let diff = calculate_field_diff(Some(&entity), Some(&entity));
+
+        // No changes, diff should be empty
+        assert!(diff.as_object().unwrap().is_empty());
+    }
+
+    #[test]
+    fn test_diff_field_added() {
+        let old_entity = serde_json::json!({
+            "id": "R1"
+        });
+        let new_entity = serde_json::json!({
+            "id": "R1",
+            "name": "The Beatles"
+        });
+
+        let diff = calculate_field_diff(Some(&old_entity), Some(&new_entity));
+
+        assert!(diff.get("id").is_none()); // unchanged
+        assert_eq!(diff["name"]["old"], serde_json::Value::Null);
+        assert_eq!(diff["name"]["new"], "The Beatles");
+    }
+
+    #[test]
+    fn test_diff_field_removed() {
+        let old_entity = serde_json::json!({
+            "id": "R1",
+            "name": "The Beatles"
+        });
+        let new_entity = serde_json::json!({
+            "id": "R1"
+        });
+
+        let diff = calculate_field_diff(Some(&old_entity), Some(&new_entity));
+
+        assert!(diff.get("id").is_none()); // unchanged
+        assert_eq!(diff["name"]["old"], "The Beatles");
+        assert_eq!(diff["name"]["new"], serde_json::Value::Null);
+    }
+
+    #[test]
+    fn test_diff_both_none() {
+        let diff = calculate_field_diff(None, None);
+        assert!(diff.as_object().unwrap().is_empty());
+    }
+
+    // =========================================================================
+    // Display summary tests
+    // =========================================================================
+
+    #[test]
+    fn test_display_summary_create() {
+        let summary = generate_display_summary(
+            &ChangeEntityType::Artist,
+            &ChangeOperation::Create,
+            Some("The Beatles"),
+        );
+        assert_eq!(summary, "Created artist 'The Beatles'");
+    }
+
+    #[test]
+    fn test_display_summary_update() {
+        let summary = generate_display_summary(
+            &ChangeEntityType::Album,
+            &ChangeOperation::Update,
+            Some("Abbey Road"),
+        );
+        assert_eq!(summary, "Updated album 'Abbey Road'");
+    }
+
+    #[test]
+    fn test_display_summary_delete() {
+        let summary = generate_display_summary(
+            &ChangeEntityType::Track,
+            &ChangeOperation::Delete,
+            Some("Come Together"),
+        );
+        assert_eq!(summary, "Deleted track 'Come Together'");
+    }
+
+    #[test]
+    fn test_display_summary_unknown_name() {
+        let summary = generate_display_summary(
+            &ChangeEntityType::Image,
+            &ChangeOperation::Create,
+            None,
+        );
+        assert_eq!(summary, "Created image '(unknown)'");
+    }
+
+    #[test]
+    fn test_extract_entity_name_from_name_field() {
+        let snapshot = serde_json::json!({
+            "id": "R1",
+            "name": "The Beatles"
+        });
+        assert_eq!(extract_entity_name(&snapshot), Some("The Beatles".to_string()));
+    }
+
+    #[test]
+    fn test_extract_entity_name_from_title_field() {
+        let snapshot = serde_json::json!({
+            "id": "T1",
+            "title": "Come Together"
+        });
+        assert_eq!(extract_entity_name(&snapshot), Some("Come Together".to_string()));
+    }
+
+    #[test]
+    fn test_extract_entity_name_prefers_name() {
+        let snapshot = serde_json::json!({
+            "id": "A1",
+            "name": "Abbey Road",
+            "title": "Some Title"
+        });
+        assert_eq!(extract_entity_name(&snapshot), Some("Abbey Road".to_string()));
+    }
+
+    #[test]
+    fn test_extract_entity_name_missing() {
+        let snapshot = serde_json::json!({
+            "id": "I1",
+            "uri": "/images/cover.jpg"
+        });
+        assert_eq!(extract_entity_name(&snapshot), None);
+    }
+
+    // =========================================================================
+    // record_change tests
+    // =========================================================================
+
+    #[test]
+    fn test_record_change_success() {
+        let store = create_test_store();
+
+        // Create a batch
+        let batch = store.create_batch("Test Batch", None).unwrap();
+
+        // Record a change
+        let snapshot = serde_json::json!({"id": "R1", "name": "The Beatles"});
+        let diff = calculate_field_diff(None, Some(&snapshot));
+
+        let change_id = store.record_change(
+            ChangeEntityType::Artist,
+            "R1",
+            ChangeOperation::Create,
+            &diff,
+            &snapshot,
+            Some("Created artist 'The Beatles'"),
+        ).unwrap();
+
+        assert!(change_id > 0);
+
+        // Verify the change was recorded
+        let changes = store.get_batch_changes(&batch.id).unwrap();
+        assert_eq!(changes.len(), 1);
+        assert_eq!(changes[0].entity_id, "R1");
+        assert_eq!(changes[0].operation, ChangeOperation::Create);
+    }
+
+    #[test]
+    fn test_record_change_fails_without_batch() {
+        let store = create_test_store();
+
+        let snapshot = serde_json::json!({"id": "R1", "name": "The Beatles"});
+        let diff = serde_json::json!({});
+
+        let result = store.record_change(
+            ChangeEntityType::Artist,
+            "R1",
+            ChangeOperation::Create,
+            &diff,
+            &snapshot,
+            None,
+        );
+
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("no active batch"));
+    }
+
+    #[test]
+    fn test_record_change_updates_batch_activity() {
+        let store = create_test_store();
+
+        let batch = store.create_batch("Test Batch", None).unwrap();
+        let initial_activity = batch.last_activity_at;
+
+        // Small delay to ensure timestamp changes
+        std::thread::sleep(std::time::Duration::from_millis(10));
+
+        // Record a change
+        let snapshot = serde_json::json!({"id": "R1"});
+        store.record_change(
+            ChangeEntityType::Artist,
+            "R1",
+            ChangeOperation::Create,
+            &serde_json::json!({}),
+            &snapshot,
+            None,
+        ).unwrap();
+
+        // Check that last_activity_at was updated
+        let updated_batch = store.get_batch(&batch.id).unwrap().unwrap();
+        assert!(updated_batch.last_activity_at >= initial_activity);
+    }
+
+    #[test]
+    fn test_record_multiple_changes() {
+        let store = create_test_store();
+
+        store.create_batch("Multi-change Batch", None).unwrap();
+
+        // Record multiple changes
+        for i in 1..=5 {
+            let snapshot = serde_json::json!({"id": format!("R{}", i), "name": format!("Artist {}", i)});
+            store.record_change(
+                ChangeEntityType::Artist,
+                &format!("R{}", i),
+                ChangeOperation::Create,
+                &serde_json::json!({}),
+                &snapshot,
+                None,
+            ).unwrap();
+        }
+
+        let batch = store.get_active_batch().unwrap().unwrap();
+        assert_eq!(store.get_batch_change_count(&batch.id).unwrap(), 5);
     }
 }
