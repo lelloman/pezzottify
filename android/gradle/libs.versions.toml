@@ -31,6 +31,7 @@ coil = "3.3.0"
 exoplayer = "1.8.0"
 robolectric = "4.14.1"
 mockk = "1.13.13"
+nanohttpd = "2.3.1"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -83,8 +84,7 @@ androidx-compose-material-icons = { group = "androidx.compose.material", name = 
 robolectric = { group = "org.robolectric", name = "robolectric", version.ref = "robolectric" }
 androidx-test-core = { group = "androidx.test", name = "core", version = "1.6.1" }
 mockk = { group = "io.mockk", name = "mockk", version.ref = "mockk" }
-
-
+nanohttpd = { group = "org.nanohttpd", name = "nanohttpd", version.ref = "nanohttpd" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

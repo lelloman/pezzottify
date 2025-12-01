@@ -4,10 +4,10 @@ We can consider V1 ready once all of the task without V2 mark are completed.
 
 ### [ready for coding]
 
+- Give the debuginterface module some love: implement an HTTP server for external monitoring (cache stats, memory pressure, performance metrics) accessible from a browser
 
 ### [to refine]
 
-- Give the debuginterface module some love: implement an HTTP server for external monitoring (cache stats, memory pressure, performance metrics) accessible from a browser
 - Add a contextual menu to queue albums and tracks (add to current playlist instead of replacing)
 - We should probably think about collecting information about storage used and how it is used. For instance, it would be cool to cache audio files, but the feature needs to be storage-aware.
 - We need to plan a "download" feature for albums and tracks
