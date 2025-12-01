@@ -9,5 +9,11 @@ pub use auth::{AuthToken, AuthTokenValue, UserAuthCredentials, UsernamePasswordC
 pub use permissions::{Permission, PermissionGrant, UserRole};
 pub use sqlite_user_store::SqliteUserStore;
 pub use user_manager::UserManager;
-pub use user_models::{BandwidthSummary, BandwidthUsage, CategoryBandwidth, LikedContentType, UserPlaylist};
-pub use user_store::{FullUserStore, UserAuthCredentialsStore, UserAuthTokenStore, UserBandwidthStore, UserStore};
+pub use user_models::{
+    BandwidthSummary, BandwidthUsage, CategoryBandwidth, DailyListeningStats, LikedContentType,
+    ListeningEvent, ListeningSummary, TrackListeningStats, UserListeningHistoryEntry, UserPlaylist,
+};
+pub use user_store::{
+    FullUserStore, UserAuthCredentialsStore, UserAuthTokenStore, UserBandwidthStore,
+    UserListeningStore, UserStore,
+};

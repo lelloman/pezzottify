@@ -245,11 +245,11 @@ pub static ref LISTENING_DURATION_SECONDS_TOTAL: CounterVec = CounterVec::new(
 3. ~~Add `UserListeningStore` trait to `user_store.rs`~~ ✅
 4. ~~Update `FullUserStore` trait~~ ✅
 5. ~~Add V6 schema + migration to `sqlite_user_store.rs`~~ ✅
-6. Implement `UserListeningStore` for `SqliteUserStore`
+6. ~~Implement `UserListeningStore` for `SqliteUserStore`~~ ✅
 
 ### Phase 2: Business Logic
 7. Add wrapper methods to `UserManager`
-8. Update exports in `user/mod.rs`
+8. ~~Update exports in `user/mod.rs`~~ ✅
 
 ### Phase 3: API Layer
 9. Add request/response structs to `server.rs`

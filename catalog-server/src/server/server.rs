@@ -1740,6 +1740,85 @@ mod tests {
         }
     }
 
+    impl crate::user::UserListeningStore for InMemoryUserStore {
+        fn record_listening_event(
+            &self,
+            _event: crate::user::ListeningEvent,
+        ) -> Result<(usize, bool)> {
+            Ok((1, true))
+        }
+
+        fn get_user_listening_events(
+            &self,
+            _user_id: usize,
+            _start_date: u32,
+            _end_date: u32,
+            _limit: Option<usize>,
+            _offset: Option<usize>,
+        ) -> Result<Vec<crate::user::ListeningEvent>> {
+            Ok(vec![])
+        }
+
+        fn get_user_listening_summary(
+            &self,
+            user_id: usize,
+            _start_date: u32,
+            _end_date: u32,
+        ) -> Result<crate::user::ListeningSummary> {
+            Ok(crate::user::ListeningSummary {
+                user_id: Some(user_id),
+                total_plays: 0,
+                total_duration_seconds: 0,
+                completed_plays: 0,
+                unique_tracks: 0,
+            })
+        }
+
+        fn get_user_listening_history(
+            &self,
+            _user_id: usize,
+            _limit: usize,
+        ) -> Result<Vec<crate::user::UserListeningHistoryEntry>> {
+            Ok(vec![])
+        }
+
+        fn get_track_listening_stats(
+            &self,
+            track_id: &str,
+            _start_date: u32,
+            _end_date: u32,
+        ) -> Result<crate::user::TrackListeningStats> {
+            Ok(crate::user::TrackListeningStats {
+                track_id: track_id.to_string(),
+                play_count: 0,
+                total_duration_seconds: 0,
+                completed_count: 0,
+                unique_listeners: 0,
+            })
+        }
+
+        fn get_daily_listening_stats(
+            &self,
+            _start_date: u32,
+            _end_date: u32,
+        ) -> Result<Vec<crate::user::DailyListeningStats>> {
+            Ok(vec![])
+        }
+
+        fn get_top_tracks(
+            &self,
+            _start_date: u32,
+            _end_date: u32,
+            _limit: usize,
+        ) -> Result<Vec<crate::user::TrackListeningStats>> {
+            Ok(vec![])
+        }
+
+        fn prune_listening_events(&self, _older_than_days: u32) -> Result<usize> {
+            Ok(0)
+        }
+    }
+
     // Tests for admin endpoints using SqliteUserStore
     mod admin_endpoint_tests {
         use super::*;
