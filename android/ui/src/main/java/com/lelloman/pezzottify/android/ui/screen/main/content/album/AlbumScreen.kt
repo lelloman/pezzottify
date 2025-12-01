@@ -36,6 +36,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -87,9 +92,15 @@ private fun AlbumScreenContent(
     }
 
     Scaffold(
-        snackbarHost = { SnackbarHost(snackbarHostState) }
-    ) { paddingValues ->
-        Box(modifier = Modifier.padding(paddingValues)) {
+        snackbarHost = {
+            SnackbarHost(
+                hostState = snackbarHostState,
+                modifier = Modifier.padding(WindowInsets.statusBars.asPaddingValues())
+            )
+        },
+        contentWindowInsets = WindowInsets(0.dp)
+    ) { _ ->
+        Box(modifier = Modifier.fillMaxSize()) {
             when {
                 state.isLoading -> LoadingScreen()
                 state.album != null -> AlbumLoadedScreen(
@@ -121,36 +132,49 @@ fun AlbumLoadedScreen(
     onArtistClick: (String) -> Unit = {},
 ) {
     val listState = rememberLazyListState()
+    val density = LocalDensity.current
+
+    // Get status bar height for proper inset handling
+    val statusBarHeight = with(density) {
+        WindowInsets.statusBars.getTop(this).toDp()
+    }
 
     // Define header dimensions
     val maxHeaderHeight = 300.dp
-    val minHeaderHeight = 80.dp
-    val collapseRange = (maxHeaderHeight - minHeaderHeight).value
+    val minHeaderHeight = 80.dp + statusBarHeight
+    val collapseRangeDp = maxHeaderHeight - minHeaderHeight
+    val collapseRangePx = with(density) { collapseRangeDp.toPx() }
     val playButtonSize = 56.dp
 
-    // Calculate scroll-based values
-    val scrollOffset by remember {
+    // Calculate scroll-based values (in pixels)
+    val scrollOffsetPx by remember {
         derivedStateOf {
             if (listState.firstVisibleItemIndex == 0) {
-                min(listState.firstVisibleItemScrollOffset.toFloat(), collapseRange)
+                min(listState.firstVisibleItemScrollOffset.toFloat(), collapseRangePx)
             } else {
-                collapseRange
+                collapseRangePx
             }
+        }
+    }
+
+    // Calculate collapse progress (0 = expanded, 1 = collapsed)
+    val collapseProgress by remember {
+        derivedStateOf {
+            scrollOffsetPx / collapseRangePx
         }
     }
 
     // Calculate header height (gradual collapse)
     val headerHeight by remember {
         derivedStateOf {
-            (maxHeaderHeight.value - scrollOffset).dp
+            maxHeaderHeight - (collapseRangeDp * collapseProgress)
         }
     }
 
     // Calculate image alpha (fade out as it collapses)
     val imageAlpha by remember {
         derivedStateOf {
-            val progress = scrollOffset / collapseRange
-            1f - progress
+            1f - collapseProgress
         }
     }
 
@@ -223,12 +247,13 @@ fun AlbumLoadedScreen(
                     )
                 }
 
-                // Gradient scrim for text readability
+                // Gradient scrim for text readability (fades with image)
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(120.dp)
                         .align(Alignment.BottomStart)
+                        .alpha(imageAlpha)
                         .background(
                             Brush.verticalGradient(
                                 colors = listOf(
@@ -239,16 +264,23 @@ fun AlbumLoadedScreen(
                         )
                 )
 
-                // Album title
+                // Album title - color transitions from white (over image) to onSurface (collapsed)
+                val textColor = lerp(
+                    MaterialTheme.colorScheme.onSurface,
+                    Color.White,
+                    imageAlpha
+                )
+                // Top padding increases as header collapses to stay below status bar
+                val textTopPadding = statusBarHeight * collapseProgress
                 Text(
                     text = album.name,
                     style = MaterialTheme.typography.headlineLarge,
-                    color = Color.White,
+                    color = textColor,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier
                         .align(Alignment.BottomStart)
-                        .padding(16.dp)
+                        .padding(start = 16.dp, end = 16.dp, bottom = 16.dp, top = textTopPadding)
                 )
             }
         }
