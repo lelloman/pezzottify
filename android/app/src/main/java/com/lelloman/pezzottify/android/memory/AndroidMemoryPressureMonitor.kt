@@ -21,10 +21,55 @@ class AndroidMemoryPressureMonitor @Inject constructor(
     private val _memoryInfo = MutableStateFlow(calculateMemoryInfo())
     override val memoryInfo: StateFlow<MemoryInfo> = _memoryInfo.asStateFlow()
 
+    init {
+        application.registerComponentCallbacks(this)
+    }
+
+    private fun calculateMemoryInfo(): MemoryInfo {
+        val runtime = Runtime.getRuntime()
+        val maxHeap = runtime.maxMemory()
+        val usedMemory = runtime.totalMemory() - runtime.freeMemory()
+        return MemoryPressureCalculator.calculateMemoryInfo(maxHeap, usedMemory)
+    }
+
+    override fun getRecommendedCacheSizeBytes(): Long {
+        return MemoryPressureCalculator.getRecommendedCacheSizeBytes(_memoryInfo.value.pressureLevel)
+    }
+
+    override fun getRecommendedMaxEntries(itemType: CacheItemType): Int {
+        return MemoryPressureCalculator.getRecommendedMaxEntries(_memoryInfo.value.pressureLevel, itemType)
+    }
+
+    override fun refresh() {
+        _memoryInfo.value = calculateMemoryInfo()
+    }
+
+    // ComponentCallbacks2 implementation for system memory pressure events
+    override fun onTrimMemory(level: Int) {
+        refresh()
+    }
+
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        // No action needed
+    }
+
+    override fun onLowMemory() {
+        _memoryInfo.value = _memoryInfo.value.copy(
+            pressureLevel = MemoryPressureLevel.CRITICAL
+        )
+    }
+}
+
+/**
+ * Extracted calculation logic for testability.
+ * Contains pure functions that don't depend on Android framework.
+ */
+object MemoryPressureCalculator {
+
     // Configurable thresholds (percentage of max heap)
-    private val lowThreshold = 0.70      // <70% used = LOW pressure
-    private val mediumThreshold = 0.80   // 70-80% used = MEDIUM
-    private val highThreshold = 0.90     // 80-90% used = HIGH
+    private const val LOW_THRESHOLD = 0.70      // <70% used = LOW pressure
+    private const val MEDIUM_THRESHOLD = 0.80   // 70-80% used = MEDIUM
+    private const val HIGH_THRESHOLD = 0.90     // 80-90% used = HIGH
     // >90% = CRITICAL
 
     // Base cache sizes per pressure level
@@ -55,62 +100,44 @@ class AndroidMemoryPressureMonitor @Inject constructor(
         )
     )
 
-    init {
-        application.registerComponentCallbacks(this)
-    }
-
-    private fun calculateMemoryInfo(): MemoryInfo {
-        val runtime = Runtime.getRuntime()
-        val maxHeap = runtime.maxMemory()
-        val usedMemory = runtime.totalMemory() - runtime.freeMemory()
-        val available = maxHeap - usedMemory
-
-        val usageRatio = usedMemory.toDouble() / maxHeap.toDouble()
-        val level = when {
-            usageRatio < lowThreshold -> MemoryPressureLevel.LOW
-            usageRatio < mediumThreshold -> MemoryPressureLevel.MEDIUM
-            usageRatio < highThreshold -> MemoryPressureLevel.HIGH
-            else -> MemoryPressureLevel.CRITICAL
+    fun calculateMemoryInfo(maxHeapBytes: Long, usedBytes: Long): MemoryInfo {
+        val available = maxHeapBytes - usedBytes
+        val usageRatio = if (maxHeapBytes > 0) {
+            usedBytes.toDouble() / maxHeapBytes.toDouble()
+        } else {
+            1.0 // Assume critical if no heap info
         }
+
+        val level = calculatePressureLevel(usageRatio)
 
         return MemoryInfo(
             availableBytes = available,
-            maxHeapBytes = maxHeap,
-            usedBytes = usedMemory,
+            maxHeapBytes = maxHeapBytes,
+            usedBytes = usedBytes,
             pressureLevel = level
         )
     }
 
-    override fun getRecommendedCacheSizeBytes(): Long {
-        return cacheSizes[_memoryInfo.value.pressureLevel]?.totalBytes ?: 0
+    fun calculatePressureLevel(usageRatio: Double): MemoryPressureLevel {
+        return when {
+            usageRatio < LOW_THRESHOLD -> MemoryPressureLevel.LOW
+            usageRatio < MEDIUM_THRESHOLD -> MemoryPressureLevel.MEDIUM
+            usageRatio < HIGH_THRESHOLD -> MemoryPressureLevel.HIGH
+            else -> MemoryPressureLevel.CRITICAL
+        }
     }
 
-    override fun getRecommendedMaxEntries(itemType: CacheItemType): Int {
-        val config = cacheSizes[_memoryInfo.value.pressureLevel] ?: return 0
+    fun getRecommendedCacheSizeBytes(pressureLevel: MemoryPressureLevel): Long {
+        return cacheSizes[pressureLevel]?.totalBytes ?: 0
+    }
+
+    fun getRecommendedMaxEntries(pressureLevel: MemoryPressureLevel, itemType: CacheItemType): Int {
+        val config = cacheSizes[pressureLevel] ?: return 0
         return when (itemType) {
             CacheItemType.ARTIST -> config.artistEntries
             CacheItemType.ALBUM -> config.albumEntries
             CacheItemType.TRACK -> config.trackEntries
         }
-    }
-
-    override fun refresh() {
-        _memoryInfo.value = calculateMemoryInfo()
-    }
-
-    // ComponentCallbacks2 implementation for system memory pressure events
-    override fun onTrimMemory(level: Int) {
-        refresh()
-    }
-
-    override fun onConfigurationChanged(newConfig: Configuration) {
-        // No action needed
-    }
-
-    override fun onLowMemory() {
-        _memoryInfo.value = _memoryInfo.value.copy(
-            pressureLevel = MemoryPressureLevel.CRITICAL
-        )
     }
 
     private data class CacheSizeConfig(

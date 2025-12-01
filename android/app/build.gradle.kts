@@ -91,6 +91,7 @@ dependencies {
     debugImplementation(project(":debuginterface"))
 
     testImplementation(libs.junit)
+    testImplementation(libs.truth)
 
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
