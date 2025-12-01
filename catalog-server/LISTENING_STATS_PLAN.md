@@ -174,7 +174,9 @@ impl<T: UserStore + UserBandwidthStore + UserListeningStore> FullUserStore for T
 | GET | `/v1/user/listening/history` | Get recently played tracks |
 | GET | `/v1/user/listening/events` | Get listening events (paginated) |
 
-### Admin Endpoints (require ManagePermissions)
+### Admin Endpoints (require ViewAnalytics)
+
+> **Note:** `ViewAnalytics` is a new permission to be added in `src/user/permissions.rs`. This separates analytics access from user management (`ManagePermissions`), allowing granular control over who can view platform statistics.
 
 | Method | Path | Description |
 |--------|------|-------------|
@@ -238,25 +240,26 @@ pub static ref LISTENING_DURATION_SECONDS_TOTAL: CounterVec = CounterVec::new(
 ## 6. Implementation Sequence
 
 ### Phase 1: Data Layer
-1. Add data models to `user_models.rs`
-2. Add `UserListeningStore` trait to `user_store.rs`
-3. Update `FullUserStore` trait
-4. Add V6 schema + migration to `sqlite_user_store.rs`
-5. Implement `UserListeningStore` for `SqliteUserStore`
+1. ~~Add `ViewAnalytics` permission to `permissions.rs`~~ ✅
+2. Add data models to `user_models.rs`
+3. Add `UserListeningStore` trait to `user_store.rs`
+4. Update `FullUserStore` trait
+5. Add V6 schema + migration to `sqlite_user_store.rs`
+6. Implement `UserListeningStore` for `SqliteUserStore`
 
 ### Phase 2: Business Logic
-6. Add wrapper methods to `UserManager`
-7. Update exports in `user/mod.rs`
+7. Add wrapper methods to `UserManager`
+8. Update exports in `user/mod.rs`
 
 ### Phase 3: API Layer
-8. Add request/response structs to `server.rs`
-9. Implement endpoint handlers
-10. Register routes with rate limiting
+9. Add request/response structs to `server.rs`
+10. Implement endpoint handlers
+11. Register routes with rate limiting
 
 ### Phase 4: Metrics & Testing
-11. Add Prometheus metrics
-12. Write unit tests for store methods
-13. Write API integration tests
+12. Add Prometheus metrics
+13. Write unit tests for store methods
+14. Write API integration tests
 
 ---
 
@@ -264,12 +267,13 @@ pub static ref LISTENING_DURATION_SECONDS_TOTAL: CounterVec = CounterVec::new(
 
 | File | Changes |
 |------|---------|
+| `src/user/permissions.rs` | Add `ViewAnalytics` permission variant |
 | `src/user/user_models.rs` | Add ListeningEvent, ListeningSummary, TrackListeningStats, UserListeningHistoryEntry, DailyListeningStats |
 | `src/user/user_store.rs` | Add UserListeningStore trait, update FullUserStore |
 | `src/user/sqlite_user_store.rs` | Add V6 schema, migration, implement UserListeningStore |
 | `src/user/user_manager.rs` | Add wrapper methods |
 | `src/user/mod.rs` | Export new types |
-| `src/server/server.rs` | Add endpoints, query params, handlers |
+| `src/server/server.rs` | Add endpoints, query params, handlers, `require_view_analytics` middleware |
 | `src/server/metrics.rs` | Add listening metrics |
 
 ---

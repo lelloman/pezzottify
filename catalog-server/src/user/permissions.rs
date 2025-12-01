@@ -9,6 +9,7 @@ pub enum Permission {
     ManagePermissions,
     IssueContentDownload,
     RebootServer,
+    ViewAnalytics,
 }
 
 impl Permission {
@@ -21,6 +22,7 @@ impl Permission {
             Permission::ManagePermissions => 5,
             Permission::IssueContentDownload => 6,
             Permission::RebootServer => 7,
+            Permission::ViewAnalytics => 8,
         }
     }
 
@@ -33,6 +35,7 @@ impl Permission {
             5 => Some(Permission::ManagePermissions),
             6 => Some(Permission::IssueContentDownload),
             7 => Some(Permission::RebootServer),
+            8 => Some(Permission::ViewAnalytics),
             _ => None,
         }
     }
@@ -44,6 +47,7 @@ const ADMIN_PERMISSIONS: &'static [Permission] = &[
     Permission::ManagePermissions,
     Permission::IssueContentDownload,
     Permission::RebootServer,
+    Permission::ViewAnalytics,
 ];
 const REGULAR_PERMISSIONS: &'static [Permission] = &[
     Permission::AccessCatalog,
@@ -105,6 +109,7 @@ mod tests {
         assert_eq!(Permission::ManagePermissions.to_int(), 5);
         assert_eq!(Permission::IssueContentDownload.to_int(), 6);
         assert_eq!(Permission::RebootServer.to_int(), 7);
+        assert_eq!(Permission::ViewAnalytics.to_int(), 8);
     }
 
     #[test]
@@ -116,12 +121,13 @@ mod tests {
         assert_eq!(Permission::from_int(5), Some(Permission::ManagePermissions));
         assert_eq!(Permission::from_int(6), Some(Permission::IssueContentDownload));
         assert_eq!(Permission::from_int(7), Some(Permission::RebootServer));
+        assert_eq!(Permission::from_int(8), Some(Permission::ViewAnalytics));
     }
 
     #[test]
     fn permission_from_int_invalid_values() {
         assert_eq!(Permission::from_int(0), None);
-        assert_eq!(Permission::from_int(8), None);
+        assert_eq!(Permission::from_int(9), None);
         assert_eq!(Permission::from_int(-1), None);
         assert_eq!(Permission::from_int(100), None);
         assert_eq!(Permission::from_int(i32::MAX), None);
@@ -138,6 +144,7 @@ mod tests {
             Permission::ManagePermissions,
             Permission::IssueContentDownload,
             Permission::RebootServer,
+            Permission::ViewAnalytics,
         ];
 
         for permission in &permissions {
@@ -151,12 +158,13 @@ mod tests {
     fn user_role_admin_permissions() {
         let admin_perms = UserRole::Admin.permissions();
 
-        assert_eq!(admin_perms.len(), 5);
+        assert_eq!(admin_perms.len(), 6);
         assert!(admin_perms.contains(&Permission::AccessCatalog));
         assert!(admin_perms.contains(&Permission::EditCatalog));
         assert!(admin_perms.contains(&Permission::ManagePermissions));
         assert!(admin_perms.contains(&Permission::IssueContentDownload));
         assert!(admin_perms.contains(&Permission::RebootServer));
+        assert!(admin_perms.contains(&Permission::ViewAnalytics));
 
         assert!(!admin_perms.contains(&Permission::LikeContent));
         assert!(!admin_perms.contains(&Permission::OwnPlaylists));
@@ -175,6 +183,7 @@ mod tests {
         assert!(!regular_perms.contains(&Permission::ManagePermissions));
         assert!(!regular_perms.contains(&Permission::IssueContentDownload));
         assert!(!regular_perms.contains(&Permission::RebootServer));
+        assert!(!regular_perms.contains(&Permission::ViewAnalytics));
     }
 
     #[test]
