@@ -37,6 +37,7 @@ class ProfileScreenViewModel @Inject constructor(
                 themeMode = interactor.getThemeMode(),
                 colorPalette = interactor.getColorPalette(),
                 fontFamily = interactor.getFontFamily(),
+                isCacheEnabled = interactor.isCacheEnabled(),
                 buildVariant = interactor.getBuildVariant(),
                 versionName = interactor.getVersionName(),
                 gitCommit = interactor.getGitCommit(),
@@ -61,6 +62,11 @@ class ProfileScreenViewModel @Inject constructor(
             launch {
                 interactor.observeFontFamily().collect { fontFamily ->
                     mutableState.update { it.copy(fontFamily = fontFamily) }
+                }
+            }
+            launch {
+                interactor.observeCacheEnabled().collect { enabled ->
+                    mutableState.update { it.copy(isCacheEnabled = enabled) }
                 }
             }
         }
@@ -111,6 +117,12 @@ class ProfileScreenViewModel @Inject constructor(
         }
     }
 
+    override fun setCacheEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            interactor.setCacheEnabled(enabled)
+        }
+    }
+
     interface Interactor {
         suspend fun logout()
         fun getUserName(): String
@@ -119,14 +131,17 @@ class ProfileScreenViewModel @Inject constructor(
         fun getThemeMode(): ThemeMode
         fun getColorPalette(): ColorPalette
         fun getFontFamily(): AppFontFamily
+        fun isCacheEnabled(): Boolean
         fun observePlayBehavior(): kotlinx.coroutines.flow.Flow<PlayBehavior>
         fun observeThemeMode(): kotlinx.coroutines.flow.Flow<ThemeMode>
         fun observeColorPalette(): kotlinx.coroutines.flow.Flow<ColorPalette>
         fun observeFontFamily(): kotlinx.coroutines.flow.Flow<AppFontFamily>
+        fun observeCacheEnabled(): kotlinx.coroutines.flow.Flow<Boolean>
         suspend fun setPlayBehavior(playBehavior: PlayBehavior)
         suspend fun setThemeMode(themeMode: ThemeMode)
         suspend fun setColorPalette(colorPalette: ColorPalette)
         suspend fun setFontFamily(fontFamily: AppFontFamily)
+        suspend fun setCacheEnabled(enabled: Boolean)
         fun getBuildVariant(): String
         fun getVersionName(): String
         fun getGitCommit(): String

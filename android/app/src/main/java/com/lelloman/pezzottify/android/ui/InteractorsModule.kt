@@ -117,6 +117,8 @@ class InteractorsModule {
 
         override fun getFontFamily(): AppFontFamily = userSettingsStore.fontFamily.value
 
+        override fun isCacheEnabled(): Boolean = userSettingsStore.isInMemoryCacheEnabled.value
+
         override fun observePlayBehavior() = userSettingsStore.playBehavior
 
         override fun observeThemeMode() = userSettingsStore.themeMode
@@ -124,6 +126,8 @@ class InteractorsModule {
         override fun observeColorPalette() = userSettingsStore.colorPalette
 
         override fun observeFontFamily() = userSettingsStore.fontFamily
+
+        override fun observeCacheEnabled() = userSettingsStore.isInMemoryCacheEnabled
 
         override suspend fun setPlayBehavior(playBehavior: PlayBehavior) {
             userSettingsStore.setPlayBehavior(playBehavior)
@@ -139,6 +143,10 @@ class InteractorsModule {
 
         override suspend fun setFontFamily(fontFamily: AppFontFamily) {
             userSettingsStore.setFontFamily(fontFamily)
+        }
+
+        override suspend fun setCacheEnabled(enabled: Boolean) {
+            userSettingsStore.setInMemoryCacheEnabled(enabled)
         }
 
         override fun getBuildVariant(): String = buildInfo.buildVariant

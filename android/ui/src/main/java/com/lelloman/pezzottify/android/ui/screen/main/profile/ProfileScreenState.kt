@@ -12,6 +12,7 @@ data class ProfileScreenState(
     val themeMode: ThemeMode = ThemeMode.Default,
     val colorPalette: ColorPalette = ColorPalette.Default,
     val fontFamily: AppFontFamily = AppFontFamily.Default,
+    val isCacheEnabled: Boolean = true,
     val isLoggingOut: Boolean = false,
     val showLogoutConfirmation: Boolean = false,
     val buildVariant: String = "",

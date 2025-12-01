@@ -20,4 +20,6 @@ interface ProfileScreenActions {
     fun selectColorPalette(colorPalette: ColorPalette)
 
     fun selectFontFamily(fontFamily: AppFontFamily)
+
+    fun setCacheEnabled(enabled: Boolean)
 }

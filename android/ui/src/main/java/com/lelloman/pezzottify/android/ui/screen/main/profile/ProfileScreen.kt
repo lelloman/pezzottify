@@ -215,6 +215,14 @@ private fun ProfileScreenInternal(
 
             HorizontalDivider(modifier = Modifier.padding(vertical = 24.dp))
 
+            // Performance Section
+            CacheSettingsSection(
+                isCacheEnabled = currentState.isCacheEnabled,
+                onCacheEnabledChanged = actions::setCacheEnabled
+            )
+
+            HorizontalDivider(modifier = Modifier.padding(vertical = 24.dp))
+
             // About Section
             Text(
                 text = "About",
@@ -296,6 +304,7 @@ private fun ProfileScreenPreview() {
                 override fun selectThemeMode(themeMode: ThemeMode) {}
                 override fun selectColorPalette(colorPalette: ColorPalette) {}
                 override fun selectFontFamily(fontFamily: AppFontFamily) {}
+                override fun setCacheEnabled(enabled: Boolean) {}
             },
         )
     }
@@ -314,6 +323,7 @@ private fun ProfileScreenPreviewDark() {
                     themeMode = ThemeMode.Dark,
                     colorPalette = ColorPalette.PurpleHaze,
                     fontFamily = AppFontFamily.Monospace,
+                    isCacheEnabled = false,
                     buildVariant = "release",
                     versionName = "1.0",
                     gitCommit = "def5678",
@@ -330,6 +340,7 @@ private fun ProfileScreenPreviewDark() {
                 override fun selectThemeMode(themeMode: ThemeMode) {}
                 override fun selectColorPalette(colorPalette: ColorPalette) {}
                 override fun selectFontFamily(fontFamily: AppFontFamily) {}
+                override fun setCacheEnabled(enabled: Boolean) {}
             },
         )
     }
