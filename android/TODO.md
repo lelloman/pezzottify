@@ -9,18 +9,18 @@ We can consider V1 ready once all of the task without V2 mark are completed.
 
 - Create a "memory pressure" component that can detect how much memory can we use for caches and such (imagine caching stuff from the db, pre-loading audio, images)
 - Add an in-memory immediate cache layer in ContentResolver, only after a "memory pressure" component
-- Add recent searches component to the search screen (store and display user's search history)
 - Add a contextual menu to queue albums and tracks (add to current playlist instead of replacing)
 - We should probably think about collecting information about storage used and how it is used. For instance, it would be cool to cache audio files, but the feature needs to be storage-aware.
 - We need to plan a "download" feature for albums and tracks
 - Check that the behavior of the audio playback is system-friendly in terms of audio events (pause on focus lost, pause on headphones unplugged and such)
-- We should gather statistics on what's being listened. Like what track, how long. This will be useful for discovery features.
 - Make a plan to introduce the user's playlist feature
 - Once the listening stats are implemented, we can add a "jump back in" component in the home screen
-- Consider if we have more than one "Synchronizers" to unify the code and make it reusable
 
 ### [done]
 
+- ~Add recent searches component to the search screen (store and display user's search history)~
+- ~Consider if we have more than one "Synchronizers" to unify the code and make it reusable~
+- ~We should gather statistics on what's being listened. Like what track, how long. This will be useful for discovery features.~
 - ~The search screen shows recently viewed items when query is empty (V1, done), add recent searches too (V2)~
 - ~Check the related artists picture logic. For instance, when visiting Prince artist screen, you don't see George Michael's picture, but if you go into George Michael screen you do have a picture~
 - ~Add custom theme palettes beyond system/light/dark (e.g., Material colors like blue, green, purple, or themed palettes like 'Midnight', 'Sunset', 'Forest')~
