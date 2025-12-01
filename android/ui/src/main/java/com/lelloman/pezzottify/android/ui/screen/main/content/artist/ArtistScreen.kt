@@ -34,6 +34,8 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import kotlin.math.min
@@ -107,9 +109,14 @@ fun ArtistLoadedScreen(
     val listState = rememberLazyListState()
     val density = LocalDensity.current
 
+    // Get status bar height for proper inset handling
+    val statusBarHeight = with(density) {
+        WindowInsets.statusBars.getTop(this).toDp()
+    }
+
     // Define header dimensions
     val maxHeaderHeight = 300.dp
-    val minHeaderHeight = 80.dp
+    val minHeaderHeight = 80.dp + statusBarHeight
     val collapseRangeDp = maxHeaderHeight - minHeaderHeight
     val collapseRangePx = with(density) { collapseRangeDp.toPx() }
     val likeButtonSize = 56.dp
@@ -256,6 +263,8 @@ fun ArtistLoadedScreen(
                     Color.White,
                     imageAlpha
                 )
+                // Top padding increases as header collapses to stay below status bar
+                val textTopPadding = statusBarHeight * collapseProgress
                 Text(
                     text = artist.name,
                     style = MaterialTheme.typography.headlineLarge,
@@ -264,7 +273,7 @@ fun ArtistLoadedScreen(
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier
                         .align(Alignment.BottomStart)
-                        .padding(16.dp)
+                        .padding(start = 16.dp, end = 16.dp, bottom = 16.dp, top = textTopPadding)
                 )
             }
         }
