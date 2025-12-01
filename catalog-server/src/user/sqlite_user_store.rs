@@ -1992,6 +1992,7 @@ impl UserListeningStore for SqliteUserStore {
 mod tests {
 
     use super::*;
+    use chrono;
     use tempfile::TempDir;
 
     fn create_tmp_store() -> (SqliteUserStore, TempDir) {
@@ -2749,5 +2750,713 @@ mod tests {
             .get_all_bandwidth_usage(20241127, 20241127)
             .unwrap();
         assert_eq!(all_records.len(), 0);
+    }
+
+    // ==================== Listening Events Tests ====================
+
+    fn create_test_listening_event(user_id: usize, track_id: &str, date: u32) -> ListeningEvent {
+        ListeningEvent {
+            id: None,
+            user_id,
+            track_id: track_id.to_string(),
+            session_id: None,
+            started_at: 1732982400, // Some fixed timestamp
+            ended_at: Some(1732982587),
+            duration_seconds: 187,
+            track_duration_seconds: 210,
+            completed: true,
+            seek_count: 2,
+            pause_count: 1,
+            playback_context: Some("album".to_string()),
+            client_type: Some("android".to_string()),
+            date,
+        }
+    }
+
+    #[test]
+    fn test_record_listening_event_basic() {
+        let (store, _temp_dir) = create_tmp_store();
+        let user_id = store.create_user("test_user").unwrap();
+
+        let event = create_test_listening_event(user_id, "tra_12345", 20241201);
+        let (id, created) = store.record_listening_event(event).unwrap();
+
+        assert!(id > 0);
+        assert!(created);
+    }
+
+    #[test]
+    fn test_record_listening_event_deduplication_with_session_id() {
+        let (store, _temp_dir) = create_tmp_store();
+        let user_id = store.create_user("test_user").unwrap();
+
+        let mut event = create_test_listening_event(user_id, "tra_12345", 20241201);
+        event.session_id = Some("unique-session-uuid".to_string());
+
+        // First insert should succeed
+        let (id1, created1) = store.record_listening_event(event.clone()).unwrap();
+        assert!(id1 > 0);
+        assert!(created1);
+
+        // Second insert with same session_id should be ignored (deduplication)
+        let (id2, created2) = store.record_listening_event(event).unwrap();
+        assert_eq!(id2, id1); // Same ID returned
+        assert!(!created2); // Not created (duplicate)
+    }
+
+    #[test]
+    fn test_record_listening_event_without_session_id_always_inserts() {
+        let (store, _temp_dir) = create_tmp_store();
+        let user_id = store.create_user("test_user").unwrap();
+
+        let event = create_test_listening_event(user_id, "tra_12345", 20241201);
+
+        // First insert
+        let (id1, created1) = store.record_listening_event(event.clone()).unwrap();
+        assert!(created1);
+
+        // Second insert without session_id should create new record
+        let (id2, created2) = store.record_listening_event(event).unwrap();
+        assert!(created2);
+        assert_ne!(id1, id2); // Different IDs
+    }
+
+    #[test]
+    fn test_get_user_listening_events() {
+        let (store, _temp_dir) = create_tmp_store();
+        let user_id = store.create_user("test_user").unwrap();
+
+        // Record events on different dates
+        let event1 = create_test_listening_event(user_id, "tra_001", 20241201);
+        let event2 = create_test_listening_event(user_id, "tra_002", 20241202);
+        let event3 = create_test_listening_event(user_id, "tra_003", 20241203);
+
+        store.record_listening_event(event1).unwrap();
+        store.record_listening_event(event2).unwrap();
+        store.record_listening_event(event3).unwrap();
+
+        // Get all events
+        let events = store
+            .get_user_listening_events(user_id, 20241201, 20241203, None, None)
+            .unwrap();
+        assert_eq!(events.len(), 3);
+
+        // Get events for specific date range
+        let events = store
+            .get_user_listening_events(user_id, 20241201, 20241202, None, None)
+            .unwrap();
+        assert_eq!(events.len(), 2);
+
+        // Test pagination
+        let events = store
+            .get_user_listening_events(user_id, 20241201, 20241203, Some(2), None)
+            .unwrap();
+        assert_eq!(events.len(), 2);
+
+        let events = store
+            .get_user_listening_events(user_id, 20241201, 20241203, Some(2), Some(2))
+            .unwrap();
+        assert_eq!(events.len(), 1);
+    }
+
+    #[test]
+    fn test_get_user_listening_summary() {
+        let (store, _temp_dir) = create_tmp_store();
+        let user_id = store.create_user("test_user").unwrap();
+
+        // Record completed event
+        let mut event1 = create_test_listening_event(user_id, "tra_001", 20241201);
+        event1.duration_seconds = 200;
+        event1.completed = true;
+
+        // Record incomplete event
+        let mut event2 = create_test_listening_event(user_id, "tra_002", 20241201);
+        event2.duration_seconds = 50;
+        event2.completed = false;
+
+        // Record another play of the same track
+        let mut event3 = create_test_listening_event(user_id, "tra_001", 20241201);
+        event3.duration_seconds = 180;
+        event3.completed = true;
+
+        store.record_listening_event(event1).unwrap();
+        store.record_listening_event(event2).unwrap();
+        store.record_listening_event(event3).unwrap();
+
+        let summary = store
+            .get_user_listening_summary(user_id, 20241201, 20241201)
+            .unwrap();
+
+        assert_eq!(summary.user_id, Some(user_id));
+        assert_eq!(summary.total_plays, 3);
+        assert_eq!(summary.total_duration_seconds, 430); // 200 + 50 + 180
+        assert_eq!(summary.completed_plays, 2);
+        assert_eq!(summary.unique_tracks, 2); // tra_001 and tra_002
+    }
+
+    #[test]
+    fn test_get_user_listening_history() {
+        let (store, _temp_dir) = create_tmp_store();
+        let user_id = store.create_user("test_user").unwrap();
+
+        // Record events - tra_001 played twice, tra_002 played once
+        let mut event1 = create_test_listening_event(user_id, "tra_001", 20241201);
+        event1.started_at = 1000;
+        event1.duration_seconds = 100;
+
+        let mut event2 = create_test_listening_event(user_id, "tra_002", 20241201);
+        event2.started_at = 2000;
+        event2.duration_seconds = 150;
+
+        let mut event3 = create_test_listening_event(user_id, "tra_001", 20241201);
+        event3.started_at = 3000;
+        event3.duration_seconds = 120;
+
+        store.record_listening_event(event1).unwrap();
+        store.record_listening_event(event2).unwrap();
+        store.record_listening_event(event3).unwrap();
+
+        let history = store.get_user_listening_history(user_id, 10).unwrap();
+
+        assert_eq!(history.len(), 2); // 2 unique tracks
+
+        // Should be ordered by last_played_at descending
+        assert_eq!(history[0].track_id, "tra_001");
+        assert_eq!(history[0].play_count, 2);
+        assert_eq!(history[0].total_duration_seconds, 220); // 100 + 120
+        assert_eq!(history[0].last_played_at, 3000);
+
+        assert_eq!(history[1].track_id, "tra_002");
+        assert_eq!(history[1].play_count, 1);
+        assert_eq!(history[1].total_duration_seconds, 150);
+    }
+
+    #[test]
+    fn test_get_track_listening_stats() {
+        let (store, _temp_dir) = create_tmp_store();
+        let user1_id = store.create_user("user1").unwrap();
+        let user2_id = store.create_user("user2").unwrap();
+
+        // User 1 plays track twice
+        let mut event1 = create_test_listening_event(user1_id, "tra_001", 20241201);
+        event1.duration_seconds = 100;
+        event1.completed = true;
+
+        let mut event2 = create_test_listening_event(user1_id, "tra_001", 20241201);
+        event2.duration_seconds = 50;
+        event2.completed = false;
+
+        // User 2 plays track once
+        let mut event3 = create_test_listening_event(user2_id, "tra_001", 20241201);
+        event3.duration_seconds = 200;
+        event3.completed = true;
+
+        store.record_listening_event(event1).unwrap();
+        store.record_listening_event(event2).unwrap();
+        store.record_listening_event(event3).unwrap();
+
+        let stats = store
+            .get_track_listening_stats("tra_001", 20241201, 20241201)
+            .unwrap();
+
+        assert_eq!(stats.track_id, "tra_001");
+        assert_eq!(stats.play_count, 3);
+        assert_eq!(stats.total_duration_seconds, 350); // 100 + 50 + 200
+        assert_eq!(stats.completed_count, 2);
+        assert_eq!(stats.unique_listeners, 2);
+    }
+
+    #[test]
+    fn test_get_daily_listening_stats() {
+        let (store, _temp_dir) = create_tmp_store();
+        let user1_id = store.create_user("user1").unwrap();
+        let user2_id = store.create_user("user2").unwrap();
+
+        // Day 1: user1 plays tra_001
+        let mut event1 = create_test_listening_event(user1_id, "tra_001", 20241201);
+        event1.duration_seconds = 100;
+        event1.completed = true;
+
+        // Day 1: user2 plays tra_002
+        let mut event2 = create_test_listening_event(user2_id, "tra_002", 20241201);
+        event2.duration_seconds = 150;
+        event2.completed = false;
+
+        // Day 2: user1 plays tra_001 again
+        let mut event3 = create_test_listening_event(user1_id, "tra_001", 20241202);
+        event3.duration_seconds = 200;
+        event3.completed = true;
+
+        store.record_listening_event(event1).unwrap();
+        store.record_listening_event(event2).unwrap();
+        store.record_listening_event(event3).unwrap();
+
+        let daily_stats = store.get_daily_listening_stats(20241201, 20241202).unwrap();
+
+        assert_eq!(daily_stats.len(), 2);
+
+        // Day 1 stats
+        let day1 = daily_stats.iter().find(|d| d.date == 20241201).unwrap();
+        assert_eq!(day1.total_plays, 2);
+        assert_eq!(day1.total_duration_seconds, 250); // 100 + 150
+        assert_eq!(day1.completed_plays, 1);
+        assert_eq!(day1.unique_users, 2);
+        assert_eq!(day1.unique_tracks, 2);
+
+        // Day 2 stats
+        let day2 = daily_stats.iter().find(|d| d.date == 20241202).unwrap();
+        assert_eq!(day2.total_plays, 1);
+        assert_eq!(day2.total_duration_seconds, 200);
+        assert_eq!(day2.completed_plays, 1);
+        assert_eq!(day2.unique_users, 1);
+        assert_eq!(day2.unique_tracks, 1);
+    }
+
+    #[test]
+    fn test_get_top_tracks() {
+        let (store, _temp_dir) = create_tmp_store();
+        let user_id = store.create_user("test_user").unwrap();
+
+        // tra_001: 3 plays
+        for _ in 0..3 {
+            let event = create_test_listening_event(user_id, "tra_001", 20241201);
+            store.record_listening_event(event).unwrap();
+        }
+
+        // tra_002: 5 plays
+        for _ in 0..5 {
+            let event = create_test_listening_event(user_id, "tra_002", 20241201);
+            store.record_listening_event(event).unwrap();
+        }
+
+        // tra_003: 1 play
+        let event = create_test_listening_event(user_id, "tra_003", 20241201);
+        store.record_listening_event(event).unwrap();
+
+        let top_tracks = store.get_top_tracks(20241201, 20241201, 10).unwrap();
+
+        assert_eq!(top_tracks.len(), 3);
+        // Should be ordered by play_count descending
+        assert_eq!(top_tracks[0].track_id, "tra_002");
+        assert_eq!(top_tracks[0].play_count, 5);
+        assert_eq!(top_tracks[1].track_id, "tra_001");
+        assert_eq!(top_tracks[1].play_count, 3);
+        assert_eq!(top_tracks[2].track_id, "tra_003");
+        assert_eq!(top_tracks[2].play_count, 1);
+
+        // Test limit
+        let top_tracks = store.get_top_tracks(20241201, 20241201, 2).unwrap();
+        assert_eq!(top_tracks.len(), 2);
+    }
+
+    #[test]
+    fn test_prune_listening_events() {
+        let (store, _temp_dir) = create_tmp_store();
+        let user_id = store.create_user("test_user").unwrap();
+
+        // Get today's date in YYYYMMDD format
+        let today = chrono::Utc::now();
+        let today_date: u32 = today.format("%Y%m%d").to_string().parse().unwrap();
+
+        // Calculate old date (60 days ago)
+        let old_date = (today - chrono::Duration::days(60))
+            .format("%Y%m%d")
+            .to_string()
+            .parse::<u32>()
+            .unwrap();
+
+        // Calculate recent date (5 days ago)
+        let recent_date = (today - chrono::Duration::days(5))
+            .format("%Y%m%d")
+            .to_string()
+            .parse::<u32>()
+            .unwrap();
+
+        // Record old event (60 days ago)
+        let old_event = create_test_listening_event(user_id, "tra_old", old_date);
+        store.record_listening_event(old_event).unwrap();
+
+        // Record recent event (5 days ago)
+        let recent_event = create_test_listening_event(user_id, "tra_recent", recent_date);
+        store.record_listening_event(recent_event).unwrap();
+
+        // Verify both exist
+        let all_events = store
+            .get_user_listening_events(user_id, old_date, today_date, None, None)
+            .unwrap();
+        assert_eq!(all_events.len(), 2);
+
+        // Prune events older than 30 days (should delete the 60-day-old event)
+        let pruned = store.prune_listening_events(30).unwrap();
+        assert_eq!(pruned, 1);
+
+        // Verify only recent event remains
+        let remaining_events = store
+            .get_user_listening_events(user_id, old_date, today_date, None, None)
+            .unwrap();
+        assert_eq!(remaining_events.len(), 1);
+        assert_eq!(remaining_events[0].track_id, "tra_recent");
+    }
+
+    #[test]
+    fn test_listening_events_deleted_on_user_delete() {
+        let (store, _temp_dir) = create_tmp_store();
+        let user_id = store.create_user("test_user").unwrap();
+
+        // Record listening event
+        let event = create_test_listening_event(user_id, "tra_001", 20241201);
+        store.record_listening_event(event).unwrap();
+
+        // Verify event exists
+        let events = store
+            .get_user_listening_events(user_id, 20241201, 20241201, None, None)
+            .unwrap();
+        assert_eq!(events.len(), 1);
+
+        // Delete user (listening_events has ON DELETE CASCADE)
+        {
+            let conn = store.conn.lock().unwrap();
+            conn.execute("DELETE FROM user WHERE id = ?1", params![user_id])
+                .unwrap();
+        }
+
+        // Verify events were deleted with user
+        // Need to check directly in DB since user no longer exists
+        {
+            let conn = store.conn.lock().unwrap();
+            let count: i64 = conn
+                .query_row(
+                    "SELECT COUNT(*) FROM listening_events WHERE user_id = ?1",
+                    params![user_id],
+                    |row| row.get(0),
+                )
+                .unwrap();
+            assert_eq!(count, 0);
+        }
+    }
+
+    #[test]
+    fn test_listening_event_with_minimal_fields() {
+        let (store, _temp_dir) = create_tmp_store();
+        let user_id = store.create_user("test_user").unwrap();
+
+        // Create event with only required fields, optional fields as None
+        let event = ListeningEvent {
+            id: None,
+            user_id,
+            track_id: "tra_minimal".to_string(),
+            session_id: None,
+            started_at: 1732982400,
+            ended_at: None,
+            duration_seconds: 100,
+            track_duration_seconds: 200,
+            completed: false,
+            seek_count: 0,
+            pause_count: 0,
+            playback_context: None,
+            client_type: None,
+            date: 20241201,
+        };
+
+        let (id, created) = store.record_listening_event(event).unwrap();
+        assert!(id > 0);
+        assert!(created);
+
+        // Verify we can retrieve it
+        let events = store
+            .get_user_listening_events(user_id, 20241201, 20241201, None, None)
+            .unwrap();
+        assert_eq!(events.len(), 1);
+        assert!(events[0].client_type.is_none());
+        assert!(events[0].playback_context.is_none());
+        assert!(events[0].ended_at.is_none());
+    }
+
+    #[test]
+    fn test_listening_event_foreign_key_constraint() {
+        let (store, _temp_dir) = create_tmp_store();
+
+        // Try to insert event for non-existent user
+        let event = create_test_listening_event(99999, "tra_001", 20241201);
+        let result = store.record_listening_event(event);
+
+        // Should fail due to foreign key constraint
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_get_user_listening_events_empty() {
+        let (store, _temp_dir) = create_tmp_store();
+        let user_id = store.create_user("test_user").unwrap();
+
+        // Query with no events
+        let events = store
+            .get_user_listening_events(user_id, 20241201, 20241231, None, None)
+            .unwrap();
+        assert!(events.is_empty());
+    }
+
+    #[test]
+    fn test_get_user_listening_events_user_isolation() {
+        let (store, _temp_dir) = create_tmp_store();
+        let user1_id = store.create_user("user1").unwrap();
+        let user2_id = store.create_user("user2").unwrap();
+
+        // User 1 listens to track A
+        let event1 = create_test_listening_event(user1_id, "tra_user1", 20241201);
+        store.record_listening_event(event1).unwrap();
+
+        // User 2 listens to track B
+        let event2 = create_test_listening_event(user2_id, "tra_user2", 20241201);
+        store.record_listening_event(event2).unwrap();
+
+        // User 1 should only see their events
+        let user1_events = store
+            .get_user_listening_events(user1_id, 20241201, 20241201, None, None)
+            .unwrap();
+        assert_eq!(user1_events.len(), 1);
+        assert_eq!(user1_events[0].track_id, "tra_user1");
+
+        // User 2 should only see their events
+        let user2_events = store
+            .get_user_listening_events(user2_id, 20241201, 20241201, None, None)
+            .unwrap();
+        assert_eq!(user2_events.len(), 1);
+        assert_eq!(user2_events[0].track_id, "tra_user2");
+    }
+
+    #[test]
+    fn test_get_user_listening_summary_empty() {
+        let (store, _temp_dir) = create_tmp_store();
+        let user_id = store.create_user("test_user").unwrap();
+
+        // Get summary with no events
+        let summary = store
+            .get_user_listening_summary(user_id, 20241201, 20241231)
+            .unwrap();
+
+        assert_eq!(summary.user_id, Some(user_id));
+        assert_eq!(summary.total_plays, 0);
+        assert_eq!(summary.total_duration_seconds, 0);
+        assert_eq!(summary.completed_plays, 0);
+        assert_eq!(summary.unique_tracks, 0);
+    }
+
+    #[test]
+    fn test_get_user_listening_history_empty() {
+        let (store, _temp_dir) = create_tmp_store();
+        let user_id = store.create_user("test_user").unwrap();
+
+        let history = store.get_user_listening_history(user_id, 10).unwrap();
+        assert!(history.is_empty());
+    }
+
+    #[test]
+    fn test_get_user_listening_history_respects_limit() {
+        let (store, _temp_dir) = create_tmp_store();
+        let user_id = store.create_user("test_user").unwrap();
+
+        // Create 5 different tracks
+        for i in 0..5 {
+            let event = create_test_listening_event(user_id, &format!("tra_{:03}", i), 20241201);
+            store.record_listening_event(event).unwrap();
+        }
+
+        // Request only 3
+        let history = store.get_user_listening_history(user_id, 3).unwrap();
+        assert_eq!(history.len(), 3);
+    }
+
+    #[test]
+    fn test_get_track_listening_stats_nonexistent_track() {
+        let (store, _temp_dir) = create_tmp_store();
+        let user_id = store.create_user("test_user").unwrap();
+
+        // Record some events for a different track
+        let event = create_test_listening_event(user_id, "tra_exists", 20241201);
+        store.record_listening_event(event).unwrap();
+
+        // Query stats for non-existent track
+        let stats = store
+            .get_track_listening_stats("tra_nonexistent", 20241201, 20241201)
+            .unwrap();
+
+        assert_eq!(stats.track_id, "tra_nonexistent");
+        assert_eq!(stats.play_count, 0);
+        assert_eq!(stats.total_duration_seconds, 0);
+        assert_eq!(stats.completed_count, 0);
+        assert_eq!(stats.unique_listeners, 0);
+    }
+
+    #[test]
+    fn test_get_daily_listening_stats_empty() {
+        let (store, _temp_dir) = create_tmp_store();
+        let _user_id = store.create_user("test_user").unwrap();
+
+        // Query stats for date range with no events
+        let daily_stats = store.get_daily_listening_stats(20241201, 20241231).unwrap();
+        assert!(daily_stats.is_empty());
+    }
+
+    #[test]
+    fn test_get_top_tracks_empty() {
+        let (store, _temp_dir) = create_tmp_store();
+        let _user_id = store.create_user("test_user").unwrap();
+
+        let top_tracks = store.get_top_tracks(20241201, 20241231, 10).unwrap();
+        assert!(top_tracks.is_empty());
+    }
+
+    #[test]
+    fn test_prune_listening_events_nothing_to_prune() {
+        let (store, _temp_dir) = create_tmp_store();
+        let user_id = store.create_user("test_user").unwrap();
+
+        // Get today's date
+        let today = chrono::Utc::now();
+        let today_date: u32 = today.format("%Y%m%d").to_string().parse().unwrap();
+
+        // Record only recent events
+        let recent_event = create_test_listening_event(user_id, "tra_recent", today_date);
+        store.record_listening_event(recent_event).unwrap();
+
+        // Prune events older than 30 days - nothing should be pruned
+        let pruned = store.prune_listening_events(30).unwrap();
+        assert_eq!(pruned, 0);
+
+        // Verify event still exists
+        let events = store
+            .get_user_listening_events(user_id, today_date, today_date, None, None)
+            .unwrap();
+        assert_eq!(events.len(), 1);
+    }
+
+    #[test]
+    fn test_session_id_uniqueness_across_users() {
+        let (store, _temp_dir) = create_tmp_store();
+        let user1_id = store.create_user("user1").unwrap();
+        let user2_id = store.create_user("user2").unwrap();
+
+        // Same session_id for different users should both succeed
+        // (session_id is globally unique, not per-user)
+        let mut event1 = create_test_listening_event(user1_id, "tra_001", 20241201);
+        event1.session_id = Some("shared-session-id".to_string());
+
+        let mut event2 = create_test_listening_event(user2_id, "tra_001", 20241201);
+        event2.session_id = Some("shared-session-id".to_string());
+
+        let (_, created1) = store.record_listening_event(event1).unwrap();
+        assert!(created1);
+
+        // Second insert with same session_id should be deduplicated
+        // even for different user (session_id is globally unique)
+        let (_, created2) = store.record_listening_event(event2).unwrap();
+        assert!(!created2);
+    }
+
+    #[test]
+    fn test_get_user_listening_events_ordering() {
+        let (store, _temp_dir) = create_tmp_store();
+        let user_id = store.create_user("test_user").unwrap();
+
+        // Insert events with different started_at times
+        let mut event1 = create_test_listening_event(user_id, "tra_first", 20241201);
+        event1.started_at = 1000;
+
+        let mut event2 = create_test_listening_event(user_id, "tra_third", 20241201);
+        event2.started_at = 3000;
+
+        let mut event3 = create_test_listening_event(user_id, "tra_second", 20241201);
+        event3.started_at = 2000;
+
+        store.record_listening_event(event1).unwrap();
+        store.record_listening_event(event2).unwrap();
+        store.record_listening_event(event3).unwrap();
+
+        let events = store
+            .get_user_listening_events(user_id, 20241201, 20241201, None, None)
+            .unwrap();
+
+        // Should be ordered by started_at descending (most recent first)
+        assert_eq!(events.len(), 3);
+        assert_eq!(events[0].track_id, "tra_third");
+        assert_eq!(events[1].track_id, "tra_second");
+        assert_eq!(events[2].track_id, "tra_first");
+    }
+
+    #[test]
+    fn test_completion_calculation_boundary() {
+        let (store, _temp_dir) = create_tmp_store();
+        let user_id = store.create_user("test_user").unwrap();
+
+        // Exactly 90% should be complete
+        let mut event_90 = create_test_listening_event(user_id, "tra_90", 20241201);
+        event_90.duration_seconds = 90;
+        event_90.track_duration_seconds = 100;
+        event_90.completed = true; // 90/100 = 0.90 = exactly 90%
+
+        // 89% should not be complete
+        let mut event_89 = create_test_listening_event(user_id, "tra_89", 20241201);
+        event_89.duration_seconds = 89;
+        event_89.track_duration_seconds = 100;
+        event_89.completed = false; // 89/100 = 0.89 < 90%
+
+        store.record_listening_event(event_90).unwrap();
+        store.record_listening_event(event_89).unwrap();
+
+        let summary = store
+            .get_user_listening_summary(user_id, 20241201, 20241201)
+            .unwrap();
+
+        assert_eq!(summary.total_plays, 2);
+        assert_eq!(summary.completed_plays, 1); // Only the 90% one
+    }
+
+    #[test]
+    fn test_get_top_tracks_with_ties() {
+        let (store, _temp_dir) = create_tmp_store();
+        let user_id = store.create_user("test_user").unwrap();
+
+        // Create 3 tracks with same play count
+        for track in &["tra_a", "tra_b", "tra_c"] {
+            for _ in 0..5 {
+                let event = create_test_listening_event(user_id, track, 20241201);
+                store.record_listening_event(event).unwrap();
+            }
+        }
+
+        let top_tracks = store.get_top_tracks(20241201, 20241201, 10).unwrap();
+
+        assert_eq!(top_tracks.len(), 3);
+        // All should have 5 plays
+        for track in &top_tracks {
+            assert_eq!(track.play_count, 5);
+        }
+    }
+
+    #[test]
+    fn test_daily_stats_multiple_days_gap() {
+        let (store, _temp_dir) = create_tmp_store();
+        let user_id = store.create_user("test_user").unwrap();
+
+        // Events on day 1 and day 5, nothing in between
+        let event1 = create_test_listening_event(user_id, "tra_001", 20241201);
+        let event2 = create_test_listening_event(user_id, "tra_002", 20241205);
+
+        store.record_listening_event(event1).unwrap();
+        store.record_listening_event(event2).unwrap();
+
+        let daily_stats = store.get_daily_listening_stats(20241201, 20241205).unwrap();
+
+        // Should only have 2 entries (days with actual events)
+        assert_eq!(daily_stats.len(), 2);
+
+        let dates: Vec<u32> = daily_stats.iter().map(|d| d.date).collect();
+        assert!(dates.contains(&20241201));
+        assert!(dates.contains(&20241205));
+        // Days 2, 3, 4 should not be in results
+        assert!(!dates.contains(&20241202));
+        assert!(!dates.contains(&20241203));
+        assert!(!dates.contains(&20241204));
     }
 }

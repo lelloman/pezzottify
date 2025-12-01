@@ -259,7 +259,7 @@ pub static ref LISTENING_DURATION_SECONDS_TOTAL: CounterVec = CounterVec::new(
 
 ### Phase 4: Metrics & Testing
 12. ~~Add Prometheus metrics~~ ✅
-13. Write unit tests for store methods
+13. ~~Write unit tests for store methods~~ ✅
 14. Write API integration tests
 
 ---
