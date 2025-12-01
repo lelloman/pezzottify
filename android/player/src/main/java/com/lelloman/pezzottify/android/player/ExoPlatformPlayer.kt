@@ -9,6 +9,7 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
 import com.google.common.util.concurrent.MoreExecutors
+import com.lelloman.pezzottify.android.domain.player.ControlsAndStatePlayer.SeekEvent
 import com.lelloman.pezzottify.android.domain.player.PlatformPlayer
 import com.lelloman.pezzottify.android.domain.player.RepeatMode
 import com.lelloman.pezzottify.android.domain.player.VolumeState
@@ -18,8 +19,11 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -64,6 +68,11 @@ internal class ExoPlatformPlayer(
     private val mutableRepeatMode = MutableStateFlow(RepeatMode.OFF)
     override val repeatMode: StateFlow<RepeatMode> = mutableRepeatMode.asStateFlow()
 
+    private val mutableCurrentTrackDurationSeconds = MutableStateFlow<Int?>(null)
+    override val currentTrackDurationSeconds: StateFlow<Int?> = mutableCurrentTrackDurationSeconds.asStateFlow()
+
+    private val mutableSeekEvents = MutableSharedFlow<SeekEvent>()
+    override val seekEvents: SharedFlow<SeekEvent> = mutableSeekEvents.asSharedFlow()
 
     private val playerListener = object : Player.Listener {
         override fun onEvents(player: Player, events: Player.Events) {
@@ -138,6 +147,7 @@ internal class ExoPlatformPlayer(
             val percent = (position.toFloat() / duration.toFloat()) * 100f
             mutableCurrentTrackPercent.value = percent
             mutableCurrentTrackProgressSec.value = (position / 1000).toInt()
+            mutableCurrentTrackDurationSeconds.value = (duration / 1000).toInt()
         }
     }
 
@@ -152,6 +162,7 @@ internal class ExoPlatformPlayer(
                         mediaController = null
                         sessionToken = null
                         mutableIsActive.value = false
+                        mutableCurrentTrackDurationSeconds.value = null
                     }
                 }
             }
@@ -222,6 +233,7 @@ internal class ExoPlatformPlayer(
             if (duration > 0) {
                 val position = (duration * percentage / 100f).toLong()
                 controller.seekTo(position)
+                emitSeekEvent()
             }
         }
     }
@@ -230,6 +242,7 @@ internal class ExoPlatformPlayer(
         mediaController?.let { controller ->
             val newPosition = (controller.currentPosition + 10_000).coerceAtMost(controller.duration)
             controller.seekTo(newPosition)
+            emitSeekEvent()
         }
     }
 
@@ -237,12 +250,20 @@ internal class ExoPlatformPlayer(
         mediaController?.let { controller ->
             val newPosition = (controller.currentPosition - 10_000).coerceAtLeast(0)
             controller.seekTo(newPosition)
+            emitSeekEvent()
+        }
+    }
+
+    private fun emitSeekEvent() {
+        coroutineScope.launch {
+            mutableSeekEvents.emit(SeekEvent(timestamp = System.currentTimeMillis()))
         }
     }
 
     override fun stop() {
         mediaController?.stop()
         mutableIsPlaying.value = false
+        mutableCurrentTrackDurationSeconds.value = null
         stopProgressPolling()
     }
 

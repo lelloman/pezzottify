@@ -7,15 +7,18 @@ import com.lelloman.pezzottify.android.domain.config.ConfigStore
 import com.lelloman.pezzottify.android.domain.settings.UserSettingsStore
 import com.lelloman.pezzottify.android.domain.statics.StaticsStore
 import com.lelloman.pezzottify.android.domain.statics.fetchstate.StaticItemFetchStateStore
+import com.lelloman.pezzottify.android.domain.listening.ListeningEventStore
 import com.lelloman.pezzottify.android.domain.user.UserDataStore
 import com.lelloman.pezzottify.android.domain.usercontent.UserContentStore
 import com.lelloman.pezzottify.android.localdata.internal.auth.AuthStoreImpl
+import com.lelloman.pezzottify.android.localdata.internal.listening.ListeningEventDao
+import com.lelloman.pezzottify.android.localdata.internal.listening.ListeningEventStoreImpl
 import com.lelloman.pezzottify.android.localdata.internal.config.ConfigStoreImpl
 import com.lelloman.pezzottify.android.localdata.internal.settings.UserSettingsStoreImpl
 import com.lelloman.pezzottify.android.localdata.internal.statics.StaticsDb
 import com.lelloman.pezzottify.android.localdata.internal.statics.StaticsItemFetchStateStoreImpl
 import com.lelloman.pezzottify.android.localdata.internal.statics.StaticsStoreImpl
-import com.lelloman.pezzottify.android.localdata.internal.user.UserDataDb
+import com.lelloman.pezzottify.android.localdata.internal.user.UserLocalDataDb
 import com.lelloman.pezzottify.android.localdata.internal.user.UserDataStoreImpl
 import com.lelloman.pezzottify.android.localdata.internal.usercontent.UserContentDb
 import com.lelloman.pezzottify.android.localdata.internal.usercontent.UserContentStoreImpl
@@ -63,11 +66,11 @@ class LocalDataModule {
     @Provides
     @Singleton
     internal fun provideUserDataStore(
-        userDataDb: UserDataDb,
+        userLocalDataDb: UserLocalDataDb,
         timeProvider: TimeProvider,
     ): UserDataStore = UserDataStoreImpl(
-        viewedContentDao = userDataDb.viewedContentDao(),
-        searchHistoryEntryDao = userDataDb.searchHistoryEntryDao(),
+        viewedContentDao = userLocalDataDb.viewedContentDao(),
+        searchHistoryEntryDao = userLocalDataDb.searchHistoryEntryDao(),
         timeProvider = { timeProvider.nowUtcMs() },
     )
 
@@ -82,4 +85,16 @@ class LocalDataModule {
     internal fun provideUserContentStore(
         userContentDb: UserContentDb
     ): UserContentStore = UserContentStoreImpl(userContentDb.likedContentDao())
+
+    @Provides
+    @Singleton
+    internal fun provideListeningEventDao(
+        userContentDb: UserContentDb
+    ): ListeningEventDao = userContentDb.listeningEventDao()
+
+    @Provides
+    @Singleton
+    internal fun provideListeningEventStore(
+        dao: ListeningEventDao
+    ): ListeningEventStore = ListeningEventStoreImpl(dao)
 }

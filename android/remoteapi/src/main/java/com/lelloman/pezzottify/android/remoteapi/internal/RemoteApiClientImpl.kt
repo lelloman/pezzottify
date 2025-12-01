@@ -1,15 +1,18 @@
 package com.lelloman.pezzottify.android.remoteapi.internal
 
+import com.lelloman.pezzottify.android.domain.listening.ListeningEventSyncData
 import com.lelloman.pezzottify.android.domain.remoteapi.RemoteApiClient
 import com.lelloman.pezzottify.android.domain.remoteapi.RemoteApiCredentialsProvider
 import com.lelloman.pezzottify.android.domain.remoteapi.response.AlbumResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.ArtistDiscographyResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.ArtistResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.ImageResponse
+import com.lelloman.pezzottify.android.domain.remoteapi.response.ListeningEventRecordedResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.LoginSuccessResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.RemoteApiResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.SearchResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.TrackResponse
+import com.lelloman.pezzottify.android.remoteapi.internal.requests.ListeningEventRequest
 import com.lelloman.pezzottify.android.remoteapi.internal.requests.LoginRequest
 import com.lelloman.pezzottify.android.remoteapi.internal.requests.SearchRequest
 import kotlinx.coroutines.CoroutineScope
@@ -164,6 +167,30 @@ internal class RemoteApiClientImpl(
                 .unlikeContent(authToken = authToken, contentId = contentId)
                 .returnFromRetrofitResponse()
         }
+
+    override suspend fun recordListeningEvent(
+        data: ListeningEventSyncData
+    ): RemoteApiResponse<ListeningEventRecordedResponse> = catchingNetworkError {
+        val request = ListeningEventRequest(
+            trackId = data.trackId,
+            sessionId = data.sessionId,
+            startedAt = data.startedAt,
+            endedAt = data.endedAt,
+            durationSeconds = data.durationSeconds,
+            trackDurationSeconds = data.trackDurationSeconds,
+            seekCount = data.seekCount,
+            pauseCount = data.pauseCount,
+            playbackContext = data.playbackContext,
+            clientType = "android",
+        )
+        val response = retrofit.recordListeningEvent(authToken = authToken, request = request)
+        response.commonError?.let { return@catchingNetworkError it }
+        val body = response.body()
+            ?: return@catchingNetworkError RemoteApiResponse.Error.Unknown("No body")
+        RemoteApiResponse.Success(
+            ListeningEventRecordedResponse(id = body.id, created = body.created)
+        )
+    }
 
     private suspend fun <T> catchingNetworkError(block: suspend () -> RemoteApiResponse<T>): RemoteApiResponse<T> =
         try {

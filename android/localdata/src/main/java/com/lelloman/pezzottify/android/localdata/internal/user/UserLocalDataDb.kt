@@ -10,10 +10,10 @@ import com.lelloman.pezzottify.android.localdata.internal.user.model.ViewedConte
 
 @Database(
     entities = [ViewedContent::class, SearchHistoryEntryEntity::class],
-    version = UserDataDb.VERSION
+    version = UserLocalDataDb.VERSION
 )
 @TypeConverters(UserDataTypeConverters::class)
-internal abstract class UserDataDb : RoomDatabase() {
+internal abstract class UserLocalDataDb : RoomDatabase() {
 
     abstract fun viewedContentDao(): ViewedContentDao
 

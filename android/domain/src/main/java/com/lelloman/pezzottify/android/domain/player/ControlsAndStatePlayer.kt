@@ -1,5 +1,6 @@
 package com.lelloman.pezzottify.android.domain.player
 
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 
 interface ControlsAndStatePlayer {
@@ -10,6 +11,21 @@ interface ControlsAndStatePlayer {
     val currentTrackIndex: StateFlow<Int?>
     val currentTrackPercent: StateFlow<Float?>
     val currentTrackProgressSec: StateFlow<Int?>
+
+    /**
+     * Duration of the currently playing track in seconds.
+     * Populated when track info is loaded/fetched.
+     * Used by ListeningTracker for listening stats.
+     */
+    val currentTrackDurationSeconds: StateFlow<Int?>
+
+    /**
+     * Emits when a seek operation occurs (seekToPercentage, forward10Sec, rewind10Sec).
+     * Used by ListeningTracker to count seeks.
+     */
+    val seekEvents: SharedFlow<SeekEvent>
+
+    data class SeekEvent(val timestamp: Long)
     val shuffleEnabled: StateFlow<Boolean>
     val repeatMode: StateFlow<RepeatMode>
 

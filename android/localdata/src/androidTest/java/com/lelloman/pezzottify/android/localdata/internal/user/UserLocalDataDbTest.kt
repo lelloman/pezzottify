@@ -18,11 +18,11 @@ import java.util.concurrent.TimeUnit
 
 private typealias ViewedContentEntity = com.lelloman.pezzottify.android.localdata.internal.user.model.ViewedContent
 
-class UserDataDbTest {
+class UserLocalDataDbTest {
 
     private val context by lazy { InstrumentationRegistry.getInstrumentation().targetContext }
 
-    private val db by lazy { Room.inMemoryDatabaseBuilder(context, UserDataDb::class.java).build() }
+    private val db by lazy { Room.inMemoryDatabaseBuilder(context, UserLocalDataDb::class.java).build() }
 
     private val viewedContentDao by lazy { db.viewedContentDao() }
 

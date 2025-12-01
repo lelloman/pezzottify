@@ -3,7 +3,7 @@ package com.lelloman.pezzottify.android.localdata.internal
 import android.content.Context
 import androidx.room.Room
 import com.lelloman.pezzottify.android.localdata.internal.statics.StaticsDb
-import com.lelloman.pezzottify.android.localdata.internal.user.UserDataDb
+import com.lelloman.pezzottify.android.localdata.internal.user.UserLocalDataDb
 import com.lelloman.pezzottify.android.localdata.internal.usercontent.UserContentDb
 import dagger.Module
 import dagger.Provides
@@ -25,14 +25,15 @@ internal class DbModule {
 
     @Provides
     @Singleton
-    internal fun provideUserDataDb(@ApplicationContext context: Context): UserDataDb = Room
-        .databaseBuilder(context, UserDataDb::class.java, UserDataDb.NAME)
-        .addMigrations(UserDataDb.MIGRATION_1_2)
+    internal fun provideUserLocalDataDb(@ApplicationContext context: Context): UserLocalDataDb = Room
+        .databaseBuilder(context, UserLocalDataDb::class.java, UserLocalDataDb.NAME)
+        .addMigrations(UserLocalDataDb.MIGRATION_1_2)
         .build()
 
     @Provides
     @Singleton
     internal fun provideUserContentDb(@ApplicationContext context: Context): UserContentDb = Room
         .databaseBuilder(context, UserContentDb::class.java, UserContentDb.NAME)
+        .addMigrations(UserContentDb.MIGRATION_1_2)
         .build()
 }

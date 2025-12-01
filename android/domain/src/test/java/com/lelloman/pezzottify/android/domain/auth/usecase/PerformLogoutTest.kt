@@ -2,6 +2,7 @@ package com.lelloman.pezzottify.android.domain.auth.usecase
 
 import com.lelloman.pezzottify.android.domain.auth.AuthState
 import com.lelloman.pezzottify.android.domain.auth.AuthStore
+import com.lelloman.pezzottify.android.domain.listening.ListeningEventStore
 import com.lelloman.pezzottify.android.domain.player.PezzottifyPlayer
 import com.lelloman.pezzottify.android.domain.remoteapi.RemoteApiClient
 import com.lelloman.pezzottify.android.domain.statics.StaticsStore
@@ -21,6 +22,7 @@ class PerformLogoutTest {
     private lateinit var staticsStore: StaticsStore
     private lateinit var userDataStore: UserDataStore
     private lateinit var userContentStore: UserContentStore
+    private lateinit var listeningEventStore: ListeningEventStore
     private lateinit var player: PezzottifyPlayer
 
     private lateinit var performLogout: PerformLogout
@@ -32,6 +34,7 @@ class PerformLogoutTest {
         staticsStore = mockk(relaxed = true)
         userDataStore = mockk(relaxed = true)
         userContentStore = mockk(relaxed = true)
+        listeningEventStore = mockk(relaxed = true)
         player = mockk(relaxed = true)
 
         performLogout = PerformLogout(
@@ -40,6 +43,7 @@ class PerformLogoutTest {
             staticsStore = staticsStore,
             userDataStore = userDataStore,
             userContentStore = userContentStore,
+            listeningEventStore = listeningEventStore,
             player = player,
         )
     }
@@ -87,6 +91,13 @@ class PerformLogoutTest {
     }
 
     @Test
+    fun `invoke deletes all listening events`() = runTest {
+        performLogout()
+
+        coVerify { listeningEventStore.deleteAll() }
+    }
+
+    @Test
     fun `invoke calls all cleanup operations`() = runTest {
         performLogout()
 
@@ -97,6 +108,7 @@ class PerformLogoutTest {
             staticsStore.deleteAll()
             userDataStore.deleteAll()
             userContentStore.deleteAll()
+            listeningEventStore.deleteAll()
         }
     }
 }

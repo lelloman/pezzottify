@@ -1,5 +1,7 @@
 package com.lelloman.pezzottify.android.remoteapi.internal
 
+import com.lelloman.pezzottify.android.remoteapi.internal.requests.ListeningEventRequest
+import com.lelloman.pezzottify.android.remoteapi.internal.requests.ListeningEventResponse
 import com.lelloman.pezzottify.android.remoteapi.internal.requests.LoginRequest
 import com.lelloman.pezzottify.android.remoteapi.internal.requests.SearchRequest
 import com.lelloman.pezzottify.android.domain.remoteapi.response.AlbumResponse
@@ -79,4 +81,10 @@ internal interface RetrofitApiClient {
         @Header("Authorization") authToken: String,
         @Path("contentId") contentId: String,
     ): Response<Unit>
+
+    @POST("/v1/user/listening")
+    suspend fun recordListeningEvent(
+        @Header("Authorization") authToken: String,
+        @Body request: ListeningEventRequest,
+    ): Response<ListeningEventResponse>
 }

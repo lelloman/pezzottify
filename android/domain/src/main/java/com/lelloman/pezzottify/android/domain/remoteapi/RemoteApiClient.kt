@@ -1,9 +1,11 @@
 package com.lelloman.pezzottify.android.domain.remoteapi
 
+import com.lelloman.pezzottify.android.domain.listening.ListeningEventSyncData
 import com.lelloman.pezzottify.android.domain.remoteapi.response.AlbumResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.ArtistDiscographyResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.ArtistResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.ImageResponse
+import com.lelloman.pezzottify.android.domain.remoteapi.response.ListeningEventRecordedResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.LoginSuccessResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.RemoteApiResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.SearchResponse
@@ -38,6 +40,8 @@ interface RemoteApiClient {
     suspend fun likeContent(contentId: String): RemoteApiResponse<Unit>
 
     suspend fun unlikeContent(contentId: String): RemoteApiResponse<Unit>
+
+    suspend fun recordListeningEvent(data: ListeningEventSyncData): RemoteApiResponse<ListeningEventRecordedResponse>
 
     @Serializable
     enum class SearchFilter {
