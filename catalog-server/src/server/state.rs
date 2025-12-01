@@ -1,6 +1,7 @@
 use axum::extract::FromRef;
 
 use crate::catalog_store::CatalogStore;
+use crate::downloader::DownloaderClient;
 use crate::search::SearchVault;
 use crate::user::UserManager;
 use std::sync::{Arc, Mutex};
@@ -10,6 +11,7 @@ use super::ServerConfig;
 
 pub type GuardedCatalogStore = Arc<dyn CatalogStore>;
 pub type GuardedUserManager = Arc<Mutex<UserManager>>;
+pub type OptionalDownloader = Option<Arc<DownloaderClient>>;
 
 #[derive(Clone)]
 pub struct ServerState {
@@ -18,6 +20,7 @@ pub struct ServerState {
     pub catalog_store: GuardedCatalogStore,
     pub search_vault: Arc<Mutex<Box<dyn SearchVault>>>,
     pub user_manager: GuardedUserManager,
+    pub downloader: OptionalDownloader,
     pub hash: String,
 }
 
@@ -45,5 +48,11 @@ impl FromRef<ServerState> for GuardedUserManager {
 impl FromRef<ServerState> for ServerConfig {
     fn from_ref(input: &ServerState) -> Self {
         input.config.clone()
+    }
+}
+
+impl FromRef<ServerState> for OptionalDownloader {
+    fn from_ref(input: &ServerState) -> Self {
+        input.downloader.clone()
     }
 }

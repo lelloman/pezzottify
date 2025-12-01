@@ -1649,6 +1649,7 @@ impl ServerState {
         catalog_store: Arc<dyn CatalogStore>,
         search_vault: Box<dyn SearchVault>,
         user_manager: UserManager,
+        downloader: Option<Arc<crate::downloader::DownloaderClient>>,
     ) -> ServerState {
         ServerState {
             config,
@@ -1656,6 +1657,7 @@ impl ServerState {
             catalog_store,
             search_vault: Arc::new(Mutex::new(search_vault)),
             user_manager: Arc::new(Mutex::new(user_manager)),
+            downloader,
             hash: "123456".to_owned(),
         }
     }
@@ -1666,9 +1668,10 @@ pub fn make_app(
     catalog_store: Arc<dyn CatalogStore>,
     search_vault: Box<dyn SearchVault>,
     user_store: Box<dyn FullUserStore>,
+    downloader: Option<Arc<crate::downloader::DownloaderClient>>,
 ) -> Result<Router> {
     let user_manager = UserManager::new(catalog_store.clone(), user_store);
-    let state = ServerState::new(config.clone(), catalog_store, search_vault, user_manager);
+    let state = ServerState::new(config.clone(), catalog_store, search_vault, user_manager, downloader);
 
     // Login route with strict IP-based rate limiting
     // For rates < 60/min, we use per_second(1) and rely on burst_size to enforce the limit
@@ -2005,6 +2008,7 @@ pub async fn run_server(
     metrics_port: u16,
     content_cache_age_sec: usize,
     frontend_dir_path: Option<String>,
+    downloader: Option<Arc<crate::downloader::DownloaderClient>>,
 ) -> Result<()> {
     let config = ServerConfig {
         port,
@@ -2012,7 +2016,7 @@ pub async fn run_server(
         content_cache_age_sec,
         frontend_dir_path,
     };
-    let app = make_app(config, catalog_store.clone(), search_vault, user_store)?;
+    let app = make_app(config, catalog_store.clone(), search_vault, user_store, downloader)?;
 
     let main_listener = tokio::net::TcpListener::bind(format!("0.0.0.0:{}", port))
         .await
@@ -2109,6 +2113,7 @@ mod tests {
             catalog_store,
             Box::new(NoOpSearchVault {}),
             user_store,
+            None, // no downloader
         )
         .unwrap();
 

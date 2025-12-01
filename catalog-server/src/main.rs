@@ -133,6 +133,15 @@ async fn main() -> Result<()> {
     #[cfg(feature = "no_search")]
     let search_vault: Box<dyn SearchVault> = Box::new(NoOpSearchVault {});
 
+    // Create downloader client if URL is configured
+    let downloader = cli_args.downloader_url.map(|url| {
+        info!("Downloader service configured at {}", url);
+        Arc::new(downloader::DownloaderClient::new(
+            url,
+            cli_args.downloader_timeout_sec,
+        ))
+    });
+
     info!("Ready to serve at port {}!", cli_args.port);
     info!("Metrics available at port {}!", cli_args.metrics_port);
     run_server(
@@ -144,6 +153,7 @@ async fn main() -> Result<()> {
         cli_args.metrics_port,
         cli_args.content_cache_age_sec,
         cli_args.frontend_dir_path,
+        downloader,
     )
     .await
 }
