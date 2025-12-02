@@ -25,12 +25,57 @@ export const useStaticsStore = defineStore('statics', () => {
     return null;
   }
 
+  // Transform ResolvedArtist response to legacy format
+  const transformArtistResponse = (resolvedArtist) => {
+    if (!resolvedArtist) return null;
+
+    // If it's already in the old format (has 'name' at top level), return as-is
+    if (resolvedArtist.name) return resolvedArtist;
+
+    // Transform ResolvedArtist to legacy format
+    const artist = {
+      ...resolvedArtist.artist,
+      portrait_group: resolvedArtist.display_image ? [resolvedArtist.display_image] : [],
+      portraits: [],
+      related: resolvedArtist.related_artists ? resolvedArtist.related_artists.map(a => a.id) : []
+    };
+
+    return artist;
+  }
+
+  // Transform ResolvedAlbum response to legacy format
+  const transformAlbumResponse = (resolvedAlbum) => {
+    if (!resolvedAlbum) return null;
+
+    // If it's already in the old format (has 'name' at top level), return as-is
+    if (resolvedAlbum.name) return resolvedAlbum;
+
+    // Transform discs: convert track objects to track IDs
+    const discs = resolvedAlbum.discs ? resolvedAlbum.discs.map(disc => ({
+      name: disc.name,
+      number: disc.number,
+      tracks: disc.tracks.map(t => t.id)
+    })) : [];
+
+    // Transform ResolvedAlbum to legacy format
+    const album = {
+      ...resolvedAlbum.album,
+      covers: resolvedAlbum.display_image ? [resolvedAlbum.display_image] : [],
+      cover_group: [],
+      artists_ids: resolvedAlbum.artists ? resolvedAlbum.artists.map(a => a.id) : [],
+      discs: discs
+    };
+
+    return album;
+  }
+
   const fetchItemFromRemote = (itemType, itemId) => {
     let itemPromise = null;
     if (itemType === 'albums') {
-      itemPromise = remoteStore.fetchAlbum(itemId);
+      // Use fetchResolvedAlbum to get display_image, artists, and tracks
+      itemPromise = remoteStore.fetchResolvedAlbum(itemId).then(transformAlbumResponse);
     } else if (itemType === 'artists') {
-      itemPromise = remoteStore.fetchArtist(itemId);
+      itemPromise = remoteStore.fetchArtist(itemId).then(transformArtistResponse);
     } else if (itemType === 'tracks') {
       itemPromise = remoteStore.fetchTrack(itemId);
     }

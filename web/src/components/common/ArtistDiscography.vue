@@ -41,8 +41,9 @@ const loadAlbumIds = async (artistId) => {
   isLoading.value = true;
   const artistsAlbumsResponse = await remoteStore.fetchArtistDiscography(artistId);
   if (artistsAlbumsResponse) {
-    albumIds.value = artistsAlbumsResponse.albums;
-    featuresIds.value = artistsAlbumsResponse.features;
+    // The API now returns Album objects, not just IDs, so extract the IDs
+    albumIds.value = artistsAlbumsResponse.albums ? artistsAlbumsResponse.albums.map(a => a.id) : [];
+    featuresIds.value = artistsAlbumsResponse.features ? artistsAlbumsResponse.features.map(a => a.id) : [];
   } else {
     error.value = "Error fetching artist albums";
   }

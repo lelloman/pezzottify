@@ -38,49 +38,45 @@ fn resolve_album(
     catalog_store: &Arc<dyn CatalogStore>,
     album_id: &str,
 ) -> Option<ResolvedSearchResult> {
-    let album_json = catalog_store.get_album_json(album_id).ok()??;
+    // Use get_resolved_album_json to get display_image
+    let album_json = catalog_store.get_resolved_album_json(album_id).ok()??;
 
-    let name = album_json.get("name")?.as_str()?.to_string();
+    // get_resolved_album_json returns a ResolvedAlbum, so we need to access nested fields
+    let name = album_json
+        .get("album")
+        .and_then(|a| a.get("name"))
+        .and_then(|n| n.as_str())
+        .unwrap_or("")
+        .to_string();
 
     // Get release date/year from the album
     let year = album_json
-        .get("date")
+        .get("album")
+        .and_then(|a| a.get("release_date"))
         .and_then(|d| d.as_i64())
         .and_then(|ts| chrono::DateTime::from_timestamp(ts, 0))
         .map(|d| d.year() as i64);
 
-    // Get artist IDs and resolve their names
-    let artists_ids: Vec<String> = album_json
-        .get("artists_ids")
+    // Get artists from the resolved album (already includes artist names)
+    let artists_ids_names: Vec<(String, String)> = album_json
+        .get("artists")
         .and_then(|a| a.as_array())
         .map(|arr| {
             arr.iter()
-                .filter_map(|v| v.as_str().map(String::from))
+                .filter_map(|artist| {
+                    let id = artist.get("id")?.as_str()?.to_string();
+                    let name = artist.get("name")?.as_str()?.to_string();
+                    Some((id, name))
+                })
                 .collect()
         })
         .unwrap_or_default();
 
-    let artists_ids_names: Vec<(String, String)> = artists_ids
-        .iter()
-        .filter_map(|a_id| {
-            let artist_json = catalog_store.get_artist_json(a_id).ok()??;
-            let name = artist_json.get("name")?.as_str()?.to_string();
-            Some((a_id.clone(), name))
-        })
-        .collect();
-
-    // Get image ID from covers or cover_group
+    // Get image ID from display_image object
     let image_id = album_json
-        .get("covers")
-        .and_then(|c| c.as_array())
-        .and_then(|arr| arr.first())
-        .or_else(|| {
-            album_json
-                .get("cover_group")
-                .and_then(|c| c.as_array())
-                .and_then(|arr| arr.first())
-        })
-        .and_then(|img| img.get("id").and_then(|id| id.as_str()))
+        .get("display_image")
+        .and_then(|img| img.get("id"))
+        .and_then(|id| id.as_str())
         .map(String::from);
 
     let resolved_album = SearchedAlbum {
@@ -100,19 +96,19 @@ fn resolve_artist(
 ) -> Option<ResolvedSearchResult> {
     let artist_json = catalog_store.get_artist_json(artist_id).ok()??;
 
-    let name = artist_json.get("name")?.as_str()?.to_string();
+    // get_artist_json returns a ResolvedArtist, so we need to access nested fields
+    let name = artist_json
+        .get("artist")
+        .and_then(|a| a.get("name"))
+        .and_then(|n| n.as_str())
+        .unwrap_or("")
+        .to_string();
 
+    // Get image ID from display_image object
     let image_id = artist_json
-        .get("portraits")
-        .and_then(|p| p.as_array())
-        .and_then(|arr| arr.first())
-        .or_else(|| {
-            artist_json
-                .get("portrait_group")
-                .and_then(|p| p.as_array())
-                .and_then(|arr| arr.first())
-        })
-        .and_then(|img| img.get("id").and_then(|id| id.as_str()))
+        .get("display_image")
+        .and_then(|img| img.get("id"))
+        .and_then(|id| id.as_str())
         .map(String::from);
 
     let resolved_artist = SearchedArtist {
@@ -150,45 +146,38 @@ fn resolve_track(
         .iter()
         .filter_map(|a_id| {
             let artist_json = catalog_store.get_artist_json(a_id).ok()??;
-            let artist_name = artist_json.get("name")?.as_str()?.to_string();
+            // get_artist_json returns ResolvedArtist, so access nested name
+            let artist_name = artist_json
+                .get("artist")
+                .and_then(|a| a.get("name"))
+                .and_then(|n| n.as_str())?
+                .to_string();
             Some((a_id.clone(), artist_name))
         })
         .collect();
 
     // Try to get image from album first, then from artist
     let image_id = catalog_store
-        .get_album_json(&album_id)
+        .get_resolved_album_json(&album_id)
         .ok()
         .flatten()
         .and_then(|album| {
+            // get_resolved_album_json returns ResolvedAlbum with display_image object
             album
-                .get("covers")
-                .and_then(|c| c.as_array())
-                .and_then(|arr| arr.first())
-                .or_else(|| {
-                    album
-                        .get("cover_group")
-                        .and_then(|c| c.as_array())
-                        .and_then(|arr| arr.first())
-                })
-                .and_then(|img| img.get("id").and_then(|id| id.as_str()))
+                .get("display_image")
+                .and_then(|img| img.get("id"))
+                .and_then(|id| id.as_str())
                 .map(String::from)
         })
         .or_else(|| {
             // Try to get image from first artist with an image
             artists_ids.iter().find_map(|a_id| {
                 let artist_json = catalog_store.get_artist_json(a_id).ok()??;
+                // get_artist_json returns ResolvedArtist with display_image object
                 artist_json
-                    .get("portraits")
-                    .and_then(|p| p.as_array())
-                    .and_then(|arr| arr.first())
-                    .or_else(|| {
-                        artist_json
-                            .get("portrait_group")
-                            .and_then(|p| p.as_array())
-                            .and_then(|arr| arr.first())
-                    })
-                    .and_then(|img| img.get("id").and_then(|id| id.as_str()))
+                    .get("display_image")
+                    .and_then(|img| img.get("id"))
+                    .and_then(|id| id.as_str())
                     .map(String::from)
             })
         });

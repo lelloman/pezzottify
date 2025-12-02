@@ -50,9 +50,9 @@ export const useRemoteStore = defineStore('remote', () => {
   const setAlbumLikeStatus = async (albumId, isLiked) => {
     try {
       if (isLiked) {
-        await axios.post(`/v1/user/liked/${albumId}`);
+        await axios.post(`/v1/user/liked/album/${albumId}`);
       } else {
-        await axios.delete(`/v1/user/liked/${albumId}`);
+        await axios.delete(`/v1/user/liked/album/${albumId}`);
       }
       return true;
     } catch (error) {
@@ -64,9 +64,9 @@ export const useRemoteStore = defineStore('remote', () => {
   const setArtistLikeStatus = async (artistId, isLiked) => {
     try {
       if (isLiked) {
-        await axios.post(`/v1/user/liked/${artistId}`);
+        await axios.post(`/v1/user/liked/artist/${artistId}`);
       } else {
-        await axios.delete(`/v1/user/liked/${artistId}`);
+        await axios.delete(`/v1/user/liked/artist/${artistId}`);
       }
       return true;
     } catch (error) {
