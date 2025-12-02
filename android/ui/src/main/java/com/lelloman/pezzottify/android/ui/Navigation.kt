@@ -27,6 +27,8 @@ fun NavController.fromMainBackToLogin() = navigate(Login) {
 
 fun NavController.toProfile() = navigate(Main.Home.Profile)
 
+fun NavController.toSettings() = navigate(Main.Home.Settings)
+
 fun NavController.toStyleSettings() = navigate(Main.Home.StyleSettings)
 
 fun NavController.fromProfileBackToLogin() = navigate(Login) {
@@ -57,6 +59,9 @@ sealed interface Screen {
 
             @Serializable
             data object Profile : Main
+
+            @Serializable
+            data object Settings : Main
 
             @Serializable
             data object StyleSettings : Main

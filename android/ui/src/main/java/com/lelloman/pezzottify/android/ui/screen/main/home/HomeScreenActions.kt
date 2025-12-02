@@ -4,5 +4,7 @@ interface HomeScreenActions {
 
     suspend fun clickOnProfile()
 
+    suspend fun clickOnSettings()
+
     fun clickOnRecentlyViewedItem(itemId: String, itemType: ViewedContentType)
 }

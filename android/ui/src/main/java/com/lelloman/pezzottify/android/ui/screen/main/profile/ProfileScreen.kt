@@ -25,7 +25,9 @@ import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.IconButton
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -109,7 +111,15 @@ private fun ProfileScreenInternal(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Profile") }
+                title = { Text("Profile") },
+                navigationIcon = {
+                    IconButton(onClick = { navController.popBackStack() }) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Back"
+                        )
+                    }
+                }
             )
         }
     ) { innerPadding ->
@@ -138,93 +148,6 @@ private fun ProfileScreenInternal(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
-            )
-
-            HorizontalDivider(modifier = Modifier.padding(vertical = 24.dp))
-
-            // Settings Section
-            Text(
-                text = "Settings",
-                style = MaterialTheme.typography.titleLarge,
-                color = MaterialTheme.colorScheme.onSurface
-            )
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // Play Behavior Setting
-            SettingsLabel(text = "Track tap behavior")
-            Spacer(modifier = Modifier.height(8.dp))
-            SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
-                PlayBehavior.entries.forEachIndexed { index, playBehavior ->
-                    SegmentedButton(
-                        shape = SegmentedButtonDefaults.itemShape(
-                            index = index,
-                            count = PlayBehavior.entries.size
-                        ),
-                        onClick = { actions.selectPlayBehavior(playBehavior) },
-                        selected = currentState.playBehavior == playBehavior
-                    ) {
-                        Text(
-                            text = when (playBehavior) {
-                                PlayBehavior.ReplacePlaylist -> "Replace"
-                                PlayBehavior.AddToPlaylist -> "Add to queue"
-                            },
-                            maxLines = 1
-                        )
-                    }
-                }
-            }
-            Text(
-                text = when (currentState.playBehavior) {
-                    PlayBehavior.ReplacePlaylist -> "Tapping a track replaces the current playlist"
-                    PlayBehavior.AddToPlaylist -> "Tapping a track adds it to the current playlist"
-                },
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = 4.dp)
-            )
-
-            Spacer(modifier = Modifier.height(24.dp))
-
-            // Appearance Settings Navigation
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable { navController.toStyleSettings() }
-                    .padding(vertical = 12.dp),
-                verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = "Appearance",
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                    Text(
-                        text = "Theme, color palette and font",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-                Icon(
-                    imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                    contentDescription = "Open appearance settings",
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(24.dp)
-                )
-            }
-
-            HorizontalDivider(modifier = Modifier.padding(vertical = 24.dp))
-
-            // Performance Section
-            CacheSettingsSection(
-                isCacheEnabled = currentState.isCacheEnabled,
-                onCacheEnabledChanged = actions::setCacheEnabled
-            )
-
-            Spacer(modifier = Modifier.height(24.dp))
-
-            StorageInfoSection(
-                storageInfo = currentState.storageInfo
             )
 
             HorizontalDivider(modifier = Modifier.padding(vertical = 24.dp))
@@ -290,10 +213,6 @@ private fun ProfileScreenPreview() {
                 ProfileScreenState(
                     userName = "testuser@example.com",
                     baseUrl = "http://10.0.2.2:3001",
-                    playBehavior = PlayBehavior.ReplacePlaylist,
-                    themeMode = ThemeMode.System,
-                    colorPalette = ColorPalette.Classic,
-                    fontFamily = AppFontFamily.System,
                     buildVariant = "debug",
                     versionName = "1.0",
                     gitCommit = "abc1234",
@@ -306,11 +225,6 @@ private fun ProfileScreenPreview() {
                 override fun clickOnLogout() {}
                 override fun confirmLogout() {}
                 override fun dismissLogoutConfirmation() {}
-                override fun selectPlayBehavior(playBehavior: PlayBehavior) {}
-                override fun selectThemeMode(themeMode: ThemeMode) {}
-                override fun selectColorPalette(colorPalette: ColorPalette) {}
-                override fun selectFontFamily(fontFamily: AppFontFamily) {}
-                override fun setCacheEnabled(enabled: Boolean) {}
             },
         )
     }
@@ -319,17 +233,12 @@ private fun ProfileScreenPreview() {
 @Composable
 @Preview(showBackground = true)
 private fun ProfileScreenPreviewDark() {
-    PezzottifyTheme(darkTheme = true, colorPalette = ColorPalette.PurpleHaze) {
+    PezzottifyTheme(darkTheme = true) {
         ProfileScreenInternal(
             state = MutableStateFlow(
                 ProfileScreenState(
                     userName = "testuser@example.com",
                     baseUrl = "http://10.0.2.2:3001",
-                    playBehavior = PlayBehavior.AddToPlaylist,
-                    themeMode = ThemeMode.Dark,
-                    colorPalette = ColorPalette.PurpleHaze,
-                    fontFamily = AppFontFamily.Monospace,
-                    isCacheEnabled = false,
                     buildVariant = "release",
                     versionName = "1.0",
                     gitCommit = "def5678",
@@ -342,11 +251,6 @@ private fun ProfileScreenPreviewDark() {
                 override fun clickOnLogout() {}
                 override fun confirmLogout() {}
                 override fun dismissLogoutConfirmation() {}
-                override fun selectPlayBehavior(playBehavior: PlayBehavior) {}
-                override fun selectThemeMode(themeMode: ThemeMode) {}
-                override fun selectColorPalette(colorPalette: ColorPalette) {}
-                override fun selectFontFamily(fontFamily: AppFontFamily) {}
-                override fun setCacheEnabled(enabled: Boolean) {}
             },
         )
     }

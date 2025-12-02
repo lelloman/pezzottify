@@ -2,6 +2,7 @@ package com.lelloman.pezzottify.android.ui.screen.main.home
 
 sealed interface HomeScreenEvents {
     data object NavigateToProfileScreen : HomeScreenEvents
+    data object NavigateToSettingsScreen : HomeScreenEvents
 
     data class NavigateToArtist(val artistId: String) : HomeScreenEvents
     data class NavigateToAlbum(val albumId: String) : HomeScreenEvents

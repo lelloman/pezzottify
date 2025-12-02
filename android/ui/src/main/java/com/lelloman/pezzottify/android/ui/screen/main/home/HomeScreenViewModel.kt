@@ -47,6 +47,10 @@ class HomeScreenViewModel(
 
     init {
         viewModelScope.launch(coroutineContext) {
+            // Load user name
+            val userName = interactor.getUserName()
+            mutableState.value = mutableState.value.copy(userName = userName)
+
             interactor.getRecentlyViewedContent(8)
                 .map { it.map(::resolveRecentlyViewedContent) }
                 .collect {
@@ -143,8 +147,13 @@ class HomeScreenViewModel(
         mutableEvents.emit(HomeScreenEvents.NavigateToProfileScreen)
     }
 
+    override suspend fun clickOnSettings() {
+        mutableEvents.emit(HomeScreenEvents.NavigateToSettingsScreen)
+    }
+
     interface Interactor {
         suspend fun getRecentlyViewedContent(maxCount: Int): Flow<List<HomeScreenState.RecentlyViewedContent>>
+        fun getUserName(): String
     }
 
     @OptIn(ExperimentalCoroutinesApi::class)

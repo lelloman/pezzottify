@@ -38,6 +38,7 @@ import com.lelloman.pezzottify.android.ui.screen.main.library.LibraryScreenViewM
 import com.lelloman.pezzottify.android.ui.screen.main.profile.ProfileScreenViewModel
 import com.lelloman.pezzottify.android.ui.screen.main.profile.stylesettings.StyleSettingsViewModel
 import com.lelloman.pezzottify.android.ui.screen.main.search.SearchScreenViewModel
+import com.lelloman.pezzottify.android.ui.screen.main.settings.SettingsScreenViewModel
 import com.lelloman.pezzottify.android.ui.screen.player.PlayerScreenViewModel
 import com.lelloman.pezzottify.android.ui.screen.queue.QueueScreenViewModel
 import com.lelloman.pezzottify.android.ui.screen.splash.SplashViewModel
@@ -91,9 +92,7 @@ class InteractorsModule {
         performLogout: PerformLogout,
         authStore: AuthStore,
         configStore: ConfigStore,
-        userSettingsStore: UserSettingsStore,
         buildInfo: BuildInfo,
-        storageMonitor: com.lelloman.pezzottify.android.domain.storage.StorageMonitor,
     ): ProfileScreenViewModel.Interactor = object : ProfileScreenViewModel.Interactor {
         override suspend fun logout() {
             performLogout()
@@ -110,6 +109,18 @@ class InteractorsModule {
 
         override fun getBaseUrl(): String = configStore.baseUrl.value
 
+        override fun getBuildVariant(): String = buildInfo.buildVariant
+
+        override fun getVersionName(): String = buildInfo.versionName
+
+        override fun getGitCommit(): String = buildInfo.gitCommit
+    }
+
+    @Provides
+    fun provideSettingsScreenInteractor(
+        userSettingsStore: UserSettingsStore,
+        storageMonitor: com.lelloman.pezzottify.android.domain.storage.StorageMonitor,
+    ): SettingsScreenViewModel.Interactor = object : SettingsScreenViewModel.Interactor {
         override fun getPlayBehavior(): PlayBehavior = userSettingsStore.playBehavior.value
 
         override fun getThemeMode(): ThemeMode = userSettingsStore.themeMode.value
@@ -153,12 +164,6 @@ class InteractorsModule {
         override suspend fun setCacheEnabled(enabled: Boolean) {
             userSettingsStore.setInMemoryCacheEnabled(enabled)
         }
-
-        override fun getBuildVariant(): String = buildInfo.buildVariant
-
-        override fun getVersionName(): String = buildInfo.versionName
-
-        override fun getGitCommit(): String = buildInfo.gitCommit
     }
 
     @Provides
@@ -370,21 +375,32 @@ class InteractorsModule {
         }
 
     @Provides
-    fun provideHomeScreenInteractor(getRecentlyViewedContent: GetRecentlyViewedContentUseCase) =
-        object : HomeScreenViewModel.Interactor {
-            override suspend fun getRecentlyViewedContent(maxCount: Int): Flow<List<HomeScreenState.RecentlyViewedContent>> =
-                getRecentlyViewedContent(maxCount).map {
-                    it.map { item ->
-                        val type = when (item.type) {
-                            ViewedContent.Type.Album -> ViewedContentType.Album
-                            ViewedContent.Type.Artist -> ViewedContentType.Artist
-                            ViewedContent.Type.Track -> ViewedContentType.Track
-                            ViewedContent.Type.UserPlaylist -> ViewedContentType.Playlist
-                        }
-                        HomeScreenState.RecentlyViewedContent(item.contentId, type)
+    fun provideHomeScreenInteractor(
+        getRecentlyViewedContent: GetRecentlyViewedContentUseCase,
+        authStore: AuthStore,
+    ) = object : HomeScreenViewModel.Interactor {
+        override suspend fun getRecentlyViewedContent(maxCount: Int): Flow<List<HomeScreenState.RecentlyViewedContent>> =
+            getRecentlyViewedContent(maxCount).map {
+                it.map { item ->
+                    val type = when (item.type) {
+                        ViewedContent.Type.Album -> ViewedContentType.Album
+                        ViewedContent.Type.Artist -> ViewedContentType.Artist
+                        ViewedContent.Type.Track -> ViewedContentType.Track
+                        ViewedContent.Type.UserPlaylist -> ViewedContentType.Playlist
                     }
+                    HomeScreenState.RecentlyViewedContent(item.contentId, type)
                 }
+            }
+
+        override fun getUserName(): String {
+            val authState = authStore.getAuthState().value
+            return if (authState is AuthState.LoggedIn) {
+                authState.userHandle
+            } else {
+                ""
+            }
         }
+    }
 
     @Provides
     fun providePlayerScreenInteractor(

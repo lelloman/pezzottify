@@ -22,6 +22,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -30,6 +31,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
@@ -59,6 +61,7 @@ import com.lelloman.pezzottify.android.ui.theme.Spacing
 import com.lelloman.pezzottify.android.ui.toAlbum
 import com.lelloman.pezzottify.android.ui.toArtist
 import com.lelloman.pezzottify.android.ui.toProfile
+import com.lelloman.pezzottify.android.ui.toSettings
 import com.lelloman.pezzottify.android.ui.toTrack
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.launch
@@ -92,6 +95,10 @@ private fun HomeScreenContent(
                     navController.toProfile()
                 }
 
+                HomeScreenEvents.NavigateToSettingsScreen -> {
+                    navController.toSettings()
+                }
+
                 is HomeScreenEvents.NavigateToAlbum -> navController.toAlbum(it.albumId)
                 is HomeScreenEvents.NavigateToArtist -> navController.toArtist(it.artistId)
                 is HomeScreenEvents.NavigateToTrack -> navController.toTrack(it.trackId)
@@ -103,14 +110,22 @@ private fun HomeScreenContent(
         modifier = Modifier.fillMaxSize(),
         topBar = {
             TopAppBar(
-                title = { Text(stringResource(R.string.app_name)) },
-                actions = {
+                title = {
+                    // Profile button with user initials
                     IconButton(onClick = {
                         coroutineScope.launch { actions.clickOnProfile() }
                     }) {
+                        UserInitialsIcon(userName = state.userName)
+                    }
+                },
+                actions = {
+                    // Settings icon
+                    IconButton(onClick = {
+                        coroutineScope.launch { actions.clickOnSettings() }
+                    }) {
                         Icon(
-                            imageVector = Icons.Default.Person,
-                            contentDescription = null,
+                            imageVector = Icons.Default.Settings,
+                            contentDescription = "Settings",
                             tint = MaterialTheme.colorScheme.onSurface
                         )
                     }
@@ -288,5 +303,47 @@ private fun <T> List<T>.forEachGroup(maxGroupSize: Int, action: @Composable (Lis
         val start = i * maxGroupSize
         val end = minOf(start + maxGroupSize, size)
         action(subList(start, end))
+    }
+}
+
+@Composable
+private fun UserInitialsIcon(userName: String, modifier: Modifier = Modifier) {
+    val initials = extractInitials(userName)
+
+    Surface(
+        modifier = modifier.size(40.dp),
+        shape = androidx.compose.foundation.shape.CircleShape,
+        color = MaterialTheme.colorScheme.primaryContainer
+    ) {
+        Box(
+            contentAlignment = androidx.compose.ui.Alignment.Center,
+            modifier = Modifier.fillMaxSize()
+        ) {
+            Text(
+                text = initials,
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onPrimaryContainer
+            )
+        }
+    }
+}
+
+private fun extractInitials(userName: String): String {
+    if (userName.isEmpty()) return "?"
+
+    // If it's an email, take the part before @
+    val nameToUse = if (userName.contains("@")) {
+        userName.substringBefore("@")
+    } else {
+        userName
+    }
+
+    // Split by common delimiters (space, dot, underscore, dash)
+    val parts = nameToUse.split(" ", ".", "_", "-").filter { it.isNotEmpty() }
+
+    return when {
+        parts.isEmpty() -> userName.take(1).uppercase()
+        parts.size == 1 -> parts[0].take(2).uppercase()
+        else -> (parts[0].take(1) + parts[1].take(1)).uppercase()
     }
 }

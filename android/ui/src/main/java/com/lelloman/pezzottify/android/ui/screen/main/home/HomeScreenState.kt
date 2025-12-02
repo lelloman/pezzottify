@@ -5,6 +5,7 @@ import kotlinx.coroutines.flow.Flow
 
 data class HomeScreenState(
     val recentlyViewedContent: List<Flow<Content<ResolvedRecentlyViewedContent>>>? = null,
+    val userName: String = "",
 ) {
     data class RecentlyViewedContent(
         val contentId: String,
