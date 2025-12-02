@@ -4,12 +4,10 @@ We can consider V1 ready once all of the task without V2 mark are completed.
 
 ### [ready for coding]
 
-- Give the debuginterface module some love: implement an HTTP server for external monitoring (cache stats, memory pressure, performance metrics) accessible from a browser
 
 ### [to refine]
 
 - Add a contextual menu to queue albums and tracks (add to current playlist instead of replacing)
-- We should probably think about collecting information about storage used and how it is used. For instance, it would be cool to cache audio files, but the feature needs to be storage-aware.
 - We need to plan a "download" feature for albums and tracks
 - Check that the behavior of the audio playback is system-friendly in terms of audio events (pause on focus lost, pause on headphones unplugged and such)
 - Make a plan to introduce the user's playlist feature
@@ -17,6 +15,8 @@ We can consider V1 ready once all of the task without V2 mark are completed.
 
 ### [done]
 
+- ~Give the debuginterface module some love: implement an HTTP server for external monitoring (cache stats, memory pressure, performance metrics) accessible from a browser~
+- ~We should probably think about collecting information about storage used and how it is used. For instance, it would be cool to cache audio files, but the feature needs to be storage-aware.~
 - ~Create a "memory pressure" component that can detect how much memory can we use for caches and such (imagine caching stuff from the db, pre-loading audio, images)~
 - ~Add an in-memory immediate cache layer in StaticsProvider, with LRU eviction, TTL expiration, user toggle setting, and performance metrics~
 - ~Add recent searches component to the search screen (store and display user's search history)~

@@ -221,6 +221,12 @@ private fun ProfileScreenInternal(
                 onCacheEnabledChanged = actions::setCacheEnabled
             )
 
+            Spacer(modifier = Modifier.height(24.dp))
+
+            StorageInfoSection(
+                storageInfo = currentState.storageInfo
+            )
+
             HorizontalDivider(modifier = Modifier.padding(vertical = 24.dp))
 
             // About Section

@@ -93,6 +93,7 @@ class InteractorsModule {
         configStore: ConfigStore,
         userSettingsStore: UserSettingsStore,
         buildInfo: BuildInfo,
+        storageMonitor: com.lelloman.pezzottify.android.domain.storage.StorageMonitor,
     ): ProfileScreenViewModel.Interactor = object : ProfileScreenViewModel.Interactor {
         override suspend fun logout() {
             performLogout()
@@ -119,6 +120,8 @@ class InteractorsModule {
 
         override fun isCacheEnabled(): Boolean = userSettingsStore.isInMemoryCacheEnabled.value
 
+        override fun getStorageInfo() = storageMonitor.storageInfo.value
+
         override fun observePlayBehavior() = userSettingsStore.playBehavior
 
         override fun observeThemeMode() = userSettingsStore.themeMode
@@ -128,6 +131,8 @@ class InteractorsModule {
         override fun observeFontFamily() = userSettingsStore.fontFamily
 
         override fun observeCacheEnabled() = userSettingsStore.isInMemoryCacheEnabled
+
+        override fun observeStorageInfo() = storageMonitor.storageInfo
 
         override suspend fun setPlayBehavior(playBehavior: PlayBehavior) {
             userSettingsStore.setPlayBehavior(playBehavior)

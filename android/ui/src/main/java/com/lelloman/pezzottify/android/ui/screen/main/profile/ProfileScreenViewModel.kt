@@ -38,6 +38,7 @@ class ProfileScreenViewModel @Inject constructor(
                 colorPalette = interactor.getColorPalette(),
                 fontFamily = interactor.getFontFamily(),
                 isCacheEnabled = interactor.isCacheEnabled(),
+                storageInfo = interactor.getStorageInfo(),
                 buildVariant = interactor.getBuildVariant(),
                 versionName = interactor.getVersionName(),
                 gitCommit = interactor.getGitCommit(),
@@ -67,6 +68,11 @@ class ProfileScreenViewModel @Inject constructor(
             launch {
                 interactor.observeCacheEnabled().collect { enabled ->
                     mutableState.update { it.copy(isCacheEnabled = enabled) }
+                }
+            }
+            launch {
+                interactor.observeStorageInfo().collect { storageInfo ->
+                    mutableState.update { it.copy(storageInfo = storageInfo) }
                 }
             }
         }
@@ -132,11 +138,13 @@ class ProfileScreenViewModel @Inject constructor(
         fun getColorPalette(): ColorPalette
         fun getFontFamily(): AppFontFamily
         fun isCacheEnabled(): Boolean
+        fun getStorageInfo(): com.lelloman.pezzottify.android.domain.storage.StorageInfo?
         fun observePlayBehavior(): kotlinx.coroutines.flow.Flow<PlayBehavior>
         fun observeThemeMode(): kotlinx.coroutines.flow.Flow<ThemeMode>
         fun observeColorPalette(): kotlinx.coroutines.flow.Flow<ColorPalette>
         fun observeFontFamily(): kotlinx.coroutines.flow.Flow<AppFontFamily>
         fun observeCacheEnabled(): kotlinx.coroutines.flow.Flow<Boolean>
+        fun observeStorageInfo(): kotlinx.coroutines.flow.Flow<com.lelloman.pezzottify.android.domain.storage.StorageInfo>
         suspend fun setPlayBehavior(playBehavior: PlayBehavior)
         suspend fun setThemeMode(themeMode: ThemeMode)
         suspend fun setColorPalette(colorPalette: ColorPalette)
