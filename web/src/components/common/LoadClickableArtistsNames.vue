@@ -51,6 +51,12 @@ onMounted(() => {
   // Clear any previous refs
   artistsRefs.length = 0;
 
+  // Guard against undefined or non-array artistsIds
+  if (!props.artistsIds || !Array.isArray(props.artistsIds)) {
+    isLoading.value = false;
+    return;
+  }
+
   // Add new reactive refs to our array
   props.artistsIds.forEach(artistId => {
     artistsRefs.push(staticsStore.getArtist(artistId));

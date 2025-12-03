@@ -69,6 +69,24 @@ export const useStaticsStore = defineStore('statics', () => {
     return album;
   }
 
+  // Transform ResolvedTrack response to legacy format
+  const transformTrackResponse = (resolvedTrack) => {
+    if (!resolvedTrack) return null;
+
+    // If it's already in the old format (has 'artists_ids' at top level), return as-is
+    if (resolvedTrack.artists_ids) return resolvedTrack;
+
+    // Transform ResolvedTrack to legacy format
+    const track = {
+      ...resolvedTrack.track,
+      artists_ids: resolvedTrack.artists ? resolvedTrack.artists.map(a => a.artist.id) : [],
+      // Also include duration in ms for compatibility (server returns duration_secs)
+      duration: resolvedTrack.track.duration_secs ? resolvedTrack.track.duration_secs * 1000 : null,
+    };
+
+    return track;
+  }
+
   const fetchItemFromRemote = (itemType, itemId) => {
     let itemPromise = null;
     if (itemType === 'albums') {
@@ -77,20 +95,30 @@ export const useStaticsStore = defineStore('statics', () => {
     } else if (itemType === 'artists') {
       itemPromise = remoteStore.fetchArtist(itemId).then(transformArtistResponse);
     } else if (itemType === 'tracks') {
-      itemPromise = remoteStore.fetchTrack(itemId);
+      // Use fetchResolvedTrack to get artists info
+      itemPromise = remoteStore.fetchResolvedTrack(itemId).then(transformTrackResponse);
     }
-    console.log("staticsStore fetchItemFromRemote itemPromise", itemPromise);
-    const item = Promise.resolve(itemPromise);
-    console.log("staticsStore fetchItemFromRemote item", item);
 
-    return item;
+    return Promise.resolve(itemPromise);
+  }
+
+  // Validate cached item has all required fields
+  const isValidCachedItem = (itemType, item) => {
+    if (!item) return false;
+    // Tracks must have artists_ids (may be missing from old cache)
+    if (itemType === 'tracks' && !item.artists_ids) return false;
+    return true;
   }
 
   const triggerStaticItemFetch = (itemType, itemId) => {
     const storedItem = loadFetchItemFromStorage(itemType, itemId);
-    if (storedItem) {
+    if (storedItem && isValidCachedItem(itemType, storedItem)) {
       statics[itemType][itemId].ref.item = storedItem;
       return;
+    }
+    // If cached item is invalid, remove it
+    if (storedItem) {
+      localStorage.removeItem(getStoredItemKey(itemType, itemId));
     }
     fetchItemFromRemote(itemType, itemId)
       .then((fetchedItem) => {

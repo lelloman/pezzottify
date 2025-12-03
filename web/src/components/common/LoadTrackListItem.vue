@@ -11,7 +11,7 @@
           @click.stop="$emit('track-image-clicked', track)" />
         <TrackName :track="track" class="trackNameSpan" :hoverAnimation="true" />
         <div class="trackArtistsSpan">
-          <LoadClickableArtistsNames :artistsIds="track.artists_ids" />
+          <LoadClickableArtistsNames v-if="track.artists_ids" :artistsIds="track.artists_ids" />
         </div>
         <div class="track-duration">{{ formatDuration(track.duration) }}</div>
       </div>

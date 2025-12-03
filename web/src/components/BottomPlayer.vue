@@ -224,7 +224,7 @@ watch(currentTrackId,
 
             localCurrentTrack.value = newCurrentTrack;
             songName.value = newCurrentTrack.name;
-            artists.value = newCurrentTrack.artists_ids;
+            artists.value = newCurrentTrack.artists_ids || [];
             //imageUrls.value = newCurrentTrack.imageUrls;
             duration.value = newCurrentTrack.duration ? formatDuration(newCurrentTrack.duration) : '';
           }

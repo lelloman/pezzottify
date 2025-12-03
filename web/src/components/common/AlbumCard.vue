@@ -5,7 +5,7 @@
       <MultiSourceImage :urls="chooseAlbumCoverImageUrl(album)" class="searchResultImage scaleClickFeedback" />
       <div class="column">
         <h3 class="title">{{ album.name }}</h3>
-        <LoadClickableArtistsNames v-if="showArtists" class="artistsNames" :artistsIds="album.artists_ids" />
+        <LoadClickableArtistsNames v-if="showArtists && album.artists_ids" class="artistsNames" :artistsIds="album.artists_ids" />
       </div>
 
       <PlayIcon class="searchResultPlayIcon scaleClickFeedback bigIcon" :data-id="album.id"
