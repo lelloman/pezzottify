@@ -299,7 +299,7 @@ watch(volume,
 .footerPlayer {
   height: var(--player-height-desktop);
   display: grid;
-  grid-template-columns: 30% 40% 30%;
+  grid-template-columns: 3fr 4fr 3fr;
   gap: var(--spacing-4);
   padding: 0 var(--spacing-4);
   align-items: center;
@@ -581,7 +581,7 @@ watch(volume,
 
 @media (min-width: 768px) and (max-width: 1023px) {
   .footerPlayer {
-    grid-template-columns: minmax(200px, 25%) 1fr minmax(200px, 25%);
+    grid-template-columns: minmax(200px, 2fr) 3fr minmax(200px, 2fr);
   }
 
   .volumeProgressBar {
