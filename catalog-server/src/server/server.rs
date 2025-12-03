@@ -21,7 +21,7 @@ use crate::{
 };
 use crate::{search::SearchVault, user::UserManager};
 use axum_extra::extract::cookie::{Cookie, SameSite};
-use tower_http::services::ServeDir;
+use tower_http::services::{ServeDir, ServeFile};
 
 use axum::{
     body::Body,
@@ -2016,9 +2016,11 @@ pub fn make_app(
         .merge(admin_changelog_routes);
 
     let home_router: Router = match config.frontend_dir_path {
-        Some(frontend_path) => {
-            let static_files_service =
-                ServeDir::new(frontend_path).append_index_html_on_directories(true);
+        Some(ref frontend_path) => {
+            let index_path = std::path::Path::new(frontend_path).join("index.html");
+            let static_files_service = ServeDir::new(frontend_path)
+                .append_index_html_on_directories(true)
+                .fallback(ServeFile::new(index_path));
             Router::new().fallback_service(static_files_service)
         }
         None => Router::new()
