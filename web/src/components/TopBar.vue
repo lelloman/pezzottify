@@ -77,12 +77,23 @@ function clearQuery() {
 .searchInput {
   width: 100%;
   height: 2.8rem;
-  background: #f5f5f5;
+  background: var(--bg-highlight);
+  color: var(--text-base);
   outline: none;
-  border: none;
+  border: 1px solid var(--border-default);
   border-radius: 1.625rem;
   padding: 0 3.5rem 0 1.5rem;
   font-size: 1rem;
+  transition: border-color var(--transition-fast), background-color var(--transition-fast);
+}
+
+.searchInput::placeholder {
+  color: var(--text-subdued);
+}
+
+.searchInput:focus {
+  border-color: var(--spotify-green);
+  background: var(--bg-elevated);
 }
 
 #clearQueryButton {

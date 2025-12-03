@@ -24,8 +24,13 @@ function handleClick() {
 </script>
 
 <style scoped>
+.artistSpan {
+  color: var(--text-subdued);
+}
+
 .artistSpan:hover {
   text-decoration: underline;
   cursor: pointer;
+  color: var(--text-base);
 }
 </style>

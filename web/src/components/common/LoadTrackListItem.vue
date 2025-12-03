@@ -116,6 +116,7 @@ defineExpose({
 <style scoped>
 .trackWrapper {
   width: 100%;
+  color: var(--text-base);
 }
 
 .trackRow {

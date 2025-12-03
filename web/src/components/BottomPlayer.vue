@@ -267,102 +267,300 @@ watch(volume,
 <style scoped>
 @import "@/assets/icons.css";
 
+/* ============================================
+   Footer Player - Desktop Layout
+   ============================================ */
+
 .footerPlayer {
-  min-width: 800px;
-  height: 100px;
-  display: flex;
-  flex-direction: row;
+  height: var(--player-height-desktop);
+  display: grid;
+  grid-template-columns: 30% 40% 30%;
+  gap: var(--spacing-4);
+  padding: 0 var(--spacing-4);
+  align-items: center;
+  background-color: var(--bg-base);
+  border-top: 1px solid var(--border-default);
   overflow: hidden;
 }
 
+/* ============================================
+   Track Info Section (Left 30%)
+   ============================================ */
+
 .trackInfoRow {
-  width: 0;
-  padding: 16px;
-  text-align: left;
-  flex: 1;
   display: flex;
   flex-direction: row;
   align-items: center;
+  gap: var(--spacing-3);
+  min-width: 0;
+  text-align: left;
 }
 
 .trackImage {
   width: 56px;
   height: 56px;
-  border-radius: 4px;
+  min-width: 56px;
+  border-radius: var(--radius-md);
   cursor: pointer;
+  transition: transform var(--transition-base), box-shadow var(--transition-base);
+}
+
+.trackImage:hover {
+  transform: scale(1.05);
+  box-shadow: var(--shadow-md);
+}
+
+.trackImage:active {
+  transform: scale(0.98);
 }
 
 .trackNamesColumn {
-  width: 0;
+  min-width: 0;
   flex: 1;
+  display: flex;
   flex-direction: column;
-  padding: 16px;
+  gap: var(--spacing-1);
 }
 
 .trackName {
   margin: 0;
-  font-size: 16px;
-  font-weight: bold;
+  font-size: var(--text-base);
+  font-weight: var(--font-semibold);
+  color: var(--text-base);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .trackArtist {
   margin: 0;
-  font-size: 14px;
-  color: #666;
+  font-size: var(--text-sm);
+  color: var(--text-subdued);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
+/* ============================================
+   Player Controls Section (Center 40%)
+   ============================================ */
+
 .playerControlsColumn {
-  width: 0;
-  height: 100%;
-  flex: 1;
   display: flex;
   flex-direction: column;
   justify-content: center;
-}
-
-.scalingIcon {
-  transform-origin: center;
-  margin: 0 4px;
+  gap: var(--spacing-2);
+  min-width: 0;
 }
 
 .playerControlsButtonsRow {
   display: flex;
-  height: 0;
-  flex: 1;
   flex-direction: row;
   justify-content: center;
   align-items: center;
+  gap: var(--spacing-1);
+}
+
+.scalingIcon {
+  transform-origin: center;
+  transition: transform var(--transition-fast), opacity var(--transition-fast);
+}
+
+.scalingIcon:hover {
+  transform: scale(1.06);
+}
+
+.scalingIcon:active {
+  transform: scale(0.96);
 }
 
 .progressControlsRow {
-  height: 0;
   display: flex;
   flex-direction: row;
   align-items: center;
-  justify-content: center;
-  margin-bottom: 16px;
+  gap: var(--spacing-3);
+  min-width: 0;
+}
+
+.progressControlsRow span {
+  font-size: var(--text-xs);
+  font-weight: var(--font-normal);
+  color: var(--text-subdued);
+  min-width: 56px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
 }
 
 .trackProgressBar {
-  max-width: 400px;
-  width: 100%;
   flex: 1;
-  margin: 0 12px;
+  min-width: 0;
 }
 
+/* ============================================
+   Extra Controls Section (Right 30%)
+   ============================================ */
+
 .extraControlsRow {
-  width: 0;
-  height: 100%;
-  align-content: center;
-  flex: 1;
   display: flex;
   flex-direction: row;
-  justify-content: center;
+  justify-content: flex-end;
   align-items: center;
+  gap: var(--spacing-2);
+  min-width: 0;
 }
 
 .volumeProgressBar {
-  max-width: 150px;
-  margin: 0 12px;
+  width: 120px;
+  max-width: 120px;
+}
+
+/* ============================================
+   Icon Button Styling
+   ============================================ */
+
+.lightControlFill {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: var(--text-base);
+  border-radius: var(--radius-full);
+  transition: all var(--transition-fast);
+}
+
+.lightControlFill:hover {
+  color: var(--text-bright);
+}
+
+.lightControlFill:focus-visible {
+  outline: 2px solid var(--spotify-green);
+  outline-offset: 2px;
+}
+
+.mediumIcon {
+  width: 32px;
+  height: 32px;
+  padding: var(--spacing-1);
+}
+
+.bigIcon {
+  width: 48px;
+  height: 48px;
+  padding: var(--spacing-2);
+  background-color: var(--spotify-green);
+  color: var(--bg-base);
+}
+
+.bigIcon:hover {
+  background-color: var(--spotify-green-hover);
+  transform: scale(1.06);
+  color: var(--bg-base);
+}
+
+.bigIcon:active {
+  background-color: var(--spotify-green-active);
+  transform: scale(0.96);
+}
+
+/* ============================================
+   Mobile Layout (< 768px)
+   ============================================ */
+
+@media (max-width: 767px) {
+  .footerPlayer {
+    height: var(--player-height-mobile);
+    grid-template-columns: 1fr auto auto;
+    grid-template-rows: 4px 1fr;
+    gap: var(--spacing-2);
+    padding: 0 var(--spacing-3);
+  }
+
+  .trackInfoRow {
+    grid-column: 1;
+    grid-row: 2;
+    gap: var(--spacing-2);
+  }
+
+  .trackImage {
+    width: 48px;
+    height: 48px;
+    min-width: 48px;
+  }
+
+  .trackNamesColumn {
+    gap: 2px;
+  }
+
+  .trackName {
+    font-size: var(--text-sm);
+  }
+
+  .trackArtist {
+    font-size: var(--text-xs);
+  }
+
+  .playerControlsColumn {
+    grid-column: 2;
+    grid-row: 2;
+    gap: 0;
+  }
+
+  .playerControlsButtonsRow {
+    gap: var(--spacing-1);
+  }
+
+  /* Hide skip and seek buttons on mobile */
+  .playerControlsButtonsRow > :not(:nth-child(3)):not(:nth-child(2)):not(:nth-child(4)) {
+    display: none;
+  }
+
+  .progressControlsRow {
+    grid-column: 1 / -1;
+    grid-row: 1;
+    gap: 0;
+    padding: 0;
+  }
+
+  .progressControlsRow span {
+    display: none;
+  }
+
+  .trackProgressBar {
+    width: 100%;
+  }
+
+  .extraControlsRow {
+    grid-column: 3;
+    grid-row: 2;
+    gap: var(--spacing-1);
+  }
+
+  .volumeProgressBar {
+    display: none;
+  }
+
+  .mediumIcon {
+    width: 28px;
+    height: 28px;
+  }
+
+  .bigIcon {
+    width: 40px;
+    height: 40px;
+  }
+}
+
+/* ============================================
+   Tablet Layout (768px - 1023px)
+   ============================================ */
+
+@media (min-width: 768px) and (max-width: 1023px) {
+  .footerPlayer {
+    grid-template-columns: minmax(200px, 25%) 1fr minmax(200px, 25%);
+  }
+
+  .volumeProgressBar {
+    width: 100px;
+  }
 }
 </style>

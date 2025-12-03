@@ -7,6 +7,7 @@
   cursor: pointer;
   border-radius: var(--panel-border-radius);
   position: relative;
+  color: var(--text-base);
 }
 
 .searchResultRow:hover {

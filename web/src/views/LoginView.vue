@@ -138,7 +138,7 @@ async function handleLogin() {
 }
 
 .form-group input::placeholder {
-  color: rgba(255, 255, 255, 0.3);
+  color: var(--text-subdued);
 }
 
 .form-group input:focus {

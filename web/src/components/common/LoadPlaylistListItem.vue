@@ -59,9 +59,15 @@ const handleClick = () => {
   margin: 10px;
   height: 100%;
   align-content: center;
+  color: #FFFFFF !important;
 }
 
 .playlistItem {
   padding: 16px;
+  color: #FFFFFF !important;
+}
+
+.playlistItem h2 {
+  color: #FFFFFF !important;
 }
 </style>

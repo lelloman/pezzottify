@@ -85,6 +85,7 @@ const handleClick = (albumId) => {
   margin: 0;
   font-size: 16px;
   font-weight: bold;
+  color: #FFFFFF !important;
 }
 
 .column {

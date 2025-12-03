@@ -43,5 +43,6 @@ const handleClick = (artist) => {
   margin: 0;
   font-size: 16px;
   font-weight: bold;
+  color: #FFFFFF !important;
 }
 </style>

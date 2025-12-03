@@ -39,5 +39,6 @@ watch(staticsStore.getArtist(props.artistId), (newData) => {
   margin: 10px;
   height: 100%;
   align-content: center;
+  color: #FFFFFF !important;
 }
 </style>
