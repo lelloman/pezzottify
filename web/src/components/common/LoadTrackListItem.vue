@@ -136,14 +136,9 @@ defineExpose({
 }
 
 .trackIndexSpan {
-  width: 24px;
+  width: 36px;
   padding-right: 12px;
-  align-items: right;
-  align-content: right;
-
-  justify-content: right;
-  justify-items: right;
-  justify-self: right;
+  text-align: right;
 }
 
 .trackNameSpan {

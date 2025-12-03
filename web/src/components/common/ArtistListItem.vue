@@ -6,6 +6,7 @@
 </template>
 
 <script setup>
+import '@/assets/search.css';
 import { useRouter } from 'vue-router';
 import { chooseSmallArtistImageUrl } from '@/utils';
 import MultiSourceImage from './MultiSourceImage.vue';

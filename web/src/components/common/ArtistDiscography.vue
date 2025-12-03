@@ -63,6 +63,7 @@ onMounted(() => {
   display: grid;
   gap: 16px;
   grid-template-columns: repeat(1, 1fr);
+  justify-items: start;
 }
 
 @media (min-width: 1000px) {

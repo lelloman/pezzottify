@@ -220,6 +220,12 @@ onBeforeUnmount(() => {
   fill: var(--accent-color);
 }
 
+.tracksSection {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+}
+
 .playlistConfirmationName {
   font-weight: bold;
   color: red;

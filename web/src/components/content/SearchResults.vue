@@ -132,6 +132,7 @@ watch(route, (newRoute) => {
   gap: 16px;
   grid-template-columns: repeat(1, 1fr);
   overflow-x: hidden;
+  justify-items: start;
 }
 
 @media (min-width: 1200px) {

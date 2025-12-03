@@ -30,7 +30,7 @@ onUnmounted(() => {
   width: 100vw;
   height: 100vh;
   font-size: 12px;
-  text-align: center;
+  text-align: left;
 }
 
 nav a.router-link-exact-active {
