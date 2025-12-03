@@ -28,8 +28,6 @@ const handleClick = (artist) => {
 .relatedArtistWrapper {
   min-width: 200px;
   margin: 10px;
-  height: 100%;
-  align-content: center;
 }
 
 .searchResultRoundImage {

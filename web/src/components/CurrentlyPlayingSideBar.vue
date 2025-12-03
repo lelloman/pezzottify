@@ -176,7 +176,6 @@ watch(
   flex-direction: row;
   cursor: pointer;
   padding: 8px 16px;
-  align-content: center;
   align-items: center;
 }
 

@@ -40,7 +40,7 @@
 import { computed, ref, watch, h } from 'vue';
 import { usePlayerStore } from '@/store/player';
 import { storeToRefs } from 'pinia';
-import { formatDuration } from '@/utils';
+import { formatDuration, chooseAlbumCoverImageUrl } from '@/utils';
 import PlayIcon from './icons/PlayIcon.vue';
 import PauseIcon from './icons/PauseIcon.vue';
 import Forward10Sec from './icons/Forward10Sec.vue';
@@ -98,10 +98,12 @@ const songName = ref('');
 const artists = ref([]);
 const imageUrls = ref([]);
 const duration = ref('');
+const currentAlbumId = ref(null);
 
 const currentTimeSec = ref(0);
 
 let localCurrentTrackUnwatcher = null;
+let albumDataUnwatcher = null;
 
 const formatTime = (timeInSeconds) => {
   const hours = Math.floor(timeInSeconds / 3600);
@@ -114,8 +116,9 @@ const formatTime = (timeInSeconds) => {
 };
 
 const handleClickOnAlbumCover = () => {
-  console.log(currentTrackId.value);
-  router.push("/album/" + currentTrackId.value.albumId);
+  if (localCurrentTrack.value && localCurrentTrack.value.album_id) {
+    router.push("/album/" + localCurrentTrack.value.album_id);
+  }
 }
 
 const startDraggingTrackProgress = () => {
@@ -220,13 +223,12 @@ watch(currentTrackId,
         (newCurrentTrackRef) => {
           if (newCurrentTrackRef.item) {
             const newCurrentTrack = newCurrentTrackRef.item;
-            console.log(newCurrentTrack);
 
             localCurrentTrack.value = newCurrentTrack;
             songName.value = newCurrentTrack.name;
             artists.value = newCurrentTrack.artists_ids || [];
-            //imageUrls.value = newCurrentTrack.imageUrls;
             duration.value = newCurrentTrack.duration ? formatDuration(newCurrentTrack.duration) : '';
+            currentAlbumId.value = newCurrentTrack.album_id || null;
           }
         }, { immediate: true });
     } else {
@@ -235,6 +237,29 @@ watch(currentTrackId,
       artists.value = [];
       imageUrls.value = [];
       duration.value = '';
+      currentAlbumId.value = null;
+    }
+  },
+  { immediate: true }
+)
+
+// Separate watcher for album cover image to avoid infinite loop
+watch(currentAlbumId,
+  (newAlbumId) => {
+    if (albumDataUnwatcher) {
+      albumDataUnwatcher();
+      albumDataUnwatcher = null;
+    }
+
+    if (newAlbumId) {
+      albumDataUnwatcher = watch(staticsStore.getAlbum(newAlbumId),
+        (albumRef) => {
+          if (albumRef && albumRef.item) {
+            imageUrls.value = chooseAlbumCoverImageUrl(albumRef.item);
+          }
+        }, { immediate: true });
+    } else {
+      imageUrls.value = [];
     }
   },
   { immediate: true }
