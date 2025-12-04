@@ -6,18 +6,20 @@
 use anyhow::{Context, Result};
 use std::path::PathBuf;
 use std::sync::Arc;
-use tracing::{info, warn};
+use tracing::{debug, info, warn};
 
 use crate::catalog_store::CatalogStore;
 use crate::downloader::models::{
     DownloaderAlbum, DownloaderArtist, DownloaderImage, DownloaderTrack,
 };
 use crate::downloader::Downloader;
+use crate::user::{settings::UserSetting, FullUserStore, Permission};
 
 /// Proxy for fetching and storing content from the downloader service.
 pub struct CatalogProxy {
     downloader: Arc<dyn Downloader>,
     catalog_store: Arc<dyn CatalogStore>,
+    user_store: Arc<dyn FullUserStore>,
     media_base_path: PathBuf,
 }
 
@@ -26,12 +28,68 @@ impl CatalogProxy {
     pub fn new(
         downloader: Arc<dyn Downloader>,
         catalog_store: Arc<dyn CatalogStore>,
+        user_store: Arc<dyn FullUserStore>,
         media_base_path: PathBuf,
     ) -> Self {
         Self {
             downloader,
             catalog_store,
+            user_store,
             media_base_path,
+        }
+    }
+
+    /// Check if a user can trigger downloads based on permission and preference.
+    ///
+    /// Returns true only if:
+    /// 1. User has IssueContentDownload permission
+    /// 2. User has enabled the "enable_direct_downloads" setting
+    fn can_user_trigger_download(&self, user_id: usize, permissions: &[Permission]) -> bool {
+        // Check permission first
+        if !permissions.contains(&Permission::IssueContentDownload) {
+            debug!(
+                "User {} cannot trigger download: missing IssueContentDownload permission",
+                user_id
+            );
+            return false;
+        }
+
+        // Check user preference (disabled by default)
+        match self
+            .user_store
+            .get_user_setting(user_id, "enable_direct_downloads")
+        {
+            Ok(Some(UserSetting::DirectDownloadsEnabled(enabled))) => {
+                if !enabled {
+                    debug!(
+                        "User {} cannot trigger download: preference disabled",
+                        user_id
+                    );
+                }
+                enabled
+            }
+            Ok(Some(_)) => {
+                // Unexpected setting type (shouldn't happen)
+                warn!(
+                    "Unexpected setting type for enable_direct_downloads for user {}",
+                    user_id
+                );
+                false
+            }
+            Ok(None) => {
+                debug!(
+                    "User {} cannot trigger download: preference not set (default: disabled)",
+                    user_id
+                );
+                false // Disabled by default
+            }
+            Err(e) => {
+                warn!(
+                    "Error checking download preference for user {}: {}",
+                    user_id, e
+                );
+                false // On error, default to disabled
+            }
         }
     }
 
@@ -42,8 +100,23 @@ impl CatalogProxy {
     /// - Has albums (discography)
     /// - Has related artists
     ///
-    /// If any data is missing, attempts to fetch from downloader.
-    pub async fn ensure_artist_complete(&self, id: &str) -> Result<()> {
+    /// If any data is missing and user has permission + preference enabled,
+    /// attempts to fetch from downloader.
+    pub async fn ensure_artist_complete(
+        &self,
+        id: &str,
+        user_id: usize,
+        permissions: &[Permission],
+    ) -> Result<()> {
+        // Check user permission and preference before attempting any downloads
+        if !self.can_user_trigger_download(user_id, permissions) {
+            debug!(
+                "Skipping artist {} completion check - user {} not authorized for downloads",
+                id, user_id
+            );
+            return Ok(());
+        }
+
         // Check if artist exists
         let artist_exists = self.catalog_store.get_artist_json(id)?.is_some();
 
@@ -72,7 +145,24 @@ impl CatalogProxy {
     }
 
     /// Ensure an album has complete data, fetching from downloader if needed.
-    pub async fn ensure_album_complete(&self, id: &str) -> Result<()> {
+    ///
+    /// If any data is missing and user has permission + preference enabled,
+    /// attempts to fetch from downloader.
+    pub async fn ensure_album_complete(
+        &self,
+        id: &str,
+        user_id: usize,
+        permissions: &[Permission],
+    ) -> Result<()> {
+        // Check user permission and preference before attempting any downloads
+        if !self.can_user_trigger_download(user_id, permissions) {
+            debug!(
+                "Skipping album {} completion check - user {} not authorized for downloads",
+                id, user_id
+            );
+            return Ok(());
+        }
+
         // Check if album exists
         let album_exists = self.catalog_store.get_album_json(id)?.is_some();
 
@@ -488,6 +578,331 @@ mod tests {
         }
     }
 
+    /// Test user store that enables direct downloads by default
+    struct TestUserStore {
+        downloads_enabled: bool,
+    }
+
+    impl TestUserStore {
+        fn new_with_downloads_enabled() -> Self {
+            Self {
+                downloads_enabled: true,
+            }
+        }
+    }
+
+    impl crate::user::UserAuthCredentialsStore for TestUserStore {
+        fn get_user_auth_credentials(
+            &self,
+            _user_handle: &str,
+        ) -> anyhow::Result<Option<crate::user::UserAuthCredentials>> {
+            Ok(None)
+        }
+        fn update_user_auth_credentials(
+            &self,
+            _credentials: crate::user::UserAuthCredentials,
+        ) -> anyhow::Result<()> {
+            Ok(())
+        }
+    }
+
+    impl crate::user::UserAuthTokenStore for TestUserStore {
+        fn get_user_auth_token(
+            &self,
+            _token: &crate::user::AuthTokenValue,
+        ) -> anyhow::Result<Option<crate::user::AuthToken>> {
+            Ok(None)
+        }
+        fn delete_user_auth_token(
+            &self,
+            _token: &crate::user::AuthTokenValue,
+        ) -> anyhow::Result<Option<crate::user::AuthToken>> {
+            Ok(None)
+        }
+        fn update_user_auth_token_last_used_timestamp(
+            &self,
+            _token: &crate::user::AuthTokenValue,
+        ) -> anyhow::Result<()> {
+            Ok(())
+        }
+        fn add_user_auth_token(&self, _token: crate::user::AuthToken) -> anyhow::Result<()> {
+            Ok(())
+        }
+        fn get_all_user_auth_tokens(
+            &self,
+            _user_handle: &str,
+        ) -> anyhow::Result<Vec<crate::user::AuthToken>> {
+            Ok(vec![])
+        }
+        fn prune_unused_auth_tokens(&self, _unused_for_days: u64) -> anyhow::Result<usize> {
+            Ok(0)
+        }
+    }
+
+    impl crate::user::UserStore for TestUserStore {
+        fn create_user(&self, _user_handle: &str) -> anyhow::Result<usize> {
+            Ok(1)
+        }
+        fn get_user_handle(&self, _user_id: usize) -> anyhow::Result<Option<String>> {
+            Ok(Some("testuser".to_string()))
+        }
+        fn get_user_id(&self, _user_handle: &str) -> anyhow::Result<Option<usize>> {
+            Ok(Some(1))
+        }
+        fn get_all_user_handles(&self) -> anyhow::Result<Vec<String>> {
+            Ok(vec!["testuser".to_string()])
+        }
+        fn set_user_liked_content(
+            &self,
+            _user_id: usize,
+            _content_id: &str,
+            _content_type: crate::user::LikedContentType,
+            _liked: bool,
+        ) -> anyhow::Result<()> {
+            Ok(())
+        }
+        fn get_user_liked_content(
+            &self,
+            _user_id: usize,
+            _content_type: crate::user::LikedContentType,
+        ) -> anyhow::Result<Vec<String>> {
+            Ok(vec![])
+        }
+        fn is_user_liked_content(
+            &self,
+            _user_id: usize,
+            _content_id: &str,
+        ) -> anyhow::Result<Option<bool>> {
+            Ok(None)
+        }
+        fn create_user_playlist(
+            &self,
+            _user_id: usize,
+            _playlist_name: &str,
+            _creator_id: usize,
+            _track_ids: Vec<String>,
+        ) -> anyhow::Result<String> {
+            Ok("playlist1".to_string())
+        }
+        fn update_user_playlist(
+            &self,
+            _playlist_id: &str,
+            _user_id: usize,
+            _playlist_name: Option<String>,
+            _track_ids: Option<Vec<String>>,
+        ) -> anyhow::Result<()> {
+            Ok(())
+        }
+        fn delete_user_playlist(&self, _playlist_id: &str, _user_id: usize) -> anyhow::Result<()> {
+            Ok(())
+        }
+        fn get_user_playlist(
+            &self,
+            _playlist_id: &str,
+            _user_id: usize,
+        ) -> anyhow::Result<crate::user::UserPlaylist> {
+            anyhow::bail!("Not implemented")
+        }
+        fn get_user_playlists(&self, _user_id: usize) -> anyhow::Result<Vec<String>> {
+            Ok(vec![])
+        }
+        fn get_user_roles(
+            &self,
+            _user_id: usize,
+        ) -> anyhow::Result<Vec<crate::user::UserRole>> {
+            Ok(vec![])
+        }
+        fn add_user_role(
+            &self,
+            _user_id: usize,
+            _role: crate::user::UserRole,
+        ) -> anyhow::Result<()> {
+            Ok(())
+        }
+        fn remove_user_role(
+            &self,
+            _user_id: usize,
+            _role: crate::user::UserRole,
+        ) -> anyhow::Result<()> {
+            Ok(())
+        }
+        fn resolve_user_permissions(
+            &self,
+            _user_id: usize,
+        ) -> anyhow::Result<Vec<Permission>> {
+            Ok(vec![Permission::IssueContentDownload])
+        }
+        fn add_user_extra_permission(
+            &self,
+            _user_id: usize,
+            _grant: crate::user::PermissionGrant,
+        ) -> anyhow::Result<usize> {
+            Ok(1)
+        }
+        fn remove_user_extra_permission(&self, _permission_id: usize) -> anyhow::Result<()> {
+            Ok(())
+        }
+        fn decrement_permission_countdown(&self, _permission_id: usize) -> anyhow::Result<bool> {
+            Ok(true)
+        }
+    }
+
+    impl crate::user::UserBandwidthStore for TestUserStore {
+        fn record_bandwidth_usage(
+            &self,
+            _user_id: usize,
+            _date: u32,
+            _endpoint_category: &str,
+            _bytes_sent: u64,
+            _request_count: u64,
+        ) -> anyhow::Result<()> {
+            Ok(())
+        }
+        fn get_user_bandwidth_usage(
+            &self,
+            _user_id: usize,
+            _start_date: u32,
+            _end_date: u32,
+        ) -> anyhow::Result<Vec<crate::user::BandwidthUsage>> {
+            Ok(vec![])
+        }
+        fn get_user_bandwidth_summary(
+            &self,
+            _user_id: usize,
+            _start_date: u32,
+            _end_date: u32,
+        ) -> anyhow::Result<crate::user::BandwidthSummary> {
+            Ok(crate::user::BandwidthSummary {
+                user_id: None,
+                total_bytes_sent: 0,
+                total_requests: 0,
+                by_category: HashMap::new(),
+            })
+        }
+        fn get_all_bandwidth_usage(
+            &self,
+            _start_date: u32,
+            _end_date: u32,
+        ) -> anyhow::Result<Vec<crate::user::BandwidthUsage>> {
+            Ok(vec![])
+        }
+        fn get_total_bandwidth_summary(
+            &self,
+            _start_date: u32,
+            _end_date: u32,
+        ) -> anyhow::Result<crate::user::BandwidthSummary> {
+            Ok(crate::user::BandwidthSummary {
+                user_id: None,
+                total_bytes_sent: 0,
+                total_requests: 0,
+                by_category: HashMap::new(),
+            })
+        }
+        fn prune_bandwidth_usage(&self, _older_than_days: u32) -> anyhow::Result<usize> {
+            Ok(0)
+        }
+    }
+
+    impl crate::user::UserListeningStore for TestUserStore {
+        fn record_listening_event(
+            &self,
+            _event: crate::user::ListeningEvent,
+        ) -> anyhow::Result<(usize, bool)> {
+            Ok((1, true))
+        }
+        fn get_user_listening_events(
+            &self,
+            _user_id: usize,
+            _start_date: u32,
+            _end_date: u32,
+            _limit: Option<usize>,
+            _offset: Option<usize>,
+        ) -> anyhow::Result<Vec<crate::user::ListeningEvent>> {
+            Ok(vec![])
+        }
+        fn get_user_listening_summary(
+            &self,
+            _user_id: usize,
+            _start_date: u32,
+            _end_date: u32,
+        ) -> anyhow::Result<crate::user::ListeningSummary> {
+            Ok(crate::user::ListeningSummary {
+                user_id: None,
+                total_plays: 0,
+                total_duration_seconds: 0,
+                completed_plays: 0,
+                unique_tracks: 0,
+            })
+        }
+        fn get_user_listening_history(
+            &self,
+            _user_id: usize,
+            _limit: usize,
+        ) -> anyhow::Result<Vec<crate::user::UserListeningHistoryEntry>> {
+            Ok(vec![])
+        }
+        fn get_track_listening_stats(
+            &self,
+            _track_id: &str,
+            _start_date: u32,
+            _end_date: u32,
+        ) -> anyhow::Result<crate::user::TrackListeningStats> {
+            Ok(crate::user::TrackListeningStats {
+                track_id: "".to_string(),
+                play_count: 0,
+                total_duration_seconds: 0,
+                completed_count: 0,
+                unique_listeners: 0,
+            })
+        }
+        fn get_daily_listening_stats(
+            &self,
+            _start_date: u32,
+            _end_date: u32,
+        ) -> anyhow::Result<Vec<crate::user::DailyListeningStats>> {
+            Ok(vec![])
+        }
+        fn get_top_tracks(
+            &self,
+            _start_date: u32,
+            _end_date: u32,
+            _limit: usize,
+        ) -> anyhow::Result<Vec<crate::user::TrackListeningStats>> {
+            Ok(vec![])
+        }
+        fn prune_listening_events(&self, _older_than_days: u32) -> anyhow::Result<usize> {
+            Ok(0)
+        }
+    }
+
+    impl crate::user::UserSettingsStore for TestUserStore {
+        fn get_user_setting(
+            &self,
+            _user_id: usize,
+            key: &str,
+        ) -> anyhow::Result<Option<UserSetting>> {
+            if key == "enable_direct_downloads" && self.downloads_enabled {
+                Ok(Some(UserSetting::DirectDownloadsEnabled(true)))
+            } else {
+                Ok(None)
+            }
+        }
+        fn set_user_setting(
+            &self,
+            _user_id: usize,
+            _setting: UserSetting,
+        ) -> anyhow::Result<()> {
+            Ok(())
+        }
+        fn get_all_user_settings(&self, _user_id: usize) -> anyhow::Result<Vec<UserSetting>> {
+            Ok(vec![])
+        }
+    }
+
+    fn create_test_user_store() -> Arc<dyn FullUserStore> {
+        Arc::new(TestUserStore::new_with_downloads_enabled())
+    }
+
     fn create_test_artist(id: &str, name: &str) -> DownloaderArtist {
         DownloaderArtist {
             id: id.to_string(),
@@ -565,6 +980,7 @@ mod tests {
     async fn test_ensure_artist_complete_fetches_missing_artist() {
         let (temp_dir, catalog_store) = setup_test_env();
         let mock_downloader = Arc::new(MockDownloader::new());
+        let user_store = create_test_user_store();
 
         // Add artist to mock
         mock_downloader.add_artist(create_test_artist("artist1", "Test Artist"));
@@ -572,11 +988,13 @@ mod tests {
         let proxy = CatalogProxy::new(
             mock_downloader.clone(),
             catalog_store.clone(),
+            user_store,
             temp_dir.path().to_path_buf(),
         );
 
         // Artist doesn't exist in catalog, should fetch from downloader
-        let result = proxy.ensure_artist_complete("artist1").await;
+        let permissions = vec![Permission::IssueContentDownload];
+        let result = proxy.ensure_artist_complete("artist1", 1, &permissions).await;
         assert!(result.is_ok());
 
         // Verify downloader was called (may be called multiple times for artist + albums)
@@ -591,6 +1009,7 @@ mod tests {
     async fn test_ensure_artist_complete_skips_existing_artist_with_related_artists() {
         let (temp_dir, catalog_store) = setup_test_env();
         let mock_downloader = Arc::new(MockDownloader::new());
+        let user_store = create_test_user_store();
 
         // Add artist to mock as fallback (in case related artists check triggers fetch)
         mock_downloader.add_artist(create_test_artist("artist1", "Existing Artist"));
@@ -618,11 +1037,13 @@ mod tests {
         let proxy = CatalogProxy::new(
             mock_downloader.clone(),
             catalog_store,
+            user_store,
             temp_dir.path().to_path_buf(),
         );
 
         // Artist exists with related artists, should not call fetch_and_store_artist
-        let result = proxy.ensure_artist_complete("artist1").await;
+        let permissions = vec![Permission::IssueContentDownload];
+        let result = proxy.ensure_artist_complete("artist1", 1, &permissions).await;
         if let Err(ref e) = result {
             eprintln!("ensure_artist_complete error: {:?}", e);
         }
@@ -640,6 +1061,7 @@ mod tests {
     async fn test_ensure_album_complete_fetches_missing_album() {
         let (temp_dir, catalog_store) = setup_test_env();
         let mock_downloader = Arc::new(MockDownloader::new());
+        let user_store = create_test_user_store();
 
         // Add album and its artist to mock
         mock_downloader.add_artist(create_test_artist("artist1", "Test Artist"));
@@ -649,11 +1071,13 @@ mod tests {
         let proxy = CatalogProxy::new(
             mock_downloader.clone(),
             catalog_store.clone(),
+            user_store,
             temp_dir.path().to_path_buf(),
         );
 
         // Album doesn't exist, should fetch
-        let result = proxy.ensure_album_complete("album1").await;
+        let permissions = vec![Permission::IssueContentDownload];
+        let result = proxy.ensure_album_complete("album1", 1, &permissions).await;
         assert!(result.is_ok());
 
         // Verify downloader was called
@@ -668,6 +1092,7 @@ mod tests {
     async fn test_fetch_and_store_track() {
         let (temp_dir, catalog_store) = setup_test_env();
         let mock_downloader = Arc::new(MockDownloader::new());
+        let user_store = create_test_user_store();
 
         // First create the album that the track references
         let album_json = serde_json::json!({
@@ -683,6 +1108,7 @@ mod tests {
         let proxy = CatalogProxy::new(
             mock_downloader.clone(),
             catalog_store.clone(),
+            user_store,
             temp_dir.path().to_path_buf(),
         );
 
@@ -717,4 +1143,476 @@ mod tests {
         let result = mock.get_track("nonexistent").await;
         assert!(result.is_err());
     }
+
+    // ==================== can_user_trigger_download Tests ====================
+
+    /// Test user store with configurable settings for testing can_user_trigger_download
+    struct ConfigurableTestUserStore {
+        downloads_enabled_setting: Option<UserSetting>,
+        permissions: Vec<Permission>,
+    }
+
+    impl ConfigurableTestUserStore {
+        fn new(downloads_enabled_setting: Option<UserSetting>, permissions: Vec<Permission>) -> Self {
+            Self {
+                downloads_enabled_setting,
+                permissions,
+            }
+        }
+    }
+
+    impl crate::user::UserAuthCredentialsStore for ConfigurableTestUserStore {
+        fn get_user_auth_credentials(
+            &self,
+            _user_handle: &str,
+        ) -> anyhow::Result<Option<crate::user::UserAuthCredentials>> {
+            Ok(None)
+        }
+        fn update_user_auth_credentials(
+            &self,
+            _credentials: crate::user::UserAuthCredentials,
+        ) -> anyhow::Result<()> {
+            Ok(())
+        }
+    }
+
+    impl crate::user::UserAuthTokenStore for ConfigurableTestUserStore {
+        fn get_user_auth_token(
+            &self,
+            _token: &crate::user::AuthTokenValue,
+        ) -> anyhow::Result<Option<crate::user::AuthToken>> {
+            Ok(None)
+        }
+        fn delete_user_auth_token(
+            &self,
+            _token: &crate::user::AuthTokenValue,
+        ) -> anyhow::Result<Option<crate::user::AuthToken>> {
+            Ok(None)
+        }
+        fn update_user_auth_token_last_used_timestamp(
+            &self,
+            _token: &crate::user::AuthTokenValue,
+        ) -> anyhow::Result<()> {
+            Ok(())
+        }
+        fn add_user_auth_token(&self, _token: crate::user::AuthToken) -> anyhow::Result<()> {
+            Ok(())
+        }
+        fn get_all_user_auth_tokens(
+            &self,
+            _user_handle: &str,
+        ) -> anyhow::Result<Vec<crate::user::AuthToken>> {
+            Ok(vec![])
+        }
+        fn prune_unused_auth_tokens(&self, _unused_for_days: u64) -> anyhow::Result<usize> {
+            Ok(0)
+        }
+    }
+
+    impl crate::user::UserStore for ConfigurableTestUserStore {
+        fn create_user(&self, _user_handle: &str) -> anyhow::Result<usize> {
+            Ok(1)
+        }
+        fn get_user_handle(&self, _user_id: usize) -> anyhow::Result<Option<String>> {
+            Ok(Some("testuser".to_string()))
+        }
+        fn get_user_id(&self, _user_handle: &str) -> anyhow::Result<Option<usize>> {
+            Ok(Some(1))
+        }
+        fn get_all_user_handles(&self) -> anyhow::Result<Vec<String>> {
+            Ok(vec!["testuser".to_string()])
+        }
+        fn set_user_liked_content(
+            &self,
+            _user_id: usize,
+            _content_id: &str,
+            _content_type: crate::user::LikedContentType,
+            _liked: bool,
+        ) -> anyhow::Result<()> {
+            Ok(())
+        }
+        fn get_user_liked_content(
+            &self,
+            _user_id: usize,
+            _content_type: crate::user::LikedContentType,
+        ) -> anyhow::Result<Vec<String>> {
+            Ok(vec![])
+        }
+        fn is_user_liked_content(
+            &self,
+            _user_id: usize,
+            _content_id: &str,
+        ) -> anyhow::Result<Option<bool>> {
+            Ok(None)
+        }
+        fn create_user_playlist(
+            &self,
+            _user_id: usize,
+            _playlist_name: &str,
+            _creator_id: usize,
+            _track_ids: Vec<String>,
+        ) -> anyhow::Result<String> {
+            Ok("playlist1".to_string())
+        }
+        fn update_user_playlist(
+            &self,
+            _playlist_id: &str,
+            _user_id: usize,
+            _playlist_name: Option<String>,
+            _track_ids: Option<Vec<String>>,
+        ) -> anyhow::Result<()> {
+            Ok(())
+        }
+        fn delete_user_playlist(&self, _playlist_id: &str, _user_id: usize) -> anyhow::Result<()> {
+            Ok(())
+        }
+        fn get_user_playlist(
+            &self,
+            _playlist_id: &str,
+            _user_id: usize,
+        ) -> anyhow::Result<crate::user::UserPlaylist> {
+            anyhow::bail!("Not implemented")
+        }
+        fn get_user_playlists(&self, _user_id: usize) -> anyhow::Result<Vec<String>> {
+            Ok(vec![])
+        }
+        fn get_user_roles(
+            &self,
+            _user_id: usize,
+        ) -> anyhow::Result<Vec<crate::user::UserRole>> {
+            Ok(vec![])
+        }
+        fn add_user_role(
+            &self,
+            _user_id: usize,
+            _role: crate::user::UserRole,
+        ) -> anyhow::Result<()> {
+            Ok(())
+        }
+        fn remove_user_role(
+            &self,
+            _user_id: usize,
+            _role: crate::user::UserRole,
+        ) -> anyhow::Result<()> {
+            Ok(())
+        }
+        fn resolve_user_permissions(
+            &self,
+            _user_id: usize,
+        ) -> anyhow::Result<Vec<Permission>> {
+            Ok(self.permissions.clone())
+        }
+        fn add_user_extra_permission(
+            &self,
+            _user_id: usize,
+            _grant: crate::user::PermissionGrant,
+        ) -> anyhow::Result<usize> {
+            Ok(1)
+        }
+        fn remove_user_extra_permission(&self, _permission_id: usize) -> anyhow::Result<()> {
+            Ok(())
+        }
+        fn decrement_permission_countdown(&self, _permission_id: usize) -> anyhow::Result<bool> {
+            Ok(true)
+        }
+    }
+
+    impl crate::user::UserBandwidthStore for ConfigurableTestUserStore {
+        fn record_bandwidth_usage(
+            &self,
+            _user_id: usize,
+            _date: u32,
+            _endpoint_category: &str,
+            _bytes_sent: u64,
+            _request_count: u64,
+        ) -> anyhow::Result<()> {
+            Ok(())
+        }
+        fn get_user_bandwidth_usage(
+            &self,
+            _user_id: usize,
+            _start_date: u32,
+            _end_date: u32,
+        ) -> anyhow::Result<Vec<crate::user::BandwidthUsage>> {
+            Ok(vec![])
+        }
+        fn get_user_bandwidth_summary(
+            &self,
+            _user_id: usize,
+            _start_date: u32,
+            _end_date: u32,
+        ) -> anyhow::Result<crate::user::BandwidthSummary> {
+            Ok(crate::user::BandwidthSummary {
+                user_id: None,
+                total_bytes_sent: 0,
+                total_requests: 0,
+                by_category: HashMap::new(),
+            })
+        }
+        fn get_all_bandwidth_usage(
+            &self,
+            _start_date: u32,
+            _end_date: u32,
+        ) -> anyhow::Result<Vec<crate::user::BandwidthUsage>> {
+            Ok(vec![])
+        }
+        fn get_total_bandwidth_summary(
+            &self,
+            _start_date: u32,
+            _end_date: u32,
+        ) -> anyhow::Result<crate::user::BandwidthSummary> {
+            Ok(crate::user::BandwidthSummary {
+                user_id: None,
+                total_bytes_sent: 0,
+                total_requests: 0,
+                by_category: HashMap::new(),
+            })
+        }
+        fn prune_bandwidth_usage(&self, _older_than_days: u32) -> anyhow::Result<usize> {
+            Ok(0)
+        }
+    }
+
+    impl crate::user::UserListeningStore for ConfigurableTestUserStore {
+        fn record_listening_event(
+            &self,
+            _event: crate::user::ListeningEvent,
+        ) -> anyhow::Result<(usize, bool)> {
+            Ok((1, true))
+        }
+        fn get_user_listening_events(
+            &self,
+            _user_id: usize,
+            _start_date: u32,
+            _end_date: u32,
+            _limit: Option<usize>,
+            _offset: Option<usize>,
+        ) -> anyhow::Result<Vec<crate::user::ListeningEvent>> {
+            Ok(vec![])
+        }
+        fn get_user_listening_summary(
+            &self,
+            _user_id: usize,
+            _start_date: u32,
+            _end_date: u32,
+        ) -> anyhow::Result<crate::user::ListeningSummary> {
+            Ok(crate::user::ListeningSummary {
+                user_id: None,
+                total_plays: 0,
+                total_duration_seconds: 0,
+                completed_plays: 0,
+                unique_tracks: 0,
+            })
+        }
+        fn get_user_listening_history(
+            &self,
+            _user_id: usize,
+            _limit: usize,
+        ) -> anyhow::Result<Vec<crate::user::UserListeningHistoryEntry>> {
+            Ok(vec![])
+        }
+        fn get_track_listening_stats(
+            &self,
+            _track_id: &str,
+            _start_date: u32,
+            _end_date: u32,
+        ) -> anyhow::Result<crate::user::TrackListeningStats> {
+            Ok(crate::user::TrackListeningStats {
+                track_id: "".to_string(),
+                play_count: 0,
+                total_duration_seconds: 0,
+                completed_count: 0,
+                unique_listeners: 0,
+            })
+        }
+        fn get_daily_listening_stats(
+            &self,
+            _start_date: u32,
+            _end_date: u32,
+        ) -> anyhow::Result<Vec<crate::user::DailyListeningStats>> {
+            Ok(vec![])
+        }
+        fn get_top_tracks(
+            &self,
+            _start_date: u32,
+            _end_date: u32,
+            _limit: usize,
+        ) -> anyhow::Result<Vec<crate::user::TrackListeningStats>> {
+            Ok(vec![])
+        }
+        fn prune_listening_events(&self, _older_than_days: u32) -> anyhow::Result<usize> {
+            Ok(0)
+        }
+    }
+
+    impl crate::user::UserSettingsStore for ConfigurableTestUserStore {
+        fn get_user_setting(
+            &self,
+            _user_id: usize,
+            key: &str,
+        ) -> anyhow::Result<Option<UserSetting>> {
+            if key == "enable_direct_downloads" {
+                Ok(self.downloads_enabled_setting.clone())
+            } else {
+                Ok(None)
+            }
+        }
+        fn set_user_setting(
+            &self,
+            _user_id: usize,
+            _setting: UserSetting,
+        ) -> anyhow::Result<()> {
+            Ok(())
+        }
+        fn get_all_user_settings(&self, _user_id: usize) -> anyhow::Result<Vec<UserSetting>> {
+            Ok(vec![])
+        }
+    }
+
+    #[tokio::test]
+    async fn test_can_user_trigger_download_no_permission() {
+        let (temp_dir, catalog_store) = setup_test_env();
+        let mock_downloader = Arc::new(MockDownloader::new());
+        // User has setting enabled but NO permission
+        let user_store: Arc<dyn FullUserStore> = Arc::new(ConfigurableTestUserStore::new(
+            Some(UserSetting::DirectDownloadsEnabled(true)),
+            vec![Permission::AccessCatalog], // Not IssueContentDownload
+        ));
+
+        mock_downloader.add_artist(create_test_artist("artist1", "Test Artist"));
+
+        let proxy = CatalogProxy::new(
+            mock_downloader.clone(),
+            catalog_store,
+            user_store,
+            temp_dir.path().to_path_buf(),
+        );
+
+        // Should skip download due to missing permission
+        let permissions = vec![Permission::AccessCatalog]; // Not IssueContentDownload
+        let result = proxy.ensure_artist_complete("artist1", 1, &permissions).await;
+        assert!(result.is_ok());
+
+        // Downloader should NOT have been called
+        assert_eq!(mock_downloader.get_call_count("get_artist"), 0);
+    }
+
+    #[tokio::test]
+    async fn test_can_user_trigger_download_no_setting() {
+        let (temp_dir, catalog_store) = setup_test_env();
+        let mock_downloader = Arc::new(MockDownloader::new());
+        // User has permission but setting is NOT set (default disabled)
+        let user_store: Arc<dyn FullUserStore> = Arc::new(ConfigurableTestUserStore::new(
+            None, // Setting not set
+            vec![Permission::IssueContentDownload],
+        ));
+
+        mock_downloader.add_artist(create_test_artist("artist1", "Test Artist"));
+
+        let proxy = CatalogProxy::new(
+            mock_downloader.clone(),
+            catalog_store,
+            user_store,
+            temp_dir.path().to_path_buf(),
+        );
+
+        // Should skip download due to setting not enabled
+        let permissions = vec![Permission::IssueContentDownload];
+        let result = proxy.ensure_artist_complete("artist1", 1, &permissions).await;
+        assert!(result.is_ok());
+
+        // Downloader should NOT have been called
+        assert_eq!(mock_downloader.get_call_count("get_artist"), 0);
+    }
+
+    #[tokio::test]
+    async fn test_can_user_trigger_download_setting_false() {
+        let (temp_dir, catalog_store) = setup_test_env();
+        let mock_downloader = Arc::new(MockDownloader::new());
+        // User has permission but setting is explicitly false
+        let user_store: Arc<dyn FullUserStore> = Arc::new(ConfigurableTestUserStore::new(
+            Some(UserSetting::DirectDownloadsEnabled(false)),
+            vec![Permission::IssueContentDownload],
+        ));
+
+        mock_downloader.add_artist(create_test_artist("artist1", "Test Artist"));
+
+        let proxy = CatalogProxy::new(
+            mock_downloader.clone(),
+            catalog_store,
+            user_store,
+            temp_dir.path().to_path_buf(),
+        );
+
+        // Should skip download due to setting being "false"
+        let permissions = vec![Permission::IssueContentDownload];
+        let result = proxy.ensure_artist_complete("artist1", 1, &permissions).await;
+        assert!(result.is_ok());
+
+        // Downloader should NOT have been called
+        assert_eq!(mock_downloader.get_call_count("get_artist"), 0);
+    }
+
+    #[tokio::test]
+    async fn test_can_user_trigger_download_permission_and_setting_enabled() {
+        let (temp_dir, catalog_store) = setup_test_env();
+        let mock_downloader = Arc::new(MockDownloader::new());
+        // User has both permission AND setting enabled
+        let user_store: Arc<dyn FullUserStore> = Arc::new(ConfigurableTestUserStore::new(
+            Some(UserSetting::DirectDownloadsEnabled(true)),
+            vec![Permission::IssueContentDownload],
+        ));
+
+        mock_downloader.add_artist(create_test_artist("artist1", "Test Artist"));
+
+        let proxy = CatalogProxy::new(
+            mock_downloader.clone(),
+            catalog_store.clone(),
+            user_store,
+            temp_dir.path().to_path_buf(),
+        );
+
+        // Should trigger download since user has permission and setting
+        let permissions = vec![Permission::IssueContentDownload];
+        let result = proxy.ensure_artist_complete("artist1", 1, &permissions).await;
+        assert!(result.is_ok());
+
+        // Downloader SHOULD have been called
+        assert!(mock_downloader.get_call_count("get_artist") >= 1);
+
+        // Verify artist was stored in catalog
+        let stored = catalog_store.get_artist_json("artist1").unwrap();
+        assert!(stored.is_some());
+    }
+
+    #[tokio::test]
+    async fn test_can_user_trigger_download_album_respects_permission_check() {
+        let (temp_dir, catalog_store) = setup_test_env();
+        let mock_downloader = Arc::new(MockDownloader::new());
+        // User has NO permission
+        let user_store: Arc<dyn FullUserStore> = Arc::new(ConfigurableTestUserStore::new(
+            Some(UserSetting::DirectDownloadsEnabled(true)),
+            vec![Permission::AccessCatalog], // Not IssueContentDownload
+        ));
+
+        mock_downloader.add_artist(create_test_artist("artist1", "Test Artist"));
+        mock_downloader.add_album(create_test_album("album1", "Test Album", vec!["artist1"]));
+        mock_downloader.add_track(create_test_track("track1", "Test Track", "album1"));
+
+        let proxy = CatalogProxy::new(
+            mock_downloader.clone(),
+            catalog_store,
+            user_store,
+            temp_dir.path().to_path_buf(),
+        );
+
+        // Should skip download due to missing permission
+        let permissions = vec![Permission::AccessCatalog];
+        let result = proxy.ensure_album_complete("album1", 1, &permissions).await;
+        assert!(result.is_ok());
+
+        // Downloader should NOT have been called
+        assert_eq!(mock_downloader.get_call_count("get_album"), 0);
+    }
+
 }

@@ -63,8 +63,8 @@ impl TestServer {
         );
 
         // Create user store
-        let user_store: Box<dyn FullUserStore> =
-            Box::new(SqliteUserStore::new(&db_path).expect("Failed to open user store"));
+        let user_store: Arc<dyn FullUserStore> =
+            Arc::new(SqliteUserStore::new(&db_path).expect("Failed to open user store"));
 
         // Create search vault (use NoOp for speed in tests)
         let search_vault: Box<dyn SearchVault> = Box::new(NoOpSearchVault {});

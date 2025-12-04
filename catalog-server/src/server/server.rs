@@ -17,7 +17,7 @@ use tracing::{debug, error, info, warn};
 use crate::catalog_store::CatalogStore;
 use crate::{
     server::stream_track::stream_track,
-    user::{user_models::LikedContentType, FullUserStore, Permission},
+    user::{user_models::LikedContentType, settings::UserSetting, FullUserStore, Permission},
 };
 use crate::{search::SearchVault, user::UserManager};
 use axum_extra::extract::cookie::{Cookie, SameSite};
@@ -220,6 +220,14 @@ struct UpdatePlaylistBody {
 #[derive(Serialize)]
 struct LoginSuccessResponse {
     token: String,
+    user_handle: String,
+    permissions: Vec<Permission>,
+}
+
+#[derive(Serialize)]
+struct SessionResponse {
+    user_handle: String,
+    permissions: Vec<Permission>,
 }
 
 #[derive(Deserialize, Debug)]
@@ -242,14 +250,17 @@ async fn home(session: Option<Session>, State(state): State<ServerState>) -> imp
 }
 
 async fn get_artist(
-    _session: Session,
+    session: Session,
     State(catalog_store): State<GuardedCatalogStore>,
     State(proxy): State<super::state::OptionalProxy>,
     Path(id): Path<String>,
 ) -> Response {
     // If proxy is available, ensure artist has complete data
     if let Some(ref proxy) = proxy {
-        if let Err(e) = proxy.ensure_artist_complete(&id).await {
+        if let Err(e) = proxy
+            .ensure_artist_complete(&id, session.user_id, &session.permissions)
+            .await
+        {
             warn!("Proxy fetch failed for artist {}: {}", id, e);
             // Continue serving what we have
         }
@@ -263,14 +274,17 @@ async fn get_artist(
 }
 
 async fn get_album(
-    _session: Session,
+    session: Session,
     State(catalog_store): State<GuardedCatalogStore>,
     State(proxy): State<super::state::OptionalProxy>,
     Path(id): Path<String>,
 ) -> Response {
     // If proxy is available, ensure album has complete data
     if let Some(ref proxy) = proxy {
-        if let Err(e) = proxy.ensure_album_complete(&id).await {
+        if let Err(e) = proxy
+            .ensure_album_complete(&id, session.user_id, &session.permissions)
+            .await
+        {
             warn!("Proxy fetch failed for album {}: {}", id, e);
             // Continue serving what we have
         }
@@ -284,14 +298,17 @@ async fn get_album(
 }
 
 async fn get_resolved_album(
-    _session: Session,
+    session: Session,
     State(catalog_store): State<GuardedCatalogStore>,
     State(proxy): State<super::state::OptionalProxy>,
     Path(id): Path<String>,
 ) -> Response {
     // If proxy is available, ensure album has complete data
     if let Some(ref proxy) = proxy {
-        if let Err(e) = proxy.ensure_album_complete(&id).await {
+        if let Err(e) = proxy
+            .ensure_album_complete(&id, session.user_id, &session.permissions)
+            .await
+        {
             warn!("Proxy fetch failed for album {}: {}", id, e);
         }
     }
@@ -304,14 +321,17 @@ async fn get_resolved_album(
 }
 
 async fn get_artist_discography(
-    _session: Session,
+    session: Session,
     State(catalog_store): State<GuardedCatalogStore>,
     State(proxy): State<super::state::OptionalProxy>,
     Path(id): Path<String>,
 ) -> Response {
     // If proxy is available, ensure artist has complete data
     if let Some(ref proxy) = proxy {
-        if let Err(e) = proxy.ensure_artist_complete(&id).await {
+        if let Err(e) = proxy
+            .ensure_artist_complete(&id, session.user_id, &session.permissions)
+            .await
+        {
             warn!("Proxy fetch failed for artist discography {}: {}", id, e);
         }
     }
@@ -928,6 +948,50 @@ fn get_default_date_range(start_date: Option<u32>, end_date: Option<u32>) -> (u3
     (start, end)
 }
 
+// User settings endpoints
+
+#[derive(Deserialize)]
+struct UpdateSettingsBody {
+    settings: Vec<UserSetting>,
+}
+
+#[derive(Serialize)]
+struct UserSettingsResponse {
+    settings: Vec<UserSetting>,
+}
+
+async fn get_user_settings(
+    session: Session,
+    State(user_manager): State<GuardedUserManager>,
+) -> Response {
+    match user_manager
+        .lock()
+        .unwrap()
+        .get_all_user_settings(session.user_id)
+    {
+        Ok(settings) => Json(UserSettingsResponse { settings }).into_response(),
+        Err(err) => {
+            error!("Error getting user settings: {}", err);
+            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+        }
+    }
+}
+
+async fn update_user_settings(
+    session: Session,
+    State(user_manager): State<GuardedUserManager>,
+    Json(body): Json<UpdateSettingsBody>,
+) -> Response {
+    let locked_manager = user_manager.lock().unwrap();
+    for setting in body.settings {
+        if let Err(err) = locked_manager.set_user_setting(session.user_id, setting.clone()) {
+            error!("Error setting user setting {:?}: {}", setting, err);
+            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+        }
+    }
+    StatusCode::OK.into_response()
+}
+
 async fn login(
     State(user_manager): State<GuardedUserManager>,
     Json(body): Json<LoginBody>,
@@ -948,38 +1012,50 @@ async fn login(
     };
 
     if let Some(password_credentials) = &credentials.username_password {
-            if let Ok(true) = password_credentials.hasher.verify(
-                &body.password,
-                &password_credentials.hash,
-                &password_credentials.salt,
-            ) {
-                return match locked_manager.generate_auth_token(&credentials) {
-                    Ok(auth_token) => {
-                        super::metrics::record_login_attempt("success", start.elapsed());
-                        let response_body = LoginSuccessResponse {
-                            token: auth_token.value.0.clone(),
-                        };
-                        let response_body = serde_json::to_string(&response_body).unwrap();
+        if let Ok(true) = password_credentials.hasher.verify(
+            &body.password,
+            &password_credentials.hash,
+            &password_credentials.salt,
+        ) {
+            // Fetch user permissions
+            let permissions = match locked_manager.get_user_permissions(credentials.user_id) {
+                Ok(perms) => perms,
+                Err(err) => {
+                    error!("Error fetching user permissions: {}", err);
+                    super::metrics::record_login_attempt("error", start.elapsed());
+                    return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+                }
+            };
 
-                        let cookie_value = HeaderValue::from_str(&format!(
-                            "session_token={}; Path=/; HttpOnly",
-                            auth_token.value.0.clone()
-                        ))
-                        .unwrap();
-                        response::Builder::new()
-                            .status(StatusCode::CREATED)
-                            .header(axum::http::header::SET_COOKIE, cookie_value)
-                            .body(Body::from(response_body))
-                            .unwrap()
-                    }
-                    Err(err) => {
-                        error!("Error with auth token generation: {}", err);
-                        super::metrics::record_login_attempt("error", start.elapsed());
-                        StatusCode::INTERNAL_SERVER_ERROR.into_response()
-                    }
-                };
-            }
+            return match locked_manager.generate_auth_token(&credentials) {
+                Ok(auth_token) => {
+                    super::metrics::record_login_attempt("success", start.elapsed());
+                    let response_body = LoginSuccessResponse {
+                        token: auth_token.value.0.clone(),
+                        user_handle: body.user_handle.clone(),
+                        permissions,
+                    };
+                    let response_body = serde_json::to_string(&response_body).unwrap();
+
+                    let cookie_value = HeaderValue::from_str(&format!(
+                        "session_token={}; Path=/; HttpOnly",
+                        auth_token.value.0.clone()
+                    ))
+                    .unwrap();
+                    response::Builder::new()
+                        .status(StatusCode::CREATED)
+                        .header(axum::http::header::SET_COOKIE, cookie_value)
+                        .body(Body::from(response_body))
+                        .unwrap()
+                }
+                Err(err) => {
+                    error!("Error with auth token generation: {}", err);
+                    super::metrics::record_login_attempt("error", start.elapsed());
+                    StatusCode::INTERNAL_SERVER_ERROR.into_response()
+                }
+            };
         }
+    }
     super::metrics::record_login_attempt("failure", start.elapsed());
     StatusCode::UNAUTHORIZED.into_response()
 }
@@ -1002,6 +1078,33 @@ async fn logout(State(user_manager): State<GuardedUserManager>, session: Session
         }
         Err(_) => StatusCode::BAD_REQUEST.into_response(),
     }
+}
+
+async fn get_session(
+    State(user_manager): State<GuardedUserManager>,
+    session: Session,
+) -> Response {
+    let locked_manager = user_manager.lock().unwrap();
+
+    // Get the user handle from user_id
+    let user_handle = match locked_manager.get_user_handle(session.user_id) {
+        Ok(Some(handle)) => handle,
+        Ok(None) => {
+            error!("User handle not found for user_id={}", session.user_id);
+            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+        }
+        Err(err) => {
+            error!("Failed to get user handle for user_id={}: {}", session.user_id, err);
+            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+        }
+    };
+
+    let response_body = SessionResponse {
+        user_handle,
+        permissions: session.permissions.clone(),
+    };
+
+    Json(response_body).into_response()
 }
 
 async fn reboot_server(session: Session) -> Response {
@@ -1695,6 +1798,7 @@ impl ServerState {
         catalog_store: Arc<dyn CatalogStore>,
         search_vault: Box<dyn SearchVault>,
         user_manager: UserManager,
+        user_store: Arc<dyn FullUserStore>,
         downloader: Option<Arc<dyn crate::downloader::Downloader>>,
         media_base_path: Option<std::path::PathBuf>,
     ) -> ServerState {
@@ -1703,6 +1807,7 @@ impl ServerState {
             (Some(dl), Some(path)) => Some(Arc::new(super::proxy::CatalogProxy::new(
                 dl.clone(),
                 catalog_store.clone(),
+                user_store,
                 path,
             ))),
             _ => None,
@@ -1725,12 +1830,12 @@ pub fn make_app(
     config: ServerConfig,
     catalog_store: Arc<dyn CatalogStore>,
     search_vault: Box<dyn SearchVault>,
-    user_store: Box<dyn FullUserStore>,
+    user_store: Arc<dyn FullUserStore>,
     downloader: Option<Arc<dyn crate::downloader::Downloader>>,
     media_base_path: Option<std::path::PathBuf>,
 ) -> Result<Router> {
-    let user_manager = UserManager::new(catalog_store.clone(), user_store);
-    let state = ServerState::new(config.clone(), catalog_store, search_vault, user_manager, downloader, media_base_path);
+    let user_manager = UserManager::new(catalog_store.clone(), user_store.clone());
+    let state = ServerState::new(config.clone(), catalog_store, search_vault, user_manager, user_store, downloader, media_base_path);
 
     // Login route with strict IP-based rate limiting
     // For rates < 60/min, we use per_second(1) and rely on burst_size to enforce the limit
@@ -1751,6 +1856,7 @@ pub fn make_app(
     // Other auth routes without rate limiting (already authenticated)
     let other_auth_routes: Router = Router::new()
         .route("/logout", get(logout))
+        .route("/session", get(get_session))
         .route("/challenge", get(get_challenge))
         .route("/challenge", post(post_challenge))
         .with_state(state.clone());
@@ -1906,9 +2012,21 @@ pub fn make_app(
         ))
         .with_state(state.clone());
 
+    // User settings routes (requires AccessCatalog permission)
+    let settings_routes: Router = Router::new()
+        .route("/settings", get(get_user_settings))
+        .route("/settings", put(update_user_settings))
+        .layer(GovernorLayer::new(write_rate_limit.clone()))
+        .route_layer(middleware::from_fn_with_state(
+            state.clone(),
+            require_access_catalog,
+        ))
+        .with_state(state.clone());
+
     let user_routes = liked_content_routes
         .merge(playlist_routes)
-        .merge(listening_stats_routes);
+        .merge(listening_stats_routes)
+        .merge(settings_routes);
 
     // Catalog editing routes (requires EditCatalog permission)
     let catalog_edit_routes: Router = Router::new()
@@ -2063,7 +2181,7 @@ const STALE_BATCH_CHECK_INTERVAL_SECS: u64 = 600;
 pub async fn run_server(
     catalog_store: Arc<dyn CatalogStore>,
     search_vault: Box<dyn SearchVault>,
-    user_store: Box<dyn FullUserStore>,
+    user_store: Arc<dyn FullUserStore>,
     requests_logging_level: RequestsLoggingLevel,
     port: u16,
     metrics_port: u16,
@@ -2153,7 +2271,7 @@ mod tests {
 
     #[tokio::test]
     async fn responds_forbidden_on_protected_routes() {
-        let user_store = Box::new(InMemoryUserStore::default());
+        let user_store = Arc::new(InMemoryUserStore::default());
         let catalog_store: Arc<dyn CatalogStore> = Arc::new(NullCatalogStore);
         let app = &mut make_app(
             ServerConfig::default(),
@@ -2500,6 +2618,28 @@ mod tests {
         }
     }
 
+    impl crate::user::UserSettingsStore for InMemoryUserStore {
+        fn get_user_setting(
+            &self,
+            _user_id: usize,
+            _key: &str,
+        ) -> Result<Option<crate::user::UserSetting>> {
+            Ok(None)
+        }
+
+        fn set_user_setting(
+            &self,
+            _user_id: usize,
+            _setting: crate::user::UserSetting,
+        ) -> Result<()> {
+            Ok(())
+        }
+
+        fn get_all_user_settings(&self, _user_id: usize) -> Result<Vec<crate::user::UserSetting>> {
+            Ok(vec![])
+        }
+    }
+
     // Tests for admin endpoints using SqliteUserStore
     mod admin_endpoint_tests {
         use super::*;
@@ -2719,7 +2859,7 @@ mod tests {
 
             let catalog_store: std::sync::Arc<dyn crate::catalog_store::CatalogStore> =
                 std::sync::Arc::new(crate::catalog_store::NullCatalogStore);
-            let user_manager = crate::user::UserManager::new(catalog_store, Box::new(store));
+            let user_manager = crate::user::UserManager::new(catalog_store, Arc::new(store));
 
             let found_id = user_manager.get_user_id("testuser").unwrap();
             assert_eq!(found_id, Some(user_id));

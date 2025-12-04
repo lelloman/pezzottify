@@ -2,12 +2,16 @@ import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
 import { useRemoteStore } from './remote';
 
+// Settings key constants
+export const SETTING_ENABLE_DIRECT_DOWNLOADS = 'enable_direct_downloads';
+
 export const useUserStore = defineStore('user', () => {
   const remoteStore = useRemoteStore();
   const likedAlbumIds = ref(null);
   const likedArtistsIds = ref(null);
   const playlistsData = ref(null);
   const playlistRefs = {};
+  const settings = ref({});
 
   const isInitialized = ref(false);
   const isInitializing = ref(false);
@@ -24,15 +28,17 @@ export const useUserStore = defineStore('user', () => {
 
     try {
       // Load all data in parallel
-      const [albumsData, artistsData, playlistsResponse] = await Promise.all([
+      const [albumsData, artistsData, playlistsResponse, settingsData] = await Promise.all([
         remoteStore.fetchLikedAlbums(),
         remoteStore.fetchLikedArtists(),
-        remoteStore.fetchUserPlaylists()
+        remoteStore.fetchUserPlaylists(),
+        remoteStore.fetchUserSettings()
       ]);
 
       // Update state with fetched data
       likedAlbumIds.value = albumsData;
       likedArtistsIds.value = artistsData;
+      settings.value = settingsData || {};
 
       const by_id = {};
       playlistsResponse.forEach(playlist => {
@@ -184,10 +190,33 @@ export const useUserStore = defineStore('user', () => {
     callback(success);
   }
 
+  // Settings methods
+  const getSetting = (key) => {
+    return settings.value[key];
+  };
+
+  const setSetting = async (key, value) => {
+    const success = await remoteStore.updateUserSettings({ [key]: value });
+    if (success) {
+      settings.value = { ...settings.value, [key]: value };
+    }
+    return success;
+  };
+
+  // Convenience computed for direct downloads setting
+  const isDirectDownloadsEnabled = computed(() => {
+    return settings.value[SETTING_ENABLE_DIRECT_DOWNLOADS] === 'true';
+  });
+
+  const setDirectDownloadsEnabled = async (enabled) => {
+    return await setSetting(SETTING_ENABLE_DIRECT_DOWNLOADS, enabled ? 'true' : 'false');
+  };
+
   return {
     likedAlbumIds,
     likedArtistsIds,
     playlistsData,
+    settings,
     isInitialized,
     isInitializing,
     initialize,
@@ -201,5 +230,9 @@ export const useUserStore = defineStore('user', () => {
     removeTracksFromPlaylist,
     getPlaylistRef,
     putPlaylistRef,
+    getSetting,
+    setSetting,
+    isDirectDownloadsEnabled,
+    setDirectDownloadsEnabled,
   };
 });

@@ -4,6 +4,8 @@
 
 ### [to refine]
 
+- We need a constant WS connection with the app to push updates
+
 - Consider switching Docker deployment to use a separate nginx service for web frontend serving (Option C) instead of serving from catalog-server. This would allow independent frontend deployments and better static file optimization.
 
 - Plan how are we going to put our catalog agent. This agent has the responsability to provide information to users, and if the info is not available yet in the catalog, it should be able to find it in external sources

@@ -1,6 +1,7 @@
+use serde::{Deserialize, Serialize};
 use std::time::SystemTime;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Permission {
     AccessCatalog,
     LikeContent,

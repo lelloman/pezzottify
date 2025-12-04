@@ -8,7 +8,8 @@ use crate::user::user_models::{
     BandwidthSummary, BandwidthUsage, CategoryBandwidth, DailyListeningStats, ListeningEvent,
     ListeningSummary, TrackListeningStats, UserListeningHistoryEntry,
 };
-use crate::user::user_store::{UserBandwidthStore, UserListeningStore};
+use crate::user::user_store::{UserBandwidthStore, UserListeningStore, UserSettingsStore};
+use std::collections::HashMap;
 use crate::user::*;
 use anyhow::{bail, Context, Result};
 use rusqlite::{params, Connection};
@@ -434,6 +435,33 @@ const LISTENING_EVENTS_TABLE_V_6: Table = Table {
     ],
 };
 
+/// V 7
+/// User settings table - key-value store for user preferences synced with server
+const USER_SETTINGS_TABLE_V_7: Table = Table {
+    name: "user_settings",
+    columns: &[
+        sqlite_column!(
+            "user_id",
+            &SqlType::Integer,
+            non_null = true,
+            foreign_key = Some(&ForeignKey {
+                foreign_table: "user",
+                foreign_column: "id",
+                on_delete: ForeignKeyOnChange::Cascade,
+            })
+        ),
+        sqlite_column!("setting_key", &SqlType::Text, non_null = true),
+        sqlite_column!("setting_value", &SqlType::Text),
+        sqlite_column!(
+            "updated",
+            &SqlType::Integer,
+            default_value = Some(DEFAULT_TIMESTAMP)
+        ),
+    ],
+    unique_constraints: &[&["user_id", "setting_key"]],
+    indices: &[("idx_user_settings_user_id", "user_id")],
+};
+
 pub const VERSIONED_SCHEMAS: &[VersionedSchema] = &[
     VersionedSchema {
         version: 0,
@@ -575,6 +603,26 @@ pub const VERSIONED_SCHEMAS: &[VersionedSchema] = &[
         ],
         migration: Some(|conn: &Connection| {
             LISTENING_EVENTS_TABLE_V_6.create(&conn)?;
+            Ok(())
+        }),
+    },
+    VersionedSchema {
+        version: 7,
+        tables: &[
+            USER_TABLE_V_0,
+            LIKED_CONTENT_TABLE_V_2,
+            AUTH_TOKEN_TABLE_V_0,
+            USER_PASSWORD_CREDENTIALS_V_0,
+            USER_PLAYLIST_TABLE_V_3,
+            USER_PLAYLIST_TRACKS_TABLE_V_3,
+            USER_ROLE_TABLE_V_4,
+            USER_EXTRA_PERMISSION_TABLE_V_4,
+            BANDWIDTH_USAGE_TABLE_V_5,
+            LISTENING_EVENTS_TABLE_V_6,
+            USER_SETTINGS_TABLE_V_7,
+        ],
+        migration: Some(|conn: &Connection| {
+            USER_SETTINGS_TABLE_V_7.create(&conn)?;
             Ok(())
         }),
     },
@@ -1988,6 +2036,78 @@ impl UserListeningStore for SqliteUserStore {
     }
 }
 
+impl UserSettingsStore for SqliteUserStore {
+    fn get_user_setting(&self, user_id: usize, key: &str) -> Result<Option<UserSetting>> {
+        let start = Instant::now();
+        let conn = self.conn.lock().unwrap();
+
+        let result = conn.query_row(
+            "SELECT setting_value FROM user_settings WHERE user_id = ?1 AND setting_key = ?2",
+            params![user_id, key],
+            |row| row.get::<usize, Option<String>>(0),
+        );
+
+        record_db_query("get_user_setting", start.elapsed());
+
+        match result {
+            Ok(Some(value)) => {
+                let setting = UserSetting::from_key_value(key, &value)
+                    .map_err(|e| anyhow::anyhow!(e))?;
+                Ok(Some(setting))
+            }
+            Ok(None) => Ok(None),
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+            Err(e) => Err(e.into()),
+        }
+    }
+
+    fn set_user_setting(&self, user_id: usize, setting: UserSetting) -> Result<()> {
+        let start = Instant::now();
+        let conn = self.conn.lock().unwrap();
+
+        let key = setting.key();
+        let value = setting.value_to_string();
+
+        conn.execute(
+            "INSERT INTO user_settings (user_id, setting_key, setting_value, updated)
+             VALUES (?1, ?2, ?3, (cast(strftime('%s','now') as int)))
+             ON CONFLICT(user_id, setting_key) DO UPDATE SET
+                 setting_value = excluded.setting_value,
+                 updated = excluded.updated",
+            params![user_id, key, value],
+        )?;
+
+        record_db_query("set_user_setting", start.elapsed());
+        Ok(())
+    }
+
+    fn get_all_user_settings(&self, user_id: usize) -> Result<Vec<UserSetting>> {
+        let start = Instant::now();
+        let conn = self.conn.lock().unwrap();
+
+        let mut stmt =
+            conn.prepare("SELECT setting_key, setting_value FROM user_settings WHERE user_id = ?1")?;
+        let rows = stmt.query_map(params![user_id], |row| {
+            Ok((
+                row.get::<usize, String>(0)?,
+                row.get::<usize, Option<String>>(1)?.unwrap_or_default(),
+            ))
+        })?;
+
+        let mut settings = Vec::new();
+        for row in rows {
+            let (key, value) = row?;
+            // Skip unknown keys for forward compatibility
+            if let Ok(setting) = UserSetting::from_key_value(&key, &value) {
+                settings.push(setting);
+            }
+        }
+
+        record_db_query("get_all_user_settings", start.elapsed());
+        Ok(settings)
+    }
+}
+
 #[cfg(test)]
 mod tests {
 
@@ -2128,16 +2248,16 @@ mod tests {
             assert_eq!(db_version, BASE_DB_VERSION as i64 + 3);
         }
 
-        // Now open with SqliteUserStore, which should trigger migration to latest (V6)
+        // Now open with SqliteUserStore, which should trigger migration to latest (V7)
         let store = SqliteUserStore::new(&temp_file_path).unwrap();
 
-        // Verify we're now at the latest version (V6)
+        // Verify we're now at the latest version (V7)
         {
             let conn = store.conn.lock().unwrap();
             let db_version: i64 = conn
                 .query_row("PRAGMA user_version;", [], |row| row.get(0))
                 .unwrap();
-            assert_eq!(db_version, BASE_DB_VERSION as i64 + 6);
+            assert_eq!(db_version, BASE_DB_VERSION as i64 + 7);
 
             // Verify new tables exist
             let user_role_table_exists: i64 = conn
@@ -3458,5 +3578,197 @@ mod tests {
         assert!(!dates.contains(&20241202));
         assert!(!dates.contains(&20241203));
         assert!(!dates.contains(&20241204));
+    }
+
+    // ==================== User Settings Tests ====================
+
+    #[test]
+    fn test_get_setting_returns_none_when_not_set() {
+        let (store, _temp_dir) = create_tmp_store();
+        let user_id = store.create_user("test_user").unwrap();
+
+        let result = store
+            .get_user_setting(user_id, "enable_direct_downloads")
+            .unwrap();
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_get_setting_returns_none_for_unknown_key() {
+        let (store, _temp_dir) = create_tmp_store();
+        let user_id = store.create_user("test_user").unwrap();
+
+        let result = store.get_user_setting(user_id, "unknown_key").unwrap();
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_set_and_get_setting() {
+        let (store, _temp_dir) = create_tmp_store();
+        let user_id = store.create_user("test_user").unwrap();
+
+        store
+            .set_user_setting(user_id, UserSetting::DirectDownloadsEnabled(true))
+            .unwrap();
+
+        let result = store
+            .get_user_setting(user_id, "enable_direct_downloads")
+            .unwrap();
+        assert_eq!(result, Some(UserSetting::DirectDownloadsEnabled(true)));
+    }
+
+    #[test]
+    fn test_set_setting_overwrites_existing() {
+        let (store, _temp_dir) = create_tmp_store();
+        let user_id = store.create_user("test_user").unwrap();
+
+        store
+            .set_user_setting(user_id, UserSetting::DirectDownloadsEnabled(false))
+            .unwrap();
+        store
+            .set_user_setting(user_id, UserSetting::DirectDownloadsEnabled(true))
+            .unwrap();
+
+        let result = store
+            .get_user_setting(user_id, "enable_direct_downloads")
+            .unwrap();
+        assert_eq!(result, Some(UserSetting::DirectDownloadsEnabled(true)));
+    }
+
+    #[test]
+    fn test_get_all_user_settings_empty() {
+        let (store, _temp_dir) = create_tmp_store();
+        let user_id = store.create_user("test_user").unwrap();
+
+        let settings = store.get_all_user_settings(user_id).unwrap();
+        assert!(settings.is_empty());
+    }
+
+    #[test]
+    fn test_get_all_user_settings_returns_known_settings() {
+        let (store, _temp_dir) = create_tmp_store();
+        let user_id = store.create_user("test_user").unwrap();
+
+        store
+            .set_user_setting(user_id, UserSetting::DirectDownloadsEnabled(true))
+            .unwrap();
+
+        let settings = store.get_all_user_settings(user_id).unwrap();
+        assert_eq!(settings.len(), 1);
+        assert!(settings.contains(&UserSetting::DirectDownloadsEnabled(true)));
+    }
+
+    #[test]
+    fn test_get_all_user_settings_skips_unknown_keys() {
+        let (store, _temp_dir) = create_tmp_store();
+        let user_id = store.create_user("test_user").unwrap();
+
+        // Set a known setting
+        store
+            .set_user_setting(user_id, UserSetting::DirectDownloadsEnabled(true))
+            .unwrap();
+
+        // Manually insert an unknown setting directly into the database
+        {
+            let conn = store.conn.lock().unwrap();
+            conn.execute(
+                "INSERT INTO user_settings (user_id, setting_key, setting_value, updated)
+                 VALUES (?1, ?2, ?3, 0)",
+                params![user_id, "unknown_future_setting", "some_value"],
+            )
+            .unwrap();
+        }
+
+        // get_all_user_settings should skip the unknown key
+        let settings = store.get_all_user_settings(user_id).unwrap();
+        assert_eq!(settings.len(), 1);
+        assert!(settings.contains(&UserSetting::DirectDownloadsEnabled(true)));
+    }
+
+    #[test]
+    fn test_settings_are_user_specific() {
+        let (store, _temp_dir) = create_tmp_store();
+        let user1_id = store.create_user("user1").unwrap();
+        let user2_id = store.create_user("user2").unwrap();
+
+        store
+            .set_user_setting(user1_id, UserSetting::DirectDownloadsEnabled(true))
+            .unwrap();
+        store
+            .set_user_setting(user2_id, UserSetting::DirectDownloadsEnabled(false))
+            .unwrap();
+
+        let user1_value = store
+            .get_user_setting(user1_id, "enable_direct_downloads")
+            .unwrap();
+        let user2_value = store
+            .get_user_setting(user2_id, "enable_direct_downloads")
+            .unwrap();
+
+        assert_eq!(user1_value, Some(UserSetting::DirectDownloadsEnabled(true)));
+        assert_eq!(
+            user2_value,
+            Some(UserSetting::DirectDownloadsEnabled(false))
+        );
+    }
+
+    #[test]
+    fn test_settings_deleted_with_user() {
+        let (store, _temp_dir) = create_tmp_store();
+        let user_id = store.create_user("test_user").unwrap();
+
+        store
+            .set_user_setting(user_id, UserSetting::DirectDownloadsEnabled(true))
+            .unwrap();
+
+        // Delete the user via direct SQL (CASCADE should delete settings)
+        {
+            let conn = store.conn.lock().unwrap();
+            conn.execute("DELETE FROM user WHERE id = ?1", params![user_id])
+                .unwrap();
+        }
+
+        // Verify settings are gone by checking the table directly
+        {
+            let conn = store.conn.lock().unwrap();
+            let count: i64 = conn
+                .query_row(
+                    "SELECT COUNT(*) FROM user_settings WHERE user_id = ?1",
+                    params![user_id],
+                    |row| row.get(0),
+                )
+                .unwrap();
+            assert_eq!(count, 0);
+        }
+    }
+
+    #[test]
+    fn test_enable_direct_downloads_setting_lifecycle() {
+        let (store, _temp_dir) = create_tmp_store();
+        let user_id = store.create_user("test_user").unwrap();
+
+        // Default should be None (not set)
+        let result = store
+            .get_user_setting(user_id, "enable_direct_downloads")
+            .unwrap();
+        assert!(result.is_none());
+
+        // Set to true
+        store
+            .set_user_setting(user_id, UserSetting::DirectDownloadsEnabled(true))
+            .unwrap();
+        let result = store
+            .get_user_setting(user_id, "enable_direct_downloads")
+            .unwrap();
+        assert_eq!(result, Some(UserSetting::DirectDownloadsEnabled(true)));
+
+        // Set to false
+        store
+            .set_user_setting(user_id, UserSetting::DirectDownloadsEnabled(false))
+            .unwrap();
+        let result = store
+            .get_user_setting(user_id, "enable_direct_downloads")
+            .unwrap();
+        assert_eq!(result, Some(UserSetting::DirectDownloadsEnabled(false)));
     }
 }

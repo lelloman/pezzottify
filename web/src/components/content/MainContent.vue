@@ -7,6 +7,7 @@
     <Album v-else-if="albumId" :albumId="albumId" />
     <Artist v-else-if="artistId" :artistId="artistId" />
     <UserPlaylist v-else-if="playlistId" :playlistId="playlistId" />
+    <UserSettings v-else-if="isSettingsRoute" />
     <div v-else>
       <h1 class="text-2xl font-bold mb-4">Welcome to Home</h1>
       <p>This is your home content.</p>
@@ -16,11 +17,12 @@
 </template>
 
 <script setup>
-import { ref, watch } from 'vue';
+import { ref, watch, computed } from 'vue';
 import Track from '@/components/content/Track.vue';
 import Album from '@/components/content/Album.vue';
 import Artist from '@/components/content/Artist.vue';
 import UserPlaylist from '@/components/content/UserPlaylist.vue';
+import UserSettings from '@/components/content/UserSettings.vue';
 import { useRoute } from 'vue-router';
 import SearchResults from './SearchResults.vue';
 
@@ -32,6 +34,7 @@ const trackId = ref(route.params.trackId || '');
 const artistId = ref(route.params.artistId || '');
 const albumId = ref(route.params.albumId || '');
 const playlistId = ref(route.params.playlistId || '');
+const isSettingsRoute = computed(() => route.name === 'settings');
 
 const fetchResults = async (newQuery, queryParams) => {
   console.log("watch query? " + newQuery)

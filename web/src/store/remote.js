@@ -145,6 +145,27 @@ export const useRemoteStore = defineStore('remote', () => {
     }
   }
 
+  // User settings operations
+  const fetchUserSettings = async () => {
+    try {
+      const response = await axios.get('/v1/user/settings');
+      return response.data.settings;
+    } catch (error) {
+      console.error('Failed to fetch user settings:', error);
+      return {};
+    }
+  };
+
+  const updateUserSettings = async (settings) => {
+    try {
+      await axios.put('/v1/user/settings', { settings });
+      return true;
+    } catch (error) {
+      console.error('Failed to update user settings:', error);
+      return false;
+    }
+  };
+
   // Track operations
   const fetchTrack = async (trackId) => {
     try {
@@ -221,6 +242,8 @@ export const useRemoteStore = defineStore('remote', () => {
     updatePlaylistName,
     addTracksToPlaylist,
     removeTracksFromPlaylist,
+    fetchUserSettings,
+    updateUserSettings,
     fetchTrack,
     fetchResolvedTrack,
     fetchResolvedAlbum,

@@ -750,4 +750,41 @@ impl TestClient {
             .await
             .expect("Get what's new request failed")
     }
+
+    // =========================================================================
+    // User Settings API
+    // =========================================================================
+
+    /// GET /v1/user/settings
+    pub async fn get_user_settings(&self) -> Response {
+        self.client
+            .get(format!("{}/v1/user/settings", self.base_url))
+            .send()
+            .await
+            .expect("Get user settings request failed")
+    }
+
+    /// PUT /v1/user/settings (deprecated - use update_user_settings_json)
+    #[allow(dead_code)]
+    pub async fn update_user_settings(
+        &self,
+        settings: std::collections::HashMap<&str, &str>,
+    ) -> Response {
+        self.client
+            .put(format!("{}/v1/user/settings", self.base_url))
+            .json(&json!({ "settings": settings }))
+            .send()
+            .await
+            .expect("Update user settings request failed")
+    }
+
+    /// PUT /v1/user/settings with JSON body
+    pub async fn update_user_settings_json(&self, body: serde_json::Value) -> Response {
+        self.client
+            .put(format!("{}/v1/user/settings", self.base_url))
+            .json(&body)
+            .send()
+            .await
+            .expect("Update user settings request failed")
+    }
 }

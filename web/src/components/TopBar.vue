@@ -1,12 +1,22 @@
 <template>
   <header>
-    <div class="searchInputContainer">
-      <div class="searchBar">
-        <input class="searchInput" type="text" placeholder="Search..." @input="onInput" inputmode="search"
-          v-model="localQuery" />
-        <button v-if="localQuery" id="clearQueryButton" type="submit" name="clearQueryButton" @click="clearQuery()">
-          <CrossIcon class="scaleClickFeedback crossIcon" />
-        </button>
+    <div class="topBarContent">
+      <div class="searchInputContainer">
+        <div class="searchBar">
+          <input class="searchInput" type="text" placeholder="Search..." @input="onInput" inputmode="search"
+            v-model="localQuery" />
+          <button v-if="localQuery" id="clearQueryButton" type="submit" name="clearQueryButton" @click="clearQuery()">
+            <CrossIcon class="scaleClickFeedback crossIcon" />
+          </button>
+        </div>
+      </div>
+      <div class="userActions">
+        <router-link to="/settings" class="settingsLink scaleClickFeedback" title="Settings">
+          <SettingsIcon class="settingsIcon" />
+        </router-link>
+        <router-link to="/logout" class="logoutLink scaleClickFeedback" title="Logout">
+          <LogoutIcon class="logoutIcon" />
+        </router-link>
       </div>
     </div>
   </header>
@@ -17,6 +27,8 @@ import { ref, watch } from 'vue';
 import { debounce } from 'lodash-es'; // Lightweight debounce
 import { useRouter, useRoute } from 'vue-router';
 import CrossIcon from './icons/CrossIcon.vue';
+import SettingsIcon from './icons/SettingsIcon.vue';
+import LogoutIcon from './icons/LogoutIcon.vue';
 
 const emit = defineEmits(['search']);
 const inputValue = ref('');
@@ -113,5 +125,45 @@ function clearQuery() {
   width: 24px;
   height: 24px;
   stroke: #666;
+}
+
+.topBarContent {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  height: 100%;
+  padding: 0 var(--spacing-4);
+}
+
+.userActions {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-3);
+  flex-shrink: 0;
+}
+
+.settingsLink,
+.logoutLink {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-full);
+  color: var(--text-subdued);
+  transition: color var(--transition-fast), background-color var(--transition-fast);
+}
+
+.settingsLink:hover,
+.logoutLink:hover {
+  color: var(--text-base);
+  background-color: var(--bg-elevated);
+}
+
+.settingsIcon,
+.logoutIcon {
+  width: 20px;
+  height: 20px;
 }
 </style>

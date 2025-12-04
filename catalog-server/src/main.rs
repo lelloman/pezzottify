@@ -123,7 +123,7 @@ async fn main() -> Result<()> {
         catalog_store.get_tracks_count(),
     );
 
-    let user_store = Box::new(SqliteUserStore::new(&cli_args.user_store_file_path)?);
+    let user_store = Arc::new(SqliteUserStore::new(&cli_args.user_store_file_path)?);
     info!("Indexing content for search...");
 
     #[cfg(not(feature = "no_search"))]

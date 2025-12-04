@@ -1,5 +1,6 @@
 use super::auth::{AuthToken, AuthTokenValue, UserAuthCredentials};
 use super::permissions::{Permission, PermissionGrant, UserRole};
+use super::settings::UserSetting;
 use super::user_models::{
     BandwidthSummary, BandwidthUsage, DailyListeningStats, LikedContentType, ListeningEvent,
     ListeningSummary, TrackListeningStats, UserListeningHistoryEntry, UserPlaylist,
@@ -236,8 +237,26 @@ pub trait UserListeningStore: Send + Sync {
     fn prune_listening_events(&self, older_than_days: u32) -> Result<usize>;
 }
 
-/// Combined trait for user storage with bandwidth and listening tracking
-pub trait FullUserStore: UserStore + UserBandwidthStore + UserListeningStore {}
+/// Trait for user settings storage operations.
+///
+/// The trait works with typed `UserSetting` enum values.
+/// Implementations handle serialization to/from strings internally.
+pub trait UserSettingsStore: Send + Sync {
+    /// Gets a user setting by key.
+    /// Returns Ok(None) if the setting does not exist.
+    /// Returns Err if the stored value cannot be parsed.
+    fn get_user_setting(&self, user_id: usize, key: &str) -> Result<Option<UserSetting>>;
 
-// Blanket implementation for any type that implements UserStore, UserBandwidthStore, and UserListeningStore
-impl<T: UserStore + UserBandwidthStore + UserListeningStore> FullUserStore for T {}
+    /// Sets a user setting. Creates or updates the setting.
+    fn set_user_setting(&self, user_id: usize, setting: UserSetting) -> Result<()>;
+
+    /// Gets all settings for a user.
+    /// Unknown keys in the database are skipped (for forward compatibility).
+    fn get_all_user_settings(&self, user_id: usize) -> Result<Vec<UserSetting>>;
+}
+
+/// Combined trait for user storage with bandwidth, listening tracking, and settings
+pub trait FullUserStore: UserStore + UserBandwidthStore + UserListeningStore + UserSettingsStore {}
+
+// Blanket implementation for any type that implements all user store traits
+impl<T: UserStore + UserBandwidthStore + UserListeningStore + UserSettingsStore> FullUserStore for T {}

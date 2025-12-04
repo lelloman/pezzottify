@@ -663,7 +663,7 @@ fn main() -> Result<()> {
     };
     let user_store = SqliteUserStore::new(auth_store_file_path.clone())?;
     let catalog_store = Arc::new(NullCatalogStore);
-    let mut user_manager = UserManager::new(catalog_store, Box::new(user_store));
+    let mut user_manager = UserManager::new(catalog_store, Arc::new(user_store));
 
     // Print welcome screen instead of clap help
     print_welcome(&auth_store_file_path.display().to_string());
