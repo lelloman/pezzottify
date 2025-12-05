@@ -13,19 +13,26 @@ This document tracks all implementation tasks for the WebSocket infrastructure f
 
 Before writing any code, verify assumptions from the plan.
 
-### 0.1 [ ] Verify auth mechanisms work for WS upgrade
+### 0.1 [x] Verify auth mechanisms work for WS upgrade
 
 **Context:** WebSocket upgrade requests need to be authenticated using the same mechanisms as REST endpoints (cookies for browsers, Authorization header for native clients).
 
 **Tasks:**
-- [ ] 0.1.1 Check how `Session` extractor works in axum - does it run on WS upgrade requests?
-- [ ] 0.1.2 Verify cookies are accessible during WS upgrade
-- [ ] 0.1.3 Verify Authorization header is accessible during WS upgrade
-- [ ] 0.1.4 Document any adjustments needed for WS-specific auth handling
+- [x] 0.1.1 Check how `Session` extractor works in axum - does it run on WS upgrade requests?
+- [x] 0.1.2 Verify cookies are accessible during WS upgrade
+- [x] 0.1.3 Verify Authorization header is accessible during WS upgrade
+- [x] 0.1.4 Document any adjustments needed for WS-specific auth handling
 
 **Files to check:**
 - `catalog-server/src/server/session.rs`
 - Axum documentation for WebSocket + extractors
+
+**Findings:**
+- `Session` uses `FromRequestParts<ServerState>` trait (session.rs:149) which extracts from HTTP request parts before body consumption
+- WebSocket upgrade is an HTTP request, so `FromRequestParts` extractors work normally
+- Cookies: extracted via `CookieJar::from_request_parts` (session.rs:48-58) - browsers send cookies with WS upgrade
+- Authorization header: extracted directly from `parts.headers` (session.rs:60-66) - works for native clients
+- **No adjustments needed** - existing Session extractor works as-is for WebSocket handlers
 
 ---
 
