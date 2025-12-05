@@ -599,7 +599,7 @@ async fn get_sync_events(
 
 ### 3.1 WebSocket Message Types
 
-#### [ ] 3.1.1 Add `SYNC` message type constant
+#### [x] 3.1.1 Add `SYNC` message type constant
 
 **Description:** Add constant for sync message type.
 
@@ -614,7 +614,7 @@ pub mod msg_types {
 }
 ```
 
-#### [ ] 3.1.2 Create `SyncMessage` payload struct
+#### [x] 3.1.2 Create `SyncMessage` payload struct
 
 **Description:** Define the sync message payload structure.
 
@@ -638,7 +638,7 @@ pub mod sync {
 
 ### 3.2 Broadcast to Other Devices
 
-#### [ ] 3.2.1 Implement `broadcast_to_others` method
+#### [x] 3.2.1 Implement `broadcast_to_others` method
 
 **Description:** Broadcast message to all user's devices except source.
 
@@ -669,7 +669,7 @@ pub async fn broadcast_to_others(
 
 ### 3.3 Broadcast on State Change
 
-#### [ ] 3.3.1 Add ConnectionManager to handler state
+#### [x] 3.3.1 Add ConnectionManager to handler state
 
 **Description:** Make ConnectionManager available to HTTP handlers.
 
@@ -677,7 +677,7 @@ pub async fn broadcast_to_others(
 - File: `catalog-server/src/server/server.rs`
 - Add to app state / extension
 
-#### [ ] 3.3.2 Update like handler to broadcast
+#### [x] 3.3.2 Update like handler to broadcast
 
 **Description:** Broadcast sync event after logging like.
 
@@ -697,7 +697,7 @@ if let Some(device_id) = session.device_id {
 }
 ```
 
-#### [ ] 3.3.3 Update unlike handler to broadcast
+#### [x] 3.3.3 Update unlike handler to broadcast
 
 **Description:** Broadcast sync event after logging unlike.
 

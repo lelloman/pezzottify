@@ -293,8 +293,8 @@ use super::sync_events::{StoredEvent, UserEvent};
 /// Trait for sync event storage operations
 pub trait UserEventStore: Send + Sync {
     /// Appends an event to the user's event log.
-    /// Returns the sequence number of the new event.
-    fn append_event(&self, user_id: usize, event: &UserEvent) -> Result<i64>;
+    /// Returns the stored event with sequence number and server timestamp.
+    fn append_event(&self, user_id: usize, event: &UserEvent) -> Result<StoredEvent>;
 
     /// Gets events since a given sequence number.
     /// Returns events with seq > since_seq, ordered by seq ascending.

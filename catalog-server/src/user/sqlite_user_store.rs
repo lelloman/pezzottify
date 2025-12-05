@@ -912,12 +912,12 @@ impl SqliteUserStore {
     // ========================================================================
 
     /// Append an event to the user's event log.
-    /// Returns the sequence number of the new event.
+    /// Returns the stored event with sequence number and server timestamp.
     pub fn append_event(
         &self,
         user_id: usize,
         event: &crate::user::sync_events::UserEvent,
-    ) -> Result<i64> {
+    ) -> Result<crate::user::sync_events::StoredEvent> {
         let start = Instant::now();
         let conn = self.conn.lock().unwrap();
         let payload = serde_json::to_string(event)?;
@@ -929,8 +929,20 @@ impl SqliteUserStore {
         )?;
 
         let seq = conn.last_insert_rowid();
+
+        // Fetch the server_timestamp that was set by the database
+        let server_timestamp: i64 = conn.query_row(
+            "SELECT server_timestamp FROM user_events WHERE seq = ?1",
+            params![seq],
+            |row| row.get(0),
+        )?;
+
         record_db_query("append_event", start.elapsed());
-        Ok(seq)
+        Ok(crate::user::sync_events::StoredEvent {
+            seq,
+            event: event.clone(),
+            server_timestamp,
+        })
     }
 
     /// Get events since a given sequence number.
@@ -2608,7 +2620,7 @@ impl user_store::UserEventStore for SqliteUserStore {
         &self,
         user_id: usize,
         event: &crate::user::sync_events::UserEvent,
-    ) -> Result<i64> {
+    ) -> Result<crate::user::sync_events::StoredEvent> {
         SqliteUserStore::append_event(self, user_id, event)
     }
 
@@ -4318,11 +4330,11 @@ mod tests {
             content_id: "album_123".to_string(),
         };
 
-        let seq1 = store.append_event(user_id, &event).unwrap();
-        let seq2 = store.append_event(user_id, &event).unwrap();
+        let stored1 = store.append_event(user_id, &event).unwrap();
+        let stored2 = store.append_event(user_id, &event).unwrap();
 
-        assert!(seq1 > 0);
-        assert!(seq2 > seq1);
+        assert!(stored1.seq > 0);
+        assert!(stored2.seq > stored1.seq);
     }
 
     #[test]
@@ -4343,25 +4355,25 @@ mod tests {
             content_id: "album_1".to_string(),
         };
 
-        let seq1 = store.append_event(user_id, &event1).unwrap();
-        let seq2 = store.append_event(user_id, &event2).unwrap();
-        let seq3 = store.append_event(user_id, &event3).unwrap();
+        let stored1 = store.append_event(user_id, &event1).unwrap();
+        let stored2 = store.append_event(user_id, &event2).unwrap();
+        let stored3 = store.append_event(user_id, &event3).unwrap();
 
         // Get all events (since 0)
         let events = store.get_events_since(user_id, 0).unwrap();
         assert_eq!(events.len(), 3);
-        assert_eq!(events[0].seq, seq1);
-        assert_eq!(events[1].seq, seq2);
-        assert_eq!(events[2].seq, seq3);
+        assert_eq!(events[0].seq, stored1.seq);
+        assert_eq!(events[1].seq, stored2.seq);
+        assert_eq!(events[2].seq, stored3.seq);
 
-        // Get events since seq1
-        let events = store.get_events_since(user_id, seq1).unwrap();
+        // Get events since stored1.seq
+        let events = store.get_events_since(user_id, stored1.seq).unwrap();
         assert_eq!(events.len(), 2);
-        assert_eq!(events[0].seq, seq2);
-        assert_eq!(events[1].seq, seq3);
+        assert_eq!(events[0].seq, stored2.seq);
+        assert_eq!(events[1].seq, stored3.seq);
 
-        // Get events since seq3 (should be empty)
-        let events = store.get_events_since(user_id, seq3).unwrap();
+        // Get events since stored3.seq (should be empty)
+        let events = store.get_events_since(user_id, stored3.seq).unwrap();
         assert!(events.is_empty());
     }
 
@@ -4406,11 +4418,11 @@ mod tests {
             content_id: "album_1".to_string(),
         };
 
-        let seq1 = store.append_event(user_id, &event).unwrap();
-        assert_eq!(store.get_current_seq(user_id).unwrap(), seq1);
+        let stored1 = store.append_event(user_id, &event).unwrap();
+        assert_eq!(store.get_current_seq(user_id).unwrap(), stored1.seq);
 
-        let seq2 = store.append_event(user_id, &event).unwrap();
-        assert_eq!(store.get_current_seq(user_id).unwrap(), seq2);
+        let stored2 = store.append_event(user_id, &event).unwrap();
+        assert_eq!(store.get_current_seq(user_id).unwrap(), stored2.seq);
     }
 
     #[test]
@@ -4432,12 +4444,12 @@ mod tests {
             content_id: "album_1".to_string(),
         };
 
-        let seq1 = store.append_event(user_id, &event).unwrap();
+        let stored1 = store.append_event(user_id, &event).unwrap();
         let _ = store.append_event(user_id, &event).unwrap();
         let _ = store.append_event(user_id, &event).unwrap();
 
         let min_seq = store.get_min_seq(user_id).unwrap();
-        assert_eq!(min_seq, Some(seq1));
+        assert_eq!(min_seq, Some(stored1.seq));
     }
 
     #[test]

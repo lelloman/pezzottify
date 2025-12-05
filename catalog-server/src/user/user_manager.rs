@@ -58,7 +58,7 @@ impl UserManager {
         &self,
         user_id: usize,
         event: &super::sync_events::UserEvent,
-    ) -> Result<i64> {
+    ) -> Result<super::sync_events::StoredEvent> {
         self.user_store.append_event(user_id, event)
     }
 

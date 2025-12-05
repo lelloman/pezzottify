@@ -950,9 +950,13 @@ mod tests {
         fn append_event(
             &self,
             _user_id: usize,
-            _event: &crate::user::sync_events::UserEvent,
-        ) -> anyhow::Result<i64> {
-            Ok(1)
+            event: &crate::user::sync_events::UserEvent,
+        ) -> anyhow::Result<crate::user::sync_events::StoredEvent> {
+            Ok(crate::user::sync_events::StoredEvent {
+                seq: 1,
+                event: event.clone(),
+                server_timestamp: 0,
+            })
         }
 
         fn get_events_since(
@@ -1597,9 +1601,13 @@ mod tests {
         fn append_event(
             &self,
             _user_id: usize,
-            _event: &crate::user::sync_events::UserEvent,
-        ) -> anyhow::Result<i64> {
-            Ok(1)
+            event: &crate::user::sync_events::UserEvent,
+        ) -> anyhow::Result<crate::user::sync_events::StoredEvent> {
+            Ok(crate::user::sync_events::StoredEvent {
+                seq: 1,
+                event: event.clone(),
+                server_timestamp: 0,
+            })
         }
 
         fn get_events_since(

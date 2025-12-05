@@ -105,6 +105,22 @@ pub mod msg_types {
     pub const PONG: &str = "pong";
     /// Server error response.
     pub const ERROR: &str = "error";
+    /// Sync event notification (server -> client).
+    pub const SYNC: &str = "sync";
+}
+
+/// Sync-related message payloads.
+pub mod sync {
+    use crate::user::sync_events::StoredEvent;
+    use serde::{Deserialize, Serialize};
+
+    /// Payload for sync event messages.
+    ///
+    /// Sent to notify clients of state changes (likes, settings, playlists, permissions).
+    #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+    pub struct SyncEventMessage {
+        pub event: StoredEvent,
+    }
 }
 
 #[cfg(test)]

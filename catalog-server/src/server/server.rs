@@ -807,37 +807,6 @@ async fn get_whats_new(
     }
 }
 
-fn update_user_liked_content(
-    user_manager: GuardedUserManager,
-    user_id: usize,
-    content_type: LikedContentType,
-    content_id: &str,
-    liked: bool,
-) -> Response {
-    let um = user_manager.lock().unwrap();
-    match um.set_user_liked_content(user_id, content_id, content_type, liked) {
-        Ok(_) => {
-            // Log sync event
-            let event = if liked {
-                UserEvent::ContentLiked {
-                    content_type,
-                    content_id: content_id.to_string(),
-                }
-            } else {
-                UserEvent::ContentUnliked {
-                    content_type,
-                    content_id: content_id.to_string(),
-                }
-            };
-            if let Err(e) = um.append_event(user_id, &event) {
-                warn!("Failed to log sync event: {}", e);
-            }
-            StatusCode::OK.into_response()
-        }
-        Err(_) => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
-    }
-}
-
 fn parse_content_type(content_type_str: &str) -> Option<LikedContentType> {
     match content_type_str {
         "artist" => Some(LikedContentType::Artist),
@@ -850,23 +819,85 @@ fn parse_content_type(content_type_str: &str) -> Option<LikedContentType> {
 async fn add_user_liked_content(
     session: Session,
     State(user_manager): State<GuardedUserManager>,
+    State(connection_manager): State<GuardedConnectionManager>,
     Path((content_type_str, content_id)): Path<(String, String)>,
 ) -> Response {
     let Some(content_type) = parse_content_type(&content_type_str) else {
         return StatusCode::BAD_REQUEST.into_response();
     };
-    update_user_liked_content(user_manager, session.user_id, content_type, &content_id, true)
+
+    let stored_event = {
+        let um = user_manager.lock().unwrap();
+        match um.set_user_liked_content(session.user_id, &content_id, content_type, true) {
+            Ok(_) => {
+                let event = UserEvent::ContentLiked {
+                    content_type,
+                    content_id: content_id.to_string(),
+                };
+                match um.append_event(session.user_id, &event) {
+                    Ok(stored) => Some(stored),
+                    Err(e) => {
+                        warn!("Failed to log sync event: {}", e);
+                        None
+                    }
+                }
+            }
+            Err(_) => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+        }
+    };
+
+    // Broadcast to other devices if we have a stored event and device_id
+    if let (Some(stored_event), Some(device_id)) = (stored_event, session.device_id) {
+        let ws_msg = super::websocket::messages::ServerMessage::new(
+            super::websocket::messages::msg_types::SYNC,
+            super::websocket::messages::sync::SyncEventMessage { event: stored_event },
+        );
+        connection_manager.send_to_other_devices(session.user_id, device_id, ws_msg).await;
+    }
+
+    StatusCode::OK.into_response()
 }
 
 async fn delete_user_liked_content(
     session: Session,
     State(user_manager): State<GuardedUserManager>,
+    State(connection_manager): State<GuardedConnectionManager>,
     Path((content_type_str, content_id)): Path<(String, String)>,
 ) -> Response {
     let Some(content_type) = parse_content_type(&content_type_str) else {
         return StatusCode::BAD_REQUEST.into_response();
     };
-    update_user_liked_content(user_manager, session.user_id, content_type, &content_id, false)
+
+    let stored_event = {
+        let um = user_manager.lock().unwrap();
+        match um.set_user_liked_content(session.user_id, &content_id, content_type, false) {
+            Ok(_) => {
+                let event = UserEvent::ContentUnliked {
+                    content_type,
+                    content_id: content_id.to_string(),
+                };
+                match um.append_event(session.user_id, &event) {
+                    Ok(stored) => Some(stored),
+                    Err(e) => {
+                        warn!("Failed to log sync event: {}", e);
+                        None
+                    }
+                }
+            }
+            Err(_) => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+        }
+    };
+
+    // Broadcast to other devices if we have a stored event and device_id
+    if let (Some(stored_event), Some(device_id)) = (stored_event, session.device_id) {
+        let ws_msg = super::websocket::messages::ServerMessage::new(
+            super::websocket::messages::msg_types::SYNC,
+            super::websocket::messages::sync::SyncEventMessage { event: stored_event },
+        );
+        connection_manager.send_to_other_devices(session.user_id, device_id, ws_msg).await;
+    }
+
+    StatusCode::OK.into_response()
 }
 
 async fn get_user_liked_content(
@@ -3017,9 +3048,13 @@ mod tests {
         fn append_event(
             &self,
             _user_id: usize,
-            _event: &crate::user::sync_events::UserEvent,
-        ) -> Result<i64> {
-            Ok(1)
+            event: &crate::user::sync_events::UserEvent,
+        ) -> Result<crate::user::sync_events::StoredEvent> {
+            Ok(crate::user::sync_events::StoredEvent {
+                seq: 1,
+                event: event.clone(),
+                server_timestamp: 0,
+            })
         }
 
         fn get_events_since(
