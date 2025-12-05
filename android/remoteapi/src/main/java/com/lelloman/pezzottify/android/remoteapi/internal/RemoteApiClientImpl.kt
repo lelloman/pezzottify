@@ -12,6 +12,8 @@ import com.lelloman.pezzottify.android.domain.remoteapi.response.ListeningEventR
 import com.lelloman.pezzottify.android.domain.remoteapi.response.LoginSuccessResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.RemoteApiResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.SearchResponse
+import com.lelloman.pezzottify.android.domain.remoteapi.response.SyncEventsResponse
+import com.lelloman.pezzottify.android.domain.remoteapi.response.SyncStateResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.TrackResponse
 import com.lelloman.pezzottify.android.remoteapi.internal.requests.ListeningEventRequest
 import com.lelloman.pezzottify.android.remoteapi.internal.requests.LoginRequest
@@ -202,6 +204,23 @@ internal class RemoteApiClientImpl(
             ListeningEventRecordedResponse(id = body.id, created = body.created)
         )
     }
+
+    override suspend fun getSyncState(): RemoteApiResponse<SyncStateResponse> =
+        catchingNetworkError {
+            retrofit
+                .getSyncState(authToken = authToken)
+                .returnFromRetrofitResponse()
+        }
+
+    override suspend fun getSyncEvents(since: Long): RemoteApiResponse<SyncEventsResponse> =
+        catchingNetworkError {
+            val response = retrofit.getSyncEvents(authToken = authToken, since = since)
+            // Handle 410 Gone (events pruned)
+            if (response.code() == 410) {
+                return@catchingNetworkError RemoteApiResponse.Error.EventsPruned
+            }
+            response.returnFromRetrofitResponse()
+        }
 
     private suspend fun <T> catchingNetworkError(block: suspend () -> RemoteApiResponse<T>): RemoteApiResponse<T> =
         try {

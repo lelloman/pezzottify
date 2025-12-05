@@ -156,6 +156,11 @@ class UserContentSynchronizer internal constructor(
                 logger.error("syncItem() unknown error for ${item.contentId}: ${result.message}")
                 userContentStore.updateSyncStatus(item.contentId, SyncStatus.SyncError)
             }
+            is RemoteApiResponse.Error.EventsPruned -> {
+                // EventsPruned is not expected for like/unlike operations
+                logger.error("syncItem() unexpected events pruned error for ${item.contentId}")
+                userContentStore.updateSyncStatus(item.contentId, SyncStatus.SyncError)
+            }
         }
     }
 

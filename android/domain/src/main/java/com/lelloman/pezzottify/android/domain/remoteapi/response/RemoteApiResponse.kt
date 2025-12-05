@@ -11,6 +11,12 @@ sealed interface RemoteApiResponse<out T> {
 
         data object NotFound : Error
 
+        /**
+         * Returned when requesting sync events for a sequence that has been pruned.
+         * The client should perform a full sync instead.
+         */
+        data object EventsPruned : Error
+
         data class Unknown(val message: String) : Error
     }
 }

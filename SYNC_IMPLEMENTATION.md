@@ -972,7 +972,7 @@ const fetchSyncEvents = async (since) => {
 
 ### 5.1 Sync Event Models
 
-#### [ ] 5.1.1 Create `SyncEvent.kt` with event payload classes
+#### [x] 5.1.1 Create `SyncEvent.kt` with event payload classes
 
 **Description:** Define Kotlin data classes for sync events.
 
@@ -980,7 +980,7 @@ const fetchSyncEvents = async (since) => {
 - New file: `android/domain/src/main/java/com/lelloman/pezzottify/android/domain/sync/SyncEvent.kt`
 - Use kotlinx.serialization annotations
 
-#### [ ] 5.1.2 Create `StoredEvent` data class
+#### [x] 5.1.2 Create `StoredEvent` data class
 
 **Description:** Wrapper with seq, event, and timestamp.
 
@@ -991,21 +991,21 @@ const fetchSyncEvents = async (since) => {
 
 ### 5.2 Sync State Store
 
-#### [ ] 5.2.1 Create `SyncStateStore` interface
+#### [x] 5.2.1 Create `SyncStateStore` interface
 
 **Description:** Interface for cursor persistence.
 
 **Context:**
 - New file: `android/domain/src/main/java/com/lelloman/pezzottify/android/domain/sync/SyncStateStore.kt`
 
-#### [ ] 5.2.2 Implement `SyncStateStoreImpl` in localdata
+#### [x] 5.2.2 Implement `SyncStateStoreImpl` in localdata
 
 **Description:** Implementation using EncryptedSharedPreferences.
 
 **Context:**
 - New file: `android/localdata/src/main/java/.../sync/SyncStateStoreImpl.kt`
 
-#### [ ] 5.2.3 Add DI bindings for SyncStateStore
+#### [x] 5.2.3 Add DI bindings for SyncStateStore
 
 **Description:** Provide SyncStateStore via Hilt.
 
@@ -1016,28 +1016,28 @@ const fetchSyncEvents = async (since) => {
 
 ### 5.3 Sync API
 
-#### [ ] 5.3.1 Add `getSyncState` to RemoteApiClient
+#### [x] 5.3.1 Add `getSyncState` to RemoteApiClient
 
 **Description:** Add method to fetch full sync state.
 
 **Context:**
 - File: `android/remoteapi/.../RemoteApiClient.kt`
 
-#### [ ] 5.3.2 Add `getSyncEvents` to RemoteApiClient
+#### [x] 5.3.2 Add `getSyncEvents` to RemoteApiClient
 
 **Description:** Add method to fetch events since sequence.
 
 **Context:**
 - File: `android/remoteapi/.../RemoteApiClient.kt`
 
-#### [ ] 5.3.3 Create response data classes
+#### [x] 5.3.3 Create response data classes
 
 **Description:** Define `SyncStateResponse` and `SyncEventsResponse`.
 
 **Context:**
 - File: `android/remoteapi/.../response/SyncResponses.kt` or similar
 
-#### [ ] 5.3.4 Implement API calls in RemoteApiClientImpl
+#### [x] 5.3.4 Implement API calls in RemoteApiClientImpl
 
 **Description:** Implement the actual HTTP calls.
 
@@ -1048,28 +1048,28 @@ const fetchSyncEvents = async (since) => {
 
 ### 5.4 Sync Manager
 
-#### [ ] 5.4.1 Create `SyncManager` interface
+#### [x] 5.4.1 Create `SyncManager` interface
 
 **Description:** Interface for sync operations.
 
 **Context:**
 - New file: `android/domain/src/main/java/com/lelloman/pezzottify/android/domain/sync/SyncManager.kt`
 
-#### [ ] 5.4.2 Create `SyncState` sealed interface
+#### [x] 5.4.2 Create `SyncState` sealed interface
 
 **Description:** Define sync state variants (Idle, Syncing, Synced, Error).
 
 **Context:**
 - File: `android/domain/.../sync/SyncManager.kt`
 
-#### [ ] 5.4.3 Implement `SyncManagerImpl`
+#### [x] 5.4.3 Implement `SyncManagerImpl`
 
 **Description:** Implementation of sync manager with fullSync, catchUp, applyEvent.
 
 **Context:**
 - New file: `android/domain/src/main/java/.../sync/SyncManagerImpl.kt`
 
-#### [ ] 5.4.4 Add DI bindings for SyncManager
+#### [x] 5.4.4 Add DI bindings for SyncManager
 
 **Description:** Provide SyncManager via Hilt.
 

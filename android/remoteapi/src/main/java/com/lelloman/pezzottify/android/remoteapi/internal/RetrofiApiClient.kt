@@ -10,6 +10,8 @@ import com.lelloman.pezzottify.android.domain.remoteapi.response.ArtistResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.ImageResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.LoginSuccessResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.SearchResponse
+import com.lelloman.pezzottify.android.domain.remoteapi.response.SyncEventsResponse
+import com.lelloman.pezzottify.android.domain.remoteapi.response.SyncStateResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.TrackResponse
 import okhttp3.ResponseBody
 import retrofit2.Response
@@ -19,6 +21,7 @@ import retrofit2.http.GET
 import retrofit2.http.Header
 import retrofit2.http.POST
 import retrofit2.http.Path
+import retrofit2.http.Query
 
 internal interface RetrofitApiClient {
 
@@ -89,4 +92,15 @@ internal interface RetrofitApiClient {
         @Header("Authorization") authToken: String,
         @Body request: ListeningEventRequest,
     ): Response<ListeningEventResponse>
+
+    @GET("/v1/sync/state")
+    suspend fun getSyncState(
+        @Header("Authorization") authToken: String,
+    ): Response<SyncStateResponse>
+
+    @GET("/v1/sync/events")
+    suspend fun getSyncEvents(
+        @Header("Authorization") authToken: String,
+        @Query("since") since: Long,
+    ): Response<SyncEventsResponse>
 }

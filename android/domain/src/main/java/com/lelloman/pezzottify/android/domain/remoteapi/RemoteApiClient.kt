@@ -9,6 +9,8 @@ import com.lelloman.pezzottify.android.domain.remoteapi.response.ListeningEventR
 import com.lelloman.pezzottify.android.domain.remoteapi.response.LoginSuccessResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.RemoteApiResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.SearchResponse
+import com.lelloman.pezzottify.android.domain.remoteapi.response.SyncEventsResponse
+import com.lelloman.pezzottify.android.domain.remoteapi.response.SyncStateResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.TrackResponse
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.serialization.Serializable
@@ -53,6 +55,17 @@ interface RemoteApiClient {
     suspend fun unlikeContent(contentType: String, contentId: String): RemoteApiResponse<Unit>
 
     suspend fun recordListeningEvent(data: ListeningEventSyncData): RemoteApiResponse<ListeningEventRecordedResponse>
+
+    /**
+     * Get full user sync state for initial sync.
+     */
+    suspend fun getSyncState(): RemoteApiResponse<SyncStateResponse>
+
+    /**
+     * Get sync events since a given sequence number.
+     * Returns RemoteApiResponse.Error.EventsPruned if the sequence has been pruned.
+     */
+    suspend fun getSyncEvents(since: Long): RemoteApiResponse<SyncEventsResponse>
 
     @Serializable
     enum class SearchFilter {
