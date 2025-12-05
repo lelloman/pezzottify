@@ -189,24 +189,24 @@ Maps to UI indicator:
 
 ## Phase 3: Dependency Injection
 
-### 3.1 [ ] Add WebSocketManager to DI
+### 3.1 [x] Add WebSocketManager to DI
 
 **File:** `android/remoteapi/src/main/java/com/lelloman/pezzottify/android/remoteapi/RemoteApiModule.kt`
 
 **Tasks:**
-- [ ] 3.1.1 Add `@Provides @Singleton` function for `WebSocketManager`
-- [ ] 3.1.2 Inject required dependencies (AuthStore, HostUrlProvider, etc.)
-- [ ] 3.1.3 Create application-scoped CoroutineScope for WebSocket
+- [x] 3.1.1 Add `@Provides @Singleton` function for `WebSocketManager`
+- [x] 3.1.2 Inject required dependencies (AuthStore, ConfigStore, LoggerFactory)
+- [x] 3.1.3 Create application-scoped CoroutineScope for WebSocket (with @WebSocketScope qualifier)
 
 ---
 
-### 3.2 [ ] Export WebSocketManager from remoteapi module
+### 3.2 [x] Export WebSocketManager from remoteapi module
 
 **File:** `android/remoteapi/build.gradle.kts` (if needed)
 
 **Tasks:**
-- [ ] 3.2.1 Ensure domain module has access to WebSocketManager interface
-- [ ] 3.2.2 Verify no circular dependencies
+- [x] 3.2.1 Ensure domain module has access to WebSocketManager interface - Already accessible via existing dependency
+- [x] 3.2.2 Verify no circular dependencies - Build successful
 
 ---
 
