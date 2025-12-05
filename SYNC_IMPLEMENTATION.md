@@ -1080,46 +1080,46 @@ const fetchSyncEvents = async (since) => {
 
 ### 5.5 WebSocket Integration
 
-#### [ ] 5.5.1 Register sync message handler
+#### [x] 5.5.1 Register sync message handler
 
 **Description:** Handle incoming sync messages from WebSocket.
 
 **Context:**
-- File: `android/domain/.../websocket/WebSocketInitializer.kt`
+- File: `android/domain/.../sync/SyncWebSocketHandler.kt`
 - Register handler for "sync" prefix
 
 ---
 
 ### 5.6 User Content Updates
 
-#### [ ] 5.6.1 Add apply methods to user content store
+#### [x] 5.6.1 Add apply methods to user content store
 
 **Description:** Methods to apply individual sync events.
 
 **Context:**
-- File: `android/domain/.../UserContentStore.kt` or similar
-- Add `applyContentLiked`, `applyContentUnliked`, etc.
+- File: `android/domain/.../sync/SyncManagerImpl.kt`
+- SyncManagerImpl.applyStoredEvent() handles individual events via UserContentStore.setLiked()
 
-#### [ ] 5.6.2 Add setter methods for full sync
+#### [x] 5.6.2 Add setter methods for full sync
 
 **Description:** Methods to set full state from sync.
 
 **Context:**
-- File: `android/domain/.../UserContentStore.kt`
-- Add `setLikedContent`, `setPlaylists`, `setPermissions`
+- File: `android/domain/.../sync/SyncManagerImpl.kt`
+- SyncManagerImpl.applyLikesState() handles full sync via UserContentStore.setLiked()
 
 ---
 
 ### 5.7 Auth Integration
 
-#### [ ] 5.7.1 Initialize sync on login
+#### [x] 5.7.1 Initialize sync on login
 
 **Description:** Call syncManager.initialize() after successful login.
 
 **Context:**
 - File: `android/domain/.../auth/usecase/PerformLogin.kt`
 
-#### [ ] 5.7.2 Cleanup sync on logout
+#### [x] 5.7.2 Cleanup sync on logout
 
 **Description:** Call syncManager.cleanup() before clearing auth.
 

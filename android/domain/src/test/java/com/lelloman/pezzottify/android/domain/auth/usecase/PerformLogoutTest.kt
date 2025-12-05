@@ -7,6 +7,7 @@ import com.lelloman.pezzottify.android.domain.listening.ListeningEventStore
 import com.lelloman.pezzottify.android.domain.player.PezzottifyPlayer
 import com.lelloman.pezzottify.android.domain.remoteapi.RemoteApiClient
 import com.lelloman.pezzottify.android.domain.statics.StaticsStore
+import com.lelloman.pezzottify.android.domain.sync.SyncManager
 import com.lelloman.pezzottify.android.domain.user.UserDataStore
 import com.lelloman.pezzottify.android.domain.usercontent.UserContentStore
 import com.lelloman.pezzottify.android.domain.websocket.WebSocketManager
@@ -26,6 +27,7 @@ class PerformLogoutTest {
     private lateinit var userDataStore: UserDataStore
     private lateinit var userContentStore: UserContentStore
     private lateinit var listeningEventStore: ListeningEventStore
+    private lateinit var syncManager: SyncManager
     private lateinit var player: PezzottifyPlayer
     private lateinit var webSocketManager: WebSocketManager
 
@@ -40,6 +42,7 @@ class PerformLogoutTest {
         userDataStore = mockk(relaxed = true)
         userContentStore = mockk(relaxed = true)
         listeningEventStore = mockk(relaxed = true)
+        syncManager = mockk(relaxed = true)
         player = mockk(relaxed = true)
         webSocketManager = mockk(relaxed = true)
 
@@ -51,6 +54,7 @@ class PerformLogoutTest {
             userDataStore = userDataStore,
             userContentStore = userContentStore,
             listeningEventStore = listeningEventStore,
+            syncManager = syncManager,
             player = player,
             webSocketManager = webSocketManager,
         )
@@ -120,12 +124,20 @@ class PerformLogoutTest {
     }
 
     @Test
+    fun `invoke cleans up sync manager`() = runTest {
+        performLogout()
+
+        coVerify { syncManager.cleanup() }
+    }
+
+    @Test
     fun `invoke calls all cleanup operations`() = runTest {
         performLogout()
 
         coVerify {
             player.stop()
             webSocketManager.disconnect()
+            syncManager.cleanup()
             authStore.storeAuthState(AuthState.LoggedOut)
             remoteApiClient.logout()
             staticsStore.deleteAll()

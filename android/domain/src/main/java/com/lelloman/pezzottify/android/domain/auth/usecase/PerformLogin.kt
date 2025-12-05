@@ -6,8 +6,8 @@ import com.lelloman.pezzottify.android.domain.config.ConfigStore
 import com.lelloman.pezzottify.android.domain.device.DeviceInfoProvider
 import com.lelloman.pezzottify.android.domain.remoteapi.RemoteApiClient
 import com.lelloman.pezzottify.android.domain.remoteapi.response.RemoteApiResponse
+import com.lelloman.pezzottify.android.domain.sync.SyncManager
 import com.lelloman.pezzottify.android.domain.usecase.UseCase
-import com.lelloman.pezzottify.android.domain.usercontent.UserContentSynchronizer
 import com.lelloman.pezzottify.android.domain.websocket.WebSocketManager
 import javax.inject.Inject
 
@@ -15,7 +15,7 @@ class PerformLogin @Inject constructor(
     private val remoteApiClient: RemoteApiClient,
     private val authStore: AuthStore,
     private val configStore: ConfigStore,
-    private val userContentSynchronizer: UserContentSynchronizer,
+    private val syncManager: SyncManager,
     private val deviceInfoProvider: DeviceInfoProvider,
     private val webSocketManager: WebSocketManager,
 ) : UseCase() {
@@ -36,7 +36,7 @@ class PerformLogin @Inject constructor(
                     )
                 )
                 webSocketManager.connect()
-                userContentSynchronizer.fetchRemoteLikedContent()
+                syncManager.initialize()
                 return LoginResult.Success
             }
 
