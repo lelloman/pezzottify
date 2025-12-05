@@ -558,7 +558,7 @@ const AUTH_TOKEN_TABLE_V_8: Table = Table {
 
 ---
 
-### [ ] Task 4.3: Add VersionedSchema V8 entry
+### [x] Task 4.3: Add VersionedSchema V8 entry
 **File**: `catalog-server/src/user/sqlite_user_store.rs`
 
 **Implementation**:

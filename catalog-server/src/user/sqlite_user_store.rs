@@ -704,6 +704,37 @@ pub const VERSIONED_SCHEMAS: &[VersionedSchema] = &[
             Ok(())
         }),
     },
+    VersionedSchema {
+        version: 8,
+        tables: &[
+            USER_TABLE_V_0,
+            LIKED_CONTENT_TABLE_V_2,
+            AUTH_TOKEN_TABLE_V_8,
+            USER_PASSWORD_CREDENTIALS_V_0,
+            USER_PLAYLIST_TABLE_V_3,
+            USER_PLAYLIST_TRACKS_TABLE_V_3,
+            USER_ROLE_TABLE_V_4,
+            USER_EXTRA_PERMISSION_TABLE_V_4,
+            BANDWIDTH_USAGE_TABLE_V_5,
+            LISTENING_EVENTS_TABLE_V_6,
+            USER_SETTINGS_TABLE_V_7,
+            DEVICE_TABLE_V_8,
+        ],
+        migration: Some(|conn: &Connection| {
+            // Step 1: Create device table first (auth_token will reference it)
+            DEVICE_TABLE_V_8.create(&conn)?;
+
+            // Step 2: Delete all existing tokens (no real users yet, per plan)
+            conn.execute("DELETE FROM auth_token", [])?;
+
+            // Step 3: Recreate auth_token with device_id column
+            // SQLite doesn't support ADD COLUMN with NOT NULL and FK well
+            conn.execute("DROP TABLE auth_token", [])?;
+            AUTH_TOKEN_TABLE_V_8.create(&conn)?;
+
+            Ok(())
+        }),
+    },
 ];
 
 /// A random A-z0-9 string
@@ -2366,16 +2397,16 @@ mod tests {
             assert_eq!(db_version, BASE_DB_VERSION as i64 + 3);
         }
 
-        // Now open with SqliteUserStore, which should trigger migration to latest (V7)
+        // Now open with SqliteUserStore, which should trigger migration to latest (V8)
         let store = SqliteUserStore::new(&temp_file_path).unwrap();
 
-        // Verify we're now at the latest version (V7)
+        // Verify we're now at the latest version (V8)
         {
             let conn = store.conn.lock().unwrap();
             let db_version: i64 = conn
                 .query_row("PRAGMA user_version;", [], |row| row.get(0))
                 .unwrap();
-            assert_eq!(db_version, BASE_DB_VERSION as i64 + 7);
+            assert_eq!(db_version, BASE_DB_VERSION as i64 + 8);
 
             // Verify new tables exist
             let user_role_table_exists: i64 = conn
