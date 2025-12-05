@@ -48,6 +48,7 @@ The catalog server is the backend component of Pezzottify that provides:
   - `UserManager`: Authentication with Argon2 password hashing and RSA token signing
   - `permissions.rs`: Role-based permissions (Admin, Regular)
   - `auth.rs`: Token-based authentication with RSA signing
+  - `device.rs`: Device tracking and management
 
 - **`server/`**: Axum-based HTTP server
   - `session.rs`: Session management via HTTP-only cookies
@@ -243,6 +244,27 @@ Static content (catalog data, images, audio) is cached using HTTP `Cache-Control
 | POST | `/login` | No | Login with credentials, returns session token |
 | GET | `/logout` | Yes | Logout and invalidate session token |
 
+#### Login Request Body
+
+```json
+{
+  "user_handle": "username",
+  "password": "password",
+  "device_uuid": "unique-device-identifier",
+  "device_type": "web|android|ios",
+  "device_name": "Chrome Browser",     // optional
+  "os_info": "Windows 11"              // optional
+}
+```
+
+**Device fields:**
+- `device_uuid`: Unique identifier for the device (8-64 characters). Should be generated once and persisted on the client.
+- `device_type`: One of `web`, `android`, `ios`, or `unknown`
+- `device_name`: Human-readable device name (max 100 characters)
+- `os_info`: Operating system information (max 200 characters)
+
+Devices are tracked per-user with a limit of 50 devices. Oldest devices are automatically pruned when the limit is exceeded.
+
 ### Catalog Content (`/v1/content`)
 
 All content endpoints require `AccessCatalog` permission.
@@ -289,13 +311,16 @@ Requires `OwnPlaylists` permission.
 
 ### Authentication Flow
 
-1. Client sends credentials to `POST /v1/auth/login`
-2. Server validates password using Argon2
-3. Server generates signed auth token using RSA
-4. Token returned in response body and set as HTTP-only cookie
-5. Client includes cookie in subsequent requests
-6. Session middleware validates token and extracts user permissions
-7. Permission middleware checks required permissions for each route
+1. Client sends credentials and device info to `POST /v1/auth/login`
+2. Server validates device info (UUID format, field lengths)
+3. Server validates password using Argon2
+4. Server registers/updates device and associates it with the user
+5. Server enforces per-user device limit (50 devices max)
+6. Server generates auth token linked to the device
+7. Token returned in response body and set as HTTP-only cookie
+8. Client includes cookie in subsequent requests
+9. Session middleware validates token and extracts user permissions + device info
+10. Permission middleware checks required permissions for each route
 
 ### User Roles
 
@@ -485,6 +510,7 @@ catalog-server/
 │   │   ├── sqlite_user_store.rs
 │   │   ├── auth.rs
 │   │   ├── permissions.rs
+│   │   ├── device.rs        # Device tracking
 │   │   └── user_models.rs
 │   ├── search/              # Search functionality
 │   │   ├── mod.rs
