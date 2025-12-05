@@ -1873,6 +1873,7 @@ impl ServerState {
             user_manager: Arc::new(Mutex::new(user_manager)),
             downloader,
             proxy,
+            ws_connection_manager: Arc::new(super::websocket::ConnectionManager::new()),
             hash: "123456".to_owned(),
         }
     }
@@ -2198,11 +2199,17 @@ pub fn make_app(
             .with_state(state.clone()),
     };
 
+    // WebSocket route - requires authentication (Session extractor will validate)
+    let ws_routes: Router = Router::new()
+        .route("/ws", get(super::websocket::ws_handler))
+        .with_state(state.clone());
+
     let mut app: Router = home_router
         .nest("/v1/auth", auth_routes)
         .nest("/v1/content", content_routes)
         .nest("/v1/user", user_routes)
-        .nest("/v1/admin", admin_routes);
+        .nest("/v1/admin", admin_routes)
+        .nest("/v1", ws_routes);
 
     #[cfg(feature = "slowdown")]
     {

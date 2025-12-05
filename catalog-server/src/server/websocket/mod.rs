@@ -8,5 +8,5 @@ pub mod handler;
 pub mod messages;
 
 pub use connection::ConnectionManager;
-pub use handler::{ws_handler, WsState};
+pub use handler::ws_handler;
 pub use messages::{ClientMessage, ServerMessage};

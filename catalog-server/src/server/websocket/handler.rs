@@ -20,10 +20,11 @@ use super::{
     messages::{msg_types, system, ClientMessage, ServerMessage},
 };
 use crate::server::session::Session;
+use crate::server::state::GuardedConnectionManager;
 
-/// State needed for WebSocket handling.
-pub struct WsState {
-    pub connection_manager: Arc<ConnectionManager>,
+/// State needed for WebSocket handling (internal).
+struct WsState {
+    connection_manager: Arc<ConnectionManager>,
 }
 
 /// WebSocket upgrade handler.
@@ -33,8 +34,9 @@ pub struct WsState {
 pub async fn ws_handler(
     ws: WebSocketUpgrade,
     session: Session,
-    State(state): State<Arc<WsState>>,
+    State(connection_manager): State<GuardedConnectionManager>,
 ) -> Response {
+    let state = Arc::new(WsState { connection_manager });
     // Require device_id for WebSocket connections
     let device_id = match session.device_id {
         Some(id) => id,

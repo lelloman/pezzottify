@@ -8,12 +8,14 @@ use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
 use super::proxy::CatalogProxy;
+use super::websocket::ConnectionManager;
 use super::ServerConfig;
 
 pub type GuardedCatalogStore = Arc<dyn CatalogStore>;
 pub type GuardedUserManager = Arc<Mutex<UserManager>>;
 pub type OptionalDownloader = Option<Arc<dyn Downloader>>;
 pub type OptionalProxy = Option<Arc<CatalogProxy>>;
+pub type GuardedConnectionManager = Arc<ConnectionManager>;
 
 #[derive(Clone)]
 pub struct ServerState {
@@ -24,6 +26,7 @@ pub struct ServerState {
     pub user_manager: GuardedUserManager,
     pub downloader: OptionalDownloader,
     pub proxy: OptionalProxy,
+    pub ws_connection_manager: GuardedConnectionManager,
     pub hash: String,
 }
 
@@ -63,5 +66,11 @@ impl FromRef<ServerState> for OptionalDownloader {
 impl FromRef<ServerState> for OptionalProxy {
     fn from_ref(input: &ServerState) -> Self {
         input.proxy.clone()
+    }
+}
+
+impl FromRef<ServerState> for GuardedConnectionManager {
+    fn from_ref(input: &ServerState) -> Self {
+        input.ws_connection_manager.clone()
     }
 }

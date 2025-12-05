@@ -174,45 +174,49 @@ Create the core WebSocket module with message types, connection manager, and han
 
 Integrate the WebSocket module into the main server.
 
-### 2.1 [ ] Export websocket module from server
+### 2.1 [x] Export websocket module from server
 
 **File:** `catalog-server/src/server/mod.rs`
 
 **Tasks:**
-- [ ] 2.1.1 Add `pub mod websocket;`
+- [x] 2.1.1 Add `pub mod websocket;`
+
+**Note:** Already done in Task 1.2.
 
 ---
 
-### 2.2 [ ] Add ConnectionManager to ServerState
+### 2.2 [x] Add ConnectionManager to ServerState
 
 **File:** `catalog-server/src/server/state.rs` (or wherever ServerState is defined)
 
 **Tasks:**
-- [ ] 2.2.1 Add `ws_connection_manager: Arc<ConnectionManager>` field to ServerState
-- [ ] 2.2.2 Initialize ConnectionManager in ServerState constructor/builder
+- [x] 2.2.1 Add `ws_connection_manager: Arc<ConnectionManager>` field to ServerState
+- [x] 2.2.2 Initialize ConnectionManager in ServerState constructor/builder (server.rs:1876)
+- [x] 2.2.3 Add `GuardedConnectionManager` type alias
+- [x] 2.2.4 Add `FromRef` impl for `GuardedConnectionManager`
 
 ---
 
-### 2.3 [ ] Register WebSocket route
+### 2.3 [x] Register WebSocket route
 
 **File:** `catalog-server/src/server/server.rs`
 
 **Tasks:**
-- [ ] 2.3.1 Import websocket handler and WsState
-- [ ] 2.3.2 Create `WsState` instance with connection_manager from ServerState
-- [ ] 2.3.3 Add route: `.route("/v1/ws", get(ws_handler))`
-- [ ] 2.3.4 Ensure Session extractor works for this route (auth middleware)
+- [x] 2.3.1 Import websocket handler (using super::websocket::ws_handler)
+- [x] 2.3.2 Handler extracts GuardedConnectionManager via FromRef (simplified from WsState)
+- [x] 2.3.3 Add route: `.nest("/v1", ws_routes)` with `.route("/ws", get(ws_handler))`
+- [x] 2.3.4 Session extractor validates auth automatically
 
 **Endpoint:** `GET /v1/ws`
 
 ---
 
-### 2.4 [ ] Verify server compiles and starts
+### 2.4 [x] Verify server compiles and starts
 
 **Tasks:**
-- [ ] 2.4.1 Run `cargo build`
-- [ ] 2.4.2 Run `cargo test`
-- [ ] 2.4.3 Start server and verify no startup errors
+- [x] 2.4.1 Run `cargo build` - Success
+- [x] 2.4.2 Run `cargo test` - All tests pass
+- [ ] 2.4.3 Start server and verify no startup errors - Manual verification needed
 
 ---
 
