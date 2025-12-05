@@ -606,7 +606,7 @@ VersionedSchema {
 
 ## Phase 5: DeviceStore Implementation
 
-### [ ] Task 5.1: Add device module import to sqlite_user_store.rs
+### [x] Task 5.1: Add device module import to sqlite_user_store.rs
 **File**: `catalog-server/src/user/sqlite_user_store.rs`
 
 **Implementation**:

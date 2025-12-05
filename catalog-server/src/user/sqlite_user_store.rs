@@ -8,6 +8,7 @@ use crate::user::user_models::{
     BandwidthSummary, BandwidthUsage, CategoryBandwidth, DailyListeningStats, ListeningEvent,
     ListeningSummary, TrackListeningStats, UserListeningHistoryEntry,
 };
+use crate::user::device::{Device, DeviceRegistration, DeviceType};
 use crate::user::user_store::{UserBandwidthStore, UserListeningStore, UserSettingsStore};
 use std::collections::HashMap;
 use crate::user::*;
