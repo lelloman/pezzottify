@@ -53,6 +53,15 @@ impl UserManager {
             .set_user_liked_content(user_id, content_id, content_type, liked)
     }
 
+    /// Append an event to the user's sync event log.
+    pub fn append_event(
+        &self,
+        user_id: usize,
+        event: &super::sync_events::UserEvent,
+    ) -> Result<i64> {
+        self.user_store.append_event(user_id, event)
+    }
+
     pub fn get_auth_token(&self, value: &AuthTokenValue) -> Result<Option<AuthToken>> {
         self.user_store.get_user_auth_token(value)
     }

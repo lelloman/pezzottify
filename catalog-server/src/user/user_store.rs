@@ -288,14 +288,40 @@ pub trait DeviceStore: Send + Sync {
     fn enforce_user_device_limit(&self, user_id: usize, max_devices: usize) -> Result<usize>;
 }
 
-/// Combined trait for user storage with bandwidth, listening tracking, settings, and devices
+use super::sync_events::{StoredEvent, UserEvent};
+
+/// Trait for sync event storage operations
+pub trait UserEventStore: Send + Sync {
+    /// Appends an event to the user's event log.
+    /// Returns the sequence number of the new event.
+    fn append_event(&self, user_id: usize, event: &UserEvent) -> Result<i64>;
+
+    /// Gets events since a given sequence number.
+    /// Returns events with seq > since_seq, ordered by seq ascending.
+    fn get_events_since(&self, user_id: usize, since_seq: i64) -> Result<Vec<StoredEvent>>;
+
+    /// Gets the current (latest) sequence number for a user.
+    /// Returns 0 if no events exist.
+    fn get_current_seq(&self, user_id: usize) -> Result<i64>;
+
+    /// Gets the minimum available sequence number for a user.
+    /// Returns None if no events exist.
+    /// Used to detect if requested sequence has been pruned.
+    fn get_min_seq(&self, user_id: usize) -> Result<Option<i64>>;
+
+    /// Deletes events older than the given Unix timestamp.
+    /// Returns the number of deleted events.
+    fn prune_events_older_than(&self, before_timestamp: i64) -> Result<u64>;
+}
+
+/// Combined trait for user storage with bandwidth, listening tracking, settings, devices, and events
 pub trait FullUserStore:
-    UserStore + UserBandwidthStore + UserListeningStore + UserSettingsStore + DeviceStore
+    UserStore + UserBandwidthStore + UserListeningStore + UserSettingsStore + DeviceStore + UserEventStore
 {
 }
 
 // Blanket implementation for any type that implements all user store traits
-impl<T: UserStore + UserBandwidthStore + UserListeningStore + UserSettingsStore + DeviceStore>
+impl<T: UserStore + UserBandwidthStore + UserListeningStore + UserSettingsStore + DeviceStore + UserEventStore>
     FullUserStore for T
 {
 }

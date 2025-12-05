@@ -19,7 +19,7 @@ use crate::{
     server::stream_track::stream_track,
     user::{
         device::DeviceRegistration, user_models::LikedContentType, settings::UserSetting,
-        FullUserStore, Permission,
+        sync_events::UserEvent, FullUserStore, Permission,
     },
 };
 use crate::{search::SearchVault, user::UserManager};
@@ -630,12 +630,26 @@ fn update_user_liked_content(
     content_id: &str,
     liked: bool,
 ) -> Response {
-    match user_manager
-        .lock()
-        .unwrap()
-        .set_user_liked_content(user_id, content_id, content_type, liked)
-    {
-        Ok(_) => StatusCode::OK.into_response(),
+    let um = user_manager.lock().unwrap();
+    match um.set_user_liked_content(user_id, content_id, content_type, liked) {
+        Ok(_) => {
+            // Log sync event
+            let event = if liked {
+                UserEvent::ContentLiked {
+                    content_type,
+                    content_id: content_id.to_string(),
+                }
+            } else {
+                UserEvent::ContentUnliked {
+                    content_type,
+                    content_id: content_id.to_string(),
+                }
+            };
+            if let Err(e) = um.append_event(user_id, &event) {
+                warn!("Failed to log sync event: {}", e);
+            }
+            StatusCode::OK.into_response()
+        }
         Err(_) => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
     }
 }
@@ -693,14 +707,25 @@ async fn post_playlist(
     State(user_manager): State<GuardedUserManager>,
     Json(body): Json<CreatePlaylistBody>,
 ) -> Response {
-    match user_manager.lock().unwrap().create_user_playlist(
+    let um = user_manager.lock().unwrap();
+    match um.create_user_playlist(
         session.user_id,
         &body.name,
         session.user_id,
         body.track_ids.clone(),
     ) {
-        Ok(id) => Json(id).into_response(),
-        Err(_) => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+        Ok(id) => {
+            // Log sync event
+            let event = UserEvent::PlaylistCreated {
+                playlist_id: id.clone(),
+                name: body.name.clone(),
+            };
+            if let Err(e) = um.append_event(session.user_id, &event) {
+                warn!("Failed to log sync event: {}", e);
+            }
+            Json(id).into_response()
+        }
+        Err(_) => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
     }
 }
 
@@ -711,13 +736,30 @@ async fn put_playlist(
     Json(body): Json<UpdatePlaylistBody>,
 ) -> Response {
     debug!("Updating playlist with id {}", id);
-    match user_manager.lock().unwrap().update_user_playlist(
-        &id,
-        session.user_id,
-        body.name,
-        body.track_ids,
-    ) {
-        Ok(_) => StatusCode::OK.into_response(),
+    let um = user_manager.lock().unwrap();
+    match um.update_user_playlist(&id, session.user_id, body.name.clone(), body.track_ids.clone()) {
+        Ok(_) => {
+            // Log sync events for name and/or tracks changes
+            if let Some(name) = body.name {
+                let event = UserEvent::PlaylistRenamed {
+                    playlist_id: id.clone(),
+                    name,
+                };
+                if let Err(e) = um.append_event(session.user_id, &event) {
+                    warn!("Failed to log sync event: {}", e);
+                }
+            }
+            if let Some(track_ids) = body.track_ids {
+                let event = UserEvent::PlaylistTracksUpdated {
+                    playlist_id: id.clone(),
+                    track_ids,
+                };
+                if let Err(e) = um.append_event(session.user_id, &event) {
+                    warn!("Failed to log sync event: {}", e);
+                }
+            }
+            StatusCode::OK.into_response()
+        }
         Err(err) => {
             debug!("Error updating playlist: {}", err);
             StatusCode::INTERNAL_SERVER_ERROR.into_response()
@@ -730,12 +772,18 @@ async fn delete_playlist(
     State(user_manager): State<GuardedUserManager>,
     Path(id): Path<String>,
 ) -> Response {
-    match user_manager
-        .lock()
-        .unwrap()
-        .delete_user_playlist(&id, session.user_id)
-    {
-        Ok(_) => StatusCode::OK.into_response(),
+    let um = user_manager.lock().unwrap();
+    match um.delete_user_playlist(&id, session.user_id) {
+        Ok(_) => {
+            // Log sync event
+            let event = UserEvent::PlaylistDeleted {
+                playlist_id: id.clone(),
+            };
+            if let Err(e) = um.append_event(session.user_id, &event) {
+                warn!("Failed to log sync event: {}", e);
+            }
+            StatusCode::OK.into_response()
+        }
         Err(_) => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
     }
 }
@@ -767,12 +815,21 @@ async fn add_playlist_tracks(
     Path(id): Path<String>,
     Json(body): Json<AddTracksToPlaylistBody>,
 ) -> Response {
-    match user_manager
-        .lock()
-        .unwrap()
-        .add_playlist_tracks(&id, session.user_id, body.tracks_ids)
-    {
-        Ok(_) => StatusCode::OK.into_response(),
+    let um = user_manager.lock().unwrap();
+    match um.add_playlist_tracks(&id, session.user_id, body.tracks_ids) {
+        Ok(_) => {
+            // Fetch updated track list and log sync event
+            if let Ok(playlist) = um.get_user_playlist(&id, session.user_id) {
+                let event = UserEvent::PlaylistTracksUpdated {
+                    playlist_id: id.clone(),
+                    track_ids: playlist.tracks,
+                };
+                if let Err(e) = um.append_event(session.user_id, &event) {
+                    warn!("Failed to log sync event: {}", e);
+                }
+            }
+            StatusCode::OK.into_response()
+        }
         Err(_) => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
     }
 }
@@ -783,12 +840,21 @@ async fn remove_tracks_from_playlist(
     Path(id): Path<String>,
     Json(body): Json<RemoveTracksFromPlaylist>,
 ) -> Response {
-    match user_manager.lock().unwrap().remove_tracks_from_playlist(
-        &id,
-        session.user_id,
-        body.tracks_positions,
-    ) {
-        Ok(_) => StatusCode::OK.into_response(),
+    let um = user_manager.lock().unwrap();
+    match um.remove_tracks_from_playlist(&id, session.user_id, body.tracks_positions) {
+        Ok(_) => {
+            // Fetch updated track list and log sync event
+            if let Ok(playlist) = um.get_user_playlist(&id, session.user_id) {
+                let event = UserEvent::PlaylistTracksUpdated {
+                    playlist_id: id.clone(),
+                    track_ids: playlist.tracks,
+                };
+                if let Err(e) = um.append_event(session.user_id, &event) {
+                    warn!("Failed to log sync event: {}", e);
+                }
+            }
+            StatusCode::OK.into_response()
+        }
         Err(_) => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
     }
 }
@@ -997,6 +1063,13 @@ async fn update_user_settings(
         if let Err(err) = locked_manager.set_user_setting(session.user_id, setting.clone()) {
             error!("Error setting user setting {:?}: {}", setting, err);
             return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+        }
+        // Log sync event
+        let event = UserEvent::SettingChanged {
+            setting: setting.clone(),
+        };
+        if let Err(e) = locked_manager.append_event(session.user_id, &event) {
+            warn!("Failed to log sync event: {}", e);
         }
     }
     StatusCode::OK.into_response()
@@ -2739,6 +2812,36 @@ mod tests {
             _user_id: usize,
             _max_devices: usize,
         ) -> Result<usize> {
+            Ok(0)
+        }
+    }
+
+    impl crate::user::UserEventStore for InMemoryUserStore {
+        fn append_event(
+            &self,
+            _user_id: usize,
+            _event: &crate::user::sync_events::UserEvent,
+        ) -> Result<i64> {
+            Ok(1)
+        }
+
+        fn get_events_since(
+            &self,
+            _user_id: usize,
+            _since_seq: i64,
+        ) -> Result<Vec<crate::user::sync_events::StoredEvent>> {
+            Ok(vec![])
+        }
+
+        fn get_current_seq(&self, _user_id: usize) -> Result<i64> {
+            Ok(0)
+        }
+
+        fn get_min_seq(&self, _user_id: usize) -> Result<Option<i64>> {
+            Ok(None)
+        }
+
+        fn prune_events_older_than(&self, _before_timestamp: i64) -> Result<u64> {
             Ok(0)
         }
     }

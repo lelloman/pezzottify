@@ -464,6 +464,7 @@ fn execute_command(
                 }
                 InnerCommand::AddRole { user_handle, role } => {
                     use user::UserRole;
+                    use user::sync_events::UserEvent;
                     let role_enum = match UserRole::from_str(&role) {
                         Some(r) => r,
                         None => {
@@ -493,6 +494,15 @@ fn execute_command(
                     if let Err(err) = user_manager.add_user_role(user_id, role_enum) {
                         return CommandExecutionResult::Error(format!("{}", err));
                     }
+
+                    // Log sync event with updated permissions
+                    if let Ok(permissions) = user_manager.get_user_permissions(user_id) {
+                        let event = UserEvent::PermissionsReset { permissions };
+                        if let Err(e) = user_manager.append_event(user_id, &event) {
+                            print_warning(&format!("Failed to log sync event: {}", e));
+                        }
+                    }
+
                     print_success(&format!(
                         "Role '{}' added to user '{}'",
                         role.with(colors::CYAN).bold(),
@@ -501,6 +511,7 @@ fn execute_command(
                 }
                 InnerCommand::RemoveRole { user_handle, role } => {
                     use user::UserRole;
+                    use user::sync_events::UserEvent;
                     let role_enum = match UserRole::from_str(&role) {
                         Some(r) => r,
                         None => {
@@ -530,6 +541,15 @@ fn execute_command(
                     if let Err(err) = user_manager.remove_user_role(user_id, role_enum) {
                         return CommandExecutionResult::Error(format!("{}", err));
                     }
+
+                    // Log sync event with updated permissions
+                    if let Ok(permissions) = user_manager.get_user_permissions(user_id) {
+                        let event = UserEvent::PermissionsReset { permissions };
+                        if let Err(e) = user_manager.append_event(user_id, &event) {
+                            print_warning(&format!("Failed to log sync event: {}", e));
+                        }
+                    }
+
                     print_success(&format!(
                         "Role '{}' removed from user '{}'",
                         role.with(colors::CYAN).bold(),

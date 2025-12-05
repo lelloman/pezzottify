@@ -946,6 +946,36 @@ mod tests {
         }
     }
 
+    impl crate::user::UserEventStore for TestUserStore {
+        fn append_event(
+            &self,
+            _user_id: usize,
+            _event: &crate::user::sync_events::UserEvent,
+        ) -> anyhow::Result<i64> {
+            Ok(1)
+        }
+
+        fn get_events_since(
+            &self,
+            _user_id: usize,
+            _since_seq: i64,
+        ) -> anyhow::Result<Vec<crate::user::sync_events::StoredEvent>> {
+            Ok(vec![])
+        }
+
+        fn get_current_seq(&self, _user_id: usize) -> anyhow::Result<i64> {
+            Ok(0)
+        }
+
+        fn get_min_seq(&self, _user_id: usize) -> anyhow::Result<Option<i64>> {
+            Ok(None)
+        }
+
+        fn prune_events_older_than(&self, _before_timestamp: i64) -> anyhow::Result<u64> {
+            Ok(0)
+        }
+    }
+
     fn create_test_user_store() -> Arc<dyn FullUserStore> {
         Arc::new(TestUserStore::new_with_downloads_enabled())
     }
@@ -1559,6 +1589,36 @@ mod tests {
             _user_id: usize,
             _max_devices: usize,
         ) -> anyhow::Result<usize> {
+            Ok(0)
+        }
+    }
+
+    impl crate::user::UserEventStore for ConfigurableTestUserStore {
+        fn append_event(
+            &self,
+            _user_id: usize,
+            _event: &crate::user::sync_events::UserEvent,
+        ) -> anyhow::Result<i64> {
+            Ok(1)
+        }
+
+        fn get_events_since(
+            &self,
+            _user_id: usize,
+            _since_seq: i64,
+        ) -> anyhow::Result<Vec<crate::user::sync_events::StoredEvent>> {
+            Ok(vec![])
+        }
+
+        fn get_current_seq(&self, _user_id: usize) -> anyhow::Result<i64> {
+            Ok(0)
+        }
+
+        fn get_min_seq(&self, _user_id: usize) -> anyhow::Result<Option<i64>> {
+            Ok(None)
+        }
+
+        fn prune_events_older_than(&self, _before_timestamp: i64) -> anyhow::Result<u64> {
             Ok(0)
         }
     }

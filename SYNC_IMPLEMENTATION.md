@@ -376,7 +376,7 @@ pub fn prune_events_older_than(&self, before_timestamp: i64) -> Result<u64> {
 
 ### 1.4 Event Logging in Handlers
 
-#### [ ] 1.4.1 Add event logging to like content handler
+#### [x] 1.4.1 Add event logging to like content handler
 
 **Description:** Append `ContentLiked` event after successful like.
 
@@ -384,7 +384,7 @@ pub fn prune_events_older_than(&self, before_timestamp: i64) -> Result<u64> {
 - File: `catalog-server/src/server/server.rs`
 - Find handler for `POST /v1/user/liked/{type}/{id}`
 
-#### [ ] 1.4.2 Add event logging to unlike content handler
+#### [x] 1.4.2 Add event logging to unlike content handler
 
 **Description:** Append `ContentUnliked` event after successful unlike.
 
@@ -392,7 +392,7 @@ pub fn prune_events_older_than(&self, before_timestamp: i64) -> Result<u64> {
 - File: `catalog-server/src/server/server.rs`
 - Find handler for `DELETE /v1/user/liked/{type}/{id}`
 
-#### [ ] 1.4.3 Add event logging to settings handler
+#### [x] 1.4.3 Add event logging to settings handler
 
 **Description:** Append `SettingChanged` event after successful setting update.
 
@@ -400,7 +400,7 @@ pub fn prune_events_older_than(&self, before_timestamp: i64) -> Result<u64> {
 - File: `catalog-server/src/server/server.rs`
 - Find handler for `PUT /v1/user/settings`
 
-#### [ ] 1.4.4 Add event logging to create playlist handler
+#### [x] 1.4.4 Add event logging to create playlist handler
 
 **Description:** Append `PlaylistCreated` event after successful creation.
 
@@ -408,7 +408,7 @@ pub fn prune_events_older_than(&self, before_timestamp: i64) -> Result<u64> {
 - File: `catalog-server/src/server/server.rs`
 - Find `post_playlist` handler
 
-#### [ ] 1.4.5 Add event logging to rename playlist handler
+#### [x] 1.4.5 Add event logging to rename playlist handler
 
 **Description:** Append `PlaylistRenamed` event after successful rename.
 
@@ -416,7 +416,7 @@ pub fn prune_events_older_than(&self, before_timestamp: i64) -> Result<u64> {
 - File: `catalog-server/src/server/server.rs`
 - Find `put_playlist` handler
 
-#### [ ] 1.4.6 Add event logging to delete playlist handler
+#### [x] 1.4.6 Add event logging to delete playlist handler
 
 **Description:** Append `PlaylistDeleted` event after successful deletion.
 
@@ -424,7 +424,7 @@ pub fn prune_events_older_than(&self, before_timestamp: i64) -> Result<u64> {
 - File: `catalog-server/src/server/server.rs`
 - Find `delete_playlist` handler
 
-#### [ ] 1.4.7 Add event logging to add tracks handler
+#### [x] 1.4.7 Add event logging to add tracks handler
 
 **Description:** Append `PlaylistTracksUpdated` event after adding tracks.
 
@@ -433,7 +433,7 @@ pub fn prune_events_older_than(&self, before_timestamp: i64) -> Result<u64> {
 - Find `add_playlist_tracks` handler
 - Need to fetch updated track list for the event
 
-#### [ ] 1.4.8 Add event logging to remove tracks handler
+#### [x] 1.4.8 Add event logging to remove tracks handler
 
 **Description:** Append `PlaylistTracksUpdated` event after removing tracks.
 
@@ -442,7 +442,7 @@ pub fn prune_events_older_than(&self, before_timestamp: i64) -> Result<u64> {
 - Find `remove_tracks_from_playlist` handler
 - Need to fetch updated track list for the event
 
-#### [ ] 1.4.9 Add event logging to CLI for permission changes
+#### [x] 1.4.9 Add event logging to CLI for permission changes
 
 **Description:** Log permission events when admin changes user permissions via CLI.
 

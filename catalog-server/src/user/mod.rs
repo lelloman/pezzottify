@@ -20,5 +20,5 @@ pub use user_models::{
 };
 pub use user_store::{
     DeviceStore, FullUserStore, UserAuthCredentialsStore, UserAuthTokenStore, UserBandwidthStore,
-    UserListeningStore, UserSettingsStore, UserStore,
+    UserEventStore, UserListeningStore, UserSettingsStore, UserStore,
 };

@@ -2603,6 +2603,36 @@ impl user_store::DeviceStore for SqliteUserStore {
     }
 }
 
+impl user_store::UserEventStore for SqliteUserStore {
+    fn append_event(
+        &self,
+        user_id: usize,
+        event: &crate::user::sync_events::UserEvent,
+    ) -> Result<i64> {
+        SqliteUserStore::append_event(self, user_id, event)
+    }
+
+    fn get_events_since(
+        &self,
+        user_id: usize,
+        since_seq: i64,
+    ) -> Result<Vec<crate::user::sync_events::StoredEvent>> {
+        SqliteUserStore::get_events_since(self, user_id, since_seq)
+    }
+
+    fn get_current_seq(&self, user_id: usize) -> Result<i64> {
+        SqliteUserStore::get_current_seq(self, user_id)
+    }
+
+    fn get_min_seq(&self, user_id: usize) -> Result<Option<i64>> {
+        SqliteUserStore::get_min_seq(self, user_id)
+    }
+
+    fn prune_events_older_than(&self, before_timestamp: i64) -> Result<u64> {
+        SqliteUserStore::prune_events_older_than(self, before_timestamp)
+    }
+}
+
 #[cfg(test)]
 mod tests {
 
