@@ -920,87 +920,147 @@ async fn get_user_liked_content(
 async fn post_playlist(
     session: Session,
     State(user_manager): State<GuardedUserManager>,
+    State(connection_manager): State<GuardedConnectionManager>,
     Json(body): Json<CreatePlaylistBody>,
 ) -> Response {
-    let um = user_manager.lock().unwrap();
-    match um.create_user_playlist(
-        session.user_id,
-        &body.name,
-        session.user_id,
-        body.track_ids.clone(),
-    ) {
-        Ok(id) => {
-            // Log sync event
-            let event = UserEvent::PlaylistCreated {
-                playlist_id: id.clone(),
-                name: body.name.clone(),
-            };
-            if let Err(e) = um.append_event(session.user_id, &event) {
-                warn!("Failed to log sync event: {}", e);
+    let (id, stored_event) = {
+        let um = user_manager.lock().unwrap();
+        match um.create_user_playlist(
+            session.user_id,
+            &body.name,
+            session.user_id,
+            body.track_ids.clone(),
+        ) {
+            Ok(id) => {
+                // Log sync event
+                let event = UserEvent::PlaylistCreated {
+                    playlist_id: id.clone(),
+                    name: body.name.clone(),
+                };
+                let stored_event = match um.append_event(session.user_id, &event) {
+                    Ok(stored) => Some(stored),
+                    Err(e) => {
+                        warn!("Failed to log sync event: {}", e);
+                        None
+                    }
+                };
+                (Some(id), stored_event)
             }
-            Json(id).into_response()
+            Err(_) => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
         }
-        Err(_) => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+    };
+
+    // Broadcast to other devices
+    if let (Some(stored_event), Some(device_id)) = (stored_event, session.device_id) {
+        let ws_msg = super::websocket::messages::ServerMessage::new(
+            super::websocket::messages::msg_types::SYNC,
+            super::websocket::messages::sync::SyncEventMessage { event: stored_event },
+        );
+        connection_manager
+            .send_to_other_devices(session.user_id, device_id, ws_msg)
+            .await;
     }
+
+    Json(id).into_response()
 }
 
 async fn put_playlist(
     session: Session,
     State(user_manager): State<GuardedUserManager>,
+    State(connection_manager): State<GuardedConnectionManager>,
     Path(id): Path<String>,
     Json(body): Json<UpdatePlaylistBody>,
 ) -> Response {
     debug!("Updating playlist with id {}", id);
-    let um = user_manager.lock().unwrap();
-    match um.update_user_playlist(&id, session.user_id, body.name.clone(), body.track_ids.clone()) {
-        Ok(_) => {
-            // Log sync events for name and/or tracks changes
-            if let Some(name) = body.name {
-                let event = UserEvent::PlaylistRenamed {
-                    playlist_id: id.clone(),
-                    name,
-                };
-                if let Err(e) = um.append_event(session.user_id, &event) {
-                    warn!("Failed to log sync event: {}", e);
+    let stored_events = {
+        let um = user_manager.lock().unwrap();
+        match um.update_user_playlist(&id, session.user_id, body.name.clone(), body.track_ids.clone()) {
+            Ok(_) => {
+                // Log sync events for name and/or tracks changes
+                let mut events = Vec::new();
+                if let Some(name) = body.name {
+                    let event = UserEvent::PlaylistRenamed {
+                        playlist_id: id.clone(),
+                        name,
+                    };
+                    match um.append_event(session.user_id, &event) {
+                        Ok(stored) => events.push(stored),
+                        Err(e) => warn!("Failed to log sync event: {}", e),
+                    }
                 }
-            }
-            if let Some(track_ids) = body.track_ids {
-                let event = UserEvent::PlaylistTracksUpdated {
-                    playlist_id: id.clone(),
-                    track_ids,
-                };
-                if let Err(e) = um.append_event(session.user_id, &event) {
-                    warn!("Failed to log sync event: {}", e);
+                if let Some(track_ids) = body.track_ids {
+                    let event = UserEvent::PlaylistTracksUpdated {
+                        playlist_id: id.clone(),
+                        track_ids,
+                    };
+                    match um.append_event(session.user_id, &event) {
+                        Ok(stored) => events.push(stored),
+                        Err(e) => warn!("Failed to log sync event: {}", e),
+                    }
                 }
+                events
             }
-            StatusCode::OK.into_response()
+            Err(err) => {
+                debug!("Error updating playlist: {}", err);
+                return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+            }
         }
-        Err(err) => {
-            debug!("Error updating playlist: {}", err);
-            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+    };
+
+    // Broadcast to other devices
+    if let Some(device_id) = session.device_id {
+        for stored_event in stored_events {
+            let ws_msg = super::websocket::messages::ServerMessage::new(
+                super::websocket::messages::msg_types::SYNC,
+                super::websocket::messages::sync::SyncEventMessage { event: stored_event },
+            );
+            connection_manager
+                .send_to_other_devices(session.user_id, device_id.clone(), ws_msg)
+                .await;
         }
     }
+
+    StatusCode::OK.into_response()
 }
 
 async fn delete_playlist(
     session: Session,
     State(user_manager): State<GuardedUserManager>,
+    State(connection_manager): State<GuardedConnectionManager>,
     Path(id): Path<String>,
 ) -> Response {
-    let um = user_manager.lock().unwrap();
-    match um.delete_user_playlist(&id, session.user_id) {
-        Ok(_) => {
-            // Log sync event
-            let event = UserEvent::PlaylistDeleted {
-                playlist_id: id.clone(),
-            };
-            if let Err(e) = um.append_event(session.user_id, &event) {
-                warn!("Failed to log sync event: {}", e);
+    let stored_event = {
+        let um = user_manager.lock().unwrap();
+        match um.delete_user_playlist(&id, session.user_id) {
+            Ok(_) => {
+                // Log sync event
+                let event = UserEvent::PlaylistDeleted {
+                    playlist_id: id.clone(),
+                };
+                match um.append_event(session.user_id, &event) {
+                    Ok(stored) => Some(stored),
+                    Err(e) => {
+                        warn!("Failed to log sync event: {}", e);
+                        None
+                    }
+                }
             }
-            StatusCode::OK.into_response()
+            Err(_) => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
         }
-        Err(_) => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+    };
+
+    // Broadcast to other devices
+    if let (Some(stored_event), Some(device_id)) = (stored_event, session.device_id) {
+        let ws_msg = super::websocket::messages::ServerMessage::new(
+            super::websocket::messages::msg_types::SYNC,
+            super::websocket::messages::sync::SyncEventMessage { event: stored_event },
+        );
+        connection_manager
+            .send_to_other_devices(session.user_id, device_id, ws_msg)
+            .await;
     }
+
+    StatusCode::OK.into_response()
 }
 
 async fn get_playlist(
@@ -1027,51 +1087,93 @@ async fn get_playlist(
 async fn add_playlist_tracks(
     session: Session,
     State(user_manager): State<GuardedUserManager>,
+    State(connection_manager): State<GuardedConnectionManager>,
     Path(id): Path<String>,
     Json(body): Json<AddTracksToPlaylistBody>,
 ) -> Response {
-    let um = user_manager.lock().unwrap();
-    match um.add_playlist_tracks(&id, session.user_id, body.tracks_ids) {
-        Ok(_) => {
-            // Fetch updated track list and log sync event
-            if let Ok(playlist) = um.get_user_playlist(&id, session.user_id) {
-                let event = UserEvent::PlaylistTracksUpdated {
-                    playlist_id: id.clone(),
-                    track_ids: playlist.tracks,
-                };
-                if let Err(e) = um.append_event(session.user_id, &event) {
-                    warn!("Failed to log sync event: {}", e);
+    let stored_event = {
+        let um = user_manager.lock().unwrap();
+        match um.add_playlist_tracks(&id, session.user_id, body.tracks_ids) {
+            Ok(_) => {
+                // Fetch updated track list and log sync event
+                if let Ok(playlist) = um.get_user_playlist(&id, session.user_id) {
+                    let event = UserEvent::PlaylistTracksUpdated {
+                        playlist_id: id.clone(),
+                        track_ids: playlist.tracks,
+                    };
+                    match um.append_event(session.user_id, &event) {
+                        Ok(stored) => Some(stored),
+                        Err(e) => {
+                            warn!("Failed to log sync event: {}", e);
+                            None
+                        }
+                    }
+                } else {
+                    None
                 }
             }
-            StatusCode::OK.into_response()
+            Err(_) => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
         }
-        Err(_) => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+    };
+
+    // Broadcast to other devices
+    if let (Some(stored_event), Some(device_id)) = (stored_event, session.device_id) {
+        let ws_msg = super::websocket::messages::ServerMessage::new(
+            super::websocket::messages::msg_types::SYNC,
+            super::websocket::messages::sync::SyncEventMessage { event: stored_event },
+        );
+        connection_manager
+            .send_to_other_devices(session.user_id, device_id, ws_msg)
+            .await;
     }
+
+    StatusCode::OK.into_response()
 }
 
 async fn remove_tracks_from_playlist(
     session: Session,
     State(user_manager): State<GuardedUserManager>,
+    State(connection_manager): State<GuardedConnectionManager>,
     Path(id): Path<String>,
     Json(body): Json<RemoveTracksFromPlaylist>,
 ) -> Response {
-    let um = user_manager.lock().unwrap();
-    match um.remove_tracks_from_playlist(&id, session.user_id, body.tracks_positions) {
-        Ok(_) => {
-            // Fetch updated track list and log sync event
-            if let Ok(playlist) = um.get_user_playlist(&id, session.user_id) {
-                let event = UserEvent::PlaylistTracksUpdated {
-                    playlist_id: id.clone(),
-                    track_ids: playlist.tracks,
-                };
-                if let Err(e) = um.append_event(session.user_id, &event) {
-                    warn!("Failed to log sync event: {}", e);
+    let stored_event = {
+        let um = user_manager.lock().unwrap();
+        match um.remove_tracks_from_playlist(&id, session.user_id, body.tracks_positions) {
+            Ok(_) => {
+                // Fetch updated track list and log sync event
+                if let Ok(playlist) = um.get_user_playlist(&id, session.user_id) {
+                    let event = UserEvent::PlaylistTracksUpdated {
+                        playlist_id: id.clone(),
+                        track_ids: playlist.tracks,
+                    };
+                    match um.append_event(session.user_id, &event) {
+                        Ok(stored) => Some(stored),
+                        Err(e) => {
+                            warn!("Failed to log sync event: {}", e);
+                            None
+                        }
+                    }
+                } else {
+                    None
                 }
             }
-            StatusCode::OK.into_response()
+            Err(_) => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
         }
-        Err(_) => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+    };
+
+    // Broadcast to other devices
+    if let (Some(stored_event), Some(device_id)) = (stored_event, session.device_id) {
+        let ws_msg = super::websocket::messages::ServerMessage::new(
+            super::websocket::messages::msg_types::SYNC,
+            super::websocket::messages::sync::SyncEventMessage { event: stored_event },
+        );
+        connection_manager
+            .send_to_other_devices(session.user_id, device_id, ws_msg)
+            .await;
     }
+
+    StatusCode::OK.into_response()
 }
 
 async fn get_user_playlists(
@@ -1271,22 +1373,40 @@ async fn get_user_settings(
 async fn update_user_settings(
     session: Session,
     State(user_manager): State<GuardedUserManager>,
+    State(connection_manager): State<GuardedConnectionManager>,
     Json(body): Json<UpdateSettingsBody>,
 ) -> Response {
-    let locked_manager = user_manager.lock().unwrap();
-    for setting in body.settings {
-        if let Err(err) = locked_manager.set_user_setting(session.user_id, setting.clone()) {
-            error!("Error setting user setting {:?}: {}", setting, err);
-            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+    let stored_events = {
+        let locked_manager = user_manager.lock().unwrap();
+        let mut events = Vec::new();
+        for setting in body.settings {
+            if let Err(err) = locked_manager.set_user_setting(session.user_id, setting.clone()) {
+                error!("Error setting user setting {:?}: {}", setting, err);
+                return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+            }
+            // Log sync event
+            let event = UserEvent::SettingChanged {
+                setting: setting.clone(),
+            };
+            match locked_manager.append_event(session.user_id, &event) {
+                Ok(stored) => events.push(stored),
+                Err(e) => warn!("Failed to log sync event: {}", e),
+            }
         }
-        // Log sync event
-        let event = UserEvent::SettingChanged {
-            setting: setting.clone(),
-        };
-        if let Err(e) = locked_manager.append_event(session.user_id, &event) {
-            warn!("Failed to log sync event: {}", e);
+        events
+    };
+
+    // Broadcast all events to other devices
+    if let Some(device_id) = session.device_id {
+        for stored_event in stored_events {
+            let ws_msg = super::websocket::messages::ServerMessage::new(
+                super::websocket::messages::msg_types::SYNC,
+                super::websocket::messages::sync::SyncEventMessage { event: stored_event },
+            );
+            connection_manager.send_to_other_devices(session.user_id, device_id, ws_msg).await;
         }
     }
+
     StatusCode::OK.into_response()
 }
 

@@ -701,27 +701,27 @@ if let Some(device_id) = session.device_id {
 
 **Description:** Broadcast sync event after logging unlike.
 
-#### [ ] 3.3.4 Update settings handler to broadcast
+#### [x] 3.3.4 Update settings handler to broadcast
 
 **Description:** Broadcast sync event after logging setting change.
 
-#### [ ] 3.3.5 Update playlist create handler to broadcast
+#### [x] 3.3.5 Update playlist create handler to broadcast
 
 **Description:** Broadcast sync event after logging playlist creation.
 
-#### [ ] 3.3.6 Update playlist rename handler to broadcast
+#### [x] 3.3.6 Update playlist rename handler to broadcast
 
 **Description:** Broadcast sync event after logging playlist rename.
 
-#### [ ] 3.3.7 Update playlist delete handler to broadcast
+#### [x] 3.3.7 Update playlist delete handler to broadcast
 
 **Description:** Broadcast sync event after logging playlist deletion.
 
-#### [ ] 3.3.8 Update add tracks handler to broadcast
+#### [x] 3.3.8 Update add tracks handler to broadcast
 
 **Description:** Broadcast sync event after logging track addition.
 
-#### [ ] 3.3.9 Update remove tracks handler to broadcast
+#### [x] 3.3.9 Update remove tracks handler to broadcast
 
 **Description:** Broadcast sync event after logging track removal.
 
