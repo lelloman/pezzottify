@@ -229,6 +229,33 @@ export const useRemoteStore = defineStore('remote', () => {
     }
   };
 
+  // Sync API operations
+  const fetchSyncState = async () => {
+    try {
+      const response = await axios.get('/v1/sync/state');
+      return response.data;
+    } catch (error) {
+      console.error('Error fetching sync state:', error);
+      throw error;
+    }
+  };
+
+  const fetchSyncEvents = async (since) => {
+    try {
+      const response = await axios.get('/v1/sync/events', {
+        params: { since }
+      });
+      return response.data;
+    } catch (error) {
+      // Return error info for 410 Gone handling
+      if (error.response && error.response.status === 410) {
+        return { error: 'events_pruned', status: 410 };
+      }
+      console.error('Error fetching sync events:', error);
+      throw error;
+    }
+  };
+
   return {
     setBlockHttpCache,
     fetchLikedAlbums,
@@ -250,5 +277,8 @@ export const useRemoteStore = defineStore('remote', () => {
     fetchAlbum,
     fetchArtist,
     fetchArtistDiscography,
+    // Sync API
+    fetchSyncState,
+    fetchSyncEvents,
   };
 });

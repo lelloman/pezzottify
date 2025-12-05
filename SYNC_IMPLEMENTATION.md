@@ -731,7 +731,7 @@ if let Some(device_id) = session.device_id {
 
 ### 4.1 User Store Updates
 
-#### [ ] 4.1.1 Add `likedTrackIds` state
+#### [x] 4.1.1 Add `likedTrackIds` state
 
 **Description:** Add state for liked track IDs.
 
@@ -739,7 +739,7 @@ if let Some(device_id) = session.device_id {
 - File: `web/src/store/user.js`
 - Add `const likedTrackIds = ref(null);`
 
-#### [ ] 4.1.2 Add `permissions` state
+#### [x] 4.1.2 Add `permissions` state
 
 **Description:** Add state for user permissions.
 
@@ -747,84 +747,84 @@ if let Some(device_id) = session.device_id {
 - File: `web/src/store/user.js`
 - Add `const permissions = ref([]);`
 
-#### [ ] 4.1.3 Add `applyContentLiked` method
+#### [x] 4.1.3 Add `applyContentLiked` method
 
 **Description:** Apply a content liked event to local state.
 
 **Context:**
 - File: `web/src/store/user.js`
 
-#### [ ] 4.1.4 Add `applyContentUnliked` method
+#### [x] 4.1.4 Add `applyContentUnliked` method
 
 **Description:** Apply a content unliked event to local state.
 
 **Context:**
 - File: `web/src/store/user.js`
 
-#### [ ] 4.1.5 Add `applySettingChanged` method
+#### [x] 4.1.5 Add `applySettingChanged` method
 
 **Description:** Apply a setting changed event to local state.
 
 **Context:**
 - File: `web/src/store/user.js`
 
-#### [ ] 4.1.6 Add `applyPlaylistCreated` method
+#### [x] 4.1.6 Add `applyPlaylistCreated` method
 
 **Description:** Apply a playlist created event to local state.
 
 **Context:**
 - File: `web/src/store/user.js`
 
-#### [ ] 4.1.7 Add `applyPlaylistRenamed` method
+#### [x] 4.1.7 Add `applyPlaylistRenamed` method
 
 **Description:** Apply a playlist renamed event to local state.
 
 **Context:**
 - File: `web/src/store/user.js`
 
-#### [ ] 4.1.8 Add `applyPlaylistDeleted` method
+#### [x] 4.1.8 Add `applyPlaylistDeleted` method
 
 **Description:** Apply a playlist deleted event to local state.
 
 **Context:**
 - File: `web/src/store/user.js`
 
-#### [ ] 4.1.9 Add `applyPlaylistTracksUpdated` method
+#### [x] 4.1.9 Add `applyPlaylistTracksUpdated` method
 
 **Description:** Apply a playlist tracks updated event to local state.
 
 **Context:**
 - File: `web/src/store/user.js`
 
-#### [ ] 4.1.10 Add `applyPermissionGranted` method
+#### [x] 4.1.10 Add `applyPermissionGranted` method
 
 **Description:** Apply a permission granted event to local state.
 
 **Context:**
 - File: `web/src/store/user.js`
 
-#### [ ] 4.1.11 Add `applyPermissionRevoked` method
+#### [x] 4.1.11 Add `applyPermissionRevoked` method
 
 **Description:** Apply a permission revoked event to local state.
 
 **Context:**
 - File: `web/src/store/user.js`
 
-#### [ ] 4.1.12 Add `applyPermissionsReset` method
+#### [x] 4.1.12 Add `applyPermissionsReset` method
 
 **Description:** Apply a permissions reset event to local state.
 
 **Context:**
 - File: `web/src/store/user.js`
 
-#### [ ] 4.1.13 Add setter methods for full sync
+#### [x] 4.1.13 Add setter methods for full sync
 
 **Description:** Add `setLikedAlbums`, `setLikedArtists`, `setLikedTracks`, `setAllSettings`, `setPlaylists`, `setPermissions`.
 
 **Context:**
 - File: `web/src/store/user.js`
 
-#### [ ] 4.1.14 Export new state and methods
+#### [x] 4.1.14 Export new state and methods
 
 **Description:** Add new state and methods to the store's return object.
 
@@ -835,7 +835,7 @@ if let Some(device_id) = session.device_id {
 
 ### 4.2 Remote Store Updates
 
-#### [ ] 4.2.1 Add `fetchSyncState` method
+#### [x] 4.2.1 Add `fetchSyncState` method
 
 **Description:** Fetch full sync state from server.
 
@@ -850,7 +850,7 @@ const fetchSyncState = async () => {
 };
 ```
 
-#### [ ] 4.2.2 Add `fetchSyncEvents` method
+#### [x] 4.2.2 Add `fetchSyncEvents` method
 
 **Description:** Fetch sync events since a sequence number.
 
@@ -867,7 +867,7 @@ const fetchSyncEvents = async (since) => {
 };
 ```
 
-#### [ ] 4.2.3 Export new methods
+#### [x] 4.2.3 Export new methods
 
 **Description:** Add new methods to the store's return object.
 
@@ -878,14 +878,14 @@ const fetchSyncEvents = async (since) => {
 
 ### 4.3 Sync Store
 
-#### [ ] 4.3.1 Create `sync.js` store file
+#### [x] 4.3.1 Create `sync.js` store file
 
 **Description:** Create the new sync store.
 
 **Context:**
 - New file: `web/src/store/sync.js`
 
-#### [ ] 4.3.2 Implement cursor persistence
+#### [x] 4.3.2 Implement cursor persistence
 
 **Description:** Load/save/clear cursor from localStorage.
 
@@ -893,14 +893,14 @@ const fetchSyncEvents = async (since) => {
 - File: `web/src/store/sync.js`
 - Key format: `sync_cursor_{userId}`
 
-#### [ ] 4.3.3 Implement `fullSync` function
+#### [x] 4.3.3 Implement `fullSync` function
 
 **Description:** Fetch full state and update user store.
 
 **Context:**
 - File: `web/src/store/sync.js`
 
-#### [ ] 4.3.4 Implement `catchUp` function
+#### [x] 4.3.4 Implement `catchUp` function
 
 **Description:** Fetch and apply events since cursor.
 
@@ -909,7 +909,7 @@ const fetchSyncEvents = async (since) => {
 - Handle 410 response by calling fullSync
 - Detect sequence gaps and trigger fullSync
 
-#### [ ] 4.3.5 Implement `applyEvent` function
+#### [x] 4.3.5 Implement `applyEvent` function
 
 **Description:** Dispatch event to appropriate user store method.
 
@@ -917,7 +917,7 @@ const fetchSyncEvents = async (since) => {
 - File: `web/src/store/sync.js`
 - Switch on event type, call corresponding apply method
 
-#### [ ] 4.3.6 Implement WebSocket connection
+#### [x] 4.3.6 Implement WebSocket connection
 
 **Description:** Connect to WebSocket and handle sync messages.
 
@@ -925,21 +925,21 @@ const fetchSyncEvents = async (since) => {
 - File: `web/src/store/sync.js`
 - Handle reconnection with catch-up
 
-#### [ ] 4.3.7 Implement `initialize` function
+#### [x] 4.3.7 Implement `initialize` function
 
 **Description:** Load cursor, catch up, and connect.
 
 **Context:**
 - File: `web/src/store/sync.js`
 
-#### [ ] 4.3.8 Implement `cleanup` function
+#### [x] 4.3.8 Implement `cleanup` function
 
 **Description:** Disconnect and clear cursor (for logout).
 
 **Context:**
 - File: `web/src/store/sync.js`
 
-#### [ ] 4.3.9 Export store
+#### [x] 4.3.9 Export store
 
 **Description:** Export the sync store with all necessary state and methods.
 

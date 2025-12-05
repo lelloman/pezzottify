@@ -9,9 +9,11 @@ export const useUserStore = defineStore('user', () => {
   const remoteStore = useRemoteStore();
   const likedAlbumIds = ref(null);
   const likedArtistsIds = ref(null);
+  const likedTrackIds = ref(null);
   const playlistsData = ref(null);
   const playlistRefs = {};
   const settings = ref({});
+  const permissions = ref([]);
 
   const isInitialized = ref(false);
   const isInitializing = ref(false);
@@ -212,13 +214,170 @@ export const useUserStore = defineStore('user', () => {
     return await setSetting(SETTING_ENABLE_DIRECT_DOWNLOADS, enabled ? 'true' : 'false');
   };
 
+  // =====================================================
+  // Sync Event Apply Methods
+  // These methods apply incoming sync events to local state
+  // =====================================================
+
+  const applyContentLiked = (contentType, contentId) => {
+    switch (contentType) {
+      case 'album':
+        if (likedAlbumIds.value && !likedAlbumIds.value.includes(contentId)) {
+          likedAlbumIds.value = [contentId, ...likedAlbumIds.value];
+        }
+        break;
+      case 'artist':
+        if (likedArtistsIds.value && !likedArtistsIds.value.includes(contentId)) {
+          likedArtistsIds.value = [contentId, ...likedArtistsIds.value];
+        }
+        break;
+      case 'track':
+        if (likedTrackIds.value && !likedTrackIds.value.includes(contentId)) {
+          likedTrackIds.value = [contentId, ...likedTrackIds.value];
+        }
+        break;
+    }
+  };
+
+  const applyContentUnliked = (contentType, contentId) => {
+    switch (contentType) {
+      case 'album':
+        if (likedAlbumIds.value) {
+          likedAlbumIds.value = likedAlbumIds.value.filter(id => id !== contentId);
+        }
+        break;
+      case 'artist':
+        if (likedArtistsIds.value) {
+          likedArtistsIds.value = likedArtistsIds.value.filter(id => id !== contentId);
+        }
+        break;
+      case 'track':
+        if (likedTrackIds.value) {
+          likedTrackIds.value = likedTrackIds.value.filter(id => id !== contentId);
+        }
+        break;
+    }
+  };
+
+  const applySettingChanged = (setting) => {
+    // Setting comes as an object with the setting type as key
+    // e.g., { enable_direct_downloads: "true" } or { DirectDownloadsEnabled: true }
+    if (typeof setting === 'object') {
+      // Handle server format: { DirectDownloadsEnabled: true }
+      if ('DirectDownloadsEnabled' in setting) {
+        settings.value = {
+          ...settings.value,
+          [SETTING_ENABLE_DIRECT_DOWNLOADS]: setting.DirectDownloadsEnabled ? 'true' : 'false'
+        };
+      } else {
+        // Handle direct key-value pairs
+        settings.value = { ...settings.value, ...setting };
+      }
+    }
+  };
+
+  const applyPlaylistCreated = (playlistId, name) => {
+    if (playlistsData.value) {
+      const newPlaylist = {
+        id: playlistId,
+        name: name,
+        tracks: []
+      };
+      // Only add if not already present
+      if (!playlistsData.value.by_id[playlistId]) {
+        playlistsData.value.list = [newPlaylist, ...playlistsData.value.list];
+        playlistsData.value.by_id[playlistId] = newPlaylist;
+      }
+    }
+  };
+
+  const applyPlaylistRenamed = (playlistId, name) => {
+    if (playlistsData.value && playlistsData.value.by_id[playlistId]) {
+      playlistsData.value.by_id[playlistId].name = name;
+      playlistsData.value.list = playlistsData.value.list.map(p =>
+        p.id === playlistId ? { ...p, name } : p
+      );
+    }
+  };
+
+  const applyPlaylistDeleted = (playlistId) => {
+    if (playlistsData.value) {
+      delete playlistsData.value.by_id[playlistId];
+      playlistsData.value.list = playlistsData.value.list.filter(p => p.id !== playlistId);
+      if (playlistRefs[playlistId]) {
+        delete playlistRefs[playlistId];
+      }
+    }
+  };
+
+  const applyPlaylistTracksUpdated = (playlistId, trackIds) => {
+    if (playlistsData.value && playlistsData.value.by_id[playlistId]) {
+      playlistsData.value.by_id[playlistId].tracks = trackIds;
+    }
+  };
+
+  const applyPermissionGranted = (permission) => {
+    if (!permissions.value.includes(permission)) {
+      permissions.value = [...permissions.value, permission];
+    }
+  };
+
+  const applyPermissionRevoked = (permission) => {
+    permissions.value = permissions.value.filter(p => p !== permission);
+  };
+
+  const applyPermissionsReset = (newPermissions) => {
+    permissions.value = newPermissions;
+  };
+
+  // =====================================================
+  // Setter Methods for Full Sync
+  // These methods set the full state from sync API response
+  // =====================================================
+
+  const setLikedAlbums = (albumIds) => {
+    likedAlbumIds.value = albumIds;
+  };
+
+  const setLikedArtists = (artistIds) => {
+    likedArtistsIds.value = artistIds;
+  };
+
+  const setLikedTracks = (trackIds) => {
+    likedTrackIds.value = trackIds;
+  };
+
+  const setAllSettings = (newSettings) => {
+    settings.value = newSettings;
+  };
+
+  const setPlaylists = (playlists) => {
+    const by_id = {};
+    playlists.forEach(playlist => {
+      by_id[playlist.id] = playlist;
+    });
+    playlistsData.value = {
+      list: playlists,
+      by_id: by_id,
+    };
+  };
+
+  const setPermissions = (newPermissions) => {
+    permissions.value = newPermissions;
+  };
+
   return {
+    // State
     likedAlbumIds,
     likedArtistsIds,
+    likedTrackIds,
     playlistsData,
     settings,
+    permissions,
     isInitialized,
     isInitializing,
+
+    // Standard methods
     initialize,
     setAlbumIsLiked,
     setArtistIsLiked,
@@ -234,5 +393,25 @@ export const useUserStore = defineStore('user', () => {
     setSetting,
     isDirectDownloadsEnabled,
     setDirectDownloadsEnabled,
+
+    // Sync event apply methods
+    applyContentLiked,
+    applyContentUnliked,
+    applySettingChanged,
+    applyPlaylistCreated,
+    applyPlaylistRenamed,
+    applyPlaylistDeleted,
+    applyPlaylistTracksUpdated,
+    applyPermissionGranted,
+    applyPermissionRevoked,
+    applyPermissionsReset,
+
+    // Full sync setter methods
+    setLikedAlbums,
+    setLikedArtists,
+    setLikedTracks,
+    setAllSettings,
+    setPlaylists,
+    setPermissions,
   };
 });
