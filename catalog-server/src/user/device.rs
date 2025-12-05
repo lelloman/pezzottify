@@ -118,3 +118,44 @@ impl DeviceRegistration {
         })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_device_type_from_str_valid() {
+        assert_eq!(DeviceType::from_str("web"), DeviceType::Web);
+        assert_eq!(DeviceType::from_str("android"), DeviceType::Android);
+        assert_eq!(DeviceType::from_str("ios"), DeviceType::Ios);
+        assert_eq!(DeviceType::from_str("WEB"), DeviceType::Web); // case insensitive
+        assert_eq!(DeviceType::from_str("Android"), DeviceType::Android);
+    }
+
+    #[test]
+    fn test_device_type_from_str_invalid() {
+        assert_eq!(DeviceType::from_str(""), DeviceType::Unknown);
+        assert_eq!(DeviceType::from_str("windows"), DeviceType::Unknown);
+        assert_eq!(DeviceType::from_str("invalid"), DeviceType::Unknown);
+    }
+
+    #[test]
+    fn test_device_type_as_str_roundtrip() {
+        assert_eq!(
+            DeviceType::from_str(DeviceType::Web.as_str()),
+            DeviceType::Web
+        );
+        assert_eq!(
+            DeviceType::from_str(DeviceType::Android.as_str()),
+            DeviceType::Android
+        );
+        assert_eq!(
+            DeviceType::from_str(DeviceType::Ios.as_str()),
+            DeviceType::Ios
+        );
+        assert_eq!(
+            DeviceType::from_str(DeviceType::Unknown.as_str()),
+            DeviceType::Unknown
+        );
+    }
+}

@@ -237,7 +237,7 @@ pub mod device;
 
 ---
 
-### [ ] Task 1.8: Add unit tests for DeviceType
+### [x] Task 1.8: Add unit tests for DeviceType
 **File**: `catalog-server/src/user/device.rs`
 
 **Implementation**:
