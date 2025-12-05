@@ -154,7 +154,7 @@ pub struct DeviceRegistration {
 
 ---
 
-### [ ] Task 1.6: Implement DeviceRegistration::validate_and_sanitize
+### [x] Task 1.6: Implement DeviceRegistration::validate_and_sanitize
 **File**: `catalog-server/src/user/device.rs`
 
 **Implementation**:
