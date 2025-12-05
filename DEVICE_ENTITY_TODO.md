@@ -706,7 +706,7 @@ impl DeviceStore for SqliteUserStore {
 
 ---
 
-### [ ] Task 5.4: Implement get_device_by_uuid
+### [x] Task 5.4: Implement get_device_by_uuid
 **File**: `catalog-server/src/user/sqlite_user_store.rs`
 
 **Implementation**:
@@ -741,7 +741,7 @@ impl DeviceStore for SqliteUserStore {
 
 ---
 
-### [ ] Task 5.5: Implement get_user_devices
+### [x] Task 5.5: Implement get_user_devices
 **File**: `catalog-server/src/user/sqlite_user_store.rs`
 
 **Implementation**:
@@ -777,7 +777,7 @@ impl DeviceStore for SqliteUserStore {
 
 ---
 
-### [ ] Task 5.6: Implement associate_device_with_user
+### [x] Task 5.6: Implement associate_device_with_user
 **File**: `catalog-server/src/user/sqlite_user_store.rs`
 
 **Implementation**:
@@ -804,7 +804,7 @@ impl DeviceStore for SqliteUserStore {
 
 ---
 
-### [ ] Task 5.7: Implement touch_device
+### [x] Task 5.7: Implement touch_device
 **File**: `catalog-server/src/user/sqlite_user_store.rs`
 
 **Implementation**:
@@ -828,7 +828,7 @@ impl DeviceStore for SqliteUserStore {
 
 ---
 
-### [ ] Task 5.8: Implement prune_orphaned_devices
+### [x] Task 5.8: Implement prune_orphaned_devices
 **File**: `catalog-server/src/user/sqlite_user_store.rs`
 
 **Implementation**:
@@ -857,7 +857,7 @@ impl DeviceStore for SqliteUserStore {
 
 ---
 
-### [ ] Task 5.9: Implement enforce_user_device_limit
+### [x] Task 5.9: Implement enforce_user_device_limit
 **File**: `catalog-server/src/user/sqlite_user_store.rs`
 
 **Implementation**:

@@ -2290,28 +2290,136 @@ impl user_store::DeviceStore for SqliteUserStore {
         }
     }
 
-    fn get_device_by_uuid(&self, _device_uuid: &str) -> Result<Option<device::Device>> {
-        todo!("DeviceStore implementation pending - Phase 5")
+    fn get_device_by_uuid(&self, device_uuid: &str) -> Result<Option<Device>> {
+        let start = Instant::now();
+        let conn = self.conn.lock().unwrap();
+        let result = conn.query_row(
+            "SELECT id, device_uuid, user_id, device_type, device_name, os_info, first_seen, last_seen
+             FROM device WHERE device_uuid = ?1",
+            params![device_uuid],
+            |row| {
+                Ok(Device {
+                    id: row.get(0)?,
+                    device_uuid: row.get(1)?,
+                    user_id: row.get(2)?,
+                    device_type: DeviceType::from_str(&row.get::<_, String>(3)?),
+                    device_name: row.get(4)?,
+                    os_info: row.get(5)?,
+                    first_seen: SystemTime::UNIX_EPOCH
+                        + std::time::Duration::from_secs(row.get::<_, i64>(6)? as u64),
+                    last_seen: SystemTime::UNIX_EPOCH
+                        + std::time::Duration::from_secs(row.get::<_, i64>(7)? as u64),
+                })
+            },
+        );
+
+        record_db_query("get_device_by_uuid", start.elapsed());
+        match result {
+            Ok(device) => Ok(Some(device)),
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+            Err(e) => Err(e.into()),
+        }
     }
 
-    fn get_user_devices(&self, _user_id: usize) -> Result<Vec<device::Device>> {
-        todo!("DeviceStore implementation pending - Phase 5")
+    fn get_user_devices(&self, user_id: usize) -> Result<Vec<Device>> {
+        let start = Instant::now();
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare(
+            "SELECT id, device_uuid, user_id, device_type, device_name, os_info, first_seen, last_seen
+             FROM device WHERE user_id = ?1 ORDER BY last_seen DESC",
+        )?;
+        let rows = stmt.query_map(params![user_id], |row| {
+            Ok(Device {
+                id: row.get(0)?,
+                device_uuid: row.get(1)?,
+                user_id: row.get(2)?,
+                device_type: DeviceType::from_str(&row.get::<_, String>(3)?),
+                device_name: row.get(4)?,
+                os_info: row.get(5)?,
+                first_seen: SystemTime::UNIX_EPOCH
+                    + std::time::Duration::from_secs(row.get::<_, i64>(6)? as u64),
+                last_seen: SystemTime::UNIX_EPOCH
+                    + std::time::Duration::from_secs(row.get::<_, i64>(7)? as u64),
+            })
+        })?;
+
+        let devices: Result<Vec<Device>, _> = rows.collect();
+        record_db_query("get_user_devices", start.elapsed());
+        Ok(devices?)
     }
 
-    fn associate_device_with_user(&self, _device_id: usize, _user_id: usize) -> Result<()> {
-        todo!("DeviceStore implementation pending - Phase 5")
+    fn associate_device_with_user(&self, device_id: usize, user_id: usize) -> Result<()> {
+        let start = Instant::now();
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "UPDATE device SET user_id = ?1 WHERE id = ?2",
+            params![user_id, device_id],
+        )?;
+        record_db_query("associate_device_with_user", start.elapsed());
+        Ok(())
     }
 
-    fn touch_device(&self, _device_id: usize) -> Result<()> {
-        todo!("DeviceStore implementation pending - Phase 5")
+    fn touch_device(&self, device_id: usize) -> Result<()> {
+        let start = Instant::now();
+        let conn = self.conn.lock().unwrap();
+        let now = SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .unwrap()
+            .as_secs() as i64;
+        conn.execute(
+            "UPDATE device SET last_seen = ?1 WHERE id = ?2",
+            params![now, device_id],
+        )?;
+        record_db_query("touch_device", start.elapsed());
+        Ok(())
     }
 
-    fn prune_orphaned_devices(&self, _inactive_for_days: u32) -> Result<usize> {
-        todo!("DeviceStore implementation pending - Phase 5")
+    fn prune_orphaned_devices(&self, inactive_for_days: u32) -> Result<usize> {
+        let start = Instant::now();
+        let conn = self.conn.lock().unwrap();
+        let cutoff = SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .unwrap()
+            .as_secs() as i64
+            - (inactive_for_days as i64 * 24 * 60 * 60);
+
+        let deleted = conn.execute(
+            "DELETE FROM device WHERE user_id IS NULL AND last_seen < ?1",
+            params![cutoff],
+        )?;
+        record_db_query("prune_orphaned_devices", start.elapsed());
+        Ok(deleted)
     }
 
-    fn enforce_user_device_limit(&self, _user_id: usize, _max_devices: usize) -> Result<usize> {
-        todo!("DeviceStore implementation pending - Phase 5")
+    fn enforce_user_device_limit(&self, user_id: usize, max_devices: usize) -> Result<usize> {
+        let start = Instant::now();
+        let conn = self.conn.lock().unwrap();
+
+        // Count current devices for user
+        let device_count: usize = conn.query_row(
+            "SELECT COUNT(*) FROM device WHERE user_id = ?1",
+            params![user_id],
+            |row| row.get(0),
+        )?;
+
+        if device_count <= max_devices {
+            record_db_query("enforce_user_device_limit", start.elapsed());
+            return Ok(0);
+        }
+
+        let to_delete = device_count - max_devices;
+
+        // Delete oldest devices (by last_seen) beyond the limit
+        let deleted = conn.execute(
+            "DELETE FROM device WHERE id IN (
+                SELECT id FROM device WHERE user_id = ?1
+                ORDER BY last_seen ASC LIMIT ?2
+            )",
+            params![user_id, to_delete],
+        )?;
+
+        record_db_query("enforce_user_device_limit", start.elapsed());
+        Ok(deleted)
     }
 }
 
