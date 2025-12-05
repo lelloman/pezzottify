@@ -51,7 +51,7 @@ This document breaks down the Device Entity Implementation Plan into small, sequ
 
 ---
 
-### [ ] Task 1.2: Add validation constants
+### [x] Task 1.2: Add validation constants
 **File**: `catalog-server/src/user/device.rs`
 
 **Implementation**:
