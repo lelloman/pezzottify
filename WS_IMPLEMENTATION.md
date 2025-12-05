@@ -71,23 +71,23 @@ Create the core WebSocket module with message types, connection manager, and han
 
 ---
 
-### 1.2 [ ] Implement message types (`messages.rs`)
+### 1.2 [x] Implement message types (`messages.rs`)
 
 **Context:** Generic envelope format for all WS messages. Uses `type` field for routing and `payload` for feature-specific data.
 
 **File:** `catalog-server/src/server/websocket/messages.rs`
 
 **Tasks:**
-- [ ] 1.2.1 Create `ServerMessage` struct with `msg_type: String` and `payload: serde_json::Value`
-- [ ] 1.2.2 Implement `ServerMessage::new()` helper method
-- [ ] 1.2.3 Create `ClientMessage` struct (same structure as ServerMessage)
-- [ ] 1.2.4 Create `system` submodule with:
+- [x] 1.2.1 Create `ServerMessage` struct with `msg_type: String` and `payload: serde_json::Value`
+- [x] 1.2.2 Implement `ServerMessage::new()` helper method
+- [x] 1.2.3 Create `ClientMessage` struct (same structure as ServerMessage)
+- [x] 1.2.4 Create `system` submodule with:
   - `Connected` struct (device_id)
   - `Ping` struct (unit)
   - `Pong` struct (unit)
   - `Error` struct (code, message)
-- [ ] 1.2.5 Add serde derives with `#[serde(rename = "type")]` for msg_type field
-- [ ] 1.2.6 Write unit tests for serialization/deserialization
+- [x] 1.2.5 Add serde derives with `#[serde(rename = "type")]` for msg_type field
+- [x] 1.2.6 Write unit tests for serialization/deserialization
 
 **Reserved message types:**
 - `connected` - server sends on successful connection

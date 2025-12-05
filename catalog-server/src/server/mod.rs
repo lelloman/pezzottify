@@ -7,6 +7,7 @@ pub mod server;
 pub(self) mod session;
 pub mod state;
 pub(self) mod stream_track;
+pub mod websocket;
 
 pub use config::ServerConfig;
 pub use http_layers::*;
