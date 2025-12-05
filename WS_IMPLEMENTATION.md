@@ -154,16 +154,19 @@ Create the core WebSocket module with message types, connection manager, and han
 
 ---
 
-### 1.5 [ ] Create module exports (`mod.rs`)
+### 1.5 [x] Create module exports (`mod.rs`)
 
 **File:** `catalog-server/src/server/websocket/mod.rs`
 
 **Tasks:**
-- [ ] 1.5.1 Add `pub mod messages;`
-- [ ] 1.5.2 Add `pub mod connection;`
-- [ ] 1.5.3 Add `pub mod handler;`
-- [ ] 1.5.4 Add re-exports: `pub use connection::ConnectionManager;`
-- [ ] 1.5.5 Add re-exports: `pub use messages::{ServerMessage, ClientMessage};`
+- [x] 1.5.1 Add `pub mod messages;`
+- [x] 1.5.2 Add `pub mod connection;`
+- [x] 1.5.3 Add `pub mod handler;`
+- [x] 1.5.4 Add re-exports: `pub use connection::ConnectionManager;`
+- [x] 1.5.5 Add re-exports: `pub use messages::{ServerMessage, ClientMessage};`
+- [x] 1.5.6 Add re-exports: `pub use handler::{ws_handler, WsState};`
+
+**Note:** This was done incrementally while implementing each module.
 
 ---
 
