@@ -6,6 +6,7 @@ import router from './router'
 import { createPinia } from 'pinia'
 import { useDebugStore } from './store/debug'
 import { useRemoteStore } from './store/remote'
+import { useAuthStore } from './store/auth'
 
 const pinia = createPinia();
 const app = createApp(App);
@@ -16,6 +17,10 @@ app.use(router)
 
 window.config = useDebugStore();
 const remoteStore = useRemoteStore();
+const authStore = useAuthStore();
+
+// Initialize auth store (connects to WebSocket if already authenticated)
+authStore.initialize();
 
 app.mount('#app')
 

@@ -257,15 +257,17 @@ Implement the WebSocket service for the Vue frontend.
 
 ---
 
-### 3.2 [ ] Integrate with auth store
+### 3.2 [x] Integrate with auth store
 
 **File:** `web/src/store/auth.js`
 
 **Tasks:**
-- [ ] 3.2.1 Import websocket service
-- [ ] 3.2.2 Call `ws.connect()` after successful login
-- [ ] 3.2.3 Call `ws.disconnect()` on logout
-- [ ] 3.2.4 Call `ws.connect()` in initialize() if already authenticated
+- [x] 3.2.1 Import websocket service
+- [x] 3.2.2 Call `ws.connect()` after successful login
+- [x] 3.2.3 Call `ws.disconnect()` on logout
+- [x] 3.2.4 Call `ws.connect()` in initialize() if already authenticated
+
+**Note:** Also updated `main.js` to call `authStore.initialize()` on app startup.
 
 ---
 

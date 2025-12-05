@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia';
 import axios from 'axios';
+import * as ws from '../services/websocket';
 
 const DEVICE_UUID_KEY = 'pezzottify_device_uuid';
 
@@ -59,15 +60,30 @@ export const useAuthStore = defineStore('auth', {
 
         // Optionally fetch and store user info
         this.user = response.data.user || null;
+
+        // Connect to WebSocket after successful login
+        ws.connect();
       } catch (error) {
         console.error('Login failed', error);
         throw new Error(error.response?.data?.message || 'Login failed');
       }
     },
     logout() {
+      // Disconnect WebSocket before clearing auth
+      ws.disconnect();
+
       this.token = null;
       this.user = null;
       localStorage.removeItem('token');
+    },
+    /**
+     * Initialize the auth store on app startup.
+     * Connects to WebSocket if already authenticated.
+     */
+    initialize() {
+      if (this.isAuthenticated) {
+        ws.connect();
+      }
     }
   }
 });
