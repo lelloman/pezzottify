@@ -36,18 +36,24 @@ Before writing any code, verify assumptions from the plan.
 
 ---
 
-### 0.2 [ ] Verify device limit exists
+### 0.2 [x] Verify device limit exists
 
 **Context:** There should already be a per-user device limit from the Device Entity feature. If not, we need to define one.
 
 **Tasks:**
-- [ ] 0.2.1 Check if device limit is enforced in the device registration/login flow
-- [ ] 0.2.2 Document current limit (or decide on one if missing - suggested: 10 devices)
-- [ ] 0.2.3 Confirm how the limit affects WS connections (ConnectionManager doesn't need to enforce it if login already does)
+- [x] 0.2.1 Check if device limit is enforced in the device registration/login flow
+- [x] 0.2.2 Document current limit (or decide on one if missing - suggested: 10 devices)
+- [x] 0.2.3 Confirm how the limit affects WS connections (ConnectionManager doesn't need to enforce it if login already does)
 
 **Files to check:**
 - `catalog-server/src/user/` - device-related code
 - Device Entity plan/implementation
+
+**Findings:**
+- Device limit exists: `MAX_DEVICES_PER_USER = 50` defined at `server.rs:55`
+- Enforced during login via `enforce_user_device_limit()` at `server.rs:1075`
+- When limit exceeded, oldest devices (by last_seen) are pruned
+- **ConnectionManager doesn't need device limits** - login flow already enforces it, and WS connections are tied to authenticated devices
 
 ---
 
