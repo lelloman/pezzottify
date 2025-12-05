@@ -17,7 +17,7 @@ slowdown = [] # dev feature, adds a slowdown layer in front of server routes
 anyhow = "1.0.75"
 argon2 = "0.5.3"
 async-trait = "0.1.85"
-axum = "0.8.1"
+axum = { version = "0.8.1", features = ["ws"] }
 axum-extra = { version = "0.10.0", features = ["cookie"] }
 byte-unit = "5.1.6"
 chrono = "0.4.39"

@@ -124,34 +124,33 @@ Create the core WebSocket module with message types, connection manager, and han
 
 ---
 
-### 1.4 [ ] Implement WebSocket handler (`handler.rs`)
+### 1.4 [x] Implement WebSocket handler (`handler.rs`)
 
 **Context:** Handles WS upgrade, message loop, and cleanup.
 
 **File:** `catalog-server/src/server/websocket/handler.rs`
 
 **Tasks:**
-- [ ] 1.4.1 Define `WsState` struct containing `Arc<ConnectionManager>`
-- [ ] 1.4.2 Implement `ws_handler()` - the axum route handler
+- [x] 1.4.1 Define `WsState` struct containing `Arc<ConnectionManager>`
+- [x] 1.4.2 Implement `ws_handler()` - the axum route handler
   - Extract `WebSocketUpgrade`, `Session`, and `State<Arc<WsState>>`
   - Call `ws.on_upgrade()` with `handle_socket`
-- [ ] 1.4.3 Implement `handle_socket()` async function:
-  - [ ] 1.4.3a Extract user_id, device_id, device_type from session
-  - [ ] 1.4.3b Register with ConnectionManager, get outgoing_rx
-  - [ ] 1.4.3c Split socket into sink and stream
-  - [ ] 1.4.3d Send `connected` message immediately
-  - [ ] 1.4.3e Spawn task to forward outgoing_rx messages to ws_sink
-  - [ ] 1.4.3f Loop on ws_stream to receive incoming messages
-  - [ ] 1.4.3g Handle Close and Error by breaking loop
-  - [ ] 1.4.3h On exit: abort outgoing task, unregister from ConnectionManager
-- [ ] 1.4.4 Implement `handle_client_message()`:
+  - Reject if device_id is missing (400 Bad Request)
+- [x] 1.4.3 Implement `handle_socket()` async function:
+  - [x] 1.4.3a Extract user_id, device_id, device_type from session
+  - [x] 1.4.3b Register with ConnectionManager, get outgoing_rx
+  - [x] 1.4.3c Split socket into sink and stream
+  - [x] 1.4.3d Send `connected` message immediately
+  - [x] 1.4.3e Spawn task to forward outgoing_rx messages to ws_sink
+  - [x] 1.4.3f Loop on ws_stream to receive incoming messages
+  - [x] 1.4.3g Handle Close and Error by breaking loop
+  - [x] 1.4.3h On exit: abort outgoing task, unregister from ConnectionManager
+- [x] 1.4.4 Implement `handle_client_message()`:
   - Handle `ping` -> respond with `pong`
-  - Log/ignore unknown message types (placeholder for future feature dispatch)
-- [ ] 1.4.5 Add idle timeout handling (decide on approach):
-  - Option A: Use `tokio::time::timeout` on stream recv
-  - Option B: Rely on reverse proxy timeout
-  - Option C: Check axum WebSocket config options
-- [ ] 1.4.6 Write integration test for basic connect/disconnect flow
+  - Handle unknown types -> send error message
+  - Placeholder for future feature dispatch (sync.*, playback.*)
+- [ ] 1.4.5 Add idle timeout handling - Deferred (can rely on reverse proxy or add later)
+- [ ] 1.4.6 Write integration test for basic connect/disconnect flow - Deferred to Phase 4
 
 ---
 

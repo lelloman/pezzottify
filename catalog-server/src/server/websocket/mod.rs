@@ -4,8 +4,9 @@
 //! for features like user data sync, remote playback control, and notifications.
 
 pub mod connection;
+pub mod handler;
 pub mod messages;
-// pub mod handler;
 
 pub use connection::ConnectionManager;
+pub use handler::{ws_handler, WsState};
 pub use messages::{ClientMessage, ServerMessage};
