@@ -790,4 +790,26 @@ impl TestClient {
             .await
             .expect("Update user settings request failed")
     }
+
+    // =========================================================================
+    // Sync API
+    // =========================================================================
+
+    /// GET /v1/sync/state
+    pub async fn get_sync_state(&self) -> Response {
+        self.client
+            .get(format!("{}/v1/sync/state", self.base_url))
+            .send()
+            .await
+            .expect("Get sync state request failed")
+    }
+
+    /// GET /v1/sync/events?since={since}
+    pub async fn get_sync_events(&self, since: i64) -> Response {
+        self.client
+            .get(format!("{}/v1/sync/events?since={}", self.base_url, since))
+            .send()
+            .await
+            .expect("Get sync events request failed")
+    }
 }

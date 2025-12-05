@@ -518,6 +518,29 @@ impl UserManager {
     pub fn get_all_user_settings(&self, user_id: usize) -> Result<Vec<UserSetting>> {
         self.user_store.get_all_user_settings(user_id)
     }
+
+    // ========================================================================
+    // Sync Event Methods
+    // ========================================================================
+
+    /// Get events since a given sequence number.
+    pub fn get_events_since(
+        &self,
+        user_id: usize,
+        since_seq: i64,
+    ) -> Result<Vec<super::sync_events::StoredEvent>> {
+        self.user_store.get_events_since(user_id, since_seq)
+    }
+
+    /// Get the current (latest) sequence number for a user.
+    pub fn get_current_seq(&self, user_id: usize) -> Result<i64> {
+        self.user_store.get_current_seq(user_id)
+    }
+
+    /// Get the minimum available sequence number for a user.
+    pub fn get_min_seq(&self, user_id: usize) -> Result<Option<i64>> {
+        self.user_store.get_min_seq(user_id)
+    }
 }
 
 #[cfg(test)]

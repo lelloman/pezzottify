@@ -457,7 +457,7 @@ pub fn prune_events_older_than(&self, before_timestamp: i64) -> Result<u64> {
 
 ### 2.1 Full State Endpoint
 
-#### [ ] 2.1.1 Create `SyncStateResponse` struct
+#### [x] 2.1.1 Create `SyncStateResponse` struct
 
 **Description:** Define response structure for full state endpoint.
 
@@ -490,7 +490,7 @@ struct PlaylistState {
 }
 ```
 
-#### [ ] 2.1.2 Implement `get_sync_state` handler
+#### [x] 2.1.2 Implement `get_sync_state` handler
 
 **Description:** Handler that returns full user state with current sequence.
 
@@ -499,7 +499,7 @@ struct PlaylistState {
 - Route: `GET /v1/sync/state`
 - Combines: liked content, settings, playlists, permissions
 
-#### [ ] 2.1.3 Add route for `GET /v1/sync/state`
+#### [x] 2.1.3 Add route for `GET /v1/sync/state`
 
 **Description:** Wire up the sync state endpoint.
 
@@ -511,7 +511,7 @@ struct PlaylistState {
 
 ### 2.2 Events Since Endpoint
 
-#### [ ] 2.2.1 Create `SyncEventsResponse` struct
+#### [x] 2.2.1 Create `SyncEventsResponse` struct
 
 **Description:** Define response structure for events endpoint.
 
@@ -527,7 +527,7 @@ struct SyncEventsResponse {
 }
 ```
 
-#### [ ] 2.2.2 Create `SyncEventsQuery` struct
+#### [x] 2.2.2 Create `SyncEventsQuery` struct
 
 **Description:** Define query parameters for events endpoint.
 
@@ -542,7 +542,7 @@ struct SyncEventsQuery {
 }
 ```
 
-#### [ ] 2.2.3 Implement `get_sync_events` handler
+#### [x] 2.2.3 Implement `get_sync_events` handler
 
 **Description:** Handler that returns events since a sequence number.
 
@@ -576,7 +576,7 @@ async fn get_sync_events(
 }
 ```
 
-#### [ ] 2.2.4 Add route for `GET /v1/sync/events`
+#### [x] 2.2.4 Add route for `GET /v1/sync/events`
 
 **Description:** Wire up the sync events endpoint.
 
@@ -584,7 +584,7 @@ async fn get_sync_events(
 - File: `catalog-server/src/server/server.rs`
 - Add to router with `require_access_catalog` middleware
 
-#### [ ] 2.2.5 Write integration tests for sync endpoints
+#### [x] 2.2.5 Write integration tests for sync endpoints
 
 **Description:** Test both sync endpoints with various scenarios.
 

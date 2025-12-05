@@ -250,6 +250,190 @@ struct RemoveTracksFromPlaylist {
     pub tracks_positions: Vec<usize>,
 }
 
+// ========================================================================
+// Sync API Types
+// ========================================================================
+
+#[derive(Serialize)]
+struct SyncStateResponse {
+    seq: i64,
+    likes: LikesState,
+    settings: Vec<UserSetting>,
+    playlists: Vec<PlaylistState>,
+    permissions: Vec<Permission>,
+}
+
+#[derive(Serialize)]
+struct LikesState {
+    albums: Vec<String>,
+    artists: Vec<String>,
+    tracks: Vec<String>,
+}
+
+#[derive(Serialize)]
+struct PlaylistState {
+    id: String,
+    name: String,
+    tracks: Vec<String>,
+}
+
+#[derive(Serialize)]
+struct SyncEventsResponse {
+    events: Vec<crate::user::sync_events::StoredEvent>,
+    current_seq: i64,
+}
+
+#[derive(Deserialize)]
+struct SyncEventsQuery {
+    since: i64,
+}
+
+// ========================================================================
+// Sync API Handlers
+// ========================================================================
+
+/// GET /v1/sync/state - Returns full user state for initial sync
+async fn get_sync_state(
+    session: Session,
+    State(user_manager): State<GuardedUserManager>,
+) -> Response {
+    let um = user_manager.lock().unwrap();
+
+    // Get current sequence number
+    let seq = match um.get_current_seq(session.user_id) {
+        Ok(seq) => seq,
+        Err(err) => {
+            error!("Error getting current seq: {}", err);
+            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+        }
+    };
+
+    // Get likes for all content types
+    let albums = match um.get_user_liked_content(session.user_id, LikedContentType::Album) {
+        Ok(v) => v,
+        Err(err) => {
+            error!("Error getting liked albums: {}", err);
+            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+        }
+    };
+    let artists = match um.get_user_liked_content(session.user_id, LikedContentType::Artist) {
+        Ok(v) => v,
+        Err(err) => {
+            error!("Error getting liked artists: {}", err);
+            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+        }
+    };
+    let tracks = match um.get_user_liked_content(session.user_id, LikedContentType::Track) {
+        Ok(v) => v,
+        Err(err) => {
+            error!("Error getting liked tracks: {}", err);
+            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+        }
+    };
+
+    // Get all user settings
+    let settings = match um.get_all_user_settings(session.user_id) {
+        Ok(s) => s,
+        Err(err) => {
+            error!("Error getting user settings: {}", err);
+            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+        }
+    };
+
+    // Get all playlists with their full data
+    let playlist_ids = match um.get_user_playlists(session.user_id) {
+        Ok(p) => p,
+        Err(err) => {
+            error!("Error getting user playlists: {}", err);
+            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+        }
+    };
+
+    let mut playlists = Vec::new();
+    for playlist_id in playlist_ids {
+        match um.get_user_playlist(&playlist_id, session.user_id) {
+            Ok(playlist) => {
+                playlists.push(PlaylistState {
+                    id: playlist.id,
+                    name: playlist.name,
+                    tracks: playlist.tracks,
+                });
+            }
+            Err(err) => {
+                warn!("Error getting playlist {}: {}", playlist_id, err);
+                // Continue with other playlists
+            }
+        }
+    }
+
+    // Get permissions
+    let permissions = match um.get_user_permissions(session.user_id) {
+        Ok(p) => p,
+        Err(err) => {
+            error!("Error getting user permissions: {}", err);
+            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+        }
+    };
+
+    Json(SyncStateResponse {
+        seq,
+        likes: LikesState {
+            albums,
+            artists,
+            tracks,
+        },
+        settings,
+        playlists,
+        permissions,
+    })
+    .into_response()
+}
+
+/// GET /v1/sync/events - Returns events since a given sequence number
+async fn get_sync_events(
+    session: Session,
+    State(user_manager): State<GuardedUserManager>,
+    Query(query): Query<SyncEventsQuery>,
+) -> Response {
+    let um = user_manager.lock().unwrap();
+
+    // Check if requested sequence has been pruned
+    // Return 410 GONE if the event *after* the requested sequence has been pruned.
+    // For example, if since=5 and min_seq=10, events 6-9 have been pruned,
+    // so we can't provide a continuous stream from seq 5.
+    // However, if since=0 and min_seq=1, that's fine - we return event 1.
+    if let Ok(Some(min_seq)) = um.get_min_seq(session.user_id) {
+        if query.since > 0 && query.since + 1 < min_seq {
+            // Requested sequence is no longer available
+            return StatusCode::GONE.into_response();
+        }
+    }
+
+    // Get current sequence number
+    let current_seq = match um.get_current_seq(session.user_id) {
+        Ok(seq) => seq,
+        Err(err) => {
+            error!("Error getting current seq: {}", err);
+            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+        }
+    };
+
+    // Get events since the requested sequence
+    let events = match um.get_events_since(session.user_id, query.since) {
+        Ok(e) => e,
+        Err(err) => {
+            error!("Error getting events since {}: {}", query.since, err);
+            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+        }
+    };
+
+    Json(SyncEventsResponse {
+        events,
+        current_seq,
+    })
+    .into_response()
+}
+
 async fn home(session: Option<Session>, State(state): State<ServerState>) -> impl IntoResponse {
     let stats = ServerStats {
         uptime: format_uptime(state.start_time.elapsed()),
@@ -2087,7 +2271,7 @@ pub fn make_app(
     let playlist_read_routes: Router = Router::new()
         .route("/playlist/{id}", get(get_playlist))
         .route("/playlists", get(get_user_playlists))
-        .layer(GovernorLayer::new(user_content_read_rate_limit))
+        .layer(GovernorLayer::new(user_content_read_rate_limit.clone()))
         .route_layer(middleware::from_fn_with_state(
             state.clone(),
             require_own_playlists,
@@ -2153,6 +2337,18 @@ pub fn make_app(
         .merge(playlist_routes)
         .merge(listening_stats_routes)
         .merge(settings_routes);
+
+    // Sync routes (requires AccessCatalog permission)
+    // Rate limiting: uses content read limit since these are read operations
+    let sync_routes: Router = Router::new()
+        .route("/state", get(get_sync_state))
+        .route("/events", get(get_sync_events))
+        .layer(GovernorLayer::new(user_content_read_rate_limit.clone()))
+        .route_layer(middleware::from_fn_with_state(
+            state.clone(),
+            require_access_catalog,
+        ))
+        .with_state(state.clone());
 
     // Catalog editing routes (requires EditCatalog permission)
     let catalog_edit_routes: Router = Router::new()
@@ -2282,6 +2478,7 @@ pub fn make_app(
         .nest("/v1/content", content_routes)
         .nest("/v1/user", user_routes)
         .nest("/v1/admin", admin_routes)
+        .nest("/v1/sync", sync_routes)
         .nest("/v1", ws_routes);
 
     #[cfg(feature = "slowdown")]
