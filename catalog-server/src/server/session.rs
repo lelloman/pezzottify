@@ -1,5 +1,6 @@
 use super::state::ServerState;
 use crate::user::auth::AuthTokenValue;
+use crate::user::device::DeviceType;
 use crate::user::Permission;
 
 use axum::{
@@ -15,6 +16,8 @@ pub struct Session {
     pub user_id: usize,
     pub token: String,
     pub permissions: Vec<Permission>,
+    pub device_id: Option<usize>,
+    pub device_type: Option<DeviceType>,
 }
 
 impl Session {
@@ -114,10 +117,32 @@ async fn extract_session_from_request_parts(
         }
     };
 
+    // Look up device info if device_id is present
+    let (device_id, device_type) = if let Some(device_id) = auth_token.device_id {
+        match user_manager.get_device(device_id) {
+            Ok(Some(device)) => {
+                debug!("Found device for session: device_id={}, type={:?}", device_id, device.device_type);
+                (Some(device_id), Some(device.device_type))
+            }
+            Ok(None) => {
+                debug!("Device not found for device_id={}, continuing without device info", device_id);
+                (Some(device_id), None)
+            }
+            Err(e) => {
+                debug!("Failed to get device info for device_id={}: {}", device_id, e);
+                (Some(device_id), None)
+            }
+        }
+    } else {
+        (None, None)
+    };
+
     Some(Session {
         user_id: auth_token.user_id,
         token: auth_token.value.0,
         permissions,
+        device_id,
+        device_type,
     })
 }
 
@@ -160,6 +185,8 @@ mod tests {
                 Permission::LikeContent,
                 Permission::OwnPlaylists,
             ],
+            device_id: None,
+            device_type: None,
         };
 
         assert!(session.has_permission(Permission::AccessCatalog));
@@ -173,6 +200,8 @@ mod tests {
             user_id: 1,
             token: "test-token".to_string(),
             permissions: vec![Permission::AccessCatalog, Permission::LikeContent],
+            device_id: None,
+            device_type: None,
         };
 
         assert!(!session.has_permission(Permission::EditCatalog));
@@ -186,6 +215,8 @@ mod tests {
             user_id: 1,
             token: "test-token".to_string(),
             permissions: vec![],
+            device_id: None,
+            device_type: None,
         };
 
         assert!(!session.has_permission(Permission::AccessCatalog));
@@ -283,6 +314,8 @@ mod tests {
             user_id: 42,
             token: "secret-token".to_string(),
             permissions: vec![Permission::AccessCatalog],
+            device_id: Some(123),
+            device_type: Some(DeviceType::Web),
         };
 
         let debug_str = format!("{:?}", session);
@@ -291,6 +324,8 @@ mod tests {
         assert!(debug_str.contains("token"));
         assert!(debug_str.contains("secret-token"));
         assert!(debug_str.contains("permissions"));
+        assert!(debug_str.contains("device_id"));
+        assert!(debug_str.contains("device_type"));
     }
 
     #[test]
