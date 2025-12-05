@@ -246,60 +246,86 @@ Maps to UI indicator:
 
 ---
 
-## Phase 5: UI Status Indicator
+## Phase 5: Lifecycle & Connectivity
 
-### 5.1 [ ] Create ConnectionStatusIndicator composable
+### 5.1 [ ] Implement lifecycle-aware connection
+
+**Tasks:**
+- [ ] 5.1.1 Inject `ProcessLifecycleOwner` or use `LifecycleObserver`
+- [ ] 5.1.2 Track app foreground/background state
+- [ ] 5.1.3 Inject player state (is music playing?) from `Player` module
+- [ ] 5.1.4 Implement connection policy:
+  - Connect when: `(appInForeground || musicPlaying) && authenticated`
+  - Disconnect when: `!appInForeground && !musicPlaying`
+- [ ] 5.1.5 Debounce state changes (avoid rapid connect/disconnect)
+
+---
+
+### 5.2 [ ] Implement network connectivity listener
+
+**Tasks:**
+- [ ] 5.2.1 Create `NetworkConnectivityObserver` using `ConnectivityManager`
+- [ ] 5.2.2 Expose `isConnected: StateFlow<Boolean>`
+- [ ] 5.2.3 Trigger reconnect when network becomes available
+- [ ] 5.2.4 Pause reconnect attempts when network is unavailable
+- [ ] 5.2.5 Handle network type changes (WiFi ↔ Mobile)
+
+---
+
+## Phase 6: UI Status Indicator
+
+### 6.1 [ ] Create ConnectionStatusIndicator composable
 
 **File:** `android/ui/src/main/java/com/lelloman/pezzottify/android/ui/common/ConnectionStatusIndicator.kt`
 
 **Tasks:**
-- [ ] 5.1.1 Create `@Composable` function
-- [ ] 5.1.2 Accept `connectionState: ConnectionState` parameter
-- [ ] 5.1.3 Render colored dot:
+- [ ] 6.1.1 Create `@Composable` function
+- [ ] 6.1.2 Accept `connectionState: ConnectionState` parameter
+- [ ] 6.1.3 Render colored dot:
   - Green (`#22c55e`) for `Connected`
   - Orange (`#f97316`) for `Connecting` (with pulse animation)
   - Red (`#ef4444`) for `Disconnected` / `Error`
-- [ ] 5.1.4 Add subtle glow effect (optional)
-- [ ] 5.1.5 Show tooltip on long press with status details
+- [ ] 6.1.4 Add subtle glow effect (optional)
+- [ ] 6.1.5 Show tooltip on long press with status details
 
 ---
 
-### 5.2 [ ] Add indicator to app bar/header
+### 6.2 [ ] Add indicator to app bar/header
 
 **File:** TBD (main scaffold or top bar)
 
 **Tasks:**
-- [ ] 5.2.1 Find the main app bar composable
-- [ ] 5.2.2 Inject `WebSocketManager` into relevant ViewModel
-- [ ] 5.2.3 Expose `connectionState` as StateFlow
-- [ ] 5.2.4 Place `ConnectionStatusIndicator` in app bar
+- [ ] 6.2.1 Find the main app bar composable
+- [ ] 6.2.2 Inject `WebSocketManager` into relevant ViewModel
+- [ ] 6.2.3 Expose `connectionState` as StateFlow
+- [ ] 6.2.4 Place `ConnectionStatusIndicator` in app bar
 
 ---
 
-## Phase 6: Testing
+## Phase 7: Testing
 
-### 6.1 [ ] Unit tests for WebSocketManagerImpl
+### 7.1 [ ] Unit tests for WebSocketManagerImpl
 
 **File:** `android/remoteapi/src/test/java/.../websocket/WebSocketManagerImplTest.kt`
 
 **Tasks:**
-- [ ] 6.1.1 Test connection state transitions
-- [ ] 6.1.2 Test message parsing and handler dispatch
-- [ ] 6.1.3 Test reconnection backoff logic
-- [ ] 6.1.4 Test intentional disconnect prevents reconnect
-- [ ] 6.1.5 Mock OkHttp WebSocket for unit tests
+- [ ] 7.1.1 Test connection state transitions
+- [ ] 7.1.2 Test message parsing and handler dispatch
+- [ ] 7.1.3 Test reconnection backoff logic
+- [ ] 7.1.4 Test intentional disconnect prevents reconnect
+- [ ] 7.1.5 Mock OkHttp WebSocket for unit tests
 
 ---
 
-### 6.2 [ ] Integration tests
+### 7.2 [ ] Integration tests
 
 **File:** `android/remoteapi/src/integrationTest/java/.../websocket/WebSocketIntegrationTest.kt`
 
 **Tasks:**
-- [ ] 6.2.1 Test real connection to test server
-- [ ] 6.2.2 Test "connected" message received
-- [ ] 6.2.3 Test ping/pong heartbeat
-- [ ] 6.2.4 Test reconnection after server restart
+- [ ] 7.2.1 Test real connection to test server
+- [ ] 7.2.2 Test "connected" message received
+- [ ] 7.2.3 Test ping/pong heartbeat
+- [ ] 7.2.4 Test reconnection after server restart
 
 ---
 
@@ -312,15 +338,18 @@ Maps to UI indicator:
 | `domain/.../websocket/WebSocketManager.kt` | Interface + ConnectionState |
 | `domain/.../websocket/WebSocketMessage.kt` | Message data classes |
 | `remoteapi/.../websocket/WebSocketManagerImpl.kt` | OkHttp implementation |
+| `remoteapi/.../websocket/NetworkConnectivityObserver.kt` | Network state observer |
+| `domain/.../websocket/WebSocketLifecycleManager.kt` | Lifecycle-aware connection manager |
 | `ui/.../common/ConnectionStatusIndicator.kt` | Status dot composable |
 
 ### Must Modify
 
 | File | Changes |
 |------|---------|
-| `remoteapi/RemoteApiModule.kt` | Add WebSocketManager provider |
+| `remoteapi/RemoteApiModule.kt` | Add WebSocketManager + NetworkConnectivityObserver providers |
 | `domain/.../auth/usecase/PerformLogin.kt` | Connect on login |
 | `domain/.../auth/usecase/PerformLogout.kt` | Disconnect on logout |
+| `app/PezzottifyApplication.kt` | Initialize lifecycle observer |
 | App bar/header composable | Add status indicator |
 
 ---
@@ -363,16 +392,22 @@ Same as web client - JSON envelope format:
 2. **Phase 2** - RemoteAPI implementation (core logic)
 3. **Phase 3** - DI wiring (make it injectable)
 4. **Phase 4** - Auth integration (connect/disconnect lifecycle)
-5. **Phase 5** - UI indicator (user visibility)
-6. **Phase 6** - Testing (quality assurance)
+5. **Phase 5** - Lifecycle & Connectivity (smart connection management)
+6. **Phase 6** - UI indicator (user visibility)
+7. **Phase 7** - Testing (quality assurance)
 
 ---
 
-## Open Questions
+## Design Decisions
 
-1. **App backgrounding** - Should WebSocket disconnect when app goes to background? Or stay connected for notifications?
-2. **Network changes** - Should we listen for connectivity changes and reconnect?
-3. **Battery optimization** - Any concerns with persistent connection on mobile?
+1. **App backgrounding** - WebSocket stays connected when:
+   - App is in foreground, OR
+   - Music is playing (even if app is in background)
+   - Disconnect when app is in background AND no music playing
+
+2. **Network changes** - Yes, listen for connectivity changes and auto-reconnect when network becomes available
+
+3. **Battery optimization** - Not a concern. The app streams music from server, so WS connection has negligible impact compared to audio streaming.
 
 ---
 
@@ -380,12 +415,13 @@ Same as web client - JSON envelope format:
 
 | Phase | Tasks | Estimated Complexity |
 |-------|-------|---------------------|
-| Phase 1: Domain Interface | 3 groups | Low |
+| Phase 1: Domain Interface | 2 groups | Low |
 | Phase 2: Implementation | 5 groups | High |
 | Phase 3: DI | 2 groups | Low |
 | Phase 4: Auth Integration | 3 groups | Medium |
-| Phase 5: UI Indicator | 2 groups | Medium |
-| Phase 6: Testing | 2 groups | Medium |
+| Phase 5: Lifecycle & Connectivity | 2 groups | Medium |
+| Phase 6: UI Indicator | 2 groups | Medium |
+| Phase 7: Testing | 2 groups | Medium |
 
-**Total task groups:** 17
-**Total individual tasks:** ~45
+**Total task groups:** 18
+**Total individual tasks:** ~55
