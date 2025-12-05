@@ -1409,12 +1409,13 @@ impl UserAuthTokenStore for SqliteUserStore {
     fn get_user_auth_token(&self, value: &AuthTokenValue) -> Result<Option<AuthToken>> {
         let start = Instant::now();
         let conn = self.conn.lock().unwrap();
-        let mut stmt = conn
-            .prepare("SELECT * FROM auth_token WHERE value = ?1")?;
+        let mut stmt = conn.prepare(
+            "SELECT user_id, value, created, last_used, device_id FROM auth_token WHERE value = ?1",
+        )?;
         let result = match stmt.query_row(params![value.0], |row| {
             Ok(AuthToken {
                 user_id: row.get(0)?,
-                device_id: None, // Will be populated when device_id column is added to schema
+                device_id: row.get(4)?,
                 value: AuthTokenValue(row.get(1)?),
                 created: system_time_from_column_result(row.get(2)?),
                 last_used: row
@@ -1436,12 +1437,12 @@ impl UserAuthTokenStore for SqliteUserStore {
 
         // Get the token data before deleting
         let auth_token = match tx
-            .prepare("SELECT * FROM auth_token WHERE value = ?1")
+            .prepare("SELECT user_id, value, created, last_used, device_id FROM auth_token WHERE value = ?1")
             .and_then(|mut stmt| {
                 stmt.query_row(params![token.0], |row| {
                     Ok(AuthToken {
                         user_id: row.get(0)?,
-                        device_id: None, // Will be populated when device_id column is added to schema
+                        device_id: row.get(4)?,
                         value: AuthTokenValue(row.get(1)?),
                         created: system_time_from_column_result(row.get(2)?),
                         last_used: row
@@ -1478,9 +1479,15 @@ impl UserAuthTokenStore for SqliteUserStore {
     fn add_user_auth_token(&self, token: AuthToken) -> Result<()> {
         let start = Instant::now();
         let conn = self.conn.lock().unwrap();
+        let created = token
+            .created
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .unwrap()
+            .as_secs() as i64;
+
         conn.execute(
-            "INSERT INTO auth_token (value, user_id) VALUES (?1, ?2)",
-            params![token.value.0, token.user_id,],
+            "INSERT INTO auth_token (user_id, value, created, device_id) VALUES (?1, ?2, ?3, ?4)",
+            params![token.user_id, token.value.0, created, token.device_id],
         )?;
         record_db_query("add_user_auth_token", start.elapsed());
         Ok(())
@@ -1488,15 +1495,14 @@ impl UserAuthTokenStore for SqliteUserStore {
 
     fn get_all_user_auth_tokens(&self, user_handle: &str) -> Result<Vec<AuthToken>> {
         let conn = self.conn.lock().unwrap();
-        let mut stmt = conn
-            .prepare(
-                "SELECT * FROM auth_token WHERE user_id = (SELECT id FROM user WHERE handle = ?1)",
-            )?;
+        let mut stmt = conn.prepare(
+            "SELECT user_id, value, created, last_used, device_id FROM auth_token WHERE user_id = (SELECT id FROM user WHERE handle = ?1)",
+        )?;
         let rows = stmt
             .query_map(params![user_handle], |row| {
                 Ok(AuthToken {
                     user_id: row.get(0)?,
-                    device_id: None, // Will be populated when device_id column is added to schema
+                    device_id: row.get(4)?,
                     value: AuthTokenValue(row.get(1)?),
                     created: system_time_from_column_result(row.get(2)?),
                     last_used: row

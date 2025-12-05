@@ -18,12 +18,12 @@ This document breaks down the Device Entity Implementation Plan into small, sequ
 
 | Phase | Description | Tasks | Status |
 |-------|-------------|-------|--------|
-| 1 | Core Types and Validation | 9 | [ ] |
-| 2 | Store Trait Definitions | 2 | [ ] |
-| 3 | AuthToken Changes | 1 | [ ] |
-| 4 | SQLite Schema and Migration | 3 | [ ] |
-| 5 | DeviceStore Implementation | 9 | [ ] |
-| 6 | Update Auth Token Persistence | 2 | [ ] |
+| 1 | Core Types and Validation | 9 | [x] |
+| 2 | Store Trait Definitions | 2 | [x] |
+| 3 | AuthToken Changes | 1 | [x] |
+| 4 | SQLite Schema and Migration | 3 | [x] |
+| 5 | DeviceStore Implementation | 9 | [x] |
+| 6 | Update Auth Token Persistence | 2 | [x] |
 | 7 | UserManager Changes | 3 | [ ] |
 | 8 | Server Changes | 7 | [ ] |
 | 9 | Session Changes | 3 | [ ] |
@@ -893,7 +893,7 @@ impl DeviceStore for SqliteUserStore {
 
 ## Phase 6: Update Auth Token Persistence
 
-### [ ] Task 6.1: Update add_user_auth_token to include device_id
+### [x] Task 6.1: Update add_user_auth_token to include device_id
 **File**: `catalog-server/src/user/sqlite_user_store.rs`
 
 **Implementation**:
@@ -921,7 +921,7 @@ fn add_user_auth_token(&self, token: AuthToken) -> Result<()> {
 
 ---
 
-### [ ] Task 6.2: Update get_user_auth_token to return device_id
+### [x] Task 6.2: Update get_user_auth_token to return device_id
 **File**: `catalog-server/src/user/sqlite_user_store.rs`
 
 **Implementation**:
