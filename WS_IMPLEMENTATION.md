@@ -96,27 +96,27 @@ Create the core WebSocket module with message types, connection manager, and han
 
 ---
 
-### 1.3 [ ] Implement ConnectionManager (`connection.rs`)
+### 1.3 [x] Implement ConnectionManager (`connection.rs`)
 
 **Context:** Tracks all active WebSocket connections, organized by user_id -> device_id -> channel sender.
 
 **File:** `catalog-server/src/server/websocket/connection.rs`
 
 **Tasks:**
-- [ ] 1.3.1 Define `ConnectionId` struct (user_id, device_id)
-- [ ] 1.3.2 Define `ConnectionEntry` struct (sender: mpsc::Sender, device_type: String)
-- [ ] 1.3.3 Define `SendError` enum (NotConnected, Disconnected)
-- [ ] 1.3.4 Create `ConnectionManager` struct with `RwLock<HashMap<usize, HashMap<String, ConnectionEntry>>>`
-- [ ] 1.3.5 Implement `ConnectionManager::new()`
-- [ ] 1.3.6 Implement `register()` - creates channel, stores sender, returns receiver
+- [x] 1.3.1 Define `ConnectionId` struct (user_id, device_id) - Not needed, using separate params
+- [x] 1.3.2 Define `ConnectionEntry` struct (sender: mpsc::Sender, device_type: String)
+- [x] 1.3.3 Define `SendError` enum (NotConnected, Disconnected)
+- [x] 1.3.4 Create `ConnectionManager` struct with `RwLock<HashMap<usize, HashMap<usize, ConnectionEntry>>>`
+- [x] 1.3.5 Implement `ConnectionManager::new()`
+- [x] 1.3.6 Implement `register()` - creates channel, stores sender, returns receiver
   - Must handle drop-and-replace for existing device connections
-- [ ] 1.3.7 Implement `unregister()` - removes connection entry, cleans up empty user maps
-- [ ] 1.3.8 Implement `send_to_device()` - send to specific device
-- [ ] 1.3.9 Implement `send_to_other_devices()` - broadcast excluding source device, returns failed device_ids
-- [ ] 1.3.10 Implement `broadcast_to_user()` - send to all devices of a user, returns failed device_ids
-- [ ] 1.3.11 Implement `get_connected_devices()` - list connected device_ids for a user
-- [ ] 1.3.12 Implement `is_device_connected()` - check if specific device is connected
-- [ ] 1.3.13 Write unit tests for all ConnectionManager methods
+- [x] 1.3.7 Implement `unregister()` - removes connection entry, cleans up empty user maps
+- [x] 1.3.8 Implement `send_to_device()` - send to specific device
+- [x] 1.3.9 Implement `send_to_other_devices()` - broadcast excluding source device, returns failed device_ids
+- [x] 1.3.10 Implement `broadcast_to_user()` - send to all devices of a user, returns failed device_ids
+- [x] 1.3.11 Implement `get_connected_devices()` - list connected device_ids for a user
+- [x] 1.3.12 Implement `is_device_connected()` - check if specific device is connected
+- [x] 1.3.13 Write unit tests for all ConnectionManager methods (13 tests)
 
 **Design notes:**
 - Channel buffer size: 32 messages
