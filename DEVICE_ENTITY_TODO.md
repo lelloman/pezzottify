@@ -511,7 +511,7 @@ const DEVICE_TABLE_V_8: Table = Table {
 
 ---
 
-### [ ] Task 4.2: Add AUTH_TOKEN_TABLE_V_8 constant
+### [x] Task 4.2: Add AUTH_TOKEN_TABLE_V_8 constant
 **File**: `catalog-server/src/user/sqlite_user_store.rs`
 
 **Implementation**:

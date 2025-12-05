@@ -501,6 +501,45 @@ const DEVICE_TABLE_V_8: Table = Table {
     ],
 };
 
+/// V 8
+/// Auth token table with device_id foreign key
+const AUTH_TOKEN_TABLE_V_8: Table = Table {
+    name: "auth_token",
+    columns: &[
+        sqlite_column!(
+            "user_id",
+            &SqlType::Integer,
+            non_null = true,
+            foreign_key = Some(&ForeignKey {
+                foreign_table: "user",
+                foreign_column: "id",
+                on_delete: ForeignKeyOnChange::Cascade,
+            })
+        ),
+        sqlite_column!("value", &SqlType::Text, non_null = true, is_unique = true),
+        sqlite_column!(
+            "created",
+            &SqlType::Integer,
+            default_value = Some(DEFAULT_TIMESTAMP)
+        ),
+        sqlite_column!("last_used", &SqlType::Integer),
+        sqlite_column!(
+            "device_id",
+            &SqlType::Integer,
+            foreign_key = Some(&ForeignKey {
+                foreign_table: "device",
+                foreign_column: "id",
+                on_delete: ForeignKeyOnChange::Cascade,
+            })
+        ),
+    ],
+    unique_constraints: &[],
+    indices: &[
+        ("idx_auth_token_value", "value"),
+        ("idx_auth_token_device", "device_id"),
+    ],
+};
+
 pub const VERSIONED_SCHEMAS: &[VersionedSchema] = &[
     VersionedSchema {
         version: 0,
