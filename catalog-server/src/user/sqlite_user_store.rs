@@ -2222,11 +2222,41 @@ impl UserSettingsStore for SqliteUserStore {
 }
 
 impl user_store::DeviceStore for SqliteUserStore {
-    fn register_or_update_device(
-        &self,
-        _registration: &device::DeviceRegistration,
-    ) -> Result<usize> {
-        todo!("DeviceStore implementation pending - Phase 5")
+    fn register_or_update_device(&self, registration: &DeviceRegistration) -> Result<usize> {
+        let start = Instant::now();
+        let conn = self.conn.lock().unwrap();
+        let now = SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .unwrap()
+            .as_secs() as i64;
+
+        // Use INSERT ... ON CONFLICT for upsert semantics
+        conn.execute(
+            "INSERT INTO device (device_uuid, device_type, device_name, os_info, first_seen, last_seen)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?5)
+             ON CONFLICT(device_uuid) DO UPDATE SET
+                device_type = ?2,
+                device_name = ?3,
+                os_info = ?4,
+                last_seen = ?5",
+            params![
+                registration.device_uuid,
+                registration.device_type.as_str(),
+                registration.device_name,
+                registration.os_info,
+                now,
+            ],
+        )?;
+
+        // Get the device ID (either newly created or existing)
+        let device_id: usize = conn.query_row(
+            "SELECT id FROM device WHERE device_uuid = ?1",
+            params![registration.device_uuid],
+            |row| row.get(0),
+        )?;
+
+        record_db_query("register_or_update_device", start.elapsed());
+        Ok(device_id)
     }
 
     fn get_device(&self, _device_id: usize) -> Result<Option<device::Device>> {

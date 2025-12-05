@@ -617,7 +617,7 @@ use crate::user::device::{Device, DeviceRegistration, DeviceType};
 
 ---
 
-### [ ] Task 5.2: Implement register_or_update_device
+### [x] Task 5.2: Implement register_or_update_device
 **File**: `catalog-server/src/user/sqlite_user_store.rs`
 
 **Implementation**:
