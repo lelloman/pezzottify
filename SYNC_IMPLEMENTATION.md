@@ -1130,14 +1130,14 @@ const fetchSyncEvents = async (since) => {
 
 ### 5.8 Testing
 
-#### [ ] 5.8.1 Write unit tests for SyncManagerImpl
+#### [x] 5.8.1 Write unit tests for SyncManagerImpl
 
 **Description:** Test fullSync, catchUp, applyEvent logic.
 
 **Context:**
 - New file: `android/domain/src/test/java/.../sync/SyncManagerImplTest.kt`
 
-#### [ ] 5.8.2 Write unit tests for event serialization
+#### [x] 5.8.2 Write unit tests for event serialization
 
 **Description:** Test Kotlin event classes serialize/deserialize correctly.
 
