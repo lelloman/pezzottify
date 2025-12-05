@@ -273,6 +273,8 @@ Implement the WebSocket service for the Vue frontend.
 
 ### 3.3 [ ] Test web client connection
 
+**Status:** Requires manual testing
+
 **Tasks:**
 - [ ] 3.3.1 Start server and web dev server
 - [ ] 3.3.2 Log in and verify WS connection in browser dev tools
@@ -286,33 +288,37 @@ Implement the WebSocket service for the Vue frontend.
 
 Comprehensive testing of the WebSocket infrastructure.
 
-### 4.1 [ ] Unit tests for ConnectionManager
+### 4.1 [x] Unit tests for ConnectionManager
 
 **File:** `catalog-server/src/server/websocket/connection.rs` (tests module)
 
+**Note:** Completed in Phase 1 (Task 1.3). All 13 tests pass.
+
 **Tasks:**
-- [ ] 4.1.1 Test `register()` creates valid receiver
-- [ ] 4.1.2 Test `unregister()` removes connection
-- [ ] 4.1.3 Test `send_to_device()` delivers message
-- [ ] 4.1.4 Test `send_to_device()` returns NotConnected for unknown device
-- [ ] 4.1.5 Test `send_to_other_devices()` excludes source device
-- [ ] 4.1.6 Test `send_to_other_devices()` returns failed devices
-- [ ] 4.1.7 Test `broadcast_to_user()` sends to all devices
-- [ ] 4.1.8 Test `get_connected_devices()` returns correct list
-- [ ] 4.1.9 Test `is_device_connected()` returns correct boolean
-- [ ] 4.1.10 Test drop-and-replace: registering same device_id replaces old connection
+- [x] 4.1.1 Test `register()` creates valid receiver
+- [x] 4.1.2 Test `unregister()` removes connection
+- [x] 4.1.3 Test `send_to_device()` delivers message
+- [x] 4.1.4 Test `send_to_device()` returns NotConnected for unknown device
+- [x] 4.1.5 Test `send_to_other_devices()` excludes source device
+- [x] 4.1.6 Test `send_to_other_devices()` returns failed devices
+- [x] 4.1.7 Test `broadcast_to_user()` sends to all devices
+- [x] 4.1.8 Test `get_connected_devices()` returns correct list
+- [x] 4.1.9 Test `is_device_connected()` returns correct boolean
+- [x] 4.1.10 Test drop-and-replace: registering same device_id replaces old connection
 
 ---
 
-### 4.2 [ ] Unit tests for message serialization
+### 4.2 [x] Unit tests for message serialization
 
 **File:** `catalog-server/src/server/websocket/messages.rs` (tests module)
 
+**Note:** Completed in Phase 1 (Task 1.2). All 10 tests pass.
+
 **Tasks:**
-- [ ] 4.2.1 Test ServerMessage serializes to expected JSON format
-- [ ] 4.2.2 Test ClientMessage deserializes from JSON
-- [ ] 4.2.3 Test system::Connected serializes correctly
-- [ ] 4.2.4 Test system::Error serializes correctly
+- [x] 4.2.1 Test ServerMessage serializes to expected JSON format
+- [x] 4.2.2 Test ClientMessage deserializes from JSON
+- [x] 4.2.3 Test system::Connected serializes correctly
+- [x] 4.2.4 Test system::Error serializes correctly
 
 ---
 
@@ -388,11 +394,11 @@ Final polish before marking feature complete.
 
 | Phase | Tasks | Status |
 |-------|-------|--------|
-| Phase 0: Verification | 2 groups | [ ] Not started |
-| Phase 1: Server Module | 5 groups | [ ] Not started |
-| Phase 2: Server Integration | 4 groups | [ ] Not started |
-| Phase 3: Web Client | 3 groups | [ ] Not started |
-| Phase 4: Testing | 5 groups | [ ] Not started |
+| Phase 0: Verification | 2 groups | [x] Complete |
+| Phase 1: Server Module | 5 groups | [x] Complete |
+| Phase 2: Server Integration | 4 groups | [x] Complete |
+| Phase 3: Web Client | 3 groups | [~] In progress (3.3 needs manual testing) |
+| Phase 4: Testing | 5 groups | [~] In progress (unit tests done, integration/manual pending) |
 | Phase 5: Cleanup | 3 groups | [ ] Not started |
 
 **Total task groups:** 22
