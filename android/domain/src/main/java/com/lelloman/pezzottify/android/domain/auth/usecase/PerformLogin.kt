@@ -8,6 +8,7 @@ import com.lelloman.pezzottify.android.domain.remoteapi.RemoteApiClient
 import com.lelloman.pezzottify.android.domain.remoteapi.response.RemoteApiResponse
 import com.lelloman.pezzottify.android.domain.usecase.UseCase
 import com.lelloman.pezzottify.android.domain.usercontent.UserContentSynchronizer
+import com.lelloman.pezzottify.android.domain.websocket.WebSocketManager
 import javax.inject.Inject
 
 class PerformLogin @Inject constructor(
@@ -16,6 +17,7 @@ class PerformLogin @Inject constructor(
     private val configStore: ConfigStore,
     private val userContentSynchronizer: UserContentSynchronizer,
     private val deviceInfoProvider: DeviceInfoProvider,
+    private val webSocketManager: WebSocketManager,
 ) : UseCase() {
 
     suspend operator fun invoke(email: String, password: String): LoginResult {
@@ -33,6 +35,7 @@ class PerformLogin @Inject constructor(
                         authToken = remoteResponse.data.token,
                     )
                 )
+                webSocketManager.connect()
                 userContentSynchronizer.fetchRemoteLikedContent()
                 return LoginResult.Success
             }

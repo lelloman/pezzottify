@@ -9,6 +9,7 @@ import com.lelloman.pezzottify.android.domain.remoteapi.RemoteApiClient
 import com.lelloman.pezzottify.android.domain.statics.StaticsStore
 import com.lelloman.pezzottify.android.domain.user.UserDataStore
 import com.lelloman.pezzottify.android.domain.usercontent.UserContentStore
+import com.lelloman.pezzottify.android.domain.websocket.WebSocketManager
 import io.mockk.coVerify
 import io.mockk.mockk
 import io.mockk.verify
@@ -26,6 +27,7 @@ class PerformLogoutTest {
     private lateinit var userContentStore: UserContentStore
     private lateinit var listeningEventStore: ListeningEventStore
     private lateinit var player: PezzottifyPlayer
+    private lateinit var webSocketManager: WebSocketManager
 
     private lateinit var performLogout: PerformLogout
 
@@ -39,6 +41,7 @@ class PerformLogoutTest {
         userContentStore = mockk(relaxed = true)
         listeningEventStore = mockk(relaxed = true)
         player = mockk(relaxed = true)
+        webSocketManager = mockk(relaxed = true)
 
         performLogout = PerformLogout(
             authStore = authStore,
@@ -49,6 +52,7 @@ class PerformLogoutTest {
             userContentStore = userContentStore,
             listeningEventStore = listeningEventStore,
             player = player,
+            webSocketManager = webSocketManager,
         )
     }
 
@@ -109,11 +113,19 @@ class PerformLogoutTest {
     }
 
     @Test
+    fun `invoke disconnects websocket`() = runTest {
+        performLogout()
+
+        coVerify { webSocketManager.disconnect() }
+    }
+
+    @Test
     fun `invoke calls all cleanup operations`() = runTest {
         performLogout()
 
         coVerify {
             player.stop()
+            webSocketManager.disconnect()
             authStore.storeAuthState(AuthState.LoggedOut)
             remoteApiClient.logout()
             staticsStore.deleteAll()

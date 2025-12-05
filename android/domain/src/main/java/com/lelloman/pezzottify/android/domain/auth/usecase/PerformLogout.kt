@@ -10,6 +10,7 @@ import com.lelloman.pezzottify.android.domain.statics.StaticsStore
 import com.lelloman.pezzottify.android.domain.usecase.UseCase
 import com.lelloman.pezzottify.android.domain.user.UserDataStore
 import com.lelloman.pezzottify.android.domain.usercontent.UserContentStore
+import com.lelloman.pezzottify.android.domain.websocket.WebSocketManager
 import javax.inject.Inject
 
 class PerformLogout @Inject internal constructor(
@@ -21,10 +22,12 @@ class PerformLogout @Inject internal constructor(
     private val userContentStore: UserContentStore,
     private val listeningEventStore: ListeningEventStore,
     private val player: PezzottifyPlayer,
+    private val webSocketManager: WebSocketManager,
 ) : UseCase() {
 
     suspend operator fun invoke() {
         player.stop()
+        webSocketManager.disconnect()
         authStore.storeAuthState(AuthState.LoggedOut)
         remoteApiClient.logout()
         staticsCache.clearAll()

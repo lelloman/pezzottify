@@ -212,37 +212,37 @@ Maps to UI indicator:
 
 ## Phase 4: Auth Integration
 
-### 4.1 [ ] Connect WebSocket on login
+### 4.1 [x] Connect WebSocket on login
 
 **File:** `android/domain/src/main/java/com/lelloman/pezzottify/android/domain/auth/usecase/PerformLogin.kt`
 
 **Tasks:**
-- [ ] 4.1.1 Inject `WebSocketManager` into `PerformLogin`
-- [ ] 4.1.2 Call `webSocketManager.connect()` after successful login
-- [ ] 4.1.3 Ensure connection happens after auth state is stored
+- [x] 4.1.1 Inject `WebSocketManager` into `PerformLogin`
+- [x] 4.1.2 Call `webSocketManager.connect()` after successful login
+- [x] 4.1.3 Ensure connection happens after auth state is stored
 
 ---
 
-### 4.2 [ ] Disconnect WebSocket on logout
+### 4.2 [x] Disconnect WebSocket on logout
 
 **File:** `android/domain/src/main/java/com/lelloman/pezzottify/android/domain/auth/usecase/PerformLogout.kt`
 
 **Tasks:**
-- [ ] 4.2.1 Inject `WebSocketManager` into `PerformLogout`
-- [ ] 4.2.2 Call `webSocketManager.disconnect()` before clearing auth
-- [ ] 4.2.3 Ensure intentional disconnect flag is set
+- [x] 4.2.1 Inject `WebSocketManager` into `PerformLogout`
+- [x] 4.2.2 Call `webSocketManager.disconnect()` before clearing auth
+- [x] 4.2.3 Ensure intentional disconnect flag is set (handled by WebSocketManagerImpl)
 
 ---
 
-### 4.3 [ ] Auto-connect on app start if authenticated
+### 4.3 [x] Auto-connect on app start if authenticated
 
-**File:** `android/domain/src/main/java/com/lelloman/pezzottify/android/domain/AppInitializer.kt` (or similar)
+**File:** `android/domain/src/main/java/com/lelloman/pezzottify/android/domain/websocket/WebSocketInitializer.kt`
 
 **Tasks:**
-- [ ] 4.3.1 Create `WebSocketInitializer` implementing `AppInitializer`
-- [ ] 4.3.2 Observe `AuthStore.getAuthState()`
-- [ ] 4.3.3 Connect when state becomes `LoggedIn`
-- [ ] 4.3.4 Disconnect when state becomes `LoggedOut`
+- [x] 4.3.1 Create `WebSocketInitializer` implementing `AppInitializer`
+- [x] 4.3.2 Observe `AuthStore.getAuthState()`
+- [x] 4.3.3 Connect when state becomes `LoggedIn`
+- [x] 4.3.4 Disconnect when state becomes `LoggedOut`
 
 ---
 

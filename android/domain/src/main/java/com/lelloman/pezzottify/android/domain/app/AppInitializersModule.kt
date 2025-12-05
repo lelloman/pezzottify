@@ -6,6 +6,7 @@ import com.lelloman.pezzottify.android.domain.listening.ListeningTracker
 import com.lelloman.pezzottify.android.domain.player.PezzottifyPlayer
 import com.lelloman.pezzottify.android.domain.sync.StaticsSynchronizer
 import com.lelloman.pezzottify.android.domain.usercontent.UserContentSynchronizer
+import com.lelloman.pezzottify.android.domain.websocket.WebSocketInitializer
 import dagger.Binds
 import dagger.Module
 import dagger.hilt.InstallIn
@@ -39,4 +40,8 @@ abstract class AppInitializersModule {
     @Binds
     @IntoSet
     internal abstract fun bindsListeningEventSynchronizer(synchronizer: ListeningEventSynchronizer): AppInitializer
+
+    @Binds
+    @IntoSet
+    internal abstract fun bindsWebSocketInitializer(initializer: WebSocketInitializer): AppInitializer
 }
