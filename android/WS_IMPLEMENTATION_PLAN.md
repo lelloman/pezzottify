@@ -248,27 +248,27 @@ Maps to UI indicator:
 
 ## Phase 5: Lifecycle & Connectivity
 
-### 5.1 [ ] Implement lifecycle-aware connection
+### 5.1 [x] Implement lifecycle-aware connection
 
 **Tasks:**
-- [ ] 5.1.1 Inject `ProcessLifecycleOwner` or use `LifecycleObserver`
-- [ ] 5.1.2 Track app foreground/background state
-- [ ] 5.1.3 Inject player state (is music playing?) from `Player` module
-- [ ] 5.1.4 Implement connection policy:
-  - Connect when: `(appInForeground || musicPlaying) && authenticated`
+- [x] 5.1.1 Inject `ProcessLifecycleOwner` or use `LifecycleObserver` - AndroidAppLifecycleObserver
+- [x] 5.1.2 Track app foreground/background state - AppLifecycleObserver interface + implementation
+- [x] 5.1.3 Inject player state (is music playing?) from `Player` module - PezzottifyPlayer.isPlaying
+- [x] 5.1.4 Implement connection policy:
+  - Connect when: `(appInForeground || musicPlaying) && authenticated && networkAvailable`
   - Disconnect when: `!appInForeground && !musicPlaying`
-- [ ] 5.1.5 Debounce state changes (avoid rapid connect/disconnect)
+- [x] 5.1.5 Debounce state changes (500ms debounce in WebSocketInitializer)
 
 ---
 
-### 5.2 [ ] Implement network connectivity listener
+### 5.2 [x] Implement network connectivity listener
 
 **Tasks:**
-- [ ] 5.2.1 Create `NetworkConnectivityObserver` using `ConnectivityManager`
-- [ ] 5.2.2 Expose `isConnected: StateFlow<Boolean>`
-- [ ] 5.2.3 Trigger reconnect when network becomes available
-- [ ] 5.2.4 Pause reconnect attempts when network is unavailable
-- [ ] 5.2.5 Handle network type changes (WiFi ↔ Mobile)
+- [x] 5.2.1 Create `NetworkConnectivityObserver` using `ConnectivityManager` - AndroidNetworkConnectivityObserver
+- [x] 5.2.2 Expose `isConnected: StateFlow<Boolean>` - isNetworkAvailable: StateFlow<Boolean>
+- [x] 5.2.3 Trigger reconnect when network becomes available - WebSocketInitializer combines network state
+- [x] 5.2.4 Pause reconnect attempts when network is unavailable - Only connects when network available
+- [x] 5.2.5 Handle network type changes (WiFi ↔ Mobile) - onCapabilitiesChanged callback
 
 ---
 
