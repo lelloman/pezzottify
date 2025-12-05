@@ -246,7 +246,7 @@ mod tests {
 
 ### 1.3 Event Log Storage
 
-#### [ ] 1.3.1 Implement `append_event` method
+#### [x] 1.3.1 Implement `append_event` method
 
 **Description:** Insert a new event into the log and return its sequence number.
 
@@ -274,7 +274,7 @@ pub fn append_event(&self, user_id: usize, event: &UserEvent) -> Result<i64> {
 }
 ```
 
-#### [ ] 1.3.2 Implement `get_events_since` method
+#### [x] 1.3.2 Implement `get_events_since` method
 
 **Description:** Retrieve events after a given sequence number.
 
@@ -305,7 +305,7 @@ pub fn get_events_since(&self, user_id: usize, since_seq: i64) -> Result<Vec<Sto
 }
 ```
 
-#### [ ] 1.3.3 Implement `get_current_seq` method
+#### [x] 1.3.3 Implement `get_current_seq` method
 
 **Description:** Get the latest sequence number for a user (0 if none).
 
@@ -326,7 +326,7 @@ pub fn get_current_seq(&self, user_id: usize) -> Result<i64> {
 }
 ```
 
-#### [ ] 1.3.4 Implement `get_min_seq` method
+#### [x] 1.3.4 Implement `get_min_seq` method
 
 **Description:** Get the minimum available sequence number for a user.
 
@@ -346,7 +346,7 @@ pub fn get_min_seq(&self, user_id: usize) -> Result<Option<i64>> {
 }
 ```
 
-#### [ ] 1.3.5 Implement `prune_events_older_than` method
+#### [x] 1.3.5 Implement `prune_events_older_than` method
 
 **Description:** Delete events older than a given timestamp.
 
@@ -365,7 +365,7 @@ pub fn prune_events_older_than(&self, before_timestamp: i64) -> Result<u64> {
 }
 ```
 
-#### [ ] 1.3.6 Write unit tests for event log storage
+#### [x] 1.3.6 Write unit tests for event log storage
 
 **Description:** Test append, retrieve, and prune operations.
 

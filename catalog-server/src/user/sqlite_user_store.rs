@@ -906,6 +906,124 @@ impl SqliteUserStore {
         tx.commit()?;
         Ok(())
     }
+
+    // ========================================================================
+    // Sync Event Log Methods
+    // ========================================================================
+
+    /// Append an event to the user's event log.
+    /// Returns the sequence number of the new event.
+    pub fn append_event(
+        &self,
+        user_id: usize,
+        event: &crate::user::sync_events::UserEvent,
+    ) -> Result<i64> {
+        let start = Instant::now();
+        let conn = self.conn.lock().unwrap();
+        let payload = serde_json::to_string(event)?;
+        let event_type = event.event_type();
+
+        conn.execute(
+            "INSERT INTO user_events (user_id, event_type, payload) VALUES (?1, ?2, ?3)",
+            params![user_id, event_type, payload],
+        )?;
+
+        let seq = conn.last_insert_rowid();
+        record_db_query("append_event", start.elapsed());
+        Ok(seq)
+    }
+
+    /// Get events since a given sequence number.
+    /// Returns events with seq > since_seq, ordered by seq ascending.
+    pub fn get_events_since(
+        &self,
+        user_id: usize,
+        since_seq: i64,
+    ) -> Result<Vec<crate::user::sync_events::StoredEvent>> {
+        let start = Instant::now();
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare(
+            "SELECT seq, payload, server_timestamp
+             FROM user_events
+             WHERE user_id = ?1 AND seq > ?2
+             ORDER BY seq ASC",
+        )?;
+
+        let events = stmt
+            .query_map(params![user_id, since_seq], |row| {
+                let seq: i64 = row.get(0)?;
+                let payload: String = row.get(1)?;
+                let server_timestamp: i64 = row.get(2)?;
+                let event: crate::user::sync_events::UserEvent =
+                    serde_json::from_str(&payload).map_err(|e| {
+                        rusqlite::Error::FromSqlConversionFailure(
+                            1,
+                            rusqlite::types::Type::Text,
+                            Box::new(e),
+                        )
+                    })?;
+                Ok(crate::user::sync_events::StoredEvent {
+                    seq,
+                    event,
+                    server_timestamp,
+                })
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+
+        record_db_query("get_events_since", start.elapsed());
+        Ok(events)
+    }
+
+    /// Get the current (latest) sequence number for a user.
+    /// Returns 0 if no events exist.
+    pub fn get_current_seq(&self, user_id: usize) -> Result<i64> {
+        let start = Instant::now();
+        let conn = self.conn.lock().unwrap();
+        let seq: Option<i64> = conn
+            .query_row(
+                "SELECT MAX(seq) FROM user_events WHERE user_id = ?1",
+                params![user_id],
+                |row| row.get(0),
+            )
+            .ok();
+
+        record_db_query("get_current_seq", start.elapsed());
+        Ok(seq.unwrap_or(0))
+    }
+
+    /// Get the minimum available sequence number for a user.
+    /// Returns None if no events exist.
+    /// Used to detect if requested sequence has been pruned.
+    pub fn get_min_seq(&self, user_id: usize) -> Result<Option<i64>> {
+        let start = Instant::now();
+        let conn = self.conn.lock().unwrap();
+        let seq: Option<i64> = conn
+            .query_row(
+                "SELECT MIN(seq) FROM user_events WHERE user_id = ?1",
+                params![user_id],
+                |row| row.get(0),
+            )
+            .ok()
+            .flatten();
+
+        record_db_query("get_min_seq", start.elapsed());
+        Ok(seq)
+    }
+
+    /// Delete events older than the given Unix timestamp.
+    /// Used for maintenance/pruning.
+    /// Returns the number of deleted events.
+    pub fn prune_events_older_than(&self, before_timestamp: i64) -> Result<u64> {
+        let start = Instant::now();
+        let conn = self.conn.lock().unwrap();
+        let deleted = conn.execute(
+            "DELETE FROM user_events WHERE server_timestamp < ?1",
+            params![before_timestamp],
+        )?;
+
+        record_db_query("prune_events_older_than", start.elapsed());
+        Ok(deleted as u64)
+    }
 }
 
 impl UserStore for SqliteUserStore {
@@ -4151,5 +4269,232 @@ mod tests {
             .get_user_setting(user_id, "enable_direct_downloads")
             .unwrap();
         assert_eq!(result, Some(UserSetting::DirectDownloadsEnabled(false)));
+    }
+
+    // ========================================================================
+    // Sync Event Log Tests
+    // ========================================================================
+
+    use crate::user::sync_events::{StoredEvent, UserEvent};
+    use crate::user::user_models::LikedContentType;
+
+    #[test]
+    fn test_append_event_returns_sequence() {
+        let (store, _temp_dir) = create_tmp_store();
+        let user_id = store.create_user("test_user").unwrap();
+
+        let event = UserEvent::ContentLiked {
+            content_type: LikedContentType::Album,
+            content_id: "album_123".to_string(),
+        };
+
+        let seq1 = store.append_event(user_id, &event).unwrap();
+        let seq2 = store.append_event(user_id, &event).unwrap();
+
+        assert!(seq1 > 0);
+        assert!(seq2 > seq1);
+    }
+
+    #[test]
+    fn test_get_events_since_returns_events_in_order() {
+        let (store, _temp_dir) = create_tmp_store();
+        let user_id = store.create_user("test_user").unwrap();
+
+        let event1 = UserEvent::ContentLiked {
+            content_type: LikedContentType::Album,
+            content_id: "album_1".to_string(),
+        };
+        let event2 = UserEvent::ContentLiked {
+            content_type: LikedContentType::Track,
+            content_id: "track_1".to_string(),
+        };
+        let event3 = UserEvent::ContentUnliked {
+            content_type: LikedContentType::Album,
+            content_id: "album_1".to_string(),
+        };
+
+        let seq1 = store.append_event(user_id, &event1).unwrap();
+        let seq2 = store.append_event(user_id, &event2).unwrap();
+        let seq3 = store.append_event(user_id, &event3).unwrap();
+
+        // Get all events (since 0)
+        let events = store.get_events_since(user_id, 0).unwrap();
+        assert_eq!(events.len(), 3);
+        assert_eq!(events[0].seq, seq1);
+        assert_eq!(events[1].seq, seq2);
+        assert_eq!(events[2].seq, seq3);
+
+        // Get events since seq1
+        let events = store.get_events_since(user_id, seq1).unwrap();
+        assert_eq!(events.len(), 2);
+        assert_eq!(events[0].seq, seq2);
+        assert_eq!(events[1].seq, seq3);
+
+        // Get events since seq3 (should be empty)
+        let events = store.get_events_since(user_id, seq3).unwrap();
+        assert!(events.is_empty());
+    }
+
+    #[test]
+    fn test_get_events_since_isolates_users() {
+        let (store, _temp_dir) = create_tmp_store();
+        let user1 = store.create_user("user1").unwrap();
+        let user2 = store.create_user("user2").unwrap();
+
+        let event = UserEvent::ContentLiked {
+            content_type: LikedContentType::Album,
+            content_id: "album_1".to_string(),
+        };
+
+        store.append_event(user1, &event).unwrap();
+        store.append_event(user1, &event).unwrap();
+        store.append_event(user2, &event).unwrap();
+
+        let events1 = store.get_events_since(user1, 0).unwrap();
+        let events2 = store.get_events_since(user2, 0).unwrap();
+
+        assert_eq!(events1.len(), 2);
+        assert_eq!(events2.len(), 1);
+    }
+
+    #[test]
+    fn test_get_current_seq_returns_zero_for_no_events() {
+        let (store, _temp_dir) = create_tmp_store();
+        let user_id = store.create_user("test_user").unwrap();
+
+        let seq = store.get_current_seq(user_id).unwrap();
+        assert_eq!(seq, 0);
+    }
+
+    #[test]
+    fn test_get_current_seq_returns_latest_seq() {
+        let (store, _temp_dir) = create_tmp_store();
+        let user_id = store.create_user("test_user").unwrap();
+
+        let event = UserEvent::ContentLiked {
+            content_type: LikedContentType::Album,
+            content_id: "album_1".to_string(),
+        };
+
+        let seq1 = store.append_event(user_id, &event).unwrap();
+        assert_eq!(store.get_current_seq(user_id).unwrap(), seq1);
+
+        let seq2 = store.append_event(user_id, &event).unwrap();
+        assert_eq!(store.get_current_seq(user_id).unwrap(), seq2);
+    }
+
+    #[test]
+    fn test_get_min_seq_returns_none_for_no_events() {
+        let (store, _temp_dir) = create_tmp_store();
+        let user_id = store.create_user("test_user").unwrap();
+
+        let seq = store.get_min_seq(user_id).unwrap();
+        assert!(seq.is_none());
+    }
+
+    #[test]
+    fn test_get_min_seq_returns_first_seq() {
+        let (store, _temp_dir) = create_tmp_store();
+        let user_id = store.create_user("test_user").unwrap();
+
+        let event = UserEvent::ContentLiked {
+            content_type: LikedContentType::Album,
+            content_id: "album_1".to_string(),
+        };
+
+        let seq1 = store.append_event(user_id, &event).unwrap();
+        let _ = store.append_event(user_id, &event).unwrap();
+        let _ = store.append_event(user_id, &event).unwrap();
+
+        let min_seq = store.get_min_seq(user_id).unwrap();
+        assert_eq!(min_seq, Some(seq1));
+    }
+
+    #[test]
+    fn test_prune_events_older_than() {
+        let (store, _temp_dir) = create_tmp_store();
+        let user_id = store.create_user("test_user").unwrap();
+
+        let event = UserEvent::ContentLiked {
+            content_type: LikedContentType::Album,
+            content_id: "album_1".to_string(),
+        };
+
+        // Insert events
+        store.append_event(user_id, &event).unwrap();
+        store.append_event(user_id, &event).unwrap();
+        store.append_event(user_id, &event).unwrap();
+
+        // Get the current timestamp (events were just created)
+        let current_time = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs() as i64;
+
+        // Pruning with future timestamp should delete all events
+        let deleted = store.prune_events_older_than(current_time + 10).unwrap();
+        assert_eq!(deleted, 3);
+
+        // Verify no events remain
+        let events = store.get_events_since(user_id, 0).unwrap();
+        assert!(events.is_empty());
+    }
+
+    #[test]
+    fn test_event_serialization_roundtrip() {
+        let (store, _temp_dir) = create_tmp_store();
+        let user_id = store.create_user("test_user").unwrap();
+
+        // Test various event types
+        let events = vec![
+            UserEvent::ContentLiked {
+                content_type: LikedContentType::Artist,
+                content_id: "artist_123".to_string(),
+            },
+            UserEvent::ContentUnliked {
+                content_type: LikedContentType::Track,
+                content_id: "track_456".to_string(),
+            },
+            UserEvent::SettingChanged {
+                setting: UserSetting::DirectDownloadsEnabled(true),
+            },
+            UserEvent::PlaylistCreated {
+                playlist_id: "pl_abc".to_string(),
+                name: "My Playlist".to_string(),
+            },
+            UserEvent::PlaylistRenamed {
+                playlist_id: "pl_abc".to_string(),
+                name: "Renamed Playlist".to_string(),
+            },
+            UserEvent::PlaylistDeleted {
+                playlist_id: "pl_abc".to_string(),
+            },
+            UserEvent::PlaylistTracksUpdated {
+                playlist_id: "pl_abc".to_string(),
+                track_ids: vec!["t1".to_string(), "t2".to_string()],
+            },
+            UserEvent::PermissionGranted {
+                permission: Permission::EditCatalog,
+            },
+            UserEvent::PermissionRevoked {
+                permission: Permission::IssueContentDownload,
+            },
+            UserEvent::PermissionsReset {
+                permissions: vec![Permission::AccessCatalog, Permission::LikeContent],
+            },
+        ];
+
+        // Append all events
+        for event in &events {
+            store.append_event(user_id, event).unwrap();
+        }
+
+        // Retrieve and verify
+        let stored_events = store.get_events_since(user_id, 0).unwrap();
+        assert_eq!(stored_events.len(), events.len());
+
+        for (original, stored) in events.iter().zip(stored_events.iter()) {
+            assert_eq!(&stored.event, original);
+        }
     }
 }
