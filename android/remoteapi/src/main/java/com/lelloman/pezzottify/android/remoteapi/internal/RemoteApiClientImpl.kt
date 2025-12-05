@@ -1,6 +1,7 @@
 package com.lelloman.pezzottify.android.remoteapi.internal
 
 import com.lelloman.pezzottify.android.domain.listening.ListeningEventSyncData
+import com.lelloman.pezzottify.android.domain.remoteapi.DeviceInfo
 import com.lelloman.pezzottify.android.domain.remoteapi.RemoteApiClient
 import com.lelloman.pezzottify.android.domain.remoteapi.RemoteApiCredentialsProvider
 import com.lelloman.pezzottify.android.domain.remoteapi.response.AlbumResponse
@@ -80,10 +81,20 @@ internal class RemoteApiClientImpl(
 
     override suspend fun login(
         userHandle: String,
-        password: String
+        password: String,
+        deviceInfo: DeviceInfo,
     ): RemoteApiResponse<LoginSuccessResponse> = catchingNetworkError {
         retrofit
-            .login(LoginRequest(userHandle = userHandle, password = password))
+            .login(
+                LoginRequest(
+                    userHandle = userHandle,
+                    password = password,
+                    deviceUuid = deviceInfo.deviceUuid,
+                    deviceType = deviceInfo.deviceType,
+                    deviceName = deviceInfo.deviceName,
+                    osInfo = deviceInfo.osInfo,
+                )
+            )
             .returnFromRetrofitResponse()
     }
 

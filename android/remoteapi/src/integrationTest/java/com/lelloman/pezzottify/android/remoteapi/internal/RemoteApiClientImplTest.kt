@@ -1,6 +1,7 @@
 package com.lelloman.pezzottify.android.remoteapi.internal
 
 import com.google.common.truth.Truth.assertThat
+import com.lelloman.pezzottify.android.domain.remoteapi.DeviceInfo
 import com.lelloman.pezzottify.android.domain.remoteapi.RemoteApiClient
 import com.lelloman.pezzottify.android.domain.remoteapi.RemoteApiCredentialsProvider
 import com.lelloman.pezzottify.android.domain.remoteapi.response.SearchedItemType
@@ -42,7 +43,13 @@ class RemoteApiClientImplTest {
         assertThat(forbiddenResponse).isEqualTo(RemoteApiResponse.Error.Unauthorized)
 
         // The login endpoint returns the token
-        val loginResponse = client.login(userHandle, password)
+        val testDeviceInfo = DeviceInfo(
+            deviceUuid = "android-test-uuid-12345",
+            deviceType = "android",
+            deviceName = "Integration Test Device",
+            osInfo = "Android Test",
+        )
+        val loginResponse = client.login(userHandle, password, testDeviceInfo)
         assertThat(loginResponse).isInstanceOf(RemoteApiResponse.Success::class.java)
         credentialsProvider.authToken = (loginResponse as RemoteApiResponse.Success).data.token
 

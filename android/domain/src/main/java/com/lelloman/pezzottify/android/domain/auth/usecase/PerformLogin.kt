@@ -3,6 +3,7 @@ package com.lelloman.pezzottify.android.domain.auth.usecase
 import com.lelloman.pezzottify.android.domain.auth.AuthState
 import com.lelloman.pezzottify.android.domain.auth.AuthStore
 import com.lelloman.pezzottify.android.domain.config.ConfigStore
+import com.lelloman.pezzottify.android.domain.device.DeviceInfoProvider
 import com.lelloman.pezzottify.android.domain.remoteapi.RemoteApiClient
 import com.lelloman.pezzottify.android.domain.remoteapi.response.RemoteApiResponse
 import com.lelloman.pezzottify.android.domain.usecase.UseCase
@@ -14,6 +15,7 @@ class PerformLogin @Inject constructor(
     private val authStore: AuthStore,
     private val configStore: ConfigStore,
     private val userContentSynchronizer: UserContentSynchronizer,
+    private val deviceInfoProvider: DeviceInfoProvider,
 ) : UseCase() {
 
     suspend operator fun invoke(email: String, password: String): LoginResult {
@@ -21,7 +23,8 @@ class PerformLogin @Inject constructor(
             handle = email,
             baseUrl = configStore.baseUrl.value,
         )
-        when (val remoteResponse = remoteApiClient.login(email, password)) {
+        val deviceInfo = deviceInfoProvider.getDeviceInfo()
+        when (val remoteResponse = remoteApiClient.login(email, password, deviceInfo)) {
             is RemoteApiResponse.Success -> {
                 authStore.storeAuthState(
                     AuthState.LoggedIn(

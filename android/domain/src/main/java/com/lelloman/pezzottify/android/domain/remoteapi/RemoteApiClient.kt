@@ -14,9 +14,20 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.serialization.Serializable
 
 
+data class DeviceInfo(
+    val deviceUuid: String,
+    val deviceType: String,
+    val deviceName: String?,
+    val osInfo: String?,
+)
+
 interface RemoteApiClient {
 
-    suspend fun login(userHandle: String, password: String): RemoteApiResponse<LoginSuccessResponse>
+    suspend fun login(
+        userHandle: String,
+        password: String,
+        deviceInfo: DeviceInfo,
+    ): RemoteApiResponse<LoginSuccessResponse>
 
     suspend fun logout(): RemoteApiResponse<Unit>
 
