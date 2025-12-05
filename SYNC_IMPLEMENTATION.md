@@ -950,7 +950,7 @@ const fetchSyncEvents = async (since) => {
 
 ### 4.4 Integration
 
-#### [ ] 4.4.1 Update user store initialize to use sync
+#### [x] 4.4.1 Update user store initialize to use sync
 
 **Description:** Replace direct fetch calls with sync initialization.
 
@@ -958,7 +958,7 @@ const fetchSyncEvents = async (since) => {
 - File: `web/src/store/user.js`
 - Modify `initialize()` to call `syncStore.initialize()`
 
-#### [ ] 4.4.2 Update logout flow to cleanup sync
+#### [x] 4.4.2 Update logout flow to cleanup sync
 
 **Description:** Call sync cleanup on logout.
 

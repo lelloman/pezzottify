@@ -68,9 +68,22 @@ export const useAuthStore = defineStore('auth', {
         throw new Error(error.response?.data?.message || 'Login failed');
       }
     },
-    logout() {
+    async logout() {
       // Disconnect WebSocket before clearing auth
       ws.disconnect();
+
+      // Cleanup sync state and reset user store
+      try {
+        const { useSyncStore } = await import('./sync');
+        const { useUserStore } = await import('./user');
+        const syncStore = useSyncStore();
+        const userStore = useUserStore();
+
+        syncStore.cleanup();
+        userStore.reset();
+      } catch (error) {
+        console.error('Failed to cleanup stores:', error);
+      }
 
       this.token = null;
       this.user = null;

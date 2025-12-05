@@ -18,7 +18,7 @@ export const useUserStore = defineStore('user', () => {
   const isInitialized = ref(false);
   const isInitializing = ref(false);
 
-  // Load all user data
+  // Load all user data via sync
   const initialize = async () => {
     // Return early if already initialized and not forcing refresh
     if (isInitialized.value) return true;
@@ -29,31 +29,17 @@ export const useUserStore = defineStore('user', () => {
     isInitializing.value = true;
 
     try {
-      // Load all data in parallel
-      const [albumsData, artistsData, playlistsResponse, settingsData] = await Promise.all([
-        remoteStore.fetchLikedAlbums(),
-        remoteStore.fetchLikedArtists(),
-        remoteStore.fetchUserPlaylists(),
-        remoteStore.fetchUserSettings()
-      ]);
+      // Use lazy import to avoid circular dependency
+      const { useSyncStore } = await import('./sync');
+      const syncStore = useSyncStore();
 
-      // Update state with fetched data
-      likedAlbumIds.value = albumsData;
-      likedArtistsIds.value = artistsData;
-      settings.value = settingsData || {};
+      // Initialize via sync store - this will do full sync or catch-up
+      const success = await syncStore.initialize();
 
-      const by_id = {};
-      playlistsResponse.forEach(playlist => {
-        by_id[playlist.id] = playlist;
-      });
-
-      playlistsData.value = {
-        list: playlistsResponse,
-        by_id: by_id,
-      };
-
-      isInitialized.value = true;
-      return true;
+      if (success) {
+        isInitialized.value = true;
+      }
+      return success;
     } catch (error) {
       console.error('Failed to initialize user data:', error);
       return false;
@@ -366,6 +352,20 @@ export const useUserStore = defineStore('user', () => {
     permissions.value = newPermissions;
   };
 
+  // Reset all state (for logout)
+  const reset = () => {
+    likedAlbumIds.value = null;
+    likedArtistsIds.value = null;
+    likedTrackIds.value = null;
+    playlistsData.value = null;
+    settings.value = {};
+    permissions.value = [];
+    isInitialized.value = false;
+    isInitializing.value = false;
+    // Clear playlist refs
+    Object.keys(playlistRefs).forEach(key => delete playlistRefs[key]);
+  };
+
   return {
     // State
     likedAlbumIds,
@@ -413,5 +413,8 @@ export const useUserStore = defineStore('user', () => {
     setAllSettings,
     setPlaylists,
     setPermissions,
+
+    // Lifecycle
+    reset,
   };
 });
