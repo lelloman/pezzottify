@@ -85,7 +85,7 @@ internal class WebSocketManagerImpl(
 
         val request = Request.Builder()
             .url(wsUrl)
-            .header("Authorization", "Bearer ${authState.authToken}")
+            .header("Authorization", authState.authToken)
             .build()
 
         webSocket = okHttpClient.newWebSocket(request, createWebSocketListener())
