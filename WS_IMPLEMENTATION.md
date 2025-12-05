@@ -224,36 +224,36 @@ Integrate the WebSocket module into the main server.
 
 Implement the WebSocket service for the Vue frontend.
 
-### 3.1 [ ] Create WebSocket service
+### 3.1 [x] Create WebSocket service
 
 **File:** `web/src/services/websocket.js`
 
 **Tasks:**
-- [ ] 3.1.1 Create file with module-level state:
+- [x] 3.1.1 Create file with module-level state:
   - `socket` ref (WebSocket instance or null)
   - `connected` ref (boolean)
   - `deviceId` ref (string or null)
   - `handlers` Map (typePrefix -> handler function)
-- [ ] 3.1.2 Implement `registerHandler(typePrefix, handler)`
-- [ ] 3.1.3 Implement `unregisterHandler(typePrefix)`
-- [ ] 3.1.4 Implement `connect()`:
+- [x] 3.1.2 Implement `registerHandler(typePrefix, handler)`
+- [x] 3.1.3 Implement `unregisterHandler(typePrefix)`
+- [x] 3.1.4 Implement `connect()`:
   - Guard: return if already connected or not authenticated
   - Build WS URL from current location (ws/wss based on http/https)
   - Create WebSocket instance
   - Set up onopen, onmessage, onclose, onerror handlers
   - Auto-reconnect on unexpected close (3 second delay)
-- [ ] 3.1.5 Implement `disconnect()`:
+- [x] 3.1.5 Implement `disconnect()`:
   - Close with code 1000 (normal closure)
   - Clear socket and state
-- [ ] 3.1.6 Implement `send(type, payload)`:
+- [x] 3.1.6 Implement `send(type, payload)`:
   - Guard: only send if socket is open
   - JSON stringify and send
-- [ ] 3.1.7 Implement `handleMessage(msg)`:
+- [x] 3.1.7 Implement `handleMessage(msg)`:
   - Handle `connected` -> set connected=true, store deviceId
   - Handle `pong` -> ignore (heartbeat response)
   - Handle `error` -> console.error
   - Dispatch to feature handlers by type prefix
-- [ ] 3.1.8 Export reactive computed: `wsConnected`, `wsDeviceId`
+- [x] 3.1.8 Export reactive computed: `wsConnected`, `wsDeviceId`
 
 ---
 
