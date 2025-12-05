@@ -63,7 +63,7 @@ CREATE INDEX idx_user_events_user_seq ON user_events(user_id, seq);
 
 ### 1.2 Event Types
 
-#### [ ] 1.2.1 Create `sync_events.rs` module file
+#### [x] 1.2.1 Create `sync_events.rs` module file
 
 **Description:** Create new module for sync event type definitions.
 
@@ -77,7 +77,7 @@ CREATE INDEX idx_user_events_user_seq ON user_events(user_id, seq);
 use serde::{Deserialize, Serialize};
 ```
 
-#### [ ] 1.2.2 Define `UserEvent` enum
+#### [x] 1.2.2 Define `UserEvent` enum
 
 **Description:** Define all sync event types with serde tagging.
 
@@ -151,7 +151,7 @@ pub enum UserEvent {
 }
 ```
 
-#### [ ] 1.2.3 Define `StoredEvent` struct
+#### [x] 1.2.3 Define `StoredEvent` struct
 
 **Description:** Wrapper for events with sequence number and timestamp.
 
@@ -169,7 +169,7 @@ pub struct StoredEvent {
 }
 ```
 
-#### [ ] 1.2.4 Add Serialize/Deserialize to `LikedContentType`
+#### [x] 1.2.4 Add Serialize/Deserialize to `LikedContentType`
 
 **Description:** Ensure `LikedContentType` can be serialized in events.
 
@@ -191,7 +191,7 @@ pub enum LikedContentType {
 }
 ```
 
-#### [ ] 1.2.5 Add Serialize/Deserialize to `Permission`
+#### [x] 1.2.5 Add Serialize/Deserialize to `Permission`
 
 **Description:** Ensure `Permission` can be serialized in events.
 
@@ -200,7 +200,7 @@ pub enum LikedContentType {
 - Check if already has Serialize/Deserialize (it does per the code)
 - Verify JSON representation matches expected format
 
-#### [ ] 1.2.6 Export `sync_events` module
+#### [x] 1.2.6 Export `sync_events` module
 
 **Description:** Make sync_events module public.
 
@@ -213,7 +213,7 @@ pub mod sync_events;
 pub use sync_events::{StoredEvent, UserEvent};
 ```
 
-#### [ ] 1.2.7 Write unit tests for event serialization
+#### [x] 1.2.7 Write unit tests for event serialization
 
 **Description:** Verify events serialize/deserialize correctly.
 

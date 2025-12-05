@@ -13,10 +13,13 @@ pub struct User {
     pub playlists: HashMap<String, UserPlaylist>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum LikedContentType {
     Artist,
     Album,
     Track,
+    #[serde(other)]
     Unknown,
 }
 
