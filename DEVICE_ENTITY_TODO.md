@@ -136,7 +136,7 @@ pub struct Device {
 
 ---
 
-### [ ] Task 1.5: Implement DeviceRegistration struct
+### [x] Task 1.5: Implement DeviceRegistration struct
 **File**: `catalog-server/src/user/device.rs`
 
 **Implementation**:

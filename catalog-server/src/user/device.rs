@@ -48,3 +48,12 @@ pub struct Device {
     pub first_seen: SystemTime,
     pub last_seen: SystemTime,
 }
+
+/// Input for registering/updating a device
+#[derive(Clone, Debug)]
+pub struct DeviceRegistration {
+    pub device_uuid: String,
+    pub device_type: DeviceType,
+    pub device_name: Option<String>,
+    pub os_info: Option<String>,
+}
