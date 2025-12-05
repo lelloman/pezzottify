@@ -45,6 +45,7 @@ dependencies {
     implementation(libs.kotlinx.coroutines.core)
     implementation(libs.kotlinx.android.coroutines)
     implementation(project(":domain"))
+    implementation(project(":logger"))
     implementation(libs.hilt)
     kapt(libs.hilt.compiler)
 

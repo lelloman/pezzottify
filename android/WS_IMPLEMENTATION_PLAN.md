@@ -75,115 +75,115 @@ Maps to UI indicator:
 
 ## Phase 1: Domain Layer Interface
 
-### 1.1 [ ] Create WebSocketManager interface
+### 1.1 [x] Create WebSocketManager interface
 
 **File:** `android/domain/src/main/java/com/lelloman/pezzottify/android/domain/websocket/WebSocketManager.kt`
 
 **Tasks:**
-- [ ] 1.1.1 Create `ConnectionState` sealed interface
-- [ ] 1.1.2 Create `WebSocketManager` interface with:
+- [x] 1.1.1 Create `ConnectionState` sealed interface
+- [x] 1.1.2 Create `WebSocketManager` interface with:
   - `connectionState: StateFlow<ConnectionState>`
   - `suspend fun connect()`
   - `suspend fun disconnect()`
   - `fun send(type: String, payload: Any?)`
   - `fun registerHandler(prefix: String, handler: MessageHandler)`
   - `fun unregisterHandler(prefix: String)`
-- [ ] 1.1.3 Create `MessageHandler` functional interface
+- [x] 1.1.3 Create `MessageHandler` functional interface
 
 ---
 
-### 1.2 [ ] Create message types
+### 1.2 [x] Create message types
 
 **File:** `android/domain/src/main/java/com/lelloman/pezzottify/android/domain/websocket/WebSocketMessage.kt`
 
 **Tasks:**
-- [ ] 1.2.1 Create `ClientMessage` data class (type, payload)
-- [ ] 1.2.2 Create `ServerMessage` data class (type, payload)
-- [ ] 1.2.3 Add kotlinx.serialization annotations
+- [x] 1.2.1 Create `ClientMessage` data class (type, payload)
+- [x] 1.2.2 Create `ServerMessage` data class (type, payload)
+- [x] 1.2.3 Add kotlinx.serialization annotations
 
 ---
 
 ## Phase 2: RemoteAPI Layer Implementation
 
-### 2.1 [ ] Create WebSocketManagerImpl
+### 2.1 [x] Create WebSocketManagerImpl
 
 **File:** `android/remoteapi/src/main/java/com/lelloman/pezzottify/android/remoteapi/internal/websocket/WebSocketManagerImpl.kt`
 
 **Tasks:**
-- [ ] 2.1.1 Create class implementing `WebSocketManager`
-- [ ] 2.1.2 Inject dependencies:
+- [x] 2.1.1 Create class implementing `WebSocketManager`
+- [x] 2.1.2 Inject dependencies:
   - `AuthStore` - for auth token
-  - `HostUrlProvider` - for base URL (convert http→ws, https→wss)
+  - `ConfigStore` - for base URL (convert http→ws, https→wss)
   - `CoroutineScope` - for background work
   - `LoggerFactory` - for logging
-- [ ] 2.1.3 Create `MutableStateFlow<ConnectionState>` for state
-- [ ] 2.1.4 Create `handlers: ConcurrentHashMap<String, MessageHandler>` for message routing
+- [x] 2.1.3 Create `MutableStateFlow<ConnectionState>` for state
+- [x] 2.1.4 Create `handlers: ConcurrentHashMap<String, MessageHandler>` for message routing
 
 ---
 
-### 2.2 [ ] Implement connection logic
+### 2.2 [x] Implement connection logic
 
 **File:** `android/remoteapi/src/main/java/com/lelloman/pezzottify/android/remoteapi/internal/websocket/WebSocketManagerImpl.kt`
 
 **Tasks:**
-- [ ] 2.2.1 Implement `connect()`:
+- [x] 2.2.1 Implement `connect()`:
   - Check if already connected/connecting
   - Get auth token from AuthStore
   - Build WebSocket URL from base URL
   - Create OkHttp WebSocket with auth header
   - Set state to `Connecting`
-- [ ] 2.2.2 Implement `disconnect()`:
+- [x] 2.2.2 Implement `disconnect()`:
   - Close WebSocket with code 1000
   - Set state to `Disconnected`
   - Cancel any pending reconnect
-- [ ] 2.2.3 Implement `WebSocketListener`:
+- [x] 2.2.3 Implement `WebSocketListener`:
   - `onOpen` → wait for server "connected" message
   - `onMessage` → parse JSON, dispatch to handlers
   - `onClosed` → set state, schedule reconnect if unexpected
   - `onFailure` → set error state, schedule reconnect
-- [ ] 2.2.4 Implement `send()`:
+- [x] 2.2.4 Implement `send()`:
   - Serialize message to JSON
   - Send via WebSocket if connected
 
 ---
 
-### 2.3 [ ] Implement reconnection logic
+### 2.3 [x] Implement reconnection logic
 
 **Tasks:**
-- [ ] 2.3.1 Add reconnection parameters:
+- [x] 2.3.1 Add reconnection parameters:
   - `minBackoff = 1000ms`
   - `maxBackoff = 30000ms`
   - `backoffMultiplier = 1.5`
-- [ ] 2.3.2 Track `reconnectAttempt` counter
-- [ ] 2.3.3 Implement exponential backoff calculation
-- [ ] 2.3.4 Use `CoroutineScope.launch` with `delay()` for retry
-- [ ] 2.3.5 Reset backoff on successful connection
-- [ ] 2.3.6 Add `intentionalDisconnect` flag to prevent reconnect after logout
+- [x] 2.3.2 Track `reconnectAttempt` counter
+- [x] 2.3.3 Implement exponential backoff calculation
+- [x] 2.3.4 Use `CoroutineScope.launch` with `delay()` for retry
+- [x] 2.3.5 Reset backoff on successful connection
+- [x] 2.3.6 Add `intentionalDisconnect` flag to prevent reconnect after logout
 
 ---
 
-### 2.4 [ ] Implement message handling
+### 2.4 [x] Implement message handling
 
 **Tasks:**
-- [ ] 2.4.1 Parse incoming JSON to `ServerMessage`
-- [ ] 2.4.2 Handle system messages:
+- [x] 2.4.1 Parse incoming JSON to `ServerMessage`
+- [x] 2.4.2 Handle system messages:
   - `connected` → extract device_id, set state to `Connected`
   - `pong` → ignore (heartbeat response)
   - `error` → log error
-- [ ] 2.4.3 Dispatch to handlers by prefix:
+- [x] 2.4.3 Dispatch to handlers by prefix:
   - Extract prefix from type (e.g., "sync" from "sync.liked")
   - Call registered handler if exists
-- [ ] 2.4.4 Implement `registerHandler()` and `unregisterHandler()`
+- [x] 2.4.4 Implement `registerHandler()` and `unregisterHandler()`
 
 ---
 
-### 2.5 [ ] Implement ping/pong heartbeat
+### 2.5 [x] Implement ping/pong heartbeat
 
 **Tasks:**
-- [ ] 2.5.1 Add heartbeat interval constant (30 seconds)
-- [ ] 2.5.2 Launch coroutine to send ping periodically when connected
-- [ ] 2.5.3 Cancel heartbeat coroutine on disconnect
-- [ ] 2.5.4 Consider connection dead if no pong received (optional)
+- [x] 2.5.1 Add heartbeat interval constant (30 seconds)
+- [x] 2.5.2 Launch coroutine to send ping periodically when connected
+- [x] 2.5.3 Cancel heartbeat coroutine on disconnect
+- [x] 2.5.4 Consider connection dead if no pong received (optional) - OkHttp pingInterval handles WS-level keep-alive
 
 ---
 
