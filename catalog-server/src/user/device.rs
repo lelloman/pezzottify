@@ -158,4 +158,101 @@ mod tests {
             DeviceType::Unknown
         );
     }
+
+    #[test]
+    fn test_validate_valid_input() {
+        let result = DeviceRegistration::validate_and_sanitize(
+            "test-uuid-1234",
+            "android",
+            Some("My Phone"),
+            Some("Android 14"),
+        );
+        assert!(result.is_ok());
+        let reg = result.unwrap();
+        assert_eq!(reg.device_uuid, "test-uuid-1234");
+        assert_eq!(reg.device_type, DeviceType::Android);
+        assert_eq!(reg.device_name, Some("My Phone".to_string()));
+        assert_eq!(reg.os_info, Some("Android 14".to_string()));
+    }
+
+    #[test]
+    fn test_validate_uuid_too_short() {
+        let result = DeviceRegistration::validate_and_sanitize("short", "web", None, None);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("device_uuid"));
+    }
+
+    #[test]
+    fn test_validate_uuid_too_long() {
+        let long_uuid = "a".repeat(65);
+        let result = DeviceRegistration::validate_and_sanitize(&long_uuid, "web", None, None);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_validate_uuid_invalid_chars() {
+        let result =
+            DeviceRegistration::validate_and_sanitize("uuid with spaces!", "web", None, None);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("alphanumeric"));
+    }
+
+    #[test]
+    fn test_validate_device_name_truncation() {
+        let long_name = "x".repeat(150);
+        let result =
+            DeviceRegistration::validate_and_sanitize("valid-uuid", "web", Some(&long_name), None);
+        assert!(result.is_ok());
+        assert_eq!(
+            result.unwrap().device_name.unwrap().len(),
+            DEVICE_NAME_MAX_LEN
+        );
+    }
+
+    #[test]
+    fn test_validate_os_info_truncation() {
+        let long_info = "y".repeat(250);
+        let result =
+            DeviceRegistration::validate_and_sanitize("valid-uuid", "web", None, Some(&long_info));
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap().os_info.unwrap().len(), OS_INFO_MAX_LEN);
+    }
+
+    #[test]
+    fn test_validate_control_chars_stripped() {
+        let result = DeviceRegistration::validate_and_sanitize(
+            "valid-uuid",
+            "web",
+            Some("Name\x00With\x1FControl"),
+            Some("OS\nInfo"),
+        );
+        assert!(result.is_ok());
+        let reg = result.unwrap();
+        assert_eq!(reg.device_name, Some("NameWithControl".to_string()));
+        assert_eq!(reg.os_info, Some("OSInfo".to_string()));
+    }
+
+    #[test]
+    fn test_validate_whitespace_trimming() {
+        let result = DeviceRegistration::validate_and_sanitize(
+            "  valid-uuid  ",
+            "web",
+            Some("  trimmed  "),
+            None,
+        );
+        assert!(result.is_ok());
+        let reg = result.unwrap();
+        assert_eq!(reg.device_uuid, "valid-uuid");
+        assert_eq!(reg.device_name, Some("trimmed".to_string()));
+    }
+
+    #[test]
+    fn test_validate_empty_optional_becomes_none() {
+        let result =
+            DeviceRegistration::validate_and_sanitize("valid-uuid", "web", Some(""), Some("   "));
+        assert!(result.is_ok());
+        let reg = result.unwrap();
+        assert!(reg.device_name.is_none());
+        assert!(reg.os_info.is_none());
+    }
 }

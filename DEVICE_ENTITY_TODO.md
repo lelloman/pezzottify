@@ -275,7 +275,7 @@ mod tests {
 
 ---
 
-### [ ] Task 1.9: Add unit tests for DeviceRegistration validation
+### [x] Task 1.9: Add unit tests for DeviceRegistration validation
 **File**: `catalog-server/src/user/device.rs`
 
 **Implementation**:
