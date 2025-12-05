@@ -23,14 +23,17 @@ The following user data will be synchronized:
 
 **Core concept:** Server maintains an append-only event log per user. Clients track their position (cursor) and sync via:
 - REST endpoints for catch-up
-- Real-time push (SSE) for instant updates
+- Real-time push via existing WebSocket (`GET /v1/ws`)
 
 **Sync flows:**
 
-1. **Online action:** Client → REST API → Server logs event → broadcasts to other devices
+1. **Online action:** Client → REST API → Server logs event → broadcasts to other devices via WebSocket
 2. **Receiving push:** Server pushes event → Client applies to local state → updates cursor
 3. **Reconnection:** Client fetches events since cursor → applies all → updates cursor
 4. **Cursor too old:** Server returns 410 → Client does full state reset
+5. **Sequence gap:** Client detects gap → triggers full state reset
+
+**Important:** The server broadcasts events only to *other* devices of the same user. The device that performed the action already applied it optimistically — no need to echo back.
 
 ---
 
@@ -46,7 +49,6 @@ CREATE TABLE user_events (
   user_id INTEGER NOT NULL REFERENCES user(id) ON DELETE CASCADE,
   event_type TEXT NOT NULL,
   payload TEXT NOT NULL,        -- JSON
-  client_timestamp INTEGER NOT NULL,
   server_timestamp INTEGER DEFAULT (cast(strftime('%s','now') as int))
 );
 
@@ -63,6 +65,8 @@ CREATE INDEX idx_user_events_user_seq ON user_events(user_id, seq);
 ```rust
 use serde::{Deserialize, Serialize};
 use crate::user::user_models::ContentType;
+use crate::user::permissions::Permission;
+use crate::user::settings::UserSetting;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", content = "payload")]
@@ -83,8 +87,7 @@ pub enum UserEvent {
     // Settings
     #[serde(rename = "setting_changed")]
     SettingChanged {
-        key: String,
-        value: serde_json::Value,
+        setting: UserSetting,
     },
 
     // Playlists
@@ -105,39 +108,26 @@ pub enum UserEvent {
         playlist_id: String,
     },
 
-    #[serde(rename = "playlist_track_added")]
-    PlaylistTrackAdded {
+    #[serde(rename = "playlist_tracks_updated")]
+    PlaylistTracksUpdated {
         playlist_id: String,
-        track_id: String,
-        position: u32,
+        track_ids: Vec<String>,  // Full list of tracks (replaces previous)
     },
 
-    #[serde(rename = "playlist_track_removed")]
-    PlaylistTrackRemoved {
-        playlist_id: String,
-        track_id: String,
-    },
-
-    #[serde(rename = "playlist_tracks_reordered")]
-    PlaylistTracksReordered {
-        playlist_id: String,
-        track_ids: Vec<String>,  // New order of all track IDs
-    },
-
-    // Permissions (triggered by admin actions)
+    // Permissions (triggered by CLI admin actions)
     #[serde(rename = "permission_granted")]
     PermissionGranted {
-        permission: String,
+        permission: Permission,
     },
 
     #[serde(rename = "permission_revoked")]
     PermissionRevoked {
-        permission: String,
+        permission: Permission,
     },
 
     #[serde(rename = "permissions_reset")]
     PermissionsReset {
-        permissions: Vec<String>,  // Full list of current permissions
+        permissions: Vec<Permission>,  // Full list of current permissions
     },
 }
 
@@ -145,7 +135,6 @@ pub enum UserEvent {
 pub struct StoredEvent {
     pub seq: i64,
     pub event: UserEvent,
-    pub client_timestamp: i64,
     pub server_timestamp: i64,
 }
 ```
@@ -163,7 +152,6 @@ pub fn append_event(
     &self,
     user_id: i64,
     event: &UserEvent,
-    client_timestamp: i64,
 ) -> Result<i64, UserStoreError>;
 
 /// Get events since a given sequence number
@@ -177,6 +165,10 @@ pub fn get_events_since(
 /// Get the current (latest) sequence number for a user
 /// Returns 0 if no events exist
 pub fn get_current_seq(&self, user_id: i64) -> Result<i64, UserStoreError>;
+
+/// Get the minimum available sequence number for a user
+/// Used to detect if requested sequence has been pruned
+pub fn get_min_seq(&self, user_id: i64) -> Result<i64, UserStoreError>;
 
 /// Delete events older than the given timestamp
 /// Used for maintenance/pruning
@@ -193,26 +185,25 @@ Update these handlers to append events after successful operations:
 |----------|-------|
 | `POST /v1/user/liked/{type}/{id}` | `ContentLiked` |
 | `DELETE /v1/user/liked/{type}/{id}` | `ContentUnliked` |
-| `PUT /v1/user/settings` | `SettingChanged` (one per changed setting) |
-| `POST /v1/user/playlists` | `PlaylistCreated` |
-| `PUT /v1/user/playlists/{id}` | `PlaylistRenamed` |
-| `DELETE /v1/user/playlists/{id}` | `PlaylistDeleted` |
-| `POST /v1/user/playlists/{id}/tracks` | `PlaylistTrackAdded` |
-| `DELETE /v1/user/playlists/{id}/tracks/{track_id}` | `PlaylistTrackRemoved` |
-| `PUT /v1/user/playlists/{id}/tracks` | `PlaylistTracksReordered` |
+| `PUT /v1/user/settings` | `SettingChanged` |
+| `POST /v1/user/playlist` | `PlaylistCreated` |
+| `PUT /v1/user/playlist/{id}` | `PlaylistRenamed` and/or `PlaylistTracksUpdated` |
+| `DELETE /v1/user/playlist/{id}` | `PlaylistDeleted` |
+| `PUT /v1/user/playlist/{id}/add` | `PlaylistTracksUpdated` |
+| `PUT /v1/user/playlist/{id}/remove` | `PlaylistTracksUpdated` |
 
-**Permission events** are triggered by admin endpoints (when managing other users):
+**Permission events** are triggered by CLI admin commands. The CLI must call event logging directly:
 
-| Endpoint | Event (on target user's log) |
-|----------|------------------------------|
-| `POST /v1/admin/users/{id}/permissions` | `PermissionGranted` |
-| `DELETE /v1/admin/users/{id}/permissions/{perm}` | `PermissionRevoked` |
-| `PUT /v1/admin/users/{id}/role` | `PermissionsReset` |
+| CLI Command | Event (on target user's log) |
+|-------------|------------------------------|
+| Grant permission | `PermissionGranted` |
+| Revoke permission | `PermissionRevoked` |
+| Change role | `PermissionsReset` |
 
 Each handler will:
 1. Perform the existing operation
 2. Append event to log
-3. Broadcast to connected clients (Phase 3)
+3. Broadcast to other connected devices (Phase 3)
 4. Return response
 
 ---
@@ -245,9 +236,9 @@ Each handler will:
     }
   ],
   "permissions": [
-    "access_catalog",
-    "like_content",
-    "own_playlists"
+    "AccessCatalog",
+    "LikeContent",
+    "OwnPlaylists"
   ]
 }
 ```
@@ -282,8 +273,10 @@ Each handler will:
       "seq": 44,
       "type": "setting_changed",
       "payload": {
-        "key": "enable_direct_downloads",
-        "value": false
+        "setting": {
+          "key": "enable_direct_downloads",
+          "value": false
+        }
       },
       "timestamp": 1701700005
     }
@@ -302,80 +295,51 @@ Each handler will:
 
 ---
 
-## Phase 3: Server — Real-Time Push
+## Phase 3: Server — Real-Time Push via WebSocket
 
-### 3.1 Connection Management
+### 3.1 Extend Existing WebSocket Infrastructure
 
-**New file:** `catalog-server/src/server/sync_broadcast.rs`
+The server already has WebSocket support at `GET /v1/ws` with connection management and message routing. We'll extend it to handle sync events.
+
+**Modify:** `catalog-server/src/server/websocket/messages.rs`
+
+Add sync message types:
 
 ```rust
-use std::collections::HashMap;
-use std::sync::Arc;
-use tokio::sync::{broadcast, RwLock};
-use crate::user::sync_events::StoredEvent;
-
-pub struct SyncBroadcaster {
-    /// Map of user_id -> broadcast channel sender
-    channels: RwLock<HashMap<i64, broadcast::Sender<StoredEvent>>>,
+pub mod msg_types {
+    // ... existing types ...
+    pub const SYNC: &str = "sync";
 }
 
-impl SyncBroadcaster {
-    pub fn new() -> Self;
+pub mod sync {
+    use serde::{Deserialize, Serialize};
+    use crate::user::sync_events::StoredEvent;
 
-    /// Subscribe to events for a user
-    /// Returns a receiver that will get all future events
-    pub async fn subscribe(&self, user_id: i64) -> broadcast::Receiver<StoredEvent>;
-
-    /// Broadcast an event to all connected clients for a user
-    pub async fn broadcast(&self, user_id: i64, event: StoredEvent);
-
-    /// Clean up channel when no subscribers remain
-    async fn cleanup_if_empty(&self, user_id: i64);
+    #[derive(Debug, Clone, Serialize, Deserialize)]
+    pub struct SyncEvent {
+        pub event: StoredEvent,
+    }
 }
 ```
 
-### 3.2 SSE Push Endpoint
+### 3.2 Broadcast to Other Devices
 
-**New route:** `GET /v1/sync/stream`
+**Modify:** `catalog-server/src/server/websocket/connection.rs`
 
-**Permission:** `AccessCatalog`
-
-**Response:** `Content-Type: text/event-stream`
-
-**Event format:**
-```
-event: sync
-data: {"seq":43,"type":"content_liked","payload":{"content_type":"album","content_id":"album_123"},"timestamp":1701700000}
-
-event: sync
-data: {"seq":44,"type":"setting_changed","payload":{"key":"enable_direct_downloads","value":false},"timestamp":1701700005}
-
-```
-
-**Implementation using Axum SSE:**
+Add method to broadcast to all devices except one:
 
 ```rust
-use axum::response::sse::{Event, Sse};
-use futures::stream::Stream;
-
-async fn sync_stream(
-    session: Session,
-    State(broadcaster): State<Arc<SyncBroadcaster>>,
-) -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
-    let receiver = broadcaster.subscribe(session.user_id).await;
-
-    let stream = BroadcastStream::new(receiver)
-        .map(|result| {
-            let event = result.unwrap();
-            Ok(Event::default()
-                .event("sync")
-                .data(serde_json::to_string(&event).unwrap()))
-        });
-
-    Sse::new(stream).keep_alive(
-        axum::response::sse::KeepAlive::new()
-            .interval(Duration::from_secs(30))
-    )
+impl ConnectionManager {
+    /// Broadcast a message to all connected devices for a user except the source device
+    pub async fn broadcast_to_others(
+        &self,
+        user_id: usize,
+        source_device_id: usize,
+        message: ServerMessage,
+    ) {
+        // Get all device connections for user
+        // Send to all except source_device_id
+    }
 }
 ```
 
@@ -391,9 +355,14 @@ let event = UserEvent::ContentLiked {
     content_type,
     content_id: content_id.clone(),
 };
-let seq = user_store.append_event(user_id, &event, client_timestamp)?;
-let stored_event = StoredEvent { seq, event, client_timestamp, server_timestamp };
-broadcaster.broadcast(user_id, stored_event).await;
+let seq = user_store.append_event(user_id, &event)?;
+let stored_event = StoredEvent { seq, event, server_timestamp };
+
+// Broadcast to OTHER devices only (not the one making this request)
+if let Some(device_id) = session.device_id {
+    let ws_message = ServerMessage::new(msg_types::SYNC, sync::SyncEvent { event: stored_event });
+    connection_manager.broadcast_to_others(user_id, device_id, ws_message).await;
+}
 ```
 
 ---
@@ -416,8 +385,8 @@ export const useSyncStore = defineStore('sync', () => {
 
   // State
   const cursor = ref(null);          // Last seen sequence number
-  const connected = ref(false);      // SSE connection status
-  const eventSource = ref(null);     // SSE EventSource instance
+  const connected = ref(false);      // WebSocket connection status
+  const webSocket = ref(null);       // WebSocket instance
 
   // Cursor persistence key (includes user ID)
   const cursorKey = computed(() => `sync_cursor_${userStore.userId}`);
@@ -468,6 +437,17 @@ export const useSyncStore = defineStore('sync', () => {
     try {
       const response = await remoteStore.fetchSyncEvents(cursor.value);
 
+      // Check for sequence gaps
+      if (response.events.length > 0) {
+        const firstSeq = response.events[0].seq;
+        if (firstSeq > cursor.value + 1) {
+          // Gap detected, do full resync
+          console.warn('Sequence gap detected, performing full sync');
+          await fullSync();
+          return;
+        }
+      }
+
       // Apply each event
       for (const event of response.events) {
         applyEvent(event);
@@ -499,7 +479,7 @@ export const useSyncStore = defineStore('sync', () => {
 
       // Settings
       case 'setting_changed':
-        userStore.applySettingChanged(event.payload.key, event.payload.value);
+        userStore.applySettingChanged(event.payload.setting);
         break;
 
       // Playlists
@@ -512,14 +492,8 @@ export const useSyncStore = defineStore('sync', () => {
       case 'playlist_deleted':
         userStore.applyPlaylistDeleted(event.payload.playlist_id);
         break;
-      case 'playlist_track_added':
-        userStore.applyPlaylistTrackAdded(event.payload.playlist_id, event.payload.track_id, event.payload.position);
-        break;
-      case 'playlist_track_removed':
-        userStore.applyPlaylistTrackRemoved(event.payload.playlist_id, event.payload.track_id);
-        break;
-      case 'playlist_tracks_reordered':
-        userStore.applyPlaylistTracksReordered(event.payload.playlist_id, event.payload.track_ids);
+      case 'playlist_tracks_updated':
+        userStore.applyPlaylistTracksUpdated(event.payload.playlist_id, event.payload.track_ids);
         break;
 
       // Permissions
@@ -539,41 +513,48 @@ export const useSyncStore = defineStore('sync', () => {
     saveCursor();
   }
 
-  // Connect to SSE stream
+  // Connect to WebSocket
   function connect() {
-    if (eventSource.value) {
+    if (webSocket.value) {
       return; // Already connected
     }
 
-    const url = `${remoteStore.baseUrl}/v1/sync/stream`;
-    eventSource.value = new EventSource(url, { withCredentials: true });
+    const wsUrl = remoteStore.baseUrl.replace(/^http/, 'ws') + '/v1/ws';
+    webSocket.value = new WebSocket(wsUrl);
 
-    eventSource.value.addEventListener('sync', (e) => {
-      const event = JSON.parse(e.data);
-      applyEvent(event);
-    });
-
-    eventSource.value.onopen = () => {
+    webSocket.value.onopen = () => {
       connected.value = true;
     };
 
-    eventSource.value.onerror = async () => {
+    webSocket.value.onmessage = (e) => {
+      const message = JSON.parse(e.data);
+      if (message.type === 'sync') {
+        applyEvent(message.payload.event);
+      }
+      // Handle other message types (connected, pong, etc.) as needed
+    };
+
+    webSocket.value.onclose = async () => {
       connected.value = false;
-      // SSE will auto-reconnect, but we need to catch up
-      // Small delay to avoid hammering server
-      setTimeout(async () => {
-        if (eventSource.value?.readyState === EventSource.OPEN) {
-          await catchUp();
+      webSocket.value = null;
+      // Reconnect after delay
+      setTimeout(() => {
+        if (userStore.isInitialized) {
+          catchUp().then(() => connect());
         }
       }, 1000);
     };
+
+    webSocket.value.onerror = () => {
+      connected.value = false;
+    };
   }
 
-  // Disconnect from SSE stream
+  // Disconnect from WebSocket
   function disconnect() {
-    if (eventSource.value) {
-      eventSource.value.close();
-      eventSource.value = null;
+    if (webSocket.value) {
+      webSocket.value.close();
+      webSocket.value = null;
       connected.value = false;
     }
   }
@@ -608,9 +589,11 @@ export const useSyncStore = defineStore('sync', () => {
 
 **Modify:** `web/src/store/user.js`
 
-Add methods for applying sync events (update state without API calls):
+Add `likedTrackIds` state and methods for applying sync events:
 
 ```javascript
+const likedTrackIds = ref(null);
+
 // Apply a like event from sync
 function applyContentLiked(contentType, contentId) {
   switch (contentType) {
@@ -648,8 +631,8 @@ function applyContentUnliked(contentType, contentId) {
 }
 
 // Apply a setting change event from sync
-function applySettingChanged(key, value) {
-  settings.value[key] = value;
+function applySettingChanged(setting) {
+  settings.value[setting.key] = setting.value;
 }
 
 // Setters for full state (used by fullSync)
@@ -675,50 +658,39 @@ function setAllSettings(settingsArray) {
 // --- Playlist event handlers ---
 
 function applyPlaylistCreated(playlistId, name) {
-  playlists.value.push({
-    id: playlistId,
-    name: name,
-    tracks: []
-  });
+  if (!playlistsData.value) return;
+  const newPlaylist = { id: playlistId, name: name, tracks: [] };
+  playlistsData.value.list.push(newPlaylist);
+  playlistsData.value.by_id[playlistId] = newPlaylist;
 }
 
 function applyPlaylistRenamed(playlistId, name) {
-  const playlist = playlists.value.find(p => p.id === playlistId);
-  if (playlist) {
-    playlist.name = name;
-  }
+  if (!playlistsData.value?.by_id[playlistId]) return;
+  playlistsData.value.by_id[playlistId].name = name;
 }
 
 function applyPlaylistDeleted(playlistId) {
-  playlists.value = playlists.value.filter(p => p.id !== playlistId);
+  if (!playlistsData.value) return;
+  playlistsData.value.list = playlistsData.value.list.filter(p => p.id !== playlistId);
+  delete playlistsData.value.by_id[playlistId];
 }
 
-function applyPlaylistTrackAdded(playlistId, trackId, position) {
-  const playlist = playlists.value.find(p => p.id === playlistId);
-  if (playlist) {
-    playlist.tracks.splice(position, 0, trackId);
-  }
+function applyPlaylistTracksUpdated(playlistId, trackIds) {
+  if (!playlistsData.value?.by_id[playlistId]) return;
+  playlistsData.value.by_id[playlistId].tracks = trackIds;
 }
 
-function applyPlaylistTrackRemoved(playlistId, trackId) {
-  const playlist = playlists.value.find(p => p.id === playlistId);
-  if (playlist) {
-    playlist.tracks = playlist.tracks.filter(id => id !== trackId);
-  }
-}
-
-function applyPlaylistTracksReordered(playlistId, trackIds) {
-  const playlist = playlists.value.find(p => p.id === playlistId);
-  if (playlist) {
-    playlist.tracks = trackIds;
-  }
-}
-
-function setPlaylists(playlistsData) {
-  playlists.value = playlistsData;
+function setPlaylists(playlistsList) {
+  const by_id = {};
+  playlistsList.forEach(playlist => {
+    by_id[playlist.id] = playlist;
+  });
+  playlistsData.value = { list: playlistsList, by_id };
 }
 
 // --- Permission event handlers ---
+
+const permissions = ref([]);
 
 function applyPermissionGranted(permission) {
   if (!permissions.value.includes(permission)) {
@@ -785,29 +757,249 @@ function logout() {
 
 ---
 
-## Phase 5: Cursor Persistence & Edge Cases
+## Phase 5: Android — Sync Client
 
-### 5.1 Cursor Storage
+### 5.1 Sync Event Models
+
+**New file:** `android/domain/src/main/java/com/lelloman/pezzottify/android/domain/sync/SyncEvent.kt`
+
+```kotlin
+import kotlinx.serialization.SerialName
+import kotlinx.serialization.Serializable
+
+@Serializable
+sealed interface SyncEventPayload
+
+@Serializable
+@SerialName("content_liked")
+data class ContentLiked(
+    @SerialName("content_type") val contentType: String,
+    @SerialName("content_id") val contentId: String
+) : SyncEventPayload
+
+@Serializable
+@SerialName("content_unliked")
+data class ContentUnliked(
+    @SerialName("content_type") val contentType: String,
+    @SerialName("content_id") val contentId: String
+) : SyncEventPayload
+
+@Serializable
+@SerialName("setting_changed")
+data class SettingChanged(
+    val setting: UserSettingValue
+) : SyncEventPayload
+
+@Serializable
+@SerialName("playlist_created")
+data class PlaylistCreated(
+    @SerialName("playlist_id") val playlistId: String,
+    val name: String
+) : SyncEventPayload
+
+@Serializable
+@SerialName("playlist_renamed")
+data class PlaylistRenamed(
+    @SerialName("playlist_id") val playlistId: String,
+    val name: String
+) : SyncEventPayload
+
+@Serializable
+@SerialName("playlist_deleted")
+data class PlaylistDeleted(
+    @SerialName("playlist_id") val playlistId: String
+) : SyncEventPayload
+
+@Serializable
+@SerialName("playlist_tracks_updated")
+data class PlaylistTracksUpdated(
+    @SerialName("playlist_id") val playlistId: String,
+    @SerialName("track_ids") val trackIds: List<String>
+) : SyncEventPayload
+
+@Serializable
+@SerialName("permission_granted")
+data class PermissionGranted(
+    val permission: String
+) : SyncEventPayload
+
+@Serializable
+@SerialName("permission_revoked")
+data class PermissionRevoked(
+    val permission: String
+) : SyncEventPayload
+
+@Serializable
+@SerialName("permissions_reset")
+data class PermissionsReset(
+    val permissions: List<String>
+) : SyncEventPayload
+
+@Serializable
+data class StoredEvent(
+    val seq: Long,
+    val event: SyncEventPayload,
+    @SerialName("server_timestamp") val serverTimestamp: Long
+)
+```
+
+### 5.2 Sync State Store
+
+**New file:** `android/domain/src/main/java/com/lelloman/pezzottify/android/domain/sync/SyncStateStore.kt`
+
+```kotlin
+interface SyncStateStore {
+    suspend fun getCursor(): Long?
+    suspend fun setCursor(seq: Long)
+    suspend fun clearCursor()
+}
+```
+
+**Implementation in localdata module** using EncryptedSharedPreferences.
+
+### 5.3 Sync API Client
+
+**Modify:** `android/remoteapi/.../RemoteApiClient.kt`
+
+Add sync endpoints:
+
+```kotlin
+interface RemoteApiClient {
+    // ... existing methods ...
+
+    suspend fun getSyncState(): SyncStateResponse
+    suspend fun getSyncEvents(since: Long): SyncEventsResponse
+}
+```
+
+### 5.4 Sync Manager
+
+**New file:** `android/domain/src/main/java/com/lelloman/pezzottify/android/domain/sync/SyncManager.kt`
+
+```kotlin
+interface SyncManager {
+    val syncState: StateFlow<SyncState>
+
+    suspend fun initialize()
+    suspend fun fullSync()
+    suspend fun catchUp()
+    fun cleanup()
+}
+
+sealed interface SyncState {
+    data object Idle : SyncState
+    data object Syncing : SyncState
+    data class Synced(val seq: Long) : SyncState
+    data class Error(val message: String) : SyncState
+}
+```
+
+### 5.5 WebSocket Sync Handler
+
+**Modify:** `android/domain/src/main/java/com/lelloman/pezzottify/android/domain/websocket/WebSocketInitializer.kt`
+
+Register sync message handler:
+
+```kotlin
+webSocketManager.registerHandler("sync") { message ->
+    val syncMessage = Json.decodeFromString<SyncMessage>(message.payload)
+    syncManager.applyEvent(syncMessage.event)
+}
+```
+
+### 5.6 User Content Store Updates
+
+**Modify:** `android/domain/.../UserContentStore.kt` (or equivalent)
+
+Add methods for applying sync events:
+
+```kotlin
+interface UserContentStore {
+    // ... existing methods ...
+
+    suspend fun applyContentLiked(contentType: String, contentId: String)
+    suspend fun applyContentUnliked(contentType: String, contentId: String)
+    suspend fun applySettingChanged(setting: UserSettingValue)
+    suspend fun applyPlaylistCreated(playlistId: String, name: String)
+    suspend fun applyPlaylistRenamed(playlistId: String, name: String)
+    suspend fun applyPlaylistDeleted(playlistId: String)
+    suspend fun applyPlaylistTracksUpdated(playlistId: String, trackIds: List<String>)
+
+    // Full state setters for fullSync
+    suspend fun setLikedContent(albums: List<String>, artists: List<String>, tracks: List<String>)
+    suspend fun setPlaylists(playlists: List<Playlist>)
+    suspend fun setPermissions(permissions: List<String>)
+}
+```
+
+### 5.7 Integration with App Lifecycle
+
+**Modify:** `android/domain/.../auth/usecase/PerformLogin.kt`
+
+After successful login, initialize sync:
+
+```kotlin
+syncManager.initialize()
+```
+
+**Modify:** `android/domain/.../auth/usecase/PerformLogout.kt`
+
+Before clearing auth, cleanup sync:
+
+```kotlin
+syncManager.cleanup()
+```
+
+---
+
+## Phase 6: Cursor Persistence & Edge Cases
+
+### 6.1 Cursor Storage
 
 - **Key format:** `sync_cursor_{userId}`
-- **Storage:** `localStorage`
+- **Storage:**
+  - Web: `localStorage`
+  - Android: `EncryptedSharedPreferences`
 - **Updated:** after each event application
 
-### 5.2 Fresh Login
+### 6.2 Fresh Login
 
-- No cursor in localStorage
+- No cursor in storage
 - `catchUp()` sees `cursor === null`
 - Calls `fullSync()`
 
-### 5.3 Logout
+### 6.3 Logout
 
-- Call `syncStore.cleanup()`
-- Clears cursor from localStorage
-- Closes SSE connection
+- Call `syncManager.cleanup()` / `syncStore.cleanup()`
+- Clears cursor from storage
+- Closes WebSocket connection
 
-### 5.4 Multiple Tabs
+### 6.4 Sequence Gap Detection
 
-**Initial approach:** each tab has its own SSE connection
+When receiving events via catch-up:
+```javascript
+if (response.events.length > 0) {
+  const firstSeq = response.events[0].seq;
+  if (firstSeq > cursor + 1) {
+    // Gap detected, do full resync
+    await fullSync();
+    return;
+  }
+}
+```
+
+When receiving events via WebSocket:
+```javascript
+if (event.seq > cursor + 1) {
+  // Gap detected, do full resync
+  await fullSync();
+  return;
+}
+```
+
+### 6.5 Multiple Tabs (Web)
+
+**Initial approach:** each tab has its own WebSocket connection
 
 - Simple to implement
 - Slightly wasteful (multiple connections per user)
@@ -815,10 +1007,10 @@ function logout() {
 
 **Future optimization (optional):**
 - Use `BroadcastChannel` API to share events between tabs
-- Only one tab maintains SSE connection
+- Only one tab maintains WebSocket connection
 - Complexity: leader election, tab close handling
 
-### 5.5 Page Visibility
+### 6.6 Page Visibility (Web)
 
 **Optional optimization:**
 
@@ -833,9 +1025,9 @@ document.addEventListener('visibilitychange', () => {
 
 ---
 
-## Phase 6: Event Log Maintenance
+## Phase 7: Event Log Maintenance
 
-### 6.1 Pruning Strategy
+### 7.1 Pruning Strategy
 
 **Recommended:** Time-based pruning
 
@@ -849,7 +1041,7 @@ document.addEventListener('visibilitychange', () => {
 - Bounded storage per user
 - May prune recent events for very active users
 
-### 6.2 Pruning Implementation
+### 7.2 Pruning Implementation
 
 **Add to:** `catalog-server/src/user/sqlite_user_store.rs`
 
@@ -864,27 +1056,42 @@ pub fn prune_events_older_than(&self, before_timestamp: i64) -> Result<u64, User
 }
 ```
 
-### 6.3 Pruning Execution
+### 7.3 Pruning Execution
 
-**Options:**
+**Approach:** Internal background task
 
-1. **CLI command:** Run via cron job
-   ```bash
-   cargo run --bin cli-maintenance -- prune-events --older-than-days 30
-   ```
+Spawn an async task on server startup that runs periodically:
 
-2. **Background task:** Spawn async task on server startup that runs periodically
+```rust
+// In server startup
+tokio::spawn(async move {
+    let mut interval = tokio::time::interval(Duration::from_secs(24 * 60 * 60)); // Daily
+    loop {
+        interval.tick().await;
+        let cutoff = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs() as i64 - (30 * 24 * 60 * 60); // 30 days ago
 
-3. **On-demand:** Prune during low-traffic periods (e.g., triggered by admin endpoint)
+        match user_store.prune_events_older_than(cutoff) {
+            Ok(count) => tracing::info!("Pruned {} old sync events", count),
+            Err(e) => tracing::error!("Failed to prune sync events: {}", e),
+        }
+    }
+});
+```
 
-**Recommended:** CLI command with cron for simplicity.
+**Configuration:** Add optional CLI args:
+- `--event-retention-days <DAYS>`: How long to keep events (default: 30)
+- `--prune-interval-hours <HOURS>`: How often to run pruning (default: 24)
 
-### 6.4 Detecting Pruned Sequences
+### 7.4 Detecting Pruned Sequences
 
 When client requests `GET /v1/sync/events?since=N`:
 
 ```rust
 // Check if we have any events at or before the requested sequence
+// This is O(1) with the (user_id, seq) index
 let min_seq = get_min_seq_for_user(user_id)?;
 
 if since_seq < min_seq {
@@ -903,8 +1110,10 @@ if since_seq < min_seq {
 | File | Description |
 |------|-------------|
 | `catalog-server/src/user/sync_events.rs` | Event type definitions |
-| `catalog-server/src/server/sync_broadcast.rs` | Push connection management |
-| `web/src/store/sync.js` | Sync client logic |
+| `web/src/store/sync.js` | Web sync client logic |
+| `android/domain/.../sync/SyncEvent.kt` | Android event models |
+| `android/domain/.../sync/SyncManager.kt` | Android sync manager |
+| `android/domain/.../sync/SyncStateStore.kt` | Android cursor persistence |
 
 ### Modified Files
 
@@ -913,9 +1122,14 @@ if since_seq < min_seq {
 | `catalog-server/src/user/sqlite_user_store.rs` | Schema migration, event log methods |
 | `catalog-server/src/user/mod.rs` | Export sync_events module |
 | `catalog-server/src/server/server.rs` | New routes, broadcast integration |
-| `catalog-server/src/server/mod.rs` | Export sync_broadcast module |
-| `web/src/store/user.js` | Event application methods, init flow |
+| `catalog-server/src/server/websocket/messages.rs` | Sync message types |
+| `catalog-server/src/server/websocket/connection.rs` | broadcast_to_others method |
+| `catalog-server/src/bin/cli-auth.rs` | Event logging for permission changes |
+| `catalog-server/src/main.rs` | Background pruning task |
+| `web/src/store/user.js` | Event application methods, likedTrackIds, permissions |
 | `web/src/store/remote.js` | Sync API methods |
+| `android/remoteapi/.../RemoteApiClient.kt` | Sync API methods |
+| `android/domain/.../websocket/WebSocketInitializer.kt` | Sync handler registration |
 
 ---
 
@@ -930,7 +1144,7 @@ if since_seq < min_seq {
 - Modify like/unlike handlers to append events
 - Modify settings handler to append events
 - Modify playlist handlers to append events
-- Modify admin permission handlers to append events (on target user's log)
+- Modify CLI to log permission events
 - (No broadcast yet — just logging)
 
 ### Step 3: Sync REST Endpoints
@@ -940,22 +1154,33 @@ if since_seq < min_seq {
 
 ### Step 4: Web Catch-Up Sync
 - Create `sync.js` store
+- Add `likedTrackIds` to user store
 - Implement `fullSync()` and `catchUp()`
 - Integrate with user store
 - Test: change data via API, refresh page, verify sync
 
-### Step 5: SSE Push
-- Implement `SyncBroadcaster`
-- Add `GET /v1/sync/stream` endpoint
+### Step 5: WebSocket Push
+- Add sync message types
+- Add `broadcast_to_others()` method
 - Modify handlers to broadcast after logging
 
 ### Step 6: Web Real-Time
-- Implement SSE connection in `sync.js`
+- Implement WebSocket connection in `sync.js`
 - Test: open two browser tabs, like in one, see update in other
 
-### Step 7: Pruning
+### Step 7: Android Sync
+- Create sync event models
+- Implement SyncStateStore
+- Add sync API methods
+- Implement SyncManager
+- Register WebSocket sync handler
+- Add event application methods to stores
+- Integrate with login/logout
+
+### Step 8: Pruning
 - Implement `prune_events_older_than()`
-- Create CLI command or background task
+- Add background pruning task to server startup
+- Add `--event-retention-days` and `--prune-interval-hours` CLI args
 - Test: prune events, verify 410 response, verify full sync recovery
 
 ---
@@ -967,6 +1192,7 @@ if since_seq < min_seq {
 - [ ] Event log append and retrieval
 - [ ] Pruning logic
 - [ ] 410 detection for pruned sequences
+- [ ] Sequence gap detection
 
 ### Integration Tests
 - [ ] `GET /v1/sync/state` returns correct data (likes, settings, playlists, permissions)
@@ -975,14 +1201,17 @@ if since_seq < min_seq {
 - [ ] Like action generates event
 - [ ] Settings change generates event
 - [ ] Playlist CRUD generates events
-- [ ] Admin permission changes generate events on target user's log
+- [ ] CLI permission changes generate events on target user's log
+- [ ] WebSocket broadcast excludes source device
 
 ### End-to-End Tests
 - [ ] Fresh login → full sync works
 - [ ] Page refresh → catch-up sync works
-- [ ] Two tabs → real-time sync via SSE
+- [ ] Two tabs → real-time sync via WebSocket
 - [ ] Offline → reconnect → catch-up works
 - [ ] Long offline → 410 → full sync recovery
+- [ ] Sequence gap → full sync recovery
+- [ ] Web and Android devices sync in real-time
 
 ---
 
@@ -992,11 +1221,10 @@ if since_seq < min_seq {
 - **Offline queue:** Allow actions while offline, sync when back online
 - **Compression:** Compact redundant events (like + unlike same item)
 - **Selective sync:** Subscribe to specific event types
-- **WebSocket:** Add as alternative to SSE for bidirectional needs
 
 ### Performance Optimizations
-- **Tab coordination:** Use BroadcastChannel to share one SSE connection
-- **Batching:** Batch multiple events into single SSE message
+- **Tab coordination:** Use BroadcastChannel to share one WebSocket connection
+- **Batching:** Batch multiple events into single WebSocket message
 - **Debouncing:** Debounce rapid changes before broadcasting
 
 ---
@@ -1009,24 +1237,23 @@ if since_seq < min_seq {
 |------------|--------------|---------|
 | `content_liked` | User likes content | `{ content_type, content_id }` |
 | `content_unliked` | User unlikes content | `{ content_type, content_id }` |
-| `setting_changed` | User changes setting | `{ key, value }` |
+| `setting_changed` | User changes setting | `{ setting: UserSetting }` |
 | `playlist_created` | User creates playlist | `{ playlist_id, name }` |
 | `playlist_renamed` | User renames playlist | `{ playlist_id, name }` |
 | `playlist_deleted` | User deletes playlist | `{ playlist_id }` |
-| `playlist_track_added` | User adds track to playlist | `{ playlist_id, track_id, position }` |
-| `playlist_track_removed` | User removes track from playlist | `{ playlist_id, track_id }` |
-| `playlist_tracks_reordered` | User reorders playlist | `{ playlist_id, track_ids }` |
-| `permission_granted` | Admin grants permission | `{ permission }` |
-| `permission_revoked` | Admin revokes permission | `{ permission }` |
-| `permissions_reset` | Admin changes user role | `{ permissions }` |
+| `playlist_tracks_updated` | User modifies playlist tracks | `{ playlist_id, track_ids }` |
+| `permission_granted` | Admin grants permission (via CLI) | `{ permission: Permission }` |
+| `permission_revoked` | Admin revokes permission (via CLI) | `{ permission: Permission }` |
+| `permissions_reset` | Admin changes user role (via CLI) | `{ permissions: Vec<Permission> }` |
 
 ### Permission Values
 
-Permissions that can appear in events:
-- `access_catalog`
-- `like_content`
-- `own_playlists`
-- `edit_catalog`
-- `manage_permissions`
-- `issue_content_download`
-- `reboot_server`
+Permissions that can appear in events (from `permissions.rs`):
+- `AccessCatalog`
+- `LikeContent`
+- `OwnPlaylists`
+- `EditCatalog`
+- `ManagePermissions`
+- `IssueContentDownload`
+- `RebootServer`
+- `ViewAnalytics`
