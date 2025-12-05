@@ -11,6 +11,9 @@
         </div>
       </div>
       <div class="userActions">
+        <div class="connectionStatus" :title="connectionTitle">
+          <span class="statusDot" :class="connectionStatusClass"></span>
+        </div>
         <router-link to="/settings" class="settingsLink scaleClickFeedback" title="Settings">
           <SettingsIcon class="settingsIcon" />
         </router-link>
@@ -23,12 +26,13 @@
 </template>
 
 <script setup>
-import { ref, watch } from 'vue';
+import { ref, watch, computed } from 'vue';
 import { debounce } from 'lodash-es'; // Lightweight debounce
 import { useRouter, useRoute } from 'vue-router';
 import CrossIcon from './icons/CrossIcon.vue';
 import SettingsIcon from './icons/SettingsIcon.vue';
 import LogoutIcon from './icons/LogoutIcon.vue';
+import { wsConnectionStatus } from '../services/websocket';
 
 const emit = defineEmits(['search']);
 const inputValue = ref('');
@@ -69,6 +73,23 @@ function onInput(event) {
 function clearQuery() {
   router.push("/")
 }
+
+// WebSocket connection status indicator
+const connectionStatusClass = computed(() => {
+  switch (wsConnectionStatus.value) {
+    case 'connected': return 'status-connected';
+    case 'connecting': return 'status-connecting';
+    default: return 'status-disconnected';
+  }
+});
+
+const connectionTitle = computed(() => {
+  switch (wsConnectionStatus.value) {
+    case 'connected': return 'Connected to server';
+    case 'connecting': return 'Connecting...';
+    default: return 'Disconnected from server';
+  }
+});
 
 </script>
 
@@ -165,5 +186,40 @@ function clearQuery() {
 .logoutIcon {
   width: 20px;
   height: 20px;
+}
+
+.connectionStatus {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 var(--spacing-2);
+}
+
+.statusDot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  transition: background-color var(--transition-fast);
+}
+
+.status-connected {
+  background-color: #22c55e; /* green */
+  box-shadow: 0 0 6px rgba(34, 197, 94, 0.5);
+}
+
+.status-connecting {
+  background-color: #f97316; /* orange */
+  box-shadow: 0 0 6px rgba(249, 115, 22, 0.5);
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+.status-disconnected {
+  background-color: #ef4444; /* red */
+  box-shadow: 0 0 6px rgba(239, 68, 68, 0.5);
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
 }
 </style>

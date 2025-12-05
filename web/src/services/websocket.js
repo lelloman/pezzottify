@@ -10,6 +10,7 @@ import { ref, computed } from 'vue';
 // Connection state (module-level, singleton)
 const socket = ref(null);
 const connected = ref(false);
+const connecting = ref(false);
 const deviceId = ref(null);
 
 // Message handlers by type prefix
@@ -61,6 +62,7 @@ export function connect() {
   }
 
   intentionalClose = false;
+  connecting.value = true;
 
   const wsUrl = buildWsUrl();
   console.log('[WS] Connecting to', wsUrl);
@@ -68,7 +70,7 @@ export function connect() {
   socket.value = new WebSocket(wsUrl);
 
   socket.value.onopen = () => {
-    console.log('[WS] Connection opened');
+    console.log('[WS] Connection opened, waiting for server confirmation...');
   };
 
   socket.value.onmessage = (event) => {
@@ -83,6 +85,7 @@ export function connect() {
   socket.value.onclose = (event) => {
     console.log('[WS] Connection closed:', event.code, event.reason);
     connected.value = false;
+    connecting.value = false;
     deviceId.value = null;
     socket.value = null;
 
@@ -118,6 +121,7 @@ export function disconnect() {
     socket.value.close(1000, 'Client disconnect');
     socket.value = null;
     connected.value = false;
+    connecting.value = false;
     deviceId.value = null;
   }
 }
@@ -153,6 +157,7 @@ function handleMessage(msg) {
   // Handle system messages
   if (type === 'connected') {
     connected.value = true;
+    connecting.value = false;
     deviceId.value = payload.device_id;
     console.log('[WS] Connected as device:', payload.device_id);
     return;
@@ -186,10 +191,21 @@ function handleMessage(msg) {
 export const wsConnected = computed(() => connected.value);
 export const wsDeviceId = computed(() => deviceId.value);
 
+/**
+ * Connection status for UI indicators.
+ * @returns {'connected' | 'connecting' | 'disconnected'}
+ */
+export const wsConnectionStatus = computed(() => {
+  if (connected.value) return 'connected';
+  if (connecting.value) return 'connecting';
+  return 'disconnected';
+});
+
 // Export for debugging
 export function getConnectionState() {
   return {
     connected: connected.value,
+    connecting: connecting.value,
     deviceId: deviceId.value,
     socketState: socket.value?.readyState,
     handlersCount: handlers.size,
