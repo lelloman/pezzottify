@@ -61,13 +61,13 @@ Before writing any code, verify assumptions from the plan.
 
 Create the core WebSocket module with message types, connection manager, and handler.
 
-### 1.1 [ ] Create websocket module directory structure
+### 1.1 [x] Create websocket module directory structure
 
 **Context:** New module at `catalog-server/src/server/websocket/`
 
 **Tasks:**
-- [ ] 1.1.1 Create directory `catalog-server/src/server/websocket/`
-- [ ] 1.1.2 Create empty `mod.rs` file
+- [x] 1.1.1 Create directory `catalog-server/src/server/websocket/`
+- [x] 1.1.2 Create empty `mod.rs` file
 
 ---
 
