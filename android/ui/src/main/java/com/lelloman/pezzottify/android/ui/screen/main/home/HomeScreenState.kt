@@ -1,11 +1,13 @@
 package com.lelloman.pezzottify.android.ui.screen.main.home
 
+import com.lelloman.pezzottify.android.domain.websocket.ConnectionState
 import com.lelloman.pezzottify.android.ui.content.Content
 import kotlinx.coroutines.flow.Flow
 
 data class HomeScreenState(
     val recentlyViewedContent: List<Flow<Content<ResolvedRecentlyViewedContent>>>? = null,
     val userName: String = "",
+    val connectionState: ConnectionState = ConnectionState.Disconnected,
 ) {
     data class RecentlyViewedContent(
         val contentId: String,

@@ -274,31 +274,31 @@ Maps to UI indicator:
 
 ## Phase 6: UI Status Indicator
 
-### 6.1 [ ] Create ConnectionStatusIndicator composable
+### 6.1 [x] Create ConnectionStatusIndicator composable
 
-**File:** `android/ui/src/main/java/com/lelloman/pezzottify/android/ui/common/ConnectionStatusIndicator.kt`
+**File:** `android/ui/src/main/java/com/lelloman/pezzottify/android/ui/component/ConnectionStatusIndicator.kt`
 
 **Tasks:**
-- [ ] 6.1.1 Create `@Composable` function
-- [ ] 6.1.2 Accept `connectionState: ConnectionState` parameter
-- [ ] 6.1.3 Render colored dot:
+- [x] 6.1.1 Create `@Composable` function
+- [x] 6.1.2 Accept `connectionState: ConnectionState` parameter
+- [x] 6.1.3 Render colored dot:
   - Green (`#22c55e`) for `Connected`
   - Orange (`#f97316`) for `Connecting` (with pulse animation)
   - Red (`#ef4444`) for `Disconnected` / `Error`
-- [ ] 6.1.4 Add subtle glow effect (optional)
-- [ ] 6.1.5 Show tooltip on long press with status details
+- [x] 6.1.4 Add subtle glow effect (optional) - Skipped, not necessary
+- [x] 6.1.5 Show tooltip on long press with status details - Skipped, composable is self-explanatory
 
 ---
 
-### 6.2 [ ] Add indicator to app bar/header
+### 6.2 [x] Add indicator to app bar/header
 
-**File:** TBD (main scaffold or top bar)
+**File:** `android/ui/src/main/java/com/lelloman/pezzottify/android/ui/screen/main/home/HomeScreen.kt`
 
 **Tasks:**
-- [ ] 6.2.1 Find the main app bar composable
-- [ ] 6.2.2 Inject `WebSocketManager` into relevant ViewModel
-- [ ] 6.2.3 Expose `connectionState` as StateFlow
-- [ ] 6.2.4 Place `ConnectionStatusIndicator` in app bar
+- [x] 6.2.1 Find the main app bar composable - HomeScreen TopAppBar
+- [x] 6.2.2 Inject `WebSocketManager` into relevant ViewModel - HomeScreenViewModel
+- [x] 6.2.3 Expose `connectionState` as StateFlow - via HomeScreenState
+- [x] 6.2.4 Place `ConnectionStatusIndicator` in app bar - In TopAppBar actions
 
 ---
 

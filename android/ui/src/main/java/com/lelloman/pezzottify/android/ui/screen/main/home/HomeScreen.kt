@@ -49,6 +49,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import androidx.navigation.compose.rememberNavController
 import com.lelloman.pezzottify.android.ui.R
+import com.lelloman.pezzottify.android.ui.component.ConnectionStatusIndicator
 import com.lelloman.pezzottify.android.ui.component.NullablePezzottifyImage
 import com.lelloman.pezzottify.android.ui.component.PezzottifyImageShape
 import com.lelloman.pezzottify.android.ui.component.ScrollingArtistsRow
@@ -119,6 +120,14 @@ private fun HomeScreenContent(
                     }
                 },
                 actions = {
+                    // Connection status indicator
+                    ConnectionStatusIndicator(
+                        connectionState = state.connectionState,
+                        modifier = Modifier
+                            .padding(end = 8.dp)
+                            .align(alignment = androidx.compose.ui.Alignment.CenterVertically),
+                        size = 10.dp
+                    )
                     // Settings icon
                     IconButton(onClick = {
                         coroutineScope.launch { actions.clickOnSettings() }

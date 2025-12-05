@@ -2,6 +2,7 @@ package com.lelloman.pezzottify.android.ui.screen.main.home
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.lelloman.pezzottify.android.domain.websocket.WebSocketManager
 import com.lelloman.pezzottify.android.ui.content.Content
 import com.lelloman.pezzottify.android.ui.content.ContentResolver
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -26,6 +27,7 @@ import kotlin.coroutines.CoroutineContext
 class HomeScreenViewModel(
     private val interactor: Interactor,
     private val contentResolver: ContentResolver,
+    private val webSocketManager: WebSocketManager,
     private val coroutineContext: CoroutineContext,
 ) : HomeScreenActions, ViewModel() {
 
@@ -33,9 +35,11 @@ class HomeScreenViewModel(
     constructor(
         interactor: Interactor,
         contentResolver: ContentResolver,
+        webSocketManager: WebSocketManager,
     ) : this(
         interactor,
         contentResolver,
+        webSocketManager,
         Dispatchers.IO,
     )
 
@@ -56,6 +60,12 @@ class HomeScreenViewModel(
                 .collect {
                     mutableState.value = mutableState.value.copy(recentlyViewedContent = it)
                 }
+        }
+
+        viewModelScope.launch {
+            webSocketManager.connectionState.collect { connectionState ->
+                mutableState.value = mutableState.value.copy(connectionState = connectionState)
+            }
         }
     }
 
