@@ -2259,8 +2259,35 @@ impl user_store::DeviceStore for SqliteUserStore {
         Ok(device_id)
     }
 
-    fn get_device(&self, _device_id: usize) -> Result<Option<device::Device>> {
-        todo!("DeviceStore implementation pending - Phase 5")
+    fn get_device(&self, device_id: usize) -> Result<Option<Device>> {
+        let start = Instant::now();
+        let conn = self.conn.lock().unwrap();
+        let result = conn.query_row(
+            "SELECT id, device_uuid, user_id, device_type, device_name, os_info, first_seen, last_seen
+             FROM device WHERE id = ?1",
+            params![device_id],
+            |row| {
+                Ok(Device {
+                    id: row.get(0)?,
+                    device_uuid: row.get(1)?,
+                    user_id: row.get(2)?,
+                    device_type: DeviceType::from_str(&row.get::<_, String>(3)?),
+                    device_name: row.get(4)?,
+                    os_info: row.get(5)?,
+                    first_seen: SystemTime::UNIX_EPOCH
+                        + std::time::Duration::from_secs(row.get::<_, i64>(6)? as u64),
+                    last_seen: SystemTime::UNIX_EPOCH
+                        + std::time::Duration::from_secs(row.get::<_, i64>(7)? as u64),
+                })
+            },
+        );
+
+        record_db_query("get_device", start.elapsed());
+        match result {
+            Ok(device) => Ok(Some(device)),
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+            Err(e) => Err(e.into()),
+        }
     }
 
     fn get_device_by_uuid(&self, _device_uuid: &str) -> Result<Option<device::Device>> {

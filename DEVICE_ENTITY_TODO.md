@@ -667,7 +667,7 @@ impl DeviceStore for SqliteUserStore {
 
 ---
 
-### [ ] Task 5.3: Implement get_device
+### [x] Task 5.3: Implement get_device
 **File**: `catalog-server/src/user/sqlite_user_store.rs`
 
 **Implementation**:
