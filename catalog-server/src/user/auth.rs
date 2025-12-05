@@ -16,6 +16,7 @@ pub struct AuthTokenValue(pub String);
 #[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct AuthToken {
     pub user_id: usize,
+    pub device_id: Option<usize>,
     pub created: SystemTime,
     pub last_used: Option<SystemTime>,
     pub value: AuthTokenValue,

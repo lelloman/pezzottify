@@ -1304,6 +1304,7 @@ impl UserAuthTokenStore for SqliteUserStore {
         let result = match stmt.query_row(params![value.0], |row| {
             Ok(AuthToken {
                 user_id: row.get(0)?,
+                device_id: None, // Will be populated when device_id column is added to schema
                 value: AuthTokenValue(row.get(1)?),
                 created: system_time_from_column_result(row.get(2)?),
                 last_used: row
@@ -1330,6 +1331,7 @@ impl UserAuthTokenStore for SqliteUserStore {
                 stmt.query_row(params![token.0], |row| {
                     Ok(AuthToken {
                         user_id: row.get(0)?,
+                        device_id: None, // Will be populated when device_id column is added to schema
                         value: AuthTokenValue(row.get(1)?),
                         created: system_time_from_column_result(row.get(2)?),
                         last_used: row
@@ -1384,6 +1386,7 @@ impl UserAuthTokenStore for SqliteUserStore {
             .query_map(params![user_handle], |row| {
                 Ok(AuthToken {
                     user_id: row.get(0)?,
+                    device_id: None, // Will be populated when device_id column is added to schema
                     value: AuthTokenValue(row.get(1)?),
                     created: system_time_from_column_result(row.get(2)?),
                     last_used: row
@@ -2578,6 +2581,7 @@ mod tests {
         // Create a token
         let token = AuthToken {
             user_id,
+            device_id: None,
             value: AuthTokenValue::generate(),
             created: SystemTime::now(),
             last_used: None,
@@ -2607,6 +2611,7 @@ mod tests {
         // Create an old token (simulate by manually inserting with old timestamp)
         let old_token = AuthToken {
             user_id,
+            device_id: None,
             value: AuthTokenValue::generate(),
             created: SystemTime::now(),
             last_used: None,
@@ -2630,6 +2635,7 @@ mod tests {
         // Create a recent token
         let recent_token = AuthToken {
             user_id,
+            device_id: None,
             value: AuthTokenValue::generate(),
             created: SystemTime::now(),
             last_used: None,
@@ -2657,6 +2663,7 @@ mod tests {
         // Create an old token
         let token = AuthToken {
             user_id,
+            device_id: None,
             value: AuthTokenValue::generate(),
             created: SystemTime::now(),
             last_used: None,

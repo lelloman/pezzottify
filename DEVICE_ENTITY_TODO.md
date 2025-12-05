@@ -446,7 +446,7 @@ impl<T: UserStore + UserBandwidthStore + UserListeningStore + UserSettingsStore 
 
 ## Phase 3: AuthToken Changes
 
-### [ ] Task 3.1: Add device_id field to AuthToken struct
+### [x] Task 3.1: Add device_id field to AuthToken struct
 **File**: `catalog-server/src/user/auth.rs`
 
 **Implementation**:

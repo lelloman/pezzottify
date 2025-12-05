@@ -64,6 +64,7 @@ impl UserManager {
     pub fn generate_auth_token(&mut self, credentials: &UserAuthCredentials) -> Result<AuthToken> {
         let token = AuthToken {
             user_id: credentials.user_id.clone(),
+            device_id: None, // Device association handled separately in login flow
             value: AuthTokenValue::generate(),
             created: SystemTime::now(),
             last_used: None,
