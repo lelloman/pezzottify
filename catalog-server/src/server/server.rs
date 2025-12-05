@@ -2640,6 +2640,50 @@ mod tests {
         }
     }
 
+    impl crate::user::DeviceStore for InMemoryUserStore {
+        fn register_or_update_device(
+            &self,
+            _registration: &crate::user::device::DeviceRegistration,
+        ) -> Result<usize> {
+            Ok(1)
+        }
+        fn get_device(&self, _device_id: usize) -> Result<Option<crate::user::device::Device>> {
+            Ok(None)
+        }
+        fn get_device_by_uuid(
+            &self,
+            _device_uuid: &str,
+        ) -> Result<Option<crate::user::device::Device>> {
+            Ok(None)
+        }
+        fn get_user_devices(
+            &self,
+            _user_id: usize,
+        ) -> Result<Vec<crate::user::device::Device>> {
+            Ok(vec![])
+        }
+        fn associate_device_with_user(
+            &self,
+            _device_id: usize,
+            _user_id: usize,
+        ) -> Result<()> {
+            Ok(())
+        }
+        fn touch_device(&self, _device_id: usize) -> Result<()> {
+            Ok(())
+        }
+        fn prune_orphaned_devices(&self, _inactive_for_days: u32) -> Result<usize> {
+            Ok(0)
+        }
+        fn enforce_user_device_limit(
+            &self,
+            _user_id: usize,
+            _max_devices: usize,
+        ) -> Result<usize> {
+            Ok(0)
+        }
+    }
+
     // Tests for admin endpoints using SqliteUserStore
     mod admin_endpoint_tests {
         use super::*;

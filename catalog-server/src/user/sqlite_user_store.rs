@@ -2108,6 +2108,43 @@ impl UserSettingsStore for SqliteUserStore {
     }
 }
 
+impl user_store::DeviceStore for SqliteUserStore {
+    fn register_or_update_device(
+        &self,
+        _registration: &device::DeviceRegistration,
+    ) -> Result<usize> {
+        todo!("DeviceStore implementation pending - Phase 5")
+    }
+
+    fn get_device(&self, _device_id: usize) -> Result<Option<device::Device>> {
+        todo!("DeviceStore implementation pending - Phase 5")
+    }
+
+    fn get_device_by_uuid(&self, _device_uuid: &str) -> Result<Option<device::Device>> {
+        todo!("DeviceStore implementation pending - Phase 5")
+    }
+
+    fn get_user_devices(&self, _user_id: usize) -> Result<Vec<device::Device>> {
+        todo!("DeviceStore implementation pending - Phase 5")
+    }
+
+    fn associate_device_with_user(&self, _device_id: usize, _user_id: usize) -> Result<()> {
+        todo!("DeviceStore implementation pending - Phase 5")
+    }
+
+    fn touch_device(&self, _device_id: usize) -> Result<()> {
+        todo!("DeviceStore implementation pending - Phase 5")
+    }
+
+    fn prune_orphaned_devices(&self, _inactive_for_days: u32) -> Result<usize> {
+        todo!("DeviceStore implementation pending - Phase 5")
+    }
+
+    fn enforce_user_device_limit(&self, _user_id: usize, _max_devices: usize) -> Result<usize> {
+        todo!("DeviceStore implementation pending - Phase 5")
+    }
+}
+
 #[cfg(test)]
 mod tests {
 

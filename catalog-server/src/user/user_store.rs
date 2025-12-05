@@ -1,4 +1,5 @@
 use super::auth::{AuthToken, AuthTokenValue, UserAuthCredentials};
+use super::device::{Device, DeviceRegistration};
 use super::permissions::{Permission, PermissionGrant, UserRole};
 use super::settings::UserSetting;
 use super::user_models::{
@@ -255,8 +256,46 @@ pub trait UserSettingsStore: Send + Sync {
     fn get_all_user_settings(&self, user_id: usize) -> Result<Vec<UserSetting>>;
 }
 
-/// Combined trait for user storage with bandwidth, listening tracking, and settings
-pub trait FullUserStore: UserStore + UserBandwidthStore + UserListeningStore + UserSettingsStore {}
+/// Trait for device storage operations
+pub trait DeviceStore: Send + Sync {
+    /// Register a new device or get existing one by device_uuid.
+    /// If device exists, updates device_type/name/os_info and last_seen.
+    /// Returns the device ID.
+    fn register_or_update_device(&self, registration: &DeviceRegistration) -> Result<usize>;
+
+    /// Get device by ID
+    fn get_device(&self, device_id: usize) -> Result<Option<Device>>;
+
+    /// Get device by UUID
+    fn get_device_by_uuid(&self, device_uuid: &str) -> Result<Option<Device>>;
+
+    /// Get all devices for a user
+    fn get_user_devices(&self, user_id: usize) -> Result<Vec<Device>>;
+
+    /// Update device's associated user (called on login)
+    fn associate_device_with_user(&self, device_id: usize, user_id: usize) -> Result<()>;
+
+    /// Update last_seen timestamp
+    fn touch_device(&self, device_id: usize) -> Result<()>;
+
+    /// Prune orphaned devices (user_id IS NULL) that haven't been seen for the specified days.
+    /// Returns the number of devices deleted.
+    fn prune_orphaned_devices(&self, inactive_for_days: u32) -> Result<usize>;
+
+    /// Enforce per-user device limit by pruning oldest devices (by last_seen).
+    /// Called after associating a device with a user during login.
+    /// Returns the number of devices deleted.
+    fn enforce_user_device_limit(&self, user_id: usize, max_devices: usize) -> Result<usize>;
+}
+
+/// Combined trait for user storage with bandwidth, listening tracking, settings, and devices
+pub trait FullUserStore:
+    UserStore + UserBandwidthStore + UserListeningStore + UserSettingsStore + DeviceStore
+{
+}
 
 // Blanket implementation for any type that implements all user store traits
-impl<T: UserStore + UserBandwidthStore + UserListeningStore + UserSettingsStore> FullUserStore for T {}
+impl<T: UserStore + UserBandwidthStore + UserListeningStore + UserSettingsStore + DeviceStore>
+    FullUserStore for T
+{
+}

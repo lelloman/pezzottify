@@ -376,7 +376,7 @@ fn test_validate_empty_optional_becomes_none() {
 
 ## Phase 2: Store Trait Definitions
 
-### [ ] Task 2.1: Add DeviceStore trait to user_store.rs
+### [x] Task 2.1: Add DeviceStore trait to user_store.rs
 **File**: `catalog-server/src/user/user_store.rs`
 
 **Implementation**:
@@ -427,7 +427,7 @@ fn test_validate_empty_optional_becomes_none() {
 
 ---
 
-### [ ] Task 2.2: Update FullUserStore trait bound
+### [x] Task 2.2: Update FullUserStore trait bound
 **File**: `catalog-server/src/user/user_store.rs`
 
 **Implementation**:

@@ -899,6 +899,53 @@ mod tests {
         }
     }
 
+    impl crate::user::DeviceStore for TestUserStore {
+        fn register_or_update_device(
+            &self,
+            _registration: &crate::user::device::DeviceRegistration,
+        ) -> anyhow::Result<usize> {
+            Ok(1)
+        }
+        fn get_device(
+            &self,
+            _device_id: usize,
+        ) -> anyhow::Result<Option<crate::user::device::Device>> {
+            Ok(None)
+        }
+        fn get_device_by_uuid(
+            &self,
+            _device_uuid: &str,
+        ) -> anyhow::Result<Option<crate::user::device::Device>> {
+            Ok(None)
+        }
+        fn get_user_devices(
+            &self,
+            _user_id: usize,
+        ) -> anyhow::Result<Vec<crate::user::device::Device>> {
+            Ok(vec![])
+        }
+        fn associate_device_with_user(
+            &self,
+            _device_id: usize,
+            _user_id: usize,
+        ) -> anyhow::Result<()> {
+            Ok(())
+        }
+        fn touch_device(&self, _device_id: usize) -> anyhow::Result<()> {
+            Ok(())
+        }
+        fn prune_orphaned_devices(&self, _inactive_for_days: u32) -> anyhow::Result<usize> {
+            Ok(0)
+        }
+        fn enforce_user_device_limit(
+            &self,
+            _user_id: usize,
+            _max_devices: usize,
+        ) -> anyhow::Result<usize> {
+            Ok(0)
+        }
+    }
+
     fn create_test_user_store() -> Arc<dyn FullUserStore> {
         Arc::new(TestUserStore::new_with_downloads_enabled())
     }
@@ -1466,6 +1513,53 @@ mod tests {
         }
         fn get_all_user_settings(&self, _user_id: usize) -> anyhow::Result<Vec<UserSetting>> {
             Ok(vec![])
+        }
+    }
+
+    impl crate::user::DeviceStore for ConfigurableTestUserStore {
+        fn register_or_update_device(
+            &self,
+            _registration: &crate::user::device::DeviceRegistration,
+        ) -> anyhow::Result<usize> {
+            Ok(1)
+        }
+        fn get_device(
+            &self,
+            _device_id: usize,
+        ) -> anyhow::Result<Option<crate::user::device::Device>> {
+            Ok(None)
+        }
+        fn get_device_by_uuid(
+            &self,
+            _device_uuid: &str,
+        ) -> anyhow::Result<Option<crate::user::device::Device>> {
+            Ok(None)
+        }
+        fn get_user_devices(
+            &self,
+            _user_id: usize,
+        ) -> anyhow::Result<Vec<crate::user::device::Device>> {
+            Ok(vec![])
+        }
+        fn associate_device_with_user(
+            &self,
+            _device_id: usize,
+            _user_id: usize,
+        ) -> anyhow::Result<()> {
+            Ok(())
+        }
+        fn touch_device(&self, _device_id: usize) -> anyhow::Result<()> {
+            Ok(())
+        }
+        fn prune_orphaned_devices(&self, _inactive_for_days: u32) -> anyhow::Result<usize> {
+            Ok(0)
+        }
+        fn enforce_user_device_limit(
+            &self,
+            _user_id: usize,
+            _max_devices: usize,
+        ) -> anyhow::Result<usize> {
+            Ok(0)
         }
     }
 

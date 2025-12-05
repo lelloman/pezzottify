@@ -17,6 +17,6 @@ pub use user_models::{
     ListeningEvent, ListeningSummary, TrackListeningStats, UserListeningHistoryEntry, UserPlaylist,
 };
 pub use user_store::{
-    FullUserStore, UserAuthCredentialsStore, UserAuthTokenStore, UserBandwidthStore,
+    DeviceStore, FullUserStore, UserAuthCredentialsStore, UserAuthTokenStore, UserBandwidthStore,
     UserListeningStore, UserSettingsStore, UserStore,
 };
