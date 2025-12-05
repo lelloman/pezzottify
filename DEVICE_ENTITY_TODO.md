@@ -67,7 +67,7 @@ pub const OS_INFO_MAX_LEN: usize = 200;
 
 ---
 
-### [ ] Task 1.3: Implement DeviceType enum
+### [x] Task 1.3: Implement DeviceType enum
 **File**: `catalog-server/src/user/device.rs`
 
 **Implementation**:
