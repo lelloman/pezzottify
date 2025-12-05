@@ -2,6 +2,7 @@ use crate::catalog_store::CatalogStore;
 
 use super::{
     auth::PezzottifyHasher,
+    device::{Device, DeviceRegistration},
     permissions::{Permission, PermissionGrant, UserRole},
     settings::UserSetting,
     user_models::{
@@ -61,10 +62,14 @@ impl UserManager {
             .update_user_auth_token_last_used_timestamp(value)
     }
 
-    pub fn generate_auth_token(&mut self, credentials: &UserAuthCredentials) -> Result<AuthToken> {
+    pub fn generate_auth_token(
+        &mut self,
+        credentials: &UserAuthCredentials,
+        device_id: usize,
+    ) -> Result<AuthToken> {
         let token = AuthToken {
             user_id: credentials.user_id.clone(),
-            device_id: None, // Device association handled separately in login flow
+            device_id: Some(device_id),
             value: AuthTokenValue::generate(),
             created: SystemTime::now(),
             last_used: None,
@@ -341,6 +346,32 @@ impl UserManager {
 
     pub fn prune_unused_auth_tokens(&self, unused_for_days: u64) -> Result<usize> {
         self.user_store.prune_unused_auth_tokens(unused_for_days)
+    }
+
+    // Device management methods
+
+    pub fn register_or_update_device(&self, registration: &DeviceRegistration) -> Result<usize> {
+        self.user_store.register_or_update_device(registration)
+    }
+
+    pub fn associate_device_with_user(&self, device_id: usize, user_id: usize) -> Result<()> {
+        self.user_store.associate_device_with_user(device_id, user_id)
+    }
+
+    pub fn get_device(&self, device_id: usize) -> Result<Option<Device>> {
+        self.user_store.get_device(device_id)
+    }
+
+    pub fn get_user_devices(&self, user_id: usize) -> Result<Vec<Device>> {
+        self.user_store.get_user_devices(user_id)
+    }
+
+    pub fn prune_orphaned_devices(&self, inactive_for_days: u32) -> Result<usize> {
+        self.user_store.prune_orphaned_devices(inactive_for_days)
+    }
+
+    pub fn enforce_user_device_limit(&self, user_id: usize, max_devices: usize) -> Result<usize> {
+        self.user_store.enforce_user_device_limit(user_id, max_devices)
     }
 
     // Bandwidth tracking methods

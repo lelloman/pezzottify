@@ -86,7 +86,10 @@ impl TestClient {
             .post(format!("{}/v1/auth/login", self.base_url))
             .json(&json!({
                 "user_handle": handle,
-                "password": password
+                "password": password,
+                "device_uuid": "test-device-uuid-12345",
+                "device_type": "web",
+                "device_name": "Test Client"
             }))
             .send()
             .await

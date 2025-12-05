@@ -24,8 +24,8 @@ This document breaks down the Device Entity Implementation Plan into small, sequ
 | 4 | SQLite Schema and Migration | 3 | [x] |
 | 5 | DeviceStore Implementation | 9 | [x] |
 | 6 | Update Auth Token Persistence | 2 | [x] |
-| 7 | UserManager Changes | 3 | [ ] |
-| 8 | Server Changes | 7 | [ ] |
+| 7 | UserManager Changes | 3 | [x] |
+| 8 | Server Changes | 7 | [x] |
 | 9 | Session Changes | 3 | [ ] |
 | 10 | Testing | 6 | [ ] |
 | 11 | Final Cleanup and Verification | 5 | [ ] |
@@ -957,7 +957,7 @@ fn get_user_auth_token(&self, token_value: &str) -> Result<Option<AuthToken>> {
 
 ## Phase 7: UserManager Changes
 
-### [ ] Task 7.1: Add device imports to user_manager.rs
+### [x] Task 7.1: Add device imports to user_manager.rs
 **File**: `catalog-server/src/user/user_manager.rs`
 
 **Implementation**:
@@ -968,7 +968,7 @@ use crate::user::device::{Device, DeviceRegistration};
 
 ---
 
-### [ ] Task 7.2: Add device delegation methods to UserManager
+### [x] Task 7.2: Add device delegation methods to UserManager
 **File**: `catalog-server/src/user/user_manager.rs`
 
 **Implementation**:
@@ -1009,7 +1009,7 @@ pub fn enforce_user_device_limit(&self, user_id: usize, max_devices: usize) -> R
 
 ---
 
-### [ ] Task 7.3: Update generate_auth_token signature and implementation
+### [x] Task 7.3: Update generate_auth_token signature and implementation
 **File**: `catalog-server/src/user/user_manager.rs`
 
 **Implementation**:
@@ -1034,7 +1034,7 @@ pub fn generate_auth_token(&mut self, credentials: &UserAuthCredentials, device_
 
 ## Phase 8: Server Changes
 
-### [ ] Task 8.1: Update LoginBody struct
+### [x] Task 8.1: Update LoginBody struct
 **File**: `catalog-server/src/server/server.rs`
 
 **Implementation**:
@@ -1053,7 +1053,7 @@ struct LoginBody {
 
 ---
 
-### [ ] Task 8.2: Add LoginErrorResponse struct
+### [x] Task 8.2: Add LoginErrorResponse struct
 **File**: `catalog-server/src/server/server.rs`
 
 **Implementation**:
@@ -1068,7 +1068,7 @@ struct LoginErrorResponse {
 
 ---
 
-### [ ] Task 8.3: Add device imports to server.rs
+### [x] Task 8.3: Add device imports to server.rs
 **File**: `catalog-server/src/server/server.rs`
 
 **Implementation**:
@@ -1079,7 +1079,7 @@ use crate::user::device::DeviceRegistration;
 
 ---
 
-### [ ] Task 8.4: Add MAX_DEVICES_PER_USER constant
+### [x] Task 8.4: Add MAX_DEVICES_PER_USER constant
 **File**: `catalog-server/src/server/server.rs`
 
 **Implementation**:
@@ -1090,7 +1090,7 @@ const MAX_DEVICES_PER_USER: usize = 50;
 
 ---
 
-### [ ] Task 8.5: Update login handler - Part 1: Device validation
+### [x] Task 8.5: Update login handler - Part 1: Device validation
 **File**: `catalog-server/src/server/server.rs`
 
 **Implementation**:
@@ -1126,7 +1126,7 @@ async fn login(
 
 ---
 
-### [ ] Task 8.6: Update login handler - Part 2: Device registration
+### [x] Task 8.6: Update login handler - Part 2: Device registration
 **File**: `catalog-server/src/server/server.rs`
 
 **Implementation**:
@@ -1173,7 +1173,7 @@ After successful credential validation, add:
 
 ---
 
-### [ ] Task 8.7: Update generate_auth_token call site
+### [x] Task 8.7: Update generate_auth_token call site
 **File**: `catalog-server/src/server/server.rs`
 
 **Implementation**:

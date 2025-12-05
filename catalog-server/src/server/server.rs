@@ -17,7 +17,10 @@ use tracing::{debug, error, info, warn};
 use crate::catalog_store::CatalogStore;
 use crate::{
     server::stream_track::stream_track,
-    user::{user_models::LikedContentType, settings::UserSetting, FullUserStore, Permission},
+    user::{
+        device::DeviceRegistration, user_models::LikedContentType, settings::UserSetting,
+        FullUserStore, Permission,
+    },
 };
 use crate::{search::SearchVault, user::UserManager};
 use axum_extra::extract::cookie::{Cookie, SameSite};
@@ -48,6 +51,9 @@ use crate::server::session::Session;
 use crate::user::auth::AuthTokenValue;
 use axum::extract::Request;
 use axum::middleware::Next;
+
+const MAX_DEVICES_PER_USER: usize = 50;
+
 #[derive(Serialize)]
 struct ServerStats {
     pub uptime: String,
@@ -203,6 +209,10 @@ async fn require_view_analytics(
 struct LoginBody {
     pub user_handle: String,
     pub password: String,
+    pub device_uuid: String,
+    pub device_type: String,
+    pub device_name: Option<String>,
+    pub os_info: Option<String>,
 }
 
 #[derive(Deserialize, Debug)]
@@ -998,6 +1008,22 @@ async fn login(
 ) -> Response {
     let start = Instant::now();
     debug!("login() called with {:?}", body);
+
+    // 1. Validate device info first (fail fast)
+    let device_registration = match DeviceRegistration::validate_and_sanitize(
+        &body.device_uuid,
+        &body.device_type,
+        body.device_name.as_deref(),
+        body.os_info.as_deref(),
+    ) {
+        Ok(reg) => reg,
+        Err(e) => {
+            warn!("Invalid device info in login request: {}", e);
+            super::metrics::record_login_attempt("failure", start.elapsed());
+            return (StatusCode::BAD_REQUEST, e.to_string()).into_response();
+        }
+    };
+
     let mut locked_manager = user_manager.lock().unwrap();
     let credentials = match locked_manager.get_user_credentials(&body.user_handle) {
         Ok(Some(creds)) => creds,
@@ -1027,7 +1053,33 @@ async fn login(
                 }
             };
 
-            return match locked_manager.generate_auth_token(&credentials) {
+            // 2. Register/update device
+            let device_id = match locked_manager.register_or_update_device(&device_registration) {
+                Ok(id) => id,
+                Err(e) => {
+                    error!("Device registration failed: {}", e);
+                    super::metrics::record_login_attempt("error", start.elapsed());
+                    return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+                }
+            };
+
+            // 3. Associate device with user
+            if let Err(e) = locked_manager.associate_device_with_user(device_id, credentials.user_id)
+            {
+                error!("Device association failed: {}", e);
+                // Non-fatal, continue with login
+            }
+
+            // 4. Enforce per-user device limit
+            if let Err(e) =
+                locked_manager.enforce_user_device_limit(credentials.user_id, MAX_DEVICES_PER_USER)
+            {
+                error!("Device limit enforcement failed: {}", e);
+                // Non-fatal, continue with login
+            }
+
+            // 5. Generate auth token with device_id
+            return match locked_manager.generate_auth_token(&credentials, device_id) {
                 Ok(auth_token) => {
                     super::metrics::record_login_attempt("success", start.elapsed());
                     let response_body = LoginSuccessResponse {
