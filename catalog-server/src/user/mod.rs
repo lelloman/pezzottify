@@ -1,4 +1,5 @@
 pub mod auth;
+pub mod device;
 pub mod permissions;
 pub mod settings;
 mod sqlite_user_store;

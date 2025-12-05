@@ -224,7 +224,7 @@ impl DeviceRegistration {
 
 ---
 
-### [ ] Task 1.7: Export device module from mod.rs
+### [x] Task 1.7: Export device module from mod.rs
 **File**: `catalog-server/src/user/mod.rs`
 
 **Implementation**:
