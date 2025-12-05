@@ -110,7 +110,7 @@ impl DeviceType {
 
 ---
 
-### [ ] Task 1.4: Implement Device struct
+### [x] Task 1.4: Implement Device struct
 **File**: `catalog-server/src/user/device.rs`
 
 **Implementation**:

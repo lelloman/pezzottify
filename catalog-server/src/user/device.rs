@@ -36,3 +36,15 @@ impl DeviceType {
         }
     }
 }
+
+#[derive(Clone, Debug)]
+pub struct Device {
+    pub id: usize,
+    pub device_uuid: String,
+    pub user_id: Option<usize>,
+    pub device_type: DeviceType,
+    pub device_name: Option<String>,
+    pub os_info: Option<String>,
+    pub first_seen: SystemTime,
+    pub last_seen: SystemTime,
+}
