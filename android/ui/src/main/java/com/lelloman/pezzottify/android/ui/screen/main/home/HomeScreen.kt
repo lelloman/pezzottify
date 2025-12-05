@@ -49,8 +49,9 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import androidx.navigation.compose.rememberNavController
 import com.lelloman.pezzottify.android.ui.R
-import com.lelloman.pezzottify.android.ui.component.ConnectionStatusIndicator
+import com.lelloman.pezzottify.android.ui.component.BackOnlineBanner
 import com.lelloman.pezzottify.android.ui.component.NullablePezzottifyImage
+import com.lelloman.pezzottify.android.ui.component.OfflineIndicator
 import com.lelloman.pezzottify.android.ui.component.PezzottifyImageShape
 import com.lelloman.pezzottify.android.ui.component.ScrollingArtistsRow
 import com.lelloman.pezzottify.android.ui.content.ArtistInfo
@@ -120,13 +121,13 @@ private fun HomeScreenContent(
                     }
                 },
                 actions = {
-                    // Connection status indicator
-                    ConnectionStatusIndicator(
+                    // Offline indicator (only visible when disconnected)
+                    OfflineIndicator(
                         connectionState = state.connectionState,
                         modifier = Modifier
-                            .padding(end = 8.dp)
+                            .padding(end = 4.dp)
                             .align(alignment = androidx.compose.ui.Alignment.CenterVertically),
-                        size = 10.dp
+                        size = 20.dp
                     )
                     // Settings icon
                     IconButton(onClick = {
@@ -146,9 +147,19 @@ private fun HomeScreenContent(
             modifier = Modifier
                 .padding(innerPadding)
                 .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = Spacing.Medium),
         ) {
+            // Back online banner (shows briefly when reconnecting)
+            BackOnlineBanner(
+                connectionState = state.connectionState,
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = Spacing.Medium),
+            ) {
             state.recentlyViewedContent?.let { recentlyViewedItems ->
                 Spacer(modifier = Modifier.height(Spacing.Medium))
                 Text(
@@ -180,6 +191,7 @@ private fun HomeScreenContent(
                     }
                     Spacer(modifier = Modifier.height(Spacing.Small))
                 }
+            }
             }
         }
     }

@@ -274,31 +274,38 @@ Maps to UI indicator:
 
 ## Phase 6: UI Status Indicator
 
-### 6.1 [x] Create ConnectionStatusIndicator composable
+### 6.1 [x] Create OfflineIndicator composable
 
 **File:** `android/ui/src/main/java/com/lelloman/pezzottify/android/ui/component/ConnectionStatusIndicator.kt`
 
 **Tasks:**
-- [x] 6.1.1 Create `@Composable` function
+- [x] 6.1.1 Create `@Composable` OfflineIndicator function
 - [x] 6.1.2 Accept `connectionState: ConnectionState` parameter
-- [x] 6.1.3 Render colored dot:
-  - Green (`#22c55e`) for `Connected`
-  - Orange (`#f97316`) for `Connecting` (with pulse animation)
-  - Red (`#ef4444`) for `Disconnected` / `Error`
-- [x] 6.1.4 Add subtle glow effect (optional) - Skipped, not necessary
-- [x] 6.1.5 Show tooltip on long press with status details - Skipped, composable is self-explanatory
+- [x] 6.1.3 Show CloudOff icon only when disconnected/error (hidden otherwise)
+- [x] 6.1.4 Added material-icons-extended dependency for CloudOff icon
 
 ---
 
-### 6.2 [x] Add indicator to app bar/header
+### 6.2 [x] Create BackOnlineBanner composable
+
+**File:** `android/ui/src/main/java/com/lelloman/pezzottify/android/ui/component/BackOnlineBanner.kt`
+
+**Tasks:**
+- [x] 6.2.1 Create animated banner that slides in from top
+- [x] 6.2.2 Show green "Back online" message when transitioning from offline to connected
+- [x] 6.2.3 Auto-dismiss after 3 seconds
+
+---
+
+### 6.3 [x] Add indicators to HomeScreen
 
 **File:** `android/ui/src/main/java/com/lelloman/pezzottify/android/ui/screen/main/home/HomeScreen.kt`
 
 **Tasks:**
-- [x] 6.2.1 Find the main app bar composable - HomeScreen TopAppBar
-- [x] 6.2.2 Inject `WebSocketManager` into relevant ViewModel - HomeScreenViewModel
-- [x] 6.2.3 Expose `connectionState` as StateFlow - via HomeScreenState
-- [x] 6.2.4 Place `ConnectionStatusIndicator` in app bar - In TopAppBar actions
+- [x] 6.3.1 Inject `WebSocketManager` into HomeScreenViewModel
+- [x] 6.3.2 Expose `connectionState` as StateFlow via HomeScreenState
+- [x] 6.3.3 Place `OfflineIndicator` in TopAppBar actions
+- [x] 6.3.4 Place `BackOnlineBanner` at top of content area
 
 ---
 

@@ -16,4 +16,8 @@
     <string name="app_name">Pezzottify</string>
     <string name="recently_viewed_item_header">Recently viewed</string>
     <!-- HOME SCREEN -->
+
+    <!-- CONNECTION STATUS -->
+    <string name="back_online">Back online</string>
+    <!-- CONNECTION STATUS -->
 </resources>

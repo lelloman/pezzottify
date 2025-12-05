@@ -82,6 +82,7 @@ exoplayer = { group = "androidx.media3", name = "media3-exoplayer", version.ref 
 exoplayer-okhttp = { group = "androidx.media3", name = "media3-datasource-okhttp", version.ref = "exoplayer" }
 androidx-media3-session = { group = "androidx.media3", name = "media3-session", version.ref = "exoplayer" }
 androidx-compose-material-icons = { group = "androidx.compose.material", name = "material-icons-core" }
+androidx-compose-material-icons-extended = { group = "androidx.compose.material", name = "material-icons-extended" }
 robolectric = { group = "org.robolectric", name = "robolectric", version.ref = "robolectric" }
 androidx-test-core = { group = "androidx.test", name = "core", version = "1.6.1" }
 mockk = { group = "io.mockk", name = "mockk", version.ref = "mockk" }
