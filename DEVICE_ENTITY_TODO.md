@@ -470,7 +470,7 @@ pub struct AuthToken {
 
 ## Phase 4: SQLite Schema and Migration
 
-### [ ] Task 4.1: Add DEVICE_TABLE_V_8 constant
+### [x] Task 4.1: Add DEVICE_TABLE_V_8 constant
 **File**: `catalog-server/src/user/sqlite_user_store.rs`
 
 **Implementation**:

@@ -462,6 +462,45 @@ const USER_SETTINGS_TABLE_V_7: Table = Table {
     indices: &[("idx_user_settings_user_id", "user_id")],
 };
 
+/// V 8
+/// Device table - tracks client devices for session management
+const DEVICE_TABLE_V_8: Table = Table {
+    name: "device",
+    columns: &[
+        sqlite_column!("id", &SqlType::Integer, is_primary_key = true, is_unique = true),
+        sqlite_column!("device_uuid", &SqlType::Text, non_null = true, is_unique = true),
+        sqlite_column!(
+            "user_id",
+            &SqlType::Integer,
+            foreign_key = Some(&ForeignKey {
+                foreign_table: "user",
+                foreign_column: "id",
+                on_delete: ForeignKeyOnChange::SetNull,
+            })
+        ),
+        sqlite_column!("device_type", &SqlType::Text, non_null = true),
+        sqlite_column!("device_name", &SqlType::Text),
+        sqlite_column!("os_info", &SqlType::Text),
+        sqlite_column!(
+            "first_seen",
+            &SqlType::Integer,
+            non_null = true,
+            default_value = Some(DEFAULT_TIMESTAMP)
+        ),
+        sqlite_column!(
+            "last_seen",
+            &SqlType::Integer,
+            non_null = true,
+            default_value = Some(DEFAULT_TIMESTAMP)
+        ),
+    ],
+    unique_constraints: &[],
+    indices: &[
+        ("idx_device_user", "user_id"),
+        ("idx_device_uuid", "device_uuid"),
+    ],
+};
+
 pub const VERSIONED_SCHEMAS: &[VersionedSchema] = &[
     VersionedSchema {
         version: 0,
