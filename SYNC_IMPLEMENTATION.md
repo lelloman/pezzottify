@@ -13,7 +13,7 @@ This document breaks down the sync plan into small, actionable tasks.
 
 ### 1.1 Database Schema
 
-#### [ ] 1.1.1 Add `user_events` table to schema
+#### [x] 1.1.1 Add `user_events` table to schema
 
 **Description:** Create the new table for storing user sync events.
 
@@ -37,7 +37,7 @@ const USER_EVENTS_TABLE_V_1: TableDef = TableDef {
 };
 ```
 
-#### [ ] 1.1.2 Add index on `(user_id, seq)`
+#### [x] 1.1.2 Add index on `(user_id, seq)`
 
 **Description:** Create index for efficient event queries by user.
 
@@ -50,7 +50,7 @@ const USER_EVENTS_TABLE_V_1: TableDef = TableDef {
 CREATE INDEX idx_user_events_user_seq ON user_events(user_id, seq);
 ```
 
-#### [ ] 1.1.3 Register table in schema migrations
+#### [x] 1.1.3 Register table in schema migrations
 
 **Description:** Ensure table is created on database initialization/upgrade.
 
