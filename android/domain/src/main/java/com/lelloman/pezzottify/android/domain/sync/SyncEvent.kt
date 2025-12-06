@@ -1,7 +1,9 @@
 package com.lelloman.pezzottify.android.domain.sync
 
+import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonClassDiscriminator
 
 /**
  * Content type for liked/unliked events.
@@ -20,6 +22,8 @@ enum class LikedContentType {
  * User setting types for setting_changed events.
  * Uses tagged serialization: {"key": "setting_key", "value": value}
  */
+@OptIn(ExperimentalSerializationApi::class)
+@JsonClassDiscriminator("key")
 @Serializable
 sealed interface UserSetting {
     @Serializable
