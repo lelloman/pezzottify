@@ -380,7 +380,7 @@ Requires authentication.
 | GET | `/settings` | Get user settings |
 | PUT | `/settings` | Update user settings |
 
-#### Sync
+### Sync (`/v1/sync`)
 
 Requires authentication.
 
@@ -489,7 +489,7 @@ Requires `EditCatalog` permission.
 
 ### User Roles
 
-- **Admin**: Full system access
+- **Admin**: Administrative access (does not include user features like liking content or playlists)
   - AccessCatalog, EditCatalog, ManagePermissions, IssueContentDownload, RebootServer, ViewAnalytics
 
 - **Regular**: Standard user access
@@ -838,7 +838,19 @@ The server exposes metrics on a separate port (default: 9091) for security. This
 | `pezzottify_db_query_duration_seconds` | Histogram | Database query duration by operation |
 | `pezzottify_db_connection_errors_total` | Counter | Database connection errors |
 | `pezzottify_catalog_items_total` | Gauge | Catalog items by type (artist/album/track) |
+| `pezzottify_catalog_size_bytes` | Gauge | Catalog size in bytes |
+| `pezzottify_errors_total` | Counter | Total errors by type and endpoint |
 | `pezzottify_process_memory_bytes` | Gauge | Process memory usage |
+| `pezzottify_bandwidth_bytes_total` | Counter | Total bytes transferred by user and endpoint category |
+| `pezzottify_bandwidth_requests_total` | Counter | Total requests by user and endpoint category |
+| `pezzottify_listening_events_total` | Counter | Total listening events by client type and completion |
+| `pezzottify_listening_duration_seconds_total` | Counter | Total listening duration by client type |
+| `pezzottify_changelog_stale_batches` | Gauge | Number of stale changelog batches |
+| `pezzottify_changelog_stale_batch_checks_total` | Counter | Total stale batch checks performed |
+| `pezzottify_downloader_requests_total` | Counter | Total requests to downloader service by operation and status |
+| `pezzottify_downloader_request_duration_seconds` | Histogram | Downloader request duration by operation |
+| `pezzottify_downloader_errors_total` | Counter | Total downloader errors by operation and type |
+| `pezzottify_downloader_bytes_total` | Counter | Total bytes downloaded by content type |
 
 ### Alert Rules
 
