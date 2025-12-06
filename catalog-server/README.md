@@ -463,8 +463,10 @@ Requires `EditCatalog` permission.
 | POST | `/changelog/batch` | Create changelog batch |
 | GET | `/changelog/batches` | List changelog batches |
 | GET | `/changelog/batch/{batch_id}` | Get changelog batch details |
-| POST | `/changelog/batch/{batch_id}/apply` | Apply changelog batch |
+| GET | `/changelog/batch/{batch_id}/changes` | Get changelog batch changes |
+| POST | `/changelog/batch/{batch_id}/close` | Close changelog batch |
 | DELETE | `/changelog/batch/{batch_id}` | Delete changelog batch |
+| GET | `/changelog/entity/{entity_type}/{entity_id}` | Get entity change history |
 
 ### WebSocket (`/v1/ws`)
 
