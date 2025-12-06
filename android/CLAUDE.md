@@ -81,14 +81,13 @@ The project uses a multi-module architecture with clear separation of concerns:
 **Key Components:**
 - **Use Cases**: Business logic operations
   - `PerformLogin`: Handle user authentication
+  - `PerformLogout`: Handle user logout
   - `PerformSearch`: Search catalog content
   - `InitializeApp`: App startup logic
-  - `LoadArtistScreen`, `LoadAlbumScreen`, `LoadTrackScreen`: Content loading
-  - `SyncStatics`: Synchronize catalog data from server
+  - `IsLoggedIn`: Check authentication status
 - **Domain Models**: Core data structures
   - `Artist`, `Album`, `Track`: Content models
   - `AuthState`: Authentication state management
-  - `AppEvent`: Application-wide events
 - **Interfaces**: Contracts for data sources
   - `RemoteApiClient`: HTTP API contract
   - `StaticsStore`: Catalog data persistence contract
@@ -175,8 +174,6 @@ The project uses a multi-module architecture with clear separation of concerns:
 - Manages playback state (playing, paused, stopped)
 - Track queue management
 
-**Note**: Also see `platform-player` module for platform-specific implementations
-
 ### Presentation Layer
 
 #### ui
@@ -203,6 +200,10 @@ The project uses a multi-module architecture with clear separation of concerns:
 - `AlbumScreen`: Album details and tracks
 - `TrackScreen`: Track details
 - `ProfileScreen`: User profile and settings
+- `SettingsScreen`, `StyleSettingsScreen`: App settings and style customization
+- `PlayerScreen`: Full-screen player view
+- `QueueScreen`: Playback queue management
+- `FullScreenImageScreen`: Full-screen image viewer
 - `AboutScreen`: App information
 
 **Reusable Components:**
@@ -263,11 +264,6 @@ The project uses a multi-module architecture with clear separation of concerns:
 - Network inspection tools
 - Debug controls and settings
 - Development utilities
-
-#### platform-player
-- **Purpose**: Platform-specific player implementations
-- **Location**: `/android/platform-player/`
-- **Note**: Listed in settings.gradle.kts but not currently connected in dependency graph
 
 ## Architecture Patterns
 
@@ -369,7 +365,7 @@ fun MyScreen(viewModel: MyViewModel = hiltViewModel()) {
 - Internal implementations in `internal/` subpackage if needed
 
 ### Naming Conventions
-- **Use Cases**: Verb-first names (`PerformLogin`, `LoadArtistScreen`)
+- **Use Cases**: Verb-first names (`PerformLogin`, `PerformSearch`)
 - **ViewModels**: `{Screen}ViewModel` (`LoginViewModel`)
 - **Screens**: `{Screen}Screen` (`LoginScreen`)
 - **State Classes**: `{Screen}State` (`LoginScreenState`)

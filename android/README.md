@@ -42,7 +42,7 @@ The project follows Clean Architecture principles with a multi-module Gradle set
 - Defines interfaces for data sources (repositories, stores, API clients)
 - Framework-agnostic and has no Android dependencies
 - Key components:
-  - Use cases: `PerformLogin`, `PerformSearch`, `InitializeApp`
+  - Use cases: `PerformLogin`, `PerformLogout`, `PerformSearch`, `InitializeApp`, `IsLoggedIn`
   - Domain models: `Artist`, `Album`, `Track`, `AuthState`
   - Interfaces: `RemoteApiClient`, `StaticsStore`, `AuthStore`, `PezzottifyPlayer`
   - State management via Kotlin `StateFlow`
@@ -85,6 +85,10 @@ The project follows Clean Architecture principles with a multi-module Gradle set
   - `LibraryScreen`: User's music library
   - `ArtistScreen`, `AlbumScreen`, `TrackScreen`: Content detail views
   - `ProfileScreen`: User profile and settings
+  - `SettingsScreen`, `StyleSettingsScreen`: App settings and style customization
+  - `PlayerScreen`: Full-screen player view
+  - `QueueScreen`: Playback queue management
+  - `FullScreenImageScreen`: Full-screen image viewer
   - `AboutScreen`: App information
 - Reusable components for content lists, cards, and player controls
 - Material 3 theming and design system
