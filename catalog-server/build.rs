@@ -6,11 +6,8 @@ fn main() {
     let git_hash = get_git_hash().unwrap_or_else(|| "unknown".to_string());
     let dirty_suffix = if is_repo_dirty() { "-dirty" } else { "" };
     println!("cargo:rustc-env=GIT_HASH={}{}", git_hash, dirty_suffix);
-    // Rerun on commit changes
-    println!("cargo:rerun-if-changed=../.git/HEAD");
-    println!("cargo:rerun-if-changed=../.git/refs/heads/");
-    // Rerun on staged file changes (dirty detection)
-    println!("cargo:rerun-if-changed=../.git/index");
+    // No rerun-if-changed: let cargo rerun build.rs on any source change
+    // This ensures dirty detection works for unstaged changes
 }
 
 fn is_repo_dirty() -> bool {
