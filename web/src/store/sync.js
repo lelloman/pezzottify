@@ -251,9 +251,12 @@ export const useSyncStore = defineStore('sync', () => {
       // Load cursor from storage
       loadCursor();
 
-      // If no cursor (first time), do full sync
-      // Otherwise, catch up from where we left off
-      if (cursor.value === 0) {
+      // Check if user store has in-memory state
+      // On page reload, the cursor is preserved but in-memory state is lost
+      const hasInMemoryState = userStore.likedTrackIds !== null;
+      const needsFullSync = cursor.value === 0 || !hasInMemoryState;
+
+      if (needsFullSync) {
         await fullSync();
       } else {
         await catchUp();
