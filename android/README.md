@@ -13,7 +13,7 @@ Pezzottify Android is a native Android music streaming application built with mo
 - **Networking**: Retrofit + OkHttp with Kotlin Serialization
 - **Local Storage**: Room Database with encrypted preferences
 - **Asynchronous Programming**: Kotlin Coroutines + Flow
-- **Audio Playback**: Custom player implementation with platform-specific components
+- **Audio Playback**: ExoPlayer (Media3) with OkHttp integration
 - **Architecture**: Clean Architecture with multi-module structure
 
 The app is designed with clean architecture principles, separating concerns into distinct modules with well-defined dependencies. This modular approach ensures scalability, testability, and maintainability while allowing teams to work independently on different features.
@@ -40,7 +40,6 @@ The project follows Clean Architecture principles with a multi-module Gradle set
 **domain**
 - Contains business logic, use cases, and domain models
 - Defines interfaces for data sources (repositories, stores, API clients)
-- Framework-agnostic and has no Android dependencies
 - Key components:
   - Use cases: `PerformLogin`, `PerformLogout`, `PerformSearch`, `InitializeApp`, `IsLoggedIn`
   - Domain models: `Artist`, `Album`, `Track`, `AuthState`
@@ -61,9 +60,10 @@ The project follows Clean Architecture principles with a multi-module Gradle set
 - Implements persistence interfaces from domain (`AuthStore`, `StaticsStore`, `UserDataStore`)
 - Uses Room Database for caching catalog data and user content
 - Encrypted SharedPreferences for sensitive data (authentication tokens, config)
-- Two databases:
+- Three databases:
   - `StaticsDb`: Caches artists, albums, tracks, and discographies
-  - `UserDataDb`: Stores recently viewed content
+  - `UserLocalDataDb`: Stores recently viewed content and search history
+  - `UserContentDb`: Stores liked content and listening events
 - Fetch state tracking to manage data freshness and avoid redundant network calls
 
 **player**
@@ -116,10 +116,10 @@ The project follows Clean Architecture principles with a multi-module Gradle set
 ```
 app
 ├─ ui
-├─ domain
-├─ remoteapi → domain
-├─ localdata → domain
-├─ player → domain
+├─ domain → logger
+├─ remoteapi → domain, logger
+├─ localdata → domain, logger
+├─ player → domain, logger
 ├─ logger
 └─ debuginterface (debug only)
 ```
