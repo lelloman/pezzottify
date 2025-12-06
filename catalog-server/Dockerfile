@@ -32,7 +32,7 @@ RUN GIT_DIRTY=$(git -C /app status --porcelain catalog-server/ 2>/dev/null | gre
 WORKDIR /app/catalog-server
 
 # Build the release binary with dirty detection
-RUN . /tmp/build-env && cargo build --release
+RUN . /tmp/build-env && GIT_DIRTY="$GIT_DIRTY" cargo build --release
 
 
 # ------------------------------------------
