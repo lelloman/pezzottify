@@ -219,9 +219,10 @@ export const useSyncStore = defineStore('sync', () => {
   const handleSyncMessage = (type, payload) => {
     // Handler receives (type, payload) from WebSocket service
     // payload format: { event: StoredEvent }
+    console.log('[Sync] Received message:', type, payload);
     const event = payload?.event;
     if (!event) {
-      console.warn('Invalid sync message:', type, payload);
+      console.warn('[Sync] Invalid sync message - no event:', type, payload);
       return;
     }
 

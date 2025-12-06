@@ -308,11 +308,17 @@ export const useUserStore = defineStore('user', () => {
   };
 
   const applySettingChanged = (setting) => {
-    // Setting comes as an object with the setting type as key
-    // e.g., { enable_direct_downloads: "true" } or { DirectDownloadsEnabled: true }
+    // Setting comes from sync events in tagged format: { key: "setting_key", value: settingValue }
     if (typeof setting === 'object') {
-      // Handle server format: { DirectDownloadsEnabled: true }
-      if ('DirectDownloadsEnabled' in setting) {
+      // Handle tagged format from sync events: { key: "...", value: ... }
+      if ('key' in setting && 'value' in setting) {
+        const value = typeof setting.value === 'boolean'
+          ? (setting.value ? 'true' : 'false')
+          : setting.value;
+        settings.value = { ...settings.value, [setting.key]: value };
+      }
+      // Handle legacy format: { DirectDownloadsEnabled: true }
+      else if ('DirectDownloadsEnabled' in setting) {
         settings.value = {
           ...settings.value,
           [SETTING_ENABLE_DIRECT_DOWNLOADS]: setting.DirectDownloadsEnabled ? 'true' : 'false'

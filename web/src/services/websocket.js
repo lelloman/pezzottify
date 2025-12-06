@@ -156,6 +156,7 @@ export function ping() {
  */
 function handleMessage(msg) {
   const { type, payload } = msg;
+  console.log('[WS] Received message:', type, payload);
 
   // Handle system messages
   if (type === 'connected') {

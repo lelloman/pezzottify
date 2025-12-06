@@ -158,7 +158,13 @@ export const useRemoteStore = defineStore('remote', () => {
 
   const updateUserSettings = async (settings) => {
     try {
-      await axios.put('/v1/user/settings', { settings });
+      // Convert from { key: value } format to server's expected format:
+      // { settings: [{ key: "setting_key", value: settingValue }] }
+      const settingsArray = Object.entries(settings).map(([key, value]) => ({
+        key,
+        value: value === 'true' ? true : value === 'false' ? false : value,
+      }));
+      await axios.put('/v1/user/settings', { settings: settingsArray });
       return true;
     } catch (error) {
       console.error('Failed to update user settings:', error);

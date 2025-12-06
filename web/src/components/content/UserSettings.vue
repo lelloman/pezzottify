@@ -83,6 +83,7 @@ const handleDirectDownloadsToggle = async (event) => {
   align-items: flex-start;
   gap: var(--spacing-4);
   padding: var(--spacing-3) 0;
+  flex-wrap: wrap;
 }
 
 .setting-info {
@@ -109,8 +110,10 @@ const handleDirectDownloadsToggle = async (event) => {
   position: relative;
   display: inline-block;
   width: 48px;
+  min-width: 48px;
   height: 24px;
   flex-shrink: 0;
+  margin-left: auto;
 }
 
 .toggle input {
@@ -126,7 +129,7 @@ const handleDirectDownloadsToggle = async (event) => {
   left: 0;
   right: 0;
   bottom: 0;
-  background-color: var(--bg-subdued);
+  background-color: var(--bg-subdued, #535353);
   transition: 0.3s;
   border-radius: 24px;
 }
@@ -138,13 +141,13 @@ const handleDirectDownloadsToggle = async (event) => {
   width: 18px;
   left: 3px;
   bottom: 3px;
-  background-color: var(--text-base);
+  background-color: var(--text-base, #fff);
   transition: 0.3s;
   border-radius: 50%;
 }
 
 .toggle input:checked + .toggle-slider {
-  background-color: var(--spotify-green);
+  background-color: var(--spotify-green, #1db954);
 }
 
 .toggle input:checked + .toggle-slider:before {
