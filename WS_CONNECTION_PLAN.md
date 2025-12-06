@@ -753,23 +753,23 @@ This infrastructure is designed to be extended by other features:
 
 Before starting implementation, verify these assumptions:
 
-- [ ] **Auth mechanisms work for WS upgrade**: Confirm that session extraction from cookies and Authorization header works during WebSocket upgrade (same middleware as REST)
-- [ ] **Device limit exists**: Verify there's already a per-user device limit from the Device Entity feature. If not, determine the limit (suggested: 10 devices)
+- [x] **Auth mechanisms work for WS upgrade**: Confirm that session extraction from cookies and Authorization header works during WebSocket upgrade (same middleware as REST)
+- [x] **Device limit exists**: Verify there's already a per-user device limit from the Device Entity feature. If not, determine the limit (suggested: 10 devices)
 
 ---
 
 ## Testing Checklist
 
-- [ ] WebSocket upgrade succeeds with valid session cookie
-- [ ] WebSocket upgrade succeeds with valid Authorization header
-- [ ] WebSocket upgrade fails without authentication (401)
-- [ ] `connected` message received on successful connection
-- [ ] `ping` / `pong` heartbeat works (protocol-level)
-- [ ] Idle connections are dropped after timeout
-- [ ] Connection properly removed on disconnect
-- [ ] Multiple devices for same user tracked separately
-- [ ] Same device reconnecting replaces old connection (drop-and-replace)
-- [ ] `send_to_other_devices` excludes source device
-- [ ] `broadcast_to_user` reaches all devices
-- [ ] Client auto-reconnects after unexpected disconnect
-- [ ] Client doesn't reconnect after intentional disconnect (logout)
+- [x] WebSocket upgrade succeeds with valid session cookie
+- [x] WebSocket upgrade succeeds with valid Authorization header
+- [x] WebSocket upgrade fails without authentication (401)
+- [x] `connected` message received on successful connection
+- [x] `ping` / `pong` heartbeat works (protocol-level)
+- [x] Idle connections are dropped after timeout
+- [x] Connection properly removed on disconnect
+- [x] Multiple devices for same user tracked separately
+- [x] Same device reconnecting replaces old connection (drop-and-replace)
+- [x] `send_to_other_devices` excludes source device
+- [x] `broadcast_to_user` reaches all devices
+- [x] Client auto-reconnects after unexpected disconnect
+- [x] Client doesn't reconnect after intentional disconnect (logout)

@@ -422,3 +422,59 @@ async fn test_websocket_unauthenticated_connection_rejected() {
     // Connection should be rejected
     assert!(result.is_err(), "WebSocket connection with invalid token should be rejected");
 }
+
+/// Connect to WebSocket using Authorization header instead of cookie
+async fn connect_ws_with_auth_header(
+    base_url: &str,
+    session_token: &str,
+) -> tokio_tungstenite::WebSocketStream<
+    tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>,
+> {
+    let ws_url = base_url.replace("http://", "ws://") + "/v1/ws";
+
+    let request = http::Request::builder()
+        .uri(&ws_url)
+        .header(header::AUTHORIZATION, session_token)
+        .header(header::HOST, "localhost")
+        .header(header::CONNECTION, "Upgrade")
+        .header(header::UPGRADE, "websocket")
+        .header(header::SEC_WEBSOCKET_VERSION, "13")
+        .header(header::SEC_WEBSOCKET_KEY, "dGhlIHNhbXBsZSBub25jZQ==")
+        .body(())
+        .expect("Failed to build WebSocket request");
+
+    let (ws_stream, _) = connect_async(request)
+        .await
+        .expect("Failed to connect to WebSocket with Authorization header");
+
+    ws_stream
+}
+
+#[tokio::test]
+async fn test_websocket_connect_with_authorization_header() {
+    let server = TestServer::spawn().await;
+
+    // Login and get session token
+    let client = TestClient::new(server.base_url.clone());
+    let response = client
+        .login_with_device(TEST_USER, TEST_PASS, "ws-auth-header-test-uuid")
+        .await;
+    assert_eq!(response.status(), StatusCode::CREATED);
+    let token = extract_session_token(response).await;
+
+    // Connect using Authorization header instead of cookie
+    let mut ws = connect_ws_with_auth_header(&server.base_url, &token).await;
+
+    // Should receive "connected" message
+    let connected = wait_for_message(&mut ws, "connected", Duration::from_secs(5)).await;
+    assert!(connected.is_some(), "Should receive connected message with Authorization header");
+
+    // Verify the connected message structure
+    let connected_msg = connected.unwrap();
+    assert_eq!(
+        connected_msg.get("type").and_then(|t| t.as_str()),
+        Some("connected")
+    );
+
+    ws.close(None).await.ok();
+}
