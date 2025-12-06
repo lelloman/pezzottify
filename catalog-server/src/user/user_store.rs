@@ -128,7 +128,8 @@ pub trait UserStore: UserAuthTokenStore + UserAuthCredentialsStore + Send + Sync
     fn add_user_extra_permission(&self, user_id: usize, grant: PermissionGrant) -> Result<usize>;
 
     /// Removes an extra permission grant by its id.
-    fn remove_user_extra_permission(&self, permission_id: usize) -> Result<()>;
+    /// Returns the user_id and permission that was deleted, or None if not found.
+    fn remove_user_extra_permission(&self, permission_id: usize) -> Result<Option<(usize, Permission)>>;
 
     /// Decrements the countdown of an extra permission grant.
     /// Returns true if the permission still has uses remaining, false otherwise.

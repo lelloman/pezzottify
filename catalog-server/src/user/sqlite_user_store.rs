@@ -1480,8 +1480,22 @@ impl UserStore for SqliteUserStore {
         }
     }
 
-    fn remove_user_extra_permission(&self, permission_id: usize) -> Result<()> {
+    fn remove_user_extra_permission(&self, permission_id: usize) -> Result<Option<(usize, Permission)>> {
         let conn = self.conn.lock().unwrap();
+
+        // First, get the user_id and permission before deleting
+        let result: Option<(usize, i32)> = conn
+            .query_row(
+                &format!(
+                    "SELECT user_id, permission FROM {} WHERE id = ?1",
+                    USER_EXTRA_PERMISSION_TABLE_V_4.name
+                ),
+                params![permission_id],
+                |row| Ok((row.get::<_, usize>(0)?, row.get::<_, i32>(1)?)),
+            )
+            .ok();
+
+        // Delete the permission
         conn.execute(
             &format!(
                 "DELETE FROM {} WHERE id = ?1",
@@ -1489,7 +1503,16 @@ impl UserStore for SqliteUserStore {
             ),
             params![permission_id],
         )?;
-        Ok(())
+
+        // Return the deleted info if found
+        match result {
+            Some((user_id, perm_int)) => {
+                let permission = Permission::from_int(perm_int)
+                    .ok_or_else(|| anyhow::anyhow!("Invalid permission int: {}", perm_int))?;
+                Ok(Some((user_id, permission)))
+            }
+            None => Ok(None),
+        }
     }
 
     fn decrement_permission_countdown(&self, permission_id: usize) -> Result<bool> {

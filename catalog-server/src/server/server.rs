@@ -1748,6 +1748,7 @@ async fn admin_get_user_roles(
 async fn admin_add_user_role(
     _session: Session,
     State(user_manager): State<GuardedUserManager>,
+    State(connection_manager): State<GuardedConnectionManager>,
     Path(user_handle): Path<String>,
     Json(body): Json<AddRoleBody>,
 ) -> Response {
@@ -1756,28 +1757,57 @@ async fn admin_add_user_role(
         None => return (StatusCode::BAD_REQUEST, "Invalid role").into_response(),
     };
 
-    let manager = user_manager.lock().unwrap();
-    let user_id = match manager.get_user_id(&user_handle) {
-        Ok(Some(id)) => id,
-        Ok(None) => return StatusCode::NOT_FOUND.into_response(),
-        Err(err) => {
-            error!("Error getting user id: {}", err);
+    let (user_id, stored_event) = {
+        let manager = user_manager.lock().unwrap();
+        let user_id = match manager.get_user_id(&user_handle) {
+            Ok(Some(id)) => id,
+            Ok(None) => return StatusCode::NOT_FOUND.into_response(),
+            Err(err) => {
+                error!("Error getting user id: {}", err);
+                return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+            }
+        };
+
+        if let Err(err) = manager.add_user_role(user_id, role) {
+            error!("Error adding user role: {}", err);
             return StatusCode::INTERNAL_SERVER_ERROR.into_response();
         }
+
+        // Get new permissions and emit PermissionsReset event
+        let permissions = match manager.get_user_permissions(user_id) {
+            Ok(perms) => perms,
+            Err(err) => {
+                error!("Error getting user permissions after role change: {}", err);
+                return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+            }
+        };
+
+        let event = UserEvent::PermissionsReset { permissions };
+        let stored_event = match manager.append_event(user_id, &event) {
+            Ok(stored) => stored,
+            Err(e) => {
+                warn!("Failed to log sync event for permission change: {}", e);
+                return StatusCode::CREATED.into_response();
+            }
+        };
+
+        (user_id, stored_event)
     };
 
-    match manager.add_user_role(user_id, role) {
-        Ok(()) => StatusCode::CREATED.into_response(),
-        Err(err) => {
-            error!("Error adding user role: {}", err);
-            StatusCode::INTERNAL_SERVER_ERROR.into_response()
-        }
-    }
+    // Broadcast to all user's devices
+    let ws_msg = super::websocket::messages::ServerMessage::new(
+        super::websocket::messages::msg_types::SYNC,
+        super::websocket::messages::sync::SyncEventMessage { event: stored_event },
+    );
+    connection_manager.broadcast_to_user(user_id, ws_msg).await;
+
+    StatusCode::CREATED.into_response()
 }
 
 async fn admin_remove_user_role(
     _session: Session,
     State(user_manager): State<GuardedUserManager>,
+    State(connection_manager): State<GuardedConnectionManager>,
     Path((user_handle, role_name)): Path<(String, String)>,
 ) -> Response {
     let role = match crate::user::UserRole::from_str(&role_name) {
@@ -1785,23 +1815,51 @@ async fn admin_remove_user_role(
         None => return (StatusCode::BAD_REQUEST, "Invalid role").into_response(),
     };
 
-    let manager = user_manager.lock().unwrap();
-    let user_id = match manager.get_user_id(&user_handle) {
-        Ok(Some(id)) => id,
-        Ok(None) => return StatusCode::NOT_FOUND.into_response(),
-        Err(err) => {
-            error!("Error getting user id: {}", err);
+    let (user_id, stored_event) = {
+        let manager = user_manager.lock().unwrap();
+        let user_id = match manager.get_user_id(&user_handle) {
+            Ok(Some(id)) => id,
+            Ok(None) => return StatusCode::NOT_FOUND.into_response(),
+            Err(err) => {
+                error!("Error getting user id: {}", err);
+                return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+            }
+        };
+
+        if let Err(err) = manager.remove_user_role(user_id, role) {
+            error!("Error removing user role: {}", err);
             return StatusCode::INTERNAL_SERVER_ERROR.into_response();
         }
+
+        // Get new permissions and emit PermissionsReset event
+        let permissions = match manager.get_user_permissions(user_id) {
+            Ok(perms) => perms,
+            Err(err) => {
+                error!("Error getting user permissions after role change: {}", err);
+                return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+            }
+        };
+
+        let event = UserEvent::PermissionsReset { permissions };
+        let stored_event = match manager.append_event(user_id, &event) {
+            Ok(stored) => stored,
+            Err(e) => {
+                warn!("Failed to log sync event for permission change: {}", e);
+                return StatusCode::OK.into_response();
+            }
+        };
+
+        (user_id, stored_event)
     };
 
-    match manager.remove_user_role(user_id, role) {
-        Ok(()) => StatusCode::OK.into_response(),
-        Err(err) => {
-            error!("Error removing user role: {}", err);
-            StatusCode::INTERNAL_SERVER_ERROR.into_response()
-        }
-    }
+    // Broadcast to all user's devices
+    let ws_msg = super::websocket::messages::ServerMessage::new(
+        super::websocket::messages::msg_types::SYNC,
+        super::websocket::messages::sync::SyncEventMessage { event: stored_event },
+    );
+    connection_manager.broadcast_to_user(user_id, ws_msg).await;
+
+    StatusCode::OK.into_response()
 }
 
 async fn admin_get_user_permissions(
@@ -1838,10 +1896,11 @@ async fn admin_get_user_permissions(
 async fn admin_add_user_extra_permission(
     _session: Session,
     State(user_manager): State<GuardedUserManager>,
+    State(connection_manager): State<GuardedConnectionManager>,
     Path(user_handle): Path<String>,
     Json(body): Json<AddExtraPermissionBody>,
 ) -> Response {
-    use crate::user::{Permission, PermissionGrant};
+    use crate::user::PermissionGrant;
     use std::time::{Duration, SystemTime};
 
     let permission = match body.permission.as_str() {
@@ -1852,56 +1911,102 @@ async fn admin_add_user_extra_permission(
         "ManagePermissions" => Permission::ManagePermissions,
         "IssueContentDownload" => Permission::IssueContentDownload,
         "RebootServer" => Permission::RebootServer,
+        "ViewAnalytics" => Permission::ViewAnalytics,
         _ => return (StatusCode::BAD_REQUEST, "Invalid permission").into_response(),
     };
 
-    let manager = user_manager.lock().unwrap();
-    let user_id = match manager.get_user_id(&user_handle) {
-        Ok(Some(id)) => id,
-        Ok(None) => return StatusCode::NOT_FOUND.into_response(),
-        Err(err) => {
-            error!("Error getting user id: {}", err);
-            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
-        }
+    let (user_id, permission_id, stored_event) = {
+        let manager = user_manager.lock().unwrap();
+        let user_id = match manager.get_user_id(&user_handle) {
+            Ok(Some(id)) => id,
+            Ok(None) => return StatusCode::NOT_FOUND.into_response(),
+            Err(err) => {
+                error!("Error getting user id: {}", err);
+                return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+            }
+        };
+
+        let start_time = SystemTime::now();
+        let end_time = body.duration_seconds.map(|secs| start_time + Duration::from_secs(secs));
+
+        let grant = PermissionGrant::Extra {
+            start_time,
+            end_time,
+            permission,
+            countdown: body.countdown,
+        };
+
+        let permission_id = match manager.add_user_extra_permission(user_id, grant) {
+            Ok(id) => id,
+            Err(err) => {
+                error!("Error adding extra permission: {}", err);
+                return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+            }
+        };
+
+        // Emit PermissionGranted event
+        let event = UserEvent::PermissionGranted { permission };
+        let stored_event = match manager.append_event(user_id, &event) {
+            Ok(stored) => stored,
+            Err(e) => {
+                warn!("Failed to log sync event for permission grant: {}", e);
+                return (StatusCode::CREATED, Json(AddExtraPermissionResponse { permission_id })).into_response();
+            }
+        };
+
+        (user_id, permission_id, stored_event)
     };
 
-    let start_time = SystemTime::now();
-    let end_time = body.duration_seconds.map(|secs| start_time + Duration::from_secs(secs));
+    // Broadcast to all user's devices
+    let ws_msg = super::websocket::messages::ServerMessage::new(
+        super::websocket::messages::msg_types::SYNC,
+        super::websocket::messages::sync::SyncEventMessage { event: stored_event },
+    );
+    connection_manager.broadcast_to_user(user_id, ws_msg).await;
 
-    let grant = PermissionGrant::Extra {
-        start_time,
-        end_time,
-        permission,
-        countdown: body.countdown,
-    };
-
-    match manager.add_user_extra_permission(user_id, grant) {
-        Ok(permission_id) => {
-            (StatusCode::CREATED, Json(AddExtraPermissionResponse { permission_id })).into_response()
-        }
-        Err(err) => {
-            error!("Error adding extra permission: {}", err);
-            StatusCode::INTERNAL_SERVER_ERROR.into_response()
-        }
-    }
+    (StatusCode::CREATED, Json(AddExtraPermissionResponse { permission_id })).into_response()
 }
 
 async fn admin_remove_extra_permission(
     _session: Session,
     State(user_manager): State<GuardedUserManager>,
+    State(connection_manager): State<GuardedConnectionManager>,
     Path(permission_id): Path<usize>,
 ) -> Response {
-    match user_manager
-        .lock()
-        .unwrap()
-        .remove_user_extra_permission(permission_id)
-    {
-        Ok(()) => StatusCode::OK.into_response(),
-        Err(err) => {
-            error!("Error removing extra permission: {}", err);
-            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+    let (user_id, permission) = {
+        let manager = user_manager.lock().unwrap();
+        match manager.remove_user_extra_permission(permission_id) {
+            Ok(Some((user_id, permission))) => (user_id, permission),
+            Ok(None) => return StatusCode::NOT_FOUND.into_response(),
+            Err(err) => {
+                error!("Error removing extra permission: {}", err);
+                return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+            }
         }
-    }
+    };
+
+    // Emit sync event for the permission revocation
+    let event = UserEvent::PermissionRevoked { permission };
+    let stored_event = {
+        let manager = user_manager.lock().unwrap();
+        match manager.append_event(user_id, &event) {
+            Ok(event) => event,
+            Err(err) => {
+                error!("Error appending permission revoked event: {}", err);
+                // Permission was removed but sync failed - still return success
+                return StatusCode::OK.into_response();
+            }
+        }
+    };
+
+    // Broadcast the sync event to user's connected devices
+    let ws_msg = super::websocket::messages::ServerMessage::new(
+        super::websocket::messages::msg_types::SYNC,
+        super::websocket::messages::sync::SyncEventMessage { event: stored_event },
+    );
+    connection_manager.broadcast_to_user(user_id, ws_msg).await;
+
+    StatusCode::OK.into_response()
 }
 
 // Bandwidth statistics endpoints
@@ -2916,7 +3021,7 @@ mod tests {
             todo!()
         }
 
-        fn remove_user_extra_permission(&self, _permission_id: usize) -> Result<()> {
+        fn remove_user_extra_permission(&self, _permission_id: usize) -> Result<Option<(usize, Permission)>> {
             todo!()
         }
 

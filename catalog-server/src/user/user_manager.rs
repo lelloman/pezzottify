@@ -349,7 +349,7 @@ impl UserManager {
         self.user_store.add_user_extra_permission(user_id, grant)
     }
 
-    pub fn remove_user_extra_permission(&self, permission_id: usize) -> Result<()> {
+    pub fn remove_user_extra_permission(&self, permission_id: usize) -> Result<Option<(usize, Permission)>> {
         self.user_store.remove_user_extra_permission(permission_id)
     }
 

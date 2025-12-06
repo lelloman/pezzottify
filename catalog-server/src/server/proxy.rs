@@ -739,8 +739,8 @@ mod tests {
         ) -> anyhow::Result<usize> {
             Ok(1)
         }
-        fn remove_user_extra_permission(&self, _permission_id: usize) -> anyhow::Result<()> {
-            Ok(())
+        fn remove_user_extra_permission(&self, _permission_id: usize) -> anyhow::Result<Option<(usize, Permission)>> {
+            Ok(None)
         }
         fn decrement_permission_countdown(&self, _permission_id: usize) -> anyhow::Result<bool> {
             Ok(true)
@@ -1390,8 +1390,8 @@ mod tests {
         ) -> anyhow::Result<usize> {
             Ok(1)
         }
-        fn remove_user_extra_permission(&self, _permission_id: usize) -> anyhow::Result<()> {
-            Ok(())
+        fn remove_user_extra_permission(&self, _permission_id: usize) -> anyhow::Result<Option<(usize, Permission)>> {
+            Ok(None)
         }
         fn decrement_permission_countdown(&self, _permission_id: usize) -> anyhow::Result<bool> {
             Ok(true)
