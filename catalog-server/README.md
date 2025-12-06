@@ -77,7 +77,8 @@ The catalog server is the backend component of Pezzottify that provides:
   - `ManagePermissions`: Manage user permissions
   - `IssueContentDownload`: Issue download tokens
   - `RebootServer`: Reboot server
-- **`UserRole`**: Admin (all permissions) or Regular (basic permissions)
+  - `ViewAnalytics`: View listening analytics and statistics
+- **`UserRole`**: Admin or Regular with different permission sets
 
 ## Prerequisites
 
@@ -234,6 +235,10 @@ cargo run --release -- \
 | `--logging-level <LEVEL>` | `path` | Request logging level (`path`, `full`, `none`) |
 | `--content-cache-age-sec <SECONDS>` | `3600` | HTTP cache duration in seconds |
 | `--frontend-dir-path <PATH>` | None | Serve static frontend files from this path |
+| `--downloader-url <URL>` | None | URL of the downloader service for fetching missing content |
+| `--downloader-timeout-sec <SECONDS>` | `300` | Timeout in seconds for downloader requests |
+| `--event-retention-days <DAYS>` | `30` | Number of days to retain sync events before pruning (0 to disable) |
+| `--prune-interval-hours <HOURS>` | `24` | Interval in hours between pruning runs |
 
 ### Environment Variables
 
@@ -254,14 +259,23 @@ Configure build-time behavior with Cargo features:
 
 ### Rate Limits
 
-The server implements per-endpoint rate limiting (configured in `server/mod.rs`):
+The server implements per-endpoint rate limiting (configured in `server/http_layers/rate_limit.rs`):
 
-- **Login**: 5 requests/minute per IP
-- **Stream**: 60 requests/minute per user/IP
-- **Content Read**: 120 requests/minute per user/IP
-- **Write Operations**: 30 requests/minute per user/IP
-- **Search**: 30 requests/minute per user/IP
-- **Global**: 200 requests/minute per user/IP
+**Per Minute:**
+- **Login**: 10 requests/minute per IP
+- **Stream**: 100 requests/minute per user
+- **Content Read**: 500 requests/minute per user
+- **Write Operations**: 60 requests/minute per user
+- **Search**: 100 requests/minute per user
+- **Global**: 1000 requests/minute per user
+
+**Per Hour:**
+- **Login**: 100 requests/hour per IP
+- **Stream**: 5000 requests/hour per user
+- **Content Read**: 25000 requests/hour per user
+- **Write Operations**: 2000 requests/hour per user
+- **Search**: 5000 requests/hour per user
+- **Global**: 50000 requests/hour per user
 
 ### HTTP Caching
 
@@ -278,6 +292,9 @@ Static content (catalog data, images, audio) is cached using HTTP `Cache-Control
 |--------|----------|------|-------------|
 | POST | `/login` | No | Login with credentials, returns session token |
 | GET | `/logout` | Yes | Logout and invalidate session token |
+| GET | `/session` | Yes | Get current session info |
+| GET | `/challenge` | No | Get authentication challenge |
+| POST | `/challenge` | No | Submit authentication challenge response |
 
 #### Login Request Body
 
@@ -314,6 +331,7 @@ All content endpoints require `AccessCatalog` permission.
 | GET | `/track/{id}/resolved` | Get track with resolved album and artist references |
 | GET | `/image/{id}` | Get image file |
 | GET | `/stream/{id}` | Stream audio file (supports range requests) |
+| GET | `/whatsnew` | Get recently added content |
 | POST | `/search` | Search catalog (requires search feature enabled) |
 
 ### User Content (`/v1/user`)
@@ -325,8 +343,8 @@ Requires `LikeContent` permission.
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | GET | `/liked/{content_type}` | Get liked content (content_type: `album`, `artist`, `track`) |
-| POST | `/liked/{content_id}` | Like content |
-| DELETE | `/liked/{content_id}` | Unlike content |
+| POST | `/liked/{content_type}/{content_id}` | Like content |
+| DELETE | `/liked/{content_type}/{content_id}` | Unlike content |
 
 #### Playlists
 
@@ -341,6 +359,118 @@ Requires `OwnPlaylists` permission.
 | DELETE | `/playlist/{id}` | Delete playlist |
 | PUT | `/playlist/{id}/add` | Add tracks to playlist |
 | PUT | `/playlist/{id}/remove` | Remove tracks from playlist |
+
+#### Listening Stats
+
+Requires `AccessCatalog` permission.
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/listening` | Record a listening event |
+| GET | `/listening/summary` | Get user's listening summary |
+| GET | `/listening/history` | Get user's listening history |
+| GET | `/listening/events` | Get user's listening events |
+
+#### Settings
+
+Requires authentication.
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/settings` | Get user settings |
+| PUT | `/settings` | Update user settings |
+
+#### Sync
+
+Requires authentication.
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/state` | Get sync state |
+| GET | `/events` | Get sync events since last sync |
+
+### Catalog Edit (`/v1/content`)
+
+Requires `EditCatalog` permission.
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/artist` | Create new artist |
+| PUT | `/artist/{id}` | Update artist |
+| DELETE | `/artist/{id}` | Delete artist |
+| POST | `/album` | Create new album |
+| PUT | `/album/{id}` | Update album |
+| DELETE | `/album/{id}` | Delete album |
+| POST | `/track` | Create new track |
+| PUT | `/track/{id}` | Update track |
+| DELETE | `/track/{id}` | Delete track |
+| POST | `/image` | Create new image |
+| PUT | `/image/{id}` | Update image |
+| DELETE | `/image/{id}` | Delete image |
+
+### Admin (`/v1/admin`)
+
+#### Server Management
+
+Requires `RebootServer` permission.
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/reboot` | Reboot the server |
+
+#### User Management
+
+Requires `ManagePermissions` permission.
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/users` | List all users |
+| GET | `/users/{user_handle}/roles` | Get user's roles |
+| POST | `/users/{user_handle}/roles` | Add role to user |
+| DELETE | `/users/{user_handle}/roles/{role}` | Remove role from user |
+| GET | `/users/{user_handle}/permissions` | Get user's permissions |
+| POST | `/users/{user_handle}/permissions` | Add extra permission to user |
+| DELETE | `/permissions/{permission_id}` | Remove extra permission |
+
+#### Bandwidth Analytics
+
+Requires `ViewAnalytics` permission.
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/bandwidth/summary` | Get bandwidth summary |
+| GET | `/bandwidth/usage` | Get bandwidth usage details |
+| GET | `/bandwidth/users/{user_handle}/summary` | Get user's bandwidth summary |
+| GET | `/bandwidth/users/{user_handle}/usage` | Get user's bandwidth usage |
+
+#### Listening Analytics
+
+Requires `ViewAnalytics` permission.
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/listening/daily` | Get daily listening stats |
+| GET | `/listening/top-tracks` | Get top tracks |
+| GET | `/listening/track/{track_id}` | Get track listening stats |
+| GET | `/listening/users/{user_handle}/summary` | Get user's listening summary |
+
+#### Changelog Management
+
+Requires `EditCatalog` permission.
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/changelog/batch` | Create changelog batch |
+| GET | `/changelog/batches` | List changelog batches |
+| GET | `/changelog/batch/{batch_id}` | Get changelog batch details |
+| POST | `/changelog/batch/{batch_id}/apply` | Apply changelog batch |
+| DELETE | `/changelog/batch/{batch_id}` | Delete changelog batch |
+
+### WebSocket (`/v1/ws`)
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/ws` | WebSocket connection for real-time updates |
 
 ## Authentication & Authorization
 
@@ -360,7 +490,7 @@ Requires `OwnPlaylists` permission.
 ### User Roles
 
 - **Admin**: Full system access
-  - AccessCatalog, EditCatalog, ManagePermissions, IssueContentDownload, RebootServer
+  - AccessCatalog, EditCatalog, ManagePermissions, IssueContentDownload, RebootServer, ViewAnalytics
 
 - **Regular**: Standard user access
   - AccessCatalog, LikeContent, OwnPlaylists
@@ -424,6 +554,19 @@ add-role <user_handle> <role>
 
 # Remove role from user
 remove-role <user_handle> <role>
+```
+
+#### Utility Commands
+
+```bash
+# Show the path of the current auth database
+where
+
+# Show available commands
+help
+
+# Exit the CLI
+exit
 ```
 
 ### Example Workflow
@@ -521,6 +664,8 @@ catalog-server/
 ├── src/
 │   ├── main.rs              # Main server entry point
 │   ├── cli_auth.rs          # CLI auth tool entry point
+│   ├── cli_style.rs         # CLI styling utilities
+│   ├── lib.rs               # Library entry point
 │   ├── catalog_store/       # SQLite catalog storage
 │   │   ├── mod.rs
 │   │   ├── store.rs         # SqliteCatalogStore implementation
@@ -528,7 +673,12 @@ catalog-server/
 │   │   ├── models.rs        # Artist, Album, Track models
 │   │   ├── schema.rs        # SQLite schema definitions
 │   │   ├── validation.rs    # Write operation validation
+│   │   ├── changelog.rs     # Catalog changelog support
 │   │   └── null_store.rs    # NullCatalogStore for CLI tools
+│   ├── downloader/          # Downloader service client
+│   │   ├── mod.rs
+│   │   ├── client.rs        # HTTP client for downloader
+│   │   └── models.rs        # Request/response models
 │   ├── server/              # HTTP server
 │   │   ├── mod.rs
 │   │   ├── server.rs        # Route handlers
@@ -537,7 +687,19 @@ catalog-server/
 │   │   ├── session.rs       # Session middleware
 │   │   ├── stream_track.rs  # Audio streaming
 │   │   ├── search.rs        # Search routes
-│   │   └── http_layers/     # Middleware
+│   │   ├── metrics.rs       # Prometheus metrics
+│   │   ├── proxy.rs         # Catalog proxy for downloader
+│   │   ├── http_layers/     # Middleware
+│   │   │   ├── mod.rs
+│   │   │   ├── http_cache.rs
+│   │   │   ├── rate_limit.rs
+│   │   │   ├── requests_logging.rs
+│   │   │   └── random_slowdown.rs
+│   │   └── websocket/       # WebSocket support
+│   │       ├── mod.rs
+│   │       ├── handler.rs
+│   │       ├── connection.rs
+│   │       └── messages.rs
 │   ├── user/                # Authentication & authorization
 │   │   ├── mod.rs
 │   │   ├── user_manager.rs
@@ -546,6 +708,8 @@ catalog-server/
 │   │   ├── auth.rs
 │   │   ├── permissions.rs
 │   │   ├── device.rs        # Device tracking
+│   │   ├── settings.rs      # User settings
+│   │   ├── sync_events.rs   # Sync event tracking
 │   │   └── user_models.rs
 │   ├── search/              # Search functionality
 │   │   ├── mod.rs
