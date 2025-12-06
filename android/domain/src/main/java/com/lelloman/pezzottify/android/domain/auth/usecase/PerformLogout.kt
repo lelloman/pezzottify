@@ -9,6 +9,7 @@ import com.lelloman.pezzottify.android.domain.remoteapi.RemoteApiClient
 import com.lelloman.pezzottify.android.domain.statics.StaticsStore
 import com.lelloman.pezzottify.android.domain.sync.SyncManager
 import com.lelloman.pezzottify.android.domain.usecase.UseCase
+import com.lelloman.pezzottify.android.domain.user.PermissionsStore
 import com.lelloman.pezzottify.android.domain.user.UserDataStore
 import com.lelloman.pezzottify.android.domain.usercontent.UserContentStore
 import com.lelloman.pezzottify.android.domain.websocket.WebSocketManager
@@ -21,6 +22,7 @@ class PerformLogout @Inject internal constructor(
     private val staticsCache: StaticsCache,
     private val userDataStore: UserDataStore,
     private val userContentStore: UserContentStore,
+    private val permissionsStore: PermissionsStore,
     private val listeningEventStore: ListeningEventStore,
     private val syncManager: SyncManager,
     private val player: PezzottifyPlayer,
@@ -37,6 +39,7 @@ class PerformLogout @Inject internal constructor(
         staticsStore.deleteAll()
         userDataStore.deleteAll()
         userContentStore.deleteAll()
+        permissionsStore.clear()
         listeningEventStore.deleteAll()
     }
 }

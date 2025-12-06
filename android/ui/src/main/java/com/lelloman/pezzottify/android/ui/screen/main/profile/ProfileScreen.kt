@@ -1,6 +1,9 @@
 package com.lelloman.pezzottify.android.ui.screen.main.profile
 
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -14,6 +17,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -33,6 +37,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import androidx.navigation.compose.rememberNavController
+import com.lelloman.pezzottify.android.ui.model.Permission
 import com.lelloman.pezzottify.android.ui.fromProfileBackToLogin
 import com.lelloman.pezzottify.android.ui.theme.PezzottifyTheme
 import kotlinx.coroutines.flow.Flow
@@ -52,7 +57,7 @@ fun ProfileScreen(navController: NavController, rootNavController: NavController
     )
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 private fun ProfileScreenInternal(
     state: StateFlow<ProfileScreenState>,
@@ -91,6 +96,20 @@ private fun ProfileScreenInternal(
             dismissButton = {
                 TextButton(onClick = actions::dismissLogoutConfirmation) {
                     Text("Cancel")
+                }
+            }
+        )
+    }
+
+    // Permission description dialog
+    currentState.selectedPermission?.let { permission ->
+        AlertDialog(
+            onDismissRequest = actions::onPermissionDialogDismissed,
+            title = { Text(permission.displayName) },
+            text = { Text(permission.description) },
+            confirmButton = {
+                TextButton(onClick = actions::onPermissionDialogDismissed) {
+                    Text("OK")
                 }
             }
         )
@@ -137,6 +156,25 @@ private fun ProfileScreenInternal(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
+
+            // Permissions Section
+            if (currentState.permissions.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(16.dp))
+                SettingsLabel(text = "Permissions")
+                Spacer(modifier = Modifier.height(8.dp))
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    currentState.permissions.sortedBy { it.ordinal }.forEach { permission ->
+                        FilterChip(
+                            selected = true,
+                            onClick = { actions.onPermissionClicked(permission) },
+                            label = { Text(permission.displayName) }
+                        )
+                    }
+                }
+            }
 
             HorizontalDivider(modifier = Modifier.padding(vertical = 24.dp))
 
@@ -213,6 +251,11 @@ private fun ProfileScreenPreview() {
                     versionName = "1.0",
                     gitCommit = "abc1234",
                     serverVersion = "0.5.0 (abc1234)",
+                    permissions = setOf(
+                        Permission.AccessCatalog,
+                        Permission.LikeContent,
+                        Permission.OwnPlaylists,
+                    ),
                 )
             ),
             events = flow {},
@@ -222,6 +265,8 @@ private fun ProfileScreenPreview() {
                 override fun clickOnLogout() {}
                 override fun confirmLogout() {}
                 override fun dismissLogoutConfirmation() {}
+                override fun onPermissionClicked(permission: Permission) {}
+                override fun onPermissionDialogDismissed() {}
             },
         )
     }
@@ -240,6 +285,13 @@ private fun ProfileScreenPreviewDark() {
                     versionName = "1.0",
                     gitCommit = "def5678",
                     serverVersion = "disconnected",
+                    permissions = setOf(
+                        Permission.AccessCatalog,
+                        Permission.LikeContent,
+                        Permission.OwnPlaylists,
+                        Permission.EditCatalog,
+                        Permission.ManagePermissions,
+                    ),
                 )
             ),
             events = flow {},
@@ -249,6 +301,8 @@ private fun ProfileScreenPreviewDark() {
                 override fun clickOnLogout() {}
                 override fun confirmLogout() {}
                 override fun dismissLogoutConfirmation() {}
+                override fun onPermissionClicked(permission: Permission) {}
+                override fun onPermissionDialogDismissed() {}
             },
         )
     }

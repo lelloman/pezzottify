@@ -2,6 +2,7 @@ package com.lelloman.pezzottify.android.ui.screen.main.profile
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.lelloman.pezzottify.android.ui.model.Permission
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -41,6 +42,11 @@ class ProfileScreenViewModel @Inject constructor(
                 mutableState.update { it.copy(serverVersion = serverVersion) }
             }
         }
+        viewModelScope.launch {
+            interactor.observePermissions().collect { permissions ->
+                mutableState.update { it.copy(permissions = permissions) }
+            }
+        }
     }
 
     override fun clickOnLogout() {
@@ -64,6 +70,14 @@ class ProfileScreenViewModel @Inject constructor(
         mutableState.update { it.copy(showLogoutConfirmation = false) }
     }
 
+    override fun onPermissionClicked(permission: Permission) {
+        mutableState.update { it.copy(selectedPermission = permission) }
+    }
+
+    override fun onPermissionDialogDismissed() {
+        mutableState.update { it.copy(selectedPermission = null) }
+    }
+
     interface Interactor {
         suspend fun logout()
         fun getUserName(): String
@@ -72,5 +86,6 @@ class ProfileScreenViewModel @Inject constructor(
         fun getVersionName(): String
         fun getGitCommit(): String
         fun observeServerVersion(): Flow<String>
+        fun observePermissions(): Flow<Set<Permission>>
     }
 }

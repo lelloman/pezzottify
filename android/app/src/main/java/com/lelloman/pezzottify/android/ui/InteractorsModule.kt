@@ -12,6 +12,9 @@ import com.lelloman.pezzottify.android.domain.websocket.WebSocketManager
 import com.lelloman.pezzottify.android.ui.component.ConnectionState as UiConnectionState
 import com.lelloman.pezzottify.android.domain.player.PezzottifyPlayer
 import com.lelloman.pezzottify.android.domain.player.RepeatMode
+import com.lelloman.pezzottify.android.domain.sync.Permission as DomainPermission
+import com.lelloman.pezzottify.android.domain.user.PermissionsStore
+import com.lelloman.pezzottify.android.ui.model.Permission as UiPermission
 import com.lelloman.pezzottify.android.ui.screen.player.RepeatModeUi
 import com.lelloman.pezzottify.android.domain.settings.AppFontFamily as DomainAppFontFamily
 import com.lelloman.pezzottify.android.domain.settings.ColorPalette as DomainColorPalette
@@ -114,6 +117,7 @@ class InteractorsModule {
         configStore: ConfigStore,
         buildInfo: BuildInfo,
         webSocketManager: WebSocketManager,
+        permissionsStore: PermissionsStore,
     ): ProfileScreenViewModel.Interactor = object : ProfileScreenViewModel.Interactor {
         override suspend fun logout() {
             performLogout()
@@ -142,6 +146,11 @@ class InteractorsModule {
                 else -> "disconnected"
             }
         }
+
+        override fun observePermissions(): Flow<Set<UiPermission>> =
+            permissionsStore.permissions.map { permissions ->
+                permissions.mapNotNull { it.toUi() }.toSet()
+            }
     }
 
     @Provides
@@ -693,4 +702,15 @@ private fun DomainConnectionState.toUi(): UiConnectionState = when (this) {
     DomainConnectionState.Connecting -> UiConnectionState.Connecting
     DomainConnectionState.Disconnected -> UiConnectionState.Disconnected
     is DomainConnectionState.Error -> UiConnectionState.Error(message)
+}
+
+private fun DomainPermission.toUi(): UiPermission? = when (this) {
+    DomainPermission.AccessCatalog -> UiPermission.AccessCatalog
+    DomainPermission.LikeContent -> UiPermission.LikeContent
+    DomainPermission.OwnPlaylists -> UiPermission.OwnPlaylists
+    DomainPermission.EditCatalog -> UiPermission.EditCatalog
+    DomainPermission.ManagePermissions -> UiPermission.ManagePermissions
+    DomainPermission.IssueContentDownload -> UiPermission.IssueContentDownload
+    DomainPermission.RebootServer -> UiPermission.RebootServer
+    DomainPermission.ViewAnalytics -> UiPermission.ViewAnalytics
 }

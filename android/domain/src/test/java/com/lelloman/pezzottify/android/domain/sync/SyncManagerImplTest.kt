@@ -6,6 +6,7 @@ import com.lelloman.pezzottify.android.domain.remoteapi.response.LikesState
 import com.lelloman.pezzottify.android.domain.remoteapi.response.RemoteApiResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.SyncEventsResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.SyncStateResponse
+import com.lelloman.pezzottify.android.domain.user.PermissionsStore
 import com.lelloman.pezzottify.android.domain.usercontent.LikedContent
 import com.lelloman.pezzottify.android.domain.usercontent.SyncStatus
 import com.lelloman.pezzottify.android.domain.usercontent.UserContentStore
@@ -27,6 +28,7 @@ class SyncManagerImplTest {
     private lateinit var remoteApiClient: RemoteApiClient
     private lateinit var syncStateStore: SyncStateStore
     private lateinit var userContentStore: UserContentStore
+    private lateinit var permissionsStore: PermissionsStore
     private lateinit var logger: Logger
 
     private val testDispatcher = StandardTestDispatcher()
@@ -38,12 +40,14 @@ class SyncManagerImplTest {
         remoteApiClient = mockk(relaxed = true)
         syncStateStore = mockk(relaxed = true)
         userContentStore = mockk(relaxed = true)
+        permissionsStore = mockk(relaxed = true)
         logger = mockk(relaxed = true)
 
         syncManager = SyncManagerImpl(
             remoteApiClient = remoteApiClient,
             syncStateStore = syncStateStore,
             userContentStore = userContentStore,
+            permissionsStore = permissionsStore,
             logger = logger,
             dispatcher = testDispatcher,
         )

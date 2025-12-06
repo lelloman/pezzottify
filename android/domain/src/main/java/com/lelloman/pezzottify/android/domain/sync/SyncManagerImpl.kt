@@ -2,6 +2,7 @@ package com.lelloman.pezzottify.android.domain.sync
 
 import com.lelloman.pezzottify.android.domain.remoteapi.RemoteApiClient
 import com.lelloman.pezzottify.android.domain.remoteapi.response.RemoteApiResponse
+import com.lelloman.pezzottify.android.domain.user.PermissionsStore
 import com.lelloman.pezzottify.android.domain.usercontent.LikedContent
 import com.lelloman.pezzottify.android.domain.usercontent.SyncStatus
 import com.lelloman.pezzottify.android.domain.usercontent.UserContentStore
@@ -21,6 +22,7 @@ class SyncManagerImpl internal constructor(
     private val remoteApiClient: RemoteApiClient,
     private val syncStateStore: SyncStateStore,
     private val userContentStore: UserContentStore,
+    private val permissionsStore: PermissionsStore,
     private val logger: Logger,
     private val dispatcher: CoroutineDispatcher,
 ) : SyncManager {
@@ -30,11 +32,13 @@ class SyncManagerImpl internal constructor(
         remoteApiClient: RemoteApiClient,
         syncStateStore: SyncStateStore,
         userContentStore: UserContentStore,
+        permissionsStore: PermissionsStore,
         loggerFactory: LoggerFactory,
     ) : this(
         remoteApiClient,
         syncStateStore,
         userContentStore,
+        permissionsStore,
         loggerFactory.getLogger(SyncManagerImpl::class),
         Dispatchers.IO,
     )
@@ -72,7 +76,11 @@ class SyncManagerImpl internal constructor(
                 applyLikesState(syncState.likes.artists, LikedContent.ContentType.Artist)
                 applyLikesState(syncState.likes.tracks, LikedContent.ContentType.Track)
 
-                // TODO: Apply settings, playlists, permissions when those stores exist
+                // Update permissions
+                permissionsStore.setPermissions(syncState.permissions.toSet())
+                logger.debug("Applied permissions: ${syncState.permissions}")
+
+                // TODO: Apply settings, playlists when those stores exist
 
                 // Save cursor
                 syncStateStore.saveCursor(syncState.seq)
@@ -223,17 +231,17 @@ class SyncManagerImpl internal constructor(
             }
 
             is SyncEvent.PermissionGranted -> {
-                // TODO: Implement when permissions are tracked locally
+                permissionsStore.addPermission(event.permission)
                 logger.debug("Applied PermissionGranted: ${event.permission}")
             }
 
             is SyncEvent.PermissionRevoked -> {
-                // TODO: Implement when permissions are tracked locally
+                permissionsStore.removePermission(event.permission)
                 logger.debug("Applied PermissionRevoked: ${event.permission}")
             }
 
             is SyncEvent.PermissionsReset -> {
-                // TODO: Implement when permissions are tracked locally
+                permissionsStore.setPermissions(event.permissions.toSet())
                 logger.debug("Applied PermissionsReset: ${event.permissions}")
             }
         }

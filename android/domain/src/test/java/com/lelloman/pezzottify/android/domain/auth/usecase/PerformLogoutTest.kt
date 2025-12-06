@@ -8,6 +8,7 @@ import com.lelloman.pezzottify.android.domain.player.PezzottifyPlayer
 import com.lelloman.pezzottify.android.domain.remoteapi.RemoteApiClient
 import com.lelloman.pezzottify.android.domain.statics.StaticsStore
 import com.lelloman.pezzottify.android.domain.sync.SyncManager
+import com.lelloman.pezzottify.android.domain.user.PermissionsStore
 import com.lelloman.pezzottify.android.domain.user.UserDataStore
 import com.lelloman.pezzottify.android.domain.usercontent.UserContentStore
 import com.lelloman.pezzottify.android.domain.websocket.WebSocketManager
@@ -26,6 +27,7 @@ class PerformLogoutTest {
     private lateinit var staticsCache: StaticsCache
     private lateinit var userDataStore: UserDataStore
     private lateinit var userContentStore: UserContentStore
+    private lateinit var permissionsStore: PermissionsStore
     private lateinit var listeningEventStore: ListeningEventStore
     private lateinit var syncManager: SyncManager
     private lateinit var player: PezzottifyPlayer
@@ -41,6 +43,7 @@ class PerformLogoutTest {
         staticsCache = mockk(relaxed = true)
         userDataStore = mockk(relaxed = true)
         userContentStore = mockk(relaxed = true)
+        permissionsStore = mockk(relaxed = true)
         listeningEventStore = mockk(relaxed = true)
         syncManager = mockk(relaxed = true)
         player = mockk(relaxed = true)
@@ -53,6 +56,7 @@ class PerformLogoutTest {
             staticsCache = staticsCache,
             userDataStore = userDataStore,
             userContentStore = userContentStore,
+            permissionsStore = permissionsStore,
             listeningEventStore = listeningEventStore,
             syncManager = syncManager,
             player = player,
@@ -131,6 +135,13 @@ class PerformLogoutTest {
     }
 
     @Test
+    fun `invoke clears permissions store`() = runTest {
+        performLogout()
+
+        coVerify { permissionsStore.clear() }
+    }
+
+    @Test
     fun `invoke calls all cleanup operations`() = runTest {
         performLogout()
 
@@ -143,6 +154,7 @@ class PerformLogoutTest {
             staticsStore.deleteAll()
             userDataStore.deleteAll()
             userContentStore.deleteAll()
+            permissionsStore.clear()
             listeningEventStore.deleteAll()
         }
         verify { staticsCache.clearAll() }
