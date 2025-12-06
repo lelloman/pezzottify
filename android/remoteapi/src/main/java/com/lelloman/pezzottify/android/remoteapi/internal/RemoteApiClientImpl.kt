@@ -15,9 +15,11 @@ import com.lelloman.pezzottify.android.domain.remoteapi.response.SearchResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.SyncEventsResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.SyncStateResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.TrackResponse
+import com.lelloman.pezzottify.android.domain.sync.UserSetting
 import com.lelloman.pezzottify.android.remoteapi.internal.requests.ListeningEventRequest
 import com.lelloman.pezzottify.android.remoteapi.internal.requests.LoginRequest
 import com.lelloman.pezzottify.android.remoteapi.internal.requests.SearchRequest
+import com.lelloman.pezzottify.android.remoteapi.internal.requests.UpdateUserSettingsRequest
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.flow.SharingStarted
@@ -220,6 +222,16 @@ internal class RemoteApiClientImpl(
                 return@catchingNetworkError RemoteApiResponse.Error.EventsPruned
             }
             response.returnFromRetrofitResponse()
+        }
+
+    override suspend fun updateUserSettings(settings: List<UserSetting>): RemoteApiResponse<Unit> =
+        catchingNetworkError {
+            retrofit
+                .updateUserSettings(
+                    authToken = authToken,
+                    request = UpdateUserSettingsRequest(settings = settings)
+                )
+                .returnFromRetrofitResponse()
         }
 
     private suspend fun <T> catchingNetworkError(block: suspend () -> RemoteApiResponse<T>): RemoteApiResponse<T> =

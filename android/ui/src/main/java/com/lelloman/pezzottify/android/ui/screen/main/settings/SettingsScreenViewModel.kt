@@ -38,6 +38,8 @@ class SettingsScreenViewModel @Inject constructor(
                 fontFamily = interactor.getFontFamily(),
                 isCacheEnabled = interactor.isCacheEnabled(),
                 storageInfo = interactor.getStorageInfo(),
+                directDownloadsEnabled = interactor.isDirectDownloadsEnabled(),
+                hasIssueContentDownloadPermission = interactor.hasIssueContentDownloadPermission(),
             )
             mutableState.value = initialState
 
@@ -69,6 +71,16 @@ class SettingsScreenViewModel @Inject constructor(
             launch {
                 interactor.observeStorageInfo().collect { storageInfo ->
                     mutableState.update { it.copy(storageInfo = storageInfo) }
+                }
+            }
+            launch {
+                interactor.observeDirectDownloadsEnabled().collect { enabled ->
+                    mutableState.update { it.copy(directDownloadsEnabled = enabled) }
+                }
+            }
+            launch {
+                interactor.observeHasIssueContentDownloadPermission().collect { hasPermission ->
+                    mutableState.update { it.copy(hasIssueContentDownloadPermission = hasPermission) }
                 }
             }
         }
@@ -104,6 +116,12 @@ class SettingsScreenViewModel @Inject constructor(
         }
     }
 
+    override fun setDirectDownloadsEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            interactor.setDirectDownloadsEnabled(enabled)
+        }
+    }
+
     interface Interactor {
         fun getPlayBehavior(): PlayBehavior
         fun getThemeMode(): ThemeMode
@@ -111,16 +129,21 @@ class SettingsScreenViewModel @Inject constructor(
         fun getFontFamily(): AppFontFamily
         fun isCacheEnabled(): Boolean
         fun getStorageInfo(): StorageInfo?
+        fun isDirectDownloadsEnabled(): Boolean
+        fun hasIssueContentDownloadPermission(): Boolean
         fun observePlayBehavior(): kotlinx.coroutines.flow.Flow<PlayBehavior>
         fun observeThemeMode(): kotlinx.coroutines.flow.Flow<ThemeMode>
         fun observeColorPalette(): kotlinx.coroutines.flow.Flow<ColorPalette>
         fun observeFontFamily(): kotlinx.coroutines.flow.Flow<AppFontFamily>
         fun observeCacheEnabled(): kotlinx.coroutines.flow.Flow<Boolean>
         fun observeStorageInfo(): kotlinx.coroutines.flow.Flow<StorageInfo>
+        fun observeDirectDownloadsEnabled(): kotlinx.coroutines.flow.Flow<Boolean>
+        fun observeHasIssueContentDownloadPermission(): kotlinx.coroutines.flow.Flow<Boolean>
         suspend fun setPlayBehavior(playBehavior: PlayBehavior)
         suspend fun setThemeMode(themeMode: ThemeMode)
         suspend fun setColorPalette(colorPalette: ColorPalette)
         suspend fun setFontFamily(fontFamily: AppFontFamily)
         suspend fun setCacheEnabled(enabled: Boolean)
+        suspend fun setDirectDownloadsEnabled(enabled: Boolean): Boolean
     }
 }

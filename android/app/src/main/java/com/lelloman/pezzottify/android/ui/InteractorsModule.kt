@@ -26,6 +26,7 @@ import com.lelloman.pezzottify.android.domain.storage.StoragePressureLevel as Do
 import com.lelloman.pezzottify.android.domain.usercontent.LikedContent as DomainLikedContent
 import com.lelloman.pezzottify.android.domain.player.PlaybackPlaylist as DomainPlaybackPlaylist
 import com.lelloman.pezzottify.android.domain.player.PlaybackPlaylistContext as DomainPlaybackPlaylistContext
+import com.lelloman.pezzottify.android.domain.settings.usecase.UpdateDirectDownloadsSetting
 import com.lelloman.pezzottify.android.ui.theme.AppFontFamily as UiAppFontFamily
 import com.lelloman.pezzottify.android.ui.theme.ColorPalette as UiColorPalette
 import com.lelloman.pezzottify.android.ui.theme.ThemeMode as UiThemeMode
@@ -157,6 +158,8 @@ class InteractorsModule {
     fun provideSettingsScreenInteractor(
         userSettingsStore: UserSettingsStore,
         storageMonitor: com.lelloman.pezzottify.android.domain.storage.StorageMonitor,
+        permissionsStore: PermissionsStore,
+        updateDirectDownloadsSetting: UpdateDirectDownloadsSetting,
     ): SettingsScreenViewModel.Interactor = object : SettingsScreenViewModel.Interactor {
         override fun getPlayBehavior(): UiPlayBehavior =
             userSettingsStore.playBehavior.value.toUi()
@@ -171,6 +174,11 @@ class InteractorsModule {
 
         override fun getStorageInfo(): UiStorageInfo = storageMonitor.storageInfo.value.toUi()
 
+        override fun isDirectDownloadsEnabled(): Boolean = userSettingsStore.directDownloadsEnabled.value
+
+        override fun hasIssueContentDownloadPermission(): Boolean =
+            permissionsStore.permissions.value.contains(DomainPermission.IssueContentDownload)
+
         override fun observePlayBehavior(): Flow<UiPlayBehavior> = userSettingsStore.playBehavior.map { it.toUi() }
 
         override fun observeThemeMode(): Flow<UiThemeMode> = userSettingsStore.themeMode.map { it.toUi()}
@@ -182,6 +190,11 @@ class InteractorsModule {
         override fun observeCacheEnabled() = userSettingsStore.isInMemoryCacheEnabled
 
         override fun observeStorageInfo(): Flow<UiStorageInfo> = storageMonitor.storageInfo.map { it.toUi() }
+
+        override fun observeDirectDownloadsEnabled(): Flow<Boolean> = userSettingsStore.directDownloadsEnabled
+
+        override fun observeHasIssueContentDownloadPermission(): Flow<Boolean> =
+            permissionsStore.permissions.map { it.contains(DomainPermission.IssueContentDownload) }
 
         override suspend fun setPlayBehavior(playBehavior: UiPlayBehavior) {
             userSettingsStore.setPlayBehavior(playBehavior.toDomain())
@@ -202,6 +215,12 @@ class InteractorsModule {
         override suspend fun setCacheEnabled(enabled: Boolean) {
             userSettingsStore.setInMemoryCacheEnabled(enabled)
         }
+
+        override suspend fun setDirectDownloadsEnabled(enabled: Boolean): Boolean =
+            when (updateDirectDownloadsSetting(enabled)) {
+                UpdateDirectDownloadsSetting.Result.Success -> true
+                UpdateDirectDownloadsSetting.Result.Error -> false
+            }
     }
 
     @Provides

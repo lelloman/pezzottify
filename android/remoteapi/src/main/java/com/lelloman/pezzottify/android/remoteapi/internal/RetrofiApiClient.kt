@@ -4,6 +4,7 @@ import com.lelloman.pezzottify.android.remoteapi.internal.requests.ListeningEven
 import com.lelloman.pezzottify.android.remoteapi.internal.requests.ListeningEventResponse
 import com.lelloman.pezzottify.android.remoteapi.internal.requests.LoginRequest
 import com.lelloman.pezzottify.android.remoteapi.internal.requests.SearchRequest
+import com.lelloman.pezzottify.android.remoteapi.internal.requests.UpdateUserSettingsRequest
 import com.lelloman.pezzottify.android.domain.remoteapi.response.AlbumResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.ArtistDiscographyResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.ArtistResponse
@@ -20,6 +21,7 @@ import retrofit2.http.DELETE
 import retrofit2.http.GET
 import retrofit2.http.Header
 import retrofit2.http.POST
+import retrofit2.http.PUT
 import retrofit2.http.Path
 import retrofit2.http.Query
 
@@ -103,4 +105,10 @@ internal interface RetrofitApiClient {
         @Header("Authorization") authToken: String,
         @Query("since") since: Long,
     ): Response<SyncEventsResponse>
+
+    @PUT("/v1/user/settings")
+    suspend fun updateUserSettings(
+        @Header("Authorization") authToken: String,
+        @Body request: UpdateUserSettingsRequest,
+    ): Response<Unit>
 }

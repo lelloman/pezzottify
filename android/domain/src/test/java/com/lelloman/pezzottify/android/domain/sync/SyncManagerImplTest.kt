@@ -6,6 +6,7 @@ import com.lelloman.pezzottify.android.domain.remoteapi.response.LikesState
 import com.lelloman.pezzottify.android.domain.remoteapi.response.RemoteApiResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.SyncEventsResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.SyncStateResponse
+import com.lelloman.pezzottify.android.domain.settings.UserSettingsStore
 import com.lelloman.pezzottify.android.domain.user.PermissionsStore
 import com.lelloman.pezzottify.android.domain.usercontent.LikedContent
 import com.lelloman.pezzottify.android.domain.usercontent.SyncStatus
@@ -29,6 +30,7 @@ class SyncManagerImplTest {
     private lateinit var syncStateStore: SyncStateStore
     private lateinit var userContentStore: UserContentStore
     private lateinit var permissionsStore: PermissionsStore
+    private lateinit var userSettingsStore: UserSettingsStore
     private lateinit var logger: Logger
 
     private val testDispatcher = StandardTestDispatcher()
@@ -41,6 +43,7 @@ class SyncManagerImplTest {
         syncStateStore = mockk(relaxed = true)
         userContentStore = mockk(relaxed = true)
         permissionsStore = mockk(relaxed = true)
+        userSettingsStore = mockk(relaxed = true)
         logger = mockk(relaxed = true)
 
         syncManager = SyncManagerImpl(
@@ -48,6 +51,7 @@ class SyncManagerImplTest {
             syncStateStore = syncStateStore,
             userContentStore = userContentStore,
             permissionsStore = permissionsStore,
+            userSettingsStore = userSettingsStore,
             logger = logger,
             dispatcher = testDispatcher,
         )
@@ -377,6 +381,55 @@ class SyncManagerImplTest {
 
     // endregion
 
+    // region settings
+
+    @Test
+    fun `fullSync applies settings from response`() = runTest(testDispatcher) {
+        val settings = listOf(
+            UserSetting.DirectDownloadsEnabled(true)
+        )
+        coEvery { remoteApiClient.getSyncState() } returns RemoteApiResponse.Success(
+            createSyncStateResponse(seq = 10L, settings = settings)
+        )
+
+        syncManager.fullSync()
+
+        coVerify { userSettingsStore.setDirectDownloadsEnabled(true) }
+    }
+
+    @Test
+    fun `handleSyncMessage applies setting changed event`() = runTest(testDispatcher) {
+        every { syncStateStore.getCursor() } returns 5L
+        val event = createSettingChangedEvent(
+            seq = 6L,
+            setting = UserSetting.DirectDownloadsEnabled(true),
+        )
+
+        syncManager.handleSyncMessage(event)
+
+        coVerify { userSettingsStore.setDirectDownloadsEnabled(true) }
+        coVerify { syncStateStore.saveCursor(6L) }
+    }
+
+    @Test
+    fun `catchUp applies setting changed events`() = runTest(testDispatcher) {
+        every { syncStateStore.getCursor() } returns 5L
+        val events = listOf(
+            createSettingChangedEvent(seq = 6L, setting = UserSetting.DirectDownloadsEnabled(false)),
+            createSettingChangedEvent(seq = 7L, setting = UserSetting.DirectDownloadsEnabled(true)),
+        )
+        coEvery { remoteApiClient.getSyncEvents(5L) } returns RemoteApiResponse.Success(
+            SyncEventsResponse(events = events, currentSeq = 7L)
+        )
+
+        syncManager.catchUp()
+
+        coVerify { userSettingsStore.setDirectDownloadsEnabled(false) }
+        coVerify { userSettingsStore.setDirectDownloadsEnabled(true) }
+    }
+
+    // endregion
+
     // region helper functions
 
     private fun createSyncStateResponse(
@@ -384,6 +437,7 @@ class SyncManagerImplTest {
         likesAlbums: List<String> = emptyList(),
         likesArtists: List<String> = emptyList(),
         likesTracks: List<String> = emptyList(),
+        settings: List<UserSetting> = emptyList(),
     ): SyncStateResponse {
         return SyncStateResponse(
             seq = seq,
@@ -392,7 +446,7 @@ class SyncManagerImplTest {
                 artists = likesArtists,
                 tracks = likesTracks,
             ),
-            settings = emptyList(),
+            settings = settings,
             playlists = emptyList(),
             permissions = emptyList(),
         )
@@ -427,6 +481,21 @@ class SyncManagerImplTest {
             payload = SyncEventPayload(
                 contentType = contentType,
                 contentId = contentId,
+            ),
+            serverTimestamp = serverTimestamp,
+        )
+    }
+
+    private fun createSettingChangedEvent(
+        seq: Long,
+        setting: UserSetting,
+        serverTimestamp: Long = System.currentTimeMillis(),
+    ): StoredEvent {
+        return StoredEvent(
+            seq = seq,
+            type = "setting_changed",
+            payload = SyncEventPayload(
+                setting = setting,
             ),
             serverTimestamp = serverTimestamp,
         )

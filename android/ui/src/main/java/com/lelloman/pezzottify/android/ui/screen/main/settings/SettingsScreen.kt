@@ -183,6 +183,17 @@ private fun SettingsScreenInternal(
                 onCacheEnabledChanged = actions::setCacheEnabled
             )
 
+            // Direct Downloads Section - only shown if user has permission
+            if (currentState.hasIssueContentDownloadPermission) {
+                HorizontalDivider(modifier = Modifier.padding(vertical = 24.dp))
+
+                DirectDownloadsSection(
+                    isEnabled = currentState.directDownloadsEnabled,
+                    hasPermission = currentState.hasIssueContentDownloadPermission,
+                    onEnabledChanged = actions::setDirectDownloadsEnabled
+                )
+            }
+
             HorizontalDivider(modifier = Modifier.padding(vertical = 24.dp))
 
             StorageInfoSection(
@@ -225,7 +236,7 @@ private fun SettingsScreenPreview() {
                 override fun selectColorPalette(colorPalette: ColorPalette) {}
                 override fun selectFontFamily(fontFamily: AppFontFamily) {}
                 override fun setCacheEnabled(enabled: Boolean) {}
-
+                override fun setDirectDownloadsEnabled(enabled: Boolean) {}
             },
         )
     }
@@ -253,6 +264,7 @@ private fun SettingsScreenPreviewDark() {
                 override fun selectColorPalette(colorPalette: ColorPalette) {}
                 override fun selectFontFamily(fontFamily: AppFontFamily) {}
                 override fun setCacheEnabled(enabled: Boolean) {}
+                override fun setDirectDownloadsEnabled(enabled: Boolean) {}
             },
         )
     }

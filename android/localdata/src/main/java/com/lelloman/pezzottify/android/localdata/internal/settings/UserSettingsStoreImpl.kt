@@ -72,6 +72,12 @@ internal class UserSettingsStoreImpl(
     }
     override val isInMemoryCacheEnabled: StateFlow<Boolean> = mutableInMemoryCacheEnabled.asStateFlow()
 
+    private val mutableDirectDownloadsEnabled by lazy {
+        val enabled = prefs.getBoolean(KEY_DIRECT_DOWNLOADS_ENABLED, DEFAULT_DIRECT_DOWNLOADS_ENABLED)
+        MutableStateFlow(enabled)
+    }
+    override val directDownloadsEnabled: StateFlow<Boolean> = mutableDirectDownloadsEnabled.asStateFlow()
+
     override suspend fun setPlayBehavior(playBehavior: PlayBehavior) {
         withContext(dispatcher) {
             mutablePlayBehavior.value = playBehavior
@@ -107,6 +113,20 @@ internal class UserSettingsStoreImpl(
         }
     }
 
+    override suspend fun setDirectDownloadsEnabled(enabled: Boolean) {
+        withContext(dispatcher) {
+            mutableDirectDownloadsEnabled.value = enabled
+            prefs.edit().putBoolean(KEY_DIRECT_DOWNLOADS_ENABLED, enabled).commit()
+        }
+    }
+
+    override suspend fun clearSyncedSettings() {
+        withContext(dispatcher) {
+            mutableDirectDownloadsEnabled.value = DEFAULT_DIRECT_DOWNLOADS_ENABLED
+            prefs.edit().remove(KEY_DIRECT_DOWNLOADS_ENABLED).commit()
+        }
+    }
+
     private fun parsePlayBehavior(value: String): PlayBehavior? = try {
         PlayBehavior.valueOf(value)
     } catch (e: IllegalArgumentException) {
@@ -139,6 +159,8 @@ internal class UserSettingsStoreImpl(
         const val KEY_FONT_FAMILY = "FontFamily"
         const val KEY_IN_MEMORY_CACHE_ENABLED = "InMemoryCacheEnabled"
         const val DEFAULT_IN_MEMORY_CACHE_ENABLED = true
+        const val KEY_DIRECT_DOWNLOADS_ENABLED = "DirectDownloadsEnabled"
+        const val DEFAULT_DIRECT_DOWNLOADS_ENABLED = false
         // Legacy value for migration - AmoledBlack was removed and converted to Amoled theme mode
         const val LEGACY_AMOLED_BLACK_PALETTE = "AmoledBlack"
     }

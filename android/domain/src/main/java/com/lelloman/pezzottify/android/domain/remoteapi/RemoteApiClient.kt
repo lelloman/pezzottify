@@ -12,6 +12,7 @@ import com.lelloman.pezzottify.android.domain.remoteapi.response.SearchResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.SyncEventsResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.SyncStateResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.TrackResponse
+import com.lelloman.pezzottify.android.domain.sync.UserSetting
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.serialization.Serializable
 
@@ -66,6 +67,12 @@ interface RemoteApiClient {
      * Returns RemoteApiResponse.Error.EventsPruned if the sequence has been pruned.
      */
     suspend fun getSyncEvents(since: Long): RemoteApiResponse<SyncEventsResponse>
+
+    /**
+     * Update user settings on the server.
+     * This generates a setting_changed event that will be synced to other devices.
+     */
+    suspend fun updateUserSettings(settings: List<UserSetting>): RemoteApiResponse<Unit>
 
     @Serializable
     enum class SearchFilter {

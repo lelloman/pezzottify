@@ -10,11 +10,29 @@ interface UserSettingsStore {
     val fontFamily: StateFlow<AppFontFamily>
     val isInMemoryCacheEnabled: StateFlow<Boolean>
 
+    /**
+     * Whether direct downloads are enabled.
+     * This setting is synced with the server and is only visible to users with IssueContentDownload permission.
+     */
+    val directDownloadsEnabled: StateFlow<Boolean>
+
     suspend fun setPlayBehavior(playBehavior: PlayBehavior)
     suspend fun setThemeMode(themeMode: ThemeMode)
     suspend fun setColorPalette(colorPalette: ColorPalette)
     suspend fun setFontFamily(fontFamily: AppFontFamily)
     suspend fun setInMemoryCacheEnabled(enabled: Boolean)
+
+    /**
+     * Set whether direct downloads are enabled.
+     * This is called when receiving a sync event from the server, not directly by the user.
+     */
+    suspend fun setDirectDownloadsEnabled(enabled: Boolean)
+
+    /**
+     * Clear all synced user settings.
+     * Called on logout.
+     */
+    suspend fun clearSyncedSettings()
 }
 
 enum class PlayBehavior {

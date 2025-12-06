@@ -13,4 +13,6 @@ data class SettingsScreenState(
     val fontFamily: AppFontFamily = AppFontFamily.Default,
     val isCacheEnabled: Boolean = true,
     val storageInfo: StorageInfo? = null,
+    val directDownloadsEnabled: Boolean = false,
+    val hasIssueContentDownloadPermission: Boolean = false,
 )

@@ -2,6 +2,7 @@ package com.lelloman.pezzottify.android.domain.sync
 
 import com.lelloman.pezzottify.android.domain.remoteapi.RemoteApiClient
 import com.lelloman.pezzottify.android.domain.remoteapi.response.RemoteApiResponse
+import com.lelloman.pezzottify.android.domain.settings.UserSettingsStore
 import com.lelloman.pezzottify.android.domain.user.PermissionsStore
 import com.lelloman.pezzottify.android.domain.usercontent.LikedContent
 import com.lelloman.pezzottify.android.domain.usercontent.SyncStatus
@@ -23,6 +24,7 @@ class SyncManagerImpl internal constructor(
     private val syncStateStore: SyncStateStore,
     private val userContentStore: UserContentStore,
     private val permissionsStore: PermissionsStore,
+    private val userSettingsStore: UserSettingsStore,
     private val logger: Logger,
     private val dispatcher: CoroutineDispatcher,
 ) : SyncManager {
@@ -33,12 +35,14 @@ class SyncManagerImpl internal constructor(
         syncStateStore: SyncStateStore,
         userContentStore: UserContentStore,
         permissionsStore: PermissionsStore,
+        userSettingsStore: UserSettingsStore,
         loggerFactory: LoggerFactory,
     ) : this(
         remoteApiClient,
         syncStateStore,
         userContentStore,
         permissionsStore,
+        userSettingsStore,
         loggerFactory.getLogger(SyncManagerImpl::class),
         Dispatchers.IO,
     )
@@ -80,7 +84,10 @@ class SyncManagerImpl internal constructor(
                 permissionsStore.setPermissions(syncState.permissions.toSet())
                 logger.debug("Applied permissions: ${syncState.permissions}")
 
-                // TODO: Apply settings, playlists when those stores exist
+                // Apply settings
+                applySettingsState(syncState.settings)
+
+                // TODO: Apply playlists when playlist store is available
 
                 // Save cursor
                 syncStateStore.saveCursor(syncState.seq)
@@ -206,7 +213,7 @@ class SyncManagerImpl internal constructor(
             }
 
             is SyncEvent.SettingChanged -> {
-                // TODO: Implement when settings store is available
+                applySetting(event.setting)
                 logger.debug("Applied SettingChanged: ${event.setting}")
             }
 
@@ -278,6 +285,21 @@ class SyncManagerImpl internal constructor(
             LikedContentType.Album -> LikedContent.ContentType.Album
             LikedContentType.Artist -> LikedContent.ContentType.Artist
             LikedContentType.Track -> LikedContent.ContentType.Track
+        }
+    }
+
+    private suspend fun applySettingsState(settings: List<UserSetting>) {
+        settings.forEach { setting ->
+            applySetting(setting)
+        }
+        logger.debug("Applied ${settings.size} settings")
+    }
+
+    private suspend fun applySetting(setting: UserSetting) {
+        when (setting) {
+            is UserSetting.DirectDownloadsEnabled -> {
+                userSettingsStore.setDirectDownloadsEnabled(setting.value)
+            }
         }
     }
 

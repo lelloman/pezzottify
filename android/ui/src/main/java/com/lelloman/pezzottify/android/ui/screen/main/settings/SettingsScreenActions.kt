@@ -16,4 +16,6 @@ interface SettingsScreenActions {
     fun selectFontFamily(fontFamily: AppFontFamily)
 
     fun setCacheEnabled(enabled: Boolean)
+
+    fun setDirectDownloadsEnabled(enabled: Boolean)
 }

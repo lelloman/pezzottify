@@ -244,4 +244,55 @@ class UserSettingsStoreImplTest {
         assertThat(store.themeMode.value).isEqualTo(ThemeMode.Dark)
         assertThat(store.colorPalette.value).isEqualTo(ColorPalette.OceanBlue)
     }
+
+    // region directDownloadsEnabled
+
+    @Test
+    fun `directDownloadsEnabled returns false by default`() {
+        val store = UserSettingsStoreImpl(context, testDispatcher)
+
+        assertThat(store.directDownloadsEnabled.value).isFalse()
+    }
+
+    @Test
+    fun `setDirectDownloadsEnabled persists value`() = runTest(testDispatcher) {
+        val store = UserSettingsStoreImpl(context, testDispatcher)
+
+        store.setDirectDownloadsEnabled(true)
+
+        assertThat(store.directDownloadsEnabled.value).isTrue()
+    }
+
+    @Test
+    fun `directDownloadsEnabled value survives store recreation`() = runTest(testDispatcher) {
+        val store1 = UserSettingsStoreImpl(context, testDispatcher)
+        store1.setDirectDownloadsEnabled(true)
+
+        val store2 = UserSettingsStoreImpl(context, testDispatcher)
+
+        assertThat(store2.directDownloadsEnabled.value).isTrue()
+    }
+
+    @Test
+    fun `clearSyncedSettings resets directDownloadsEnabled to default`() = runTest(testDispatcher) {
+        val store = UserSettingsStoreImpl(context, testDispatcher)
+        store.setDirectDownloadsEnabled(true)
+
+        store.clearSyncedSettings()
+
+        assertThat(store.directDownloadsEnabled.value).isFalse()
+    }
+
+    @Test
+    fun `clearSyncedSettings persists reset value`() = runTest(testDispatcher) {
+        val store1 = UserSettingsStoreImpl(context, testDispatcher)
+        store1.setDirectDownloadsEnabled(true)
+        store1.clearSyncedSettings()
+
+        val store2 = UserSettingsStoreImpl(context, testDispatcher)
+
+        assertThat(store2.directDownloadsEnabled.value).isFalse()
+    }
+
+    // endregion
 }
