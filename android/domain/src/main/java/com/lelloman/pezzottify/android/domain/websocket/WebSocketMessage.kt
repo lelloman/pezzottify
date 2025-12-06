@@ -27,6 +27,7 @@ data class ServerMessage(
 @Serializable
 data class ConnectedPayload(
     val device_id: Int,
+    val server_version: String,
 )
 
 /**

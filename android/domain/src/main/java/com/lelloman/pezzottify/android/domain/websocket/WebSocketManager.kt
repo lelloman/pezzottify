@@ -8,7 +8,7 @@ import kotlinx.coroutines.flow.StateFlow
 sealed interface ConnectionState {
     data object Disconnected : ConnectionState
     data object Connecting : ConnectionState
-    data class Connected(val deviceId: Int) : ConnectionState
+    data class Connected(val deviceId: Int, val serverVersion: String) : ConnectionState
     data class Error(val message: String) : ConnectionState
 }
 

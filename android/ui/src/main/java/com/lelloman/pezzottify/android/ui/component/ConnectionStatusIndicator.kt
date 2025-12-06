@@ -56,7 +56,7 @@ private fun PreviewOfflineIndicatorDisconnected() {
 @Composable
 private fun PreviewOfflineIndicatorConnected() {
     OfflineIndicator(
-        connectionState = ConnectionState.Connected(deviceId = 1),
+        connectionState = ConnectionState.Connected(deviceId = 1, serverVersion = "0.5.0"),
         size = 24.dp
     )
 }

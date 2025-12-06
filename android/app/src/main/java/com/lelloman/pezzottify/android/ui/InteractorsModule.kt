@@ -7,6 +7,8 @@ import com.lelloman.pezzottify.android.domain.auth.usecase.PerformLogin
 import com.lelloman.pezzottify.android.domain.auth.usecase.PerformLogout
 import com.lelloman.pezzottify.android.domain.config.BuildInfo
 import com.lelloman.pezzottify.android.domain.config.ConfigStore
+import com.lelloman.pezzottify.android.domain.websocket.ConnectionState
+import com.lelloman.pezzottify.android.domain.websocket.WebSocketManager
 import com.lelloman.pezzottify.android.domain.player.PezzottifyPlayer
 import com.lelloman.pezzottify.android.domain.player.RepeatMode
 import com.lelloman.pezzottify.android.ui.screen.player.RepeatModeUi
@@ -93,6 +95,7 @@ class InteractorsModule {
         authStore: AuthStore,
         configStore: ConfigStore,
         buildInfo: BuildInfo,
+        webSocketManager: WebSocketManager,
     ): ProfileScreenViewModel.Interactor = object : ProfileScreenViewModel.Interactor {
         override suspend fun logout() {
             performLogout()
@@ -114,6 +117,13 @@ class InteractorsModule {
         override fun getVersionName(): String = buildInfo.versionName
 
         override fun getGitCommit(): String = buildInfo.gitCommit
+
+        override fun observeServerVersion() = webSocketManager.connectionState.map { state ->
+            when (state) {
+                is ConnectionState.Connected -> state.serverVersion
+                else -> "disconnected"
+            }
+        }
     }
 
     @Provides

@@ -210,10 +210,11 @@ internal class WebSocketManagerImpl(
         }
 
         val deviceId = payload?.device_id ?: 0
-        logger.info("WebSocket connected with device_id: $deviceId")
+        val serverVersion = payload?.server_version ?: "unknown"
+        logger.info("WebSocket connected with device_id: $deviceId, server_version: $serverVersion")
 
         reconnectAttempt = 0
-        _connectionState.value = ConnectionState.Connected(deviceId)
+        _connectionState.value = ConnectionState.Connected(deviceId, serverVersion)
         startHeartbeat()
     }
 

@@ -7,6 +7,7 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
@@ -34,6 +35,11 @@ class ProfileScreenViewModel @Inject constructor(
                 gitCommit = interactor.getGitCommit(),
             )
             mutableState.value = initialState
+        }
+        viewModelScope.launch {
+            interactor.observeServerVersion().collect { serverVersion ->
+                mutableState.update { it.copy(serverVersion = serverVersion) }
+            }
         }
     }
 
@@ -65,5 +71,6 @@ class ProfileScreenViewModel @Inject constructor(
         fun getBuildVariant(): String
         fun getVersionName(): String
         fun getGitCommit(): String
+        fun observeServerVersion(): Flow<String>
     }
 }

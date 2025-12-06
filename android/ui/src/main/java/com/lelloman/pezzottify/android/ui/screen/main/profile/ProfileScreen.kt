@@ -174,6 +174,14 @@ private fun ProfileScreenInternal(
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
+            Spacer(modifier = Modifier.height(8.dp))
+
+            SettingsLabel(text = "Server Version")
+            Text(
+                text = currentState.serverVersion,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
 
             Spacer(modifier = Modifier.weight(1f))
 
@@ -216,6 +224,7 @@ private fun ProfileScreenPreview() {
                     buildVariant = "debug",
                     versionName = "1.0",
                     gitCommit = "abc1234",
+                    serverVersion = "0.5.0 (abc1234)",
                 )
             ),
             events = flow {},
@@ -242,6 +251,7 @@ private fun ProfileScreenPreviewDark() {
                     buildVariant = "release",
                     versionName = "1.0",
                     gitCommit = "def5678",
+                    serverVersion = "disconnected",
                 )
             ),
             events = flow {},

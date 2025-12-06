@@ -8,4 +8,5 @@ data class ProfileScreenState(
     val buildVariant: String = "",
     val versionName: String = "",
     val gitCommit: String = "",
+    val serverVersion: String = "disconnected",
 )
