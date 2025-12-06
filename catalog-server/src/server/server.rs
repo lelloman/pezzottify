@@ -397,19 +397,7 @@ async fn get_sync_events(
 ) -> Response {
     let um = user_manager.lock().unwrap();
 
-    // Check if requested sequence has been pruned
-    // Return 410 GONE if the event *after* the requested sequence has been pruned.
-    // For example, if since=5 and min_seq=10, events 6-9 have been pruned,
-    // so we can't provide a continuous stream from seq 5.
-    // However, if since=0 and min_seq=1, that's fine - we return event 1.
-    if let Ok(Some(min_seq)) = um.get_min_seq(session.user_id) {
-        if query.since > 0 && query.since + 1 < min_seq {
-            // Requested sequence is no longer available
-            return StatusCode::GONE.into_response();
-        }
-    }
-
-    // Get current sequence number
+    // Get current sequence number first (needed for pruning check)
     let current_seq = match um.get_current_seq(session.user_id) {
         Ok(seq) => seq,
         Err(err) => {
@@ -417,6 +405,31 @@ async fn get_sync_events(
             return StatusCode::INTERNAL_SERVER_ERROR.into_response();
         }
     };
+
+    // Check if requested sequence has been pruned
+    // Return 410 GONE if the event *after* the requested sequence has been pruned.
+    // For example, if since=5 and min_seq=10, events 6-9 have been pruned,
+    // so we can't provide a continuous stream from seq 5.
+    // However, if since=0 and min_seq=1, that's fine - we return event 1.
+    if query.since > 0 {
+        match um.get_min_seq(session.user_id) {
+            Ok(Some(min_seq)) if query.since + 1 < min_seq => {
+                // Requested sequence is no longer available
+                return StatusCode::GONE.into_response();
+            }
+            Ok(None) => {
+                // No events exist but client is asking for events after some sequence.
+                // Either all events were pruned or the client has invalid state.
+                // Return 410 to signal the client should reset their sync state.
+                return StatusCode::GONE.into_response();
+            }
+            Err(err) => {
+                error!("Error getting min seq: {}", err);
+                return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+            }
+            _ => {}
+        }
+    }
 
     // Get events since the requested sequence
     let events = match um.get_events_since(session.user_id, query.since) {
