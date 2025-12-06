@@ -15,6 +15,11 @@ export const useUserStore = defineStore('user', () => {
   const settings = ref({});
   const permissions = ref([]);
 
+  // Pending settings that failed to sync - key -> { value, retryCount }
+  const pendingSettings = ref({});
+  const MAX_RETRY_COUNT = 3;
+  const RETRY_DELAY_MS = 2000;
+
   const isInitialized = ref(false);
   const isInitializing = ref(false);
 
@@ -183,17 +188,74 @@ export const useUserStore = defineStore('user', () => {
     return settings.value[key];
   };
 
-  const setSetting = async (key, value) => {
+  // Check if a setting has a pending sync
+  const isSettingPending = (key) => {
+    return key in pendingSettings.value;
+  };
+
+  // Check if any settings are pending sync
+  const hasPendingSettings = computed(() => {
+    return Object.keys(pendingSettings.value).length > 0;
+  });
+
+  // Internal function to sync a single setting to the server
+  const syncSettingToServer = async (key, value, retryCount = 0) => {
     const success = await remoteStore.updateUserSettings({ [key]: value });
+
     if (success) {
-      settings.value = { ...settings.value, [key]: value };
+      // Remove from pending on success
+      const newPending = { ...pendingSettings.value };
+      delete newPending[key];
+      pendingSettings.value = newPending;
+      return true;
+    } else {
+      // Track as pending for retry
+      pendingSettings.value = {
+        ...pendingSettings.value,
+        [key]: { value, retryCount }
+      };
+
+      // Schedule retry if under max count
+      if (retryCount < MAX_RETRY_COUNT) {
+        setTimeout(() => {
+          // Only retry if still pending with same value
+          const pending = pendingSettings.value[key];
+          if (pending && pending.value === value) {
+            syncSettingToServer(key, value, retryCount + 1);
+          }
+        }, RETRY_DELAY_MS * Math.pow(2, retryCount)); // Exponential backoff
+      }
+      return false;
     }
-    return success;
+  };
+
+  // Optimistic setting update - updates UI immediately, syncs in background
+  const setSetting = async (key, value) => {
+    // Optimistically update local state immediately
+    settings.value = { ...settings.value, [key]: value };
+
+    // Sync to server in background (don't await)
+    syncSettingToServer(key, value);
+
+    // Always return true since we updated optimistically
+    return true;
+  };
+
+  // Retry all pending settings (call on reconnect or user action)
+  const retryPendingSettings = async () => {
+    const pending = { ...pendingSettings.value };
+    for (const [key, { value }] of Object.entries(pending)) {
+      await syncSettingToServer(key, value, 0);
+    }
   };
 
   // Convenience computed for direct downloads setting
   const isDirectDownloadsEnabled = computed(() => {
     return settings.value[SETTING_ENABLE_DIRECT_DOWNLOADS] === 'true';
+  });
+
+  const isDirectDownloadsPending = computed(() => {
+    return isSettingPending(SETTING_ENABLE_DIRECT_DOWNLOADS);
   });
 
   const setDirectDownloadsEnabled = async (enabled) => {
@@ -359,6 +421,7 @@ export const useUserStore = defineStore('user', () => {
     likedTrackIds.value = null;
     playlistsData.value = null;
     settings.value = {};
+    pendingSettings.value = {};
     permissions.value = [];
     isInitialized.value = false;
     isInitializing.value = false;
@@ -391,7 +454,11 @@ export const useUserStore = defineStore('user', () => {
     putPlaylistRef,
     getSetting,
     setSetting,
+    isSettingPending,
+    hasPendingSettings,
+    retryPendingSettings,
     isDirectDownloadsEnabled,
+    isDirectDownloadsPending,
     setDirectDownloadsEnabled,
 
     // Sync event apply methods

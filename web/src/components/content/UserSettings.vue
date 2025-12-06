@@ -6,7 +6,12 @@
       <h2 class="section-title">Content Downloads</h2>
       <div class="setting-item">
         <div class="setting-info">
-          <label class="setting-label" for="direct-downloads">Enable Direct Downloads</label>
+          <label class="setting-label" for="direct-downloads">
+            Enable Direct Downloads
+            <span v-if="isDirectDownloadsPending" class="sync-pending" title="Syncing...">
+              <span class="sync-dot"></span>
+            </span>
+          </label>
           <p class="setting-description">
             When enabled, missing content (albums, artists) will be automatically fetched from the server
             when you browse to them. This requires the appropriate permission from an administrator.
@@ -18,7 +23,6 @@
             id="direct-downloads"
             :checked="isDirectDownloadsEnabled"
             @change="handleDirectDownloadsToggle"
-            :disabled="isUpdating"
           />
           <span class="toggle-slider"></span>
         </label>
@@ -28,26 +32,18 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue';
+import { computed } from 'vue';
 import { useUserStore } from '@/store/user';
 
 const userStore = useUserStore();
-const isUpdating = ref(false);
 
 const isDirectDownloadsEnabled = computed(() => userStore.isDirectDownloadsEnabled);
+const isDirectDownloadsPending = computed(() => userStore.isDirectDownloadsPending);
 
 const handleDirectDownloadsToggle = async (event) => {
   const newValue = event.target.checked;
-  isUpdating.value = true;
-  try {
-    const success = await userStore.setDirectDownloadsEnabled(newValue);
-    if (!success) {
-      // Revert the checkbox if the update failed
-      event.target.checked = !newValue;
-    }
-  } finally {
-    isUpdating.value = false;
-  }
+  await userStore.setDirectDownloadsEnabled(newValue);
+  // No need to revert - optimistic update always succeeds locally
 };
 </script>
 
@@ -158,5 +154,31 @@ const handleDirectDownloadsToggle = async (event) => {
 .toggle input:disabled + .toggle-slider {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+/* Sync pending indicator */
+.sync-pending {
+  display: inline-flex;
+  align-items: center;
+  margin-left: var(--spacing-2);
+}
+
+.sync-dot {
+  width: 8px;
+  height: 8px;
+  background-color: var(--spotify-green);
+  border-radius: 50%;
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.5;
+    transform: scale(0.8);
+  }
 }
 </style>
