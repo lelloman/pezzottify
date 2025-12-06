@@ -56,6 +56,14 @@ cargo test <test_name>
 **Additional binaries:**
 - `cli-auth`: Authentication CLI tool
 
+**Docker build:**
+```bash
+./build-docker.sh catalog-server        # Build and start with correct version info
+./build-docker.sh -d catalog-server     # Detached mode
+```
+
+The wrapper script detects git hash and dirty state on the host and passes them to Docker. This is necessary because Docker builds don't have access to the full git repo.
+
 ### Web Frontend (Vue 3)
 
 ```bash

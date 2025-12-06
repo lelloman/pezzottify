@@ -10,6 +10,7 @@ A high-performance Rust backend server for the Pezzottify music streaming platfo
 - [Installation](#installation)
 - [Catalog Directory Structure](#catalog-directory-structure)
 - [Building](#building)
+- [Docker Build](#docker-build)
 - [Running the Server](#running-the-server)
 - [Command-line Arguments](#command-line-arguments)
 - [Build Features](#build-features)
@@ -139,6 +140,40 @@ cargo build --features fast
 # Add artificial slowdown for testing (useful for frontend development)
 cargo build --features slowdown
 ```
+
+## Docker Build
+
+The Docker image includes both the catalog server and web frontend. A wrapper script handles git version detection since Docker builds don't have access to the full git repository.
+
+### Using the Build Script (Recommended)
+
+```bash
+# From repository root
+./build-docker.sh catalog-server        # Build and start
+./build-docker.sh -d catalog-server     # Detached mode
+```
+
+The script:
+1. Detects git commit hash on the host
+2. Detects dirty state (uncommitted changes)
+3. Passes these as build args to Docker
+4. Runs `docker-compose up --build`
+
+### Manual Build
+
+If you need to build manually:
+
+```bash
+GIT_HASH=$(git rev-parse --short HEAD) \
+GIT_DIRTY=$(git status --porcelain | grep -q . && echo 1 || echo 0) \
+docker-compose up --build catalog-server
+```
+
+### Version in Docker Image
+
+The server version will show:
+- `v0.5.0-abc1234` for clean builds (commit hash)
+- `v0.5.0-abc1234-dirty` for builds with uncommitted changes
 
 ## Running the Server
 
@@ -549,6 +584,8 @@ The catalog server includes a full monitoring stack with Prometheus metrics, Gra
 
 3. **Start the stack:**
    ```bash
+   ./build-docker.sh -d   # Builds with correct version info
+   # Or for monitoring services only (no rebuild):
    docker-compose up -d
    ```
 
@@ -659,14 +696,14 @@ The following alerts are configured in `monitoring/alerts.yml`:
 ### Running Individual Services
 
 ```bash
-# Start only the catalog server (no monitoring)
-docker-compose up -d catalog-server
+# Build and start only the catalog server (no monitoring)
+./build-docker.sh -d catalog-server
 
-# Start server with monitoring (no alerting)
-docker-compose up -d catalog-server prometheus grafana
+# Build server and start with monitoring (no alerting)
+./build-docker.sh -d catalog-server && docker-compose up -d prometheus grafana
 
-# Start the full stack including alerts
-docker-compose up -d
+# Build and start the full stack including alerts
+./build-docker.sh -d
 ```
 
 ### Viewing Metrics Directly
