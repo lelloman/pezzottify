@@ -1,8 +1,9 @@
 use anyhow::{Context, Result};
 use clap::Parser;
 use std::sync::Arc;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use std::{fmt::Debug, path::PathBuf};
-use tracing::{info, level_filters::LevelFilter};
+use tracing::{error, info, level_filters::LevelFilter};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
 
 mod catalog_store;
@@ -81,6 +82,14 @@ struct CliArgs {
     /// Timeout in seconds for downloader requests.
     #[clap(long, default_value_t = 300)]
     pub downloader_timeout_sec: u64,
+
+    /// Number of days to retain sync events before pruning. Set to 0 to disable pruning.
+    #[clap(long, default_value_t = 30)]
+    pub event_retention_days: u64,
+
+    /// Interval in hours between pruning runs. Only used if event_retention_days > 0.
+    #[clap(long, default_value_t = 24)]
+    pub prune_interval_hours: u64,
 }
 
 #[tokio::main]
@@ -124,6 +133,48 @@ async fn main() -> Result<()> {
     );
 
     let user_store = Arc::new(SqliteUserStore::new(&cli_args.user_store_file_path)?);
+
+    // Spawn background task for event pruning if enabled
+    if cli_args.event_retention_days > 0 {
+        let retention_days = cli_args.event_retention_days;
+        let interval_hours = cli_args.prune_interval_hours;
+        let pruning_user_store = user_store.clone();
+
+        info!(
+            "Event pruning enabled: retaining {} days, pruning every {} hours",
+            retention_days, interval_hours
+        );
+
+        tokio::spawn(async move {
+            let interval = Duration::from_secs(interval_hours * 60 * 60);
+            let mut ticker = tokio::time::interval(interval);
+
+            // Skip the first immediate tick, wait for the first interval
+            ticker.tick().await;
+
+            loop {
+                ticker.tick().await;
+
+                let cutoff = SystemTime::now()
+                    .duration_since(UNIX_EPOCH)
+                    .unwrap()
+                    .as_secs() as i64
+                    - (retention_days as i64 * 24 * 60 * 60);
+
+                match pruning_user_store.prune_events_older_than(cutoff) {
+                    Ok(count) => {
+                        if count > 0 {
+                            info!("Pruned {} old sync events", count);
+                        }
+                    }
+                    Err(e) => {
+                        error!("Failed to prune sync events: {}", e);
+                    }
+                }
+            }
+        });
+    }
+
     info!("Indexing content for search...");
 
     #[cfg(not(feature = "no_search"))]

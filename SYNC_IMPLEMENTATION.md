@@ -1150,7 +1150,7 @@ const fetchSyncEvents = async (since) => {
 
 ### 6.1 Sequence Gap Detection
 
-#### [ ] 6.1.1 Add gap detection to web catchUp
+#### [x] 6.1.1 Add gap detection to web catchUp
 
 **Description:** Detect gaps and trigger fullSync.
 
@@ -1158,7 +1158,7 @@ const fetchSyncEvents = async (since) => {
 - File: `web/src/store/sync.js`
 - In `catchUp()`, check if first event seq > cursor + 1
 
-#### [ ] 6.1.2 Add gap detection to web WebSocket handler
+#### [x] 6.1.2 Add gap detection to web WebSocket handler
 
 **Description:** Detect gaps in real-time events.
 
@@ -1166,7 +1166,7 @@ const fetchSyncEvents = async (since) => {
 - File: `web/src/store/sync.js`
 - In message handler, check if event.seq > cursor + 1
 
-#### [ ] 6.1.3 Add gap detection to Android SyncManager
+#### [x] 6.1.3 Add gap detection to Android SyncManager
 
 **Description:** Detect gaps and trigger fullSync.
 
@@ -1179,7 +1179,7 @@ const fetchSyncEvents = async (since) => {
 
 ### 7.1 Background Pruning
 
-#### [ ] 7.1.1 Add CLI args for pruning configuration
+#### [x] 7.1.1 Add CLI args for pruning configuration
 
 **Description:** Add `--event-retention-days` and `--prune-interval-hours` args.
 
@@ -1187,7 +1187,7 @@ const fetchSyncEvents = async (since) => {
 - File: `catalog-server/src/main.rs`
 - Add to CLI argument parsing
 
-#### [ ] 7.1.2 Implement background pruning task
+#### [x] 7.1.2 Implement background pruning task
 
 **Description:** Spawn async task that prunes periodically.
 
