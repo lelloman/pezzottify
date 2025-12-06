@@ -4,7 +4,8 @@
 
 mod common;
 
-use common::{TestClient, TestServer, TRACK_1_ID, TRACK_2_ID};
+use common::{TestClient, TestServer, TEST_USER, TRACK_1_ID, TRACK_2_ID};
+use pezzottify_catalog_server::user::{UserEventStore, UserStore};
 use reqwest::StatusCode;
 use serde_json::json;
 
@@ -345,4 +346,85 @@ async fn test_get_sync_events_playlist_tracks_updated() {
     let events = body["events"].as_array().unwrap();
     assert_eq!(events.len(), 2);
     assert_eq!(events[1]["type"], "playlist_tracks_updated");
+}
+
+#[tokio::test]
+async fn test_get_sync_events_returns_410_for_pruned_sequence() {
+    let server = TestServer::spawn().await;
+    let client = TestClient::authenticated(server.base_url.clone()).await;
+
+    // Create some events by liking content
+    client.add_liked_content("track", "track-001").await;
+    client.add_liked_content("track", "track-002").await;
+    client.add_liked_content("track", "track-003").await;
+
+    // Get current seq to verify we have events
+    let response = client.get_sync_state().await;
+    let body: serde_json::Value = response.json().await.unwrap();
+    let current_seq = body["seq"].as_i64().unwrap();
+    assert!(current_seq >= 3, "Should have at least 3 events");
+
+    // Get user_id for the test user
+    let user_id = server
+        .user_store
+        .get_user_id(TEST_USER)
+        .unwrap()
+        .expect("Test user should exist");
+
+    // Prune all events by using a future timestamp
+    let future_timestamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs() as i64
+        + 100;
+    let deleted = server
+        .user_store
+        .prune_events_older_than(future_timestamp)
+        .unwrap();
+    assert!(deleted >= 3, "Should have deleted at least 3 events");
+
+    // Verify events are gone
+    let events = server.user_store.get_events_since(user_id, 0).unwrap();
+    assert!(events.is_empty(), "All events should be pruned");
+
+    // Now try to get events from a sequence that was pruned
+    // Requesting since=1 when all events (including seq 2, 3, etc.) are gone should return 410
+    let response = client.get_sync_events(1).await;
+    assert_eq!(
+        response.status(),
+        StatusCode::GONE,
+        "Should return 410 GONE when requesting pruned sequence"
+    );
+}
+
+#[tokio::test]
+async fn test_get_sync_events_returns_ok_for_since_zero_when_pruned() {
+    let server = TestServer::spawn().await;
+    let client = TestClient::authenticated(server.base_url.clone()).await;
+
+    // Create an event
+    client.add_liked_content("track", "track-001").await;
+
+    // Prune all events
+    let future_timestamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs() as i64
+        + 100;
+    server
+        .user_store
+        .prune_events_older_than(future_timestamp)
+        .unwrap();
+
+    // Requesting since=0 should still return OK (even if no events, since=0 is always valid)
+    let response = client.get_sync_events(0).await;
+    assert_eq!(
+        response.status(),
+        StatusCode::OK,
+        "Should return OK for since=0 even when events are pruned"
+    );
+
+    let body: serde_json::Value = response.json().await.unwrap();
+    let events = body["events"].as_array().unwrap();
+    assert!(events.is_empty(), "Events should be empty after pruning");
 }

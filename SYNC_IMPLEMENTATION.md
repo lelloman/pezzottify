@@ -1224,19 +1224,19 @@ tokio::spawn(async move {
 
 ### 8.1 Server Tests
 
-#### [ ] 8.1.1 Integration test: sync state endpoint
+#### [x] 8.1.1 Integration test: sync state endpoint
 
 **Description:** Test `GET /v1/sync/state` returns correct data.
 
-#### [ ] 8.1.2 Integration test: sync events endpoint
+#### [x] 8.1.2 Integration test: sync events endpoint
 
 **Description:** Test `GET /v1/sync/events` returns events in order.
 
-#### [ ] 8.1.3 Integration test: 410 for pruned sequences
+#### [x] 8.1.3 Integration test: 410 for pruned sequences
 
 **Description:** Test that pruned sequences return 410.
 
-#### [ ] 8.1.4 Integration test: event generation
+#### [x] 8.1.4 Integration test: event generation
 
 **Description:** Test that actions generate correct events.
 

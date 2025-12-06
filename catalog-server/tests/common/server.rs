@@ -8,7 +8,7 @@ use super::fixtures::{create_test_catalog, create_test_db_with_users};
 use pezzottify_catalog_server::catalog_store::SqliteCatalogStore;
 use pezzottify_catalog_server::search::{NoOpSearchVault, SearchVault};
 use pezzottify_catalog_server::server::{server::make_app, RequestsLoggingLevel, ServerConfig};
-use pezzottify_catalog_server::user::{FullUserStore, SqliteUserStore};
+use pezzottify_catalog_server::user::{FullUserStore, SqliteUserStore, UserStore};
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
@@ -24,6 +24,9 @@ pub struct TestServer {
 
     /// The port the server is listening on
     pub port: u16,
+
+    /// User store for direct database access in tests
+    pub user_store: Arc<dyn FullUserStore>,
 
     // Private fields - keep resources alive until drop
     _temp_catalog_dir: TempDir,
@@ -65,6 +68,7 @@ impl TestServer {
         // Create user store
         let user_store: Arc<dyn FullUserStore> =
             Arc::new(SqliteUserStore::new(&db_path).expect("Failed to open user store"));
+        let user_store_for_test = user_store.clone();
 
         // Create search vault (use NoOp for speed in tests)
         let search_vault: Box<dyn SearchVault> = Box::new(NoOpSearchVault {});
@@ -112,6 +116,7 @@ impl TestServer {
         let server = Self {
             base_url: base_url.clone(),
             port,
+            user_store: user_store_for_test,
             _temp_catalog_dir: temp_catalog_dir,
             _temp_db_dir: temp_db_dir,
             _shutdown_tx: Some(shutdown_tx),
