@@ -26,6 +26,6 @@ defineProps({
 .subtitle {
   margin: 0;
   font-size: 14px;
-  color: #666;
+  color: inherit;
 }
 </style>

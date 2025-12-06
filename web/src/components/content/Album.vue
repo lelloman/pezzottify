@@ -20,7 +20,7 @@
         <div v-for="(trackId, trackIndex) in disc.tracks" :key="trackId" class="track"
           @contextmenu.prevent="openTrackContextMenu($event, trackId, trackIndex)">
           <LoadTrackListItem :contextId="albumId" :trackId="trackId" :trackNumber="trackIndex + 1"
-            @track-clicked="handleClickOnTrack(trackId)" :isCurrentlyPlaying="trackIndex == currentTrackIndex" />
+            @track-clicked="handleClickOnTrack(trackId)" :isCurrentlyPlaying="getFlatTrackIndex(discIndex, trackIndex) == currentTrackIndex" />
         </div>
       </div>
     </div>
@@ -69,6 +69,16 @@ const openTrackContextMenu = (event, trackId, index) => {
   trackContextMenuRef.value.openMenu(event, trackId, index);
 }
 
+// Compute flat track index across all discs
+const getFlatTrackIndex = (discIndex, trackIndex) => {
+  if (!album.value || !album.value.discs) return -1;
+  let flatIndex = trackIndex;
+  for (let i = 0; i < discIndex; i++) {
+    flatIndex += album.value.discs[i].tracks.length;
+  }
+  return flatIndex;
+}
+
 watch(() => player.currentTrackId,
   (newTrackId) => {
     console.log("CurrentTrackId: " + newTrackId);
@@ -79,8 +89,9 @@ watch(() => player.currentTrackId,
 
 watch([() => player.currentTrackIndex, () => player.currentPlaylist],
   ([newTrackIndex, newPlaylist]) => {
-    console.log("CurrentTrackIndex: ", newTrackIndex, "CurrentPlaylist: ", newPlaylist.context);
-    if (newPlaylist && newPlaylist.context.id === props.albumId && Number.isInteger(newTrackIndex)) {
+    console.log("Album.vue watcher - TrackIndex:", newTrackIndex, "Playlist:", newPlaylist, "AlbumId:", props.albumId);
+    if (newPlaylist && newPlaylist.context && newPlaylist.context.id === props.albumId && Number.isInteger(newTrackIndex)) {
+      console.log("Album.vue - Setting currentTrackIndex to:", newTrackIndex);
       currentTrackIndex.value = newTrackIndex;
     } else {
       currentTrackIndex.value = null;

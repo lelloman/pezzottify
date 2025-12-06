@@ -129,8 +129,9 @@ const handleTrackSelection = (track) => {
 
 watch([() => player.currentTrackIndex, () => player.currentPlaylist],
   ([newTrackIndex, newPlaylist]) => {
-    console.log("CurrentTrackIndex: ", newTrackIndex, "CurrentPlaylist: ", newPlaylist.context);
-    if (newPlaylist && newPlaylist.context.id === props.playlistId && newPlaylist.context.edited === false && Number.isInteger(newTrackIndex)) {
+    console.log("UserPlaylist.vue watcher - TrackIndex:", newTrackIndex, "Playlist:", newPlaylist, "PlaylistId:", props.playlistId);
+    if (newPlaylist && newPlaylist.context && newPlaylist.context.id === props.playlistId && newPlaylist.context.edited === false && Number.isInteger(newTrackIndex)) {
+      console.log("UserPlaylist.vue - Setting currentTrackIndex to:", newTrackIndex);
       currentTrackIndex.value = newTrackIndex;
     } else {
       currentTrackIndex.value = null;

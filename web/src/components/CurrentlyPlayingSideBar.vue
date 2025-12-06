@@ -14,7 +14,7 @@
         <template v-slot:item="{ record, index, dataKey }">
           <div :class="{ currentlyPlayingRow: index == currentIndex, trackRow: true }"
             @contextmenu.prevent="openContextMenu($event, record.id, index)">
-            <LoadTrackListItem :trackId="record.id" :trackNumber="index + 1" @track-clicked="handleClick(index)" />
+            <LoadTrackListItem :trackId="record.id" :trackNumber="index + 1" @track-clicked="handleClick(index)" :isCurrentlyPlaying="index == currentIndex" />
           </div>
         </template>
       </VirtualList>

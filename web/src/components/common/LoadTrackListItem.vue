@@ -133,6 +133,8 @@ defineExpose({
 
 .playingTrack {
   color: var(--accent-color);
+  background-color: rgba(29, 185, 84, 0.2);
+  border-left: 4px solid var(--accent-color);
 }
 
 .trackIndexSpan {

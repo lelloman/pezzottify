@@ -50,7 +50,7 @@ const handleClick = () => {
   cursor: pointer;
   white-space: nowrap;
   width: 100%;
-  color: var(--text-base);
+  color: inherit;
 }
 
 .track-name:hover {

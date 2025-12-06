@@ -25,12 +25,11 @@ function handleClick() {
 
 <style scoped>
 .artistSpan {
-  color: var(--text-subdued);
+  color: inherit;
 }
 
 .artistSpan:hover {
   text-decoration: underline;
   cursor: pointer;
-  color: var(--text-base);
 }
 </style>
