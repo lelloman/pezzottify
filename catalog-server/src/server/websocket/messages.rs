@@ -57,10 +57,11 @@ pub mod system {
 
     /// Sent immediately after connection is established.
     ///
-    /// Confirms the WebSocket connection is ready and provides the device ID.
+    /// Confirms the WebSocket connection is ready and provides the device ID and server version.
     #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
     pub struct Connected {
         pub device_id: usize,
+        pub server_version: String,
     }
 
     /// Heartbeat request (client -> server).
@@ -172,12 +173,16 @@ mod tests {
 
     #[test]
     fn system_connected_serializes_correctly() {
-        let connected = system::Connected { device_id: 42 };
+        let connected = system::Connected {
+            device_id: 42,
+            server_version: "1.2.3".to_string(),
+        };
         let msg = ServerMessage::new(msg_types::CONNECTED, &connected);
         let json = serde_json::to_string(&msg).unwrap();
 
         assert!(json.contains("\"type\":\"connected\""));
         assert!(json.contains("\"device_id\":42"));
+        assert!(json.contains("\"server_version\":\"1.2.3\""));
     }
 
     #[test]

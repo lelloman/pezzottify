@@ -92,7 +92,10 @@ async fn handle_socket(
     // Send connected message
     let connected_msg = ServerMessage::new(
         msg_types::CONNECTED,
-        system::Connected { device_id },
+        system::Connected {
+            device_id,
+            server_version: env!("CARGO_PKG_VERSION").to_string(),
+        },
     );
 
     // Spawn task to forward outgoing messages to WebSocket

@@ -32,7 +32,10 @@ import { useRouter, useRoute } from 'vue-router';
 import CrossIcon from './icons/CrossIcon.vue';
 import SettingsIcon from './icons/SettingsIcon.vue';
 import LogoutIcon from './icons/LogoutIcon.vue';
-import { wsConnectionStatus } from '../services/websocket';
+import { wsConnectionStatus, wsServerVersion } from '../services/websocket';
+
+// App version injected by Vite at build time
+const appVersion = __APP_VERSION__;
 
 const emit = defineEmits(['search']);
 const inputValue = ref('');
@@ -85,9 +88,12 @@ const connectionStatusClass = computed(() => {
 
 const connectionTitle = computed(() => {
   switch (wsConnectionStatus.value) {
-    case 'connected': return 'Connected to server';
-    case 'connecting': return 'Connecting...';
-    default: return 'Disconnected from server';
+    case 'connected': {
+      const serverVer = wsServerVersion.value || 'unknown';
+      return `Connected\nWeb: v${appVersion}\nServer: v${serverVer}`;
+    }
+    case 'connecting': return `Connecting...\nWeb: v${appVersion}`;
+    default: return `Disconnected\nWeb: v${appVersion}`;
   }
 });
 

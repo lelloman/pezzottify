@@ -12,6 +12,7 @@ const socket = ref(null);
 const connected = ref(false);
 const connecting = ref(false);
 const deviceId = ref(null);
+const serverVersion = ref(null);
 
 // Message handlers by type prefix
 const handlers = new Map();
@@ -87,6 +88,7 @@ export function connect() {
     connected.value = false;
     connecting.value = false;
     deviceId.value = null;
+    serverVersion.value = null;
     socket.value = null;
 
     // Auto-reconnect after delay (unless intentional close)
@@ -123,6 +125,7 @@ export function disconnect() {
     connected.value = false;
     connecting.value = false;
     deviceId.value = null;
+    serverVersion.value = null;
   }
 }
 
@@ -159,7 +162,8 @@ function handleMessage(msg) {
     connected.value = true;
     connecting.value = false;
     deviceId.value = payload.device_id;
-    console.log('[WS] Connected as device:', payload.device_id);
+    serverVersion.value = payload.server_version;
+    console.log('[WS] Connected as device:', payload.device_id, 'server version:', payload.server_version);
     return;
   }
 
@@ -190,6 +194,7 @@ function handleMessage(msg) {
 // Export reactive state as computed refs
 export const wsConnected = computed(() => connected.value);
 export const wsDeviceId = computed(() => deviceId.value);
+export const wsServerVersion = computed(() => serverVersion.value);
 
 /**
  * Connection status for UI indicators.
@@ -207,6 +212,7 @@ export function getConnectionState() {
     connected: connected.value,
     connecting: connecting.value,
     deviceId: deviceId.value,
+    serverVersion: serverVersion.value,
     socketState: socket.value?.readyState,
     handlersCount: handlers.size,
   };
