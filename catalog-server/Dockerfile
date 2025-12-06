@@ -15,24 +15,18 @@ RUN npm run build
 # ------------------------------------------
 FROM rust:1.91.1 AS rust-builder
 
+# Build args for version info (detected on host, passed by build script)
+ARG GIT_HASH=unknown
+ARG GIT_DIRTY=0
+
 WORKDIR /app
 
-# Copy git info for version and dirty detection
-COPY .git/HEAD .git/HEAD
-COPY .git/refs .git/refs
-COPY .git/index .git/index
-COPY .git/objects .git/objects
-
-# Copy source and detect dirty state
 COPY catalog-server/ catalog-server/
-RUN GIT_DIRTY=$(git -C /app status --porcelain catalog-server/ 2>/dev/null | grep -q . && echo 1 || echo 0) && \
-    echo "GIT_DIRTY=$GIT_DIRTY" >> /tmp/build-env && \
-    echo "Detected GIT_DIRTY=$GIT_DIRTY"
 
 WORKDIR /app/catalog-server
 
-# Build the release binary with dirty detection
-RUN . /tmp/build-env && GIT_DIRTY="$GIT_DIRTY" cargo build --release
+# Build with version info from build args
+RUN GIT_HASH="$GIT_HASH" GIT_DIRTY="$GIT_DIRTY" cargo build --release
 
 
 # ------------------------------------------
@@ -67,7 +61,7 @@ CMD ["catalog-server", "/data/db/catalog.db", "/data/db/user.db", "--media-path"
 
 # NOTE: Build context must be the repository root (not catalog-server/)
 # Build with (from repo root):
-# docker build -t catalog-server -f catalog-server/Dockerfile .
-
-# Run with:
-# docker run -d --rm --name pezzottify-catalog-server -p 3001:3001 -v /path/to/catalog:/data/catalog -v /path/to/db:/data/db -v /path/to/media:/data/media catalog-server
+#   ./build-docker.sh catalog-server
+# Or manually:
+#   GIT_HASH=$(git rev-parse --short HEAD) GIT_DIRTY=$(git status --porcelain | grep -q . && echo 1 || echo 0) \
+#   docker-compose up --build catalog-server
