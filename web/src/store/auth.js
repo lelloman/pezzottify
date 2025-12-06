@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia';
 import axios from 'axios';
 import * as ws from '../services/websocket';
+import { useSyncStore } from './sync';
 
 const DEVICE_UUID_KEY = 'pezzottify_device_uuid';
 
@@ -62,6 +63,8 @@ export const useAuthStore = defineStore('auth', {
         this.user = response.data.user || null;
 
         // Connect to WebSocket after successful login
+        const syncStore = useSyncStore();
+        ws.registerHandler('sync', syncStore.handleSyncMessage);
         ws.connect();
       } catch (error) {
         console.error('Login failed', error);
@@ -69,7 +72,8 @@ export const useAuthStore = defineStore('auth', {
       }
     },
     async logout() {
-      // Disconnect WebSocket before clearing auth
+      // Unregister sync handler and disconnect WebSocket before clearing auth
+      ws.unregisterHandler('sync');
       ws.disconnect();
 
       // Cleanup sync state and reset user store
@@ -95,6 +99,8 @@ export const useAuthStore = defineStore('auth', {
      */
     initialize() {
       if (this.isAuthenticated) {
+        const syncStore = useSyncStore();
+        ws.registerHandler('sync', syncStore.handleSyncMessage);
         ws.connect();
       }
     }
