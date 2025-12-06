@@ -1,5 +1,8 @@
 package com.lelloman.pezzottify.android.domain.settings
 
+import com.lelloman.pezzottify.android.domain.sync.UserSetting
+import com.lelloman.pezzottify.android.domain.usercontent.SyncStatus
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
 
 interface UserSettingsStore {
@@ -25,8 +28,26 @@ interface UserSettingsStore {
     /**
      * Set whether direct downloads are enabled.
      * This is called when receiving a sync event from the server, not directly by the user.
+     * Uses Synced status since it comes from the server.
      */
     suspend fun setDirectDownloadsEnabled(enabled: Boolean)
+
+    /**
+     * Set a synced setting with specified sync status.
+     * Used for local changes that need to be synced (PendingSync) or
+     * when applying server state (Synced).
+     */
+    suspend fun setSyncedSetting(setting: UserSetting, syncStatus: SyncStatus)
+
+    /**
+     * Get all settings that are pending sync with the server.
+     */
+    fun getPendingSyncSettings(): Flow<List<SyncedUserSetting>>
+
+    /**
+     * Update the sync status of a setting.
+     */
+    suspend fun updateSyncStatus(settingKey: String, status: SyncStatus)
 
     /**
      * Clear all synced user settings.

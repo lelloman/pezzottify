@@ -4,6 +4,7 @@ import com.lelloman.pezzottify.android.domain.auth.AuthStore
 import com.lelloman.pezzottify.android.domain.listening.ListeningEventSynchronizer
 import com.lelloman.pezzottify.android.domain.listening.ListeningTracker
 import com.lelloman.pezzottify.android.domain.player.PezzottifyPlayer
+import com.lelloman.pezzottify.android.domain.settings.UserSettingsSynchronizer
 import com.lelloman.pezzottify.android.domain.sync.StaticsSynchronizer
 import com.lelloman.pezzottify.android.domain.sync.SyncWebSocketHandler
 import com.lelloman.pezzottify.android.domain.usercontent.UserContentSynchronizer
@@ -33,6 +34,10 @@ abstract class AppInitializersModule {
     @Binds
     @IntoSet
     internal abstract fun bindsUserContentSynchronizer(synchronizer: UserContentSynchronizer): AppInitializer
+
+    @Binds
+    @IntoSet
+    internal abstract fun bindsUserSettingsSynchronizer(synchronizer: UserSettingsSynchronizer): AppInitializer
 
     @Binds
     @IntoSet

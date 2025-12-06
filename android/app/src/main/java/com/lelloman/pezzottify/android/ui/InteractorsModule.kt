@@ -216,11 +216,10 @@ class InteractorsModule {
             userSettingsStore.setInMemoryCacheEnabled(enabled)
         }
 
-        override suspend fun setDirectDownloadsEnabled(enabled: Boolean): Boolean =
-            when (updateDirectDownloadsSetting(enabled)) {
-                UpdateDirectDownloadsSetting.Result.Success -> true
-                UpdateDirectDownloadsSetting.Result.Error -> false
-            }
+        override suspend fun setDirectDownloadsEnabled(enabled: Boolean): Boolean {
+            updateDirectDownloadsSetting(enabled)
+            return true // Setting is saved locally and synced in background
+        }
     }
 
     @Provides

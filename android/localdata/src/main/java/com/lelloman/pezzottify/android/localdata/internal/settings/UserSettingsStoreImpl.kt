@@ -4,13 +4,18 @@ import android.content.Context
 import com.lelloman.pezzottify.android.domain.settings.AppFontFamily
 import com.lelloman.pezzottify.android.domain.settings.ColorPalette
 import com.lelloman.pezzottify.android.domain.settings.PlayBehavior
+import com.lelloman.pezzottify.android.domain.settings.SyncedUserSetting
 import com.lelloman.pezzottify.android.domain.settings.ThemeMode
 import com.lelloman.pezzottify.android.domain.settings.UserSettingsStore
+import com.lelloman.pezzottify.android.domain.sync.UserSetting
+import com.lelloman.pezzottify.android.domain.usercontent.SyncStatus
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 
 internal class UserSettingsStoreImpl(
@@ -78,6 +83,24 @@ internal class UserSettingsStoreImpl(
     }
     override val directDownloadsEnabled: StateFlow<Boolean> = mutableDirectDownloadsEnabled.asStateFlow()
 
+    // Track sync status for synced settings (key -> SyncedUserSetting)
+    private val mutableSyncedSettings by lazy {
+        val settings = mutableMapOf<String, SyncedUserSetting>()
+        // Load existing synced settings with their sync status
+        val directDownloadsStatus = prefs.getString(KEY_DIRECT_DOWNLOADS_SYNC_STATUS, null)
+            ?.let { parseSyncStatus(it) }
+        if (directDownloadsStatus != null && directDownloadsStatus != SyncStatus.Synced) {
+            val enabled = prefs.getBoolean(KEY_DIRECT_DOWNLOADS_ENABLED, DEFAULT_DIRECT_DOWNLOADS_ENABLED)
+            val modifiedAt = prefs.getLong(KEY_DIRECT_DOWNLOADS_MODIFIED_AT, System.currentTimeMillis())
+            settings[KEY_SETTING_DIRECT_DOWNLOADS] = SyncedUserSetting(
+                setting = UserSetting.DirectDownloadsEnabled(enabled),
+                modifiedAt = modifiedAt,
+                syncStatus = directDownloadsStatus,
+            )
+        }
+        MutableStateFlow(settings.toMap())
+    }
+
     override suspend fun setPlayBehavior(playBehavior: PlayBehavior) {
         withContext(dispatcher) {
             mutablePlayBehavior.value = playBehavior
@@ -116,14 +139,85 @@ internal class UserSettingsStoreImpl(
     override suspend fun setDirectDownloadsEnabled(enabled: Boolean) {
         withContext(dispatcher) {
             mutableDirectDownloadsEnabled.value = enabled
-            prefs.edit().putBoolean(KEY_DIRECT_DOWNLOADS_ENABLED, enabled).commit()
+            prefs.edit()
+                .putBoolean(KEY_DIRECT_DOWNLOADS_ENABLED, enabled)
+                .putString(KEY_DIRECT_DOWNLOADS_SYNC_STATUS, SyncStatus.Synced.name)
+                .remove(KEY_DIRECT_DOWNLOADS_MODIFIED_AT)
+                .commit()
+            // Remove from pending sync since it came from server
+            val updatedSettings = mutableSyncedSettings.value.toMutableMap()
+            updatedSettings.remove(KEY_SETTING_DIRECT_DOWNLOADS)
+            mutableSyncedSettings.value = updatedSettings
+        }
+    }
+
+    override suspend fun setSyncedSetting(setting: UserSetting, syncStatus: SyncStatus) {
+        withContext(dispatcher) {
+            when (setting) {
+                is UserSetting.DirectDownloadsEnabled -> {
+                    val enabled = setting.value
+                    val modifiedAt = System.currentTimeMillis()
+                    mutableDirectDownloadsEnabled.value = enabled
+                    prefs.edit()
+                        .putBoolean(KEY_DIRECT_DOWNLOADS_ENABLED, enabled)
+                        .putString(KEY_DIRECT_DOWNLOADS_SYNC_STATUS, syncStatus.name)
+                        .putLong(KEY_DIRECT_DOWNLOADS_MODIFIED_AT, modifiedAt)
+                        .commit()
+
+                    val updatedSettings = mutableSyncedSettings.value.toMutableMap()
+                    if (syncStatus == SyncStatus.Synced) {
+                        updatedSettings.remove(KEY_SETTING_DIRECT_DOWNLOADS)
+                    } else {
+                        updatedSettings[KEY_SETTING_DIRECT_DOWNLOADS] = SyncedUserSetting(
+                            setting = setting,
+                            modifiedAt = modifiedAt,
+                            syncStatus = syncStatus,
+                        )
+                    }
+                    mutableSyncedSettings.value = updatedSettings
+                }
+            }
+        }
+    }
+
+    override fun getPendingSyncSettings(): Flow<List<SyncedUserSetting>> {
+        return mutableSyncedSettings.map { settings ->
+            settings.values.filter { it.syncStatus == SyncStatus.PendingSync }
+        }
+    }
+
+    override suspend fun updateSyncStatus(settingKey: String, status: SyncStatus) {
+        withContext(dispatcher) {
+            when (settingKey) {
+                KEY_SETTING_DIRECT_DOWNLOADS -> {
+                    prefs.edit()
+                        .putString(KEY_DIRECT_DOWNLOADS_SYNC_STATUS, status.name)
+                        .commit()
+
+                    val updatedSettings = mutableSyncedSettings.value.toMutableMap()
+                    val existing = updatedSettings[settingKey]
+                    if (existing != null) {
+                        if (status == SyncStatus.Synced) {
+                            updatedSettings.remove(settingKey)
+                        } else {
+                            updatedSettings[settingKey] = existing.copy(syncStatus = status)
+                        }
+                        mutableSyncedSettings.value = updatedSettings
+                    }
+                }
+            }
         }
     }
 
     override suspend fun clearSyncedSettings() {
         withContext(dispatcher) {
             mutableDirectDownloadsEnabled.value = DEFAULT_DIRECT_DOWNLOADS_ENABLED
-            prefs.edit().remove(KEY_DIRECT_DOWNLOADS_ENABLED).commit()
+            prefs.edit()
+                .remove(KEY_DIRECT_DOWNLOADS_ENABLED)
+                .remove(KEY_DIRECT_DOWNLOADS_SYNC_STATUS)
+                .remove(KEY_DIRECT_DOWNLOADS_MODIFIED_AT)
+                .commit()
+            mutableSyncedSettings.value = emptyMap()
         }
     }
 
@@ -151,6 +245,12 @@ internal class UserSettingsStoreImpl(
         null
     }
 
+    private fun parseSyncStatus(value: String): SyncStatus? = try {
+        SyncStatus.valueOf(value)
+    } catch (e: IllegalArgumentException) {
+        null
+    }
+
     internal companion object {
         const val SHARED_PREF_FILE_NAME = "UserSettingsStore"
         const val KEY_PLAY_BEHAVIOR = "PlayBehavior"
@@ -160,7 +260,11 @@ internal class UserSettingsStoreImpl(
         const val KEY_IN_MEMORY_CACHE_ENABLED = "InMemoryCacheEnabled"
         const val DEFAULT_IN_MEMORY_CACHE_ENABLED = true
         const val KEY_DIRECT_DOWNLOADS_ENABLED = "DirectDownloadsEnabled"
+        const val KEY_DIRECT_DOWNLOADS_SYNC_STATUS = "DirectDownloadsSyncStatus"
+        const val KEY_DIRECT_DOWNLOADS_MODIFIED_AT = "DirectDownloadsModifiedAt"
         const val DEFAULT_DIRECT_DOWNLOADS_ENABLED = false
+        // Setting key for synced settings map
+        const val KEY_SETTING_DIRECT_DOWNLOADS = "enable_direct_downloads"
         // Legacy value for migration - AmoledBlack was removed and converted to Amoled theme mode
         const val LEGACY_AMOLED_BLACK_PALETTE = "AmoledBlack"
     }
