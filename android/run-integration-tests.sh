@@ -170,15 +170,29 @@ EOSQL
 
 echo "✅ Catalog database created with test data"
 
-# Build Docker image if it doesn't exist or is outdated
+# Build Docker image - always rebuild to ensure we have the latest code
+# This is important because schema changes will cause "database version too new" errors
 echo "🐳 Building Docker image..."
 cd "$PROJECT_ROOT"
-if ! docker image inspect "$DOCKER_IMAGE" &> /dev/null; then
-    echo "Building $DOCKER_IMAGE..."
-    docker build -t "$DOCKER_IMAGE" -f catalog-server/Dockerfile .
+
+# Get the latest commit hash of catalog-server
+LATEST_COMMIT=$(git log -1 --format=%H -- catalog-server/)
+
+# Check if image exists and has the correct commit label
+EXISTING_COMMIT=$(docker image inspect "$DOCKER_IMAGE" --format '{{index .Config.Labels "catalog-server.commit"}}' 2>/dev/null || echo "")
+
+if [ "$EXISTING_COMMIT" = "$LATEST_COMMIT" ]; then
+    echo "Docker image $DOCKER_IMAGE is up to date (commit: ${LATEST_COMMIT:0:8})"
 else
-    echo "Docker image $DOCKER_IMAGE already exists, skipping build..."
-    echo "   (Run 'docker rmi $DOCKER_IMAGE' to force rebuild)"
+    if [ -n "$EXISTING_COMMIT" ]; then
+        echo "Docker image is outdated (has: ${EXISTING_COMMIT:0:8}, need: ${LATEST_COMMIT:0:8})"
+        echo "Removing old image..."
+        docker rm -f $(docker ps -aq --filter "ancestor=$DOCKER_IMAGE") 2>/dev/null || true
+        docker rmi "$DOCKER_IMAGE" 2>/dev/null || true
+    else
+        echo "Building $DOCKER_IMAGE..."
+    fi
+    docker build -t "$DOCKER_IMAGE" --label "catalog-server.commit=$LATEST_COMMIT" -f catalog-server/Dockerfile .
 fi
 
 # Create test user database
