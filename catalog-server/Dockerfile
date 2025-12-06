@@ -15,11 +15,24 @@ RUN npm run build
 # ------------------------------------------
 FROM rust:1.91.1 AS rust-builder
 
-WORKDIR /catalog-server
-COPY catalog-server/ .
+WORKDIR /app
 
-# Build the release binary
-RUN cargo build --release
+# Copy git info for version and dirty detection
+COPY .git/HEAD .git/HEAD
+COPY .git/refs .git/refs
+COPY .git/index .git/index
+COPY .git/objects .git/objects
+
+# Copy source and detect dirty state
+COPY catalog-server/ catalog-server/
+RUN GIT_DIRTY=$(git -C /app status --porcelain catalog-server/ 2>/dev/null | grep -q . && echo 1 || echo 0) && \
+    echo "GIT_DIRTY=$GIT_DIRTY" >> /tmp/build-env && \
+    echo "Detected GIT_DIRTY=$GIT_DIRTY"
+
+WORKDIR /app/catalog-server
+
+# Build the release binary with dirty detection
+RUN . /tmp/build-env && cargo build --release
 
 
 # ------------------------------------------
@@ -33,8 +46,8 @@ RUN apt-get update && apt-get install -y libsqlite3-dev && rm -rf /var/lib/apt/l
 WORKDIR /app
 
 # Copy the binaries from the builder stage
-COPY --from=rust-builder /catalog-server/target/release/cli-auth /usr/local/bin/cli-auth
-COPY --from=rust-builder /catalog-server/target/release/catalog-server /usr/local/bin/catalog-server
+COPY --from=rust-builder /app/catalog-server/target/release/cli-auth /usr/local/bin/cli-auth
+COPY --from=rust-builder /app/catalog-server/target/release/catalog-server /usr/local/bin/catalog-server
 
 # Copy the web frontend from the web builder stage
 COPY --from=web-builder /web/dist /app/web

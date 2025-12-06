@@ -16,8 +16,12 @@ android/build/
 *.swp
 *.swo
 
-# Git
-.git/
+# Git (allow files needed for version and dirty detection)
+.git/*
+!.git/HEAD
+!.git/refs
+!.git/index
+!.git/objects
 
 # Docker files (prevent recursion)
 docker-compose*.yml
