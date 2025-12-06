@@ -1240,7 +1240,7 @@ tokio::spawn(async move {
 
 **Description:** Test that actions generate correct events.
 
-#### [ ] 8.1.5 Integration test: WebSocket broadcast
+#### [x] 8.1.5 Integration test: WebSocket broadcast
 
 **Description:** Test that events are broadcast to other devices.
 

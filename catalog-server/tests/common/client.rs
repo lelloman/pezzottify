@@ -82,18 +82,42 @@ impl TestClient {
 
     /// POST /v1/auth/login
     pub async fn login(&self, handle: &str, password: &str) -> Response {
+        self.login_with_device(handle, password, "test-device-uuid-12345").await
+    }
+
+    /// POST /v1/auth/login with custom device UUID
+    ///
+    /// Useful for testing multi-device scenarios like WebSocket sync.
+    pub async fn login_with_device(&self, handle: &str, password: &str, device_uuid: &str) -> Response {
         self.client
             .post(format!("{}/v1/auth/login", self.base_url))
             .json(&json!({
                 "user_handle": handle,
                 "password": password,
-                "device_uuid": "test-device-uuid-12345",
+                "device_uuid": device_uuid,
                 "device_type": "web",
-                "device_name": "Test Client"
+                "device_name": format!("Test Client {}", device_uuid)
             }))
             .send()
             .await
             .expect("Login request failed")
+    }
+
+    /// Creates an authenticated client for a specific device
+    ///
+    /// Use this for testing multi-device scenarios.
+    pub async fn authenticated_with_device(base_url: String, device_uuid: &str) -> Self {
+        let client = Self::new(base_url);
+
+        let response = client.login_with_device(TEST_USER, TEST_PASS, device_uuid).await;
+        assert_eq!(
+            response.status(),
+            reqwest::StatusCode::CREATED,
+            "Test user authentication failed: {:?}",
+            response.text().await
+        );
+
+        client
     }
 
     /// GET /v1/auth/logout
