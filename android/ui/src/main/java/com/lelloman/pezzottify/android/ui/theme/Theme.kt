@@ -10,9 +10,6 @@ import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
-import com.lelloman.pezzottify.android.domain.settings.AppFontFamily
-import com.lelloman.pezzottify.android.domain.settings.ColorPalette
-import com.lelloman.pezzottify.android.domain.settings.ThemeMode
 
 private val AppShapes = Shapes(
     extraSmall = RoundedCornerShape(4.dp),

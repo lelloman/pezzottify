@@ -2,10 +2,11 @@ package com.lelloman.pezzottify.android.ui.screen.main.settings
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.lelloman.pezzottify.android.domain.settings.AppFontFamily
-import com.lelloman.pezzottify.android.domain.settings.ColorPalette
-import com.lelloman.pezzottify.android.domain.settings.PlayBehavior
-import com.lelloman.pezzottify.android.domain.settings.ThemeMode
+import com.lelloman.pezzottify.android.ui.model.PlayBehavior
+import com.lelloman.pezzottify.android.ui.model.StorageInfo
+import com.lelloman.pezzottify.android.ui.theme.AppFontFamily
+import com.lelloman.pezzottify.android.ui.theme.ColorPalette
+import com.lelloman.pezzottify.android.ui.theme.ThemeMode
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -109,13 +110,13 @@ class SettingsScreenViewModel @Inject constructor(
         fun getColorPalette(): ColorPalette
         fun getFontFamily(): AppFontFamily
         fun isCacheEnabled(): Boolean
-        fun getStorageInfo(): com.lelloman.pezzottify.android.domain.storage.StorageInfo?
+        fun getStorageInfo(): StorageInfo?
         fun observePlayBehavior(): kotlinx.coroutines.flow.Flow<PlayBehavior>
         fun observeThemeMode(): kotlinx.coroutines.flow.Flow<ThemeMode>
         fun observeColorPalette(): kotlinx.coroutines.flow.Flow<ColorPalette>
         fun observeFontFamily(): kotlinx.coroutines.flow.Flow<AppFontFamily>
         fun observeCacheEnabled(): kotlinx.coroutines.flow.Flow<Boolean>
-        fun observeStorageInfo(): kotlinx.coroutines.flow.Flow<com.lelloman.pezzottify.android.domain.storage.StorageInfo>
+        fun observeStorageInfo(): kotlinx.coroutines.flow.Flow<StorageInfo>
         suspend fun setPlayBehavior(playBehavior: PlayBehavior)
         suspend fun setThemeMode(themeMode: ThemeMode)
         suspend fun setColorPalette(colorPalette: ColorPalette)

@@ -2,17 +2,19 @@ package com.lelloman.pezzottify.android.ui.screen.main.home
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.lelloman.pezzottify.android.domain.websocket.WebSocketManager
+import com.lelloman.pezzottify.android.ui.component.ConnectionState
 import com.lelloman.pezzottify.android.ui.content.Content
 import com.lelloman.pezzottify.android.ui.content.ContentResolver
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
@@ -27,7 +29,6 @@ import kotlin.coroutines.CoroutineContext
 class HomeScreenViewModel(
     private val interactor: Interactor,
     private val contentResolver: ContentResolver,
-    private val webSocketManager: WebSocketManager,
     private val coroutineContext: CoroutineContext,
 ) : HomeScreenActions, ViewModel() {
 
@@ -35,11 +36,9 @@ class HomeScreenViewModel(
     constructor(
         interactor: Interactor,
         contentResolver: ContentResolver,
-        webSocketManager: WebSocketManager,
     ) : this(
         interactor,
         contentResolver,
-        webSocketManager,
         Dispatchers.IO,
     )
 
@@ -63,7 +62,7 @@ class HomeScreenViewModel(
         }
 
         viewModelScope.launch {
-            webSocketManager.connectionState.collect { connectionState ->
+            interactor.connectionState(viewModelScope).collect { connectionState ->
                 mutableState.value = mutableState.value.copy(connectionState = connectionState)
             }
         }
@@ -162,6 +161,9 @@ class HomeScreenViewModel(
     }
 
     interface Interactor {
+
+        fun connectionState(scope: CoroutineScope): StateFlow<ConnectionState>
+
         suspend fun getRecentlyViewedContent(maxCount: Int): Flow<List<HomeScreenState.RecentlyViewedContent>>
         fun getUserName(): String
     }
@@ -178,6 +180,7 @@ class HomeScreenViewModel(
                                     artistContent.data.id,
                                     artistContent.data.name
                                 )
+
                                 else -> artistInfo
                             }
                         }
@@ -193,6 +196,7 @@ class HomeScreenViewModel(
                         }
                     }
                 }
+
                 else -> flowOf(content)
             }
         }

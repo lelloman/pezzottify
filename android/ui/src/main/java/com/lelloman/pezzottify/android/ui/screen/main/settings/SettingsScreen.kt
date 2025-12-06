@@ -35,13 +35,13 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import androidx.navigation.compose.rememberNavController
-import com.lelloman.pezzottify.android.domain.settings.AppFontFamily
-import com.lelloman.pezzottify.android.domain.settings.ColorPalette
-import com.lelloman.pezzottify.android.domain.settings.PlayBehavior
-import com.lelloman.pezzottify.android.domain.settings.ThemeMode
+import com.lelloman.pezzottify.android.ui.model.PlayBehavior
 import com.lelloman.pezzottify.android.ui.screen.main.profile.CacheSettingsSection
 import com.lelloman.pezzottify.android.ui.screen.main.profile.StorageInfoSection
+import com.lelloman.pezzottify.android.ui.theme.AppFontFamily
+import com.lelloman.pezzottify.android.ui.theme.ColorPalette
 import com.lelloman.pezzottify.android.ui.theme.PezzottifyTheme
+import com.lelloman.pezzottify.android.ui.theme.ThemeMode
 import com.lelloman.pezzottify.android.ui.toStyleSettings
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -225,6 +225,7 @@ private fun SettingsScreenPreview() {
                 override fun selectColorPalette(colorPalette: ColorPalette) {}
                 override fun selectFontFamily(fontFamily: AppFontFamily) {}
                 override fun setCacheEnabled(enabled: Boolean) {}
+
             },
         )
     }

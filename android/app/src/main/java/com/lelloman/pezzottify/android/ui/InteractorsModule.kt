@@ -7,16 +7,31 @@ import com.lelloman.pezzottify.android.domain.auth.usecase.PerformLogin
 import com.lelloman.pezzottify.android.domain.auth.usecase.PerformLogout
 import com.lelloman.pezzottify.android.domain.config.BuildInfo
 import com.lelloman.pezzottify.android.domain.config.ConfigStore
-import com.lelloman.pezzottify.android.domain.websocket.ConnectionState
+import com.lelloman.pezzottify.android.domain.websocket.ConnectionState as DomainConnectionState
 import com.lelloman.pezzottify.android.domain.websocket.WebSocketManager
+import com.lelloman.pezzottify.android.ui.component.ConnectionState as UiConnectionState
 import com.lelloman.pezzottify.android.domain.player.PezzottifyPlayer
 import com.lelloman.pezzottify.android.domain.player.RepeatMode
 import com.lelloman.pezzottify.android.ui.screen.player.RepeatModeUi
-import com.lelloman.pezzottify.android.domain.settings.AppFontFamily
-import com.lelloman.pezzottify.android.domain.settings.ColorPalette
-import com.lelloman.pezzottify.android.domain.settings.PlayBehavior
-import com.lelloman.pezzottify.android.domain.settings.ThemeMode
+import com.lelloman.pezzottify.android.domain.settings.AppFontFamily as DomainAppFontFamily
+import com.lelloman.pezzottify.android.domain.settings.ColorPalette as DomainColorPalette
+import com.lelloman.pezzottify.android.domain.settings.PlayBehavior as DomainPlayBehavior
+import com.lelloman.pezzottify.android.domain.settings.ThemeMode as DomainThemeMode
 import com.lelloman.pezzottify.android.domain.settings.UserSettingsStore
+import com.lelloman.pezzottify.android.domain.storage.StorageInfo as DomainStorageInfo
+import com.lelloman.pezzottify.android.domain.storage.StoragePressureLevel as DomainStoragePressureLevel
+import com.lelloman.pezzottify.android.domain.usercontent.LikedContent as DomainLikedContent
+import com.lelloman.pezzottify.android.domain.player.PlaybackPlaylist as DomainPlaybackPlaylist
+import com.lelloman.pezzottify.android.domain.player.PlaybackPlaylistContext as DomainPlaybackPlaylistContext
+import com.lelloman.pezzottify.android.ui.theme.AppFontFamily as UiAppFontFamily
+import com.lelloman.pezzottify.android.ui.theme.ColorPalette as UiColorPalette
+import com.lelloman.pezzottify.android.ui.theme.ThemeMode as UiThemeMode
+import com.lelloman.pezzottify.android.ui.model.PlayBehavior as UiPlayBehavior
+import com.lelloman.pezzottify.android.ui.model.StorageInfo as UiStorageInfo
+import com.lelloman.pezzottify.android.ui.model.StoragePressureLevel as UiStoragePressureLevel
+import com.lelloman.pezzottify.android.ui.model.LikedContent as UiLikedContent
+import com.lelloman.pezzottify.android.ui.model.PlaybackPlaylist as UiPlaybackPlaylist
+import com.lelloman.pezzottify.android.ui.model.PlaybackPlaylistContext as UiPlaybackPlaylistContext
 import com.lelloman.pezzottify.android.domain.statics.usecase.PerformSearch
 import com.lelloman.pezzottify.android.domain.user.GetRecentlyViewedContentUseCase
 import com.lelloman.pezzottify.android.domain.user.GetSearchHistoryEntriesUseCase
@@ -25,7 +40,6 @@ import com.lelloman.pezzottify.android.domain.user.LogViewedContentUseCase
 import com.lelloman.pezzottify.android.domain.user.SearchHistoryEntry
 import com.lelloman.pezzottify.android.domain.user.ViewedContent
 import com.lelloman.pezzottify.android.domain.usercontent.GetLikedStateUseCase
-import com.lelloman.pezzottify.android.domain.usercontent.LikedContent
 import com.lelloman.pezzottify.android.domain.usercontent.ToggleLikeUseCase
 import com.lelloman.pezzottify.android.domain.usercontent.UserContentStore
 import com.lelloman.pezzottify.android.logger.LoggerFactory
@@ -48,9 +62,13 @@ import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.android.components.ViewModelComponent
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 
 @InstallIn(ViewModelComponent::class)
 @Module
@@ -120,7 +138,7 @@ class InteractorsModule {
 
         override fun observeServerVersion() = webSocketManager.connectionState.map { state ->
             when (state) {
-                is ConnectionState.Connected -> state.serverVersion
+                is DomainConnectionState.Connected -> state.serverVersion
                 else -> "disconnected"
             }
         }
@@ -131,44 +149,45 @@ class InteractorsModule {
         userSettingsStore: UserSettingsStore,
         storageMonitor: com.lelloman.pezzottify.android.domain.storage.StorageMonitor,
     ): SettingsScreenViewModel.Interactor = object : SettingsScreenViewModel.Interactor {
-        override fun getPlayBehavior(): PlayBehavior = userSettingsStore.playBehavior.value
+        override fun getPlayBehavior(): UiPlayBehavior =
+            userSettingsStore.playBehavior.value.toUi()
 
-        override fun getThemeMode(): ThemeMode = userSettingsStore.themeMode.value
+        override fun getThemeMode(): UiThemeMode = userSettingsStore.themeMode.value.toUi()
 
-        override fun getColorPalette(): ColorPalette = userSettingsStore.colorPalette.value
+        override fun getColorPalette(): UiColorPalette = userSettingsStore.colorPalette.value.toUi()
 
-        override fun getFontFamily(): AppFontFamily = userSettingsStore.fontFamily.value
+        override fun getFontFamily(): UiAppFontFamily = userSettingsStore.fontFamily.value.toUi()
 
         override fun isCacheEnabled(): Boolean = userSettingsStore.isInMemoryCacheEnabled.value
 
-        override fun getStorageInfo() = storageMonitor.storageInfo.value
+        override fun getStorageInfo(): UiStorageInfo = storageMonitor.storageInfo.value.toUi()
 
-        override fun observePlayBehavior() = userSettingsStore.playBehavior
+        override fun observePlayBehavior(): Flow<UiPlayBehavior> = userSettingsStore.playBehavior.map { it.toUi() }
 
-        override fun observeThemeMode() = userSettingsStore.themeMode
+        override fun observeThemeMode(): Flow<UiThemeMode> = userSettingsStore.themeMode.map { it.toUi()}
 
-        override fun observeColorPalette() = userSettingsStore.colorPalette
+        override fun observeColorPalette(): Flow<UiColorPalette>  = userSettingsStore.colorPalette.map { it.toUi() }
 
-        override fun observeFontFamily() = userSettingsStore.fontFamily
+        override fun observeFontFamily(): Flow<UiAppFontFamily> = userSettingsStore.fontFamily.map { it.toUi() }
 
         override fun observeCacheEnabled() = userSettingsStore.isInMemoryCacheEnabled
 
-        override fun observeStorageInfo() = storageMonitor.storageInfo
+        override fun observeStorageInfo(): Flow<UiStorageInfo> = storageMonitor.storageInfo.map { it.toUi() }
 
-        override suspend fun setPlayBehavior(playBehavior: PlayBehavior) {
-            userSettingsStore.setPlayBehavior(playBehavior)
+        override suspend fun setPlayBehavior(playBehavior: UiPlayBehavior) {
+            userSettingsStore.setPlayBehavior(playBehavior.toDomain())
         }
 
-        override suspend fun setThemeMode(themeMode: ThemeMode) {
-            userSettingsStore.setThemeMode(themeMode)
+        override suspend fun setThemeMode(themeMode: UiThemeMode) {
+            userSettingsStore.setThemeMode(themeMode.toDomain())
         }
 
-        override suspend fun setColorPalette(colorPalette: ColorPalette) {
-            userSettingsStore.setColorPalette(colorPalette)
+        override suspend fun setColorPalette(colorPalette: UiColorPalette) {
+            userSettingsStore.setColorPalette(colorPalette.toDomain())
         }
 
-        override suspend fun setFontFamily(fontFamily: AppFontFamily) {
-            userSettingsStore.setFontFamily(fontFamily)
+        override suspend fun setFontFamily(fontFamily: UiAppFontFamily) {
+            userSettingsStore.setFontFamily(fontFamily.toDomain())
         }
 
         override suspend fun setCacheEnabled(enabled: Boolean) {
@@ -180,28 +199,28 @@ class InteractorsModule {
     fun provideStyleSettingsInteractor(
         userSettingsStore: UserSettingsStore,
     ): StyleSettingsViewModel.Interactor = object : StyleSettingsViewModel.Interactor {
-        override fun getThemeMode(): ThemeMode = userSettingsStore.themeMode.value
+        override fun getThemeMode(): UiThemeMode = userSettingsStore.themeMode.value.toUi()
 
-        override fun getColorPalette(): ColorPalette = userSettingsStore.colorPalette.value
+        override fun getColorPalette(): UiColorPalette = userSettingsStore.colorPalette.value.toUi()
 
-        override fun getFontFamily(): AppFontFamily = userSettingsStore.fontFamily.value
+        override fun getFontFamily(): UiAppFontFamily = userSettingsStore.fontFamily.value.toUi()
 
-        override fun observeThemeMode() = userSettingsStore.themeMode
+        override fun observeThemeMode(): Flow<UiThemeMode> = userSettingsStore.themeMode.map { it.toUi() }
 
-        override fun observeColorPalette() = userSettingsStore.colorPalette
+        override fun observeColorPalette(): Flow<UiColorPalette> = userSettingsStore.colorPalette.map { it.toUi() }
 
-        override fun observeFontFamily() = userSettingsStore.fontFamily
+        override fun observeFontFamily(): Flow<UiAppFontFamily> = userSettingsStore.fontFamily.map { it.toUi() }
 
-        override suspend fun setThemeMode(themeMode: ThemeMode) {
-            userSettingsStore.setThemeMode(themeMode)
+        override suspend fun setThemeMode(themeMode: UiThemeMode) {
+            userSettingsStore.setThemeMode(themeMode.toDomain())
         }
 
-        override suspend fun setColorPalette(colorPalette: ColorPalette) {
-            userSettingsStore.setColorPalette(colorPalette)
+        override suspend fun setColorPalette(colorPalette: UiColorPalette) {
+            userSettingsStore.setColorPalette(colorPalette.toDomain())
         }
 
-        override suspend fun setFontFamily(fontFamily: AppFontFamily) {
-            userSettingsStore.setFontFamily(fontFamily)
+        override suspend fun setFontFamily(fontFamily: UiAppFontFamily) {
+            userSettingsStore.setFontFamily(fontFamily.toDomain())
         }
     }
 
@@ -287,15 +306,15 @@ class InteractorsModule {
     ): AlbumScreenViewModel.Interactor = object : AlbumScreenViewModel.Interactor {
         override fun playAlbum(albumId: String) {
             when (userSettingsStore.playBehavior.value) {
-                PlayBehavior.ReplacePlaylist -> player.loadAlbum(albumId)
-                PlayBehavior.AddToPlaylist -> player.addAlbumToPlaylist(albumId)
+                DomainPlayBehavior.ReplacePlaylist -> player.loadAlbum(albumId)
+                DomainPlayBehavior.AddToPlaylist -> player.addAlbumToPlaylist(albumId)
             }
         }
 
         override fun playTrack(albumId: String, trackId: String) {
             when (userSettingsStore.playBehavior.value) {
-                PlayBehavior.ReplacePlaylist -> player.loadAlbum(albumId, trackId)
-                PlayBehavior.AddToPlaylist -> player.addTracksToPlaylist(listOf(trackId))
+                DomainPlayBehavior.ReplacePlaylist -> player.loadAlbum(albumId, trackId)
+                DomainPlayBehavior.AddToPlaylist -> player.addTracksToPlaylist(listOf(trackId))
             }
         }
 
@@ -313,13 +332,13 @@ class InteractorsModule {
             }
 
         override fun getIsAddToQueueMode(): Flow<Boolean> =
-            userSettingsStore.playBehavior.map { it == PlayBehavior.AddToPlaylist }
+            userSettingsStore.playBehavior.map { it == DomainPlayBehavior.AddToPlaylist }
 
         override fun isLiked(contentId: String): Flow<Boolean> =
             getLikedStateUseCase(contentId)
 
         override fun toggleLike(contentId: String, currentlyLiked: Boolean) {
-            toggleLikeUseCase(contentId, LikedContent.ContentType.Album, currentlyLiked)
+            toggleLikeUseCase(contentId, DomainLikedContent.ContentType.Album, currentlyLiked)
         }
     }
 
@@ -337,7 +356,7 @@ class InteractorsModule {
             getLikedStateUseCase(contentId)
 
         override fun toggleLike(contentId: String, currentlyLiked: Boolean) {
-            toggleLikeUseCase(contentId, LikedContent.ContentType.Artist, currentlyLiked)
+            toggleLikeUseCase(contentId, DomainLikedContent.ContentType.Artist, currentlyLiked)
         }
     }
 
@@ -388,7 +407,13 @@ class InteractorsModule {
     fun provideHomeScreenInteractor(
         getRecentlyViewedContent: GetRecentlyViewedContentUseCase,
         authStore: AuthStore,
+        webSocketManager: WebSocketManager,
     ) = object : HomeScreenViewModel.Interactor {
+
+        override fun connectionState(scope: CoroutineScope): StateFlow<UiConnectionState> =
+            webSocketManager.connectionState.map { it.toUi() }
+                .stateIn(scope, SharingStarted.Eagerly, webSocketManager.connectionState.value.toUi())
+
         override suspend fun getRecentlyViewedContent(maxCount: Int): Flow<List<HomeScreenState.RecentlyViewedContent>> =
             getRecentlyViewedContent(maxCount).map {
                 it.map { item ->
@@ -440,7 +465,13 @@ class InteractorsModule {
                             val trackPercent: Float?,
                             val progressSec: Int?,
                         )
-                        TempState2(tempState.playlist, tempState.isPlaying, tempState.currentTrackIndex, tempState.trackPercent, progressSec)
+                        TempState2(
+                            tempState.playlist,
+                            tempState.isPlaying,
+                            tempState.currentTrackIndex,
+                            tempState.trackPercent,
+                            progressSec
+                        )
                     }
                     .combine(player.volumeState) { tempState, volumeState ->
                         data class TempState3(
@@ -452,7 +483,15 @@ class InteractorsModule {
                             val volume: Float,
                             val isMuted: Boolean,
                         )
-                        TempState3(tempState.playlist, tempState.isPlaying, tempState.currentTrackIndex, tempState.trackPercent, tempState.progressSec, volumeState.volume, volumeState.isMuted)
+                        TempState3(
+                            tempState.playlist,
+                            tempState.isPlaying,
+                            tempState.currentTrackIndex,
+                            tempState.trackPercent,
+                            tempState.progressSec,
+                            volumeState.volume,
+                            volumeState.isMuted
+                        )
                     }
                     .combine(player.shuffleEnabled) { tempState, shuffleEnabled ->
                         data class TempState4(
@@ -465,7 +504,16 @@ class InteractorsModule {
                             val isMuted: Boolean,
                             val shuffleEnabled: Boolean,
                         )
-                        TempState4(tempState.playlist, tempState.isPlaying, tempState.currentTrackIndex, tempState.trackPercent, tempState.progressSec, tempState.volume, tempState.isMuted, shuffleEnabled)
+                        TempState4(
+                            tempState.playlist,
+                            tempState.isPlaying,
+                            tempState.currentTrackIndex,
+                            tempState.trackPercent,
+                            tempState.progressSec,
+                            tempState.volume,
+                            tempState.isMuted,
+                            shuffleEnabled
+                        )
                     }
                     .combine(player.repeatMode) { tempState, repeatMode ->
                         if (tempState.playlist != null) {
@@ -519,13 +567,15 @@ class InteractorsModule {
         player: PezzottifyPlayer
     ): QueueScreenViewModel.Interactor =
         object : QueueScreenViewModel.Interactor {
-            override fun getPlaybackPlaylist() = player.playbackPlaylist
+            override fun getPlaybackPlaylist(): Flow<UiPlaybackPlaylist?> =
+                player.playbackPlaylist.map { it?.toUi() }
 
             override fun getCurrentTrackIndex() = player.currentTrackIndex
 
             override fun playTrackAtIndex(index: Int) = player.loadTrackIndex(index)
 
-            override fun moveTrack(fromIndex: Int, toIndex: Int) = player.moveTrack(fromIndex, toIndex)
+            override fun moveTrack(fromIndex: Int, toIndex: Int) =
+                player.moveTrack(fromIndex, toIndex)
 
             override fun removeTrack(trackId: String) = player.removeTrackFromPlaylist(trackId)
         }
@@ -535,7 +585,112 @@ class InteractorsModule {
         userContentStore: UserContentStore,
     ): LibraryScreenViewModel.Interactor =
         object : LibraryScreenViewModel.Interactor {
-            override fun getLikedContent(): Flow<List<LikedContent>> =
-                userContentStore.getLikedContent()
+            override fun getLikedContent(): Flow<List<UiLikedContent>> =
+                userContentStore.getLikedContent().map { it.toUi() }
         }
+
+}
+
+private fun DomainThemeMode.toUi(): UiThemeMode = when (this) {
+    DomainThemeMode.System -> UiThemeMode.System
+    DomainThemeMode.Light -> UiThemeMode.Light
+    DomainThemeMode.Dark -> UiThemeMode.Dark
+    DomainThemeMode.Amoled -> UiThemeMode.Amoled
+}
+
+private fun DomainColorPalette.toUi(): UiColorPalette = when (this) {
+    DomainColorPalette.Classic -> UiColorPalette.Classic
+    DomainColorPalette.OceanBlue -> UiColorPalette.OceanBlue
+    DomainColorPalette.SunsetCoral -> UiColorPalette.SunsetCoral
+    DomainColorPalette.PurpleHaze -> UiColorPalette.PurpleHaze
+    DomainColorPalette.RoseGold -> UiColorPalette.RoseGold
+    DomainColorPalette.Midnight -> UiColorPalette.Midnight
+    DomainColorPalette.Forest -> UiColorPalette.Forest
+}
+
+private fun DomainAppFontFamily.toUi(): UiAppFontFamily = when (this) {
+    DomainAppFontFamily.System -> UiAppFontFamily.System
+    DomainAppFontFamily.SansSerif -> UiAppFontFamily.SansSerif
+    DomainAppFontFamily.Serif -> UiAppFontFamily.Serif
+    DomainAppFontFamily.Monospace -> UiAppFontFamily.Monospace
+}
+
+private fun DomainPlayBehavior.toUi(): UiPlayBehavior = when (this) {
+    DomainPlayBehavior.ReplacePlaylist -> UiPlayBehavior.ReplacePlaylist
+    DomainPlayBehavior.AddToPlaylist -> UiPlayBehavior.AddToPlaylist
+}
+
+private fun UiPlayBehavior.toDomain(): DomainPlayBehavior = when (this) {
+    UiPlayBehavior.ReplacePlaylist -> DomainPlayBehavior.ReplacePlaylist
+    UiPlayBehavior.AddToPlaylist -> DomainPlayBehavior.AddToPlaylist
+}
+
+private fun UiThemeMode.toDomain(): DomainThemeMode = when (this) {
+    UiThemeMode.System -> DomainThemeMode.System
+    UiThemeMode.Light -> DomainThemeMode.Light
+    UiThemeMode.Dark -> DomainThemeMode.Dark
+    UiThemeMode.Amoled -> DomainThemeMode.Amoled
+}
+
+private fun UiColorPalette.toDomain(): DomainColorPalette = when (this) {
+    UiColorPalette.Classic -> DomainColorPalette.Classic
+    UiColorPalette.OceanBlue -> DomainColorPalette.OceanBlue
+    UiColorPalette.SunsetCoral -> DomainColorPalette.SunsetCoral
+    UiColorPalette.PurpleHaze -> DomainColorPalette.PurpleHaze
+    UiColorPalette.RoseGold -> DomainColorPalette.RoseGold
+    UiColorPalette.Midnight -> DomainColorPalette.Midnight
+    UiColorPalette.Forest -> DomainColorPalette.Forest
+}
+
+private fun UiAppFontFamily.toDomain(): DomainAppFontFamily = when (this) {
+    UiAppFontFamily.System -> DomainAppFontFamily.System
+    UiAppFontFamily.SansSerif -> DomainAppFontFamily.SansSerif
+    UiAppFontFamily.Serif -> DomainAppFontFamily.Serif
+    UiAppFontFamily.Monospace -> DomainAppFontFamily.Monospace
+}
+
+private fun DomainStoragePressureLevel.toUi(): UiStoragePressureLevel = when (this) {
+    DomainStoragePressureLevel.LOW -> UiStoragePressureLevel.LOW
+    DomainStoragePressureLevel.MEDIUM -> UiStoragePressureLevel.MEDIUM
+    DomainStoragePressureLevel.HIGH -> UiStoragePressureLevel.HIGH
+    DomainStoragePressureLevel.CRITICAL -> UiStoragePressureLevel.CRITICAL
+}
+
+private fun DomainStorageInfo.toUi(): UiStorageInfo = UiStorageInfo(
+    totalBytes = totalBytes,
+    availableBytes = availableBytes,
+    usedBytes = usedBytes,
+    pressureLevel = pressureLevel.toUi()
+)
+
+private fun DomainLikedContent.toUi(): UiLikedContent = UiLikedContent(
+    contentId = contentId,
+    contentType = contentType.toUi(),
+    isLiked = isLiked
+)
+
+private fun DomainLikedContent.ContentType.toUi(): UiLikedContent.ContentType = when (this) {
+    DomainLikedContent.ContentType.Album -> UiLikedContent.ContentType.Album
+    DomainLikedContent.ContentType.Artist -> UiLikedContent.ContentType.Artist
+    DomainLikedContent.ContentType.Track -> UiLikedContent.ContentType.Track
+}
+
+private fun List<DomainLikedContent>.toUi(): List<UiLikedContent> = map { it.toUi() }
+
+private fun DomainPlaybackPlaylistContext.toUi(): UiPlaybackPlaylistContext = when (this) {
+    is DomainPlaybackPlaylistContext.Album -> UiPlaybackPlaylistContext.Album(albumId)
+    is DomainPlaybackPlaylistContext.UserPlaylist -> UiPlaybackPlaylistContext.UserPlaylist(userPlaylistId, isEdited)
+    DomainPlaybackPlaylistContext.UserMix -> UiPlaybackPlaylistContext.UserMix
+}
+
+private fun DomainPlaybackPlaylist.toUi(): UiPlaybackPlaylist = UiPlaybackPlaylist(
+    context = context.toUi(),
+    tracksIds = tracksIds
+)
+
+private fun DomainConnectionState.toUi(): UiConnectionState = when (this) {
+    is DomainConnectionState.Connected -> UiConnectionState.Connected(deviceId, serverVersion)
+    DomainConnectionState.Connecting -> UiConnectionState.Connecting
+    DomainConnectionState.Disconnected -> UiConnectionState.Disconnected
+    is DomainConnectionState.Error -> UiConnectionState.Error(message)
 }

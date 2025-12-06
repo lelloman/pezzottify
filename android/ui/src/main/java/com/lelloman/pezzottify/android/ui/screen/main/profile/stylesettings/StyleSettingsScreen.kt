@@ -45,10 +45,10 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import androidx.navigation.compose.rememberNavController
-import com.lelloman.pezzottify.android.domain.settings.AppFontFamily
-import com.lelloman.pezzottify.android.domain.settings.ColorPalette
-import com.lelloman.pezzottify.android.domain.settings.ThemeMode
+import com.lelloman.pezzottify.android.ui.theme.AppFontFamily
+import com.lelloman.pezzottify.android.ui.theme.ColorPalette
 import com.lelloman.pezzottify.android.ui.theme.PezzottifyTheme
+import com.lelloman.pezzottify.android.ui.theme.ThemeMode
 import com.lelloman.pezzottify.android.ui.theme.getPalettePreviewColors
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow

@@ -1,6 +1,6 @@
 package com.lelloman.pezzottify.android.ui.screen.main.home
 
-import com.lelloman.pezzottify.android.domain.websocket.ConnectionState
+import com.lelloman.pezzottify.android.ui.component.ConnectionState
 import com.lelloman.pezzottify.android.ui.content.Content
 import kotlinx.coroutines.flow.Flow
 

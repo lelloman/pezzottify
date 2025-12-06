@@ -1,10 +1,10 @@
 package com.lelloman.pezzottify.android.ui.screen.main.settings
 
-import com.lelloman.pezzottify.android.domain.settings.AppFontFamily
-import com.lelloman.pezzottify.android.domain.settings.ColorPalette
-import com.lelloman.pezzottify.android.domain.settings.PlayBehavior
-import com.lelloman.pezzottify.android.domain.settings.ThemeMode
-import com.lelloman.pezzottify.android.domain.storage.StorageInfo
+import com.lelloman.pezzottify.android.ui.model.PlayBehavior
+import com.lelloman.pezzottify.android.ui.model.StorageInfo
+import com.lelloman.pezzottify.android.ui.theme.AppFontFamily
+import com.lelloman.pezzottify.android.ui.theme.ColorPalette
+import com.lelloman.pezzottify.android.ui.theme.ThemeMode
 
 data class SettingsScreenState(
     val playBehavior: PlayBehavior = PlayBehavior.Default,

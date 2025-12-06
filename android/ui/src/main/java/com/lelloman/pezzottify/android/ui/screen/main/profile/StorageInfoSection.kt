@@ -13,8 +13,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import com.lelloman.pezzottify.android.domain.storage.StorageInfo
-import com.lelloman.pezzottify.android.domain.storage.StoragePressureLevel
+import com.lelloman.pezzottify.android.ui.model.StorageInfo
+import com.lelloman.pezzottify.android.ui.model.StoragePressureLevel
 import com.lelloman.pezzottify.android.ui.theme.PezzottifyTheme
 import kotlin.math.roundToInt
 

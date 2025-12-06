@@ -5,7 +5,6 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
-import com.lelloman.pezzottify.android.domain.settings.AppFontFamily
 
 /**
  * Creates a Typography instance for the given font family.

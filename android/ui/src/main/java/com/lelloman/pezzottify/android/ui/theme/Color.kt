@@ -4,7 +4,6 @@ import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.ui.graphics.Color
-import com.lelloman.pezzottify.android.domain.settings.ColorPalette
 
 // ============================================================================
 // CLASSIC PALETTE (Original Green Theme)

@@ -2,8 +2,8 @@ package com.lelloman.pezzottify.android.ui.screen.main.library
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.lelloman.pezzottify.android.domain.usercontent.LikedContent
 import com.lelloman.pezzottify.android.ui.content.ContentResolver
+import com.lelloman.pezzottify.android.ui.model.LikedContent
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.SharingStarted
