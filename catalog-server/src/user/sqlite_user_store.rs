@@ -2892,6 +2892,138 @@ mod tests {
     }
 
     #[test]
+    fn test_migration_v7_to_v8_device_table() {
+        let temp_dir = TempDir::new().unwrap();
+        let temp_file_path = temp_dir.path().join("test_migration_v7_v8.db");
+
+        // Create a V7 database manually
+        {
+            let conn = Connection::open(&temp_file_path).unwrap();
+            VERSIONED_SCHEMAS[7].create(&conn).unwrap(); // V7 is at index 7
+
+            // Add a user and auth token (pre-migration, auth_token doesn't have device_id)
+            conn.execute("INSERT INTO user (handle) VALUES (?1)", params!["test_user"])
+                .unwrap();
+            let user_id = conn.last_insert_rowid();
+
+            // Insert a token (V7 auth_token doesn't have device_id)
+            let now = SystemTime::now()
+                .duration_since(SystemTime::UNIX_EPOCH)
+                .unwrap()
+                .as_secs() as i64;
+            conn.execute(
+                "INSERT INTO auth_token (user_id, value, created) VALUES (?1, ?2, ?3)",
+                params![user_id, "old-token-value", now],
+            )
+            .unwrap();
+
+            // Verify we're at V7
+            let db_version: i64 = conn
+                .query_row("PRAGMA user_version;", [], |row| row.get(0))
+                .unwrap();
+            assert_eq!(db_version, BASE_DB_VERSION as i64 + 7);
+
+            // Verify token exists before migration
+            let token_count: i64 = conn
+                .query_row("SELECT COUNT(*) FROM auth_token", [], |row| row.get(0))
+                .unwrap();
+            assert_eq!(token_count, 1);
+        }
+
+        // Now open with SqliteUserStore, which should trigger migration to latest
+        let store = SqliteUserStore::new(&temp_file_path).unwrap();
+
+        // Verify we're now at the latest version
+        {
+            let conn = store.conn.lock().unwrap();
+            let db_version: i64 = conn
+                .query_row("PRAGMA user_version;", [], |row| row.get(0))
+                .unwrap();
+            assert_eq!(db_version, BASE_DB_VERSION as i64 + 9);
+
+            // Verify device table exists
+            let device_table_exists: i64 = conn
+                .query_row(
+                    "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='device'",
+                    [],
+                    |row| row.get(0),
+                )
+                .unwrap();
+            assert_eq!(device_table_exists, 1);
+
+            // Verify device table has expected columns
+            let device_columns: Vec<String> = conn
+                .prepare("PRAGMA table_info(device)")
+                .unwrap()
+                .query_map([], |row| row.get::<_, String>(1))
+                .unwrap()
+                .filter_map(|r| r.ok())
+                .collect();
+            assert!(device_columns.contains(&"id".to_string()));
+            assert!(device_columns.contains(&"device_uuid".to_string()));
+            assert!(device_columns.contains(&"user_id".to_string()));
+            assert!(device_columns.contains(&"device_type".to_string()));
+            assert!(device_columns.contains(&"device_name".to_string()));
+            assert!(device_columns.contains(&"os_info".to_string()));
+            assert!(device_columns.contains(&"first_seen".to_string()));
+            assert!(device_columns.contains(&"last_seen".to_string()));
+
+            // Verify auth_token has device_id column
+            let auth_token_columns: Vec<String> = conn
+                .prepare("PRAGMA table_info(auth_token)")
+                .unwrap()
+                .query_map([], |row| row.get::<_, String>(1))
+                .unwrap()
+                .filter_map(|r| r.ok())
+                .collect();
+            assert!(auth_token_columns.contains(&"device_id".to_string()));
+
+            // Verify old tokens were deleted during migration
+            let token_count: i64 = conn
+                .query_row("SELECT COUNT(*) FROM auth_token", [], |row| row.get(0))
+                .unwrap();
+            assert_eq!(token_count, 0, "Old tokens should be deleted during V8 migration");
+
+            // Verify device indices exist
+            let device_uuid_index_exists: i64 = conn
+                .query_row(
+                    "SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND name='idx_device_uuid'",
+                    [],
+                    |row| row.get(0),
+                )
+                .unwrap();
+            assert_eq!(device_uuid_index_exists, 1);
+
+            let device_user_index_exists: i64 = conn
+                .query_row(
+                    "SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND name='idx_device_user'",
+                    [],
+                    |row| row.get(0),
+                )
+                .unwrap();
+            assert_eq!(device_user_index_exists, 1);
+        }
+
+        // Verify user data is still intact
+        let user_id = store.get_user_id("test_user").unwrap().unwrap();
+        assert_eq!(user_id, 1);
+
+        // Test device functionality works after migration
+        let reg = DeviceRegistration {
+            device_uuid: "post-migration-device".to_string(),
+            device_type: DeviceType::Android,
+            device_name: Some("Test Phone".to_string()),
+            os_info: Some("Android 14".to_string()),
+        };
+        let device_id = store.register_or_update_device(&reg).unwrap();
+        assert!(device_id > 0);
+
+        let device = store.get_device(device_id).unwrap().unwrap();
+        assert_eq!(device.device_uuid, "post-migration-device");
+        assert_eq!(device.device_type, DeviceType::Android);
+    }
+
+    #[test]
     fn test_add_single_role() {
         let (store, _temp_dir) = create_tmp_store();
         let user_id = store.create_user("test_user").unwrap();

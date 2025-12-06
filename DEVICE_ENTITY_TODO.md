@@ -27,7 +27,7 @@ This document breaks down the Device Entity Implementation Plan into small, sequ
 | 7 | UserManager Changes | 3 | [x] |
 | 8 | Server Changes | 7 | [x] |
 | 9 | Session Changes | 3 | [x] |
-| 10 | Testing | 6 | [~] |
+| 10 | Testing | 6 | [x] |
 | 11 | Final Cleanup and Verification | 5 | [x] |
 | **Total** | | **50** | |
 
@@ -1243,7 +1243,7 @@ let session = Session {
 
 ## Phase 10: Testing
 
-### [ ] Task 10.1: Add DeviceStore unit tests - Registration
+### [x] Task 10.1: Add DeviceStore unit tests - Registration
 **File**: `catalog-server/src/user/sqlite_user_store.rs`
 
 **Implementation**:
@@ -1296,7 +1296,7 @@ fn test_register_existing_device_updates() {
 
 ---
 
-### [ ] Task 10.2: Add DeviceStore unit tests - User association
+### [x] Task 10.2: Add DeviceStore unit tests - User association
 **File**: `catalog-server/src/user/sqlite_user_store.rs`
 
 **Implementation**:
@@ -1350,7 +1350,7 @@ fn test_get_user_devices() {
 
 ---
 
-### [ ] Task 10.3: Add DeviceStore unit tests - Pruning
+### [x] Task 10.3: Add DeviceStore unit tests - Pruning
 **File**: `catalog-server/src/user/sqlite_user_store.rs`
 
 **Implementation**:
@@ -1403,7 +1403,7 @@ fn test_enforce_user_device_limit() {
 
 ---
 
-### [ ] Task 10.4: Add AuthToken with device tests
+### [x] Task 10.4: Add AuthToken with device tests
 **File**: `catalog-server/src/user/sqlite_user_store.rs`
 
 **Implementation**:
@@ -1469,7 +1469,7 @@ fn test_token_cascade_delete_on_device_delete() {
 
 ---
 
-### [ ] Task 10.5: Add integration tests for login flow
+### [x] Task 10.5: Add integration tests for login flow
 **File**: Create new test file or add to existing integration tests
 
 **Implementation**:
@@ -1482,7 +1482,7 @@ Integration tests should cover:
 
 ---
 
-### [ ] Task 10.6: Add migration tests
+### [x] Task 10.6: Add migration tests
 **File**: `catalog-server/src/user/sqlite_user_store.rs`
 
 **Implementation**:
@@ -1524,21 +1524,29 @@ cd catalog-server && cargo test
 
 ---
 
-### [ ] Task 11.4: Test migration manually
+### [x] Task 11.4: Test migration manually
 1. Create a V7 database with existing tokens
 2. Run the server to trigger migration
 3. Verify schema changes applied correctly
 4. Verify tokens were deleted
 
+**Note**: Covered by automated test `test_migration_v7_to_v8_device_table`
+
 ---
 
-### [ ] Task 11.5: Test login flow end-to-end
+### [x] Task 11.5: Test login flow end-to-end
 1. Start server with fresh database
 2. Create a user
 3. Login with device info
 4. Verify device record created
 5. Verify session contains device info
 6. Logout and login again - verify same device reused
+
+**Note**: Covered by automated integration tests in `e2e_auth_tests.rs`:
+- `test_login_with_device_info`
+- `test_multiple_logins_same_device_reuse_record`
+- `test_device_persists_across_logout_login`
+- `test_different_devices_for_same_user`
 
 ---
 
