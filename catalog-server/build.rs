@@ -13,9 +13,7 @@ fn main() {
 fn is_repo_dirty() -> bool {
     // Check GIT_DIRTY env var first (for Docker builds)
     if let Ok(val) = std::env::var("GIT_DIRTY") {
-        if val == "1" || val.to_lowercase() == "true" {
-            return true;
-        }
+        return val == "1" || val.to_lowercase() == "true";
     }
 
     // Fall back to git command (for local builds)
