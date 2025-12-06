@@ -4539,4 +4539,417 @@ mod tests {
             assert_eq!(&stored.event, original);
         }
     }
+
+    // ==================== DeviceStore Tests ====================
+
+    #[test]
+    fn test_register_new_device() {
+        let (store, _temp_dir) = create_tmp_store();
+
+        let reg = DeviceRegistration {
+            device_uuid: "test-uuid-12345678".to_string(),
+            device_type: DeviceType::Android,
+            device_name: Some("Test Phone".to_string()),
+            os_info: Some("Android 14".to_string()),
+        };
+
+        let device_id = store.register_or_update_device(&reg).unwrap();
+        assert!(device_id > 0);
+
+        let device = store.get_device(device_id).unwrap().unwrap();
+        assert_eq!(device.device_uuid, "test-uuid-12345678");
+        assert_eq!(device.device_type, DeviceType::Android);
+        assert_eq!(device.device_name, Some("Test Phone".to_string()));
+        assert_eq!(device.os_info, Some("Android 14".to_string()));
+        assert!(device.user_id.is_none()); // Not associated with any user yet
+    }
+
+    #[test]
+    fn test_register_existing_device_updates() {
+        let (store, _temp_dir) = create_tmp_store();
+
+        let reg1 = DeviceRegistration {
+            device_uuid: "test-uuid-12345678".to_string(),
+            device_type: DeviceType::Android,
+            device_name: Some("Old Name".to_string()),
+            os_info: None,
+        };
+        let id1 = store.register_or_update_device(&reg1).unwrap();
+
+        // Register same device with updated info
+        let reg2 = DeviceRegistration {
+            device_uuid: "test-uuid-12345678".to_string(),
+            device_type: DeviceType::Android,
+            device_name: Some("New Name".to_string()),
+            os_info: Some("Updated OS".to_string()),
+        };
+        let id2 = store.register_or_update_device(&reg2).unwrap();
+
+        // Same device ID should be returned
+        assert_eq!(id1, id2);
+
+        // Verify info was updated
+        let device = store.get_device(id1).unwrap().unwrap();
+        assert_eq!(device.device_name, Some("New Name".to_string()));
+        assert_eq!(device.os_info, Some("Updated OS".to_string()));
+    }
+
+    #[test]
+    fn test_get_device_by_uuid() {
+        let (store, _temp_dir) = create_tmp_store();
+
+        let reg = DeviceRegistration {
+            device_uuid: "unique-device-uuid".to_string(),
+            device_type: DeviceType::Web,
+            device_name: None,
+            os_info: None,
+        };
+        let device_id = store.register_or_update_device(&reg).unwrap();
+
+        // Get by UUID
+        let device = store.get_device_by_uuid("unique-device-uuid").unwrap().unwrap();
+        assert_eq!(device.id, device_id);
+        assert_eq!(device.device_type, DeviceType::Web);
+
+        // Non-existent UUID returns None
+        let not_found = store.get_device_by_uuid("non-existent-uuid").unwrap();
+        assert!(not_found.is_none());
+    }
+
+    #[test]
+    fn test_get_device_not_found() {
+        let (store, _temp_dir) = create_tmp_store();
+
+        let device = store.get_device(9999).unwrap();
+        assert!(device.is_none());
+    }
+
+    #[test]
+    fn test_associate_device_with_user() {
+        let (store, _temp_dir) = create_tmp_store();
+        let user_id = store.create_user("test_user").unwrap();
+
+        let reg = DeviceRegistration {
+            device_uuid: "assoc-test-uuid".to_string(),
+            device_type: DeviceType::Web,
+            device_name: None,
+            os_info: None,
+        };
+        let device_id = store.register_or_update_device(&reg).unwrap();
+
+        // Initially no user
+        let device = store.get_device(device_id).unwrap().unwrap();
+        assert!(device.user_id.is_none());
+
+        // Associate with user
+        store.associate_device_with_user(device_id, user_id).unwrap();
+
+        let device = store.get_device(device_id).unwrap().unwrap();
+        assert_eq!(device.user_id, Some(user_id));
+    }
+
+    #[test]
+    fn test_get_user_devices() {
+        let (store, _temp_dir) = create_tmp_store();
+        let user_id = store.create_user("test_user").unwrap();
+
+        // Register and associate multiple devices
+        for i in 0..3 {
+            let reg = DeviceRegistration {
+                device_uuid: format!("uuid-device-{}", i),
+                device_type: DeviceType::Android,
+                device_name: Some(format!("Device {}", i)),
+                os_info: None,
+            };
+            let device_id = store.register_or_update_device(&reg).unwrap();
+            store.associate_device_with_user(device_id, user_id).unwrap();
+        }
+
+        let devices = store.get_user_devices(user_id).unwrap();
+        assert_eq!(devices.len(), 3);
+
+        // All devices should belong to the user
+        for device in &devices {
+            assert_eq!(device.user_id, Some(user_id));
+        }
+    }
+
+    #[test]
+    fn test_get_user_devices_empty() {
+        let (store, _temp_dir) = create_tmp_store();
+        let user_id = store.create_user("test_user").unwrap();
+
+        // User with no devices
+        let devices = store.get_user_devices(user_id).unwrap();
+        assert!(devices.is_empty());
+    }
+
+    #[test]
+    fn test_touch_device_updates_last_seen() {
+        let (store, _temp_dir) = create_tmp_store();
+
+        let reg = DeviceRegistration {
+            device_uuid: "touch-test-uuid".to_string(),
+            device_type: DeviceType::Ios,
+            device_name: None,
+            os_info: None,
+        };
+        let device_id = store.register_or_update_device(&reg).unwrap();
+
+        let device_before = store.get_device(device_id).unwrap().unwrap();
+        let last_seen_before = device_before.last_seen;
+
+        // Small delay to ensure timestamp difference
+        std::thread::sleep(std::time::Duration::from_millis(10));
+
+        store.touch_device(device_id).unwrap();
+
+        let device_after = store.get_device(device_id).unwrap().unwrap();
+        assert!(device_after.last_seen >= last_seen_before);
+    }
+
+    #[test]
+    fn test_enforce_user_device_limit() {
+        let (store, _temp_dir) = create_tmp_store();
+        let user_id = store.create_user("test_user").unwrap();
+
+        // Register 5 devices with increasing last_seen times
+        for i in 0..5 {
+            let reg = DeviceRegistration {
+                device_uuid: format!("limit-test-{}", i),
+                device_type: DeviceType::Android,
+                device_name: Some(format!("Device {}", i)),
+                os_info: None,
+            };
+            let device_id = store.register_or_update_device(&reg).unwrap();
+            store.associate_device_with_user(device_id, user_id).unwrap();
+            // Small delay to ensure different last_seen timestamps
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+
+        // Verify we have 5 devices
+        assert_eq!(store.get_user_devices(user_id).unwrap().len(), 5);
+
+        // Enforce limit of 3
+        let deleted = store.enforce_user_device_limit(user_id, 3).unwrap();
+        assert_eq!(deleted, 2);
+
+        let remaining = store.get_user_devices(user_id).unwrap();
+        assert_eq!(remaining.len(), 3);
+
+        // The oldest devices (0 and 1) should be deleted, keeping 2, 3, 4
+        let uuids: Vec<&str> = remaining.iter().map(|d| d.device_uuid.as_str()).collect();
+        assert!(!uuids.contains(&"limit-test-0"));
+        assert!(!uuids.contains(&"limit-test-1"));
+        assert!(uuids.contains(&"limit-test-2"));
+        assert!(uuids.contains(&"limit-test-3"));
+        assert!(uuids.contains(&"limit-test-4"));
+    }
+
+    #[test]
+    fn test_enforce_user_device_limit_no_deletion_needed() {
+        let (store, _temp_dir) = create_tmp_store();
+        let user_id = store.create_user("test_user").unwrap();
+
+        // Register 2 devices
+        for i in 0..2 {
+            let reg = DeviceRegistration {
+                device_uuid: format!("no-limit-{}", i),
+                device_type: DeviceType::Web,
+                device_name: None,
+                os_info: None,
+            };
+            let device_id = store.register_or_update_device(&reg).unwrap();
+            store.associate_device_with_user(device_id, user_id).unwrap();
+        }
+
+        // Enforce limit of 5 (no deletion needed)
+        let deleted = store.enforce_user_device_limit(user_id, 5).unwrap();
+        assert_eq!(deleted, 0);
+
+        assert_eq!(store.get_user_devices(user_id).unwrap().len(), 2);
+    }
+
+    #[test]
+    fn test_prune_orphaned_devices() {
+        let (store, _temp_dir) = create_tmp_store();
+
+        // Create an orphaned device (no user_id) with old timestamp
+        let reg = DeviceRegistration {
+            device_uuid: "orphan-uuid-test".to_string(),
+            device_type: DeviceType::Web,
+            device_name: None,
+            os_info: None,
+        };
+        let device_id = store.register_or_update_device(&reg).unwrap();
+
+        // Manually set last_seen to 10 days ago
+        {
+            let conn = store.conn.lock().unwrap();
+            let ten_days_ago = SystemTime::now()
+                .duration_since(SystemTime::UNIX_EPOCH)
+                .unwrap()
+                .as_secs() as i64
+                - (10 * 24 * 60 * 60);
+            conn.execute(
+                "UPDATE device SET last_seen = ?1 WHERE id = ?2",
+                params![ten_days_ago, device_id],
+            )
+            .unwrap();
+        }
+
+        // Verify device exists
+        assert!(store.get_device(device_id).unwrap().is_some());
+
+        // Prune devices inactive for more than 7 days
+        let deleted = store.prune_orphaned_devices(7).unwrap();
+        assert_eq!(deleted, 1);
+
+        // Device should be gone
+        assert!(store.get_device(device_id).unwrap().is_none());
+    }
+
+    #[test]
+    fn test_prune_orphaned_devices_does_not_delete_associated() {
+        let (store, _temp_dir) = create_tmp_store();
+        let user_id = store.create_user("test_user").unwrap();
+
+        // Create a device associated with user with old timestamp
+        let reg = DeviceRegistration {
+            device_uuid: "associated-uuid".to_string(),
+            device_type: DeviceType::Android,
+            device_name: None,
+            os_info: None,
+        };
+        let device_id = store.register_or_update_device(&reg).unwrap();
+        store.associate_device_with_user(device_id, user_id).unwrap();
+
+        // Manually set last_seen to 10 days ago
+        {
+            let conn = store.conn.lock().unwrap();
+            let ten_days_ago = SystemTime::now()
+                .duration_since(SystemTime::UNIX_EPOCH)
+                .unwrap()
+                .as_secs() as i64
+                - (10 * 24 * 60 * 60);
+            conn.execute(
+                "UPDATE device SET last_seen = ?1 WHERE id = ?2",
+                params![ten_days_ago, device_id],
+            )
+            .unwrap();
+        }
+
+        // Prune orphaned devices - should not delete associated devices
+        let deleted = store.prune_orphaned_devices(7).unwrap();
+        assert_eq!(deleted, 0);
+
+        // Device should still exist
+        assert!(store.get_device(device_id).unwrap().is_some());
+    }
+
+    #[test]
+    fn test_prune_orphaned_devices_does_not_delete_recent() {
+        let (store, _temp_dir) = create_tmp_store();
+
+        // Create an orphaned device (no user_id) with recent timestamp
+        let reg = DeviceRegistration {
+            device_uuid: "recent-orphan-uuid".to_string(),
+            device_type: DeviceType::Web,
+            device_name: None,
+            os_info: None,
+        };
+        let device_id = store.register_or_update_device(&reg).unwrap();
+
+        // Prune devices inactive for more than 7 days - should not delete recent device
+        let deleted = store.prune_orphaned_devices(7).unwrap();
+        assert_eq!(deleted, 0);
+
+        // Device should still exist
+        assert!(store.get_device(device_id).unwrap().is_some());
+    }
+
+    #[test]
+    fn test_device_user_id_set_null_on_user_delete() {
+        let (store, _temp_dir) = create_tmp_store();
+        let user_id = store.create_user("test_user").unwrap();
+
+        // Create a device and associate with user
+        let reg = DeviceRegistration {
+            device_uuid: "cascade-test-uuid".to_string(),
+            device_type: DeviceType::Android,
+            device_name: None,
+            os_info: None,
+        };
+        let device_id = store.register_or_update_device(&reg).unwrap();
+        store.associate_device_with_user(device_id, user_id).unwrap();
+
+        // Verify association
+        let device = store.get_device(device_id).unwrap().unwrap();
+        assert_eq!(device.user_id, Some(user_id));
+
+        // Delete user
+        {
+            let conn = store.conn.lock().unwrap();
+            conn.execute("DELETE FROM user WHERE id = ?1", params![user_id])
+                .unwrap();
+        }
+
+        // Device should still exist but user_id should be NULL (ON DELETE SET NULL)
+        let device = store.get_device(device_id).unwrap().unwrap();
+        assert!(device.user_id.is_none());
+    }
+
+    // ==================== AuthToken with Device Tests ====================
+
+    #[test]
+    fn test_auth_token_with_device_id() {
+        let (store, _temp_dir) = create_tmp_store();
+        let user_id = store.create_user("test_user").unwrap();
+
+        // Create a device
+        let reg = DeviceRegistration {
+            device_uuid: "token-test-uuid".to_string(),
+            device_type: DeviceType::Web,
+            device_name: None,
+            os_info: None,
+        };
+        let device_id = store.register_or_update_device(&reg).unwrap();
+
+        // Create token with device_id
+        let token = AuthToken {
+            user_id,
+            device_id: Some(device_id),
+            value: AuthTokenValue::generate(),
+            created: SystemTime::now(),
+            last_used: None,
+        };
+
+        store.add_user_auth_token(token.clone()).unwrap();
+
+        // Retrieve and verify
+        let retrieved = store.get_user_auth_token(&token.value).unwrap().unwrap();
+        assert_eq!(retrieved.device_id, Some(device_id));
+        assert_eq!(retrieved.user_id, user_id);
+    }
+
+    #[test]
+    fn test_auth_token_without_device_id() {
+        let (store, _temp_dir) = create_tmp_store();
+        let user_id = store.create_user("test_user").unwrap();
+
+        // Create token without device_id (backward compatibility)
+        let token = AuthToken {
+            user_id,
+            device_id: None,
+            value: AuthTokenValue::generate(),
+            created: SystemTime::now(),
+            last_used: None,
+        };
+
+        store.add_user_auth_token(token.clone()).unwrap();
+
+        // Retrieve and verify
+        let retrieved = store.get_user_auth_token(&token.value).unwrap().unwrap();
+        assert!(retrieved.device_id.is_none());
+    }
 }
