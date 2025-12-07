@@ -51,6 +51,7 @@ import com.lelloman.pezzottify.android.ui.screen.login.LoginViewModel
 import com.lelloman.pezzottify.android.ui.screen.main.MainScreenViewModel
 import com.lelloman.pezzottify.android.ui.screen.main.content.album.AlbumScreenViewModel
 import com.lelloman.pezzottify.android.ui.screen.main.content.artist.ArtistScreenViewModel
+import com.lelloman.pezzottify.android.ui.screen.main.content.track.TrackScreenViewModel
 import com.lelloman.pezzottify.android.ui.screen.main.home.HomeScreenState
 import com.lelloman.pezzottify.android.ui.screen.main.home.HomeScreenViewModel
 import com.lelloman.pezzottify.android.ui.screen.main.home.ViewedContentType
@@ -384,6 +385,45 @@ class InteractorsModule {
 
         override fun toggleLike(contentId: String, currentlyLiked: Boolean) {
             toggleLikeUseCase(contentId, DomainLikedContent.ContentType.Artist, currentlyLiked)
+        }
+    }
+
+    @Provides
+    fun provideTrackScreenInteractor(
+        player: PezzottifyPlayer,
+        logViewedContentUseCase: LogViewedContentUseCase,
+        userSettingsStore: UserSettingsStore,
+        getLikedStateUseCase: GetLikedStateUseCase,
+        toggleLikeUseCase: ToggleLikeUseCase,
+    ): TrackScreenViewModel.Interactor = object : TrackScreenViewModel.Interactor {
+        override fun playTrack(albumId: String, trackId: String) {
+            when (userSettingsStore.playBehavior.value) {
+                DomainPlayBehavior.ReplacePlaylist -> player.loadAlbum(albumId, trackId)
+                DomainPlayBehavior.AddToPlaylist -> player.addTracksToPlaylist(listOf(trackId))
+            }
+        }
+
+        override fun logViewedTrack(trackId: String) {
+            logViewedContentUseCase(trackId, ViewedContent.Type.Track)
+        }
+
+        override fun getCurrentPlayingTrackId(): Flow<String?> =
+            player.playbackPlaylist.combine(player.currentTrackIndex) { playlist, currentTrackIndex ->
+                if (playlist != null && currentTrackIndex != null && currentTrackIndex in playlist.tracksIds.indices) {
+                    playlist.tracksIds[currentTrackIndex]
+                } else {
+                    null
+                }
+            }
+
+        override fun getIsAddToQueueMode(): Flow<Boolean> =
+            userSettingsStore.playBehavior.map { it == DomainPlayBehavior.AddToPlaylist }
+
+        override fun isLiked(contentId: String): Flow<Boolean> =
+            getLikedStateUseCase(contentId)
+
+        override fun toggleLike(contentId: String, currentlyLiked: Boolean) {
+            toggleLikeUseCase(contentId, DomainLikedContent.ContentType.Track, currentlyLiked)
         }
     }
 

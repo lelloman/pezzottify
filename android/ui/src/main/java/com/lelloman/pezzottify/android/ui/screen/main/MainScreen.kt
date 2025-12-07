@@ -181,7 +181,7 @@ private fun MainScreenContent(state: MainScreenState, actions: MainScreenActions
                     AlbumScreen(it.toRoute<Screen.Main.Album>().albumId, navController)
                 }
                 composable<Screen.Main.Track> {
-                    TrackScreen(it.toRoute<Screen.Main.Track>().trackId)
+                    TrackScreen(it.toRoute<Screen.Main.Track>().trackId, navController)
                 }
 
                 // Overlay screens (no bottom nav/player)
