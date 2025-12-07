@@ -190,6 +190,18 @@ impl ConnectionManager {
         let conns = self.connections.read().await;
         conns.values().map(|user_conns| user_conns.len()).sum()
     }
+
+    /// Get list of all connected user IDs.
+    pub async fn get_connected_user_ids(&self) -> Vec<usize> {
+        let conns = self.connections.read().await;
+        conns.keys().copied().collect()
+    }
+
+    /// Get count of unique connected users.
+    pub async fn connected_user_count(&self) -> usize {
+        let conns = self.connections.read().await;
+        conns.len()
+    }
 }
 
 #[cfg(test)]

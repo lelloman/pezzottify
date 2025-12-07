@@ -401,6 +401,16 @@ export const useRemoteStore = defineStore('remote', () => {
     }
   };
 
+  const fetchOnlineUsers = async () => {
+    try {
+      const response = await axios.get('/v1/admin/online-users');
+      return response.data;
+    } catch (error) {
+      console.error('Failed to fetch online users:', error);
+      return null;
+    }
+  };
+
   // =====================================================
   // Admin API - Server Control (RebootServer)
   // =====================================================
@@ -452,6 +462,7 @@ export const useRemoteStore = defineStore('remote', () => {
     fetchTopTracks,
     fetchTrackStats,
     fetchUserListeningSummary,
+    fetchOnlineUsers,
     // Admin API - Server Control
     rebootServer,
   };

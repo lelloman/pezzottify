@@ -27,6 +27,22 @@
       </div>
     </div>
 
+    <!-- Online Users -->
+    <div class="onlineUsersCard">
+      <div class="onlineUsersInfo">
+        <span class="onlineCount">{{ onlineUsers?.count ?? '—' }}</span>
+        <span class="onlineLabel">{{ onlineUsers?.count === 1 ? 'user online' : 'users online' }}</span>
+      </div>
+      <div v-if="onlineUsers?.handles?.length > 0" class="onlineHandles">
+        <span v-for="handle in onlineUsers.handles" :key="handle" class="userBadge">
+          {{ handle }}
+        </span>
+        <span v-if="onlineUsers.count > 3" class="moreUsers">
+          +{{ onlineUsers.count - 3 }} more
+        </span>
+      </div>
+    </div>
+
     <div v-if="loadError" class="errorMessage">
       {{ loadError }}
     </div>
@@ -160,6 +176,7 @@ const loadError = ref(null);
 const dailyStats = ref([]);
 const topTracks = ref([]);
 const trackInfoMap = ref({});
+const onlineUsers = ref(null);
 
 // Fetch track info for top tracks
 const fetchTrackInfo = async () => {
@@ -200,9 +217,10 @@ const loadData = async () => {
   const start = formatDateForApi(startDate.value);
   const end = formatDateForApi(endDate.value);
 
-  const [dailyResult, topTracksResult] = await Promise.all([
+  const [dailyResult, topTracksResult, onlineResult] = await Promise.all([
     remoteStore.fetchDailyListening(start, end),
     remoteStore.fetchTopTracks(start, end, 20),
+    remoteStore.fetchOnlineUsers(),
   ]);
 
   if (dailyResult === null && topTracksResult === null) {
@@ -211,6 +229,8 @@ const loadData = async () => {
     dailyStats.value = dailyResult || [];
     topTracks.value = topTracksResult || [];
   }
+
+  onlineUsers.value = onlineResult;
 
   isLoading.value = false;
 };
@@ -351,7 +371,56 @@ onMounted(() => {
 }
 
 .dateRangeSection {
+  margin-bottom: var(--spacing-4);
+}
+
+.onlineUsersCard {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--spacing-4);
+  padding: var(--spacing-4);
+  background-color: var(--bg-elevated-base);
+  border-radius: var(--radius-lg);
   margin-bottom: var(--spacing-6);
+}
+
+.onlineUsersInfo {
+  display: flex;
+  align-items: baseline;
+  gap: var(--spacing-2);
+}
+
+.onlineCount {
+  font-size: var(--text-3xl);
+  font-weight: var(--font-bold);
+  color: var(--spotify-green);
+}
+
+.onlineLabel {
+  font-size: var(--text-base);
+  color: var(--text-subdued);
+}
+
+.onlineHandles {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--spacing-2);
+}
+
+.userBadge {
+  padding: var(--spacing-1) var(--spacing-3);
+  background-color: rgba(29, 185, 84, 0.15);
+  border: 1px solid rgba(29, 185, 84, 0.3);
+  border-radius: var(--radius-full);
+  font-size: var(--text-sm);
+  color: var(--spotify-green);
+}
+
+.moreUsers {
+  font-size: var(--text-sm);
+  color: var(--text-subdued);
 }
 
 .dateInputs {

@@ -2204,6 +2204,37 @@ async fn admin_get_user_listening_summary(
     }
 }
 
+/// Response for online users endpoint
+#[derive(Serialize)]
+struct OnlineUsersResponse {
+    /// Total count of unique users connected via WebSocket
+    count: usize,
+    /// Handles of first few connected users (up to 3)
+    handles: Vec<String>,
+}
+
+/// Get count and handles of currently connected users
+async fn admin_get_online_users(
+    _session: Session,
+    State(user_manager): State<GuardedUserManager>,
+    State(connection_manager): State<GuardedConnectionManager>,
+) -> Response {
+    // Get connected user IDs from WebSocket connection manager
+    let user_ids = connection_manager.get_connected_user_ids().await;
+    let count = user_ids.len();
+
+    // Get handles for first 3 users
+    let manager = user_manager.lock().unwrap();
+    let handles: Vec<String> = user_ids
+        .into_iter()
+        .take(3)
+        .filter_map(|user_id| manager.get_user_handle(user_id).ok())
+        .flatten()
+        .collect();
+
+    Json(OnlineUsersResponse { count, handles }).into_response()
+}
+
 // ============================================================================
 // Changelog admin endpoints (requires EditCatalog permission)
 // ============================================================================
@@ -2684,6 +2715,7 @@ pub fn make_app(
         .route("/listening/top-tracks", get(admin_get_top_tracks))
         .route("/listening/track/{track_id}", get(admin_get_track_listening_stats))
         .route("/listening/users/{user_handle}/summary", get(admin_get_user_listening_summary))
+        .route("/online-users", get(admin_get_online_users))
         .layer(GovernorLayer::new(write_rate_limit.clone()))
         .route_layer(middleware::from_fn_with_state(
             state.clone(),
