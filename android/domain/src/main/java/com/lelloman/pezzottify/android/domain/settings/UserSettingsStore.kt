@@ -72,7 +72,7 @@ enum class ThemeMode {
     Amoled;  // True black for OLED screens
 
     companion object {
-        val Default = System
+        val Default = Dark
     }
 }
 
@@ -97,6 +97,6 @@ enum class AppFontFamily {
     Monospace;    // Monospace for a developer feel
 
     companion object {
-        val Default = System
+        val Default = SansSerif
     }
 }

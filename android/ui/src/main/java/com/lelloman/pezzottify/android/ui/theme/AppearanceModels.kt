@@ -7,7 +7,7 @@ enum class ThemeMode {
     Amoled;
 
     companion object {
-        val Default = System
+        val Default = Dark
     }
 }
 
@@ -32,6 +32,6 @@ enum class AppFontFamily {
     Monospace;
 
     companion object {
-        val Default = System
+        val Default = SansSerif
     }
 }
