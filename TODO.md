@@ -28,6 +28,10 @@
 - ~Log requests/responses to stdout~
 
 
+## [catalog-server]
+
+- Add caching for popular content endpoint (`/v1/content/popular`) - currently re-aggregates from raw listening data on every call
+
 ## [agents]
 
 - Make artist info retrieval agent

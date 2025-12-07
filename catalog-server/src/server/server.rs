@@ -820,6 +820,70 @@ async fn get_whats_new(
     }
 }
 
+/// Get popular albums and artists based on listening data from the last 7 days
+async fn get_popular_content(
+    _session: Session,
+    State(user_manager): State<GuardedUserManager>,
+    Query(query): Query<PopularContentQuery>,
+) -> Response {
+    use std::time::SystemTime;
+
+    // Default: last 7 days
+    let now_secs = SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+
+    let end_date = {
+        let datetime = chrono::DateTime::from_timestamp(now_secs as i64, 0)
+            .unwrap_or_else(|| chrono::Utc::now());
+        datetime
+            .format("%Y%m%d")
+            .to_string()
+            .parse::<u32>()
+            .unwrap_or(0)
+    };
+
+    let start_date = {
+        let seven_days_ago = now_secs - (7 * 24 * 60 * 60);
+        let datetime = chrono::DateTime::from_timestamp(seven_days_ago as i64, 0)
+            .unwrap_or_else(|| chrono::Utc::now());
+        datetime
+            .format("%Y%m%d")
+            .to_string()
+            .parse::<u32>()
+            .unwrap_or(0)
+    };
+
+    // Default and cap limits
+    let albums_limit = query.albums_limit.unwrap_or(10).min(20);
+    let artists_limit = query.artists_limit.unwrap_or(10).min(20);
+
+    info!(
+        "get_popular_content: date range {} - {}, limits albums={} artists={}",
+        start_date, end_date, albums_limit, artists_limit
+    );
+
+    match user_manager
+        .lock()
+        .unwrap()
+        .get_popular_content(start_date, end_date, albums_limit, artists_limit)
+    {
+        Ok(content) => {
+            info!(
+                "get_popular_content: returning {} albums, {} artists",
+                content.albums.len(),
+                content.artists.len()
+            );
+            Json(content).into_response()
+        }
+        Err(err) => {
+            error!("Error getting popular content: {}", err);
+            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+        }
+    }
+}
+
 fn parse_content_type(content_type_str: &str) -> Option<LikedContentType> {
     match content_type_str {
         "artist" => Some(LikedContentType::Artist),
@@ -1687,6 +1751,12 @@ struct TopTracksQuery {
     pub start_date: Option<u32>,
     pub end_date: Option<u32>,
     pub limit: Option<usize>,
+}
+
+#[derive(Deserialize, Debug)]
+struct PopularContentQuery {
+    pub albums_limit: Option<usize>,
+    pub artists_limit: Option<usize>,
 }
 
 async fn admin_get_users(
@@ -2674,6 +2744,7 @@ pub fn make_app(
         .route("/track/{id}/resolved", get(get_resolved_track))
         .route("/image/{id}", get(get_image))
         .route("/whatsnew", get(get_whats_new))
+        .route("/popular", get(get_popular_content))
         .layer(GovernorLayer::new(content_read_rate_limit))
         .with_state(state.clone());
 

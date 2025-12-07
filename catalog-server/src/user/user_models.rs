@@ -161,3 +161,38 @@ pub struct DailyListeningStats {
     pub unique_users: u64,
     pub unique_tracks: u64,
 }
+
+// ============================================================================
+// Popular Content Models
+// ============================================================================
+
+/// A popular album with listening statistics
+#[derive(Serialize, Debug, Clone)]
+pub struct PopularAlbum {
+    pub id: String,
+    pub name: String,
+    /// Image ID for the album cover
+    pub image_id: Option<String>,
+    /// Primary artist names for display
+    pub artist_names: Vec<String>,
+    /// Total play count across all tracks in the album
+    pub play_count: u64,
+}
+
+/// A popular artist with listening statistics
+#[derive(Serialize, Debug, Clone)]
+pub struct PopularArtist {
+    pub id: String,
+    pub name: String,
+    /// Image ID for the artist image
+    pub image_id: Option<String>,
+    /// Total play count across all tracks by the artist
+    pub play_count: u64,
+}
+
+/// Container for popular content (albums and artists)
+#[derive(Serialize, Debug, Clone)]
+pub struct PopularContent {
+    pub albums: Vec<PopularAlbum>,
+    pub artists: Vec<PopularArtist>,
+}

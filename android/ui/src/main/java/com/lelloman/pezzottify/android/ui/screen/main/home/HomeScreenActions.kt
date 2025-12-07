@@ -7,4 +7,8 @@ interface HomeScreenActions {
     suspend fun clickOnSettings()
 
     fun clickOnRecentlyViewedItem(itemId: String, itemType: ViewedContentType)
+
+    fun clickOnPopularAlbum(albumId: String)
+
+    fun clickOnPopularArtist(artistId: String)
 }

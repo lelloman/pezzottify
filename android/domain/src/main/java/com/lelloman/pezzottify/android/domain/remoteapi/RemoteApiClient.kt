@@ -7,6 +7,7 @@ import com.lelloman.pezzottify.android.domain.remoteapi.response.ArtistResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.ImageResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.ListeningEventRecordedResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.LoginSuccessResponse
+import com.lelloman.pezzottify.android.domain.remoteapi.response.PopularContentResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.RemoteApiResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.SearchResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.SyncEventsResponse
@@ -43,6 +44,14 @@ interface RemoteApiClient {
     suspend fun getTrack(trackId: String): RemoteApiResponse<TrackResponse>
 
     suspend fun getImage(imageId: String): RemoteApiResponse<ImageResponse>
+
+    /**
+     * Get popular albums and artists based on listening data from the last 7 days.
+     */
+    suspend fun getPopularContent(
+        albumsLimit: Int = 10,
+        artistsLimit: Int = 10,
+    ): RemoteApiResponse<PopularContentResponse>
 
     suspend fun search(
         query: String,

@@ -36,6 +36,7 @@ import com.lelloman.pezzottify.android.ui.model.StoragePressureLevel as UiStorag
 import com.lelloman.pezzottify.android.ui.model.LikedContent as UiLikedContent
 import com.lelloman.pezzottify.android.ui.model.PlaybackPlaylist as UiPlaybackPlaylist
 import com.lelloman.pezzottify.android.ui.model.PlaybackPlaylistContext as UiPlaybackPlaylistContext
+import com.lelloman.pezzottify.android.domain.statics.usecase.GetPopularContent
 import com.lelloman.pezzottify.android.domain.statics.usecase.PerformSearch
 import com.lelloman.pezzottify.android.domain.user.GetRecentlyViewedContentUseCase
 import com.lelloman.pezzottify.android.domain.user.GetSearchHistoryEntriesUseCase
@@ -54,6 +55,9 @@ import com.lelloman.pezzottify.android.ui.screen.main.content.artist.ArtistScree
 import com.lelloman.pezzottify.android.ui.screen.main.content.track.TrackScreenViewModel
 import com.lelloman.pezzottify.android.ui.screen.main.home.HomeScreenState
 import com.lelloman.pezzottify.android.ui.screen.main.home.HomeScreenViewModel
+import com.lelloman.pezzottify.android.ui.screen.main.home.PopularAlbumState
+import com.lelloman.pezzottify.android.ui.screen.main.home.PopularArtistState
+import com.lelloman.pezzottify.android.ui.screen.main.home.PopularContentState
 import com.lelloman.pezzottify.android.ui.screen.main.home.ViewedContentType
 import com.lelloman.pezzottify.android.ui.screen.main.library.LibraryScreenViewModel
 import com.lelloman.pezzottify.android.ui.screen.main.profile.ProfileScreenViewModel
@@ -473,8 +477,10 @@ class InteractorsModule {
     @Provides
     fun provideHomeScreenInteractor(
         getRecentlyViewedContent: GetRecentlyViewedContentUseCase,
+        getPopularContentUseCase: GetPopularContent,
         authStore: AuthStore,
         webSocketManager: WebSocketManager,
+        configStore: ConfigStore,
     ) = object : HomeScreenViewModel.Interactor {
 
         override fun connectionState(scope: CoroutineScope): StateFlow<UiConnectionState> =
@@ -500,6 +506,34 @@ class InteractorsModule {
                 authState.userHandle
             } else {
                 ""
+            }
+        }
+
+        override suspend fun getPopularContent(): PopularContentState? {
+            // Only fetch if logged in - otherwise auth token is empty and server returns 403
+            if (authStore.getAuthState().value !is AuthState.LoggedIn) {
+                return null
+            }
+            val result = getPopularContentUseCase()
+            return result.getOrNull()?.let { popularContent ->
+                val baseUrl = configStore.baseUrl.value
+                PopularContentState(
+                    albums = popularContent.albums.map { album ->
+                        PopularAlbumState(
+                            id = album.id,
+                            name = album.name,
+                            imageUrl = ImageUrlProvider.buildImageUrl(baseUrl, album.displayImageId),
+                            artistNames = album.artistNames,
+                        )
+                    },
+                    artists = popularContent.artists.map { artist ->
+                        PopularArtistState(
+                            id = artist.id,
+                            name = artist.name,
+                            imageUrl = ImageUrlProvider.buildImageUrl(baseUrl, artist.displayImageId),
+                        )
+                    },
+                )
             }
         }
     }

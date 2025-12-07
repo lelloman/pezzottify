@@ -7,13 +7,14 @@ use super::{
     settings::UserSetting,
     user_models::{
         BandwidthSummary, BandwidthUsage, DailyListeningStats, LikedContentType, ListeningEvent,
-        ListeningSummary, TrackListeningStats, UserListeningHistoryEntry,
+        ListeningSummary, PopularAlbum, PopularArtist, PopularContent, TrackListeningStats,
+        UserListeningHistoryEntry,
     },
     AuthToken, AuthTokenValue, FullUserStore, UserAuthCredentials, UserPlaylist,
     UsernamePasswordCredentials,
 };
 use anyhow::{bail, Context, Result};
-use std::{sync::Arc, time::SystemTime};
+use std::{collections::HashMap, sync::Arc, time::SystemTime};
 
 const MAX_PLAYLIST_SIZE: usize = 300;
 
@@ -523,6 +524,155 @@ impl UserManager {
 
     pub fn get_all_user_settings(&self, user_id: usize) -> Result<Vec<UserSetting>> {
         self.user_store.get_all_user_settings(user_id)
+    }
+
+    // ========================================================================
+    // Popular Content Methods
+    // ========================================================================
+
+    /// Get popular albums and artists based on listening data.
+    /// Aggregates play counts from individual tracks to album and artist level.
+    pub fn get_popular_content(
+        &self,
+        start_date: u32,
+        end_date: u32,
+        albums_limit: usize,
+        artists_limit: usize,
+    ) -> Result<PopularContent> {
+        // Get top tracks with a higher limit to ensure we have enough to aggregate
+        let track_limit = (albums_limit + artists_limit) * 5;
+        let top_tracks = self.user_store.get_top_tracks(start_date, end_date, track_limit)?;
+
+        // Aggregate play counts by album and artist
+        let mut album_plays: HashMap<String, u64> = HashMap::new();
+        let mut artist_plays: HashMap<String, u64> = HashMap::new();
+
+        for track_stats in &top_tracks {
+            // Get album_id from track
+            if let Some(album_id) = self.catalog_store.get_track_album_id(&track_stats.track_id) {
+                *album_plays.entry(album_id).or_insert(0) += track_stats.play_count;
+            }
+
+            // Get track artists from resolved track JSON
+            if let Ok(Some(track_json)) = self
+                .catalog_store
+                .get_resolved_track_json(&track_stats.track_id)
+            {
+                if let Some(artists) = track_json.get("artists").and_then(|a| a.as_array()) {
+                    for track_artist in artists {
+                        // TrackArtist has nested structure: { "artist": { "id": "..." }, "role": "..." }
+                        if let Some(artist_id) = track_artist
+                            .get("artist")
+                            .and_then(|a| a.get("id"))
+                            .and_then(|id| id.as_str())
+                        {
+                            *artist_plays.entry(artist_id.to_string()).or_insert(0) +=
+                                track_stats.play_count;
+                        }
+                    }
+                }
+            }
+        }
+
+        // Sort albums by play count and take top N
+        let mut album_list: Vec<_> = album_plays.into_iter().collect();
+        album_list.sort_by(|a, b| b.1.cmp(&a.1));
+
+        let popular_albums: Vec<PopularAlbum> = album_list
+            .into_iter()
+            .take(albums_limit)
+            .filter_map(|(album_id, play_count)| {
+                // Get resolved album JSON to get name, image, and artists
+                if let Ok(Some(album_json)) = self.catalog_store.get_resolved_album_json(&album_id)
+                {
+                    let id = album_json
+                        .get("album")
+                        .and_then(|a| a.get("id"))
+                        .and_then(|id| id.as_str())
+                        .unwrap_or(&album_id)
+                        .to_string();
+                    let name = album_json
+                        .get("album")
+                        .and_then(|a| a.get("name"))
+                        .and_then(|n| n.as_str())
+                        .unwrap_or("Unknown")
+                        .to_string();
+                    let image_id = album_json
+                        .get("display_image")
+                        .and_then(|img| img.get("id"))
+                        .and_then(|id| id.as_str())
+                        .map(|s| s.to_string());
+                    let artist_names: Vec<String> = album_json
+                        .get("artists")
+                        .and_then(|a| a.as_array())
+                        .map(|artists| {
+                            artists
+                                .iter()
+                                .filter_map(|a| a.get("name").and_then(|n| n.as_str()))
+                                .map(|s| s.to_string())
+                                .collect()
+                        })
+                        .unwrap_or_default();
+
+                    Some(PopularAlbum {
+                        id,
+                        name,
+                        image_id,
+                        artist_names,
+                        play_count,
+                    })
+                } else {
+                    None
+                }
+            })
+            .collect();
+
+        // Sort artists by play count and take top N
+        let mut artist_list: Vec<_> = artist_plays.into_iter().collect();
+        artist_list.sort_by(|a, b| b.1.cmp(&a.1));
+
+        let popular_artists: Vec<PopularArtist> = artist_list
+            .into_iter()
+            .take(artists_limit)
+            .filter_map(|(artist_id, play_count)| {
+                // Get resolved artist JSON to get name and image
+                if let Ok(Some(artist_json)) =
+                    self.catalog_store.get_resolved_artist_json(&artist_id)
+                {
+                    let id = artist_json
+                        .get("artist")
+                        .and_then(|a| a.get("id"))
+                        .and_then(|id| id.as_str())
+                        .unwrap_or(&artist_id)
+                        .to_string();
+                    let name = artist_json
+                        .get("artist")
+                        .and_then(|a| a.get("name"))
+                        .and_then(|n| n.as_str())
+                        .unwrap_or("Unknown")
+                        .to_string();
+                    let image_id = artist_json
+                        .get("display_image")
+                        .and_then(|img| img.get("id"))
+                        .and_then(|id| id.as_str())
+                        .map(|s| s.to_string());
+
+                    Some(PopularArtist {
+                        id,
+                        name,
+                        image_id,
+                        play_count,
+                    })
+                } else {
+                    None
+                }
+            })
+            .collect();
+
+        Ok(PopularContent {
+            albums: popular_albums,
+            artists: popular_artists,
+        })
     }
 
     // ========================================================================

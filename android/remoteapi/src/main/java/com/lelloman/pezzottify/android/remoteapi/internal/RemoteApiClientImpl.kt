@@ -10,6 +10,7 @@ import com.lelloman.pezzottify.android.domain.remoteapi.response.ArtistResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.ImageResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.ListeningEventRecordedResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.LoginSuccessResponse
+import com.lelloman.pezzottify.android.domain.remoteapi.response.PopularContentResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.RemoteApiResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.SearchResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.SyncEventsResponse
@@ -152,6 +153,19 @@ internal class RemoteApiClientImpl(
                 )
             )
         }
+
+    override suspend fun getPopularContent(
+        albumsLimit: Int,
+        artistsLimit: Int,
+    ): RemoteApiResponse<PopularContentResponse> = catchingNetworkError {
+        retrofit
+            .getPopularContent(
+                authToken = authToken,
+                albumsLimit = albumsLimit,
+                artistsLimit = artistsLimit,
+            )
+            .returnFromRetrofitResponse()
+    }
 
     override suspend fun search(
         query: String,

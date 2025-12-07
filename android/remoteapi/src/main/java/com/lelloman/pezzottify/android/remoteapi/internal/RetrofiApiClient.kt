@@ -10,6 +10,7 @@ import com.lelloman.pezzottify.android.domain.remoteapi.response.ArtistDiscograp
 import com.lelloman.pezzottify.android.domain.remoteapi.response.ArtistResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.ImageResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.LoginSuccessResponse
+import com.lelloman.pezzottify.android.domain.remoteapi.response.PopularContentResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.SearchResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.SyncEventsResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.SyncStateResponse
@@ -62,6 +63,13 @@ internal interface RetrofitApiClient {
         @Header("Authorization") authToken: String,
         @Path("imageId") imageId: String
     ): Response<ResponseBody>
+
+    @GET("/v1/content/popular")
+    suspend fun getPopularContent(
+        @Header("Authorization") authToken: String,
+        @Query("albums_limit") albumsLimit: Int,
+        @Query("artists_limit") artistsLimit: Int,
+    ): Response<PopularContentResponse>
 
     @POST("/v1/content/search")
     suspend fun search(

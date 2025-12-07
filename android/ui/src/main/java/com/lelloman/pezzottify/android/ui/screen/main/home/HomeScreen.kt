@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -160,7 +161,7 @@ private fun HomeScreenContent(
                     .verticalScroll(rememberScrollState())
                     .padding(horizontal = Spacing.Medium),
             ) {
-            state.recentlyViewedContent?.let { recentlyViewedItems ->
+            state.recentlyViewedContent?.takeIf { it.isNotEmpty() }?.let { recentlyViewedItems ->
                 Spacer(modifier = Modifier.height(Spacing.Medium))
                 Text(
                     stringResource(R.string.recently_viewed_item_header),
@@ -192,6 +193,70 @@ private fun HomeScreenContent(
                     Spacer(modifier = Modifier.height(Spacing.Small))
                 }
             }
+
+                // Popular content section
+                state.popularContent?.let { popularContent ->
+                    if (popularContent.albums.isNotEmpty()) {
+                        Spacer(modifier = Modifier.height(Spacing.Large))
+                        Text(
+                            stringResource(R.string.popular_albums_header),
+                            style = MaterialTheme.typography.titleLarge
+                        )
+                        Spacer(modifier = Modifier.height(Spacing.Medium))
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(Spacing.Small)
+                        ) {
+                            popularContent.albums.forEach { album ->
+                                PopularAlbumItem(
+                                    album = album,
+                                    onClick = { actions.clickOnPopularAlbum(album.id) }
+                                )
+                            }
+                        }
+                    }
+
+                    if (popularContent.artists.isNotEmpty()) {
+                        Spacer(modifier = Modifier.height(Spacing.Large))
+                        Text(
+                            stringResource(R.string.popular_artists_header),
+                            style = MaterialTheme.typography.titleLarge
+                        )
+                        Spacer(modifier = Modifier.height(Spacing.Medium))
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(Spacing.Small)
+                        ) {
+                            popularContent.artists.forEach { artist ->
+                                PopularArtistItem(
+                                    artist = artist,
+                                    onClick = { actions.clickOnPopularArtist(artist.id) }
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // Show empty state message if no content
+                val hasRecentlyViewed = state.recentlyViewedContent?.isNotEmpty() == true
+                val hasPopularAlbums = state.popularContent?.albums?.isNotEmpty() == true
+                val hasPopularArtists = state.popularContent?.artists?.isNotEmpty() == true
+                if (!hasRecentlyViewed && !hasPopularAlbums && !hasPopularArtists) {
+                    Spacer(modifier = Modifier.height(Spacing.ExtraLarge))
+                    Text(
+                        text = stringResource(R.string.home_empty_state),
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.fillMaxWidth(),
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(Spacing.Large))
             }
         }
     }
@@ -366,5 +431,100 @@ private fun extractInitials(userName: String): String {
         parts.isEmpty() -> userName.take(1).uppercase()
         parts.size == 1 -> parts[0].take(2).uppercase()
         else -> (parts[0].take(1) + parts[1].take(1)).uppercase()
+    }
+}
+
+@Composable
+private fun PopularAlbumItem(
+    album: PopularAlbumState,
+    onClick: () -> Unit,
+) {
+    Card(
+        modifier = Modifier
+            .width(140.dp)
+            .clickable(onClick = onClick),
+        shape = RoundedCornerShape(CornerRadius.Small),
+        elevation = CardDefaults.cardElevation(defaultElevation = Elevation.Small)
+    ) {
+        Column {
+            NullablePezzottifyImage(
+                url = album.imageUrl,
+                shape = PezzottifyImageShape.FullSize,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .aspectRatio(1f)
+                    .clip(
+                        RoundedCornerShape(
+                            topStart = CornerRadius.Small,
+                            topEnd = CornerRadius.Small,
+                            bottomStart = 0.dp,
+                            bottomEnd = 0.dp
+                        )
+                    )
+            )
+            Column(
+                modifier = Modifier.padding(Spacing.Small)
+            ) {
+                Text(
+                    text = album.name,
+                    style = MaterialTheme.typography.titleSmall,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                if (album.artistNames.isNotEmpty()) {
+                    Text(
+                        text = album.artistNames.joinToString(", "),
+                        style = MaterialTheme.typography.bodySmall,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun PopularArtistItem(
+    artist: PopularArtistState,
+    onClick: () -> Unit,
+) {
+    Card(
+        modifier = Modifier
+            .width(140.dp)
+            .clickable(onClick = onClick),
+        shape = RoundedCornerShape(CornerRadius.Small),
+        elevation = CardDefaults.cardElevation(defaultElevation = Elevation.Small)
+    ) {
+        Column {
+            NullablePezzottifyImage(
+                url = artist.imageUrl,
+                shape = PezzottifyImageShape.FullSize,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .aspectRatio(1f)
+                    .clip(
+                        RoundedCornerShape(
+                            topStart = CornerRadius.Small,
+                            topEnd = CornerRadius.Small,
+                            bottomStart = 0.dp,
+                            bottomEnd = 0.dp
+                        )
+                    )
+            )
+            Column(
+                modifier = Modifier.padding(Spacing.Small)
+            ) {
+                Text(
+                    text = artist.name,
+                    style = MaterialTheme.typography.titleSmall,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+            }
+        }
     }
 }
