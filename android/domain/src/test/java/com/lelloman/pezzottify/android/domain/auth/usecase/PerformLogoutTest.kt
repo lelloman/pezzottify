@@ -65,10 +65,10 @@ class PerformLogoutTest {
     }
 
     @Test
-    fun `invoke stops player`() = runTest {
+    fun `invoke clears player session`() = runTest {
         performLogout()
 
-        coVerify { player.stop() }
+        verify { player.clearSession() }
     }
 
     @Test
@@ -146,7 +146,6 @@ class PerformLogoutTest {
         performLogout()
 
         coVerify {
-            player.stop()
             webSocketManager.disconnect()
             syncManager.cleanup()
             authStore.storeAuthState(AuthState.LoggedOut)
@@ -157,6 +156,9 @@ class PerformLogoutTest {
             permissionsStore.clear()
             listeningEventStore.deleteAll()
         }
-        verify { staticsCache.clearAll() }
+        verify {
+            player.clearSession()
+            staticsCache.clearAll()
+        }
     }
 }

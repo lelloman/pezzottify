@@ -30,7 +30,7 @@ class PerformLogout @Inject internal constructor(
 ) : UseCase() {
 
     suspend operator fun invoke() {
-        player.stop()
+        player.clearSession()
         webSocketManager.disconnect()
         syncManager.cleanup()
         authStore.storeAuthState(AuthState.LoggedOut)

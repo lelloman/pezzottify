@@ -267,6 +267,18 @@ internal class ExoPlatformPlayer(
         stopProgressPolling()
     }
 
+    override fun clearSession() {
+        stopProgressPolling()
+        mediaController?.stop()
+        mediaController?.clearMediaItems()
+        mutableIsActive.value = false
+        mutableIsPlaying.value = false
+        mutableCurrentTrackIndex.value = null
+        mutableCurrentTrackPercent.value = null
+        mutableCurrentTrackProgressSec.value = null
+        mutableCurrentTrackDurationSeconds.value = null
+    }
+
     override fun setVolume(volume: Float) {
         mediaController?.volume = volume.coerceIn(0f, 1f)
         mutableVolumeState.value = mutableVolumeState.value.copy(volume = volume.coerceIn(0f, 1f))

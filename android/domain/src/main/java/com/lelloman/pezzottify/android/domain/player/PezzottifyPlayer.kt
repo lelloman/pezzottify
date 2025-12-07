@@ -20,4 +20,10 @@ interface PezzottifyPlayer : ControlsAndStatePlayer, AppInitializer{
     fun addTracksToPlaylist(tracksIds: List<String>)
     fun removeTrackFromPlaylist(trackId: String)
 
+    /**
+     * Clears the player session completely, stopping playback and clearing the playlist.
+     * Used during logout to fully reset the player state.
+     */
+    fun clearSession()
+
 }

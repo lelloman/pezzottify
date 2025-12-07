@@ -221,6 +221,14 @@ internal class PlayerImpl(
         }
     }
 
+    override fun clearSession() {
+        loadNexPlaylistJob?.cancel()
+        loadNexPlaylistJob = null
+        mutablePlaybackPlaylist.value = null
+        platformPlayer.clearSession()
+        logger.info("Cleared player session")
+    }
+
     override fun toggleShuffle() {
         platformPlayer.toggleShuffle()
     }
