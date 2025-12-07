@@ -223,6 +223,6 @@ class HomeScreenViewModel(
 
 private fun Long.toYear(): Int {
     val calendar = Calendar.getInstance()
-    calendar.timeInMillis = this
+    calendar.timeInMillis = this * 1000 // Convert seconds to milliseconds
     return calendar.get(Calendar.YEAR)
 }
