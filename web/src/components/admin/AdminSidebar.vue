@@ -1,15 +1,15 @@
 <template>
   <aside class="adminSidebar">
     <nav class="sidebarNav">
-      <button
+      <router-link
         v-for="section in sections"
         :key="section.id"
+        :to="section.route"
         class="sidebarButton"
         :class="{ active: activeSection === section.id }"
-        @click="$emit('select', section.id)"
       >
         {{ section.label }}
-      </button>
+      </router-link>
     </nav>
   </aside>
 </template>
@@ -25,8 +25,6 @@ defineProps({
     default: null,
   },
 });
-
-defineEmits(['select']);
 </script>
 
 <style scoped>

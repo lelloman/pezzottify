@@ -55,9 +55,30 @@ const router = createRouter({
 
     {
       path: '/admin',
-      name: 'admin',
       component: AdminView,
-      meta: { requiresAuth: true }
+      meta: { requiresAuth: true },
+      children: [
+        {
+          path: '',
+          name: 'admin',
+          redirect: '/admin/users',
+        },
+        {
+          path: 'users',
+          name: 'admin-users',
+          meta: { requiresAuth: true, section: 'users' },
+        },
+        {
+          path: 'analytics',
+          name: 'admin-analytics',
+          meta: { requiresAuth: true, section: 'analytics' },
+        },
+        {
+          path: 'server',
+          name: 'admin-server',
+          meta: { requiresAuth: true, section: 'server' },
+        },
+      ],
     },
 
     {

@@ -128,7 +128,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue';
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
 import { Line, Bar } from 'vue-chartjs';
 import {
   Chart as ChartJS,
@@ -353,14 +353,34 @@ const barChartOptions = {
   },
 };
 
+// Refresh online users only (for periodic polling)
+const refreshOnlineUsers = async () => {
+  const result = await remoteStore.fetchOnlineUsers();
+  if (result !== null) {
+    onlineUsers.value = result;
+  }
+};
+
+// Polling interval for online users (30 seconds)
+const ONLINE_USERS_POLL_INTERVAL = 30000;
+let onlineUsersInterval = null;
+
 onMounted(() => {
   loadData();
+  onlineUsersInterval = setInterval(refreshOnlineUsers, ONLINE_USERS_POLL_INTERVAL);
+});
+
+onUnmounted(() => {
+  if (onlineUsersInterval) {
+    clearInterval(onlineUsersInterval);
+    onlineUsersInterval = null;
+  }
 });
 </script>
 
 <style scoped>
 .analyticsDashboard {
-  max-width: 1000px;
+  width: 100%;
 }
 
 .sectionTitle {
