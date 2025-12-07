@@ -19,7 +19,6 @@
         <AdminSidebar
           :sections="availableSections"
           :activeSection="activeSection"
-          @select="activeSection = $event"
         />
         <main class="adminContent">
           <component :is="activeSectionComponent" />
@@ -31,6 +30,7 @@
 
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
 import { useUserStore } from '@/store/user';
 import CrossIcon from '@/components/icons/CrossIcon.vue';
 import AdminSidebar from '@/components/admin/AdminSidebar.vue';
@@ -39,6 +39,8 @@ import AnalyticsDashboard from '@/components/admin/AnalyticsDashboard.vue';
 import ServerControl from '@/components/admin/ServerControl.vue';
 import { wsConnectionStatus, wsServerVersion } from '@/services/websocket';
 
+const route = useRoute();
+const router = useRouter();
 const userStore = useUserStore();
 const isLoading = ref(true);
 
@@ -61,31 +63,35 @@ const connectionTitle = computed(() => {
 
 // Define available sections based on permissions
 const allSections = [
-  { id: 'users', label: 'Users', permission: 'ManagePermissions', component: UserManagement },
-  { id: 'analytics', label: 'Analytics', permission: 'ViewAnalytics', component: AnalyticsDashboard },
-  { id: 'server', label: 'Server', permission: 'RebootServer', component: ServerControl },
+  { id: 'users', label: 'Users', permission: 'ManagePermissions', component: UserManagement, route: '/admin/users' },
+  { id: 'analytics', label: 'Analytics', permission: 'ViewAnalytics', component: AnalyticsDashboard, route: '/admin/analytics' },
+  { id: 'server', label: 'Server', permission: 'RebootServer', component: ServerControl, route: '/admin/server' },
 ];
 
 const availableSections = computed(() => {
   return allSections.filter(section => userStore.hasPermission(section.permission));
 });
 
-const activeSection = ref(null);
+// Get active section from route
+const activeSection = computed(() => {
+  return route.meta.section || null;
+});
 
-// Initialize user store and set default section
+// Initialize user store and redirect to first available section if needed
 onMounted(async () => {
   await userStore.initialize();
   isLoading.value = false;
 
-  if (availableSections.value.length > 0 && !activeSection.value) {
-    activeSection.value = availableSections.value[0].id;
+  // If we're at /admin with no section, redirect to first available
+  if (!activeSection.value && availableSections.value.length > 0) {
+    router.replace(availableSections.value[0].route);
   }
 });
 
-// Watch for permission changes (e.g., if they load after mount)
+// Watch for permission changes
 watch(availableSections, (sections) => {
-  if (sections.length > 0 && !activeSection.value) {
-    activeSection.value = sections[0].id;
+  if (!activeSection.value && sections.length > 0) {
+    router.replace(sections[0].route);
   }
 });
 
