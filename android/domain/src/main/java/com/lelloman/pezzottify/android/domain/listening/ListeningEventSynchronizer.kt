@@ -78,8 +78,8 @@ class ListeningEventSynchronizer internal constructor(
 
         when (result) {
             is RemoteApiResponse.Success -> {
-                // Delete immediately after successful sync
-                listeningEventStore.deleteEvent(event.id)
+                // Mark as synced - deletion happens when session is finalized or new session starts
+                listeningEventStore.updateSyncStatus(event.id, SyncStatus.Synced)
                 logger.debug("Successfully synced listening event ${event.sessionId}")
             }
             is RemoteApiResponse.Error.Network -> {

@@ -145,7 +145,7 @@ class ListeningEventSynchronizerTest {
     // ========== Sync Success Tests ==========
 
     @Test
-    fun `successful sync deletes event from store`() = runTest {
+    fun `successful sync marks event as synced`() = runTest {
         val event = createTestEvent(id = 1L)
         val response = ListeningEventRecordedResponse(id = 100L, created = true)
 
@@ -161,7 +161,7 @@ class ListeningEventSynchronizerTest {
 
         coVerify { listeningEventStore.updateSyncStatus(1L, SyncStatus.Syncing) }
         coVerify { remoteApiClient.recordListeningEvent(any()) }
-        coVerify { listeningEventStore.deleteEvent(1L) }
+        coVerify { listeningEventStore.updateSyncStatus(1L, SyncStatus.Synced) }
     }
 
     @Test
@@ -285,9 +285,9 @@ class ListeningEventSynchronizerTest {
         advanceUntilIdle()
 
         coVerify(exactly = 3) { remoteApiClient.recordListeningEvent(any()) }
-        coVerify { listeningEventStore.deleteEvent(1L) }
-        coVerify { listeningEventStore.deleteEvent(2L) }
-        coVerify { listeningEventStore.deleteEvent(3L) }
+        coVerify { listeningEventStore.updateSyncStatus(1L, SyncStatus.Synced) }
+        coVerify { listeningEventStore.updateSyncStatus(2L, SyncStatus.Synced) }
+        coVerify { listeningEventStore.updateSyncStatus(3L, SyncStatus.Synced) }
     }
 
     @Test
@@ -311,7 +311,7 @@ class ListeningEventSynchronizerTest {
 
         coVerify(exactly = 2) { remoteApiClient.recordListeningEvent(any()) }
         coVerify { listeningEventStore.updateSyncStatus(1L, SyncStatus.PendingSync) }
-        coVerify { listeningEventStore.deleteEvent(2L) }
+        coVerify { listeningEventStore.updateSyncStatus(2L, SyncStatus.Synced) }
     }
 
     // ========== Helper Functions ==========

@@ -4,6 +4,7 @@ import com.lelloman.pezzottify.android.domain.app.AppInitializer
 import com.lelloman.pezzottify.android.domain.app.TimeProvider
 import com.lelloman.pezzottify.android.domain.player.PezzottifyPlayer
 import com.lelloman.pezzottify.android.domain.player.PlaybackPlaylistContext
+import com.lelloman.pezzottify.android.domain.usercontent.SyncStatus
 import com.lelloman.pezzottify.android.logger.LoggerFactory
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.DelicateCoroutinesApi
@@ -58,7 +59,7 @@ class ListeningTracker internal constructor(
     data class ActiveSession(
         val sessionId: String,
         val trackId: String,
-        val trackDurationSeconds: Int,
+        var trackDurationSeconds: Int,
         val startedAt: Long,
         var accumulatedDurationMs: Long = 0,
         var lastResumeTime: Long? = null,
@@ -94,6 +95,13 @@ class ListeningTracker internal constructor(
             }
         }
 
+        // Monitor track duration changes (duration becomes available after track loads)
+        scope.launch {
+            player.currentTrackDurationSeconds.collect { duration ->
+                duration?.let { updateTrackDuration(it) }
+            }
+        }
+
         // Periodic save loop
         scope.launch {
             while (true) {
@@ -118,10 +126,16 @@ class ListeningTracker internal constructor(
     }
 
     private suspend fun startNewSession(trackIndex: Int, isPlaying: Boolean) {
+        // Clean up any previously synced events before starting new session
+        val deletedCount = listeningEventStore.deleteSyncedEvents()
+        if (deletedCount > 0) {
+            logger.debug("Cleaned up $deletedCount synced events")
+        }
+
         val playlist = player.playbackPlaylist.value ?: return
         val trackId = playlist.tracksIds.getOrNull(trackIndex) ?: return
 
-        // Get track duration from player (populated when track loads)
+        // Get track duration from player (may not be available yet, will be updated via flow)
         val trackDurationSeconds = player.currentTrackDurationSeconds.value ?: 0
 
         currentSession = ActiveSession(
@@ -169,6 +183,16 @@ class ListeningTracker internal constructor(
         currentSession?.let { it.seekCount++ }
     }
 
+    private fun updateTrackDuration(durationSeconds: Int) {
+        val session = currentSession ?: return
+        // Only update if we had no duration (0) or if it's significantly different
+        // This handles the case where duration becomes available after session start
+        if (session.trackDurationSeconds == 0 && durationSeconds > 0) {
+            session.trackDurationSeconds = durationSeconds
+            logger.debug("Updated track duration for session ${session.sessionId}: ${durationSeconds}s")
+        }
+    }
+
     private suspend fun saveCurrentSessionProgress() {
         val session = currentSession ?: return
         val duration = calculateFinalDuration(session)
@@ -182,8 +206,9 @@ class ListeningTracker internal constructor(
             session.savedEventId = listeningEventStore.saveEvent(event)
             logger.debug("Saved session progress ${session.sessionId}, duration: ${duration}s")
         } else {
-            // Update existing record
+            // Update existing record and reset sync status so it gets re-synced
             listeningEventStore.updateEvent(event.copy(id = session.savedEventId!!))
+            listeningEventStore.updateSyncStatus(session.savedEventId!!, SyncStatus.PendingSync)
             logger.debug("Updated session progress ${session.sessionId}, duration: ${duration}s")
         }
 
@@ -201,7 +226,9 @@ class ListeningTracker internal constructor(
             if (session.savedEventId == null) {
                 listeningEventStore.saveEvent(event)
             } else {
+                // Update existing record and reset sync status so it gets re-synced with final data
                 listeningEventStore.updateEvent(event.copy(id = session.savedEventId!!))
+                listeningEventStore.updateSyncStatus(session.savedEventId!!, SyncStatus.PendingSync)
             }
             logger.debug("Finalized listening session ${session.sessionId}, duration: ${finalDuration}s")
 

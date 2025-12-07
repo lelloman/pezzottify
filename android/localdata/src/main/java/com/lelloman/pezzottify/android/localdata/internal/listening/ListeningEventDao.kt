@@ -30,6 +30,9 @@ internal interface ListeningEventDao {
     @Query("DELETE FROM listening_event WHERE sync_status != 'Synced' AND created_at < :olderThanMs")
     suspend fun deleteOldNonSynced(olderThanMs: Long): Int
 
+    @Query("DELETE FROM listening_event WHERE sync_status = 'Synced'")
+    suspend fun deleteSynced(): Int
+
     @Query("DELETE FROM listening_event")
     suspend fun deleteAll()
 }

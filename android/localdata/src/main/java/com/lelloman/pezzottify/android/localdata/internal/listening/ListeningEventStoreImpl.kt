@@ -37,6 +37,9 @@ internal class ListeningEventStoreImpl @Inject constructor(
     override suspend fun deleteOldNonSyncedEvents(olderThanMs: Long): Int =
         dao.deleteOldNonSynced(olderThanMs)
 
+    override suspend fun deleteSyncedEvents(): Int =
+        dao.deleteSynced()
+
     override suspend fun deleteAll() {
         dao.deleteAll()
     }

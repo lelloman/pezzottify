@@ -19,5 +19,7 @@ interface ListeningEventStore {
 
     suspend fun deleteOldNonSyncedEvents(olderThanMs: Long): Int
 
+    suspend fun deleteSyncedEvents(): Int
+
     suspend fun deleteAll()
 }

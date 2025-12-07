@@ -13,7 +13,7 @@ use crate::user::user_store::{UserBandwidthStore, UserListeningStore, UserSettin
 use std::collections::HashMap;
 use crate::user::*;
 use anyhow::{bail, Context, Result};
-use rusqlite::{params, Connection};
+use rusqlite::{params, Connection, OptionalExtension};
 use std::{
     path::{Path, PathBuf},
     str::FromStr,
@@ -2032,33 +2032,65 @@ impl UserListeningStore for SqliteUserStore {
         let start = Instant::now();
         let conn = self.conn.lock().unwrap();
 
-        // If session_id is provided, use INSERT OR IGNORE for deduplication
-        // If session_id already exists, the insert will be ignored (idempotent)
+        // If session_id is provided, check if it exists and belongs to this user
+        // This enables clients to send progress updates and final data for the same session
+        // while preventing one user from overwriting another user's session
         let result = if let Some(ref session_id) = event.session_id {
-            conn.execute(
-                &format!(
-                    "INSERT OR IGNORE INTO {} (user_id, track_id, session_id, started_at, ended_at,
-                     duration_seconds, track_duration_seconds, completed, seek_count, pause_count,
-                     playback_context, client_type, date)
-                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
-                    LISTENING_EVENTS_TABLE_V_6.name
-                ),
-                params![
-                    event.user_id,
-                    event.track_id,
-                    session_id,
-                    event.started_at as i64,
-                    event.ended_at.map(|t| t as i64),
-                    event.duration_seconds as i64,
-                    event.track_duration_seconds as i64,
-                    if event.completed { 1 } else { 0 },
-                    event.seek_count as i64,
-                    event.pause_count as i64,
-                    event.playback_context,
-                    event.client_type,
-                    event.date as i64,
-                ],
-            )?
+            // Check if session exists and get its user_id
+            let existing_user: Option<usize> = conn
+                .query_row(
+                    &format!(
+                        "SELECT user_id FROM {} WHERE session_id = ?1",
+                        LISTENING_EVENTS_TABLE_V_6.name
+                    ),
+                    params![session_id],
+                    |row| row.get::<_, i64>(0).map(|id| id as usize),
+                )
+                .optional()?;
+
+            match existing_user {
+                Some(existing_uid) if existing_uid != event.user_id => {
+                    // Session belongs to a different user - ignore this event
+                    // Return the existing session's info without modifying it
+                    let id: usize = conn.query_row(
+                        &format!(
+                            "SELECT id FROM {} WHERE session_id = ?1",
+                            LISTENING_EVENTS_TABLE_V_6.name
+                        ),
+                        params![session_id],
+                        |row| row.get::<_, i64>(0).map(|id| id as usize),
+                    )?;
+                    record_db_query("record_listening_event", start.elapsed());
+                    return Ok((id, false));
+                }
+                _ => {
+                    // Either new session or same user - allow insert/replace
+                    conn.execute(
+                        &format!(
+                            "INSERT OR REPLACE INTO {} (user_id, track_id, session_id, started_at, ended_at,
+                             duration_seconds, track_duration_seconds, completed, seek_count, pause_count,
+                             playback_context, client_type, date)
+                             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
+                            LISTENING_EVENTS_TABLE_V_6.name
+                        ),
+                        params![
+                            event.user_id,
+                            event.track_id,
+                            session_id,
+                            event.started_at as i64,
+                            event.ended_at.map(|t| t as i64),
+                            event.duration_seconds as i64,
+                            event.track_duration_seconds as i64,
+                            if event.completed { 1 } else { 0 },
+                            event.seek_count as i64,
+                            event.pause_count as i64,
+                            event.playback_context,
+                            event.client_type,
+                            event.date as i64,
+                        ],
+                    )?
+                }
+            }
         } else {
             // No session_id, always insert
             conn.execute(
@@ -2087,19 +2119,20 @@ impl UserListeningStore for SqliteUserStore {
             )?
         };
 
-        let created = result > 0;
-        let id = if created {
-            conn.last_insert_rowid() as usize
+        // With INSERT OR REPLACE, we need to check if session existed before
+        // For events with session_id, check if this was an update or new insert
+        let (id, created) = if event.session_id.is_some() {
+            let id = conn.last_insert_rowid() as usize;
+            // SQLite's changes() returns 1 for both insert and replace
+            // We can detect a replace by checking if rowid changed
+            // But simpler: just return the id and consider it "created" if result > 0
+            // The caller (metrics) only cares about new events, so we'll check
+            // if ended_at is set to determine if this is the final event
+            let created = result > 0 && event.ended_at.is_some();
+            (id, created)
         } else {
-            // If not created (duplicate session_id), fetch the existing id
-            conn.query_row(
-                &format!(
-                    "SELECT id FROM {} WHERE session_id = ?1",
-                    LISTENING_EVENTS_TABLE_V_6.name
-                ),
-                params![event.session_id],
-                |row| row.get::<_, i64>(0),
-            )? as usize
+            // No session_id means always a new insert
+            (conn.last_insert_rowid() as usize, result > 0)
         };
 
         record_db_query("record_listening_event", start.elapsed());
@@ -3611,22 +3644,37 @@ mod tests {
     }
 
     #[test]
-    fn test_record_listening_event_deduplication_with_session_id() {
+    fn test_record_listening_event_update_with_session_id() {
         let (store, _temp_dir) = create_tmp_store();
         let user_id = store.create_user("test_user").unwrap();
 
         let mut event = create_test_listening_event(user_id, "tra_12345", 20241201);
         event.session_id = Some("unique-session-uuid".to_string());
+        event.duration_seconds = 100;
+        event.ended_at = None;
 
-        // First insert should succeed
+        // First insert (in-progress session)
         let (id1, created1) = store.record_listening_event(event.clone()).unwrap();
         assert!(id1 > 0);
-        assert!(created1);
+        // created1 is false because ended_at is None (not finalized yet)
+        assert!(!created1);
 
-        // Second insert with same session_id should be ignored (deduplication)
-        let (id2, created2) = store.record_listening_event(event).unwrap();
-        assert_eq!(id2, id1); // Same ID returned
-        assert!(!created2); // Not created (duplicate)
+        // Second insert with same session_id but updated data (finalized session)
+        event.duration_seconds = 300;
+        event.ended_at = Some(1732982700);
+        let (id2, created2) = store.record_listening_event(event.clone()).unwrap();
+        // INSERT OR REPLACE creates a new row (old one deleted), so id may differ
+        assert!(id2 > 0);
+        // Now created2 is true because ended_at is Some (finalized)
+        assert!(created2);
+
+        // Verify the data was updated
+        let events = store
+            .get_user_listening_events(user_id, 20241201, 20241201, None, None)
+            .unwrap();
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].duration_seconds, 300);
+        assert!(events[0].ended_at.is_some());
     }
 
     #[test]
@@ -4157,26 +4205,33 @@ mod tests {
     }
 
     #[test]
-    fn test_session_id_uniqueness_across_users() {
+    fn test_session_id_protected_across_users() {
         let (store, _temp_dir) = create_tmp_store();
         let user1_id = store.create_user("user1").unwrap();
         let user2_id = store.create_user("user2").unwrap();
 
-        // Same session_id for different users should both succeed
-        // (session_id is globally unique, not per-user)
+        // User1 creates a session
         let mut event1 = create_test_listening_event(user1_id, "tra_001", 20241201);
         event1.session_id = Some("shared-session-id".to_string());
 
-        let mut event2 = create_test_listening_event(user2_id, "tra_001", 20241201);
-        event2.session_id = Some("shared-session-id".to_string());
-
-        let (_, created1) = store.record_listening_event(event1).unwrap();
+        let (id1, created1) = store.record_listening_event(event1).unwrap();
         assert!(created1);
 
-        // Second insert with same session_id should be deduplicated
-        // even for different user (session_id is globally unique)
-        let (_, created2) = store.record_listening_event(event2).unwrap();
-        assert!(!created2);
+        // User2 tries to use the same session_id - should be rejected
+        // (session_id is globally unique and protected per user)
+        let mut event2 = create_test_listening_event(user2_id, "tra_002", 20241201);
+        event2.session_id = Some("shared-session-id".to_string());
+
+        let (id2, created2) = store.record_listening_event(event2).unwrap();
+        assert!(!created2); // Not created because session belongs to different user
+        assert_eq!(id2, id1); // Returns the existing session's id
+
+        // Verify user1's event is still intact
+        let events = store
+            .get_user_listening_events(user1_id, 20241201, 20241201, None, None)
+            .unwrap();
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].track_id, "tra_001"); // Still user1's track
     }
 
     #[test]
