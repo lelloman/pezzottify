@@ -86,7 +86,8 @@
           <thead>
             <tr>
               <th>#</th>
-              <th>Track ID</th>
+              <th>Track</th>
+              <th>Artist</th>
               <th>Plays</th>
               <th>Completed</th>
               <th>Duration</th>
@@ -94,9 +95,10 @@
             </tr>
           </thead>
           <tbody>
-            <tr v-for="(track, index) in topTracks" :key="track.track_id">
+            <tr v-for="(track, index) in topTracksWithInfo" :key="track.track_id">
               <td>{{ index + 1 }}</td>
-              <td class="trackId">{{ track.track_id }}</td>
+              <td class="trackName">{{ track.name || track.track_id }}</td>
+              <td class="artistName">{{ track.artist || '—' }}</td>
               <td>{{ track.play_count }}</td>
               <td>{{ track.completed_count }}</td>
               <td>{{ formatDuration(track.total_duration_seconds) }}</td>
@@ -110,7 +112,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, watch } from 'vue';
 import { Line, Bar } from 'vue-chartjs';
 import {
   Chart as ChartJS,
@@ -157,6 +159,39 @@ const loadError = ref(null);
 
 const dailyStats = ref([]);
 const topTracks = ref([]);
+const trackInfoMap = ref({});
+
+// Fetch track info for top tracks
+const fetchTrackInfo = async () => {
+  for (const track of topTracks.value) {
+    if (!trackInfoMap.value[track.track_id]) {
+      const trackInfo = await remoteStore.fetchResolvedTrack(track.track_id);
+      if (trackInfo) {
+        trackInfoMap.value = {
+          ...trackInfoMap.value,
+          [track.track_id]: trackInfo,
+        };
+      }
+    }
+  }
+};
+
+// Watch topTracks and fetch info when it changes
+watch(topTracks, () => {
+  fetchTrackInfo();
+});
+
+// Computed that combines track stats with track info
+const topTracksWithInfo = computed(() => {
+  return topTracks.value.map(track => {
+    const info = trackInfoMap.value[track.track_id];
+    return {
+      ...track,
+      name: info?.track?.name || null,
+      artist: info?.artists?.[0]?.artist?.name || null,
+    };
+  });
+});
 
 const loadData = async () => {
   isLoading.value = true;
@@ -231,12 +266,16 @@ const dailyChartData = computed(() => {
 
 // Chart data for top tracks
 const topTracksChartData = computed(() => {
-  if (topTracks.value.length === 0) return null;
+  if (topTracksWithInfo.value.length === 0) return null;
 
-  const top10 = topTracks.value.slice(0, 10);
+  const top10 = topTracksWithInfo.value.slice(0, 10);
 
   return {
-    labels: top10.map((t, i) => `#${i + 1}`),
+    labels: top10.map((t, i) => {
+      const name = t.name || `Track ${i + 1}`;
+      // Truncate long names for chart readability
+      return name.length > 20 ? name.slice(0, 17) + '...' : name;
+    }),
     datasets: [
       {
         label: 'Play Count',
