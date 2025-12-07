@@ -2,6 +2,25 @@
   <div class="userManagement">
     <h2 class="sectionTitle">User Management</h2>
 
+    <!-- Create User Section -->
+    <div class="createUserSection">
+      <input
+        v-model="newUserHandle"
+        type="text"
+        placeholder="New user handle..."
+        class="createUserInput"
+        @keyup.enter="handleCreateUser"
+      />
+      <button
+        class="createUserButton"
+        @click="handleCreateUser"
+        :disabled="!newUserHandle.trim() || isCreating"
+      >
+        {{ isCreating ? 'Creating...' : 'Create User' }}
+      </button>
+    </div>
+    <div v-if="createError" class="createError">{{ createError }}</div>
+
     <div v-if="isLoading" class="loadingState">
       Loading users...
     </div>
@@ -17,9 +36,12 @@
         :key="user.user_handle"
         class="userCard"
       >
-        <div class="userHeader" @click="toggleUserExpanded(user.user_handle)">
-          <span class="userName">{{ user.user_handle }}</span>
-          <span class="expandIcon">{{ expandedUsers[user.user_handle] ? '−' : '+' }}</span>
+        <div class="userHeader">
+          <span class="userName" @click="toggleUserExpanded(user.user_handle)">{{ user.user_handle }}</span>
+          <div class="userActions">
+            <button class="deleteUserButton" @click.stop="initiateDelete(user.user_handle)" title="Delete user">×</button>
+            <span class="expandIcon" @click="toggleUserExpanded(user.user_handle)">{{ expandedUsers[user.user_handle] ? '−' : '+' }}</span>
+          </div>
         </div>
 
         <div v-if="expandedUsers[user.user_handle]" class="userDetails">
@@ -114,6 +136,44 @@
         No users found.
       </div>
     </div>
+
+    <!-- First Confirmation Dialog -->
+    <div v-if="showFirstConfirm" class="dialogOverlay" @click.self="cancelDelete">
+      <div class="dialogBox">
+        <h3 class="dialogTitle">Delete User</h3>
+        <p class="dialogMessage">Are you sure you want to delete user <strong>{{ deleteTarget }}</strong>?</p>
+        <div class="dialogActions">
+          <button class="dialogButton cancelButton" @click="cancelDelete">Cancel</button>
+          <button class="dialogButton dangerButton" @click="confirmFirstDelete">Delete</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Second Confirmation Dialog -->
+    <div v-if="showSecondConfirm" class="dialogOverlay" @click.self="cancelDelete">
+      <div class="dialogBox">
+        <h3 class="dialogTitle">Confirm Deletion</h3>
+        <p class="dialogMessage">This will permanently delete <strong>{{ deleteTarget }}</strong> and all their data (playlists, liked content, settings, etc.).</p>
+        <p class="dialogMessage">Type <strong>{{ deleteTarget }}</strong> to confirm:</p>
+        <input
+          v-model="confirmDeleteName"
+          type="text"
+          class="confirmInput"
+          :placeholder="deleteTarget"
+          @keyup.enter="confirmSecondDelete"
+        />
+        <div class="dialogActions">
+          <button class="dialogButton cancelButton" @click="cancelDelete">Cancel</button>
+          <button
+            class="dialogButton dangerButton"
+            @click="confirmSecondDelete"
+            :disabled="confirmDeleteName !== deleteTarget"
+          >
+            Delete Forever
+          </button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -126,6 +186,17 @@ const remoteStore = useRemoteStore();
 const users = ref([]);
 const isLoading = ref(true);
 const loadError = ref(null);
+
+// Create user state
+const newUserHandle = ref('');
+const isCreating = ref(false);
+const createError = ref(null);
+
+// Delete user state
+const deleteTarget = ref(null);
+const showFirstConfirm = ref(false);
+const showSecondConfirm = ref(false);
+const confirmDeleteName = ref('');
 
 const expandedUsers = reactive({});
 const userDetails = reactive({});
@@ -164,6 +235,55 @@ const loadUsers = async () => {
   } finally {
     isLoading.value = false;
   }
+};
+
+const handleCreateUser = async () => {
+  const handle = newUserHandle.value.trim();
+  if (!handle) return;
+
+  isCreating.value = true;
+  createError.value = null;
+
+  const result = await remoteStore.createUser(handle);
+  if (result.error) {
+    createError.value = result.error;
+  } else {
+    newUserHandle.value = '';
+    await loadUsers();
+  }
+
+  isCreating.value = false;
+};
+
+const initiateDelete = (userHandle) => {
+  deleteTarget.value = userHandle;
+  showFirstConfirm.value = true;
+};
+
+const confirmFirstDelete = () => {
+  showFirstConfirm.value = false;
+  showSecondConfirm.value = true;
+  confirmDeleteName.value = '';
+};
+
+const cancelDelete = () => {
+  showFirstConfirm.value = false;
+  showSecondConfirm.value = false;
+  deleteTarget.value = null;
+  confirmDeleteName.value = '';
+};
+
+const confirmSecondDelete = async () => {
+  if (confirmDeleteName.value !== deleteTarget.value) return;
+
+  const result = await remoteStore.deleteUser(deleteTarget.value);
+  if (result.error) {
+    alert(result.error);
+  } else {
+    await loadUsers();
+  }
+
+  cancelDelete();
 };
 
 const toggleUserExpanded = async (userHandle) => {
@@ -281,7 +401,6 @@ onMounted(() => {
   justify-content: space-between;
   align-items: center;
   padding: var(--spacing-4);
-  cursor: pointer;
   transition: background-color var(--transition-fast);
 }
 
@@ -293,12 +412,15 @@ onMounted(() => {
   font-size: var(--text-lg);
   font-weight: var(--font-medium);
   color: var(--text-base);
+  cursor: pointer;
+  flex: 1;
 }
 
 .expandIcon {
   font-size: var(--text-xl);
   color: var(--text-subdued);
   font-weight: var(--font-bold);
+  cursor: pointer;
 }
 
 .userDetails {
@@ -419,5 +541,168 @@ onMounted(() => {
   font-size: var(--text-xs);
   color: var(--text-subdued);
   margin: var(--spacing-2) 0 0 0;
+}
+
+/* Create User Section */
+.createUserSection {
+  display: flex;
+  gap: var(--spacing-2);
+  margin-bottom: var(--spacing-4);
+}
+
+.createUserInput {
+  flex: 1;
+  padding: var(--spacing-3) var(--spacing-4);
+  background-color: var(--bg-elevated-base);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  color: var(--text-base);
+  font-size: var(--text-base);
+}
+
+.createUserInput::placeholder {
+  color: var(--text-subdued);
+}
+
+.createUserButton {
+  padding: var(--spacing-3) var(--spacing-6);
+  background-color: var(--spotify-green);
+  color: white;
+  border: none;
+  border-radius: var(--radius-md);
+  font-size: var(--text-base);
+  font-weight: var(--font-medium);
+  cursor: pointer;
+  transition: background-color var(--transition-fast);
+}
+
+.createUserButton:hover:not(:disabled) {
+  background-color: #1ed760;
+}
+
+.createUserButton:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.createError {
+  color: #dc2626;
+  font-size: var(--text-sm);
+  margin-bottom: var(--spacing-4);
+}
+
+/* User Actions */
+.userActions {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-2);
+}
+
+.deleteUserButton {
+  background: none;
+  border: none;
+  color: var(--text-subdued);
+  font-size: var(--text-xl);
+  cursor: pointer;
+  padding: var(--spacing-1) var(--spacing-2);
+  border-radius: var(--radius-md);
+  transition: all var(--transition-fast);
+  line-height: 1;
+}
+
+.deleteUserButton:hover {
+  background-color: rgba(220, 38, 38, 0.2);
+  color: #dc2626;
+}
+
+/* Dialog Styles */
+.dialogOverlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.dialogBox {
+  background-color: var(--bg-elevated-base);
+  border-radius: var(--radius-lg);
+  padding: var(--spacing-6);
+  max-width: 400px;
+  width: 90%;
+}
+
+.dialogTitle {
+  font-size: var(--text-xl);
+  font-weight: var(--font-bold);
+  color: var(--text-base);
+  margin: 0 0 var(--spacing-4) 0;
+}
+
+.dialogMessage {
+  font-size: var(--text-base);
+  color: var(--text-subdued);
+  margin: 0 0 var(--spacing-3) 0;
+  line-height: 1.5;
+}
+
+.dialogMessage strong {
+  color: var(--text-base);
+}
+
+.confirmInput {
+  width: 100%;
+  padding: var(--spacing-3);
+  background-color: var(--bg-base);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  color: var(--text-base);
+  font-size: var(--text-base);
+  margin-bottom: var(--spacing-4);
+}
+
+.dialogActions {
+  display: flex;
+  gap: var(--spacing-3);
+  justify-content: flex-end;
+}
+
+.dialogButton {
+  padding: var(--spacing-2) var(--spacing-4);
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm);
+  font-weight: var(--font-medium);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.cancelButton {
+  background-color: var(--bg-highlight);
+  border: 1px solid var(--border-default);
+  color: var(--text-base);
+}
+
+.cancelButton:hover {
+  background-color: var(--bg-base);
+}
+
+.dangerButton {
+  background-color: #dc2626;
+  border: none;
+  color: white;
+}
+
+.dangerButton:hover:not(:disabled) {
+  background-color: #b91c1c;
+}
+
+.dangerButton:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 </style>

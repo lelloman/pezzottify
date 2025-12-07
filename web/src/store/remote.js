@@ -282,6 +282,32 @@ export const useRemoteStore = defineStore('remote', () => {
     }
   };
 
+  const createUser = async (userHandle) => {
+    try {
+      const response = await axios.post('/v1/admin/users', { user_handle: userHandle });
+      return response.data;
+    } catch (error) {
+      console.error('Failed to create user:', error);
+      if (error.response?.status === 409) {
+        return { error: 'User handle already exists' };
+      }
+      return { error: 'Failed to create user' };
+    }
+  };
+
+  const deleteUser = async (userHandle) => {
+    try {
+      await axios.delete(`/v1/admin/users/${userHandle}`);
+      return { success: true };
+    } catch (error) {
+      console.error('Failed to delete user:', error);
+      if (error.response?.status === 400) {
+        return { error: 'Cannot delete your own account' };
+      }
+      return { error: 'Failed to delete user' };
+    }
+  };
+
   const fetchUserRoles = async (userHandle) => {
     try {
       const response = await axios.get(`/v1/admin/users/${userHandle}/roles`);
@@ -451,6 +477,8 @@ export const useRemoteStore = defineStore('remote', () => {
     fetchSyncEvents,
     // Admin API - User Management
     fetchAdminUsers,
+    createUser,
+    deleteUser,
     fetchUserRoles,
     addUserRole,
     removeUserRole,

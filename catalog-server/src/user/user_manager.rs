@@ -42,6 +42,12 @@ impl UserManager {
         Ok(self.user_store.create_user(&user_handle.as_ref().to_owned())?)
     }
 
+    /// Deletes a user and all associated data.
+    /// Returns Ok(true) if user was deleted, Ok(false) if user didn't exist.
+    pub fn delete_user(&self, user_id: usize) -> Result<bool> {
+        self.user_store.delete_user(user_id)
+    }
+
     pub fn set_user_liked_content(
         &self,
         user_id: usize,

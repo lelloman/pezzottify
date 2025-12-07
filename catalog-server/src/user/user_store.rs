@@ -51,6 +51,10 @@ pub trait UserStore: UserAuthTokenStore + UserAuthCredentialsStore + Send + Sync
     /// Creates a new user and returns the user id.
     fn create_user(&self, user_handle: &str) -> Result<usize>;
 
+    /// Deletes a user and all associated data.
+    /// Returns Ok(true) if user was deleted, Ok(false) if user didn't exist.
+    fn delete_user(&self, user_id: usize) -> Result<bool>;
+
     // Returns a full user object for the given user id.
     // Returns Ok(None) if the user does not exist.
     // Returns Err if there is a database error.

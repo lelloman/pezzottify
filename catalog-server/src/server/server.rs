@@ -1714,6 +1714,82 @@ async fn admin_get_users(
     }
 }
 
+#[derive(Deserialize)]
+struct CreateUserBody {
+    user_handle: String,
+}
+
+#[derive(Serialize)]
+struct CreateUserResponse {
+    user_id: usize,
+    user_handle: String,
+}
+
+async fn admin_create_user(
+    _session: Session,
+    State(user_manager): State<GuardedUserManager>,
+    Json(body): Json<CreateUserBody>,
+) -> Response {
+    let manager = user_manager.lock().unwrap();
+
+    // Create user (add_user validates handle is not empty and not duplicate)
+    let user_id = match manager.add_user(&body.user_handle) {
+        Ok(id) => id,
+        Err(err) => {
+            let err_str = err.to_string();
+            if err_str.contains("already exists") {
+                return (StatusCode::CONFLICT, "User handle already exists").into_response();
+            }
+            if err_str.contains("cannot be empty") {
+                return (StatusCode::BAD_REQUEST, "User handle cannot be empty").into_response();
+            }
+            error!("Error creating user: {}", err);
+            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+        }
+    };
+
+    (
+        StatusCode::CREATED,
+        Json(CreateUserResponse {
+            user_id,
+            user_handle: body.user_handle,
+        }),
+    )
+        .into_response()
+}
+
+async fn admin_delete_user(
+    session: Session,
+    State(user_manager): State<GuardedUserManager>,
+    Path(user_handle): Path<String>,
+) -> Response {
+    let manager = user_manager.lock().unwrap();
+
+    // Get user id first
+    let user_id = match manager.get_user_id(&user_handle) {
+        Ok(Some(id)) => id,
+        Ok(None) => return StatusCode::NOT_FOUND.into_response(),
+        Err(err) => {
+            error!("Error getting user id: {}", err);
+            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+        }
+    };
+
+    // Prevent self-deletion
+    if user_id == session.user_id {
+        return (StatusCode::BAD_REQUEST, "Cannot delete your own account").into_response();
+    }
+
+    match manager.delete_user(user_id) {
+        Ok(true) => StatusCode::NO_CONTENT.into_response(),
+        Ok(false) => StatusCode::NOT_FOUND.into_response(),
+        Err(err) => {
+            error!("Error deleting user: {}", err);
+            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+        }
+    }
+}
+
 async fn admin_get_user_roles(
     _session: Session,
     State(user_manager): State<GuardedUserManager>,
@@ -2691,6 +2767,8 @@ pub fn make_app(
     // Admin user management routes (requires ManagePermissions permission)
     let admin_user_routes: Router = Router::new()
         .route("/users", get(admin_get_users))
+        .route("/users", post(admin_create_user))
+        .route("/users/{user_handle}", delete(admin_delete_user))
         .route("/users/{user_handle}/roles", get(admin_get_user_roles))
         .route("/users/{user_handle}/roles", post(admin_add_user_role))
         .route("/users/{user_handle}/roles/{role}", delete(admin_remove_user_role))

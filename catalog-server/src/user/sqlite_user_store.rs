@@ -1050,6 +1050,15 @@ impl UserStore for SqliteUserStore {
         Ok(conn.last_insert_rowid() as usize)
     }
 
+    fn delete_user(&self, user_id: usize) -> Result<bool> {
+        let conn = self.conn.lock().unwrap();
+        let rows_affected = conn.execute(
+            &format!("DELETE FROM {} WHERE id = ?1", USER_TABLE_V_0.name),
+            params![user_id],
+        )?;
+        Ok(rows_affected > 0)
+    }
+
     fn get_user_playlists(&self, user_id: usize) -> Result<Vec<String>> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(&format!(
