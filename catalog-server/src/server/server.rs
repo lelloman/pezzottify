@@ -1790,6 +1790,97 @@ async fn admin_delete_user(
     }
 }
 
+#[derive(Serialize)]
+struct UserCredentialsStatusResponse {
+    user_handle: String,
+    has_password: bool,
+}
+
+async fn admin_get_user_credentials_status(
+    _session: Session,
+    State(user_manager): State<GuardedUserManager>,
+    Path(user_handle): Path<String>,
+) -> Response {
+    let manager = user_manager.lock().unwrap();
+
+    match manager.get_user_credentials(&user_handle) {
+        Ok(Some(creds)) => Json(UserCredentialsStatusResponse {
+            user_handle,
+            has_password: creds.username_password.is_some(),
+        })
+        .into_response(),
+        Ok(None) => StatusCode::NOT_FOUND.into_response(),
+        Err(err) => {
+            error!("Error getting user credentials: {}", err);
+            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+        }
+    }
+}
+
+#[derive(Deserialize)]
+struct SetPasswordBody {
+    password: String,
+}
+
+async fn admin_set_user_password(
+    _session: Session,
+    State(user_manager): State<GuardedUserManager>,
+    Path(user_handle): Path<String>,
+    Json(body): Json<SetPasswordBody>,
+) -> Response {
+    let mut manager = user_manager.lock().unwrap();
+
+    // Check if user exists and has password already
+    let has_password = match manager.get_user_credentials(&user_handle) {
+        Ok(Some(creds)) => creds.username_password.is_some(),
+        Ok(None) => return StatusCode::NOT_FOUND.into_response(),
+        Err(err) => {
+            error!("Error getting user credentials: {}", err);
+            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+        }
+    };
+
+    let result = if has_password {
+        manager.update_password_credentials(&user_handle, body.password)
+    } else {
+        manager.create_password_credentials(&user_handle, body.password)
+    };
+
+    match result {
+        Ok(()) => StatusCode::NO_CONTENT.into_response(),
+        Err(err) => {
+            error!("Error setting user password: {}", err);
+            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+        }
+    }
+}
+
+async fn admin_delete_user_password(
+    _session: Session,
+    State(user_manager): State<GuardedUserManager>,
+    Path(user_handle): Path<String>,
+) -> Response {
+    let mut manager = user_manager.lock().unwrap();
+
+    // Check if user exists
+    match manager.get_user_credentials(&user_handle) {
+        Ok(Some(_)) => {}
+        Ok(None) => return StatusCode::NOT_FOUND.into_response(),
+        Err(err) => {
+            error!("Error getting user credentials: {}", err);
+            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+        }
+    };
+
+    match manager.delete_password_credentials(&user_handle) {
+        Ok(()) => StatusCode::NO_CONTENT.into_response(),
+        Err(err) => {
+            error!("Error deleting user password: {}", err);
+            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+        }
+    }
+}
+
 async fn admin_get_user_roles(
     _session: Session,
     State(user_manager): State<GuardedUserManager>,
@@ -2775,6 +2866,9 @@ pub fn make_app(
         .route("/users/{user_handle}/permissions", get(admin_get_user_permissions))
         .route("/users/{user_handle}/permissions", post(admin_add_user_extra_permission))
         .route("/permissions/{permission_id}", delete(admin_remove_extra_permission))
+        .route("/users/{user_handle}/credentials", get(admin_get_user_credentials_status))
+        .route("/users/{user_handle}/password", put(admin_set_user_password))
+        .route("/users/{user_handle}/password", delete(admin_delete_user_password))
         // Bandwidth statistics routes
         .route("/bandwidth/summary", get(admin_get_bandwidth_summary))
         .route("/bandwidth/usage", get(admin_get_bandwidth_usage))

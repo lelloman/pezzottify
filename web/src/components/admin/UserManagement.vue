@@ -128,6 +128,47 @@
               </div>
               <p class="grantHint">Leave duration and countdown empty for permanent permission.</p>
             </div>
+
+            <!-- Password Login Section -->
+            <div class="detailSection">
+              <h4 class="detailTitle">Password Login</h4>
+              <div class="passwordStatus">
+                <span v-if="userDetails[user.user_handle]?.hasPassword" class="statusBadge hasPassword">
+                  Password set
+                </span>
+                <span v-else class="statusBadge noPassword">
+                  No password
+                </span>
+              </div>
+              <div class="passwordForm">
+                <input
+                  v-model="newPassword[user.user_handle]"
+                  type="password"
+                  :placeholder="userDetails[user.user_handle]?.hasPassword ? 'New password...' : 'Set password...'"
+                  class="passwordInput"
+                  @keyup.enter="handleSetPassword(user.user_handle)"
+                />
+                <button
+                  v-if="newPassword[user.user_handle]"
+                  class="setPasswordButton"
+                  @click="handleSetPassword(user.user_handle)"
+                  :disabled="settingPassword[user.user_handle]"
+                >
+                  {{ settingPassword[user.user_handle] ? 'Saving...' : (userDetails[user.user_handle]?.hasPassword ? 'Update' : 'Set') }}
+                </button>
+                <button
+                  v-if="userDetails[user.user_handle]?.hasPassword && !newPassword[user.user_handle]"
+                  class="removePasswordButton"
+                  @click="handleRemovePassword(user.user_handle)"
+                  :disabled="settingPassword[user.user_handle]"
+                >
+                  Remove
+                </button>
+              </div>
+              <div v-if="passwordError[user.user_handle]" class="passwordError">
+                {{ passwordError[user.user_handle] }}
+              </div>
+            </div>
           </template>
         </div>
       </div>
@@ -206,6 +247,11 @@ const newRole = reactive({});
 const grantPermission = reactive({});
 const grantDuration = reactive({});
 const grantCountdown = reactive({});
+
+// Password management state
+const newPassword = reactive({});
+const settingPassword = reactive({});
+const passwordError = reactive({});
 
 const availablePermissions = [
   'AccessCatalog',
@@ -298,14 +344,16 @@ const toggleUserExpanded = async (userHandle) => {
 const loadUserDetails = async (userHandle) => {
   loadingUserDetails[userHandle] = true;
 
-  const [rolesResult, permissionsResult] = await Promise.all([
+  const [rolesResult, permissionsResult, credentialsResult] = await Promise.all([
     remoteStore.fetchUserRoles(userHandle),
     remoteStore.fetchUserPermissions(userHandle),
+    remoteStore.fetchUserCredentialsStatus(userHandle),
   ]);
 
   userDetails[userHandle] = {
     roles: rolesResult?.roles || [],
     permissions: permissionsResult?.permissions || [],
+    hasPassword: credentialsResult?.has_password || false,
   };
 
   loadingUserDetails[userHandle] = false;
@@ -343,6 +391,38 @@ const handleGrantPermission = async (userHandle) => {
     grantCountdown[userHandle] = null;
     await loadUserDetails(userHandle);
   }
+};
+
+const handleSetPassword = async (userHandle) => {
+  const password = newPassword[userHandle];
+  if (!password) return;
+
+  settingPassword[userHandle] = true;
+  passwordError[userHandle] = null;
+
+  const result = await remoteStore.setUserPassword(userHandle, password);
+  if (result.error) {
+    passwordError[userHandle] = result.error;
+  } else {
+    newPassword[userHandle] = '';
+    await loadUserDetails(userHandle);
+  }
+
+  settingPassword[userHandle] = false;
+};
+
+const handleRemovePassword = async (userHandle) => {
+  settingPassword[userHandle] = true;
+  passwordError[userHandle] = null;
+
+  const result = await remoteStore.deleteUserPassword(userHandle);
+  if (result.error) {
+    passwordError[userHandle] = result.error;
+  } else {
+    await loadUserDetails(userHandle);
+  }
+
+  settingPassword[userHandle] = false;
 };
 
 onMounted(() => {
@@ -704,5 +784,94 @@ onMounted(() => {
 .dangerButton:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+/* Password Section */
+.passwordStatus {
+  margin-bottom: var(--spacing-2);
+}
+
+.statusBadge {
+  display: inline-block;
+  padding: var(--spacing-1) var(--spacing-3);
+  border-radius: var(--radius-full);
+  font-size: var(--text-sm);
+  font-weight: var(--font-medium);
+}
+
+.hasPassword {
+  background-color: var(--spotify-green);
+  color: white;
+}
+
+.noPassword {
+  background-color: var(--bg-highlight);
+  color: var(--text-subdued);
+}
+
+.passwordForm {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-2);
+  align-items: center;
+}
+
+.passwordInput {
+  flex: 1;
+  min-width: 150px;
+  padding: var(--spacing-2) var(--spacing-3);
+  background-color: var(--bg-base);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  color: var(--text-base);
+  font-size: var(--text-sm);
+}
+
+.setPasswordButton {
+  padding: var(--spacing-2) var(--spacing-4);
+  background-color: var(--spotify-green);
+  color: white;
+  border: none;
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm);
+  font-weight: var(--font-medium);
+  cursor: pointer;
+  transition: background-color var(--transition-fast);
+}
+
+.setPasswordButton:hover:not(:disabled) {
+  background-color: #1ed760;
+}
+
+.setPasswordButton:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.removePasswordButton {
+  padding: var(--spacing-2) var(--spacing-4);
+  background-color: transparent;
+  color: #dc2626;
+  border: 1px solid #dc2626;
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm);
+  font-weight: var(--font-medium);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.removePasswordButton:hover:not(:disabled) {
+  background-color: rgba(220, 38, 38, 0.1);
+}
+
+.removePasswordButton:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.passwordError {
+  color: #dc2626;
+  font-size: var(--text-sm);
+  margin-top: var(--spacing-2);
 }
 </style>

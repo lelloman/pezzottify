@@ -371,6 +371,36 @@ export const useRemoteStore = defineStore('remote', () => {
     }
   };
 
+  const fetchUserCredentialsStatus = async (userHandle) => {
+    try {
+      const response = await axios.get(`/v1/admin/users/${userHandle}/credentials`);
+      return response.data;
+    } catch (error) {
+      console.error('Failed to fetch user credentials status:', error);
+      return null;
+    }
+  };
+
+  const setUserPassword = async (userHandle, password) => {
+    try {
+      await axios.put(`/v1/admin/users/${userHandle}/password`, { password });
+      return { success: true };
+    } catch (error) {
+      console.error('Failed to set user password:', error);
+      return { error: 'Failed to set password' };
+    }
+  };
+
+  const deleteUserPassword = async (userHandle) => {
+    try {
+      await axios.delete(`/v1/admin/users/${userHandle}/password`);
+      return { success: true };
+    } catch (error) {
+      console.error('Failed to delete user password:', error);
+      return { error: 'Failed to delete password' };
+    }
+  };
+
   // =====================================================
   // Admin API - Analytics (ViewAnalytics)
   // =====================================================
@@ -485,6 +515,9 @@ export const useRemoteStore = defineStore('remote', () => {
     fetchUserPermissions,
     grantPermission,
     revokePermission,
+    fetchUserCredentialsStatus,
+    setUserPassword,
+    deleteUserPassword,
     // Admin API - Analytics
     fetchDailyListening,
     fetchTopTracks,
