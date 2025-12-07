@@ -5,6 +5,9 @@ import { useRemoteStore } from './remote';
 // Settings key constants
 export const SETTING_ENABLE_DIRECT_DOWNLOADS = 'enable_direct_downloads';
 
+// Admin permissions that grant access to admin panel
+const ADMIN_PERMISSIONS = ['ManagePermissions', 'ViewAnalytics', 'RebootServer'];
+
 export const useUserStore = defineStore('user', () => {
   const remoteStore = useRemoteStore();
   const likedAlbumIds = ref(null);
@@ -385,6 +388,22 @@ export const useUserStore = defineStore('user', () => {
   };
 
   // =====================================================
+  // Permission Check Helpers
+  // =====================================================
+
+  const hasPermission = (permission) => {
+    return permissions.value.includes(permission);
+  };
+
+  const hasAnyAdminPermission = computed(() => {
+    return ADMIN_PERMISSIONS.some(p => permissions.value.includes(p));
+  });
+
+  const canManagePermissions = computed(() => permissions.value.includes('ManagePermissions'));
+  const canViewAnalytics = computed(() => permissions.value.includes('ViewAnalytics'));
+  const canRebootServer = computed(() => permissions.value.includes('RebootServer'));
+
+  // =====================================================
   // Setter Methods for Full Sync
   // These methods set the full state from sync API response
   // =====================================================
@@ -489,5 +508,12 @@ export const useUserStore = defineStore('user', () => {
 
     // Lifecycle
     reset,
+
+    // Permission check helpers
+    hasPermission,
+    hasAnyAdminPermission,
+    canManagePermissions,
+    canViewAnalytics,
+    canRebootServer,
   };
 });

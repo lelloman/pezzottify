@@ -14,6 +14,9 @@
         <div class="connectionStatus" :title="connectionTitle">
           <span class="statusDot" :class="connectionStatusClass"></span>
         </div>
+        <router-link v-if="userStore.hasAnyAdminPermission" to="/admin" class="adminLink scaleClickFeedback" title="Admin Panel">
+          <AdminIcon class="adminIcon" />
+        </router-link>
         <router-link to="/settings" class="settingsLink scaleClickFeedback" title="Settings">
           <SettingsIcon class="settingsIcon" />
         </router-link>
@@ -32,7 +35,11 @@ import { useRouter, useRoute } from 'vue-router';
 import CrossIcon from './icons/CrossIcon.vue';
 import SettingsIcon from './icons/SettingsIcon.vue';
 import LogoutIcon from './icons/LogoutIcon.vue';
+import AdminIcon from './icons/AdminIcon.vue';
 import { wsConnectionStatus, wsServerVersion } from '../services/websocket';
+import { useUserStore } from '../store/user';
+
+const userStore = useUserStore();
 
 // App version injected by Vite at build time
 const appVersion = __APP_VERSION__;
@@ -170,6 +177,7 @@ const connectionTitle = computed(() => {
   flex-shrink: 0;
 }
 
+.adminLink,
 .settingsLink,
 .logoutLink {
   display: flex;
@@ -182,12 +190,14 @@ const connectionTitle = computed(() => {
   transition: color var(--transition-fast), background-color var(--transition-fast);
 }
 
+.adminLink:hover,
 .settingsLink:hover,
 .logoutLink:hover {
   color: var(--text-base);
   background-color: var(--bg-elevated);
 }
 
+.adminIcon,
 .settingsIcon,
 .logoutIcon {
   width: 20px;

@@ -262,6 +262,159 @@ export const useRemoteStore = defineStore('remote', () => {
     }
   };
 
+  // =====================================================
+  // Admin API - User Management (ManagePermissions)
+  // =====================================================
+
+  const fetchAdminUsers = async () => {
+    try {
+      console.log('Fetching admin users...');
+      const response = await axios.get('/v1/admin/users');
+      console.log('Admin users response:', response.data);
+      return response.data;
+    } catch (error) {
+      console.error('Failed to fetch users:', error);
+      if (error.response) {
+        console.error('Response status:', error.response.status);
+        console.error('Response data:', error.response.data);
+      }
+      return null;
+    }
+  };
+
+  const fetchUserRoles = async (userHandle) => {
+    try {
+      const response = await axios.get(`/v1/admin/users/${userHandle}/roles`);
+      return response.data;
+    } catch (error) {
+      console.error('Failed to fetch user roles:', error);
+      return null;
+    }
+  };
+
+  const addUserRole = async (userHandle, role) => {
+    try {
+      await axios.post(`/v1/admin/users/${userHandle}/roles`, { role });
+      return true;
+    } catch (error) {
+      console.error('Failed to add user role:', error);
+      return false;
+    }
+  };
+
+  const removeUserRole = async (userHandle, role) => {
+    try {
+      await axios.delete(`/v1/admin/users/${userHandle}/roles/${role}`);
+      return true;
+    } catch (error) {
+      console.error('Failed to remove user role:', error);
+      return false;
+    }
+  };
+
+  const fetchUserPermissions = async (userHandle) => {
+    try {
+      const response = await axios.get(`/v1/admin/users/${userHandle}/permissions`);
+      return response.data;
+    } catch (error) {
+      console.error('Failed to fetch user permissions:', error);
+      return null;
+    }
+  };
+
+  const grantPermission = async (userHandle, permission, durationSeconds = null, countdown = null) => {
+    try {
+      const body = { permission };
+      if (durationSeconds !== null) body.duration_seconds = durationSeconds;
+      if (countdown !== null) body.countdown = countdown;
+      const response = await axios.post(`/v1/admin/users/${userHandle}/permissions`, body);
+      return response.data;
+    } catch (error) {
+      console.error('Failed to grant permission:', error);
+      return null;
+    }
+  };
+
+  const revokePermission = async (permissionId) => {
+    try {
+      await axios.delete(`/v1/admin/permissions/${permissionId}`);
+      return true;
+    } catch (error) {
+      console.error('Failed to revoke permission:', error);
+      return false;
+    }
+  };
+
+  // =====================================================
+  // Admin API - Analytics (ViewAnalytics)
+  // =====================================================
+
+  const fetchDailyListening = async (startDate = null, endDate = null) => {
+    try {
+      const params = {};
+      if (startDate) params.start_date = startDate;
+      if (endDate) params.end_date = endDate;
+      const response = await axios.get('/v1/admin/listening/daily', { params });
+      return response.data;
+    } catch (error) {
+      console.error('Failed to fetch daily listening stats:', error);
+      return null;
+    }
+  };
+
+  const fetchTopTracks = async (startDate = null, endDate = null, limit = 50) => {
+    try {
+      const params = { limit };
+      if (startDate) params.start_date = startDate;
+      if (endDate) params.end_date = endDate;
+      const response = await axios.get('/v1/admin/listening/top-tracks', { params });
+      return response.data;
+    } catch (error) {
+      console.error('Failed to fetch top tracks:', error);
+      return null;
+    }
+  };
+
+  const fetchTrackStats = async (trackId, startDate = null, endDate = null) => {
+    try {
+      const params = {};
+      if (startDate) params.start_date = startDate;
+      if (endDate) params.end_date = endDate;
+      const response = await axios.get(`/v1/admin/listening/track/${trackId}`, { params });
+      return response.data;
+    } catch (error) {
+      console.error('Failed to fetch track stats:', error);
+      return null;
+    }
+  };
+
+  const fetchUserListeningSummary = async (userHandle, startDate = null, endDate = null) => {
+    try {
+      const params = {};
+      if (startDate) params.start_date = startDate;
+      if (endDate) params.end_date = endDate;
+      const response = await axios.get(`/v1/admin/listening/users/${userHandle}/summary`, { params });
+      return response.data;
+    } catch (error) {
+      console.error('Failed to fetch user listening summary:', error);
+      return null;
+    }
+  };
+
+  // =====================================================
+  // Admin API - Server Control (RebootServer)
+  // =====================================================
+
+  const rebootServer = async () => {
+    try {
+      await axios.post('/v1/admin/reboot');
+      return true;
+    } catch (error) {
+      console.error('Failed to reboot server:', error);
+      return false;
+    }
+  };
+
   return {
     setBlockHttpCache,
     fetchLikedAlbums,
@@ -286,5 +439,20 @@ export const useRemoteStore = defineStore('remote', () => {
     // Sync API
     fetchSyncState,
     fetchSyncEvents,
+    // Admin API - User Management
+    fetchAdminUsers,
+    fetchUserRoles,
+    addUserRole,
+    removeUserRole,
+    fetchUserPermissions,
+    grantPermission,
+    revokePermission,
+    // Admin API - Analytics
+    fetchDailyListening,
+    fetchTopTracks,
+    fetchTrackStats,
+    fetchUserListeningSummary,
+    // Admin API - Server Control
+    rebootServer,
   };
 });

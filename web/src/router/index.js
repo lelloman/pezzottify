@@ -1,6 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import HomeView from '../views/HomeView.vue'
 import LoginView from '../views/LoginView.vue'
+import AdminView from '../views/AdminView.vue'
 import { useAuthStore } from '../store/auth.js';
 import axios from 'axios';
 
@@ -50,6 +51,13 @@ const router = createRouter({
           meta: { requiresAuth: true }
         }
       ]
+    },
+
+    {
+      path: '/admin',
+      name: 'admin',
+      component: AdminView,
+      meta: { requiresAuth: true }
     },
 
     {

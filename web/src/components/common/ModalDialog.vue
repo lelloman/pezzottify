@@ -61,11 +61,20 @@ onUnmounted(() => {
 }
 
 .modal {
-  background: white;
-  color: black;
+  background: #ffffff !important;
+  color: #1a1a1a !important;
   padding: 20px;
   border-radius: 8px;
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+}
+
+.modal h1,
+.modal h2,
+.modal h3,
+.modal p,
+.modal span,
+.modal div {
+  color: #1a1a1a;
 }
 
 .v-enter-active,

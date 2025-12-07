@@ -1,8 +1,8 @@
 <template>
   <ModalDialog :closeOnEsc="true" :isOpen="props.isOpen" :closeCallback="props.closeCallback">
-    <div class="modalContent">
-      <h1>{{ props.title }}</h1>
-      <p>
+    <div class="modalContent" style="color: #1a1a1a !important;">
+      <h1 style="color: #1a1a1a !important;">{{ props.title }}</h1>
+      <p style="color: #333333 !important;">
         <slot name="message"></slot>
       </p>
       <div class="modal-buttons">
@@ -45,14 +45,20 @@ const props = defineProps({
 </script>
 
 <style scoped>
+.modalContent {
+  color: #1a1a1a;
+}
+
 .modalContent h1 {
   margin: 0;
   font-size: 28px;
+  color: #1a1a1a;
 }
 
 .modalContent p {
   margin: 8px 0;
   font-size: 14px;
+  color: #333;
 }
 
 .modal-buttons {
@@ -84,7 +90,7 @@ const props = defineProps({
 }
 
 .positiveButton {
-  background-color: var(--accent-color) !important;
+  background-color: var(--accent-color, var(--spotify-green, #1db954)) !important;
   color: white;
 }
 </style>

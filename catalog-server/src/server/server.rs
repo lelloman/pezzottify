@@ -1693,10 +1693,10 @@ async fn admin_get_users(
     _session: Session,
     State(user_manager): State<GuardedUserManager>,
 ) -> Response {
-    match user_manager.lock().unwrap().get_all_user_handles() {
+    let manager = user_manager.lock().unwrap();
+    match manager.get_all_user_handles() {
         Ok(handles) => {
             let mut users: Vec<UserInfo> = vec![];
-            let manager = user_manager.lock().unwrap();
             for handle in handles {
                 if let Ok(Some(user_id)) = manager.get_user_id(&handle) {
                     users.push(UserInfo {
