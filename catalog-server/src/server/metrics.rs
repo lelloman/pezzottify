@@ -150,6 +150,26 @@ lazy_static! {
         Opts::new(format!("{PREFIX}_downloader_bytes_total"), "Total bytes downloaded from downloader service"),
         &["content_type"]
     ).expect("Failed to create downloader_bytes_total metric");
+
+    // Background Job Metrics
+    pub static ref BACKGROUND_JOB_EXECUTIONS_TOTAL: CounterVec = CounterVec::new(
+        Opts::new(format!("{PREFIX}_background_job_executions_total"), "Total background job executions"),
+        &["job_id", "status"]
+    ).expect("Failed to create background_job_executions_total metric");
+
+    pub static ref BACKGROUND_JOB_DURATION_SECONDS: HistogramVec = HistogramVec::new(
+        HistogramOpts::new(
+            format!("{PREFIX}_background_job_duration_seconds"),
+            "Background job execution duration in seconds"
+        )
+        .buckets(vec![0.1, 0.5, 1.0, 5.0, 10.0, 30.0, 60.0, 300.0, 600.0]),
+        &["job_id"]
+    ).expect("Failed to create background_job_duration_seconds metric");
+
+    pub static ref BACKGROUND_JOB_RUNNING: GaugeVec = GaugeVec::new(
+        Opts::new(format!("{PREFIX}_background_job_running"), "Whether a background job is currently running"),
+        &["job_id"]
+    ).expect("Failed to create background_job_running metric");
 }
 
 /// Initialize all metrics and register them with the Prometheus registry
@@ -177,6 +197,9 @@ pub fn init_metrics() {
     let _ = REGISTRY.register(Box::new(DOWNLOADER_REQUEST_DURATION_SECONDS.clone()));
     let _ = REGISTRY.register(Box::new(DOWNLOADER_ERRORS_TOTAL.clone()));
     let _ = REGISTRY.register(Box::new(DOWNLOADER_BYTES_TOTAL.clone()));
+    let _ = REGISTRY.register(Box::new(BACKGROUND_JOB_EXECUTIONS_TOTAL.clone()));
+    let _ = REGISTRY.register(Box::new(BACKGROUND_JOB_DURATION_SECONDS.clone()));
+    let _ = REGISTRY.register(Box::new(BACKGROUND_JOB_RUNNING.clone()));
 
     tracing::info!("Metrics system initialized successfully");
 }
@@ -329,6 +352,24 @@ pub fn record_downloader_bytes(content_type: &str, bytes: u64) {
     DOWNLOADER_BYTES_TOTAL
         .with_label_values(&[content_type])
         .inc_by(bytes as f64);
+}
+
+/// Record a background job execution
+pub fn record_background_job_execution(job_id: &str, status: &str, duration: Duration) {
+    BACKGROUND_JOB_EXECUTIONS_TOTAL
+        .with_label_values(&[job_id, status])
+        .inc();
+
+    BACKGROUND_JOB_DURATION_SECONDS
+        .with_label_values(&[job_id])
+        .observe(duration.as_secs_f64());
+}
+
+/// Set whether a background job is currently running
+pub fn set_background_job_running(job_id: &str, running: bool) {
+    BACKGROUND_JOB_RUNNING
+        .with_label_values(&[job_id])
+        .set(if running { 1.0 } else { 0.0 });
 }
 
 /// Update process memory usage
@@ -622,5 +663,57 @@ mod tests {
             .iter()
             .find(|m| m.get_name() == "pezzottify_downloader_bytes_total");
         assert!(bytes.is_some(), "Downloader bytes metric should exist");
+    }
+
+    #[test]
+    fn test_record_background_job_execution() {
+        // Ensure metrics are initialized
+        init_metrics();
+
+        // Record a successful job execution
+        record_background_job_execution("test_job", "success", Duration::from_secs(5));
+
+        // Record a failed job execution
+        record_background_job_execution("test_job", "failed", Duration::from_secs(2));
+
+        // Verify metrics exist
+        let metrics = REGISTRY.gather();
+        let executions = metrics
+            .iter()
+            .find(|m| m.get_name() == "pezzottify_background_job_executions_total");
+        assert!(
+            executions.is_some(),
+            "Background job executions metric should exist"
+        );
+
+        let duration = metrics
+            .iter()
+            .find(|m| m.get_name() == "pezzottify_background_job_duration_seconds");
+        assert!(
+            duration.is_some(),
+            "Background job duration metric should exist"
+        );
+    }
+
+    #[test]
+    fn test_set_background_job_running() {
+        // Ensure metrics are initialized
+        init_metrics();
+
+        // Set job as running
+        set_background_job_running("test_job", true);
+
+        // Set job as not running
+        set_background_job_running("test_job", false);
+
+        // Verify metric exists
+        let metrics = REGISTRY.gather();
+        let running = metrics
+            .iter()
+            .find(|m| m.get_name() == "pezzottify_background_job_running");
+        assert!(
+            running.is_some(),
+            "Background job running metric should exist"
+        );
     }
 }
