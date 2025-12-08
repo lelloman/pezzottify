@@ -2,16 +2,31 @@
   <div class="trackWrapper">
     <div v-if="loading" class="track-loading">Loading...</div>
     <div v-else-if="error" class="track-error">Error: {{ error }}</div>
-    <div v-else-if="track" @click="handleTrackClick" :class="computeTrackRowClasses">
+    <div
+      v-else-if="track"
+      @click="handleTrackClick"
+      :class="computeTrackRowClasses"
+    >
       <div class="track-item-content">
         <div class="trackIndexSpan">
-          <p>{{ trackNumber }} </p>
+          <p>{{ trackNumber }}</p>
         </div>
-        <MultiSourceImage v-if="track.image_urls" class="trackImage scaleClickFeedback" :urls="track.image_urls"
-          @click.stop="$emit('track-image-clicked', track)" />
-        <TrackName :track="track" class="trackNameSpan" :hoverAnimation="true" />
+        <MultiSourceImage
+          v-if="track.image_urls"
+          class="trackImage scaleClickFeedback"
+          :urls="track.image_urls"
+          @click.stop="$emit('track-image-clicked', track)"
+        />
+        <TrackName
+          :track="track"
+          class="trackNameSpan"
+          :hoverAnimation="true"
+        />
         <div class="trackArtistsSpan">
-          <LoadClickableArtistsNames v-if="track.artists_ids" :artistsIds="track.artists_ids" />
+          <LoadClickableArtistsNames
+            v-if="track.artists_ids"
+            :artistsIds="track.artists_ids"
+          />
         </div>
         <div class="track-duration">{{ formatDuration(track.duration) }}</div>
       </div>
@@ -20,12 +35,12 @@
 </template>
 
 <script setup>
-import { ref, onMounted, computed, watch } from 'vue';
-import { formatDuration } from '@/utils';
-import TrackName from '@/components/common/TrackName.vue';
-import LoadClickableArtistsNames from '@/components/common/LoadClickableArtistsNames.vue';
-import { useStaticsStore } from '@/store/statics';
-import MultiSourceImage from '@/components/common/MultiSourceImage.vue';
+import { ref, onMounted, computed, watch } from "vue";
+import { formatDuration } from "@/utils";
+import TrackName from "@/components/common/TrackName.vue";
+import LoadClickableArtistsNames from "@/components/common/LoadClickableArtistsNames.vue";
+import { useStaticsStore } from "@/store/statics";
+import MultiSourceImage from "@/components/common/MultiSourceImage.vue";
 
 const staticsStore = useStaticsStore();
 
@@ -36,19 +51,19 @@ const props = defineProps({
   },
   contextId: {
     type: String,
-    default: null
+    default: null,
   },
   trackNumber: {
     type: Number,
-    default: 0
+    default: 0,
   },
   isCurrentlyPlaying: {
     type: Boolean,
-    default: false
-  }
+    default: false,
+  },
 });
 
-const emit = defineEmits(['track-clicked', 'track-image-clicked']);
+const emit = defineEmits(["track-clicked", "track-image-clicked"]);
 
 const loading = ref(false);
 const error = ref(null);
@@ -64,7 +79,8 @@ const loadTrackData = async () => {
   loading.value = true;
   error.value = null;
   track.value = null;
-  trackDataUnWatcher = watch(staticsStore.getTrack(props.trackId),
+  trackDataUnWatcher = watch(
+    staticsStore.getTrack(props.trackId),
     (newTrack) => {
       if (newTrack && newTrack.item) {
         loading.value = false;
@@ -72,12 +88,12 @@ const loadTrackData = async () => {
         if (newTrack.error) {
           error.value = newTrack.error;
         }
-        if (typeof newTrack.item === 'object') {
+        if (typeof newTrack.item === "object") {
           track.value = newTrack.item;
         }
       }
     },
-    { immediate: true }
+    { immediate: true },
   );
 };
 
@@ -91,7 +107,7 @@ const computeTrackRowClasses = computed(() => {
 
 const handleTrackClick = () => {
   if (track.value) {
-    emit('track-clicked', track.value);
+    emit("track-clicked", track.value);
   }
 };
 
@@ -101,15 +117,18 @@ onMounted(() => {
 });
 
 // Watch for changes to trackId and reload if necessary
-watch(() => props.trackId, (newId, oldId) => {
-  if (newId != oldId) {
-    //loadTrackData();
-  }
-});
+watch(
+  () => props.trackId,
+  (newId, oldId) => {
+    if (newId != oldId) {
+      //loadTrackData();
+    }
+  },
+);
 
 // Expose track data for parent components
 defineExpose({
-  track
+  track,
 });
 </script>
 

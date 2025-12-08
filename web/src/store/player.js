@@ -1,9 +1,9 @@
-import { defineStore } from 'pinia';
-import { computed, ref, watch } from 'vue';
-import { Howl } from 'howler';
-import { useStaticsStore } from './statics';
+import { defineStore } from "pinia";
+import { computed, ref, watch } from "vue";
+import { Howl } from "howler";
+import { useStaticsStore } from "./statics";
 
-export const usePlayerStore = defineStore('player', () => {
+export const usePlayerStore = defineStore("player", () => {
   const staticsStore = useStaticsStore();
 
   /* PROPS */
@@ -29,8 +29,12 @@ export const usePlayerStore = defineStore('player', () => {
     return null;
   });
 
-  const canGoToPreviousPlaylist = computed(() => currentPlaylistIndex.value > 0);
-  const canGoToNextPlaylist = computed(() => currentPlaylistIndex.value < (playlistsHistory.value.length - 1));
+  const canGoToPreviousPlaylist = computed(
+    () => currentPlaylistIndex.value > 0,
+  );
+  const canGoToNextPlaylist = computed(
+    () => currentPlaylistIndex.value < playlistsHistory.value.length - 1,
+  );
   /* PROPS */
 
   /* PERSISTENCE */
@@ -38,22 +42,34 @@ export const usePlayerStore = defineStore('player', () => {
   if (savedPlaylistsHistory) {
     playlistsHistory.value = JSON.parse(savedPlaylistsHistory);
     if (playlistsHistory.value && playlistsHistory.value.length > 0) {
-
-      const savedCurrentPlaylistIndex = localStorage.getItem("currentPlaylistIndex") || playlistsHistory.value.length - 1;
+      const savedCurrentPlaylistIndex =
+        localStorage.getItem("currentPlaylistIndex") ||
+        playlistsHistory.value.length - 1;
       currentPlaylistIndex.value = Number.parseInt(savedCurrentPlaylistIndex);
 
       const loadedTrackIndex = localStorage.getItem("currentTrackIndex");
       if (loadedTrackIndex) {
         const indexValue = Number.parseInt(loadedTrackIndex);
         console.log("Loaded currenTrackIndex " + indexValue);
-        if (Number.isInteger(indexValue) && !Number.isNaN(indexValue) && indexValue >= 0 && indexValue < currentPlaylist.value.tracksIds.length) {
+        if (
+          Number.isInteger(indexValue) &&
+          !Number.isNaN(indexValue) &&
+          indexValue >= 0 &&
+          indexValue < currentPlaylist.value.tracksIds.length
+        ) {
           currentTrackIndex.value = indexValue;
-          currentTrackId.value = currentPlaylist.value.tracksIds[indexValue]
+          currentTrackId.value = currentPlaylist.value.tracksIds[indexValue];
         }
       }
-      const savedPercent = Number.parseFloat(localStorage.getItem("progressPercent"));
+      const savedPercent = Number.parseFloat(
+        localStorage.getItem("progressPercent"),
+      );
       console.log("loaded savedPercent " + savedPercent);
-      if (!Number.isNaN(savedPercent) && savedPercent >= 0.0 && savedPercent <= 1.0) {
+      if (
+        !Number.isNaN(savedPercent) &&
+        savedPercent >= 0.0 &&
+        savedPercent <= 1.0
+      ) {
         pendingPercentSeek = savedPercent;
         progressPercent.value = savedPercent;
         console.log("seeking saved percent");
@@ -65,17 +81,20 @@ export const usePlayerStore = defineStore('player', () => {
     }
   }
 
-  const savePlaylistHistory = (history) => localStorage.setItem("playlistsHistory", JSON.stringify(history));
+  const savePlaylistHistory = (history) =>
+    localStorage.setItem("playlistsHistory", JSON.stringify(history));
 
-  watch(playlistsHistory, (newPlaylistsHistory) => savePlaylistHistory(newPlaylistsHistory));
+  watch(playlistsHistory, (newPlaylistsHistory) =>
+    savePlaylistHistory(newPlaylistsHistory),
+  );
 
   const savedMuted = localStorage.getItem("muted");
-  if (savedMuted === 'true') {
+  if (savedMuted === "true") {
     muted.value = true;
   }
-  watch(muted, (newMuted) => localStorage.setItem('muted', newMuted));
+  watch(muted, (newMuted) => localStorage.setItem("muted", newMuted));
 
-  const savedVolume = localStorage.getItem('volume');
+  const savedVolume = localStorage.getItem("volume");
   if (savedVolume) {
     const parseVolume = Number.parseFloat(savedVolume);
     if (!Number.isNaN(parseFloat)) {
@@ -86,7 +105,7 @@ export const usePlayerStore = defineStore('player', () => {
 
   watch(currentTrackIndex, (newTrackIndex) => {
     if (Number.isInteger(newTrackIndex)) {
-      localStorage.setItem('currentTrackIndex', newTrackIndex);
+      localStorage.setItem("currentTrackIndex", newTrackIndex);
     }
   });
 
@@ -102,7 +121,6 @@ export const usePlayerStore = defineStore('player', () => {
     if (diff > 4) {
       persistProgressPercent();
     }
-
   });
   /* PERSISTENCE */
 
@@ -122,17 +140,19 @@ export const usePlayerStore = defineStore('player', () => {
         id: album.id,
         edited: false,
       },
-      tracksIds: album.discs.flatMap(disc => disc.tracks).map((trackId) => trackId),
+      tracksIds: album.discs
+        .flatMap((disc) => disc.tracks)
+        .map((trackId) => trackId),
       type: PLAYBACK_CONTEXTS.album,
-    }
-  }
+    };
+  };
   const makePlaylistFromUserPlaylist = (playlist) => {
     return {
       context: { ...playlist, edited: false },
       tracksIds: playlist.tracks.map((trackId) => trackId),
       type: PLAYBACK_CONTEXTS.userPlaylist,
     };
-  }
+  };
 
   const makePlaylistFromTrackId = (trackId) => {
     return {
@@ -142,16 +162,23 @@ export const usePlayerStore = defineStore('player', () => {
       tracksIds: [trackId],
       type: PLAYBACK_CONTEXTS.userMix,
     };
-  }
+  };
   /* Playlist creation */
 
   const setNewPlaylingPlaylist = (newPlaylist) => {
     pendingPercentSeek = null;
     let newHistory;
 
-    if (playlistsHistory.value && currentPlaylistIndex.value !== null && currentPlaylistIndex.value < playlistsHistory.value.length - 1) {
+    if (
+      playlistsHistory.value &&
+      currentPlaylistIndex.value !== null &&
+      currentPlaylistIndex.value < playlistsHistory.value.length - 1
+    ) {
       // If we're not at the end of history, remove all future playlists
-      newHistory = [...playlistsHistory.value.slice(0, currentPlaylistIndex.value + 1), newPlaylist];
+      newHistory = [
+        ...playlistsHistory.value.slice(0, currentPlaylistIndex.value + 1),
+        newPlaylist,
+      ];
     } else {
       // Otherwise, just append normally
       newHistory = [...(playlistsHistory.value || []), newPlaylist];
@@ -171,10 +198,10 @@ export const usePlayerStore = defineStore('player', () => {
       for (let i = 0; i < discIndex; i++) {
         previousDiscsTracks += album.discs[i].tracks.length;
       }
-      album.discs.map((disc) => disc.tracks.length).slice(0, discIndex - 1)
+      album.discs.map((disc) => disc.tracks.length).slice(0, discIndex - 1);
     }
     return trackIndex + previousDiscsTracks;
-  }
+  };
 
   /* Playlist starters */
   const setAlbumId = async (albumId, discIndex, trackIndex) => {
@@ -193,10 +220,10 @@ export const usePlayerStore = defineStore('player', () => {
     } else {
       console.error("Album", albumId, "not found in staticsStore");
     }
-  }
+  };
 
   const setTrack = (newTrack) => {
-    const trackPlaylist = makePlaylistFromTrackId(newTrack.id)
+    const trackPlaylist = makePlaylistFromTrackId(newTrack.id);
     setNewPlaylingPlaylist(trackPlaylist);
     loadTrack(0);
     play();
@@ -212,11 +239,10 @@ export const usePlayerStore = defineStore('player', () => {
     setNewPlaylingPlaylist(userPlaylistPlaylist);
     loadTrack(0);
     play();
-  }
+  };
   /* Playlist starters */
 
   const loadTrack = (index) => {
-
     if (sound) {
       sound.unload();
     }
@@ -250,16 +276,16 @@ export const usePlayerStore = defineStore('player', () => {
       },
     });
     requestUpdateProgressOnNewFrame();
-  }
+  };
 
   let lastUpdateMs = 0;
 
   const relaxedUpdateProgress = () => {
-    updateProgress(true)
-  }
+    updateProgress(true);
+  };
   const requestUpdateProgressOnNewFrame = () => {
     requestAnimationFrame(relaxedUpdateProgress);
-  }
+  };
   const updateProgress = (relaxed) => {
     if (relaxed) {
       if (Date.now() - lastUpdateMs < 300) {
@@ -270,14 +296,14 @@ export const usePlayerStore = defineStore('player', () => {
     if (sound) {
       const currentTime = sound.seek();
       const duration = sound.duration();
-      progressPercent.value = (currentTime / duration);
+      progressPercent.value = currentTime / duration;
       progressSec.value = currentTime;
       if (sound.playing()) {
         requestUpdateProgressOnNewFrame();
       }
       lastUpdateMs = Date.now();
     }
-  }
+  };
 
   /* Playback controls */
   const skipNextTrack = () => {
@@ -295,7 +321,7 @@ export const usePlayerStore = defineStore('player', () => {
     if (isPlaying.value) {
       play();
     }
-  }
+  };
 
   const skipPreviousTrack = () => {
     let previousIndex = currentTrackIndex.value - 1;
@@ -312,22 +338,22 @@ export const usePlayerStore = defineStore('player', () => {
     if (isPlaying.value) {
       play();
     }
-  }
+  };
 
   const play = () => {
     if (!sound) {
       loadTrack(currentTrackIndex.value);
     }
     sound.play();
-    isPlaying.value = true
-  }
+    isPlaying.value = true;
+  };
 
   const pause = () => {
     if (sound) {
       sound.pause();
     }
-    isPlaying.value = false
-  }
+    isPlaying.value = false;
+  };
 
   const playPause = () => {
     console.log("PlayerStore playPause() current value: " + isPlaying.value);
@@ -353,7 +379,7 @@ export const usePlayerStore = defineStore('player', () => {
   const seekToPercentage = (percentage) => {
     if (sound) {
       const duration = sound.duration();
-      const seekTime = (duration * percentage);
+      const seekTime = duration * percentage;
       const play = sound.playing();
       sound.seek(seekTime);
       if (play) {
@@ -371,7 +397,7 @@ export const usePlayerStore = defineStore('player', () => {
       updateProgress();
       requestUpdateProgressOnNewFrame();
     }
-  }
+  };
 
   const rewind10Sec = () => {
     if (sound) {
@@ -379,32 +405,36 @@ export const usePlayerStore = defineStore('player', () => {
       updateProgress();
       requestUpdateProgressOnNewFrame();
     }
-  }
+  };
 
   const setVolume = (newVolume) => {
     if (sound) {
       sound.volume(newVolume);
     }
     volume.value = newVolume;
-  }
+  };
 
   const setMuted = (newMuted) => {
     if (sound) {
       sound.volume(newMuted ? 0.0 : volume.value);
     }
     muted.value = newMuted;
-  }
+  };
 
   const loadTrackIndex = (index) => {
     pendingPercentSeek = null;
-    if (currentPlaylist.value.tracksIds.length && index >= 0 && index < currentPlaylist.value.tracksIds.length) {
+    if (
+      currentPlaylist.value.tracksIds.length &&
+      index >= 0 &&
+      index < currentPlaylist.value.tracksIds.length
+    ) {
       currentTrackIndex.value = index;
       loadTrack(index);
       if (isPlaying.value) {
         play();
       }
     }
-  }
+  };
   /* Playback controls */
 
   /* Playing playlist controls */
@@ -419,9 +449,9 @@ export const usePlayerStore = defineStore('player', () => {
     currentTrackId.value = null;
     pendingPercentSeek = null;
     currentTrackIndex.value = null;
-    currentPlaylistIndex.value = null
+    currentPlaylistIndex.value = null;
     playlistsHistory.value = [];
-  }
+  };
 
   const goToPreviousPlaylist = () => {
     if (canGoToPreviousPlaylist.value) {
@@ -431,7 +461,7 @@ export const usePlayerStore = defineStore('player', () => {
         play();
       }
     }
-  }
+  };
   const goToNextPlaylist = () => {
     if (canGoToNextPlaylist.value) {
       currentPlaylistIndex.value += 1;
@@ -440,7 +470,7 @@ export const usePlayerStore = defineStore('player', () => {
         play();
       }
     }
-  }
+  };
 
   const moveTrack = (fromIndex, toIndex) => {
     if (fromIndex === toIndex) {
@@ -456,7 +486,7 @@ export const usePlayerStore = defineStore('player', () => {
       ...currentPlaylist.value,
       context: { ...currentPlaylist.value.context },
       tracksIds: newTracks,
-    }
+    };
     if (currentPlaylist.value.type === PLAYBACK_CONTEXTS.album) {
       newPlaylist.type = PLAYBACK_CONTEXTS.userMix;
       newPlaylist.context = { name: null, id: null, edited: false };
@@ -474,13 +504,19 @@ export const usePlayerStore = defineStore('player', () => {
 
     if (fromIndex === currentTrackIndex.value) {
       currentTrackIndex.value = toIndex;
-    } else if (fromIndex < currentTrackIndex.value && toIndex >= currentTrackIndex.value) {
+    } else if (
+      fromIndex < currentTrackIndex.value &&
+      toIndex >= currentTrackIndex.value
+    ) {
       currentTrackIndex.value -= 1;
-    } else if (fromIndex > currentTrackIndex.value && toIndex <= currentTrackIndex.value) {
+    } else if (
+      fromIndex > currentTrackIndex.value &&
+      toIndex <= currentTrackIndex.value
+    ) {
       currentTrackIndex.value += 1;
     }
     savePlaylistHistory(playlistsHistory.value);
-  }
+  };
 
   const addTracksToPlaylist = (tracksIds) => {
     if (!currentPlaylist.value) {
@@ -492,7 +528,7 @@ export const usePlayerStore = defineStore('player', () => {
       ...currentPlaylist.value,
       context: { ...currentPlaylist.value.context },
       tracksIds: newTracks,
-    }
+    };
     if (currentPlaylist.value.type === PLAYBACK_CONTEXTS.album) {
       newPlaylist.type = PLAYBACK_CONTEXTS.userMix;
       newPlaylist.context = { name: null, id: null, edited: false };
@@ -507,7 +543,7 @@ export const usePlayerStore = defineStore('player', () => {
       playlistsHistory.value[currentPlaylistIndex.value] = newPlaylist;
       savePlaylistHistory(playlistsHistory.value);
     }
-  }
+  };
 
   const removeTrackFromPlaylist = (index) => {
     console.log("player removeTrackFromPlaylist() index: " + index);
@@ -521,7 +557,7 @@ export const usePlayerStore = defineStore('player', () => {
       ...currentPlaylist.value,
       context: { ...currentPlaylist.value.context },
       tracksIds: newTracks,
-    }
+    };
     if (currentPlaylist.value.type === PLAYBACK_CONTEXTS.album) {
       newPlaylist.type = PLAYBACK_CONTEXTS.userMix;
       newPlaylist.context = { name: null, id: null, edited: false };
@@ -542,7 +578,7 @@ export const usePlayerStore = defineStore('player', () => {
       playlistsHistory.value[currentPlaylistIndex.value] = newPlaylist;
       savePlaylistHistory(playlistsHistory.value);
     }
-  }
+  };
   /* Playing playlist controls */
 
   return {

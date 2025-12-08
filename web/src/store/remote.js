@@ -1,47 +1,47 @@
-import { defineStore } from 'pinia';
-import axios from 'axios';
+import { defineStore } from "pinia";
+import axios from "axios";
 
-export const useRemoteStore = defineStore('remote', () => {
-
+export const useRemoteStore = defineStore("remote", () => {
   const setBlockHttpCache = (value) => {
     if (value) {
-      axios.defaults.headers.common['Cache-Control'] = 'no-cache, no-store, must-revalidate';
-      axios.defaults.headers.common['Pragma'] = 'no-cache';
-      axios.defaults.headers.common['Expires'] = '0';
+      axios.defaults.headers.common["Cache-Control"] =
+        "no-cache, no-store, must-revalidate";
+      axios.defaults.headers.common["Pragma"] = "no-cache";
+      axios.defaults.headers.common["Expires"] = "0";
     } else {
-      delete axios.defaults.headers.common['Cache-Control'];
-      delete axios.defaults.headers.common['Pragma'];
-      delete axios.defaults.headers.common['Expires'];
+      delete axios.defaults.headers.common["Cache-Control"];
+      delete axios.defaults.headers.common["Pragma"];
+      delete axios.defaults.headers.common["Expires"];
     }
-  }
+  };
 
   // User data fetching
   const fetchLikedAlbums = async () => {
     try {
-      const response = await axios.get('/v1/user/liked/album');
+      const response = await axios.get("/v1/user/liked/album");
       return response.data;
     } catch (error) {
-      console.error('Failed to load liked albums:', error);
+      console.error("Failed to load liked albums:", error);
       return [];
     }
   };
 
   const fetchLikedArtists = async () => {
     try {
-      const response = await axios.get('/v1/user/liked/artist');
+      const response = await axios.get("/v1/user/liked/artist");
       return response.data;
     } catch (error) {
-      console.error('Failed to load liked artists:', error);
+      console.error("Failed to load liked artists:", error);
       return [];
     }
   };
 
   const fetchUserPlaylists = async () => {
     try {
-      const response = await axios.get('/v1/user/playlists');
+      const response = await axios.get("/v1/user/playlists");
       return response.data;
     } catch (error) {
-      console.error('Failed to load playlists:', error);
+      console.error("Failed to load playlists:", error);
       return [];
     }
   };
@@ -56,7 +56,7 @@ export const useRemoteStore = defineStore('remote', () => {
       }
       return true;
     } catch (error) {
-      console.error('Failed to update album liked status:', error);
+      console.error("Failed to update album liked status:", error);
       return false;
     }
   };
@@ -70,7 +70,7 @@ export const useRemoteStore = defineStore('remote', () => {
       }
       return true;
     } catch (error) {
-      console.error('Failed to update artist liked status:', error);
+      console.error("Failed to update artist liked status:", error);
       return false;
     }
   };
@@ -81,20 +81,20 @@ export const useRemoteStore = defineStore('remote', () => {
       const response = await axios.get(`/v1/user/playlist/${playlistId}`);
       return response.data;
     } catch (error) {
-      console.error('Failed to load playlist data:', error);
+      console.error("Failed to load playlist data:", error);
       return null;
     }
   };
 
   const createNewPlaylist = async () => {
     try {
-      const response = await axios.post('/v1/user/playlist', {
-        name: 'New Playlist',
+      const response = await axios.post("/v1/user/playlist", {
+        name: "New Playlist",
         track_ids: [],
       });
       return response.data;
     } catch (error) {
-      console.error('Failed to create new playlist:', error);
+      console.error("Failed to create new playlist:", error);
       return null;
     }
   };
@@ -104,7 +104,7 @@ export const useRemoteStore = defineStore('remote', () => {
       await axios.delete(`/v1/user/playlist/${playlistId}`);
       return true;
     } catch (error) {
-      console.error('Failed to delete playlist:', error);
+      console.error("Failed to delete playlist:", error);
       return false;
     }
   };
@@ -116,7 +116,7 @@ export const useRemoteStore = defineStore('remote', () => {
       });
       return true;
     } catch (error) {
-      console.error('Failed to update playlist name:', error);
+      console.error("Failed to update playlist name:", error);
       return false;
     }
   };
@@ -124,11 +124,11 @@ export const useRemoteStore = defineStore('remote', () => {
   const addTracksToPlaylist = async (playlistId, trackIds) => {
     try {
       await axios.put(`/v1/user/playlist/${playlistId}/add`, {
-        tracks_ids: trackIds
+        tracks_ids: trackIds,
       });
       return true;
     } catch (error) {
-      console.error('Failed to add tracks to playlist:', error);
+      console.error("Failed to add tracks to playlist:", error);
       return false;
     }
   };
@@ -136,22 +136,22 @@ export const useRemoteStore = defineStore('remote', () => {
   const removeTracksFromPlaylist = async (playlistId, tracksPositions) => {
     try {
       await axios.put(`/v1/user/playlist/${playlistId}/remove`, {
-        tracks_positions: tracksPositions
+        tracks_positions: tracksPositions,
       });
       return true;
     } catch (error) {
-      console.error('Failed to remove tracks from playlist:', error);
+      console.error("Failed to remove tracks from playlist:", error);
       return false;
     }
-  }
+  };
 
   // User settings operations
   const fetchUserSettings = async () => {
     try {
-      const response = await axios.get('/v1/user/settings');
+      const response = await axios.get("/v1/user/settings");
       return response.data.settings;
     } catch (error) {
-      console.error('Failed to fetch user settings:', error);
+      console.error("Failed to fetch user settings:", error);
       return {};
     }
   };
@@ -162,12 +162,12 @@ export const useRemoteStore = defineStore('remote', () => {
       // { settings: [{ key: "setting_key", value: settingValue }] }
       const settingsArray = Object.entries(settings).map(([key, value]) => ({
         key,
-        value: value === 'true' ? true : value === 'false' ? false : value,
+        value: value === "true" ? true : value === "false" ? false : value,
       }));
-      await axios.put('/v1/user/settings', { settings: settingsArray });
+      await axios.put("/v1/user/settings", { settings: settingsArray });
       return true;
     } catch (error) {
-      console.error('Failed to update user settings:', error);
+      console.error("Failed to update user settings:", error);
       return false;
     }
   };
@@ -178,7 +178,7 @@ export const useRemoteStore = defineStore('remote', () => {
       const response = await axios.get(`/v1/content/track/${trackId}`);
       return response.data;
     } catch (error) {
-      console.error('Error fetching track data:', error);
+      console.error("Error fetching track data:", error);
       return null;
     }
   };
@@ -188,7 +188,7 @@ export const useRemoteStore = defineStore('remote', () => {
       const response = await axios.get(`/v1/content/track/${trackId}/resolved`);
       return response.data;
     } catch (error) {
-      console.error('Error fetching resolved track data:', error);
+      console.error("Error fetching resolved track data:", error);
       return null;
     }
   };
@@ -199,7 +199,7 @@ export const useRemoteStore = defineStore('remote', () => {
       const response = await axios.get(`/v1/content/album/${albumId}/resolved`);
       return response.data;
     } catch (error) {
-      console.error('Error fetching album data:', error);
+      console.error("Error fetching album data:", error);
       return null;
     }
   };
@@ -209,7 +209,7 @@ export const useRemoteStore = defineStore('remote', () => {
       const response = await axios.get(`/v1/content/album/${albumId}`);
       return response.data;
     } catch (error) {
-      console.error('Error fetching album data:', error);
+      console.error("Error fetching album data:", error);
       return null;
     }
   };
@@ -220,17 +220,19 @@ export const useRemoteStore = defineStore('remote', () => {
       const response = await axios.get(`/v1/content/artist/${artistId}`);
       return response.data;
     } catch (error) {
-      console.error('Error fetching artist data:', error);
+      console.error("Error fetching artist data:", error);
       return null;
     }
   };
 
   const fetchArtistDiscography = async (artistId) => {
     try {
-      const response = await axios.get(`/v1/content/artist/${artistId}/discography`);
+      const response = await axios.get(
+        `/v1/content/artist/${artistId}/discography`,
+      );
       return response.data;
     } catch (error) {
-      console.error('Error fetching artist albums:', error);
+      console.error("Error fetching artist albums:", error);
       return [];
     }
   };
@@ -238,26 +240,26 @@ export const useRemoteStore = defineStore('remote', () => {
   // Sync API operations
   const fetchSyncState = async () => {
     try {
-      const response = await axios.get('/v1/sync/state');
+      const response = await axios.get("/v1/sync/state");
       return response.data;
     } catch (error) {
-      console.error('Error fetching sync state:', error);
+      console.error("Error fetching sync state:", error);
       throw error;
     }
   };
 
   const fetchSyncEvents = async (since) => {
     try {
-      const response = await axios.get('/v1/sync/events', {
-        params: { since }
+      const response = await axios.get("/v1/sync/events", {
+        params: { since },
       });
       return response.data;
     } catch (error) {
       // Return error info for 410 Gone handling
       if (error.response && error.response.status === 410) {
-        return { error: 'events_pruned', status: 410 };
+        return { error: "events_pruned", status: 410 };
       }
-      console.error('Error fetching sync events:', error);
+      console.error("Error fetching sync events:", error);
       throw error;
     }
   };
@@ -268,15 +270,15 @@ export const useRemoteStore = defineStore('remote', () => {
 
   const fetchAdminUsers = async () => {
     try {
-      console.log('Fetching admin users...');
-      const response = await axios.get('/v1/admin/users');
-      console.log('Admin users response:', response.data);
+      console.log("Fetching admin users...");
+      const response = await axios.get("/v1/admin/users");
+      console.log("Admin users response:", response.data);
       return response.data;
     } catch (error) {
-      console.error('Failed to fetch users:', error);
+      console.error("Failed to fetch users:", error);
       if (error.response) {
-        console.error('Response status:', error.response.status);
-        console.error('Response data:', error.response.data);
+        console.error("Response status:", error.response.status);
+        console.error("Response data:", error.response.data);
       }
       return null;
     }
@@ -284,14 +286,16 @@ export const useRemoteStore = defineStore('remote', () => {
 
   const createUser = async (userHandle) => {
     try {
-      const response = await axios.post('/v1/admin/users', { user_handle: userHandle });
+      const response = await axios.post("/v1/admin/users", {
+        user_handle: userHandle,
+      });
       return response.data;
     } catch (error) {
-      console.error('Failed to create user:', error);
+      console.error("Failed to create user:", error);
       if (error.response?.status === 409) {
-        return { error: 'User handle already exists' };
+        return { error: "User handle already exists" };
       }
-      return { error: 'Failed to create user' };
+      return { error: "Failed to create user" };
     }
   };
 
@@ -300,11 +304,11 @@ export const useRemoteStore = defineStore('remote', () => {
       await axios.delete(`/v1/admin/users/${userHandle}`);
       return { success: true };
     } catch (error) {
-      console.error('Failed to delete user:', error);
+      console.error("Failed to delete user:", error);
       if (error.response?.status === 400) {
-        return { error: 'Cannot delete your own account' };
+        return { error: "Cannot delete your own account" };
       }
-      return { error: 'Failed to delete user' };
+      return { error: "Failed to delete user" };
     }
   };
 
@@ -313,7 +317,7 @@ export const useRemoteStore = defineStore('remote', () => {
       const response = await axios.get(`/v1/admin/users/${userHandle}/roles`);
       return response.data;
     } catch (error) {
-      console.error('Failed to fetch user roles:', error);
+      console.error("Failed to fetch user roles:", error);
       return null;
     }
   };
@@ -323,7 +327,7 @@ export const useRemoteStore = defineStore('remote', () => {
       await axios.post(`/v1/admin/users/${userHandle}/roles`, { role });
       return true;
     } catch (error) {
-      console.error('Failed to add user role:', error);
+      console.error("Failed to add user role:", error);
       return false;
     }
   };
@@ -333,30 +337,40 @@ export const useRemoteStore = defineStore('remote', () => {
       await axios.delete(`/v1/admin/users/${userHandle}/roles/${role}`);
       return true;
     } catch (error) {
-      console.error('Failed to remove user role:', error);
+      console.error("Failed to remove user role:", error);
       return false;
     }
   };
 
   const fetchUserPermissions = async (userHandle) => {
     try {
-      const response = await axios.get(`/v1/admin/users/${userHandle}/permissions`);
+      const response = await axios.get(
+        `/v1/admin/users/${userHandle}/permissions`,
+      );
       return response.data;
     } catch (error) {
-      console.error('Failed to fetch user permissions:', error);
+      console.error("Failed to fetch user permissions:", error);
       return null;
     }
   };
 
-  const grantPermission = async (userHandle, permission, durationSeconds = null, countdown = null) => {
+  const grantPermission = async (
+    userHandle,
+    permission,
+    durationSeconds = null,
+    countdown = null,
+  ) => {
     try {
       const body = { permission };
       if (durationSeconds !== null) body.duration_seconds = durationSeconds;
       if (countdown !== null) body.countdown = countdown;
-      const response = await axios.post(`/v1/admin/users/${userHandle}/permissions`, body);
+      const response = await axios.post(
+        `/v1/admin/users/${userHandle}/permissions`,
+        body,
+      );
       return response.data;
     } catch (error) {
-      console.error('Failed to grant permission:', error);
+      console.error("Failed to grant permission:", error);
       return null;
     }
   };
@@ -366,17 +380,19 @@ export const useRemoteStore = defineStore('remote', () => {
       await axios.delete(`/v1/admin/permissions/${permissionId}`);
       return true;
     } catch (error) {
-      console.error('Failed to revoke permission:', error);
+      console.error("Failed to revoke permission:", error);
       return false;
     }
   };
 
   const fetchUserCredentialsStatus = async (userHandle) => {
     try {
-      const response = await axios.get(`/v1/admin/users/${userHandle}/credentials`);
+      const response = await axios.get(
+        `/v1/admin/users/${userHandle}/credentials`,
+      );
       return response.data;
     } catch (error) {
-      console.error('Failed to fetch user credentials status:', error);
+      console.error("Failed to fetch user credentials status:", error);
       return null;
     }
   };
@@ -386,8 +402,8 @@ export const useRemoteStore = defineStore('remote', () => {
       await axios.put(`/v1/admin/users/${userHandle}/password`, { password });
       return { success: true };
     } catch (error) {
-      console.error('Failed to set user password:', error);
-      return { error: 'Failed to set password' };
+      console.error("Failed to set user password:", error);
+      return { error: "Failed to set password" };
     }
   };
 
@@ -396,8 +412,8 @@ export const useRemoteStore = defineStore('remote', () => {
       await axios.delete(`/v1/admin/users/${userHandle}/password`);
       return { success: true };
     } catch (error) {
-      console.error('Failed to delete user password:', error);
-      return { error: 'Failed to delete password' };
+      console.error("Failed to delete user password:", error);
+      return { error: "Failed to delete password" };
     }
   };
 
@@ -410,23 +426,29 @@ export const useRemoteStore = defineStore('remote', () => {
       const params = {};
       if (startDate) params.start_date = startDate;
       if (endDate) params.end_date = endDate;
-      const response = await axios.get('/v1/admin/listening/daily', { params });
+      const response = await axios.get("/v1/admin/listening/daily", { params });
       return response.data;
     } catch (error) {
-      console.error('Failed to fetch daily listening stats:', error);
+      console.error("Failed to fetch daily listening stats:", error);
       return null;
     }
   };
 
-  const fetchTopTracks = async (startDate = null, endDate = null, limit = 50) => {
+  const fetchTopTracks = async (
+    startDate = null,
+    endDate = null,
+    limit = 50,
+  ) => {
     try {
       const params = { limit };
       if (startDate) params.start_date = startDate;
       if (endDate) params.end_date = endDate;
-      const response = await axios.get('/v1/admin/listening/top-tracks', { params });
+      const response = await axios.get("/v1/admin/listening/top-tracks", {
+        params,
+      });
       return response.data;
     } catch (error) {
-      console.error('Failed to fetch top tracks:', error);
+      console.error("Failed to fetch top tracks:", error);
       return null;
     }
   };
@@ -436,33 +458,42 @@ export const useRemoteStore = defineStore('remote', () => {
       const params = {};
       if (startDate) params.start_date = startDate;
       if (endDate) params.end_date = endDate;
-      const response = await axios.get(`/v1/admin/listening/track/${trackId}`, { params });
+      const response = await axios.get(`/v1/admin/listening/track/${trackId}`, {
+        params,
+      });
       return response.data;
     } catch (error) {
-      console.error('Failed to fetch track stats:', error);
+      console.error("Failed to fetch track stats:", error);
       return null;
     }
   };
 
-  const fetchUserListeningSummary = async (userHandle, startDate = null, endDate = null) => {
+  const fetchUserListeningSummary = async (
+    userHandle,
+    startDate = null,
+    endDate = null,
+  ) => {
     try {
       const params = {};
       if (startDate) params.start_date = startDate;
       if (endDate) params.end_date = endDate;
-      const response = await axios.get(`/v1/admin/listening/users/${userHandle}/summary`, { params });
+      const response = await axios.get(
+        `/v1/admin/listening/users/${userHandle}/summary`,
+        { params },
+      );
       return response.data;
     } catch (error) {
-      console.error('Failed to fetch user listening summary:', error);
+      console.error("Failed to fetch user listening summary:", error);
       return null;
     }
   };
 
   const fetchOnlineUsers = async () => {
     try {
-      const response = await axios.get('/v1/admin/online-users');
+      const response = await axios.get("/v1/admin/online-users");
       return response.data;
     } catch (error) {
-      console.error('Failed to fetch online users:', error);
+      console.error("Failed to fetch online users:", error);
       return null;
     }
   };
@@ -473,10 +504,10 @@ export const useRemoteStore = defineStore('remote', () => {
 
   const rebootServer = async () => {
     try {
-      await axios.post('/v1/admin/reboot');
+      await axios.post("/v1/admin/reboot");
       return true;
     } catch (error) {
-      console.error('Failed to reboot server:', error);
+      console.error("Failed to reboot server:", error);
       return false;
     }
   };

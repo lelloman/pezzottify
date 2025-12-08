@@ -1,8 +1,12 @@
 <template>
   <footer v-if="localCurrentTrack" class="footerPlayer">
     <div class="trackInfoRow">
-      <MultiSourceImage :urls="imageUrls" alt="Image" class="trackImage scaleClickFeedback"
-        @click.stop="handleClickOnAlbumCover" />
+      <MultiSourceImage
+        :urls="imageUrls"
+        alt="Image"
+        class="trackImage scaleClickFeedback"
+        @click.stop="handleClickOnAlbumCover"
+      />
       <div class="trackNamesColumn">
         <TrackName :track="localCurrentTrack" :infiniteAnimation="true" />
         <LoadClickableArtistsNames :artistsIds="artists" />
@@ -12,63 +16,96 @@
       <div class="playerControlsButtonsRow">
         <ControlIconButton :action="rewind10Sec" :icon="Rewind10Sec" />
         <ControlIconButton :action="skipPreviousTrack" :icon="SkipPrevious" />
-        <ControlIconButton v-if="!isPlaying" :action="playPause" :icon="PlayIcon" :big="true" />
-        <ControlIconButton v-if="isPlaying" :action="playPause" :icon="PauseIcon" :big="true" />
+        <ControlIconButton
+          v-if="!isPlaying"
+          :action="playPause"
+          :icon="PlayIcon"
+          :big="true"
+        />
+        <ControlIconButton
+          v-if="isPlaying"
+          :action="playPause"
+          :icon="PauseIcon"
+          :big="true"
+        />
         <ControlIconButton :action="skipNextTrack" :icon="NextTrack" />
         <ControlIconButton :action="forward10Sec" :icon="Forward10Sec" />
       </div>
       <div class="progressControlsRow">
         <span>{{ formattedTime }}</span>
-        <ProgressBar id="TrackProgressBar" class="trackProgressBar" :progress="combinedProgressPercent"
-          @update:progress="updateTrackProgress" @update:startDrag="startDraggingTrackProgress"
-          @update:stopDrag="seekTrack" />
+        <ProgressBar
+          id="TrackProgressBar"
+          class="trackProgressBar"
+          :progress="combinedProgressPercent"
+          @update:progress="updateTrackProgress"
+          @update:startDrag="startDraggingTrackProgress"
+          @update:stopDrag="seekTrack"
+        />
         <span>{{ duration }}</span>
       </div>
     </div>
     <div class="extraControlsRow">
-      <ControlIconButton v-if="isMuted" :action="volumeOn" :icon="VolumeOffIcon" />
-      <ControlIconButton v-if="!isMuted" :action="volumeOff" :icon="VolumeOnIcon" />
-      <ProgressBar class="volumeProgressBar" :progress="computedVolumePercent" @update:progress="updateVolumeProgress"
-        @update:stratDrag="startDraggingVolumeProgress" @update:stopDrag="setVolume" />
+      <ControlIconButton
+        v-if="isMuted"
+        :action="volumeOn"
+        :icon="VolumeOffIcon"
+      />
+      <ControlIconButton
+        v-if="!isMuted"
+        :action="volumeOff"
+        :icon="VolumeOnIcon"
+      />
+      <ProgressBar
+        class="volumeProgressBar"
+        :progress="computedVolumePercent"
+        @update:progress="updateVolumeProgress"
+        @update:stratDrag="startDraggingVolumeProgress"
+        @update:stopDrag="setVolume"
+      />
       <ControlIconButton :action="stop" :icon="StopIcon" />
     </div>
   </footer>
 </template>
 
 <script setup>
-
-import { computed, ref, watch, h } from 'vue';
-import { usePlayerStore } from '@/store/player';
-import { storeToRefs } from 'pinia';
-import { formatDuration, chooseAlbumCoverImageUrl } from '@/utils';
-import PlayIcon from './icons/PlayIcon.vue';
-import PauseIcon from './icons/PauseIcon.vue';
-import Forward10Sec from './icons/Forward10Sec.vue';
-import Rewind10Sec from './icons/Rewind10Sec.vue';
-import NextTrack from './icons/SkipNext.vue';
-import SkipPrevious from './icons/SkipPrevious.vue';
-import ProgressBar from '@/components/common/ProgressBar.vue';
-import StopIcon from './icons/StopIcon.vue';
-import VolumeOnIcon from './icons/VolumeOnIcon.vue';
-import VolumeOffIcon from './icons/VolumeOffIcon.vue';
-import MultiSourceImage from './common/MultiSourceImage.vue';
-import LoadClickableArtistsNames from '@/components/common/LoadClickableArtistsNames.vue';
-import { useRouter } from 'vue-router';
-import TrackName from './common/TrackName.vue';
-import { useStaticsStore } from '@/store/statics';
+import { computed, ref, watch, h } from "vue";
+import { usePlayerStore } from "@/store/player";
+import { storeToRefs } from "pinia";
+import { formatDuration, chooseAlbumCoverImageUrl } from "@/utils";
+import PlayIcon from "./icons/PlayIcon.vue";
+import PauseIcon from "./icons/PauseIcon.vue";
+import Forward10Sec from "./icons/Forward10Sec.vue";
+import Rewind10Sec from "./icons/Rewind10Sec.vue";
+import NextTrack from "./icons/SkipNext.vue";
+import SkipPrevious from "./icons/SkipPrevious.vue";
+import ProgressBar from "@/components/common/ProgressBar.vue";
+import StopIcon from "./icons/StopIcon.vue";
+import VolumeOnIcon from "./icons/VolumeOnIcon.vue";
+import VolumeOffIcon from "./icons/VolumeOffIcon.vue";
+import MultiSourceImage from "./common/MultiSourceImage.vue";
+import LoadClickableArtistsNames from "@/components/common/LoadClickableArtistsNames.vue";
+import { useRouter } from "vue-router";
+import TrackName from "./common/TrackName.vue";
+import { useStaticsStore } from "@/store/statics";
 
 const ControlIconButton = {
   props: ["icon", "action", "big"],
   setup(props) {
     const onClick = () => {
       props.action();
-    }
+    };
 
-    const sizeClass = props.big ? 'bigIcon' : 'mediumIcon';
+    const sizeClass = props.big ? "bigIcon" : "mediumIcon";
 
-    return () => h('div', { class: 'lightControlFill scaleClickFeedback scalingIcon ' + sizeClass, onClick }, [
-      h(props.icon)
-    ])
+    return () =>
+      h(
+        "div",
+        {
+          class: "lightControlFill scaleClickFeedback scalingIcon " + sizeClass,
+          onClick,
+        },
+        [h(props.icon)],
+      );
   },
 };
 
@@ -89,15 +126,24 @@ const draggingVolumePercent = ref(null);
 const isMuted = ref(false);
 
 const computedVolumePercent = computed(() => {
-  return draggingVolumePercent.value || (isMuted.value ? 0.0 : volumePercent.value);
-})
+  return (
+    draggingVolumePercent.value || (isMuted.value ? 0.0 : volumePercent.value)
+  );
+});
 
-const { currentTrackId, isPlaying, progressPercent, progressSec, volume, muted } = storeToRefs(player);
+const {
+  currentTrackId,
+  isPlaying,
+  progressPercent,
+  progressSec,
+  volume,
+  muted,
+} = storeToRefs(player);
 
-const songName = ref('');
+const songName = ref("");
 const artists = ref([]);
 const imageUrls = ref([]);
-const duration = ref('');
+const duration = ref("");
 const currentAlbumId = ref(null);
 
 const currentTimeSec = ref(0);
@@ -110,7 +156,7 @@ const formatTime = (timeInSeconds) => {
   const minutes = Math.floor((timeInSeconds % 3600) / 60);
   const seconds = Math.floor(timeInSeconds % 60);
 
-  const pad = (num) => String(num).padStart(2, '0');
+  const pad = (num) => String(num).padStart(2, "0");
 
   return `${pad(hours)}:${pad(minutes)}:${pad(seconds)}`;
 };
@@ -119,18 +165,18 @@ const handleClickOnAlbumCover = () => {
   if (localCurrentTrack.value && localCurrentTrack.value.album_id) {
     router.push("/album/" + localCurrentTrack.value.album_id);
   }
-}
+};
 
 const startDraggingTrackProgress = () => {
   console.log("startDragging");
   draggingTrackPercent.value = localProgressPercent.value;
-}
+};
 
 const seekTrack = () => {
   if (draggingTrackPercent.value) {
     const targetSeekPercent = draggingTrackPercent.value;
     console.log("seekTrack target value: " + targetSeekPercent);
-    player.seekToPercentage(targetSeekPercent)
+    player.seekToPercentage(targetSeekPercent);
     draggingTrackPercent.value = null;
     console.log("stopDragging");
   }
@@ -169,19 +215,19 @@ function stop() {
 
 const startDraggingVolumeProgress = () => {
   draggingVolumePercent.value = volumePercent.value;
-}
+};
 
 const updateVolumeProgress = (event) => {
   draggingVolumePercent.value = event;
-}
+};
 
 const volumeOn = () => {
   player.setMuted(false);
-}
+};
 
 const volumeOff = () => {
   player.setMuted(true);
-}
+};
 
 const setVolume = () => {
   volumePercent.value = draggingVolumePercent.value;
@@ -189,9 +235,10 @@ const setVolume = () => {
   console.log("BottomPlayer setVolume " + volumePercent.value);
   player.setVolume(volumePercent.value);
   player.setMuted(false);
-}
+};
 
-watch(progressPercent,
+watch(
+  progressPercent,
   (newProgressPercent) => {
     if (newProgressPercent) {
       localProgressPercent.value = newProgressPercent;
@@ -199,9 +246,10 @@ watch(progressPercent,
       localProgressPercent.value = 0;
     }
   },
-  { immediate: true }
+  { immediate: true },
 );
-watch(progressSec,
+watch(
+  progressSec,
   (newProgressSec) => {
     if (newProgressSec) {
       currentTimeSec.value = newProgressSec;
@@ -209,9 +257,10 @@ watch(progressSec,
       currentTimeSec.value = 0;
     }
   },
-  { immediate: true }
-)
-watch(currentTrackId,
+  { immediate: true },
+);
+watch(
+  currentTrackId,
   (newCurrentTrackId) => {
     if (localCurrentTrackUnwatcher) {
       localCurrentTrackUnwatcher();
@@ -219,7 +268,8 @@ watch(currentTrackId,
     }
 
     if (newCurrentTrackId) {
-      localCurrentTrackUnwatcher = watch(staticsStore.getTrack(newCurrentTrackId),
+      localCurrentTrackUnwatcher = watch(
+        staticsStore.getTrack(newCurrentTrackId),
         (newCurrentTrackRef) => {
           if (newCurrentTrackRef.item) {
             const newCurrentTrack = newCurrentTrackRef.item;
@@ -227,24 +277,29 @@ watch(currentTrackId,
             localCurrentTrack.value = newCurrentTrack;
             songName.value = newCurrentTrack.name;
             artists.value = newCurrentTrack.artists_ids || [];
-            duration.value = newCurrentTrack.duration ? formatDuration(newCurrentTrack.duration) : '';
+            duration.value = newCurrentTrack.duration
+              ? formatDuration(newCurrentTrack.duration)
+              : "";
             currentAlbumId.value = newCurrentTrack.album_id || null;
           }
-        }, { immediate: true });
+        },
+        { immediate: true },
+      );
     } else {
       localCurrentTrack.value = null;
-      songName.value = '';
+      songName.value = "";
       artists.value = [];
       imageUrls.value = [];
-      duration.value = '';
+      duration.value = "";
       currentAlbumId.value = null;
     }
   },
-  { immediate: true }
-)
+  { immediate: true },
+);
 
 // Separate watcher for album cover image to avoid infinite loop
-watch(currentAlbumId,
+watch(
+  currentAlbumId,
   (newAlbumId) => {
     if (albumDataUnwatcher) {
       albumDataUnwatcher();
@@ -252,33 +307,39 @@ watch(currentAlbumId,
     }
 
     if (newAlbumId) {
-      albumDataUnwatcher = watch(staticsStore.getAlbum(newAlbumId),
+      albumDataUnwatcher = watch(
+        staticsStore.getAlbum(newAlbumId),
         (albumRef) => {
           if (albumRef && albumRef.item) {
             imageUrls.value = chooseAlbumCoverImageUrl(albumRef.item);
           }
-        }, { immediate: true });
+        },
+        { immediate: true },
+      );
     } else {
       imageUrls.value = [];
     }
   },
-  { immediate: true }
-)
-watch(isPlaying,
+  { immediate: true },
+);
+watch(
+  isPlaying,
   (newIsPlaying) => {
     isPlaying.value = newIsPlaying;
     console.log("Bottom Player newIsPlaying: " + newIsPlaying);
   },
-  { immediate: true }
+  { immediate: true },
 );
 
-watch(muted,
+watch(
+  muted,
   (newMuted) => {
     isMuted.value = newMuted;
   },
   { immediate: true },
 );
-watch(volume,
+watch(
+  volume,
   (newVolume) => {
     if (newVolume) {
       volumePercent.value = newVolume;
@@ -286,7 +347,6 @@ watch(volume,
   },
   { immediate: true },
 );
-
 </script>
 
 <style scoped>
@@ -327,7 +387,9 @@ watch(volume,
   min-width: 56px;
   border-radius: var(--radius-md);
   cursor: pointer;
-  transition: transform var(--transition-base), box-shadow var(--transition-base);
+  transition:
+    transform var(--transition-base),
+    box-shadow var(--transition-base);
 }
 
 .trackImage:hover {
@@ -388,7 +450,9 @@ watch(volume,
 
 .scalingIcon {
   transform-origin: center;
-  transition: transform var(--transition-fast), opacity var(--transition-fast);
+  transition:
+    transform var(--transition-fast),
+    opacity var(--transition-fast);
 }
 
 .scalingIcon:hover {
@@ -535,7 +599,8 @@ watch(volume,
   }
 
   /* Hide skip and seek buttons on mobile */
-  .playerControlsButtonsRow > :not(:nth-child(3)):not(:nth-child(2)):not(:nth-child(4)) {
+  .playerControlsButtonsRow
+    > :not(:nth-child(3)):not(:nth-child(2)):not(:nth-child(4)) {
     display: none;
   }
 

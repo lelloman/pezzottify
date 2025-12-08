@@ -1,6 +1,12 @@
 <template>
-  <div class="sliding-container" ref="containerRef" :style="containerStyle" @click.stop="$emit('click')"
-    @mouseenter="handleHover(true)" @mouseleave="handleHover(false)">
+  <div
+    class="sliding-container"
+    ref="containerRef"
+    :style="containerStyle"
+    @click.stop="$emit('click')"
+    @mouseenter="handleHover(true)"
+    @mouseleave="handleHover(false)"
+  >
     <!-- Primary slot with conditional styling -->
     <div ref="contentRef" :class="computeContentClasses">
       <p>
@@ -16,7 +22,16 @@
 </template>
 
 <script setup>
-import { computed, defineProps, defineEmits, ref, onMounted, onUpdated, nextTick, onBeforeUnmount } from 'vue';
+import {
+  computed,
+  defineProps,
+  defineEmits,
+  ref,
+  onMounted,
+  onUpdated,
+  nextTick,
+  onBeforeUnmount,
+} from "vue";
 
 const props = defineProps({
   infiniteAnimation: {
@@ -30,7 +45,7 @@ const props = defineProps({
   scrollSpeed: {
     type: Number,
     default: 50, // pixels per second
-  }
+  },
 });
 
 const containerRef = ref(null);
@@ -60,7 +75,12 @@ const checkOverflow = async () => {
     // We need to scroll the full content width + gap
     if (isOverflowing.value) {
       // Content width + gap, converted to seconds based on scroll speed
-      animationDuration.value = (contentWidth + parseFloat(getComputedStyle(containerRef.value).getPropertyValue('--gap'))) / props.scrollSpeed;
+      animationDuration.value =
+        (contentWidth +
+          parseFloat(
+            getComputedStyle(containerRef.value).getPropertyValue("--gap"),
+          )) /
+        props.scrollSpeed;
     }
   }
 };
@@ -79,44 +99,50 @@ const debouncedCheckOverflow = debounce(checkOverflow, 200);
 
 // Should animate only if animation is enabled
 const shouldAnimate = computed(() => {
-  return isOverflowing.value && (props.infiniteAnimation || (props.hoverAnimation && isHovering.value));
+  return (
+    isOverflowing.value &&
+    (props.infiniteAnimation || (props.hoverAnimation && isHovering.value))
+  );
 });
 
 const computeContentClasses = computed(() => {
-  const animating = isOverflowing.value && (props.infiniteAnimation || (props.hoverAnimation && isHovering.value));
+  const animating =
+    isOverflowing.value &&
+    (props.infiniteAnimation || (props.hoverAnimation && isHovering.value));
   const ellipsisOverflow = !props.infiniteAnimation && !props.hoverAnimation;
   const animateOnHover = props.hoverAnimation && !isHovering.value;
-  const hovering = isOverflowing.value && props.hoverAnimation && isHovering.value;
+  const hovering =
+    isOverflowing.value && props.hoverAnimation && isHovering.value;
   const base = !(animating || ellipsisOverflow || animateOnHover || hovering);
   return {
-    'animating': animating,
-    'ellipsis-overflow': ellipsisOverflow,
-    'animateOnHover': animateOnHover,
-    'hovering': hovering,
-    'base': base,
+    animating: animating,
+    "ellipsis-overflow": ellipsisOverflow,
+    animateOnHover: animateOnHover,
+    hovering: hovering,
+    base: base,
   };
 });
 
 // IMPORTANT CHANGE: Move the animation style to the container level
 // This ensures the CSS variable is available to all child elements including hover states
 const containerStyle = computed(() => {
-  return { '--animation-duration': `${animationDuration.value}s` };
+  return { "--animation-duration": `${animationDuration.value}s` };
 });
 
 // Check overflow on mount and updates, and set up resize listener
 onMounted(() => {
   checkOverflow();
-  window.addEventListener('resize', debouncedCheckOverflow);
+  window.addEventListener("resize", debouncedCheckOverflow);
 });
 
 // Clean up resize event listener when component is unmounted
 onBeforeUnmount(() => {
-  window.removeEventListener('resize', debouncedCheckOverflow);
+  window.removeEventListener("resize", debouncedCheckOverflow);
 });
 
 onUpdated(checkOverflow);
 
-defineEmits(['click']);
+defineEmits(["click"]);
 </script>
 
 <style scoped>

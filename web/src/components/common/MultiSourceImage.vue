@@ -1,11 +1,17 @@
 <template>
-  <img :src="currentSrc" alt=""
-    onerror="this.src='data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxNiIgaGVpZ2h0PSIxNiIgdmlld0JveD0iMCAwIDE2IDE2Ij48L3N2Zz4=';" />
+  <img
+    :src="currentSrc"
+    alt=""
+    onerror="
+      this.src =
+        'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxNiIgaGVpZ2h0PSIxNiIgdmlld0JveD0iMCAwIDE2IDE2Ij48L3N2Zz4='
+    "
+  />
 </template>
 
 <script setup>
-import { useDebugStore } from '@/store/debug';
-import { ref, watch } from 'vue';
+import { useDebugStore } from "@/store/debug";
+import { ref, watch } from "vue";
 
 const configStore = useDebugStore();
 
@@ -13,11 +19,11 @@ const props = defineProps({
   urls: {
     type: Array,
     required: true,
-    validator: (value) => value.every((url) => typeof url === 'string'),
+    validator: (value) => value.every((url) => typeof url === "string"),
   },
 });
 
-const currentSrc = ref('');
+const currentSrc = ref("");
 let loaded = false;
 
 const tryLoadImage = (url) => {
@@ -41,17 +47,20 @@ const loadImagesSequentially = async (urls) => {
     }
   }
 };
-watch([() => configStore.imagesEnabled, () => props.urls], ([newImagesEnabled, newUrls], [oldImagesEnabled, oldUrls]) => {
-  if (newUrls != oldUrls) {
-    loaded = false;
-  }
-  if (!loaded && newImagesEnabled && newUrls && newUrls.length > 0) {
-    currentSrc.value = '';
-    loadImagesSequentially(newUrls);
-  } else if (oldImagesEnabled && !newImagesEnabled) {
-    loaded = false;
-    currentSrc.value = '';
-  }
-}, { immediate: true });
-
+watch(
+  [() => configStore.imagesEnabled, () => props.urls],
+  ([newImagesEnabled, newUrls], [oldImagesEnabled, oldUrls]) => {
+    if (newUrls != oldUrls) {
+      loaded = false;
+    }
+    if (!loaded && newImagesEnabled && newUrls && newUrls.length > 0) {
+      currentSrc.value = "";
+      loadImagesSequentially(newUrls);
+    } else if (oldImagesEnabled && !newImagesEnabled) {
+      loaded = false;
+      currentSrc.value = "";
+    }
+  },
+  { immediate: true },
+);
 </script>

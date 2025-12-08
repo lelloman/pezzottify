@@ -3,24 +3,53 @@
     <div class="topSection">
       <MultiSourceImage class="coverImage" :urls="coverUrls" />
       <div class="albumInfoColum">
-        <h1 class="albumName"> {{ album.name }}</h1>
+        <h1 class="albumName">{{ album.name }}</h1>
       </div>
     </div>
     <div class="commandsSection">
-      <PlayIcon class="playAlbumIcon scaleClickFeedback bigIcon" @click.stop="handleClickOnPlayAlbum" />
-      <ToggableFavoriteIcon :toggled="isAlbumLiked" :clickCallback="handleClickOnFavoriteIcon" />
+      <PlayIcon
+        class="playAlbumIcon scaleClickFeedback bigIcon"
+        @click.stop="handleClickOnPlayAlbum"
+      />
+      <ToggableFavoriteIcon
+        :toggled="isAlbumLiked"
+        :clickCallback="handleClickOnFavoriteIcon"
+      />
     </div>
     <div class="artistsContainer">
-      <LoadArtistListItem v-for="artistId in album.artists_ids" :key="artistId" :artistId="artistId" />
+      <LoadArtistListItem
+        v-for="artistId in album.artists_ids"
+        :key="artistId"
+        :artistId="artistId"
+      />
     </div>
     <div class="tracksContainer">
-      <div v-for="(disc, discIndex) in album.discs" :key="disc" class="discContainer">
-        <h1 v-if="album.discs.length > 1">Disc {{ discIndex + 1 }}<span v-if="disc.name">- {{ disc.name }}</span>
+      <div
+        v-for="(disc, discIndex) in album.discs"
+        :key="disc"
+        class="discContainer"
+      >
+        <h1 v-if="album.discs.length > 1">
+          Disc {{ discIndex + 1
+          }}<span v-if="disc.name">- {{ disc.name }}</span>
         </h1>
-        <div v-for="(trackId, trackIndex) in disc.tracks" :key="trackId" class="track"
-          @contextmenu.prevent="openTrackContextMenu($event, trackId, trackIndex)">
-          <LoadTrackListItem :contextId="albumId" :trackId="trackId" :trackNumber="trackIndex + 1"
-            @track-clicked="handleClickOnTrack(trackId)" :isCurrentlyPlaying="getFlatTrackIndex(discIndex, trackIndex) == currentTrackIndex" />
+        <div
+          v-for="(trackId, trackIndex) in disc.tracks"
+          :key="trackId"
+          class="track"
+          @contextmenu.prevent="
+            openTrackContextMenu($event, trackId, trackIndex)
+          "
+        >
+          <LoadTrackListItem
+            :contextId="albumId"
+            :trackId="trackId"
+            :trackNumber="trackIndex + 1"
+            @track-clicked="handleClickOnTrack(trackId)"
+            :isCurrentlyPlaying="
+              getFlatTrackIndex(discIndex, trackIndex) == currentTrackIndex
+            "
+          />
         </div>
       </div>
     </div>
@@ -32,23 +61,23 @@
 </template>
 
 <script setup>
-import { ref, watch, onMounted } from 'vue';
-import { chooseAlbumCoverImageUrl } from '@/utils';
-import MultiSourceImage from '@/components/common/MultiSourceImage.vue';
-import PlayIcon from '@/components/icons/PlayIcon.vue';
-import { usePlayerStore } from '@/store/player';
-import { useUserStore } from '@/store/user';
-import ToggableFavoriteIcon from '@/components/common/ToggableFavoriteIcon.vue';
-import LoadArtistListItem from '@/components/common/LoadArtistListItem.vue';
-import TrackContextMenu from '@/components/common/contextmenu/TrackContextMenu.vue';
-import LoadTrackListItem from '../common/LoadTrackListItem.vue';
-import { useStaticsStore } from '@/store/statics';
+import { ref, watch, onMounted } from "vue";
+import { chooseAlbumCoverImageUrl } from "@/utils";
+import MultiSourceImage from "@/components/common/MultiSourceImage.vue";
+import PlayIcon from "@/components/icons/PlayIcon.vue";
+import { usePlayerStore } from "@/store/player";
+import { useUserStore } from "@/store/user";
+import ToggableFavoriteIcon from "@/components/common/ToggableFavoriteIcon.vue";
+import LoadArtistListItem from "@/components/common/LoadArtistListItem.vue";
+import TrackContextMenu from "@/components/common/contextmenu/TrackContextMenu.vue";
+import LoadTrackListItem from "../common/LoadTrackListItem.vue";
+import { useStaticsStore } from "@/store/statics";
 
 const props = defineProps({
   albumId: {
     type: String,
     required: true,
-  }
+  },
 });
 
 const album = ref(null);
@@ -67,7 +96,7 @@ let albumDataUnwatcher = null;
 const trackContextMenuRef = ref(null);
 const openTrackContextMenu = (event, trackId, index) => {
   trackContextMenuRef.value.openMenu(event, trackId, index);
-}
+};
 
 // Compute flat track index across all discs
 const getFlatTrackIndex = (discIndex, trackIndex) => {
@@ -77,28 +106,42 @@ const getFlatTrackIndex = (discIndex, trackIndex) => {
     flatIndex += album.value.discs[i].tracks.length;
   }
   return flatIndex;
-}
+};
 
-watch(() => player.currentTrackId,
+watch(
+  () => player.currentTrackId,
   (newTrackId) => {
     console.log("CurrentTrackId: " + newTrackId);
     currentTrackId.value = newTrackId;
   },
-  { immediate: true }
+  { immediate: true },
 );
 
-watch([() => player.currentTrackIndex, () => player.currentPlaylist],
+watch(
+  [() => player.currentTrackIndex, () => player.currentPlaylist],
   ([newTrackIndex, newPlaylist]) => {
-    console.log("Album.vue watcher - TrackIndex:", newTrackIndex, "Playlist:", newPlaylist, "AlbumId:", props.albumId);
-    if (newPlaylist && newPlaylist.context && newPlaylist.context.id === props.albumId && Number.isInteger(newTrackIndex)) {
+    console.log(
+      "Album.vue watcher - TrackIndex:",
+      newTrackIndex,
+      "Playlist:",
+      newPlaylist,
+      "AlbumId:",
+      props.albumId,
+    );
+    if (
+      newPlaylist &&
+      newPlaylist.context &&
+      newPlaylist.context.id === props.albumId &&
+      Number.isInteger(newTrackIndex)
+    ) {
       console.log("Album.vue - Setting currentTrackIndex to:", newTrackIndex);
       currentTrackIndex.value = newTrackIndex;
     } else {
       currentTrackIndex.value = null;
     }
   },
-  { immediate: true }
-)
+  { immediate: true },
+);
 
 const fetchData = async (id) => {
   if (albumDataUnwatcher) {
@@ -110,53 +153,63 @@ const fetchData = async (id) => {
   albumDataUnwatcher = watch(
     staticsStore.getAlbum(id),
     (newData) => {
-      if (newData && newData.item && typeof newData.item === 'object') {
+      if (newData && newData.item && typeof newData.item === "object") {
         coverUrls.value = chooseAlbumCoverImageUrl(newData.item);
         album.value = newData.item;
       }
     },
-    { immediate: true });
+    { immediate: true },
+  );
 };
 
 const handleClickOnFavoriteIcon = () => {
   userStore.setAlbumIsLiked(props.albumId, !isAlbumLiked.value);
-}
+};
 
 const handleClickOnPlayAlbum = () => {
   player.setAlbumId(props.albumId);
-}
+};
 
 const handleClickOnTrack = (trackId) => {
   if (trackId != currentTrackId.value) {
-    const discIndex = album.value.discs.findIndex((disc) => disc.tracks.includes(trackId));
+    const discIndex = album.value.discs.findIndex((disc) =>
+      disc.tracks.includes(trackId),
+    );
     const trackIndex = album.value.discs[discIndex].tracks.indexOf(trackId);
     player.setAlbumId(props.albumId, discIndex, trackIndex);
   }
-}
+};
 
-watch(album,
+watch(
+  album,
   (newAlbum) => {
     if (newAlbum) {
       coverUrls.value = chooseAlbumCoverImageUrl(newAlbum);
     }
   },
-  { immediate: true }
+  { immediate: true },
 );
 
-watch(() => props.albumId, (newId) => {
-  fetchData(newId);
-});
+watch(
+  () => props.albumId,
+  (newId) => {
+    fetchData(newId);
+  },
+);
 
-watch(() => userStore.likedAlbumIds,
+watch(
+  () => userStore.likedAlbumIds,
   (likedAlbums) => {
-    console.log("watch liked albums and album data, new stuff incoming: " + likedAlbums);
+    console.log(
+      "watch liked albums and album data, new stuff incoming: " + likedAlbums,
+    );
     if (likedAlbums) {
       isAlbumLiked.value = likedAlbums.includes(props.albumId);
       console.log("isAlbumLiked: " + isAlbumLiked.value);
       console.log("likedAlbums: " + likedAlbums);
     }
   },
-  { immediate: true }
+  { immediate: true },
 );
 
 onMounted(() => {
@@ -173,7 +226,7 @@ onMounted(() => {
 .coverImage {
   width: 400px;
   height: 400;
-  object-fit: contain
+  object-fit: contain;
 }
 
 .albumInfoColum {
@@ -200,7 +253,7 @@ onMounted(() => {
   margin-right: 8px;
 }
 
-.commandsSection>div {
+.commandsSection > div {
   margin-left: 16px;
 }
 
@@ -242,5 +295,6 @@ onMounted(() => {
   flex: 1;
 }
 
-.trackDurationSpan {}
+.trackDurationSpan {
+}
 </style>

@@ -17,40 +17,40 @@
 </template>
 
 <script setup>
-import { ref, watch, computed } from 'vue';
-import Track from '@/components/content/Track.vue';
-import Album from '@/components/content/Album.vue';
-import Artist from '@/components/content/Artist.vue';
-import UserPlaylist from '@/components/content/UserPlaylist.vue';
-import UserSettings from '@/components/content/UserSettings.vue';
-import { useRoute } from 'vue-router';
-import SearchResults from './SearchResults.vue';
+import { ref, watch, computed } from "vue";
+import Track from "@/components/content/Track.vue";
+import Album from "@/components/content/Album.vue";
+import Artist from "@/components/content/Artist.vue";
+import UserPlaylist from "@/components/content/UserPlaylist.vue";
+import UserSettings from "@/components/content/UserSettings.vue";
+import { useRoute } from "vue-router";
+import SearchResults from "./SearchResults.vue";
 
 const results = ref(null);
 
 const route = useRoute();
-const searchQuery = ref(route.params.query || '');
-const trackId = ref(route.params.trackId || '');
-const artistId = ref(route.params.artistId || '');
-const albumId = ref(route.params.albumId || '');
-const playlistId = ref(route.params.playlistId || '');
-const isSettingsRoute = computed(() => route.name === 'settings');
+const searchQuery = ref(route.params.query || "");
+const trackId = ref(route.params.trackId || "");
+const artistId = ref(route.params.artistId || "");
+const albumId = ref(route.params.albumId || "");
+const playlistId = ref(route.params.playlistId || "");
+const isSettingsRoute = computed(() => route.name === "settings");
 
 const fetchResults = async (newQuery, queryParams) => {
-  console.log("watch query? " + newQuery)
+  console.log("watch query? " + newQuery);
   if (newQuery) {
     results.value = [];
     const requestBody = { query: newQuery, resolve: true };
 
-    const filters = queryParams.type ? queryParams.type.split(',') : null;
+    const filters = queryParams.type ? queryParams.type.split(",") : null;
     if (filters) {
       requestBody.filters = filters;
     }
     try {
-      const response = await fetch('/v1/content/search', {
-        method: 'POST',
+      const response = await fetch("/v1/content/search", {
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
+          "Content-Type": "application/json",
         },
         body: JSON.stringify(requestBody),
       });
@@ -59,47 +59,51 @@ const fetchResults = async (newQuery, queryParams) => {
       console.log(data);
       results.value = data;
     } catch (error) {
-      console.error('Search error:', error);
+      console.error("Search error:", error);
     }
   } else {
     results.value = [];
   }
-}
+};
 watch(
-  [
-    () => route.params.query,
-    () => route.query,
-  ],
+  [() => route.params.query, () => route.query],
   ([newQuery, newQueryParams], [oldQuery, oldQueryParams]) => {
     console.log("MainContent newQueryParams:");
     console.log(newQueryParams);
-    searchQuery.value = newQuery || '';
+    searchQuery.value = newQuery || "";
     fetchResults(newQuery, route.query);
   },
-  { immediate: true }
+  { immediate: true },
 );
 watch(
   () => route.params.trackId,
-  (newTrackId) => { trackId.value = newTrackId || ''; },
-  { immediate: true }
-)
+  (newTrackId) => {
+    trackId.value = newTrackId || "";
+  },
+  { immediate: true },
+);
 watch(
   () => route.params.artistId,
-  (newArtistId) => { artistId.value = newArtistId || ''; },
-  { immediate: true }
-)
+  (newArtistId) => {
+    artistId.value = newArtistId || "";
+  },
+  { immediate: true },
+);
 watch(
   () => route.params.albumId,
-  (newAlbumId) => { albumId.value = newAlbumId || ''; },
-  { immediate: true }
-)
+  (newAlbumId) => {
+    albumId.value = newAlbumId || "";
+  },
+  { immediate: true },
+);
 watch(
   () => route.params.playlistId,
-  (newPlaylistId) => { playlistId.value = newPlaylistId || ''; },
-  { immediate: true }
-)
+  (newPlaylistId) => {
+    playlistId.value = newPlaylistId || "";
+  },
+  { immediate: true },
+);
 </script>
-
 
 <style>
 .mainContent {

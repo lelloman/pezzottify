@@ -16,14 +16,12 @@
         @click="handleCreateUser"
         :disabled="!newUserHandle.trim() || isCreating"
       >
-        {{ isCreating ? 'Creating...' : 'Create User' }}
+        {{ isCreating ? "Creating..." : "Create User" }}
       </button>
     </div>
     <div v-if="createError" class="createError">{{ createError }}</div>
 
-    <div v-if="isLoading" class="loadingState">
-      Loading users...
-    </div>
+    <div v-if="isLoading" class="loadingState">Loading users...</div>
 
     <div v-else-if="loadError" class="errorState">
       {{ loadError }}
@@ -31,22 +29,35 @@
     </div>
 
     <div v-else class="userList">
-      <div
-        v-for="user in users"
-        :key="user.user_handle"
-        class="userCard"
-      >
+      <div v-for="user in users" :key="user.user_handle" class="userCard">
         <div class="userHeader">
-          <span class="userName" @click="toggleUserExpanded(user.user_handle)">{{ user.user_handle }}</span>
+          <span
+            class="userName"
+            @click="toggleUserExpanded(user.user_handle)"
+            >{{ user.user_handle }}</span
+          >
           <div class="userActions">
-            <button class="deleteUserButton" @click.stop="initiateDelete(user.user_handle)" title="Delete user">×</button>
-            <span class="expandIcon" @click="toggleUserExpanded(user.user_handle)">{{ expandedUsers[user.user_handle] ? '−' : '+' }}</span>
+            <button
+              class="deleteUserButton"
+              @click.stop="initiateDelete(user.user_handle)"
+              title="Delete user"
+            >
+              ×
+            </button>
+            <span
+              class="expandIcon"
+              @click="toggleUserExpanded(user.user_handle)"
+              >{{ expandedUsers[user.user_handle] ? "−" : "+" }}</span
+            >
           </div>
         </div>
 
         <div v-if="expandedUsers[user.user_handle]" class="userDetails">
           <!-- Loading state for user details -->
-          <div v-if="loadingUserDetails[user.user_handle]" class="detailsLoading">
+          <div
+            v-if="loadingUserDetails[user.user_handle]"
+            class="detailsLoading"
+          >
             Loading details...
           </div>
 
@@ -61,9 +72,19 @@
                   class="roleTag"
                 >
                   {{ role }}
-                  <button class="removeButton" @click="handleRemoveRole(user.user_handle, role)" title="Remove role">×</button>
+                  <button
+                    class="removeButton"
+                    @click="handleRemoveRole(user.user_handle, role)"
+                    title="Remove role"
+                  >
+                    ×
+                  </button>
                 </span>
-                <span v-if="!userDetails[user.user_handle]?.roles?.length" class="emptyState">No roles</span>
+                <span
+                  v-if="!userDetails[user.user_handle]?.roles?.length"
+                  class="emptyState"
+                  >No roles</span
+                >
               </div>
               <div class="addRoleForm">
                 <select v-model="newRole[user.user_handle]" class="roleSelect">
@@ -86,13 +107,18 @@
               <h4 class="detailTitle">Current Permissions</h4>
               <div class="permissionList">
                 <span
-                  v-for="perm in userDetails[user.user_handle]?.permissions || []"
+                  v-for="perm in userDetails[user.user_handle]?.permissions ||
+                  []"
                   :key="perm"
                   class="permissionTag"
                 >
                   {{ perm }}
                 </span>
-                <span v-if="!userDetails[user.user_handle]?.permissions?.length" class="emptyState">No permissions</span>
+                <span
+                  v-if="!userDetails[user.user_handle]?.permissions?.length"
+                  class="emptyState"
+                  >No permissions</span
+                >
               </div>
             </div>
 
@@ -100,9 +126,18 @@
             <div class="detailSection">
               <h4 class="detailTitle">Grant Extra Permission</h4>
               <div class="grantForm">
-                <select v-model="grantPermission[user.user_handle]" class="permissionSelect">
+                <select
+                  v-model="grantPermission[user.user_handle]"
+                  class="permissionSelect"
+                >
                   <option value="">Select permission...</option>
-                  <option v-for="perm in availablePermissions" :key="perm" :value="perm">{{ perm }}</option>
+                  <option
+                    v-for="perm in availablePermissions"
+                    :key="perm"
+                    :value="perm"
+                  >
+                    {{ perm }}
+                  </option>
                 </select>
                 <input
                   v-model.number="grantDuration[user.user_handle]"
@@ -126,25 +161,32 @@
                   Grant
                 </button>
               </div>
-              <p class="grantHint">Leave duration and countdown empty for permanent permission.</p>
+              <p class="grantHint">
+                Leave duration and countdown empty for permanent permission.
+              </p>
             </div>
 
             <!-- Password Login Section -->
             <div class="detailSection">
               <h4 class="detailTitle">Password Login</h4>
               <div class="passwordStatus">
-                <span v-if="userDetails[user.user_handle]?.hasPassword" class="statusBadge hasPassword">
+                <span
+                  v-if="userDetails[user.user_handle]?.hasPassword"
+                  class="statusBadge hasPassword"
+                >
                   Password set
                 </span>
-                <span v-else class="statusBadge noPassword">
-                  No password
-                </span>
+                <span v-else class="statusBadge noPassword"> No password </span>
               </div>
               <div class="passwordForm">
                 <input
                   v-model="newPassword[user.user_handle]"
                   type="password"
-                  :placeholder="userDetails[user.user_handle]?.hasPassword ? 'New password...' : 'Set password...'"
+                  :placeholder="
+                    userDetails[user.user_handle]?.hasPassword
+                      ? 'New password...'
+                      : 'Set password...'
+                  "
                   class="passwordInput"
                   @keyup.enter="handleSetPassword(user.user_handle)"
                 />
@@ -154,10 +196,19 @@
                   @click="handleSetPassword(user.user_handle)"
                   :disabled="settingPassword[user.user_handle]"
                 >
-                  {{ settingPassword[user.user_handle] ? 'Saving...' : (userDetails[user.user_handle]?.hasPassword ? 'Update' : 'Set') }}
+                  {{
+                    settingPassword[user.user_handle]
+                      ? "Saving..."
+                      : userDetails[user.user_handle]?.hasPassword
+                        ? "Update"
+                        : "Set"
+                  }}
                 </button>
                 <button
-                  v-if="userDetails[user.user_handle]?.hasPassword && !newPassword[user.user_handle]"
+                  v-if="
+                    userDetails[user.user_handle]?.hasPassword &&
+                    !newPassword[user.user_handle]
+                  "
                   class="removePasswordButton"
                   @click="handleRemovePassword(user.user_handle)"
                   :disabled="settingPassword[user.user_handle]"
@@ -173,29 +224,48 @@
         </div>
       </div>
 
-      <div v-if="users.length === 0" class="emptyUsers">
-        No users found.
-      </div>
+      <div v-if="users.length === 0" class="emptyUsers">No users found.</div>
     </div>
 
     <!-- First Confirmation Dialog -->
-    <div v-if="showFirstConfirm" class="dialogOverlay" @click.self="cancelDelete">
+    <div
+      v-if="showFirstConfirm"
+      class="dialogOverlay"
+      @click.self="cancelDelete"
+    >
       <div class="dialogBox">
         <h3 class="dialogTitle">Delete User</h3>
-        <p class="dialogMessage">Are you sure you want to delete user <strong>{{ deleteTarget }}</strong>?</p>
+        <p class="dialogMessage">
+          Are you sure you want to delete user
+          <strong>{{ deleteTarget }}</strong
+          >?
+        </p>
         <div class="dialogActions">
-          <button class="dialogButton cancelButton" @click="cancelDelete">Cancel</button>
-          <button class="dialogButton dangerButton" @click="confirmFirstDelete">Delete</button>
+          <button class="dialogButton cancelButton" @click="cancelDelete">
+            Cancel
+          </button>
+          <button class="dialogButton dangerButton" @click="confirmFirstDelete">
+            Delete
+          </button>
         </div>
       </div>
     </div>
 
     <!-- Second Confirmation Dialog -->
-    <div v-if="showSecondConfirm" class="dialogOverlay" @click.self="cancelDelete">
+    <div
+      v-if="showSecondConfirm"
+      class="dialogOverlay"
+      @click.self="cancelDelete"
+    >
       <div class="dialogBox">
         <h3 class="dialogTitle">Confirm Deletion</h3>
-        <p class="dialogMessage">This will permanently delete <strong>{{ deleteTarget }}</strong> and all their data (playlists, liked content, settings, etc.).</p>
-        <p class="dialogMessage">Type <strong>{{ deleteTarget }}</strong> to confirm:</p>
+        <p class="dialogMessage">
+          This will permanently delete <strong>{{ deleteTarget }}</strong> and
+          all their data (playlists, liked content, settings, etc.).
+        </p>
+        <p class="dialogMessage">
+          Type <strong>{{ deleteTarget }}</strong> to confirm:
+        </p>
         <input
           v-model="confirmDeleteName"
           type="text"
@@ -204,7 +274,9 @@
           @keyup.enter="confirmSecondDelete"
         />
         <div class="dialogActions">
-          <button class="dialogButton cancelButton" @click="cancelDelete">Cancel</button>
+          <button class="dialogButton cancelButton" @click="cancelDelete">
+            Cancel
+          </button>
           <button
             class="dialogButton dangerButton"
             @click="confirmSecondDelete"
@@ -219,8 +291,8 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue';
-import { useRemoteStore } from '@/store/remote';
+import { ref, reactive, onMounted } from "vue";
+import { useRemoteStore } from "@/store/remote";
 
 const remoteStore = useRemoteStore();
 
@@ -229,7 +301,7 @@ const isLoading = ref(true);
 const loadError = ref(null);
 
 // Create user state
-const newUserHandle = ref('');
+const newUserHandle = ref("");
 const isCreating = ref(false);
 const createError = ref(null);
 
@@ -237,7 +309,7 @@ const createError = ref(null);
 const deleteTarget = ref(null);
 const showFirstConfirm = ref(false);
 const showSecondConfirm = ref(false);
-const confirmDeleteName = ref('');
+const confirmDeleteName = ref("");
 
 const expandedUsers = reactive({});
 const userDetails = reactive({});
@@ -254,14 +326,14 @@ const settingPassword = reactive({});
 const passwordError = reactive({});
 
 const availablePermissions = [
-  'AccessCatalog',
-  'LikeContent',
-  'OwnPlaylists',
-  'EditCatalog',
-  'ManagePermissions',
-  'IssueContentDownload',
-  'RebootServer',
-  'ViewAnalytics',
+  "AccessCatalog",
+  "LikeContent",
+  "OwnPlaylists",
+  "EditCatalog",
+  "ManagePermissions",
+  "IssueContentDownload",
+  "RebootServer",
+  "ViewAnalytics",
 ];
 
 const loadUsers = async () => {
@@ -273,11 +345,12 @@ const loadUsers = async () => {
     if (result) {
       users.value = result;
     } else {
-      loadError.value = 'Failed to load users. Check browser console for details.';
+      loadError.value =
+        "Failed to load users. Check browser console for details.";
     }
   } catch (error) {
-    console.error('UserManagement: Error loading users:', error);
-    loadError.value = `Error: ${error.message || 'Unknown error'}`;
+    console.error("UserManagement: Error loading users:", error);
+    loadError.value = `Error: ${error.message || "Unknown error"}`;
   } finally {
     isLoading.value = false;
   }
@@ -294,7 +367,7 @@ const handleCreateUser = async () => {
   if (result.error) {
     createError.value = result.error;
   } else {
-    newUserHandle.value = '';
+    newUserHandle.value = "";
     await loadUsers();
   }
 
@@ -309,14 +382,14 @@ const initiateDelete = (userHandle) => {
 const confirmFirstDelete = () => {
   showFirstConfirm.value = false;
   showSecondConfirm.value = true;
-  confirmDeleteName.value = '';
+  confirmDeleteName.value = "";
 };
 
 const cancelDelete = () => {
   showFirstConfirm.value = false;
   showSecondConfirm.value = false;
   deleteTarget.value = null;
-  confirmDeleteName.value = '';
+  confirmDeleteName.value = "";
 };
 
 const confirmSecondDelete = async () => {
@@ -344,11 +417,13 @@ const toggleUserExpanded = async (userHandle) => {
 const loadUserDetails = async (userHandle) => {
   loadingUserDetails[userHandle] = true;
 
-  const [rolesResult, permissionsResult, credentialsResult] = await Promise.all([
-    remoteStore.fetchUserRoles(userHandle),
-    remoteStore.fetchUserPermissions(userHandle),
-    remoteStore.fetchUserCredentialsStatus(userHandle),
-  ]);
+  const [rolesResult, permissionsResult, credentialsResult] = await Promise.all(
+    [
+      remoteStore.fetchUserRoles(userHandle),
+      remoteStore.fetchUserPermissions(userHandle),
+      remoteStore.fetchUserCredentialsStatus(userHandle),
+    ],
+  );
 
   userDetails[userHandle] = {
     roles: rolesResult?.roles || [],
@@ -365,7 +440,7 @@ const handleAddRole = async (userHandle) => {
 
   const success = await remoteStore.addUserRole(userHandle, role);
   if (success) {
-    newRole[userHandle] = '';
+    newRole[userHandle] = "";
     await loadUserDetails(userHandle);
   }
 };
@@ -384,9 +459,14 @@ const handleGrantPermission = async (userHandle) => {
   const duration = grantDuration[userHandle] || null;
   const countdown = grantCountdown[userHandle] || null;
 
-  const result = await remoteStore.grantPermission(userHandle, permission, duration, countdown);
+  const result = await remoteStore.grantPermission(
+    userHandle,
+    permission,
+    duration,
+    countdown,
+  );
   if (result) {
-    grantPermission[userHandle] = '';
+    grantPermission[userHandle] = "";
     grantDuration[userHandle] = null;
     grantCountdown[userHandle] = null;
     await loadUserDetails(userHandle);
@@ -404,7 +484,7 @@ const handleSetPassword = async (userHandle) => {
   if (result.error) {
     passwordError[userHandle] = result.error;
   } else {
-    newPassword[userHandle] = '';
+    newPassword[userHandle] = "";
     await loadUserDetails(userHandle);
   }
 

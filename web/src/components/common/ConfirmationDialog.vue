@@ -1,20 +1,31 @@
 <template>
-  <ModalDialog :closeOnEsc="true" :isOpen="props.isOpen" :closeCallback="props.closeCallback">
-    <div class="modalContent" style="color: #1a1a1a !important;">
-      <h1 style="color: #1a1a1a !important;">{{ props.title }}</h1>
-      <p style="color: #333333 !important;">
+  <ModalDialog
+    :closeOnEsc="true"
+    :isOpen="props.isOpen"
+    :closeCallback="props.closeCallback"
+  >
+    <div class="modalContent" style="color: #1a1a1a !important">
+      <h1 style="color: #1a1a1a !important">{{ props.title }}</h1>
+      <p style="color: #333333 !important">
         <slot name="message"></slot>
       </p>
       <div class="modal-buttons">
-        <div class="button" @click="props.closeCallback">{{ props.negativeButtonText }}</div>
-        <div class="button positiveButton" @click="props.positiveButtonCallback">{{ props.positiveButtonText }}</div>
+        <div class="button" @click="props.closeCallback">
+          {{ props.negativeButtonText }}
+        </div>
+        <div
+          class="button positiveButton"
+          @click="props.positiveButtonCallback"
+        >
+          {{ props.positiveButtonText }}
+        </div>
       </div>
     </div>
   </ModalDialog>
 </template>
 
 <script setup>
-import ModalDialog from '@/components/common/ModalDialog.vue';
+import ModalDialog from "@/components/common/ModalDialog.vue";
 
 const props = defineProps({
   isOpen: {
@@ -74,23 +85,32 @@ const props = defineProps({
   padding: 8px 16px;
   border-radius: 4px;
   background-color: rgba(0, 0, 0, 0.1);
-  transition: scale 0.3s ease, background-color 0.3s ease;
+  transition:
+    scale 0.3s ease,
+    background-color 0.3s ease;
 }
 
 .button:hover {
   background-color: rgba(0, 0, 0, 0.2);
   scale: 1.05;
-  transition: scale 0.3s ease, background-color 0.3s ease;
+  transition:
+    scale 0.3s ease,
+    background-color 0.3s ease;
 }
 
 .button:active {
   background-color: rgba(0, 0, 0, 0.3);
   scale: 0.95;
-  transition: scale 0.3s ease, background-color 0.3s ease;
+  transition:
+    scale 0.3s ease,
+    background-color 0.3s ease;
 }
 
 .positiveButton {
-  background-color: var(--accent-color, var(--spotify-green, #1db954)) !important;
+  background-color: var(
+    --accent-color,
+    var(--spotify-green, #1db954)
+  ) !important;
   color: white;
 }
 </style>

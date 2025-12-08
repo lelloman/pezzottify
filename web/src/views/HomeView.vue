@@ -7,7 +7,10 @@
     <template v-else>
       <TopBar @search="handleSearch" :initialQuery="searchQuery" />
       <div class="centralPanel">
-        <UserContentSideBar @select-item="handleSelect" class="sideBar userContentSideBar" />
+        <UserContentSideBar
+          @select-item="handleSelect"
+          class="sideBar userContentSideBar"
+        />
         <MainContent :search-query="searchQuery" />
         <CurrentlyPlayingSideBar class="sideBar currentlyPlayingSideBar" />
       </div>
@@ -16,16 +19,15 @@
   </div>
 </template>
 
-
 <script setup>
-import { ref, watch, onMounted } from 'vue';
-import TopBar from '@/components/TopBar.vue';
-import MainContent from '@/components/content/MainContent.vue';
-import BottomPlayer from '@/components/BottomPlayer.vue';
-import { useRoute } from 'vue-router';
-import UserContentSideBar from '@/components/UserContentSideBar.vue';
-import CurrentlyPlayingSideBar from '@/components/CurrentlyPlayingSideBar.vue';
-import { useUserStore } from '@/store/user';
+import { ref, watch, onMounted } from "vue";
+import TopBar from "@/components/TopBar.vue";
+import MainContent from "@/components/content/MainContent.vue";
+import BottomPlayer from "@/components/BottomPlayer.vue";
+import { useRoute } from "vue-router";
+import UserContentSideBar from "@/components/UserContentSideBar.vue";
+import CurrentlyPlayingSideBar from "@/components/CurrentlyPlayingSideBar.vue";
+import { useUserStore } from "@/store/user";
 
 // Access the user store
 const userStore = useUserStore();
@@ -36,22 +38,22 @@ onMounted(async () => {
   try {
     await userStore.initialize();
   } catch (error) {
-    console.error('Failed to initialize user data:', error);
+    console.error("Failed to initialize user data:", error);
   } finally {
     isLoading.value = false;
   }
 });
 
 const route = useRoute();
-const searchQuery = ref(decodeURIComponent(route.params.query || ''));
+const searchQuery = ref(decodeURIComponent(route.params.query || ""));
 
 // Watch for changes in the route's query parameter
 watch(
   () => route.params.query,
   (newQuery) => {
-    searchQuery.value = decodeURIComponent(newQuery || '');
+    searchQuery.value = decodeURIComponent(newQuery || "");
   },
-  { immediate: true }
+  { immediate: true },
 );
 
 function handleSearch(query) {
@@ -59,7 +61,7 @@ function handleSearch(query) {
 }
 
 function handleSelect(item) {
-  console.log('Selected:', item);
+  console.log("Selected:", item);
 }
 </script>
 
@@ -119,7 +121,9 @@ function handleSelect(item) {
 /* Desktop (1024px+): Show both sidebars */
 @media (min-width: 1024px) {
   .centralPanel {
-    grid-template-columns: var(--sidebar-width-desktop) 1fr var(--sidebar-width-desktop);
+    grid-template-columns: var(--sidebar-width-desktop) 1fr var(
+        --sidebar-width-desktop
+      );
     gap: var(--spacing-4);
     padding: var(--spacing-4);
   }
@@ -136,7 +140,9 @@ function handleSelect(item) {
 /* Large Desktop (1280px+): Wider sidebars */
 @media (min-width: 1280px) {
   .centralPanel {
-    grid-template-columns: var(--sidebar-width-large) 1fr var(--sidebar-width-large);
+    grid-template-columns: var(--sidebar-width-large) 1fr var(
+        --sidebar-width-large
+      );
   }
 }
 

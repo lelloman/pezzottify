@@ -1,19 +1,40 @@
 <template>
-  <div v-if="isOpen" ref="menu" class="container" :style="{ top: `${adjustedY}px`, left: `${adjustedX}px` }">
-    <div v-for="(item, index) in items" :key="item.name" class="contextMenuItem"
-      @mouseenter="item.subMenu && startHoverTimer(item)" @mouseleave="clearHoverTimer"
-      @click.stop="executeItemAction([index, item])">
-
-      <component :is="item.icon" v-if="item.icon" class="smallIcon" style="fill: #ddd" />
+  <div
+    v-if="isOpen"
+    ref="menu"
+    class="container"
+    :style="{ top: `${adjustedY}px`, left: `${adjustedX}px` }"
+  >
+    <div
+      v-for="(item, index) in items"
+      :key="item.name"
+      class="contextMenuItem"
+      @mouseenter="item.subMenu && startHoverTimer(item)"
+      @mouseleave="clearHoverTimer"
+      @click.stop="executeItemAction([index, item])"
+    >
+      <component
+        :is="item.icon"
+        v-if="item.icon"
+        class="smallIcon"
+        style="fill: #ddd"
+      />
 
       <span>{{ item.name }}</span>
 
-      <ChevronRight v-if="item.subMenu" class="smallIcon" style="fill: #eee;" />
+      <ChevronRight v-if="item.subMenu" class="smallIcon" style="fill: #eee" />
 
-      <div v-if="isSubMenuOpen && currentSubMenu === item" class="subMenu"
-        :style="{ top: `${subMenuY}px`, left: `${subMenuX}px` }">
-        <div class="contextMenuItem" v-for="(subItem, subIndex) in item.subMenu()" :key="subItem.name"
-          @click.stop="executeSubItemAction([index, item], [subIndex, subItem])">
+      <div
+        v-if="isSubMenuOpen && currentSubMenu === item"
+        class="subMenu"
+        :style="{ top: `${subMenuY}px`, left: `${subMenuX}px` }"
+      >
+        <div
+          class="contextMenuItem"
+          v-for="(subItem, subIndex) in item.subMenu()"
+          :key="subItem.name"
+          @click.stop="executeSubItemAction([index, item], [subIndex, subItem])"
+        >
           {{ subItem.name }}
         </div>
       </div>
@@ -22,17 +43,17 @@
 </template>
 
 <script setup>
-import { watch, computed, useTemplateRef, ref, defineExpose } from 'vue';
-import ChevronRight from '@/components/icons/ChevronRight.vue';
+import { watch, computed, useTemplateRef, ref, defineExpose } from "vue";
+import ChevronRight from "@/components/icons/ChevronRight.vue";
 
 defineProps({
   items: {
     type: Array,
-    required: true
-  }
+    required: true,
+  },
 });
 
-const menu = useTemplateRef('menu');
+const menu = useTemplateRef("menu");
 
 const contextData = ref({
   x: 0,
@@ -44,7 +65,13 @@ const isOpen = computed(() => contextData.value.isOpen);
 
 const executeItemAction = ([index, item]) => {
   const hasSubmenu = item.subMenu !== undefined;
-  console.log("Executing item '" + item.name + "' action (hasSubmenu: " + hasSubmenu + ")");
+  console.log(
+    "Executing item '" +
+      item.name +
+      "' action (hasSubmenu: " +
+      hasSubmenu +
+      ")",
+  );
   if (hasSubmenu) return;
 
   item.action([index, item]);
@@ -53,7 +80,12 @@ const executeItemAction = ([index, item]) => {
 
 const executeSubItemAction = ([index, item], [subIndex, subItem]) => {
   const hasSubmenu = subItem.subMenu !== undefined;
-  console.log("Executing subItem '" + subItem.name + "' action " + (hasSubmenu ? " (hasSubmenu)" : ""));
+  console.log(
+    "Executing subItem '" +
+      subItem.name +
+      "' action " +
+      (hasSubmenu ? " (hasSubmenu)" : ""),
+  );
   if (hasSubmenu) return;
 
   subItem.action([index, item], [subIndex, subItem]);
@@ -61,17 +93,20 @@ const executeSubItemAction = ([index, item], [subIndex, subItem]) => {
   contextData.value.isOpen = false;
 };
 
-watch(() => contextData.value.isOpen, (isOpen) => {
-  if (isOpen) {
-    window.addEventListener('click', handleClickOutside, true);
-    window.addEventListener('contextmenu', handleClickOutside, true);
-    window.addEventListener('keydown', handleKeydown, true);
-  } else {
-    window.removeEventListener('click', handleClickOutside, true);
-    window.removeEventListener('contextmenu', handleClickOutside, true);
-    window.removeEventListener('keydown', handleKeydown, true);
-  }
-});
+watch(
+  () => contextData.value.isOpen,
+  (isOpen) => {
+    if (isOpen) {
+      window.addEventListener("click", handleClickOutside, true);
+      window.addEventListener("contextmenu", handleClickOutside, true);
+      window.addEventListener("keydown", handleKeydown, true);
+    } else {
+      window.removeEventListener("click", handleClickOutside, true);
+      window.removeEventListener("contextmenu", handleClickOutside, true);
+      window.removeEventListener("keydown", handleKeydown, true);
+    }
+  },
+);
 
 const adjustedX = computed(() => {
   if (!menu.value) return;
@@ -101,7 +136,7 @@ const handleClickOutside = (event) => {
 };
 
 const handleKeydown = (event) => {
-  if (event.key === 'Escape') {
+  if (event.key === "Escape") {
     contextData.value.isOpen = false;
   }
 };

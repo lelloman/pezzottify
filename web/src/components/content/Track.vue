@@ -3,22 +3,32 @@
     <div class="topSection">
       <MultiSourceImage class="coverImage" :urls="coverUrls" />
       <div class="trackInfoColum">
-        <h1 class="trackName">{{ track.name }} </h1>
-        <h3 v-if="album">From: <span class="albumName" @click.stop="handleClickOnAlbumName">{{ album.name }} - {{
-          getYearFromTimestamp(album.date) }}</span></h3>
+        <h1 class="trackName">{{ track.name }}</h1>
+        <h3 v-if="album">
+          From:
+          <span class="albumName" @click.stop="handleClickOnAlbumName"
+            >{{ album.name }} - {{ getYearFromTimestamp(album.date) }}</span
+          >
+        </h3>
         <p>Duration: {{ formatDuration(track.duration) }}</p>
         <p v-if="track.is_explicit">Explicit!</p>
-        <p v-if="track.has_lyrics && track.language_of_performance.length"> Language: {{
-          track.language_of_performance.join(", ")
-          }}
+        <p v-if="track.has_lyrics && track.language_of_performance.length">
+          Language: {{ track.language_of_performance.join(", ") }}
         </p>
       </div>
     </div>
     <div class="commandsSection">
-      <PlayIcon class="playTrackIcon scaleClickFeedback bigIcon" @click.stop="handleClickOnPlayTrack" />
+      <PlayIcon
+        class="playTrackIcon scaleClickFeedback bigIcon"
+        @click.stop="handleClickOnPlayTrack"
+      />
     </div>
     <div class="artistsContainer">
-      <LoadArtistListItem v-for="artistId in track.artists_ids" :key="artistId" :artistId="artistId" />
+      <LoadArtistListItem
+        v-for="artistId in track.artists_ids"
+        :key="artistId"
+        :artistId="artistId"
+      />
     </div>
   </div>
   <div v-else>
@@ -27,20 +37,25 @@
 </template>
 
 <script setup>
-import { ref, watch, onMounted } from 'vue';
-import MultiSourceImage from '@/components/common/MultiSourceImage.vue';
-import PlayIcon from '../icons/PlayIcon.vue';
-import { usePlayerStore } from '@/store/player';
-import { chooseAlbumCoverImageUrl, chooseAlbumCoverImageIds, formatDuration, getYearFromTimestamp } from '@/utils';
-import { useRouter } from 'vue-router';
-import LoadArtistListItem from '../common/LoadArtistListItem.vue';
-import { useStaticsStore } from '@/store/statics';
+import { ref, watch, onMounted } from "vue";
+import MultiSourceImage from "@/components/common/MultiSourceImage.vue";
+import PlayIcon from "../icons/PlayIcon.vue";
+import { usePlayerStore } from "@/store/player";
+import {
+  chooseAlbumCoverImageUrl,
+  chooseAlbumCoverImageIds,
+  formatDuration,
+  getYearFromTimestamp,
+} from "@/utils";
+import { useRouter } from "vue-router";
+import LoadArtistListItem from "../common/LoadArtistListItem.vue";
+import { useStaticsStore } from "@/store/statics";
 
 const props = defineProps({
   trackId: {
     type: String,
     required: true,
-  }
+  },
 });
 
 const track = ref(null);
@@ -81,7 +96,7 @@ const fetchTrack = async (id) => {
     albumDataUnwatcher();
     albumDataUnwatcher = null;
   }
-  track.value = null
+  track.value = null;
   coverUrls.value = [];
 
   if (!id) return;
@@ -89,27 +104,37 @@ const fetchTrack = async (id) => {
   trackDataUnwatcher = watch(
     staticsStore.getTrack(id),
     (newData) => {
-      if (newData && newData.item && typeof newData.item === 'object') {
+      if (newData && newData.item && typeof newData.item === "object") {
         track.value = newData.item;
-        albumDataUnwatcher = watch(staticsStore.getAlbum(newData.item.album_id), (newAlbumData) => {
-          if (newAlbumData && newAlbumData.item && typeof newAlbumData.item === 'object') {
-            album.value = newAlbumData.item;
-            coverUrls.value = chooseAlbumCoverImageUrl(newAlbumData.item);
-          }
-        }, { immediate: true });
+        albumDataUnwatcher = watch(
+          staticsStore.getAlbum(newData.item.album_id),
+          (newAlbumData) => {
+            if (
+              newAlbumData &&
+              newAlbumData.item &&
+              typeof newAlbumData.item === "object"
+            ) {
+              album.value = newAlbumData.item;
+              coverUrls.value = chooseAlbumCoverImageUrl(newAlbumData.item);
+            }
+          },
+          { immediate: true },
+        );
       }
     },
-    { immediate: true }
-  )
+    { immediate: true },
+  );
 };
-watch(() => props.trackId, (newId) => {
-  fetchTrack(newId);
-});
+watch(
+  () => props.trackId,
+  (newId) => {
+    fetchTrack(newId);
+  },
+);
 
 onMounted(() => {
   fetchTrack(props.trackId);
 });
-
 </script>
 
 <style scoped>
@@ -123,7 +148,7 @@ onMounted(() => {
 .coverImage {
   width: 400px;
   height: 400;
-  object-fit: contain
+  object-fit: contain;
 }
 
 .trackInfoColum {

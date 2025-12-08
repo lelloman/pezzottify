@@ -1,24 +1,34 @@
 <template>
   <div class="searchResultRow" :data-id="result" @click="handleClick(result)">
-    <MultiSourceImage :urls="[imageUrl]" alt="Image" class="searchResultImage" />
+    <MultiSourceImage
+      :urls="[imageUrl]"
+      alt="Image"
+      class="searchResultImage"
+    />
     <div class="column">
       <h3 class="title">{{ result.name }}</h3>
-      <ClickableArtistsNames class="subtitle" :prefix="result.year + ' - '"
-        :artistsIdsNames="result.artists_ids_names" />
+      <ClickableArtistsNames
+        class="subtitle"
+        :prefix="result.year + ' - '"
+        :artistsIdsNames="result.artists_ids_names"
+      />
     </div>
-    <PlayIcon class="searchResultPlayIcon scaleClickFeedback bigIcon" :data-id="result"
-      @click.stop="handlePlayClick(result)" />
+    <PlayIcon
+      class="searchResultPlayIcon scaleClickFeedback bigIcon"
+      :data-id="result"
+      @click.stop="handlePlayClick(result)"
+    />
   </div>
 </template>
 
 <script setup>
-import '@/assets/search.css'
-import { usePlayerStore } from '@/store/player';
-import { computedImageUrl } from '@/utils.js';
-import { useRouter } from 'vue-router';
-import PlayIcon from '@/components/icons/PlayIcon.vue';
-import ClickableArtistsNames from '@/components/common/ClickableArtistsNames.vue';
-import MultiSourceImage from '../common/MultiSourceImage.vue';
+import "@/assets/search.css";
+import { usePlayerStore } from "@/store/player";
+import { computedImageUrl } from "@/utils.js";
+import { useRouter } from "vue-router";
+import PlayIcon from "@/components/icons/PlayIcon.vue";
+import ClickableArtistsNames from "@/components/common/ClickableArtistsNames.vue";
+import MultiSourceImage from "../common/MultiSourceImage.vue";
 
 const playerStore = usePlayerStore();
 
@@ -26,7 +36,7 @@ const props = defineProps({
   result: {
     type: Object,
     required: true,
-  }
+  },
 });
 
 const imageUrl = computedImageUrl(props.result.image_id);
@@ -36,14 +46,14 @@ const router = useRouter();
 const handleClick = (event) => {
   console.log(event);
   router.push("/album/" + event.id);
-}
+};
 
 const handlePlayClick = (event) => {
   console.log("play click");
   console.log(event);
   playerStore.setAlbumId(event.id);
   playerStore.setIsPlaying(true);
-}
+};
 </script>
 
 <style scoped>

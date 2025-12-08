@@ -3,13 +3,20 @@
     <div class="topSection">
       <MultiSourceImage class="coverImage" :urls="coverUrls" />
       <div class="artistInfoColum">
-        <h1 class="artistName"> {{ artist.name }}</h1>
+        <h1 class="artistName">{{ artist.name }}</h1>
         <div class="verticalFiller"></div>
-        <ToggableFavoriteIcon :toggled="isArtistLiked" :clickCallback="handleClickOnFavoriteIcon" />
+        <ToggableFavoriteIcon
+          :toggled="isArtistLiked"
+          :clickCallback="handleClickOnFavoriteIcon"
+        />
       </div>
     </div>
     <div class="relatedArtistsContainer">
-      <LoadArtistListItem v-for="artistId in artist.related" :key="artistId" :artistId="artistId" />
+      <LoadArtistListItem
+        v-for="artistId in artist.related"
+        :key="artistId"
+        :artistId="artistId"
+      />
     </div>
     <div class="discographyContainer">
       <ArtistDiscography :artistId="artistId" />
@@ -22,20 +29,20 @@
 </template>
 
 <script setup>
-import { ref, watch, onMounted } from 'vue';
-import { chooseArtistCoverImageUrl } from '@/utils';
-import { useUserStore } from '@/store/user.js';
-import { useStaticsStore } from '@/store/statics.js';
-import MultiSourceImage from '@/components/common/MultiSourceImage.vue';
-import ToggableFavoriteIcon from '@/components/common/ToggableFavoriteIcon.vue';
-import LoadArtistListItem from '@/components/common/LoadArtistListItem.vue';
-import ArtistDiscography from '@/components/common/ArtistDiscography.vue';
+import { ref, watch, onMounted } from "vue";
+import { chooseArtistCoverImageUrl } from "@/utils";
+import { useUserStore } from "@/store/user.js";
+import { useStaticsStore } from "@/store/statics.js";
+import MultiSourceImage from "@/components/common/MultiSourceImage.vue";
+import ToggableFavoriteIcon from "@/components/common/ToggableFavoriteIcon.vue";
+import LoadArtistListItem from "@/components/common/LoadArtistListItem.vue";
+import ArtistDiscography from "@/components/common/ArtistDiscography.vue";
 
 const props = defineProps({
   artistId: {
     type: String,
     required: true,
-  }
+  },
 });
 
 const artist = ref(null);
@@ -56,30 +63,35 @@ const fetchData = async (id) => {
   artistDataUnwatcher = watch(
     staticsStore.getArtist(id),
     (newData) => {
-      if (newData && newData.item && typeof newData.item === 'object') {
+      if (newData && newData.item && typeof newData.item === "object") {
         coverUrls.value = chooseArtistCoverImageUrl(newData.item);
         artist.value = newData.item;
       }
     },
-    { immediate: true });
+    { immediate: true },
+  );
 };
 
-watch([() => userStore.likedArtistsIds, artist],
+watch(
+  [() => userStore.likedArtistsIds, artist],
   ([likedArtis, artistData], [oldLikedArtists, oldArtistData]) => {
     if (likedArtis && artistData) {
       isArtistLiked.value = likedArtis.includes(props.artistId);
     }
   },
-  { immediate: true }
+  { immediate: true },
 );
 
 const handleClickOnFavoriteIcon = () => {
   userStore.setArtistIsLiked(props.artistId, !isArtistLiked.value);
-}
+};
 
-watch(() => props.artistId, (newId) => {
-  fetchData(newId);
-});
+watch(
+  () => props.artistId,
+  (newId) => {
+    fetchData(newId);
+  },
+);
 
 onMounted(() => {
   fetchData(props.artistId);
@@ -95,7 +107,7 @@ onMounted(() => {
 .coverImage {
   width: 400px;
   height: 400;
-  object-fit: contain
+  object-fit: contain;
 }
 
 .artistInfoColum {
@@ -104,7 +116,8 @@ onMounted(() => {
   margin: 0 16px;
 }
 
-.artistName {}
+.artistName {
+}
 
 .relatedArtistsContainer {
   width: 100%;
