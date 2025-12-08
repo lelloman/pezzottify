@@ -124,15 +124,16 @@ The Android project uses a multi-module Gradle setup with modules: `app`, `ui`, 
 - `SqliteCatalogStore`: SQLite-backed catalog with CRUD operations
 - `CatalogStore`: Trait for catalog access (read and write)
 - `Session`: Request session with user permissions
-- `Permission`: Enum for access control (AccessCatalog, LikeContent, OwnPlaylists, EditCatalog, ManagePermissions, IssueContentDownload, RebootServer)
+- `Permission`: Enum for access control (AccessCatalog, LikeContent, OwnPlaylists, EditCatalog, ManagePermissions, IssueContentDownload, RebootServer, ViewAnalytics)
 - `UserRole`: Admin (all permissions) or Regular (basic permissions)
 
 **Server routes structure:**
 - `/v1/auth/*`: Login, logout, session management
-- `/v1/catalog/*`: Artists, albums, tracks, images
-- `/v1/search/*`: Search endpoints
-- `/v1/user/*`: User playlists, liked content
-- `/v1/playback/*`: Track streaming
+- `/v1/content/*`: Artists, albums, tracks, images, streaming, search
+- `/v1/user/*`: User playlists, liked content, settings, listening stats
+- `/v1/admin/*`: User management, analytics, server control
+- `/v1/sync/*`: Event log for multi-device sync
+- `/v1/ws`: WebSocket for real-time updates
 
 **Authentication flow:**
 1. User logs in with credentials (POST `/v1/auth/login`)
