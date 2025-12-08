@@ -28,10 +28,7 @@ class LoginViewModel @Inject constructor(
     val events = mutableEvents.asSharedFlow()
 
     override fun updateHost(host: String) {
-        mutableState.value = mutableState.value.copy(host = host)
-        viewModelScope.launch {
-            interactor.setHost(host)
-        }
+        mutableState.value = mutableState.value.copy(host = host, hostError = null)
     }
 
     override fun updateEmail(email: String) {
@@ -46,6 +43,15 @@ class LoginViewModel @Inject constructor(
         if (!mutableState.value.isLoading) {
             mutableState.value = mutableState.value.copy(isLoading = true)
             viewModelScope.launch {
+                val hostResult = interactor.setHost(mutableState.value.host)
+                if (hostResult is Interactor.SetHostResult.InvalidUrl) {
+                    mutableState.value = mutableState.value.copy(
+                        isLoading = false,
+                        hostError = "Invalid URL",
+                    )
+                    return@launch
+                }
+
                 val loginResult = interactor.login(
                     email = mutableState.value.email,
                     password = mutableState.value.password,
@@ -76,9 +82,14 @@ class LoginViewModel @Inject constructor(
 
         fun getInitialEmail(): String
 
-        suspend fun setHost(host: String)
+        suspend fun setHost(host: String): SetHostResult
 
         suspend fun login(email: String, password: String): LoginResult
+
+        sealed interface SetHostResult {
+            data object Success : SetHostResult
+            data object InvalidUrl : SetHostResult
+        }
 
         sealed interface LoginResult {
 

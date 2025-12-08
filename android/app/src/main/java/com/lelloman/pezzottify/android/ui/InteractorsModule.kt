@@ -101,9 +101,11 @@ class InteractorsModule {
         override fun getInitialEmail(): String =
             authStore.getLastUsedHandle() ?: ""
 
-        override suspend fun setHost(host: String) {
-            configStore.setBaseUrl(host)
-        }
+        override suspend fun setHost(host: String): LoginViewModel.Interactor.SetHostResult =
+            when (configStore.setBaseUrl(host)) {
+                ConfigStore.SetBaseUrlResult.Success -> LoginViewModel.Interactor.SetHostResult.Success
+                ConfigStore.SetBaseUrlResult.InvalidUrl -> LoginViewModel.Interactor.SetHostResult.InvalidUrl
+            }
 
         override suspend fun login(
             email: String,
