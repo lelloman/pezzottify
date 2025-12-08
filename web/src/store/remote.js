@@ -499,7 +499,7 @@ export const useRemoteStore = defineStore("remote", () => {
   };
 
   // =====================================================
-  // Admin API - Server Control (RebootServer)
+  // Admin API - Server Control (ServerAdmin)
   // =====================================================
 
   const rebootServer = async () => {

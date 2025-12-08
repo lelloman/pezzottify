@@ -10,7 +10,7 @@ enum class Permission {
     EditCatalog,
     ManagePermissions,
     IssueContentDownload,
-    RebootServer,
+    ServerAdmin,
     ViewAnalytics;
 
     val displayName: String
@@ -21,7 +21,7 @@ enum class Permission {
             EditCatalog -> "Edit Catalog"
             ManagePermissions -> "Manage Permissions"
             IssueContentDownload -> "Download Content"
-            RebootServer -> "Reboot Server"
+            ServerAdmin -> "Server Admin"
             ViewAnalytics -> "View Analytics"
         }
 
@@ -33,7 +33,7 @@ enum class Permission {
             EditCatalog -> "Add, edit, or remove catalog content."
             ManagePermissions -> "Grant or revoke permissions for other users."
             IssueContentDownload -> "Request downloads of missing content."
-            RebootServer -> "Restart the server remotely."
+            ServerAdmin -> "Server administration (reboot, etc.)."
             ViewAnalytics -> "View listening statistics and analytics."
         }
 }

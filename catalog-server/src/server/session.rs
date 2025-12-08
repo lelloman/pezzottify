@@ -221,7 +221,7 @@ mod tests {
 
         assert!(!session.has_permission(Permission::EditCatalog));
         assert!(!session.has_permission(Permission::ManagePermissions));
-        assert!(!session.has_permission(Permission::RebootServer));
+        assert!(!session.has_permission(Permission::ServerAdmin));
     }
 
     #[test]

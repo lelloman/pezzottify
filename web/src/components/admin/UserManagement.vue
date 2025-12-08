@@ -332,7 +332,7 @@ const availablePermissions = [
   "EditCatalog",
   "ManagePermissions",
   "IssueContentDownload",
-  "RebootServer",
+  "ServerAdmin",
   "ViewAnalytics",
 ];
 

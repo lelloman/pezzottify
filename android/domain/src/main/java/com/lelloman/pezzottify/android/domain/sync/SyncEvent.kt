@@ -42,7 +42,7 @@ enum class Permission {
     EditCatalog,
     ManagePermissions,
     IssueContentDownload,
-    RebootServer,
+    ServerAdmin,
     ViewAnalytics,
 }
 

@@ -84,7 +84,7 @@ const allSections = [
   {
     id: "server",
     label: "Server",
-    permission: "RebootServer",
+    permission: "ServerAdmin",
     component: ServerControl,
     route: "/admin/server",
   },

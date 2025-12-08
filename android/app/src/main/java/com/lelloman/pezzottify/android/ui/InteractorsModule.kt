@@ -803,6 +803,6 @@ private fun DomainPermission.toUi(): UiPermission? = when (this) {
     DomainPermission.EditCatalog -> UiPermission.EditCatalog
     DomainPermission.ManagePermissions -> UiPermission.ManagePermissions
     DomainPermission.IssueContentDownload -> UiPermission.IssueContentDownload
-    DomainPermission.RebootServer -> UiPermission.RebootServer
+    DomainPermission.ServerAdmin -> UiPermission.ServerAdmin
     DomainPermission.ViewAnalytics -> UiPermission.ViewAnalytics
 }
