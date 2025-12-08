@@ -23,7 +23,7 @@ struct HashedItem {
 }
 
 #[cfg_attr(test, derive(Clone))]
-#[derive(Debug, Hash, Eq, Serialize)]
+#[derive(Debug, Eq, Serialize)]
 pub struct SearchResult {
     pub item_type: HashedItemType,
     pub item_id: String,
