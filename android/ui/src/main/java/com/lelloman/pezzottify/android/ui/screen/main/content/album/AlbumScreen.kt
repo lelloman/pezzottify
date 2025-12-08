@@ -99,8 +99,8 @@ private fun AlbumScreenContent(
             )
         },
         contentWindowInsets = WindowInsets(0.dp)
-    ) { _ ->
-        Box(modifier = Modifier.fillMaxSize()) {
+    ) { contentPadding ->
+        Box(modifier = Modifier.fillMaxSize().padding(contentPadding)) {
             when {
                 state.isLoading -> LoadingScreen()
                 state.album != null -> AlbumLoadedScreen(
