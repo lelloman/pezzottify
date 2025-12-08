@@ -2101,21 +2101,30 @@ impl UserListeningStore for SqliteUserStore {
         // If session_id is provided, check if it exists and belongs to this user
         // This enables clients to send progress updates and final data for the same session
         // while preventing one user from overwriting another user's session
-        let result = if let Some(ref session_id) = event.session_id {
-            // Check if session exists and get its user_id
-            let existing_user: Option<usize> = conn
+        //
+        // Returns (id, created) where:
+        // - id: the row id of the event
+        // - created: true only if this is a NEW finalized event (for metrics counting)
+        //   This prevents double-counting when clients retry or update sessions
+        let (id, created) = if let Some(ref session_id) = event.session_id {
+            // Check if session exists and whether it was already finalized
+            let existing: Option<(usize, bool)> = conn
                 .query_row(
                     &format!(
-                        "SELECT user_id FROM {} WHERE session_id = ?1",
+                        "SELECT user_id, ended_at IS NOT NULL FROM {} WHERE session_id = ?1",
                         LISTENING_EVENTS_TABLE_V_6.name
                     ),
                     params![session_id],
-                    |row| row.get::<_, i64>(0).map(|id| id as usize),
+                    |row| {
+                        let user_id: i64 = row.get(0)?;
+                        let was_finalized: bool = row.get(1)?;
+                        Ok((user_id as usize, was_finalized))
+                    },
                 )
                 .optional()?;
 
-            match existing_user {
-                Some(existing_uid) if existing_uid != event.user_id => {
+            match existing {
+                Some((existing_uid, _)) if existing_uid != event.user_id => {
                     // Session belongs to a different user - ignore this event
                     // Return the existing session's info without modifying it
                     let id: usize = conn.query_row(
@@ -2129,8 +2138,8 @@ impl UserListeningStore for SqliteUserStore {
                     record_db_query("record_listening_event", start.elapsed());
                     return Ok((id, false));
                 }
-                _ => {
-                    // Either new session or same user - allow insert/replace
+                Some((_, was_already_finalized)) => {
+                    // Same user updating existing session - allow replace
                     conn.execute(
                         &format!(
                             "INSERT OR REPLACE INTO {} (user_id, track_id, session_id, started_at, ended_at,
@@ -2154,11 +2163,46 @@ impl UserListeningStore for SqliteUserStore {
                             event.client_type,
                             event.date as i64,
                         ],
-                    )?
+                    )?;
+                    let id = conn.last_insert_rowid() as usize;
+                    // created = true only if this update finalizes a previously non-finalized session
+                    let created = !was_already_finalized && event.ended_at.is_some();
+                    (id, created)
+                }
+                None => {
+                    // New session - insert
+                    conn.execute(
+                        &format!(
+                            "INSERT INTO {} (user_id, track_id, session_id, started_at, ended_at,
+                             duration_seconds, track_duration_seconds, completed, seek_count, pause_count,
+                             playback_context, client_type, date)
+                             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
+                            LISTENING_EVENTS_TABLE_V_6.name
+                        ),
+                        params![
+                            event.user_id,
+                            event.track_id,
+                            session_id,
+                            event.started_at as i64,
+                            event.ended_at.map(|t| t as i64),
+                            event.duration_seconds as i64,
+                            event.track_duration_seconds as i64,
+                            if event.completed { 1 } else { 0 },
+                            event.seek_count as i64,
+                            event.pause_count as i64,
+                            event.playback_context,
+                            event.client_type,
+                            event.date as i64,
+                        ],
+                    )?;
+                    let id = conn.last_insert_rowid() as usize;
+                    // New session, created = true only if finalized
+                    let created = event.ended_at.is_some();
+                    (id, created)
                 }
             }
         } else {
-            // No session_id, always insert
+            // No session_id, always insert as new event
             conn.execute(
                 &format!(
                     "INSERT INTO {} (user_id, track_id, session_id, started_at, ended_at,
@@ -2182,23 +2226,11 @@ impl UserListeningStore for SqliteUserStore {
                     event.client_type,
                     event.date as i64,
                 ],
-            )?
-        };
-
-        // With INSERT OR REPLACE, we need to check if session existed before
-        // For events with session_id, check if this was an update or new insert
-        let (id, created) = if event.session_id.is_some() {
+            )?;
             let id = conn.last_insert_rowid() as usize;
-            // SQLite's changes() returns 1 for both insert and replace
-            // We can detect a replace by checking if rowid changed
-            // But simpler: just return the id and consider it "created" if result > 0
-            // The caller (metrics) only cares about new events, so we'll check
-            // if ended_at is set to determine if this is the final event
-            let created = result > 0 && event.ended_at.is_some();
+            // No session_id means always new, created = true only if finalized
+            let created = event.ended_at.is_some();
             (id, created)
-        } else {
-            // No session_id means always a new insert
-            (conn.last_insert_rowid() as usize, result > 0)
         };
 
         record_db_query("record_listening_event", start.elapsed());
@@ -4126,7 +4158,8 @@ mod tests {
 
         let (id, created) = store.record_listening_event(event).unwrap();
         assert!(id > 0);
-        assert!(created);
+        // created=false because ended_at is None (event not finalized, won't count in metrics)
+        assert!(!created);
 
         // Verify we can retrieve it
         let events = store
