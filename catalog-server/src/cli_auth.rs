@@ -5,6 +5,7 @@ use std::{path::PathBuf, sync::Arc};
 
 mod catalog_store;
 mod cli_style;
+mod config;
 mod downloader;
 mod search;
 mod server;
