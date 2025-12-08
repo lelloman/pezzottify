@@ -820,7 +820,9 @@ async fn get_whats_new(
     }
 }
 
-/// Get popular albums and artists based on listening data from the last 7 days
+/// Get popular albums and artists based on listening data from the last 365 days.
+/// Uses a large window so that low-traffic instances still return meaningful results.
+/// Results are cached for 24 hours in UserManager.
 async fn get_popular_content(
     _session: Session,
     State(user_manager): State<GuardedUserManager>,
@@ -828,7 +830,8 @@ async fn get_popular_content(
 ) -> Response {
     use std::time::SystemTime;
 
-    // Default: last 7 days
+    // Use 365-day window - on busy instances the query limit caps results,
+    // on quiet instances we get meaningful data from further back
     let now_secs = SystemTime::now()
         .duration_since(SystemTime::UNIX_EPOCH)
         .unwrap()
@@ -845,8 +848,8 @@ async fn get_popular_content(
     };
 
     let start_date = {
-        let seven_days_ago = now_secs - (7 * 24 * 60 * 60);
-        let datetime = chrono::DateTime::from_timestamp(seven_days_ago as i64, 0)
+        let one_year_ago = now_secs - (365 * 24 * 60 * 60);
+        let datetime = chrono::DateTime::from_timestamp(one_year_ago as i64, 0)
             .unwrap_or_else(|| chrono::Utc::now());
         datetime
             .format("%Y%m%d")
