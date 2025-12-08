@@ -28,8 +28,12 @@ private val BackOnlineColor = Color(0xFF22c55e) // Green
 private const val BANNER_DISPLAY_DURATION_MS = 3000L
 
 /**
- * A banner that slides in from the top when connection is restored.
+ * A banner that slides in from the top when connection is restored after an error.
  * Auto-dismisses after a few seconds.
+ *
+ * Note: This banner only shows when recovering from [ConnectionState.Error], not from
+ * [ConnectionState.Disconnected]. Disconnected represents an intentional disconnect
+ * (e.g., app going to background) and should not trigger the "back online" banner.
  *
  * @param connectionState Current connection state
  * @param modifier Modifier for the banner
@@ -42,20 +46,19 @@ fun BackOnlineBanner(
     onDismissed: () -> Unit = {},
 ) {
     var showBanner by remember { mutableStateOf(false) }
-    var wasOffline by remember { mutableStateOf(false) }
+    var hadError by remember { mutableStateOf(false) }
 
     // Track connection state changes
     LaunchedEffect(connectionState) {
-        val isOffline = connectionState is ConnectionState.Disconnected ||
-                connectionState is ConnectionState.Error
+        val hasError = connectionState is ConnectionState.Error
         val isConnected = connectionState is ConnectionState.Connected
 
-        if (isOffline) {
-            wasOffline = true
-        } else if (isConnected && wasOffline) {
-            // Just came back online
+        if (hasError) {
+            hadError = true
+        } else if (isConnected && hadError) {
+            // Just recovered from an error
             showBanner = true
-            wasOffline = false
+            hadError = false
             delay(BANNER_DISPLAY_DURATION_MS)
             showBanner = false
             onDismissed()

@@ -166,19 +166,26 @@ internal class WebSocketManagerImpl(
             this@WebSocketManagerImpl.webSocket = null
 
             if (!intentionalDisconnect) {
-                _connectionState.value = ConnectionState.Disconnected
+                // Unexpected close - treat as error and attempt reconnection
+                _connectionState.value = ConnectionState.Error(reason.ifEmpty { "Connection closed unexpectedly" })
                 scheduleReconnect()
             }
         }
 
         override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
-            logger.error("WebSocket failure: ${t.message}", t)
             heartbeatJob?.cancel()
             heartbeatJob = null
             this@WebSocketManagerImpl.webSocket = null
-            _connectionState.value = ConnectionState.Error(t.message ?: "Connection failed")
 
-            if (!intentionalDisconnect) {
+            if (intentionalDisconnect) {
+                // Failure during intentional disconnect (e.g., EOFException when closing)
+                // This is expected, just log at debug level and set Disconnected state
+                logger.debug("WebSocket closed during intentional disconnect: ${t.message}")
+                _connectionState.value = ConnectionState.Disconnected
+            } else {
+                // Unexpected failure - log error, set Error state, and attempt reconnection
+                logger.error("WebSocket failure: ${t.message}", t)
+                _connectionState.value = ConnectionState.Error(t.message ?: "Connection failed")
                 scheduleReconnect()
             }
         }
