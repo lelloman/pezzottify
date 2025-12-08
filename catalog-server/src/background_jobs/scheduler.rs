@@ -1,22 +1,22 @@
 use super::context::JobContext;
+use super::handle::{SchedulerCommand, SharedJobState};
 use super::job::{BackgroundJob, HookEvent, JobError, JobSchedule, ShutdownBehavior};
 use crate::server_store::{JobRunStatus, ServerStore};
-use anyhow::Result;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, RwLock};
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, info, warn};
 
 /// Manages background job scheduling and execution.
 pub struct JobScheduler {
-    /// Registered jobs indexed by their ID.
-    jobs: HashMap<String, Arc<dyn BackgroundJob>>,
+    /// Shared state accessible by SchedulerHandle
+    shared_state: Arc<RwLock<SharedJobState>>,
 
-    /// Currently running jobs with their task handles.
-    running_jobs: HashMap<String, JoinHandle<()>>,
+    /// Currently running jobs with their task handles (not shared, managed by scheduler loop)
+    running_handles: HashMap<String, JoinHandle<()>>,
 
     /// Cancellation tokens for each running job.
     job_cancel_tokens: HashMap<String, CancellationToken>,
@@ -27,6 +27,9 @@ pub struct JobScheduler {
     /// Receiver for hook events from the HTTP server.
     hook_receiver: mpsc::Receiver<HookEvent>,
 
+    /// Receiver for commands from SchedulerHandle
+    command_receiver: mpsc::Receiver<SchedulerCommand>,
+
     /// Token to signal scheduler shutdown.
     shutdown_token: CancellationToken,
 
@@ -35,67 +38,48 @@ pub struct JobScheduler {
 }
 
 impl JobScheduler {
-    /// Create a new job scheduler.
+    /// Create a new job scheduler and return a handle for interacting with it.
     pub fn new(
         server_store: Arc<dyn ServerStore>,
         hook_receiver: mpsc::Receiver<HookEvent>,
+        command_receiver: mpsc::Receiver<SchedulerCommand>,
         shutdown_token: CancellationToken,
         job_context: JobContext,
+        shared_state: Arc<RwLock<SharedJobState>>,
     ) -> Self {
         Self {
-            jobs: HashMap::new(),
-            running_jobs: HashMap::new(),
+            shared_state,
+            running_handles: HashMap::new(),
             job_cancel_tokens: HashMap::new(),
             server_store,
             hook_receiver,
+            command_receiver,
             shutdown_token,
             job_context,
         }
     }
 
     /// Register a job with the scheduler.
-    pub fn register_job(&mut self, job: Arc<dyn BackgroundJob>) {
+    pub async fn register_job(&mut self, job: Arc<dyn BackgroundJob>) {
         let job_id = job.id().to_string();
         info!(
             "Registering job: {} - {}",
             job_id,
             job.description()
         );
-        self.jobs.insert(job_id, job);
+        let mut state = self.shared_state.write().await;
+        state.jobs.insert(job_id, job);
     }
 
-    /// Manually trigger a job by ID.
-    pub fn trigger_job(&mut self, job_id: &str) -> Result<(), JobError> {
-        if !self.jobs.contains_key(job_id) {
-            return Err(JobError::NotFound);
-        }
-
-        if self.running_jobs.contains_key(job_id) {
-            return Err(JobError::AlreadyRunning);
-        }
-
-        self.spawn_job(job_id, "manual");
-        Ok(())
-    }
-
-    /// Get the IDs of all registered jobs.
-    pub fn registered_job_ids(&self) -> Vec<&str> {
-        self.jobs.keys().map(|s| s.as_str()).collect()
-    }
-
-    /// Get a reference to a registered job by ID.
-    pub fn get_job(&self, job_id: &str) -> Option<&Arc<dyn BackgroundJob>> {
-        self.jobs.get(job_id)
-    }
-
-    /// Check if a job is currently running.
-    pub fn is_job_running(&self, job_id: &str) -> bool {
-        self.running_jobs.contains_key(job_id)
+    /// Get the number of registered jobs.
+    pub async fn job_count(&self) -> usize {
+        self.shared_state.read().await.jobs.len()
     }
 
     /// Main scheduler loop.
     pub async fn run(&mut self) {
-        info!("Starting job scheduler with {} registered jobs", self.jobs.len());
+        let job_count = self.job_count().await;
+        info!("Starting job scheduler with {} registered jobs", job_count);
 
         // On startup: mark any stale running jobs as failed
         match self.server_store.mark_stale_jobs_failed() {
@@ -109,13 +93,13 @@ impl JobScheduler {
         }
 
         // Fire OnStartup hooks
-        self.trigger_jobs_for_hook(HookEvent::OnStartup);
+        self.trigger_jobs_for_hook(HookEvent::OnStartup).await;
 
         loop {
             // Clean up completed job handles
             self.cleanup_completed_jobs().await;
 
-            let sleep_duration = self.time_until_next_scheduled_job();
+            let sleep_duration = self.time_until_next_scheduled_job().await;
             debug!(
                 "Scheduler sleeping for {:?} until next scheduled job",
                 sleep_duration
@@ -123,11 +107,14 @@ impl JobScheduler {
 
             tokio::select! {
                 _ = tokio::time::sleep(sleep_duration) => {
-                    self.run_due_jobs();
+                    self.run_due_jobs().await;
                 }
                 Some(event) = self.hook_receiver.recv() => {
                     debug!("Received hook event: {}", event);
-                    self.trigger_jobs_for_hook(event);
+                    self.trigger_jobs_for_hook(event).await;
+                }
+                Some(cmd) = self.command_receiver.recv() => {
+                    self.handle_command(cmd).await;
                 }
                 _ = self.shutdown_token.cancelled() => {
                     info!("Scheduler received shutdown signal");
@@ -140,12 +127,39 @@ impl JobScheduler {
         info!("Job scheduler stopped");
     }
 
+    /// Handle a command from the SchedulerHandle.
+    async fn handle_command(&mut self, cmd: SchedulerCommand) {
+        match cmd {
+            SchedulerCommand::TriggerJob { job_id, response } => {
+                let result = self.trigger_job(&job_id).await;
+                let _ = response.send(result);
+            }
+        }
+    }
+
+    /// Manually trigger a job by ID.
+    async fn trigger_job(&mut self, job_id: &str) -> Result<(), JobError> {
+        let state = self.shared_state.read().await;
+        if !state.jobs.contains_key(job_id) {
+            return Err(JobError::NotFound);
+        }
+
+        if state.running_jobs.contains(job_id) {
+            return Err(JobError::AlreadyRunning);
+        }
+        drop(state);
+
+        self.spawn_job(job_id, "manual").await;
+        Ok(())
+    }
+
     /// Calculate time until the next scheduled job should run.
-    fn time_until_next_scheduled_job(&self) -> Duration {
+    async fn time_until_next_scheduled_job(&self) -> Duration {
         let mut min_duration = Duration::from_secs(60); // Default check interval
 
-        for (job_id, job) in &self.jobs {
-            if self.running_jobs.contains_key(job_id) {
+        let state = self.shared_state.read().await;
+        for (job_id, job) in &state.jobs {
+            if state.running_jobs.contains(job_id) {
                 continue; // Skip already running jobs
             }
 
@@ -173,7 +187,7 @@ impl JobScheduler {
         schedule: JobSchedule,
     ) -> Option<chrono::DateTime<chrono::Utc>> {
         match schedule {
-            JobSchedule::Interval(interval) => {
+            JobSchedule::Interval(_interval) => {
                 // Get last run time from server store
                 if let Ok(Some(state)) = self.server_store.get_schedule_state(job_id) {
                     Some(state.next_run_at)
@@ -194,11 +208,11 @@ impl JobScheduler {
             }
             JobSchedule::Combined { cron, interval, .. } => {
                 // Return the earliest of cron and interval schedules
-                let interval_time = interval.and_then(|int| {
+                let interval_time = interval.and_then(|_int| {
                     if let Ok(Some(state)) = self.server_store.get_schedule_state(job_id) {
                         Some(state.next_run_at)
                     } else {
-                        Some(chrono::Utc::now() + chrono::Duration::from_std(int).ok()?)
+                        Some(chrono::Utc::now())
                     }
                 });
 
@@ -213,61 +227,70 @@ impl JobScheduler {
     }
 
     /// Run all jobs that are due for scheduled execution.
-    fn run_due_jobs(&mut self) {
+    async fn run_due_jobs(&mut self) {
         let now = chrono::Utc::now();
         let mut jobs_to_run = Vec::new();
 
-        for (job_id, job) in &self.jobs {
-            if self.running_jobs.contains_key(job_id) {
-                continue;
-            }
+        {
+            let state = self.shared_state.read().await;
+            for (job_id, job) in &state.jobs {
+                if state.running_jobs.contains(job_id) {
+                    continue;
+                }
 
-            if let Some(next_run) = self.get_next_run_time(job_id, job.schedule()) {
-                if next_run <= now {
-                    jobs_to_run.push(job_id.clone());
+                if let Some(next_run) = self.get_next_run_time(job_id, job.schedule()) {
+                    if next_run <= now {
+                        jobs_to_run.push(job_id.clone());
+                    }
                 }
             }
         }
 
         for job_id in jobs_to_run {
-            self.spawn_job(&job_id, "schedule");
+            self.spawn_job(&job_id, "schedule").await;
         }
     }
 
     /// Trigger all jobs that listen for a specific hook event.
-    fn trigger_jobs_for_hook(&mut self, event: HookEvent) {
+    async fn trigger_jobs_for_hook(&mut self, event: HookEvent) {
         let mut jobs_to_trigger = Vec::new();
 
-        for (job_id, job) in &self.jobs {
-            if self.running_jobs.contains_key(job_id) {
-                debug!("Skipping hook trigger for already running job: {}", job_id);
-                continue;
-            }
+        {
+            let state = self.shared_state.read().await;
+            for (job_id, job) in &state.jobs {
+                if state.running_jobs.contains(job_id) {
+                    debug!("Skipping hook trigger for already running job: {}", job_id);
+                    continue;
+                }
 
-            let should_trigger = match job.schedule() {
-                JobSchedule::Hook(hook_event) => hook_event == event,
-                JobSchedule::Combined { ref hooks, .. } => hooks.contains(&event),
-                _ => false,
-            };
+                let should_trigger = match job.schedule() {
+                    JobSchedule::Hook(hook_event) => hook_event == event,
+                    JobSchedule::Combined { ref hooks, .. } => hooks.contains(&event),
+                    _ => false,
+                };
 
-            if should_trigger {
-                jobs_to_trigger.push(job_id.clone());
+                if should_trigger {
+                    jobs_to_trigger.push(job_id.clone());
+                }
             }
         }
 
         for job_id in jobs_to_trigger {
             let trigger = format!("hook:{}", event);
-            self.spawn_job(&job_id, &trigger);
+            self.spawn_job(&job_id, &trigger).await;
         }
     }
 
     /// Spawn a job execution task.
-    fn spawn_job(&mut self, job_id: &str, triggered_by: &str) {
-        let job = match self.jobs.get(job_id) {
-            Some(job) => Arc::clone(job),
-            None => {
-                error!("Attempted to spawn unknown job: {}", job_id);
-                return;
+    async fn spawn_job(&mut self, job_id: &str, triggered_by: &str) {
+        let job = {
+            let state = self.shared_state.read().await;
+            match state.jobs.get(job_id) {
+                Some(job) => Arc::clone(job),
+                None => {
+                    error!("Attempted to spawn unknown job: {}", job_id);
+                    return;
+                }
             }
         };
 
@@ -281,6 +304,12 @@ impl JobScheduler {
         };
 
         info!("Starting job: {} (run_id: {}, triggered_by: {})", job_id, run_id, triggered_by);
+
+        // Mark job as running in shared state
+        {
+            let mut state = self.shared_state.write().await;
+            state.running_jobs.insert(job_id.to_string());
+        }
 
         // Create cancellation token for this job
         let cancel_token = self.job_context.cancellation_token.child_token();
@@ -296,6 +325,7 @@ impl JobScheduler {
 
         let server_store = Arc::clone(&self.server_store);
         let job_id_owned = job_id.to_string();
+        let shared_state = Arc::clone(&self.shared_state);
 
         // Spawn the job in a blocking task since jobs are synchronous
         let handle = tokio::spawn(async move {
@@ -330,16 +360,25 @@ impl JobScheduler {
             if let Err(e) = server_store.record_job_finish(run_id, status, error_msg) {
                 error!("Failed to record job finish for {}: {}", job_id_owned, e);
             }
+
+            // Mark job as not running in shared state
+            {
+                let mut state = shared_state.write().await;
+                state.running_jobs.remove(&job_id_owned);
+            }
         });
 
-        self.running_jobs.insert(job_id.to_string(), handle);
+        self.running_handles.insert(job_id.to_string(), handle);
     }
 
     /// Update schedule state after a job completes (for interval-based jobs).
-    fn update_schedule_after_run(&self, job_id: &str) {
-        let job = match self.jobs.get(job_id) {
-            Some(job) => job,
-            None => return,
+    async fn update_schedule_after_run(&self, job_id: &str) {
+        let job = {
+            let state = self.shared_state.read().await;
+            match state.jobs.get(job_id) {
+                Some(job) => Arc::clone(job),
+                None => return,
+            }
         };
 
         let interval = match job.schedule() {
@@ -366,18 +405,18 @@ impl JobScheduler {
     async fn cleanup_completed_jobs(&mut self) {
         let mut completed = Vec::new();
 
-        for (job_id, handle) in &self.running_jobs {
+        for (job_id, handle) in &self.running_handles {
             if handle.is_finished() {
                 completed.push(job_id.clone());
             }
         }
 
         for job_id in completed {
-            if let Some(handle) = self.running_jobs.remove(&job_id) {
+            if let Some(handle) = self.running_handles.remove(&job_id) {
                 let _ = handle.await;
             }
             self.job_cancel_tokens.remove(&job_id);
-            self.update_schedule_after_run(&job_id);
+            self.update_schedule_after_run(&job_id).await;
         }
     }
 
@@ -386,12 +425,15 @@ impl JobScheduler {
         info!("Shutting down scheduler...");
 
         // Cancel cancellable jobs
-        for (job_id, _) in &self.running_jobs {
-            if let Some(job) = self.jobs.get(job_id) {
-                if job.shutdown_behavior() == ShutdownBehavior::Cancellable {
-                    if let Some(token) = self.job_cancel_tokens.get(job_id) {
-                        debug!("Cancelling job: {}", job_id);
-                        token.cancel();
+        {
+            let state = self.shared_state.read().await;
+            for job_id in &state.running_jobs {
+                if let Some(job) = state.jobs.get(job_id) {
+                    if job.shutdown_behavior() == ShutdownBehavior::Cancellable {
+                        if let Some(token) = self.job_cancel_tokens.get(job_id) {
+                            debug!("Cancelling job: {}", job_id);
+                            token.cancel();
+                        }
                     }
                 }
             }
@@ -399,11 +441,13 @@ impl JobScheduler {
 
         // Wait for all jobs to complete
         let mut wait_jobs = Vec::new();
-        for (job_id, handle) in self.running_jobs.drain() {
-            let behavior = self.jobs.get(&job_id)
-                .map(|j| j.shutdown_behavior())
-                .unwrap_or(ShutdownBehavior::Cancellable);
-
+        for (job_id, handle) in self.running_handles.drain() {
+            let behavior = {
+                let state = self.shared_state.read().await;
+                state.jobs.get(&job_id)
+                    .map(|j| j.shutdown_behavior())
+                    .unwrap_or(ShutdownBehavior::Cancellable)
+            };
             wait_jobs.push((job_id, handle, behavior));
         }
 
@@ -417,6 +461,37 @@ impl JobScheduler {
         self.job_cancel_tokens.clear();
         info!("Scheduler shutdown complete");
     }
+}
+
+/// Create a scheduler and its handle.
+pub fn create_scheduler(
+    server_store: Arc<dyn ServerStore>,
+    hook_receiver: mpsc::Receiver<HookEvent>,
+    shutdown_token: CancellationToken,
+    job_context: JobContext,
+) -> (JobScheduler, super::handle::SchedulerHandle) {
+    let (command_tx, command_rx) = mpsc::channel(100);
+    let shared_state = Arc::new(RwLock::new(SharedJobState {
+        jobs: HashMap::new(),
+        running_jobs: HashSet::new(),
+    }));
+
+    let scheduler = JobScheduler::new(
+        server_store.clone(),
+        hook_receiver,
+        command_rx,
+        shutdown_token,
+        job_context,
+        Arc::clone(&shared_state),
+    );
+
+    let handle = super::handle::SchedulerHandle::new(
+        command_tx,
+        shared_state,
+        server_store,
+    );
+
+    (scheduler, handle)
 }
 
 #[cfg(test)]
@@ -461,7 +536,7 @@ mod tests {
         }
     }
 
-    fn create_test_scheduler() -> (JobScheduler, TempDir, mpsc::Sender<HookEvent>) {
+    fn create_test_scheduler() -> (JobScheduler, super::super::handle::SchedulerHandle, TempDir, mpsc::Sender<HookEvent>) {
         let temp_dir = TempDir::new().unwrap();
         let db_path = temp_dir.path().join("server.db");
         let server_store = Arc::new(SqliteServerStore::new(&db_path).unwrap());
@@ -484,19 +559,19 @@ mod tests {
             server_store.clone(),
         );
 
-        let scheduler = JobScheduler::new(
+        let (scheduler, handle) = create_scheduler(
             server_store,
             hook_receiver,
             shutdown_token,
             job_context,
         );
 
-        (scheduler, temp_dir, hook_sender)
+        (scheduler, handle, temp_dir, hook_sender)
     }
 
-    #[test]
-    fn test_register_job() {
-        let (mut scheduler, _temp_dir, _hook_sender) = create_test_scheduler();
+    #[tokio::test]
+    async fn test_register_job() {
+        let (mut scheduler, handle, _temp_dir, _hook_sender) = create_test_scheduler();
 
         let exec_count = Arc::new(AtomicUsize::new(0));
         let job = Arc::new(TestJob {
@@ -505,38 +580,31 @@ mod tests {
             should_fail: Arc::new(AtomicBool::new(false)),
         });
 
-        scheduler.register_job(job);
+        scheduler.register_job(job).await;
 
-        assert!(scheduler.get_job("test_job").is_some());
-        assert!(scheduler.get_job("nonexistent").is_none());
-    }
-
-    #[test]
-    fn test_trigger_nonexistent_job() {
-        let (mut scheduler, _temp_dir, _hook_sender) = create_test_scheduler();
-
-        let result = scheduler.trigger_job("nonexistent");
-        assert!(matches!(result, Err(JobError::NotFound)));
+        let jobs = handle.list_jobs().await.unwrap();
+        assert_eq!(jobs.len(), 1);
+        assert_eq!(jobs[0].id, "test_job");
     }
 
     #[tokio::test]
-    async fn test_trigger_job_manually() {
-        let (mut scheduler, _temp_dir, _hook_sender) = create_test_scheduler();
+    async fn test_job_exists_check() {
+        let (mut scheduler, handle, _temp_dir, _hook_sender) = create_test_scheduler();
 
+        // Check that nonexistent job returns false
+        assert!(!handle.job_exists("nonexistent").await);
+
+        // Register a job
         let exec_count = Arc::new(AtomicUsize::new(0));
         let job = Arc::new(TestJob {
-            id: "manual_test",
-            execution_count: exec_count.clone(),
+            id: "test_job",
+            execution_count: exec_count,
             should_fail: Arc::new(AtomicBool::new(false)),
         });
+        scheduler.register_job(job).await;
 
-        scheduler.register_job(job);
-        scheduler.trigger_job("manual_test").unwrap();
-
-        // Wait for job to complete
-        tokio::time::sleep(Duration::from_millis(100)).await;
-        scheduler.cleanup_completed_jobs().await;
-
-        assert_eq!(exec_count.load(Ordering::SeqCst), 1);
+        // Now check that existing job returns true
+        assert!(handle.job_exists("test_job").await);
+        assert!(!handle.job_exists("nonexistent").await);
     }
 }

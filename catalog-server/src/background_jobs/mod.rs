@@ -4,10 +4,12 @@
 //! background tasks like search reindexing, cache precomputation, and event log pruning.
 
 mod context;
+mod handle;
 mod job;
 pub mod jobs;
 mod scheduler;
 
 pub use context::JobContext;
+pub use handle::{JobInfo, SchedulerHandle};
 pub use job::{BackgroundJob, HookEvent, JobError, JobSchedule, ShutdownBehavior};
-pub use scheduler::JobScheduler;
+pub use scheduler::{create_scheduler, JobScheduler};

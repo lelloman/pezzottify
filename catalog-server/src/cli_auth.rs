@@ -3,14 +3,13 @@ use clap::{CommandFactory, Parser, Subcommand};
 use crossterm::style::Stylize;
 use std::{path::PathBuf, sync::Arc};
 
-mod catalog_store;
+// Local module for CLI styling (not part of the library)
 mod cli_style;
-mod config;
-mod downloader;
-mod search;
-mod server;
-mod sqlite_persistence;
-mod user;
+
+// Import from the library crate
+use pezzottify_catalog_server::catalog_store::NullCatalogStore;
+use pezzottify_catalog_server::config;
+use pezzottify_catalog_server::user::{SqliteUserStore, UserManager};
 
 use cli_style::{
     box_chars, colors, get_prompt, get_styles, print_command_echo, print_empty_list, print_error,
@@ -18,10 +17,6 @@ use cli_style::{
     print_section_footer, print_section_header, print_success, print_warning, print_welcome,
     CommandHelp, TableBuilder,
 };
-use user::UserManager;
-
-use catalog_store::NullCatalogStore;
-use user::SqliteUserStore;
 
 use rustyline::{
     completion::Completer, highlight::Highlighter, history::FileHistory, validate::Validator,
@@ -447,7 +442,7 @@ fn execute_command(
                     }
                 },
                 InnerCommand::ListRoles => {
-                    use user::UserRole;
+                    use pezzottify_catalog_server::user::UserRole;
 
                     print_section_header("Available Roles");
                     println!();
@@ -473,8 +468,8 @@ fn execute_command(
                     print_section_footer();
                 }
                 InnerCommand::AddRole { user_handle, role } => {
-                    use user::sync_events::UserEvent;
-                    use user::UserRole;
+                    use pezzottify_catalog_server::user::sync_events::UserEvent;
+                    use pezzottify_catalog_server::user::UserRole;
                     let role_enum = match UserRole::from_str(&role) {
                         Some(r) => r,
                         None => {
@@ -520,8 +515,8 @@ fn execute_command(
                     ));
                 }
                 InnerCommand::RemoveRole { user_handle, role } => {
-                    use user::sync_events::UserEvent;
-                    use user::UserRole;
+                    use pezzottify_catalog_server::user::sync_events::UserEvent;
+                    use pezzottify_catalog_server::user::UserRole;
                     let role_enum = match UserRole::from_str(&role) {
                         Some(r) => r,
                         None => {

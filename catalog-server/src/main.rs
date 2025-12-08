@@ -7,33 +7,19 @@ use tokio_util::sync::CancellationToken;
 use tracing::{error, info, level_filters::LevelFilter};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
 
-mod catalog_store;
-use catalog_store::{CatalogStore, SqliteCatalogStore};
-
-mod config;
-
-mod downloader;
-
-mod search;
+// Import modules from the library crate
+use pezzottify_catalog_server::background_jobs::{create_scheduler, JobContext};
+use pezzottify_catalog_server::catalog_store::{CatalogStore, SqliteCatalogStore};
+use pezzottify_catalog_server::config;
+use pezzottify_catalog_server::downloader;
+use pezzottify_catalog_server::search::SearchVault;
 #[cfg(feature = "no_search")]
-use search::NoOpSearchVault;
+use pezzottify_catalog_server::search::NoOpSearchVault;
 #[cfg(not(feature = "no_search"))]
-use search::PezzotHashSearchVault;
-use search::SearchVault;
-
-mod server;
-use server::{run_server, RequestsLoggingLevel};
-
-mod sqlite_persistence;
-
-mod server_store;
-use server_store::SqliteServerStore;
-
-mod background_jobs;
-use background_jobs::{JobContext, JobScheduler};
-
-mod user;
-use user::SqliteUserStore;
+use pezzottify_catalog_server::search::PezzotHashSearchVault;
+use pezzottify_catalog_server::server::{metrics, run_server, RequestsLoggingLevel};
+use pezzottify_catalog_server::server_store::{self, SqliteServerStore};
+use pezzottify_catalog_server::user::{self, FullUserStore, SqliteUserStore};
 
 fn parse_path(s: &str) -> Result<PathBuf, String> {
     let path_buf = PathBuf::from(s);
@@ -187,8 +173,8 @@ async fn main() -> Result<()> {
 
     // Initialize metrics system
     info!("Initializing metrics...");
-    server::metrics::init_metrics();
-    server::metrics::init_catalog_metrics(
+    metrics::init_metrics();
+    metrics::init_catalog_metrics(
         catalog_store.get_artists_count(),
         catalog_store.get_albums_count(),
         catalog_store.get_tracks_count(),
@@ -221,7 +207,7 @@ async fn main() -> Result<()> {
         server_store.clone() as Arc<dyn server_store::ServerStore>,
     );
 
-    let mut scheduler = JobScheduler::new(
+    let (mut scheduler, scheduler_handle) = create_scheduler(
         server_store.clone(),
         hook_receiver,
         shutdown_token.clone(),
@@ -229,7 +215,7 @@ async fn main() -> Result<()> {
     );
 
     // Register jobs (placeholder - will be populated with actual jobs later)
-    info!("Job scheduler initialized with {} jobs", scheduler.registered_job_ids().len());
+    info!("Job scheduler initialized");
 
     // Note: The hook_sender is currently unused but will be used by the HTTP server
     // to notify the scheduler of events like catalog changes
@@ -318,6 +304,7 @@ async fn main() -> Result<()> {
             app_config.frontend_dir_path.clone(),
             downloader,
             media_base_path_for_proxy,
+            Some(scheduler_handle),
         ) => {
             info!("HTTP server stopped: {:?}", result);
             shutdown_token.cancel();
