@@ -18,7 +18,7 @@ This document breaks down the Background Jobs System and Download Manager plans 
 
 ### 0.1 Dependencies
 
-- [ ] **Task 0.1.1: Add `toml` and `serde` derive to Cargo.toml**
+- [x] **Task 0.1.1: Add `toml` and `serde` derive to Cargo.toml**
 
   **File:** `catalog-server/Cargo.toml`
 
@@ -30,7 +30,7 @@ This document breaks down the Background Jobs System and Download Manager plans 
 
 ### 0.2 Configuration Structure
 
-- [ ] **Task 0.2.1: Create `config` module**
+- [x] **Task 0.2.1: Create `config` module**
 
   **Files to create:**
   - `catalog-server/src/config/mod.rs`
@@ -47,7 +47,7 @@ This document breaks down the Background Jobs System and Download Manager plans 
   mod config;
   ```
 
-- [ ] **Task 0.2.2: Define `FileConfig` struct for TOML parsing**
+- [x] **Task 0.2.2: Define `FileConfig` struct for TOML parsing**
 
   **Context:** This struct mirrors the TOML file structure. All fields are `Option<T>` since TOML may only partially override CLI.
 
@@ -113,7 +113,7 @@ This document breaks down the Background Jobs System and Download Manager plans 
   }
   ```
 
-- [ ] **Task 0.2.3: Define `AppConfig` struct for resolved configuration**
+- [x] **Task 0.2.3: Define `AppConfig` struct for resolved configuration**
 
   **Context:** This struct holds the final resolved values (CLI defaults → TOML overrides). All fields are concrete types (not Option).
 
@@ -207,7 +207,7 @@ This document breaks down the Background Jobs System and Download Manager plans 
   }
   ```
 
-- [ ] **Task 0.2.4: Implement config resolution (CLI + TOML merge)**
+- [x] **Task 0.2.4: Implement config resolution (CLI + TOML merge)**
 
   **Context:** TOML values override CLI values where present.
 
@@ -297,7 +297,7 @@ This document breaks down the Background Jobs System and Download Manager plans 
 
 ### 0.3 CLI Integration
 
-- [ ] **Task 0.3.1: Add `--config` and `--db-dir` CLI arguments, remove positional args**
+- [x] **Task 0.3.1: Add `--config` and `--db-dir` CLI arguments, remove positional args**
 
   **File:** `catalog-server/src/main.rs`
 
@@ -342,7 +342,7 @@ This document breaks down the Background Jobs System and Download Manager plans 
   }
   ```
 
-- [ ] **Task 0.3.2: Update `main.rs` to load and resolve config**
+- [x] **Task 0.3.2: Update `main.rs` to load and resolve config**
 
   **File:** `catalog-server/src/main.rs`
 
@@ -369,13 +369,13 @@ This document breaks down the Background Jobs System and Download Manager plans 
   info!("  download_manager.enabled: {}", config.download_manager.enabled);
   ```
 
-- [ ] **Task 0.3.3: Update all `main.rs` to use `AppConfig` instead of `CliArgs`**
+- [x] **Task 0.3.3: Update all `main.rs` to use `AppConfig` instead of `CliArgs`**
 
   **Context:** Replace direct `cli_args.catalog_db` / `cli_args.user_store_file_path` accesses with `config.catalog_db_path()` / `config.user_db_path()`.
 
   **File:** `catalog-server/src/main.rs`
 
-- [ ] **Task 0.3.4: Auto-create missing database files with empty schema**
+- [x] **Task 0.3.4: Auto-create missing database files with empty schema**
 
   **Context:** If `catalog.db` or `user.db` don't exist in `db_dir`, create them with empty schema.
 
@@ -399,7 +399,7 @@ This document breaks down the Background Jobs System and Download Manager plans 
   let user_store = Arc::new(SqliteUserStore::new(&config.user_db_path())?);
   ```
 
-- [ ] **Task 0.3.5: Update `cli-auth` binary for new config**
+- [x] **Task 0.3.5: Update `cli-auth` binary for new config**
 
   **Context:** The `cli-auth` tool currently takes an optional path. Update it to use `--db-dir` or `--config` to find `user.db`.
 
@@ -412,7 +412,7 @@ This document breaks down the Background Jobs System and Download Manager plans 
 
 ### 0.4 Docker Integration
 
-- [ ] **Task 0.4.1: Create shared Docker network configuration**
+- [x] **Task 0.4.1: Create shared Docker network configuration**
 
   **Context:** Add the shared network to docker-compose.yml so catalog-server can communicate with the independently-run downloader.
 
@@ -437,7 +437,7 @@ This document breaks down the Background Jobs System and Download Manager plans 
       - pezzottify-internal
   ```
 
-- [ ] **Task 0.4.2: Create example TOML configuration file**
+- [x] **Task 0.4.2: Create example TOML configuration file**
 
   **File:** `catalog-server/config.example.toml`
 
@@ -484,7 +484,7 @@ This document breaks down the Background Jobs System and Download Manager plans 
   # Future: per-job configuration
   ```
 
-- [ ] **Task 0.4.3: Update docker-compose.yml to use config file**
+- [x] **Task 0.4.3: Update docker-compose.yml to use config file**
 
   **File:** `docker-compose.yml`
 
@@ -514,7 +514,7 @@ This document breaks down the Background Jobs System and Download Manager plans 
     command: [ "catalog-server", "--config", "/etc/pezzottify/config.toml" ]
   ```
 
-- [ ] **Task 0.4.4: Add config.toml to .gitignore**
+- [x] **Task 0.4.4: Add config.toml to .gitignore**
 
   **File:** `.gitignore`
 
@@ -525,13 +525,13 @@ This document breaks down the Background Jobs System and Download Manager plans 
 
 ### 0.5 Documentation
 
-- [ ] **Task 0.5.1: Update `catalog-server/README.md` with config documentation**
+- [x] **Task 0.5.1: Update `catalog-server/README.md` with config documentation**
 
   **Context:** Document the TOML config system, precedence rules, `--db-dir`, and all available options.
 
   **File:** `catalog-server/README.md`
 
-- [ ] **Task 0.5.2: Update `CLAUDE.md` with new config approach**
+- [x] **Task 0.5.2: Update `CLAUDE.md` with new config approach**
 
   **Context:** Update the "Running the server" section with new CLI format.
 
@@ -551,7 +551,7 @@ This document breaks down the Background Jobs System and Download Manager plans 
 
 ### 0.6 Tests
 
-- [ ] **Task 0.6.1: Add unit tests for config resolution**
+- [x] **Task 0.6.1: Add unit tests for config resolution**
 
   **Context:** Test CLI-only, TOML-only, and CLI+TOML merge scenarios.
 
