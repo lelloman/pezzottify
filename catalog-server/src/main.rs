@@ -25,6 +25,8 @@ use server::{run_server, RequestsLoggingLevel};
 
 mod sqlite_persistence;
 
+mod server_store;
+
 mod user;
 use user::SqliteUserStore;
 
