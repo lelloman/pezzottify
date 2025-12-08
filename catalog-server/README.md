@@ -39,12 +39,14 @@ The catalog server is the backend component of Pezzottify that provides:
 ### Core Modules
 
 - **`catalog_store/`**: SQLite-backed catalog management
+
   - `SqliteCatalogStore`: Main store implementation with CRUD operations
   - `CatalogStore` trait: Abstract interface for catalog access
   - Validation for write operations (foreign keys, duplicates)
   - Transactional writes with `BEGIN IMMEDIATE`
 
 - **`user/`**: Authentication and authorization
+
   - `SqliteUserStore`: User persistence in SQLite database
   - `UserManager`: Authentication with Argon2 password hashing and RSA token signing
   - `permissions.rs`: Role-based permissions (Admin, Regular)
@@ -52,12 +54,14 @@ The catalog server is the backend component of Pezzottify that provides:
   - `device.rs`: Device tracking and management
 
 - **`server/`**: Axum-based HTTP server
+
   - `session.rs`: Session management via HTTP-only cookies
   - `stream_track.rs`: Audio streaming with range request support
   - `search.rs`: Search API routes
   - `http_layers/`: Middleware for logging, caching, rate limiting, optional slowdown
 
 - **`search/`**: Search functionality
+
   - `PezzotHashSearchVault`: Custom full-text search implementation
   - `NoOpSearchVault`: Disabled search stub (for `no_search` feature)
 
@@ -89,8 +93,9 @@ The catalog server is the backend component of Pezzottify that provides:
 ## Installation
 
 1. Clone the repository:
+
    ```bash
-   git clone <repository-url>
+   git clone https://github.com/lelloman/pezzottify
    cd pezzottify/catalog-server
    ```
 
@@ -155,6 +160,7 @@ The Docker image includes both the catalog server and web frontend. A wrapper sc
 ```
 
 The script:
+
 1. Detects git commit hash on the host
 2. Detects dirty state (uncommitted changes)
 3. Passes these as build args to Docker
@@ -173,6 +179,7 @@ docker-compose up --build catalog-server
 ### Version in Docker Image
 
 The server version will show:
+
 - `v0.5.0-abc1234` for clean builds (commit hash)
 - `v0.5.0-abc1234-dirty` for builds with uncommitted changes
 
@@ -227,18 +234,18 @@ cargo run --release -- \
 
 ### Optional Arguments
 
-| Argument | Default | Description |
-|----------|---------|-------------|
-| `--media-path <PATH>` | Parent of catalog-db | Path to media files (audio/images) |
-| `--port <PORT>` | `3001` | Server port to bind to |
-| `--metrics-port <PORT>` | `9091` | Metrics server port (Prometheus scraping) |
-| `--logging-level <LEVEL>` | `path` | Request logging level (`path`, `full`, `none`) |
-| `--content-cache-age-sec <SECONDS>` | `3600` | HTTP cache duration in seconds |
-| `--frontend-dir-path <PATH>` | None | Serve static frontend files from this path |
-| `--downloader-url <URL>` | None | URL of the downloader service for fetching missing content |
-| `--downloader-timeout-sec <SECONDS>` | `300` | Timeout in seconds for downloader requests |
-| `--event-retention-days <DAYS>` | `30` | Number of days to retain sync events before pruning (0 to disable) |
-| `--prune-interval-hours <HOURS>` | `24` | Interval in hours between pruning runs |
+| Argument                             | Default              | Description                                                        |
+| ------------------------------------ | -------------------- | ------------------------------------------------------------------ |
+| `--media-path <PATH>`                | Parent of catalog-db | Path to media files (audio/images)                                 |
+| `--port <PORT>`                      | `3001`               | Server port to bind to                                             |
+| `--metrics-port <PORT>`              | `9091`               | Metrics server port (Prometheus scraping)                          |
+| `--logging-level <LEVEL>`            | `path`               | Request logging level (`path`, `full`, `none`)                     |
+| `--content-cache-age-sec <SECONDS>`  | `3600`               | HTTP cache duration in seconds                                     |
+| `--frontend-dir-path <PATH>`         | None                 | Serve static frontend files from this path                         |
+| `--downloader-url <URL>`             | None                 | URL of the downloader service for fetching missing content         |
+| `--downloader-timeout-sec <SECONDS>` | `300`                | Timeout in seconds for downloader requests                         |
+| `--event-retention-days <DAYS>`      | `30`                 | Number of days to retain sync events before pruning (0 to disable) |
+| `--prune-interval-hours <HOURS>`     | `24`                 | Interval in hours between pruning runs                             |
 
 ### Environment Variables
 
@@ -248,12 +255,12 @@ cargo run --release -- \
 
 Configure build-time behavior with Cargo features:
 
-| Feature | Description |
-|---------|-------------|
+| Feature     | Description                                                            |
+| ----------- | ---------------------------------------------------------------------- |
 | `no_search` | Disable search index building (faster builds, no search functionality) |
-| `no_checks` | Skip expensive catalog integrity checks during load |
-| `fast` | Combines `no_search` and `no_checks` for fastest development builds |
-| `slowdown` | Adds artificial request delay for frontend development testing |
+| `no_checks` | Skip expensive catalog integrity checks during load                    |
+| `fast`      | Combines `no_search` and `no_checks` for fastest development builds    |
+| `slowdown`  | Adds artificial request delay for frontend development testing         |
 
 ## Configuration
 
@@ -262,6 +269,7 @@ Configure build-time behavior with Cargo features:
 The server implements per-endpoint rate limiting (configured in `server/http_layers/rate_limit.rs`):
 
 **Per Minute:**
+
 - **Login**: 10 requests/minute per IP
 - **Stream**: 100 requests/minute per user
 - **Content Read**: 500 requests/minute per user
@@ -270,6 +278,7 @@ The server implements per-endpoint rate limiting (configured in `server/http_lay
 - **Global**: 1000 requests/minute per user
 
 **Per Hour:**
+
 - **Login**: 100 requests/hour per IP
 - **Stream**: 5000 requests/hour per user
 - **Content Read**: 25000 requests/hour per user
@@ -280,6 +289,7 @@ The server implements per-endpoint rate limiting (configured in `server/http_lay
 ### HTTP Caching
 
 Static content (catalog data, images, audio) is cached using HTTP `Cache-Control` headers:
+
 - Configurable via `--content-cache-age-sec`
 - Default: 1 hour (3600 seconds)
 - Useful for development: `--content-cache-age-sec 60` (1 minute)
@@ -288,13 +298,13 @@ Static content (catalog data, images, audio) is cached using HTTP `Cache-Control
 
 ### Authentication (`/v1/auth`)
 
-| Method | Endpoint | Auth | Description |
-|--------|----------|------|-------------|
-| POST | `/login` | No | Login with credentials, returns session token |
-| GET | `/logout` | Yes | Logout and invalidate session token |
-| GET | `/session` | Yes | Get current session info |
-| GET | `/challenge` | No | Get authentication challenge |
-| POST | `/challenge` | No | Submit authentication challenge response |
+| Method | Endpoint     | Auth | Description                                   |
+| ------ | ------------ | ---- | --------------------------------------------- |
+| POST   | `/login`     | No   | Login with credentials, returns session token |
+| GET    | `/logout`    | Yes  | Logout and invalidate session token           |
+| GET    | `/session`   | Yes  | Get current session info                      |
+| GET    | `/challenge` | No   | Get authentication challenge                  |
+| POST   | `/challenge` | No   | Submit authentication challenge response      |
 
 #### Login Request Body
 
@@ -304,14 +314,15 @@ Static content (catalog data, images, audio) is cached using HTTP `Cache-Control
   "password": "password",
   "device_uuid": "unique-device-identifier",
   "device_type": "web|android|ios",
-  "device_name": "Chrome Browser",     // optional
-  "os_info": "Windows 11"              // optional
+  "device_name": "Chrome Browser", // optional
+  "os_info": "Windows 11" // optional
 }
 ```
 
 **Device fields:**
+
 - `device_uuid`: Unique identifier for the device (8-64 characters). Should be generated once and persisted on the client.
-- `device_type`: One of `web`, `android`, `ios`, or `unknown`
+- `device_type`: One of `web`, `android`, or `unknown`
 - `device_name`: Human-readable device name (max 100 characters)
 - `os_info`: Operating system information (max 200 characters)
 
@@ -321,18 +332,19 @@ Devices are tracked per-user with a limit of 50 devices. Oldest devices are auto
 
 All content endpoints require `AccessCatalog` permission.
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/artist/{id}` | Get artist by ID |
-| GET | `/artist/{id}/discography` | Get artist's album IDs |
-| GET | `/album/{id}` | Get album by ID |
-| GET | `/album/{id}/resolved` | Get album with resolved artist references |
-| GET | `/track/{id}` | Get track by ID |
-| GET | `/track/{id}/resolved` | Get track with resolved album and artist references |
-| GET | `/image/{id}` | Get image file |
-| GET | `/stream/{id}` | Stream audio file (supports range requests) |
-| GET | `/whatsnew` | Get recently added content |
-| POST | `/search` | Search catalog (requires search feature enabled) |
+| Method | Endpoint                   | Description                                         |
+| ------ | -------------------------- | --------------------------------------------------- |
+| GET    | `/artist/{id}`             | Get artist by ID                                    |
+| GET    | `/artist/{id}/discography` | Get artist's album IDs                              |
+| GET    | `/album/{id}`              | Get album by ID                                     |
+| GET    | `/album/{id}/resolved`     | Get album with resolved artist references           |
+| GET    | `/track/{id}`              | Get track by ID                                     |
+| GET    | `/track/{id}/resolved`     | Get track with resolved album and artist references |
+| GET    | `/image/{id}`              | Get image file                                      |
+| GET    | `/stream/{id}`             | Stream audio file (supports range requests)         |
+| GET    | `/whatsnew`                | Get recently added content                          |
+| GET    | `/popular`                 | Get popular albums and artists based on listening   |
+| POST   | `/search`                  | Search catalog (requires search feature enabled)    |
 
 ### User Content (`/v1/user`)
 
@@ -340,73 +352,73 @@ All content endpoints require `AccessCatalog` permission.
 
 Requires `LikeContent` permission.
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/liked/{content_type}` | Get liked content (content_type: `album`, `artist`, `track`) |
-| POST | `/liked/{content_type}/{content_id}` | Like content |
-| DELETE | `/liked/{content_type}/{content_id}` | Unlike content |
+| Method | Endpoint                             | Description                                                  |
+| ------ | ------------------------------------ | ------------------------------------------------------------ |
+| GET    | `/liked/{content_type}`              | Get liked content (content_type: `album`, `artist`, `track`) |
+| POST   | `/liked/{content_type}/{content_id}` | Like content                                                 |
+| DELETE | `/liked/{content_type}/{content_id}` | Unlike content                                               |
 
 #### Playlists
 
 Requires `OwnPlaylists` permission.
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/playlists` | Get user's playlists |
-| GET | `/playlist/{id}` | Get playlist by ID |
-| POST | `/playlist` | Create new playlist |
-| PUT | `/playlist/{id}` | Update playlist name and/or tracks |
-| DELETE | `/playlist/{id}` | Delete playlist |
-| PUT | `/playlist/{id}/add` | Add tracks to playlist |
-| PUT | `/playlist/{id}/remove` | Remove tracks from playlist |
+| Method | Endpoint                | Description                        |
+| ------ | ----------------------- | ---------------------------------- |
+| GET    | `/playlists`            | Get user's playlists               |
+| GET    | `/playlist/{id}`        | Get playlist by ID                 |
+| POST   | `/playlist`             | Create new playlist                |
+| PUT    | `/playlist/{id}`        | Update playlist name and/or tracks |
+| DELETE | `/playlist/{id}`        | Delete playlist                    |
+| PUT    | `/playlist/{id}/add`    | Add tracks to playlist             |
+| PUT    | `/playlist/{id}/remove` | Remove tracks from playlist        |
 
 #### Listening Stats
 
 Requires `AccessCatalog` permission.
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/listening` | Record a listening event |
-| GET | `/listening/summary` | Get user's listening summary |
-| GET | `/listening/history` | Get user's listening history |
-| GET | `/listening/events` | Get user's listening events |
+| Method | Endpoint             | Description                  |
+| ------ | -------------------- | ---------------------------- |
+| POST   | `/listening`         | Record a listening event     |
+| GET    | `/listening/summary` | Get user's listening summary |
+| GET    | `/listening/history` | Get user's listening history |
+| GET    | `/listening/events`  | Get user's listening events  |
 
 #### Settings
 
 Requires authentication.
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/settings` | Get user settings |
-| PUT | `/settings` | Update user settings |
+| Method | Endpoint    | Description          |
+| ------ | ----------- | -------------------- |
+| GET    | `/settings` | Get user settings    |
+| PUT    | `/settings` | Update user settings |
 
 ### Sync (`/v1/sync`)
 
 Requires authentication.
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/state` | Get sync state |
-| GET | `/events` | Get sync events since last sync |
+| Method | Endpoint  | Description                     |
+| ------ | --------- | ------------------------------- |
+| GET    | `/state`  | Get sync state                  |
+| GET    | `/events` | Get sync events since last sync |
 
 ### Catalog Edit (`/v1/content`)
 
 Requires `EditCatalog` permission.
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/artist` | Create new artist |
-| PUT | `/artist/{id}` | Update artist |
-| DELETE | `/artist/{id}` | Delete artist |
-| POST | `/album` | Create new album |
-| PUT | `/album/{id}` | Update album |
-| DELETE | `/album/{id}` | Delete album |
-| POST | `/track` | Create new track |
-| PUT | `/track/{id}` | Update track |
-| DELETE | `/track/{id}` | Delete track |
-| POST | `/image` | Create new image |
-| PUT | `/image/{id}` | Update image |
-| DELETE | `/image/{id}` | Delete image |
+| Method | Endpoint       | Description       |
+| ------ | -------------- | ----------------- |
+| POST   | `/artist`      | Create new artist |
+| PUT    | `/artist/{id}` | Update artist     |
+| DELETE | `/artist/{id}` | Delete artist     |
+| POST   | `/album`       | Create new album  |
+| PUT    | `/album/{id}`  | Update album      |
+| DELETE | `/album/{id}`  | Delete album      |
+| POST   | `/track`       | Create new track  |
+| PUT    | `/track/{id}`  | Update track      |
+| DELETE | `/track/{id}`  | Delete track      |
+| POST   | `/image`       | Create new image  |
+| PUT    | `/image/{id}`  | Update image      |
+| DELETE | `/image/{id}`  | Delete image      |
 
 ### Admin (`/v1/admin`)
 
@@ -414,65 +426,66 @@ Requires `EditCatalog` permission.
 
 Requires `RebootServer` permission.
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/reboot` | Reboot the server |
+| Method | Endpoint  | Description       |
+| ------ | --------- | ----------------- |
+| POST   | `/reboot` | Reboot the server |
 
 #### User Management
 
 Requires `ManagePermissions` permission.
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/users` | List all users |
-| GET | `/users/{user_handle}/roles` | Get user's roles |
-| POST | `/users/{user_handle}/roles` | Add role to user |
-| DELETE | `/users/{user_handle}/roles/{role}` | Remove role from user |
-| GET | `/users/{user_handle}/permissions` | Get user's permissions |
-| POST | `/users/{user_handle}/permissions` | Add extra permission to user |
-| DELETE | `/permissions/{permission_id}` | Remove extra permission |
+| Method | Endpoint                            | Description                  |
+| ------ | ----------------------------------- | ---------------------------- |
+| GET    | `/users`                            | List all users               |
+| GET    | `/users/{user_handle}/roles`        | Get user's roles             |
+| POST   | `/users/{user_handle}/roles`        | Add role to user             |
+| DELETE | `/users/{user_handle}/roles/{role}` | Remove role from user        |
+| GET    | `/users/{user_handle}/permissions`  | Get user's permissions       |
+| POST   | `/users/{user_handle}/permissions`  | Add extra permission to user |
+| DELETE | `/permissions/{permission_id}`      | Remove extra permission      |
 
 #### Bandwidth Analytics
 
 Requires `ViewAnalytics` permission.
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/bandwidth/summary` | Get bandwidth summary |
-| GET | `/bandwidth/usage` | Get bandwidth usage details |
-| GET | `/bandwidth/users/{user_handle}/summary` | Get user's bandwidth summary |
-| GET | `/bandwidth/users/{user_handle}/usage` | Get user's bandwidth usage |
+| Method | Endpoint                                 | Description                  |
+| ------ | ---------------------------------------- | ---------------------------- |
+| GET    | `/bandwidth/summary`                     | Get bandwidth summary        |
+| GET    | `/bandwidth/usage`                       | Get bandwidth usage details  |
+| GET    | `/bandwidth/users/{user_handle}/summary` | Get user's bandwidth summary |
+| GET    | `/bandwidth/users/{user_handle}/usage`   | Get user's bandwidth usage   |
 
 #### Listening Analytics
 
 Requires `ViewAnalytics` permission.
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/listening/daily` | Get daily listening stats |
-| GET | `/listening/top-tracks` | Get top tracks |
-| GET | `/listening/track/{track_id}` | Get track listening stats |
-| GET | `/listening/users/{user_handle}/summary` | Get user's listening summary |
+| Method | Endpoint                                 | Description                    |
+| ------ | ---------------------------------------- | ------------------------------ |
+| GET    | `/listening/daily`                       | Get daily listening stats      |
+| GET    | `/listening/top-tracks`                  | Get top tracks                 |
+| GET    | `/listening/track/{track_id}`            | Get track listening stats      |
+| GET    | `/listening/users/{user_handle}/summary` | Get user's listening summary   |
+| GET    | `/online-users`                          | Get currently connected users  |
 
 #### Changelog Management
 
 Requires `EditCatalog` permission.
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/changelog/batch` | Create changelog batch |
-| GET | `/changelog/batches` | List changelog batches |
-| GET | `/changelog/batch/{batch_id}` | Get changelog batch details |
-| GET | `/changelog/batch/{batch_id}/changes` | Get changelog batch changes |
-| POST | `/changelog/batch/{batch_id}/close` | Close changelog batch |
-| DELETE | `/changelog/batch/{batch_id}` | Delete changelog batch |
-| GET | `/changelog/entity/{entity_type}/{entity_id}` | Get entity change history |
+| Method | Endpoint                                      | Description                 |
+| ------ | --------------------------------------------- | --------------------------- |
+| POST   | `/changelog/batch`                            | Create changelog batch      |
+| GET    | `/changelog/batches`                          | List changelog batches      |
+| GET    | `/changelog/batch/{batch_id}`                 | Get changelog batch details |
+| GET    | `/changelog/batch/{batch_id}/changes`         | Get changelog batch changes |
+| POST   | `/changelog/batch/{batch_id}/close`           | Close changelog batch       |
+| DELETE | `/changelog/batch/{batch_id}`                 | Delete changelog batch      |
+| GET    | `/changelog/entity/{entity_type}/{entity_id}` | Get entity change history   |
 
 ### WebSocket (`/v1/ws`)
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/ws` | WebSocket connection for real-time updates |
+| Method | Endpoint | Description                                |
+| ------ | -------- | ------------------------------------------ |
+| GET    | `/ws`    | WebSocket connection for real-time updates |
 
 ## Authentication & Authorization
 
@@ -492,6 +505,7 @@ Requires `EditCatalog` permission.
 ### User Roles
 
 - **Admin**: Administrative access (does not include user features like liking content or playlists)
+
   - AccessCatalog, EditCatalog, ManagePermissions, IssueContentDownload, RebootServer, ViewAnalytics
 
 - **Regular**: Standard user access
@@ -500,6 +514,7 @@ Requires `EditCatalog` permission.
 ### Permission System
 
 Permissions can be granted via:
+
 - **Role-based**: Permissions inherited from user role
 - **Extra grants**: Temporary or counted permission grants (future use)
 
@@ -619,11 +634,13 @@ cargo test <test_name>
 ### Faster Development Iteration
 
 1. **Use the `fast` feature** for quick rebuilds:
+
    ```bash
    cargo run --features fast -- <catalog> <db>
    ```
 
 2. **Use shorter cache times** for frontend development:
+
    ```bash
    cargo run -- <catalog> <db> --content-cache-age-sec 60
    ```
@@ -642,6 +659,7 @@ LOG_LEVEL=DEBUG cargo run -- <catalog> <db> --logging-level full
 ```
 
 Log levels:
+
 - `TRACE`: Very detailed logging
 - `DEBUG`: Debug information
 - `INFO`: General information (default)
@@ -731,11 +749,13 @@ The catalog server includes a full monitoring stack with Prometheus metrics, Gra
 ### Quick Start (Fresh Clone)
 
 1. **Create the environment file:**
+
    ```bash
    cp monitoring/.env.example monitoring/.env
    ```
 
 2. **Configure your credentials** in `monitoring/.env`:
+
    ```bash
    # Telegram Bot (get token from @BotFather, chat ID from @userinfobot)
    TELEGRAM_BOT_TOKEN=your_bot_token_here
@@ -756,6 +776,7 @@ The catalog server includes a full monitoring stack with Prometheus metrics, Gra
    ```
 
 This starts:
+
 - **catalog-server** on port 3001
 - **Prometheus** on port 9090
 - **Grafana** on port 3000
@@ -766,31 +787,35 @@ This starts:
 
 All sensitive configuration is stored in `monitoring/.env` (git-ignored). Available variables:
 
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `TELEGRAM_BOT_TOKEN` | Yes* | Telegram bot token from @BotFather |
-| `TELEGRAM_CHAT_ID` | Yes* | Chat ID to receive alerts (get from @userinfobot) |
-| `GENERIC_WEBHOOK_URL` | No | External webhook URL for custom integrations |
-| `GF_SECURITY_ADMIN_PASSWORD` | No | Grafana admin password (default: `admin`) |
+| Variable                     | Required | Description                                       |
+| ---------------------------- | -------- | ------------------------------------------------- |
+| `TELEGRAM_BOT_TOKEN`         | Yes\*    | Telegram bot token from @BotFather                |
+| `TELEGRAM_CHAT_ID`           | Yes\*    | Chat ID to receive alerts (get from @userinfobot) |
+| `GENERIC_WEBHOOK_URL`        | No       | External webhook URL for custom integrations      |
+| `GF_SECURITY_ADMIN_PASSWORD` | No       | Grafana admin password (default: `admin`)         |
 
-*Required for Telegram alerts. If not set, the telegram-bot container will fail to start (other services work fine).
+\*Required for Telegram alerts. If not set, the telegram-bot container will fail to start (other services work fine).
 
 ### Setting Up Telegram Alerts
 
 1. **Create a Telegram bot:**
+
    - Message [@BotFather](https://t.me/BotFather) on Telegram
    - Send `/newbot` and follow the prompts
    - Copy the bot token (looks like `123456789:ABCdefGHIjklMNOpqrsTUVwxyz`)
 
 2. **Get your chat ID:**
+
    - Message [@userinfobot](https://t.me/userinfobot) on Telegram
    - It will reply with your user ID (numeric)
 
 3. **Start a conversation with your bot:**
+
    - Find your bot by username and send `/start`
    - This is required before the bot can send you messages
 
 4. **Add credentials to `.env`:**
+
    ```bash
    TELEGRAM_BOT_TOKEN=123456789:ABCdefGHIjklMNOpqrsTUVwxyz
    TELEGRAM_CHAT_ID=987654321
@@ -806,13 +831,14 @@ All sensitive configuration is stored in `monitoring/.env` (git-ignored). Availa
 For custom integrations (Slack, Discord, PagerDuty, etc.), set `GENERIC_WEBHOOK_URL` in your `.env` file. Alertmanager will POST alert JSON to this URL.
 
 Example payload:
+
 ```json
 {
   "status": "firing",
   "alerts": [
     {
-      "labels": {"alertname": "ServiceDown", "severity": "critical"},
-      "annotations": {"summary": "Catalog server is down"},
+      "labels": { "alertname": "ServiceDown", "severity": "critical" },
+      "annotations": { "summary": "Catalog server is down" },
       "startsAt": "2024-01-15T10:00:00Z"
     }
   ]
@@ -829,42 +855,44 @@ Example payload:
 
 The server exposes metrics on a separate port (default: 9091) for security. This port is only exposed internally within the Docker network, not to the host. All custom metrics use the `pezzottify_` prefix for easy filtering in Grafana.
 
-| Metric | Type | Description |
-|--------|------|-------------|
-| `pezzottify_http_requests_total` | Counter | Total HTTP requests by method, path, status |
-| `pezzottify_http_request_duration_seconds` | Histogram | Request duration by method and path |
-| `pezzottify_auth_login_attempts_total` | Counter | Login attempts by status (success/failure) |
-| `pezzottify_auth_login_duration_seconds` | Histogram | Login request duration |
-| `pezzottify_auth_active_sessions` | Gauge | Number of active sessions |
-| `pezzottify_rate_limit_hits_total` | Counter | Rate limit violations by endpoint |
-| `pezzottify_db_query_duration_seconds` | Histogram | Database query duration by operation |
-| `pezzottify_db_connection_errors_total` | Counter | Database connection errors |
-| `pezzottify_catalog_items_total` | Gauge | Catalog items by type (artist/album/track) |
-| `pezzottify_catalog_size_bytes` | Gauge | Catalog size in bytes |
-| `pezzottify_errors_total` | Counter | Total errors by type and endpoint |
-| `pezzottify_process_memory_bytes` | Gauge | Process memory usage |
-| `pezzottify_bandwidth_bytes_total` | Counter | Total bytes transferred by user and endpoint category |
-| `pezzottify_bandwidth_requests_total` | Counter | Total requests by user and endpoint category |
-| `pezzottify_listening_events_total` | Counter | Total listening events by client type and completion |
-| `pezzottify_listening_duration_seconds_total` | Counter | Total listening duration by client type |
-| `pezzottify_changelog_stale_batches` | Gauge | Number of stale changelog batches |
-| `pezzottify_changelog_stale_batch_checks_total` | Counter | Total stale batch checks performed |
-| `pezzottify_downloader_requests_total` | Counter | Total requests to downloader service by operation and status |
-| `pezzottify_downloader_request_duration_seconds` | Histogram | Downloader request duration by operation |
-| `pezzottify_downloader_errors_total` | Counter | Total downloader errors by operation and type |
-| `pezzottify_downloader_bytes_total` | Counter | Total bytes downloaded by content type |
+| Metric                                           | Type      | Description                                                  |
+| ------------------------------------------------ | --------- | ------------------------------------------------------------ |
+| `pezzottify_http_requests_total`                 | Counter   | Total HTTP requests by method, path, status                  |
+| `pezzottify_http_request_duration_seconds`       | Histogram | Request duration by method and path                          |
+| `pezzottify_auth_login_attempts_total`           | Counter   | Login attempts by status (success/failure)                   |
+| `pezzottify_auth_login_duration_seconds`         | Histogram | Login request duration                                       |
+| `pezzottify_auth_active_sessions`                | Gauge     | Number of active sessions                                    |
+| `pezzottify_rate_limit_hits_total`               | Counter   | Rate limit violations by endpoint                            |
+| `pezzottify_db_query_duration_seconds`           | Histogram | Database query duration by operation                         |
+| `pezzottify_db_connection_errors_total`          | Counter   | Database connection errors                                   |
+| `pezzottify_catalog_items_total`                 | Gauge     | Catalog items by type (artist/album/track)                   |
+| `pezzottify_catalog_size_bytes`                  | Gauge     | Catalog size in bytes                                        |
+| `pezzottify_errors_total`                        | Counter   | Total errors by type and endpoint                            |
+| `pezzottify_process_memory_bytes`                | Gauge     | Process memory usage                                         |
+| `pezzottify_bandwidth_bytes_total`               | Counter   | Total bytes transferred by user and endpoint category        |
+| `pezzottify_bandwidth_requests_total`            | Counter   | Total requests by user and endpoint category                 |
+| `pezzottify_listening_events_total`              | Counter   | Total listening events by client type and completion         |
+| `pezzottify_listening_duration_seconds_total`    | Counter   | Total listening duration by client type                      |
+| `pezzottify_changelog_stale_batches`             | Gauge     | Number of stale changelog batches                            |
+| `pezzottify_changelog_stale_batch_checks_total`  | Counter   | Total stale batch checks performed                           |
+| `pezzottify_downloader_requests_total`           | Counter   | Total requests to downloader service by operation and status |
+| `pezzottify_downloader_request_duration_seconds` | Histogram | Downloader request duration by operation                     |
+| `pezzottify_downloader_errors_total`             | Counter   | Total downloader errors by operation and type                |
+| `pezzottify_downloader_bytes_total`              | Counter   | Total bytes downloaded by content type                       |
 
 ### Alert Rules
 
 The following alerts are configured in `monitoring/alerts.yml`:
 
 **Critical:**
+
 - `ServiceDown` - Catalog server unreachable
 - `LoginBruteForceAttempt` - Possible brute force attack on login
 - `HighErrorRate` - High HTTP 5xx error rate
 - `DatabaseErrors` - Database connection failures
 
 **Warning:**
+
 - `HighRateLimitViolations` - Excessive rate limiting
 - `HighLoginFailureRate` - Many failed login attempts
 - `SlowLoginPerformance` - Login latency above threshold
@@ -901,15 +929,18 @@ open http://localhost:9090
 ### Troubleshooting
 
 **telegram-bot keeps restarting:**
+
 - Ensure `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` are set in `monitoring/.env`
 - Verify you've started a conversation with your bot on Telegram
 
 **No alerts in Telegram:**
+
 - Check Alertmanager status: http://localhost:9093
 - Verify Prometheus targets: http://localhost:9090/targets
 - Check telegram-bot logs: `docker logs telegram-bot`
 
 **Grafana shows "No data":**
+
 - Wait 1-2 minutes for metrics to be scraped
 - Verify Prometheus datasource at http://localhost:3000/connections/datasources
 
@@ -918,6 +949,7 @@ open http://localhost:9090
 After deploying to production, you should verify alerts are working correctly.
 
 **Test Telegram connectivity:**
+
 ```bash
 # Load your credentials and send a test message
 source monitoring/.env
@@ -925,6 +957,7 @@ curl -s "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage?chat_id=$
 ```
 
 **Trigger a real alert (ServiceDown):**
+
 ```bash
 # Stop the catalog server to trigger the ServiceDown alert
 docker-compose stop catalog-server
@@ -940,6 +973,7 @@ docker-compose start catalog-server
 ```
 
 **Send a test alert directly to Alertmanager:**
+
 ```bash
 # This bypasses Prometheus and sends directly to Alertmanager
 curl -X POST http://localhost:9093/api/v2/alerts \
@@ -957,6 +991,7 @@ curl -X POST http://localhost:9093/api/v2/alerts \
 ```
 
 **Verify alert routing:**
+
 - Prometheus targets: http://localhost:9090/targets (should show catalog-server as UP)
 - Active alerts: http://localhost:9090/alerts
 - Alertmanager status: http://localhost:9093/#/alerts
