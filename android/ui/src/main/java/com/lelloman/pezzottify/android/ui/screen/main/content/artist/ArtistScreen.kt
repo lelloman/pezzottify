@@ -49,6 +49,7 @@ import com.lelloman.pezzottify.android.ui.component.LoadingScreen
 import com.lelloman.pezzottify.android.ui.component.NullablePezzottifyImage
 import com.lelloman.pezzottify.android.ui.component.PezzottifyImagePlaceholder
 import com.lelloman.pezzottify.android.ui.component.PezzottifyImageShape
+import com.lelloman.pezzottify.android.ui.component.SkeletonAlbumGridItem
 import com.lelloman.pezzottify.android.ui.content.Artist
 import com.lelloman.pezzottify.android.ui.content.Content
 import com.lelloman.pezzottify.android.ui.content.ContentResolver
@@ -336,7 +337,7 @@ private fun AlbumGrid(
                                 )
                             }
                             is Content.Loading, is Content.Error -> {
-                                Spacer(modifier = Modifier.weight(1f))
+                                SkeletonAlbumGridItem(modifier = Modifier.weight(1f))
                             }
                         }
                     } else {
