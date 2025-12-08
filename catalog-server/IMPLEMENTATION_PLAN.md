@@ -658,7 +658,7 @@ This document breaks down the Background Jobs System and Download Manager plans 
 
 **Goal:** Create `server.db` for job execution history and schedule state.
 
-- [ ] **Task 2.2.1: Create `server_store` module structure**
+- [x] **Task 2.2.1: Create `server_store` module structure**
 
   **Context:** New module for server operational state persistence.
 
@@ -674,7 +674,7 @@ This document breaks down the Background Jobs System and Download Manager plans 
   use server_store::SqliteServerStore;
   ```
 
-- [ ] **Task 2.2.2: Define `JobRun` and `JobScheduleState` models**
+- [x] **Task 2.2.2: Define `JobRun` and `JobScheduleState` models**
 
   **Context:** Data structures matching the `job_runs` and `job_schedules` tables.
 
@@ -1160,21 +1160,21 @@ This document breaks down the Background Jobs System and Download Manager plans 
 
 **Goal:** Implement the first background job as a reference implementation.
 
-- [ ] **Task 2.6.1: Create `popular_content` job**
+- [x] **Task 2.6.1: Create `popular_content` job**
 
   **File:** `catalog-server/src/background_jobs/jobs/popular_content.rs`
 
-- [ ] **Task 2.6.2: Register `popular_content` job in scheduler**
+- [x] **Task 2.6.2: Register `popular_content` job in scheduler**
 
   **File:** `catalog-server/src/main.rs`
 
-- [ ] **Task 2.6.3: Add tests for `popular_content` job**
+- [x] **Task 2.6.3: Add tests for `popular_content` job**
 
   **File:** `catalog-server/src/background_jobs/jobs/popular_content.rs`
 
 #### 2.7 Metrics
 
-- [ ] **Task 2.7.1: Add Prometheus metrics for job execution**
+- [x] **Task 2.7.1: Add Prometheus metrics for job execution**
 
   **File:** `catalog-server/src/server/metrics.rs`
 
@@ -1183,7 +1183,7 @@ This document breaks down the Background Jobs System and Download Manager plans 
   - `pezzottify_background_job_duration_seconds{job_id}`
   - `pezzottify_background_job_running{job_id}`
 
-- [ ] **Task 2.7.2: Emit metrics from scheduler**
+- [x] **Task 2.7.2: Emit metrics from scheduler**
 
   **File:** `catalog-server/src/background_jobs/scheduler.rs`
 
