@@ -58,21 +58,39 @@ const TRACKS_TABLE_V0: Table = Table {
                 on_delete: ForeignKeyOnChange::Cascade,
             })
         ),
-        sqlite_column!("disc_number", &SqlType::Integer, non_null = true, default_value = Some("1")),
+        sqlite_column!(
+            "disc_number",
+            &SqlType::Integer,
+            non_null = true,
+            default_value = Some("1")
+        ),
         sqlite_column!("track_number", &SqlType::Integer, non_null = true),
         sqlite_column!("duration_secs", &SqlType::Integer),
-        sqlite_column!("is_explicit", &SqlType::Integer, non_null = true, default_value = Some("0")),
+        sqlite_column!(
+            "is_explicit",
+            &SqlType::Integer,
+            non_null = true,
+            default_value = Some("0")
+        ),
         sqlite_column!("audio_uri", &SqlType::Text, non_null = true), // Relative path
         sqlite_column!("format", &SqlType::Text, non_null = true),    // 'MP3_320', 'FLAC', etc.
         sqlite_column!("tags", &SqlType::Text),                       // JSON array
-        sqlite_column!("has_lyrics", &SqlType::Integer, non_null = true, default_value = Some("0")),
+        sqlite_column!(
+            "has_lyrics",
+            &SqlType::Integer,
+            non_null = true,
+            default_value = Some("0")
+        ),
         sqlite_column!("languages", &SqlType::Text), // JSON array
         sqlite_column!("original_title", &SqlType::Text),
         sqlite_column!("version_title", &SqlType::Text),
     ],
     indices: &[
         ("idx_tracks_album", "album_id"),
-        ("idx_tracks_disc_track", "album_id, disc_number, track_number"),
+        (
+            "idx_tracks_disc_track",
+            "album_id, disc_number, track_number",
+        ),
     ],
     unique_constraints: &[],
 };
@@ -323,7 +341,12 @@ const CATALOG_BATCHES_TABLE_V2: Table = Table {
         sqlite_column!("id", &SqlType::Text, is_primary_key = true),
         sqlite_column!("name", &SqlType::Text, non_null = true),
         sqlite_column!("description", &SqlType::Text),
-        sqlite_column!("is_open", &SqlType::Integer, non_null = true, default_value = Some("1")),
+        sqlite_column!(
+            "is_open",
+            &SqlType::Integer,
+            non_null = true,
+            default_value = Some("1")
+        ),
         sqlite_column!("created_at", &SqlType::Integer, non_null = true),
         sqlite_column!("closed_at", &SqlType::Integer),
         sqlite_column!("last_activity_at", &SqlType::Integer, non_null = true),
@@ -538,9 +561,11 @@ mod tests {
 
         // Verify track exists
         let track_count: i64 = conn
-            .query_row("SELECT COUNT(*) FROM tracks WHERE album_id = 'test_album_001'", [], |r| {
-                r.get(0)
-            })
+            .query_row(
+                "SELECT COUNT(*) FROM tracks WHERE album_id = 'test_album_001'",
+                [],
+                |r| r.get(0),
+            )
             .unwrap();
         assert_eq!(track_count, 1);
 
@@ -729,8 +754,11 @@ mod tests {
         assert_eq!(change_count, 1);
 
         // Delete the batch
-        conn.execute("DELETE FROM catalog_batches WHERE id = 'test_batch_001'", [])
-            .unwrap();
+        conn.execute(
+            "DELETE FROM catalog_batches WHERE id = 'test_batch_001'",
+            [],
+        )
+        .unwrap();
 
         // Verify change was cascade deleted
         let change_count: i64 = conn

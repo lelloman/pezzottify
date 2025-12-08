@@ -45,7 +45,10 @@ async fn test_list_batches() {
     assert_eq!(response.status(), StatusCode::OK);
 
     let batches: Vec<Value> = response.json().await.unwrap();
-    assert!(!batches.is_empty(), "Should have at least one batch from test fixtures");
+    assert!(
+        !batches.is_empty(),
+        "Should have at least one batch from test fixtures"
+    );
 }
 
 #[tokio::test]
@@ -358,7 +361,10 @@ async fn test_get_entity_history_empty() {
     assert_eq!(response.status(), StatusCode::OK);
 
     let changes: Vec<Value> = response.json().await.unwrap();
-    assert!(changes.is_empty(), "Should have no history for non-existent entity");
+    assert!(
+        changes.is_empty(),
+        "Should have no history for non-existent entity"
+    );
 }
 
 #[tokio::test]
@@ -423,7 +429,10 @@ async fn test_whats_new_returns_empty_when_no_closed_batches() {
 
     let body: Value = response.json().await.unwrap();
     let batches = body["batches"].as_array().unwrap();
-    assert!(batches.is_empty(), "Should have no closed batches initially");
+    assert!(
+        batches.is_empty(),
+        "Should have no closed batches initially"
+    );
 }
 
 #[tokio::test]
@@ -463,7 +472,10 @@ async fn test_whats_new_returns_closed_batches() {
     assert!(test_batch.is_some(), "Should find our test batch");
     let test_batch = test_batch.unwrap();
     assert_eq!(test_batch["description"], "New music release");
-    assert!(test_batch["closed_at"].is_number(), "Should have closed_at timestamp");
+    assert!(
+        test_batch["closed_at"].is_number(),
+        "Should have closed_at timestamp"
+    );
 }
 
 #[tokio::test]
@@ -582,7 +594,10 @@ async fn test_whats_new_orders_by_closed_at_desc() {
         .collect();
 
     // Most recent should be first (Release 3)
-    assert!(release_names.len() >= 3, "Should have at least 3 release batches");
+    assert!(
+        release_names.len() >= 3,
+        "Should have at least 3 release batches"
+    );
     assert_eq!(release_names[0], "Release 3");
     assert_eq!(release_names[1], "Release 2");
     assert_eq!(release_names[2], "Release 1");

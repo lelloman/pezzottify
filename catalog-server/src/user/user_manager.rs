@@ -53,7 +53,9 @@ impl UserManager {
             bail!("The user handle cannot be empty.")
         }
 
-        Ok(self.user_store.create_user(&user_handle.as_ref().to_owned())?)
+        Ok(self
+            .user_store
+            .create_user(&user_handle.as_ref().to_owned())?)
     }
 
     /// Deletes a user and all associated data.
@@ -188,7 +190,10 @@ impl UserManager {
             .update_user_auth_credentials(credentials.clone())
     }
 
-    pub fn get_user_credentials(&self, user_handle: &String) -> Result<Option<UserAuthCredentials>> {
+    pub fn get_user_credentials(
+        &self,
+        user_handle: &String,
+    ) -> Result<Option<UserAuthCredentials>> {
         self.user_store.get_user_auth_credentials(user_handle)
     }
 
@@ -369,7 +374,10 @@ impl UserManager {
         self.user_store.add_user_extra_permission(user_id, grant)
     }
 
-    pub fn remove_user_extra_permission(&self, permission_id: usize) -> Result<Option<(usize, Permission)>> {
+    pub fn remove_user_extra_permission(
+        &self,
+        permission_id: usize,
+    ) -> Result<Option<(usize, Permission)>> {
         self.user_store.remove_user_extra_permission(permission_id)
     }
 
@@ -384,7 +392,8 @@ impl UserManager {
     }
 
     pub fn associate_device_with_user(&self, device_id: usize, user_id: usize) -> Result<()> {
-        self.user_store.associate_device_with_user(device_id, user_id)
+        self.user_store
+            .associate_device_with_user(device_id, user_id)
     }
 
     pub fn get_device(&self, device_id: usize) -> Result<Option<Device>> {
@@ -400,7 +409,8 @@ impl UserManager {
     }
 
     pub fn enforce_user_device_limit(&self, user_id: usize, max_devices: usize) -> Result<usize> {
-        self.user_store.enforce_user_device_limit(user_id, max_devices)
+        self.user_store
+            .enforce_user_device_limit(user_id, max_devices)
     }
 
     // Bandwidth tracking methods
@@ -413,8 +423,13 @@ impl UserManager {
         bytes_sent: u64,
         request_count: u64,
     ) -> Result<()> {
-        self.user_store
-            .record_bandwidth_usage(user_id, date, endpoint_category, bytes_sent, request_count)
+        self.user_store.record_bandwidth_usage(
+            user_id,
+            date,
+            endpoint_category,
+            bytes_sent,
+            request_count,
+        )
     }
 
     pub fn get_user_bandwidth_usage(
@@ -442,7 +457,8 @@ impl UserManager {
         start_date: u32,
         end_date: u32,
     ) -> Result<Vec<BandwidthUsage>> {
-        self.user_store.get_all_bandwidth_usage(start_date, end_date)
+        self.user_store
+            .get_all_bandwidth_usage(start_date, end_date)
     }
 
     pub fn get_total_bandwidth_summary(
@@ -509,7 +525,8 @@ impl UserManager {
         start_date: u32,
         end_date: u32,
     ) -> Result<Vec<DailyListeningStats>> {
-        self.user_store.get_daily_listening_stats(start_date, end_date)
+        self.user_store
+            .get_daily_listening_stats(start_date, end_date)
     }
 
     pub fn get_top_tracks(
@@ -599,7 +616,9 @@ impl UserManager {
     ) -> Result<PopularContent> {
         // Get top tracks with a higher limit to ensure we have enough to aggregate
         let track_limit = (albums_limit + artists_limit) * 5;
-        let top_tracks = self.user_store.get_top_tracks(start_date, end_date, track_limit)?;
+        let top_tracks = self
+            .user_store
+            .get_top_tracks(start_date, end_date, track_limit)?;
 
         // Aggregate play counts by album and artist
         let mut album_plays: HashMap<String, u64> = HashMap::new();

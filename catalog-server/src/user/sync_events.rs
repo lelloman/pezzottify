@@ -324,7 +324,10 @@ mod tests {
             "permission_revoked"
         );
         assert_eq!(
-            UserEvent::PermissionsReset { permissions: vec![] }.event_type(),
+            UserEvent::PermissionsReset {
+                permissions: vec![]
+            }
+            .event_type(),
             "permissions_reset"
         );
     }

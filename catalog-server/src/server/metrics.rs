@@ -214,9 +214,7 @@ pub fn record_http_request(method: &str, path: &str, status: u16, duration: Dura
 
 /// Record a login attempt
 pub fn record_login_attempt(status: &str, duration: Duration) {
-    AUTH_LOGIN_ATTEMPTS_TOTAL
-        .with_label_values(&[status])
-        .inc();
+    AUTH_LOGIN_ATTEMPTS_TOTAL.with_label_values(&[status]).inc();
 
     AUTH_LOGIN_DURATION_SECONDS.observe(duration.as_secs_f64());
 }
@@ -400,7 +398,12 @@ mod tests {
         init_metrics();
 
         // Record a sample request
-        record_http_request("GET", "/v1/content/track/123", 200, Duration::from_millis(50));
+        record_http_request(
+            "GET",
+            "/v1/content/track/123",
+            200,
+            Duration::from_millis(50),
+        );
 
         // Verify the counter was incremented
         let metrics = REGISTRY.gather();
@@ -440,7 +443,10 @@ mod tests {
             .iter()
             .find(|m| m.get_name() == "pezzottify_rate_limit_hits_total");
 
-        assert!(rate_limit_metrics.is_some(), "Rate limit metrics should exist");
+        assert!(
+            rate_limit_metrics.is_some(),
+            "Rate limit metrics should exist"
+        );
     }
 
     #[test]
@@ -525,12 +531,18 @@ mod tests {
         let bandwidth_bytes = metrics
             .iter()
             .find(|m| m.get_name() == "pezzottify_bandwidth_bytes_total");
-        assert!(bandwidth_bytes.is_some(), "Bandwidth bytes metric should exist");
+        assert!(
+            bandwidth_bytes.is_some(),
+            "Bandwidth bytes metric should exist"
+        );
 
         let bandwidth_requests = metrics
             .iter()
             .find(|m| m.get_name() == "pezzottify_bandwidth_requests_total");
-        assert!(bandwidth_requests.is_some(), "Bandwidth requests metric should exist");
+        assert!(
+            bandwidth_requests.is_some(),
+            "Bandwidth requests metric should exist"
+        );
     }
 
     #[test]
@@ -552,12 +564,18 @@ mod tests {
         let listening_events = metrics
             .iter()
             .find(|m| m.get_name() == "pezzottify_listening_events_total");
-        assert!(listening_events.is_some(), "Listening events metric should exist");
+        assert!(
+            listening_events.is_some(),
+            "Listening events metric should exist"
+        );
 
         let listening_duration = metrics
             .iter()
             .find(|m| m.get_name() == "pezzottify_listening_duration_seconds_total");
-        assert!(listening_duration.is_some(), "Listening duration metric should exist");
+        assert!(
+            listening_duration.is_some(),
+            "Listening duration metric should exist"
+        );
     }
 
     #[test]
@@ -580,12 +598,18 @@ mod tests {
         let requests = metrics
             .iter()
             .find(|m| m.get_name() == "pezzottify_downloader_requests_total");
-        assert!(requests.is_some(), "Downloader requests metric should exist");
+        assert!(
+            requests.is_some(),
+            "Downloader requests metric should exist"
+        );
 
         let duration = metrics
             .iter()
             .find(|m| m.get_name() == "pezzottify_downloader_request_duration_seconds");
-        assert!(duration.is_some(), "Downloader duration metric should exist");
+        assert!(
+            duration.is_some(),
+            "Downloader duration metric should exist"
+        );
 
         let errors = metrics
             .iter()

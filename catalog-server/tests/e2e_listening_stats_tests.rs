@@ -5,7 +5,7 @@
 
 mod common;
 
-use common::{TestClient, TestServer, TRACK_1_ID, TRACK_2_ID, TRACK_3_ID, TEST_USER};
+use common::{TestClient, TestServer, TEST_USER, TRACK_1_ID, TRACK_2_ID, TRACK_3_ID};
 use reqwest::StatusCode;
 
 // =============================================================================
@@ -196,7 +196,10 @@ async fn test_get_listening_history_with_events() {
     // TRACK_1 should have 2 plays and higher total duration
     let track1_entry = body.iter().find(|e| e["track_id"] == TRACK_1_ID).unwrap();
     assert_eq!(track1_entry["play_count"].as_u64().unwrap(), 2);
-    assert_eq!(track1_entry["total_duration_seconds"].as_u64().unwrap(), 370); // 180 + 190
+    assert_eq!(
+        track1_entry["total_duration_seconds"].as_u64().unwrap(),
+        370
+    ); // 180 + 190
 }
 
 #[tokio::test]
@@ -260,9 +263,7 @@ async fn test_get_listening_events_pagination() {
     }
 
     // Get first 2
-    let response = client
-        .get_listening_events(None, None, Some(2), None)
-        .await;
+    let response = client.get_listening_events(None, None, Some(2), None).await;
     assert_eq!(response.status(), StatusCode::OK);
     let body: Vec<serde_json::Value> = response.json().await.unwrap();
     assert_eq!(body.len(), 2);
@@ -314,7 +315,9 @@ async fn test_admin_daily_stats_with_data() {
 
     // Then query as admin
     let admin_client = TestClient::authenticated_admin(server.base_url.clone()).await;
-    let response = admin_client.admin_get_daily_listening_stats(None, None).await;
+    let response = admin_client
+        .admin_get_daily_listening_stats(None, None)
+        .await;
     assert_eq!(response.status(), StatusCode::OK);
 
     let body: Vec<serde_json::Value> = response.json().await.unwrap();

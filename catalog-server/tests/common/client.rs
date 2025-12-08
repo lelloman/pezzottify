@@ -82,13 +82,19 @@ impl TestClient {
 
     /// POST /v1/auth/login
     pub async fn login(&self, handle: &str, password: &str) -> Response {
-        self.login_with_device(handle, password, "test-device-uuid-12345").await
+        self.login_with_device(handle, password, "test-device-uuid-12345")
+            .await
     }
 
     /// POST /v1/auth/login with custom device UUID
     ///
     /// Useful for testing multi-device scenarios like WebSocket sync.
-    pub async fn login_with_device(&self, handle: &str, password: &str, device_uuid: &str) -> Response {
+    pub async fn login_with_device(
+        &self,
+        handle: &str,
+        password: &str,
+        device_uuid: &str,
+    ) -> Response {
         self.client
             .post(format!("{}/v1/auth/login", self.base_url))
             .json(&json!({
@@ -109,7 +115,9 @@ impl TestClient {
     pub async fn authenticated_with_device(base_url: String, device_uuid: &str) -> Self {
         let client = Self::new(base_url);
 
-        let response = client.login_with_device(TEST_USER, TEST_PASS, device_uuid).await;
+        let response = client
+            .login_with_device(TEST_USER, TEST_PASS, device_uuid)
+            .await;
         assert_eq!(
             response.status(),
             reqwest::StatusCode::CREATED,
@@ -232,7 +240,10 @@ impl TestClient {
     /// POST /v1/user/liked/{content_type}/{content_id}
     pub async fn add_liked_content(&self, content_type: &str, content_id: &str) -> Response {
         self.client
-            .post(format!("{}/v1/user/liked/{}/{}", self.base_url, content_type, content_id))
+            .post(format!(
+                "{}/v1/user/liked/{}/{}",
+                self.base_url, content_type, content_id
+            ))
             .send()
             .await
             .expect("Add liked content request failed")
@@ -241,7 +252,10 @@ impl TestClient {
     /// DELETE /v1/user/liked/{content_type}/{content_id}
     pub async fn remove_liked_content(&self, content_type: &str, content_id: &str) -> Response {
         self.client
-            .delete(format!("{}/v1/user/liked/{}/{}", self.base_url, content_type, content_id))
+            .delete(format!(
+                "{}/v1/user/liked/{}/{}",
+                self.base_url, content_type, content_id
+            ))
             .send()
             .await
             .expect("Remove liked content request failed")

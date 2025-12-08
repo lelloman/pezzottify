@@ -9,9 +9,17 @@ use std::fmt;
 /// Validation error types
 #[derive(Debug)]
 pub enum ValidationError {
-    EmptyField { field: &'static str },
-    NonPositiveValue { field: &'static str, value: i32 },
-    NegativeValue { field: &'static str, value: i32 },
+    EmptyField {
+        field: &'static str,
+    },
+    NonPositiveValue {
+        field: &'static str,
+        value: i32,
+    },
+    NegativeValue {
+        field: &'static str,
+        value: i32,
+    },
     ForeignKeyViolation {
         entity_type: &'static str,
         id: String,

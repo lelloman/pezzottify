@@ -13,9 +13,7 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use std::{net::SocketAddr, sync::Arc};
-use tower_governor::{
-    governor::GovernorConfigBuilder, key_extractor::KeyExtractor, GovernorError,
-};
+use tower_governor::{governor::GovernorConfigBuilder, key_extractor::KeyExtractor, GovernorError};
 use tracing::warn;
 
 // ============================================================================
@@ -118,20 +116,19 @@ pub fn rate_limit_error_handler(err: GovernorError, req: Request<Body>) -> Respo
             let method = req.method().as_str();
 
             // Try to extract user_id or IP for logging and metrics
-            let (identifier, identifier_type) = if let Some(user_id) = req.extensions().get::<usize>() {
-                (format!("user_id={}", user_id), "user")
-            } else if let Some(ConnectInfo(addr)) = req.extensions().get::<ConnectInfo<SocketAddr>>()
-            {
-                (format!("ip={}", addr.ip()), "ip")
-            } else {
-                ("unknown".to_string(), "unknown")
-            };
+            let (identifier, identifier_type) =
+                if let Some(user_id) = req.extensions().get::<usize>() {
+                    (format!("user_id={}", user_id), "user")
+                } else if let Some(ConnectInfo(addr)) =
+                    req.extensions().get::<ConnectInfo<SocketAddr>>()
+                {
+                    (format!("ip={}", addr.ip()), "ip")
+                } else {
+                    ("unknown".to_string(), "unknown")
+                };
 
             // Log rate limit violation
-            warn!(
-                "Rate limit exceeded: {} {} {}",
-                method, path, identifier
-            );
+            warn!("Rate limit exceeded: {} {} {}", method, path, identifier);
 
             // Record metric for Prometheus
             record_rate_limit_hit(path, identifier_type);
@@ -242,9 +239,7 @@ mod tests {
         let mut request = create_test_request();
 
         let socket_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8080);
-        request
-            .extensions_mut()
-            .insert(ConnectInfo(socket_addr));
+        request.extensions_mut().insert(ConnectInfo(socket_addr));
 
         let result = extractor.extract(&request);
         assert!(result.is_ok());
@@ -293,9 +288,7 @@ mod tests {
         let socket_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8080);
 
         request.extensions_mut().insert(user_id);
-        request
-            .extensions_mut()
-            .insert(ConnectInfo(socket_addr));
+        request.extensions_mut().insert(ConnectInfo(socket_addr));
 
         let result = extractor.extract(&request);
         assert!(result.is_ok());
@@ -309,9 +302,7 @@ mod tests {
 
         // Add only IP, no user_id
         let socket_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(192, 168, 1, 100)), 8080);
-        request
-            .extensions_mut()
-            .insert(ConnectInfo(socket_addr));
+        request.extensions_mut().insert(ConnectInfo(socket_addr));
 
         let result = extractor.extract(&request);
         assert!(result.is_ok());
@@ -411,9 +402,7 @@ mod tests {
         };
         let mut request = create_test_request();
         let socket_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(203, 0, 113, 42)), 8080);
-        request
-            .extensions_mut()
-            .insert(ConnectInfo(socket_addr));
+        request.extensions_mut().insert(ConnectInfo(socket_addr));
 
         let response = rate_limit_error_handler(err, request);
 

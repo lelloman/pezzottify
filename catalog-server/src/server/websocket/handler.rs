@@ -110,7 +110,10 @@ async fn handle_socket(
         user_id, device_id
     );
     outgoing_handle.abort();
-    state.connection_manager.unregister(user_id, device_id).await;
+    state
+        .connection_manager
+        .unregister(user_id, device_id)
+        .await;
 }
 
 /// Forward messages from the outgoing channel to the WebSocket.
@@ -160,7 +163,10 @@ async fn process_incoming(
                         // Send error response
                         let error_msg = ServerMessage::new(
                             msg_types::ERROR,
-                            system::Error::new("parse_error", format!("Invalid message format: {}", e)),
+                            system::Error::new(
+                                "parse_error",
+                                format!("Invalid message format: {}", e),
+                            ),
                         );
                         let _ = state
                             .connection_manager

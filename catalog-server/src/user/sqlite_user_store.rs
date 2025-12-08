@@ -4,16 +4,16 @@ use crate::sqlite_persistence::{
     Column, ForeignKey, ForeignKeyOnChange, SqlType, Table, VersionedSchema, BASE_DB_VERSION,
     DEFAULT_TIMESTAMP,
 };
+use crate::user::device::{Device, DeviceRegistration, DeviceType};
 use crate::user::user_models::{
     BandwidthSummary, BandwidthUsage, CategoryBandwidth, DailyListeningStats, ListeningEvent,
     ListeningSummary, TrackListeningStats, UserListeningHistoryEntry,
 };
-use crate::user::device::{Device, DeviceRegistration, DeviceType};
 use crate::user::user_store::{UserBandwidthStore, UserListeningStore, UserSettingsStore};
-use std::collections::HashMap;
 use crate::user::*;
 use anyhow::{bail, Context, Result};
 use rusqlite::{params, Connection, OptionalExtension};
+use std::collections::HashMap;
 use std::{
     path::{Path, PathBuf},
     str::FromStr,
@@ -468,8 +468,18 @@ const USER_SETTINGS_TABLE_V_7: Table = Table {
 const DEVICE_TABLE_V_8: Table = Table {
     name: "device",
     columns: &[
-        sqlite_column!("id", &SqlType::Integer, is_primary_key = true, is_unique = true),
-        sqlite_column!("device_uuid", &SqlType::Text, non_null = true, is_unique = true),
+        sqlite_column!(
+            "id",
+            &SqlType::Integer,
+            is_primary_key = true,
+            is_unique = true
+        ),
+        sqlite_column!(
+            "device_uuid",
+            &SqlType::Text,
+            non_null = true,
+            is_unique = true
+        ),
         sqlite_column!(
             "user_id",
             &SqlType::Integer,
@@ -966,8 +976,8 @@ impl SqliteUserStore {
                 let seq: i64 = row.get(0)?;
                 let payload: String = row.get(1)?;
                 let server_timestamp: i64 = row.get(2)?;
-                let event: crate::user::sync_events::UserEvent =
-                    serde_json::from_str(&payload).map_err(|e| {
+                let event: crate::user::sync_events::UserEvent = serde_json::from_str(&payload)
+                    .map_err(|e| {
                         rusqlite::Error::FromSqlConversionFailure(
                             1,
                             rusqlite::types::Type::Text,
@@ -1073,11 +1083,10 @@ impl UserStore for SqliteUserStore {
 
     fn get_user_handle(&self, user_id: usize) -> Result<Option<String>> {
         let conn = self.conn.lock().unwrap();
-        let mut stmt = conn
-            .prepare(&format!(
-                "SELECT handle FROM {} WHERE id = ?1",
-                USER_TABLE_V_0.name
-            ))?;
+        let mut stmt = conn.prepare(&format!(
+            "SELECT handle FROM {} WHERE id = ?1",
+            USER_TABLE_V_0.name
+        ))?;
         match stmt.query_row(params![user_id], |row| row.get(0)) {
             Ok(handle) => Ok(Some(handle)),
             Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
@@ -1087,8 +1096,7 @@ impl UserStore for SqliteUserStore {
 
     fn get_all_user_handles(&self) -> Result<Vec<String>> {
         let conn = self.conn.lock().unwrap();
-        let mut stmt = conn
-            .prepare(&format!("SELECT handle FROM {}", USER_TABLE_V_0.name))?;
+        let mut stmt = conn.prepare(&format!("SELECT handle FROM {}", USER_TABLE_V_0.name))?;
         let rows = stmt
             .query_map([], |row| row.get(0))?
             .collect::<Result<Vec<String>, _>>()?;
@@ -1098,11 +1106,10 @@ impl UserStore for SqliteUserStore {
 
     fn get_user_id(&self, user_handle: &str) -> Result<Option<usize>> {
         let conn = self.conn.lock().unwrap();
-        let mut stmt = conn
-            .prepare(&format!(
-                "SELECT id FROM {} WHERE handle = ?1",
-                USER_TABLE_V_0.name
-            ))?;
+        let mut stmt = conn.prepare(&format!(
+            "SELECT id FROM {} WHERE handle = ?1",
+            USER_TABLE_V_0.name
+        ))?;
         match stmt.query_row(params![user_handle], |row| row.get(0)) {
             Ok(id) => {
                 let id: i32 = id;
@@ -1115,13 +1122,11 @@ impl UserStore for SqliteUserStore {
 
     fn is_user_liked_content(&self, user_id: usize, content_id: &str) -> Result<Option<bool>> {
         let conn = self.conn.lock().unwrap();
-        let mut stmt = conn
-            .prepare(&format!(
-                "SELECT COUNT(*) FROM {} WHERE user_id = ?1 AND content_id = ?2",
-                LIKED_CONTENT_TABLE_V_2.name
-            ))?;
-        let count: i32 = stmt
-            .query_row(params![user_id, content_id], |row| row.get(0))?;
+        let mut stmt = conn.prepare(&format!(
+            "SELECT COUNT(*) FROM {} WHERE user_id = ?1 AND content_id = ?2",
+            LIKED_CONTENT_TABLE_V_2.name
+        ))?;
+        let count: i32 = stmt.query_row(params![user_id, content_id], |row| row.get(0))?;
 
         Ok(Some(count > 0))
     }
@@ -1346,7 +1351,10 @@ impl UserStore for SqliteUserStore {
         let roles = stmt
             .query_map(params![user_id], |row| {
                 let role_str: String = row.get(0)?;
-                debug!("get_user_roles: found role string '{}' for user_id={}", role_str, user_id);
+                debug!(
+                    "get_user_roles: found role string '{}' for user_id={}",
+                    role_str, user_id
+                );
                 Ok(role_str)
             })?
             .filter_map(|r| r.ok())
@@ -1357,7 +1365,10 @@ impl UserStore for SqliteUserStore {
                     .collect::<Vec<_>>()
             })
             .collect();
-        debug!("get_user_roles: returning {:?} for user_id={}", roles, user_id);
+        debug!(
+            "get_user_roles: returning {:?} for user_id={}",
+            roles, user_id
+        );
         Ok(roles)
     }
 
@@ -1368,7 +1379,10 @@ impl UserStore for SqliteUserStore {
         // Try to get existing roles for this user
         let existing_roles: Option<String> = tx
             .query_row(
-                &format!("SELECT role FROM {} WHERE user_id = ?1", USER_ROLE_TABLE_V_4.name),
+                &format!(
+                    "SELECT role FROM {} WHERE user_id = ?1",
+                    USER_ROLE_TABLE_V_4.name
+                ),
                 params![user_id],
                 |row| row.get(0),
             )
@@ -1391,7 +1405,10 @@ impl UserStore for SqliteUserStore {
                     .join(",");
 
                 tx.execute(
-                    &format!("UPDATE {} SET role = ?1 WHERE user_id = ?2", USER_ROLE_TABLE_V_4.name),
+                    &format!(
+                        "UPDATE {} SET role = ?1 WHERE user_id = ?2",
+                        USER_ROLE_TABLE_V_4.name
+                    ),
                     params![roles_str, user_id],
                 )?;
             }
@@ -1417,7 +1434,10 @@ impl UserStore for SqliteUserStore {
         // Get existing roles for this user
         let existing_roles: Option<String> = tx
             .query_row(
-                &format!("SELECT role FROM {} WHERE user_id = ?1", USER_ROLE_TABLE_V_4.name),
+                &format!(
+                    "SELECT role FROM {} WHERE user_id = ?1",
+                    USER_ROLE_TABLE_V_4.name
+                ),
                 params![user_id],
                 |row| row.get(0),
             )
@@ -1435,7 +1455,10 @@ impl UserStore for SqliteUserStore {
             if roles.is_empty() {
                 // No roles left, delete the row
                 tx.execute(
-                    &format!("DELETE FROM {} WHERE user_id = ?1", USER_ROLE_TABLE_V_4.name),
+                    &format!(
+                        "DELETE FROM {} WHERE user_id = ?1",
+                        USER_ROLE_TABLE_V_4.name
+                    ),
                     params![user_id],
                 )?;
             } else {
@@ -1447,7 +1470,10 @@ impl UserStore for SqliteUserStore {
                     .join(",");
 
                 tx.execute(
-                    &format!("UPDATE {} SET role = ?1 WHERE user_id = ?2", USER_ROLE_TABLE_V_4.name),
+                    &format!(
+                        "UPDATE {} SET role = ?1 WHERE user_id = ?2",
+                        USER_ROLE_TABLE_V_4.name
+                    ),
                     params![roles_str, user_id],
                 )?;
             }
@@ -1489,7 +1515,10 @@ impl UserStore for SqliteUserStore {
         }
     }
 
-    fn remove_user_extra_permission(&self, permission_id: usize) -> Result<Option<(usize, Permission)>> {
+    fn remove_user_extra_permission(
+        &self,
+        permission_id: usize,
+    ) -> Result<Option<(usize, Permission)>> {
         let conn = self.conn.lock().unwrap();
 
         // First, get the user_id and permission before deleting
@@ -1576,10 +1605,17 @@ impl UserStore for SqliteUserStore {
 
         // Add permissions from roles
         let roles = self.get_user_roles(user_id)?;
-        debug!("resolve_user_permissions: user_id={} has roles: {:?}", user_id, roles);
+        debug!(
+            "resolve_user_permissions: user_id={} has roles: {:?}",
+            user_id, roles
+        );
         for role in &roles {
             let role_perms = role.permissions();
-            debug!("resolve_user_permissions: adding {:?} permissions from role {:?}", role_perms.len(), role);
+            debug!(
+                "resolve_user_permissions: adding {:?} permissions from role {:?}",
+                role_perms.len(),
+                role
+            );
             for permission in role_perms {
                 permissions.insert(*permission);
             }
@@ -1592,7 +1628,10 @@ impl UserStore for SqliteUserStore {
             .unwrap()
             .as_secs() as i64;
 
-        debug!("resolve_user_permissions: checking extra permissions for user_id={} at timestamp={}", user_id, now);
+        debug!(
+            "resolve_user_permissions: checking extra permissions for user_id={} at timestamp={}",
+            user_id, now
+        );
 
         let mut stmt = conn.prepare(&format!(
             "SELECT permission FROM {} WHERE user_id = ?1 AND start_time <= ?2 AND (end_time IS NULL OR end_time >= ?2) AND (countdown IS NULL OR countdown > 0)",
@@ -1607,14 +1646,24 @@ impl UserStore for SqliteUserStore {
             .filter_map(|r| r.ok().and_then(|i| Permission::from_int(i)))
             .collect::<Vec<_>>();
 
-        debug!("resolve_user_permissions: found {} extra permissions for user_id={}", extra_perms.len(), user_id);
+        debug!(
+            "resolve_user_permissions: found {} extra permissions for user_id={}",
+            extra_perms.len(),
+            user_id
+        );
         for perm in &extra_perms {
-            debug!("resolve_user_permissions: adding extra permission {:?}", perm);
+            debug!(
+                "resolve_user_permissions: adding extra permission {:?}",
+                perm
+            );
             permissions.insert(*perm);
         }
 
         let final_permissions: Vec<Permission> = permissions.into_iter().collect();
-        debug!("resolve_user_permissions: final permissions for user_id={}: {:?}", user_id, final_permissions);
+        debug!(
+            "resolve_user_permissions: final permissions for user_id={}: {:?}",
+            user_id, final_permissions
+        );
         Ok(final_permissions)
     }
 }
@@ -1763,40 +1812,39 @@ impl UserAuthCredentialsStore for SqliteUserStore {
             }
         };
         let conn = self.conn.lock().unwrap();
-        let mut stmt = conn
-            .prepare("SELECT * FROM user_password_credentials WHERE user_id = ?1")?;
+        let mut stmt =
+            conn.prepare("SELECT * FROM user_password_credentials WHERE user_id = ?1")?;
 
-        let password_credentials = match stmt
-            .query_row(params![user_id], |row| {
-                let hasher = match PezzottifyHasher::from_str(&row.get::<usize, String>(3)?) {
-                    Ok(x) => x,
-                    Err(_) => {
-                        eprintln!("get_user_auth_credentials() -> Invalid hasher");
-                        return Err(rusqlite::Error::InvalidQuery);
-                    }
-                };
-                let user_id: usize = row.get(0)?;
-                let salt: String = row.get(1)?;
-                let hash: String = row.get(2)?;
-                let created = system_time_from_column_result(row.get(4).unwrap());
-                Ok(UsernamePasswordCredentials {
-                    user_id,
-                    salt,
-                    hash,
-                    hasher,
-                    created,
-                    last_tried: row
-                        .get::<usize, Option<i64>>(5)?
-                        .map(|v| system_time_from_column_result(v)),
-                    last_used: row
-                        .get::<usize, Option<i64>>(6)?
-                        .map(|v| system_time_from_column_result(v)),
-                })
-            }) {
-                Ok(creds) => Some(creds),
-                Err(rusqlite::Error::QueryReturnedNoRows) => None,
-                Err(e) => return Err(e.into()),
+        let password_credentials = match stmt.query_row(params![user_id], |row| {
+            let hasher = match PezzottifyHasher::from_str(&row.get::<usize, String>(3)?) {
+                Ok(x) => x,
+                Err(_) => {
+                    eprintln!("get_user_auth_credentials() -> Invalid hasher");
+                    return Err(rusqlite::Error::InvalidQuery);
+                }
             };
+            let user_id: usize = row.get(0)?;
+            let salt: String = row.get(1)?;
+            let hash: String = row.get(2)?;
+            let created = system_time_from_column_result(row.get(4).unwrap());
+            Ok(UsernamePasswordCredentials {
+                user_id,
+                salt,
+                hash,
+                hasher,
+                created,
+                last_tried: row
+                    .get::<usize, Option<i64>>(5)?
+                    .map(|v| system_time_from_column_result(v)),
+                last_used: row
+                    .get::<usize, Option<i64>>(6)?
+                    .map(|v| system_time_from_column_result(v)),
+            })
+        }) {
+            Ok(creds) => Some(creds),
+            Err(rusqlite::Error::QueryReturnedNoRows) => None,
+            Err(e) => return Err(e.into()),
+        };
 
         record_db_query("get_user_auth_credentials", start.elapsed());
         Ok(Some(UserAuthCredentials {
@@ -1869,7 +1917,13 @@ impl UserBandwidthStore for SqliteUserStore {
                  updated = (cast(strftime('%s','now') as int))",
                 BANDWIDTH_USAGE_TABLE_V_5.name
             ),
-            params![user_id, date, endpoint_category, bytes_sent as i64, request_count as i64],
+            params![
+                user_id,
+                date,
+                endpoint_category,
+                bytes_sent as i64,
+                request_count as i64
+            ],
         )?;
 
         record_db_query("record_bandwidth_usage", start.elapsed());
@@ -1941,7 +1995,11 @@ impl UserBandwidthStore for SqliteUserStore {
         Ok(summary)
     }
 
-    fn get_all_bandwidth_usage(&self, start_date: u32, end_date: u32) -> Result<Vec<BandwidthUsage>> {
+    fn get_all_bandwidth_usage(
+        &self,
+        start_date: u32,
+        end_date: u32,
+    ) -> Result<Vec<BandwidthUsage>> {
         let start = Instant::now();
         let conn = self.conn.lock().unwrap();
 
@@ -1968,7 +2026,11 @@ impl UserBandwidthStore for SqliteUserStore {
         Ok(records)
     }
 
-    fn get_total_bandwidth_summary(&self, start_date: u32, end_date: u32) -> Result<BandwidthSummary> {
+    fn get_total_bandwidth_summary(
+        &self,
+        start_date: u32,
+        end_date: u32,
+    ) -> Result<BandwidthSummary> {
         let records = self.get_all_bandwidth_usage(start_date, end_date)?;
 
         let mut summary = BandwidthSummary {
@@ -2011,7 +2073,11 @@ impl UserBandwidthStore for SqliteUserStore {
         let cutoff_date = {
             let datetime = chrono::DateTime::from_timestamp(cutoff_secs as i64, 0)
                 .unwrap_or_else(|| chrono::Utc::now());
-            datetime.format("%Y%m%d").to_string().parse::<u32>().unwrap_or(0)
+            datetime
+                .format("%Y%m%d")
+                .to_string()
+                .parse::<u32>()
+                .unwrap_or(0)
         };
 
         let deleted = conn.execute(
@@ -2390,7 +2456,11 @@ impl UserListeningStore for SqliteUserStore {
         let cutoff_date = {
             let datetime = chrono::DateTime::from_timestamp(cutoff_secs as i64, 0)
                 .unwrap_or_else(|| chrono::Utc::now());
-            datetime.format("%Y%m%d").to_string().parse::<u32>().unwrap_or(0)
+            datetime
+                .format("%Y%m%d")
+                .to_string()
+                .parse::<u32>()
+                .unwrap_or(0)
         };
 
         let deleted = conn.execute(
@@ -2421,8 +2491,8 @@ impl UserSettingsStore for SqliteUserStore {
 
         match result {
             Ok(Some(value)) => {
-                let setting = UserSetting::from_key_value(key, &value)
-                    .map_err(|e| anyhow::anyhow!(e))?;
+                let setting =
+                    UserSetting::from_key_value(key, &value).map_err(|e| anyhow::anyhow!(e))?;
                 Ok(Some(setting))
             }
             Ok(None) => Ok(None),
@@ -2455,8 +2525,8 @@ impl UserSettingsStore for SqliteUserStore {
         let start = Instant::now();
         let conn = self.conn.lock().unwrap();
 
-        let mut stmt =
-            conn.prepare("SELECT setting_key, setting_value FROM user_settings WHERE user_id = ?1")?;
+        let mut stmt = conn
+            .prepare("SELECT setting_key, setting_value FROM user_settings WHERE user_id = ?1")?;
         let rows = stmt.query_map(params![user_id], |row| {
             Ok((
                 row.get::<usize, String>(0)?,
@@ -2967,8 +3037,11 @@ mod tests {
             VERSIONED_SCHEMAS[7].create(&conn).unwrap(); // V7 is at index 7
 
             // Add a user and auth token (pre-migration, auth_token doesn't have device_id)
-            conn.execute("INSERT INTO user (handle) VALUES (?1)", params!["test_user"])
-                .unwrap();
+            conn.execute(
+                "INSERT INTO user (handle) VALUES (?1)",
+                params!["test_user"],
+            )
+            .unwrap();
             let user_id = conn.last_insert_rowid();
 
             // Insert a token (V7 auth_token doesn't have device_id)
@@ -3047,7 +3120,10 @@ mod tests {
             let token_count: i64 = conn
                 .query_row("SELECT COUNT(*) FROM auth_token", [], |row| row.get(0))
                 .unwrap();
-            assert_eq!(token_count, 0, "Old tokens should be deleted during V8 migration");
+            assert_eq!(
+                token_count, 0,
+                "Old tokens should be deleted during V8 migration"
+            );
 
             // Verify device indices exist
             let device_uuid_index_exists: i64 = conn
@@ -3170,7 +3246,10 @@ mod tests {
         let conn = store.conn.lock().unwrap();
         let count: i64 = conn
             .query_row(
-                &format!("SELECT COUNT(*) FROM {} WHERE user_id = ?1", USER_ROLE_TABLE_V_4.name),
+                &format!(
+                    "SELECT COUNT(*) FROM {} WHERE user_id = ?1",
+                    USER_ROLE_TABLE_V_4.name
+                ),
                 params![user_id],
                 |row| row.get(0),
             )
@@ -3203,7 +3282,10 @@ mod tests {
         // Manually insert comma-separated roles into the database
         let conn = store.conn.lock().unwrap();
         conn.execute(
-            &format!("INSERT INTO {} (user_id, role) VALUES (?1, ?2)", USER_ROLE_TABLE_V_4.name),
+            &format!(
+                "INSERT INTO {} (user_id, role) VALUES (?1, ?2)",
+                USER_ROLE_TABLE_V_4.name
+            ),
             params![user_id, "Admin,Regular"],
         )
         .unwrap();
@@ -3224,7 +3306,10 @@ mod tests {
         // Manually insert comma-separated roles with spaces
         let conn = store.conn.lock().unwrap();
         conn.execute(
-            &format!("INSERT INTO {} (user_id, role) VALUES (?1, ?2)", USER_ROLE_TABLE_V_4.name),
+            &format!(
+                "INSERT INTO {} (user_id, role) VALUES (?1, ?2)",
+                USER_ROLE_TABLE_V_4.name
+            ),
             params![user_id, "Admin, Regular"],
         )
         .unwrap();
@@ -3337,16 +3422,28 @@ mod tests {
         store.add_user_auth_token(recent_token.clone()).unwrap();
 
         // Verify both tokens exist
-        assert!(store.get_user_auth_token(&old_token.value).unwrap().is_some());
-        assert!(store.get_user_auth_token(&recent_token.value).unwrap().is_some());
+        assert!(store
+            .get_user_auth_token(&old_token.value)
+            .unwrap()
+            .is_some());
+        assert!(store
+            .get_user_auth_token(&recent_token.value)
+            .unwrap()
+            .is_some());
 
         // Prune tokens older than 7 days
         let pruned = store.prune_unused_auth_tokens(7).unwrap();
         assert_eq!(pruned, 1);
 
         // Verify old token is gone and recent token remains
-        assert!(store.get_user_auth_token(&old_token.value).unwrap().is_none());
-        assert!(store.get_user_auth_token(&recent_token.value).unwrap().is_some());
+        assert!(store
+            .get_user_auth_token(&old_token.value)
+            .unwrap()
+            .is_none());
+        assert!(store
+            .get_user_auth_token(&recent_token.value)
+            .unwrap()
+            .is_some());
     }
 
     #[test]
@@ -3510,9 +3607,7 @@ mod tests {
             .unwrap();
 
         // Get all bandwidth usage
-        let records = store
-            .get_all_bandwidth_usage(20241127, 20241127)
-            .unwrap();
+        let records = store.get_all_bandwidth_usage(20241127, 20241127).unwrap();
 
         assert_eq!(records.len(), 2);
         // Records should include both users
@@ -3604,9 +3699,7 @@ mod tests {
         }
 
         // Verify bandwidth records were deleted with user
-        let all_records = store
-            .get_all_bandwidth_usage(20241127, 20241127)
-            .unwrap();
+        let all_records = store.get_all_bandwidth_usage(20241127, 20241127).unwrap();
         assert_eq!(all_records.len(), 0);
     }
 
@@ -4826,7 +4919,10 @@ mod tests {
         let device_id = store.register_or_update_device(&reg).unwrap();
 
         // Get by UUID
-        let device = store.get_device_by_uuid("unique-device-uuid").unwrap().unwrap();
+        let device = store
+            .get_device_by_uuid("unique-device-uuid")
+            .unwrap()
+            .unwrap();
         assert_eq!(device.id, device_id);
         assert_eq!(device.device_type, DeviceType::Web);
 
@@ -4861,7 +4957,9 @@ mod tests {
         assert!(device.user_id.is_none());
 
         // Associate with user
-        store.associate_device_with_user(device_id, user_id).unwrap();
+        store
+            .associate_device_with_user(device_id, user_id)
+            .unwrap();
 
         let device = store.get_device(device_id).unwrap().unwrap();
         assert_eq!(device.user_id, Some(user_id));
@@ -4881,7 +4979,9 @@ mod tests {
                 os_info: None,
             };
             let device_id = store.register_or_update_device(&reg).unwrap();
-            store.associate_device_with_user(device_id, user_id).unwrap();
+            store
+                .associate_device_with_user(device_id, user_id)
+                .unwrap();
         }
 
         let devices = store.get_user_devices(user_id).unwrap();
@@ -4941,7 +5041,9 @@ mod tests {
                 os_info: None,
             };
             let device_id = store.register_or_update_device(&reg).unwrap();
-            store.associate_device_with_user(device_id, user_id).unwrap();
+            store
+                .associate_device_with_user(device_id, user_id)
+                .unwrap();
             // Small delay to ensure different last_seen timestamps
             std::thread::sleep(std::time::Duration::from_millis(10));
         }
@@ -4979,7 +5081,9 @@ mod tests {
                 os_info: None,
             };
             let device_id = store.register_or_update_device(&reg).unwrap();
-            store.associate_device_with_user(device_id, user_id).unwrap();
+            store
+                .associate_device_with_user(device_id, user_id)
+                .unwrap();
         }
 
         // Enforce limit of 5 (no deletion needed)
@@ -5041,7 +5145,9 @@ mod tests {
             os_info: None,
         };
         let device_id = store.register_or_update_device(&reg).unwrap();
-        store.associate_device_with_user(device_id, user_id).unwrap();
+        store
+            .associate_device_with_user(device_id, user_id)
+            .unwrap();
 
         // Manually set last_seen to 10 days ago
         {
@@ -5100,7 +5206,9 @@ mod tests {
             os_info: None,
         };
         let device_id = store.register_or_update_device(&reg).unwrap();
-        store.associate_device_with_user(device_id, user_id).unwrap();
+        store
+            .associate_device_with_user(device_id, user_id)
+            .unwrap();
 
         // Verify association
         let device = store.get_device(device_id).unwrap().unwrap();

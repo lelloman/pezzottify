@@ -128,7 +128,10 @@ fn resolve_track(
 
     let id = track_json.get("id")?.as_str()?.to_string();
     let name = track_json.get("name")?.as_str()?.to_string();
-    let duration = track_json.get("duration_secs").and_then(|d| d.as_u64()).unwrap_or(0) as u32;
+    let duration = track_json
+        .get("duration_secs")
+        .and_then(|d| d.as_u64())
+        .unwrap_or(0) as u32;
     let album_id = track_json.get("album_id")?.as_str()?.to_string();
 
     // Get artist IDs and resolve their names

@@ -120,7 +120,10 @@ mod tests {
         assert_eq!(Permission::from_int(3), Some(Permission::OwnPlaylists));
         assert_eq!(Permission::from_int(4), Some(Permission::EditCatalog));
         assert_eq!(Permission::from_int(5), Some(Permission::ManagePermissions));
-        assert_eq!(Permission::from_int(6), Some(Permission::IssueContentDownload));
+        assert_eq!(
+            Permission::from_int(6),
+            Some(Permission::IssueContentDownload)
+        );
         assert_eq!(Permission::from_int(7), Some(Permission::RebootServer));
         assert_eq!(Permission::from_int(8), Some(Permission::ViewAnalytics));
     }

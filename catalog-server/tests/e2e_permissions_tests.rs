@@ -94,7 +94,9 @@ async fn test_regular_user_can_create_playlist() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated(server.base_url.clone()).await;
 
-    let response = client.create_playlist("My Playlist", vec![TRACK_1_ID]).await;
+    let response = client
+        .create_playlist("My Playlist", vec![TRACK_1_ID])
+        .await;
     assert_eq!(response.status(), StatusCode::OK);
 }
 
@@ -128,7 +130,10 @@ async fn test_regular_user_cannot_delete_catalog_item() {
     // Try to delete an artist (requires EditCatalog permission)
     let response = client
         .client
-        .delete(format!("{}/v1/content/artist/{}", server.base_url, ARTIST_1_ID))
+        .delete(format!(
+            "{}/v1/content/artist/{}",
+            server.base_url, ARTIST_1_ID
+        ))
         .send()
         .await
         .unwrap();
@@ -180,7 +185,10 @@ async fn test_admin_can_update_catalog_item() {
     // The test catalog has artist R1 ("The Test Band")
     let response = client
         .client
-        .put(format!("{}/v1/content/artist/{}", server.base_url, ARTIST_1_ID))
+        .put(format!(
+            "{}/v1/content/artist/{}",
+            server.base_url, ARTIST_1_ID
+        ))
         .json(&json!({
             "id": ARTIST_1_ID,
             "name": "Updated Artist Name",
@@ -222,7 +230,10 @@ async fn test_admin_can_delete_catalog_item() {
     // Now delete it
     let response = client
         .client
-        .delete(format!("{}/v1/content/artist/artist-to-delete", server.base_url))
+        .delete(format!(
+            "{}/v1/content/artist/artist-to-delete",
+            server.base_url
+        ))
         .send()
         .await
         .unwrap();
@@ -321,4 +332,3 @@ async fn test_wrong_password_denied() {
     let response = client.login(common::TEST_USER, "wrongpassword").await;
     assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 }
-

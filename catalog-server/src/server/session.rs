@@ -108,11 +108,17 @@ async fn extract_session_from_request_parts(
 
     let permissions = match user_manager.get_user_permissions(auth_token.user_id) {
         Ok(perms) => {
-            debug!("Resolved permissions for user_id={}: {:?}", auth_token.user_id, perms);
+            debug!(
+                "Resolved permissions for user_id={}: {:?}",
+                auth_token.user_id, perms
+            );
             perms
         }
         Err(e) => {
-            debug!("Failed to resolve permissions for user_id={}: {}", auth_token.user_id, e);
+            debug!(
+                "Failed to resolve permissions for user_id={}: {}",
+                auth_token.user_id, e
+            );
             return None;
         }
     };
@@ -121,15 +127,24 @@ async fn extract_session_from_request_parts(
     let (device_id, device_type) = if let Some(device_id) = auth_token.device_id {
         match user_manager.get_device(device_id) {
             Ok(Some(device)) => {
-                debug!("Found device for session: device_id={}, type={:?}", device_id, device.device_type);
+                debug!(
+                    "Found device for session: device_id={}, type={:?}",
+                    device_id, device.device_type
+                );
                 (Some(device_id), Some(device.device_type))
             }
             Ok(None) => {
-                debug!("Device not found for device_id={}, continuing without device info", device_id);
+                debug!(
+                    "Device not found for device_id={}, continuing without device info",
+                    device_id
+                );
                 (Some(device_id), None)
             }
             Err(e) => {
-                debug!("Failed to get device info for device_id={}: {}", device_id, e);
+                debug!(
+                    "Failed to get device info for device_id={}: {}",
+                    device_id, e
+                );
                 (Some(device_id), None)
             }
         }
@@ -286,7 +301,10 @@ mod tests {
     #[test]
     fn extract_session_token_from_headers_case_sensitive() {
         let mut headers = HeaderMap::new();
-        headers.insert("authorization", HeaderValue::from_static("lowercase-header"));
+        headers.insert(
+            "authorization",
+            HeaderValue::from_static("lowercase-header"),
+        );
 
         let mut parts = create_parts_with_headers(headers);
         let token = extract_session_token_from_headers(&mut parts);

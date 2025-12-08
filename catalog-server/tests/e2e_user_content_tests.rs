@@ -4,9 +4,7 @@
 
 mod common;
 
-use common::{
-    TestClient, TestServer, ALBUM_1_ID, ARTIST_1_ID, TRACK_1_ID, TRACK_2_ID, TRACK_3_ID,
-};
+use common::{TestClient, TestServer, ALBUM_1_ID, ARTIST_1_ID, TRACK_1_ID, TRACK_2_ID, TRACK_3_ID};
 use reqwest::StatusCode;
 
 // =============================================================================

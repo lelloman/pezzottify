@@ -145,11 +145,7 @@ impl TestServer {
                 );
             }
 
-            match client
-                .get(format!("{}/", self.base_url))
-                .send()
-                .await
-            {
+            match client.get(format!("{}/", self.base_url)).send().await {
                 Ok(response) if response.status().is_success() => {
                     // Server is ready
                     return;

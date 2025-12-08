@@ -15,14 +15,14 @@ use std::{
 use tracing::{debug, error, info, warn};
 
 use crate::catalog_store::CatalogStore;
+use crate::{search::SearchVault, user::UserManager};
 use crate::{
     server::stream_track::stream_track,
     user::{
-        device::DeviceRegistration, user_models::LikedContentType, settings::UserSetting,
-        sync_events::UserEvent, FullUserStore, Permission,
+        device::DeviceRegistration, settings::UserSetting, sync_events::UserEvent,
+        user_models::LikedContentType, FullUserStore, Permission,
     },
 };
-use crate::{search::SearchVault, user::UserManager};
 use axum_extra::extract::cookie::{Cookie, SameSite};
 use tower_http::services::{ServeDir, ServeFile};
 
@@ -46,11 +46,11 @@ use super::{
     CONTENT_READ_PER_MINUTE, GLOBAL_PER_MINUTE, LOGIN_PER_MINUTE, SEARCH_PER_MINUTE,
     STREAM_PER_MINUTE, WRITE_PER_MINUTE,
 };
-use tower_governor::governor::GovernorConfigBuilder;
 use crate::server::session::Session;
 use crate::user::auth::AuthTokenValue;
 use axum::extract::Request;
 use axum::middleware::Next;
+use tower_governor::governor::GovernorConfigBuilder;
 
 const MAX_DEVICES_PER_USER: usize = 50;
 
@@ -84,10 +84,16 @@ async fn require_access_catalog(
         session.permissions
     );
     if !session.has_permission(Permission::AccessCatalog) {
-        debug!("require_access_catalog: FORBIDDEN - user_id={} lacks AccessCatalog permission", session.user_id);
+        debug!(
+            "require_access_catalog: FORBIDDEN - user_id={} lacks AccessCatalog permission",
+            session.user_id
+        );
         return StatusCode::FORBIDDEN.into_response();
     }
-    debug!("require_access_catalog: ALLOWED - user_id={}", session.user_id);
+    debug!(
+        "require_access_catalog: ALLOWED - user_id={}",
+        session.user_id
+    );
     next.run(request).await
 }
 
@@ -103,10 +109,16 @@ async fn require_like_content(
         session.permissions
     );
     if !session.has_permission(Permission::LikeContent) {
-        debug!("require_like_content: FORBIDDEN - user_id={} lacks LikeContent permission", session.user_id);
+        debug!(
+            "require_like_content: FORBIDDEN - user_id={} lacks LikeContent permission",
+            session.user_id
+        );
         return StatusCode::FORBIDDEN.into_response();
     }
-    debug!("require_like_content: ALLOWED - user_id={}", session.user_id);
+    debug!(
+        "require_like_content: ALLOWED - user_id={}",
+        session.user_id
+    );
     next.run(request).await
 }
 
@@ -122,10 +134,16 @@ async fn require_own_playlists(
         session.permissions
     );
     if !session.has_permission(Permission::OwnPlaylists) {
-        debug!("require_own_playlists: FORBIDDEN - user_id={} lacks OwnPlaylists permission", session.user_id);
+        debug!(
+            "require_own_playlists: FORBIDDEN - user_id={} lacks OwnPlaylists permission",
+            session.user_id
+        );
         return StatusCode::FORBIDDEN.into_response();
     }
-    debug!("require_own_playlists: ALLOWED - user_id={}", session.user_id);
+    debug!(
+        "require_own_playlists: ALLOWED - user_id={}",
+        session.user_id
+    );
     next.run(request).await
 }
 
@@ -141,10 +159,16 @@ async fn require_edit_catalog(
         session.permissions
     );
     if !session.has_permission(Permission::EditCatalog) {
-        debug!("require_edit_catalog: FORBIDDEN - user_id={} lacks EditCatalog permission", session.user_id);
+        debug!(
+            "require_edit_catalog: FORBIDDEN - user_id={} lacks EditCatalog permission",
+            session.user_id
+        );
         return StatusCode::FORBIDDEN.into_response();
     }
-    debug!("require_edit_catalog: ALLOWED - user_id={}", session.user_id);
+    debug!(
+        "require_edit_catalog: ALLOWED - user_id={}",
+        session.user_id
+    );
     next.run(request).await
 }
 
@@ -160,10 +184,16 @@ async fn require_reboot_server(
         session.permissions
     );
     if !session.has_permission(Permission::RebootServer) {
-        debug!("require_reboot_server: FORBIDDEN - user_id={} lacks RebootServer permission", session.user_id);
+        debug!(
+            "require_reboot_server: FORBIDDEN - user_id={} lacks RebootServer permission",
+            session.user_id
+        );
         return StatusCode::FORBIDDEN.into_response();
     }
-    debug!("require_reboot_server: ALLOWED - user_id={}", session.user_id);
+    debug!(
+        "require_reboot_server: ALLOWED - user_id={}",
+        session.user_id
+    );
     next.run(request).await
 }
 
@@ -179,10 +209,16 @@ async fn require_manage_permissions(
         session.permissions
     );
     if !session.has_permission(Permission::ManagePermissions) {
-        debug!("require_manage_permissions: FORBIDDEN - user_id={} lacks ManagePermissions permission", session.user_id);
+        debug!(
+            "require_manage_permissions: FORBIDDEN - user_id={} lacks ManagePermissions permission",
+            session.user_id
+        );
         return StatusCode::FORBIDDEN.into_response();
     }
-    debug!("require_manage_permissions: ALLOWED - user_id={}", session.user_id);
+    debug!(
+        "require_manage_permissions: ALLOWED - user_id={}",
+        session.user_id
+    );
     next.run(request).await
 }
 
@@ -198,10 +234,16 @@ async fn require_view_analytics(
         session.permissions
     );
     if !session.has_permission(Permission::ViewAnalytics) {
-        debug!("require_view_analytics: FORBIDDEN - user_id={} lacks ViewAnalytics permission", session.user_id);
+        debug!(
+            "require_view_analytics: FORBIDDEN - user_id={} lacks ViewAnalytics permission",
+            session.user_id
+        );
         return StatusCode::FORBIDDEN.into_response();
     }
-    debug!("require_view_analytics: ALLOWED - user_id={}", session.user_id);
+    debug!(
+        "require_view_analytics: ALLOWED - user_id={}",
+        session.user_id
+    );
     next.run(request).await
 }
 
@@ -867,11 +909,12 @@ async fn get_popular_content(
         start_date, end_date, albums_limit, artists_limit
     );
 
-    match user_manager
-        .lock()
-        .unwrap()
-        .get_popular_content(start_date, end_date, albums_limit, artists_limit)
-    {
+    match user_manager.lock().unwrap().get_popular_content(
+        start_date,
+        end_date,
+        albums_limit,
+        artists_limit,
+    ) {
         Ok(content) => {
             info!(
                 "get_popular_content: returning {} albums, {} artists",
@@ -930,9 +973,13 @@ async fn add_user_liked_content(
     if let (Some(stored_event), Some(device_id)) = (stored_event, session.device_id) {
         let ws_msg = super::websocket::messages::ServerMessage::new(
             super::websocket::messages::msg_types::SYNC,
-            super::websocket::messages::sync::SyncEventMessage { event: stored_event },
+            super::websocket::messages::sync::SyncEventMessage {
+                event: stored_event,
+            },
         );
-        connection_manager.send_to_other_devices(session.user_id, device_id, ws_msg).await;
+        connection_manager
+            .send_to_other_devices(session.user_id, device_id, ws_msg)
+            .await;
     }
 
     StatusCode::OK.into_response()
@@ -972,9 +1019,13 @@ async fn delete_user_liked_content(
     if let (Some(stored_event), Some(device_id)) = (stored_event, session.device_id) {
         let ws_msg = super::websocket::messages::ServerMessage::new(
             super::websocket::messages::msg_types::SYNC,
-            super::websocket::messages::sync::SyncEventMessage { event: stored_event },
+            super::websocket::messages::sync::SyncEventMessage {
+                event: stored_event,
+            },
         );
-        connection_manager.send_to_other_devices(session.user_id, device_id, ws_msg).await;
+        connection_manager
+            .send_to_other_devices(session.user_id, device_id, ws_msg)
+            .await;
     }
 
     StatusCode::OK.into_response()
@@ -1034,7 +1085,9 @@ async fn post_playlist(
     if let (Some(stored_event), Some(device_id)) = (stored_event, session.device_id) {
         let ws_msg = super::websocket::messages::ServerMessage::new(
             super::websocket::messages::msg_types::SYNC,
-            super::websocket::messages::sync::SyncEventMessage { event: stored_event },
+            super::websocket::messages::sync::SyncEventMessage {
+                event: stored_event,
+            },
         );
         connection_manager
             .send_to_other_devices(session.user_id, device_id, ws_msg)
@@ -1054,7 +1107,12 @@ async fn put_playlist(
     debug!("Updating playlist with id {}", id);
     let stored_events = {
         let um = user_manager.lock().unwrap();
-        match um.update_user_playlist(&id, session.user_id, body.name.clone(), body.track_ids.clone()) {
+        match um.update_user_playlist(
+            &id,
+            session.user_id,
+            body.name.clone(),
+            body.track_ids.clone(),
+        ) {
             Ok(_) => {
                 // Log sync events for name and/or tracks changes
                 let mut events = Vec::new();
@@ -1092,7 +1150,9 @@ async fn put_playlist(
         for stored_event in stored_events {
             let ws_msg = super::websocket::messages::ServerMessage::new(
                 super::websocket::messages::msg_types::SYNC,
-                super::websocket::messages::sync::SyncEventMessage { event: stored_event },
+                super::websocket::messages::sync::SyncEventMessage {
+                    event: stored_event,
+                },
             );
             connection_manager
                 .send_to_other_devices(session.user_id, device_id.clone(), ws_msg)
@@ -1133,7 +1193,9 @@ async fn delete_playlist(
     if let (Some(stored_event), Some(device_id)) = (stored_event, session.device_id) {
         let ws_msg = super::websocket::messages::ServerMessage::new(
             super::websocket::messages::msg_types::SYNC,
-            super::websocket::messages::sync::SyncEventMessage { event: stored_event },
+            super::websocket::messages::sync::SyncEventMessage {
+                event: stored_event,
+            },
         );
         connection_manager
             .send_to_other_devices(session.user_id, device_id, ws_msg)
@@ -1200,7 +1262,9 @@ async fn add_playlist_tracks(
     if let (Some(stored_event), Some(device_id)) = (stored_event, session.device_id) {
         let ws_msg = super::websocket::messages::ServerMessage::new(
             super::websocket::messages::msg_types::SYNC,
-            super::websocket::messages::sync::SyncEventMessage { event: stored_event },
+            super::websocket::messages::sync::SyncEventMessage {
+                event: stored_event,
+            },
         );
         connection_manager
             .send_to_other_devices(session.user_id, device_id, ws_msg)
@@ -1246,7 +1310,9 @@ async fn remove_tracks_from_playlist(
     if let (Some(stored_event), Some(device_id)) = (stored_event, session.device_id) {
         let ws_msg = super::websocket::messages::ServerMessage::new(
             super::websocket::messages::msg_types::SYNC,
-            super::websocket::messages::sync::SyncEventMessage { event: stored_event },
+            super::websocket::messages::sync::SyncEventMessage {
+                event: stored_event,
+            },
         );
         connection_manager
             .send_to_other_devices(session.user_id, device_id, ws_msg)
@@ -1288,7 +1354,11 @@ async fn post_listening_event(
     let date = {
         let datetime = chrono::DateTime::from_timestamp(started_at as i64, 0)
             .unwrap_or_else(|| chrono::Utc::now());
-        datetime.format("%Y%m%d").to_string().parse::<u32>().unwrap_or(0)
+        datetime
+            .format("%Y%m%d")
+            .to_string()
+            .parse::<u32>()
+            .unwrap_or(0)
     };
 
     // Calculate completion (>90% = complete)
@@ -1341,11 +1411,11 @@ async fn get_user_listening_summary(
 ) -> Response {
     let (start_date, end_date) = get_default_date_range(query.start_date, query.end_date);
 
-    match user_manager
-        .lock()
-        .unwrap()
-        .get_user_listening_summary(session.user_id, start_date, end_date)
-    {
+    match user_manager.lock().unwrap().get_user_listening_summary(
+        session.user_id,
+        start_date,
+        end_date,
+    ) {
         Ok(summary) => Json(summary).into_response(),
         Err(err) => {
             error!("Error getting listening summary: {}", err);
@@ -1408,14 +1478,22 @@ fn get_default_date_range(start_date: Option<u32>, end_date: Option<u32>) -> (u3
     let end = end_date.unwrap_or_else(|| {
         let datetime = chrono::DateTime::from_timestamp(now_secs as i64, 0)
             .unwrap_or_else(|| chrono::Utc::now());
-        datetime.format("%Y%m%d").to_string().parse::<u32>().unwrap_or(0)
+        datetime
+            .format("%Y%m%d")
+            .to_string()
+            .parse::<u32>()
+            .unwrap_or(0)
     });
 
     let start = start_date.unwrap_or_else(|| {
         let thirty_days_ago = now_secs - (30 * 24 * 60 * 60);
         let datetime = chrono::DateTime::from_timestamp(thirty_days_ago as i64, 0)
             .unwrap_or_else(|| chrono::Utc::now());
-        datetime.format("%Y%m%d").to_string().parse::<u32>().unwrap_or(0)
+        datetime
+            .format("%Y%m%d")
+            .to_string()
+            .parse::<u32>()
+            .unwrap_or(0)
     });
 
     (start, end)
@@ -1481,9 +1559,13 @@ async fn update_user_settings(
         for stored_event in stored_events {
             let ws_msg = super::websocket::messages::ServerMessage::new(
                 super::websocket::messages::msg_types::SYNC,
-                super::websocket::messages::sync::SyncEventMessage { event: stored_event },
+                super::websocket::messages::sync::SyncEventMessage {
+                    event: stored_event,
+                },
             );
-            connection_manager.send_to_other_devices(session.user_id, device_id, ws_msg).await;
+            connection_manager
+                .send_to_other_devices(session.user_id, device_id, ws_msg)
+                .await;
         }
     }
 
@@ -1552,7 +1634,8 @@ async fn login(
             };
 
             // 3. Associate device with user
-            if let Err(e) = locked_manager.associate_device_with_user(device_id, credentials.user_id)
+            if let Err(e) =
+                locked_manager.associate_device_with_user(device_id, credentials.user_id)
             {
                 error!("Device association failed: {}", e);
                 // Non-fatal, continue with login
@@ -1620,10 +1703,7 @@ async fn logout(State(user_manager): State<GuardedUserManager>, session: Session
     }
 }
 
-async fn get_session(
-    State(user_manager): State<GuardedUserManager>,
-    session: Session,
-) -> Response {
+async fn get_session(State(user_manager): State<GuardedUserManager>, session: Session) -> Response {
     let locked_manager = user_manager.lock().unwrap();
 
     // Get the user handle from user_id
@@ -1634,7 +1714,10 @@ async fn get_session(
             return StatusCode::INTERNAL_SERVER_ERROR.into_response();
         }
         Err(err) => {
-            error!("Failed to get user handle for user_id={}: {}", session.user_id, err);
+            error!(
+                "Failed to get user handle for user_id={}: {}",
+                session.user_id, err
+            );
             return StatusCode::INTERNAL_SERVER_ERROR.into_response();
         }
     };
@@ -1971,7 +2054,8 @@ async fn admin_get_user_roles(
 
     match manager.get_user_roles(user_id) {
         Ok(roles) => {
-            let role_strings: Vec<String> = roles.iter().map(|r| r.to_string().to_owned()).collect();
+            let role_strings: Vec<String> =
+                roles.iter().map(|r| r.to_string().to_owned()).collect();
             Json(UserRolesResponse {
                 user_handle,
                 roles: role_strings,
@@ -2037,7 +2121,9 @@ async fn admin_add_user_role(
     // Broadcast to all user's devices
     let ws_msg = super::websocket::messages::ServerMessage::new(
         super::websocket::messages::msg_types::SYNC,
-        super::websocket::messages::sync::SyncEventMessage { event: stored_event },
+        super::websocket::messages::sync::SyncEventMessage {
+            event: stored_event,
+        },
     );
     connection_manager.broadcast_to_user(user_id, ws_msg).await;
 
@@ -2095,7 +2181,9 @@ async fn admin_remove_user_role(
     // Broadcast to all user's devices
     let ws_msg = super::websocket::messages::ServerMessage::new(
         super::websocket::messages::msg_types::SYNC,
-        super::websocket::messages::sync::SyncEventMessage { event: stored_event },
+        super::websocket::messages::sync::SyncEventMessage {
+            event: stored_event,
+        },
     );
     connection_manager.broadcast_to_user(user_id, ws_msg).await;
 
@@ -2119,7 +2207,8 @@ async fn admin_get_user_permissions(
 
     match manager.get_user_permissions(user_id) {
         Ok(permissions) => {
-            let perm_strings: Vec<String> = permissions.iter().map(|p| format!("{:?}", p)).collect();
+            let perm_strings: Vec<String> =
+                permissions.iter().map(|p| format!("{:?}", p)).collect();
             Json(UserPermissionsResponse {
                 user_handle,
                 permissions: perm_strings,
@@ -2167,7 +2256,9 @@ async fn admin_add_user_extra_permission(
         };
 
         let start_time = SystemTime::now();
-        let end_time = body.duration_seconds.map(|secs| start_time + Duration::from_secs(secs));
+        let end_time = body
+            .duration_seconds
+            .map(|secs| start_time + Duration::from_secs(secs));
 
         let grant = PermissionGrant::Extra {
             start_time,
@@ -2190,7 +2281,11 @@ async fn admin_add_user_extra_permission(
             Ok(stored) => stored,
             Err(e) => {
                 warn!("Failed to log sync event for permission grant: {}", e);
-                return (StatusCode::CREATED, Json(AddExtraPermissionResponse { permission_id })).into_response();
+                return (
+                    StatusCode::CREATED,
+                    Json(AddExtraPermissionResponse { permission_id }),
+                )
+                    .into_response();
             }
         };
 
@@ -2200,11 +2295,17 @@ async fn admin_add_user_extra_permission(
     // Broadcast to all user's devices
     let ws_msg = super::websocket::messages::ServerMessage::new(
         super::websocket::messages::msg_types::SYNC,
-        super::websocket::messages::sync::SyncEventMessage { event: stored_event },
+        super::websocket::messages::sync::SyncEventMessage {
+            event: stored_event,
+        },
     );
     connection_manager.broadcast_to_user(user_id, ws_msg).await;
 
-    (StatusCode::CREATED, Json(AddExtraPermissionResponse { permission_id })).into_response()
+    (
+        StatusCode::CREATED,
+        Json(AddExtraPermissionResponse { permission_id }),
+    )
+        .into_response()
 }
 
 async fn admin_remove_extra_permission(
@@ -2242,7 +2343,9 @@ async fn admin_remove_extra_permission(
     // Broadcast the sync event to user's connected devices
     let ws_msg = super::websocket::messages::ServerMessage::new(
         super::websocket::messages::msg_types::SYNC,
-        super::websocket::messages::sync::SyncEventMessage { event: stored_event },
+        super::websocket::messages::sync::SyncEventMessage {
+            event: stored_event,
+        },
     );
     connection_manager.broadcast_to_user(user_id, ws_msg).await;
 
@@ -2685,7 +2788,15 @@ pub fn make_app(
     media_base_path: Option<std::path::PathBuf>,
 ) -> Result<Router> {
     let user_manager = UserManager::new(catalog_store.clone(), user_store.clone());
-    let state = ServerState::new(config.clone(), catalog_store, search_vault, user_manager, user_store, downloader, media_base_path);
+    let state = ServerState::new(
+        config.clone(),
+        catalog_store,
+        search_vault,
+        user_manager,
+        user_store,
+        downloader,
+        media_base_path,
+    );
 
     // Login route with strict IP-based rate limiting
     // For rates < 60/min, we use per_second(1) and rely on burst_size to enforce the limit
@@ -2797,8 +2908,14 @@ pub fn make_app(
     // Liked content WRITE routes (stricter limit)
     // Route pattern: /liked/{content_type}/{content_id}
     let liked_content_write_routes: Router = Router::new()
-        .route("/liked/{content_type}/{content_id}", post(add_user_liked_content))
-        .route("/liked/{content_type}/{content_id}", delete(delete_user_liked_content))
+        .route(
+            "/liked/{content_type}/{content_id}",
+            post(add_user_liked_content),
+        )
+        .route(
+            "/liked/{content_type}/{content_id}",
+            delete(delete_user_liked_content),
+        )
         .layer(GovernorLayer::new(write_rate_limit.clone()))
         .route_layer(middleware::from_fn_with_state(
             state.clone(),
@@ -2936,18 +3053,45 @@ pub fn make_app(
         .route("/users/{user_handle}", delete(admin_delete_user))
         .route("/users/{user_handle}/roles", get(admin_get_user_roles))
         .route("/users/{user_handle}/roles", post(admin_add_user_role))
-        .route("/users/{user_handle}/roles/{role}", delete(admin_remove_user_role))
-        .route("/users/{user_handle}/permissions", get(admin_get_user_permissions))
-        .route("/users/{user_handle}/permissions", post(admin_add_user_extra_permission))
-        .route("/permissions/{permission_id}", delete(admin_remove_extra_permission))
-        .route("/users/{user_handle}/credentials", get(admin_get_user_credentials_status))
-        .route("/users/{user_handle}/password", put(admin_set_user_password))
-        .route("/users/{user_handle}/password", delete(admin_delete_user_password))
+        .route(
+            "/users/{user_handle}/roles/{role}",
+            delete(admin_remove_user_role),
+        )
+        .route(
+            "/users/{user_handle}/permissions",
+            get(admin_get_user_permissions),
+        )
+        .route(
+            "/users/{user_handle}/permissions",
+            post(admin_add_user_extra_permission),
+        )
+        .route(
+            "/permissions/{permission_id}",
+            delete(admin_remove_extra_permission),
+        )
+        .route(
+            "/users/{user_handle}/credentials",
+            get(admin_get_user_credentials_status),
+        )
+        .route(
+            "/users/{user_handle}/password",
+            put(admin_set_user_password),
+        )
+        .route(
+            "/users/{user_handle}/password",
+            delete(admin_delete_user_password),
+        )
         // Bandwidth statistics routes
         .route("/bandwidth/summary", get(admin_get_bandwidth_summary))
         .route("/bandwidth/usage", get(admin_get_bandwidth_usage))
-        .route("/bandwidth/users/{user_handle}/summary", get(admin_get_user_bandwidth_summary))
-        .route("/bandwidth/users/{user_handle}/usage", get(admin_get_user_bandwidth_usage))
+        .route(
+            "/bandwidth/users/{user_handle}/summary",
+            get(admin_get_user_bandwidth_summary),
+        )
+        .route(
+            "/bandwidth/users/{user_handle}/usage",
+            get(admin_get_user_bandwidth_usage),
+        )
         .layer(GovernorLayer::new(write_rate_limit.clone()))
         .route_layer(middleware::from_fn_with_state(
             state.clone(),
@@ -2959,8 +3103,14 @@ pub fn make_app(
     let admin_listening_routes: Router = Router::new()
         .route("/listening/daily", get(admin_get_daily_listening_stats))
         .route("/listening/top-tracks", get(admin_get_top_tracks))
-        .route("/listening/track/{track_id}", get(admin_get_track_listening_stats))
-        .route("/listening/users/{user_handle}/summary", get(admin_get_user_listening_summary))
+        .route(
+            "/listening/track/{track_id}",
+            get(admin_get_track_listening_stats),
+        )
+        .route(
+            "/listening/users/{user_handle}/summary",
+            get(admin_get_user_listening_summary),
+        )
         .route("/online-users", get(admin_get_online_users))
         .layer(GovernorLayer::new(write_rate_limit.clone()))
         .route_layer(middleware::from_fn_with_state(
@@ -2973,7 +3123,10 @@ pub fn make_app(
     let admin_changelog_routes: Router = Router::new()
         .route("/changelog/batch", post(admin_create_changelog_batch))
         .route("/changelog/batches", get(admin_list_changelog_batches))
-        .route("/changelog/batch/{batch_id}", get(admin_get_changelog_batch))
+        .route(
+            "/changelog/batch/{batch_id}",
+            get(admin_get_changelog_batch),
+        )
         .route(
             "/changelog/batch/{batch_id}/close",
             post(admin_close_changelog_batch),
@@ -3072,7 +3225,14 @@ pub async fn run_server(
         content_cache_age_sec,
         frontend_dir_path,
     };
-    let app = make_app(config, catalog_store.clone(), search_vault, user_store, downloader, media_base_path)?;
+    let app = make_app(
+        config,
+        catalog_store.clone(),
+        search_vault,
+        user_store,
+        downloader,
+        media_base_path,
+    )?;
 
     let main_listener = tokio::net::TcpListener::bind(format!("0.0.0.0:{}", port))
         .await
@@ -3087,8 +3247,9 @@ pub async fn run_server(
     // Spawn the stale batch auto-close background task
     let catalog_store_for_bg = catalog_store.clone();
     tokio::spawn(async move {
-        let mut interval =
-            tokio::time::interval(std::time::Duration::from_secs(STALE_BATCH_CHECK_INTERVAL_SECS));
+        let mut interval = tokio::time::interval(std::time::Duration::from_secs(
+            STALE_BATCH_CHECK_INTERVAL_SECS,
+        ));
         loop {
             interval.tick().await;
             check_and_close_stale_batches(&catalog_store_for_bg);
@@ -3141,7 +3302,9 @@ mod tests {
     use crate::user::auth::UserAuthCredentials;
     use crate::user::auth::{AuthToken, AuthTokenValue};
     use crate::user::user_models::{BandwidthSummary, BandwidthUsage, LikedContentType};
-    use crate::user::{UserAuthCredentialsStore, UserAuthTokenStore, UserBandwidthStore, UserStore};
+    use crate::user::{
+        UserAuthCredentialsStore, UserAuthTokenStore, UserBandwidthStore, UserStore,
+    };
     use axum::{body::Body, http::Request};
     use tower::ServiceExt; // for `call`, `oneshot`, and `ready
 
@@ -3221,7 +3384,11 @@ mod tests {
             todo!()
         }
 
-        fn is_user_liked_content(&self, _user_id: usize, _content_id: &str) -> Result<Option<bool>> {
+        fn is_user_liked_content(
+            &self,
+            _user_id: usize,
+            _content_id: &str,
+        ) -> Result<Option<bool>> {
             todo!()
         }
 
@@ -3299,7 +3466,10 @@ mod tests {
             todo!()
         }
 
-        fn remove_user_extra_permission(&self, _permission_id: usize) -> Result<Option<(usize, Permission)>> {
+        fn remove_user_extra_permission(
+            &self,
+            _permission_id: usize,
+        ) -> Result<Option<(usize, Permission)>> {
             todo!()
         }
 
@@ -3345,7 +3515,10 @@ mod tests {
     }
 
     impl UserAuthCredentialsStore for InMemoryUserStore {
-        fn get_user_auth_credentials(&self, _user_handle: &str) -> Result<Option<UserAuthCredentials>> {
+        fn get_user_auth_credentials(
+            &self,
+            _user_handle: &str,
+        ) -> Result<Option<UserAuthCredentials>> {
             todo!()
         }
 
@@ -3532,17 +3705,10 @@ mod tests {
         ) -> Result<Option<crate::user::device::Device>> {
             Ok(None)
         }
-        fn get_user_devices(
-            &self,
-            _user_id: usize,
-        ) -> Result<Vec<crate::user::device::Device>> {
+        fn get_user_devices(&self, _user_id: usize) -> Result<Vec<crate::user::device::Device>> {
             Ok(vec![])
         }
-        fn associate_device_with_user(
-            &self,
-            _device_id: usize,
-            _user_id: usize,
-        ) -> Result<()> {
+        fn associate_device_with_user(&self, _device_id: usize, _user_id: usize) -> Result<()> {
             Ok(())
         }
         fn touch_device(&self, _device_id: usize) -> Result<()> {
@@ -3551,11 +3717,7 @@ mod tests {
         fn prune_orphaned_devices(&self, _inactive_for_days: u32) -> Result<usize> {
             Ok(0)
         }
-        fn enforce_user_device_limit(
-            &self,
-            _user_id: usize,
-            _max_devices: usize,
-        ) -> Result<usize> {
+        fn enforce_user_device_limit(&self, _user_id: usize, _max_devices: usize) -> Result<usize> {
             Ok(0)
         }
     }
@@ -3611,7 +3773,9 @@ mod tests {
         fn create_test_store_with_admin_user() -> (SqliteUserStore, usize, TempDir) {
             let (store, temp_dir) = create_test_store();
             let user_id = store.create_user("admin_user").unwrap();
-            store.add_user_role(user_id, crate::user::UserRole::Admin).unwrap();
+            store
+                .add_user_role(user_id, crate::user::UserRole::Admin)
+                .unwrap();
             (store, user_id, temp_dir)
         }
 
@@ -3619,7 +3783,9 @@ mod tests {
         fn create_test_store_with_regular_user() -> (SqliteUserStore, usize, TempDir) {
             let (store, temp_dir) = create_test_store();
             let user_id = store.create_user("regular_user").unwrap();
-            store.add_user_role(user_id, crate::user::UserRole::Regular).unwrap();
+            store
+                .add_user_role(user_id, crate::user::UserRole::Regular)
+                .unwrap();
             (store, user_id, temp_dir)
         }
 
@@ -3664,19 +3830,25 @@ mod tests {
             let user_id = store.create_user("testuser").unwrap();
 
             // Add Admin role
-            store.add_user_role(user_id, crate::user::UserRole::Admin).unwrap();
+            store
+                .add_user_role(user_id, crate::user::UserRole::Admin)
+                .unwrap();
             let roles = store.get_user_roles(user_id).unwrap();
             assert!(roles.contains(&crate::user::UserRole::Admin));
 
             // Add Regular role
-            store.add_user_role(user_id, crate::user::UserRole::Regular).unwrap();
+            store
+                .add_user_role(user_id, crate::user::UserRole::Regular)
+                .unwrap();
             let roles = store.get_user_roles(user_id).unwrap();
             assert_eq!(roles.len(), 2);
             assert!(roles.contains(&crate::user::UserRole::Admin));
             assert!(roles.contains(&crate::user::UserRole::Regular));
 
             // Remove Admin role
-            store.remove_user_role(user_id, crate::user::UserRole::Admin).unwrap();
+            store
+                .remove_user_role(user_id, crate::user::UserRole::Admin)
+                .unwrap();
             let roles = store.get_user_roles(user_id).unwrap();
             assert_eq!(roles.len(), 1);
             assert!(roles.contains(&crate::user::UserRole::Regular));
@@ -3687,12 +3859,22 @@ mod tests {
             let (store, _temp_dir) = create_test_store();
             let user_id = store.create_user("testuser").unwrap();
 
-            store.add_user_role(user_id, crate::user::UserRole::Admin).unwrap();
-            store.add_user_role(user_id, crate::user::UserRole::Admin).unwrap();
+            store
+                .add_user_role(user_id, crate::user::UserRole::Admin)
+                .unwrap();
+            store
+                .add_user_role(user_id, crate::user::UserRole::Admin)
+                .unwrap();
 
             let roles = store.get_user_roles(user_id).unwrap();
             // Should still only have one Admin role
-            assert_eq!(roles.iter().filter(|r| **r == crate::user::UserRole::Admin).count(), 1);
+            assert_eq!(
+                roles
+                    .iter()
+                    .filter(|r| **r == crate::user::UserRole::Admin)
+                    .count(),
+                1
+            );
         }
 
         #[test]
@@ -3821,6 +4003,5 @@ mod tests {
             let not_found = user_manager.get_user_id("nonexistent").unwrap();
             assert_eq!(not_found, None);
         }
-
     }
 }

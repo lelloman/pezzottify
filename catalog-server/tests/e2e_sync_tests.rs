@@ -312,7 +312,9 @@ async fn test_get_sync_events_playlist_renamed() {
     // Create and rename a playlist
     let response = client.create_playlist("Old Name", vec![]).await;
     let playlist_id: String = response.json().await.unwrap();
-    client.update_playlist(&playlist_id, Some("New Name"), None).await;
+    client
+        .update_playlist(&playlist_id, Some("New Name"), None)
+        .await;
 
     // Get events
     let response = client.get_sync_events(0).await;
@@ -334,7 +336,9 @@ async fn test_get_sync_events_playlist_tracks_updated() {
     // Create a playlist and add tracks (using valid test track IDs)
     let response = client.create_playlist("Test", vec![]).await;
     let playlist_id: String = response.json().await.unwrap();
-    let response = client.add_tracks_to_playlist(&playlist_id, vec![TRACK_1_ID]).await;
+    let response = client
+        .add_tracks_to_playlist(&playlist_id, vec![TRACK_1_ID])
+        .await;
     assert_eq!(response.status(), StatusCode::OK);
 
     // Get events
