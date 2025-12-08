@@ -1361,7 +1361,7 @@ impl UserStore for SqliteUserStore {
             .flat_map(|s| {
                 s.split(',')
                     .map(|part| part.trim())
-                    .filter_map(|part| UserRole::from_str(part))
+                    .filter_map(UserRole::from_str)
                     .collect::<Vec<_>>()
             })
             .collect();
@@ -1393,7 +1393,7 @@ impl UserStore for SqliteUserStore {
             let mut roles: Vec<UserRole> = existing
                 .split(',')
                 .map(|s| s.trim())
-                .filter_map(|s| UserRole::from_str(s))
+                .filter_map(UserRole::from_str)
                 .collect();
 
             if !roles.contains(&role) {
@@ -1448,7 +1448,7 @@ impl UserStore for SqliteUserStore {
             let roles: Vec<UserRole> = existing
                 .split(',')
                 .map(|s| s.trim())
-                .filter_map(|s| UserRole::from_str(s))
+                .filter_map(UserRole::from_str)
                 .filter(|r| r != &role)
                 .collect();
 
@@ -1643,7 +1643,7 @@ impl UserStore for SqliteUserStore {
                 let perm_int: i32 = row.get(0)?;
                 Ok(perm_int)
             })?
-            .filter_map(|r| r.ok().and_then(|i| Permission::from_int(i)))
+            .filter_map(|r| r.ok().and_then(Permission::from_int))
             .collect::<Vec<_>>();
 
         debug!(
@@ -1687,7 +1687,7 @@ impl UserAuthTokenStore for SqliteUserStore {
                 created: system_time_from_column_result(row.get(2)?),
                 last_used: row
                     .get::<usize, Option<i64>>(3)?
-                    .map(|v| system_time_from_column_result(v)),
+                    .map(system_time_from_column_result),
             })
         }) {
             Ok(token) => Ok(Some(token)),
@@ -1714,7 +1714,7 @@ impl UserAuthTokenStore for SqliteUserStore {
                         created: system_time_from_column_result(row.get(2)?),
                         last_used: row
                             .get::<usize, Option<i64>>(3)?
-                            .map(|v| system_time_from_column_result(v)),
+                            .map(system_time_from_column_result),
                     })
                 })
             }) {
@@ -1774,7 +1774,7 @@ impl UserAuthTokenStore for SqliteUserStore {
                     created: system_time_from_column_result(row.get(2)?),
                     last_used: row
                         .get::<usize, Option<i64>>(3)?
-                        .map(|v| system_time_from_column_result(v)),
+                        .map(system_time_from_column_result),
                 })
             })?
             .collect::<Result<Vec<AuthToken>, _>>()?;
@@ -1835,10 +1835,10 @@ impl UserAuthCredentialsStore for SqliteUserStore {
                 created,
                 last_tried: row
                     .get::<usize, Option<i64>>(5)?
-                    .map(|v| system_time_from_column_result(v)),
+                    .map(system_time_from_column_result),
                 last_used: row
                     .get::<usize, Option<i64>>(6)?
-                    .map(|v| system_time_from_column_result(v)),
+                    .map(system_time_from_column_result),
             })
         }) {
             Ok(creds) => Some(creds),
@@ -2072,7 +2072,7 @@ impl UserBandwidthStore for SqliteUserStore {
         // Convert to YYYYMMDD format
         let cutoff_date = {
             let datetime = chrono::DateTime::from_timestamp(cutoff_secs as i64, 0)
-                .unwrap_or_else(|| chrono::Utc::now());
+                .unwrap_or_else(chrono::Utc::now);
             datetime
                 .format("%Y%m%d")
                 .to_string()
@@ -2487,7 +2487,7 @@ impl UserListeningStore for SqliteUserStore {
         // Convert to YYYYMMDD format
         let cutoff_date = {
             let datetime = chrono::DateTime::from_timestamp(cutoff_secs as i64, 0)
-                .unwrap_or_else(|| chrono::Utc::now());
+                .unwrap_or_else(chrono::Utc::now);
             datetime
                 .format("%Y%m%d")
                 .to_string()

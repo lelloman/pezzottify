@@ -880,7 +880,7 @@ async fn get_popular_content(
 
     let end_date = {
         let datetime = chrono::DateTime::from_timestamp(now_secs as i64, 0)
-            .unwrap_or_else(|| chrono::Utc::now());
+            .unwrap_or_else(chrono::Utc::now);
         datetime
             .format("%Y%m%d")
             .to_string()
@@ -891,7 +891,7 @@ async fn get_popular_content(
     let start_date = {
         let one_year_ago = now_secs - (365 * 24 * 60 * 60);
         let datetime = chrono::DateTime::from_timestamp(one_year_ago as i64, 0)
-            .unwrap_or_else(|| chrono::Utc::now());
+            .unwrap_or_else(chrono::Utc::now);
         datetime
             .format("%Y%m%d")
             .to_string()
@@ -1352,7 +1352,7 @@ async fn post_listening_event(
     let started_at = body.started_at.unwrap_or(now_secs);
     let date = {
         let datetime = chrono::DateTime::from_timestamp(started_at as i64, 0)
-            .unwrap_or_else(|| chrono::Utc::now());
+            .unwrap_or_else(chrono::Utc::now);
         datetime
             .format("%Y%m%d")
             .to_string()
@@ -1476,7 +1476,7 @@ fn get_default_date_range(start_date: Option<u32>, end_date: Option<u32>) -> (u3
 
     let end = end_date.unwrap_or_else(|| {
         let datetime = chrono::DateTime::from_timestamp(now_secs as i64, 0)
-            .unwrap_or_else(|| chrono::Utc::now());
+            .unwrap_or_else(chrono::Utc::now);
         datetime
             .format("%Y%m%d")
             .to_string()
@@ -1487,7 +1487,7 @@ fn get_default_date_range(start_date: Option<u32>, end_date: Option<u32>) -> (u3
     let start = start_date.unwrap_or_else(|| {
         let thirty_days_ago = now_secs - (30 * 24 * 60 * 60);
         let datetime = chrono::DateTime::from_timestamp(thirty_days_ago as i64, 0)
-            .unwrap_or_else(|| chrono::Utc::now());
+            .unwrap_or_else(chrono::Utc::now);
         datetime
             .format("%Y%m%d")
             .to_string()
