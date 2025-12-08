@@ -176,7 +176,7 @@ impl VersionedSchema {
                     };
 
                     Ok(Column {
-                        name: name,
+                        name,
                         sql_type,
                         non_null: row.get::<_, i32>(3)? == 1,
                         default_value: row

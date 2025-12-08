@@ -147,7 +147,7 @@ impl SearchResultsHolder {
             let result = SearchResult {
                 item_id: item.item_id.clone(),
                 item_type: item.item_type,
-                score: score,
+                score,
                 adjusted_score: score as i64,
                 matchable_text: item.hash.hashed_text.clone(),
             };
