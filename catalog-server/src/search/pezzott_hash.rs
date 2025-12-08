@@ -22,7 +22,7 @@ impl PezzottHash {
             .as_ref()
             .to_lowercase()
             .unicode_words()
-            .map(|w| make_sim_hash(w))
+            .map(make_sim_hash)
             .collect();
 
         PezzottHash {
