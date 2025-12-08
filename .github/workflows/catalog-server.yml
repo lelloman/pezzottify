@@ -1,0 +1,49 @@
+name: Catalog Server CI
+
+on:
+  pull_request:
+    paths:
+      - 'catalog-server/**'
+      - '.github/workflows/catalog-server.yml'
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  check:
+    name: Check, Lint & Test
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: catalog-server
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            catalog-server/target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('catalog-server/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      - name: Check formatting
+        run: cargo fmt --check
+
+      - name: Run clippy
+        run: cargo clippy -- -D warnings
+
+      - name: Run tests
+        run: cargo test
+
+      - name: Build release
+        run: cargo build --release
