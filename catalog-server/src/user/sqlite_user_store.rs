@@ -1320,7 +1320,7 @@ impl UserStore for SqliteUserStore {
         let mut playlist = stmt.query_row(params![playlist_id, user_id], |row| {
             Ok(UserPlaylist {
                 id: row.get(0)?,
-                user_id: user_id,
+                user_id,
                 creator: creator_name,
                 name: row.get(1)?,
                 created: system_time_from_column_result(row.get(2)?),
