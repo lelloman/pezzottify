@@ -1,10 +1,11 @@
 use super::context::JobContext;
 use super::handle::{SchedulerCommand, SharedJobState};
 use super::job::{BackgroundJob, HookEvent, JobError, JobSchedule, ShutdownBehavior};
+use crate::server::metrics;
 use crate::server_store::{JobRunStatus, ServerStore};
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use tokio::sync::{mpsc, RwLock};
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
@@ -311,6 +312,9 @@ impl JobScheduler {
             state.running_jobs.insert(job_id.to_string());
         }
 
+        // Set metric indicating job is running
+        metrics::set_background_job_running(job_id, true);
+
         // Create cancellation token for this job
         let cancel_token = self.job_context.cancellation_token.child_token();
         self.job_cancel_tokens.insert(job_id.to_string(), cancel_token.clone());
@@ -329,33 +333,39 @@ impl JobScheduler {
 
         // Spawn the job in a blocking task since jobs are synchronous
         let handle = tokio::spawn(async move {
+            let start_time = Instant::now();
             let result = tokio::task::spawn_blocking(move || {
                 job.execute(&ctx)
             }).await;
+            let elapsed = start_time.elapsed();
 
             // Record job completion
-            let (status, error_msg) = match result {
+            let (status, error_msg, status_label) = match result {
                 Ok(Ok(())) => {
-                    info!("Job {} completed successfully", job_id_owned);
-                    (JobRunStatus::Completed, None)
+                    info!("Job {} completed successfully in {:?}", job_id_owned, elapsed);
+                    (JobRunStatus::Completed, None, "success")
                 }
                 Ok(Err(e)) => {
                     match e {
                         JobError::Cancelled => {
-                            info!("Job {} was cancelled", job_id_owned);
-                            (JobRunStatus::Failed, Some("Cancelled".to_string()))
+                            info!("Job {} was cancelled after {:?}", job_id_owned, elapsed);
+                            (JobRunStatus::Failed, Some("Cancelled".to_string()), "cancelled")
                         }
                         _ => {
-                            error!("Job {} failed: {}", job_id_owned, e);
-                            (JobRunStatus::Failed, Some(e.to_string()))
+                            error!("Job {} failed after {:?}: {}", job_id_owned, elapsed, e);
+                            (JobRunStatus::Failed, Some(e.to_string()), "failed")
                         }
                     }
                 }
                 Err(e) => {
-                    error!("Job {} panicked: {}", job_id_owned, e);
-                    (JobRunStatus::Failed, Some(format!("Task panic: {}", e)))
+                    error!("Job {} panicked after {:?}: {}", job_id_owned, elapsed, e);
+                    (JobRunStatus::Failed, Some(format!("Task panic: {}", e)), "panic")
                 }
             };
+
+            // Record metrics
+            metrics::record_background_job_execution(&job_id_owned, status_label, elapsed);
+            metrics::set_background_job_running(&job_id_owned, false);
 
             if let Err(e) = server_store.record_job_finish(run_id, status, error_msg) {
                 error!("Failed to record job finish for {}: {}", job_id_owned, e);
