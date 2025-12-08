@@ -8,6 +8,7 @@ use tracing::{error, info, level_filters::LevelFilter};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
 
 // Import modules from the library crate
+use pezzottify_catalog_server::background_jobs::jobs::PopularContentJob;
 use pezzottify_catalog_server::background_jobs::{create_scheduler, JobContext};
 use pezzottify_catalog_server::catalog_store::{CatalogStore, SqliteCatalogStore};
 use pezzottify_catalog_server::config;
@@ -19,7 +20,7 @@ use pezzottify_catalog_server::search::NoOpSearchVault;
 use pezzottify_catalog_server::search::PezzotHashSearchVault;
 use pezzottify_catalog_server::server::{metrics, run_server, RequestsLoggingLevel};
 use pezzottify_catalog_server::server_store::{self, SqliteServerStore};
-use pezzottify_catalog_server::user::{self, FullUserStore, SqliteUserStore};
+use pezzottify_catalog_server::user::{self, SqliteUserStore};
 
 fn parse_path(s: &str) -> Result<PathBuf, String> {
     let path_buf = PathBuf::from(s);
@@ -214,8 +215,14 @@ async fn main() -> Result<()> {
         job_context,
     );
 
-    // Register jobs (placeholder - will be populated with actual jobs later)
-    info!("Job scheduler initialized");
+    // Register jobs
+    scheduler
+        .register_job(Arc::new(PopularContentJob::new()))
+        .await;
+    info!(
+        "Job scheduler initialized with {} job(s)",
+        scheduler.job_count().await
+    );
 
     // Note: The hook_sender is currently unused but will be used by the HTTP server
     // to notify the scheduler of events like catalog changes
