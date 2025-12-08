@@ -3372,6 +3372,10 @@ mod tests {
             todo!()
         }
 
+        fn delete_user(&self, _user_id: usize) -> Result<bool> {
+            todo!()
+        }
+
         fn get_user_handle(&self, _user_id: usize) -> Result<Option<String>> {
             todo!()
         }

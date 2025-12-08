@@ -658,6 +658,9 @@ mod tests {
         fn create_user(&self, _user_handle: &str) -> anyhow::Result<usize> {
             Ok(1)
         }
+        fn delete_user(&self, _user_id: usize) -> anyhow::Result<bool> {
+            Ok(true)
+        }
         fn get_user_handle(&self, _user_id: usize) -> anyhow::Result<Option<String>> {
             Ok(Some("testuser".to_string()))
         }
@@ -1310,6 +1313,9 @@ mod tests {
     impl crate::user::UserStore for ConfigurableTestUserStore {
         fn create_user(&self, _user_handle: &str) -> anyhow::Result<usize> {
             Ok(1)
+        }
+        fn delete_user(&self, _user_id: usize) -> anyhow::Result<bool> {
+            Ok(true)
         }
         fn get_user_handle(&self, _user_id: usize) -> anyhow::Result<Option<String>> {
             Ok(Some("testuser".to_string()))
