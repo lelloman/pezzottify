@@ -22,11 +22,18 @@ The app is designed with clean architecture principles, separating concerns into
 
 - Browse music catalog (artists, albums, tracks)
 - Audio playback with playback controls
-- Search functionality
-- User authentication
+- Search functionality with filters
+- User authentication with multi-device support
 - Playlist management
-- Like/favorite content
+- Like/favorite content with cross-device sync
 - Artist and album detail views
+- Popular content discovery
+- Listening history tracking
+- Recently viewed content
+- Search history
+- Real-time sync via WebSocket
+- Offline support with background synchronization
+- Memory pressure management
 - Debug interface for development
 
 ## Architecture
@@ -41,9 +48,18 @@ The project follows Clean Architecture principles with a multi-module Gradle set
 - Contains business logic, use cases, and domain models
 - Defines interfaces for data sources (repositories, stores, API clients)
 - Key components:
-  - Use cases: `PerformLogin`, `PerformLogout`, `PerformSearch`, `InitializeApp`, `IsLoggedIn`
-  - Domain models: `Artist`, `Album`, `Track`, `AuthState`
-  - Interfaces: `RemoteApiClient`, `StaticsStore`, `AuthStore`, `PezzottifyPlayer`
+  - Use cases:
+    - Authentication: `PerformLogin`, `PerformLogout`, `IsLoggedIn`
+    - Content: `PerformSearch`, `GetPopularContent`, `InitializeApp`
+    - User data: `LogViewedContentUseCase`, `GetRecentlyViewedContentUseCase`, `LogSearchHistoryEntryUseCase`, `GetSearchHistoryEntriesUseCase`
+    - User content: `ToggleLikeUseCase`, `GetLikedStateUseCase`
+    - Settings: `UpdateDirectDownloadsSetting`
+  - Domain models: `Artist`, `Album`, `Track`, `AuthState`, `PopularContent`, `ViewedContent`, `LikedContent`, `ListeningEvent`
+  - Store interfaces: `RemoteApiClient`, `StaticsStore`, `AuthStore`, `UserDataStore`, `UserContentStore`, `ConfigStore`, `ListeningEventStore`, `UserSettingsStore`, `SyncStateStore`, `PermissionsStore`
+  - Player interfaces: `PezzottifyPlayer`, `PlatformPlayer`, `ControlsAndStatePlayer`
+  - Sync system: `SyncManager`, `BaseSynchronizer`, `UserContentSynchronizer`, `ListeningEventSynchronizer`, `UserSettingsSynchronizer`, `StaticsSynchronizer`, `SyncWebSocketHandler`
+  - Platform abstractions: `MemoryPressureMonitor`, `StorageMonitor`, `NetworkConnectivityObserver`, `AppLifecycleObserver`, `DeviceInfoProvider`
+  - WebSocket: `WebSocketManager`, `WebSocketInitializer`
   - State management via Kotlin `StateFlow`
 
 #### Data Layers
@@ -52,24 +68,42 @@ The project follows Clean Architecture principles with a multi-module Gradle set
 - Implements the `RemoteApiClient` interface from domain
 - Handles all HTTP communication with the Pezzottify backend server
 - Built with Retrofit, OkHttp, and Kotlin Serialization
-- API endpoints for login, catalog browsing (artists, albums, tracks), search, and image fetching
+- API endpoints:
+  - Authentication: login, logout
+  - Catalog: artists, albums, tracks, images, artist discography
+  - Discovery: search with filters, popular content
+  - User content: like/unlike content, get liked content
+  - Listening: record listening events
+  - Sync: get sync state, get sync events, update user settings
 - Response models map server JSON to domain models
 - Configurable host URL via `HostUrlProvider`
 
 **localdata**
-- Implements persistence interfaces from domain (`AuthStore`, `StaticsStore`, `UserDataStore`)
+- Implements persistence interfaces from domain
 - Uses Room Database for caching catalog data and user content
 - Encrypted SharedPreferences for sensitive data (authentication tokens, config)
+- Store implementations:
+  - `AuthStoreImpl`: Authentication credentials and session state
+  - `StaticsStoreImpl`: Catalog data caching
+  - `StaticsItemFetchStateStoreImpl`: Fetch state tracking for data freshness
+  - `UserDataStoreImpl`: Recently viewed content and search history
+  - `UserContentStoreImpl`: Liked content with sync status
+  - `ConfigStoreImpl`: App configuration
+  - `ListeningEventStoreImpl`: Listening events pending sync
+  - `UserSettingsStoreImpl`: Synced user settings
+  - `SyncStateStoreImpl`: Synchronization state tracking
+  - `PermissionsStoreImpl`: User permissions cache
 - Three databases:
   - `StaticsDb`: Caches artists, albums, tracks, and discographies
   - `UserLocalDataDb`: Stores recently viewed content and search history
-  - `UserContentDb`: Stores liked content and listening events
-- Fetch state tracking to manage data freshness and avoid redundant network calls
+  - `UserContentDb`: Stores liked content, listening events, and sync metadata
 
 **player**
-- Implements platform-specific audio playback
-- Integrates with the `PezzottifyPlayer` interface from domain
-- Handles audio streaming from the backend server
+- Implements platform-specific audio playback via `PlatformPlayer` interface
+- `PlayerService`: Android foreground service for background playback
+- `ExoPlatformPlayerModule`: ExoPlayer (Media3) integration with OkHttp for streaming
+- `PlayerServiceEventsEmitter`: Broadcasts player state changes
+- Handles audio streaming from the backend server with proper authentication
 
 #### Presentation Layer
 
@@ -97,7 +131,14 @@ The project follows Clean Architecture principles with a multi-module Gradle set
 - Main application module and entry point
 - Hilt dependency injection setup (`@HiltAndroidApp`)
 - Aggregates all feature modules
-- Minimal code - primarily DI configuration and `MainActivity`
+- Platform-specific implementations:
+  - `AndroidMemoryPressureMonitor`: Responds to system memory pressure callbacks
+  - `AndroidStorageMonitor`: Monitors device storage availability
+  - `AndroidDeviceInfoProvider`: Provides device UUID and info for multi-device support
+  - `AndroidNetworkConnectivityObserver`: Monitors network connectivity changes
+  - `AndroidAppLifecycleObserver`: Tracks app foreground/background state
+- DI modules: `ApplicationModule`, `DomainModule`, `UiModule`, `LifecycleModule`, `MemoryModule`, `StorageModule`, `InteractorsModule`
+- `MainActivity` and `PezzottifyApplication` entry points
 - Initializes the app via `InitializeApp` use case on startup
 
 #### Supporting Modules
@@ -115,7 +156,7 @@ The project follows Clean Architecture principles with a multi-module Gradle set
 
 ```
 app
-├─ ui
+├─ ui → logger
 ├─ domain → logger
 ├─ remoteapi → domain, logger
 ├─ localdata → domain, logger
@@ -124,7 +165,18 @@ app
 └─ debuginterface (debug only)
 ```
 
-All feature modules depend on the `domain` module, ensuring business logic remains centralized and testable. The `app` module ties everything together through dependency injection.
+All data and player modules depend on the `domain` module for interface definitions. The `ui` module is framework-only (Compose) and depends on `logger` for logging. The `app` module ties everything together through dependency injection, providing concrete implementations to domain interfaces.
+
+### Synchronization Architecture
+
+The app implements a robust offline-first synchronization system:
+
+1. **Local-first writes**: User actions (likes, settings changes) are saved locally with `PendingSync` status
+2. **Background sync**: Synchronizers (`UserContentSynchronizer`, `ListeningEventSynchronizer`, `UserSettingsSynchronizer`) process pending items
+3. **WebSocket real-time sync**: `SyncWebSocketHandler` receives server push notifications for changes from other devices
+4. **Conflict resolution**: Server sequence numbers track sync state; full resync on sequence gaps
+5. **Network awareness**: `NetworkConnectivityObserver` triggers sync when connectivity is restored
+6. **Lifecycle awareness**: `AppLifecycleObserver` manages sync timing based on app state
 
 ## Development
 
