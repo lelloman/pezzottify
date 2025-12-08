@@ -8,8 +8,10 @@ import coil3.request.ImageResult
 import com.lelloman.pezzottify.android.domain.auth.AuthState
 import com.lelloman.pezzottify.android.domain.auth.AuthStore
 import com.lelloman.pezzottify.android.domain.config.BuildInfo
+import com.lelloman.pezzottify.android.domain.settings.UserSettingsStore
 import com.lelloman.pezzottify.android.logger.LogLevel
 import com.lelloman.pezzottify.android.logger.LoggerFactory
+import com.lelloman.pezzottify.android.logging.LogFileManager
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -30,8 +32,21 @@ class ApplicationModule {
 
     @Provides
     @Singleton
-    fun provideLoggerFactory(logLevelProvider: StateFlow<LogLevel>): LoggerFactory =
-        LoggerFactory(logLevelProvider)
+    fun provideLogFileManager(
+        @ApplicationContext context: Context
+    ): LogFileManager = LogFileManager(context)
+
+    @Provides
+    @Singleton
+    fun provideLoggerFactory(
+        logLevelProvider: StateFlow<LogLevel>,
+        userSettingsStore: UserSettingsStore,
+        logFileManager: LogFileManager,
+    ): LoggerFactory = LoggerFactory(
+        logLevelProvider = logLevelProvider,
+        fileLoggingEnabled = userSettingsStore.isFileLoggingEnabled,
+        logDir = logFileManager.logDir,
+    )
 
     @Provides
     @Singleton

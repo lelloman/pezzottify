@@ -40,6 +40,9 @@ class SettingsScreenViewModel @Inject constructor(
                 storageInfo = interactor.getStorageInfo(),
                 directDownloadsEnabled = interactor.isDirectDownloadsEnabled(),
                 hasIssueContentDownloadPermission = interactor.hasIssueContentDownloadPermission(),
+                isFileLoggingEnabled = interactor.isFileLoggingEnabled(),
+                hasLogFiles = interactor.hasLogFiles(),
+                logFilesSize = interactor.getLogFilesSize(),
             )
             mutableState.value = initialState
 
@@ -83,6 +86,20 @@ class SettingsScreenViewModel @Inject constructor(
                     mutableState.update { it.copy(hasIssueContentDownloadPermission = hasPermission) }
                 }
             }
+            launch {
+                interactor.observeFileLoggingEnabled().collect { enabled ->
+                    mutableState.update { it.copy(isFileLoggingEnabled = enabled) }
+                }
+            }
+        }
+    }
+
+    private fun refreshLogFileState() {
+        mutableState.update {
+            it.copy(
+                hasLogFiles = interactor.hasLogFiles(),
+                logFilesSize = interactor.getLogFilesSize(),
+            )
         }
     }
 
@@ -122,6 +139,25 @@ class SettingsScreenViewModel @Inject constructor(
         }
     }
 
+    override fun setFileLoggingEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            interactor.setFileLoggingEnabled(enabled)
+            refreshLogFileState()
+        }
+    }
+
+    override fun shareLogs() {
+        val intent = interactor.getShareLogsIntent()
+        viewModelScope.launch {
+            mutableEvents.emit(SettingsScreenEvents.ShareLogs(intent))
+        }
+    }
+
+    override fun clearLogs() {
+        interactor.clearLogs()
+        refreshLogFileState()
+    }
+
     interface Interactor {
         fun getPlayBehavior(): PlayBehavior
         fun getThemeMode(): ThemeMode
@@ -139,11 +175,18 @@ class SettingsScreenViewModel @Inject constructor(
         fun observeStorageInfo(): kotlinx.coroutines.flow.Flow<StorageInfo>
         fun observeDirectDownloadsEnabled(): kotlinx.coroutines.flow.Flow<Boolean>
         fun observeHasIssueContentDownloadPermission(): kotlinx.coroutines.flow.Flow<Boolean>
+        fun observeFileLoggingEnabled(): kotlinx.coroutines.flow.Flow<Boolean>
         suspend fun setPlayBehavior(playBehavior: PlayBehavior)
         suspend fun setThemeMode(themeMode: ThemeMode)
         suspend fun setColorPalette(colorPalette: ColorPalette)
         suspend fun setFontFamily(fontFamily: AppFontFamily)
         suspend fun setCacheEnabled(enabled: Boolean)
         suspend fun setDirectDownloadsEnabled(enabled: Boolean): Boolean
+        suspend fun setFileLoggingEnabled(enabled: Boolean)
+        fun isFileLoggingEnabled(): Boolean
+        fun hasLogFiles(): Boolean
+        fun getLogFilesSize(): String
+        fun getShareLogsIntent(): android.content.Intent
+        fun clearLogs()
     }
 }

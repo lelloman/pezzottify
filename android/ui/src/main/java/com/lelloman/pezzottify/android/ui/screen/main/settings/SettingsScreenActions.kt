@@ -18,4 +18,10 @@ interface SettingsScreenActions {
     fun setCacheEnabled(enabled: Boolean)
 
     fun setDirectDownloadsEnabled(enabled: Boolean)
+
+    fun setFileLoggingEnabled(enabled: Boolean)
+
+    fun shareLogs()
+
+    fun clearLogs()
 }

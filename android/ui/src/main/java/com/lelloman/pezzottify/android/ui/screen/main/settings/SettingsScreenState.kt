@@ -15,4 +15,7 @@ data class SettingsScreenState(
     val storageInfo: StorageInfo? = null,
     val directDownloadsEnabled: Boolean = false,
     val hasIssueContentDownloadPermission: Boolean = false,
+    val isFileLoggingEnabled: Boolean = false,
+    val hasLogFiles: Boolean = false,
+    val logFilesSize: String = "",
 )

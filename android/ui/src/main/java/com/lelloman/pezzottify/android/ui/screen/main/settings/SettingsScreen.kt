@@ -29,6 +29,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -68,10 +69,15 @@ private fun SettingsScreenInternal(
     navController: NavController,
 ) {
     val currentState by state.collectAsState()
+    val context = LocalContext.current
 
     LaunchedEffect(Unit) {
-        events.collect {
-            // Handle events if needed in the future
+        events.collect { event ->
+            when (event) {
+                is SettingsScreenEvents.ShareLogs -> {
+                    context.startActivity(event.intent)
+                }
+            }
         }
     }
 
@@ -196,6 +202,17 @@ private fun SettingsScreenInternal(
 
             HorizontalDivider(modifier = Modifier.padding(vertical = 24.dp))
 
+            FileLoggingSection(
+                isEnabled = currentState.isFileLoggingEnabled,
+                hasLogs = currentState.hasLogFiles,
+                logSize = currentState.logFilesSize,
+                onEnabledChanged = actions::setFileLoggingEnabled,
+                onShareLogs = actions::shareLogs,
+                onClearLogs = actions::clearLogs,
+            )
+
+            HorizontalDivider(modifier = Modifier.padding(vertical = 24.dp))
+
             StorageInfoSection(
                 storageInfo = currentState.storageInfo
             )
@@ -237,6 +254,9 @@ private fun SettingsScreenPreview() {
                 override fun selectFontFamily(fontFamily: AppFontFamily) {}
                 override fun setCacheEnabled(enabled: Boolean) {}
                 override fun setDirectDownloadsEnabled(enabled: Boolean) {}
+                override fun setFileLoggingEnabled(enabled: Boolean) {}
+                override fun shareLogs() {}
+                override fun clearLogs() {}
             },
         )
     }
@@ -265,6 +285,9 @@ private fun SettingsScreenPreviewDark() {
                 override fun selectFontFamily(fontFamily: AppFontFamily) {}
                 override fun setCacheEnabled(enabled: Boolean) {}
                 override fun setDirectDownloadsEnabled(enabled: Boolean) {}
+                override fun setFileLoggingEnabled(enabled: Boolean) {}
+                override fun shareLogs() {}
+                override fun clearLogs() {}
             },
         )
     }

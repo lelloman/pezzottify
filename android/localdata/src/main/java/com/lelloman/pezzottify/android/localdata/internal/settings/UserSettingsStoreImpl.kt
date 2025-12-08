@@ -77,6 +77,12 @@ internal class UserSettingsStoreImpl(
     }
     override val isInMemoryCacheEnabled: StateFlow<Boolean> = mutableInMemoryCacheEnabled.asStateFlow()
 
+    private val mutableFileLoggingEnabled by lazy {
+        val enabled = prefs.getBoolean(KEY_FILE_LOGGING_ENABLED, DEFAULT_FILE_LOGGING_ENABLED)
+        MutableStateFlow(enabled)
+    }
+    override val isFileLoggingEnabled: StateFlow<Boolean> = mutableFileLoggingEnabled.asStateFlow()
+
     private val mutableDirectDownloadsEnabled by lazy {
         val enabled = prefs.getBoolean(KEY_DIRECT_DOWNLOADS_ENABLED, DEFAULT_DIRECT_DOWNLOADS_ENABLED)
         MutableStateFlow(enabled)
@@ -133,6 +139,13 @@ internal class UserSettingsStoreImpl(
         withContext(dispatcher) {
             mutableInMemoryCacheEnabled.value = enabled
             prefs.edit().putBoolean(KEY_IN_MEMORY_CACHE_ENABLED, enabled).commit()
+        }
+    }
+
+    override suspend fun setFileLoggingEnabled(enabled: Boolean) {
+        withContext(dispatcher) {
+            mutableFileLoggingEnabled.value = enabled
+            prefs.edit().putBoolean(KEY_FILE_LOGGING_ENABLED, enabled).commit()
         }
     }
 
@@ -259,6 +272,8 @@ internal class UserSettingsStoreImpl(
         const val KEY_FONT_FAMILY = "FontFamily"
         const val KEY_IN_MEMORY_CACHE_ENABLED = "InMemoryCacheEnabled"
         const val DEFAULT_IN_MEMORY_CACHE_ENABLED = true
+        const val KEY_FILE_LOGGING_ENABLED = "FileLoggingEnabled"
+        const val DEFAULT_FILE_LOGGING_ENABLED = false
         const val KEY_DIRECT_DOWNLOADS_ENABLED = "DirectDownloadsEnabled"
         const val KEY_DIRECT_DOWNLOADS_SYNC_STATUS = "DirectDownloadsSyncStatus"
         const val KEY_DIRECT_DOWNLOADS_MODIFIED_AT = "DirectDownloadsModifiedAt"
