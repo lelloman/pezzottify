@@ -1203,6 +1203,58 @@ This document breaks down the Background Jobs System and Download Manager plans 
 
 **Prerequisites:** Background Jobs System (Phase 2)
 
+**Reference:** See `DOWNLOAD_MANAGER_PLAN.md` for full design documentation.
+
+### Overview
+
+A queue-based asynchronous download manager that handles content downloads from an external downloader service. Three main components:
+
+1. **User Content Requests** - Users with `RequestContent` permission can search and request downloads
+2. **Catalog Integrity Watchdog** - Daily scan for missing files, auto-queues repairs
+3. **Catalog Expansion Agent** - Smart expansion based on listening stats (Phase 2, deferred)
+
+### State Machine
+
+```
+┌─────────┐
+│ PENDING │ ← Initial state (newly queued)
+└────┬────┘
+     │
+     ↓ (processor picks up by priority)
+┌──────────────┐
+│ IN_PROGRESS  │ ← Currently downloading
+└──────┬───────┘
+       │
+       ├─→ Success ──────────────────→ [COMPLETED] (terminal)
+       │
+       └─→ Failure
+           │
+           ├─→ retry_count < max_retries
+           │   │
+           │   ↓
+           │   ┌───────────────┐
+           │   │ RETRY_WAITING │ ← Exponential backoff
+           │   └───────┬───────┘
+           │           │
+           │           └─→ (after backoff) → PENDING
+           │
+           └─→ retry_count >= max_retries → [FAILED] (terminal)
+
+[CANCELLED] (terminal) ← User cancellation (own requests only)
+```
+
+### Priority System
+
+| Priority | Value | Source | Description |
+|----------|-------|--------|-------------|
+| Highest | 1 | Watchdog | Fix missing files in existing catalog |
+| Medium | 2 | User | User-initiated requests |
+| Lowest | 3 | Expansion | Smart catalog growth (Phase 2) |
+
+Queue processing order: `ORDER BY priority ASC, created_at ASC`
+
+---
+
 ### Phase DM-1: Core Infrastructure
 
 #### DM-1.1 Module Structure
@@ -1216,10 +1268,15 @@ This document breaks down the Background Jobs System and Download Manager plans 
   - `catalog-server/src/download_manager/audit_logger.rs`
   - `catalog-server/src/download_manager/retry_policy.rs`
   - `catalog-server/src/download_manager/schema.rs`
+  - `catalog-server/src/download_manager/search_proxy.rs`
+  - `catalog-server/src/download_manager/job_processor.rs`
+  - `catalog-server/src/download_manager/watchdog.rs`
+  - `catalog-server/src/download_manager/manager.rs`
 
   **Add to `main.rs`:**
   ```rust
   mod download_manager;
+  use download_manager::DownloadManager;
   ```
 
 #### DM-1.2 Models
@@ -1228,16 +1285,16 @@ This document breaks down the Background Jobs System and Download Manager plans 
 
   **File:** `catalog-server/src/download_manager/models.rs`
 
-  **Sample:**
   ```rust
-  #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+  #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+  #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
   pub enum QueueStatus {
       Pending,
       InProgress,
       RetryWaiting,
-      Completed,
-      Failed,
-      Cancelled,
+      Completed,    // terminal
+      Failed,       // terminal
+      Cancelled,    // terminal
   }
 
   #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -1247,19 +1304,32 @@ This document breaks down the Background Jobs System and Download Manager plans 
       Expansion = 3,  // Auto-expansion, discography fills
   }
 
-  #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+  #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+  #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
   pub enum DownloadContentType {
-      Album,
-      TrackAudio,
-      ArtistImage,
-      AlbumImage,
+      Album,          // Full album (metadata + tracks + audio + images)
+      TrackAudio,     // Single track audio file
+      ArtistImage,    // Artist image
+      AlbumImage,     // Album cover art
   }
 
-  #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+  #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+  #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
   pub enum RequestSource {
-      UserRequest,    // Explicit user request
-      Watchdog,       // Integrity watchdog repair
-      Expansion,      // Auto-expansion (e.g., related content)
+      User,       // Explicit user request
+      Watchdog,   // Integrity watchdog repair
+      Expansion,  // Auto-expansion (e.g., related content)
+  }
+
+  #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+  #[serde(rename_all = "snake_case")]
+  pub enum DownloadErrorType {
+      Connection,  // Network error - retry
+      Timeout,     // Request timeout - retry
+      NotFound,    // Content not found - NO retry (immediate fail)
+      Parse,       // Response parse error - retry
+      Storage,     // File system error - retry
+      Unknown,     // Unknown error - retry
   }
   ```
 
@@ -1267,13 +1337,61 @@ This document breaks down the Background Jobs System and Download Manager plans 
 
   **File:** `catalog-server/src/download_manager/models.rs`
 
-- [ ] **Task DM-1.2.3: Define audit types**
+  ```rust
+  #[derive(Debug, Clone)]
+  pub struct QueueItem {
+      pub id: String,                          // UUID
+      pub status: QueueStatus,
+      pub priority: QueuePriority,
+      pub content_type: DownloadContentType,
+      pub content_id: String,                  // External ID from music provider
+      pub content_name: Option<String>,        // For display (album/artist name)
+      pub artist_name: Option<String>,         // For display
+      pub request_source: RequestSource,
+      pub requested_by_user_id: Option<String>,
+      pub created_at: i64,                     // Unix timestamp
+      pub started_at: Option<i64>,             // When IN_PROGRESS started
+      pub completed_at: Option<i64>,           // When reached terminal state
+      pub last_attempt_at: Option<i64>,        // Last attempt timestamp
+      pub next_retry_at: Option<i64>,          // When to retry (for RETRY_WAITING)
+      pub retry_count: i32,
+      pub max_retries: i32,
+      pub error_type: Option<DownloadErrorType>,
+      pub error_message: Option<String>,
+      pub bytes_downloaded: Option<u64>,
+      pub processing_duration_ms: Option<i64>,
+  }
+  ```
+
+- [ ] **Task DM-1.2.3: Define `UserRequestView` struct**
 
   **File:** `catalog-server/src/download_manager/models.rs`
 
-  **Sample:**
+  **Context:** Simplified view for user-facing API responses.
+
   ```rust
-  #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+  #[derive(Debug, Clone, Serialize)]
+  pub struct UserRequestView {
+      pub id: String,
+      pub content_type: DownloadContentType,
+      pub content_id: String,
+      pub content_name: String,        // Album/artist name for display
+      pub artist_name: Option<String>,
+      pub status: QueueStatus,
+      pub created_at: i64,
+      pub completed_at: Option<i64>,
+      pub error_message: Option<String>,
+      pub queue_position: Option<usize>,  // Position in queue (for pending items)
+  }
+  ```
+
+- [ ] **Task DM-1.2.4: Define audit types**
+
+  **File:** `catalog-server/src/download_manager/models.rs`
+
+  ```rust
+  #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+  #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
   pub enum AuditEventType {
       RequestCreated,
       DownloadStarted,
@@ -1290,13 +1408,200 @@ This document breaks down the Background Jobs System and Download Manager plans 
   #[derive(Debug, Clone)]
   pub struct AuditLogEntry {
       pub id: i64,
+      pub timestamp: i64,
+      pub event_type: AuditEventType,
+      pub queue_item_id: Option<String>,
+      pub content_type: Option<DownloadContentType>,
+      pub content_id: Option<String>,
+      pub user_id: Option<String>,
+      pub request_source: Option<RequestSource>,
+      pub details: Option<serde_json::Value>,  // Event-specific JSON data
+  }
+
+  #[derive(Debug, Clone, Default)]
+  pub struct AuditLogFilter {
       pub queue_item_id: Option<String>,
       pub user_id: Option<String>,
-      pub event_type: AuditEventType,
-      pub details: Option<String>,  // JSON string
-      pub created_at: i64,
+      pub event_types: Option<Vec<AuditEventType>>,
+      pub content_type: Option<DownloadContentType>,
+      pub content_id: Option<String>,
+      pub since: Option<i64>,
+      pub until: Option<i64>,
+      pub limit: usize,
+      pub offset: usize,
   }
   ```
+
+- [ ] **Task DM-1.2.5: Define statistics and status types**
+
+  **File:** `catalog-server/src/download_manager/models.rs`
+
+  ```rust
+  #[derive(Debug, Clone, Serialize)]
+  pub struct UserLimitStatus {
+      pub requests_today: i32,
+      pub max_per_day: i32,
+      pub in_queue: i32,
+      pub max_queue: i32,
+      pub can_request: bool,
+  }
+
+  #[derive(Debug, Clone, Serialize)]
+  pub struct CapacityStatus {
+      pub albums_this_hour: i32,
+      pub max_per_hour: i32,
+      pub albums_today: i32,
+      pub max_per_day: i32,
+      pub at_capacity: bool,
+  }
+
+  #[derive(Debug, Clone, Serialize)]
+  pub struct QueueStats {
+      pub pending: i64,
+      pub in_progress: i64,
+      pub retry_waiting: i64,
+      pub completed_today: i64,
+      pub failed_today: i64,
+  }
+
+  #[derive(Debug, Clone)]
+  pub struct ActivityLogEntry {
+      pub hour_bucket: i64,        // Unix timestamp truncated to hour
+      pub albums_downloaded: i64,
+      pub tracks_downloaded: i64,
+      pub images_downloaded: i64,
+      pub bytes_downloaded: i64,
+      pub failed_count: i64,
+  }
+
+  #[derive(Debug, Clone, Serialize)]
+  pub struct HourlyCounts {
+      pub albums: i64,
+      pub tracks: i64,
+      pub images: i64,
+      pub bytes: i64,
+  }
+
+  #[derive(Debug, Clone, Serialize)]
+  pub struct DailyCounts {
+      pub albums: i64,
+      pub tracks: i64,
+      pub images: i64,
+      pub bytes: i64,
+  }
+
+  #[derive(Debug, Clone)]
+  pub struct ProcessingResult {
+      pub queue_item_id: String,
+      pub content_type: DownloadContentType,
+      pub success: bool,
+      pub bytes_downloaded: Option<u64>,
+      pub duration_ms: i64,
+      pub error: Option<DownloadError>,
+  }
+
+  #[derive(Debug, Clone)]
+  pub struct DownloadError {
+      pub error_type: DownloadErrorType,
+      pub message: String,
+  }
+
+  impl DownloadError {
+      pub fn is_retryable(&self) -> bool {
+          !matches!(self.error_type, DownloadErrorType::NotFound)
+      }
+  }
+  ```
+
+- [ ] **Task DM-1.2.6: Define search result types**
+
+  **File:** `catalog-server/src/download_manager/models.rs`
+
+  ```rust
+  #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+  pub enum SearchType {
+      Album,
+      Artist,
+  }
+
+  #[derive(Debug, Clone, Serialize)]
+  pub struct SearchResult {
+      pub id: String,              // External ID
+      #[serde(rename = "type")]
+      pub result_type: String,     // "album" or "artist"
+      pub name: String,
+      pub artist_name: Option<String>,
+      pub image_url: Option<String>,
+      pub year: Option<i32>,
+      pub in_catalog: bool,        // Already downloaded
+      pub in_queue: bool,          // Currently queued
+  }
+
+  #[derive(Debug, Clone, Serialize)]
+  pub struct SearchResults {
+      pub results: Vec<SearchResult>,
+      pub total: usize,
+  }
+
+  #[derive(Debug, Clone, Serialize)]
+  pub struct DiscographyResult {
+      pub artist: SearchResult,
+      pub albums: Vec<SearchResult>,
+  }
+
+  #[derive(Debug, Clone, Deserialize)]
+  pub struct AlbumRequest {
+      pub album_id: String,
+      pub album_name: String,
+      pub artist_name: String,
+  }
+
+  #[derive(Debug, Clone, Deserialize)]
+  pub struct DiscographyRequest {
+      pub artist_id: String,
+      pub artist_name: String,
+  }
+
+  #[derive(Debug, Clone, Serialize)]
+  pub struct RequestResult {
+      pub request_id: String,
+      pub status: QueueStatus,
+      pub queue_position: usize,
+  }
+
+  #[derive(Debug, Clone, Serialize)]
+  pub struct DiscographyRequestResult {
+      pub request_ids: Vec<String>,
+      pub albums_queued: usize,
+      pub albums_skipped: usize,  // Already in catalog
+      pub status: QueueStatus,
+  }
+  ```
+
+- [ ] **Task DM-1.2.7: Define watchdog report type**
+
+  **File:** `catalog-server/src/download_manager/models.rs`
+
+  ```rust
+  #[derive(Debug, Default, Clone)]
+  pub struct WatchdogReport {
+      pub missing_track_audio: Vec<String>,     // Track IDs
+      pub missing_album_images: Vec<String>,    // Album IDs
+      pub missing_artist_images: Vec<String>,   // Artist IDs
+      pub items_queued: usize,
+      pub items_skipped: usize,  // Already in queue
+      pub scan_duration_ms: i64,
+  }
+  ```
+
+- [ ] **Task DM-1.2.8: Add unit tests for model serialization**
+
+  **File:** `catalog-server/src/download_manager/models.rs` (test module)
+
+  **Test cases:**
+  - Enum serialization matches expected strings
+  - QueueItem to JSON and back
+  - AuditLogEntry with various detail payloads
 
 #### DM-1.3 Database Schema
 
@@ -1304,9 +1609,90 @@ This document breaks down the Background Jobs System and Download Manager plans 
 
   **File:** `catalog-server/src/download_manager/schema.rs`
 
-- [ ] **Task DM-1.3.2: Implement schema migration**
+  ```rust
+  use crate::sqlite_persistence::VersionedSchema;
+
+  pub const DOWNLOAD_QUEUE_VERSIONED_SCHEMAS: &[VersionedSchema] = &[
+      VersionedSchema {
+          version: 1,
+          up: r#"
+              -- Main queue table
+              CREATE TABLE download_queue (
+                  id TEXT PRIMARY KEY,
+                  status TEXT NOT NULL,
+                  priority INTEGER NOT NULL,
+                  content_type TEXT NOT NULL,
+                  content_id TEXT NOT NULL,
+                  content_name TEXT,
+                  artist_name TEXT,
+                  request_source TEXT NOT NULL,
+                  requested_by_user_id TEXT,
+                  created_at INTEGER NOT NULL,
+                  started_at INTEGER,
+                  completed_at INTEGER,
+                  last_attempt_at INTEGER,
+                  next_retry_at INTEGER,
+                  retry_count INTEGER DEFAULT 0,
+                  max_retries INTEGER DEFAULT 5,
+                  error_type TEXT,
+                  error_message TEXT,
+                  bytes_downloaded INTEGER,
+                  processing_duration_ms INTEGER
+              );
+
+              CREATE INDEX idx_queue_status_priority ON download_queue(status, priority, created_at);
+              CREATE INDEX idx_queue_content ON download_queue(content_type, content_id);
+              CREATE INDEX idx_queue_user ON download_queue(requested_by_user_id);
+              CREATE INDEX idx_queue_next_retry ON download_queue(next_retry_at) WHERE status = 'RETRY_WAITING';
+
+              -- Activity tracking for capacity limits
+              CREATE TABLE download_activity_log (
+                  hour_bucket INTEGER PRIMARY KEY,
+                  albums_downloaded INTEGER DEFAULT 0,
+                  tracks_downloaded INTEGER DEFAULT 0,
+                  images_downloaded INTEGER DEFAULT 0,
+                  bytes_downloaded INTEGER DEFAULT 0,
+                  failed_count INTEGER DEFAULT 0,
+                  last_updated_at INTEGER NOT NULL
+              );
+
+              -- Per-user rate limiting
+              CREATE TABLE user_request_stats (
+                  user_id TEXT PRIMARY KEY,
+                  requests_today INTEGER DEFAULT 0,
+                  requests_in_queue INTEGER DEFAULT 0,
+                  last_request_date TEXT,
+                  last_updated_at INTEGER NOT NULL
+              );
+
+              -- Audit log
+              CREATE TABLE download_audit_log (
+                  id INTEGER PRIMARY KEY AUTOINCREMENT,
+                  timestamp INTEGER NOT NULL,
+                  event_type TEXT NOT NULL,
+                  queue_item_id TEXT,
+                  content_type TEXT,
+                  content_id TEXT,
+                  user_id TEXT,
+                  request_source TEXT,
+                  details TEXT
+              );
+
+              CREATE INDEX idx_audit_timestamp ON download_audit_log(timestamp);
+              CREATE INDEX idx_audit_queue_item ON download_audit_log(queue_item_id);
+              CREATE INDEX idx_audit_user ON download_audit_log(user_id);
+              CREATE INDEX idx_audit_event_type ON download_audit_log(event_type);
+              CREATE INDEX idx_audit_content ON download_audit_log(content_type, content_id);
+          "#,
+      },
+  ];
+  ```
+
+- [ ] **Task DM-1.3.2: Implement schema initialization in store**
 
   **File:** `catalog-server/src/download_manager/queue_store.rs`
+
+  **Context:** Use existing `VersionedSchema` system from `sqlite_persistence/`.
 
 #### DM-1.4 Queue Store
 
@@ -1314,23 +1700,273 @@ This document breaks down the Background Jobs System and Download Manager plans 
 
   **File:** `catalog-server/src/download_manager/queue_store.rs`
 
-- [ ] **Task DM-1.4.2: Implement `SqliteDownloadQueueStore`**
+  ```rust
+  use anyhow::Result;
+  use super::models::*;
+
+  pub trait DownloadQueueStore: Send + Sync {
+      // === Queue Management ===
+      fn enqueue(&self, item: QueueItem) -> Result<()>;
+      fn get_item(&self, id: &str) -> Result<Option<QueueItem>>;
+      fn get_next_pending(&self) -> Result<Option<QueueItem>>;  // By priority, then age
+      fn list_by_user(&self, user_id: &str, status: Option<QueueStatus>, limit: usize, offset: usize) -> Result<Vec<QueueItem>>;
+      fn list_all(&self, status: Option<QueueStatus>, limit: usize, offset: usize) -> Result<Vec<QueueItem>>;
+      fn get_queue_position(&self, id: &str) -> Result<Option<usize>>;
+
+      // === State Transitions (atomic) ===
+      fn claim_for_processing(&self, id: &str) -> Result<bool>;  // PENDING → IN_PROGRESS
+      fn mark_completed(&self, id: &str, bytes: u64, duration_ms: i64) -> Result<()>;
+      fn mark_retry_waiting(&self, id: &str, next_retry_at: i64, error: &DownloadError) -> Result<()>;
+      fn mark_failed(&self, id: &str, error: &DownloadError) -> Result<()>;
+      fn mark_cancelled(&self, id: &str) -> Result<()>;
+
+      // === Retry Handling ===
+      fn get_retry_ready(&self) -> Result<Vec<QueueItem>>;  // next_retry_at <= now
+      fn promote_retry_to_pending(&self, id: &str) -> Result<()>;
+
+      // === Duplicate/Existence Checks ===
+      fn find_by_content(&self, content_type: DownloadContentType, content_id: &str) -> Result<Option<QueueItem>>;
+      fn is_in_queue(&self, content_type: DownloadContentType, content_id: &str) -> Result<bool>;
+      fn is_in_active_queue(&self, content_type: DownloadContentType, content_id: &str) -> Result<bool>;  // Non-terminal status
+
+      // === User Rate Limiting ===
+      fn get_user_stats(&self, user_id: &str) -> Result<UserLimitStatus>;
+      fn increment_user_requests(&self, user_id: &str) -> Result<()>;
+      fn decrement_user_queue(&self, user_id: &str) -> Result<()>;
+      fn reset_daily_user_stats(&self) -> Result<usize>;  // Reset all users, return count
+
+      // === Activity Tracking ===
+      fn record_activity(&self, content_type: DownloadContentType, bytes: u64, success: bool) -> Result<()>;
+      fn get_activity_since(&self, since: i64) -> Result<Vec<ActivityLogEntry>>;
+      fn get_hourly_counts(&self) -> Result<HourlyCounts>;
+      fn get_daily_counts(&self) -> Result<DailyCounts>;
+
+      // === Statistics ===
+      fn get_queue_stats(&self) -> Result<QueueStats>;
+      fn get_failed_items(&self, limit: usize, offset: usize) -> Result<Vec<QueueItem>>;
+
+      // === Cleanup ===
+      fn cleanup_stale_in_progress(&self, stale_threshold_secs: i64) -> Result<usize>;
+      fn cleanup_old_completed(&self, older_than: i64) -> Result<usize>;
+
+      // === Audit Logging ===
+      fn log_audit_event(&self, event: AuditLogEntry) -> Result<()>;
+      fn get_audit_log(&self, filter: AuditLogFilter) -> Result<(Vec<AuditLogEntry>, usize)>;  // (entries, total_count)
+      fn get_audit_for_item(&self, queue_item_id: &str) -> Result<Vec<AuditLogEntry>>;
+      fn get_audit_for_user(&self, user_id: &str, since: Option<i64>, until: Option<i64>, limit: usize, offset: usize) -> Result<(Vec<AuditLogEntry>, usize)>;
+      fn cleanup_old_audit_entries(&self, older_than: i64) -> Result<usize>;
+  }
+  ```
+
+- [ ] **Task DM-1.4.2: Implement `SqliteDownloadQueueStore` constructor and schema init**
 
   **File:** `catalog-server/src/download_manager/queue_store.rs`
 
-- [ ] **Task DM-1.4.3: Add unit tests for queue store**
+  ```rust
+  pub struct SqliteDownloadQueueStore {
+      conn: Arc<Mutex<Connection>>,
+  }
+
+  impl SqliteDownloadQueueStore {
+      pub fn new(db_path: &Path) -> Result<Self> {
+          let conn = Connection::open(db_path)?;
+          // Apply schema migrations
+          apply_versioned_schema(&conn, DOWNLOAD_QUEUE_VERSIONED_SCHEMAS)?;
+          Ok(Self {
+              conn: Arc::new(Mutex::new(conn)),
+          })
+      }
+  }
+  ```
+
+- [ ] **Task DM-1.4.3: Implement queue management methods**
 
   **File:** `catalog-server/src/download_manager/queue_store.rs`
+
+  **Methods:** `enqueue`, `get_item`, `get_next_pending`, `list_by_user`, `list_all`, `get_queue_position`
+
+- [ ] **Task DM-1.4.4: Implement state transition methods**
+
+  **File:** `catalog-server/src/download_manager/queue_store.rs`
+
+  **Methods:** `claim_for_processing`, `mark_completed`, `mark_retry_waiting`, `mark_failed`, `mark_cancelled`
+
+  **Important:** Use transactions for atomic state changes. Verify current status before transition.
+
+- [ ] **Task DM-1.4.5: Implement retry handling methods**
+
+  **File:** `catalog-server/src/download_manager/queue_store.rs`
+
+  **Methods:** `get_retry_ready`, `promote_retry_to_pending`
+
+- [ ] **Task DM-1.4.6: Implement duplicate check methods**
+
+  **File:** `catalog-server/src/download_manager/queue_store.rs`
+
+  **Methods:** `find_by_content`, `is_in_queue`, `is_in_active_queue`
+
+- [ ] **Task DM-1.4.7: Implement user rate limiting methods**
+
+  **File:** `catalog-server/src/download_manager/queue_store.rs`
+
+  **Methods:** `get_user_stats`, `increment_user_requests`, `decrement_user_queue`, `reset_daily_user_stats`
+
+  **Note:** Daily reset should check `last_request_date` and reset if different from today.
+
+- [ ] **Task DM-1.4.8: Implement activity tracking methods**
+
+  **File:** `catalog-server/src/download_manager/queue_store.rs`
+
+  **Methods:** `record_activity`, `get_activity_since`, `get_hourly_counts`, `get_daily_counts`
+
+  **Note:** Use hour-truncated timestamps as bucket keys.
+
+- [ ] **Task DM-1.4.9: Implement statistics and cleanup methods**
+
+  **File:** `catalog-server/src/download_manager/queue_store.rs`
+
+  **Methods:** `get_queue_stats`, `get_failed_items`, `cleanup_stale_in_progress`, `cleanup_old_completed`
+
+- [ ] **Task DM-1.4.10: Implement audit logging methods**
+
+  **File:** `catalog-server/src/download_manager/queue_store.rs`
+
+  **Methods:** `log_audit_event`, `get_audit_log`, `get_audit_for_item`, `get_audit_for_user`, `cleanup_old_audit_entries`
+
+- [ ] **Task DM-1.4.11: Add unit tests for queue store**
+
+  **File:** `catalog-server/src/download_manager/queue_store.rs` (test module)
+
+  **Test cases:**
+  - Enqueue and retrieve items
+  - Priority ordering (watchdog > user > expansion)
+  - State transitions (atomic, valid transitions only)
+  - User stats tracking and daily reset
+  - Activity logging and hourly/daily counts
+  - Duplicate detection
+  - Audit log CRUD and filtering
 
 #### DM-1.5 Support Components
 
-- [ ] **Task DM-1.5.1: Implement `AuditLogger`**
+- [ ] **Task DM-1.5.1: Implement `RetryPolicy`**
+
+  **File:** `catalog-server/src/download_manager/retry_policy.rs`
+
+  ```rust
+  #[derive(Debug, Clone)]
+  pub struct RetryPolicy {
+      pub max_retries: i32,
+      pub initial_backoff_secs: u64,
+      pub max_backoff_secs: u64,
+      pub backoff_multiplier: f64,
+  }
+
+  impl RetryPolicy {
+      pub fn new(config: &DownloadManagerSettings) -> Self {
+          Self {
+              max_retries: config.max_retries as i32,
+              initial_backoff_secs: config.initial_backoff_secs,
+              max_backoff_secs: config.max_backoff_secs,
+              backoff_multiplier: config.backoff_multiplier,
+          }
+      }
+
+      /// Calculate next retry time based on current retry count
+      pub fn next_retry_at(&self, retry_count: i32) -> i64 {
+          let backoff = self.initial_backoff_secs as f64
+              * self.backoff_multiplier.powi(retry_count);
+          let capped_backoff = backoff.min(self.max_backoff_secs as f64) as i64;
+          chrono::Utc::now().timestamp() + capped_backoff
+      }
+
+      /// Check if error should be retried
+      pub fn should_retry(&self, error: &DownloadError, retry_count: i32) -> bool {
+          error.is_retryable() && retry_count < self.max_retries
+      }
+  }
+  ```
+
+- [ ] **Task DM-1.5.2: Add unit tests for `RetryPolicy`**
+
+  **File:** `catalog-server/src/download_manager/retry_policy.rs` (test module)
+
+  **Test cases:**
+  - Backoff calculation at each retry level
+  - Max backoff capping
+  - Not-found errors are not retried
+  - Other errors are retried up to max
+
+- [ ] **Task DM-1.5.3: Implement `AuditLogger` helper**
 
   **File:** `catalog-server/src/download_manager/audit_logger.rs`
 
-- [ ] **Task DM-1.5.2: Implement `RetryPolicy`**
+  ```rust
+  pub struct AuditLogger {
+      queue_store: Arc<dyn DownloadQueueStore>,
+  }
 
-  **File:** `catalog-server/src/download_manager/retry_policy.rs`
+  impl AuditLogger {
+      pub fn new(queue_store: Arc<dyn DownloadQueueStore>) -> Self {
+          Self { queue_store }
+      }
+
+      pub fn log_request_created(
+          &self,
+          queue_item: &QueueItem,
+          queue_position: usize,
+      ) -> Result<()>;
+
+      pub fn log_download_started(&self, queue_item: &QueueItem) -> Result<()>;
+
+      pub fn log_download_completed(
+          &self,
+          queue_item: &QueueItem,
+          bytes_downloaded: u64,
+          duration_ms: i64,
+          tracks_downloaded: Option<usize>,
+      ) -> Result<()>;
+
+      pub fn log_download_failed(
+          &self,
+          queue_item: &QueueItem,
+          error: &DownloadError,
+      ) -> Result<()>;
+
+      pub fn log_retry_scheduled(
+          &self,
+          queue_item: &QueueItem,
+          next_retry_at: i64,
+          backoff_secs: u64,
+          error: &DownloadError,
+      ) -> Result<()>;
+
+      pub fn log_request_cancelled(
+          &self,
+          queue_item: &QueueItem,
+          cancelled_by_user_id: &str,
+      ) -> Result<()>;
+
+      pub fn log_admin_retry(
+          &self,
+          queue_item: &QueueItem,
+          admin_user_id: &str,
+      ) -> Result<()>;
+
+      pub fn log_watchdog_queued(
+          &self,
+          queue_item: &QueueItem,
+          reason: &str,
+      ) -> Result<()>;
+
+      pub fn log_watchdog_scan_started(&self) -> Result<()>;
+
+      pub fn log_watchdog_scan_completed(&self, report: &WatchdogReport) -> Result<()>;
+  }
+  ```
+
+- [ ] **Task DM-1.5.4: Add unit tests for `AuditLogger`**
+
+  **File:** `catalog-server/src/download_manager/audit_logger.rs` (test module)
 
 #### DM-1.6 Permission
 
@@ -1338,104 +1974,915 @@ This document breaks down the Background Jobs System and Download Manager plans 
 
   **File:** `catalog-server/src/user/permissions.rs`
 
+  ```rust
+  #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+  pub enum Permission {
+      // ... existing permissions ...
+      RequestContent,  // ID = 9
+  }
+
+  impl Permission {
+      pub fn to_int(&self) -> i32 {
+          match self {
+              // ... existing ...
+              Permission::RequestContent => 9,
+          }
+      }
+
+      pub fn from_int(i: i32) -> Option<Permission> {
+          match i {
+              // ... existing ...
+              9 => Some(Permission::RequestContent),
+              _ => None,
+          }
+      }
+  }
+  ```
+
 - [ ] **Task DM-1.6.2: Update Admin role to include RequestContent**
 
   **File:** `catalog-server/src/user/permissions.rs`
 
-- [ ] **Task DM-1.6.3: Update permission documentation**
+  **Update `ADMIN_PERMISSIONS` array to include `RequestContent`.**
+
+- [ ] **Task DM-1.6.3: Add `require_request_content` middleware**
+
+  **File:** `catalog-server/src/server/server.rs`
+
+  ```rust
+  fn require_request_content<B>(
+      State(state): State<ServerState>,
+      request: Request<B>,
+      next: Next<B>,
+  ) -> impl Future<Output = Response> {
+      require_permission(Permission::RequestContent, state, request, next)
+  }
+  ```
+
+- [ ] **Task DM-1.6.4: Update permission documentation**
 
   **File:** `catalog-server/README.md`
+
+  **Add RequestContent to permissions table with description:**
+  > Allows searching external music provider and requesting content downloads.
+
+- [ ] **Task DM-1.6.5: Update web frontend permission references**
+
+  **Files:**
+  - `web/src/store/user.js`: Add `'RequestContent'` to known permissions
+  - Add `canRequestContent` computed property
+
+- [ ] **Task DM-1.6.6: Update Android permission references**
+
+  **Files:**
+  - `android/ui/src/main/java/com/lelloman/pezzottify/android/ui/model/Permission.kt`: Add `RequestContent`
+  - `android/domain/src/main/java/com/lelloman/pezzottify/android/domain/sync/SyncEvent.kt`: Add mapping
+
+#### DM-1.7 DownloadManager Struct
+
+- [ ] **Task DM-1.7.1: Create `DownloadManager` struct**
+
+  **File:** `catalog-server/src/download_manager/manager.rs`
+
+  ```rust
+  pub struct DownloadManager {
+      queue_store: Arc<dyn DownloadQueueStore>,
+      downloader: Arc<dyn Downloader>,
+      catalog_store: Arc<dyn CatalogStore>,
+      media_path: PathBuf,
+      config: DownloadManagerSettings,
+      retry_policy: RetryPolicy,
+      audit_logger: AuditLogger,
+  }
+
+  impl DownloadManager {
+      pub fn new(
+          queue_store: Arc<dyn DownloadQueueStore>,
+          downloader: Arc<dyn Downloader>,
+          catalog_store: Arc<dyn CatalogStore>,
+          media_path: PathBuf,
+          config: DownloadManagerSettings,
+      ) -> Self;
+
+      // Search proxy
+      pub fn search(&self, query: &str, search_type: SearchType) -> Result<SearchResults>;
+      pub fn search_discography(&self, artist_id: &str) -> Result<DiscographyResult>;
+
+      // User requests
+      pub fn request_album(&self, user_id: &str, request: AlbumRequest) -> Result<RequestResult>;
+      pub fn request_discography(&self, user_id: &str, request: DiscographyRequest) -> Result<DiscographyRequestResult>;
+      pub fn get_user_requests(&self, user_id: &str, status: Option<QueueStatus>) -> Result<Vec<UserRequestView>>;
+      pub fn get_request_status(&self, user_id: &str, request_id: &str) -> Result<UserRequestView>;
+      pub fn cancel_request(&self, user_id: &str, request_id: &str) -> Result<()>;
+
+      // Rate limiting
+      pub fn check_user_limits(&self, user_id: &str) -> Result<UserLimitStatus>;
+      pub fn check_global_capacity(&self) -> Result<CapacityStatus>;
+
+      // Queue processing (called by background processor)
+      pub fn process_next(&self) -> Result<Option<ProcessingResult>>;
+      pub fn promote_ready_retries(&self) -> Result<usize>;
+
+      // Admin
+      pub fn get_queue_stats(&self) -> Result<QueueStats>;
+      pub fn get_failed_items(&self, limit: usize, offset: usize) -> Result<Vec<QueueItem>>;
+      pub fn retry_failed(&self, admin_user_id: &str, request_id: &str) -> Result<()>;
+      pub fn get_activity(&self, hours: usize) -> Result<Vec<ActivityLogEntry>>;
+      pub fn get_all_requests(&self, status: Option<QueueStatus>, user_id: Option<&str>, limit: usize, offset: usize) -> Result<Vec<QueueItem>>;
+
+      // Audit
+      pub fn get_audit_log(&self, filter: AuditLogFilter) -> Result<(Vec<AuditLogEntry>, usize)>;
+      pub fn get_audit_for_item(&self, queue_item_id: &str) -> Result<(QueueItem, Vec<AuditLogEntry>)>;
+      pub fn get_audit_for_user(&self, user_id: &str, filter: AuditLogFilter) -> Result<(Vec<AuditLogEntry>, usize)>;
+  }
+  ```
+
+- [ ] **Task DM-1.7.2: Implement search proxy methods in DownloadManager**
+
+  **File:** `catalog-server/src/download_manager/manager.rs`
+
+  **Context:** Delegates to `search_proxy.rs` module.
+
+- [ ] **Task DM-1.7.3: Implement user request methods in DownloadManager**
+
+  **File:** `catalog-server/src/download_manager/manager.rs`
+
+  **Logic:**
+  1. Check user rate limits
+  2. Check if already in catalog
+  3. Check if already in queue
+  4. Enqueue with appropriate priority
+  5. Log audit event
+  6. Return result with queue position
+
+- [ ] **Task DM-1.7.4: Implement queue processing in DownloadManager**
+
+  **File:** `catalog-server/src/download_manager/manager.rs`
+
+  **Logic for `process_next()`:**
+  1. Get next pending item (by priority)
+  2. Claim for processing (atomic)
+  3. Log download started
+  4. Call downloader
+  5. On success: mark completed, record activity, log audit
+  6. On failure: check retry policy, either mark retry or failed, log audit
+
+- [ ] **Task DM-1.7.5: Add unit tests for DownloadManager**
+
+  **File:** `catalog-server/src/download_manager/manager.rs` (test module)
 
 ---
 
 ### Phase DM-2: Search Proxy
 
-- [ ] **Task DM-2.1: Verify downloader service has search endpoints**
+#### DM-2.1 HTTP Client
 
-- [ ] **Task DM-2.2: Create `search_proxy.rs` module**
+- [ ] **Task DM-2.1.1: Create `DownloaderClient` for HTTP communication**
 
   **File:** `catalog-server/src/download_manager/search_proxy.rs`
 
-- [ ] **Task DM-2.3: Implement search with `in_catalog`/`in_queue` enrichment**
+  ```rust
+  pub struct DownloaderClient {
+      client: reqwest::Client,
+      base_url: String,
+      timeout: Duration,
+  }
 
-- [ ] **Task DM-2.4: Create API handlers**
+  impl DownloaderClient {
+      pub fn new(base_url: &str, timeout_secs: u64) -> Self {
+          let client = reqwest::Client::builder()
+              .timeout(Duration::from_secs(timeout_secs))
+              .build()
+              .expect("Failed to create HTTP client");
 
-  - `GET /v1/download/search`
-  - `GET /v1/download/search/discography/:artist_id`
+          Self {
+              client,
+              base_url: base_url.to_string(),
+              timeout: Duration::from_secs(timeout_secs),
+          }
+      }
+
+      pub async fn search(&self, query: &str, search_type: SearchType) -> Result<Vec<ExternalSearchResult>>;
+      pub async fn get_discography(&self, artist_id: &str) -> Result<ExternalDiscographyResult>;
+  }
+  ```
+
+- [ ] **Task DM-2.1.2: Define external API response types**
+
+  **File:** `catalog-server/src/download_manager/search_proxy.rs`
+
+  ```rust
+  #[derive(Debug, Deserialize)]
+  pub struct ExternalSearchResult {
+      pub id: String,
+      #[serde(rename = "type")]
+      pub result_type: String,
+      pub name: String,
+      pub artist_name: Option<String>,
+      pub image_url: Option<String>,
+      pub year: Option<i32>,
+  }
+
+  #[derive(Debug, Deserialize)]
+  pub struct ExternalDiscographyResult {
+      pub artist: ExternalSearchResult,
+      pub albums: Vec<ExternalSearchResult>,
+  }
+  ```
+
+#### DM-2.2 Search Implementation
+
+- [ ] **Task DM-2.2.1: Implement search with enrichment**
+
+  **File:** `catalog-server/src/download_manager/search_proxy.rs`
+
+  **Logic:**
+  1. Call downloader service search endpoint
+  2. For each result, check `in_catalog` via catalog store
+  3. For each result, check `in_queue` via queue store
+  4. Return enriched results
+
+- [ ] **Task DM-2.2.2: Implement discography search with enrichment**
+
+  **File:** `catalog-server/src/download_manager/search_proxy.rs`
+
+- [ ] **Task DM-2.2.3: Add caching for catalog/queue checks (optional)**
+
+  **Context:** If search results are large, batch the existence checks.
+
+#### DM-2.3 API Handlers
+
+- [ ] **Task DM-2.3.1: Create `GET /v1/download/search` handler**
+
+  **File:** `catalog-server/src/server/server.rs`
+
+  ```rust
+  async fn search_download_content(
+      State(state): State<ServerState>,
+      session: Session,
+      Query(params): Query<SearchParams>,
+  ) -> Result<Json<SearchResults>, ApiError> {
+      require_permission(&session, Permission::RequestContent)?;
+
+      let dm = state.download_manager.as_ref()
+          .ok_or(ApiError::ServiceUnavailable("Download manager not enabled"))?;
+
+      let search_type = match params.content_type.as_deref() {
+          Some("artist") => SearchType::Artist,
+          _ => SearchType::Album,
+      };
+
+      dm.search(&params.q, search_type).map(Json)
+  }
+  ```
+
+- [ ] **Task DM-2.3.2: Create `GET /v1/download/search/discography/:artist_id` handler**
+
+  **File:** `catalog-server/src/server/server.rs`
 
 ---
 
 ### Phase DM-3: User Request API
 
-- [ ] **Task DM-3.1: Create request handlers**
+#### DM-3.1 Request Handlers
 
-  - `POST /v1/download/request/album`
-  - `POST /v1/download/request/discography`
-  - `GET /v1/download/my-requests`
-  - `GET /v1/download/request/:id`
-  - `DELETE /v1/download/request/:id`
+- [ ] **Task DM-3.1.1: Create `POST /v1/download/request/album` handler**
 
-- [ ] **Task DM-3.2: Implement rate limiting**
+  **File:** `catalog-server/src/server/server.rs`
 
-- [ ] **Task DM-3.3: Add `require_request_content` middleware**
+  **Response:**
+  ```json
+  {
+      "request_id": "uuid",
+      "status": "PENDING",
+      "queue_position": 5
+  }
+  ```
+
+  **Errors:**
+  - 429: Rate limit exceeded (daily or queue)
+  - 409: Already in catalog or queue
+  - 503: Download manager not enabled
+
+- [ ] **Task DM-3.1.2: Create `POST /v1/download/request/discography` handler**
+
+  **File:** `catalog-server/src/server/server.rs`
+
+  **Response:**
+  ```json
+  {
+      "request_ids": ["uuid1", "uuid2"],
+      "albums_queued": 5,
+      "albums_skipped": 3,
+      "status": "PENDING"
+  }
+  ```
+
+- [ ] **Task DM-3.1.3: Create `GET /v1/download/my-requests` handler**
+
+  **File:** `catalog-server/src/server/server.rs`
+
+  **Response:**
+  ```json
+  {
+      "requests": [UserRequestView],
+      "stats": {
+          "requests_today": 15,
+          "max_per_day": 100,
+          "in_queue": 8,
+          "max_queue": 200
+      }
+  }
+  ```
+
+- [ ] **Task DM-3.1.4: Create `GET /v1/download/request/:id` handler**
+
+  **File:** `catalog-server/src/server/server.rs`
+
+  **Note:** Only returns requests owned by the current user.
+
+- [ ] **Task DM-3.1.5: Create `DELETE /v1/download/request/:id` handler**
+
+  **File:** `catalog-server/src/server/server.rs`
+
+  **Constraints:**
+  - Only pending or retry_waiting can be cancelled
+  - Only owner can cancel
+  - Returns 409 if in_progress/completed/failed
+
+#### DM-3.2 Rate Limiting
+
+- [ ] **Task DM-3.2.1: Implement rate limit checking in request handlers**
+
+  **File:** `catalog-server/src/server/server.rs`
+
+  **Logic:**
+  1. Check `user_request_stats.requests_today < config.user_max_requests_per_day`
+  2. Check `user_request_stats.requests_in_queue < config.user_max_queue_size`
+  3. Return 429 with helpful error message if exceeded
+
+- [ ] **Task DM-3.2.2: Create daily stats reset background job**
+
+  **File:** `catalog-server/src/background_jobs/jobs/reset_download_stats.rs`
+
+  **Context:** Runs daily at midnight to reset `requests_today` for all users.
 
 ---
 
 ### Phase DM-4: Queue Processor
 
-- [ ] **Task DM-4.1: Create `job_processor.rs`**
+#### DM-4.1 Job Processor
+
+- [ ] **Task DM-4.1.1: Create `QueueProcessor` struct**
 
   **File:** `catalog-server/src/download_manager/job_processor.rs`
 
-- [ ] **Task DM-4.2: Integrate with `Downloader` trait**
+  ```rust
+  pub struct QueueProcessor {
+      download_manager: Arc<DownloadManager>,
+      interval: Duration,
+  }
 
-- [ ] **Task DM-4.3: Spawn processor background task in main.rs**
+  impl QueueProcessor {
+      pub fn new(download_manager: Arc<DownloadManager>, interval_secs: u64) -> Self;
 
-- [ ] **Task DM-4.4: Add download queue metrics**
+      /// Main processing loop - call from spawned task
+      pub async fn run(&self, shutdown: CancellationToken) {
+          let mut interval = tokio::time::interval(self.interval);
+
+          loop {
+              tokio::select! {
+                  _ = interval.tick() => {
+                      // Promote ready retries
+                      if let Err(e) = self.download_manager.promote_ready_retries() {
+                          error!("Failed to promote retries: {}", e);
+                      }
+
+                      // Process next item
+                      match self.download_manager.process_next() {
+                          Ok(Some(result)) => {
+                              info!("Processed download: {:?}", result);
+                          }
+                          Ok(None) => {
+                              // Queue empty
+                          }
+                          Err(e) => {
+                              error!("Queue processor error: {}", e);
+                          }
+                      }
+                  }
+                  _ = shutdown.cancelled() => {
+                      info!("Queue processor shutting down");
+                      break;
+                  }
+              }
+          }
+      }
+  }
+  ```
+
+- [ ] **Task DM-4.1.2: Implement download execution logic**
+
+  **File:** `catalog-server/src/download_manager/job_processor.rs`
+
+  **Logic in `process_next()`:**
+  1. Check global capacity limits
+  2. Get next pending item
+  3. Claim for processing
+  4. Execute download via Downloader trait
+  5. Handle success/failure with retry policy
+  6. Record activity metrics
+  7. Log audit events
+
+- [ ] **Task DM-4.1.3: Handle different content types**
+
+  **File:** `catalog-server/src/download_manager/job_processor.rs`
+
+  **Content type handling:**
+  - `Album`: Full download including metadata, tracks, audio, images
+  - `TrackAudio`: Single audio file
+  - `ArtistImage`: Single image file
+  - `AlbumImage`: Single image file
+
+#### DM-4.2 Main Integration
+
+- [ ] **Task DM-4.2.1: Initialize DownloadManager in main.rs**
+
+  **File:** `catalog-server/src/main.rs`
+
+  ```rust
+  let download_manager = if config.download_manager.enabled {
+      let queue_store = Arc::new(SqliteDownloadQueueStore::new(&config.download_queue_db_path())?);
+
+      let manager = Arc::new(DownloadManager::new(
+          queue_store,
+          downloader.clone(),
+          catalog_store.clone(),
+          config.media_path.clone(),
+          config.download_manager.clone(),
+      ));
+
+      info!("Download manager initialized");
+      Some(manager)
+  } else {
+      info!("Download manager disabled (no downloader_url configured)");
+      None
+  };
+  ```
+
+- [ ] **Task DM-4.2.2: Spawn queue processor task**
+
+  **File:** `catalog-server/src/main.rs`
+
+  ```rust
+  if let Some(ref dm) = download_manager {
+      let processor = QueueProcessor::new(
+          dm.clone(),
+          config.download_manager.process_interval_secs,
+      );
+      let shutdown = shutdown_token.child_token();
+      tokio::spawn(async move {
+          processor.run(shutdown).await;
+      });
+  }
+  ```
+
+- [ ] **Task DM-4.2.3: Add DownloadManager to ServerState**
+
+  **File:** `catalog-server/src/server/server.rs`
+
+  ```rust
+  pub struct ServerState {
+      // ... existing fields ...
+      pub download_manager: Option<Arc<DownloadManager>>,
+  }
+  ```
+
+#### DM-4.3 Stale Cleanup
+
+- [ ] **Task DM-4.3.1: Implement stale in-progress cleanup**
+
+  **File:** `catalog-server/src/download_manager/job_processor.rs`
+
+  **Logic:** Items stuck in IN_PROGRESS longer than `stale_in_progress_threshold_secs` should be marked FAILED.
+
+  **Trigger:** Run on startup and periodically (hourly).
 
 ---
 
 ### Phase DM-5: Integrity Watchdog
 
-- [ ] **Task DM-5.1: Create `watchdog.rs`**
+#### DM-5.1 Watchdog Implementation
+
+- [ ] **Task DM-5.1.1: Create `IntegrityWatchdog` struct**
 
   **File:** `catalog-server/src/download_manager/watchdog.rs`
 
-- [ ] **Task DM-5.2: Implement scan methods**
+  ```rust
+  pub struct IntegrityWatchdog {
+      catalog_store: Arc<dyn CatalogStore>,
+      queue_store: Arc<dyn DownloadQueueStore>,
+      audit_logger: AuditLogger,
+      media_path: PathBuf,
+  }
 
-  - `scan_missing_track_audio`
-  - `scan_missing_album_images`
-  - `scan_missing_artist_images`
+  impl IntegrityWatchdog {
+      pub fn new(
+          catalog_store: Arc<dyn CatalogStore>,
+          queue_store: Arc<dyn DownloadQueueStore>,
+          audit_logger: AuditLogger,
+          media_path: PathBuf,
+      ) -> Self;
 
-- [ ] **Task DM-5.3: Create `IntegrityWatchdogJob` background job**
+      /// Run full integrity scan
+      pub fn run_scan(&self) -> Result<WatchdogReport>;
+  }
+  ```
+
+- [ ] **Task DM-5.1.2: Implement `scan_missing_track_audio`**
+
+  **File:** `catalog-server/src/download_manager/watchdog.rs`
+
+  **Logic:**
+  1. Query all tracks from catalog
+  2. For each track, check if audio file exists at expected path
+  3. Return list of track IDs with missing audio
+
+- [ ] **Task DM-5.1.3: Implement `scan_missing_album_images`**
+
+  **File:** `catalog-server/src/download_manager/watchdog.rs`
+
+- [ ] **Task DM-5.1.4: Implement `scan_missing_artist_images`**
+
+  **File:** `catalog-server/src/download_manager/watchdog.rs`
+
+- [ ] **Task DM-5.1.5: Implement `queue_repairs`**
+
+  **File:** `catalog-server/src/download_manager/watchdog.rs`
+
+  **Logic:**
+  1. For each missing item, check if already in queue
+  2. Skip if in queue
+  3. Enqueue with priority = Watchdog (1)
+  4. Log audit event for each queued item
+  5. Return count of queued vs skipped
+
+#### DM-5.2 Background Job
+
+- [ ] **Task DM-5.2.1: Create `IntegrityWatchdogJob`**
 
   **File:** `catalog-server/src/background_jobs/jobs/integrity_watchdog.rs`
 
-- [ ] **Task DM-5.4: Register watchdog job (conditional on download manager enabled)**
+  ```rust
+  pub struct IntegrityWatchdogJob {
+      watchdog: Arc<IntegrityWatchdog>,
+  }
+
+  impl BackgroundJob for IntegrityWatchdogJob {
+      fn id(&self) -> &'static str { "integrity_watchdog" }
+      fn name(&self) -> &'static str { "Integrity Watchdog" }
+      fn description(&self) -> &'static str { "Scan catalog for missing files and queue repairs" }
+
+      fn schedule(&self) -> JobSchedule {
+          JobSchedule::Combined {
+              interval: Some(Duration::from_secs(24 * 60 * 60)),  // Daily
+              cron: None,
+              hooks: vec![HookEvent::OnStartup],  // Also run on startup
+          }
+      }
+
+      fn shutdown_behavior(&self) -> ShutdownBehavior {
+          ShutdownBehavior::Cancellable
+      }
+
+      fn execute(&self, ctx: &JobContext) -> Result<(), JobError> {
+          let report = self.watchdog.run_scan()
+              .map_err(|e| JobError::ExecutionFailed(e.to_string()))?;
+
+          info!("Watchdog scan complete: queued={}, skipped={}, duration={}ms",
+              report.items_queued, report.items_skipped, report.scan_duration_ms);
+
+          Ok(())
+      }
+  }
+  ```
+
+- [ ] **Task DM-5.2.2: Register watchdog job conditionally**
+
+  **File:** `catalog-server/src/main.rs`
+
+  ```rust
+  if let Some(ref dm) = download_manager {
+      let watchdog = Arc::new(IntegrityWatchdog::new(
+          catalog_store.clone(),
+          dm.queue_store.clone(),
+          dm.audit_logger.clone(),
+          config.media_path.clone(),
+      ));
+
+      scheduler.register_job(Arc::new(IntegrityWatchdogJob::new(watchdog)));
+  }
+  ```
+
+- [ ] **Task DM-5.2.3: Add unit tests for watchdog**
+
+  **File:** `catalog-server/src/download_manager/watchdog.rs` (test module)
 
 ---
 
 ### Phase DM-6: Admin API & Polish
 
-- [ ] **Task DM-6.1: Create admin handlers**
+#### DM-6.1 Admin Handlers
 
-  - `GET /v1/download/admin/stats`
-  - `GET /v1/download/admin/failed`
-  - `POST /v1/download/admin/retry/:id`
-  - `GET /v1/download/admin/activity`
-  - `GET /v1/download/admin/requests`
+- [ ] **Task DM-6.1.1: Create `GET /v1/download/admin/stats` handler**
 
-- [ ] **Task DM-6.2: Create audit log handlers**
+  **File:** `catalog-server/src/server/server.rs`
 
-  - `GET /v1/download/admin/audit`
-  - `GET /v1/download/admin/audit/item/:queue_item_id`
-  - `GET /v1/download/admin/audit/user/:user_id`
+  **Permission:** `ViewAnalytics`
 
-- [ ] **Task DM-6.3: Implement audit log cleanup job**
+  **Response:**
+  ```json
+  {
+      "queue": {
+          "pending": 10,
+          "in_progress": 2,
+          "retry_waiting": 3,
+          "completed_today": 45,
+          "failed_today": 2
+      },
+      "capacity": {
+          "albums_this_hour": 7,
+          "max_per_hour": 10,
+          "albums_today": 52,
+          "max_per_day": 60
+      },
+      "processing": {
+          "average_duration_ms": 2500,
+          "success_rate_percent": 95.5
+      }
+  }
+  ```
 
-- [ ] **Task DM-6.4: Create `download_routes` function and wire into router**
+- [ ] **Task DM-6.1.2: Create `GET /v1/download/admin/failed` handler**
 
-- [ ] **Task DM-6.5: Write integration tests**
+  **File:** `catalog-server/src/server/server.rs`
+
+  **Permission:** `ViewAnalytics`
+
+  **Query params:** `limit`, `offset`
+
+- [ ] **Task DM-6.1.3: Create `POST /v1/download/admin/retry/:id` handler**
+
+  **File:** `catalog-server/src/server/server.rs`
+
+  **Permission:** `EditCatalog`
+
+  **Logic:** Reset failed item to pending, log admin retry audit event.
+
+- [ ] **Task DM-6.1.4: Create `GET /v1/download/admin/activity` handler**
+
+  **File:** `catalog-server/src/server/server.rs`
+
+  **Permission:** `ViewAnalytics`
+
+  **Query params:** `hours` (default 24)
+
+  **Response:**
+  ```json
+  {
+      "hourly": [
+          { "hour": "2024-01-15T10:00:00Z", "albums": 8, "tracks": 45, "bytes": 512000000 }
+      ],
+      "totals": {
+          "albums": 52,
+          "tracks": 312,
+          "bytes": 3200000000
+      }
+  }
+  ```
+
+- [ ] **Task DM-6.1.5: Create `GET /v1/download/admin/requests` handler**
+
+  **File:** `catalog-server/src/server/server.rs`
+
+  **Permission:** `ViewAnalytics`
+
+  **Query params:** `status`, `user_id`, `limit`, `offset`
+
+#### DM-6.2 Audit Log Handlers
+
+- [ ] **Task DM-6.2.1: Create `GET /v1/download/admin/audit` handler**
+
+  **File:** `catalog-server/src/server/server.rs`
+
+  **Permission:** `ViewAnalytics`
+
+  **Query params:** `queue_item_id`, `user_id`, `event_type`, `content_type`, `content_id`, `since`, `until`, `limit`, `offset`
+
+  **Response:**
+  ```json
+  {
+      "entries": [AuditLogEntry],
+      "total_count": 1234,
+      "has_more": true
+  }
+  ```
+
+- [ ] **Task DM-6.2.2: Create `GET /v1/download/admin/audit/item/:queue_item_id` handler**
+
+  **File:** `catalog-server/src/server/server.rs`
+
+  **Permission:** `ViewAnalytics`
+
+  **Response:**
+  ```json
+  {
+      "queue_item": QueueItem,
+      "events": [AuditLogEntry]
+  }
+  ```
+
+- [ ] **Task DM-6.2.3: Create `GET /v1/download/admin/audit/user/:user_id` handler**
+
+  **File:** `catalog-server/src/server/server.rs`
+
+  **Permission:** `ViewAnalytics`
+
+#### DM-6.3 Cleanup Jobs
+
+- [ ] **Task DM-6.3.1: Create audit log cleanup background job**
+
+  **File:** `catalog-server/src/background_jobs/jobs/audit_log_cleanup.rs`
+
+  **Context:** Uses `config.download_manager.audit_log_retention_days`. Runs daily. Deletes entries older than retention period.
+
+- [ ] **Task DM-6.3.2: Register audit log cleanup job**
+
+  **File:** `catalog-server/src/main.rs`
+
+#### DM-6.4 Router Wiring
+
+- [ ] **Task DM-6.4.1: Create `download_routes` function**
+
+  **File:** `catalog-server/src/server/server.rs`
+
+  ```rust
+  fn download_routes(state: ServerState) -> Router {
+      Router::new()
+          // Search
+          .route("/search", get(search_download_content))
+          .route("/search/discography/:artist_id", get(search_discography))
+          // User requests
+          .route("/request/album", post(request_album))
+          .route("/request/discography", post(request_discography))
+          .route("/my-requests", get(list_my_requests))
+          .route("/request/:id", get(get_request_status))
+          .route("/request/:id", delete(cancel_request))
+          // Admin
+          .route("/admin/stats", get(admin_download_stats))
+          .route("/admin/failed", get(admin_failed_downloads))
+          .route("/admin/retry/:id", post(admin_retry_download))
+          .route("/admin/activity", get(admin_download_activity))
+          .route("/admin/requests", get(admin_all_requests))
+          // Audit
+          .route("/admin/audit", get(admin_audit_log))
+          .route("/admin/audit/item/:queue_item_id", get(admin_audit_for_item))
+          .route("/admin/audit/user/:user_id", get(admin_audit_for_user))
+          .with_state(state)
+  }
+  ```
+
+- [ ] **Task DM-6.4.2: Wire download routes into main router**
+
+  **File:** `catalog-server/src/server/server.rs`
+
+  ```rust
+  let app = Router::new()
+      // ... existing routes ...
+      .nest("/v1/download", download_routes(state.clone()));
+  ```
+
+#### DM-6.5 Tests
+
+- [ ] **Task DM-6.5.1: Write integration tests for user request flow**
+
+  **Test scenario:**
+  1. User submits album request
+  2. Verify rate limits checked
+  3. Verify item queued
+  4. Process queue
+  5. Verify completed status
+  6. Verify audit log entries
+
+- [ ] **Task DM-6.5.2: Write integration tests for rate limiting**
+
+  **Test scenario:**
+  1. Submit requests up to daily limit
+  2. Verify 429 on next request
+  3. Verify queue limit separately
+
+- [ ] **Task DM-6.5.3: Write integration tests for watchdog**
+
+  **Test scenario:**
+  1. Create album in catalog without audio files
+  2. Run watchdog scan
+  3. Verify items queued at priority 1
+  4. Verify audit events
+
+- [ ] **Task DM-6.5.4: Write integration tests for admin API**
+
+  **Test scenarios:**
+  - Stats endpoint returns correct counts
+  - Failed items list
+  - Admin retry resets status
+  - Audit log queries
+
+---
+
+### Phase DM-7: Metrics
+
+- [ ] **Task DM-7.1: Define Prometheus metrics**
+
+  **File:** `catalog-server/src/server/metrics.rs`
+
+  ```rust
+  lazy_static! {
+      // Queue size by status
+      pub static ref DOWNLOAD_QUEUE_SIZE: IntGaugeVec = IntGaugeVec::new(
+          Opts::new("pezzottify_download_queue_size", "Current queue size"),
+          &["status", "priority"]
+      ).unwrap();
+
+      // Processing metrics
+      pub static ref DOWNLOAD_PROCESSED_TOTAL: IntCounterVec = IntCounterVec::new(
+          Opts::new("pezzottify_download_processed_total", "Processed downloads"),
+          &["content_type", "result"]  // result: completed, failed, retry
+      ).unwrap();
+
+      pub static ref DOWNLOAD_PROCESSING_DURATION: Histogram = Histogram::with_opts(
+          HistogramOpts::new("pezzottify_download_processing_seconds", "Download processing time")
+              .buckets(vec![1.0, 5.0, 10.0, 30.0, 60.0, 120.0, 300.0])
+      ).unwrap();
+
+      // Capacity metrics
+      pub static ref DOWNLOAD_CAPACITY_USED: IntGaugeVec = IntGaugeVec::new(
+          Opts::new("pezzottify_download_capacity_used", "Capacity usage"),
+          &["period"]  // hourly, daily
+      ).unwrap();
+
+      // User request metrics
+      pub static ref DOWNLOAD_USER_REQUESTS_TOTAL: IntCounterVec = IntCounterVec::new(
+          Opts::new("pezzottify_download_user_requests_total", "User download requests"),
+          &["type"]  // album, discography
+      ).unwrap();
+
+      // Audit log metrics
+      pub static ref DOWNLOAD_AUDIT_EVENTS_TOTAL: IntCounterVec = IntCounterVec::new(
+          Opts::new("pezzottify_download_audit_events_total", "Audit log events"),
+          &["event_type"]
+      ).unwrap();
+  }
+  ```
+
+- [ ] **Task DM-7.2: Register download metrics**
+
+  **File:** `catalog-server/src/server/metrics.rs`
+
+- [ ] **Task DM-7.3: Emit metrics from queue processor**
+
+  **File:** `catalog-server/src/download_manager/job_processor.rs`
+
+- [ ] **Task DM-7.4: Emit metrics from request handlers**
+
+  **File:** `catalog-server/src/server/server.rs`
+
+- [ ] **Task DM-7.5: Update queue size metrics periodically**
+
+  **Context:** Add to queue processor loop to update gauge metrics.
+
+---
+
+### Phase DM-8: Documentation
+
+- [ ] **Task DM-8.1: Update `catalog-server/README.md` with download manager section**
+
+  **Content:**
+  - Overview and architecture
+  - Configuration options
+  - API endpoint documentation
+  - Permission requirements
+
+- [ ] **Task DM-8.2: Update `CLAUDE.md` with download manager routes**
+
+  **File:** `CLAUDE.md`
+
+  **Add to server routes structure section.**
+
+- [ ] **Task DM-8.3: Create example TOML config with download manager settings**
+
+  **File:** `catalog-server/config.example.toml`
+
+  **Add download_manager section with all options documented.**
 
 ---
 
@@ -1443,34 +2890,50 @@ This document breaks down the Background Jobs System and Download Manager plans 
 
 ### Phase Order (Dependencies)
 
-1. **Phase 0**: TOML Configuration System
-2. **Part 1, Phase 1**: CLI Refactoring (minimal, mostly covered in Phase 0)
-3. **Part 1, Phase 2**: Background Jobs System
+1. **Phase 0**: TOML Configuration System ✅
+2. **Part 1, Phase 1**: CLI Refactoring ✅
+3. **Part 1, Phase 2**: Background Jobs System ✅
 4. **Part 2, Phase DM-1**: Download Manager Core Infrastructure
 5. **Part 2, Phase DM-2**: Search Proxy
 6. **Part 2, Phase DM-3**: User Request API
 7. **Part 2, Phase DM-4**: Queue Processor
-8. **Part 2, Phase DM-5**: Integrity Watchdog (requires Background Jobs)
+8. **Part 2, Phase DM-5**: Integrity Watchdog
 9. **Part 2, Phase DM-6**: Admin API & Polish
+10. **Part 2, Phase DM-7**: Metrics
+11. **Part 2, Phase DM-8**: Documentation
 
 ### Key Design Decisions
 
 1. **TOML overrides CLI**: Config file values take precedence over command-line arguments
 2. **Download manager auto-enabled**: When `downloader_url` is configured, download manager is enabled
-3. **Shared Docker network**: `pezzottify-internal` network allows catalog-server and downloader to communicate without referencing each other
-4. **Network creation**: First service to start creates the network (idempotent via `name:` field)
-5. **Synchronous traits**: Following existing codebase patterns, traits are synchronous. Async operations use `spawn_blocking` when needed.
+3. **Shared Docker network**: `pezzottify-internal` network allows catalog-server and downloader to communicate
+4. **Separate database**: `download_queue.db` keeps queue state separate from catalog data
+5. **Priority-based processing**: Watchdog (1) > User (2) > Expansion (3)
+6. **Synchronous traits**: Following existing codebase patterns
+7. **not_found errors don't retry**: Immediate failure for content that doesn't exist
 
 ### Notes on Implementation
 
 - **Trait style**: The codebase uses synchronous traits (`pub trait Foo: Send + Sync`), not `#[async_trait]`. Long-running async work is spawned as tasks.
-- **Module registration**: When creating new modules, remember to add `mod` declarations in `main.rs` (and `cli_auth.rs` if shared).
-- **Permission values**: `RebootServer`/`ServerAdmin` = 7, `ViewAnalytics` = 8, `RequestContent` = 9
+- **Module registration**: When creating new modules, remember to add `mod` declarations in `main.rs`.
+- **Permission values**: `ServerAdmin` = 7, `ViewAnalytics` = 8, `RequestContent` = 9
+- **Error classification**: `not_found` → immediate FAILED; all other errors → retry with exponential backoff
 
 ### Total Tasks
 
-- Phase 0 (TOML Config): ~18 tasks
-- Part 1 (Background Jobs): ~25 tasks
-- Part 2 (Download Manager): ~30 tasks (condensed from detailed breakdown)
+| Phase | Task Count |
+|-------|------------|
+| Phase 0 (TOML Config) | 18 tasks ✅ |
+| Part 1 (Background Jobs) | 25 tasks ✅ |
+| Part 2, DM-1 (Core Infrastructure) | 35 tasks |
+| Part 2, DM-2 (Search Proxy) | 5 tasks |
+| Part 2, DM-3 (User Request API) | 7 tasks |
+| Part 2, DM-4 (Queue Processor) | 6 tasks |
+| Part 2, DM-5 (Integrity Watchdog) | 7 tasks |
+| Part 2, DM-6 (Admin API & Polish) | 14 tasks |
+| Part 2, DM-7 (Metrics) | 5 tasks |
+| Part 2, DM-8 (Documentation) | 3 tasks |
 
-**Total: ~73 high-level tasks** (expanded to ~120 when including subtasks)
+**Total Part 2 (Download Manager): 82 tasks**
+
+**Grand Total: ~125 tasks**
