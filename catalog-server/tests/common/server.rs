@@ -96,7 +96,7 @@ impl TestServer {
             frontend_dir_path: None,
         };
 
-        let app = make_app(config, catalog_store, search_vault, user_store, None, None)
+        let app = make_app(config, catalog_store, search_vault, user_store, None, None, None)
             .expect("Failed to build app");
 
         // Spawn server in background task with graceful shutdown

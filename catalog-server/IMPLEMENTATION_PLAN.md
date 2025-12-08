@@ -1046,7 +1046,7 @@ This document breaks down the Background Jobs System and Download Manager plans 
 
 **Goal:** REST endpoints for listing and triggering jobs.
 
-- [ ] **Task 2.4.1: Create `GET /v1/admin/jobs` handler**
+- [x] **Task 2.4.1: Create `GET /v1/admin/jobs` handler**
 
   **Context:** Returns all registered jobs with current state.
 
@@ -1073,19 +1073,19 @@ This document breaks down the Background Jobs System and Download Manager plans 
   }
   ```
 
-- [ ] **Task 2.4.2: Create `POST /v1/admin/jobs/:job_id/trigger` handler**
+- [x] **Task 2.4.2: Create `POST /v1/admin/jobs/:job_id/trigger` handler**
 
   **Context:** Manually trigger a job. Returns 409 if already running.
 
   **File:** `catalog-server/src/server/server.rs`
 
-- [ ] **Task 2.4.3: Add `require_server_admin` middleware**
+- [x] **Task 2.4.3: Add `require_server_admin` middleware**
 
   **Context:** Rename/update existing `require_reboot_server` middleware to `require_server_admin`.
 
   **File:** `catalog-server/src/server/server.rs`
 
-- [ ] **Task 2.4.4: Wire routes into router**
+- [x] **Task 2.4.4: Wire routes into router**
 
   **File:** `catalog-server/src/server/server.rs`
 

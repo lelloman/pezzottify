@@ -14,6 +14,7 @@ use std::{
 
 use tracing::{debug, error, info, warn};
 
+use crate::background_jobs::{JobError, JobInfo, SchedulerHandle};
 use crate::catalog_store::CatalogStore;
 use crate::{search::SearchVault, user::UserManager};
 use crate::{
@@ -1745,6 +1746,174 @@ async fn reboot_server(session: Session) -> Response {
     (StatusCode::ACCEPTED, "Server reboot initiated").into_response()
 }
 
+// ============================================================================
+// Admin Job API handlers
+// ============================================================================
+
+#[derive(Serialize)]
+struct ListJobsResponse {
+    jobs: Vec<JobInfo>,
+}
+
+async fn admin_list_jobs(
+    session: Session,
+    State(scheduler_handle): State<super::state::OptionalSchedulerHandle>,
+) -> Response {
+    let handle = match scheduler_handle {
+        Some(h) => h,
+        None => {
+            return (
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(serde_json::json!({"error": "Job scheduler not available"})),
+            )
+                .into_response();
+        }
+    };
+
+    match handle.list_jobs().await {
+        Ok(jobs) => {
+            debug!("User {} listed {} jobs", session.user_id, jobs.len());
+            (StatusCode::OK, Json(ListJobsResponse { jobs })).into_response()
+        }
+        Err(e) => {
+            error!("Failed to list jobs: {}", e);
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"error": "Failed to list jobs"})),
+            )
+                .into_response()
+        }
+    }
+}
+
+async fn admin_get_job(
+    session: Session,
+    State(scheduler_handle): State<super::state::OptionalSchedulerHandle>,
+    Path(job_id): Path<String>,
+) -> Response {
+    let handle = match scheduler_handle {
+        Some(h) => h,
+        None => {
+            return (
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(serde_json::json!({"error": "Job scheduler not available"})),
+            )
+                .into_response();
+        }
+    };
+
+    match handle.get_job(&job_id).await {
+        Ok(Some(job)) => {
+            debug!("User {} retrieved job {}", session.user_id, job_id);
+            (StatusCode::OK, Json(job)).into_response()
+        }
+        Ok(None) => (
+            StatusCode::NOT_FOUND,
+            Json(serde_json::json!({"error": "Job not found"})),
+        )
+            .into_response(),
+        Err(e) => {
+            error!("Failed to get job {}: {}", job_id, e);
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"error": "Failed to get job"})),
+            )
+                .into_response()
+        }
+    }
+}
+
+async fn admin_trigger_job(
+    session: Session,
+    State(scheduler_handle): State<super::state::OptionalSchedulerHandle>,
+    Path(job_id): Path<String>,
+) -> Response {
+    let handle = match scheduler_handle {
+        Some(h) => h,
+        None => {
+            return (
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(serde_json::json!({"error": "Job scheduler not available"})),
+            )
+                .into_response();
+        }
+    };
+
+    info!("User {} triggering job {}", session.user_id, job_id);
+
+    match handle.trigger_job(&job_id).await {
+        Ok(()) => {
+            info!("Job {} triggered successfully by user {}", job_id, session.user_id);
+            (
+                StatusCode::ACCEPTED,
+                Json(serde_json::json!({"status": "triggered", "job_id": job_id})),
+            )
+                .into_response()
+        }
+        Err(JobError::NotFound) => (
+            StatusCode::NOT_FOUND,
+            Json(serde_json::json!({"error": "Job not found"})),
+        )
+            .into_response(),
+        Err(JobError::AlreadyRunning) => (
+            StatusCode::CONFLICT,
+            Json(serde_json::json!({"error": "Job is already running"})),
+        )
+            .into_response(),
+        Err(e) => {
+            error!("Failed to trigger job {}: {}", job_id, e);
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"error": format!("Failed to trigger job: {}", e)})),
+            )
+                .into_response()
+        }
+    }
+}
+
+async fn admin_get_job_history(
+    session: Session,
+    State(scheduler_handle): State<super::state::OptionalSchedulerHandle>,
+    Path(job_id): Path<String>,
+    Query(params): Query<std::collections::HashMap<String, String>>,
+) -> Response {
+    let handle = match scheduler_handle {
+        Some(h) => h,
+        None => {
+            return (
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(serde_json::json!({"error": "Job scheduler not available"})),
+            )
+                .into_response();
+        }
+    };
+
+    let limit = params
+        .get("limit")
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(20);
+
+    match handle.get_job_history(&job_id, limit) {
+        Ok(history) => {
+            debug!(
+                "User {} retrieved {} history entries for job {}",
+                session.user_id,
+                history.len(),
+                job_id
+            );
+            (StatusCode::OK, Json(serde_json::json!({"history": history}))).into_response()
+        }
+        Err(e) => {
+            error!("Failed to get job history for {}: {}", job_id, e);
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"error": "Failed to get job history"})),
+            )
+                .into_response()
+        }
+    }
+}
+
 async fn get_challenge(State(_state): State<ServerState>) -> Response {
     todo!()
 }
@@ -2752,6 +2921,7 @@ impl ServerState {
         user_store: Arc<dyn FullUserStore>,
         downloader: Option<Arc<dyn crate::downloader::Downloader>>,
         media_base_path: Option<std::path::PathBuf>,
+        scheduler_handle: Option<SchedulerHandle>,
     ) -> ServerState {
         // Create proxy if downloader and media_base_path are available
         let proxy = match (&downloader, media_base_path) {
@@ -2773,6 +2943,7 @@ impl ServerState {
             downloader,
             proxy,
             ws_connection_manager: Arc::new(super::websocket::ConnectionManager::new()),
+            scheduler_handle,
             hash: "123456".to_owned(),
         }
     }
@@ -2785,6 +2956,7 @@ pub fn make_app(
     user_store: Arc<dyn FullUserStore>,
     downloader: Option<Arc<dyn crate::downloader::Downloader>>,
     media_base_path: Option<std::path::PathBuf>,
+    scheduler_handle: Option<SchedulerHandle>,
 ) -> Result<Router> {
     let user_manager = UserManager::new(catalog_store.clone(), user_store.clone());
     let state = ServerState::new(
@@ -2795,6 +2967,7 @@ pub fn make_app(
         user_store,
         downloader,
         media_base_path,
+        scheduler_handle,
     );
 
     // Login route with strict IP-based rate limiting
@@ -3035,9 +3208,13 @@ pub fn make_app(
     // Merge catalog edit routes into content routes
     content_routes = content_routes.merge(catalog_edit_routes);
 
-    // Admin reboot route (requires ServerAdmin permission)
-    let admin_reboot_routes: Router = Router::new()
+    // Admin server routes (requires ServerAdmin permission)
+    let admin_server_routes: Router = Router::new()
         .route("/reboot", post(reboot_server))
+        .route("/jobs", get(admin_list_jobs))
+        .route("/jobs/{job_id}", get(admin_get_job))
+        .route("/jobs/{job_id}/trigger", post(admin_trigger_job))
+        .route("/jobs/{job_id}/history", get(admin_get_job_history))
         .layer(GovernorLayer::new(write_rate_limit.clone()))
         .route_layer(middleware::from_fn_with_state(
             state.clone(),
@@ -3149,7 +3326,7 @@ pub fn make_app(
         ))
         .with_state(state.clone());
 
-    let admin_routes = admin_reboot_routes
+    let admin_routes = admin_server_routes
         .merge(admin_user_routes)
         .merge(admin_listening_routes)
         .merge(admin_changelog_routes);
@@ -3218,6 +3395,7 @@ pub async fn run_server(
     frontend_dir_path: Option<String>,
     downloader: Option<Arc<dyn crate::downloader::Downloader>>,
     media_base_path: Option<std::path::PathBuf>,
+    scheduler_handle: Option<SchedulerHandle>,
 ) -> Result<()> {
     let config = ServerConfig {
         port,
@@ -3232,6 +3410,7 @@ pub async fn run_server(
         user_store,
         downloader,
         media_base_path,
+        scheduler_handle,
     )?;
 
     let main_listener = tokio::net::TcpListener::bind(format!("0.0.0.0:{}", port))
@@ -3320,6 +3499,7 @@ mod tests {
             user_store,
             None, // no downloader
             None, // no media_base_path
+            None, // no scheduler_handle
         )
         .unwrap();
 
