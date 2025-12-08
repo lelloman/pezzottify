@@ -599,7 +599,7 @@ This document breaks down the Background Jobs System and Download Manager plans 
 
 **Goal:** Rename `RebootServer` permission to `ServerAdmin`.
 
-- [ ] **Task 2.1.1: Update permission enum in `permissions.rs`**
+- [x] **Task 2.1.1: Update permission enum in `permissions.rs`**
 
   **Context:** Rename the variant and update any associated strings. The int value (7) stays the same for backward compatibility.
 
@@ -613,7 +613,7 @@ This document breaks down the Background Jobs System and Download Manager plans 
   - `from_int()`: `7 => Some(Permission::RebootServer)` → `7 => Some(Permission::ServerAdmin)`
   - `ADMIN_PERMISSIONS` array
 
-- [ ] **Task 2.1.2: Update all Rust code references to `RebootServer`**
+- [x] **Task 2.1.2: Update all Rust code references to `RebootServer`**
 
   **Context:** Find and replace all uses. Based on grep, these files need updates:
 
@@ -623,7 +623,7 @@ This document breaks down the Background Jobs System and Download Manager plans 
   - `catalog-server/src/user/sqlite_user_store.rs` (line 3267)
   - `catalog-server/src/user/permissions.rs` (multiple test assertions)
 
-- [ ] **Task 2.1.3: Update `catalog-server/README.md` permission documentation**
+- [x] **Task 2.1.3: Update `catalog-server/README.md` permission documentation**
 
   **File:** `catalog-server/README.md`
 
@@ -632,7 +632,7 @@ This document breaks down the Background Jobs System and Download Manager plans 
   - Line 427: Update description
   - Line 509: Update in admin permissions list
 
-- [ ] **Task 2.1.4: Update web frontend permission references**
+- [x] **Task 2.1.4: Update web frontend permission references**
 
   **Files and changes:**
   - `web/src/store/user.js` line 9: `'RebootServer'` → `'ServerAdmin'` in `ADMIN_PERMISSIONS`
@@ -642,7 +642,7 @@ This document breaks down the Background Jobs System and Download Manager plans 
   - `web/src/views/AdminView.vue` line 68: `'RebootServer'` → `'ServerAdmin'`
   - `web/src/components/admin/UserManagement.vue` line 263: `'RebootServer'` → `'ServerAdmin'`
 
-- [ ] **Task 2.1.5: Update Android permission references**
+- [x] **Task 2.1.5: Update Android permission references**
 
   **Files and changes:**
   - `android/ui/src/main/java/com/lelloman/pezzottify/android/ui/model/Permission.kt`:
