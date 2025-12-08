@@ -64,7 +64,10 @@ async fn test_search_with_no_results() {
 
     assert_eq!(response.status(), StatusCode::OK);
     let results: Vec<serde_json::Value> = response.json().await.unwrap();
-    assert!(results.is_empty(), "Search for nonexistent term should return empty results");
+    assert!(
+        results.is_empty(),
+        "Search for nonexistent term should return empty results"
+    );
 }
 
 #[tokio::test]
@@ -263,6 +266,9 @@ async fn test_search_case_insensitive() {
 
     // At least one should have results if the other does
     if !results_lower.is_empty() {
-        assert!(!results_upper.is_empty(), "Search should be case-insensitive");
+        assert!(
+            !results_upper.is_empty(),
+            "Search should be case-insensitive"
+        );
     }
 }

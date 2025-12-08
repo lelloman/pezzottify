@@ -212,7 +212,9 @@ pub fn print_success(message: &str) {
 pub fn print_error(message: &str) {
     println!(
         " {} {}",
-        format!("{}", box_chars::CROSS_MARK).with(colors::RED).bold(),
+        format!("{}", box_chars::CROSS_MARK)
+            .with(colors::RED)
+            .bold(),
         message.with(colors::RED)
     );
 }
@@ -269,7 +271,9 @@ pub fn print_section_footer() {
     print!("{}", box_chars::ROUND_BOTTOM_LEFT.with(colors::CYAN));
     print!(
         "{}",
-        box_chars::SINGLE_HORIZONTAL.repeat(width).with(colors::CYAN)
+        box_chars::SINGLE_HORIZONTAL
+            .repeat(width)
+            .with(colors::CYAN)
     );
     println!("{}", box_chars::ROUND_BOTTOM_RIGHT.with(colors::CYAN));
     println!();
@@ -413,7 +417,11 @@ impl TableBuilder {
             for (i, cell) in row.iter().enumerate() {
                 let width = self.col_widths.get(i).unwrap_or(&0);
                 let padding = width.saturating_sub(cell.width());
-                print!(" {}{} ", cell.clone().with(colors::WHITE), " ".repeat(padding));
+                print!(
+                    " {}{} ",
+                    cell.clone().with(colors::WHITE),
+                    " ".repeat(padding)
+                );
                 print!("{}", box_chars::SINGLE_VERTICAL.with(colors::CYAN));
             }
             println!();
@@ -544,12 +552,7 @@ pub fn print_help(commands: &[CommandHelp]) {
     // Group commands by category
     let user_commands: Vec<_> = commands
         .iter()
-        .filter(|c| {
-            matches!(
-                c.name,
-                "add-user" | "user-handles" | "show"
-            )
-        })
+        .filter(|c| matches!(c.name, "add-user" | "user-handles" | "show"))
         .collect();
 
     let auth_commands: Vec<_> = commands

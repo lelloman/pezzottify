@@ -27,9 +27,7 @@ async fn extract_session_token(response: reqwest::Response) -> String {
 async fn connect_ws(
     base_url: &str,
     session_token: &str,
-) -> tokio_tungstenite::WebSocketStream<
-    tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>,
-> {
+) -> tokio_tungstenite::WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>> {
     // Convert http:// to ws://
     let ws_url = base_url.replace("http://", "ws://") + "/v1/ws";
 
@@ -110,7 +108,10 @@ async fn test_websocket_sync_broadcast_on_like() {
 
     // Device 2 should receive sync event
     let sync_msg = wait_for_message(&mut ws2, "sync", Duration::from_secs(5)).await;
-    assert!(sync_msg.is_some(), "Should receive sync message on device 2");
+    assert!(
+        sync_msg.is_some(),
+        "Should receive sync message on device 2"
+    );
 
     let payload = sync_msg.unwrap();
     let event = payload.get("payload").and_then(|p| p.get("event"));
@@ -328,7 +329,10 @@ async fn test_websocket_graceful_disconnect() {
 
     // Connection should be closed - attempting to send should fail
     let send_result = ws.send(Message::Text("test".into())).await;
-    assert!(send_result.is_err(), "Sending on closed connection should fail");
+    assert!(
+        send_result.is_err(),
+        "Sending on closed connection should fail"
+    );
 }
 
 #[tokio::test]
@@ -391,8 +395,14 @@ async fn test_websocket_multiple_devices_connected() {
     let connected1 = wait_for_message(&mut ws1, "connected", Duration::from_secs(5)).await;
     let connected2 = wait_for_message(&mut ws2, "connected", Duration::from_secs(5)).await;
 
-    assert!(connected1.is_some(), "Device 1 should receive connected message");
-    assert!(connected2.is_some(), "Device 2 should receive connected message");
+    assert!(
+        connected1.is_some(),
+        "Device 1 should receive connected message"
+    );
+    assert!(
+        connected2.is_some(),
+        "Device 2 should receive connected message"
+    );
 
     // Both connections should be active
     ws1.close(None).await.ok();
@@ -420,16 +430,17 @@ async fn test_websocket_unauthenticated_connection_rejected() {
     let result = connect_async(request).await;
 
     // Connection should be rejected
-    assert!(result.is_err(), "WebSocket connection with invalid token should be rejected");
+    assert!(
+        result.is_err(),
+        "WebSocket connection with invalid token should be rejected"
+    );
 }
 
 /// Connect to WebSocket using Authorization header instead of cookie
 async fn connect_ws_with_auth_header(
     base_url: &str,
     session_token: &str,
-) -> tokio_tungstenite::WebSocketStream<
-    tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>,
-> {
+) -> tokio_tungstenite::WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>> {
     let ws_url = base_url.replace("http://", "ws://") + "/v1/ws";
 
     let request = http::Request::builder()
@@ -467,7 +478,10 @@ async fn test_websocket_connect_with_authorization_header() {
 
     // Should receive "connected" message
     let connected = wait_for_message(&mut ws, "connected", Duration::from_secs(5)).await;
-    assert!(connected.is_some(), "Should receive connected message with Authorization header");
+    assert!(
+        connected.is_some(),
+        "Should receive connected message with Authorization header"
+    );
 
     // Verify the connected message structure
     let connected_msg = connected.unwrap();

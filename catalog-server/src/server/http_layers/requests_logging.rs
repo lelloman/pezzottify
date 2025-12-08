@@ -179,7 +179,9 @@ pub async fn log_requests(
 
             // Record to database (fire and forget - don't block the response)
             let user_manager = state.user_manager.lock().unwrap();
-            if let Err(e) = user_manager.record_bandwidth_usage(uid, date, endpoint_category, response_bytes, 1) {
+            if let Err(e) =
+                user_manager.record_bandwidth_usage(uid, date, endpoint_category, response_bytes, 1)
+            {
                 debug!("Failed to record bandwidth usage to database: {}", e);
             }
         }

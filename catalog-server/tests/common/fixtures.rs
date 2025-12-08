@@ -52,7 +52,9 @@ pub fn create_test_catalog() -> Result<(TempDir, PathBuf, PathBuf)> {
     let store = SqliteCatalogStore::new(&catalog_db_path, &media_path)?;
 
     // Create an active changelog batch for test data insertion
-    store.changelog().create_batch("Test Data Import", Some("Initial test fixture data"))?;
+    store
+        .changelog()
+        .create_batch("Test Data Import", Some("Initial test fixture data"))?;
 
     // Insert artists (use IDs from constants: R1, R2)
     let artist1 = Artist {
@@ -168,11 +170,13 @@ pub fn create_test_db_with_users() -> Result<(TempDir, String)> {
         let store = SqliteUserStore::new(&db_path)?;
 
         // Create regular test user
-        let user_id = create_user_with_password_and_role(&store, TEST_USER, TEST_PASS, UserRole::Regular)?;
+        let user_id =
+            create_user_with_password_and_role(&store, TEST_USER, TEST_PASS, UserRole::Regular)?;
         eprintln!("Created test user {} with id {}", TEST_USER, user_id);
 
         // Create admin test user
-        let admin_id = create_user_with_password_and_role(&store, ADMIN_USER, ADMIN_PASS, UserRole::Admin)?;
+        let admin_id =
+            create_user_with_password_and_role(&store, ADMIN_USER, ADMIN_PASS, UserRole::Admin)?;
         eprintln!("Created admin user {} with id {}", ADMIN_USER, admin_id);
 
         // Store is dropped here, ensuring connection is closed

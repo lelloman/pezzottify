@@ -133,7 +133,10 @@ pub trait UserStore: UserAuthTokenStore + UserAuthCredentialsStore + Send + Sync
 
     /// Removes an extra permission grant by its id.
     /// Returns the user_id and permission that was deleted, or None if not found.
-    fn remove_user_extra_permission(&self, permission_id: usize) -> Result<Option<(usize, Permission)>>;
+    fn remove_user_extra_permission(
+        &self,
+        permission_id: usize,
+    ) -> Result<Option<(usize, Permission)>>;
 
     /// Decrements the countdown of an extra permission grant.
     /// Returns true if the permission still has uses remaining, false otherwise.
@@ -173,10 +176,18 @@ pub trait UserBandwidthStore: Send + Sync {
     ) -> Result<BandwidthSummary>;
 
     /// Gets bandwidth usage for all users (admin only) within a date range.
-    fn get_all_bandwidth_usage(&self, start_date: u32, end_date: u32) -> Result<Vec<BandwidthUsage>>;
+    fn get_all_bandwidth_usage(
+        &self,
+        start_date: u32,
+        end_date: u32,
+    ) -> Result<Vec<BandwidthUsage>>;
 
     /// Gets the total bandwidth summary across all users within a date range.
-    fn get_total_bandwidth_summary(&self, start_date: u32, end_date: u32) -> Result<BandwidthSummary>;
+    fn get_total_bandwidth_summary(
+        &self,
+        start_date: u32,
+        end_date: u32,
+    ) -> Result<BandwidthSummary>;
 
     /// Prunes bandwidth usage records older than the specified number of days.
     /// Returns the number of records deleted.
@@ -321,12 +332,23 @@ pub trait UserEventStore: Send + Sync {
 
 /// Combined trait for user storage with bandwidth, listening tracking, settings, devices, and events
 pub trait FullUserStore:
-    UserStore + UserBandwidthStore + UserListeningStore + UserSettingsStore + DeviceStore + UserEventStore
+    UserStore
+    + UserBandwidthStore
+    + UserListeningStore
+    + UserSettingsStore
+    + DeviceStore
+    + UserEventStore
 {
 }
 
 // Blanket implementation for any type that implements all user store traits
-impl<T: UserStore + UserBandwidthStore + UserListeningStore + UserSettingsStore + DeviceStore + UserEventStore>
-    FullUserStore for T
+impl<
+        T: UserStore
+            + UserBandwidthStore
+            + UserListeningStore
+            + UserSettingsStore
+            + DeviceStore
+            + UserEventStore,
+    > FullUserStore for T
 {
 }

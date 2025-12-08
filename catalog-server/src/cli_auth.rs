@@ -23,10 +23,7 @@ use catalog_store::NullCatalogStore;
 use user::SqliteUserStore;
 
 use rustyline::{
-    completion::Completer,
-    highlight::Highlighter,
-    history::FileHistory,
-    validate::Validator,
+    completion::Completer, highlight::Highlighter, history::FileHistory, validate::Validator,
     CompletionType, Config, Editor, Helper,
 };
 
@@ -92,16 +89,10 @@ enum InnerCommand {
     ListRoles,
 
     /// Adds a role to a user.
-    AddRole {
-        user_handle: String,
-        role: String,
-    },
+    AddRole { user_handle: String, role: String },
 
     /// Removes a role from a user.
-    RemoveRole {
-        user_handle: String,
-        role: String,
-    },
+    RemoveRole { user_handle: String, role: String },
 
     /// Shows the path of the current auth db.
     Where,
@@ -402,40 +393,38 @@ fn execute_command(
                         print_warning(&format!("User '{}' not found", user_handle));
                     }
                 }
-                InnerCommand::UserHandles => {
-                    match user_manager.get_all_user_handles() {
-                        Ok(handles) => {
-                            print_section_header("Registered Users");
-                            println!();
+                InnerCommand::UserHandles => match user_manager.get_all_user_handles() {
+                    Ok(handles) => {
+                        print_section_header("Registered Users");
+                        println!();
 
-                            if handles.is_empty() {
-                                print_empty_list("No users registered");
-                            } else {
-                                let mut table = TableBuilder::new(vec!["#", "Handle"]);
-                                for (i, handle) in handles.iter().enumerate() {
-                                    table.add_row(vec![&(i + 1).to_string(), handle]);
-                                }
-                                table.print();
+                        if handles.is_empty() {
+                            print_empty_list("No users registered");
+                        } else {
+                            let mut table = TableBuilder::new(vec!["#", "Handle"]);
+                            for (i, handle) in handles.iter().enumerate() {
+                                table.add_row(vec![&(i + 1).to_string(), handle]);
                             }
+                            table.print();
+                        }
 
-                            println!();
-                            println!(
-                                "  {} {}",
-                                "Total:".with(colors::DIM),
-                                format!("{} user(s)", handles.len())
-                                    .with(colors::CYAN)
-                                    .bold()
-                            );
-                            print_section_footer();
-                        }
-                        Err(err) => {
-                            return CommandExecutionResult::Error(format!(
-                                "Failed to get user handles: {}",
-                                err
-                            ));
-                        }
+                        println!();
+                        println!(
+                            "  {} {}",
+                            "Total:".with(colors::DIM),
+                            format!("{} user(s)", handles.len())
+                                .with(colors::CYAN)
+                                .bold()
+                        );
+                        print_section_footer();
                     }
-                }
+                    Err(err) => {
+                        return CommandExecutionResult::Error(format!(
+                            "Failed to get user handles: {}",
+                            err
+                        ));
+                    }
+                },
                 InnerCommand::ListRoles => {
                     use user::UserRole;
 
@@ -463,8 +452,8 @@ fn execute_command(
                     print_section_footer();
                 }
                 InnerCommand::AddRole { user_handle, role } => {
-                    use user::UserRole;
                     use user::sync_events::UserEvent;
+                    use user::UserRole;
                     let role_enum = match UserRole::from_str(&role) {
                         Some(r) => r,
                         None => {
@@ -510,8 +499,8 @@ fn execute_command(
                     ));
                 }
                 InnerCommand::RemoveRole { user_handle, role } => {
-                    use user::UserRole;
                     use user::sync_events::UserEvent;
+                    use user::UserRole;
                     let role_enum = match UserRole::from_str(&role) {
                         Some(r) => r,
                         None => {

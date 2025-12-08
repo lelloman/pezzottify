@@ -126,10 +126,7 @@ async fn test_stream_track_with_open_ended_range() {
 
     let bytes = response.bytes().await.unwrap();
     // Should get file size minus 100 bytes
-    assert!(
-        bytes.len() > 0,
-        "Expected some bytes for open-ended range"
-    );
+    assert!(bytes.len() > 0, "Expected some bytes for open-ended range");
 }
 
 #[tokio::test]
@@ -144,8 +141,7 @@ async fn test_stream_track_with_suffix_range() {
 
     // Should return partial content or full content if file < 500 bytes
     assert!(
-        response.status() == StatusCode::PARTIAL_CONTENT
-            || response.status() == StatusCode::OK
+        response.status() == StatusCode::PARTIAL_CONTENT || response.status() == StatusCode::OK
     );
 
     let bytes = response.bytes().await.unwrap();

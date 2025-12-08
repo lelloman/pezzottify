@@ -201,9 +201,7 @@ impl PezzotHashSearchVault {
         let mut items: Vec<HashedItem> = vec![];
 
         // Get searchable content from the catalog store
-        let searchable_items = catalog_store
-            .get_searchable_content()
-            .unwrap_or_default();
+        let searchable_items = catalog_store.get_searchable_content().unwrap_or_default();
 
         for searchable_item in searchable_items {
             let item_type = match searchable_item.content_type {

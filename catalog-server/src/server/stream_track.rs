@@ -94,7 +94,11 @@ pub async fn stream_track(
     // Get track name for logging (we just need to check it exists)
     let track_json = catalog_store.get_track_json(&id);
     let track_name = match track_json {
-        Ok(Some(track)) => track.get("name").and_then(|n| n.as_str()).unwrap_or("Unknown").to_string(),
+        Ok(Some(track)) => track
+            .get("name")
+            .and_then(|n| n.as_str())
+            .unwrap_or("Unknown")
+            .to_string(),
         Ok(None) => return StatusCode::NOT_FOUND.into_response(),
         Err(_) => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
     };

@@ -137,7 +137,10 @@ impl CatalogProxy {
             .unwrap_or(false);
 
         if !has_related_artists {
-            info!("Artist {} has no related artists, fetching from downloader", id);
+            info!(
+                "Artist {} has no related artists, fetching from downloader",
+                id
+            );
             self.fetch_and_store_artist(id).await?;
         }
 
@@ -360,10 +363,16 @@ impl CatalogProxy {
         // Check if already exists
         if self.catalog_store.get_artist_json(&artist.id)?.is_some() {
             self.catalog_store.update_artist(&artist.id, json)?;
-            info!("Updated artist '{}' (id: {}) in catalog", artist.name, artist.id);
+            info!(
+                "Updated artist '{}' (id: {}) in catalog",
+                artist.name, artist.id
+            );
         } else {
             self.catalog_store.create_artist(json)?;
-            info!("Created artist '{}' (id: {}) in catalog", artist.name, artist.id);
+            info!(
+                "Created artist '{}' (id: {}) in catalog",
+                artist.name, artist.id
+            );
         }
 
         // Store related artists relationships
@@ -389,10 +398,16 @@ impl CatalogProxy {
         // Check if already exists
         if self.catalog_store.get_album_json(&album.id)?.is_some() {
             self.catalog_store.update_album(&album.id, json)?;
-            info!("Updated album '{}' (id: {}) in catalog", album.name, album.id);
+            info!(
+                "Updated album '{}' (id: {}) in catalog",
+                album.name, album.id
+            );
         } else {
             self.catalog_store.create_album(json)?;
-            info!("Created album '{}' (id: {}) in catalog", album.name, album.id);
+            info!(
+                "Created album '{}' (id: {}) in catalog",
+                album.name, album.id
+            );
         }
 
         Ok(())
@@ -706,10 +721,7 @@ mod tests {
         fn get_user_playlists(&self, _user_id: usize) -> anyhow::Result<Vec<String>> {
             Ok(vec![])
         }
-        fn get_user_roles(
-            &self,
-            _user_id: usize,
-        ) -> anyhow::Result<Vec<crate::user::UserRole>> {
+        fn get_user_roles(&self, _user_id: usize) -> anyhow::Result<Vec<crate::user::UserRole>> {
             Ok(vec![])
         }
         fn add_user_role(
@@ -726,10 +738,7 @@ mod tests {
         ) -> anyhow::Result<()> {
             Ok(())
         }
-        fn resolve_user_permissions(
-            &self,
-            _user_id: usize,
-        ) -> anyhow::Result<Vec<Permission>> {
+        fn resolve_user_permissions(&self, _user_id: usize) -> anyhow::Result<Vec<Permission>> {
             Ok(vec![Permission::IssueContentDownload])
         }
         fn add_user_extra_permission(
@@ -739,7 +748,10 @@ mod tests {
         ) -> anyhow::Result<usize> {
             Ok(1)
         }
-        fn remove_user_extra_permission(&self, _permission_id: usize) -> anyhow::Result<Option<(usize, Permission)>> {
+        fn remove_user_extra_permission(
+            &self,
+            _permission_id: usize,
+        ) -> anyhow::Result<Option<(usize, Permission)>> {
             Ok(None)
         }
         fn decrement_permission_countdown(&self, _permission_id: usize) -> anyhow::Result<bool> {
@@ -887,11 +899,7 @@ mod tests {
                 Ok(None)
             }
         }
-        fn set_user_setting(
-            &self,
-            _user_id: usize,
-            _setting: UserSetting,
-        ) -> anyhow::Result<()> {
+        fn set_user_setting(&self, _user_id: usize, _setting: UserSetting) -> anyhow::Result<()> {
             Ok(())
         }
         fn get_all_user_settings(&self, _user_id: usize) -> anyhow::Result<Vec<UserSetting>> {
@@ -1075,7 +1083,9 @@ mod tests {
 
         // Artist doesn't exist in catalog, should fetch from downloader
         let permissions = vec![Permission::IssueContentDownload];
-        let result = proxy.ensure_artist_complete("artist1", 1, &permissions).await;
+        let result = proxy
+            .ensure_artist_complete("artist1", 1, &permissions)
+            .await;
         assert!(result.is_ok());
 
         // Verify downloader was called (may be called multiple times for artist + albums)
@@ -1113,7 +1123,9 @@ mod tests {
         catalog_store.create_artist(artist2_json).unwrap();
 
         // Add related artist relationship
-        catalog_store.add_related_artist("artist1", "artist2").unwrap();
+        catalog_store
+            .add_related_artist("artist1", "artist2")
+            .unwrap();
 
         let proxy = CatalogProxy::new(
             mock_downloader.clone(),
@@ -1124,7 +1136,9 @@ mod tests {
 
         // Artist exists with related artists, should not call fetch_and_store_artist
         let permissions = vec![Permission::IssueContentDownload];
-        let result = proxy.ensure_artist_complete("artist1", 1, &permissions).await;
+        let result = proxy
+            .ensure_artist_complete("artist1", 1, &permissions)
+            .await;
         if let Err(ref e) = result {
             eprintln!("ensure_artist_complete error: {:?}", e);
         }
@@ -1234,7 +1248,10 @@ mod tests {
     }
 
     impl ConfigurableTestUserStore {
-        fn new(downloads_enabled_setting: Option<UserSetting>, permissions: Vec<Permission>) -> Self {
+        fn new(
+            downloads_enabled_setting: Option<UserSetting>,
+            permissions: Vec<Permission>,
+        ) -> Self {
             Self {
                 downloads_enabled_setting,
                 permissions,
@@ -1357,10 +1374,7 @@ mod tests {
         fn get_user_playlists(&self, _user_id: usize) -> anyhow::Result<Vec<String>> {
             Ok(vec![])
         }
-        fn get_user_roles(
-            &self,
-            _user_id: usize,
-        ) -> anyhow::Result<Vec<crate::user::UserRole>> {
+        fn get_user_roles(&self, _user_id: usize) -> anyhow::Result<Vec<crate::user::UserRole>> {
             Ok(vec![])
         }
         fn add_user_role(
@@ -1377,10 +1391,7 @@ mod tests {
         ) -> anyhow::Result<()> {
             Ok(())
         }
-        fn resolve_user_permissions(
-            &self,
-            _user_id: usize,
-        ) -> anyhow::Result<Vec<Permission>> {
+        fn resolve_user_permissions(&self, _user_id: usize) -> anyhow::Result<Vec<Permission>> {
             Ok(self.permissions.clone())
         }
         fn add_user_extra_permission(
@@ -1390,7 +1401,10 @@ mod tests {
         ) -> anyhow::Result<usize> {
             Ok(1)
         }
-        fn remove_user_extra_permission(&self, _permission_id: usize) -> anyhow::Result<Option<(usize, Permission)>> {
+        fn remove_user_extra_permission(
+            &self,
+            _permission_id: usize,
+        ) -> anyhow::Result<Option<(usize, Permission)>> {
             Ok(None)
         }
         fn decrement_permission_countdown(&self, _permission_id: usize) -> anyhow::Result<bool> {
@@ -1538,11 +1552,7 @@ mod tests {
                 Ok(None)
             }
         }
-        fn set_user_setting(
-            &self,
-            _user_id: usize,
-            _setting: UserSetting,
-        ) -> anyhow::Result<()> {
+        fn set_user_setting(&self, _user_id: usize, _setting: UserSetting) -> anyhow::Result<()> {
             Ok(())
         }
         fn get_all_user_settings(&self, _user_id: usize) -> anyhow::Result<Vec<UserSetting>> {
@@ -1652,7 +1662,9 @@ mod tests {
 
         // Should skip download due to missing permission
         let permissions = vec![Permission::AccessCatalog]; // Not IssueContentDownload
-        let result = proxy.ensure_artist_complete("artist1", 1, &permissions).await;
+        let result = proxy
+            .ensure_artist_complete("artist1", 1, &permissions)
+            .await;
         assert!(result.is_ok());
 
         // Downloader should NOT have been called
@@ -1680,7 +1692,9 @@ mod tests {
 
         // Should skip download due to setting not enabled
         let permissions = vec![Permission::IssueContentDownload];
-        let result = proxy.ensure_artist_complete("artist1", 1, &permissions).await;
+        let result = proxy
+            .ensure_artist_complete("artist1", 1, &permissions)
+            .await;
         assert!(result.is_ok());
 
         // Downloader should NOT have been called
@@ -1708,7 +1722,9 @@ mod tests {
 
         // Should skip download due to setting being "false"
         let permissions = vec![Permission::IssueContentDownload];
-        let result = proxy.ensure_artist_complete("artist1", 1, &permissions).await;
+        let result = proxy
+            .ensure_artist_complete("artist1", 1, &permissions)
+            .await;
         assert!(result.is_ok());
 
         // Downloader should NOT have been called
@@ -1736,7 +1752,9 @@ mod tests {
 
         // Should trigger download since user has permission and setting
         let permissions = vec![Permission::IssueContentDownload];
-        let result = proxy.ensure_artist_complete("artist1", 1, &permissions).await;
+        let result = proxy
+            .ensure_artist_complete("artist1", 1, &permissions)
+            .await;
         assert!(result.is_ok());
 
         // Downloader SHOULD have been called
@@ -1776,5 +1794,4 @@ mod tests {
         // Downloader should NOT have been called
         assert_eq!(mock_downloader.get_call_count("get_album"), 0);
     }
-
 }

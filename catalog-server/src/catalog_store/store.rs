@@ -142,9 +142,8 @@ impl SqliteCatalogStore {
     /// Get an artist by ID.
     pub fn get_artist(&self, id: &str) -> Result<Option<Artist>> {
         let conn = self.conn.lock().unwrap();
-        let mut stmt = conn.prepare(
-            "SELECT id, name, genres, activity_periods FROM artists WHERE id = ?1",
-        )?;
+        let mut stmt =
+            conn.prepare("SELECT id, name, genres, activity_periods FROM artists WHERE id = ?1")?;
 
         match stmt.query_row(params![id], |row| {
             let genres_json: Option<String> = row.get(2)?;
@@ -244,9 +243,8 @@ impl SqliteCatalogStore {
     /// Get an image by ID.
     pub fn get_image(&self, id: &str) -> Result<Option<Image>> {
         let conn = self.conn.lock().unwrap();
-        let mut stmt = conn.prepare(
-            "SELECT id, uri, size, width, height FROM images WHERE id = ?1",
-        )?;
+        let mut stmt =
+            conn.prepare("SELECT id, uri, size, width, height FROM images WHERE id = ?1")?;
 
         match stmt.query_row(params![id], |row| {
             let size_str: String = row.get(2)?;
@@ -308,9 +306,8 @@ impl SqliteCatalogStore {
 
         // Fetch display image if set
         let display_image = if let Some(img_id) = display_image_id {
-            let mut img_stmt = conn.prepare(
-                "SELECT id, uri, size, width, height FROM images WHERE id = ?1",
-            )?;
+            let mut img_stmt =
+                conn.prepare("SELECT id, uri, size, width, height FROM images WHERE id = ?1")?;
             img_stmt
                 .query_row(params![img_id], |row| {
                     let size_str: String = row.get(2)?;
@@ -456,9 +453,8 @@ impl SqliteCatalogStore {
 
         // Fetch display image if set
         let display_image = if let Some(img_id) = display_image_id {
-            let mut img_stmt = conn.prepare(
-                "SELECT id, uri, size, width, height FROM images WHERE id = ?1",
-            )?;
+            let mut img_stmt =
+                conn.prepare("SELECT id, uri, size, width, height FROM images WHERE id = ?1")?;
             img_stmt
                 .query_row(params![img_id], |row| {
                     let size_str: String = row.get(2)?;
@@ -736,40 +732,44 @@ impl SqliteCatalogStore {
     /// Check if an artist exists by ID.
     pub fn artist_exists(&self, id: &str) -> Result<bool> {
         let conn = self.conn.lock().unwrap();
-        let count: i64 =
-            conn.query_row("SELECT COUNT(*) FROM artists WHERE id = ?1", params![id], |r| {
-                r.get(0)
-            })?;
+        let count: i64 = conn.query_row(
+            "SELECT COUNT(*) FROM artists WHERE id = ?1",
+            params![id],
+            |r| r.get(0),
+        )?;
         Ok(count > 0)
     }
 
     /// Check if an album exists by ID.
     pub fn album_exists(&self, id: &str) -> Result<bool> {
         let conn = self.conn.lock().unwrap();
-        let count: i64 =
-            conn.query_row("SELECT COUNT(*) FROM albums WHERE id = ?1", params![id], |r| {
-                r.get(0)
-            })?;
+        let count: i64 = conn.query_row(
+            "SELECT COUNT(*) FROM albums WHERE id = ?1",
+            params![id],
+            |r| r.get(0),
+        )?;
         Ok(count > 0)
     }
 
     /// Check if a track exists by ID.
     pub fn track_exists(&self, id: &str) -> Result<bool> {
         let conn = self.conn.lock().unwrap();
-        let count: i64 =
-            conn.query_row("SELECT COUNT(*) FROM tracks WHERE id = ?1", params![id], |r| {
-                r.get(0)
-            })?;
+        let count: i64 = conn.query_row(
+            "SELECT COUNT(*) FROM tracks WHERE id = ?1",
+            params![id],
+            |r| r.get(0),
+        )?;
         Ok(count > 0)
     }
 
     /// Check if an image exists by ID.
     pub fn image_exists(&self, id: &str) -> Result<bool> {
         let conn = self.conn.lock().unwrap();
-        let count: i64 =
-            conn.query_row("SELECT COUNT(*) FROM images WHERE id = ?1", params![id], |r| {
-                r.get(0)
-            })?;
+        let count: i64 = conn.query_row(
+            "SELECT COUNT(*) FROM images WHERE id = ?1",
+            params![id],
+            |r| r.get(0),
+        )?;
         Ok(count > 0)
     }
 
@@ -1093,9 +1093,8 @@ impl SqliteCatalogStore {
         conn: &Connection,
         id: &str,
     ) -> Result<Option<serde_json::Value>> {
-        let mut stmt = conn.prepare(
-            "SELECT id, name, genres, activity_periods FROM artists WHERE id = ?1",
-        )?;
+        let mut stmt =
+            conn.prepare("SELECT id, name, genres, activity_periods FROM artists WHERE id = ?1")?;
 
         match stmt.query_row(params![id], |row| {
             let genres_json: Option<String> = row.get(2)?;
@@ -1368,9 +1367,8 @@ impl SqliteCatalogStore {
         conn: &Connection,
         id: &str,
     ) -> Result<Option<serde_json::Value>> {
-        let mut stmt = conn.prepare(
-            "SELECT id, uri, size, width, height FROM images WHERE id = ?1",
-        )?;
+        let mut stmt =
+            conn.prepare("SELECT id, uri, size, width, height FROM images WHERE id = ?1")?;
 
         match stmt.query_row(params![id], |row| {
             Ok(serde_json::json!({
@@ -1528,11 +1526,8 @@ impl SqliteCatalogStore {
 
         // Record the change
         let diff = calculate_field_diff(Some(&old_snapshot), None);
-        let summary = generate_display_summary(
-            &ChangeEntityType::Image,
-            &ChangeOperation::Delete,
-            Some(id),
-        );
+        let summary =
+            generate_display_summary(&ChangeEntityType::Image, &ChangeOperation::Delete, Some(id));
         self.changelog.record_change_internal(
             &conn,
             ChangeEntityType::Image,
@@ -2216,10 +2211,16 @@ mod tests {
             .unwrap();
         }
 
-        let resolved = store.get_resolved_artist("test_artist_001").unwrap().unwrap();
+        let resolved = store
+            .get_resolved_artist("test_artist_001")
+            .unwrap()
+            .unwrap();
         assert_eq!(resolved.artist.name, "Artist 1");
         assert!(resolved.display_image.is_some());
-        assert_eq!(resolved.display_image.as_ref().unwrap().id, "test_image_001");
+        assert_eq!(
+            resolved.display_image.as_ref().unwrap().id,
+            "test_image_001"
+        );
         assert_eq!(resolved.related_artists.len(), 1);
         assert_eq!(resolved.related_artists[0].name, "Artist 2");
     }
@@ -2256,7 +2257,10 @@ mod tests {
         assert_eq!(resolved.discs.len(), 1);
         assert_eq!(resolved.discs[0].tracks.len(), 2);
         assert!(resolved.display_image.is_some());
-        assert_eq!(resolved.display_image.as_ref().unwrap().id, "test_image_001");
+        assert_eq!(
+            resolved.display_image.as_ref().unwrap().id,
+            "test_image_001"
+        );
     }
 
     #[test]
@@ -2316,7 +2320,10 @@ mod tests {
             .unwrap();
         }
 
-        let discography = store.get_artist_discography("test_artist_001").unwrap().unwrap();
+        let discography = store
+            .get_artist_discography("test_artist_001")
+            .unwrap()
+            .unwrap();
         assert_eq!(discography.albums.len(), 1);
         assert_eq!(discography.albums[0].name, "Album 1");
         assert_eq!(discography.features.len(), 1);

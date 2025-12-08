@@ -186,11 +186,7 @@ impl Downloader for DownloaderClient {
 
         if !response.status().is_success() {
             metrics::record_downloader_error("get_album", "status");
-            anyhow::bail!(
-                "Failed to fetch album {}: status {}",
-                id,
-                response.status()
-            );
+            anyhow::bail!("Failed to fetch album {}: status {}", id, response.status());
         }
 
         let result = response
@@ -222,11 +218,7 @@ impl Downloader for DownloaderClient {
 
         if !response.status().is_success() {
             metrics::record_downloader_error("get_track", "status");
-            anyhow::bail!(
-                "Failed to fetch track {}: status {}",
-                id,
-                response.status()
-            );
+            anyhow::bail!("Failed to fetch track {}: status {}", id, response.status());
         }
 
         let result = response

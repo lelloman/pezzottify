@@ -210,10 +210,7 @@ pub fn calculate_field_diff(
             if let Some(obj) = new_val.as_object() {
                 let mut diff = serde_json::Map::new();
                 for (key, value) in obj {
-                    diff.insert(
-                        key.clone(),
-                        serde_json::json!({"old": null, "new": value}),
-                    );
+                    diff.insert(key.clone(), serde_json::json!({"old": null, "new": value}));
                 }
                 serde_json::Value::Object(diff)
             } else {
@@ -225,10 +222,7 @@ pub fn calculate_field_diff(
             if let Some(obj) = old_val.as_object() {
                 let mut diff = serde_json::Map::new();
                 for (key, value) in obj {
-                    diff.insert(
-                        key.clone(),
-                        serde_json::json!({"old": value, "new": null}),
-                    );
+                    diff.insert(key.clone(), serde_json::json!({"old": value, "new": null}));
                 }
                 serde_json::Value::Object(diff)
             } else {
@@ -236,9 +230,7 @@ pub fn calculate_field_diff(
             }
         }
         // UPDATE: compare fields
-        (Some(old_val), Some(new_val)) => {
-            calculate_object_diff(old_val, new_val)
-        }
+        (Some(old_val), Some(new_val)) => calculate_object_diff(old_val, new_val),
         // Both None - shouldn't happen, return empty diff
         (None, None) => serde_json::json!({}),
     }
@@ -637,12 +629,18 @@ impl ChangeLogStore {
         let conn = self.conn.lock().unwrap();
 
         let sql = match is_open {
-            Some(true) => "SELECT id, name, description, is_open, created_at, closed_at, last_activity_at
-                          FROM catalog_batches WHERE is_open = 1 ORDER BY created_at DESC",
-            Some(false) => "SELECT id, name, description, is_open, created_at, closed_at, last_activity_at
-                           FROM catalog_batches WHERE is_open = 0 ORDER BY closed_at DESC",
-            None => "SELECT id, name, description, is_open, created_at, closed_at, last_activity_at
-                    FROM catalog_batches ORDER BY created_at DESC",
+            Some(true) => {
+                "SELECT id, name, description, is_open, created_at, closed_at, last_activity_at
+                          FROM catalog_batches WHERE is_open = 1 ORDER BY created_at DESC"
+            }
+            Some(false) => {
+                "SELECT id, name, description, is_open, created_at, closed_at, last_activity_at
+                           FROM catalog_batches WHERE is_open = 0 ORDER BY closed_at DESC"
+            }
+            None => {
+                "SELECT id, name, description, is_open, created_at, closed_at, last_activity_at
+                    FROM catalog_batches ORDER BY created_at DESC"
+            }
         };
 
         let mut stmt = conn.prepare(sql)?;
@@ -1083,9 +1081,18 @@ mod tests {
 
     #[test]
     fn test_change_operation_db_conversion() {
-        assert_eq!(ChangeOperation::from_db_str("create"), ChangeOperation::Create);
-        assert_eq!(ChangeOperation::from_db_str("update"), ChangeOperation::Update);
-        assert_eq!(ChangeOperation::from_db_str("delete"), ChangeOperation::Delete);
+        assert_eq!(
+            ChangeOperation::from_db_str("create"),
+            ChangeOperation::Create
+        );
+        assert_eq!(
+            ChangeOperation::from_db_str("update"),
+            ChangeOperation::Update
+        );
+        assert_eq!(
+            ChangeOperation::from_db_str("delete"),
+            ChangeOperation::Delete
+        );
 
         assert_eq!(ChangeOperation::Create.to_db_str(), "create");
         assert_eq!(ChangeOperation::Update.to_db_str(), "update");
@@ -1094,10 +1101,22 @@ mod tests {
 
     #[test]
     fn test_change_entity_type_db_conversion() {
-        assert_eq!(ChangeEntityType::from_db_str("artist"), ChangeEntityType::Artist);
-        assert_eq!(ChangeEntityType::from_db_str("album"), ChangeEntityType::Album);
-        assert_eq!(ChangeEntityType::from_db_str("track"), ChangeEntityType::Track);
-        assert_eq!(ChangeEntityType::from_db_str("image"), ChangeEntityType::Image);
+        assert_eq!(
+            ChangeEntityType::from_db_str("artist"),
+            ChangeEntityType::Artist
+        );
+        assert_eq!(
+            ChangeEntityType::from_db_str("album"),
+            ChangeEntityType::Album
+        );
+        assert_eq!(
+            ChangeEntityType::from_db_str("track"),
+            ChangeEntityType::Track
+        );
+        assert_eq!(
+            ChangeEntityType::from_db_str("image"),
+            ChangeEntityType::Image
+        );
 
         assert_eq!(ChangeEntityType::Artist.to_db_str(), "artist");
         assert_eq!(ChangeEntityType::Album.to_db_str(), "album");
@@ -1121,7 +1140,9 @@ mod tests {
     fn test_create_batch_success() {
         let store = create_test_store();
 
-        let batch = store.create_batch("Test Batch", Some("A test description")).unwrap();
+        let batch = store
+            .create_batch("Test Batch", Some("A test description"))
+            .unwrap();
 
         assert!(!batch.id.is_empty());
         assert_eq!(batch.name, "Test Batch");
@@ -1446,7 +1467,10 @@ mod tests {
         assert_eq!(change.entity_type, ChangeEntityType::Artist);
         assert_eq!(change.entity_id, "test_artist_001");
         assert_eq!(change.operation, ChangeOperation::Create);
-        assert_eq!(change.display_summary, Some("Created artist Test Artist".to_string()));
+        assert_eq!(
+            change.display_summary,
+            Some("Created artist Test Artist".to_string())
+        );
     }
 
     #[test]
@@ -1475,7 +1499,9 @@ mod tests {
             ).unwrap();
         }
 
-        let history = store.get_entity_history(ChangeEntityType::Artist, "test_artist_001").unwrap();
+        let history = store
+            .get_entity_history(ChangeEntityType::Artist, "test_artist_001")
+            .unwrap();
         assert_eq!(history.len(), 2);
         // Should be ordered by created_at DESC (most recent first)
         assert_eq!(history[0].operation, ChangeOperation::Update);
@@ -1504,11 +1530,15 @@ mod tests {
             ).unwrap();
         }
 
-        let artist_history = store.get_entity_history(ChangeEntityType::Artist, "test_artist_001").unwrap();
+        let artist_history = store
+            .get_entity_history(ChangeEntityType::Artist, "test_artist_001")
+            .unwrap();
         assert_eq!(artist_history.len(), 1);
         assert_eq!(artist_history[0].entity_type, ChangeEntityType::Artist);
 
-        let album_history = store.get_entity_history(ChangeEntityType::Album, "test_artist_001").unwrap();
+        let album_history = store
+            .get_entity_history(ChangeEntityType::Album, "test_artist_001")
+            .unwrap();
         assert_eq!(album_history.len(), 1);
         assert_eq!(album_history[0].entity_type, ChangeEntityType::Album);
     }
@@ -1656,11 +1686,8 @@ mod tests {
 
     #[test]
     fn test_display_summary_unknown_name() {
-        let summary = generate_display_summary(
-            &ChangeEntityType::Image,
-            &ChangeOperation::Create,
-            None,
-        );
+        let summary =
+            generate_display_summary(&ChangeEntityType::Image, &ChangeOperation::Create, None);
         assert_eq!(summary, "Created image '(unknown)'");
     }
 
@@ -1670,7 +1697,10 @@ mod tests {
             "id": "test_artist_001",
             "name": "The Beatles"
         });
-        assert_eq!(extract_entity_name(&snapshot), Some("The Beatles".to_string()));
+        assert_eq!(
+            extract_entity_name(&snapshot),
+            Some("The Beatles".to_string())
+        );
     }
 
     #[test]
@@ -1679,7 +1709,10 @@ mod tests {
             "id": "test_track_001",
             "title": "Come Together"
         });
-        assert_eq!(extract_entity_name(&snapshot), Some("Come Together".to_string()));
+        assert_eq!(
+            extract_entity_name(&snapshot),
+            Some("Come Together".to_string())
+        );
     }
 
     #[test]
@@ -1689,7 +1722,10 @@ mod tests {
             "name": "Abbey Road",
             "title": "Some Title"
         });
-        assert_eq!(extract_entity_name(&snapshot), Some("Abbey Road".to_string()));
+        assert_eq!(
+            extract_entity_name(&snapshot),
+            Some("Abbey Road".to_string())
+        );
     }
 
     #[test]
@@ -1716,14 +1752,16 @@ mod tests {
         let snapshot = serde_json::json!({"id": "test_artist_001", "name": "The Beatles"});
         let diff = calculate_field_diff(None, Some(&snapshot));
 
-        let change_id = store.record_change(
-            ChangeEntityType::Artist,
-            "test_artist_001",
-            ChangeOperation::Create,
-            &diff,
-            &snapshot,
-            Some("Created artist 'The Beatles'"),
-        ).unwrap();
+        let change_id = store
+            .record_change(
+                ChangeEntityType::Artist,
+                "test_artist_001",
+                ChangeOperation::Create,
+                &diff,
+                &snapshot,
+                Some("Created artist 'The Beatles'"),
+            )
+            .unwrap();
 
         assert!(change_id > 0);
 
@@ -1778,14 +1816,16 @@ mod tests {
 
         // Record a change
         let snapshot = serde_json::json!({"id": "test_artist_001"});
-        store.record_change(
-            ChangeEntityType::Artist,
-            "test_artist_001",
-            ChangeOperation::Create,
-            &serde_json::json!({}),
-            &snapshot,
-            None,
-        ).unwrap();
+        store
+            .record_change(
+                ChangeEntityType::Artist,
+                "test_artist_001",
+                ChangeOperation::Create,
+                &serde_json::json!({}),
+                &snapshot,
+                None,
+            )
+            .unwrap();
 
         // Check that last_activity_at was updated
         let updated_batch = store.get_batch(&batch.id).unwrap().unwrap();
@@ -1800,15 +1840,18 @@ mod tests {
 
         // Record multiple changes
         for i in 1..=5 {
-            let snapshot = serde_json::json!({"id": format!("R{}", i), "name": format!("Artist {}", i)});
-            store.record_change(
-                ChangeEntityType::Artist,
-                &format!("R{}", i),
-                ChangeOperation::Create,
-                &serde_json::json!({}),
-                &snapshot,
-                None,
-            ).unwrap();
+            let snapshot =
+                serde_json::json!({"id": format!("R{}", i), "name": format!("Artist {}", i)});
+            store
+                .record_change(
+                    ChangeEntityType::Artist,
+                    &format!("R{}", i),
+                    ChangeOperation::Create,
+                    &serde_json::json!({}),
+                    &snapshot,
+                    None,
+                )
+                .unwrap();
         }
 
         let batch = store.get_active_batch().unwrap().unwrap();
@@ -1902,7 +1945,8 @@ mod tests {
             conn.execute(
                 "UPDATE catalog_batches SET last_activity_at = ?1 WHERE id = ?2",
                 params![old_time, batch.id],
-            ).unwrap();
+            )
+            .unwrap();
         }
 
         // Close stale batches
@@ -1949,7 +1993,7 @@ mod tests {
 
         // Batch was created with date-based name
         assert!(batch.is_open);
-        assert!(batch.name.len() == 10);  // YYYY-MM-DD
+        assert!(batch.name.len() == 10); // YYYY-MM-DD
     }
 
     #[test]
@@ -1985,7 +2029,8 @@ mod tests {
             conn.execute(
                 "UPDATE catalog_batches SET last_activity_at = ?1 WHERE id = ?2",
                 params![old_time, old_batch.id],
-            ).unwrap();
+            )
+            .unwrap();
         }
 
         // Ensure active batch should close old one and create new
@@ -1995,7 +2040,7 @@ mod tests {
         // Should be a different batch
         assert_ne!(new_batch.id, old_batch.id);
         // New batch should have date-based name
-        assert!(new_batch.name.len() == 10);  // YYYY-MM-DD
+        assert!(new_batch.name.len() == 10); // YYYY-MM-DD
         drop(conn);
 
         // Old batch should be closed
