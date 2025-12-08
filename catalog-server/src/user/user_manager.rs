@@ -14,13 +14,25 @@ use super::{
     UsernamePasswordCredentials,
 };
 use anyhow::{bail, Context, Result};
-use std::{collections::HashMap, sync::Arc, time::SystemTime};
+use std::{
+    collections::HashMap,
+    sync::{Arc, Mutex},
+    time::{Instant, SystemTime},
+};
 
 const MAX_PLAYLIST_SIZE: usize = 300;
+const POPULAR_CONTENT_CACHE_TTL_SECS: u64 = 24 * 60 * 60; // 24 hours
+
+/// Cached popular content with computation timestamp
+struct CachedPopularContent {
+    content: PopularContent,
+    computed_at: Instant,
+}
 
 pub struct UserManager {
     catalog_store: Arc<dyn CatalogStore>,
     user_store: Arc<dyn FullUserStore>,
+    popular_content_cache: Mutex<Option<CachedPopularContent>>,
 }
 
 impl UserManager {
@@ -28,6 +40,7 @@ impl UserManager {
         Self {
             catalog_store,
             user_store,
+            popular_content_cache: Mutex::new(None),
         }
     }
 
@@ -531,8 +544,53 @@ impl UserManager {
     // ========================================================================
 
     /// Get popular albums and artists based on listening data.
-    /// Aggregates play counts from individual tracks to album and artist level.
+    /// Results are cached for 24 hours to avoid repeated expensive queries.
+    /// The cache stores max results (20 albums, 20 artists) and slices to requested limits.
     pub fn get_popular_content(
+        &self,
+        start_date: u32,
+        end_date: u32,
+        albums_limit: usize,
+        artists_limit: usize,
+    ) -> Result<PopularContent> {
+        const MAX_ALBUMS: usize = 20;
+        const MAX_ARTISTS: usize = 20;
+
+        // Check cache first
+        {
+            let cache = self.popular_content_cache.lock().unwrap();
+            if let Some(cached) = cache.as_ref() {
+                if cached.computed_at.elapsed().as_secs() < POPULAR_CONTENT_CACHE_TTL_SECS {
+                    // Cache hit - slice to requested limits and return
+                    return Ok(PopularContent {
+                        albums: cached.content.albums.iter().take(albums_limit).cloned().collect(),
+                        artists: cached.content.artists.iter().take(artists_limit).cloned().collect(),
+                    });
+                }
+            }
+        }
+
+        // Cache miss or stale - compute fresh with max limits
+        let content = self.compute_popular_content(start_date, end_date, MAX_ALBUMS, MAX_ARTISTS)?;
+
+        // Store in cache
+        {
+            let mut cache = self.popular_content_cache.lock().unwrap();
+            *cache = Some(CachedPopularContent {
+                content: content.clone(),
+                computed_at: Instant::now(),
+            });
+        }
+
+        // Slice to requested limits
+        Ok(PopularContent {
+            albums: content.albums.into_iter().take(albums_limit).collect(),
+            artists: content.artists.into_iter().take(artists_limit).collect(),
+        })
+    }
+
+    /// Computes popular content by aggregating play counts from top tracks.
+    fn compute_popular_content(
         &self,
         start_date: u32,
         end_date: u32,
