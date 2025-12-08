@@ -21,7 +21,7 @@
         data-key="listItemId"
         @drop="handleDrop"
       >
-        <template v-slot:item="{ record, index, dataKey }">
+        <template v-slot:item="{ record, index }">
           <div
             :class="{
               currentlyPlayingRow: index == currentIndex,

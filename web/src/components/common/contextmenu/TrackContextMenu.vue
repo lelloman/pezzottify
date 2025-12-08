@@ -65,7 +65,7 @@ if (props.canRemoveFromPlaylist) {
   menuItems.value.push({
     icon: markRaw(TrashOutlineIcon),
     name: "Remove from this playlist",
-    action: ([index, track]) => {
+    action: () => {
       console.log(
         "TrackContextMenu remove from playlist track index:" +
           trackIndex.value +
@@ -93,7 +93,7 @@ if (props.canRemoveFromQueue) {
   menuItems.value.push({
     icon: markRaw(PlaylistCancelIcon),
     name: "Remove from queue",
-    action: ([index, track]) => {
+    action: () => {
       if (Number.isInteger(trackIndex.value)) {
         player.removeTrackFromPlaylist(trackIndex.value);
       }

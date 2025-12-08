@@ -14,7 +14,7 @@
 
 <script setup>
 import "@/assets/search.css";
-import { ref, onMounted, onBeforeUnmount, computed, watch } from "vue";
+import { ref, onMounted, onBeforeUnmount, computed } from "vue";
 import { useRouter } from "vue-router";
 import { useUserStore } from "@/store/user";
 

@@ -25,7 +25,7 @@ async function handleLogin() {
       password: password.value,
     });
     router.push("/");
-  } catch (e) {
+  } catch {
     error.value = "Invalid username or password";
   } finally {
     isLoading.value = false;
