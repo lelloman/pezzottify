@@ -5,11 +5,23 @@ import { useSyncStore } from "./sync";
 
 const DEVICE_UUID_KEY = "pezzottify_device_uuid";
 
+function generateUuid() {
+  // Use crypto.randomUUID if available (secure contexts only)
+  if (typeof crypto !== "undefined" && crypto.randomUUID) {
+    return crypto.randomUUID();
+  }
+  // Fallback for non-secure contexts (HTTP)
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === "x" ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+}
+
 function getOrCreateDeviceUuid() {
   let deviceUuid = localStorage.getItem(DEVICE_UUID_KEY);
   if (!deviceUuid) {
-    // Generate a UUID-like string
-    deviceUuid = "web-" + crypto.randomUUID();
+    deviceUuid = "web-" + generateUuid();
     localStorage.setItem(DEVICE_UUID_KEY, deviceUuid);
   }
   return deviceUuid;
