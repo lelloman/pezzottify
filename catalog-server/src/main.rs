@@ -1,8 +1,9 @@
-use anyhow::{Context, Result};
+use anyhow::Result;
 use clap::Parser;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use std::{fmt::Debug, path::PathBuf};
+use tokio_util::sync::CancellationToken;
 use tracing::{error, info, level_filters::LevelFilter};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
 
@@ -26,8 +27,10 @@ use server::{run_server, RequestsLoggingLevel};
 mod sqlite_persistence;
 
 mod server_store;
+use server_store::SqliteServerStore;
 
 mod background_jobs;
+use background_jobs::{JobContext, JobScheduler};
 
 mod user;
 use user::SqliteUserStore;
@@ -200,6 +203,38 @@ async fn main() -> Result<()> {
     }
     let user_store = Arc::new(SqliteUserStore::new(&app_config.user_db_path())?);
 
+    // Create server store for background job history
+    info!(
+        "Initializing server store at {:?}",
+        app_config.server_db_path()
+    );
+    let server_store = Arc::new(SqliteServerStore::new(&app_config.server_db_path())?);
+
+    // Set up background job scheduler
+    let shutdown_token = CancellationToken::new();
+    let (hook_sender, hook_receiver) = tokio::sync::mpsc::channel(100);
+
+    let job_context = JobContext::new(
+        shutdown_token.child_token(),
+        catalog_store.clone() as Arc<dyn CatalogStore>,
+        user_store.clone() as Arc<dyn user::FullUserStore>,
+        server_store.clone() as Arc<dyn server_store::ServerStore>,
+    );
+
+    let mut scheduler = JobScheduler::new(
+        server_store.clone(),
+        hook_receiver,
+        shutdown_token.clone(),
+        job_context,
+    );
+
+    // Register jobs (placeholder - will be populated with actual jobs later)
+    info!("Job scheduler initialized with {} jobs", scheduler.registered_job_ids().len());
+
+    // Note: The hook_sender is currently unused but will be used by the HTTP server
+    // to notify the scheduler of events like catalog changes
+    let _ = hook_sender;
+
     // Spawn background task for event pruning if enabled
     if app_config.event_retention_days > 0 {
         let retention_days = app_config.event_retention_days;
@@ -269,17 +304,35 @@ async fn main() -> Result<()> {
 
     info!("Ready to serve at port {}!", app_config.port);
     info!("Metrics available at port {}!", app_config.metrics_port);
-    run_server(
-        catalog_store,
-        search_vault,
-        user_store,
-        app_config.logging_level.clone(),
-        app_config.port,
-        app_config.metrics_port,
-        app_config.content_cache_age_sec,
-        app_config.frontend_dir_path.clone(),
-        downloader,
-        media_base_path_for_proxy,
-    )
-    .await
+
+    // Run HTTP server and job scheduler concurrently
+    tokio::select! {
+        result = run_server(
+            catalog_store,
+            search_vault,
+            user_store,
+            app_config.logging_level.clone(),
+            app_config.port,
+            app_config.metrics_port,
+            app_config.content_cache_age_sec,
+            app_config.frontend_dir_path.clone(),
+            downloader,
+            media_base_path_for_proxy,
+        ) => {
+            info!("HTTP server stopped: {:?}", result);
+            shutdown_token.cancel();
+            result
+        },
+        _ = scheduler.run() => {
+            info!("Scheduler stopped");
+            Ok(())
+        },
+        _ = tokio::signal::ctrl_c() => {
+            info!("Received Ctrl+C, initiating graceful shutdown");
+            shutdown_token.cancel();
+            // Give the scheduler a moment to shut down gracefully
+            tokio::time::sleep(Duration::from_millis(100)).await;
+            Ok(())
+        }
+    }
 }
