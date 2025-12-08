@@ -28,18 +28,38 @@ use rustyline::{
     CompletionType, Config, Editor, Helper,
 };
 
-fn parse_path(s: &str) -> Result<PathBuf> {
+fn parse_path(s: &str) -> Result<PathBuf, String> {
     let original_path = PathBuf::from(s);
     if original_path.is_absolute() {
         return Ok(original_path);
     }
-    let cwd = std::env::current_dir()?;
+    let cwd = std::env::current_dir().map_err(|e| format!("Failed to get current dir: {}", e))?;
     Ok(cwd.join(original_path))
+}
+
+fn parse_dir(s: &str) -> Result<PathBuf, String> {
+    let path = parse_path(s)?;
+    if !path.exists() {
+        return Err(format!("Directory does not exist: {}", s));
+    }
+    if !path.is_dir() {
+        return Err(format!("Path is not a directory: {}", s));
+    }
+    Ok(path)
 }
 
 #[derive(Parser, Debug)]
 #[command(styles=get_styles())]
 struct CliArgs {
+    /// Path to TOML configuration file. If provided, db_dir from the file is used.
+    #[clap(long, value_parser = parse_path)]
+    pub config: Option<PathBuf>,
+
+    /// Directory containing database files. Used to find user.db.
+    #[clap(long, value_parser = parse_dir)]
+    pub db_dir: Option<PathBuf>,
+
+    /// Legacy: Direct path to user database file (for backward compatibility).
     #[clap(value_parser = parse_path)]
     pub path: Option<PathBuf>,
 }
@@ -665,12 +685,34 @@ impl Helper for MyHelper {}
 
 fn main() -> Result<()> {
     let cli_args = CliArgs::parse();
-    let auth_store_file_path = match cli_args.path {
-        Some(path) => path,
-        None => SqliteUserStore::infer_path().with_context(|| {
-            "Could not infer UserStore DB file path, please specify it explicitly."
-        })?,
+
+    // Resolve user database path with priority:
+    // 1. Legacy positional path argument (direct path to user.db)
+    // 2. --db-dir option (look for user.db in directory)
+    // 3. --config option (load db_dir from TOML config)
+    // 4. Infer from common locations
+    let auth_store_file_path = if let Some(path) = cli_args.path {
+        // Legacy: direct path to database file
+        path
+    } else if let Some(db_dir) = cli_args.db_dir {
+        // New: use user.db in db_dir
+        db_dir.join("user.db")
+    } else if let Some(config_path) = cli_args.config {
+        // Load from config file
+        let file_config = config::FileConfig::load(&config_path)
+            .with_context(|| format!("Failed to load config file: {:?}", config_path))?;
+        let db_dir = file_config
+            .db_dir
+            .map(PathBuf::from)
+            .ok_or_else(|| anyhow::anyhow!("Config file must specify db_dir"))?;
+        db_dir.join("user.db")
+    } else {
+        // Fall back to inference
+        SqliteUserStore::infer_path().with_context(|| {
+            "Could not infer UserStore DB file path. Use --db-dir, --config, or provide a path."
+        })?
     };
+
     let user_store = SqliteUserStore::new(auth_store_file_path.clone())?;
     let catalog_store = Arc::new(NullCatalogStore);
     let mut user_manager = UserManager::new(catalog_store, Arc::new(user_store));
