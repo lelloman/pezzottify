@@ -28,7 +28,7 @@ use tower_http::services::{ServeDir, ServeFile};
 
 use axum::{
     body::Body,
-    extract::{ConnectInfo, Path, Query, State},
+    extract::{Path, Query, State},
     http::{header, response, HeaderValue, StatusCode},
     middleware,
     response::{IntoResponse, Response},
@@ -41,10 +41,9 @@ use tower_governor::GovernorLayer;
 #[cfg(feature = "slowdown")]
 use super::slowdown_request;
 use super::{
-    extract_user_id_for_rate_limit, http_cache, log_requests, make_search_routes, state::*,
-    IpKeyExtractor, RequestsLoggingLevel, ServerConfig, UserOrIpKeyExtractor,
-    CONTENT_READ_PER_MINUTE, GLOBAL_PER_MINUTE, LOGIN_PER_MINUTE, SEARCH_PER_MINUTE,
-    STREAM_PER_MINUTE, WRITE_PER_MINUTE,
+    http_cache, log_requests, make_search_routes, state::*, IpKeyExtractor, RequestsLoggingLevel,
+    ServerConfig, UserOrIpKeyExtractor, CONTENT_READ_PER_MINUTE, GLOBAL_PER_MINUTE,
+    LOGIN_PER_MINUTE, SEARCH_PER_MINUTE, STREAM_PER_MINUTE, WRITE_PER_MINUTE,
 };
 use crate::server::session::Session;
 use crate::user::auth::AuthTokenValue;
@@ -3305,6 +3304,7 @@ mod tests {
     use crate::user::{
         UserAuthCredentialsStore, UserAuthTokenStore, UserBandwidthStore, UserStore,
     };
+    use axum::extract::ConnectInfo;
     use axum::{body::Body, http::Request};
     use tower::ServiceExt; // for `call`, `oneshot`, and `ready
 
