@@ -12,8 +12,8 @@ use axum::{
     middleware::Next,
     response::{IntoResponse, Response},
 };
-use std::{net::SocketAddr, sync::Arc};
-use tower_governor::{governor::GovernorConfigBuilder, key_extractor::KeyExtractor, GovernorError};
+use std::net::SocketAddr;
+use tower_governor::{key_extractor::KeyExtractor, GovernorError};
 use tracing::warn;
 
 // ============================================================================

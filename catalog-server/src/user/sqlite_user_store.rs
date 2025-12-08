@@ -1974,7 +1974,7 @@ impl UserBandwidthStore for SqliteUserStore {
             user_id: Some(user_id),
             total_bytes_sent: 0,
             total_requests: 0,
-            by_category: std::collections::HashMap::new(),
+            by_category: HashMap::new(),
         };
 
         for record in records {
@@ -2037,7 +2037,7 @@ impl UserBandwidthStore for SqliteUserStore {
             user_id: None,
             total_bytes_sent: 0,
             total_requests: 0,
-            by_category: std::collections::HashMap::new(),
+            by_category: HashMap::new(),
         };
 
         for record in records {
