@@ -77,7 +77,7 @@ private fun ArtistAvatarItem(
             }
         }
         is Content.Loading, is Content.Error -> {
-            // Don't show anything for loading or error states
+            SkeletonArtistAvatarItem()
         }
     }
 }
