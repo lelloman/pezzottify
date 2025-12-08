@@ -15,8 +15,12 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
 /**
- * Offline indicator that only shows when disconnected.
- * Hidden when connected or connecting.
+ * Offline indicator that only shows when there's a connection error.
+ * Hidden when connected, connecting, or intentionally disconnected.
+ *
+ * Note: [ConnectionState.Disconnected] represents an intentional disconnect (e.g., app in background)
+ * and should not show the indicator. Only [ConnectionState.Error] represents an unexpected
+ * disconnection that the user should be aware of.
  */
 @Composable
 fun OfflineIndicator(
@@ -24,11 +28,10 @@ fun OfflineIndicator(
     modifier: Modifier = Modifier,
     size: Dp = 24.dp,
 ) {
-    val isOffline = connectionState is ConnectionState.Disconnected ||
-            connectionState is ConnectionState.Error
+    val hasError = connectionState is ConnectionState.Error
 
     AnimatedVisibility(
-        visible = isOffline,
+        visible = hasError,
         enter = fadeIn(),
         exit = fadeOut(),
         modifier = modifier,
