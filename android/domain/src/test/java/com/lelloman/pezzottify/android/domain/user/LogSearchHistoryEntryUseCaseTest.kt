@@ -1,6 +1,9 @@
 package com.lelloman.pezzottify.android.domain.user
 
+import com.lelloman.pezzottify.android.logger.Logger
+import com.lelloman.pezzottify.android.logger.LoggerFactory
 import io.mockk.coVerify
+import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -12,12 +15,19 @@ import org.junit.Test
 class LogSearchHistoryEntryUseCaseTest {
 
     private lateinit var userDataStore: UserDataStore
+    private lateinit var loggerFactory: LoggerFactory
     private lateinit var logSearchHistoryEntry: LogSearchHistoryEntryUseCase
 
     @Before
     fun setUp() {
         userDataStore = mockk(relaxed = true)
-        logSearchHistoryEntry = LogSearchHistoryEntryUseCase(userDataStore)
+
+        val mockLogger = mockk<Logger>(relaxed = true)
+        loggerFactory = mockk()
+        every { loggerFactory.getLogger(any<String>()) } returns mockLogger
+        every { loggerFactory.getValue(any(), any()) } returns mockLogger
+
+        logSearchHistoryEntry = LogSearchHistoryEntryUseCase(userDataStore, loggerFactory)
     }
 
     @Test

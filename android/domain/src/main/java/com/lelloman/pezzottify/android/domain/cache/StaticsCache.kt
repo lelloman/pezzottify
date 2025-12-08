@@ -5,13 +5,18 @@ import com.lelloman.pezzottify.android.domain.memory.MemoryPressureMonitor
 import com.lelloman.pezzottify.android.domain.statics.Album
 import com.lelloman.pezzottify.android.domain.statics.Artist
 import com.lelloman.pezzottify.android.domain.statics.Track
+import com.lelloman.pezzottify.android.logger.Logger
+import com.lelloman.pezzottify.android.logger.LoggerFactory
 import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
 class StaticsCache @Inject constructor(
-    private val memoryPressureMonitor: MemoryPressureMonitor
+    private val memoryPressureMonitor: MemoryPressureMonitor,
+    loggerFactory: LoggerFactory,
 ) {
+    private val logger: Logger by loggerFactory
+
     companion object {
         // TTL: 5 minutes (content doesn't change frequently)
         private const val TTL_MILLIS = 5 * 60 * 1000L
@@ -44,6 +49,7 @@ class StaticsCache @Inject constructor(
     )
 
     fun clearAll() {
+        logger.info("clearAll() clearing all caches")
         artistCache.clear()
         albumCache.clear()
         trackCache.clear()
@@ -58,6 +64,7 @@ class StaticsCache @Inject constructor(
     }
 
     fun resetAllMetrics() {
+        logger.debug("resetAllMetrics() resetting metrics for all caches")
         artistCache.resetMetrics()
         albumCache.resetMetrics()
         trackCache.resetMetrics()

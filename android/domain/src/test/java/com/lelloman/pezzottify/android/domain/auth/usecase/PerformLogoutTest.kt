@@ -12,7 +12,10 @@ import com.lelloman.pezzottify.android.domain.user.PermissionsStore
 import com.lelloman.pezzottify.android.domain.user.UserDataStore
 import com.lelloman.pezzottify.android.domain.usercontent.UserContentStore
 import com.lelloman.pezzottify.android.domain.websocket.WebSocketManager
+import com.lelloman.pezzottify.android.logger.Logger
+import com.lelloman.pezzottify.android.logger.LoggerFactory
 import io.mockk.coVerify
+import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
 import kotlinx.coroutines.test.runTest
@@ -32,6 +35,7 @@ class PerformLogoutTest {
     private lateinit var syncManager: SyncManager
     private lateinit var player: PezzottifyPlayer
     private lateinit var webSocketManager: WebSocketManager
+    private lateinit var loggerFactory: LoggerFactory
 
     private lateinit var performLogout: PerformLogout
 
@@ -49,6 +53,11 @@ class PerformLogoutTest {
         player = mockk(relaxed = true)
         webSocketManager = mockk(relaxed = true)
 
+        val mockLogger = mockk<Logger>(relaxed = true)
+        loggerFactory = mockk()
+        every { loggerFactory.getLogger(any<String>()) } returns mockLogger
+        every { loggerFactory.getValue(any(), any()) } returns mockLogger
+
         performLogout = PerformLogout(
             authStore = authStore,
             remoteApiClient = remoteApiClient,
@@ -61,6 +70,7 @@ class PerformLogoutTest {
             syncManager = syncManager,
             player = player,
             webSocketManager = webSocketManager,
+            loggerFactory = loggerFactory,
         )
     }
 
