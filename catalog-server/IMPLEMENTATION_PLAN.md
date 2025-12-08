@@ -1099,7 +1099,7 @@ This document breaks down the Background Jobs System and Download Manager plans 
 
 **Goal:** Initialize and run the scheduler alongside the HTTP server.
 
-- [ ] **Task 2.5.1: Initialize `SqliteServerStore` in main.rs**
+- [x] **Task 2.5.1: Initialize `SqliteServerStore` in main.rs**
 
   **File:** `catalog-server/src/main.rs`
 
@@ -1108,7 +1108,7 @@ This document breaks down the Background Jobs System and Download Manager plans 
   let server_store = Arc::new(SqliteServerStore::new(&config.server_db_path())?);
   ```
 
-- [ ] **Task 2.5.2: Initialize `JobScheduler` with registered jobs**
+- [x] **Task 2.5.2: Initialize `JobScheduler` with registered jobs**
 
   **File:** `catalog-server/src/main.rs`
 
@@ -1135,7 +1135,7 @@ This document breaks down the Background Jobs System and Download Manager plans 
   scheduler.register_job(Arc::new(PopularContentJob::new()));
   ```
 
-- [ ] **Task 2.5.3: Run scheduler with `tokio::select!` alongside HTTP server**
+- [x] **Task 2.5.3: Run scheduler with `tokio::select!` alongside HTTP server**
 
   **File:** `catalog-server/src/main.rs`
 
