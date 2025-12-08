@@ -28,7 +28,7 @@ mod sqlite_persistence;
 mod user;
 use user::SqliteUserStore;
 
-fn parse_path(s: &str) -> Result<PathBuf> {
+fn parse_path(s: &str) -> Result<PathBuf, String> {
     let path_buf = PathBuf::from(s);
     let original_path = match path_buf.canonicalize() {
         Ok(path) => path,
@@ -36,26 +36,38 @@ fn parse_path(s: &str) -> Result<PathBuf> {
             if msg.kind() == std::io::ErrorKind::NotFound {
                 path_buf
             } else {
-                return Err(msg).with_context(|| format!("Error resolving path: {}", s));
+                return Err(format!("Error resolving path '{}': {}", s, msg));
             }
         }
     };
     if original_path.is_absolute() {
         return Ok(original_path);
     }
-    let cwd = std::env::current_dir()?;
+    let cwd = std::env::current_dir().map_err(|e| format!("Failed to get current dir: {}", e))?;
     Ok(cwd.join(original_path))
+}
+
+fn parse_dir(s: &str) -> Result<PathBuf, String> {
+    let path = parse_path(s)?;
+    if !path.exists() {
+        return Err(format!("Directory does not exist: {}", s));
+    }
+    if !path.is_dir() {
+        return Err(format!("Path is not a directory: {}", s));
+    }
+    Ok(path)
 }
 
 #[derive(Parser, Debug)]
 struct CliArgs {
-    /// Path to the SQLite catalog database file.
-    #[clap(value_parser = parse_path)]
-    pub catalog_db: PathBuf,
+    /// Path to TOML configuration file. Values in the file override CLI arguments.
+    #[clap(long, value_parser = parse_path)]
+    pub config: Option<PathBuf>,
 
-    /// Path to the SQLite database file to use for user storage.
-    #[clap(value_parser = parse_path)]
-    pub user_store_file_path: PathBuf,
+    /// Directory containing database files (catalog.db, user.db, server.db).
+    /// Can also be specified in config file.
+    #[clap(long, value_parser = parse_dir)]
+    pub db_dir: Option<PathBuf>,
 
     /// Path to the catalog media directory (for audio files and images).
     #[clap(long, value_parser = parse_path)]
@@ -98,6 +110,25 @@ struct CliArgs {
     pub prune_interval_hours: u64,
 }
 
+/// Convert CLI args to CliConfig for config resolution
+impl From<&CliArgs> for config::CliConfig {
+    fn from(args: &CliArgs) -> Self {
+        config::CliConfig {
+            db_dir: args.db_dir.clone(),
+            media_path: args.media_path.clone(),
+            port: args.port,
+            metrics_port: args.metrics_port,
+            logging_level: args.logging_level.clone(),
+            content_cache_age_sec: args.content_cache_age_sec,
+            frontend_dir_path: args.frontend_dir_path.clone(),
+            downloader_url: args.downloader_url.clone(),
+            downloader_timeout_sec: args.downloader_timeout_sec,
+            event_retention_days: args.event_retention_days,
+            prune_interval_hours: args.prune_interval_hours,
+        }
+    }
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
     let cli_args = CliArgs::parse();
@@ -113,21 +144,39 @@ async fn main() -> Result<()> {
         .try_init()
         .unwrap();
 
-    // Default media path to parent of catalog db if not specified
-    let media_path = match cli_args.media_path {
-        Some(path) => path,
-        None => cli_args
-            .catalog_db
-            .parent()
-            .map(|p| p.to_path_buf())
-            .unwrap_or_else(|| PathBuf::from(".")),
+    // Load TOML config if provided
+    let file_config = match &cli_args.config {
+        Some(path) => {
+            info!("Loading configuration from {:?}", path);
+            Some(config::FileConfig::load(path)?)
+        }
+        None => None,
     };
 
+    // Resolve final configuration (TOML overrides CLI)
+    let cli_config: config::CliConfig = (&cli_args).into();
+    let app_config = config::AppConfig::resolve(&cli_config, file_config)?;
+
+    info!("Configuration loaded:");
+    info!("  db_dir: {:?}", app_config.db_dir);
+    info!("  media_path: {:?}", app_config.media_path);
+    info!("  port: {}", app_config.port);
     info!(
-        "Opening SQLite catalog database at {:?}...",
-        cli_args.catalog_db
+        "  download_manager.enabled: {}",
+        app_config.download_manager.enabled
     );
-    let catalog_store = Arc::new(SqliteCatalogStore::new(&cli_args.catalog_db, &media_path)?);
+
+    // Create catalog store (will create DB if not exists)
+    if !app_config.catalog_db_path().exists() {
+        info!(
+            "Creating new catalog database at {:?}",
+            app_config.catalog_db_path()
+        );
+    }
+    let catalog_store = Arc::new(SqliteCatalogStore::new(
+        &app_config.catalog_db_path(),
+        &app_config.media_path,
+    )?);
 
     // Initialize metrics system
     info!("Initializing metrics...");
@@ -138,12 +187,19 @@ async fn main() -> Result<()> {
         catalog_store.get_tracks_count(),
     );
 
-    let user_store = Arc::new(SqliteUserStore::new(&cli_args.user_store_file_path)?);
+    // Create user store (will create DB if not exists)
+    if !app_config.user_db_path().exists() {
+        info!(
+            "Creating new user database at {:?}",
+            app_config.user_db_path()
+        );
+    }
+    let user_store = Arc::new(SqliteUserStore::new(&app_config.user_db_path())?);
 
     // Spawn background task for event pruning if enabled
-    if cli_args.event_retention_days > 0 {
-        let retention_days = cli_args.event_retention_days;
-        let interval_hours = cli_args.prune_interval_hours;
+    if app_config.event_retention_days > 0 {
+        let retention_days = app_config.event_retention_days;
+        let interval_hours = app_config.prune_interval_hours;
         let pruning_user_store = user_store.clone();
 
         info!(
@@ -191,32 +247,33 @@ async fn main() -> Result<()> {
     let search_vault: Box<dyn SearchVault> = Box::new(NoOpSearchVault {});
 
     // Create downloader client if URL is configured
-    let downloader: Option<Arc<dyn downloader::Downloader>> = cli_args.downloader_url.map(|url| {
-        info!("Downloader service configured at {}", url);
-        Arc::new(downloader::DownloaderClient::new(
-            url,
-            cli_args.downloader_timeout_sec,
-        )) as Arc<dyn downloader::Downloader>
-    });
+    let downloader: Option<Arc<dyn downloader::Downloader>> =
+        app_config.downloader_url.clone().map(|url| {
+            info!("Downloader service configured at {}", url);
+            Arc::new(downloader::DownloaderClient::new(
+                url,
+                app_config.downloader_timeout_sec,
+            )) as Arc<dyn downloader::Downloader>
+        });
 
     // Pass media_base_path for proxy if downloader is configured
     let media_base_path_for_proxy = if downloader.is_some() {
-        Some(media_path.clone())
+        Some(app_config.media_path.clone())
     } else {
         None
     };
 
-    info!("Ready to serve at port {}!", cli_args.port);
-    info!("Metrics available at port {}!", cli_args.metrics_port);
+    info!("Ready to serve at port {}!", app_config.port);
+    info!("Metrics available at port {}!", app_config.metrics_port);
     run_server(
         catalog_store,
         search_vault,
         user_store,
-        cli_args.logging_level,
-        cli_args.port,
-        cli_args.metrics_port,
-        cli_args.content_cache_age_sec,
-        cli_args.frontend_dir_path,
+        app_config.logging_level.clone(),
+        app_config.port,
+        app_config.metrics_port,
+        app_config.content_cache_age_sec,
+        app_config.frontend_dir_path.clone(),
         downloader,
         media_base_path_for_proxy,
     )
