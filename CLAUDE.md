@@ -37,7 +37,7 @@ cargo run -- --db-dir ../../pezzottify-catalog --media-path=../../pezzottify-cat
 
 **CLI arguments:**
 - `--config <PATH>`: Path to TOML config file (values override CLI arguments)
-- `--db-dir <PATH>`: Directory containing database files (catalog.db, user.db)
+- `--db-dir <PATH>`: Directory containing database files (catalog.db, user.db, server.db)
 - `--media-path <PATH>`: Path to media files (audio/images), defaults to db-dir
 - `--port <PORT>`: Server port (default: 3001)
 - `--metrics-port <PORT>`: Metrics server port (default: 9091)
@@ -46,6 +46,8 @@ cargo run -- --db-dir ../../pezzottify-catalog --media-path=../../pezzottify-cat
 - `--frontend-dir-path <PATH>`: Serve static frontend files
 - `--downloader-url <URL>`: URL of the downloader service for fetching missing content (optional)
 - `--downloader-timeout-sec <SECONDS>`: Timeout for downloader requests (default: 300)
+- `--event-retention-days <DAYS>`: Days to retain sync events before pruning (default: 30, 0 to disable)
+- `--prune-interval-hours <HOURS>`: Interval between pruning runs (default: 24)
 
 **Running tests:**
 ```bash
@@ -115,30 +117,61 @@ The Android project uses a multi-module Gradle setup with modules: `app`, `ui`, 
   - `UserManager`: Authentication with Argon2 password hashing
   - `permissions.rs`: Role-based permissions (Admin, Regular)
   - `auth.rs`: Token-based authentication with RSA signing
+  - `sync_events.rs`: Event types for multi-device sync
 - `server/`: Axum HTTP server
   - `session.rs`: Session management via cookies
   - `stream_track.rs`: Audio streaming with range request support
   - `search.rs`: Search API routes
+  - `websocket/`: WebSocket support for real-time updates
   - `http_layers/`: Middleware for logging, caching, slowdown
 - `search/`: Search functionality
   - `PezzotHashSearchVault`: Full-text search implementation
   - `NoOpSearchVault`: Disabled search (for `no_search` feature)
 - `sqlite_persistence/`: Database schema management
   - `versioned_schema.rs`: Schema migrations with version tracking
+- `config/`: Configuration management
+  - Combines CLI arguments and TOML file configuration
+  - TOML values override CLI defaults
+- `background_jobs/`: Scheduled background tasks
+  - Job scheduler with configurable intervals
+  - `PopularContentJob`: Computes popular content metrics
+- `server_store/`: Server-level data persistence
+  - `SqliteServerStore`: Stores server state (job history, etc.)
+- `downloader/`: External content fetching (optional)
+  - Integration with external downloader service for missing content
 
 **Key types:**
 - `SqliteCatalogStore`: SQLite-backed catalog with CRUD operations
 - `CatalogStore`: Trait for catalog access (read and write)
 - `Session`: Request session with user permissions
-- `Permission`: Enum for access control (AccessCatalog, LikeContent, OwnPlaylists, EditCatalog, ManagePermissions, IssueContentDownload, RebootServer, ViewAnalytics)
-- `UserRole`: Admin (all permissions) or Regular (basic permissions)
+- `Permission`: Enum for access control (AccessCatalog, LikeContent, OwnPlaylists, EditCatalog, ManagePermissions, IssueContentDownload, ServerAdmin, ViewAnalytics)
+- `UserRole`: Admin or Regular with different permission sets
 
 **Server routes structure:**
-- `/v1/auth/*`: Login, logout, session management
-- `/v1/content/*`: Artists, albums, tracks, images, streaming, search
-- `/v1/user/*`: User playlists, liked content, settings, listening stats
-- `/v1/admin/*`: User management, analytics, server control
-- `/v1/sync/*`: Event log for multi-device sync
+- `/v1/auth/*`: Login, logout, session management, challenge-response auth
+  - `POST /login`, `GET /logout`, `GET /session`, `GET|POST /challenge`
+- `/v1/content/*`: Catalog content and streaming
+  - `GET /album/{id}`, `GET /album/{id}/resolved`
+  - `GET /artist/{id}`, `GET /artist/{id}/discography`
+  - `GET /track/{id}`, `GET /track/{id}/resolved`
+  - `GET /image/{id}`, `GET /stream/{id}`
+  - `GET /whatsnew`, `GET /popular`
+  - `POST /search`: Full-text search (request body: `{ "query": "..." }`)
+- `/v1/user/*`: User data and preferences
+  - `GET /liked/{content_type}`, `PUT|DELETE /liked/{content_type}/{id}`
+  - `GET /playlists`, `GET /playlist/{id}`, `POST /playlist`
+  - `PUT|DELETE /playlist/{id}`, `PUT /playlist/{id}/add|remove`
+  - `GET|PUT /settings`
+  - `POST /listening`, `GET /listening/summary|history|events`
+- `/v1/admin/*`: Administration (requires admin permissions)
+  - User management: `GET|POST /users`, `DELETE /users/{handle}`, roles/permissions
+  - Jobs: `GET /jobs`, `GET|POST /jobs/{id}`, `GET /jobs/{id}/history`
+  - Changelog: `POST /changelog/batch`, `GET /changelog/batches`, etc.
+  - Analytics: `GET /bandwidth/*`, `GET /listening/*`, `GET /online-users`
+  - Catalog CRUD: `POST|PUT|DELETE /artist|album|track|image`
+  - Server control: `POST /reboot`
+- `/v1/sync/*`: Multi-device sync
+  - `GET /state`, `GET /events`
 - `/v1/ws`: WebSocket for real-time updates
 
 **Authentication flow:**
@@ -158,13 +191,14 @@ The Android project uses a multi-module Gradle setup with modules: `app`, `ui`, 
 - Howler.js for audio playback
 - Vite build tool
 
-**Store modules (Pinia):**
+**Store modules (Pinia):** Located in `web/src/store/`
 - `auth.js`: Authentication state
 - `player.js`: Audio playback state
 - `remote.js`: API communication
 - `user.js`: User data (playlists, liked content)
 - `statics.js`: Static data caching
 - `debug.js`: Debug configuration
+- `sync.js`: Multi-device sync state management (WebSocket connection, sync events)
 
 **Routing:**
 All content routes nest under HomeView with `meta: { requiresAuth: true }`:
@@ -173,6 +207,8 @@ All content routes nest under HomeView with `meta: { requiresAuth: true }`:
 - `/album/:albumId`: Album details
 - `/artist/:artistId`: Artist details
 - `/playlist/:playlistId`: Playlist details
+- `/settings`: User settings page
+- `/admin/*`: Admin panel (users, analytics, server)
 - `/login`: Login page
 - `/logout`: Logout handler
 
@@ -210,7 +246,8 @@ Multi-module Gradle project with clean architecture layers:
 - Permissions are checked via middleware functions in server.rs
 - Each protected route has a `require_*` middleware (e.g., `require_access_catalog`)
 - Permission grants can be role-based or temporary/counted extras
-- Admin role has all permissions; Regular role has AccessCatalog, LikeContent, OwnPlaylists
+- Admin role has: AccessCatalog, EditCatalog, ManagePermissions, IssueContentDownload, ServerAdmin, ViewAnalytics
+- Regular role has: AccessCatalog, LikeContent, OwnPlaylists
 
 **Database operations:**
 - SQLite used for user storage
@@ -255,9 +292,6 @@ See TODO.md for comprehensive list. Key items:
 
 **catalog-server:**
 - Display image references in artist/album/track models
-- Catalog change log for users
-- Listening stats collection
-- Content download functionality
 - FTS5 search optimization (optional)
 
 **web:**

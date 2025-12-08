@@ -191,27 +191,65 @@ let admin = TestClient::authenticated_admin(server.base_url.clone()).await;
 - `client.logout()` - POST /v1/auth/logout
 - `client.get_session()` - GET /v1/auth/session
 
-#### Catalog
-- `client.get_artist(id)` - GET /v1/catalog/artists/{id}
-- `client.get_album(id)` - GET /v1/catalog/albums/{id}
-- `client.get_track(id)` - GET /v1/catalog/tracks/{id}
-- `client.get_artist_discography(id)` - GET /v1/catalog/artists/{id}/discography
-- `client.get_image(id)` - GET /v1/catalog/images/{id}
+#### Catalog Content
+- `client.get_artist(id)` - GET /v1/content/artist/{id}
+- `client.get_album(id)` - GET /v1/content/album/{id}
+- `client.get_track(id)` - GET /v1/content/track/{id}
+- `client.get_resolved_track(id)` - GET /v1/content/track/{id}/resolved
+- `client.get_artist_discography(id)` - GET /v1/content/artist/{id}/discography
+- `client.get_image(id)` - GET /v1/content/image/{id}
+- `client.get_whats_new()` - GET /v1/content/whatsnew
 
 #### Streaming
-- `client.stream_track(id)` - GET /v1/playback/stream/{id}
-- `client.stream_track_with_range(id, range)` - GET /v1/playback/stream/{id} with Range header
+- `client.stream_track(id)` - GET /v1/content/stream/{id}
+- `client.stream_track_with_range(id, range)` - GET /v1/content/stream/{id} with Range header
 
 #### User Content
-- `client.add_liked_content(content_id)` - PUT /v1/user/liked/{content_id}
-- `client.remove_liked_content(content_id)` - DELETE /v1/user/liked/{content_id}
+- `client.add_liked_content(content_type, content_id)` - POST /v1/user/liked/{content_type}/{content_id}
+- `client.remove_liked_content(content_type, content_id)` - DELETE /v1/user/liked/{content_type}/{content_id}
 - `client.get_liked_content(content_type)` - GET /v1/user/liked/{content_type}
+- `client.get_liked_status(content_id)` - GET /v1/user/liked/{content_id}/status
+
+#### Playlists
+- `client.create_playlist(name)` - POST /v1/user/playlist
+- `client.get_playlists()` - GET /v1/user/playlists
+- `client.get_playlist(id)` - GET /v1/user/playlist/{id}
+- `client.update_playlist(id, name, track_ids)` - PUT /v1/user/playlist/{id}
+- `client.delete_playlist(id)` - DELETE /v1/user/playlist/{id}
+- `client.add_tracks_to_playlist(id, track_ids)` - PUT /v1/user/playlist/{id}/add
+- `client.remove_tracks_from_playlist(id, track_ids)` - PUT /v1/user/playlist/{id}/remove
 
 #### Search
-- `client.search(query)` - GET /v1/search?q={query}
+- `client.search(query)` - POST /v1/content/search
+- `client.search_resolved(query)` - POST /v1/content/search with resolve=true
+- `client.search_with_filters(query, filters)` - POST /v1/content/search with filters
+
+#### User Settings
+- `client.get_user_settings()` - GET /v1/user/settings
+- `client.update_user_settings_json(body)` - PUT /v1/user/settings
+
+#### Listening Stats
+- `client.post_listening_event(...)` - POST /v1/user/listening
+- `client.get_listening_summary(...)` - GET /v1/user/listening/summary
+- `client.get_listening_history(...)` - GET /v1/user/listening/history
+- `client.get_listening_events(...)` - GET /v1/user/listening/events
+
+#### Sync
+- `client.get_sync_state()` - GET /v1/sync/state
+- `client.get_sync_events(since)` - GET /v1/sync/events?since={since}
+
+#### Admin (requires admin user)
+- `client.get_jobs()` - GET /v1/admin/jobs
+- `client.get_job(job_id)` - GET /v1/admin/jobs/{job_id}
+- `client.trigger_job(job_id)` - POST /v1/admin/jobs/{job_id}/trigger
+- `client.get_job_history(job_id, limit)` - GET /v1/admin/jobs/{job_id}/history
+- `client.create_changelog_batch(...)` - POST /v1/admin/changelog/batch
+- `client.list_changelog_batches(...)` - GET /v1/admin/changelog/batches
+- `client.get_daily_listening_stats(...)` - GET /v1/admin/listening/daily
+- `client.get_top_tracks(...)` - GET /v1/admin/listening/top-tracks
 
 #### Health Check
-- `client.get_statics()` - GET /v1/statics
+- `client.get_statics()` - GET /v1/statics (server readiness check)
 
 ### Constants
 
@@ -234,7 +272,7 @@ When the server changes, update **only the relevant file in common/**:
 
 | If you need to change... | Update only... | Example |
 |-------------------------|----------------|---------|
-| API route paths | `common/client.rs` | `/v1/catalog/artists` → `/v2/artists` |
+| API route paths | `common/client.rs` | `/v1/content/artist` → `/v2/artist` |
 | Request/response JSON format | `common/client.rs` | Add new field to login request |
 | Auth mechanism | `common/client.rs` | Switch from cookie to bearer token |
 | Server startup logic | `common/server.rs` | Change `make_app()` signature |

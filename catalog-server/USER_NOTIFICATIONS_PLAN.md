@@ -1,10 +1,18 @@
 # User Notifications System Plan
 
+## Implementation Status
+
+| Feature | Status | Notes |
+|---------|--------|-------|
+| Overall | ⏳ Not Started | Initial planning only, detailed spec needed |
+
+---
+
 ## Overview
 
 A system for notifying users about events relevant to them, such as completed download requests, new content from followed artists, weekly suggestions, and system announcements.
 
-## TODO: Spec this out
+## TODO: Spec this out (Detailed planning required before implementation)
 
 ### Topics to Cover
 
