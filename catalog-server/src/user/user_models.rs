@@ -24,7 +24,7 @@ pub enum LikedContentType {
 }
 
 impl LikedContentType {
-    pub fn to_int(&self) -> i32 {
+    pub fn as_int(self) -> i32 {
         match self {
             LikedContentType::Artist => 1,
             LikedContentType::Album => 2,

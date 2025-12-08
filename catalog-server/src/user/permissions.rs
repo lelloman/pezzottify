@@ -14,7 +14,7 @@ pub enum Permission {
 }
 
 impl Permission {
-    pub fn to_int(&self) -> i32 {
+    pub fn as_int(self) -> i32 {
         match self {
             Permission::AccessCatalog => 1,
             Permission::LikeContent => 2,
@@ -42,7 +42,7 @@ impl Permission {
     }
 }
 
-const ADMIN_PERMISSIONS: &'static [Permission] = &[
+const ADMIN_PERMISSIONS: &[Permission] = &[
     Permission::AccessCatalog,
     Permission::EditCatalog,
     Permission::ManagePermissions,
@@ -50,7 +50,7 @@ const ADMIN_PERMISSIONS: &'static [Permission] = &[
     Permission::RebootServer,
     Permission::ViewAnalytics,
 ];
-const REGULAR_PERMISSIONS: &'static [Permission] = &[
+const REGULAR_PERMISSIONS: &[Permission] = &[
     Permission::AccessCatalog,
     Permission::LikeContent,
     Permission::OwnPlaylists,
@@ -70,13 +70,14 @@ impl UserRole {
         }
     }
 
-    pub fn to_string(&self) -> &'static str {
+    pub fn as_str(self) -> &'static str {
         match self {
             UserRole::Admin => "Admin",
             UserRole::Regular => "Regular",
         }
     }
 
+    #[allow(clippy::should_implement_trait)]
     pub fn from_str(s: &str) -> Option<Self> {
         match s.to_lowercase().as_str() {
             "admin" => Some(UserRole::Admin),
@@ -103,14 +104,14 @@ mod tests {
 
     #[test]
     fn permission_to_int_all_variants() {
-        assert_eq!(Permission::AccessCatalog.to_int(), 1);
-        assert_eq!(Permission::LikeContent.to_int(), 2);
-        assert_eq!(Permission::OwnPlaylists.to_int(), 3);
-        assert_eq!(Permission::EditCatalog.to_int(), 4);
-        assert_eq!(Permission::ManagePermissions.to_int(), 5);
-        assert_eq!(Permission::IssueContentDownload.to_int(), 6);
-        assert_eq!(Permission::RebootServer.to_int(), 7);
-        assert_eq!(Permission::ViewAnalytics.to_int(), 8);
+        assert_eq!(Permission::AccessCatalog.as_int(), 1);
+        assert_eq!(Permission::LikeContent.as_int(), 2);
+        assert_eq!(Permission::OwnPlaylists.as_int(), 3);
+        assert_eq!(Permission::EditCatalog.as_int(), 4);
+        assert_eq!(Permission::ManagePermissions.as_int(), 5);
+        assert_eq!(Permission::IssueContentDownload.as_int(), 6);
+        assert_eq!(Permission::RebootServer.as_int(), 7);
+        assert_eq!(Permission::ViewAnalytics.as_int(), 8);
     }
 
     #[test]
@@ -152,7 +153,7 @@ mod tests {
         ];
 
         for permission in &permissions {
-            let int_val = permission.to_int();
+            let int_val = permission.as_int();
             let recovered = Permission::from_int(int_val);
             assert_eq!(recovered, Some(*permission));
         }
@@ -191,9 +192,9 @@ mod tests {
     }
 
     #[test]
-    fn user_role_to_string() {
-        assert_eq!(UserRole::Admin.to_string(), "Admin");
-        assert_eq!(UserRole::Regular.to_string(), "Regular");
+    fn user_role_as_str() {
+        assert_eq!(UserRole::Admin.as_str(), "Admin");
+        assert_eq!(UserRole::Regular.as_str(), "Regular");
     }
 
     #[test]
@@ -226,10 +227,10 @@ mod tests {
     #[test]
     fn user_role_roundtrip() {
         let admin = UserRole::Admin;
-        assert_eq!(UserRole::from_str(admin.to_string()), Some(admin));
+        assert_eq!(UserRole::from_str(admin.as_str()), Some(admin));
 
         let regular = UserRole::Regular;
-        assert_eq!(UserRole::from_str(regular.to_string()), Some(regular));
+        assert_eq!(UserRole::from_str(regular.as_str()), Some(regular));
     }
 
     #[test]

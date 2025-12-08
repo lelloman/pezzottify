@@ -2,6 +2,7 @@
 //!
 //! This module defines the database schema for storing music catalog metadata.
 //! Audio and image files remain on the filesystem, referenced by relative URIs.
+#![allow(dead_code)]
 
 use crate::sqlite_column;
 use crate::sqlite_persistence::{

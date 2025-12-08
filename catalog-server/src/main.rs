@@ -12,7 +12,11 @@ use catalog_store::{CatalogStore, SqliteCatalogStore};
 mod downloader;
 
 mod search;
-use search::{NoOpSearchVault, PezzotHashSearchVault, SearchVault};
+#[cfg(feature = "no_search")]
+use search::NoOpSearchVault;
+#[cfg(not(feature = "no_search"))]
+use search::PezzotHashSearchVault;
+use search::SearchVault;
 
 mod server;
 use server::{run_server, RequestsLoggingLevel};

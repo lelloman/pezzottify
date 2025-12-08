@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use axum::{http::StatusCode, response::IntoResponse};
 use lazy_static::lazy_static;
 use prometheus::{

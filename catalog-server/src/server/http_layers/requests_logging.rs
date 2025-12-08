@@ -22,9 +22,9 @@ pub enum RequestsLoggingLevel {
     Body,
 }
 
-impl ToString for RequestsLoggingLevel {
-    fn to_string(&self) -> String {
-        format!("{:?}", self)
+impl std::fmt::Display for RequestsLoggingLevel {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self)
     }
 }
 
@@ -50,9 +50,7 @@ fn parse_content_length(headers: &HeaderMap) -> ContentLengthParseResult {
 
     match str_value.parse::<usize>() {
         Ok(x) => ContentLengthParseResult::Ok(x),
-        Err(_) => {
-            return ContentLengthParseResult::No("Could not parse Content-length numeric value.")
-        }
+        Err(_) => ContentLengthParseResult::No("Could not parse Content-length numeric value."),
     }
 }
 

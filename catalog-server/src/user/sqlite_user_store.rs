@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use crate::server::metrics::record_db_query;
 use crate::sqlite_column;
 use crate::sqlite_persistence::{
@@ -669,8 +671,8 @@ pub const VERSIONED_SCHEMAS: &[VersionedSchema] = &[
             USER_PLAYLIST_TRACKS_TABLE_V_3,
         ],
         migration: Some(|conn: &Connection| {
-            USER_PLAYLIST_TABLE_V_3.create(&conn)?;
-            USER_PLAYLIST_TRACKS_TABLE_V_3.create(&conn)?;
+            USER_PLAYLIST_TABLE_V_3.create(conn)?;
+            USER_PLAYLIST_TRACKS_TABLE_V_3.create(conn)?;
             Ok(())
         }),
     },
@@ -687,8 +689,8 @@ pub const VERSIONED_SCHEMAS: &[VersionedSchema] = &[
             USER_EXTRA_PERMISSION_TABLE_V_4,
         ],
         migration: Some(|conn: &Connection| {
-            USER_ROLE_TABLE_V_4.create(&conn)?;
-            USER_EXTRA_PERMISSION_TABLE_V_4.create(&conn)?;
+            USER_ROLE_TABLE_V_4.create(conn)?;
+            USER_EXTRA_PERMISSION_TABLE_V_4.create(conn)?;
             Ok(())
         }),
     },
@@ -706,7 +708,7 @@ pub const VERSIONED_SCHEMAS: &[VersionedSchema] = &[
             BANDWIDTH_USAGE_TABLE_V_5,
         ],
         migration: Some(|conn: &Connection| {
-            BANDWIDTH_USAGE_TABLE_V_5.create(&conn)?;
+            BANDWIDTH_USAGE_TABLE_V_5.create(conn)?;
             Ok(())
         }),
     },
@@ -725,7 +727,7 @@ pub const VERSIONED_SCHEMAS: &[VersionedSchema] = &[
             LISTENING_EVENTS_TABLE_V_6,
         ],
         migration: Some(|conn: &Connection| {
-            LISTENING_EVENTS_TABLE_V_6.create(&conn)?;
+            LISTENING_EVENTS_TABLE_V_6.create(conn)?;
             Ok(())
         }),
     },
@@ -745,7 +747,7 @@ pub const VERSIONED_SCHEMAS: &[VersionedSchema] = &[
             USER_SETTINGS_TABLE_V_7,
         ],
         migration: Some(|conn: &Connection| {
-            USER_SETTINGS_TABLE_V_7.create(&conn)?;
+            USER_SETTINGS_TABLE_V_7.create(conn)?;
             Ok(())
         }),
     },
@@ -767,7 +769,7 @@ pub const VERSIONED_SCHEMAS: &[VersionedSchema] = &[
         ],
         migration: Some(|conn: &Connection| {
             // Step 1: Create device table first (auth_token will reference it)
-            DEVICE_TABLE_V_8.create(&conn)?;
+            DEVICE_TABLE_V_8.create(conn)?;
 
             // Step 2: Delete all existing tokens (no real users yet, per plan)
             conn.execute("DELETE FROM auth_token", [])?;
@@ -775,7 +777,7 @@ pub const VERSIONED_SCHEMAS: &[VersionedSchema] = &[
             // Step 3: Recreate auth_token with device_id column
             // SQLite doesn't support ADD COLUMN with NOT NULL and FK well
             conn.execute("DROP TABLE auth_token", [])?;
-            AUTH_TOKEN_TABLE_V_8.create(&conn)?;
+            AUTH_TOKEN_TABLE_V_8.create(conn)?;
 
             Ok(())
         }),
@@ -798,7 +800,7 @@ pub const VERSIONED_SCHEMAS: &[VersionedSchema] = &[
             USER_EVENTS_TABLE_V_9,
         ],
         migration: Some(|conn: &Connection| {
-            USER_EVENTS_TABLE_V_9.create(&conn)?;
+            USER_EVENTS_TABLE_V_9.create(conn)?;
             Ok(())
         }),
     },
@@ -1076,7 +1078,7 @@ impl UserStore for SqliteUserStore {
             USER_PLAYLIST_TABLE_V_3.name
         ))?;
         let playlists = stmt
-            .query_map(params![user_id], |row| Ok(row.get(0)?))?
+            .query_map(params![user_id], |row| row.get(0))?
             .collect::<Result<Vec<String>, _>>()?;
         Ok(playlists)
     }
@@ -1145,7 +1147,7 @@ impl UserStore for SqliteUserStore {
                     "INSERT OR IGNORE INTO {} (user_id, content_id, content_type) VALUES (?1, ?2, ?3)",
                     LIKED_CONTENT_TABLE_V_2.name
                 ),
-                params![user_id, content_id, content_type.to_int()],
+                params![user_id, content_id, content_type.as_int()],
             )?;
         } else {
             conn.execute(
@@ -1174,7 +1176,7 @@ impl UserStore for SqliteUserStore {
             .ok()
             .unwrap();
         Ok(stmt
-            .query_map(params![user_id, content_type.to_int()], |row| row.get(0))
+            .query_map(params![user_id, content_type.as_int()], |row| row.get(0))
             .ok()
             .unwrap()
             .collect::<Result<Vec<String>, _>>()?)
@@ -1400,7 +1402,7 @@ impl UserStore for SqliteUserStore {
                 roles.push(role);
                 let roles_str = roles
                     .iter()
-                    .map(|r| r.to_string())
+                    .map(|r| r.as_str())
                     .collect::<Vec<_>>()
                     .join(",");
 
@@ -1419,7 +1421,7 @@ impl UserStore for SqliteUserStore {
                     "INSERT INTO {} (user_id, role) VALUES (?1, ?2)",
                     USER_ROLE_TABLE_V_4.name
                 ),
-                params![user_id, role.to_string()],
+                params![user_id, role.as_str()],
             )?;
         }
 
@@ -1465,7 +1467,7 @@ impl UserStore for SqliteUserStore {
                 // Update with remaining roles
                 let roles_str = roles
                     .iter()
-                    .map(|r| r.to_string())
+                    .map(|r| r.as_str())
                     .collect::<Vec<_>>()
                     .join(",");
 
@@ -1508,7 +1510,7 @@ impl UserStore for SqliteUserStore {
                         "INSERT INTO {} (user_id, permission, start_time, end_time, countdown) VALUES (?1, ?2, ?3, ?4, ?5)",
                         USER_EXTRA_PERMISSION_TABLE_V_4.name
                     ),
-                    params![user_id, permission.to_int(), start_time_secs, end_time_secs, countdown_i64],
+                    params![user_id, permission.as_int(), start_time_secs, end_time_secs, countdown_i64],
                 )?;
                 Ok(conn.last_insert_rowid() as usize)
             }

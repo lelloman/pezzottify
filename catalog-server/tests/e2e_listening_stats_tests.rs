@@ -113,7 +113,11 @@ async fn test_record_listening_event_deduplication() {
     let events_response = client.get_listening_events(None, None, None, None).await;
     assert_eq!(events_response.status(), StatusCode::OK);
     let events: Vec<serde_json::Value> = events_response.json().await.unwrap();
-    assert_eq!(events.len(), 1, "Deduplication should result in only one event");
+    assert_eq!(
+        events.len(),
+        1,
+        "Deduplication should result in only one event"
+    );
 }
 
 #[tokio::test]

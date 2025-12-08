@@ -1,7 +1,7 @@
 use anyhow::{bail, Result};
 use rusqlite::{params, types::Type, Connection};
 
-pub const DEFAULT_TIMESTAMP: &'static str = "(cast(strftime('%s','now') as int))";
+pub const DEFAULT_TIMESTAMP: &str = "(cast(strftime('%s','now') as int))";
 
 #[macro_export]
 macro_rules! sqlite_column {

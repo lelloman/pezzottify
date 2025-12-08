@@ -2,6 +2,7 @@
 //!
 //! These models are designed to work with the SQLite database schema
 //! and provide cleaner abstractions than the filesystem-based models.
+#![allow(dead_code)]
 
 use serde::{Deserialize, Serialize};
 

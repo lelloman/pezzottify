@@ -1,8 +1,9 @@
 //! HTTP client for the external downloader service.
+#![allow(dead_code)]
 
 use anyhow::{Context, Result};
 use async_trait::async_trait;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::time::{Duration, Instant};
 use tokio::fs::File;
 use tokio::io::AsyncWriteExt;
@@ -29,10 +30,10 @@ pub trait Downloader: Send + Sync {
     async fn get_track(&self, id: &str) -> Result<DownloaderTrack>;
 
     /// Download track audio to a file.
-    async fn download_track_audio(&self, id: &str, dest: &PathBuf) -> Result<u64>;
+    async fn download_track_audio(&self, id: &str, dest: &Path) -> Result<u64>;
 
     /// Download image to a file.
-    async fn download_image(&self, id: &str, dest: &PathBuf) -> Result<u64>;
+    async fn download_image(&self, id: &str, dest: &Path) -> Result<u64>;
 }
 
 /// HTTP client for communicating with the downloader service.
@@ -116,9 +117,8 @@ impl Downloader for DownloaderClient {
             .get(&url)
             .send()
             .await
-            .map_err(|e| {
+            .inspect_err(|_| {
                 metrics::record_downloader_error("health_check", "connection");
-                e
             })
             .context("Failed to connect to downloader service")?;
 
@@ -142,9 +142,8 @@ impl Downloader for DownloaderClient {
             .get(&url)
             .send()
             .await
-            .map_err(|e| {
+            .inspect_err(|_| {
                 metrics::record_downloader_error("get_artist", "connection");
-                e
             })
             .context("Failed to fetch artist from downloader")?;
 
@@ -160,9 +159,8 @@ impl Downloader for DownloaderClient {
         let result = response
             .json()
             .await
-            .map_err(|e| {
+            .inspect_err(|_| {
                 metrics::record_downloader_error("get_artist", "parse");
-                e
             })
             .context("Failed to parse artist response")?;
 
@@ -178,9 +176,8 @@ impl Downloader for DownloaderClient {
             .get(&url)
             .send()
             .await
-            .map_err(|e| {
+            .inspect_err(|_| {
                 metrics::record_downloader_error("get_album", "connection");
-                e
             })
             .context("Failed to fetch album from downloader")?;
 
@@ -192,9 +189,8 @@ impl Downloader for DownloaderClient {
         let result = response
             .json()
             .await
-            .map_err(|e| {
+            .inspect_err(|_| {
                 metrics::record_downloader_error("get_album", "parse");
-                e
             })
             .context("Failed to parse album response")?;
 
@@ -210,9 +206,8 @@ impl Downloader for DownloaderClient {
             .get(&url)
             .send()
             .await
-            .map_err(|e| {
+            .inspect_err(|_| {
                 metrics::record_downloader_error("get_track", "connection");
-                e
             })
             .context("Failed to fetch track from downloader")?;
 
@@ -224,9 +219,8 @@ impl Downloader for DownloaderClient {
         let result = response
             .json()
             .await
-            .map_err(|e| {
+            .inspect_err(|_| {
                 metrics::record_downloader_error("get_track", "parse");
-                e
             })
             .context("Failed to parse track response")?;
 
@@ -234,7 +228,7 @@ impl Downloader for DownloaderClient {
         Ok(result)
     }
 
-    async fn download_track_audio(&self, id: &str, dest: &PathBuf) -> Result<u64> {
+    async fn download_track_audio(&self, id: &str, dest: &Path) -> Result<u64> {
         let start = Instant::now();
         let url = format!("{}/track/{}/audio", self.base_url, id);
         match self.download_file(&url, dest).await {
@@ -250,7 +244,7 @@ impl Downloader for DownloaderClient {
         }
     }
 
-    async fn download_image(&self, id: &str, dest: &PathBuf) -> Result<u64> {
+    async fn download_image(&self, id: &str, dest: &Path) -> Result<u64> {
         let start = Instant::now();
         let url = format!("{}/image/{}", self.base_url, id);
         match self.download_file(&url, dest).await {

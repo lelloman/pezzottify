@@ -45,7 +45,7 @@ impl UserManager {
     }
 
     pub fn add_user<T: AsRef<str>>(&self, user_handle: T) -> Result<usize> {
-        if let Some(_) = self.user_store.get_user_id(&user_handle.as_ref())? {
+        if self.user_store.get_user_id(user_handle.as_ref())?.is_some() {
             bail!("User handle already exists.");
         }
 
@@ -53,9 +53,7 @@ impl UserManager {
             bail!("The user handle cannot be empty.")
         }
 
-        Ok(self
-            .user_store
-            .create_user(&user_handle.as_ref().to_owned())?)
+        self.user_store.create_user(user_handle.as_ref())
     }
 
     /// Deletes a user and all associated data.
@@ -99,7 +97,7 @@ impl UserManager {
         device_id: usize,
     ) -> Result<AuthToken> {
         let token = AuthToken {
-            user_id: credentials.user_id.clone(),
+            user_id: credentials.user_id,
             device_id: Some(device_id),
             value: AuthTokenValue::generate(),
             created: SystemTime::now(),
@@ -142,7 +140,7 @@ impl UserManager {
 
         let user_id = self
             .user_store
-            .get_user_id(&user_handle)?
+            .get_user_id(user_handle)?
             .with_context(|| format!("User with handle {} not found.", user_handle))?;
 
         let mut new_credentials = self
@@ -168,7 +166,7 @@ impl UserManager {
             .user_store
             .get_user_auth_credentials(user_handle)?
             .with_context(|| format!("User with handle {} not found.", user_handle))?;
-        if let None = credentials.username_password {
+        if credentials.username_password.is_none() {
             bail!(
                 "Cannot update passowrd of user with handle {} since it never had one.",
                 user_handle
@@ -190,10 +188,7 @@ impl UserManager {
             .update_user_auth_credentials(credentials.clone())
     }
 
-    pub fn get_user_credentials(
-        &self,
-        user_handle: &String,
-    ) -> Result<Option<UserAuthCredentials>> {
+    pub fn get_user_credentials(&self, user_handle: &str) -> Result<Option<UserAuthCredentials>> {
         self.user_store.get_user_auth_credentials(user_handle)
     }
 
@@ -216,7 +211,7 @@ impl UserManager {
         }
     }
 
-    pub fn get_user_tokens(&self, user_handle: &String) -> Result<Vec<AuthToken>> {
+    pub fn get_user_tokens(&self, user_handle: &str) -> Result<Vec<AuthToken>> {
         self.user_store.get_all_user_auth_tokens(user_handle)
     }
 
@@ -580,15 +575,28 @@ impl UserManager {
                 if cached.computed_at.elapsed().as_secs() < POPULAR_CONTENT_CACHE_TTL_SECS {
                     // Cache hit - slice to requested limits and return
                     return Ok(PopularContent {
-                        albums: cached.content.albums.iter().take(albums_limit).cloned().collect(),
-                        artists: cached.content.artists.iter().take(artists_limit).cloned().collect(),
+                        albums: cached
+                            .content
+                            .albums
+                            .iter()
+                            .take(albums_limit)
+                            .cloned()
+                            .collect(),
+                        artists: cached
+                            .content
+                            .artists
+                            .iter()
+                            .take(artists_limit)
+                            .cloned()
+                            .collect(),
                     });
                 }
             }
         }
 
         // Cache miss or stale - compute fresh with max limits
-        let content = self.compute_popular_content(start_date, end_date, MAX_ALBUMS, MAX_ARTISTS)?;
+        let content =
+            self.compute_popular_content(start_date, end_date, MAX_ALBUMS, MAX_ARTISTS)?;
 
         // Store in cache
         {

@@ -2,7 +2,7 @@
 #![allow(dead_code)] // Feature-gated search functionality
 
 use sha2::{Digest, Sha256};
-use std::{ops::Sub, u32};
+use std::ops::Sub;
 use unicode_segmentation::UnicodeSegmentation;
 
 const SIM_HASH_LEN_BITS: usize = 256;
@@ -78,8 +78,7 @@ impl Sub for &SimHash {
     type Output = u32;
 
     fn sub(self, other: &SimHash) -> u32 {
-        let hamming_dist = hamming_distance(&self.value, &other.value);
-        hamming_dist
+        hamming_distance(&self.value, &other.value)
     }
 }
 
