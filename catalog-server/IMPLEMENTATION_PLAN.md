@@ -575,7 +575,7 @@ This document breaks down the Background Jobs System and Download Manager plans 
 
 #### 1.1 Remaining CLI Changes
 
-- [ ] **Task 1.1.1: Verify `SqliteCatalogStore` and `SqliteUserStore` create DB if not exists**
+- [x] **Task 1.1.1: Verify `SqliteCatalogStore` and `SqliteUserStore` create DB if not exists**
 
   **Context:** Both stores should create their database file with proper schema if the file doesn't exist.
 
@@ -585,7 +585,7 @@ This document breaks down the Background Jobs System and Download Manager plans 
 
 #### 1.2 Tests
 
-- [ ] **Task 1.2.1: Update integration tests that spawn the server**
+- [x] **Task 1.2.1: Update integration tests that spawn the server**
 
   **Context:** Any tests that start the server with CLI arguments need updating.
 

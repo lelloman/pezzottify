@@ -9,7 +9,7 @@ export const SETTING_ENABLE_DIRECT_DOWNLOADS = "enable_direct_downloads";
 const ADMIN_PERMISSIONS = [
   "ManagePermissions",
   "ViewAnalytics",
-  "RebootServer",
+  "ServerAdmin",
 ];
 
 export const useUserStore = defineStore("user", () => {
@@ -455,8 +455,8 @@ export const useUserStore = defineStore("user", () => {
   const canViewAnalytics = computed(() =>
     permissions.value.includes("ViewAnalytics"),
   );
-  const canRebootServer = computed(() =>
-    permissions.value.includes("RebootServer"),
+  const canServerAdmin = computed(() =>
+    permissions.value.includes("ServerAdmin"),
   );
 
   // =====================================================
@@ -570,6 +570,6 @@ export const useUserStore = defineStore("user", () => {
     hasAnyAdminPermission,
     canManagePermissions,
     canViewAnalytics,
-    canRebootServer,
+    canServerAdmin,
   };
 });

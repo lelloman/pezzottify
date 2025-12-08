@@ -3383,7 +3383,7 @@ mod tests {
         assert!(permissions.contains(&Permission::EditCatalog));
         assert!(permissions.contains(&Permission::ManagePermissions));
         assert!(permissions.contains(&Permission::IssueContentDownload));
-        assert!(permissions.contains(&Permission::RebootServer));
+        assert!(permissions.contains(&Permission::ServerAdmin));
     }
 
     #[test]

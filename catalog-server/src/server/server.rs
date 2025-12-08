@@ -171,26 +171,26 @@ async fn require_edit_catalog(
     next.run(request).await
 }
 
-async fn require_reboot_server(
+async fn require_server_admin(
     session: Session,
     request: Request<Body>,
     next: Next,
 ) -> impl IntoResponse {
     debug!(
-        "require_reboot_server: user_id={}, has_permission={}, permissions={:?}",
+        "require_server_admin: user_id={}, has_permission={}, permissions={:?}",
         session.user_id,
-        session.has_permission(Permission::RebootServer),
+        session.has_permission(Permission::ServerAdmin),
         session.permissions
     );
-    if !session.has_permission(Permission::RebootServer) {
+    if !session.has_permission(Permission::ServerAdmin) {
         debug!(
-            "require_reboot_server: FORBIDDEN - user_id={} lacks RebootServer permission",
+            "require_server_admin: FORBIDDEN - user_id={} lacks ServerAdmin permission",
             session.user_id
         );
         return StatusCode::FORBIDDEN.into_response();
     }
     debug!(
-        "require_reboot_server: ALLOWED - user_id={}",
+        "require_server_admin: ALLOWED - user_id={}",
         session.user_id
     );
     next.run(request).await
@@ -2237,7 +2237,7 @@ async fn admin_add_user_extra_permission(
         "EditCatalog" => Permission::EditCatalog,
         "ManagePermissions" => Permission::ManagePermissions,
         "IssueContentDownload" => Permission::IssueContentDownload,
-        "RebootServer" => Permission::RebootServer,
+        "ServerAdmin" => Permission::ServerAdmin,
         "ViewAnalytics" => Permission::ViewAnalytics,
         _ => return (StatusCode::BAD_REQUEST, "Invalid permission").into_response(),
     };
@@ -3035,13 +3035,13 @@ pub fn make_app(
     // Merge catalog edit routes into content routes
     content_routes = content_routes.merge(catalog_edit_routes);
 
-    // Admin reboot route (requires RebootServer permission)
+    // Admin reboot route (requires ServerAdmin permission)
     let admin_reboot_routes: Router = Router::new()
         .route("/reboot", post(reboot_server))
         .layer(GovernorLayer::new(write_rate_limit.clone()))
         .route_layer(middleware::from_fn_with_state(
             state.clone(),
-            require_reboot_server,
+            require_server_admin,
         ))
         .with_state(state.clone());
 
@@ -3887,12 +3887,12 @@ mod tests {
             let (store, user_id, _temp_dir) = create_test_store_with_admin_user();
 
             let permissions = store.resolve_user_permissions(user_id).unwrap();
-            // Admin should have: AccessCatalog, EditCatalog, ManagePermissions, IssueContentDownload, RebootServer
+            // Admin should have: AccessCatalog, EditCatalog, ManagePermissions, IssueContentDownload, ServerAdmin
             assert!(permissions.contains(&crate::user::Permission::AccessCatalog));
             assert!(permissions.contains(&crate::user::Permission::EditCatalog));
             assert!(permissions.contains(&crate::user::Permission::ManagePermissions));
             assert!(permissions.contains(&crate::user::Permission::IssueContentDownload));
-            assert!(permissions.contains(&crate::user::Permission::RebootServer));
+            assert!(permissions.contains(&crate::user::Permission::ServerAdmin));
         }
 
         #[test]
@@ -3928,7 +3928,7 @@ mod tests {
             let grant = crate::user::PermissionGrant::Extra {
                 start_time,
                 end_time: Some(end_time),
-                permission: crate::user::Permission::RebootServer,
+                permission: crate::user::Permission::ServerAdmin,
                 countdown: None,
             };
 
@@ -3937,7 +3937,7 @@ mod tests {
 
             // Verify permission is resolved (still within time limit)
             let permissions = store.resolve_user_permissions(user_id).unwrap();
-            assert!(permissions.contains(&crate::user::Permission::RebootServer));
+            assert!(permissions.contains(&crate::user::Permission::ServerAdmin));
         }
 
         #[test]

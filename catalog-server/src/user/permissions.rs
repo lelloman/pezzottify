@@ -9,7 +9,7 @@ pub enum Permission {
     EditCatalog,
     ManagePermissions,
     IssueContentDownload,
-    RebootServer,
+    ServerAdmin,
     ViewAnalytics,
 }
 
@@ -22,7 +22,7 @@ impl Permission {
             Permission::EditCatalog => 4,
             Permission::ManagePermissions => 5,
             Permission::IssueContentDownload => 6,
-            Permission::RebootServer => 7,
+            Permission::ServerAdmin => 7,
             Permission::ViewAnalytics => 8,
         }
     }
@@ -35,7 +35,7 @@ impl Permission {
             4 => Some(Permission::EditCatalog),
             5 => Some(Permission::ManagePermissions),
             6 => Some(Permission::IssueContentDownload),
-            7 => Some(Permission::RebootServer),
+            7 => Some(Permission::ServerAdmin),
             8 => Some(Permission::ViewAnalytics),
             _ => None,
         }
@@ -47,7 +47,7 @@ const ADMIN_PERMISSIONS: &[Permission] = &[
     Permission::EditCatalog,
     Permission::ManagePermissions,
     Permission::IssueContentDownload,
-    Permission::RebootServer,
+    Permission::ServerAdmin,
     Permission::ViewAnalytics,
 ];
 const REGULAR_PERMISSIONS: &[Permission] = &[
@@ -110,7 +110,7 @@ mod tests {
         assert_eq!(Permission::EditCatalog.as_int(), 4);
         assert_eq!(Permission::ManagePermissions.as_int(), 5);
         assert_eq!(Permission::IssueContentDownload.as_int(), 6);
-        assert_eq!(Permission::RebootServer.as_int(), 7);
+        assert_eq!(Permission::ServerAdmin.as_int(), 7);
         assert_eq!(Permission::ViewAnalytics.as_int(), 8);
     }
 
@@ -125,7 +125,7 @@ mod tests {
             Permission::from_int(6),
             Some(Permission::IssueContentDownload)
         );
-        assert_eq!(Permission::from_int(7), Some(Permission::RebootServer));
+        assert_eq!(Permission::from_int(7), Some(Permission::ServerAdmin));
         assert_eq!(Permission::from_int(8), Some(Permission::ViewAnalytics));
     }
 
@@ -148,7 +148,7 @@ mod tests {
             Permission::EditCatalog,
             Permission::ManagePermissions,
             Permission::IssueContentDownload,
-            Permission::RebootServer,
+            Permission::ServerAdmin,
             Permission::ViewAnalytics,
         ];
 
@@ -168,7 +168,7 @@ mod tests {
         assert!(admin_perms.contains(&Permission::EditCatalog));
         assert!(admin_perms.contains(&Permission::ManagePermissions));
         assert!(admin_perms.contains(&Permission::IssueContentDownload));
-        assert!(admin_perms.contains(&Permission::RebootServer));
+        assert!(admin_perms.contains(&Permission::ServerAdmin));
         assert!(admin_perms.contains(&Permission::ViewAnalytics));
 
         assert!(!admin_perms.contains(&Permission::LikeContent));
@@ -187,7 +187,7 @@ mod tests {
         assert!(!regular_perms.contains(&Permission::EditCatalog));
         assert!(!regular_perms.contains(&Permission::ManagePermissions));
         assert!(!regular_perms.contains(&Permission::IssueContentDownload));
-        assert!(!regular_perms.contains(&Permission::RebootServer));
+        assert!(!regular_perms.contains(&Permission::ServerAdmin));
         assert!(!regular_perms.contains(&Permission::ViewAnalytics));
     }
 
@@ -280,7 +280,7 @@ mod tests {
         let grant = PermissionGrant::Extra {
             start_time: start,
             end_time: None,
-            permission: Permission::RebootServer,
+            permission: Permission::ServerAdmin,
             countdown: Some(5),
         };
 
@@ -293,7 +293,7 @@ mod tests {
             } => {
                 assert_eq!(start_time, start);
                 assert_eq!(end_time, None);
-                assert_eq!(permission, Permission::RebootServer);
+                assert_eq!(permission, Permission::ServerAdmin);
                 assert_eq!(countdown, Some(5));
             }
             _ => panic!("Expected Extra variant"),

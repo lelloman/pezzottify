@@ -80,7 +80,7 @@ The catalog server is the backend component of Pezzottify that provides:
   - `EditCatalog`: Create, update, delete catalog entries
   - `ManagePermissions`: Manage user permissions
   - `IssueContentDownload`: Issue download tokens
-  - `RebootServer`: Reboot server
+  - `ServerAdmin`: Server administration (reboot, etc.)
   - `ViewAnalytics`: View listening analytics and statistics
 - **`UserRole`**: Admin or Regular with different permission sets
 
@@ -455,7 +455,7 @@ Requires `EditCatalog` permission.
 
 #### Server Management
 
-Requires `RebootServer` permission.
+Requires `ServerAdmin` permission.
 
 | Method | Endpoint  | Description       |
 | ------ | --------- | ----------------- |
@@ -537,7 +537,7 @@ Requires `EditCatalog` permission.
 
 - **Admin**: Administrative access (does not include user features like liking content or playlists)
 
-  - AccessCatalog, EditCatalog, ManagePermissions, IssueContentDownload, RebootServer, ViewAnalytics
+  - AccessCatalog, EditCatalog, ManagePermissions, IssueContentDownload, ServerAdmin, ViewAnalytics
 
 - **Regular**: Standard user access
   - AccessCatalog, LikeContent, OwnPlaylists
