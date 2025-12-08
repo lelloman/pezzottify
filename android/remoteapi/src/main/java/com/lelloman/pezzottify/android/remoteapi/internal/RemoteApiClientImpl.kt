@@ -24,11 +24,14 @@ import com.lelloman.pezzottify.android.remoteapi.internal.requests.UpdateUserSet
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonNamingStrategy
+import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import retrofit2.Response
@@ -44,13 +47,25 @@ internal class RemoteApiClientImpl(
 
     private val authToken get() = credentialsProvider.authToken
 
+    private fun isValidHttpUrl(url: String): Boolean {
+        if (url.isBlank()) return false
+        return try {
+            val httpUrl = url.toHttpUrl()
+            httpUrl.scheme == "http" || httpUrl.scheme == "https"
+        } catch (_: IllegalArgumentException) {
+            false
+        }
+    }
+
     @OptIn(ExperimentalSerializationApi::class)
     private val jsonConverter = Json {
         ignoreUnknownKeys = true
         namingStrategy = JsonNamingStrategy.SnakeCase
     }
 
-    private val retrofitFlow = hostUrlProvider.hostUrl.map(::makeRetrofit)
+    private val retrofitFlow = hostUrlProvider.hostUrl
+        .map { url -> url.takeIf { isValidHttpUrl(it) } }
+        .map { validUrl -> validUrl?.let(::makeRetrofit) }
         .stateIn(coroutineScope, SharingStarted.Eagerly, null)
 
     private val <T>Response<T>.commonError
@@ -64,8 +79,8 @@ internal class RemoteApiClientImpl(
             null
         }
 
-    private val noUrlRetrofit by lazy { makeRetrofit("http://localhost") }
-    private val retrofit get() = retrofitFlow.value ?: noUrlRetrofit
+    private suspend fun getRetrofit(): RetrofitApiClient =
+        retrofitFlow.filterNotNull().first()
 
     private val <T>Response<T>.parsedBody: RemoteApiResponse<T>
         get() = try {
@@ -89,7 +104,7 @@ internal class RemoteApiClientImpl(
         password: String,
         deviceInfo: DeviceInfo,
     ): RemoteApiResponse<LoginSuccessResponse> = catchingNetworkError {
-        retrofit
+        getRetrofit()
             .login(
                 LoginRequest(
                     userHandle = userHandle,
@@ -104,42 +119,42 @@ internal class RemoteApiClientImpl(
     }
 
     override suspend fun logout(): RemoteApiResponse<Unit> = catchingNetworkError {
-        retrofit
+        getRetrofit()
             .logout(authToken = authToken)
             .returnFromRetrofitResponse()
     }
 
     override suspend fun getArtist(artistId: String): RemoteApiResponse<ArtistResponse> =
         catchingNetworkError {
-            retrofit
+            getRetrofit()
                 .getArtist(authToken = authToken, artistId = artistId)
                 .returnFromRetrofitResponse()
         }
 
     override suspend fun getArtistDiscography(artistId: String): RemoteApiResponse<ArtistDiscographyResponse> =
         catchingNetworkError {
-            retrofit
+            getRetrofit()
                 .getArtistDiscography(authToken = authToken, artistId = artistId)
                 .returnFromRetrofitResponse()
         }
 
     override suspend fun getAlbum(albumId: String): RemoteApiResponse<AlbumResponse> =
         catchingNetworkError {
-            retrofit
+            getRetrofit()
                 .getAlbum(authToken = authToken, albumId = albumId)
                 .returnFromRetrofitResponse()
         }
 
     override suspend fun getTrack(trackId: String): RemoteApiResponse<TrackResponse> =
         catchingNetworkError {
-            retrofit
+            getRetrofit()
                 .getTrack(authToken = authToken, trackId = trackId)
                 .returnFromRetrofitResponse()
         }
 
     override suspend fun getImage(imageId: String): RemoteApiResponse<ImageResponse> =
         catchingNetworkError {
-            val retrofitResponse = retrofit.getImage(authToken = authToken, imageId = imageId)
+            val retrofitResponse = getRetrofit().getImage(authToken = authToken, imageId = imageId)
             retrofitResponse.commonError?.let { return@catchingNetworkError it }
             val imageBytes = retrofitResponse.body()?.bytes()
                 ?: return@catchingNetworkError RemoteApiResponse.Error.Unknown("No body")
@@ -158,7 +173,7 @@ internal class RemoteApiClientImpl(
         albumsLimit: Int,
         artistsLimit: Int,
     ): RemoteApiResponse<PopularContentResponse> = catchingNetworkError {
-        retrofit
+        getRetrofit()
             .getPopularContent(
                 authToken = authToken,
                 albumsLimit = albumsLimit,
@@ -171,28 +186,28 @@ internal class RemoteApiClientImpl(
         query: String,
         filters: List<RemoteApiClient.SearchFilter>?
     ): RemoteApiResponse<SearchResponse> = catchingNetworkError {
-        retrofit
+        getRetrofit()
             .search(authToken, SearchRequest(query, filters?.map { it.name.lowercase() }))
             .returnFromRetrofitResponse()
     }
 
     override suspend fun getLikedContent(contentType: String): RemoteApiResponse<List<String>> =
         catchingNetworkError {
-            retrofit
+            getRetrofit()
                 .getLikedContent(authToken = authToken, contentType = contentType)
                 .returnFromRetrofitResponse()
         }
 
     override suspend fun likeContent(contentType: String, contentId: String): RemoteApiResponse<Unit> =
         catchingNetworkError {
-            retrofit
+            getRetrofit()
                 .likeContent(authToken = authToken, contentType = contentType, contentId = contentId)
                 .returnFromRetrofitResponse()
         }
 
     override suspend fun unlikeContent(contentType: String, contentId: String): RemoteApiResponse<Unit> =
         catchingNetworkError {
-            retrofit
+            getRetrofit()
                 .unlikeContent(authToken = authToken, contentType = contentType, contentId = contentId)
                 .returnFromRetrofitResponse()
         }
@@ -212,7 +227,7 @@ internal class RemoteApiClientImpl(
             playbackContext = data.playbackContext,
             clientType = "android",
         )
-        val response = retrofit.recordListeningEvent(authToken = authToken, request = request)
+        val response = getRetrofit().recordListeningEvent(authToken = authToken, request = request)
         response.commonError?.let { return@catchingNetworkError it }
         val body = response.body()
             ?: return@catchingNetworkError RemoteApiResponse.Error.Unknown("No body")
@@ -223,14 +238,14 @@ internal class RemoteApiClientImpl(
 
     override suspend fun getSyncState(): RemoteApiResponse<SyncStateResponse> =
         catchingNetworkError {
-            retrofit
+            getRetrofit()
                 .getSyncState(authToken = authToken)
                 .returnFromRetrofitResponse()
         }
 
     override suspend fun getSyncEvents(since: Long): RemoteApiResponse<SyncEventsResponse> =
         catchingNetworkError {
-            val response = retrofit.getSyncEvents(authToken = authToken, since = since)
+            val response = getRetrofit().getSyncEvents(authToken = authToken, since = since)
             // Handle 410 Gone (events pruned)
             if (response.code() == 410) {
                 return@catchingNetworkError RemoteApiResponse.Error.EventsPruned
@@ -240,7 +255,7 @@ internal class RemoteApiClientImpl(
 
     override suspend fun updateUserSettings(settings: List<UserSetting>): RemoteApiResponse<Unit> =
         catchingNetworkError {
-            retrofit
+            getRetrofit()
                 .updateUserSettings(
                     authToken = authToken,
                     request = UpdateUserSettingsRequest(settings = settings)
