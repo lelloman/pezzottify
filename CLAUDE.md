@@ -18,12 +18,16 @@ The catalog server uses a SQLite database for catalog metadata and a media direc
 **Running the server:**
 ```bash
 cd catalog-server
-cargo run -- <catalog-db-path> <user-db-path> --media-path=<media-path> --content-cache-age-sec=60 --logging-level path
+# Using config file (recommended):
+cargo run -- --config ./config.toml
+
+# Using CLI arguments:
+cargo run -- --db-dir /path/to/db-dir --media-path /path/to/media --port 3001
 ```
 
 Example:
 ```bash
-cargo run -- ../../catalog.db ../../test.db --media-path=../../pezzottify-catalog --content-cache-age-sec=60 --logging-level path
+cargo run -- --db-dir ../../pezzottify-catalog --media-path=../../pezzottify-catalog --content-cache-age-sec=60 --logging-level path
 ```
 
 **Build features:**
@@ -32,7 +36,9 @@ cargo run -- ../../catalog.db ../../test.db --media-path=../../pezzottify-catalo
 - `--features slowdown`: Adds slowdown layer for testing
 
 **CLI arguments:**
-- `--media-path <PATH>`: Path to media files (audio/images), defaults to parent of catalog-db
+- `--config <PATH>`: Path to TOML config file (values override CLI arguments)
+- `--db-dir <PATH>`: Directory containing database files (catalog.db, user.db)
+- `--media-path <PATH>`: Path to media files (audio/images), defaults to db-dir
 - `--port <PORT>`: Server port (default: 3001)
 - `--metrics-port <PORT>`: Metrics server port (default: 9091)
 - `--logging-level <LEVEL>`: Request logging level (default: path)
