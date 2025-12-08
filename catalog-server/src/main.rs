@@ -13,11 +13,11 @@ use pezzottify_catalog_server::background_jobs::{create_scheduler, JobContext};
 use pezzottify_catalog_server::catalog_store::{CatalogStore, SqliteCatalogStore};
 use pezzottify_catalog_server::config;
 use pezzottify_catalog_server::downloader;
-use pezzottify_catalog_server::search::SearchVault;
 #[cfg(feature = "no_search")]
 use pezzottify_catalog_server::search::NoOpSearchVault;
 #[cfg(not(feature = "no_search"))]
 use pezzottify_catalog_server::search::PezzotHashSearchVault;
+use pezzottify_catalog_server::search::SearchVault;
 use pezzottify_catalog_server::server::{metrics, run_server, RequestsLoggingLevel};
 use pezzottify_catalog_server::server_store::{self, SqliteServerStore};
 use pezzottify_catalog_server::user::{self, SqliteUserStore};
@@ -168,7 +168,7 @@ async fn main() -> Result<()> {
         );
     }
     let catalog_store = Arc::new(SqliteCatalogStore::new(
-        &app_config.catalog_db_path(),
+        app_config.catalog_db_path(),
         &app_config.media_path,
     )?);
 
@@ -188,14 +188,14 @@ async fn main() -> Result<()> {
             app_config.user_db_path()
         );
     }
-    let user_store = Arc::new(SqliteUserStore::new(&app_config.user_db_path())?);
+    let user_store = Arc::new(SqliteUserStore::new(app_config.user_db_path())?);
 
     // Create server store for background job history
     info!(
         "Initializing server store at {:?}",
         app_config.server_db_path()
     );
-    let server_store = Arc::new(SqliteServerStore::new(&app_config.server_db_path())?);
+    let server_store = Arc::new(SqliteServerStore::new(app_config.server_db_path())?);
 
     // Set up background job scheduler
     let shutdown_token = CancellationToken::new();

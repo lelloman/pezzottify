@@ -16,7 +16,7 @@ impl JobRunStatus {
         }
     }
 
-    pub fn from_str(s: &str) -> Option<Self> {
+    pub fn parse(s: &str) -> Option<Self> {
         match s {
             "running" => Some(JobRunStatus::Running),
             "completed" => Some(JobRunStatus::Completed),

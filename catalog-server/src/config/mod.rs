@@ -2,8 +2,8 @@ mod file_config;
 
 pub use file_config::{BackgroundJobsConfig, DownloadManagerConfig, FileConfig};
 
-use anyhow::{bail, Result};
 use crate::server::RequestsLoggingLevel;
+use anyhow::{bail, Result};
 use clap::ValueEnum;
 use std::path::PathBuf;
 
@@ -81,7 +81,9 @@ impl AppConfig {
             .and_then(|s| parse_logging_level(&s))
             .unwrap_or_else(|| cli.logging_level.clone());
 
-        let content_cache_age_sec = file.content_cache_age_sec.unwrap_or(cli.content_cache_age_sec);
+        let content_cache_age_sec = file
+            .content_cache_age_sec
+            .unwrap_or(cli.content_cache_age_sec);
         let frontend_dir_path = file
             .frontend_dir_path
             .or_else(|| cli.frontend_dir_path.clone());
@@ -326,10 +328,7 @@ mod tests {
         };
         let result = AppConfig::resolve(&cli, None);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("does not exist"));
+        assert!(result.unwrap_err().to_string().contains("does not exist"));
     }
 
     #[test]
@@ -394,10 +393,7 @@ mod tests {
 
         let config = AppConfig::resolve(&cli, None).unwrap();
 
-        assert_eq!(
-            config.catalog_db_path(),
-            temp_dir.path().join("catalog.db")
-        );
+        assert_eq!(config.catalog_db_path(), temp_dir.path().join("catalog.db"));
         assert_eq!(config.user_db_path(), temp_dir.path().join("user.db"));
         assert_eq!(config.server_db_path(), temp_dir.path().join("server.db"));
         assert_eq!(

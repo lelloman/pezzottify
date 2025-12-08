@@ -1843,7 +1843,10 @@ async fn admin_trigger_job(
 
     match handle.trigger_job(&job_id).await {
         Ok(()) => {
-            info!("Job {} triggered successfully by user {}", job_id, session.user_id);
+            info!(
+                "Job {} triggered successfully by user {}",
+                job_id, session.user_id
+            );
             (
                 StatusCode::ACCEPTED,
                 Json(serde_json::json!({"status": "triggered", "job_id": job_id})),
@@ -1901,7 +1904,11 @@ async fn admin_get_job_history(
                 history.len(),
                 job_id
             );
-            (StatusCode::OK, Json(serde_json::json!({"history": history}))).into_response()
+            (
+                StatusCode::OK,
+                Json(serde_json::json!({"history": history})),
+            )
+                .into_response()
         }
         Err(e) => {
             error!("Failed to get job history for {}: {}", job_id, e);
@@ -2912,7 +2919,7 @@ async fn admin_get_changelog_entity_history(
 }
 
 impl ServerState {
-    #[allow(clippy::arc_with_non_send_sync)]
+    #[allow(clippy::arc_with_non_send_sync, clippy::too_many_arguments)]
     fn new(
         config: ServerConfig,
         catalog_store: Arc<dyn CatalogStore>,

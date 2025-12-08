@@ -22,8 +22,7 @@ impl SqliteServerStore {
         conn.execute("PRAGMA foreign_keys = ON;", [])?;
 
         // Check user_version to determine if this is a fresh database
-        let raw_version: i64 = conn
-            .query_row("PRAGMA user_version;", [], |row| row.get(0))?;
+        let raw_version: i64 = conn.query_row("PRAGMA user_version;", [], |row| row.get(0))?;
 
         if raw_version == 0 {
             // Fresh database - initialize schema
@@ -56,9 +55,7 @@ impl SqliteServerStore {
     }
 
     fn initialize_schema(conn: &Connection) -> Result<()> {
-        let schema = SERVER_VERSIONED_SCHEMAS
-            .last()
-            .expect("No schemas defined");
+        let schema = SERVER_VERSIONED_SCHEMAS.last().expect("No schemas defined");
         conn.execute_batch(schema.up)
             .context("Failed to initialize server database schema")?;
         conn.execute(
@@ -71,9 +68,13 @@ impl SqliteServerStore {
     fn run_migrations(conn: &Connection, from_version: usize) -> Result<()> {
         for schema in SERVER_VERSIONED_SCHEMAS.iter() {
             if schema.version > from_version {
-                info!("Running server database migration to version {}", schema.version);
-                conn.execute_batch(schema.up)
-                    .with_context(|| format!("Failed to run migration to version {}", schema.version))?;
+                info!(
+                    "Running server database migration to version {}",
+                    schema.version
+                );
+                conn.execute_batch(schema.up).with_context(|| {
+                    format!("Failed to run migration to version {}", schema.version)
+                })?;
                 conn.execute(
                     &format!("PRAGMA user_version = {}", BASE_DB_VERSION + schema.version),
                     [],
@@ -89,7 +90,7 @@ impl SqliteServerStore {
 
     fn row_to_job_run(row: &rusqlite::Row) -> rusqlite::Result<JobRun> {
         let status_str: String = row.get("status")?;
-        let status = JobRunStatus::from_str(&status_str).unwrap_or(JobRunStatus::Failed);
+        let status = JobRunStatus::parse(&status_str).unwrap_or(JobRunStatus::Failed);
 
         let started_at_str: String = row.get("started_at")?;
         let finished_at_str: Option<String> = row.get("finished_at")?;
@@ -168,7 +169,10 @@ impl ServerStore for SqliteServerStore {
         )?;
 
         let jobs = stmt
-            .query_map(params![JobRunStatus::Running.as_str()], Self::row_to_job_run)?
+            .query_map(
+                params![JobRunStatus::Running.as_str()],
+                Self::row_to_job_run,
+            )?
             .collect::<rusqlite::Result<Vec<_>>>()?;
 
         Ok(jobs)
@@ -375,10 +379,7 @@ mod tests {
 
         let last_run = store.get_last_run("stale_job_1").unwrap().unwrap();
         assert_eq!(last_run.status, JobRunStatus::Failed);
-        assert!(last_run
-            .error_message
-            .unwrap()
-            .contains("server restart"));
+        assert!(last_run.error_message.unwrap().contains("server restart"));
     }
 
     #[test]
