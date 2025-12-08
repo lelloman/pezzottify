@@ -7,6 +7,7 @@ import com.lelloman.pezzottify.android.domain.remoteapi.RemoteApiClient
 import com.lelloman.pezzottify.android.domain.remoteapi.RemoteApiCredentialsProvider
 import com.lelloman.pezzottify.android.domain.websocket.WebSocketManager
 import com.lelloman.pezzottify.android.logger.LoggerFactory
+import com.lelloman.pezzottify.android.remoteapi.internal.HttpLoggingInterceptor
 import com.lelloman.pezzottify.android.remoteapi.internal.RemoteApiClientImpl
 import com.lelloman.pezzottify.android.remoteapi.internal.websocket.WebSocketManagerImpl
 import dagger.Module
@@ -53,17 +54,22 @@ class RemoteApiModule {
     @Singleton
     fun provideRemoteApiClient(
         authStore: AuthStore,
-        configStore: ConfigStore
-    ): RemoteApiClient = RemoteApiClientImpl(
-        okhttpClientBuilder = OkHttpClient.Builder(),
-        hostUrlProvider = object : RemoteApiClient.HostUrlProvider {
-            override val hostUrl: StateFlow<String>
-                get() = configStore.baseUrl
+        configStore: ConfigStore,
+        loggerFactory: LoggerFactory,
+    ): RemoteApiClient {
+        val httpLogger = loggerFactory.getLogger("HTTP")
+        return RemoteApiClientImpl(
+            okhttpClientBuilder = OkHttpClient.Builder(),
+            hostUrlProvider = object : RemoteApiClient.HostUrlProvider {
+                override val hostUrl: StateFlow<String>
+                    get() = configStore.baseUrl
 
-        },
-        credentialsProvider = object : RemoteApiCredentialsProvider {
-            override val authToken: String
-                get() = (authStore.getAuthState().value as? AuthState.LoggedIn)?.authToken ?: ""
-        }
-    )
+            },
+            credentialsProvider = object : RemoteApiCredentialsProvider {
+                override val authToken: String
+                    get() = (authStore.getAuthState().value as? AuthState.LoggedIn)?.authToken ?: ""
+            },
+            interceptors = listOf(HttpLoggingInterceptor(httpLogger)),
+        )
+    }
 }

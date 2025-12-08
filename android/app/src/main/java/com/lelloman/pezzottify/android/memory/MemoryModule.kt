@@ -5,6 +5,7 @@ import com.lelloman.pezzottify.android.domain.cache.CacheMetricsCollector
 import com.lelloman.pezzottify.android.domain.cache.CacheMetricsCollectorImpl
 import com.lelloman.pezzottify.android.domain.cache.StaticsCache
 import com.lelloman.pezzottify.android.domain.memory.MemoryPressureMonitor
+import com.lelloman.pezzottify.android.logger.LoggerFactory
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -24,8 +25,9 @@ class MemoryModule {
     @Provides
     @Singleton
     fun provideStaticsCache(
-        memoryPressureMonitor: MemoryPressureMonitor
-    ): StaticsCache = StaticsCache(memoryPressureMonitor)
+        memoryPressureMonitor: MemoryPressureMonitor,
+        loggerFactory: LoggerFactory,
+    ): StaticsCache = StaticsCache(memoryPressureMonitor, loggerFactory)
 
     @Provides
     @Singleton

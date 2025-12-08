@@ -32,6 +32,7 @@ import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonNamingStrategy
 import okhttp3.HttpUrl.Companion.toHttpUrl
+import okhttp3.Interceptor
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import retrofit2.Response
@@ -43,7 +44,12 @@ internal class RemoteApiClientImpl(
     private val okhttpClientBuilder: OkHttpClient.Builder,
     private val credentialsProvider: RemoteApiCredentialsProvider,
     coroutineScope: CoroutineScope = GlobalScope,
+    interceptors: List<Interceptor> = emptyList(),
 ) : RemoteApiClient {
+
+    init {
+        interceptors.forEach { okhttpClientBuilder.addInterceptor(it) }
+    }
 
     private val authToken get() = credentialsProvider.authToken
 
