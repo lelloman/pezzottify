@@ -7,6 +7,9 @@ pub const DEFAULT_TIMESTAMP: &'static str = "(cast(strftime('%s','now') as int))
 macro_rules! sqlite_column {
     ($name:expr, $sql_type:expr $(, $field:ident = $value:expr)*) => {
         {
+            // Allow unused_mut because the variable is only mutated when optional
+            // field assignments are passed to the macro (e.g., `is_primary_key = true`)
+            #[allow(unused_mut)]
             let mut column = Column {
                 name: $name,
                 sql_type: $sql_type,
