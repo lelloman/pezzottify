@@ -2,9 +2,27 @@ mod file_config;
 
 pub use file_config::{BackgroundJobsConfig, DownloadManagerConfig, FileConfig};
 
+use anyhow::{bail, Result};
 use crate::server::RequestsLoggingLevel;
 use clap::ValueEnum;
 use std::path::PathBuf;
+
+/// CLI arguments that can be used for config resolution.
+/// This struct mirrors the CLI arguments that can be overridden by TOML config.
+#[derive(Debug, Clone, Default)]
+pub struct CliConfig {
+    pub db_dir: Option<PathBuf>,
+    pub media_path: Option<PathBuf>,
+    pub port: u16,
+    pub metrics_port: u16,
+    pub logging_level: RequestsLoggingLevel,
+    pub content_cache_age_sec: usize,
+    pub frontend_dir_path: Option<String>,
+    pub downloader_url: Option<String>,
+    pub downloader_timeout_sec: u64,
+    pub event_retention_days: u64,
+    pub prune_interval_hours: u64,
+}
 
 #[derive(Debug, Clone)]
 pub struct AppConfig {
@@ -27,6 +45,100 @@ pub struct AppConfig {
 }
 
 impl AppConfig {
+    /// Resolve configuration from CLI arguments and optional TOML file config.
+    /// TOML values override CLI values where present.
+    pub fn resolve(cli: &CliConfig, file_config: Option<FileConfig>) -> Result<Self> {
+        let file = file_config.unwrap_or_default();
+
+        // TOML overrides CLI for each field
+        let db_dir = file
+            .db_dir
+            .map(PathBuf::from)
+            .or_else(|| cli.db_dir.clone())
+            .ok_or_else(|| {
+                anyhow::anyhow!("db_dir must be specified via --db-dir or in config file")
+            })?;
+
+        // Validate db_dir exists
+        if !db_dir.exists() {
+            bail!("Database directory does not exist: {:?}", db_dir);
+        }
+        if !db_dir.is_dir() {
+            bail!("db_dir is not a directory: {:?}", db_dir);
+        }
+
+        let media_path = file
+            .media_path
+            .map(PathBuf::from)
+            .or_else(|| cli.media_path.clone())
+            .unwrap_or_else(|| db_dir.clone());
+
+        let port = file.port.unwrap_or(cli.port);
+        let metrics_port = file.metrics_port.unwrap_or(cli.metrics_port);
+
+        let logging_level = file
+            .logging_level
+            .and_then(|s| parse_logging_level(&s))
+            .unwrap_or_else(|| cli.logging_level.clone());
+
+        let content_cache_age_sec = file.content_cache_age_sec.unwrap_or(cli.content_cache_age_sec);
+        let frontend_dir_path = file
+            .frontend_dir_path
+            .or_else(|| cli.frontend_dir_path.clone());
+
+        let downloader_url = file
+            .downloader_url
+            .clone()
+            .or_else(|| cli.downloader_url.clone());
+
+        let downloader_timeout_sec = file
+            .downloader_timeout_sec
+            .unwrap_or(cli.downloader_timeout_sec);
+        let event_retention_days = file
+            .event_retention_days
+            .unwrap_or(cli.event_retention_days);
+        let prune_interval_hours = file
+            .prune_interval_hours
+            .unwrap_or(cli.prune_interval_hours);
+
+        // Download manager settings - merge file config with defaults
+        let dm_file = file.download_manager.unwrap_or_default();
+        let download_manager = DownloadManagerSettings {
+            enabled: downloader_url.is_some(),
+            max_albums_per_hour: dm_file.max_albums_per_hour.unwrap_or(10),
+            max_albums_per_day: dm_file.max_albums_per_day.unwrap_or(60),
+            user_max_requests_per_day: dm_file.user_max_requests_per_day.unwrap_or(100),
+            user_max_queue_size: dm_file.user_max_queue_size.unwrap_or(200),
+            process_interval_secs: dm_file.process_interval_secs.unwrap_or(5),
+            stale_in_progress_threshold_secs: dm_file
+                .stale_in_progress_threshold_secs
+                .unwrap_or(3600),
+            max_retries: dm_file.max_retries.unwrap_or(5),
+            initial_backoff_secs: dm_file.initial_backoff_secs.unwrap_or(60),
+            max_backoff_secs: dm_file.max_backoff_secs.unwrap_or(3600),
+            backoff_multiplier: dm_file.backoff_multiplier.unwrap_or(2.0),
+            audit_log_retention_days: dm_file.audit_log_retention_days.unwrap_or(90),
+        };
+
+        let background_jobs = BackgroundJobsSettings::default();
+
+        Ok(Self {
+            db_dir,
+            media_path,
+            port,
+            metrics_port,
+            logging_level,
+            content_cache_age_sec,
+            frontend_dir_path,
+            downloader_url,
+            downloader_timeout_sec,
+            event_retention_days,
+            prune_interval_hours,
+            download_manager,
+            background_jobs,
+        })
+    }
+
     pub fn catalog_db_path(&self) -> PathBuf {
         self.db_dir.join("catalog.db")
     }
@@ -93,6 +205,11 @@ fn parse_logging_level(s: &str) -> Option<RequestsLoggingLevel> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tempfile::TempDir;
+
+    fn make_temp_db_dir() -> TempDir {
+        TempDir::new().unwrap()
+    }
 
     #[test]
     fn test_parse_logging_level() {
@@ -119,5 +236,173 @@ mod tests {
         ));
         // Invalid
         assert!(parse_logging_level("invalid").is_none());
+    }
+
+    #[test]
+    fn test_resolve_cli_only() {
+        let temp_dir = make_temp_db_dir();
+        let cli = CliConfig {
+            db_dir: Some(temp_dir.path().to_path_buf()),
+            media_path: Some(PathBuf::from("/media")),
+            port: 3001,
+            metrics_port: 9091,
+            logging_level: RequestsLoggingLevel::Headers,
+            content_cache_age_sec: 7200,
+            frontend_dir_path: Some("/frontend".to_string()),
+            downloader_url: Some("http://downloader:3002".to_string()),
+            downloader_timeout_sec: 600,
+            event_retention_days: 60,
+            prune_interval_hours: 12,
+        };
+
+        let config = AppConfig::resolve(&cli, None).unwrap();
+
+        assert_eq!(config.db_dir, temp_dir.path());
+        assert_eq!(config.media_path, PathBuf::from("/media"));
+        assert_eq!(config.port, 3001);
+        assert_eq!(config.metrics_port, 9091);
+        assert_eq!(config.logging_level, RequestsLoggingLevel::Headers);
+        assert_eq!(config.content_cache_age_sec, 7200);
+        assert_eq!(config.frontend_dir_path, Some("/frontend".to_string()));
+        assert_eq!(
+            config.downloader_url,
+            Some("http://downloader:3002".to_string())
+        );
+        assert_eq!(config.downloader_timeout_sec, 600);
+        assert_eq!(config.event_retention_days, 60);
+        assert_eq!(config.prune_interval_hours, 12);
+        assert!(config.download_manager.enabled);
+    }
+
+    #[test]
+    fn test_resolve_toml_overrides_cli() {
+        let temp_dir = make_temp_db_dir();
+        let cli = CliConfig {
+            db_dir: Some(PathBuf::from("/should/be/overridden")),
+            media_path: Some(PathBuf::from("/cli/media")),
+            port: 3001,
+            metrics_port: 9091,
+            logging_level: RequestsLoggingLevel::Path,
+            content_cache_age_sec: 3600,
+            ..Default::default()
+        };
+
+        let file_config = FileConfig {
+            db_dir: Some(temp_dir.path().to_string_lossy().to_string()),
+            media_path: Some("/toml/media".to_string()),
+            port: Some(4000),
+            logging_level: Some("body".to_string()),
+            ..Default::default()
+        };
+
+        let config = AppConfig::resolve(&cli, Some(file_config)).unwrap();
+
+        // TOML values should override CLI
+        assert_eq!(config.db_dir, temp_dir.path());
+        assert_eq!(config.media_path, PathBuf::from("/toml/media"));
+        assert_eq!(config.port, 4000);
+        assert_eq!(config.logging_level, RequestsLoggingLevel::Body);
+        // CLI value used when TOML doesn't specify
+        assert_eq!(config.metrics_port, 9091);
+        assert_eq!(config.content_cache_age_sec, 3600);
+    }
+
+    #[test]
+    fn test_resolve_missing_db_dir_error() {
+        let cli = CliConfig::default();
+        let result = AppConfig::resolve(&cli, None);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("db_dir must be specified"));
+    }
+
+    #[test]
+    fn test_resolve_nonexistent_db_dir_error() {
+        let cli = CliConfig {
+            db_dir: Some(PathBuf::from("/nonexistent/path/that/should/not/exist")),
+            ..Default::default()
+        };
+        let result = AppConfig::resolve(&cli, None);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("does not exist"));
+    }
+
+    #[test]
+    fn test_resolve_db_dir_not_directory_error() {
+        // Create a temporary file (not a directory)
+        let temp_file = tempfile::NamedTempFile::new().unwrap();
+        let cli = CliConfig {
+            db_dir: Some(temp_file.path().to_path_buf()),
+            ..Default::default()
+        };
+        let result = AppConfig::resolve(&cli, None);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("not a directory"));
+    }
+
+    #[test]
+    fn test_resolve_download_manager_disabled_without_url() {
+        let temp_dir = make_temp_db_dir();
+        let cli = CliConfig {
+            db_dir: Some(temp_dir.path().to_path_buf()),
+            downloader_url: None,
+            ..Default::default()
+        };
+
+        let config = AppConfig::resolve(&cli, None).unwrap();
+        assert!(!config.download_manager.enabled);
+    }
+
+    #[test]
+    fn test_resolve_download_manager_enabled_with_url() {
+        let temp_dir = make_temp_db_dir();
+        let cli = CliConfig {
+            db_dir: Some(temp_dir.path().to_path_buf()),
+            downloader_url: Some("http://localhost:3002".to_string()),
+            ..Default::default()
+        };
+
+        let config = AppConfig::resolve(&cli, None).unwrap();
+        assert!(config.download_manager.enabled);
+    }
+
+    #[test]
+    fn test_resolve_media_path_defaults_to_db_dir() {
+        let temp_dir = make_temp_db_dir();
+        let cli = CliConfig {
+            db_dir: Some(temp_dir.path().to_path_buf()),
+            media_path: None,
+            ..Default::default()
+        };
+
+        let config = AppConfig::resolve(&cli, None).unwrap();
+        assert_eq!(config.media_path, temp_dir.path());
+    }
+
+    #[test]
+    fn test_db_path_helpers() {
+        let temp_dir = make_temp_db_dir();
+        let cli = CliConfig {
+            db_dir: Some(temp_dir.path().to_path_buf()),
+            ..Default::default()
+        };
+
+        let config = AppConfig::resolve(&cli, None).unwrap();
+
+        assert_eq!(
+            config.catalog_db_path(),
+            temp_dir.path().join("catalog.db")
+        );
+        assert_eq!(config.user_db_path(), temp_dir.path().join("user.db"));
+        assert_eq!(config.server_db_path(), temp_dir.path().join("server.db"));
+        assert_eq!(
+            config.download_queue_db_path(),
+            temp_dir.path().join("download_queue.db")
+        );
     }
 }

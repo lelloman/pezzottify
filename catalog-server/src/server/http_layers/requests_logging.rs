@@ -22,6 +22,12 @@ pub enum RequestsLoggingLevel {
     Body,
 }
 
+impl Default for RequestsLoggingLevel {
+    fn default() -> Self {
+        Self::Path
+    }
+}
+
 impl std::fmt::Display for RequestsLoggingLevel {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{:?}", self)
