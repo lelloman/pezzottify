@@ -67,7 +67,7 @@ const fetchResults = async (newQuery, queryParams) => {
 };
 watch(
   [() => route.params.query, () => route.query],
-  ([newQuery, newQueryParams], [oldQuery, oldQueryParams]) => {
+  ([newQuery, newQueryParams]) => {
     console.log("MainContent newQueryParams:");
     console.log(newQueryParams);
     searchQuery.value = newQuery || "";

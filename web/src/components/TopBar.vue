@@ -67,7 +67,7 @@ import { useUserStore } from "../store/user";
 const userStore = useUserStore();
 
 // App version injected by Vite at build time
-const appVersion = __APP_VERSION__;
+const appVersion = __APP_VERSION__; // eslint-disable-line no-undef
 
 const emit = defineEmits(["search"]);
 const inputValue = ref("");

@@ -74,7 +74,7 @@ const fetchData = async (id) => {
 
 watch(
   [() => userStore.likedArtistsIds, artist],
-  ([likedArtis, artistData], [oldLikedArtists, oldArtistData]) => {
+  ([likedArtis, artistData]) => {
     if (likedArtis && artistData) {
       isArtistLiked.value = likedArtis.includes(props.artistId);
     }
