@@ -9,6 +9,9 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilte
 mod catalog_store;
 use catalog_store::{CatalogStore, SqliteCatalogStore};
 
+mod config;
+use config::FileConfig;
+
 mod downloader;
 
 mod search;
