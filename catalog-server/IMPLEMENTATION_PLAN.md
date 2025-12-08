@@ -729,7 +729,7 @@ This document breaks down the Background Jobs System and Download Manager plans 
   }
   ```
 
-- [ ] **Task 2.2.3: Define `ServerStore` trait**
+- [x] **Task 2.2.3: Define `ServerStore` trait**
 
   **Context:** Interface for job history operations. Note: Using synchronous trait (matching existing patterns in codebase).
 
@@ -761,7 +761,7 @@ This document breaks down the Background Jobs System and Download Manager plans 
   }
   ```
 
-- [ ] **Task 2.2.4: Create schema for `server.db`**
+- [x] **Task 2.2.4: Create schema for `server.db`**
 
   **File:** `catalog-server/src/server_store/schema.rs`
 
@@ -796,13 +796,13 @@ This document breaks down the Background Jobs System and Download Manager plans 
   ];
   ```
 
-- [ ] **Task 2.2.5: Implement `SqliteServerStore`**
+- [x] **Task 2.2.5: Implement `SqliteServerStore`**
 
   **Context:** SQLite implementation of `ServerStore`.
 
   **File:** `catalog-server/src/server_store/sqlite_server_store.rs`
 
-- [ ] **Task 2.2.6: Add unit tests for `SqliteServerStore`**
+- [x] **Task 2.2.6: Add unit tests for `SqliteServerStore`**
 
   **Context:** Test CRUD operations, state transitions, stale job handling.
 
