@@ -1,5 +1,14 @@
 # Download Manager Implementation Plan
 
+## Implementation Status
+
+| Feature | Status | Notes |
+|---------|--------|-------|
+| Overall | ⏳ Not Started | Planning complete, implementation pending |
+| Dependencies | ✅ Ready | TOML Config and Background Jobs systems are complete |
+
+---
+
 ## Overview
 
 A queue-based asynchronous download manager that handles content downloads from a generic free music provider. It operates **alongside** (not replacing) the existing live proxy feature, which serves trusted users for real-time catalog browsing.

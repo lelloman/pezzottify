@@ -6,7 +6,19 @@ A recurring task scheduler for the catalog-server. This system manages periodic 
 
 ---
 
-## Phase 1: CLI Refactoring (Database Directory)
+## Implementation Status
+
+| Phase | Status | Notes |
+|-------|--------|-------|
+| Phase 1: CLI Refactoring | ✅ Complete | `--db-dir` implemented, positional args removed |
+| Phase 2: Background Jobs | ✅ Complete | JobScheduler, ServerStore, PopularContentJob implemented |
+| Permission Rename | ✅ Complete | `RebootServer` → `ServerAdmin` done |
+| Admin API | ✅ Complete | `/v1/admin/jobs` endpoints implemented |
+| Prometheus Metrics | ✅ Complete | Job execution metrics exposed |
+
+---
+
+## Phase 1: CLI Refactoring (Database Directory) ✅ COMPLETE
 
 Refactor the CLI to use a single `--db-dir` argument instead of separate paths for each database. This simplifies configuration and enables adding new databases (like `server.db`) without CLI changes.
 
@@ -49,18 +61,18 @@ Existing deployments need to:
 
 ### Implementation Checklist
 
-- [ ] `catalog-server/src/main.rs`
+- [x] `catalog-server/src/main.rs`
   - Replace `catalog_db` and `user_store_file_path` positional args with `--db-dir` option
   - Add `parse_dir` function (similar to existing `parse_path`)
   - Construct `catalog.db` and `user.db` paths from `--db-dir`
   - Validate directory exists before proceeding
-- [ ] Docker configuration
+- [x] Docker configuration
   - Update `Dockerfile` entrypoint if hardcoded paths exist
   - Update `docker-compose.yml` volume mounts and command
-- [ ] Documentation
+- [x] Documentation
   - `catalog-server/README.md` - Update CLI usage and examples
   - `CLAUDE.md` - Update development commands
-- [ ] Tests
+- [x] Tests
   - Update any integration tests that spawn the server with CLI args
 
 ### Example Usage After Migration
@@ -75,7 +87,7 @@ docker run -v /host/data:/data pezzottify-server --db-dir=/data --media-path=/me
 
 ---
 
-## Phase 2: Background Jobs System
+## Phase 2: Background Jobs System ✅ COMPLETE
 
 ### 2.1 Scheduling Mechanisms
 
@@ -425,7 +437,7 @@ Response (already running):
 ```
 (HTTP 409 Conflict)
 
-### 2.6 Permission Changes
+### 2.6 Permission Changes ✅ COMPLETE
 
 Rename `RebootServer` to `ServerAdmin` to encompass broader server administration capabilities:
 
