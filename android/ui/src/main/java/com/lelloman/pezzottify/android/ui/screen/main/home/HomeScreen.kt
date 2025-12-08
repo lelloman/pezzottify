@@ -1,6 +1,5 @@
 package com.lelloman.pezzottify.android.ui.screen.main.home
 
-import android.annotation.SuppressLint
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -110,7 +109,6 @@ private fun HomeScreenContent(
         }
     }
 
-    @SuppressLint("UnusedMaterial3ScaffoldPaddingParameter")
     Scaffold(
         modifier = Modifier.fillMaxSize(),
         topBar = {
@@ -145,10 +143,11 @@ private fun HomeScreenContent(
                 }
             )
         }
-    ) {
+    ) { scaffoldPadding ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                .padding(top = scaffoldPadding.calculateTopPadding())
         ) {
             // Back online banner (shows briefly when reconnecting)
             BackOnlineBanner(
