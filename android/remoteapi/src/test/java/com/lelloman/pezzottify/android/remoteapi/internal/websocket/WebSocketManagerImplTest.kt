@@ -16,6 +16,10 @@ import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.WebSocket
+import okhttp3.WebSocketListener
 import org.junit.Before
 import org.junit.Test
 import kotlin.reflect.KProperty
@@ -28,6 +32,8 @@ class WebSocketManagerImplTest {
     private lateinit var loggerFactory: LoggerFactory
     private lateinit var testScope: TestScope
     private lateinit var webSocketManager: WebSocketManagerImpl
+    private lateinit var mockOkHttpClient: OkHttpClient
+    private lateinit var mockWebSocket: WebSocket
 
     private val authStateFlow = MutableStateFlow<AuthState>(AuthState.LoggedOut)
     private val baseUrlFlow = MutableStateFlow("http://localhost:3001")
@@ -38,10 +44,13 @@ class WebSocketManagerImplTest {
         configStore = mockk()
         val mockLogger = mockk<Logger>(relaxed = true)
         loggerFactory = mockk()
+        mockOkHttpClient = mockk()
+        mockWebSocket = mockk(relaxed = true)
 
         every { loggerFactory.getValue(any(), any<KProperty<*>>()) } returns mockLogger
         every { authStore.getAuthState() } returns authStateFlow
         every { configStore.baseUrl } returns baseUrlFlow
+        every { mockOkHttpClient.newWebSocket(any<Request>(), any<WebSocketListener>()) } returns mockWebSocket
 
         testScope = TestScope(StandardTestDispatcher())
 
@@ -50,6 +59,7 @@ class WebSocketManagerImplTest {
             configStore = configStore,
             coroutineScope = testScope,
             loggerFactory = loggerFactory,
+            okHttpClient = mockOkHttpClient,
         )
     }
 
