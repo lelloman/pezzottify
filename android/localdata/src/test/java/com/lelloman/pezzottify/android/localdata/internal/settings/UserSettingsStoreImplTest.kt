@@ -45,7 +45,7 @@ class UserSettingsStoreImplTest {
         val store = UserSettingsStoreImpl(context, testDispatcher)
 
         assertThat(store.themeMode.value).isEqualTo(ThemeMode.Default)
-        assertThat(store.themeMode.value).isEqualTo(ThemeMode.System)
+        assertThat(store.themeMode.value).isEqualTo(ThemeMode.Dark)
     }
 
     @Test
@@ -148,7 +148,7 @@ class UserSettingsStoreImplTest {
         val store = UserSettingsStoreImpl(context, testDispatcher)
 
         assertThat(store.fontFamily.value).isEqualTo(AppFontFamily.Default)
-        assertThat(store.fontFamily.value).isEqualTo(AppFontFamily.System)
+        assertThat(store.fontFamily.value).isEqualTo(AppFontFamily.SansSerif)
     }
 
     @Test
