@@ -14,18 +14,13 @@ use chrono::Datelike;
 use std::time::Instant;
 use tracing::{debug, error, info};
 
-#[derive(PartialEq, PartialOrd, Clone, Debug, clap::ValueEnum)]
+#[derive(PartialEq, PartialOrd, Clone, Debug, Default, clap::ValueEnum)]
 pub enum RequestsLoggingLevel {
     None,
+    #[default]
     Path,
     Headers,
     Body,
-}
-
-impl Default for RequestsLoggingLevel {
-    fn default() -> Self {
-        Self::Path
-    }
 }
 
 impl std::fmt::Display for RequestsLoggingLevel {

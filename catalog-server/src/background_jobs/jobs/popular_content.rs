@@ -115,7 +115,9 @@ impl BackgroundJob for PopularContentJob {
         debug!("Found {} top tracks in listening data", top_tracks.len());
 
         if top_tracks.is_empty() {
-            info!("No listening data found for the date range, skipping popular content computation");
+            info!(
+                "No listening data found for the date range, skipping popular content computation"
+            );
             return Ok(());
         }
 
@@ -162,18 +164,12 @@ impl BackgroundJob for PopularContentJob {
         // Sort and get top albums
         let mut album_list: Vec<_> = album_plays.into_iter().collect();
         album_list.sort_by(|a, b| b.1.cmp(&a.1));
-        let top_albums: Vec<_> = album_list
-            .into_iter()
-            .take(self.albums_limit)
-            .collect();
+        let top_albums: Vec<_> = album_list.into_iter().take(self.albums_limit).collect();
 
         // Sort and get top artists
         let mut artist_list: Vec<_> = artist_plays.into_iter().collect();
         artist_list.sort_by(|a, b| b.1.cmp(&a.1));
-        let top_artists: Vec<_> = artist_list
-            .into_iter()
-            .take(self.artists_limit)
-            .collect();
+        let top_artists: Vec<_> = artist_list.into_iter().take(self.artists_limit).collect();
 
         // Warm up catalog store caches by resolving album and artist JSON
         let mut albums_resolved = 0;
@@ -192,7 +188,11 @@ impl BackgroundJob for PopularContentJob {
             if ctx.is_cancelled() {
                 return Err(JobError::Cancelled);
             }
-            if ctx.catalog_store.get_resolved_artist_json(artist_id).is_ok() {
+            if ctx
+                .catalog_store
+                .get_resolved_artist_json(artist_id)
+                .is_ok()
+            {
                 artists_resolved += 1;
             }
         }

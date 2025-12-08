@@ -850,4 +850,50 @@ impl TestClient {
             .await
             .expect("Get sync events request failed")
     }
+
+    // ========================================================================
+    // Admin Jobs Endpoints
+    // ========================================================================
+
+    /// GET /v1/admin/jobs
+    pub async fn admin_list_jobs(&self) -> Response {
+        self.client
+            .get(format!("{}/v1/admin/jobs", self.base_url))
+            .send()
+            .await
+            .expect("List jobs request failed")
+    }
+
+    /// GET /v1/admin/jobs/{job_id}
+    pub async fn admin_get_job(&self, job_id: &str) -> Response {
+        self.client
+            .get(format!("{}/v1/admin/jobs/{}", self.base_url, job_id))
+            .send()
+            .await
+            .expect("Get job request failed")
+    }
+
+    /// POST /v1/admin/jobs/{job_id}/trigger
+    pub async fn admin_trigger_job(&self, job_id: &str) -> Response {
+        self.client
+            .post(format!(
+                "{}/v1/admin/jobs/{}/trigger",
+                self.base_url, job_id
+            ))
+            .send()
+            .await
+            .expect("Trigger job request failed")
+    }
+
+    /// GET /v1/admin/jobs/{job_id}/history?limit={limit}
+    pub async fn admin_get_job_history(&self, job_id: &str, limit: usize) -> Response {
+        self.client
+            .get(format!(
+                "{}/v1/admin/jobs/{}/history?limit={}",
+                self.base_url, job_id, limit
+            ))
+            .send()
+            .await
+            .expect("Get job history request failed")
+    }
 }

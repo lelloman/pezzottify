@@ -40,18 +40,13 @@ impl std::fmt::Display for HookEvent {
 }
 
 /// How a job should be handled during server shutdown.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum ShutdownBehavior {
     /// Job can be cancelled immediately
+    #[default]
     Cancellable,
     /// Wait for job to complete before shutdown
     WaitForCompletion,
-}
-
-impl Default for ShutdownBehavior {
-    fn default() -> Self {
-        ShutdownBehavior::Cancellable
-    }
 }
 
 /// Errors that can occur during job execution.

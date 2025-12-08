@@ -221,3 +221,161 @@ impl SchedulerHandle {
         state.jobs.contains_key(job_id)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::background_jobs::job::HookEvent;
+    use crate::server_store::JobRunStatus;
+    use chrono::Utc;
+    use std::time::Duration;
+
+    #[test]
+    fn test_job_schedule_info_from_cron() {
+        let schedule = JobSchedule::Cron("0 0 * * *".to_string());
+        let info: JobScheduleInfo = schedule.into();
+
+        assert_eq!(info.schedule_type, "cron");
+        assert_eq!(info.cron, Some("0 0 * * *".to_string()));
+        assert!(info.value_secs.is_none());
+        assert!(info.hooks.is_none());
+    }
+
+    #[test]
+    fn test_job_schedule_info_from_interval() {
+        let schedule = JobSchedule::Interval(Duration::from_secs(3600));
+        let info: JobScheduleInfo = schedule.into();
+
+        assert_eq!(info.schedule_type, "interval");
+        assert_eq!(info.value_secs, Some(3600));
+        assert!(info.cron.is_none());
+        assert!(info.hooks.is_none());
+    }
+
+    #[test]
+    fn test_job_schedule_info_from_hook() {
+        let schedule = JobSchedule::Hook(HookEvent::OnStartup);
+        let info: JobScheduleInfo = schedule.into();
+
+        assert_eq!(info.schedule_type, "hook");
+        assert_eq!(info.hooks, Some(vec!["OnStartup".to_string()]));
+        assert!(info.value_secs.is_none());
+        assert!(info.cron.is_none());
+    }
+
+    #[test]
+    fn test_job_schedule_info_from_combined() {
+        let schedule = JobSchedule::Combined {
+            cron: Some("0 * * * *".to_string()),
+            interval: Some(Duration::from_secs(1800)),
+            hooks: vec![HookEvent::OnStartup, HookEvent::OnCatalogChange],
+        };
+        let info: JobScheduleInfo = schedule.into();
+
+        assert_eq!(info.schedule_type, "combined");
+        assert_eq!(info.cron, Some("0 * * * *".to_string()));
+        assert_eq!(info.value_secs, Some(1800));
+        let hooks = info.hooks.unwrap();
+        assert_eq!(hooks.len(), 2);
+        assert!(hooks.contains(&"OnStartup".to_string()));
+        assert!(hooks.contains(&"OnCatalogChange".to_string()));
+    }
+
+    #[test]
+    fn test_job_schedule_info_combined_without_optional_fields() {
+        let schedule = JobSchedule::Combined {
+            cron: None,
+            interval: None,
+            hooks: vec![HookEvent::OnStartup],
+        };
+        let info: JobScheduleInfo = schedule.into();
+
+        assert_eq!(info.schedule_type, "combined");
+        assert!(info.cron.is_none());
+        assert!(info.value_secs.is_none());
+        assert_eq!(info.hooks, Some(vec!["OnStartup".to_string()]));
+    }
+
+    #[test]
+    fn test_job_run_info_from_completed() {
+        let now = Utc::now();
+        let finished = now + chrono::Duration::seconds(10);
+        let run = JobRun {
+            id: 1,
+            job_id: "test_job".to_string(),
+            started_at: now,
+            finished_at: Some(finished),
+            status: JobRunStatus::Completed,
+            error_message: None,
+            triggered_by: "manual".to_string(),
+        };
+
+        let info: JobRunInfo = run.into();
+
+        assert_eq!(info.status, "completed");
+        assert!(info.error_message.is_none());
+        assert_eq!(info.triggered_by, "manual");
+        assert!(info.finished_at.is_some());
+    }
+
+    #[test]
+    fn test_job_run_info_from_failed() {
+        let now = Utc::now();
+        let run = JobRun {
+            id: 2,
+            job_id: "test_job".to_string(),
+            started_at: now,
+            finished_at: Some(now + chrono::Duration::seconds(5)),
+            status: JobRunStatus::Failed,
+            error_message: Some("Something went wrong".to_string()),
+            triggered_by: "schedule".to_string(),
+        };
+
+        let info: JobRunInfo = run.into();
+
+        assert_eq!(info.status, "failed");
+        assert_eq!(info.error_message, Some("Something went wrong".to_string()));
+        assert_eq!(info.triggered_by, "schedule");
+    }
+
+    #[test]
+    fn test_job_run_info_from_running() {
+        let now = Utc::now();
+        let run = JobRun {
+            id: 3,
+            job_id: "test_job".to_string(),
+            started_at: now,
+            finished_at: None,
+            status: JobRunStatus::Running,
+            error_message: None,
+            triggered_by: "hook:OnStartup".to_string(),
+        };
+
+        let info: JobRunInfo = run.into();
+
+        assert_eq!(info.status, "running");
+        assert!(info.finished_at.is_none());
+        assert_eq!(info.triggered_by, "hook:OnStartup");
+    }
+
+    #[test]
+    fn test_job_run_info_datetime_format() {
+        let now = Utc::now();
+        let run = JobRun {
+            id: 1,
+            job_id: "test_job".to_string(),
+            started_at: now,
+            finished_at: Some(now),
+            status: JobRunStatus::Completed,
+            error_message: None,
+            triggered_by: "test".to_string(),
+        };
+
+        let info: JobRunInfo = run.into();
+
+        // Should be RFC3339 format
+        assert!(info.started_at.contains("T"));
+        assert!(info.started_at.contains("+") || info.started_at.contains("Z"));
+        assert!(info.finished_at.unwrap().contains("T"));
+    }
+}
