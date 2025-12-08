@@ -1,0 +1,39 @@
+# Pezzottify Catalog Server Configuration
+# Copy this file to config.toml and customize for your deployment.
+# Values here override CLI arguments.
+
+# Core settings
+db_dir = "/data/db"
+media_path = "/data/media"
+port = 3001
+metrics_port = 9091
+logging_level = "path"
+content_cache_age_sec = 60
+frontend_dir_path = "/app/web"
+
+# Downloader service URL (enables download manager when set)
+# The downloader should be on the same Docker network (pezzottify-internal)
+# downloader_url = "http://downloader:3002"
+downloader_timeout_sec = 300
+
+# Event pruning
+event_retention_days = 30
+prune_interval_hours = 24
+
+# Download Manager settings (only used if downloader_url is set)
+[download_manager]
+max_albums_per_hour = 10
+max_albums_per_day = 60
+user_max_requests_per_day = 100
+user_max_queue_size = 200
+process_interval_secs = 5
+stale_in_progress_threshold_secs = 3600
+max_retries = 5
+initial_backoff_secs = 60
+max_backoff_secs = 3600
+backoff_multiplier = 2.0
+audit_log_retention_days = 90
+
+# Background Jobs settings
+[background_jobs]
+# Future: per-job configuration

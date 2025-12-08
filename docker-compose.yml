@@ -16,14 +16,16 @@ services:
     volumes:
       - /home/lelloman/pezzottify-catalog/:/data/db # Contains catalog.db and user.db
       - /home/lelloman/pezzottify-catalog/:/data/media # Contains albums/ and images/
+      - ./catalog-server/config.toml:/etc/pezzottify/config.toml:ro
     networks:
       - monitoring
+      - pezzottify-internal
     environment:
       - LOG_LEVEL=info
     restart: unless-stopped
-    # Args: <catalog-db-path> <user-db-path> [--media-path <path>] [options]
-    # Optional: Add "--downloader-url", "<URL>" to enable on-demand content fetching
-    command: [ "catalog-server", "/data/db/catalog.db", "/data/db/user.db", "--media-path", "/data/media", "--content-cache-age-sec=60", "--logging-level", "path", "--frontend-dir-path", "/app/web" ]
+    # New config-based invocation. Create config.toml from config.example.toml
+    # Optional: Set downloader_url in config to enable on-demand content fetching
+    command: [ "catalog-server", "--config", "/etc/pezzottify/config.toml" ]
 
   prometheus:
     image: prom/prometheus:v2.48.0
@@ -107,6 +109,9 @@ services:
 
 networks:
   monitoring:
+    driver: bridge
+  pezzottify-internal:
+    name: pezzottify-internal  # Explicit name prevents docker-compose prefix
     driver: bridge
 
 volumes:
