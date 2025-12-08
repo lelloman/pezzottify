@@ -48,6 +48,7 @@ import com.lelloman.pezzottify.android.domain.usercontent.GetLikedStateUseCase
 import com.lelloman.pezzottify.android.domain.usercontent.ToggleLikeUseCase
 import com.lelloman.pezzottify.android.domain.usercontent.UserContentStore
 import com.lelloman.pezzottify.android.logger.LoggerFactory
+import com.lelloman.pezzottify.android.logging.LogFileManager
 import com.lelloman.pezzottify.android.ui.screen.login.LoginViewModel
 import com.lelloman.pezzottify.android.ui.screen.main.MainScreenViewModel
 import com.lelloman.pezzottify.android.ui.screen.main.content.album.AlbumScreenViewModel
@@ -167,6 +168,7 @@ class InteractorsModule {
         storageMonitor: com.lelloman.pezzottify.android.domain.storage.StorageMonitor,
         permissionsStore: PermissionsStore,
         updateDirectDownloadsSetting: UpdateDirectDownloadsSetting,
+        logFileManager: LogFileManager,
     ): SettingsScreenViewModel.Interactor = object : SettingsScreenViewModel.Interactor {
         override fun getPlayBehavior(): UiPlayBehavior =
             userSettingsStore.playBehavior.value.toUi()
@@ -227,6 +229,22 @@ class InteractorsModule {
             updateDirectDownloadsSetting(enabled)
             return true // Setting is saved locally and synced in background
         }
+
+        override fun observeFileLoggingEnabled(): Flow<Boolean> = userSettingsStore.isFileLoggingEnabled
+
+        override suspend fun setFileLoggingEnabled(enabled: Boolean) {
+            userSettingsStore.setFileLoggingEnabled(enabled)
+        }
+
+        override fun isFileLoggingEnabled(): Boolean = userSettingsStore.isFileLoggingEnabled.value
+
+        override fun hasLogFiles(): Boolean = logFileManager.hasLogs()
+
+        override fun getLogFilesSize(): String = logFileManager.getFormattedLogSize()
+
+        override fun getShareLogsIntent(): android.content.Intent = logFileManager.createShareIntent()
+
+        override fun clearLogs() = logFileManager.clearLogs()
     }
 
     @Provides

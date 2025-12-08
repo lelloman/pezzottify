@@ -12,6 +12,7 @@ interface UserSettingsStore {
     val colorPalette: StateFlow<ColorPalette>
     val fontFamily: StateFlow<AppFontFamily>
     val isInMemoryCacheEnabled: StateFlow<Boolean>
+    val isFileLoggingEnabled: StateFlow<Boolean>
 
     /**
      * Whether direct downloads are enabled.
@@ -24,6 +25,7 @@ interface UserSettingsStore {
     suspend fun setColorPalette(colorPalette: ColorPalette)
     suspend fun setFontFamily(fontFamily: AppFontFamily)
     suspend fun setInMemoryCacheEnabled(enabled: Boolean)
+    suspend fun setFileLoggingEnabled(enabled: Boolean)
 
     /**
      * Set whether direct downloads are enabled.
