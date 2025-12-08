@@ -13,7 +13,10 @@ else
     export GIT_DIRTY=0
 fi
 
-echo "Building with GIT_HASH=$GIT_HASH GIT_DIRTY=$GIT_DIRTY"
+# Detect hostname for alerts
+export ALERT_HOSTNAME=$(hostname)
+
+echo "Building with GIT_HASH=$GIT_HASH GIT_DIRTY=$GIT_DIRTY ALERT_HOSTNAME=$ALERT_HOSTNAME"
 
 # Pass all arguments to docker-compose (e.g., "catalog-server", "-d", etc.)
 docker-compose up --build "$@"

@@ -31,14 +31,13 @@ services:
     ports:
       - "9090:9090"
     volumes:
-      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+      - ./monitoring/prometheus-entrypoint.sh:/prometheus-entrypoint.sh:ro
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml.template
       - ./monitoring/alerts.yml:/etc/prometheus/alerts.yml
       - prometheus-data:/prometheus
-    command:
-      - '--config.file=/etc/prometheus/prometheus.yml'
-      - '--storage.tsdb.path=/prometheus'
-      - '--storage.tsdb.retention.time=30d'
-      - '--web.enable-lifecycle'
+    environment:
+      - ALERT_HOSTNAME=${ALERT_HOSTNAME:-unknown}
+    entrypoint: [ "/prometheus-entrypoint.sh" ]
     networks:
       - monitoring
     restart: unless-stopped
@@ -74,6 +73,8 @@ services:
       - alertmanager-data:/alertmanager
     env_file:
       - ./monitoring/.env
+    environment:
+      - ALERT_HOSTNAME=${ALERT_HOSTNAME:-unknown}
     entrypoint: [ "/alertmanager-entrypoint.sh" ]
     networks:
       - monitoring
