@@ -17,13 +17,14 @@ async fn test_record_listening_event_minimal() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated(server.base_url.clone()).await;
 
-    // Record a listening event with minimal fields
+    // Record a listening event with minimal fields (no ended_at = not finalized)
     let response = client.post_listening_event(TRACK_1_ID, 180, 200).await;
     assert_eq!(response.status(), StatusCode::OK);
 
     let body: serde_json::Value = response.json().await.unwrap();
     assert!(body["id"].as_u64().unwrap() > 0);
-    assert!(body["created"].as_bool().unwrap());
+    // created=false because ended_at is not set (event not finalized, won't count in metrics)
+    assert!(!body["created"].as_bool().unwrap());
 }
 
 #[tokio::test]
@@ -60,13 +61,21 @@ async fn test_record_listening_event_deduplication() {
 
     let session_id = "unique-dedup-test-session";
 
-    // First request should create
+    // Use current timestamps so the event falls within the default date range
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+    let started_at = now - 200; // Started 200 seconds ago
+    let ended_at = now - 20; // Ended 20 seconds ago
+
+    // First request creates a new finalized event
     let response = client
         .post_listening_event_full(
             TRACK_1_ID,
             Some(session_id),
-            None,
-            None,
+            Some(started_at),
+            Some(ended_at),
             180,
             200,
             None,
@@ -77,16 +86,16 @@ async fn test_record_listening_event_deduplication() {
         .await;
     assert_eq!(response.status(), StatusCode::OK);
     let body1: serde_json::Value = response.json().await.unwrap();
+    // created=true: new finalized event (should be counted in metrics)
     assert!(body1["created"].as_bool().unwrap());
-    let id1 = body1["id"].as_u64().unwrap();
 
-    // Second request with same session_id should be deduplicated
+    // Second request with same session_id is a duplicate
     let response = client
         .post_listening_event_full(
             TRACK_1_ID,
             Some(session_id),
-            None,
-            None,
+            Some(started_at),
+            Some(ended_at),
             180,
             200,
             None,
@@ -97,8 +106,14 @@ async fn test_record_listening_event_deduplication() {
         .await;
     assert_eq!(response.status(), StatusCode::OK);
     let body2: serde_json::Value = response.json().await.unwrap();
+    // created=false: duplicate of already-finalized event (should NOT be counted in metrics)
     assert!(!body2["created"].as_bool().unwrap());
-    assert_eq!(body2["id"].as_u64().unwrap(), id1);
+
+    // Verify deduplication: only one event should exist in the database
+    let events_response = client.get_listening_events(None, None, None, None).await;
+    assert_eq!(events_response.status(), StatusCode::OK);
+    let events: Vec<serde_json::Value> = events_response.json().await.unwrap();
+    assert_eq!(events.len(), 1, "Deduplication should result in only one event");
 }
 
 #[tokio::test]
