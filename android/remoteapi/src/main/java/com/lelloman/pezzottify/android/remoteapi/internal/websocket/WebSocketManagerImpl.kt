@@ -36,6 +36,7 @@ internal class WebSocketManagerImpl(
     private val configStore: ConfigStore,
     private val coroutineScope: CoroutineScope,
     loggerFactory: LoggerFactory,
+    okHttpClient: OkHttpClient? = null,
 ) : WebSocketManager {
 
     private val logger: Logger by loggerFactory
@@ -45,7 +46,7 @@ internal class WebSocketManagerImpl(
         encodeDefaults = true
     }
 
-    private val okHttpClient = OkHttpClient.Builder()
+    private val okHttpClient = okHttpClient ?: OkHttpClient.Builder()
         .pingInterval(PING_INTERVAL_SECONDS, TimeUnit.SECONDS)
         .build()
 
