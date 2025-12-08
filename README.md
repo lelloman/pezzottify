@@ -93,6 +93,7 @@ See component-specific READMEs:
 | ManagePermissions | ✓ | | Manage user roles and permissions |
 | IssueContentDownload | ✓ | | Generate download tokens |
 | RebootServer | ✓ | | Restart the server remotely |
+| ViewAnalytics | ✓ | | View listening and bandwidth analytics |
 
 ### Devices
 
@@ -215,11 +216,12 @@ The server exposes a REST API over HTTP with WebSocket support for real-time syn
 
 | Path | Description |
 |------|-------------|
-| `/v1/auth/*` | Authentication (login, logout) |
-| `/v1/content/*` | Catalog content (artists, albums, tracks, images, streaming) |
-| `/v1/user/*` | User content (playlists, liked content, settings) |
+| `/v1/auth/*` | Authentication (login, logout, session) |
+| `/v1/content/*` | Catalog content (artists, albums, tracks, images, streaming, search) |
+| `/v1/user/*` | User content (playlists, liked content, settings, listening stats) |
+| `/v1/admin/*` | Admin operations (user management, analytics, server control) |
 | `/v1/sync/*` | Event log for multi-device sync |
-| `/ws` | WebSocket connection for real-time updates |
+| `/v1/ws` | WebSocket connection for real-time updates |
 
 ### Key Features
 
@@ -279,4 +281,4 @@ pezzottify/
 
 ## License
 
-See LICENSE file.
+This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENSE) file for details.
