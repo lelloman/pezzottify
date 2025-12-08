@@ -2,6 +2,7 @@
 //!
 //! This library exposes the internal modules for testing and potential reuse.
 
+pub mod background_jobs;
 pub mod catalog_store;
 pub mod config;
 pub mod downloader;

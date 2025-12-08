@@ -27,6 +27,8 @@ mod sqlite_persistence;
 
 mod server_store;
 
+mod background_jobs;
+
 mod user;
 use user::SqliteUserStore;
 
