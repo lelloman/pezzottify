@@ -10,7 +10,7 @@ mod catalog_store;
 use catalog_store::{CatalogStore, SqliteCatalogStore};
 
 mod config;
-use config::FileConfig;
+use config::{AppConfig, FileConfig};
 
 mod downloader;
 
