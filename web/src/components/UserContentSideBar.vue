@@ -1,16 +1,34 @@
 <template>
   <aside class="panel">
     <div class="tabSelectorsContainer">
-      <div @click.stop="setAlbumsTab"
-        :class="{ 'tabSelector': true, 'scaleClickFeedback': true, 'selectedTab': selectedTab === 'albums' }">
+      <div
+        @click.stop="setAlbumsTab"
+        :class="{
+          tabSelector: true,
+          scaleClickFeedback: true,
+          selectedTab: selectedTab === 'albums',
+        }"
+      >
         <h3>Albums</h3>
       </div>
-      <div @click.stop="setArtistsTab"
-        :class="{ 'tabSelector': true, 'scaleClickFeedback': true, 'selectedTab': selectedTab === 'artists' }">
+      <div
+        @click.stop="setArtistsTab"
+        :class="{
+          tabSelector: true,
+          scaleClickFeedback: true,
+          selectedTab: selectedTab === 'artists',
+        }"
+      >
         <h3>Artists</h3>
       </div>
-      <div @click.stop="setPlaylistsTab"
-        :class="{ 'tabSelector': true, 'scaleClickFeedback': true, 'selectedTab': selectedTab === 'playlists' }">
+      <div
+        @click.stop="setPlaylistsTab"
+        :class="{
+          tabSelector: true,
+          scaleClickFeedback: true,
+          selectedTab: selectedTab === 'playlists',
+        }"
+      >
         <h3>Playlists</h3>
       </div>
     </div>
@@ -26,7 +44,10 @@
     </div>
     <div v-else-if="selectedTab == 'playlists'" class="contentContainer">
       <div class="createPlaylistButtonContainer">
-        <div class="createPlaylistButton scaleClickFeedback" @click.stop="handleCreatePlaylistButtonClick">
+        <div
+          class="createPlaylistButton scaleClickFeedback"
+          @click.stop="handleCreatePlaylistButtonClick"
+        >
           <span v-if="!isCreatingPlaylist">Create</span>
           <span v-else>...</span>
         </div>
@@ -37,19 +58,18 @@
         </div>
       </div>
     </div>
-
   </aside>
 </template>
 
 <script setup>
-import '@/assets/base.css';
-import '@/assets/main.css';
-import { watch, ref, onMounted, computed } from 'vue';
-import { useUserStore } from '@/store/user.js';
-import { useRouter } from 'vue-router';
-import AlbumCard from '@/components/common/AlbumCard.vue';
-import LoadArtistListItem from '@/components/common/LoadArtistListItem.vue';
-import LoadPlaylistListItem from './common/LoadPlaylistListItem.vue';
+import "@/assets/base.css";
+import "@/assets/main.css";
+import { watch, ref, onMounted, computed } from "vue";
+import { useUserStore } from "@/store/user.js";
+import { useRouter } from "vue-router";
+import AlbumCard from "@/components/common/AlbumCard.vue";
+import LoadArtistListItem from "@/components/common/LoadArtistListItem.vue";
+import LoadPlaylistListItem from "./common/LoadPlaylistListItem.vue";
 
 const userStore = useUserStore();
 const router = useRouter();
@@ -72,36 +92,40 @@ const playlists = computed(() => {
   return [];
 });
 
-watch(() => userStore.isInitializing,
+watch(
+  () => userStore.isInitializing,
   (newIsInitializing) => {
-    loading.value = newIsInitializing
+    loading.value = newIsInitializing;
   },
-  { immediate: true }
+  { immediate: true },
 );
-watch(() => userStore.likedAlbumIds,
+watch(
+  () => userStore.likedAlbumIds,
   (likedAlbums) => {
     if (likedAlbums) {
       albumIds.value = likedAlbums;
     }
   },
-  { immediate: true }
+  { immediate: true },
 );
-watch(() => userStore.likedArtistsIds,
+watch(
+  () => userStore.likedArtistsIds,
   (likedArtists) => {
     if (likedArtists) {
       artistsIds.value = likedArtists;
     }
   },
-  { immediate: true }
+  { immediate: true },
 );
-watch(() => userStore.playlistsData,
+watch(
+  () => userStore.playlistsData,
   (newPlaylistsData) => {
     console.log("new userStore.playlistsData ", newPlaylistsData);
     if (newPlaylistsData) {
       playlistsData.value = newPlaylistsData;
     }
   },
-  { immediate: true }
+  { immediate: true },
 );
 
 const handleCreatePlaylistButtonClick = () => {
@@ -116,31 +140,31 @@ const handleCreatePlaylistButtonClick = () => {
       router.push(`/playlist/${newPlaylistId}?edit=true`);
     }
   });
-}
+};
 
 const setTab = (tabName) => {
-  if (['albums', 'artists', 'playlists'].indexOf(tabName) < 0) {
+  if (["albums", "artists", "playlists"].indexOf(tabName) < 0) {
     return false;
   }
   selectedTab.value = tabName;
-  localStorage.setItem('selectedTab', tabName);
+  localStorage.setItem("selectedTab", tabName);
   return true;
 };
 
 const setAlbumsTab = () => {
-  setTab('albums');
+  setTab("albums");
 };
 
 const setArtistsTab = () => {
-  setTab('artists');
+  setTab("artists");
 };
 
 const setPlaylistsTab = () => {
-  setTab('playlists');
+  setTab("playlists");
 };
 
 onMounted(() => {
-  if (!setTab(localStorage.getItem('selectedTab'))) {
+  if (!setTab(localStorage.getItem("selectedTab"))) {
     setAlbumsTab();
   }
 });
@@ -161,26 +185,30 @@ onMounted(() => {
   opacity: 0.4;
 }
 
-.tabSelector>h3 {
+.tabSelector > h3 {
   color: white;
   font-weight: bold;
 }
 
 .tabSelector:hover {
   background-color: var(--highlighted-panel-color);
-  transition: scale 0.3s ease, background-color 0.3s ease, opacity 0.3s ease;
-  opacity: 1.0;
+  transition:
+    scale 0.3s ease,
+    background-color 0.3s ease,
+    opacity 0.3s ease;
+  opacity: 1;
 }
 
 .tabSelector:active {
-  transition: scale 0.3s ease, opacity 0.3s ease;
-  opacity: 1.0;
+  transition:
+    scale 0.3s ease,
+    opacity 0.3s ease;
+  opacity: 1;
 }
 
 .selectedTab {
   background-color: var(--accent-color) !important;
   transition: transform;
-  ;
   opacity: 1 !important;
 }
 

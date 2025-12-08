@@ -3,14 +3,14 @@
 </template>
 
 <script setup>
-import PlusIcon from '@/components/icons/PlusIcon.vue';
-import ContextMenu from '@/components/common/contextmenu/ContextMenu.vue';
-import { ref, markRaw } from 'vue';
-import PlaylistPlusIcon from '@/components/icons/PlaylistPlusIcon.vue';
-import { useUserStore } from '@/store/user';
-import { usePlayerStore } from '@/store/player';
-import PlaylistCancelIcon from '@/components/icons/PlaylistCancelIcon.vue';
-import TrashOutlineIcon from '@/components/icons/TrashOutlineIcon.vue';
+import PlusIcon from "@/components/icons/PlusIcon.vue";
+import ContextMenu from "@/components/common/contextmenu/ContextMenu.vue";
+import { ref, markRaw } from "vue";
+import PlaylistPlusIcon from "@/components/icons/PlaylistPlusIcon.vue";
+import { useUserStore } from "@/store/user";
+import { usePlayerStore } from "@/store/player";
+import PlaylistCancelIcon from "@/components/icons/PlaylistCancelIcon.vue";
+import TrashOutlineIcon from "@/components/icons/TrashOutlineIcon.vue";
 
 const props = defineProps({
   canRemoveFromQueue: {
@@ -24,7 +24,7 @@ const props = defineProps({
   contextId: {
     type: String,
     default: null,
-  }
+  },
 });
 
 const contextMenu = ref(null);
@@ -42,51 +42,62 @@ const handleAddToQueueClick = () => {
 };
 
 const makeAddToPlaylistSubMenu = () => {
-  console.log("Make add to playlist sub menu, userStore.playlistsData.list.length: ", userStore.playlistsData.list.length);
-  return userStore.playlistsData.list.map(playlistId => (
-    {
-      name: userStore.playlistsData.by_id[playlistId].name,
-      action: () => userStore.addTracksToPlaylist(playlistId, [trackId.value], () => { })
-    }
-  ));
-}
+  console.log(
+    "Make add to playlist sub menu, userStore.playlistsData.list.length: ",
+    userStore.playlistsData.list.length,
+  );
+  return userStore.playlistsData.list.map((playlistId) => ({
+    name: userStore.playlistsData.by_id[playlistId].name,
+    action: () =>
+      userStore.addTracksToPlaylist(playlistId, [trackId.value], () => {}),
+  }));
+};
 
 const menuItems = ref([
   {
     icon: markRaw(PlusIcon),
-    name: 'Add to playlist',
-    subMenu: makeAddToPlaylistSubMenu
+    name: "Add to playlist",
+    subMenu: makeAddToPlaylistSubMenu,
   },
 ]);
 
 if (props.canRemoveFromPlaylist) {
   menuItems.value.push({
     icon: markRaw(TrashOutlineIcon),
-    name: 'Remove from this playlist',
+    name: "Remove from this playlist",
     action: ([index, track]) => {
-      console.log("TrackContextMenu remove from playlist track index:" + trackIndex.value + " contextId:" + props.contextId);
+      console.log(
+        "TrackContextMenu remove from playlist track index:" +
+          trackIndex.value +
+          " contextId:" +
+          props.contextId,
+      );
       if (Number.isInteger(trackIndex.value) && props.contextId) {
-        userStore.removeTracksFromPlaylist(props.contextId, [trackIndex.value], () => { });
+        userStore.removeTracksFromPlaylist(
+          props.contextId,
+          [trackIndex.value],
+          () => {},
+        );
       }
-    }
+    },
   });
 }
 
 menuItems.value.push({
   icon: markRaw(PlaylistPlusIcon),
-  name: 'Add to queue',
-  action: () => handleAddToQueueClick()
+  name: "Add to queue",
+  action: () => handleAddToQueueClick(),
 });
 
 if (props.canRemoveFromQueue) {
   menuItems.value.push({
     icon: markRaw(PlaylistCancelIcon),
-    name: 'Remove from queue',
+    name: "Remove from queue",
     action: ([index, track]) => {
       if (Number.isInteger(trackIndex.value)) {
         player.removeTrackFromPlaylist(trackIndex.value);
       }
-    }
+    },
   });
 }
 
@@ -102,7 +113,7 @@ defineExpose({
 </script>
 
 <style scoped>
-@import '@/assets/icons.css';
+@import "@/assets/icons.css";
 
 .contextMenuItem {
   display: flex;

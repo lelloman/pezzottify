@@ -5,7 +5,7 @@
  * for features like user data sync, remote playback control, etc.
  */
 
-import { ref, computed } from 'vue';
+import { ref, computed } from "vue";
 
 // Connection state (module-level, singleton)
 const socket = ref(null);
@@ -43,7 +43,7 @@ export function unregisterHandler(typePrefix) {
  * @returns {string}
  */
 function buildWsUrl() {
-  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
   return `${protocol}//${window.location.host}/v1/ws`;
 }
 
@@ -66,12 +66,12 @@ export function connect() {
   connecting.value = true;
 
   const wsUrl = buildWsUrl();
-  console.log('[WS] Connecting to', wsUrl);
+  console.log("[WS] Connecting to", wsUrl);
 
   socket.value = new WebSocket(wsUrl);
 
   socket.value.onopen = () => {
-    console.log('[WS] Connection opened, waiting for server confirmation...');
+    console.log("[WS] Connection opened, waiting for server confirmation...");
   };
 
   socket.value.onmessage = (event) => {
@@ -79,12 +79,12 @@ export function connect() {
       const msg = JSON.parse(event.data);
       handleMessage(msg);
     } catch (e) {
-      console.error('[WS] Failed to parse message:', e);
+      console.error("[WS] Failed to parse message:", e);
     }
   };
 
   socket.value.onclose = (event) => {
-    console.log('[WS] Connection closed:', event.code, event.reason);
+    console.log("[WS] Connection closed:", event.code, event.reason);
     connected.value = false;
     connecting.value = false;
     deviceId.value = null;
@@ -93,7 +93,7 @@ export function connect() {
 
     // Auto-reconnect after delay (unless intentional close)
     if (!intentionalClose && event.code !== 1000) {
-      console.log('[WS] Will attempt reconnect in 3 seconds...');
+      console.log("[WS] Will attempt reconnect in 3 seconds...");
       reconnectTimeout = setTimeout(() => {
         reconnectTimeout = null;
         connect();
@@ -102,7 +102,7 @@ export function connect() {
   };
 
   socket.value.onerror = (error) => {
-    console.error('[WS] Error:', error);
+    console.error("[WS] Error:", error);
   };
 }
 
@@ -120,7 +120,7 @@ export function disconnect() {
   }
 
   if (socket.value) {
-    socket.value.close(1000, 'Client disconnect');
+    socket.value.close(1000, "Client disconnect");
     socket.value = null;
     connected.value = false;
     connecting.value = false;
@@ -139,7 +139,7 @@ export function send(type, payload = null) {
     const msg = { type, payload };
     socket.value.send(JSON.stringify(msg));
   } else {
-    console.warn('[WS] Cannot send, not connected');
+    console.warn("[WS] Cannot send, not connected");
   }
 }
 
@@ -147,7 +147,7 @@ export function send(type, payload = null) {
  * Send a ping to the server.
  */
 export function ping() {
-  send('ping', null);
+  send("ping", null);
 }
 
 /**
@@ -156,39 +156,44 @@ export function ping() {
  */
 function handleMessage(msg) {
   const { type, payload } = msg;
-  console.log('[WS] Received message:', type, payload);
+  console.log("[WS] Received message:", type, payload);
 
   // Handle system messages
-  if (type === 'connected') {
+  if (type === "connected") {
     connected.value = true;
     connecting.value = false;
     deviceId.value = payload.device_id;
     serverVersion.value = payload.server_version;
-    console.log('[WS] Connected as device:', payload.device_id, 'server version:', payload.server_version);
+    console.log(
+      "[WS] Connected as device:",
+      payload.device_id,
+      "server version:",
+      payload.server_version,
+    );
     return;
   }
 
-  if (type === 'pong') {
+  if (type === "pong") {
     // Heartbeat response - ignore
     return;
   }
 
-  if (type === 'error') {
-    console.error('[WS] Server error:', payload.code, payload.message);
+  if (type === "error") {
+    console.error("[WS] Server error:", payload.code, payload.message);
     return;
   }
 
   // Dispatch to feature handlers by prefix
-  const prefix = type.split('.')[0];
+  const prefix = type.split(".")[0];
   const handler = handlers.get(prefix);
   if (handler) {
     try {
       handler(type, payload);
     } catch (e) {
-      console.error('[WS] Handler error for', type, ':', e);
+      console.error("[WS] Handler error for", type, ":", e);
     }
   } else {
-    console.warn('[WS] No handler for message type:', type);
+    console.warn("[WS] No handler for message type:", type);
   }
 }
 
@@ -202,9 +207,9 @@ export const wsServerVersion = computed(() => serverVersion.value);
  * @returns {'connected' | 'connecting' | 'disconnected'}
  */
 export const wsConnectionStatus = computed(() => {
-  if (connected.value) return 'connected';
-  if (connecting.value) return 'connecting';
-  return 'disconnected';
+  if (connected.value) return "connected";
+  if (connecting.value) return "connecting";
+  return "disconnected";
 });
 
 // Export for debugging

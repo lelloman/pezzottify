@@ -3,7 +3,7 @@
 </template>
 
 <script setup>
-import { useRouter } from 'vue-router';
+import { useRouter } from "vue-router";
 
 const props = defineProps({
   artistId: {
@@ -13,8 +13,8 @@ const props = defineProps({
   artistName: {
     type: String,
     required: true,
-  }
-})
+  },
+});
 
 const router = useRouter();
 

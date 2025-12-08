@@ -7,22 +7,14 @@
       <div class="dateInputs">
         <label class="dateLabel">
           From:
-          <input
-            type="date"
-            v-model="startDate"
-            class="dateInput"
-          />
+          <input type="date" v-model="startDate" class="dateInput" />
         </label>
         <label class="dateLabel">
           To:
-          <input
-            type="date"
-            v-model="endDate"
-            class="dateInput"
-          />
+          <input type="date" v-model="endDate" class="dateInput" />
         </label>
         <button class="refreshButton" @click="loadData" :disabled="isLoading">
-          {{ isLoading ? 'Loading...' : 'Refresh' }}
+          {{ isLoading ? "Loading..." : "Refresh" }}
         </button>
       </div>
     </div>
@@ -30,11 +22,17 @@
     <!-- Online Users -->
     <div class="onlineUsersCard">
       <div class="onlineUsersInfo">
-        <span class="onlineCount">{{ onlineUsers?.count ?? '—' }}</span>
-        <span class="onlineLabel">{{ onlineUsers?.count === 1 ? 'user online' : 'users online' }}</span>
+        <span class="onlineCount">{{ onlineUsers?.count ?? "—" }}</span>
+        <span class="onlineLabel">{{
+          onlineUsers?.count === 1 ? "user online" : "users online"
+        }}</span>
       </div>
       <div v-if="onlineUsers?.handles?.length > 0" class="onlineHandles">
-        <span v-for="handle in onlineUsers.handles" :key="handle" class="userBadge">
+        <span
+          v-for="handle in onlineUsers.handles"
+          :key="handle"
+          class="userBadge"
+        >
           {{ handle }}
         </span>
         <span v-if="onlineUsers.count > 3" class="moreUsers">
@@ -51,8 +49,14 @@
     <div class="chartSection">
       <h3 class="chartTitle">Daily Listening</h3>
       <div class="chartContainer">
-        <Line v-if="dailyChartData" :data="dailyChartData" :options="lineChartOptions" />
-        <div v-else class="noData">No listening data available for this period.</div>
+        <Line
+          v-if="dailyChartData"
+          :data="dailyChartData"
+          :options="lineChartOptions"
+        />
+        <div v-else class="noData">
+          No listening data available for this period.
+        </div>
       </div>
     </div>
 
@@ -89,8 +93,14 @@
     <div class="chartSection">
       <h3 class="chartTitle">Top Tracks</h3>
       <div class="chartContainer barChartContainer">
-        <Bar v-if="topTracksChartData" :data="topTracksChartData" :options="barChartOptions" />
-        <div v-else class="noData">No track data available for this period.</div>
+        <Bar
+          v-if="topTracksChartData"
+          :data="topTracksChartData"
+          :options="barChartOptions"
+        />
+        <div v-else class="noData">
+          No track data available for this period.
+        </div>
       </div>
     </div>
 
@@ -111,10 +121,13 @@
             </tr>
           </thead>
           <tbody>
-            <tr v-for="(track, index) in topTracksWithInfo" :key="track.track_id">
+            <tr
+              v-for="(track, index) in topTracksWithInfo"
+              :key="track.track_id"
+            >
               <td>{{ index + 1 }}</td>
               <td class="trackName">{{ track.name || track.track_id }}</td>
-              <td class="artistName">{{ track.artist || '—' }}</td>
+              <td class="artistName">{{ track.artist || "—" }}</td>
               <td>{{ track.play_count }}</td>
               <td>{{ track.completed_count }}</td>
               <td>{{ formatDuration(track.total_duration_seconds) }}</td>
@@ -128,8 +141,8 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
-import { Line, Bar } from 'vue-chartjs';
+import { ref, computed, onMounted, onUnmounted, watch } from "vue";
+import { Line, Bar } from "vue-chartjs";
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -141,8 +154,8 @@ import {
   Tooltip,
   Legend,
   Filler,
-} from 'chart.js';
-import { useRemoteStore } from '@/store/remote';
+} from "chart.js";
+import { useRemoteStore } from "@/store/remote";
 
 // Register Chart.js components
 ChartJS.register(
@@ -154,7 +167,7 @@ ChartJS.register(
   Title,
   Tooltip,
   Legend,
-  Filler
+  Filler,
 );
 
 const remoteStore = useRemoteStore();
@@ -164,8 +177,8 @@ const today = new Date();
 const thirtyDaysAgo = new Date(today);
 thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
-const formatDateForInput = (date) => date.toISOString().split('T')[0];
-const formatDateForApi = (dateStr) => dateStr.replace(/-/g, '');
+const formatDateForInput = (date) => date.toISOString().split("T")[0];
+const formatDateForApi = (dateStr) => dateStr.replace(/-/g, "");
 
 const startDate = ref(formatDateForInput(thirtyDaysAgo));
 const endDate = ref(formatDateForInput(today));
@@ -200,7 +213,7 @@ watch(topTracks, () => {
 
 // Computed that combines track stats with track info
 const topTracksWithInfo = computed(() => {
-  return topTracks.value.map(track => {
+  return topTracks.value.map((track) => {
     const info = trackInfoMap.value[track.track_id];
     return {
       ...track,
@@ -224,7 +237,7 @@ const loadData = async () => {
   ]);
 
   if (dailyResult === null && topTracksResult === null) {
-    loadError.value = 'Failed to load analytics data.';
+    loadError.value = "Failed to load analytics data.";
   } else {
     dailyStats.value = dailyResult || [];
     topTracks.value = topTracksResult || [];
@@ -246,7 +259,7 @@ const formatDate = (dateNum) => {
 
 // Format seconds to human readable duration
 const formatDuration = (seconds) => {
-  if (!seconds) return '0m';
+  if (!seconds) return "0m";
   const hours = Math.floor(seconds / 3600);
   const mins = Math.floor((seconds % 3600) / 60);
   if (hours > 0) {
@@ -262,21 +275,21 @@ const dailyChartData = computed(() => {
   const sortedStats = [...dailyStats.value].sort((a, b) => a.date - b.date);
 
   return {
-    labels: sortedStats.map(d => formatDate(d.date)),
+    labels: sortedStats.map((d) => formatDate(d.date)),
     datasets: [
       {
-        label: 'Total Plays',
-        data: sortedStats.map(d => d.total_plays),
-        borderColor: '#1db954',
-        backgroundColor: 'rgba(29, 185, 84, 0.1)',
+        label: "Total Plays",
+        data: sortedStats.map((d) => d.total_plays),
+        borderColor: "#1db954",
+        backgroundColor: "rgba(29, 185, 84, 0.1)",
         fill: true,
         tension: 0.3,
       },
       {
-        label: 'Completed Plays',
-        data: sortedStats.map(d => d.completed_plays),
-        borderColor: '#1ed760',
-        backgroundColor: 'rgba(30, 215, 96, 0.1)',
+        label: "Completed Plays",
+        data: sortedStats.map((d) => d.completed_plays),
+        borderColor: "#1ed760",
+        backgroundColor: "rgba(30, 215, 96, 0.1)",
         fill: true,
         tension: 0.3,
       },
@@ -294,14 +307,14 @@ const topTracksChartData = computed(() => {
     labels: top10.map((t, i) => {
       const name = t.name || `Track ${i + 1}`;
       // Truncate long names for chart readability
-      return name.length > 20 ? name.slice(0, 17) + '...' : name;
+      return name.length > 20 ? name.slice(0, 17) + "..." : name;
     }),
     datasets: [
       {
-        label: 'Play Count',
-        data: top10.map(t => t.play_count),
-        backgroundColor: 'rgba(29, 185, 84, 0.8)',
-        borderColor: '#1db954',
+        label: "Play Count",
+        data: top10.map((t) => t.play_count),
+        backgroundColor: "rgba(29, 185, 84, 0.8)",
+        borderColor: "#1db954",
         borderWidth: 1,
       },
     ],
@@ -313,20 +326,20 @@ const lineChartOptions = {
   maintainAspectRatio: false,
   plugins: {
     legend: {
-      position: 'top',
+      position: "top",
       labels: {
-        color: '#b3b3b3',
+        color: "#b3b3b3",
       },
     },
   },
   scales: {
     x: {
-      ticks: { color: '#b3b3b3' },
-      grid: { color: 'rgba(255, 255, 255, 0.1)' },
+      ticks: { color: "#b3b3b3" },
+      grid: { color: "rgba(255, 255, 255, 0.1)" },
     },
     y: {
-      ticks: { color: '#b3b3b3' },
-      grid: { color: 'rgba(255, 255, 255, 0.1)' },
+      ticks: { color: "#b3b3b3" },
+      grid: { color: "rgba(255, 255, 255, 0.1)" },
       beginAtZero: true,
     },
   },
@@ -342,12 +355,12 @@ const barChartOptions = {
   },
   scales: {
     x: {
-      ticks: { color: '#b3b3b3' },
-      grid: { color: 'rgba(255, 255, 255, 0.1)' },
+      ticks: { color: "#b3b3b3" },
+      grid: { color: "rgba(255, 255, 255, 0.1)" },
     },
     y: {
-      ticks: { color: '#b3b3b3' },
-      grid: { color: 'rgba(255, 255, 255, 0.1)' },
+      ticks: { color: "#b3b3b3" },
+      grid: { color: "rgba(255, 255, 255, 0.1)" },
       beginAtZero: true,
     },
   },
@@ -367,7 +380,10 @@ let onlineUsersInterval = null;
 
 onMounted(() => {
   loadData();
-  onlineUsersInterval = setInterval(refreshOnlineUsers, ONLINE_USERS_POLL_INTERVAL);
+  onlineUsersInterval = setInterval(
+    refreshOnlineUsers,
+    ONLINE_USERS_POLL_INTERVAL,
+  );
 });
 
 onUnmounted(() => {

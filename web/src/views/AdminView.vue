@@ -12,9 +12,7 @@
       </div>
     </header>
     <div class="adminBody">
-      <div v-if="isLoading" class="loadingState">
-        Loading...
-      </div>
+      <div v-if="isLoading" class="loadingState">Loading...</div>
       <template v-else>
         <AdminSidebar
           :sections="availableSections"
@@ -29,15 +27,15 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue';
-import { useRoute, useRouter } from 'vue-router';
-import { useUserStore } from '@/store/user';
-import CrossIcon from '@/components/icons/CrossIcon.vue';
-import AdminSidebar from '@/components/admin/AdminSidebar.vue';
-import UserManagement from '@/components/admin/UserManagement.vue';
-import AnalyticsDashboard from '@/components/admin/AnalyticsDashboard.vue';
-import ServerControl from '@/components/admin/ServerControl.vue';
-import { wsConnectionStatus, wsServerVersion } from '@/services/websocket';
+import { ref, computed, onMounted, watch } from "vue";
+import { useRoute, useRouter } from "vue-router";
+import { useUserStore } from "@/store/user";
+import CrossIcon from "@/components/icons/CrossIcon.vue";
+import AdminSidebar from "@/components/admin/AdminSidebar.vue";
+import UserManagement from "@/components/admin/UserManagement.vue";
+import AnalyticsDashboard from "@/components/admin/AnalyticsDashboard.vue";
+import ServerControl from "@/components/admin/ServerControl.vue";
+import { wsConnectionStatus, wsServerVersion } from "@/services/websocket";
 
 const route = useRoute();
 const router = useRouter();
@@ -47,29 +45,55 @@ const isLoading = ref(true);
 // Connection status (same as TopBar)
 const connectionStatusClass = computed(() => {
   switch (wsConnectionStatus.value) {
-    case 'connected': return 'status-connected';
-    case 'connecting': return 'status-connecting';
-    default: return 'status-disconnected';
+    case "connected":
+      return "status-connected";
+    case "connecting":
+      return "status-connecting";
+    default:
+      return "status-disconnected";
   }
 });
 
 const connectionTitle = computed(() => {
   switch (wsConnectionStatus.value) {
-    case 'connected': return `Connected (Server: v${wsServerVersion.value || 'unknown'})`;
-    case 'connecting': return 'Connecting...';
-    default: return 'Disconnected';
+    case "connected":
+      return `Connected (Server: v${wsServerVersion.value || "unknown"})`;
+    case "connecting":
+      return "Connecting...";
+    default:
+      return "Disconnected";
   }
 });
 
 // Define available sections based on permissions
 const allSections = [
-  { id: 'users', label: 'Users', permission: 'ManagePermissions', component: UserManagement, route: '/admin/users' },
-  { id: 'analytics', label: 'Analytics', permission: 'ViewAnalytics', component: AnalyticsDashboard, route: '/admin/analytics' },
-  { id: 'server', label: 'Server', permission: 'RebootServer', component: ServerControl, route: '/admin/server' },
+  {
+    id: "users",
+    label: "Users",
+    permission: "ManagePermissions",
+    component: UserManagement,
+    route: "/admin/users",
+  },
+  {
+    id: "analytics",
+    label: "Analytics",
+    permission: "ViewAnalytics",
+    component: AnalyticsDashboard,
+    route: "/admin/analytics",
+  },
+  {
+    id: "server",
+    label: "Server",
+    permission: "RebootServer",
+    component: ServerControl,
+    route: "/admin/server",
+  },
 ];
 
 const availableSections = computed(() => {
-  return allSections.filter(section => userStore.hasPermission(section.permission));
+  return allSections.filter((section) =>
+    userStore.hasPermission(section.permission),
+  );
 });
 
 // Get active section from route
@@ -96,7 +120,7 @@ watch(availableSections, (sections) => {
 });
 
 const activeSectionComponent = computed(() => {
-  const section = allSections.find(s => s.id === activeSection.value);
+  const section = allSections.find((s) => s.id === activeSection.value);
   return section?.component || null;
 });
 </script>
@@ -130,7 +154,9 @@ const activeSectionComponent = computed(() => {
   color: var(--text-subdued);
   text-decoration: none;
   border-radius: var(--radius-full);
-  transition: color var(--transition-fast), background-color var(--transition-fast);
+  transition:
+    color var(--transition-fast),
+    background-color var(--transition-fast);
 }
 
 .closeButton:hover {
@@ -187,8 +213,13 @@ const activeSectionComponent = computed(() => {
 }
 
 @keyframes pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.5; }
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
 }
 
 .adminBody {

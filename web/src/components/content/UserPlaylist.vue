@@ -7,18 +7,37 @@
           {{ playlist.name }}
         </h1>
 
-        <EditIcon class="editIcon scaleClickFeedback" @click.stop="handleEditButtonClick" />
-
+        <EditIcon
+          class="editIcon scaleClickFeedback"
+          @click.stop="handleEditButtonClick"
+        />
       </div>
       <div class="commandsSection">
-        <PlayIcon class="commandIcon scaleClickFeedback bigIcon" @click.stop="handleClickOnPlay" />
-        <TrashIcon class="commandIcon scaleClickFeedback mediumIcon" @click.stop="handleClickOnDelete" />
+        <PlayIcon
+          class="commandIcon scaleClickFeedback bigIcon"
+          @click.stop="handleClickOnPlay"
+        />
+        <TrashIcon
+          class="commandIcon scaleClickFeedback mediumIcon"
+          @click.stop="handleClickOnDelete"
+        />
       </div>
       <div class="tracksSection">
-        <div v-for="(trackId, trackIndex) in playlist.tracks" :key="trackIndex + trackId" class="track"
-          @contextmenu.prevent="openTrackContextMenu($event, trackId, trackIndex)">
-          <LoadTrackListItem :contextId="playlistId" :trackId="trackId" :trackNumber="trackIndex + 1"
-            @track-clicked="handleTrackSelection" :isCurrentlyPlaying="trackIndex == currentTrackIndex" />
+        <div
+          v-for="(trackId, trackIndex) in playlist.tracks"
+          :key="trackIndex + trackId"
+          class="track"
+          @contextmenu.prevent="
+            openTrackContextMenu($event, trackId, trackIndex)
+          "
+        >
+          <LoadTrackListItem
+            :contextId="playlistId"
+            :trackId="trackId"
+            :trackNumber="trackIndex + 1"
+            @track-clicked="handleTrackSelection"
+            :isCurrentlyPlaying="trackIndex == currentTrackIndex"
+          />
         </div>
       </div>
     </div>
@@ -26,49 +45,62 @@
   </div>
 
   <Transition>
-    <ConfirmationDialog v-if="deleteConfirmationDialogOpen" :isOpen="deleteConfirmationDialogOpen"
-      :closeCallback="() => deleteConfirmationDialogOpen = false" :title="'Delete playlist'"
-      :positiveButtonCallback="handleDeletePlaylistConfirmation">
-
+    <ConfirmationDialog
+      v-if="deleteConfirmationDialogOpen"
+      :isOpen="deleteConfirmationDialogOpen"
+      :closeCallback="() => (deleteConfirmationDialogOpen = false)"
+      :title="'Delete playlist'"
+      :positiveButtonCallback="handleDeletePlaylistConfirmation"
+    >
       <template #message>
-        Are you sure you want to delete playlist <span style="font-weight: bold;">{{ playlist?.name }}</span>?
+        Are you sure you want to delete playlist
+        <span style="font-weight: bold">{{ playlist?.name }}</span
+        >?
       </template>
     </ConfirmationDialog>
   </Transition>
 
   <Transition>
-    <ConfirmationDialog v-if="isEditMode" :isOpen="isEditMode" :closeCallback="closeEditMode"
-      :title="'Edit playlist name'" :negativeButtonText="'Cancel'" :positiveButtonText="'Save'"
-      :positiveButtonCallback="handleChangeNameButtonClicked">
-
+    <ConfirmationDialog
+      v-if="isEditMode"
+      :isOpen="isEditMode"
+      :closeCallback="closeEditMode"
+      :title="'Edit playlist name'"
+      :negativeButtonText="'Cancel'"
+      :positiveButtonText="'Save'"
+      :positiveButtonCallback="handleChangeNameButtonClicked"
+    >
       <template #message>
         <input id="editPlaylistNameInput" />
       </template>
-
     </ConfirmationDialog>
   </Transition>
 
-  <TrackContextMenu :contextId="playlistId" :canRemoveFromPlaylist="true" ref="trackContextMenuRef" />
+  <TrackContextMenu
+    :contextId="playlistId"
+    :canRemoveFromPlaylist="true"
+    ref="trackContextMenuRef"
+  />
 </template>
 
 <script setup>
-import { watch, ref, computed, onBeforeUnmount } from 'vue';
-import PlayIcon from '@/components/icons/PlayIcon.vue';
-import TrashIcon from '../icons/TrashIcon.vue';
-import ConfirmationDialog from '@/components/common/ConfirmationDialog.vue';
-import { useRoute, useRouter } from 'vue-router';
-import { useUserStore } from '@/store/user';
-import EditIcon from '@/components/icons/EditIcon.vue';
-import LoadTrackListItem from '@/components/common/LoadTrackListItem.vue';
-import { usePlayerStore } from '@/store/player';
-import TrackContextMenu from '@/components/common/contextmenu/TrackContextMenu.vue';
+import { watch, ref, computed, onBeforeUnmount } from "vue";
+import PlayIcon from "@/components/icons/PlayIcon.vue";
+import TrashIcon from "../icons/TrashIcon.vue";
+import ConfirmationDialog from "@/components/common/ConfirmationDialog.vue";
+import { useRoute, useRouter } from "vue-router";
+import { useUserStore } from "@/store/user";
+import EditIcon from "@/components/icons/EditIcon.vue";
+import LoadTrackListItem from "@/components/common/LoadTrackListItem.vue";
+import { usePlayerStore } from "@/store/player";
+import TrackContextMenu from "@/components/common/contextmenu/TrackContextMenu.vue";
 
 // Define playlistId prop
 const props = defineProps({
   playlistId: {
     type: String,
     required: true,
-  }
+  },
 });
 
 const router = useRouter();
@@ -87,21 +119,21 @@ const isEditMode = ref(false);
 
 const handleEditButtonClick = () => {
   router.push({ query: { edit: !isEditMode.value } });
-}
+};
 
 const playlist = computed(() => {
   return playlistRef.value?.value;
 });
 
 const openTrackContextMenu = (event, trackId, trackIndex) => {
-  console.log('Open track context menu:', trackId, trackIndex);
+  console.log("Open track context menu:", trackId, trackIndex);
   trackContextMenuRef.value.openMenu(event, trackId, trackIndex);
 };
 
 const handleChangeNameButtonClicked = async () => {
   const newName = document.getElementById("editPlaylistNameInput").value;
   closeEditMode();
-  userStore.updatePlaylistName(props.playlistId, newName, () => { });
+  userStore.updatePlaylistName(props.playlistId, newName, () => {});
 };
 
 const closeEditMode = () => {
@@ -110,35 +142,52 @@ const closeEditMode = () => {
 
 const handleDeletePlaylistConfirmation = async () => {
   deleteConfirmationDialogOpen.value = false;
-  userStore.deletePlaylist(props.playlistId, () => router.push('/'));
+  userStore.deletePlaylist(props.playlistId, () => router.push("/"));
 };
 
 const handleClickOnPlay = () => {
-  console.log('Play playlist:', props.playlistId);
+  console.log("Play playlist:", props.playlistId);
   player.setUserPlaylist(playlist.value);
 };
 
 const handleClickOnDelete = () => {
-  console.log('Delete playlist:', props.playlistId);
+  console.log("Delete playlist:", props.playlistId);
   deleteConfirmationDialogOpen.value = true;
 };
 
 const handleTrackSelection = (track) => {
-  console.log('Selected track:', track);
+  console.log("Selected track:", track);
 };
 
-watch([() => player.currentTrackIndex, () => player.currentPlaylist],
+watch(
+  [() => player.currentTrackIndex, () => player.currentPlaylist],
   ([newTrackIndex, newPlaylist]) => {
-    console.log("UserPlaylist.vue watcher - TrackIndex:", newTrackIndex, "Playlist:", newPlaylist, "PlaylistId:", props.playlistId);
-    if (newPlaylist && newPlaylist.context && newPlaylist.context.id === props.playlistId && newPlaylist.context.edited === false && Number.isInteger(newTrackIndex)) {
-      console.log("UserPlaylist.vue - Setting currentTrackIndex to:", newTrackIndex);
+    console.log(
+      "UserPlaylist.vue watcher - TrackIndex:",
+      newTrackIndex,
+      "Playlist:",
+      newPlaylist,
+      "PlaylistId:",
+      props.playlistId,
+    );
+    if (
+      newPlaylist &&
+      newPlaylist.context &&
+      newPlaylist.context.id === props.playlistId &&
+      newPlaylist.context.edited === false &&
+      Number.isInteger(newTrackIndex)
+    ) {
+      console.log(
+        "UserPlaylist.vue - Setting currentTrackIndex to:",
+        newTrackIndex,
+      );
       currentTrackIndex.value = newTrackIndex;
     } else {
       currentTrackIndex.value = null;
     }
   },
-  { immediate: true }
-)
+  { immediate: true },
+);
 
 watch(
   route,
@@ -146,30 +195,31 @@ watch(
     isEditMode.value = newRoute.query.edit ? true : false;
     if (isEditMode.value && playlist.value) {
       setTimeout(() => {
-        document.getElementById("editPlaylistNameInput").value = playlist.value.name;
+        document.getElementById("editPlaylistNameInput").value =
+          playlist.value.name;
         document.getElementById("editPlaylistNameInput").focus();
       }, 100);
     }
   },
-  { immediate: true }
+  { immediate: true },
 );
 
 // Watch for playlist ID changes to load data
 watch(
   () => props.playlistId,
   (newId) => {
-    console.log('UserPlaylist Load playlist:', newId);
+    console.log("UserPlaylist Load playlist:", newId);
     if (newId) {
       if (playlistRef.value) {
         userStore.putPlaylistRef(playlistRef.value.id);
       }
       playlistRef.value = userStore.getPlaylistRef(newId);
-      console.log('UserPlaylist got playlist ref');
+      console.log("UserPlaylist got playlist ref");
       console.log(playlistRef.value);
-      userStore.loadPlaylistData(newId).finally(() => loading.value = false);
+      userStore.loadPlaylistData(newId).finally(() => (loading.value = false));
     }
   },
-  { immediate: true }
+  { immediate: true },
 );
 
 onBeforeUnmount(() => {
@@ -178,7 +228,6 @@ onBeforeUnmount(() => {
     userStore.putPlaylistRef(props.playlistId);
   }
 });
-
 </script>
 
 <style scoped>

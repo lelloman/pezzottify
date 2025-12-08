@@ -53,7 +53,9 @@ defineProps({
   color: var(--text-subdued);
   font-size: var(--text-base);
   cursor: pointer;
-  transition: color var(--transition-fast), background-color var(--transition-fast);
+  transition:
+    color var(--transition-fast),
+    background-color var(--transition-fast);
 }
 
 .sidebarButton:hover {

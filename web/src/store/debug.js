@@ -1,12 +1,13 @@
-import { defineStore } from 'pinia';
-import { ref, watch } from 'vue';
+import { defineStore } from "pinia";
+import { ref, watch } from "vue";
 
-export const useDebugStore = defineStore('debug', () => {
-
-  const imagesEnabledValue = localStorage.getItem("imagesEnabled") === "false" ? false : true;
+export const useDebugStore = defineStore("debug", () => {
+  const imagesEnabledValue =
+    localStorage.getItem("imagesEnabled") === "false" ? false : true;
   const imagesEnabled = ref(imagesEnabledValue);
 
-  const blockRightClickValue = localStorage.getItem("blockRightClick") === "false" ? false : true;
+  const blockRightClickValue =
+    localStorage.getItem("blockRightClick") === "false" ? false : true;
   const blockRightClick = ref(blockRightClickValue);
 
   const blockHttpCache = ref(localStorage.getItem("blockHttpCache") === "true");
@@ -25,8 +26,11 @@ export const useDebugStore = defineStore('debug', () => {
       }
     }
     keysToRemove.forEach((key) => localStorage.removeItem(key));
-  }
+  };
   return {
-    imagesEnabled, blockHttpCache, blockRightClick, clearLocalStorageStatics,
+    imagesEnabled,
+    blockHttpCache,
+    blockRightClick,
+    clearLocalStorageStatics,
   };
 });

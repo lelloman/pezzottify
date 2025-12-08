@@ -1,4 +1,4 @@
-@import './base.css';
+@import "./base.css";
 
 /* ============================================
    Global Styles & Layout
@@ -18,9 +18,18 @@
   color: inherit;
 }
 
-#app h1, #app h2, #app h3, #app h4, #app h5, #app h6,
-#app p, #app span, #app div, #app li, #app label {
-  color: #FFFFFF;
+#app h1,
+#app h2,
+#app h3,
+#app h4,
+#app h5,
+#app h6,
+#app p,
+#app span,
+#app div,
+#app li,
+#app label {
+  color: #ffffff;
 }
 
 /* ============================================

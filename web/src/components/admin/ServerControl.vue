@@ -6,8 +6,8 @@
       <div class="controlInfo">
         <h3 class="controlTitle">Restart Server</h3>
         <p class="controlDescription">
-          Initiate a server restart. The server will gracefully shut down and restart.
-          All connected clients will be temporarily disconnected.
+          Initiate a server restart. The server will gracefully shut down and
+          restart. All connected clients will be temporarily disconnected.
         </p>
       </div>
       <button
@@ -15,7 +15,7 @@
         :disabled="isRebooting"
         @click="showConfirmDialog = true"
       >
-        {{ isRebooting ? 'Rebooting...' : 'Reboot Server' }}
+        {{ isRebooting ? "Rebooting..." : "Reboot Server" }}
       </button>
     </div>
 
@@ -25,24 +25,25 @@
 
     <ConfirmationDialog
       :isOpen="showConfirmDialog"
-      :closeCallback="() => showConfirmDialog = false"
+      :closeCallback="() => (showConfirmDialog = false)"
       :positiveButtonCallback="handleReboot"
       title="Confirm Server Reboot"
       positiveButtonText="Reboot"
       negativeButtonText="Cancel"
     >
       <template #message>
-        Are you sure you want to reboot the server? This will disconnect all clients temporarily.
+        Are you sure you want to reboot the server? This will disconnect all
+        clients temporarily.
       </template>
     </ConfirmationDialog>
   </div>
 </template>
 
 <script setup>
-import { ref, watch } from 'vue';
-import { useRemoteStore } from '@/store/remote';
-import ConfirmationDialog from '@/components/common/ConfirmationDialog.vue';
-import { wsConnectionStatus } from '@/services/websocket';
+import { ref, watch } from "vue";
+import { useRemoteStore } from "@/store/remote";
+import ConfirmationDialog from "@/components/common/ConfirmationDialog.vue";
+import { wsConnectionStatus } from "@/services/websocket";
 
 const remoteStore = useRemoteStore();
 
@@ -52,7 +53,11 @@ const rebootError = ref(null);
 
 // Reset rebooting state when connection is restored after a reboot
 watch(wsConnectionStatus, (newStatus, oldStatus) => {
-  if (isRebooting.value && newStatus === 'connected' && oldStatus !== 'connected') {
+  if (
+    isRebooting.value &&
+    newStatus === "connected" &&
+    oldStatus !== "connected"
+  ) {
     isRebooting.value = false;
   }
 });
@@ -65,7 +70,7 @@ const handleReboot = async () => {
   const success = await remoteStore.rebootServer();
 
   if (!success) {
-    rebootError.value = 'Failed to initiate server reboot. Please try again.';
+    rebootError.value = "Failed to initiate server reboot. Please try again.";
     isRebooting.value = false;
   }
   // If successful, the server will restart and we'll lose connection
@@ -124,7 +129,9 @@ const handleReboot = async () => {
   font-size: var(--text-base);
   font-weight: var(--font-medium);
   cursor: pointer;
-  transition: background-color var(--transition-fast), opacity var(--transition-fast);
+  transition:
+    background-color var(--transition-fast),
+    opacity var(--transition-fast);
   flex-shrink: 0;
 }
 

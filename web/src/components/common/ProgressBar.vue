@@ -19,7 +19,7 @@
 </template>
 
 <script setup>
-import { ref, defineProps, defineEmits, onMounted, onUnmounted } from 'vue';
+import { ref, defineProps, defineEmits, onMounted, onUnmounted } from "vue";
 
 const props = defineProps({
   progress: {
@@ -29,7 +29,11 @@ const props = defineProps({
   },
 });
 
-const emit = defineEmits(['update:progress', 'update:startDrag', 'update:stopDrag']);
+const emit = defineEmits([
+  "update:progress",
+  "update:startDrag",
+  "update:stopDrag",
+]);
 
 const progressBar = ref(null);
 const isDragging = ref(false);
@@ -37,14 +41,14 @@ const isDragging = ref(false);
 const startDrag = (event) => {
   event.preventDefault();
   isDragging.value = true;
-  emit('update:startDrag');
+  emit("update:startDrag");
   updateProgress(event);
 
   // Support both mouse and touch events
-  window.addEventListener('mousemove', onDrag);
-  window.addEventListener('mouseup', stopDrag);
-  window.addEventListener('touchmove', onDrag, { passive: false });
-  window.addEventListener('touchend', stopDrag);
+  window.addEventListener("mousemove", onDrag);
+  window.addEventListener("mouseup", stopDrag);
+  window.addEventListener("touchmove", onDrag, { passive: false });
+  window.addEventListener("touchend", stopDrag);
 };
 
 const onDrag = (event) => {
@@ -55,12 +59,12 @@ const onDrag = (event) => {
 };
 
 const stopDrag = (event) => {
-  emit('update:stopDrag', event)
+  emit("update:stopDrag", event);
   isDragging.value = false;
-  window.removeEventListener('mousemove', onDrag);
-  window.removeEventListener('mouseup', stopDrag);
-  window.removeEventListener('touchmove', onDrag);
-  window.removeEventListener('touchend', stopDrag);
+  window.removeEventListener("mousemove", onDrag);
+  window.removeEventListener("mouseup", stopDrag);
+  window.removeEventListener("touchmove", onDrag);
+  window.removeEventListener("touchend", stopDrag);
 };
 
 const updateProgress = (event) => {
@@ -70,7 +74,7 @@ const updateProgress = (event) => {
     const clientX = event.touches ? event.touches[0].clientX : event.clientX;
     const offsetX = clientX - rect.left;
     const newProgress = Math.min(Math.max(offsetX / rect.width, 0), 1);
-    emit('update:progress', newProgress);
+    emit("update:progress", newProgress);
   }
 };
 
@@ -79,21 +83,21 @@ const handleKeyDown = (event) => {
   let newProgress = props.progress;
 
   switch (event.key) {
-    case 'ArrowLeft':
-    case 'ArrowDown':
+    case "ArrowLeft":
+    case "ArrowDown":
       event.preventDefault();
       newProgress = Math.max(0, props.progress - step);
       break;
-    case 'ArrowRight':
-    case 'ArrowUp':
+    case "ArrowRight":
+    case "ArrowUp":
       event.preventDefault();
       newProgress = Math.min(1, props.progress + step);
       break;
-    case 'Home':
+    case "Home":
       event.preventDefault();
       newProgress = 0;
       break;
-    case 'End':
+    case "End":
       event.preventDefault();
       newProgress = 1;
       break;
@@ -101,14 +105,14 @@ const handleKeyDown = (event) => {
       return;
   }
 
-  emit('update:startDrag');
-  emit('update:progress', newProgress);
-  emit('update:stopDrag', event);
+  emit("update:startDrag");
+  emit("update:progress", newProgress);
+  emit("update:stopDrag", event);
 };
 onMounted(() => {
   onUnmounted(() => {
-    window.removeEventListener('mousemove', onDrag);
-    window.removeEventListener('mouseup', stopDrag);
+    window.removeEventListener("mousemove", onDrag);
+    window.removeEventListener("mouseup", stopDrag);
   });
 });
 </script>
@@ -156,7 +160,9 @@ onMounted(() => {
   height: 100%;
   background-color: var(--text-subdued);
   border-radius: inherit;
-  transition: background-color var(--transition-base), width var(--transition-fast);
+  transition:
+    background-color var(--transition-base),
+    width var(--transition-fast);
   display: flex;
   align-items: center;
   justify-content: flex-end;
@@ -174,7 +180,9 @@ onMounted(() => {
   border-radius: var(--radius-full);
   opacity: 0;
   transform: scale(0);
-  transition: opacity var(--transition-fast), transform var(--transition-fast);
+  transition:
+    opacity var(--transition-fast),
+    transform var(--transition-fast);
   box-shadow: var(--shadow-md);
   pointer-events: none;
 }
@@ -193,7 +201,7 @@ onMounted(() => {
 
 /* Increase hit area for better touch support */
 .progress-bar::before {
-  content: '';
+  content: "";
   position: absolute;
   top: -8px;
   bottom: -8px;

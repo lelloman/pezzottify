@@ -1,14 +1,18 @@
 <template>
-  <SlidingText :infiniteAnimation="props.infiniteAnimation" :animateOnHover="props.animateOnHover" :data-id="track.id"
-    @click="handleClick">
+  <SlidingText
+    :infiniteAnimation="props.infiniteAnimation"
+    :animateOnHover="props.animateOnHover"
+    :data-id="track.id"
+    @click="handleClick"
+  >
     <span class="track-name">{{ sanitizedTrackName }}</span>
   </SlidingText>
 </template>
 
 <script setup>
-import { useRouter } from 'vue-router';
-import { computed } from 'vue';
-import SlidingText from './SlidingText.vue';
+import { useRouter } from "vue-router";
+import { computed } from "vue";
+import SlidingText from "./SlidingText.vue";
 
 const props = defineProps({
   track: {
@@ -30,11 +34,11 @@ const router = useRouter();
 const sanitizedTrackName = computed(() => {
   if (props.track.name) {
     return props.track.name
-      .replace(/<br\s*\/?>/gi, ' ')  // Replace <br> tags with spaces
-      .replace(/\r?\n|\r/g, ' ')     // Replace line feeds with spaces
-      .replace(/<[^>]*>/g, '');      // Remove any remaining HTML tags
+      .replace(/<br\s*\/?>/gi, " ") // Replace <br> tags with spaces
+      .replace(/\r?\n|\r/g, " ") // Replace line feeds with spaces
+      .replace(/<[^>]*>/g, ""); // Remove any remaining HTML tags
   } else {
-    return '';
+    return "";
   }
 });
 

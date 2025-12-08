@@ -1,29 +1,32 @@
 <script setup>
-import { ref } from 'vue';
-import { useAuthStore } from '@/store/auth.js';
-import { useRouter } from 'vue-router';
+import { ref } from "vue";
+import { useAuthStore } from "@/store/auth.js";
+import { useRouter } from "vue-router";
 
 const authStore = useAuthStore();
 const router = useRouter();
-const username = ref('');
-const password = ref('');
-const error = ref('');
+const username = ref("");
+const password = ref("");
+const error = ref("");
 const isLoading = ref(false);
 
 async function handleLogin() {
   if (!username.value || !password.value) {
-    error.value = 'Please enter both username and password';
+    error.value = "Please enter both username and password";
     return;
   }
 
   isLoading.value = true;
-  error.value = '';
+  error.value = "";
 
   try {
-    await authStore.login({ username: username.value, password: password.value });
-    router.push('/');
+    await authStore.login({
+      username: username.value,
+      password: password.value,
+    });
+    router.push("/");
   } catch (e) {
-    error.value = 'Invalid username or password';
+    error.value = "Invalid username or password";
   } finally {
     isLoading.value = false;
   }

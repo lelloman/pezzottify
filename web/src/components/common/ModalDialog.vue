@@ -9,7 +9,7 @@
 </template>
 
 <script setup>
-import { defineProps, onUnmounted, watch } from 'vue';
+import { defineProps, onUnmounted, watch } from "vue";
 
 const props = defineProps({
   isOpen: {
@@ -28,22 +28,26 @@ const props = defineProps({
 
 const closeOnEsc = (e) => {
   console.log("Modal dialog close on Esc listener");
-  if (e.key === 'Escape') {
+  if (e.key === "Escape") {
     props.closeCallback();
   }
 };
 
-watch(() => props.isOpen, (isOpen) => {
-  if (isOpen && props.closeOnEsc === true) {
-    window.addEventListener('keydown', closeOnEsc);
-  } else {
-    window.removeEventListener('keydown', closeOnEsc);
-  }
-}, { immediate: true });
+watch(
+  () => props.isOpen,
+  (isOpen) => {
+    if (isOpen && props.closeOnEsc === true) {
+      window.addEventListener("keydown", closeOnEsc);
+    } else {
+      window.removeEventListener("keydown", closeOnEsc);
+    }
+  },
+  { immediate: true },
+);
 
 // Removes the esc listener when the component is unmounted just in case?
 onUnmounted(() => {
-  window.removeEventListener('keydown', closeOnEsc);
+  window.removeEventListener("keydown", closeOnEsc);
 });
 </script>
 

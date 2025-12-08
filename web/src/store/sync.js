@@ -1,12 +1,12 @@
-import { defineStore } from 'pinia';
-import { ref } from 'vue';
-import { useRemoteStore } from './remote';
-import { useUserStore } from './user';
+import { defineStore } from "pinia";
+import { ref } from "vue";
+import { useRemoteStore } from "./remote";
+import { useUserStore } from "./user";
 
 // localStorage key for sync cursor
-const SYNC_CURSOR_KEY = 'pezzottify_sync_cursor';
+const SYNC_CURSOR_KEY = "pezzottify_sync_cursor";
 
-export const useSyncStore = defineStore('sync', () => {
+export const useSyncStore = defineStore("sync", () => {
   const remoteStore = useRemoteStore();
   const userStore = useUserStore();
 
@@ -27,7 +27,7 @@ export const useSyncStore = defineStore('sync', () => {
         cursor.value = parseInt(stored, 10) || 0;
       }
     } catch (error) {
-      console.error('Failed to load sync cursor:', error);
+      console.error("Failed to load sync cursor:", error);
       cursor.value = 0;
     }
   };
@@ -37,7 +37,7 @@ export const useSyncStore = defineStore('sync', () => {
       cursor.value = newCursor;
       localStorage.setItem(SYNC_CURSOR_KEY, String(newCursor));
     } catch (error) {
-      console.error('Failed to save sync cursor:', error);
+      console.error("Failed to save sync cursor:", error);
     }
   };
 
@@ -46,7 +46,7 @@ export const useSyncStore = defineStore('sync', () => {
       cursor.value = 0;
       localStorage.removeItem(SYNC_CURSOR_KEY);
     } catch (error) {
-      console.error('Failed to clear sync cursor:', error);
+      console.error("Failed to clear sync cursor:", error);
     }
   };
 
@@ -60,48 +60,51 @@ export const useSyncStore = defineStore('sync', () => {
     const { type, payload } = event;
 
     switch (type) {
-      case 'content_liked':
+      case "content_liked":
         userStore.applyContentLiked(payload.content_type, payload.content_id);
         break;
 
-      case 'content_unliked':
+      case "content_unliked":
         userStore.applyContentUnliked(payload.content_type, payload.content_id);
         break;
 
-      case 'setting_changed':
+      case "setting_changed":
         userStore.applySettingChanged(payload.setting);
         break;
 
-      case 'playlist_created':
+      case "playlist_created":
         userStore.applyPlaylistCreated(payload.playlist_id, payload.name);
         break;
 
-      case 'playlist_renamed':
+      case "playlist_renamed":
         userStore.applyPlaylistRenamed(payload.playlist_id, payload.name);
         break;
 
-      case 'playlist_deleted':
+      case "playlist_deleted":
         userStore.applyPlaylistDeleted(payload.playlist_id);
         break;
 
-      case 'playlist_tracks_updated':
-        userStore.applyPlaylistTracksUpdated(payload.playlist_id, payload.track_ids);
+      case "playlist_tracks_updated":
+        userStore.applyPlaylistTracksUpdated(
+          payload.playlist_id,
+          payload.track_ids,
+        );
         break;
 
-      case 'permission_granted':
+      case "permission_granted":
         userStore.applyPermissionGranted(payload.permission);
         break;
 
-      case 'permission_revoked':
+      case "permission_revoked":
         userStore.applyPermissionRevoked(payload.permission);
         break;
 
-      case 'permissions_reset':
+      case "permissions_reset":
         userStore.applyPermissionsReset(payload.permissions);
         break;
 
       default:
-        console.warn('Unknown sync event type:', type);
+        console.warn("Unknown sync event type:", type);
     }
   };
 
@@ -110,7 +113,7 @@ export const useSyncStore = defineStore('sync', () => {
   // =====================================================
 
   const fullSync = async () => {
-    console.log('Performing full sync...');
+    console.log("Performing full sync...");
     isSyncing.value = true;
     lastSyncError.value = null;
 
@@ -125,13 +128,15 @@ export const useSyncStore = defineStore('sync', () => {
       // Convert settings array to object format
       const settingsObj = {};
       if (state.settings) {
-        state.settings.forEach(setting => {
+        state.settings.forEach((setting) => {
           // Handle different setting formats from server
-          if (typeof setting === 'object') {
+          if (typeof setting === "object") {
             // Settings come as objects like { DirectDownloadsEnabled: true }
             const key = Object.keys(setting)[0];
-            if (key === 'DirectDownloadsEnabled') {
-              settingsObj['enable_direct_downloads'] = setting[key] ? 'true' : 'false';
+            if (key === "DirectDownloadsEnabled") {
+              settingsObj["enable_direct_downloads"] = setting[key]
+                ? "true"
+                : "false";
             } else {
               settingsObj[key] = setting[key];
             }
@@ -141,10 +146,10 @@ export const useSyncStore = defineStore('sync', () => {
       userStore.setAllSettings(settingsObj);
 
       // Convert playlists to expected format
-      const playlists = (state.playlists || []).map(p => ({
+      const playlists = (state.playlists || []).map((p) => ({
         id: p.id,
         name: p.name,
-        tracks: p.tracks || []
+        tracks: p.tracks || [],
       }));
       userStore.setPlaylists(playlists);
 
@@ -153,10 +158,10 @@ export const useSyncStore = defineStore('sync', () => {
       // Update cursor
       saveCursor(state.seq);
 
-      console.log('Full sync complete, cursor:', state.seq);
+      console.log("Full sync complete, cursor:", state.seq);
       return true;
     } catch (error) {
-      console.error('Full sync failed:', error);
+      console.error("Full sync failed:", error);
       lastSyncError.value = error;
       return false;
     } finally {
@@ -169,7 +174,7 @@ export const useSyncStore = defineStore('sync', () => {
   // =====================================================
 
   const catchUp = async () => {
-    console.log('Catching up from cursor:', cursor.value);
+    console.log("Catching up from cursor:", cursor.value);
     isSyncing.value = true;
     lastSyncError.value = null;
 
@@ -177,8 +182,8 @@ export const useSyncStore = defineStore('sync', () => {
       const result = await remoteStore.fetchSyncEvents(cursor.value);
 
       // Check for 410 Gone (events pruned)
-      if (result.error === 'events_pruned') {
-        console.log('Events pruned, performing full sync');
+      if (result.error === "events_pruned") {
+        console.log("Events pruned, performing full sync");
         return await fullSync();
       }
 
@@ -186,7 +191,7 @@ export const useSyncStore = defineStore('sync', () => {
 
       // Check for sequence gap
       if (events.length > 0 && events[0].seq > cursor.value + 1) {
-        console.log('Sequence gap detected, performing full sync');
+        console.log("Sequence gap detected, performing full sync");
         return await fullSync();
       }
 
@@ -201,10 +206,10 @@ export const useSyncStore = defineStore('sync', () => {
         saveCursor(current_seq);
       }
 
-      console.log('Catch-up complete, cursor:', cursor.value);
+      console.log("Catch-up complete, cursor:", cursor.value);
       return true;
     } catch (error) {
-      console.error('Catch-up failed:', error);
+      console.error("Catch-up failed:", error);
       lastSyncError.value = error;
       return false;
     } finally {
@@ -219,16 +224,16 @@ export const useSyncStore = defineStore('sync', () => {
   const handleSyncMessage = (type, payload) => {
     // Handler receives (type, payload) from WebSocket service
     // payload format: { event: StoredEvent }
-    console.log('[Sync] Received message:', type, payload);
+    console.log("[Sync] Received message:", type, payload);
     const event = payload?.event;
     if (!event) {
-      console.warn('[Sync] Invalid sync message - no event:', type, payload);
+      console.warn("[Sync] Invalid sync message - no event:", type, payload);
       return;
     }
 
     // Check for sequence gap
     if (event.seq > cursor.value + 1) {
-      console.log('WebSocket sequence gap detected, catching up');
+      console.log("WebSocket sequence gap detected, catching up");
       catchUp();
       return;
     }
@@ -266,7 +271,7 @@ export const useSyncStore = defineStore('sync', () => {
       isInitialized.value = true;
       return true;
     } catch (error) {
-      console.error('Sync initialization failed:', error);
+      console.error("Sync initialization failed:", error);
       lastSyncError.value = error;
       return false;
     } finally {

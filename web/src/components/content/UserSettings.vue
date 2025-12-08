@@ -8,13 +8,18 @@
         <div class="setting-info">
           <label class="setting-label" for="direct-downloads">
             Enable Direct Downloads
-            <span v-if="isDirectDownloadsPending" class="sync-pending" title="Syncing...">
+            <span
+              v-if="isDirectDownloadsPending"
+              class="sync-pending"
+              title="Syncing..."
+            >
               <span class="sync-dot"></span>
             </span>
           </label>
           <p class="setting-description">
-            When enabled, missing content (albums, artists) will be automatically fetched from the server
-            when you browse to them. This requires the appropriate permission from an administrator.
+            When enabled, missing content (albums, artists) will be
+            automatically fetched from the server when you browse to them. This
+            requires the appropriate permission from an administrator.
           </p>
         </div>
         <label class="toggle">
@@ -32,13 +37,17 @@
 </template>
 
 <script setup>
-import { computed } from 'vue';
-import { useUserStore } from '@/store/user';
+import { computed } from "vue";
+import { useUserStore } from "@/store/user";
 
 const userStore = useUserStore();
 
-const isDirectDownloadsEnabled = computed(() => userStore.isDirectDownloadsEnabled);
-const isDirectDownloadsPending = computed(() => userStore.isDirectDownloadsPending);
+const isDirectDownloadsEnabled = computed(
+  () => userStore.isDirectDownloadsEnabled,
+);
+const isDirectDownloadsPending = computed(
+  () => userStore.isDirectDownloadsPending,
+);
 
 const handleDirectDownloadsToggle = async (event) => {
   const newValue = event.target.checked;
@@ -175,7 +184,8 @@ const handleDirectDownloadsToggle = async (event) => {
 }
 
 @keyframes pulse {
-  0%, 100% {
+  0%,
+  100% {
     opacity: 1;
     transform: scale(1);
   }

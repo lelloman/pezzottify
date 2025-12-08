@@ -1,14 +1,18 @@
-import { defineStore } from 'pinia';
-import { ref, computed } from 'vue';
-import { useRemoteStore } from './remote';
+import { defineStore } from "pinia";
+import { ref, computed } from "vue";
+import { useRemoteStore } from "./remote";
 
 // Settings key constants
-export const SETTING_ENABLE_DIRECT_DOWNLOADS = 'enable_direct_downloads';
+export const SETTING_ENABLE_DIRECT_DOWNLOADS = "enable_direct_downloads";
 
 // Admin permissions that grant access to admin panel
-const ADMIN_PERMISSIONS = ['ManagePermissions', 'ViewAnalytics', 'RebootServer'];
+const ADMIN_PERMISSIONS = [
+  "ManagePermissions",
+  "ViewAnalytics",
+  "RebootServer",
+];
 
-export const useUserStore = defineStore('user', () => {
+export const useUserStore = defineStore("user", () => {
   const remoteStore = useRemoteStore();
   const likedAlbumIds = ref(null);
   const likedArtistsIds = ref(null);
@@ -38,7 +42,7 @@ export const useUserStore = defineStore('user', () => {
 
     try {
       // Use lazy import to avoid circular dependency
-      const { useSyncStore } = await import('./sync');
+      const { useSyncStore } = await import("./sync");
       const syncStore = useSyncStore();
 
       // Initialize via sync store - this will do full sync or catch-up
@@ -49,7 +53,7 @@ export const useUserStore = defineStore('user', () => {
       }
       return success;
     } catch (error) {
-      console.error('Failed to initialize user data:', error);
+      console.error("Failed to initialize user data:", error);
       return false;
     } finally {
       isInitializing.value = false;
@@ -62,10 +66,12 @@ export const useUserStore = defineStore('user', () => {
       if (isLiked) {
         likedAlbumIds.value = [albumId, ...likedAlbumIds.value];
       } else {
-        likedAlbumIds.value = likedAlbumIds.value.filter(id => id !== albumId);
+        likedAlbumIds.value = likedAlbumIds.value.filter(
+          (id) => id !== albumId,
+        );
       }
     }
-  }
+  };
 
   const setArtistIsLiked = async (artistId, isLiked) => {
     const success = await remoteStore.setArtistLikeStatus(artistId, isLiked);
@@ -73,10 +79,12 @@ export const useUserStore = defineStore('user', () => {
       if (isLiked) {
         likedArtistsIds.value = [artistId, ...likedArtistsIds.value];
       } else {
-        likedArtistsIds.value = likedArtistsIds.value.filter(id => id !== artistId);
+        likedArtistsIds.value = likedArtistsIds.value.filter(
+          (id) => id !== artistId,
+        );
       }
     }
-  }
+  };
 
   const getPlaylistRef = (playlistId) => {
     if (!playlistRefs[playlistId]) {
@@ -109,7 +117,7 @@ export const useUserStore = defineStore('user', () => {
 
     const playlistData = await remoteStore.fetchPlaylistData(playlistId);
     if (playlistData && playlistsData.value) {
-      playlistsData.value.list = playlistsData.value.list.map(playlist => {
+      playlistsData.value.list = playlistsData.value.list.map((playlist) => {
         if (playlist.id === playlistId) {
           return playlistData;
         }
@@ -117,7 +125,7 @@ export const useUserStore = defineStore('user', () => {
       });
       playlistsData.value.by_id[playlistId] = playlistData;
     }
-  }
+  };
 
   const createPlaylist = async (callback) => {
     const newPlaylist = await remoteStore.createNewPlaylist();
@@ -128,51 +136,71 @@ export const useUserStore = defineStore('user', () => {
       playlistsData.value.by_id[newPlaylist.id] = newPlaylist;
     }
     callback(newPlaylist);
-  }
+  };
 
   const deletePlaylist = async (playlistId, callback) => {
     const success = await remoteStore.deleteUserPlaylist(playlistId);
     if (success && playlistsData.value) {
       const oldValue = playlistsData.value;
       delete oldValue.by_id[playlistId];
-      oldValue.list = oldValue.list.filter(playlist => playlist !== playlistId);
+      oldValue.list = oldValue.list.filter(
+        (playlist) => playlist !== playlistId,
+      );
       playlistsData.value = oldValue;
       if (playlistRefs[playlistId]) {
         delete playlistRefs[playlistId];
       }
     }
     callback(success);
-  }
+  };
 
   const updatePlaylistName = async (playlistId, name, callback) => {
     const success = await remoteStore.updatePlaylistName(playlistId, name);
-    if (success && playlistsData.value && playlistsData.value.by_id[playlistId]) {
+    if (
+      success &&
+      playlistsData.value &&
+      playlistsData.value.by_id[playlistId]
+    ) {
       // Update name in memory
       playlistsData.value.by_id[playlistId].name = name;
 
       // Update the playlist in the list
-      playlistsData.value.list = playlistsData.value.list.map(p =>
-        p.id === playlistId ? { ...p, name } : p
+      playlistsData.value.list = playlistsData.value.list.map((p) =>
+        p.id === playlistId ? { ...p, name } : p,
       );
     }
     callback(success);
-  }
+  };
 
   const addTracksToPlaylist = async (playlistId, trackIds, callback) => {
     const success = await remoteStore.addTracksToPlaylist(playlistId, trackIds);
     console.log("user store addTracksToPlaylist success: " + success);
-    if (success && playlistsData.value && playlistsData.value.by_id[playlistId]) {
+    if (
+      success &&
+      playlistsData.value &&
+      playlistsData.value.by_id[playlistId]
+    ) {
       const playlist = playlistsData.value.by_id[playlistId];
       playlist.tracks = [...playlist.tracks, ...trackIds];
       console.log("user store addTracksToPlaylist playlist:");
-
     }
     callback(success);
-  }
+  };
 
-  const removeTracksFromPlaylist = async (playlistId, tracksPositions, callback) => {
-    const success = await remoteStore.removeTracksFromPlaylist(playlistId, tracksPositions);
-    if (success && playlistsData.value && playlistsData.value.by_id[playlistId]) {
+  const removeTracksFromPlaylist = async (
+    playlistId,
+    tracksPositions,
+    callback,
+  ) => {
+    const success = await remoteStore.removeTracksFromPlaylist(
+      playlistId,
+      tracksPositions,
+    );
+    if (
+      success &&
+      playlistsData.value &&
+      playlistsData.value.by_id[playlistId]
+    ) {
       const playlist = playlistsData.value.by_id[playlistId];
 
       const newTracks = [];
@@ -184,7 +212,7 @@ export const useUserStore = defineStore('user', () => {
       playlist.tracks = newTracks;
     }
     callback(success);
-  }
+  };
 
   // Settings methods
   const getSetting = (key) => {
@@ -215,18 +243,21 @@ export const useUserStore = defineStore('user', () => {
       // Track as pending for retry
       pendingSettings.value = {
         ...pendingSettings.value,
-        [key]: { value, retryCount }
+        [key]: { value, retryCount },
       };
 
       // Schedule retry if under max count
       if (retryCount < MAX_RETRY_COUNT) {
-        setTimeout(() => {
-          // Only retry if still pending with same value
-          const pending = pendingSettings.value[key];
-          if (pending && pending.value === value) {
-            syncSettingToServer(key, value, retryCount + 1);
-          }
-        }, RETRY_DELAY_MS * Math.pow(2, retryCount)); // Exponential backoff
+        setTimeout(
+          () => {
+            // Only retry if still pending with same value
+            const pending = pendingSettings.value[key];
+            if (pending && pending.value === value) {
+              syncSettingToServer(key, value, retryCount + 1);
+            }
+          },
+          RETRY_DELAY_MS * Math.pow(2, retryCount),
+        ); // Exponential backoff
       }
       return false;
     }
@@ -254,7 +285,7 @@ export const useUserStore = defineStore('user', () => {
 
   // Convenience computed for direct downloads setting
   const isDirectDownloadsEnabled = computed(() => {
-    return settings.value[SETTING_ENABLE_DIRECT_DOWNLOADS] === 'true';
+    return settings.value[SETTING_ENABLE_DIRECT_DOWNLOADS] === "true";
   });
 
   const isDirectDownloadsPending = computed(() => {
@@ -262,7 +293,10 @@ export const useUserStore = defineStore('user', () => {
   });
 
   const setDirectDownloadsEnabled = async (enabled) => {
-    return await setSetting(SETTING_ENABLE_DIRECT_DOWNLOADS, enabled ? 'true' : 'false');
+    return await setSetting(
+      SETTING_ENABLE_DIRECT_DOWNLOADS,
+      enabled ? "true" : "false",
+    );
   };
 
   // =====================================================
@@ -272,17 +306,20 @@ export const useUserStore = defineStore('user', () => {
 
   const applyContentLiked = (contentType, contentId) => {
     switch (contentType) {
-      case 'album':
+      case "album":
         if (likedAlbumIds.value && !likedAlbumIds.value.includes(contentId)) {
           likedAlbumIds.value = [contentId, ...likedAlbumIds.value];
         }
         break;
-      case 'artist':
-        if (likedArtistsIds.value && !likedArtistsIds.value.includes(contentId)) {
+      case "artist":
+        if (
+          likedArtistsIds.value &&
+          !likedArtistsIds.value.includes(contentId)
+        ) {
           likedArtistsIds.value = [contentId, ...likedArtistsIds.value];
         }
         break;
-      case 'track':
+      case "track":
         if (likedTrackIds.value && !likedTrackIds.value.includes(contentId)) {
           likedTrackIds.value = [contentId, ...likedTrackIds.value];
         }
@@ -292,19 +329,25 @@ export const useUserStore = defineStore('user', () => {
 
   const applyContentUnliked = (contentType, contentId) => {
     switch (contentType) {
-      case 'album':
+      case "album":
         if (likedAlbumIds.value) {
-          likedAlbumIds.value = likedAlbumIds.value.filter(id => id !== contentId);
+          likedAlbumIds.value = likedAlbumIds.value.filter(
+            (id) => id !== contentId,
+          );
         }
         break;
-      case 'artist':
+      case "artist":
         if (likedArtistsIds.value) {
-          likedArtistsIds.value = likedArtistsIds.value.filter(id => id !== contentId);
+          likedArtistsIds.value = likedArtistsIds.value.filter(
+            (id) => id !== contentId,
+          );
         }
         break;
-      case 'track':
+      case "track":
         if (likedTrackIds.value) {
-          likedTrackIds.value = likedTrackIds.value.filter(id => id !== contentId);
+          likedTrackIds.value = likedTrackIds.value.filter(
+            (id) => id !== contentId,
+          );
         }
         break;
     }
@@ -312,19 +355,24 @@ export const useUserStore = defineStore('user', () => {
 
   const applySettingChanged = (setting) => {
     // Setting comes from sync events in tagged format: { key: "setting_key", value: settingValue }
-    if (typeof setting === 'object') {
+    if (typeof setting === "object") {
       // Handle tagged format from sync events: { key: "...", value: ... }
-      if ('key' in setting && 'value' in setting) {
-        const value = typeof setting.value === 'boolean'
-          ? (setting.value ? 'true' : 'false')
-          : setting.value;
+      if ("key" in setting && "value" in setting) {
+        const value =
+          typeof setting.value === "boolean"
+            ? setting.value
+              ? "true"
+              : "false"
+            : setting.value;
         settings.value = { ...settings.value, [setting.key]: value };
       }
       // Handle legacy format: { DirectDownloadsEnabled: true }
-      else if ('DirectDownloadsEnabled' in setting) {
+      else if ("DirectDownloadsEnabled" in setting) {
         settings.value = {
           ...settings.value,
-          [SETTING_ENABLE_DIRECT_DOWNLOADS]: setting.DirectDownloadsEnabled ? 'true' : 'false'
+          [SETTING_ENABLE_DIRECT_DOWNLOADS]: setting.DirectDownloadsEnabled
+            ? "true"
+            : "false",
         };
       } else {
         // Handle direct key-value pairs
@@ -338,7 +386,7 @@ export const useUserStore = defineStore('user', () => {
       const newPlaylist = {
         id: playlistId,
         name: name,
-        tracks: []
+        tracks: [],
       };
       // Only add if not already present
       if (!playlistsData.value.by_id[playlistId]) {
@@ -351,8 +399,8 @@ export const useUserStore = defineStore('user', () => {
   const applyPlaylistRenamed = (playlistId, name) => {
     if (playlistsData.value && playlistsData.value.by_id[playlistId]) {
       playlistsData.value.by_id[playlistId].name = name;
-      playlistsData.value.list = playlistsData.value.list.map(p =>
-        p.id === playlistId ? { ...p, name } : p
+      playlistsData.value.list = playlistsData.value.list.map((p) =>
+        p.id === playlistId ? { ...p, name } : p,
       );
     }
   };
@@ -360,7 +408,9 @@ export const useUserStore = defineStore('user', () => {
   const applyPlaylistDeleted = (playlistId) => {
     if (playlistsData.value) {
       delete playlistsData.value.by_id[playlistId];
-      playlistsData.value.list = playlistsData.value.list.filter(p => p.id !== playlistId);
+      playlistsData.value.list = playlistsData.value.list.filter(
+        (p) => p.id !== playlistId,
+      );
       if (playlistRefs[playlistId]) {
         delete playlistRefs[playlistId];
       }
@@ -380,7 +430,7 @@ export const useUserStore = defineStore('user', () => {
   };
 
   const applyPermissionRevoked = (permission) => {
-    permissions.value = permissions.value.filter(p => p !== permission);
+    permissions.value = permissions.value.filter((p) => p !== permission);
   };
 
   const applyPermissionsReset = (newPermissions) => {
@@ -396,12 +446,18 @@ export const useUserStore = defineStore('user', () => {
   };
 
   const hasAnyAdminPermission = computed(() => {
-    return ADMIN_PERMISSIONS.some(p => permissions.value.includes(p));
+    return ADMIN_PERMISSIONS.some((p) => permissions.value.includes(p));
   });
 
-  const canManagePermissions = computed(() => permissions.value.includes('ManagePermissions'));
-  const canViewAnalytics = computed(() => permissions.value.includes('ViewAnalytics'));
-  const canRebootServer = computed(() => permissions.value.includes('RebootServer'));
+  const canManagePermissions = computed(() =>
+    permissions.value.includes("ManagePermissions"),
+  );
+  const canViewAnalytics = computed(() =>
+    permissions.value.includes("ViewAnalytics"),
+  );
+  const canRebootServer = computed(() =>
+    permissions.value.includes("RebootServer"),
+  );
 
   // =====================================================
   // Setter Methods for Full Sync
@@ -426,7 +482,7 @@ export const useUserStore = defineStore('user', () => {
 
   const setPlaylists = (playlists) => {
     const by_id = {};
-    playlists.forEach(playlist => {
+    playlists.forEach((playlist) => {
       by_id[playlist.id] = playlist;
     });
     playlistsData.value = {
@@ -451,7 +507,7 @@ export const useUserStore = defineStore('user', () => {
     isInitialized.value = false;
     isInitializing.value = false;
     // Clear playlist refs
-    Object.keys(playlistRefs).forEach(key => delete playlistRefs[key]);
+    Object.keys(playlistRefs).forEach((key) => delete playlistRefs[key]);
   };
 
   return {

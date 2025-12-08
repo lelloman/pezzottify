@@ -1,7 +1,11 @@
 <template>
   <div class="playlistWrapper">
     <div v-if="loading">Loading...</div>
-    <div v-else-if="playlist" class="playlistItem searchResultRow" @click.stop="handleClick">
+    <div
+      v-else-if="playlist"
+      class="playlistItem searchResultRow"
+      @click.stop="handleClick"
+    >
       <h2>{{ playlist.name }} ({{ playlist.tracks?.length || 0 }})</h2>
     </div>
     <div v-else-if="error">Error. {{ error }}</div>
@@ -9,10 +13,10 @@
 </template>
 
 <script setup>
-import '@/assets/search.css';
-import { ref, onMounted, onBeforeUnmount, computed, watch } from 'vue';
-import { useRouter } from 'vue-router';
-import { useUserStore } from '@/store/user';
+import "@/assets/search.css";
+import { ref, onMounted, onBeforeUnmount, computed, watch } from "vue";
+import { useRouter } from "vue-router";
+import { useUserStore } from "@/store/user";
 
 const router = useRouter();
 const userStore = useUserStore();
@@ -21,7 +25,7 @@ const props = defineProps({
   playlistId: {
     type: String,
     required: true,
-  }
+  },
 });
 
 const loading = ref(true);
@@ -32,8 +36,9 @@ onMounted(() => {
   // Get the reference on mount
   playlistRef.value = userStore.getPlaylistRef(props.playlistId);
 
-  userStore.loadPlaylistData(props.playlistId)
-    .finally(() => loading.value = false);
+  userStore
+    .loadPlaylistData(props.playlistId)
+    .finally(() => (loading.value = false));
 });
 
 onBeforeUnmount(() => {
@@ -58,15 +63,15 @@ const handleClick = () => {
 .playlistWrapper {
   min-width: 200px;
   margin: 10px;
-  color: #FFFFFF !important;
+  color: #ffffff !important;
 }
 
 .playlistItem {
   padding: 16px;
-  color: #FFFFFF !important;
+  color: #ffffff !important;
 }
 
 .playlistItem h2 {
-  color: #FFFFFF !important;
+  color: #ffffff !important;
 }
 </style>

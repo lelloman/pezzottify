@@ -2,14 +2,35 @@
   <div class="wrapper">
     <div class="filtersContainer">
       <div
-        :class="{ 'filter': true, 'selectedFilter': selectedFilters.indexOf('album') > -1, 'scaleClickFeedback': true }"
-        @click.stop="toggleFilter('album')">Albums</div>
+        :class="{
+          filter: true,
+          selectedFilter: selectedFilters.indexOf('album') > -1,
+          scaleClickFeedback: true,
+        }"
+        @click.stop="toggleFilter('album')"
+      >
+        Albums
+      </div>
       <div
-        :class="{ 'filter': true, 'selectedFilter': selectedFilters.indexOf('artist') > -1, 'scaleClickFeedback': true }"
-        @click.stop="toggleFilter('artist')">Artists</div>
+        :class="{
+          filter: true,
+          selectedFilter: selectedFilters.indexOf('artist') > -1,
+          scaleClickFeedback: true,
+        }"
+        @click.stop="toggleFilter('artist')"
+      >
+        Artists
+      </div>
       <div
-        :class="{ 'filter': true, 'selectedFilter': selectedFilters.indexOf('track') > -1, 'scaleClickFeedback': true }"
-        @click.stop="toggleFilter('track')">Tracks</div>
+        :class="{
+          filter: true,
+          selectedFilter: selectedFilters.indexOf('track') > -1,
+          scaleClickFeedback: true,
+        }"
+        @click.stop="toggleFilter('track')"
+      >
+        Tracks
+      </div>
     </div>
     <div class="searchResultsContainer">
       <div v-for="(result, index) in results" :key="index" class="searchResult">
@@ -25,11 +46,11 @@
 </template>
 
 <script setup>
-import { ref, watch, defineProps } from 'vue';
-import AlbumResult from '@/components/search/AlbumResult.vue';
-import ArtistResult from '@/components/search/ArtistResult.vue';
-import TrackResult from '@/components/search/TrackResult.vue';
-import { useRoute, useRouter } from 'vue-router';
+import { ref, watch, defineProps } from "vue";
+import AlbumResult from "@/components/search/AlbumResult.vue";
+import ArtistResult from "@/components/search/ArtistResult.vue";
+import TrackResult from "@/components/search/TrackResult.vue";
+import { useRoute, useRouter } from "vue-router";
 
 const props = defineProps({
   results: {
@@ -38,7 +59,7 @@ const props = defineProps({
   },
 });
 
-const selectedFilters = ref(['album', 'artist', 'track']);
+const selectedFilters = ref(["album", "artist", "track"]);
 const isLoading = ref(true);
 
 const router = useRouter();
@@ -52,7 +73,7 @@ const toggleFilter = (filter) => {
   } else {
     selectedFilters.value = [...selectedFilters.value, filter];
   }
-}
+};
 
 watch(props.results, (newResults) => {
   if (newResults) {
@@ -71,18 +92,20 @@ watch(selectedFilters, (newFilters) => {
   }
 });
 
-watch(route, (newRoute) => {
-  const possibleValues = ['album', 'artist', 'track'];
-  if (newRoute.query.type) {
-    selectedFilters.value = newRoute.query
-      .type
-      .split(',')
-      .filter((i) => possibleValues.indexOf(i) > -1);
-  } else {
-    selectedFilters.value = possibleValues;
-  }
-},
-  { immediate: true });
+watch(
+  route,
+  (newRoute) => {
+    const possibleValues = ["album", "artist", "track"];
+    if (newRoute.query.type) {
+      selectedFilters.value = newRoute.query.type
+        .split(",")
+        .filter((i) => possibleValues.indexOf(i) > -1);
+    } else {
+      selectedFilters.value = possibleValues;
+    }
+  },
+  { immediate: true },
+);
 </script>
 
 <style scoped>
@@ -105,21 +128,29 @@ watch(route, (newRoute) => {
   transition: scale 0.3s ease;
   cursor: pointer;
   font-weight: bold;
-  transition: scale 0.3s ease, background-color 0.3s ease;
+  transition:
+    scale 0.3s ease,
+    background-color 0.3s ease;
 }
 
 .filter:hover {
-  transition: scale 0.3s ease, background-color 0.3s ease;
+  transition:
+    scale 0.3s ease,
+    background-color 0.3s ease;
 }
 
 .filter:active {
-  transition: scale 0.3s ease, background-color 0.3s ease;
+  transition:
+    scale 0.3s ease,
+    background-color 0.3s ease;
 }
 
 .selectedFilter {
   background-color: var(--accent-color);
   color: white;
-  transition: scale 0.3s ease, background-color 0.3s ease;
+  transition:
+    scale 0.3s ease,
+    background-color 0.3s ease;
 }
 
 .searchResult {
