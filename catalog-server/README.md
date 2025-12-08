@@ -185,18 +185,28 @@ The server version will show:
 
 ## Running the Server
 
-### Basic Usage
+### Using Config File (Recommended)
 
 ```bash
-cargo run --release -- <catalog-db-path> <user-db-path>
+# Create config from example
+cp config.example.toml config.toml
+
+# Edit config.toml to set your paths
+# Then run:
+cargo run --release -- --config ./config.toml
 ```
 
-### Example
+### Using CLI Arguments
+
+```bash
+cargo run --release -- --db-dir /path/to/db-dir --media-path /path/to/media
+```
+
+### Example with CLI Arguments
 
 ```bash
 cargo run --release -- \
-  /path/to/catalog.db \
-  /path/to/user.db \
+  --db-dir /path/to/db-dir \
   --media-path /path/to/media \
   --port 3001 \
   --content-cache-age-sec 60 \
@@ -207,8 +217,7 @@ cargo run --release -- \
 
 ```bash
 cargo run --features fast -- \
-  ../../catalog.db \
-  ../../test.db \
+  --db-dir ../../pezzottify-catalog \
   --media-path ../../pezzottify-catalog \
   --content-cache-age-sec 60 \
   --logging-level path
@@ -220,32 +229,54 @@ To serve the web frontend from the server:
 
 ```bash
 cargo run --release -- \
-  /path/to/catalog.db \
-  /path/to/user.db \
+  --db-dir /path/to/db-dir \
   --frontend-dir-path /path/to/web/dist
 ```
 
 ## Command-line Arguments
 
-### Required Arguments
+### Configuration Options
 
-- `<catalog-db-path>`: Path to the SQLite catalog database file
-- `<user-db-path>`: Path to the SQLite database file for user storage
+| Argument                             | Default       | Description                                                        |
+| ------------------------------------ | ------------- | ------------------------------------------------------------------ |
+| `--config <PATH>`                    | None          | Path to TOML configuration file. Values override CLI arguments.    |
+| `--db-dir <PATH>`                    | None          | Directory containing database files (catalog.db, user.db)          |
+| `--media-path <PATH>`                | Same as db-dir| Path to media files (audio/images)                                 |
+| `--port <PORT>`                      | `3001`        | Server port to bind to                                             |
+| `--metrics-port <PORT>`              | `9091`        | Metrics server port (Prometheus scraping)                          |
+| `--logging-level <LEVEL>`            | `path`        | Request logging level (`none`, `path`, `headers`, `body`)          |
+| `--content-cache-age-sec <SECONDS>`  | `3600`        | HTTP cache duration in seconds                                     |
+| `--frontend-dir-path <PATH>`         | None          | Serve static frontend files from this path                         |
+| `--downloader-url <URL>`             | None          | URL of the downloader service for fetching missing content         |
+| `--downloader-timeout-sec <SECONDS>` | `300`         | Timeout in seconds for downloader requests                         |
+| `--event-retention-days <DAYS>`      | `30`          | Number of days to retain sync events before pruning (0 to disable) |
+| `--prune-interval-hours <HOURS>`     | `24`          | Interval in hours between pruning runs                             |
 
-### Optional Arguments
+### TOML Configuration
 
-| Argument                             | Default              | Description                                                        |
-| ------------------------------------ | -------------------- | ------------------------------------------------------------------ |
-| `--media-path <PATH>`                | Parent of catalog-db | Path to media files (audio/images)                                 |
-| `--port <PORT>`                      | `3001`               | Server port to bind to                                             |
-| `--metrics-port <PORT>`              | `9091`               | Metrics server port (Prometheus scraping)                          |
-| `--logging-level <LEVEL>`            | `path`               | Request logging level (`path`, `full`, `none`)                     |
-| `--content-cache-age-sec <SECONDS>`  | `3600`               | HTTP cache duration in seconds                                     |
-| `--frontend-dir-path <PATH>`         | None                 | Serve static frontend files from this path                         |
-| `--downloader-url <URL>`             | None                 | URL of the downloader service for fetching missing content         |
-| `--downloader-timeout-sec <SECONDS>` | `300`                | Timeout in seconds for downloader requests                         |
-| `--event-retention-days <DAYS>`      | `30`                 | Number of days to retain sync events before pruning (0 to disable) |
-| `--prune-interval-hours <HOURS>`     | `24`                 | Interval in hours between pruning runs                             |
+The server can be configured via a TOML file. TOML values override CLI arguments. See `config.example.toml` for all available options.
+
+Example `config.toml`:
+
+```toml
+db_dir = "/data/db"
+media_path = "/data/media"
+port = 3001
+logging_level = "path"
+
+# Enable download manager by setting downloader_url
+# downloader_url = "http://downloader:3002"
+
+[download_manager]
+max_albums_per_hour = 10
+max_albums_per_day = 60
+```
+
+### Configuration Precedence
+
+1. TOML config file values (highest priority)
+2. CLI arguments
+3. Default values (lowest priority)
 
 ### Environment Variables
 
@@ -526,7 +557,15 @@ The `cli-auth` binary provides user and authentication management.
 
 ```bash
 cargo build --release --bin cli-auth
-./target/release/cli-auth <user-db-path>
+
+# Using config file
+./target/release/cli-auth --config /path/to/config.toml
+
+# Using db-dir
+./target/release/cli-auth --db-dir /path/to/db-dir
+
+# Legacy: direct path to user.db (backward compatible)
+./target/release/cli-auth /path/to/user.db
 ```
 
 ### Available Commands
@@ -589,8 +628,8 @@ exit
 ### Example Workflow
 
 ```bash
-# Start the CLI tool
-cargo run --bin cli-auth -- /path/to/user.db
+# Start the CLI tool (using db-dir)
+cargo run --bin cli-auth -- --db-dir /path/to/db-dir
 
 # Create a new admin user
 > add-user admin
@@ -636,18 +675,18 @@ cargo test <test_name>
 1. **Use the `fast` feature** for quick rebuilds:
 
    ```bash
-   cargo run --features fast -- <catalog> <db>
+   cargo run --features fast -- --db-dir /path/to/db
    ```
 
 2. **Use shorter cache times** for frontend development:
 
    ```bash
-   cargo run -- <catalog> <db> --content-cache-age-sec 60
+   cargo run -- --db-dir /path/to/db --content-cache-age-sec 60
    ```
 
 3. **Use `slowdown` feature** to test loading states in frontend:
    ```bash
-   cargo run --features slowdown -- <catalog> <db>
+   cargo run --features slowdown -- --db-dir /path/to/db
    ```
 
 ### Debugging
@@ -655,7 +694,7 @@ cargo test <test_name>
 Enable detailed logging:
 
 ```bash
-LOG_LEVEL=DEBUG cargo run -- <catalog> <db> --logging-level full
+LOG_LEVEL=DEBUG cargo run -- --db-dir /path/to/db --logging-level body
 ```
 
 Log levels:
