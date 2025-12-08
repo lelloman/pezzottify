@@ -3,6 +3,7 @@
 //! Implements both per-minute and per-hour rate limits with different configurations
 //! for different route groups. Uses IP-based limiting for login endpoints and
 //! user-based limiting for authenticated endpoints.
+#![allow(dead_code)]
 
 use crate::server::metrics::record_rate_limit_hit;
 use axum::{
@@ -43,21 +44,27 @@ pub const WRITE_PER_MINUTE: u32 = 60;
 // ============================================================================
 
 /// Login attempts per hour per IP
+#[allow(dead_code)]
 pub const LOGIN_PER_HOUR: u32 = 100;
 
 /// Global requests per hour per user
+#[allow(dead_code)]
 pub const GLOBAL_PER_HOUR: u32 = 50000;
 
 /// Search requests per hour per user
+#[allow(dead_code)]
 pub const SEARCH_PER_HOUR: u32 = 5000;
 
 /// Content read requests per hour per user
+#[allow(dead_code)]
 pub const CONTENT_READ_PER_HOUR: u32 = 25000;
 
 /// Stream requests per hour per user
+#[allow(dead_code)]
 pub const STREAM_PER_HOUR: u32 = 5000;
 
 /// Write operations per hour per user
+#[allow(dead_code)]
 pub const WRITE_PER_HOUR: u32 = 2000;
 
 // ============================================================================
@@ -108,6 +115,7 @@ impl KeyExtractor for UserOrIpKeyExtractor {
 // ============================================================================
 
 /// Custom error handler that logs rate limit violations and returns appropriate response
+#[allow(dead_code)]
 pub fn rate_limit_error_handler(err: GovernorError, req: Request<Body>) -> Response {
     match err {
         GovernorError::TooManyRequests { .. } => {

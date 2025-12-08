@@ -357,7 +357,7 @@ fn execute_command(
                                     print_empty_list("No roles assigned");
                                 } else {
                                     for role in roles.iter() {
-                                        print_list_item(&role.to_string(), 2);
+                                        print_list_item(role.as_str(), 2);
                                     }
                                 }
                             }
@@ -435,7 +435,7 @@ fn execute_command(
                         println!(
                             "  {} {}",
                             box_chars::STAR.with(colors::YELLOW),
-                            role.to_string().with(colors::CYAN).bold()
+                            role.as_str().with(colors::CYAN).bold()
                         );
 
                         let permissions = role.permissions();

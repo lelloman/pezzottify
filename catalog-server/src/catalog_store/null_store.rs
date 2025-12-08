@@ -2,6 +2,7 @@
 //!
 //! A no-op implementation of CatalogStore for use cases where catalog
 //! functionality is not needed (e.g., CLI tools that only manage users).
+#![allow(dead_code)]
 
 use super::changelog::{CatalogBatch, ChangeEntityType, ChangeEntry, WhatsNewBatch};
 use super::trait_def::{CatalogStore, SearchableItem};

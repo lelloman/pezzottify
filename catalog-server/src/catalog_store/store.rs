@@ -3,6 +3,7 @@
 //! This module provides the `SqliteCatalogStore` which stores and retrieves
 //! catalog metadata from a SQLite database, with media files remaining on
 //! the filesystem.
+#![allow(dead_code)]
 
 use super::changelog::{
     calculate_field_diff, extract_entity_name, generate_display_summary, CatalogBatch,
@@ -1066,7 +1067,7 @@ impl SqliteCatalogStore {
         let diff = calculate_field_diff(Some(&old_snapshot), Some(&new_snapshot));
 
         // Only record if there are actual changes
-        if !diff.as_object().map_or(true, |o| o.is_empty()) {
+        if !diff.as_object().is_none_or(|o| o.is_empty()) {
             let name = extract_entity_name(&new_snapshot);
             let summary = generate_display_summary(
                 &ChangeEntityType::Artist,
@@ -1151,7 +1152,7 @@ impl SqliteCatalogStore {
         let diff = calculate_field_diff(Some(&old_snapshot), Some(&new_snapshot));
 
         // Only record if there are actual changes
-        if !diff.as_object().map_or(true, |o| o.is_empty()) {
+        if !diff.as_object().is_none_or(|o| o.is_empty()) {
             let name = extract_entity_name(&new_snapshot);
             let summary = generate_display_summary(
                 &ChangeEntityType::Album,
@@ -1249,7 +1250,7 @@ impl SqliteCatalogStore {
         let diff = calculate_field_diff(Some(&old_snapshot), Some(&new_snapshot));
 
         // Only record if there are actual changes
-        if !diff.as_object().map_or(true, |o| o.is_empty()) {
+        if !diff.as_object().is_none_or(|o| o.is_empty()) {
             let name = extract_entity_name(&new_snapshot);
             let summary = generate_display_summary(
                 &ChangeEntityType::Track,
@@ -1341,7 +1342,7 @@ impl SqliteCatalogStore {
         let diff = calculate_field_diff(Some(&old_snapshot), Some(&new_snapshot));
 
         // Only record if there are actual changes
-        if !diff.as_object().map_or(true, |o| o.is_empty()) {
+        if !diff.as_object().is_none_or(|o| o.is_empty()) {
             let summary = generate_display_summary(
                 &ChangeEntityType::Image,
                 &ChangeOperation::Update,

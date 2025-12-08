@@ -1,3 +1,5 @@
+#![allow(unused_imports)]
+
 mod http_cache;
 mod random_slowdown;
 mod rate_limit;

@@ -228,7 +228,7 @@ impl SearchVault for PezzotHashSearchVault {
         max_results: usize,
         filter: Option<Vec<HashedItemType>>,
     ) -> Vec<SearchResult> {
-        let query_hash = PezzottHash::calc(&query);
+        let query_hash = PezzottHash::calc(query);
 
         let mut results = SearchResultsHolder::new(max_results);
         let allowed_types = filter.unwrap_or_else(|| {
@@ -243,10 +243,10 @@ impl SearchVault for PezzotHashSearchVault {
             if !allowed_types.contains(&item.item_type) {
                 continue;
             }
-            results.maybe_add(&item, item.hash.match_query(&query_hash));
+            results.maybe_add(item, item.hash.match_query(&query_hash));
         }
 
-        results.re_sort(&query);
+        results.re_sort(query);
 
         results.consume()
     }

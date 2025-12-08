@@ -127,10 +127,10 @@ impl ConnectionManager {
 
         if let Some(user_conns) = conns.get(&user_id) {
             for (device_id, entry) in user_conns.iter() {
-                if *device_id != exclude_device_id {
-                    if entry.sender.send(message.clone()).await.is_err() {
-                        failed.push(*device_id);
-                    }
+                if *device_id != exclude_device_id
+                    && entry.sender.send(message.clone()).await.is_err()
+                {
+                    failed.push(*device_id);
                 }
             }
         }

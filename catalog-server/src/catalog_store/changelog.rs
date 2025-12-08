@@ -2,6 +2,7 @@
 //!
 //! This module defines the types for tracking changes to catalog entities
 //! (artists, albums, tracks, images) through batched changelog entries.
+#![allow(dead_code)]
 
 use anyhow::{bail, Result};
 use rusqlite::{params, Connection};
@@ -741,6 +742,7 @@ impl ChangeLogStore {
     ///
     /// # Returns
     /// The ID of the inserted change entry.
+    #[allow(clippy::too_many_arguments)]
     pub fn record_change_internal(
         &self,
         conn: &Connection,

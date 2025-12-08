@@ -18,7 +18,6 @@ use serde::Deserialize;
 
 #[derive(Deserialize)]
 #[serde(rename_all = "lowercase")]
-
 pub enum SearchFilter {
     Album,
     Artist,

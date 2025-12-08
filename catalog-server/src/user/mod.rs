@@ -1,3 +1,5 @@
+#![allow(unused_imports)]
+
 pub mod auth;
 pub mod device;
 pub mod permissions;

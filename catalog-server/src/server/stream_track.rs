@@ -47,10 +47,10 @@ impl ByteRange {
             return None;
         }
 
-        return Some(ByteRange {
+        Some(ByteRange {
             start_inclusive: parts[0].parse::<u64>().ok(),
             end_inclusive: parts[1].parse::<u64>().ok(),
-        });
+        })
     }
 }
 
@@ -73,15 +73,8 @@ impl FromRequestParts<ServerState> for Option<ByteRange> {
             .headers
             .get(HEADER_BYTE_RANGE)
             .map(|x| x.to_str())
-            .map(|x| match x {
-                Ok(x) => Some(x),
-                _ => None,
-            })
-            .map(|x| match x {
-                Some(x) => ByteRange::parse(x),
-                None => None,
-            })
-            .flatten())
+            .map(|x| x.ok())
+            .and_then(|x| x.and_then(ByteRange::parse)))
     }
 }
 
@@ -116,8 +109,8 @@ pub async fn stream_track(
     };
 
     let mut start_served = 0;
-    if let Some(start) = byte_range.map(|x| x.start_inclusive).flatten() {
-        if let Err(_) = file.seek(SeekFrom::Start(start)).await {
+    if let Some(start) = byte_range.and_then(|x| x.start_inclusive) {
+        if file.seek(SeekFrom::Start(start)).await.is_err() {
             return StatusCode::BAD_REQUEST.into_response();
         }
         start_served = start;

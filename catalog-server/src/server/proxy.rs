@@ -68,14 +68,6 @@ impl CatalogProxy {
                 }
                 enabled
             }
-            Ok(Some(_)) => {
-                // Unexpected setting type (shouldn't happen)
-                warn!(
-                    "Unexpected setting type for enable_direct_downloads for user {}",
-                    user_id
-                );
-                false
-            }
             Ok(None) => {
                 debug!(
                     "User {} cannot trigger download: preference not set (default: disabled)",
@@ -232,7 +224,7 @@ impl CatalogProxy {
     /// Fetch artist's albums from downloader.
     async fn fetch_artist_albums(&self, artist_id: &str) -> Result<()> {
         // Get artist from downloader to find album IDs
-        let dl_artist = self.downloader.get_artist(artist_id).await?;
+        let _dl_artist = self.downloader.get_artist(artist_id).await?;
 
         // The downloader artist response doesn't include album IDs directly,
         // so we need to fetch albums separately. For now, we'll skip this
@@ -572,7 +564,7 @@ mod tests {
                 .ok_or_else(|| anyhow::anyhow!("Track not found: {}", id))
         }
 
-        async fn download_track_audio(&self, _id: &str, dest: &PathBuf) -> Result<u64> {
+        async fn download_track_audio(&self, _id: &str, dest: &std::path::Path) -> Result<u64> {
             self.increment_call("download_track_audio");
             // Create a fake audio file
             if let Some(parent) = dest.parent() {
@@ -582,7 +574,7 @@ mod tests {
             Ok(15)
         }
 
-        async fn download_image(&self, _id: &str, dest: &PathBuf) -> Result<u64> {
+        async fn download_image(&self, _id: &str, dest: &std::path::Path) -> Result<u64> {
             self.increment_call("download_image");
             // Create a fake image file
             if let Some(parent) = dest.parent() {

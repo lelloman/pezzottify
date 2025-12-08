@@ -204,7 +204,7 @@ pub fn print_banner() {
 pub fn print_success(message: &str) {
     println!(
         " {} {}",
-        format!("{}", box_chars::CHECK).with(colors::GREEN).bold(),
+        box_chars::CHECK.to_string().with(colors::GREEN).bold(),
         message.with(colors::GREEN)
     );
 }
@@ -212,9 +212,7 @@ pub fn print_success(message: &str) {
 pub fn print_error(message: &str) {
     println!(
         " {} {}",
-        format!("{}", box_chars::CROSS_MARK)
-            .with(colors::RED)
-            .bold(),
+        box_chars::CROSS_MARK.to_string().with(colors::RED).bold(),
         message.with(colors::RED)
     );
 }

@@ -3,6 +3,8 @@
 //! This module provides generic WebSocket support that can be extended
 //! for features like user data sync, remote playback control, and notifications.
 
+#![allow(unused_imports)]
+
 pub mod connection;
 pub mod handler;
 pub mod messages;

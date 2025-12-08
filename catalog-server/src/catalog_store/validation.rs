@@ -2,6 +2,7 @@
 //!
 //! Provides validation functions to ensure data integrity before
 //! inserting or updating entities in the catalog store.
+#![allow(dead_code)]
 
 use super::models::{Album, Artist, Image, Track};
 use std::fmt;

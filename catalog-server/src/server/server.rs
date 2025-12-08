@@ -879,8 +879,8 @@ async fn get_popular_content(
         .as_secs();
 
     let end_date = {
-        let datetime = chrono::DateTime::from_timestamp(now_secs as i64, 0)
-            .unwrap_or_else(chrono::Utc::now);
+        let datetime =
+            chrono::DateTime::from_timestamp(now_secs as i64, 0).unwrap_or_else(chrono::Utc::now);
         datetime
             .format("%Y%m%d")
             .to_string()
@@ -1154,7 +1154,7 @@ async fn put_playlist(
                 },
             );
             connection_manager
-                .send_to_other_devices(session.user_id, device_id.clone(), ws_msg)
+                .send_to_other_devices(session.user_id, device_id, ws_msg)
                 .await;
         }
     }
@@ -1351,8 +1351,8 @@ async fn post_listening_event(
         .as_secs();
     let started_at = body.started_at.unwrap_or(now_secs);
     let date = {
-        let datetime = chrono::DateTime::from_timestamp(started_at as i64, 0)
-            .unwrap_or_else(chrono::Utc::now);
+        let datetime =
+            chrono::DateTime::from_timestamp(started_at as i64, 0).unwrap_or_else(chrono::Utc::now);
         datetime
             .format("%Y%m%d")
             .to_string()
@@ -1475,8 +1475,8 @@ fn get_default_date_range(start_date: Option<u32>, end_date: Option<u32>) -> (u3
         .as_secs();
 
     let end = end_date.unwrap_or_else(|| {
-        let datetime = chrono::DateTime::from_timestamp(now_secs as i64, 0)
-            .unwrap_or_else(chrono::Utc::now);
+        let datetime =
+            chrono::DateTime::from_timestamp(now_secs as i64, 0).unwrap_or_else(chrono::Utc::now);
         datetime
             .format("%Y%m%d")
             .to_string()
@@ -2053,8 +2053,7 @@ async fn admin_get_user_roles(
 
     match manager.get_user_roles(user_id) {
         Ok(roles) => {
-            let role_strings: Vec<String> =
-                roles.iter().map(|r| r.to_string().to_owned()).collect();
+            let role_strings: Vec<String> = roles.iter().map(|r| r.as_str().to_owned()).collect();
             Json(UserRolesResponse {
                 user_handle,
                 roles: role_strings,
@@ -2744,6 +2743,7 @@ async fn admin_get_changelog_entity_history(
 }
 
 impl ServerState {
+    #[allow(clippy::arc_with_non_send_sync)]
     fn new(
         config: ServerConfig,
         catalog_store: Arc<dyn CatalogStore>,
@@ -3206,6 +3206,7 @@ pub fn make_app(
 /// The actual staleness threshold is configured in ChangeLogStore (default 1 hour).
 const STALE_BATCH_CHECK_INTERVAL_SECS: u64 = 600;
 
+#[allow(clippy::too_many_arguments)]
 pub async fn run_server(
     catalog_store: Arc<dyn CatalogStore>,
     search_vault: Box<dyn SearchVault>,

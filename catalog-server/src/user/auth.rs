@@ -83,10 +83,10 @@ impl FromStr for PezzottifyHasher {
     }
 }
 
-impl ToString for PezzottifyHasher {
-    fn to_string(&self) -> String {
+impl std::fmt::Display for PezzottifyHasher {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            PezzottifyHasher::Argon2 => "argon2".to_string(),
+            PezzottifyHasher::Argon2 => write!(f, "argon2"),
         }
     }
 }

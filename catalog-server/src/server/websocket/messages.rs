@@ -2,6 +2,7 @@
 //!
 //! Defines the generic message envelope format used for all WebSocket communication.
 //! Feature-specific payloads are carried as JSON values, allowing extensibility.
+#![allow(dead_code)]
 
 use serde::{Deserialize, Serialize};
 
