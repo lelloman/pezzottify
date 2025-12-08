@@ -812,7 +812,7 @@ This document breaks down the Background Jobs System and Download Manager plans 
 
 **Goal:** Implement the job scheduling and execution system.
 
-- [ ] **Task 2.3.1: Create `background_jobs` module structure**
+- [x] **Task 2.3.1: Create `background_jobs` module structure**
 
   **Files to create:**
   - `catalog-server/src/background_jobs/mod.rs`
@@ -827,7 +827,7 @@ This document breaks down the Background Jobs System and Download Manager plans 
   use background_jobs::{JobScheduler, HookEvent};
   ```
 
-- [ ] **Task 2.3.2: Define `BackgroundJob` trait and related types**
+- [x] **Task 2.3.2: Define `BackgroundJob` trait and related types**
 
   **File:** `catalog-server/src/background_jobs/job.rs`
 
@@ -906,7 +906,7 @@ This document breaks down the Background Jobs System and Download Manager plans 
   }
   ```
 
-- [ ] **Task 2.3.3: Define `JobContext` struct**
+- [x] **Task 2.3.3: Define `JobContext` struct**
 
   **File:** `catalog-server/src/background_jobs/context.rs`
 
@@ -934,7 +934,7 @@ This document breaks down the Background Jobs System and Download Manager plans 
   }
   ```
 
-- [ ] **Task 2.3.4: Implement `JobScheduler` struct**
+- [x] **Task 2.3.4: Implement `JobScheduler` struct**
 
   **File:** `catalog-server/src/background_jobs/scheduler.rs`
 
@@ -951,7 +951,7 @@ This document breaks down the Background Jobs System and Download Manager plans 
   - `run()` - Main scheduler loop
   - `shutdown()` - Graceful shutdown
 
-- [ ] **Task 2.3.5: Implement scheduler main loop**
+- [x] **Task 2.3.5: Implement scheduler main loop**
 
   **File:** `catalog-server/src/background_jobs/scheduler.rs`
 
@@ -986,7 +986,7 @@ This document breaks down the Background Jobs System and Download Manager plans 
   }
   ```
 
-- [ ] **Task 2.3.6: Add hook event dispatch channel to server state**
+- [x] **Task 2.3.6: Add hook event dispatch channel to server state**
 
   **File:** `catalog-server/src/server/mod.rs` (or wherever ServerState is)
 
@@ -1001,7 +1001,7 @@ This document breaks down the Background Jobs System and Download Manager plans 
   }
   ```
 
-- [ ] **Task 2.3.7: Implement graceful shutdown handling**
+- [x] **Task 2.3.7: Implement graceful shutdown handling**
 
   **File:** `catalog-server/src/background_jobs/scheduler.rs`
 
@@ -1038,7 +1038,7 @@ This document breaks down the Background Jobs System and Download Manager plans 
   }
   ```
 
-- [ ] **Task 2.3.8: Add unit tests for scheduler**
+- [x] **Task 2.3.8: Add unit tests for scheduler**
 
   **File:** `catalog-server/src/background_jobs/scheduler.rs` (test module)
 
