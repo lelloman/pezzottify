@@ -2,49 +2,50 @@
   <div class="downloadManager">
     <h2 class="sectionTitle">Download Manager</h2>
 
-    <!-- Stats Overview -->
-    <div class="statsGrid">
-      <div class="statCard">
-        <span class="statValue">{{ stats?.queue?.pending ?? "—" }}</span>
-        <span class="statLabel">Pending</span>
+    <!-- Downloader Status -->
+    <div class="downloaderStatus" :class="downloaderStatusClass">
+      <div class="statusMain">
+        <span class="statusDot"></span>
+        <span class="statusState">{{ downloaderState }}</span>
       </div>
-      <div class="statCard">
-        <span class="statValue">{{ stats?.queue?.in_progress ?? "—" }}</span>
-        <span class="statLabel">In Progress</span>
+      <div v-if="stats?.downloader?.uptime_secs" class="statusUptime">
+        Uptime: {{ formatUptime(stats.downloader.uptime_secs) }}
       </div>
-      <div class="statCard">
-        <span class="statValue">{{ stats?.queue?.retry_waiting ?? "—" }}</span>
-        <span class="statLabel">Retry Waiting</span>
-      </div>
-      <div class="statCard success">
-        <span class="statValue">{{ stats?.queue?.completed_today ?? "—" }}</span>
-        <span class="statLabel">Completed Today</span>
-      </div>
-      <div class="statCard danger">
-        <span class="statValue">{{ stats?.queue?.failed_today ?? "—" }}</span>
-        <span class="statLabel">Failed Today</span>
+      <div v-if="stats?.downloader?.last_error" class="statusError">
+        {{ stats.downloader.last_error }}
       </div>
     </div>
 
-    <!-- Capacity Info -->
-    <div class="capacityCard">
-      <h3 class="cardTitle">Rate Limits</h3>
-      <div class="capacityGrid">
-        <div class="capacityItem">
-          <span class="capacityValue"
-            >{{ stats?.capacity?.albums_this_hour ?? "—" }} /
-            {{ stats?.capacity?.max_per_hour ?? "—" }}</span
-          >
-          <span class="capacityLabel">Albums this hour</span>
-        </div>
-        <div class="capacityItem">
-          <span class="capacityValue"
-            >{{ stats?.capacity?.albums_today ?? "—" }} /
-            {{ stats?.capacity?.max_per_day ?? "—" }}</span
-          >
-          <span class="capacityLabel">Albums today</span>
-        </div>
-      </div>
+    <!-- Action Buttons -->
+    <div class="actionButtons">
+      <button class="actionButton" @click="openDownloadModal('album')">
+        Download Album
+      </button>
+      <button class="actionButton" @click="openDownloadModal('artist')">
+        Download Artist
+      </button>
+      <button class="refreshButton" @click="loadData" :disabled="isLoading">
+        {{ isLoading ? "Loading..." : "Refresh" }}
+      </button>
+    </div>
+
+    <!-- Stats Summary -->
+    <div class="statsSummary">
+      <span class="statItem">
+        <strong>{{ stats?.queue?.pending ?? 0 }}</strong> pending
+      </span>
+      <span class="statItem">
+        <strong>{{ stats?.queue?.in_progress ?? 0 }}</strong> in progress
+      </span>
+      <span class="statItem">
+        <strong>{{ stats?.queue?.retry_waiting ?? 0 }}</strong> retrying
+      </span>
+      <span class="statItem success">
+        <strong>{{ stats?.queue?.completed_today ?? 0 }}</strong> completed today
+      </span>
+      <span class="statItem danger">
+        <strong>{{ stats?.queue?.failed_today ?? 0 }}</strong> failed today
+      </span>
     </div>
 
     <!-- Tab Navigation -->
@@ -57,9 +58,7 @@
         @click="activeTab = tab.id"
       >
         {{ tab.label }}
-      </button>
-      <button class="refreshButton" @click="loadData" :disabled="isLoading">
-        {{ isLoading ? "Loading..." : "Refresh" }}
+        <span v-if="tab.count !== undefined" class="tabCount">{{ tab.count }}</span>
       </button>
     </div>
 
@@ -67,108 +66,94 @@
       {{ loadError }}
     </div>
 
-    <!-- Failed Downloads Tab -->
-    <div v-if="activeTab === 'failed'" class="tabContent">
-      <div v-if="failedItems.length === 0" class="emptyState">
-        No failed downloads.
+    <!-- Queue Tab -->
+    <div v-if="activeTab === 'queue'" class="tabContent">
+      <div v-if="queueItems.length === 0" class="emptyState">
+        Queue is empty.
       </div>
-      <div v-else class="tableWrapper">
-        <table class="dataTable">
-          <thead>
-            <tr>
-              <th>External ID</th>
-              <th>Type</th>
-              <th>Retries</th>
-              <th>Error</th>
-              <th>Failed At</th>
-              <th>Action</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="item in failedItems" :key="item.id">
-              <td class="idCell">{{ item.external_id }}</td>
-              <td>{{ item.item_type }}</td>
-              <td>{{ item.retry_count }}</td>
-              <td class="errorCell">{{ item.last_error || "—" }}</td>
-              <td>{{ formatDate(item.updated_at) }}</td>
-              <td>
-                <button
-                  class="retryButton"
-                  @click="handleRetry(item.id)"
-                  :disabled="retryingItems[item.id]"
-                >
-                  {{ retryingItems[item.id] ? "..." : "Retry" }}
-                </button>
-              </td>
-            </tr>
-          </tbody>
-        </table>
+      <div v-else class="queueList">
+        <div v-for="item in queueItems" :key="item.id" class="queueItem" :class="statusClass(item.status)">
+          <div class="queueItemHeader">
+            <div class="queueItemMain">
+              <span class="queueItemType">{{ formatContentType(item.content_type) }}</span>
+              <span class="queueItemName">{{ formatItemName(item) }}</span>
+            </div>
+            <div class="queueItemActions">
+              <span class="statusBadge" :class="statusClass(item.status)">
+                {{ formatStatus(item.status) }}
+              </span>
+              <button
+                v-if="item.status === 'FAILED'"
+                class="retryButton"
+                @click="handleRetry(item.id, false)"
+                :disabled="retryingItems[item.id]"
+              >
+                {{ retryingItems[item.id] ? "..." : "Retry" }}
+              </button>
+              <button
+                v-if="item.status === 'IN_PROGRESS' || item.status === 'RETRY_WAITING'"
+                class="forceRetryButton"
+                @click="handleRetry(item.id, true)"
+                :disabled="retryingItems[item.id]"
+              >
+                {{ retryingItems[item.id] ? "..." : "Force" }}
+              </button>
+              <button
+                v-if="item.status !== 'IN_PROGRESS'"
+                class="deleteButton"
+                @click="confirmDelete(item)"
+                :disabled="deletingItems[item.id]"
+              >
+                {{ deletingItems[item.id] ? "..." : "Delete" }}
+              </button>
+            </div>
+          </div>
+          <div class="queueItemDetails">
+            <span class="detailItem">
+              <span class="detailLabel">Priority:</span>
+              <span class="detailValue">{{ formatPriority(item.priority) }}</span>
+            </span>
+            <span class="detailItem">
+              <span class="detailLabel">Created:</span>
+              <span class="detailValue">{{ formatDate(item.created_at) }}</span>
+            </span>
+            <span v-if="item.last_attempt_at" class="detailItem">
+              <span class="detailLabel">Last attempt:</span>
+              <span class="detailValue">{{ formatDate(item.last_attempt_at) }}</span>
+            </span>
+            <span v-if="item.next_retry_at" class="detailItem">
+              <span class="detailLabel">Next retry:</span>
+              <span class="detailValue">{{ formatDate(item.next_retry_at) }}</span>
+            </span>
+            <span v-if="item.retry_count > 0" class="detailItem">
+              <span class="detailLabel">Retries:</span>
+              <span class="detailValue">{{ item.retry_count }} / {{ item.max_retries }}</span>
+            </span>
+          </div>
+          <div v-if="item.error_type || item.error_message" class="queueItemError">
+            <span v-if="item.error_type" class="errorType">{{ item.error_type }}</span>
+            <span v-if="item.error_message">{{ item.error_message }}</span>
+          </div>
+        </div>
       </div>
     </div>
 
-    <!-- Activity Tab -->
-    <div v-if="activeTab === 'activity'" class="tabContent">
-      <div v-if="activity.length === 0" class="emptyState">
-        No recent activity.
+    <!-- Downloaded Tab -->
+    <div v-if="activeTab === 'downloaded'" class="tabContent">
+      <div v-if="completedItems.length === 0" class="emptyState">
+        No completed downloads yet.
       </div>
-      <div v-else class="tableWrapper">
-        <table class="dataTable">
-          <thead>
-            <tr>
-              <th>External ID</th>
-              <th>Type</th>
-              <th>Status</th>
-              <th>User</th>
-              <th>Updated</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="item in activity" :key="item.id">
-              <td class="idCell">{{ item.external_id }}</td>
-              <td>{{ item.item_type }}</td>
-              <td>
-                <span class="statusBadge" :class="statusClass(item.status)">
-                  {{ item.status }}
-                </span>
-              </td>
-              <td>{{ item.user_handle || "—" }}</td>
-              <td>{{ formatDate(item.updated_at) }}</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    </div>
-
-    <!-- All Requests Tab -->
-    <div v-if="activeTab === 'requests'" class="tabContent">
-      <div v-if="requests.length === 0" class="emptyState">
-        No download requests.
-      </div>
-      <div v-else class="tableWrapper">
-        <table class="dataTable">
-          <thead>
-            <tr>
-              <th>External ID</th>
-              <th>Type</th>
-              <th>Status</th>
-              <th>User</th>
-              <th>Requested</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="item in requests" :key="item.id">
-              <td class="idCell">{{ item.external_id }}</td>
-              <td>{{ item.item_type }}</td>
-              <td>
-                <span class="statusBadge" :class="statusClass(item.status)">
-                  {{ item.status }}
-                </span>
-              </td>
-              <td>{{ item.user_handle || "—" }}</td>
-              <td>{{ formatDate(item.created_at) }}</td>
-            </tr>
-          </tbody>
-        </table>
+      <div v-else class="queueList">
+        <div v-for="item in completedItems" :key="item.id" class="queueItem completed">
+          <div class="queueItemMain">
+            <span class="queueItemType">{{ formatContentType(item.content_type) }}</span>
+            <span class="queueItemName">{{ formatItemName(item) }}</span>
+          </div>
+          <div class="queueItemMeta">
+            <span class="statusBadge status-completed">completed</span>
+            <span class="queueItemTime">{{ formatDate(item.completed_at || item.updated_at) }}</span>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -177,91 +162,109 @@
       <div v-if="auditLog.length === 0" class="emptyState">
         No audit log entries.
       </div>
-      <div v-else class="tableWrapper">
-        <table class="dataTable">
-          <thead>
-            <tr>
-              <th>Time</th>
-              <th>Event</th>
-              <th>User</th>
-              <th>External ID</th>
-              <th>Details</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="entry in auditLog" :key="entry.id">
-              <td>{{ formatDate(entry.created_at) }}</td>
-              <td>
-                <span class="eventBadge" :class="eventClass(entry.event_type)">
-                  {{ formatEventType(entry.event_type) }}
-                </span>
-              </td>
-              <td>
-                <button
-                  v-if="entry.user_handle"
-                  class="linkButton"
-                  @click="showUserAudit(entry.user_handle)"
-                >
-                  {{ entry.user_handle }}
-                </button>
-                <span v-else>system</span>
-              </td>
-              <td class="idCell">
-                <button
-                  v-if="entry.external_id"
-                  class="linkButton"
-                  @click="showItemAudit(entry.external_id)"
-                >
-                  {{ entry.external_id }}
-                </button>
-                <span v-else>—</span>
-              </td>
-              <td class="detailsCell">{{ entry.details || "—" }}</td>
-            </tr>
-          </tbody>
-        </table>
+      <div v-else class="auditList">
+        <div v-for="entry in auditLog" :key="entry.id" class="auditEntry">
+          <div class="auditEntryHeader">
+            <span class="eventBadge" :class="eventClass(entry.event_type)">
+              {{ formatEventType(entry.event_type) }}
+            </span>
+            <span class="auditEntryTime">{{ formatDate(entry.created_at) }}</span>
+          </div>
+          <div class="auditEntryBody">
+            <span v-if="entry.user_handle" class="auditUser">{{ entry.user_handle }}</span>
+            <span v-if="entry.external_id" class="auditItem">{{ entry.external_id }}</span>
+            <span v-if="entry.details" class="auditDetails">{{ entry.details }}</span>
+          </div>
+        </div>
       </div>
     </div>
 
-    <!-- Audit Detail Panel -->
-    <div v-if="showAuditDetail" class="detailOverlay" @click.self="closeAuditDetail">
-      <div class="detailPanel">
+    <!-- Download Request Modal -->
+    <div v-if="showDownloadModal" class="detailOverlay" @click.self="closeDownloadModal">
+      <div class="detailPanel downloadModal">
         <div class="detailHeader">
           <h3 class="detailTitle">
-            {{ auditDetailType === "item" ? "Item History" : "User History" }}
+            {{ downloadModalType === "album" ? "Download Album" : "Download Artist Discography" }}
           </h3>
-          <span class="detailSubtitle">{{ auditDetailId }}</span>
-          <button class="closeDetailButton" @click="closeAuditDetail">×</button>
+          <button class="closeDetailButton" @click="closeDownloadModal">×</button>
         </div>
-        <div v-if="loadingAuditDetail" class="detailLoading">
-          Loading history...
+        <div class="modalContent">
+          <div class="formGroup">
+            <label class="formLabel">
+              {{ downloadModalType === "album" ? "Album ID" : "Artist ID" }}
+            </label>
+            <input
+              v-model="downloadForm.id"
+              type="text"
+              class="formInput"
+              :placeholder="downloadModalType === 'album' ? 'External album ID' : 'External artist ID'"
+            />
+          </div>
+          <div v-if="downloadModalType === 'album'" class="formGroup">
+            <label class="formLabel">Album Name</label>
+            <input
+              v-model="downloadForm.albumName"
+              type="text"
+              class="formInput"
+              placeholder="Album name (for display)"
+            />
+          </div>
+          <div class="formGroup">
+            <label class="formLabel">Artist Name</label>
+            <input
+              v-model="downloadForm.artistName"
+              type="text"
+              class="formInput"
+              placeholder="Artist name (for display)"
+            />
+          </div>
+          <div v-if="downloadError" class="modalError">
+            {{ downloadError }}
+          </div>
+          <div v-if="downloadSuccess" class="modalSuccess">
+            {{ downloadSuccess }}
+          </div>
+          <div class="modalActions">
+            <button class="cancelButton" @click="closeDownloadModal">Cancel</button>
+            <button
+              class="confirmButton"
+              @click="submitDownloadRequest"
+              :disabled="isSubmitting || !isFormValid"
+            >
+              {{ isSubmitting ? "Submitting..." : "Download" }}
+            </button>
+          </div>
         </div>
-        <div v-else-if="auditDetailEntries.length === 0" class="detailEmpty">
-          No audit entries found.
+      </div>
+    </div>
+
+    <!-- Delete Confirmation Modal -->
+    <div v-if="showDeleteModal" class="detailOverlay" @click.self="closeDeleteModal">
+      <div class="detailPanel deleteModal">
+        <div class="detailHeader">
+          <h3 class="detailTitle">Delete Download Request</h3>
+          <button class="closeDetailButton" @click="closeDeleteModal">×</button>
         </div>
-        <div v-else class="detailContent">
-          <div
-            v-for="entry in auditDetailEntries"
-            :key="entry.id"
-            class="auditEntry"
-          >
-            <div class="auditEntryHeader">
-              <span class="eventBadge" :class="eventClass(entry.event_type)">
-                {{ formatEventType(entry.event_type) }}
-              </span>
-              <span class="auditEntryTime">{{ formatDate(entry.created_at) }}</span>
-            </div>
-            <div class="auditEntryBody">
-              <div v-if="auditDetailType === 'item' && entry.user_handle" class="auditEntryMeta">
-                User: {{ entry.user_handle }}
-              </div>
-              <div v-if="auditDetailType === 'user' && entry.external_id" class="auditEntryMeta">
-                Item: {{ entry.external_id }}
-              </div>
-              <div v-if="entry.details" class="auditEntryDetails">
-                {{ entry.details }}
-              </div>
-            </div>
+        <div class="modalContent">
+          <p class="deleteWarning">
+            Are you sure you want to delete this download request?
+          </p>
+          <div class="deleteItemInfo">
+            <span class="queueItemType">{{ formatContentType(itemToDelete?.content_type) }}</span>
+            <span class="queueItemName">{{ formatItemName(itemToDelete) }}</span>
+          </div>
+          <div v-if="deleteError" class="modalError">
+            {{ deleteError }}
+          </div>
+          <div class="modalActions">
+            <button class="cancelButton" @click="closeDeleteModal">Cancel</button>
+            <button
+              class="deleteConfirmButton"
+              @click="executeDelete"
+              :disabled="isDeleting"
+            >
+              {{ isDeleting ? "Deleting..." : "Delete" }}
+            </button>
           </div>
         </div>
       </div>
@@ -270,85 +273,131 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, onUnmounted } from "vue";
+import { ref, reactive, computed, onMounted, onUnmounted } from "vue";
 import { useRemoteStore } from "@/store/remote";
 
 const remoteStore = useRemoteStore();
 
-const tabs = [
-  { id: "failed", label: "Failed" },
-  { id: "activity", label: "Activity" },
-  { id: "requests", label: "All Requests" },
-  { id: "audit", label: "Audit Log" },
-];
+// Download modal state
+const showDownloadModal = ref(false);
+const downloadModalType = ref(null);
+const downloadForm = reactive({
+  id: "",
+  albumName: "",
+  artistName: "",
+});
+const isSubmitting = ref(false);
+const downloadError = ref(null);
+const downloadSuccess = ref(null);
 
-const activeTab = ref("failed");
+const isFormValid = computed(() => {
+  if (!downloadForm.id || !downloadForm.artistName) return false;
+  if (downloadModalType.value === "album" && !downloadForm.albumName) return false;
+  return true;
+});
+
+const downloaderState = computed(() => {
+  if (stats.value === null) return "Checking...";
+  if (!stats.value.downloader) return "Unknown";
+  return stats.value.downloader.state || "Unknown";
+});
+
+const downloaderStatusClass = computed(() => {
+  const state = stats.value?.downloader?.state;
+  if (!state) return "status-unknown";
+  if (state === "Healthy") return "status-online";
+  if (state === "LoggingIn" || state === "Booting") return "status-pending";
+  return "status-offline";
+});
+
+const openDownloadModal = (type) => {
+  downloadModalType.value = type;
+  downloadForm.id = "";
+  downloadForm.albumName = "";
+  downloadForm.artistName = "";
+  downloadError.value = null;
+  downloadSuccess.value = null;
+  showDownloadModal.value = true;
+};
+
+const closeDownloadModal = () => {
+  showDownloadModal.value = false;
+  downloadModalType.value = null;
+};
+
+const submitDownloadRequest = async () => {
+  isSubmitting.value = true;
+  downloadError.value = null;
+  downloadSuccess.value = null;
+
+  let result;
+  if (downloadModalType.value === "album") {
+    result = await remoteStore.requestAlbumDownload(
+      downloadForm.id,
+      downloadForm.albumName,
+      downloadForm.artistName,
+    );
+  } else {
+    result = await remoteStore.requestDiscographyDownload(
+      downloadForm.id,
+      downloadForm.artistName,
+    );
+  }
+
+  isSubmitting.value = false;
+
+  if (result.error) {
+    downloadError.value = typeof result.error === "string" ? result.error : JSON.stringify(result.error);
+  } else {
+    downloadSuccess.value = downloadModalType.value === "album"
+      ? "Album queued for download!"
+      : "Discography queued for download!";
+    await loadData();
+    setTimeout(() => {
+      closeDownloadModal();
+    }, 1500);
+  }
+};
+
+// Tab and data state
+const activeTab = ref("queue");
 const isLoading = ref(false);
 const loadError = ref(null);
 
 const stats = ref(null);
-const failedItems = ref([]);
-const activity = ref([]);
-const requests = ref([]);
+const queueItems = ref([]);
+const completedItems = ref([]);
 const auditLog = ref([]);
 const retryingItems = reactive({});
+const deletingItems = reactive({});
 
-// Audit detail panel state
-const showAuditDetail = ref(false);
-const auditDetailType = ref(null); // "item" or "user"
-const auditDetailId = ref(null);
-const auditDetailEntries = ref([]);
-const loadingAuditDetail = ref(false);
+// Delete modal state
+const showDeleteModal = ref(false);
+const itemToDelete = ref(null);
+const isDeleting = ref(false);
+const deleteError = ref(null);
 
-const showItemAudit = async (externalId) => {
-  showAuditDetail.value = true;
-  auditDetailType.value = "item";
-  auditDetailId.value = externalId;
-  loadingAuditDetail.value = true;
-  auditDetailEntries.value = [];
-
-  const result = await remoteStore.fetchDownloadAuditForItem(externalId);
-  auditDetailEntries.value = result?.entries || [];
-  loadingAuditDetail.value = false;
-};
-
-const showUserAudit = async (userHandle) => {
-  showAuditDetail.value = true;
-  auditDetailType.value = "user";
-  auditDetailId.value = userHandle;
-  loadingAuditDetail.value = true;
-  auditDetailEntries.value = [];
-
-  const result = await remoteStore.fetchDownloadAuditForUser(userHandle);
-  auditDetailEntries.value = result?.entries || [];
-  loadingAuditDetail.value = false;
-};
-
-const closeAuditDetail = () => {
-  showAuditDetail.value = false;
-  auditDetailType.value = null;
-  auditDetailId.value = null;
-  auditDetailEntries.value = [];
-};
+const tabs = computed(() => [
+  { id: "queue", label: "Queue", count: queueItems.value.length },
+  { id: "downloaded", label: "Downloaded", count: completedItems.value.length },
+  { id: "audit", label: "Audit Log" },
+]);
 
 const loadData = async () => {
   isLoading.value = true;
   loadError.value = null;
 
   try {
-    const [statsResult, failedResult, activityResult, requestsResult, auditResult] =
-      await Promise.all([
-        remoteStore.fetchDownloadStats(),
-        remoteStore.fetchFailedDownloads(50, 0),
-        remoteStore.fetchDownloadActivity(50),
-        remoteStore.fetchDownloadRequests(100, 0),
-        remoteStore.fetchDownloadAuditLog(100, 0),
-      ]);
+    const [statsResult, queueResult, completedResult, auditResult] = await Promise.all([
+      remoteStore.fetchDownloadStats(),
+      remoteStore.fetchDownloadQueue(),
+      remoteStore.fetchDownloadCompleted(100, 0),
+      remoteStore.fetchDownloadAuditLog(100, 0),
+    ]);
 
     stats.value = statsResult;
-    failedItems.value = failedResult?.items || [];
-    activity.value = activityResult?.items || [];
-    requests.value = requestsResult?.items || [];
+    queueItems.value = queueResult?.items || [];
+    completedItems.value = completedResult?.items || [];
     auditLog.value = auditResult?.entries || [];
 
     if (!statsResult) {
@@ -361,38 +410,104 @@ const loadData = async () => {
   isLoading.value = false;
 };
 
-const handleRetry = async (itemId) => {
+const handleRetry = async (itemId, force = false) => {
   retryingItems[itemId] = true;
 
-  const result = await remoteStore.retryDownload(itemId);
+  const result = await remoteStore.retryDownload(itemId, force);
 
   if (result.error) {
     alert(result.error);
   } else {
-    // Reload data to see updated status
     await loadData();
   }
 
   retryingItems[itemId] = false;
 };
 
+const confirmDelete = (item) => {
+  itemToDelete.value = item;
+  deleteError.value = null;
+  showDeleteModal.value = true;
+};
+
+const closeDeleteModal = () => {
+  showDeleteModal.value = false;
+  itemToDelete.value = null;
+  deleteError.value = null;
+};
+
+const executeDelete = async () => {
+  if (!itemToDelete.value) return;
+
+  const itemId = itemToDelete.value.id;
+  isDeleting.value = true;
+  deletingItems[itemId] = true;
+  deleteError.value = null;
+
+  const result = await remoteStore.deleteDownloadRequest(itemId);
+
+  if (result.error) {
+    deleteError.value = result.error;
+    isDeleting.value = false;
+    deletingItems[itemId] = false;
+  } else {
+    closeDeleteModal();
+    await loadData();
+    deletingItems[itemId] = false;
+    isDeleting.value = false;
+  }
+};
+
+const formatItemName = (item) => {
+  const name = item.content_name || item.content_id;
+  if (item.artist_name) {
+    return `${name} - ${item.artist_name}`;
+  }
+  return name;
+};
+
+const formatPriority = (priority) => {
+  if (!priority) return "normal";
+  const p = priority.toLowerCase();
+  if (p === "high" || p === "system") return "high";
+  if (p === "low") return "low";
+  return "normal";
+};
+
+const formatUptime = (secs) => {
+  if (secs < 60) return `${secs}s`;
+  if (secs < 3600) return `${Math.floor(secs / 60)}m`;
+  if (secs < 86400) return `${Math.floor(secs / 3600)}h ${Math.floor((secs % 3600) / 60)}m`;
+  return `${Math.floor(secs / 86400)}d ${Math.floor((secs % 86400) / 3600)}h`;
+};
+
 const formatDate = (timestamp) => {
   if (!timestamp) return "—";
-  const date = new Date(timestamp);
+  const date = new Date(timestamp * 1000);
   return date.toLocaleString();
 };
 
+const formatContentType = (type) => {
+  if (!type) return "";
+  return type.replace("_", " ").toLowerCase();
+};
+
+const formatStatus = (status) => {
+  if (!status) return "";
+  return status.toLowerCase().replace("_", " ");
+};
+
 const statusClass = (status) => {
-  switch (status?.toLowerCase()) {
-    case "completed":
+  switch (status?.toUpperCase()) {
+    case "COMPLETED":
       return "status-completed";
-    case "in_progress":
+    case "IN_PROGRESS":
       return "status-progress";
-    case "pending":
+    case "PENDING":
       return "status-pending";
-    case "failed":
+    case "FAILED":
       return "status-failed";
-    case "retry_waiting":
+    case "RETRY_WAITING":
       return "status-retry";
     default:
       return "";
@@ -414,15 +529,14 @@ const eventClass = (eventType) => {
 
 const formatEventType = (eventType) => {
   if (!eventType) return "—";
-  // Convert snake_case to Title Case
   return eventType
     .split("_")
     .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
     .join(" ");
 };
 
-// Auto-refresh every 30 seconds
-const REFRESH_INTERVAL = 30000;
+// Auto-refresh every 10 seconds
+const REFRESH_INTERVAL = 10000;
 let refreshInterval = null;
 
 onMounted(() => {
@@ -447,87 +561,142 @@ onUnmounted(() => {
   font-size: var(--text-2xl);
   font-weight: var(--font-bold);
   color: var(--text-base);
-  margin: 0 0 var(--spacing-6) 0;
+  margin: 0 0 var(--spacing-4) 0;
 }
 
-/* Stats Grid */
-.statsGrid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+/* Downloader Status */
+.downloaderStatus {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--spacing-4);
+  padding: var(--spacing-3) var(--spacing-4);
+  border-radius: var(--radius-lg);
+  margin-bottom: var(--spacing-4);
+  font-size: var(--text-sm);
+}
+
+.downloaderStatus.status-online {
+  background-color: rgba(34, 197, 94, 0.15);
+}
+
+.downloaderStatus.status-offline {
+  background-color: rgba(220, 38, 38, 0.15);
+}
+
+.downloaderStatus.status-pending {
+  background-color: rgba(249, 115, 22, 0.15);
+}
+
+.downloaderStatus.status-unknown {
+  background-color: rgba(156, 163, 175, 0.15);
+}
+
+.statusMain {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-2);
+  font-weight: var(--font-semibold);
+}
+
+.statusDot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+
+.status-online .statusDot { background-color: #22c55e; }
+.status-online .statusState { color: #22c55e; }
+.status-offline .statusDot { background-color: #dc2626; }
+.status-offline .statusState { color: #dc2626; }
+.status-pending .statusDot { background-color: #f97316; }
+.status-pending .statusState { color: #f97316; }
+.status-unknown .statusDot { background-color: #9ca3af; }
+.status-unknown .statusState { color: #9ca3af; }
+
+.statusUptime {
+  color: var(--text-subdued);
+}
+
+.statusError {
+  color: #dc2626;
+  font-size: var(--text-xs);
+  flex-basis: 100%;
+}
+
+/* Action Buttons */
+.actionButtons {
+  display: flex;
   gap: var(--spacing-3);
   margin-bottom: var(--spacing-4);
 }
 
-.statCard {
-  background-color: var(--bg-elevated-base);
-  border-radius: var(--radius-lg);
-  padding: var(--spacing-4);
-  text-align: center;
-}
-
-.statCard.success .statValue {
-  color: var(--spotify-green);
-}
-
-.statCard.danger .statValue {
-  color: #dc2626;
-}
-
-.statValue {
-  display: block;
-  font-size: var(--text-2xl);
-  font-weight: var(--font-bold);
-  color: var(--text-base);
-}
-
-.statLabel {
-  display: block;
+.actionButton {
+  padding: var(--spacing-2) var(--spacing-4);
+  background-color: var(--spotify-green);
+  color: white;
+  border: none;
+  border-radius: var(--radius-md);
   font-size: var(--text-sm);
-  color: var(--text-subdued);
-  margin-top: var(--spacing-1);
-}
-
-/* Capacity Card */
-.capacityCard {
-  background-color: var(--bg-elevated-base);
-  border-radius: var(--radius-lg);
-  padding: var(--spacing-4);
-  margin-bottom: var(--spacing-4);
-}
-
-.cardTitle {
-  font-size: var(--text-base);
-  font-weight: var(--font-semibold);
-  color: var(--text-base);
-  margin: 0 0 var(--spacing-3) 0;
-}
-
-.capacityGrid {
-  display: flex;
-  gap: var(--spacing-6);
-  flex-wrap: wrap;
-}
-
-.capacityItem {
-  display: flex;
-  flex-direction: column;
-}
-
-.capacityValue {
-  font-size: var(--text-lg);
   font-weight: var(--font-medium);
+  cursor: pointer;
+  transition: background-color var(--transition-fast);
+}
+
+.actionButton:hover {
+  background-color: #1ed760;
+}
+
+.refreshButton {
+  margin-left: auto;
+  padding: var(--spacing-2) var(--spacing-4);
+  background-color: var(--bg-elevated-base);
+  border: 1px solid var(--border-subdued);
+  border-radius: var(--radius-md);
+  color: var(--text-subdued);
+  font-size: var(--text-sm);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.refreshButton:hover:not(:disabled) {
+  border-color: var(--text-base);
   color: var(--text-base);
 }
 
-.capacityLabel {
+.refreshButton:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Stats Summary */
+.statsSummary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-4);
+  padding: var(--spacing-3) var(--spacing-4);
+  background-color: var(--bg-elevated-base);
+  border-radius: var(--radius-lg);
+  margin-bottom: var(--spacing-4);
   font-size: var(--text-sm);
   color: var(--text-subdued);
+}
+
+.statItem strong {
+  color: var(--text-base);
+}
+
+.statItem.success strong {
+  color: #22c55e;
+}
+
+.statItem.danger strong {
+  color: #dc2626;
 }
 
 /* Tab Navigation */
 .tabNav {
   display: flex;
-  flex-wrap: wrap;
   gap: var(--spacing-2);
   margin-bottom: var(--spacing-4);
   border-bottom: 1px solid var(--border-subdued);
@@ -535,6 +704,9 @@ onUnmounted(() => {
 }
 
 .tabButton {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-2);
   padding: var(--spacing-2) var(--spacing-4);
   background: none;
   border: none;
@@ -556,26 +728,11 @@ onUnmounted(() => {
   background-color: var(--bg-elevated-base);
 }
 
-.refreshButton {
-  margin-left: auto;
-  padding: var(--spacing-2) var(--spacing-4);
-  background-color: var(--spotify-green);
-  color: white;
-  border: none;
-  border-radius: var(--radius-md);
-  font-size: var(--text-sm);
-  font-weight: var(--font-medium);
-  cursor: pointer;
-  transition: background-color var(--transition-fast);
-}
-
-.refreshButton:hover:not(:disabled) {
-  background-color: #1ed760;
-}
-
-.refreshButton:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
+.tabCount {
+  background-color: var(--bg-highlight);
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+  font-size: var(--text-xs);
 }
 
 /* Error Message */
@@ -603,82 +760,77 @@ onUnmounted(() => {
   font-size: var(--text-base);
 }
 
-/* Table Styles */
-.tableWrapper {
-  overflow-x: auto;
+/* Queue List */
+.queueList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2);
 }
 
-.dataTable {
-  width: 100%;
-  border-collapse: collapse;
+.queueItem {
   background-color: var(--bg-elevated-base);
-  border-radius: var(--radius-lg);
-  overflow: hidden;
-}
-
-.dataTable th,
-.dataTable td {
+  border-radius: var(--radius-md);
   padding: var(--spacing-3) var(--spacing-4);
-  text-align: left;
-  border-bottom: 1px solid var(--border-subdued);
+  border-left: 3px solid var(--border-subdued);
 }
 
-.dataTable th {
-  background-color: var(--bg-highlight);
-  color: var(--text-subdued);
-  font-size: var(--text-sm);
-  font-weight: var(--font-semibold);
+.queueItem.status-pending { border-left-color: #9ca3af; }
+.queueItem.status-progress { border-left-color: #3b82f6; }
+.queueItem.status-completed { border-left-color: #22c55e; }
+.queueItem.status-failed { border-left-color: #dc2626; }
+.queueItem.status-retry { border-left-color: #f97316; }
+
+.queueItemMain {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-3);
+  margin-bottom: var(--spacing-2);
+}
+
+.queueItemType {
+  font-size: var(--text-xs);
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  color: var(--text-subdued);
+  background-color: var(--bg-highlight);
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
 }
 
-.dataTable td {
+.queueItemName {
+  font-weight: var(--font-medium);
   color: var(--text-base);
+}
+
+.queueItemArtist {
+  color: var(--text-subdued);
   font-size: var(--text-sm);
 }
 
-.dataTable tr:last-child td {
-  border-bottom: none;
+.queueItemMeta {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-3);
+  font-size: var(--text-sm);
 }
 
-.dataTable tr:hover td {
-  background-color: var(--bg-highlight);
-}
-
-.idCell {
-  font-family: monospace;
-  font-size: var(--text-xs);
-  max-width: 200px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.errorCell {
-  max-width: 250px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: #dc2626;
-}
-
-.detailsCell {
-  max-width: 300px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: var(--text-xs);
+.queueItemTime {
   color: var(--text-subdued);
+  font-size: var(--text-xs);
+}
+
+.queueItemError {
+  margin-top: var(--spacing-2);
+  font-size: var(--text-xs);
+  color: #dc2626;
 }
 
 /* Status Badge */
 .statusBadge {
   display: inline-block;
-  padding: var(--spacing-1) var(--spacing-2);
+  padding: 2px 8px;
   border-radius: var(--radius-full);
   font-size: var(--text-xs);
   font-weight: var(--font-medium);
-  text-transform: lowercase;
 }
 
 .status-completed {
@@ -706,10 +858,200 @@ onUnmounted(() => {
   color: #f97316;
 }
 
+/* Retry Button */
+.retryButton {
+  padding: 2px 10px;
+  background-color: var(--spotify-green);
+  color: white;
+  border: none;
+  border-radius: var(--radius-md);
+  font-size: var(--text-xs);
+  cursor: pointer;
+  transition: background-color var(--transition-fast);
+}
+
+.retryButton:hover:not(:disabled) {
+  background-color: #1ed760;
+}
+
+.retryButton:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.forceRetryButton {
+  padding: 2px 10px;
+  background-color: #f97316;
+  color: white;
+  border: none;
+  border-radius: var(--radius-md);
+  font-size: var(--text-xs);
+  cursor: pointer;
+  transition: background-color var(--transition-fast);
+}
+
+.forceRetryButton:hover:not(:disabled) {
+  background-color: #ea580c;
+}
+
+.forceRetryButton:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.deleteButton {
+  padding: 2px 10px;
+  background-color: transparent;
+  color: #dc2626;
+  border: 1px solid #dc2626;
+  border-radius: var(--radius-md);
+  font-size: var(--text-xs);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.deleteButton:hover:not(:disabled) {
+  background-color: #dc2626;
+  color: white;
+}
+
+.deleteButton:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Queue Item Layout */
+.queueItemHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: var(--spacing-3);
+}
+
+.queueItemActions {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-2);
+  flex-shrink: 0;
+}
+
+.queueItemDetails {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-3);
+  margin-top: var(--spacing-2);
+  font-size: var(--text-xs);
+}
+
+.detailItem {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-1);
+}
+
+.detailLabel {
+  color: var(--text-subdued);
+}
+
+.detailValue {
+  color: var(--text-base);
+}
+
+.queueItemError .errorType {
+  display: inline-block;
+  padding: 1px 6px;
+  background-color: rgba(220, 38, 38, 0.15);
+  border-radius: var(--radius-sm);
+  margin-right: var(--spacing-2);
+  font-weight: var(--font-medium);
+}
+
+/* Delete Modal */
+.deleteWarning {
+  color: var(--text-subdued);
+  margin: 0 0 var(--spacing-4) 0;
+}
+
+.deleteItemInfo {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-3);
+  padding: var(--spacing-3);
+  background-color: var(--bg-base);
+  border-radius: var(--radius-md);
+  margin-bottom: var(--spacing-4);
+}
+
+.deleteConfirmButton {
+  padding: var(--spacing-2) var(--spacing-4);
+  background-color: #dc2626;
+  border: none;
+  border-radius: var(--radius-md);
+  color: white;
+  font-size: var(--text-sm);
+  font-weight: var(--font-medium);
+  cursor: pointer;
+}
+
+.deleteConfirmButton:hover:not(:disabled) {
+  background-color: #b91c1c;
+}
+
+.deleteConfirmButton:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Audit List */
+.auditList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2);
+}
+
+.auditEntry {
+  background-color: var(--bg-elevated-base);
+  border-radius: var(--radius-md);
+  padding: var(--spacing-3);
+}
+
+.auditEntryHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--spacing-2);
+}
+
+.auditEntryTime {
+  font-size: var(--text-xs);
+  color: var(--text-subdued);
+}
+
+.auditEntryBody {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-2);
+  font-size: var(--text-sm);
+  color: var(--text-subdued);
+}
+
+.auditUser {
+  color: var(--spotify-green);
+}
+
+.auditItem {
+  font-family: monospace;
+  font-size: var(--text-xs);
+}
+
+.auditDetails {
+  color: var(--text-base);
+}
+
 /* Event Badge */
 .eventBadge {
   display: inline-block;
-  padding: var(--spacing-1) var(--spacing-2);
+  padding: 2px 8px;
   border-radius: var(--radius-md);
   font-size: var(--text-xs);
   font-weight: var(--font-medium);
@@ -735,46 +1077,7 @@ onUnmounted(() => {
   color: #3b82f6;
 }
 
-/* Retry Button */
-.retryButton {
-  padding: var(--spacing-1) var(--spacing-3);
-  background-color: var(--spotify-green);
-  color: white;
-  border: none;
-  border-radius: var(--radius-md);
-  font-size: var(--text-xs);
-  font-weight: var(--font-medium);
-  cursor: pointer;
-  transition: background-color var(--transition-fast);
-}
-
-.retryButton:hover:not(:disabled) {
-  background-color: #1ed760;
-}
-
-.retryButton:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-/* Link Button (clickable text) */
-.linkButton {
-  background: none;
-  border: none;
-  color: var(--spotify-green);
-  font-size: inherit;
-  font-family: inherit;
-  cursor: pointer;
-  padding: 0;
-  text-decoration: underline;
-  text-underline-offset: 2px;
-}
-
-.linkButton:hover {
-  color: #1ed760;
-}
-
-/* Audit Detail Panel */
+/* Modal */
 .detailOverlay {
   position: fixed;
   top: 0;
@@ -792,21 +1095,17 @@ onUnmounted(() => {
 .detailPanel {
   background-color: var(--bg-elevated-base);
   border-radius: var(--radius-lg);
-  max-width: 600px;
+  max-width: 450px;
   width: 100%;
-  max-height: 80vh;
-  display: flex;
-  flex-direction: column;
   overflow: hidden;
 }
 
 .detailHeader {
   display: flex;
   align-items: center;
-  gap: var(--spacing-3);
+  justify-content: space-between;
   padding: var(--spacing-4);
   border-bottom: 1px solid var(--border-subdued);
-  flex-shrink: 0;
 }
 
 .detailTitle {
@@ -814,16 +1113,6 @@ onUnmounted(() => {
   font-weight: var(--font-bold);
   color: var(--text-base);
   margin: 0;
-}
-
-.detailSubtitle {
-  font-size: var(--text-sm);
-  color: var(--text-subdued);
-  font-family: monospace;
-  flex: 1;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .closeDetailButton {
@@ -834,84 +1123,121 @@ onUnmounted(() => {
   cursor: pointer;
   padding: var(--spacing-1);
   line-height: 1;
-  border-radius: var(--radius-md);
-  transition: all var(--transition-fast);
 }
 
 .closeDetailButton:hover {
   color: var(--text-base);
-  background-color: var(--bg-highlight);
 }
 
-.detailLoading,
-.detailEmpty {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: var(--spacing-8);
-  color: var(--text-subdued);
-}
-
-.detailContent {
-  overflow-y: auto;
+.modalContent {
   padding: var(--spacing-4);
 }
 
-.auditEntry {
-  padding: var(--spacing-3);
-  background-color: var(--bg-base);
-  border-radius: var(--radius-md);
-  margin-bottom: var(--spacing-3);
+.formGroup {
+  margin-bottom: var(--spacing-4);
 }
 
-.auditEntry:last-child {
-  margin-bottom: 0;
-}
-
-.auditEntryHeader {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--spacing-2);
+.formLabel {
+  display: block;
+  font-size: var(--text-sm);
+  font-weight: var(--font-medium);
+  color: var(--text-subdued);
   margin-bottom: var(--spacing-2);
 }
 
-.auditEntryTime {
-  font-size: var(--text-xs);
-  color: var(--text-subdued);
-}
-
-.auditEntryBody {
+.formInput {
+  width: 100%;
+  padding: var(--spacing-3);
+  background-color: var(--bg-base);
+  border: 1px solid var(--border-subdued);
+  border-radius: var(--radius-md);
+  color: var(--text-base);
   font-size: var(--text-sm);
 }
 
-.auditEntryMeta {
-  color: var(--text-subdued);
-  margin-bottom: var(--spacing-1);
+.formInput:focus {
+  outline: none;
+  border-color: var(--spotify-green);
 }
 
-.auditEntryDetails {
+.formInput::placeholder {
+  color: var(--text-subdued);
+}
+
+.modalError {
+  padding: var(--spacing-3);
+  background-color: rgba(220, 38, 38, 0.1);
+  border: 1px solid #dc2626;
+  border-radius: var(--radius-md);
+  color: #dc2626;
+  font-size: var(--text-sm);
+  margin-bottom: var(--spacing-4);
+}
+
+.modalSuccess {
+  padding: var(--spacing-3);
+  background-color: rgba(34, 197, 94, 0.1);
+  border: 1px solid #22c55e;
+  border-radius: var(--radius-md);
+  color: #22c55e;
+  font-size: var(--text-sm);
+  margin-bottom: var(--spacing-4);
+}
+
+.modalActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--spacing-3);
+}
+
+.cancelButton {
+  padding: var(--spacing-2) var(--spacing-4);
+  background: none;
+  border: 1px solid var(--border-subdued);
+  border-radius: var(--radius-md);
+  color: var(--text-subdued);
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+
+.cancelButton:hover {
+  border-color: var(--text-base);
   color: var(--text-base);
-  word-break: break-word;
+}
+
+.confirmButton {
+  padding: var(--spacing-2) var(--spacing-4);
+  background-color: var(--spotify-green);
+  border: none;
+  border-radius: var(--radius-md);
+  color: white;
+  font-size: var(--text-sm);
+  font-weight: var(--font-medium);
+  cursor: pointer;
+}
+
+.confirmButton:hover:not(:disabled) {
+  background-color: #1ed760;
+}
+
+.confirmButton:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 @media (max-width: 768px) {
-  .statsGrid {
-    grid-template-columns: repeat(2, 1fr);
-  }
-
-  .capacityGrid {
-    flex-direction: column;
-    gap: var(--spacing-2);
-  }
-
-  .tabNav {
-    flex-direction: column;
+  .actionButtons {
+    flex-wrap: wrap;
   }
 
   .refreshButton {
     margin-left: 0;
     width: 100%;
+  }
+
+  .statsSummary {
+    flex-direction: column;
+    gap: var(--spacing-2);
   }
 }
 </style>

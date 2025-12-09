@@ -24,6 +24,9 @@ pub trait DownloadQueueStore: Send + Sync {
     /// Get a queue item by ID.
     fn get_item(&self, id: &str) -> Result<Option<QueueItem>>;
 
+    /// Delete a queue item by ID. Returns true if item was deleted.
+    fn delete_item(&self, id: &str) -> Result<bool>;
+
     /// Get the next pending item to process (by priority, then age).
     fn get_next_pending(&self) -> Result<Option<QueueItem>>;
 
@@ -97,6 +100,10 @@ pub trait DownloadQueueStore: Send + Sync {
 
     /// Promote a retry-waiting item back to pending.
     fn promote_retry_to_pending(&self, id: &str) -> Result<()>;
+
+    /// Reset any non-completed item back to pending (for admin retry).
+    /// Clears error info and resets retry state.
+    fn reset_to_pending(&self, id: &str) -> Result<()>;
 
     // === Duplicate/Existence Checks ===
 
@@ -494,6 +501,12 @@ impl DownloadQueueStore for SqliteDownloadQueueStore {
             .optional()?;
 
         Ok(item)
+    }
+
+    fn delete_item(&self, id: &str) -> Result<bool> {
+        let conn = self.conn.lock().unwrap();
+        let rows_affected = conn.execute("DELETE FROM download_queue WHERE id = ?1", [id])?;
+        Ok(rows_affected > 0)
     }
 
     fn get_next_pending(&self) -> Result<Option<QueueItem>> {
@@ -937,6 +950,30 @@ impl DownloadQueueStore for SqliteDownloadQueueStore {
                WHERE id = ?1 AND status = 'RETRY_WAITING'"#,
             [id],
         )?;
+
+        Ok(())
+    }
+
+    fn reset_to_pending(&self, id: &str) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+
+        let rows = conn.execute(
+            r#"UPDATE download_queue
+               SET status = 'PENDING',
+                   next_retry_at = NULL,
+                   error_type = NULL,
+                   error_message = NULL,
+                   retry_count = 0
+               WHERE id = ?1 AND status != 'COMPLETED'"#,
+            [id],
+        )?;
+
+        if rows == 0 {
+            return Err(anyhow::anyhow!(
+                "Item not found or already completed: {}",
+                id
+            ));
+        }
 
         Ok(())
     }

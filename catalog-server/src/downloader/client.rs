@@ -105,6 +105,31 @@ impl DownloaderClient {
 
         Ok(bytes.len() as u64)
     }
+
+    /// Get the current status of the downloader service.
+    pub async fn get_status(&self) -> Result<super::models::DownloaderStatus> {
+        let url = format!("{}/status", self.base_url);
+        let response = self
+            .client
+            .get(&url)
+            .send()
+            .await
+            .context("Failed to connect to downloader service")?;
+
+        if !response.status().is_success() {
+            anyhow::bail!(
+                "Downloader status request failed with status: {}",
+                response.status()
+            );
+        }
+
+        let status = response
+            .json()
+            .await
+            .context("Failed to parse downloader status response")?;
+
+        Ok(status)
+    }
 }
 
 #[async_trait]

@@ -54,6 +54,22 @@ impl DownloaderClient {
         }
     }
 
+    /// Get the current status of the downloader service.
+    pub async fn get_status(&self) -> Result<crate::downloader::models::DownloaderStatus> {
+        let url = format!("{}/status", self.base_url);
+        let response = self.client.get(&url).send().await?;
+
+        if !response.status().is_success() {
+            return Err(anyhow!(
+                "Downloader status request failed with status: {}",
+                response.status()
+            ));
+        }
+
+        let status = response.json().await?;
+        Ok(status)
+    }
+
     // =========================================================================
     // Search Endpoints
     // =========================================================================
@@ -149,8 +165,8 @@ impl DownloaderClient {
             ));
         }
 
-        let tracks_response: TracksResponse = response.json().await?;
-        Ok(tracks_response.tracks)
+        let tracks: Vec<ExternalTrack> = response.json().await?;
+        Ok(tracks)
     }
 
     /// Get artist metadata from the downloader service.

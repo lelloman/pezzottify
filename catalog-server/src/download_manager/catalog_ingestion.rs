@@ -118,8 +118,8 @@ fn convert_artist(external: &ExternalArtist) -> Artist {
     Artist {
         id: external.id.clone(),
         name: external.name.clone(),
-        genres: external.genres.clone(),
-        activity_periods: vec![], // External API doesn't provide this
+        genres: external.genre.clone(),
+        activity_periods: vec![], // TODO: Convert activity_periods from external API
     }
 }
 

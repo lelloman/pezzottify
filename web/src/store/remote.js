@@ -526,6 +526,31 @@ export const useRemoteStore = defineStore("remote", () => {
     }
   };
 
+  const fetchDownloadQueue = async () => {
+    try {
+      // Fetch all non-completed items for the queue view
+      const response = await axios.get("/v1/download/admin/requests", {
+        params: { limit: 200, offset: 0, exclude_completed: true },
+      });
+      return response.data;
+    } catch (error) {
+      console.error("Failed to fetch download queue:", error);
+      return null;
+    }
+  };
+
+  const fetchDownloadCompleted = async (limit = 100, offset = 0) => {
+    try {
+      const response = await axios.get("/v1/download/admin/requests", {
+        params: { limit, offset, status: "COMPLETED" },
+      });
+      return response.data;
+    } catch (error) {
+      console.error("Failed to fetch completed downloads:", error);
+      return null;
+    }
+  };
+
   const fetchFailedDownloads = async (limit = 50, offset = 0) => {
     try {
       const response = await axios.get("/v1/download/admin/failed", {
@@ -594,9 +619,11 @@ export const useRemoteStore = defineStore("remote", () => {
     }
   };
 
-  const retryDownload = async (itemId) => {
+  const retryDownload = async (itemId, force = false) => {
     try {
-      const response = await axios.post(`/v1/download/admin/retry/${itemId}`);
+      const response = await axios.post(`/v1/download/admin/retry/${itemId}`, null, {
+        params: { force },
+      });
       return { success: true, data: response.data };
     } catch (error) {
       console.error("Failed to retry download:", error);
@@ -607,6 +634,55 @@ export const useRemoteStore = defineStore("remote", () => {
         return { error: "Item not found" };
       }
       return { error: "Failed to retry download" };
+    }
+  };
+
+  const deleteDownloadRequest = async (itemId) => {
+    try {
+      await axios.delete(`/v1/download/admin/request/${itemId}`);
+      return { success: true };
+    } catch (error) {
+      console.error("Failed to delete download request:", error);
+      if (error.response?.status === 400) {
+        return { error: error.response.data || "Cannot delete item" };
+      }
+      if (error.response?.status === 404) {
+        return { error: "Item not found" };
+      }
+      return { error: "Failed to delete download request" };
+    }
+  };
+
+  const requestAlbumDownload = async (albumId, albumName, artistName) => {
+    try {
+      const response = await axios.post("/v1/download/request/album", {
+        album_id: albumId,
+        album_name: albumName,
+        artist_name: artistName,
+      });
+      return { success: true, data: response.data };
+    } catch (error) {
+      console.error("Failed to request album download:", error);
+      if (error.response?.data) {
+        return { error: error.response.data };
+      }
+      return { error: "Failed to request download" };
+    }
+  };
+
+  const requestDiscographyDownload = async (artistId, artistName) => {
+    try {
+      const response = await axios.post("/v1/download/request/discography", {
+        artist_id: artistId,
+        artist_name: artistName,
+      });
+      return { success: true, data: response.data };
+    } catch (error) {
+      console.error("Failed to request discography download:", error);
+      if (error.response?.data) {
+        return { error: error.response.data };
+      }
+      return { error: "Failed to request download" };
     }
   };
 
@@ -657,6 +733,8 @@ export const useRemoteStore = defineStore("remote", () => {
     rebootServer,
     // Admin API - Download Manager
     fetchDownloadStats,
+    fetchDownloadQueue,
+    fetchDownloadCompleted,
     fetchFailedDownloads,
     fetchDownloadActivity,
     fetchDownloadRequests,
@@ -664,5 +742,8 @@ export const useRemoteStore = defineStore("remote", () => {
     fetchDownloadAuditForItem,
     fetchDownloadAuditForUser,
     retryDownload,
+    deleteDownloadRequest,
+    requestAlbumDownload,
+    requestDiscographyDownload,
   };
 });
