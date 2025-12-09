@@ -8,12 +8,13 @@ use tracing::{error, info, level_filters::LevelFilter};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
 
 // Import modules from the library crate
-use pezzottify_catalog_server::background_jobs::jobs::PopularContentJob;
+use pezzottify_catalog_server::background_jobs::jobs::{IntegrityWatchdogJob, PopularContentJob};
 use pezzottify_catalog_server::background_jobs::{create_scheduler, JobContext};
 use pezzottify_catalog_server::catalog_store::{CatalogStore, SqliteCatalogStore};
 use pezzottify_catalog_server::config;
 use pezzottify_catalog_server::download_manager::{
-    DownloadManager, DownloaderClient, QueueProcessor, SqliteDownloadQueueStore,
+    AuditLogger, DownloadManager, DownloadQueueStore, DownloaderClient, IntegrityWatchdog,
+    QueueProcessor, SqliteDownloadQueueStore,
 };
 use pezzottify_catalog_server::downloader;
 #[cfg(feature = "no_search")]
@@ -310,8 +311,8 @@ async fn main() -> Result<()> {
     };
 
     // Initialize download manager if enabled
-    let download_manager = if app_config.download_manager.enabled {
-        let queue_store = Arc::new(SqliteDownloadQueueStore::new(
+    let (download_manager, download_queue_store) = if app_config.download_manager.enabled {
+        let queue_store: Arc<dyn DownloadQueueStore> = Arc::new(SqliteDownloadQueueStore::new(
             app_config.download_queue_db_path(),
         )?);
 
@@ -321,7 +322,7 @@ async fn main() -> Result<()> {
         )?;
 
         let manager = Arc::new(DownloadManager::new(
-            queue_store,
+            queue_store.clone(),
             dm_downloader_client,
             catalog_store.clone() as Arc<dyn CatalogStore>,
             app_config.media_path.clone(),
@@ -332,10 +333,10 @@ async fn main() -> Result<()> {
             "Download manager initialized (process_interval={}s)",
             app_config.download_manager.process_interval_secs
         );
-        Some(manager)
+        (Some(manager), Some(queue_store))
     } else {
         info!("Download manager disabled");
-        None
+        (None, None)
     };
 
     // Spawn queue processor task if download manager is enabled
@@ -349,6 +350,20 @@ async fn main() -> Result<()> {
             processor.run(shutdown).await;
         });
         info!("Queue processor started");
+    }
+
+    // Register integrity watchdog job if download manager is enabled
+    if let Some(ref queue_store) = download_queue_store {
+        let audit_logger = AuditLogger::new(queue_store.clone());
+        let watchdog = Arc::new(IntegrityWatchdog::new(
+            catalog_store.clone() as Arc<dyn CatalogStore>,
+            queue_store.clone(),
+            audit_logger,
+        ));
+        scheduler
+            .register_job(Arc::new(IntegrityWatchdogJob::new(watchdog)))
+            .await;
+        info!("Integrity watchdog job registered");
     }
 
     info!("Ready to serve at port {}!", app_config.port);
