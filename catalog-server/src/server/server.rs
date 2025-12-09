@@ -274,6 +274,29 @@ async fn require_request_content(
     next.run(request).await
 }
 
+async fn require_download_manager_admin(
+    session: Session,
+    request: Request<Body>,
+    next: Next,
+) -> impl IntoResponse {
+    debug!(
+        "require_download_manager_admin: user_id={} permissions={:?}",
+        session.user_id, session.permissions
+    );
+    if !session.has_permission(Permission::DownloadManagerAdmin) {
+        debug!(
+            "require_download_manager_admin: FORBIDDEN - user_id={} lacks DownloadManagerAdmin permission",
+            session.user_id
+        );
+        return StatusCode::FORBIDDEN.into_response();
+    }
+    debug!(
+        "require_download_manager_admin: ALLOWED - user_id={}",
+        session.user_id
+    );
+    next.run(request).await
+}
+
 #[derive(Deserialize, Debug)]
 struct LoginBody {
     pub user_handle: String,
@@ -4094,7 +4117,7 @@ pub fn make_app(
         ))
         .with_state(state.clone());
 
-    // Download manager admin read routes (requires ViewAnalytics permission)
+    // Download manager admin read routes (requires DownloadManagerAdmin permission)
     let download_admin_read_routes: Router = Router::new()
         .route("/admin/stats", get(admin_get_download_stats))
         .route("/admin/failed", get(admin_get_download_failed))
@@ -4105,16 +4128,16 @@ pub fn make_app(
         .route("/admin/audit/user/{id}", get(admin_get_audit_for_user))
         .route_layer(middleware::from_fn_with_state(
             state.clone(),
-            require_view_analytics,
+            require_download_manager_admin,
         ))
         .with_state(state.clone());
 
-    // Download manager admin write routes (requires EditCatalog permission)
+    // Download manager admin write routes (requires DownloadManagerAdmin permission)
     let download_admin_write_routes: Router = Router::new()
         .route("/admin/retry/{id}", post(admin_retry_download))
         .route_layer(middleware::from_fn_with_state(
             state.clone(),
-            require_edit_catalog,
+            require_download_manager_admin,
         ))
         .with_state(state.clone());
 
