@@ -11,7 +11,8 @@ enum class Permission {
     ManagePermissions,
     IssueContentDownload,
     ServerAdmin,
-    ViewAnalytics;
+    ViewAnalytics,
+    RequestContent;
 
     val displayName: String
         get() = when (this) {
@@ -23,6 +24,7 @@ enum class Permission {
             IssueContentDownload -> "Download Content"
             ServerAdmin -> "Server Admin"
             ViewAnalytics -> "View Analytics"
+            RequestContent -> "Request Content"
         }
 
     val description: String
@@ -35,5 +37,6 @@ enum class Permission {
             IssueContentDownload -> "Request downloads of missing content."
             ServerAdmin -> "Server administration (reboot, etc.)."
             ViewAnalytics -> "View listening statistics and analytics."
+            RequestContent -> "Search external music provider and request content downloads."
         }
 }

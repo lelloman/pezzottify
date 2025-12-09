@@ -458,6 +458,9 @@ export const useUserStore = defineStore("user", () => {
   const canServerAdmin = computed(() =>
     permissions.value.includes("ServerAdmin"),
   );
+  const canRequestContent = computed(() =>
+    permissions.value.includes("RequestContent"),
+  );
 
   // =====================================================
   // Setter Methods for Full Sync
@@ -571,5 +574,6 @@ export const useUserStore = defineStore("user", () => {
     canManagePermissions,
     canViewAnalytics,
     canServerAdmin,
+    canRequestContent,
   };
 });

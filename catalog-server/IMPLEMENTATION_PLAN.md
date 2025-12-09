@@ -2117,7 +2117,7 @@ Queue processing order: `ORDER BY priority ASC, created_at ASC`
 
 #### DM-1.6 Permission
 
-- [ ] **Task DM-1.6.1: Add `RequestContent` permission (ID = 9)**
+- [x] **Task DM-1.6.1: Add `RequestContent` permission (ID = 9)**
 
   **File:** `catalog-server/src/user/permissions.rs`
 
@@ -2146,13 +2146,13 @@ Queue processing order: `ORDER BY priority ASC, created_at ASC`
   }
   ```
 
-- [ ] **Task DM-1.6.2: Update Admin role to include RequestContent**
+- [x] **Task DM-1.6.2: Update Admin role to include RequestContent**
 
   **File:** `catalog-server/src/user/permissions.rs`
 
   **Update `ADMIN_PERMISSIONS` array to include `RequestContent`.**
 
-- [ ] **Task DM-1.6.3: Add `require_request_content` middleware**
+- [x] **Task DM-1.6.3: Add `require_request_content` middleware**
 
   **File:** `catalog-server/src/server/server.rs`
 
@@ -2166,20 +2166,20 @@ Queue processing order: `ORDER BY priority ASC, created_at ASC`
   }
   ```
 
-- [ ] **Task DM-1.6.4: Update permission documentation**
+- [x] **Task DM-1.6.4: Update permission documentation**
 
   **File:** `catalog-server/README.md`
 
   **Add RequestContent to permissions table with description:**
   > Allows searching external music provider and requesting content downloads.
 
-- [ ] **Task DM-1.6.5: Update web frontend permission references**
+- [x] **Task DM-1.6.5: Update web frontend permission references**
 
   **Files:**
   - `web/src/store/user.js`: Add `'RequestContent'` to known permissions
   - Add `canRequestContent` computed property
 
-- [ ] **Task DM-1.6.6: Update Android permission references**
+- [x] **Task DM-1.6.6: Update Android permission references**
 
   **Files:**
   - `android/ui/src/main/java/com/lelloman/pezzottify/android/ui/model/Permission.kt`: Add `RequestContent`
