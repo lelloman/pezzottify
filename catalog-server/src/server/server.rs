@@ -249,6 +249,31 @@ async fn require_view_analytics(
     next.run(request).await
 }
 
+async fn require_request_content(
+    session: Session,
+    request: Request<Body>,
+    next: Next,
+) -> impl IntoResponse {
+    debug!(
+        "require_request_content: user_id={}, has_permission={}, permissions={:?}",
+        session.user_id,
+        session.has_permission(Permission::RequestContent),
+        session.permissions
+    );
+    if !session.has_permission(Permission::RequestContent) {
+        debug!(
+            "require_request_content: FORBIDDEN - user_id={} lacks RequestContent permission",
+            session.user_id
+        );
+        return StatusCode::FORBIDDEN.into_response();
+    }
+    debug!(
+        "require_request_content: ALLOWED - user_id={}",
+        session.user_id
+    );
+    next.run(request).await
+}
+
 #[derive(Deserialize, Debug)]
 struct LoginBody {
     pub user_handle: String,

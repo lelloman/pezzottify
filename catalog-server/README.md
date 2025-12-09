@@ -85,6 +85,7 @@ The catalog server is the backend component of Pezzottify that provides:
   - `IssueContentDownload`: Issue download tokens
   - `ServerAdmin`: Server administration (reboot, etc.)
   - `ViewAnalytics`: View listening analytics and statistics
+  - `RequestContent`: Search external music provider and request content downloads
 - **`UserRole`**: Admin or Regular with different permission sets
 
 ## Prerequisites
@@ -599,7 +600,7 @@ Requires `EditCatalog` permission.
 
 - **Admin**: Administrative access (does not include user features like liking content or playlists)
 
-  - AccessCatalog, EditCatalog, ManagePermissions, IssueContentDownload, ServerAdmin, ViewAnalytics
+  - AccessCatalog, EditCatalog, ManagePermissions, IssueContentDownload, ServerAdmin, ViewAnalytics, RequestContent
 
 - **Regular**: Standard user access
   - AccessCatalog, LikeContent, OwnPlaylists

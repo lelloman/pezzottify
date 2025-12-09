@@ -44,6 +44,7 @@ enum class Permission {
     IssueContentDownload,
     ServerAdmin,
     ViewAnalytics,
+    RequestContent,
 }
 
 /**
