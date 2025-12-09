@@ -151,6 +151,12 @@ lazy_static! {
         &["content_type"]
     ).expect("Failed to create downloader_bytes_total metric");
 
+    // Download Queue Metrics
+    pub static ref DOWNLOAD_QUEUE_STALE_IN_PROGRESS: Gauge = Gauge::new(
+        format!("{PREFIX}_download_queue_stale_in_progress"),
+        "Number of download queue items stuck in IN_PROGRESS state longer than threshold"
+    ).expect("Failed to create download_queue_stale_in_progress metric");
+
     // Background Job Metrics
     pub static ref BACKGROUND_JOB_EXECUTIONS_TOTAL: CounterVec = CounterVec::new(
         Opts::new(format!("{PREFIX}_background_job_executions_total"), "Total background job executions"),
@@ -197,6 +203,7 @@ pub fn init_metrics() {
     let _ = REGISTRY.register(Box::new(DOWNLOADER_REQUEST_DURATION_SECONDS.clone()));
     let _ = REGISTRY.register(Box::new(DOWNLOADER_ERRORS_TOTAL.clone()));
     let _ = REGISTRY.register(Box::new(DOWNLOADER_BYTES_TOTAL.clone()));
+    let _ = REGISTRY.register(Box::new(DOWNLOAD_QUEUE_STALE_IN_PROGRESS.clone()));
     let _ = REGISTRY.register(Box::new(BACKGROUND_JOB_EXECUTIONS_TOTAL.clone()));
     let _ = REGISTRY.register(Box::new(BACKGROUND_JOB_DURATION_SECONDS.clone()));
     let _ = REGISTRY.register(Box::new(BACKGROUND_JOB_RUNNING.clone()));
@@ -352,6 +359,11 @@ pub fn record_downloader_bytes(content_type: &str, bytes: u64) {
     DOWNLOADER_BYTES_TOTAL
         .with_label_values(&[content_type])
         .inc_by(bytes as f64);
+}
+
+/// Set the count of stale in-progress download queue items
+pub fn set_download_stale_in_progress(count: usize) {
+    DOWNLOAD_QUEUE_STALE_IN_PROGRESS.set(count as f64);
 }
 
 /// Record a background job execution

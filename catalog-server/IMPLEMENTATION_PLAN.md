@@ -2774,7 +2774,7 @@ Queue processing order: `ORDER BY priority ASC, created_at ASC`
 
 #### DM-4.3 Stale Detection
 
-- [ ] **Task DM-4.3.1: Implement stale in-progress detection and alerting**
+- [x] **Task DM-4.3.1: Implement stale in-progress detection and alerting**
 
   **File:** `catalog-server/src/download_manager/job_processor.rs`
 
