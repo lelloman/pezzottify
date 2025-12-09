@@ -12,6 +12,9 @@ use pezzottify_catalog_server::background_jobs::jobs::PopularContentJob;
 use pezzottify_catalog_server::background_jobs::{create_scheduler, JobContext};
 use pezzottify_catalog_server::catalog_store::{CatalogStore, SqliteCatalogStore};
 use pezzottify_catalog_server::config;
+use pezzottify_catalog_server::download_manager::{
+    DownloadManager, DownloaderClient, SqliteDownloadQueueStore,
+};
 use pezzottify_catalog_server::downloader;
 #[cfg(feature = "no_search")]
 use pezzottify_catalog_server::search::NoOpSearchVault;
@@ -306,6 +309,35 @@ async fn main() -> Result<()> {
         None
     };
 
+    // Initialize download manager if enabled
+    let download_manager = if app_config.download_manager.enabled {
+        let queue_store = Arc::new(SqliteDownloadQueueStore::new(
+            app_config.download_queue_db_path(),
+        )?);
+
+        let dm_downloader_client = DownloaderClient::new(
+            app_config.downloader_url.clone().unwrap(),
+            app_config.downloader_timeout_sec,
+        )?;
+
+        let manager = Arc::new(DownloadManager::new(
+            queue_store,
+            dm_downloader_client,
+            catalog_store.clone() as Arc<dyn CatalogStore>,
+            app_config.media_path.clone(),
+            app_config.download_manager.clone(),
+        ));
+
+        info!(
+            "Download manager initialized (process_interval={}s)",
+            app_config.download_manager.process_interval_secs
+        );
+        Some(manager)
+    } else {
+        info!("Download manager disabled");
+        None
+    };
+
     info!("Ready to serve at port {}!", app_config.port);
     info!("Metrics available at port {}!", app_config.metrics_port);
 
@@ -324,6 +356,7 @@ async fn main() -> Result<()> {
             media_base_path_for_proxy,
             Some(scheduler_handle),
             app_config.ssl.clone(),
+            download_manager,
         ) => {
             info!("HTTP server stopped: {:?}", result);
             shutdown_token.cancel();
