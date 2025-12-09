@@ -13,7 +13,7 @@ use pezzottify_catalog_server::background_jobs::{create_scheduler, JobContext};
 use pezzottify_catalog_server::catalog_store::{CatalogStore, SqliteCatalogStore};
 use pezzottify_catalog_server::config;
 use pezzottify_catalog_server::download_manager::{
-    DownloadManager, DownloaderClient, SqliteDownloadQueueStore,
+    DownloadManager, DownloaderClient, QueueProcessor, SqliteDownloadQueueStore,
 };
 use pezzottify_catalog_server::downloader;
 #[cfg(feature = "no_search")]
@@ -337,6 +337,19 @@ async fn main() -> Result<()> {
         info!("Download manager disabled");
         None
     };
+
+    // Spawn queue processor task if download manager is enabled
+    if let Some(ref dm) = download_manager {
+        let processor = QueueProcessor::new(
+            dm.clone(),
+            app_config.download_manager.process_interval_secs,
+        );
+        let shutdown = shutdown_token.child_token();
+        tokio::spawn(async move {
+            processor.run(shutdown).await;
+        });
+        info!("Queue processor started");
+    }
 
     info!("Ready to serve at port {}!", app_config.port);
     info!("Metrics available at port {}!", app_config.metrics_port);
