@@ -1580,7 +1580,7 @@ impl<'a> ImportTransaction<'a> {
 // CatalogStore trait implementation
 // =========================================================================
 
-use super::trait_def::{CatalogStore, SearchableContentType, SearchableItem};
+use super::trait_def::{CatalogStore, SearchableContentType, SearchableItem, WritableCatalogStore};
 
 impl CatalogStore for SqliteCatalogStore {
     fn get_artist_json(&self, id: &str) -> Result<Option<serde_json::Value>> {
@@ -2068,6 +2068,70 @@ impl CatalogStore for SqliteCatalogStore {
 
     fn close_stale_batches(&self) -> Result<usize> {
         self.changelog.close_stale_batches()
+    }
+}
+
+impl WritableCatalogStore for SqliteCatalogStore {
+    fn artist_exists(&self, id: &str) -> Result<bool> {
+        SqliteCatalogStore::artist_exists(self, id)
+    }
+
+    fn album_exists(&self, id: &str) -> Result<bool> {
+        SqliteCatalogStore::album_exists(self, id)
+    }
+
+    fn image_exists(&self, id: &str) -> Result<bool> {
+        SqliteCatalogStore::image_exists(self, id)
+    }
+
+    fn insert_artist(&self, artist: &Artist) -> Result<()> {
+        SqliteCatalogStore::insert_artist(self, artist)
+    }
+
+    fn insert_album(&self, album: &Album) -> Result<()> {
+        SqliteCatalogStore::insert_album(self, album)
+    }
+
+    fn insert_track(&self, track: &Track) -> Result<()> {
+        SqliteCatalogStore::insert_track(self, track)
+    }
+
+    fn insert_image(&self, image: &Image) -> Result<()> {
+        SqliteCatalogStore::insert_image(self, image)
+    }
+
+    fn add_album_artist(&self, album_id: &str, artist_id: &str, position: i32) -> Result<()> {
+        SqliteCatalogStore::add_album_artist(self, album_id, artist_id, position)
+    }
+
+    fn add_track_artist(
+        &self,
+        track_id: &str,
+        artist_id: &str,
+        role: &ArtistRole,
+        position: i32,
+    ) -> Result<()> {
+        SqliteCatalogStore::add_track_artist(self, track_id, artist_id, role, position)
+    }
+
+    fn add_artist_image(
+        &self,
+        artist_id: &str,
+        image_id: &str,
+        image_type: &ImageType,
+        position: i32,
+    ) -> Result<()> {
+        SqliteCatalogStore::add_artist_image(self, artist_id, image_id, image_type, position)
+    }
+
+    fn add_album_image(
+        &self,
+        album_id: &str,
+        image_id: &str,
+        image_type: &ImageType,
+        position: i32,
+    ) -> Result<()> {
+        SqliteCatalogStore::add_album_image(self, album_id, image_id, image_type, position)
     }
 }
 
