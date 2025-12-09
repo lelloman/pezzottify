@@ -2611,7 +2611,7 @@ Queue processing order: `ORDER BY priority ASC, created_at ASC`
   }
   ```
 
-- [ ] **Task DM-4.1.2: Implement download execution logic**
+- [x] **Task DM-4.1.2: Implement download execution logic**
 
   **File:** `catalog-server/src/download_manager/job_processor.rs`
 

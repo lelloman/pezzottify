@@ -7,6 +7,8 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use anyhow::{anyhow, Result};
+use tokio::fs;
+use tracing::{debug, info};
 use uuid::Uuid;
 
 use crate::catalog_store::CatalogStore;
@@ -343,13 +345,8 @@ impl DownloadManager {
 
         let start_time = std::time::Instant::now();
 
-        // 5. Call downloader
-        // TODO: Implement actual download in DM-4.1.2
-        // For now, simulate a failure to exercise the error handling path
-        let download_result: Result<u64, DownloadError> = Err(DownloadError::new(
-            DownloadErrorType::Unknown,
-            "Download service not yet implemented".to_string(),
-        ));
+        // 5. Execute download based on content type
+        let download_result = self.execute_download(&item).await;
 
         let duration_ms = start_time.elapsed().as_millis() as i64;
 
@@ -415,6 +412,323 @@ impl DownloadManager {
                     error,
                 )))
             }
+        }
+    }
+
+    /// Execute download based on content type.
+    ///
+    /// Returns the number of bytes downloaded on success.
+    async fn execute_download(&self, item: &QueueItem) -> Result<u64, DownloadError> {
+        match item.content_type {
+            DownloadContentType::Album => {
+                // Albums are parent items that create children for tracks/images
+                self.execute_album_download(item).await
+            }
+            DownloadContentType::TrackAudio => {
+                // Download track audio file
+                self.execute_track_download(item).await
+            }
+            DownloadContentType::AlbumImage | DownloadContentType::ArtistImage => {
+                // Download image file
+                self.execute_image_download(item).await
+            }
+        }
+    }
+
+    /// Execute album download - fetches metadata and creates child items.
+    async fn execute_album_download(&self, item: &QueueItem) -> Result<u64, DownloadError> {
+        info!("Processing album: {}", item.content_id);
+
+        // 1. Fetch album metadata
+        let album = self
+            .downloader_client
+            .get_album(&item.content_id)
+            .await
+            .map_err(|e| {
+                DownloadError::new(
+                    DownloadErrorType::Connection,
+                    format!("Failed to fetch album metadata: {}", e),
+                )
+            })?;
+
+        // 2. Fetch album tracks
+        let tracks = self
+            .downloader_client
+            .get_album_tracks(&item.content_id)
+            .await
+            .map_err(|e| {
+                DownloadError::new(
+                    DownloadErrorType::Connection,
+                    format!("Failed to fetch album tracks: {}", e),
+                )
+            })?;
+
+        // 3. Fetch artist metadata for each artist on the album
+        let mut artists = Vec::new();
+        for artist_id in &album.artists_ids {
+            match self.downloader_client.get_artist(artist_id).await {
+                Ok(artist) => artists.push(artist),
+                Err(e) => {
+                    debug!("Failed to fetch artist {}: {}", artist_id, e);
+                    // Continue without this artist
+                }
+            }
+        }
+
+        // 4. Create child queue items for tracks and images
+        let mut children = Vec::new();
+        let track_count = tracks.len();
+
+        // Add track children
+        for track in &tracks {
+            children.push(QueueItem::new_child(
+                Uuid::new_v4().to_string(),
+                item.id.clone(),
+                DownloadContentType::TrackAudio,
+                track.id.clone(),
+                item.priority,
+                item.request_source,
+                item.requested_by_user_id.clone(),
+                self.config.max_retries as i32,
+            ));
+        }
+
+        // Add album cover images
+        for cover in &album.covers {
+            // Only download medium/large sizes
+            if cover.size == "medium" || cover.size == "large" {
+                children.push(QueueItem::new_child(
+                    Uuid::new_v4().to_string(),
+                    item.id.clone(),
+                    DownloadContentType::AlbumImage,
+                    cover.id.clone(),
+                    QueuePriority::Expansion,
+                    item.request_source,
+                    item.requested_by_user_id.clone(),
+                    self.config.max_retries as i32,
+                ));
+            }
+        }
+
+        // Add artist portrait images
+        for artist in &artists {
+            for portrait in &artist.portraits {
+                if portrait.size == "medium" || portrait.size == "large" {
+                    children.push(QueueItem::new_child(
+                        Uuid::new_v4().to_string(),
+                        item.id.clone(),
+                        DownloadContentType::ArtistImage,
+                        portrait.id.clone(),
+                        QueuePriority::Expansion,
+                        item.request_source,
+                        item.requested_by_user_id.clone(),
+                        self.config.max_retries as i32,
+                    ));
+                }
+            }
+        }
+
+        let children_count = children.len();
+        let image_count = children_count - track_count;
+
+        // 5. Insert children into queue
+        if !children.is_empty() {
+            self.queue_store.create_children(&item.id, children).map_err(|e| {
+                DownloadError::new(
+                    DownloadErrorType::Storage,
+                    format!("Failed to create child items: {}", e),
+                )
+            })?;
+
+            // Log children created
+            self.audit_logger
+                .log_children_created(item, children_count, track_count, image_count)
+                .ok();
+        }
+
+        info!(
+            "Album {} queued {} child items ({} tracks, {} images)",
+            item.content_id, children_count, track_count, image_count
+        );
+
+        // TODO: Implement catalog ingestion in DM-4.1.4
+        // For now, just queue the children without creating catalog entries
+
+        // Return 0 bytes - album itself doesn't download data, children do
+        Ok(0)
+    }
+
+    /// Execute track audio download.
+    async fn execute_track_download(&self, item: &QueueItem) -> Result<u64, DownloadError> {
+        info!("Downloading track audio: {}", item.content_id);
+
+        // 1. Download track audio
+        let (bytes, content_type) = self
+            .downloader_client
+            .download_track_audio(&item.content_id)
+            .await
+            .map_err(|e| {
+                DownloadError::new(
+                    DownloadErrorType::Connection,
+                    format!("Failed to download track audio: {}", e),
+                )
+            })?;
+
+        // 2. Determine file extension from content type
+        let ext = Self::content_type_to_extension(&content_type);
+
+        // 3. Write to disk
+        let audio_dir = self.media_path.join("audio");
+        fs::create_dir_all(&audio_dir).await.map_err(|e| {
+            DownloadError::new(
+                DownloadErrorType::Storage,
+                format!("Failed to create audio directory: {}", e),
+            )
+        })?;
+
+        let file_path = audio_dir.join(format!("{}.{}", item.content_id, ext));
+        fs::write(&file_path, &bytes).await.map_err(|e| {
+            DownloadError::new(
+                DownloadErrorType::Storage,
+                format!("Failed to write audio file: {}", e),
+            )
+        })?;
+
+        let bytes_downloaded = bytes.len() as u64;
+        info!(
+            "Track {} downloaded: {} bytes -> {}",
+            item.content_id,
+            bytes_downloaded,
+            file_path.display()
+        );
+
+        // 4. Check if parent is complete (for child items)
+        if let Some(parent_id) = &item.parent_id {
+            self.check_and_complete_parent(parent_id).ok();
+        }
+
+        Ok(bytes_downloaded)
+    }
+
+    /// Execute image download (album cover or artist portrait).
+    async fn execute_image_download(&self, item: &QueueItem) -> Result<u64, DownloadError> {
+        info!("Downloading image: {}", item.content_id);
+
+        // 1. Download image
+        let bytes = self
+            .downloader_client
+            .download_image(&item.content_id)
+            .await
+            .map_err(|e| {
+                DownloadError::new(
+                    DownloadErrorType::Connection,
+                    format!("Failed to download image: {}", e),
+                )
+            })?;
+
+        // 2. Write to disk (images are stored as .jpg)
+        let images_dir = self.media_path.join("images");
+        fs::create_dir_all(&images_dir).await.map_err(|e| {
+            DownloadError::new(
+                DownloadErrorType::Storage,
+                format!("Failed to create images directory: {}", e),
+            )
+        })?;
+
+        let file_path = images_dir.join(format!("{}.jpg", item.content_id));
+        fs::write(&file_path, &bytes).await.map_err(|e| {
+            DownloadError::new(
+                DownloadErrorType::Storage,
+                format!("Failed to write image file: {}", e),
+            )
+        })?;
+
+        let bytes_downloaded = bytes.len() as u64;
+        info!(
+            "Image {} downloaded: {} bytes -> {}",
+            item.content_id,
+            bytes_downloaded,
+            file_path.display()
+        );
+
+        // 3. Check if parent is complete (for child items)
+        if let Some(parent_id) = &item.parent_id {
+            self.check_and_complete_parent(parent_id).ok();
+        }
+
+        Ok(bytes_downloaded)
+    }
+
+    /// Check if all children of a parent are complete and update parent status.
+    fn check_and_complete_parent(&self, parent_id: &str) -> Result<()> {
+        // check_parent_completion returns:
+        // - Some(Completed) if all children completed successfully
+        // - Some(Failed) if any children failed and none are in progress
+        // - None if children are still being processed
+        let new_status = self.queue_store.check_parent_completion(parent_id)?;
+
+        match new_status {
+            Some(QueueStatus::Completed) => {
+                // All children done - calculate total bytes and mark parent as completed
+                let children = self.queue_store.get_children(parent_id)?;
+                let total_bytes: u64 = children
+                    .iter()
+                    .filter_map(|c| c.bytes_downloaded)
+                    .sum();
+                let children_count = children.len();
+
+                self.queue_store.mark_completed(parent_id, total_bytes, 0)?;
+
+                if let Some(parent) = self.queue_store.get_item(parent_id)? {
+                    if let Some(user_id) = &parent.requested_by_user_id {
+                        self.queue_store.decrement_user_queue(user_id)?;
+                    }
+                }
+
+                info!(
+                    "Parent {} completed: {} children, {} total bytes",
+                    parent_id, children_count, total_bytes
+                );
+            }
+            Some(QueueStatus::Failed) => {
+                // Some children failed - get failure count for error message
+                let progress = self.queue_store.get_children_progress(parent_id)?;
+
+                self.queue_store.mark_failed(
+                    parent_id,
+                    &DownloadError::new(
+                        DownloadErrorType::Unknown,
+                        format!(
+                            "{} of {} children failed",
+                            progress.failed, progress.total_children
+                        ),
+                    ),
+                )?;
+
+                if let Some(parent) = self.queue_store.get_item(parent_id)? {
+                    if let Some(user_id) = &parent.requested_by_user_id {
+                        self.queue_store.decrement_user_queue(user_id)?;
+                    }
+                }
+            }
+            _ => {
+                // None or other status - children still in progress, do nothing
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Convert content type to file extension.
+    fn content_type_to_extension(content_type: &str) -> &'static str {
+        match content_type {
+            "audio/flac" => "flac",
+            "audio/mpeg" | "audio/mp3" => "mp3",
+            "audio/ogg" | "audio/vorbis" => "ogg",
+            "audio/wav" | "audio/wave" => "wav",
+            "audio/aac" => "aac",
+            "audio/mp4" | "audio/m4a" => "m4a",
+            _ => "flac", // Default to flac
         }
     }
 
