@@ -1,6 +1,6 @@
 mod file_config;
 
-pub use file_config::{BackgroundJobsConfig, DownloadManagerConfig, FileConfig};
+pub use file_config::{BackgroundJobsConfig, DownloadManagerConfig, FileConfig, SslConfig};
 
 use crate::server::RequestsLoggingLevel;
 use anyhow::{bail, Result};
@@ -22,6 +22,8 @@ pub struct CliConfig {
     pub downloader_timeout_sec: u64,
     pub event_retention_days: u64,
     pub prune_interval_hours: u64,
+    pub ssl_cert: Option<PathBuf>,
+    pub ssl_key: Option<PathBuf>,
 }
 
 #[derive(Debug, Clone)]
@@ -42,6 +44,15 @@ pub struct AppConfig {
     // Feature configs (with defaults)
     pub download_manager: DownloadManagerSettings,
     pub background_jobs: BackgroundJobsSettings,
+
+    // SSL/TLS configuration
+    pub ssl: Option<SslSettings>,
+}
+
+#[derive(Debug, Clone)]
+pub struct SslSettings {
+    pub cert_path: PathBuf,
+    pub key_path: PathBuf,
 }
 
 impl AppConfig {
@@ -124,6 +135,40 @@ impl AppConfig {
 
         let background_jobs = BackgroundJobsSettings::default();
 
+        // SSL settings - TOML [ssl] section takes precedence over CLI args
+        let ssl = if let Some(ssl_file) = file.ssl {
+            // Validate paths exist
+            let cert_path = PathBuf::from(&ssl_file.cert_path);
+            let key_path = PathBuf::from(&ssl_file.key_path);
+            if !cert_path.exists() {
+                bail!("SSL certificate file not found: {:?}", cert_path);
+            }
+            if !key_path.exists() {
+                bail!("SSL key file not found: {:?}", key_path);
+            }
+            Some(SslSettings {
+                cert_path,
+                key_path,
+            })
+        } else if let (Some(cert), Some(key)) = (&cli.ssl_cert, &cli.ssl_key) {
+            // CLI args provided
+            if !cert.exists() {
+                bail!("SSL certificate file not found: {:?}", cert);
+            }
+            if !key.exists() {
+                bail!("SSL key file not found: {:?}", key);
+            }
+            Some(SslSettings {
+                cert_path: cert.clone(),
+                key_path: key.clone(),
+            })
+        } else if cli.ssl_cert.is_some() || cli.ssl_key.is_some() {
+            // Only one of cert/key provided - error
+            bail!("Both --ssl-cert and --ssl-key must be provided together");
+        } else {
+            None
+        };
+
         Ok(Self {
             db_dir,
             media_path,
@@ -138,6 +183,7 @@ impl AppConfig {
             prune_interval_hours,
             download_manager,
             background_jobs,
+            ssl,
         })
     }
 
@@ -255,6 +301,8 @@ mod tests {
             downloader_timeout_sec: 600,
             event_retention_days: 60,
             prune_interval_hours: 12,
+            ssl_cert: None,
+            ssl_key: None,
         };
 
         let config = AppConfig::resolve(&cli, None).unwrap();
@@ -274,6 +322,7 @@ mod tests {
         assert_eq!(config.event_retention_days, 60);
         assert_eq!(config.prune_interval_hours, 12);
         assert!(config.download_manager.enabled);
+        assert!(config.ssl.is_none());
     }
 
     #[test]

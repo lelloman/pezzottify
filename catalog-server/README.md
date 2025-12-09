@@ -15,6 +15,9 @@ A high-performance Rust backend server for the Pezzottify music streaming platfo
 - [Command-line Arguments](#command-line-arguments)
 - [Build Features](#build-features)
 - [Configuration](#configuration)
+  - [Rate Limits](#rate-limits)
+  - [HTTP Caching](#http-caching)
+  - [SSL/TLS Configuration](#ssltls-configuration)
 - [API Endpoints](#api-endpoints)
 - [Authentication & Authorization](#authentication--authorization)
 - [CLI Auth Tool](#cli-auth-tool)
@@ -251,6 +254,8 @@ cargo run --release -- \
 | `--downloader-timeout-sec <SECONDS>` | `300`         | Timeout in seconds for downloader requests                         |
 | `--event-retention-days <DAYS>`      | `30`          | Number of days to retain sync events before pruning (0 to disable) |
 | `--prune-interval-hours <HOURS>`     | `24`          | Interval in hours between pruning runs                             |
+| `--ssl-cert <PATH>`                  | None          | Path to SSL certificate file (PEM format). Requires `--ssl-key`.   |
+| `--ssl-key <PATH>`                   | None          | Path to SSL private key file (PEM format). Requires `--ssl-cert`.  |
 
 ### TOML Configuration
 
@@ -270,6 +275,11 @@ logging_level = "path"
 [download_manager]
 max_albums_per_hour = 10
 max_albums_per_day = 60
+
+# Enable HTTPS (optional)
+# [ssl]
+# cert_path = "/path/to/cert.pem"
+# key_path = "/path/to/key.pem"
 ```
 
 ### Configuration Precedence
@@ -324,6 +334,54 @@ Static content (catalog data, images, audio) is cached using HTTP `Cache-Control
 - Configurable via `--content-cache-age-sec`
 - Default: 1 hour (3600 seconds)
 - Useful for development: `--content-cache-age-sec 60` (1 minute)
+
+### SSL/TLS Configuration
+
+The server supports HTTPS with TLS using self-signed or CA-signed certificates.
+
+#### Generating Self-Signed Certificates
+
+Basic certificate (valid for 365 days):
+
+```bash
+openssl req -x509 -newkey rsa:4096 -keyout key.pem -out cert.pem -days 365 -nodes \
+  -subj "/CN=localhost"
+```
+
+Certificate with Subject Alternative Names (recommended for production):
+
+```bash
+openssl req -x509 -newkey rsa:4096 -keyout key.pem -out cert.pem -days 365 -nodes \
+  -subj "/CN=yourdomain.com" \
+  -addext "subjectAltName=DNS:yourdomain.com,DNS:localhost,IP:127.0.0.1"
+```
+
+#### Enabling SSL
+
+Via CLI arguments:
+
+```bash
+cargo run --release -- \
+  --db-dir /path/to/db \
+  --ssl-cert /path/to/cert.pem \
+  --ssl-key /path/to/key.pem
+```
+
+Via config.toml:
+
+```toml
+[ssl]
+cert_path = "/path/to/cert.pem"
+key_path = "/path/to/key.pem"
+```
+
+#### SSL Notes
+
+- Both `cert_path` and `key_path` are required when enabling SSL
+- Certificate and key must be in PEM format
+- The metrics endpoint (port 9091) remains HTTP-only for internal use
+- For Android clients: consider pinning the certificate in the app for enhanced security
+- For web browsers: users will see a security warning for self-signed certificates (click through once to accept)
 
 ## API Endpoints
 
