@@ -1963,7 +1963,7 @@ Queue processing order: `ORDER BY priority ASC, created_at ASC`
 
   **Note:** Use hour-truncated timestamps as bucket keys.
 
-- [ ] **Task DM-1.4.10: Implement statistics methods**
+- [x] **Task DM-1.4.10: Implement statistics methods**
 
   **File:** `catalog-server/src/download_manager/queue_store.rs`
 
