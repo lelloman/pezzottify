@@ -354,6 +354,55 @@ impl SqliteDownloadQueueStore {
             .unwrap()
             .as_secs() as i64
     }
+
+    /// Get today's date as a string in YYYY-MM-DD format.
+    fn today_date_string() -> String {
+        use std::time::{SystemTime, UNIX_EPOCH};
+
+        let secs = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+
+        // Convert to days since epoch, then back to date components
+        let days = secs / 86400;
+        let mut year = 1970i32;
+        let mut remaining_days = days as i32;
+
+        // Calculate year
+        loop {
+            let days_in_year = if year % 4 == 0 && (year % 100 != 0 || year % 400 == 0) {
+                366
+            } else {
+                365
+            };
+            if remaining_days < days_in_year {
+                break;
+            }
+            remaining_days -= days_in_year;
+            year += 1;
+        }
+
+        // Calculate month and day
+        let is_leap = year % 4 == 0 && (year % 100 != 0 || year % 400 == 0);
+        let days_in_months = if is_leap {
+            [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
+        } else {
+            [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
+        };
+
+        let mut month = 1u32;
+        for days_in_month in days_in_months.iter() {
+            if remaining_days < *days_in_month {
+                break;
+            }
+            remaining_days -= days_in_month;
+            month += 1;
+        }
+        let day = (remaining_days + 1) as u32;
+
+        format!("{:04}-{:02}-{:02}", year, month, day)
+    }
 }
 
 impl DownloadQueueStore for SqliteDownloadQueueStore {
@@ -915,23 +964,117 @@ impl DownloadQueueStore for SqliteDownloadQueueStore {
         Ok(count > 0)
     }
 
-    // Stub implementations for remaining trait methods (to be implemented in later tasks)
+    // === User Rate Limiting ===
 
-    fn get_user_stats(&self, _user_id: &str) -> Result<UserLimitStatus> {
-        todo!("Implement in DM-1.4.8")
+    fn get_user_stats(&self, user_id: &str) -> Result<UserLimitStatus> {
+        let conn = self.conn.lock().unwrap();
+
+        // Try to get existing stats
+        let result = conn
+            .query_row(
+                r#"SELECT requests_today, requests_in_queue, last_request_date
+                   FROM user_request_stats
+                   WHERE user_id = ?1"#,
+                [user_id],
+                |row| {
+                    Ok((
+                        row.get::<_, i32>("requests_today")?,
+                        row.get::<_, i32>("requests_in_queue")?,
+                        row.get::<_, Option<String>>("last_request_date")?,
+                    ))
+                },
+            )
+            .optional()?;
+
+        // Default limits (these could be made configurable)
+        const MAX_REQUESTS_PER_DAY: i32 = 50;
+        const MAX_QUEUE_SIZE: i32 = 100;
+
+        match result {
+            Some((requests_today, in_queue, last_date)) => {
+                // Check if we need to reset (date changed)
+                let today = Self::today_date_string();
+                let effective_requests = if last_date.as_deref() == Some(&today) {
+                    requests_today
+                } else {
+                    0 // Reset since it's a new day
+                };
+
+                Ok(UserLimitStatus::available(
+                    effective_requests,
+                    MAX_REQUESTS_PER_DAY,
+                    in_queue,
+                    MAX_QUEUE_SIZE,
+                ))
+            }
+            None => {
+                // No record yet - user has full quota
+                Ok(UserLimitStatus::available(
+                    0,
+                    MAX_REQUESTS_PER_DAY,
+                    0,
+                    MAX_QUEUE_SIZE,
+                ))
+            }
+        }
     }
 
-    fn increment_user_requests(&self, _user_id: &str) -> Result<()> {
-        todo!("Implement in DM-1.4.8")
+    fn increment_user_requests(&self, user_id: &str) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        let now = Self::now();
+        let today = Self::today_date_string();
+
+        // Insert or update - if it's a new day, reset requests_today
+        conn.execute(
+            r#"INSERT INTO user_request_stats (user_id, requests_today, requests_in_queue, last_request_date, last_updated_at)
+               VALUES (?1, 1, 1, ?2, ?3)
+               ON CONFLICT(user_id) DO UPDATE SET
+                   requests_today = CASE
+                       WHEN last_request_date = ?2 THEN requests_today + 1
+                       ELSE 1
+                   END,
+                   requests_in_queue = requests_in_queue + 1,
+                   last_request_date = ?2,
+                   last_updated_at = ?3"#,
+            rusqlite::params![user_id, today, now],
+        )?;
+
+        Ok(())
     }
 
-    fn decrement_user_queue(&self, _user_id: &str) -> Result<()> {
-        todo!("Implement in DM-1.4.8")
+    fn decrement_user_queue(&self, user_id: &str) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        let now = Self::now();
+
+        conn.execute(
+            r#"UPDATE user_request_stats
+               SET requests_in_queue = MAX(0, requests_in_queue - 1),
+                   last_updated_at = ?1
+               WHERE user_id = ?2"#,
+            rusqlite::params![now, user_id],
+        )?;
+
+        Ok(())
     }
 
     fn reset_daily_user_stats(&self) -> Result<usize> {
-        todo!("Implement in DM-1.4.8")
+        let conn = self.conn.lock().unwrap();
+        let today = Self::today_date_string();
+        let now = Self::now();
+
+        let rows_affected = conn.execute(
+            r#"UPDATE user_request_stats
+               SET requests_today = 0,
+                   last_request_date = ?1,
+                   last_updated_at = ?2
+               WHERE last_request_date != ?1 OR last_request_date IS NULL"#,
+            rusqlite::params![today, now],
+        )?;
+
+        Ok(rows_affected)
     }
+
+    // Stub implementations for remaining trait methods (to be implemented in later tasks)
 
     fn record_activity(&self, _content_type: DownloadContentType, _bytes: u64, _success: bool) -> Result<()> {
         todo!("Implement in DM-1.4.9")
@@ -2539,5 +2682,195 @@ mod tests {
         assert!(!store
             .is_in_active_queue(DownloadContentType::Album, "album-123")
             .unwrap());
+    }
+
+    // === User Rate Limiting Tests ===
+
+    #[test]
+    fn test_get_user_stats_new_user() {
+        let store = SqliteDownloadQueueStore::in_memory().unwrap();
+
+        let stats = store.get_user_stats("user-1").unwrap();
+
+        // New user should have full quota
+        assert_eq!(stats.requests_today, 0);
+        assert_eq!(stats.in_queue, 0);
+        assert!(stats.can_request);
+    }
+
+    #[test]
+    fn test_increment_user_requests() {
+        let store = SqliteDownloadQueueStore::in_memory().unwrap();
+
+        // Increment requests
+        store.increment_user_requests("user-1").unwrap();
+
+        let stats = store.get_user_stats("user-1").unwrap();
+        assert_eq!(stats.requests_today, 1);
+        assert_eq!(stats.in_queue, 1);
+
+        // Increment again
+        store.increment_user_requests("user-1").unwrap();
+
+        let stats = store.get_user_stats("user-1").unwrap();
+        assert_eq!(stats.requests_today, 2);
+        assert_eq!(stats.in_queue, 2);
+    }
+
+    #[test]
+    fn test_decrement_user_queue() {
+        let store = SqliteDownloadQueueStore::in_memory().unwrap();
+
+        // Setup - add some requests
+        store.increment_user_requests("user-1").unwrap();
+        store.increment_user_requests("user-1").unwrap();
+        store.increment_user_requests("user-1").unwrap();
+
+        let stats = store.get_user_stats("user-1").unwrap();
+        assert_eq!(stats.in_queue, 3);
+
+        // Decrement
+        store.decrement_user_queue("user-1").unwrap();
+
+        let stats = store.get_user_stats("user-1").unwrap();
+        assert_eq!(stats.in_queue, 2);
+        // Note: requests_today stays the same
+        assert_eq!(stats.requests_today, 3);
+    }
+
+    #[test]
+    fn test_decrement_user_queue_not_negative() {
+        let store = SqliteDownloadQueueStore::in_memory().unwrap();
+
+        // Setup with one item
+        store.increment_user_requests("user-1").unwrap();
+        store.decrement_user_queue("user-1").unwrap();
+
+        let stats = store.get_user_stats("user-1").unwrap();
+        assert_eq!(stats.in_queue, 0);
+
+        // Decrement again - should not go negative
+        store.decrement_user_queue("user-1").unwrap();
+
+        let stats = store.get_user_stats("user-1").unwrap();
+        assert_eq!(stats.in_queue, 0);
+    }
+
+    #[test]
+    fn test_decrement_user_queue_nonexistent_user() {
+        let store = SqliteDownloadQueueStore::in_memory().unwrap();
+
+        // Should not fail for nonexistent user (just no-op)
+        store.decrement_user_queue("nonexistent").unwrap();
+    }
+
+    #[test]
+    fn test_reset_daily_user_stats() {
+        let store = SqliteDownloadQueueStore::in_memory().unwrap();
+
+        // Add requests for two users
+        store.increment_user_requests("user-1").unwrap();
+        store.increment_user_requests("user-1").unwrap();
+        store.increment_user_requests("user-2").unwrap();
+
+        // Verify current stats
+        let stats1 = store.get_user_stats("user-1").unwrap();
+        let stats2 = store.get_user_stats("user-2").unwrap();
+        assert_eq!(stats1.requests_today, 2);
+        assert_eq!(stats2.requests_today, 1);
+
+        // Reset won't affect users whose last_request_date is today
+        // (which it is since we just made requests)
+        let reset_count = store.reset_daily_user_stats().unwrap();
+        assert_eq!(reset_count, 0);
+
+        // Stats should remain unchanged
+        let stats1 = store.get_user_stats("user-1").unwrap();
+        assert_eq!(stats1.requests_today, 2);
+    }
+
+    #[test]
+    fn test_today_date_string_format() {
+        let date = SqliteDownloadQueueStore::today_date_string();
+
+        // Should be in YYYY-MM-DD format
+        assert_eq!(date.len(), 10);
+        assert_eq!(&date[4..5], "-");
+        assert_eq!(&date[7..8], "-");
+
+        // Year should be reasonable (2020-2100)
+        let year: i32 = date[0..4].parse().unwrap();
+        assert!(year >= 2020 && year <= 2100);
+
+        // Month should be 01-12
+        let month: i32 = date[5..7].parse().unwrap();
+        assert!(month >= 1 && month <= 12);
+
+        // Day should be 01-31
+        let day: i32 = date[8..10].parse().unwrap();
+        assert!(day >= 1 && day <= 31);
+    }
+
+    #[test]
+    fn test_user_stats_workflow() {
+        let store = SqliteDownloadQueueStore::in_memory().unwrap();
+
+        // User makes 3 download requests
+        for _ in 0..3 {
+            store.increment_user_requests("user-1").unwrap();
+        }
+
+        let stats = store.get_user_stats("user-1").unwrap();
+        assert_eq!(stats.requests_today, 3);
+        assert_eq!(stats.in_queue, 3);
+
+        // One item completes
+        store.decrement_user_queue("user-1").unwrap();
+
+        let stats = store.get_user_stats("user-1").unwrap();
+        assert_eq!(stats.requests_today, 3); // Still 3 (counts requests made, not in queue)
+        assert_eq!(stats.in_queue, 2);
+
+        // Another item completes
+        store.decrement_user_queue("user-1").unwrap();
+
+        let stats = store.get_user_stats("user-1").unwrap();
+        assert_eq!(stats.in_queue, 1);
+
+        // Last item completes
+        store.decrement_user_queue("user-1").unwrap();
+
+        let stats = store.get_user_stats("user-1").unwrap();
+        assert_eq!(stats.in_queue, 0);
+        assert_eq!(stats.requests_today, 3); // Daily count preserved
+    }
+
+    #[test]
+    fn test_multiple_users_independent() {
+        let store = SqliteDownloadQueueStore::in_memory().unwrap();
+
+        // User 1 makes 5 requests
+        for _ in 0..5 {
+            store.increment_user_requests("user-1").unwrap();
+        }
+
+        // User 2 makes 2 requests
+        for _ in 0..2 {
+            store.increment_user_requests("user-2").unwrap();
+        }
+
+        // Verify independent tracking
+        let stats1 = store.get_user_stats("user-1").unwrap();
+        let stats2 = store.get_user_stats("user-2").unwrap();
+
+        assert_eq!(stats1.requests_today, 5);
+        assert_eq!(stats2.requests_today, 2);
+
+        // Decrement user 1's queue
+        store.decrement_user_queue("user-1").unwrap();
+
+        // User 2 should be unaffected
+        let stats2 = store.get_user_stats("user-2").unwrap();
+        assert_eq!(stats2.in_queue, 2);
     }
 }
