@@ -3016,6 +3016,177 @@ async fn search_download_discography(
     }
 }
 
+/// POST /v1/download/request/album - Request download of an album
+async fn request_album_download(
+    session: Session,
+    State(download_manager): State<super::state::OptionalDownloadManager>,
+    Json(request): Json<crate::download_manager::AlbumRequest>,
+) -> Response {
+    let dm = match download_manager {
+        Some(dm) => dm,
+        None => {
+            return (
+                StatusCode::SERVICE_UNAVAILABLE,
+                "Download manager not enabled",
+            )
+                .into_response()
+        }
+    };
+
+    let user_id = session.user_id.to_string();
+    match dm.request_album(&user_id, request) {
+        Ok(result) => Json(result).into_response(),
+        Err(err) => {
+            let err_msg = err.to_string();
+            if err_msg.contains("Rate limit exceeded") {
+                (StatusCode::TOO_MANY_REQUESTS, err_msg).into_response()
+            } else if err_msg.contains("already in queue") {
+                (StatusCode::CONFLICT, err_msg).into_response()
+            } else {
+                error!("Error requesting album download: {}", err);
+                StatusCode::INTERNAL_SERVER_ERROR.into_response()
+            }
+        }
+    }
+}
+
+/// POST /v1/download/request/discography - Request download of artist discography
+async fn request_discography_download(
+    session: Session,
+    State(download_manager): State<super::state::OptionalDownloadManager>,
+    Json(request): Json<crate::download_manager::DiscographyRequest>,
+) -> Response {
+    let dm = match download_manager {
+        Some(dm) => dm,
+        None => {
+            return (
+                StatusCode::SERVICE_UNAVAILABLE,
+                "Download manager not enabled",
+            )
+                .into_response()
+        }
+    };
+
+    let user_id = session.user_id.to_string();
+    match dm.request_discography(&user_id, request) {
+        Ok(result) => Json(result).into_response(),
+        Err(err) => {
+            let err_msg = err.to_string();
+            if err_msg.contains("Rate limit exceeded") {
+                (StatusCode::TOO_MANY_REQUESTS, err_msg).into_response()
+            } else if err_msg.contains("not yet implemented") {
+                (StatusCode::NOT_IMPLEMENTED, err_msg).into_response()
+            } else {
+                error!("Error requesting discography download: {}", err);
+                StatusCode::INTERNAL_SERVER_ERROR.into_response()
+            }
+        }
+    }
+}
+
+/// Query parameters for my-requests endpoint
+#[derive(Deserialize)]
+struct MyRequestsParams {
+    #[serde(default = "default_my_requests_limit")]
+    limit: usize,
+    #[serde(default)]
+    offset: usize,
+}
+
+fn default_my_requests_limit() -> usize {
+    50
+}
+
+/// GET /v1/download/my-requests - Get user's download requests
+async fn get_my_download_requests(
+    session: Session,
+    State(download_manager): State<super::state::OptionalDownloadManager>,
+    Query(params): Query<MyRequestsParams>,
+) -> Response {
+    let dm = match download_manager {
+        Some(dm) => dm,
+        None => {
+            return (
+                StatusCode::SERVICE_UNAVAILABLE,
+                "Download manager not enabled",
+            )
+                .into_response()
+        }
+    };
+
+    let user_id = session.user_id.to_string();
+    match dm.get_user_requests(&user_id, params.limit, params.offset) {
+        Ok(requests) => {
+            let limits = dm.check_user_limits(&user_id).unwrap_or_else(|_| {
+                crate::download_manager::UserLimitStatus::available(0, 0, 0, 0)
+            });
+            Json(serde_json::json!({
+                "requests": requests,
+                "stats": limits
+            }))
+            .into_response()
+        }
+        Err(err) => {
+            error!("Error getting user requests: {}", err);
+            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+        }
+    }
+}
+
+/// GET /v1/download/request/:id - Get status of a specific request
+async fn get_download_request_status(
+    session: Session,
+    State(download_manager): State<super::state::OptionalDownloadManager>,
+    Path(request_id): Path<String>,
+) -> Response {
+    let dm = match download_manager {
+        Some(dm) => dm,
+        None => {
+            return (
+                StatusCode::SERVICE_UNAVAILABLE,
+                "Download manager not enabled",
+            )
+                .into_response()
+        }
+    };
+
+    let user_id = session.user_id.to_string();
+    match dm.get_request_status(&user_id, &request_id) {
+        Ok(Some(item)) => Json(item).into_response(),
+        Ok(None) => StatusCode::NOT_FOUND.into_response(),
+        Err(err) => {
+            error!("Error getting request status: {}", err);
+            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+        }
+    }
+}
+
+/// GET /v1/download/limits - Get user's rate limit status
+async fn get_download_limits(
+    session: Session,
+    State(download_manager): State<super::state::OptionalDownloadManager>,
+) -> Response {
+    let dm = match download_manager {
+        Some(dm) => dm,
+        None => {
+            return (
+                StatusCode::SERVICE_UNAVAILABLE,
+                "Download manager not enabled",
+            )
+                .into_response()
+        }
+    };
+
+    let user_id = session.user_id.to_string();
+    match dm.check_user_limits(&user_id) {
+        Ok(limits) => Json(limits).into_response(),
+        Err(err) => {
+            error!("Error checking user limits: {}", err);
+            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+        }
+    }
+}
+
 impl ServerState {
     #[allow(clippy::arc_with_non_send_sync, clippy::too_many_arguments)]
     fn new(
@@ -3441,6 +3612,11 @@ pub fn make_app(
     let download_routes: Router = Router::new()
         .route("/search", get(search_download_content))
         .route("/search/discography/{artist_id}", get(search_download_discography))
+        .route("/request/album", post(request_album_download))
+        .route("/request/discography", post(request_discography_download))
+        .route("/my-requests", get(get_my_download_requests))
+        .route("/request/{id}", get(get_download_request_status))
+        .route("/limits", get(get_download_limits))
         .route_layer(middleware::from_fn_with_state(
             state.clone(),
             require_request_content,

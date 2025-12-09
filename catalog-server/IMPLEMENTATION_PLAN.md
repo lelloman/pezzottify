@@ -2455,7 +2455,7 @@ Queue processing order: `ORDER BY priority ASC, created_at ASC`
 
 #### DM-3.1 Request Handlers
 
-- [ ] **Task DM-3.1.1: Create `POST /v1/download/request/album` handler**
+- [x] **Task DM-3.1.1: Create `POST /v1/download/request/album` handler**
 
   **File:** `catalog-server/src/server/server.rs`
 
@@ -2473,7 +2473,7 @@ Queue processing order: `ORDER BY priority ASC, created_at ASC`
   - 409: Already in catalog or queue
   - 503: Download manager not enabled
 
-- [ ] **Task DM-3.1.2: Create `POST /v1/download/request/discography` handler**
+- [x] **Task DM-3.1.2: Create `POST /v1/download/request/discography` handler**
 
   **File:** `catalog-server/src/server/server.rs`
 
@@ -2487,7 +2487,7 @@ Queue processing order: `ORDER BY priority ASC, created_at ASC`
   }
   ```
 
-- [ ] **Task DM-3.1.3: Create `GET /v1/download/my-requests` handler**
+- [x] **Task DM-3.1.3: Create `GET /v1/download/my-requests` handler**
 
   **File:** `catalog-server/src/server/server.rs`
 
@@ -2504,13 +2504,13 @@ Queue processing order: `ORDER BY priority ASC, created_at ASC`
   }
   ```
 
-- [ ] **Task DM-3.1.4: Create `GET /v1/download/request/:id` handler**
+- [x] **Task DM-3.1.4: Create `GET /v1/download/request/:id` handler**
 
   **File:** `catalog-server/src/server/server.rs`
 
   **Note:** Only returns requests owned by the current user.
 
-- [ ] **Task DM-3.1.5: Create `GET /v1/download/limits` handler**
+- [x] **Task DM-3.1.5: Create `GET /v1/download/limits` handler**
 
   **File:** `catalog-server/src/server/server.rs`
 
