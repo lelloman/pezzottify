@@ -857,19 +857,65 @@ impl DownloadQueueStore for SqliteDownloadQueueStore {
         Ok(())
     }
 
+    // === Duplicate/Existence Checks ===
+
+    fn find_by_content(
+        &self,
+        content_type: DownloadContentType,
+        content_id: &str,
+    ) -> Result<Option<QueueItem>> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare(
+            r#"SELECT * FROM download_queue
+               WHERE content_type = ?1 AND content_id = ?2
+               ORDER BY created_at DESC
+               LIMIT 1"#,
+        )?;
+
+        let item = stmt
+            .query_row(
+                rusqlite::params![content_type.as_str(), content_id],
+                Self::row_to_queue_item,
+            )
+            .optional()?;
+
+        Ok(item)
+    }
+
+    fn is_in_queue(
+        &self,
+        content_type: DownloadContentType,
+        content_id: &str,
+    ) -> Result<bool> {
+        let conn = self.conn.lock().unwrap();
+        let count: i64 = conn.query_row(
+            r#"SELECT COUNT(*) FROM download_queue
+               WHERE content_type = ?1 AND content_id = ?2"#,
+            rusqlite::params![content_type.as_str(), content_id],
+            |row| row.get(0),
+        )?;
+
+        Ok(count > 0)
+    }
+
+    fn is_in_active_queue(
+        &self,
+        content_type: DownloadContentType,
+        content_id: &str,
+    ) -> Result<bool> {
+        let conn = self.conn.lock().unwrap();
+        let count: i64 = conn.query_row(
+            r#"SELECT COUNT(*) FROM download_queue
+               WHERE content_type = ?1 AND content_id = ?2
+               AND status IN ('PENDING', 'IN_PROGRESS', 'RETRY_WAITING')"#,
+            rusqlite::params![content_type.as_str(), content_id],
+            |row| row.get(0),
+        )?;
+
+        Ok(count > 0)
+    }
+
     // Stub implementations for remaining trait methods (to be implemented in later tasks)
-
-    fn find_by_content(&self, _content_type: DownloadContentType, _content_id: &str) -> Result<Option<QueueItem>> {
-        todo!("Implement in DM-1.4.7")
-    }
-
-    fn is_in_queue(&self, _content_type: DownloadContentType, _content_id: &str) -> Result<bool> {
-        todo!("Implement in DM-1.4.7")
-    }
-
-    fn is_in_active_queue(&self, _content_type: DownloadContentType, _content_id: &str) -> Result<bool> {
-        todo!("Implement in DM-1.4.7")
-    }
 
     fn get_user_stats(&self, _user_id: &str) -> Result<UserLimitStatus> {
         todo!("Implement in DM-1.4.8")
@@ -2251,5 +2297,247 @@ mod tests {
         // Claim again for second attempt
         assert!(store.claim_for_processing("item-1").unwrap());
         assert_eq!(store.get_item("item-1").unwrap().unwrap().status, QueueStatus::InProgress);
+    }
+
+    // === Duplicate Check Tests ===
+
+    #[test]
+    fn test_find_by_content_found() {
+        let store = SqliteDownloadQueueStore::in_memory().unwrap();
+
+        let item = QueueItem::new(
+            "item-1".to_string(),
+            DownloadContentType::Album,
+            "album-123".to_string(),
+            QueuePriority::User,
+            RequestSource::User,
+            5,
+        );
+        store.enqueue(item).unwrap();
+
+        let found = store
+            .find_by_content(DownloadContentType::Album, "album-123")
+            .unwrap();
+        assert!(found.is_some());
+        assert_eq!(found.unwrap().id, "item-1");
+    }
+
+    #[test]
+    fn test_find_by_content_not_found() {
+        let store = SqliteDownloadQueueStore::in_memory().unwrap();
+
+        let found = store
+            .find_by_content(DownloadContentType::Album, "nonexistent")
+            .unwrap();
+        assert!(found.is_none());
+    }
+
+    #[test]
+    fn test_find_by_content_wrong_type() {
+        let store = SqliteDownloadQueueStore::in_memory().unwrap();
+
+        let item = QueueItem::new(
+            "item-1".to_string(),
+            DownloadContentType::Album,
+            "album-123".to_string(),
+            QueuePriority::User,
+            RequestSource::User,
+            5,
+        );
+        store.enqueue(item).unwrap();
+
+        // Search with wrong content type
+        let found = store
+            .find_by_content(DownloadContentType::TrackAudio, "album-123")
+            .unwrap();
+        assert!(found.is_none());
+    }
+
+    #[test]
+    fn test_find_by_content_returns_most_recent() {
+        let store = SqliteDownloadQueueStore::in_memory().unwrap();
+
+        // Create two items with same content (different IDs)
+        let mut item1 = QueueItem::new(
+            "item-1".to_string(),
+            DownloadContentType::Album,
+            "album-123".to_string(),
+            QueuePriority::User,
+            RequestSource::User,
+            5,
+        );
+        item1.created_at = 1000;
+
+        let mut item2 = QueueItem::new(
+            "item-2".to_string(),
+            DownloadContentType::Album,
+            "album-123".to_string(),
+            QueuePriority::User,
+            RequestSource::User,
+            5,
+        );
+        item2.created_at = 2000; // More recent
+
+        store.enqueue(item1).unwrap();
+        store.enqueue(item2).unwrap();
+
+        // Should return most recent
+        let found = store
+            .find_by_content(DownloadContentType::Album, "album-123")
+            .unwrap();
+        assert!(found.is_some());
+        assert_eq!(found.unwrap().id, "item-2");
+    }
+
+    #[test]
+    fn test_is_in_queue_true() {
+        let store = SqliteDownloadQueueStore::in_memory().unwrap();
+
+        let item = QueueItem::new(
+            "item-1".to_string(),
+            DownloadContentType::Album,
+            "album-123".to_string(),
+            QueuePriority::User,
+            RequestSource::User,
+            5,
+        );
+        store.enqueue(item).unwrap();
+
+        assert!(store
+            .is_in_queue(DownloadContentType::Album, "album-123")
+            .unwrap());
+    }
+
+    #[test]
+    fn test_is_in_queue_false() {
+        let store = SqliteDownloadQueueStore::in_memory().unwrap();
+
+        assert!(!store
+            .is_in_queue(DownloadContentType::Album, "nonexistent")
+            .unwrap());
+    }
+
+    #[test]
+    fn test_is_in_queue_includes_completed() {
+        let store = SqliteDownloadQueueStore::in_memory().unwrap();
+
+        let mut item = QueueItem::new(
+            "item-1".to_string(),
+            DownloadContentType::Album,
+            "album-123".to_string(),
+            QueuePriority::User,
+            RequestSource::User,
+            5,
+        );
+        item.status = QueueStatus::Completed;
+        store.enqueue(item).unwrap();
+
+        // is_in_queue should include completed items
+        assert!(store
+            .is_in_queue(DownloadContentType::Album, "album-123")
+            .unwrap());
+    }
+
+    #[test]
+    fn test_is_in_active_queue_pending() {
+        let store = SqliteDownloadQueueStore::in_memory().unwrap();
+
+        let item = QueueItem::new(
+            "item-1".to_string(),
+            DownloadContentType::Album,
+            "album-123".to_string(),
+            QueuePriority::User,
+            RequestSource::User,
+            5,
+        );
+        store.enqueue(item).unwrap();
+
+        assert!(store
+            .is_in_active_queue(DownloadContentType::Album, "album-123")
+            .unwrap());
+    }
+
+    #[test]
+    fn test_is_in_active_queue_in_progress() {
+        let store = SqliteDownloadQueueStore::in_memory().unwrap();
+
+        let item = QueueItem::new(
+            "item-1".to_string(),
+            DownloadContentType::Album,
+            "album-123".to_string(),
+            QueuePriority::User,
+            RequestSource::User,
+            5,
+        );
+        store.enqueue(item).unwrap();
+        store.claim_for_processing("item-1").unwrap();
+
+        assert!(store
+            .is_in_active_queue(DownloadContentType::Album, "album-123")
+            .unwrap());
+    }
+
+    #[test]
+    fn test_is_in_active_queue_retry_waiting() {
+        let store = SqliteDownloadQueueStore::in_memory().unwrap();
+
+        let item = QueueItem::new(
+            "item-1".to_string(),
+            DownloadContentType::Album,
+            "album-123".to_string(),
+            QueuePriority::User,
+            RequestSource::User,
+            5,
+        );
+        store.enqueue(item).unwrap();
+
+        let error = DownloadError::new(DownloadErrorType::Timeout, "Timeout");
+        store.mark_retry_waiting("item-1", 1000, &error).unwrap();
+
+        assert!(store
+            .is_in_active_queue(DownloadContentType::Album, "album-123")
+            .unwrap());
+    }
+
+    #[test]
+    fn test_is_in_active_queue_not_completed() {
+        let store = SqliteDownloadQueueStore::in_memory().unwrap();
+
+        let mut item = QueueItem::new(
+            "item-1".to_string(),
+            DownloadContentType::Album,
+            "album-123".to_string(),
+            QueuePriority::User,
+            RequestSource::User,
+            5,
+        );
+        item.status = QueueStatus::Completed;
+        store.enqueue(item).unwrap();
+
+        // Completed items are NOT in active queue
+        assert!(!store
+            .is_in_active_queue(DownloadContentType::Album, "album-123")
+            .unwrap());
+    }
+
+    #[test]
+    fn test_is_in_active_queue_not_failed() {
+        let store = SqliteDownloadQueueStore::in_memory().unwrap();
+
+        let mut item = QueueItem::new(
+            "item-1".to_string(),
+            DownloadContentType::Album,
+            "album-123".to_string(),
+            QueuePriority::User,
+            RequestSource::User,
+            5,
+        );
+        item.status = QueueStatus::Failed;
+        store.enqueue(item).unwrap();
+
+        // Failed items are NOT in active queue
+        assert!(!store
+            .is_in_active_queue(DownloadContentType::Album, "album-123")
+            .unwrap());
     }
 }

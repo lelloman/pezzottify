@@ -1941,7 +1941,7 @@ Queue processing order: `ORDER BY priority ASC, created_at ASC`
 
   **Methods:** `get_retry_ready`, `promote_retry_to_pending`
 
-- [ ] **Task DM-1.4.7: Implement duplicate check methods**
+- [x] **Task DM-1.4.7: Implement duplicate check methods**
 
   **File:** `catalog-server/src/download_manager/queue_store.rs`
 
