@@ -310,9 +310,112 @@ impl DownloadManager {
     /// Process the next item in the queue.
     ///
     /// Returns `Ok(None)` if the queue is empty or capacity limits are reached.
+    ///
+    /// # Logic:
+    /// 1. Check global capacity limits
+    /// 2. Get next pending item (by priority)
+    /// 3. Claim for processing (atomic)
+    /// 4. Log download started
+    /// 5. Call downloader
+    /// 6. On success: mark completed, record activity, log audit
+    /// 7. On failure: check retry policy, either mark retry or failed, log audit
     pub async fn process_next(&self) -> Result<Option<ProcessingResult>> {
-        // TODO: Implement in DM-1.7.4
-        todo!("process_next not yet implemented")
+        // 1. Check global capacity limits
+        let capacity = self.check_global_capacity()?;
+        if capacity.at_capacity {
+            return Ok(None);
+        }
+
+        // 2. Get next pending item (by priority)
+        let item = match self.queue_store.get_next_pending()? {
+            Some(item) => item,
+            None => return Ok(None),
+        };
+
+        // 3. Claim for processing (atomic)
+        if !self.queue_store.claim_for_processing(&item.id)? {
+            // Another processor claimed it, try again
+            return Ok(None);
+        }
+
+        // 4. Log download started
+        self.audit_logger.log_download_started(&item)?;
+
+        let start_time = std::time::Instant::now();
+
+        // 5. Call downloader
+        // TODO: Implement actual download in DM-4.1.2
+        // For now, simulate a failure to exercise the error handling path
+        let download_result: Result<u64, DownloadError> = Err(DownloadError::new(
+            DownloadErrorType::Unknown,
+            "Download service not yet implemented".to_string(),
+        ));
+
+        let duration_ms = start_time.elapsed().as_millis() as i64;
+
+        match download_result {
+            Ok(bytes_downloaded) => {
+                // 6. On success: mark completed, record activity, log audit
+                self.queue_store
+                    .mark_completed(&item.id, bytes_downloaded, duration_ms)?;
+
+                self.queue_store
+                    .record_activity(item.content_type, bytes_downloaded, true)?;
+
+                // Decrement user's queue count
+                if let Some(user_id) = &item.requested_by_user_id {
+                    self.queue_store.decrement_user_queue(user_id)?;
+                }
+
+                self.audit_logger.log_download_completed(
+                    &item,
+                    bytes_downloaded,
+                    duration_ms,
+                    None, // tracks_downloaded - only for albums
+                )?;
+
+                Ok(Some(ProcessingResult::success(
+                    item.id,
+                    item.content_type,
+                    bytes_downloaded,
+                    duration_ms,
+                )))
+            }
+            Err(error) => {
+                // 7. On failure: check retry policy, either mark retry or failed
+                if self.retry_policy.should_retry(&error, item.retry_count) {
+                    // Schedule retry
+                    let next_retry_at = self.retry_policy.next_retry_at(item.retry_count);
+                    let backoff_secs = self.retry_policy.backoff_secs(item.retry_count);
+
+                    self.queue_store
+                        .mark_retry_waiting(&item.id, next_retry_at, &error)?;
+
+                    self.audit_logger
+                        .log_retry_scheduled(&item, next_retry_at, backoff_secs, &error)?;
+                } else {
+                    // Mark as permanently failed
+                    self.queue_store.mark_failed(&item.id, &error)?;
+
+                    // Decrement user's queue count
+                    if let Some(user_id) = &item.requested_by_user_id {
+                        self.queue_store.decrement_user_queue(user_id)?;
+                    }
+
+                    self.queue_store
+                        .record_activity(item.content_type, 0, false)?;
+
+                    self.audit_logger.log_download_failed(&item, &error)?;
+                }
+
+                Ok(Some(ProcessingResult::failure(
+                    item.id,
+                    item.content_type,
+                    duration_ms,
+                    error,
+                )))
+            }
+        }
     }
 
     /// Promote items that are ready for retry back to pending status.
@@ -694,5 +797,101 @@ mod tests {
             .unwrap_err()
             .to_string()
             .contains("requires async implementation"));
+    }
+
+    #[tokio::test]
+    async fn test_process_next_empty_queue() {
+        let ctx = create_test_manager();
+
+        let result = ctx.manager.process_next().await.unwrap();
+
+        // Should return None when queue is empty
+        assert!(result.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_process_next_processes_item() {
+        let ctx = create_test_manager();
+
+        // Add an item to the queue
+        let request = AlbumRequest {
+            album_id: "album-123".to_string(),
+            album_name: "Test Album".to_string(),
+            artist_name: "Test Artist".to_string(),
+        };
+        let request_result = ctx.manager.request_album("user-1", request).unwrap();
+
+        // Process the item
+        let result = ctx.manager.process_next().await.unwrap();
+
+        // Should return a result (failure since download not implemented)
+        assert!(result.is_some());
+        let processing_result = result.unwrap();
+        assert_eq!(processing_result.queue_item_id, request_result.request_id);
+        assert_eq!(processing_result.content_type, DownloadContentType::Album);
+        assert!(!processing_result.success);
+        assert!(processing_result.error.is_some());
+    }
+
+    #[tokio::test]
+    async fn test_process_next_schedules_retry() {
+        let ctx = create_test_manager();
+
+        // Add an item to the queue
+        let request = AlbumRequest {
+            album_id: "album-456".to_string(),
+            album_name: "Test Album".to_string(),
+            artist_name: "Test Artist".to_string(),
+        };
+        let request_result = ctx.manager.request_album("user-1", request).unwrap();
+
+        // Process the item (will fail and schedule retry)
+        let result = ctx.manager.process_next().await.unwrap();
+        assert!(result.is_some());
+
+        // Check the item is now in RETRY_WAITING status
+        let item = ctx
+            .manager
+            .queue_store
+            .get_item(&request_result.request_id)
+            .unwrap()
+            .unwrap();
+        assert_eq!(item.status, QueueStatus::RetryWaiting);
+        assert_eq!(item.retry_count, 1);
+    }
+
+    #[tokio::test]
+    async fn test_process_next_logs_audit_events() {
+        let ctx = create_test_manager();
+
+        // Add an item to the queue
+        let request = AlbumRequest {
+            album_id: "album-789".to_string(),
+            album_name: "Test Album".to_string(),
+            artist_name: "Test Artist".to_string(),
+        };
+        let request_result = ctx.manager.request_album("user-1", request).unwrap();
+
+        // Process the item
+        ctx.manager.process_next().await.unwrap();
+
+        // Check audit log entries
+        let (_, entries) = ctx
+            .manager
+            .get_audit_for_item(&request_result.request_id)
+            .unwrap()
+            .unwrap();
+
+        // Should have: RequestCreated, DownloadStarted, RetryScheduled
+        assert!(entries.len() >= 3);
+        assert!(entries
+            .iter()
+            .any(|e| e.event_type == AuditEventType::RequestCreated));
+        assert!(entries
+            .iter()
+            .any(|e| e.event_type == AuditEventType::DownloadStarted));
+        assert!(entries
+            .iter()
+            .any(|e| e.event_type == AuditEventType::RetryScheduled));
     }
 }

@@ -2261,7 +2261,7 @@ Queue processing order: `ORDER BY priority ASC, created_at ASC`
   5. Log audit event
   6. Return result with queue position
 
-- [ ] **Task DM-1.7.4: Implement queue processing in DownloadManager**
+- [x] **Task DM-1.7.4: Implement queue processing in DownloadManager**
 
   **File:** `catalog-server/src/download_manager/manager.rs`
 
