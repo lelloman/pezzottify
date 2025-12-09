@@ -1370,7 +1370,7 @@ Queue processing order: `ORDER BY priority ASC, created_at ASC`
 
 #### DM-1.1 Module Structure
 
-- [ ] **Task DM-1.1.1: Create `download_manager` module**
+- [x] **Task DM-1.1.1: Create `download_manager` module**
 
   **Files to create:**
   - `catalog-server/src/download_manager/mod.rs`

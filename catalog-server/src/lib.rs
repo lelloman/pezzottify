@@ -5,6 +5,7 @@
 pub mod background_jobs;
 pub mod catalog_store;
 pub mod config;
+pub mod download_manager;
 pub mod downloader;
 pub mod search;
 pub mod server;
