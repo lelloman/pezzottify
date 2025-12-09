@@ -21,6 +21,7 @@ pub struct FileConfig {
     // Feature configs
     pub download_manager: Option<DownloadManagerConfig>,
     pub background_jobs: Option<BackgroundJobsConfig>,
+    pub ssl: Option<SslConfig>,
 }
 
 #[derive(Debug, Deserialize, Default, Clone)]
@@ -44,6 +45,12 @@ pub struct DownloadManagerConfig {
 pub struct BackgroundJobsConfig {
     // Future: per-job configuration can be added here
     // e.g., pub popular_content_interval_hours: Option<u64>,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+pub struct SslConfig {
+    pub cert_path: String,
+    pub key_path: String,
 }
 
 impl FileConfig {
