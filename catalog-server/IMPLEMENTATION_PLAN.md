@@ -1955,7 +1955,7 @@ Queue processing order: `ORDER BY priority ASC, created_at ASC`
 
   **Note:** Daily reset should check `last_request_date` and reset if different from today.
 
-- [ ] **Task DM-1.4.9: Implement activity tracking methods**
+- [x] **Task DM-1.4.9: Implement activity tracking methods**
 
   **File:** `catalog-server/src/download_manager/queue_store.rs`
 

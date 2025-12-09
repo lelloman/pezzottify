@@ -403,6 +403,20 @@ impl SqliteDownloadQueueStore {
 
         format!("{:04}-{:02}-{:02}", year, month, day)
     }
+
+    /// Get current hour bucket (timestamp truncated to hour).
+    fn hour_bucket() -> i64 {
+        let now = Self::now();
+        // Truncate to hour (3600 seconds)
+        (now / 3600) * 3600
+    }
+
+    /// Get start of current day as hour bucket.
+    fn day_start_bucket() -> i64 {
+        let now = Self::now();
+        // Truncate to day (86400 seconds)
+        (now / 86400) * 86400
+    }
 }
 
 impl DownloadQueueStore for SqliteDownloadQueueStore {
@@ -1074,23 +1088,131 @@ impl DownloadQueueStore for SqliteDownloadQueueStore {
         Ok(rows_affected)
     }
 
-    // Stub implementations for remaining trait methods (to be implemented in later tasks)
+    // === Activity Tracking ===
 
-    fn record_activity(&self, _content_type: DownloadContentType, _bytes: u64, _success: bool) -> Result<()> {
-        todo!("Implement in DM-1.4.9")
+    fn record_activity(
+        &self,
+        content_type: DownloadContentType,
+        bytes: u64,
+        success: bool,
+    ) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        let hour_bucket = Self::hour_bucket();
+        let now = Self::now();
+
+        // Determine which counter to increment based on content type
+        let (albums_inc, tracks_inc, images_inc, failed_inc) = match (content_type, success) {
+            (DownloadContentType::Album, true) => (1, 0, 0, 0),
+            (DownloadContentType::TrackAudio, true) => (0, 1, 0, 0),
+            (DownloadContentType::ArtistImage, true)
+            | (DownloadContentType::AlbumImage, true) => (0, 0, 1, 0),
+            (_, false) => (0, 0, 0, 1),
+        };
+
+        conn.execute(
+            r#"INSERT INTO download_activity_log (
+                   hour_bucket, albums_downloaded, tracks_downloaded, images_downloaded,
+                   bytes_downloaded, failed_count, last_updated_at
+               ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+               ON CONFLICT(hour_bucket) DO UPDATE SET
+                   albums_downloaded = albums_downloaded + ?2,
+                   tracks_downloaded = tracks_downloaded + ?3,
+                   images_downloaded = images_downloaded + ?4,
+                   bytes_downloaded = bytes_downloaded + ?5,
+                   failed_count = failed_count + ?6,
+                   last_updated_at = ?7"#,
+            rusqlite::params![
+                hour_bucket,
+                albums_inc,
+                tracks_inc,
+                images_inc,
+                bytes as i64,
+                failed_inc,
+                now
+            ],
+        )?;
+
+        Ok(())
     }
 
-    fn get_activity_since(&self, _since: i64) -> Result<Vec<ActivityLogEntry>> {
-        todo!("Implement in DM-1.4.9")
+    fn get_activity_since(&self, since: i64) -> Result<Vec<ActivityLogEntry>> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare(
+            r#"SELECT hour_bucket, albums_downloaded, tracks_downloaded, images_downloaded,
+                      bytes_downloaded, failed_count
+               FROM download_activity_log
+               WHERE hour_bucket >= ?1
+               ORDER BY hour_bucket ASC"#,
+        )?;
+
+        let entries = stmt
+            .query_map([since], |row| {
+                Ok(ActivityLogEntry {
+                    hour_bucket: row.get("hour_bucket")?,
+                    albums_downloaded: row.get("albums_downloaded")?,
+                    tracks_downloaded: row.get("tracks_downloaded")?,
+                    images_downloaded: row.get("images_downloaded")?,
+                    bytes_downloaded: row.get("bytes_downloaded")?,
+                    failed_count: row.get("failed_count")?,
+                })
+            })?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+
+        Ok(entries)
     }
 
     fn get_hourly_counts(&self) -> Result<HourlyCounts> {
-        todo!("Implement in DM-1.4.9")
+        let conn = self.conn.lock().unwrap();
+        let hour_bucket = Self::hour_bucket();
+
+        let result = conn
+            .query_row(
+                r#"SELECT albums_downloaded, tracks_downloaded, images_downloaded, bytes_downloaded
+                   FROM download_activity_log
+                   WHERE hour_bucket = ?1"#,
+                [hour_bucket],
+                |row| {
+                    Ok(HourlyCounts {
+                        albums: row.get("albums_downloaded")?,
+                        tracks: row.get("tracks_downloaded")?,
+                        images: row.get("images_downloaded")?,
+                        bytes: row.get("bytes_downloaded")?,
+                    })
+                },
+            )
+            .optional()?;
+
+        Ok(result.unwrap_or_default())
     }
 
     fn get_daily_counts(&self) -> Result<DailyCounts> {
-        todo!("Implement in DM-1.4.9")
+        let conn = self.conn.lock().unwrap();
+        let day_start = Self::day_start_bucket();
+
+        let result = conn
+            .query_row(
+                r#"SELECT
+                       COALESCE(SUM(albums_downloaded), 0) as albums,
+                       COALESCE(SUM(tracks_downloaded), 0) as tracks,
+                       COALESCE(SUM(images_downloaded), 0) as images,
+                       COALESCE(SUM(bytes_downloaded), 0) as bytes
+                   FROM download_activity_log
+                   WHERE hour_bucket >= ?1"#,
+                [day_start],
+                |row| {
+                    Ok(DailyCounts {
+                        albums: row.get("albums")?,
+                        tracks: row.get("tracks")?,
+                        images: row.get("images")?,
+                        bytes: row.get("bytes")?,
+                    })
+                },
+            )?;
+
+        Ok(result)
     }
+
+    // Stub implementations for remaining trait methods (to be implemented in later tasks)
 
     fn get_queue_stats(&self) -> Result<QueueStats> {
         todo!("Implement in DM-1.4.10")
@@ -2872,5 +2994,161 @@ mod tests {
         // User 2 should be unaffected
         let stats2 = store.get_user_stats("user-2").unwrap();
         assert_eq!(stats2.in_queue, 2);
+    }
+
+    // === Activity Tracking Tests ===
+
+    #[test]
+    fn test_record_activity_album() {
+        let store = SqliteDownloadQueueStore::in_memory().unwrap();
+
+        store.record_activity(DownloadContentType::Album, 1000, true).unwrap();
+
+        let hourly = store.get_hourly_counts().unwrap();
+        assert_eq!(hourly.albums, 1);
+        assert_eq!(hourly.tracks, 0);
+        assert_eq!(hourly.images, 0);
+        assert_eq!(hourly.bytes, 1000);
+    }
+
+    #[test]
+    fn test_record_activity_track() {
+        let store = SqliteDownloadQueueStore::in_memory().unwrap();
+
+        store.record_activity(DownloadContentType::TrackAudio, 5000000, true).unwrap();
+
+        let hourly = store.get_hourly_counts().unwrap();
+        assert_eq!(hourly.albums, 0);
+        assert_eq!(hourly.tracks, 1);
+        assert_eq!(hourly.bytes, 5000000);
+    }
+
+    #[test]
+    fn test_record_activity_image() {
+        let store = SqliteDownloadQueueStore::in_memory().unwrap();
+
+        store.record_activity(DownloadContentType::AlbumImage, 50000, true).unwrap();
+
+        let hourly = store.get_hourly_counts().unwrap();
+        assert_eq!(hourly.images, 1);
+        assert_eq!(hourly.bytes, 50000);
+    }
+
+    #[test]
+    fn test_record_activity_failure() {
+        let store = SqliteDownloadQueueStore::in_memory().unwrap();
+
+        // Record a failed download - should not increment content counts
+        store.record_activity(DownloadContentType::Album, 0, false).unwrap();
+
+        let hourly = store.get_hourly_counts().unwrap();
+        assert_eq!(hourly.albums, 0);
+        assert_eq!(hourly.tracks, 0);
+        // Bytes are still recorded (even if 0)
+    }
+
+    #[test]
+    fn test_record_activity_accumulates() {
+        let store = SqliteDownloadQueueStore::in_memory().unwrap();
+
+        // Record multiple downloads
+        store.record_activity(DownloadContentType::Album, 1000, true).unwrap();
+        store.record_activity(DownloadContentType::Album, 2000, true).unwrap();
+        store.record_activity(DownloadContentType::TrackAudio, 5000000, true).unwrap();
+        store.record_activity(DownloadContentType::TrackAudio, 6000000, true).unwrap();
+        store.record_activity(DownloadContentType::TrackAudio, 7000000, true).unwrap();
+
+        let hourly = store.get_hourly_counts().unwrap();
+        assert_eq!(hourly.albums, 2);
+        assert_eq!(hourly.tracks, 3);
+        assert_eq!(hourly.bytes, 1000 + 2000 + 5000000 + 6000000 + 7000000);
+    }
+
+    #[test]
+    fn test_get_hourly_counts_empty() {
+        let store = SqliteDownloadQueueStore::in_memory().unwrap();
+
+        // No activity recorded - should return defaults
+        let hourly = store.get_hourly_counts().unwrap();
+        assert_eq!(hourly.albums, 0);
+        assert_eq!(hourly.tracks, 0);
+        assert_eq!(hourly.images, 0);
+        assert_eq!(hourly.bytes, 0);
+    }
+
+    #[test]
+    fn test_get_daily_counts_empty() {
+        let store = SqliteDownloadQueueStore::in_memory().unwrap();
+
+        // No activity recorded
+        let daily = store.get_daily_counts().unwrap();
+        assert_eq!(daily.albums, 0);
+        assert_eq!(daily.tracks, 0);
+    }
+
+    #[test]
+    fn test_get_daily_counts() {
+        let store = SqliteDownloadQueueStore::in_memory().unwrap();
+
+        // Record various activities
+        store.record_activity(DownloadContentType::Album, 1000, true).unwrap();
+        store.record_activity(DownloadContentType::TrackAudio, 5000000, true).unwrap();
+        store.record_activity(DownloadContentType::AlbumImage, 50000, true).unwrap();
+
+        let daily = store.get_daily_counts().unwrap();
+        assert_eq!(daily.albums, 1);
+        assert_eq!(daily.tracks, 1);
+        assert_eq!(daily.images, 1);
+        assert_eq!(daily.bytes, 1000 + 5000000 + 50000);
+    }
+
+    #[test]
+    fn test_get_activity_since_empty() {
+        let store = SqliteDownloadQueueStore::in_memory().unwrap();
+
+        let entries = store.get_activity_since(0).unwrap();
+        assert!(entries.is_empty());
+    }
+
+    #[test]
+    fn test_get_activity_since() {
+        let store = SqliteDownloadQueueStore::in_memory().unwrap();
+
+        // Record some activity
+        store.record_activity(DownloadContentType::Album, 1000, true).unwrap();
+
+        // Get all activity since epoch
+        let entries = store.get_activity_since(0).unwrap();
+        assert_eq!(entries.len(), 1);
+
+        let entry = &entries[0];
+        assert_eq!(entry.albums_downloaded, 1);
+        assert_eq!(entry.bytes_downloaded, 1000);
+    }
+
+    #[test]
+    fn test_hour_bucket() {
+        let bucket = SqliteDownloadQueueStore::hour_bucket();
+
+        // Should be divisible by 3600 (one hour in seconds)
+        assert_eq!(bucket % 3600, 0);
+
+        // Should be close to current time (within one hour)
+        let now = SqliteDownloadQueueStore::now();
+        assert!(now - bucket < 3600);
+        assert!(now >= bucket);
+    }
+
+    #[test]
+    fn test_day_start_bucket() {
+        let bucket = SqliteDownloadQueueStore::day_start_bucket();
+
+        // Should be divisible by 86400 (one day in seconds)
+        assert_eq!(bucket % 86400, 0);
+
+        // Should be close to current time (within one day)
+        let now = SqliteDownloadQueueStore::now();
+        assert!(now - bucket < 86400);
+        assert!(now >= bucket);
     }
 }
