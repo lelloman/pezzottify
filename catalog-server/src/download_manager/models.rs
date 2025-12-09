@@ -147,6 +147,148 @@ impl DownloadErrorType {
     }
 }
 
+/// A download queue item representing a single download task.
+#[derive(Debug, Clone)]
+pub struct QueueItem {
+    /// Unique identifier (UUID)
+    pub id: String,
+    /// Parent queue item ID (for child items like individual tracks of an album)
+    pub parent_id: Option<String>,
+    /// Current status in the state machine
+    pub status: QueueStatus,
+    /// Processing priority (lower value = higher priority)
+    pub priority: QueuePriority,
+    /// Type of content being downloaded
+    pub content_type: DownloadContentType,
+    /// External ID from music provider (base62 for content, hex for images)
+    pub content_id: String,
+    /// Display name (album/artist name)
+    pub content_name: Option<String>,
+    /// Artist name for display
+    pub artist_name: Option<String>,
+    /// Source of this request
+    pub request_source: RequestSource,
+    /// User who requested this download (if user-initiated)
+    pub requested_by_user_id: Option<String>,
+    /// When the item was added to the queue (Unix timestamp)
+    pub created_at: i64,
+    /// When processing started (IN_PROGRESS state began)
+    pub started_at: Option<i64>,
+    /// When the item reached a terminal state
+    pub completed_at: Option<i64>,
+    /// Timestamp of the last download attempt
+    pub last_attempt_at: Option<i64>,
+    /// When to retry (for RETRY_WAITING status)
+    pub next_retry_at: Option<i64>,
+    /// Number of retry attempts made
+    pub retry_count: i32,
+    /// Maximum number of retries allowed
+    pub max_retries: i32,
+    /// Type of error that caused failure (if any)
+    pub error_type: Option<DownloadErrorType>,
+    /// Human-readable error message
+    pub error_message: Option<String>,
+    /// Number of bytes downloaded (for completed items)
+    pub bytes_downloaded: Option<u64>,
+    /// Time spent processing in milliseconds
+    pub processing_duration_ms: Option<i64>,
+}
+
+impl QueueItem {
+    /// Create a new queue item with the given parameters.
+    pub fn new(
+        id: String,
+        content_type: DownloadContentType,
+        content_id: String,
+        priority: QueuePriority,
+        request_source: RequestSource,
+        max_retries: i32,
+    ) -> Self {
+        Self {
+            id,
+            parent_id: None,
+            status: QueueStatus::Pending,
+            priority,
+            content_type,
+            content_id,
+            content_name: None,
+            artist_name: None,
+            request_source,
+            requested_by_user_id: None,
+            created_at: chrono::Utc::now().timestamp(),
+            started_at: None,
+            completed_at: None,
+            last_attempt_at: None,
+            next_retry_at: None,
+            retry_count: 0,
+            max_retries,
+            error_type: None,
+            error_message: None,
+            bytes_downloaded: None,
+            processing_duration_ms: None,
+        }
+    }
+
+    /// Create a new queue item as a child of another item.
+    pub fn new_child(
+        id: String,
+        parent_id: String,
+        content_type: DownloadContentType,
+        content_id: String,
+        priority: QueuePriority,
+        request_source: RequestSource,
+        requested_by_user_id: Option<String>,
+        max_retries: i32,
+    ) -> Self {
+        Self {
+            id,
+            parent_id: Some(parent_id),
+            status: QueueStatus::Pending,
+            priority,
+            content_type,
+            content_id,
+            content_name: None,
+            artist_name: None,
+            request_source,
+            requested_by_user_id,
+            created_at: chrono::Utc::now().timestamp(),
+            started_at: None,
+            completed_at: None,
+            last_attempt_at: None,
+            next_retry_at: None,
+            retry_count: 0,
+            max_retries,
+            error_type: None,
+            error_message: None,
+            bytes_downloaded: None,
+            processing_duration_ms: None,
+        }
+    }
+
+    /// Set display names for this item.
+    pub fn with_names(mut self, content_name: Option<String>, artist_name: Option<String>) -> Self {
+        self.content_name = content_name;
+        self.artist_name = artist_name;
+        self
+    }
+
+    /// Set the user who requested this download.
+    pub fn with_user(mut self, user_id: String) -> Self {
+        self.requested_by_user_id = Some(user_id);
+        self
+    }
+
+    /// Returns true if this is a parent item (has no parent_id).
+    pub fn is_parent(&self) -> bool {
+        self.parent_id.is_none()
+    }
+
+    /// Returns true if this is a child item.
+    pub fn is_child(&self) -> bool {
+        self.parent_id.is_some()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -265,5 +407,82 @@ mod tests {
 
         let deserialized: DownloadErrorType = serde_json::from_str(&json).unwrap();
         assert_eq!(deserialized, DownloadErrorType::NotFound);
+    }
+
+    #[test]
+    fn test_queue_item_new() {
+        let item = QueueItem::new(
+            "test-id".to_string(),
+            DownloadContentType::Album,
+            "album-123".to_string(),
+            QueuePriority::User,
+            RequestSource::User,
+            5,
+        );
+
+        assert_eq!(item.id, "test-id");
+        assert!(item.parent_id.is_none());
+        assert_eq!(item.status, QueueStatus::Pending);
+        assert_eq!(item.priority, QueuePriority::User);
+        assert_eq!(item.content_type, DownloadContentType::Album);
+        assert_eq!(item.content_id, "album-123");
+        assert_eq!(item.request_source, RequestSource::User);
+        assert_eq!(item.max_retries, 5);
+        assert_eq!(item.retry_count, 0);
+        assert!(item.is_parent());
+        assert!(!item.is_child());
+    }
+
+    #[test]
+    fn test_queue_item_new_child() {
+        let item = QueueItem::new_child(
+            "child-id".to_string(),
+            "parent-id".to_string(),
+            DownloadContentType::TrackAudio,
+            "track-456".to_string(),
+            QueuePriority::User,
+            RequestSource::User,
+            Some("user-1".to_string()),
+            3,
+        );
+
+        assert_eq!(item.id, "child-id");
+        assert_eq!(item.parent_id, Some("parent-id".to_string()));
+        assert_eq!(item.status, QueueStatus::Pending);
+        assert_eq!(item.content_type, DownloadContentType::TrackAudio);
+        assert_eq!(item.requested_by_user_id, Some("user-1".to_string()));
+        assert!(!item.is_parent());
+        assert!(item.is_child());
+    }
+
+    #[test]
+    fn test_queue_item_with_names() {
+        let item = QueueItem::new(
+            "test-id".to_string(),
+            DownloadContentType::Album,
+            "album-123".to_string(),
+            QueuePriority::User,
+            RequestSource::User,
+            5,
+        )
+        .with_names(Some("Album Name".to_string()), Some("Artist Name".to_string()));
+
+        assert_eq!(item.content_name, Some("Album Name".to_string()));
+        assert_eq!(item.artist_name, Some("Artist Name".to_string()));
+    }
+
+    #[test]
+    fn test_queue_item_with_user() {
+        let item = QueueItem::new(
+            "test-id".to_string(),
+            DownloadContentType::Album,
+            "album-123".to_string(),
+            QueuePriority::User,
+            RequestSource::User,
+            5,
+        )
+        .with_user("user-123".to_string());
+
+        assert_eq!(item.requested_by_user_id, Some("user-123".to_string()));
     }
 }
