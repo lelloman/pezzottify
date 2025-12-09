@@ -1509,7 +1509,7 @@ Queue processing order: `ORDER BY priority ASC, created_at ASC`
   }
   ```
 
-- [ ] **Task DM-1.2.4: Define audit types**
+- [x] **Task DM-1.2.4: Define audit types**
 
   **File:** `catalog-server/src/download_manager/models.rs`
 
