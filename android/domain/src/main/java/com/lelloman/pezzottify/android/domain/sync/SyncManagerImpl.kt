@@ -1,12 +1,14 @@
 package com.lelloman.pezzottify.android.domain.sync
 
 import com.lelloman.pezzottify.android.domain.remoteapi.RemoteApiClient
+import com.lelloman.pezzottify.android.domain.remoteapi.response.PlaylistState
 import com.lelloman.pezzottify.android.domain.remoteapi.response.RemoteApiResponse
 import com.lelloman.pezzottify.android.domain.settings.UserSettingsStore
 import com.lelloman.pezzottify.android.domain.user.PermissionsStore
 import com.lelloman.pezzottify.android.domain.usercontent.LikedContent
 import com.lelloman.pezzottify.android.domain.usercontent.SyncStatus
 import com.lelloman.pezzottify.android.domain.usercontent.UserContentStore
+import com.lelloman.pezzottify.android.domain.usercontent.UserPlaylistStore
 import com.lelloman.pezzottify.android.logger.Logger
 import com.lelloman.pezzottify.android.logger.LoggerFactory
 import kotlinx.coroutines.CoroutineDispatcher
@@ -23,6 +25,7 @@ class SyncManagerImpl internal constructor(
     private val remoteApiClient: RemoteApiClient,
     private val syncStateStore: SyncStateStore,
     private val userContentStore: UserContentStore,
+    private val userPlaylistStore: UserPlaylistStore,
     private val permissionsStore: PermissionsStore,
     private val userSettingsStore: UserSettingsStore,
     private val logger: Logger,
@@ -34,6 +37,7 @@ class SyncManagerImpl internal constructor(
         remoteApiClient: RemoteApiClient,
         syncStateStore: SyncStateStore,
         userContentStore: UserContentStore,
+        userPlaylistStore: UserPlaylistStore,
         permissionsStore: PermissionsStore,
         userSettingsStore: UserSettingsStore,
         loggerFactory: LoggerFactory,
@@ -41,6 +45,7 @@ class SyncManagerImpl internal constructor(
         remoteApiClient,
         syncStateStore,
         userContentStore,
+        userPlaylistStore,
         permissionsStore,
         userSettingsStore,
         loggerFactory.getLogger(SyncManagerImpl::class),
@@ -87,7 +92,8 @@ class SyncManagerImpl internal constructor(
                 // Apply settings
                 applySettingsState(syncState.settings)
 
-                // TODO: Apply playlists when playlist store is available
+                // Apply playlists
+                applyPlaylistsState(syncState.playlists)
 
                 // Save cursor
                 syncStateStore.saveCursor(syncState.seq)
@@ -218,22 +224,26 @@ class SyncManagerImpl internal constructor(
             }
 
             is SyncEvent.PlaylistCreated -> {
-                // TODO: Implement when playlist store is available
+                userPlaylistStore.createOrUpdatePlaylist(
+                    id = event.playlistId,
+                    name = event.name,
+                    trackIds = emptyList(),
+                )
                 logger.debug("Applied PlaylistCreated: ${event.playlistId} ${event.name}")
             }
 
             is SyncEvent.PlaylistRenamed -> {
-                // TODO: Implement when playlist store is available
+                userPlaylistStore.updatePlaylistName(event.playlistId, event.name)
                 logger.debug("Applied PlaylistRenamed: ${event.playlistId} ${event.name}")
             }
 
             is SyncEvent.PlaylistDeleted -> {
-                // TODO: Implement when playlist store is available
+                userPlaylistStore.deletePlaylist(event.playlistId)
                 logger.debug("Applied PlaylistDeleted: ${event.playlistId}")
             }
 
             is SyncEvent.PlaylistTracksUpdated -> {
-                // TODO: Implement when playlist store is available
+                userPlaylistStore.updatePlaylistTracks(event.playlistId, event.trackIds)
                 logger.debug("Applied PlaylistTracksUpdated: ${event.playlistId}")
             }
 
@@ -293,6 +303,18 @@ class SyncManagerImpl internal constructor(
             applySetting(setting)
         }
         logger.debug("Applied ${settings.size} settings")
+    }
+
+    private suspend fun applyPlaylistsState(playlists: List<PlaylistState>) {
+        val domainPlaylists = playlists.map { playlist ->
+            object : com.lelloman.pezzottify.android.domain.usercontent.UserPlaylist {
+                override val id = playlist.id
+                override val name = playlist.name
+                override val trackIds = playlist.tracks
+            }
+        }
+        userPlaylistStore.replaceAllPlaylists(domainPlaylists)
+        logger.debug("Applied ${playlists.size} playlists")
     }
 
     private suspend fun applySetting(setting: UserSetting) {

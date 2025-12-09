@@ -3,6 +3,7 @@ package com.lelloman.pezzottify.android.domain.player
 import com.lelloman.pezzottify.android.domain.config.ConfigStore
 import com.lelloman.pezzottify.android.domain.player.internal.PlayerImpl
 import com.lelloman.pezzottify.android.domain.statics.StaticsProvider
+import com.lelloman.pezzottify.android.domain.usercontent.UserPlaylistStore
 import com.lelloman.pezzottify.android.logger.LoggerFactory
 import dagger.Module
 import dagger.Provides
@@ -21,10 +22,12 @@ class PlayerModule {
         loggerFactory: LoggerFactory,
         platformPlayer: PlatformPlayer,
         configStore: ConfigStore,
+        userPlaylistStore: UserPlaylistStore,
     ): PezzottifyPlayer = PlayerImpl(
         staticsProvider = staticsProvider,
         loggerFactory = loggerFactory,
         platformPlayer = platformPlayer,
         configStore = configStore,
+        userPlaylistStore = userPlaylistStore,
     )
 }
