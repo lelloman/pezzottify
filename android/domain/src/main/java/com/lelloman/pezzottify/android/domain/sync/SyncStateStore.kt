@@ -19,10 +19,10 @@ interface SyncStateStore {
     val cursor: StateFlow<Long>
 
     /**
-     * Get the current sync cursor value.
+     * Get the current sync cursor value synchronously.
      * Returns 0 if no cursor has been saved.
      */
-    fun getCursor(): Long
+    fun getCurrentCursor(): Long
 
     /**
      * Save a new sync cursor value.

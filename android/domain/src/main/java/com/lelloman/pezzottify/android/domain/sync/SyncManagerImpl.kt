@@ -53,7 +53,7 @@ class SyncManagerImpl internal constructor(
     override suspend fun initialize(): Boolean = withContext(dispatcher) {
         logger.info("initialize()")
 
-        val cursor = syncStateStore.getCursor()
+        val cursor = syncStateStore.getCurrentCursor()
 
         if (cursor == 0L) {
             // No cursor, do full sync
@@ -109,7 +109,7 @@ class SyncManagerImpl internal constructor(
         logger.info("catchUp()")
         mutableState.value = SyncState.Syncing
 
-        val cursor = syncStateStore.getCursor()
+        val cursor = syncStateStore.getCurrentCursor()
         when (val response = remoteApiClient.getSyncEvents(cursor)) {
             is RemoteApiResponse.Success -> {
                 val eventsResponse = response.data
@@ -155,7 +155,7 @@ class SyncManagerImpl internal constructor(
     override suspend fun handleSyncMessage(storedEvent: StoredEvent) = withContext(dispatcher) {
         logger.debug("handleSyncMessage() seq=${storedEvent.seq}")
 
-        val cursor = syncStateStore.getCursor()
+        val cursor = syncStateStore.getCurrentCursor()
 
         // Check for sequence gap
         if (storedEvent.seq > cursor + 1) {

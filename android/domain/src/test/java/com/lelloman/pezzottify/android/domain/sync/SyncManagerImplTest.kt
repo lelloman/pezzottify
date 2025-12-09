@@ -61,7 +61,7 @@ class SyncManagerImplTest {
 
     @Test
     fun `initialize performs fullSync when cursor is 0`() = runTest(testDispatcher) {
-        every { syncStateStore.getCursor() } returns 0L
+        every { syncStateStore.getCurrentCursor() } returns 0L
         coEvery { remoteApiClient.getSyncState() } returns RemoteApiResponse.Success(
             createSyncStateResponse(seq = 10L)
         )
@@ -75,7 +75,7 @@ class SyncManagerImplTest {
 
     @Test
     fun `initialize performs catchUp when cursor is greater than 0`() = runTest(testDispatcher) {
-        every { syncStateStore.getCursor() } returns 5L
+        every { syncStateStore.getCurrentCursor() } returns 5L
         coEvery { remoteApiClient.getSyncEvents(5L) } returns RemoteApiResponse.Success(
             SyncEventsResponse(events = emptyList(), currentSeq = 5L)
         )
@@ -175,7 +175,7 @@ class SyncManagerImplTest {
 
     @Test
     fun `catchUp success applies events and updates cursor`() = runTest(testDispatcher) {
-        every { syncStateStore.getCursor() } returns 5L
+        every { syncStateStore.getCurrentCursor() } returns 5L
         val events = listOf(
             createContentLikedEvent(seq = 6L, contentId = "track1"),
             createContentLikedEvent(seq = 7L, contentId = "track2"),
@@ -194,7 +194,7 @@ class SyncManagerImplTest {
 
     @Test
     fun `catchUp applies content liked events to user content store`() = runTest(testDispatcher) {
-        every { syncStateStore.getCursor() } returns 5L
+        every { syncStateStore.getCurrentCursor() } returns 5L
         val events = listOf(
             createContentLikedEvent(seq = 6L, contentId = "track1", contentType = LikedContentType.Track),
         )
@@ -217,7 +217,7 @@ class SyncManagerImplTest {
 
     @Test
     fun `catchUp applies content unliked events to user content store`() = runTest(testDispatcher) {
-        every { syncStateStore.getCursor() } returns 5L
+        every { syncStateStore.getCurrentCursor() } returns 5L
         val events = listOf(
             createContentUnlikedEvent(seq = 6L, contentId = "album1", contentType = LikedContentType.Album),
         )
@@ -240,7 +240,7 @@ class SyncManagerImplTest {
 
     @Test
     fun `catchUp triggers fullSync when events are pruned`() = runTest(testDispatcher) {
-        every { syncStateStore.getCursor() } returns 5L
+        every { syncStateStore.getCurrentCursor() } returns 5L
         coEvery { remoteApiClient.getSyncEvents(5L) } returns RemoteApiResponse.Error.EventsPruned
         coEvery { remoteApiClient.getSyncState() } returns RemoteApiResponse.Success(
             createSyncStateResponse(seq = 100L)
@@ -255,7 +255,7 @@ class SyncManagerImplTest {
 
     @Test
     fun `catchUp triggers fullSync when sequence gap detected`() = runTest(testDispatcher) {
-        every { syncStateStore.getCursor() } returns 5L
+        every { syncStateStore.getCurrentCursor() } returns 5L
         // Gap: cursor is 5, but first event is 10 (should be 6)
         val events = listOf(
             createContentLikedEvent(seq = 10L, contentId = "track1"),
@@ -275,7 +275,7 @@ class SyncManagerImplTest {
 
     @Test
     fun `catchUp error updates state to Error`() = runTest(testDispatcher) {
-        every { syncStateStore.getCursor() } returns 5L
+        every { syncStateStore.getCurrentCursor() } returns 5L
         coEvery { remoteApiClient.getSyncEvents(5L) } returns RemoteApiResponse.Error.Unauthorized
 
         val result = syncManager.catchUp()
@@ -286,7 +286,7 @@ class SyncManagerImplTest {
 
     @Test
     fun `catchUp with no events updates cursor to currentSeq`() = runTest(testDispatcher) {
-        every { syncStateStore.getCursor() } returns 5L
+        every { syncStateStore.getCurrentCursor() } returns 5L
         coEvery { remoteApiClient.getSyncEvents(5L) } returns RemoteApiResponse.Success(
             SyncEventsResponse(events = emptyList(), currentSeq = 5L)
         )
@@ -299,7 +299,7 @@ class SyncManagerImplTest {
 
     @Test
     fun `catchUp updates cursor even when currentSeq is higher than last event`() = runTest(testDispatcher) {
-        every { syncStateStore.getCursor() } returns 5L
+        every { syncStateStore.getCurrentCursor() } returns 5L
         coEvery { remoteApiClient.getSyncEvents(5L) } returns RemoteApiResponse.Success(
             SyncEventsResponse(events = emptyList(), currentSeq = 10L)
         )
@@ -315,7 +315,7 @@ class SyncManagerImplTest {
 
     @Test
     fun `handleSyncMessage applies event and updates cursor`() = runTest(testDispatcher) {
-        every { syncStateStore.getCursor() } returns 5L
+        every { syncStateStore.getCurrentCursor() } returns 5L
         val event = createContentLikedEvent(seq = 6L, contentId = "track1")
 
         syncManager.handleSyncMessage(event)
@@ -326,7 +326,7 @@ class SyncManagerImplTest {
 
     @Test
     fun `handleSyncMessage triggers catchUp when sequence gap detected`() = runTest(testDispatcher) {
-        every { syncStateStore.getCursor() } returns 5L
+        every { syncStateStore.getCurrentCursor() } returns 5L
         val event = createContentLikedEvent(seq = 10L, contentId = "track1")
         coEvery { remoteApiClient.getSyncEvents(5L) } returns RemoteApiResponse.Success(
             SyncEventsResponse(events = emptyList(), currentSeq = 10L)
@@ -339,7 +339,7 @@ class SyncManagerImplTest {
 
     @Test
     fun `handleSyncMessage applies content liked event to user content store`() = runTest(testDispatcher) {
-        every { syncStateStore.getCursor() } returns 5L
+        every { syncStateStore.getCurrentCursor() } returns 5L
         val event = createContentLikedEvent(
             seq = 6L,
             contentId = "artist1",
@@ -366,7 +366,7 @@ class SyncManagerImplTest {
     @Test
     fun `cleanup clears cursor and resets state to Idle`() = runTest(testDispatcher) {
         // First sync to get a non-Idle state
-        every { syncStateStore.getCursor() } returns 0L
+        every { syncStateStore.getCurrentCursor() } returns 0L
         coEvery { remoteApiClient.getSyncState() } returns RemoteApiResponse.Success(
             createSyncStateResponse(seq = 10L)
         )
@@ -399,7 +399,7 @@ class SyncManagerImplTest {
 
     @Test
     fun `handleSyncMessage applies setting changed event`() = runTest(testDispatcher) {
-        every { syncStateStore.getCursor() } returns 5L
+        every { syncStateStore.getCurrentCursor() } returns 5L
         val event = createSettingChangedEvent(
             seq = 6L,
             setting = UserSetting.DirectDownloadsEnabled(true),
@@ -413,7 +413,7 @@ class SyncManagerImplTest {
 
     @Test
     fun `catchUp applies setting changed events`() = runTest(testDispatcher) {
-        every { syncStateStore.getCursor() } returns 5L
+        every { syncStateStore.getCurrentCursor() } returns 5L
         val events = listOf(
             createSettingChangedEvent(seq = 6L, setting = UserSetting.DirectDownloadsEnabled(false)),
             createSettingChangedEvent(seq = 7L, setting = UserSetting.DirectDownloadsEnabled(true)),
