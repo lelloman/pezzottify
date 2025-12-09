@@ -896,4 +896,133 @@ impl TestClient {
             .await
             .expect("Get job history request failed")
     }
+
+    // ========================================================================
+    // Download Manager Endpoints
+    // ========================================================================
+
+    /// GET /v1/download/search?q={query}
+    pub async fn download_search(&self, query: &str) -> Response {
+        self.client
+            .get(format!("{}/v1/download/search", self.base_url))
+            .query(&[("q", query)])
+            .send()
+            .await
+            .expect("Download search request failed")
+    }
+
+    /// GET /v1/download/limits
+    pub async fn download_limits(&self) -> Response {
+        self.client
+            .get(format!("{}/v1/download/limits", self.base_url))
+            .send()
+            .await
+            .expect("Download limits request failed")
+    }
+
+    /// GET /v1/download/my-requests
+    pub async fn download_my_requests(&self) -> Response {
+        self.client
+            .get(format!("{}/v1/download/my-requests", self.base_url))
+            .send()
+            .await
+            .expect("Download my requests failed")
+    }
+
+    /// POST /v1/download/request/album
+    pub async fn download_request_album(
+        &self,
+        album_id: &str,
+        album_name: &str,
+        artist_name: &str,
+    ) -> Response {
+        self.client
+            .post(format!("{}/v1/download/request/album", self.base_url))
+            .json(&json!({
+                "album_id": album_id,
+                "album_name": album_name,
+                "artist_name": artist_name
+            }))
+            .send()
+            .await
+            .expect("Download request album failed")
+    }
+
+    /// GET /v1/download/admin/stats
+    pub async fn download_admin_stats(&self) -> Response {
+        self.client
+            .get(format!("{}/v1/download/admin/stats", self.base_url))
+            .send()
+            .await
+            .expect("Download admin stats request failed")
+    }
+
+    /// GET /v1/download/admin/failed
+    pub async fn download_admin_failed(&self) -> Response {
+        self.client
+            .get(format!("{}/v1/download/admin/failed", self.base_url))
+            .send()
+            .await
+            .expect("Download admin failed request failed")
+    }
+
+    /// GET /v1/download/admin/activity
+    pub async fn download_admin_activity(&self) -> Response {
+        self.client
+            .get(format!("{}/v1/download/admin/activity", self.base_url))
+            .send()
+            .await
+            .expect("Download admin activity request failed")
+    }
+
+    /// GET /v1/download/admin/requests
+    pub async fn download_admin_requests(&self) -> Response {
+        self.client
+            .get(format!("{}/v1/download/admin/requests", self.base_url))
+            .send()
+            .await
+            .expect("Download admin requests failed")
+    }
+
+    /// POST /v1/download/admin/retry/{id}
+    pub async fn download_admin_retry(&self, id: &str) -> Response {
+        self.client
+            .post(format!("{}/v1/download/admin/retry/{}", self.base_url, id))
+            .send()
+            .await
+            .expect("Download admin retry request failed")
+    }
+
+    /// GET /v1/download/admin/audit
+    pub async fn download_admin_audit(&self) -> Response {
+        self.client
+            .get(format!("{}/v1/download/admin/audit", self.base_url))
+            .send()
+            .await
+            .expect("Download admin audit request failed")
+    }
+
+    /// GET /v1/download/admin/audit/item/{id}
+    pub async fn download_admin_audit_item(&self, id: &str) -> Response {
+        self.client
+            .get(format!(
+                "{}/v1/download/admin/audit/item/{}",
+                self.base_url, id
+            ))
+            .send()
+            .await
+            .expect("Download admin audit item request failed")
+    }
+
+    /// GET /v1/download/admin/audit/user/{id}
+    pub async fn download_admin_audit_user(&self, id: &str) -> Response {
+        self.client
+            .get(format!(
+                "{}/v1/download/admin/audit/user/{}",
+                self.base_url, id
+            ))
+            .send()
+            .await
+            .expect("Download admin audit user request failed")
+    }
 }
