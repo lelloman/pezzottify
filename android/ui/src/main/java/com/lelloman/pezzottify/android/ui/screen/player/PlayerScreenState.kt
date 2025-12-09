@@ -10,6 +10,7 @@ enum class RepeatModeUi {
 
 data class PlayerScreenState(
     val isLoading: Boolean = true,
+    val trackId: String = "",
     val trackName: String = "",
     val albumId: String = "",
     val albumName: String = "",
