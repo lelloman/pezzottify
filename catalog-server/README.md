@@ -341,16 +341,20 @@ The server supports HTTPS with TLS using self-signed or CA-signed certificates.
 
 #### Generating Self-Signed Certificates
 
-Basic certificate (valid for 365 days):
+**Important:** The `CN` (Common Name) must match the hostname clients use to connect.
+If it doesn't match, certificate validation will fail.
+
+For local development only:
 
 ```bash
 openssl req -x509 -newkey rsa:4096 -keyout key.pem -out cert.pem -days 365 -nodes \
   -subj "/CN=localhost"
 ```
 
-Certificate with Subject Alternative Names (recommended for production):
+For production with a domain (recommended):
 
 ```bash
+# Replace yourdomain.com with your actual domain
 openssl req -x509 -newkey rsa:4096 -keyout key.pem -out cert.pem -days 365 -nodes \
   -subj "/CN=yourdomain.com" \
   -addext "subjectAltName=DNS:yourdomain.com,DNS:localhost,IP:127.0.0.1"
