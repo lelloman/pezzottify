@@ -2273,7 +2273,7 @@ Queue processing order: `ORDER BY priority ASC, created_at ASC`
   5. On success: mark completed, record activity, log audit
   6. On failure: check retry policy, either mark retry or failed, log audit
 
-- [ ] **Task DM-1.7.5: Add unit tests for DownloadManager**
+- [x] **Task DM-1.7.5: Add unit tests for DownloadManager**
 
   **File:** `catalog-server/src/download_manager/manager.rs` (test module)
 
