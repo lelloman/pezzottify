@@ -366,6 +366,201 @@ impl UserRequestView {
     }
 }
 
+/// Types of events recorded in the audit log.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum AuditEventType {
+    /// User submitted an album/content request
+    RequestCreated,
+    /// Item claimed for processing (status -> IN_PROGRESS)
+    DownloadStarted,
+    /// Album spawned child items (track audio, images)
+    ChildrenCreated,
+    /// Item finished successfully
+    DownloadCompleted,
+    /// Item failed after max retries
+    DownloadFailed,
+    /// Item scheduled for retry (status -> RETRY_WAITING)
+    RetryScheduled,
+    /// Admin manually reset failed item to pending
+    AdminRetry,
+    /// Watchdog queued a repair item
+    WatchdogQueued,
+    /// Watchdog scan started
+    WatchdogScanStarted,
+    /// Watchdog scan completed
+    WatchdogScanCompleted,
+}
+
+impl AuditEventType {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            AuditEventType::RequestCreated => "REQUEST_CREATED",
+            AuditEventType::DownloadStarted => "DOWNLOAD_STARTED",
+            AuditEventType::ChildrenCreated => "CHILDREN_CREATED",
+            AuditEventType::DownloadCompleted => "DOWNLOAD_COMPLETED",
+            AuditEventType::DownloadFailed => "DOWNLOAD_FAILED",
+            AuditEventType::RetryScheduled => "RETRY_SCHEDULED",
+            AuditEventType::AdminRetry => "ADMIN_RETRY",
+            AuditEventType::WatchdogQueued => "WATCHDOG_QUEUED",
+            AuditEventType::WatchdogScanStarted => "WATCHDOG_SCAN_STARTED",
+            AuditEventType::WatchdogScanCompleted => "WATCHDOG_SCAN_COMPLETED",
+        }
+    }
+
+    pub fn from_str(s: &str) -> Option<Self> {
+        match s {
+            "REQUEST_CREATED" => Some(AuditEventType::RequestCreated),
+            "DOWNLOAD_STARTED" => Some(AuditEventType::DownloadStarted),
+            "CHILDREN_CREATED" => Some(AuditEventType::ChildrenCreated),
+            "DOWNLOAD_COMPLETED" => Some(AuditEventType::DownloadCompleted),
+            "DOWNLOAD_FAILED" => Some(AuditEventType::DownloadFailed),
+            "RETRY_SCHEDULED" => Some(AuditEventType::RetryScheduled),
+            "ADMIN_RETRY" => Some(AuditEventType::AdminRetry),
+            "WATCHDOG_QUEUED" => Some(AuditEventType::WatchdogQueued),
+            "WATCHDOG_SCAN_STARTED" => Some(AuditEventType::WatchdogScanStarted),
+            "WATCHDOG_SCAN_COMPLETED" => Some(AuditEventType::WatchdogScanCompleted),
+            _ => None,
+        }
+    }
+}
+
+/// An entry in the audit log.
+#[derive(Debug, Clone)]
+pub struct AuditLogEntry {
+    /// Auto-incremented ID
+    pub id: i64,
+    /// Unix timestamp when the event occurred
+    pub timestamp: i64,
+    /// Type of event
+    pub event_type: AuditEventType,
+    /// Associated queue item ID (if applicable)
+    pub queue_item_id: Option<String>,
+    /// Content type (if applicable)
+    pub content_type: Option<DownloadContentType>,
+    /// Content ID (if applicable)
+    pub content_id: Option<String>,
+    /// User who triggered the event (if applicable)
+    pub user_id: Option<String>,
+    /// Source of the request
+    pub request_source: Option<RequestSource>,
+    /// Event-specific JSON data (e.g., child count for ChildrenCreated)
+    pub details: Option<serde_json::Value>,
+}
+
+impl AuditLogEntry {
+    /// Create a new audit log entry with the current timestamp.
+    pub fn new(event_type: AuditEventType) -> Self {
+        Self {
+            id: 0, // Will be set by database
+            timestamp: chrono::Utc::now().timestamp(),
+            event_type,
+            queue_item_id: None,
+            content_type: None,
+            content_id: None,
+            user_id: None,
+            request_source: None,
+            details: None,
+        }
+    }
+
+    /// Set the queue item ID.
+    pub fn with_queue_item(mut self, queue_item_id: String) -> Self {
+        self.queue_item_id = Some(queue_item_id);
+        self
+    }
+
+    /// Set content information.
+    pub fn with_content(mut self, content_type: DownloadContentType, content_id: String) -> Self {
+        self.content_type = Some(content_type);
+        self.content_id = Some(content_id);
+        self
+    }
+
+    /// Set user ID.
+    pub fn with_user(mut self, user_id: String) -> Self {
+        self.user_id = Some(user_id);
+        self
+    }
+
+    /// Set request source.
+    pub fn with_source(mut self, source: RequestSource) -> Self {
+        self.request_source = Some(source);
+        self
+    }
+
+    /// Set event details as JSON.
+    pub fn with_details(mut self, details: serde_json::Value) -> Self {
+        self.details = Some(details);
+        self
+    }
+}
+
+/// Filter criteria for querying audit logs.
+#[derive(Debug, Clone, Default)]
+pub struct AuditLogFilter {
+    /// Filter by queue item ID
+    pub queue_item_id: Option<String>,
+    /// Filter by user ID
+    pub user_id: Option<String>,
+    /// Filter by event types (any of these)
+    pub event_types: Option<Vec<AuditEventType>>,
+    /// Filter by content type
+    pub content_type: Option<DownloadContentType>,
+    /// Filter by content ID
+    pub content_id: Option<String>,
+    /// Filter events since this timestamp
+    pub since: Option<i64>,
+    /// Filter events until this timestamp
+    pub until: Option<i64>,
+    /// Maximum number of results
+    pub limit: usize,
+    /// Offset for pagination
+    pub offset: usize,
+}
+
+impl AuditLogFilter {
+    /// Create a new filter with default limit.
+    pub fn new() -> Self {
+        Self {
+            limit: 100,
+            ..Default::default()
+        }
+    }
+
+    /// Filter by queue item.
+    pub fn for_queue_item(mut self, queue_item_id: String) -> Self {
+        self.queue_item_id = Some(queue_item_id);
+        self
+    }
+
+    /// Filter by user.
+    pub fn for_user(mut self, user_id: String) -> Self {
+        self.user_id = Some(user_id);
+        self
+    }
+
+    /// Filter by event types.
+    pub fn with_event_types(mut self, types: Vec<AuditEventType>) -> Self {
+        self.event_types = Some(types);
+        self
+    }
+
+    /// Filter by time range.
+    pub fn in_range(mut self, since: Option<i64>, until: Option<i64>) -> Self {
+        self.since = since;
+        self.until = until;
+        self
+    }
+
+    /// Set pagination.
+    pub fn paginate(mut self, limit: usize, offset: usize) -> Self {
+        self.limit = limit;
+        self.offset = offset;
+        self
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -664,5 +859,78 @@ mod tests {
         let json = serde_json::to_string(&progress).unwrap();
         assert!(json.contains("\"total_children\":10"));
         assert!(json.contains("\"completed\":5"));
+    }
+
+    #[test]
+    fn test_audit_event_type_conversion() {
+        assert_eq!(AuditEventType::RequestCreated.as_str(), "REQUEST_CREATED");
+        assert_eq!(AuditEventType::DownloadStarted.as_str(), "DOWNLOAD_STARTED");
+        assert_eq!(AuditEventType::ChildrenCreated.as_str(), "CHILDREN_CREATED");
+        assert_eq!(AuditEventType::DownloadCompleted.as_str(), "DOWNLOAD_COMPLETED");
+        assert_eq!(AuditEventType::DownloadFailed.as_str(), "DOWNLOAD_FAILED");
+
+        assert_eq!(
+            AuditEventType::from_str("REQUEST_CREATED"),
+            Some(AuditEventType::RequestCreated)
+        );
+        assert_eq!(
+            AuditEventType::from_str("WATCHDOG_SCAN_COMPLETED"),
+            Some(AuditEventType::WatchdogScanCompleted)
+        );
+        assert_eq!(AuditEventType::from_str("INVALID"), None);
+    }
+
+    #[test]
+    fn test_audit_event_type_serialization() {
+        let event = AuditEventType::DownloadCompleted;
+        let json = serde_json::to_string(&event).unwrap();
+        assert_eq!(json, "\"DOWNLOAD_COMPLETED\"");
+
+        let deserialized: AuditEventType = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized, AuditEventType::DownloadCompleted);
+    }
+
+    #[test]
+    fn test_audit_log_entry_builder() {
+        let entry = AuditLogEntry::new(AuditEventType::RequestCreated)
+            .with_queue_item("queue-123".to_string())
+            .with_content(DownloadContentType::Album, "album-456".to_string())
+            .with_user("user-789".to_string())
+            .with_source(RequestSource::User)
+            .with_details(serde_json::json!({"key": "value"}));
+
+        assert_eq!(entry.event_type, AuditEventType::RequestCreated);
+        assert_eq!(entry.queue_item_id, Some("queue-123".to_string()));
+        assert_eq!(entry.content_type, Some(DownloadContentType::Album));
+        assert_eq!(entry.content_id, Some("album-456".to_string()));
+        assert_eq!(entry.user_id, Some("user-789".to_string()));
+        assert_eq!(entry.request_source, Some(RequestSource::User));
+        assert!(entry.details.is_some());
+    }
+
+    #[test]
+    fn test_audit_log_filter_builder() {
+        let filter = AuditLogFilter::new()
+            .for_user("user-123".to_string())
+            .with_event_types(vec![AuditEventType::RequestCreated, AuditEventType::DownloadCompleted])
+            .in_range(Some(1000), Some(2000))
+            .paginate(50, 100);
+
+        assert_eq!(filter.user_id, Some("user-123".to_string()));
+        assert_eq!(filter.event_types.as_ref().unwrap().len(), 2);
+        assert_eq!(filter.since, Some(1000));
+        assert_eq!(filter.until, Some(2000));
+        assert_eq!(filter.limit, 50);
+        assert_eq!(filter.offset, 100);
+    }
+
+    #[test]
+    fn test_audit_log_filter_default() {
+        let filter = AuditLogFilter::new();
+
+        assert_eq!(filter.limit, 100);
+        assert_eq!(filter.offset, 0);
+        assert!(filter.user_id.is_none());
+        assert!(filter.queue_item_id.is_none());
     }
 }
