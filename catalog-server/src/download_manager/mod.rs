@@ -17,6 +17,6 @@ mod search_proxy;
 mod watchdog;
 
 pub use manager::DownloadManager;
-// pub use models::*;  // TODO: uncomment when models are implemented
+pub use models::*;
 pub use queue_store::{DownloadQueueStore, SqliteDownloadQueueStore};
 pub use schema::DOWNLOAD_QUEUE_VERSIONED_SCHEMAS;

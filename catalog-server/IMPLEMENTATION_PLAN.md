@@ -1395,7 +1395,7 @@ Queue processing order: `ORDER BY priority ASC, created_at ASC`
 
 #### DM-1.2 Models
 
-- [ ] **Task DM-1.2.1: Define queue enums**
+- [x] **Task DM-1.2.1: Define queue enums**
 
   **File:** `catalog-server/src/download_manager/models.rs`
 
