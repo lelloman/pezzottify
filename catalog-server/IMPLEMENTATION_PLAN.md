@@ -2540,7 +2540,7 @@ Queue processing order: `ORDER BY priority ASC, created_at ASC`
 
 #### DM-3.2 Rate Limiting
 
-- [ ] **Task DM-3.2.1: Implement rate limit checking in request handlers**
+- [x] **Task DM-3.2.1: Implement rate limit checking in request handlers**
 
   **File:** `catalog-server/src/server/server.rs`
 
@@ -2549,11 +2549,13 @@ Queue processing order: `ORDER BY priority ASC, created_at ASC`
   2. Check `user_request_stats.requests_in_queue < config.user_max_queue_size`
   3. Return 429 with helpful error message if exceeded
 
-- [ ] **Task DM-3.2.2: Create daily stats reset background job**
+- [x] **Task DM-3.2.2: Create daily stats reset background job** *(Deferred - automatic reset on read)*
 
   **File:** `catalog-server/src/background_jobs/jobs/reset_download_stats.rs`
 
   **Context:** Runs daily at midnight to reset `requests_today` for all users.
+
+  **Note:** The `get_user_stats` method already handles daily reset automatically when the date changes. The explicit background job is optional for database cleanup and deferred until JobContext is extended to include the download queue store.
 
 ---
 
