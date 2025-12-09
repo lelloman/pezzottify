@@ -2,6 +2,7 @@ use axum::extract::FromRef;
 
 use crate::background_jobs::SchedulerHandle;
 use crate::catalog_store::CatalogStore;
+use crate::download_manager::DownloadManager;
 use crate::downloader::Downloader;
 use crate::search::SearchVault;
 use crate::user::UserManager;
@@ -18,6 +19,7 @@ pub type OptionalDownloader = Option<Arc<dyn Downloader>>;
 pub type OptionalProxy = Option<Arc<CatalogProxy>>;
 pub type GuardedConnectionManager = Arc<ConnectionManager>;
 pub type OptionalSchedulerHandle = Option<SchedulerHandle>;
+pub type OptionalDownloadManager = Option<Arc<DownloadManager>>;
 
 #[derive(Clone)]
 pub struct ServerState {
@@ -30,6 +32,7 @@ pub struct ServerState {
     pub proxy: OptionalProxy,
     pub ws_connection_manager: GuardedConnectionManager,
     pub scheduler_handle: OptionalSchedulerHandle,
+    pub download_manager: OptionalDownloadManager,
     pub hash: String,
 }
 
@@ -81,5 +84,11 @@ impl FromRef<ServerState> for GuardedConnectionManager {
 impl FromRef<ServerState> for OptionalSchedulerHandle {
     fn from_ref(input: &ServerState) -> Self {
         input.scheduler_handle.clone()
+    }
+}
+
+impl FromRef<ServerState> for OptionalDownloadManager {
+    fn from_ref(input: &ServerState) -> Self {
+        input.download_manager.clone()
     }
 }
