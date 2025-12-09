@@ -179,3 +179,73 @@ pub enum SearchableContentType {
     Album,
     Track,
 }
+
+/// Extension trait for catalog stores that support typed write operations.
+///
+/// This trait extends `CatalogStore` with methods that accept typed structs
+/// rather than JSON values, which is needed for catalog ingestion from
+/// the download manager.
+pub trait WritableCatalogStore: CatalogStore {
+    // =========================================================================
+    // Existence Checks
+    // =========================================================================
+
+    /// Check if an artist exists in the catalog.
+    fn artist_exists(&self, id: &str) -> Result<bool>;
+
+    /// Check if an album exists in the catalog.
+    fn album_exists(&self, id: &str) -> Result<bool>;
+
+    /// Check if an image exists in the catalog.
+    fn image_exists(&self, id: &str) -> Result<bool>;
+
+    // =========================================================================
+    // Typed Insert Operations
+    // =========================================================================
+
+    /// Insert an artist into the catalog.
+    fn insert_artist(&self, artist: &super::Artist) -> Result<()>;
+
+    /// Insert an album into the catalog.
+    fn insert_album(&self, album: &super::Album) -> Result<()>;
+
+    /// Insert a track into the catalog.
+    fn insert_track(&self, track: &super::Track) -> Result<()>;
+
+    /// Insert an image into the catalog.
+    fn insert_image(&self, image: &super::Image) -> Result<()>;
+
+    // =========================================================================
+    // Relationship Operations
+    // =========================================================================
+
+    /// Add an artist to an album at the given position.
+    fn add_album_artist(&self, album_id: &str, artist_id: &str, position: i32) -> Result<()>;
+
+    /// Add an artist to a track with a role at the given position.
+    fn add_track_artist(
+        &self,
+        track_id: &str,
+        artist_id: &str,
+        role: &super::ArtistRole,
+        position: i32,
+    ) -> Result<()>;
+
+    /// Add an image to an artist.
+    fn add_artist_image(
+        &self,
+        artist_id: &str,
+        image_id: &str,
+        image_type: &super::ImageType,
+        position: i32,
+    ) -> Result<()>;
+
+    /// Add an image to an album.
+    fn add_album_image(
+        &self,
+        album_id: &str,
+        image_id: &str,
+        image_type: &super::ImageType,
+        position: i32,
+    ) -> Result<()>;
+}

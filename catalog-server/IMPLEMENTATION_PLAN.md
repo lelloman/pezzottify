@@ -2625,7 +2625,7 @@ Queue processing order: `ORDER BY priority ASC, created_at ASC`
   7. Log audit events
   8. **For child items:** After completion, call `check_parent_completion()` and update parent if all children done
 
-- [ ] **Task DM-4.1.3: Handle different content types**
+- [x] **Task DM-4.1.3: Handle different content types**
 
   **File:** `catalog-server/src/download_manager/job_processor.rs`
 
@@ -2651,7 +2651,7 @@ Queue processing order: `ORDER BY priority ASC, created_at ASC`
   2. Write bytes to `{media_path}/images/{id}.jpg`
   3. Mark `COMPLETED`, call `check_parent_completion()`
 
-- [ ] **Task DM-4.1.4: Implement catalog ingestion logic**
+- [x] **Task DM-4.1.4: Implement catalog ingestion logic**
 
   **File:** `catalog-server/src/download_manager/catalog_ingestion.rs`
 
