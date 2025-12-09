@@ -1729,7 +1729,7 @@ Queue processing order: `ORDER BY priority ASC, created_at ASC`
 
 #### DM-1.3 Database Schema
 
-- [ ] **Task DM-1.3.1: Create `download_queue.db` schema**
+- [x] **Task DM-1.3.1: Create `download_queue.db` schema**
 
   **File:** `catalog-server/src/download_manager/schema.rs`
 
