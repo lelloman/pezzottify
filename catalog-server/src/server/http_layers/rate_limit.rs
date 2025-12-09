@@ -25,16 +25,16 @@ use tracing::warn;
 pub const LOGIN_PER_MINUTE: u32 = 10;
 
 /// Global requests per minute per user (prevents runaway bugs)
-pub const GLOBAL_PER_MINUTE: u32 = 1000;
+pub const GLOBAL_PER_MINUTE: u32 = 5000;
 
 /// Search requests per minute per user (expensive operation)
 pub const SEARCH_PER_MINUTE: u32 = 100;
 
 /// Content read requests per minute per user (catalog browsing)
-pub const CONTENT_READ_PER_MINUTE: u32 = 500;
+pub const CONTENT_READ_PER_MINUTE: u32 = 2000;
 
 /// Stream requests per minute per user (prevents rapid skipping)
-pub const STREAM_PER_MINUTE: u32 = 100;
+pub const STREAM_PER_MINUTE: u32 = 200;
 
 /// Write operations per minute per user (playlists, likes)
 pub const WRITE_PER_MINUTE: u32 = 60;
@@ -49,7 +49,7 @@ pub const LOGIN_PER_HOUR: u32 = 100;
 
 /// Global requests per hour per user
 #[allow(dead_code)]
-pub const GLOBAL_PER_HOUR: u32 = 50000;
+pub const GLOBAL_PER_HOUR: u32 = 10000;
 
 /// Search requests per hour per user
 #[allow(dead_code)]
@@ -57,7 +57,7 @@ pub const SEARCH_PER_HOUR: u32 = 5000;
 
 /// Content read requests per hour per user
 #[allow(dead_code)]
-pub const CONTENT_READ_PER_HOUR: u32 = 25000;
+pub const CONTENT_READ_PER_HOUR: u32 = 50000;
 
 /// Stream requests per hour per user
 #[allow(dead_code)]
