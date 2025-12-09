@@ -2249,7 +2249,7 @@ Queue processing order: `ORDER BY priority ASC, created_at ASC`
 
   **Context:** Delegates to `search_proxy.rs` module.
 
-- [ ] **Task DM-1.7.3: Implement user request methods in DownloadManager**
+- [x] **Task DM-1.7.3: Implement user request methods in DownloadManager**
 
   **File:** `catalog-server/src/download_manager/manager.rs`
 
