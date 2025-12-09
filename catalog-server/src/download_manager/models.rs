@@ -569,6 +569,18 @@ impl AuditLogFilter {
         self
     }
 
+    /// Filter by content type.
+    pub fn for_content_type(mut self, content_type: DownloadContentType) -> Self {
+        self.content_type = Some(content_type);
+        self
+    }
+
+    /// Filter by content ID.
+    pub fn for_content_id(mut self, content_id: String) -> Self {
+        self.content_id = Some(content_id);
+        self
+    }
+
     /// Filter by time range.
     pub fn in_range(mut self, since: Option<i64>, until: Option<i64>) -> Self {
         self.since = since;
