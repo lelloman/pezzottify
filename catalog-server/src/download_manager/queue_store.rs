@@ -634,27 +634,197 @@ impl DownloadQueueStore for SqliteDownloadQueueStore {
         Ok(())
     }
 
+    // === Parent-Child Management ===
+
+    fn create_children(&self, parent_id: &str, children: Vec<QueueItem>) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+
+        // Use a transaction to insert all children atomically
+        conn.execute("BEGIN IMMEDIATE", [])?;
+
+        let result = (|| {
+            for child in children {
+                // Verify the child has the correct parent_id
+                let actual_parent_id = child.parent_id.as_deref().unwrap_or("");
+                if actual_parent_id != parent_id {
+                    bail!(
+                        "Child item {} has parent_id {:?} but expected {}",
+                        child.id,
+                        child.parent_id,
+                        parent_id
+                    );
+                }
+
+                conn.execute(
+                    r#"INSERT INTO download_queue (
+                        id, parent_id, status, priority, content_type, content_id,
+                        content_name, artist_name, request_source, requested_by_user_id,
+                        created_at, started_at, completed_at, last_attempt_at, next_retry_at,
+                        retry_count, max_retries, error_type, error_message,
+                        bytes_downloaded, processing_duration_ms
+                    ) VALUES (
+                        ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10,
+                        ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21
+                    )"#,
+                    rusqlite::params![
+                        child.id,
+                        child.parent_id,
+                        child.status.as_db_str(),
+                        child.priority.as_i32(),
+                        child.content_type.as_str(),
+                        child.content_id,
+                        child.content_name,
+                        child.artist_name,
+                        child.request_source.as_str(),
+                        child.requested_by_user_id,
+                        child.created_at,
+                        child.started_at,
+                        child.completed_at,
+                        child.last_attempt_at,
+                        child.next_retry_at,
+                        child.retry_count,
+                        child.max_retries,
+                        child.error_type.as_ref().map(|e| e.as_str()),
+                        child.error_message,
+                        child.bytes_downloaded,
+                        child.processing_duration_ms,
+                    ],
+                )?;
+            }
+            Ok(())
+        })();
+
+        if result.is_ok() {
+            conn.execute("COMMIT", [])?;
+        } else {
+            conn.execute("ROLLBACK", [])?;
+        }
+
+        result
+    }
+
+    fn get_children(&self, parent_id: &str) -> Result<Vec<QueueItem>> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare(
+            r#"SELECT * FROM download_queue
+               WHERE parent_id = ?1
+               ORDER BY created_at ASC"#,
+        )?;
+
+        let items = stmt
+            .query_map([parent_id], Self::row_to_queue_item)?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+
+        Ok(items)
+    }
+
+    fn get_children_progress(&self, parent_id: &str) -> Result<DownloadProgress> {
+        let conn = self.conn.lock().unwrap();
+
+        let mut stmt = conn.prepare(
+            r#"SELECT
+                   COUNT(*) as total,
+                   COALESCE(SUM(CASE WHEN status = 'COMPLETED' THEN 1 ELSE 0 END), 0) as completed,
+                   COALESCE(SUM(CASE WHEN status = 'FAILED' THEN 1 ELSE 0 END), 0) as failed,
+                   COALESCE(SUM(CASE WHEN status = 'PENDING' THEN 1 ELSE 0 END), 0) as pending,
+                   COALESCE(SUM(CASE WHEN status = 'IN_PROGRESS' THEN 1 ELSE 0 END), 0) as in_progress
+               FROM download_queue
+               WHERE parent_id = ?1"#,
+        )?;
+
+        let progress = stmt.query_row([parent_id], |row| {
+            Ok(DownloadProgress {
+                total_children: row.get::<_, i64>("total")? as usize,
+                completed: row.get::<_, i64>("completed")? as usize,
+                failed: row.get::<_, i64>("failed")? as usize,
+                pending: row.get::<_, i64>("pending")? as usize,
+                in_progress: row.get::<_, i64>("in_progress")? as usize,
+            })
+        })?;
+
+        Ok(progress)
+    }
+
+    fn check_parent_completion(&self, parent_id: &str) -> Result<Option<QueueStatus>> {
+        let conn = self.conn.lock().unwrap();
+
+        // Get status counts for all children
+        let mut stmt = conn.prepare(
+            r#"SELECT status, COUNT(*) as count
+               FROM download_queue
+               WHERE parent_id = ?1
+               GROUP BY status"#,
+        )?;
+
+        let mut pending = 0i64;
+        let mut in_progress = 0i64;
+        let mut retry_waiting = 0i64;
+        let mut completed = 0i64;
+        let mut failed = 0i64;
+
+        let rows = stmt.query_map([parent_id], |row| {
+            Ok((row.get::<_, String>("status")?, row.get::<_, i64>("count")?))
+        })?;
+
+        for row in rows {
+            let (status, count) = row?;
+            match status.as_str() {
+                "PENDING" => pending = count,
+                "IN_PROGRESS" => in_progress = count,
+                "RETRY_WAITING" => retry_waiting = count,
+                "COMPLETED" => completed = count,
+                "FAILED" => failed = count,
+                _ => {}
+            }
+        }
+
+        let total = pending + in_progress + retry_waiting + completed + failed;
+
+        // No children - no completion status
+        if total == 0 {
+            return Ok(None);
+        }
+
+        // If any child is still in a non-terminal state, parent is not complete
+        if pending > 0 || in_progress > 0 || retry_waiting > 0 {
+            return Ok(None);
+        }
+
+        // All children are in terminal states (COMPLETED or FAILED)
+        if failed > 0 {
+            // At least one child failed
+            Ok(Some(QueueStatus::Failed))
+        } else {
+            // All children completed
+            Ok(Some(QueueStatus::Completed))
+        }
+    }
+
+    fn get_user_requests(
+        &self,
+        user_id: &str,
+        limit: usize,
+        offset: usize,
+    ) -> Result<Vec<QueueItem>> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare(
+            r#"SELECT * FROM download_queue
+               WHERE requested_by_user_id = ?1 AND parent_id IS NULL
+               ORDER BY created_at DESC
+               LIMIT ?2 OFFSET ?3"#,
+        )?;
+
+        let items = stmt
+            .query_map(
+                rusqlite::params![user_id, limit as i64, offset as i64],
+                Self::row_to_queue_item,
+            )?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+
+        Ok(items)
+    }
+
     // Stub implementations for remaining trait methods (to be implemented in later tasks)
-
-    fn create_children(&self, _parent_id: &str, _children: Vec<QueueItem>) -> Result<()> {
-        todo!("Implement in DM-1.4.5")
-    }
-
-    fn get_children(&self, _parent_id: &str) -> Result<Vec<QueueItem>> {
-        todo!("Implement in DM-1.4.5")
-    }
-
-    fn get_children_progress(&self, _parent_id: &str) -> Result<DownloadProgress> {
-        todo!("Implement in DM-1.4.5")
-    }
-
-    fn check_parent_completion(&self, _parent_id: &str) -> Result<Option<QueueStatus>> {
-        todo!("Implement in DM-1.4.5")
-    }
-
-    fn get_user_requests(&self, _user_id: &str, _limit: usize, _offset: usize) -> Result<Vec<QueueItem>> {
-        todo!("Implement in DM-1.4.5")
-    }
 
     fn get_retry_ready(&self) -> Result<Vec<QueueItem>> {
         todo!("Implement in DM-1.4.6")
@@ -1441,5 +1611,425 @@ mod tests {
         // Next pending should be item-2
         let next = store.get_next_pending().unwrap().unwrap();
         assert_eq!(next.id, "item-2");
+    }
+
+    // === Parent-Child Management Tests ===
+
+    #[test]
+    fn test_create_children() {
+        let store = SqliteDownloadQueueStore::in_memory().unwrap();
+
+        // Create parent
+        let parent = QueueItem::new(
+            "parent-1".to_string(),
+            DownloadContentType::Album,
+            "album-1".to_string(),
+            QueuePriority::User,
+            RequestSource::User,
+            5,
+        )
+        .with_user("user-1".to_string());
+        store.enqueue(parent).unwrap();
+
+        // Create children
+        let children = vec![
+            QueueItem::new_child(
+                "child-1".to_string(),
+                "parent-1".to_string(),
+                DownloadContentType::TrackAudio,
+                "track-1".to_string(),
+                QueuePriority::User,
+                RequestSource::User,
+                Some("user-1".to_string()),
+                3,
+            ),
+            QueueItem::new_child(
+                "child-2".to_string(),
+                "parent-1".to_string(),
+                DownloadContentType::TrackAudio,
+                "track-2".to_string(),
+                QueuePriority::User,
+                RequestSource::User,
+                Some("user-1".to_string()),
+                3,
+            ),
+        ];
+
+        store.create_children("parent-1", children).unwrap();
+
+        // Verify children were created
+        let retrieved_children = store.get_children("parent-1").unwrap();
+        assert_eq!(retrieved_children.len(), 2);
+        assert_eq!(retrieved_children[0].id, "child-1");
+        assert_eq!(retrieved_children[1].id, "child-2");
+    }
+
+    #[test]
+    fn test_create_children_empty_list() {
+        let store = SqliteDownloadQueueStore::in_memory().unwrap();
+
+        // Create parent
+        let parent = QueueItem::new(
+            "parent-1".to_string(),
+            DownloadContentType::Album,
+            "album-1".to_string(),
+            QueuePriority::User,
+            RequestSource::User,
+            5,
+        );
+        store.enqueue(parent).unwrap();
+
+        // Creating no children should succeed
+        store.create_children("parent-1", vec![]).unwrap();
+
+        let children = store.get_children("parent-1").unwrap();
+        assert!(children.is_empty());
+    }
+
+    #[test]
+    fn test_create_children_wrong_parent_id() {
+        let store = SqliteDownloadQueueStore::in_memory().unwrap();
+
+        let parent = QueueItem::new(
+            "parent-1".to_string(),
+            DownloadContentType::Album,
+            "album-1".to_string(),
+            QueuePriority::User,
+            RequestSource::User,
+            5,
+        );
+        store.enqueue(parent).unwrap();
+
+        // Child with wrong parent_id
+        let children = vec![QueueItem::new_child(
+            "child-1".to_string(),
+            "wrong-parent".to_string(), // Wrong parent!
+            DownloadContentType::TrackAudio,
+            "track-1".to_string(),
+            QueuePriority::User,
+            RequestSource::User,
+            None,
+            3,
+        )];
+
+        // Should fail
+        let result = store.create_children("parent-1", children);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_get_children_empty() {
+        let store = SqliteDownloadQueueStore::in_memory().unwrap();
+
+        let children = store.get_children("nonexistent-parent").unwrap();
+        assert!(children.is_empty());
+    }
+
+    #[test]
+    fn test_get_children_progress() {
+        let store = SqliteDownloadQueueStore::in_memory().unwrap();
+
+        // Create parent
+        let parent = QueueItem::new(
+            "parent-1".to_string(),
+            DownloadContentType::Album,
+            "album-1".to_string(),
+            QueuePriority::User,
+            RequestSource::User,
+            5,
+        );
+        store.enqueue(parent).unwrap();
+
+        // Create children with different statuses
+        let mut child1 = QueueItem::new_child(
+            "child-1".to_string(),
+            "parent-1".to_string(),
+            DownloadContentType::TrackAudio,
+            "track-1".to_string(),
+            QueuePriority::User,
+            RequestSource::User,
+            None,
+            3,
+        );
+        child1.status = QueueStatus::Completed;
+
+        let mut child2 = QueueItem::new_child(
+            "child-2".to_string(),
+            "parent-1".to_string(),
+            DownloadContentType::TrackAudio,
+            "track-2".to_string(),
+            QueuePriority::User,
+            RequestSource::User,
+            None,
+            3,
+        );
+        child2.status = QueueStatus::Failed;
+
+        let child3 = QueueItem::new_child(
+            "child-3".to_string(),
+            "parent-1".to_string(),
+            DownloadContentType::TrackAudio,
+            "track-3".to_string(),
+            QueuePriority::User,
+            RequestSource::User,
+            None,
+            3,
+        ); // Pending by default
+
+        let mut child4 = QueueItem::new_child(
+            "child-4".to_string(),
+            "parent-1".to_string(),
+            DownloadContentType::TrackAudio,
+            "track-4".to_string(),
+            QueuePriority::User,
+            RequestSource::User,
+            None,
+            3,
+        );
+        child4.status = QueueStatus::InProgress;
+
+        store.create_children("parent-1", vec![child1, child2, child3, child4]).unwrap();
+
+        let progress = store.get_children_progress("parent-1").unwrap();
+        assert_eq!(progress.total_children, 4);
+        assert_eq!(progress.completed, 1);
+        assert_eq!(progress.failed, 1);
+        assert_eq!(progress.pending, 1);
+        assert_eq!(progress.in_progress, 1);
+    }
+
+    #[test]
+    fn test_get_children_progress_empty() {
+        let store = SqliteDownloadQueueStore::in_memory().unwrap();
+
+        let progress = store.get_children_progress("nonexistent").unwrap();
+        assert_eq!(progress.total_children, 0);
+        assert_eq!(progress.completed, 0);
+    }
+
+    #[test]
+    fn test_check_parent_completion_no_children() {
+        let store = SqliteDownloadQueueStore::in_memory().unwrap();
+
+        let result = store.check_parent_completion("nonexistent").unwrap();
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_check_parent_completion_still_pending() {
+        let store = SqliteDownloadQueueStore::in_memory().unwrap();
+
+        let parent = QueueItem::new(
+            "parent-1".to_string(),
+            DownloadContentType::Album,
+            "album-1".to_string(),
+            QueuePriority::User,
+            RequestSource::User,
+            5,
+        );
+        store.enqueue(parent).unwrap();
+
+        let child = QueueItem::new_child(
+            "child-1".to_string(),
+            "parent-1".to_string(),
+            DownloadContentType::TrackAudio,
+            "track-1".to_string(),
+            QueuePriority::User,
+            RequestSource::User,
+            None,
+            3,
+        ); // Pending by default
+
+        store.create_children("parent-1", vec![child]).unwrap();
+
+        let result = store.check_parent_completion("parent-1").unwrap();
+        assert!(result.is_none()); // Still pending
+    }
+
+    #[test]
+    fn test_check_parent_completion_all_completed() {
+        let store = SqliteDownloadQueueStore::in_memory().unwrap();
+
+        let parent = QueueItem::new(
+            "parent-1".to_string(),
+            DownloadContentType::Album,
+            "album-1".to_string(),
+            QueuePriority::User,
+            RequestSource::User,
+            5,
+        );
+        store.enqueue(parent).unwrap();
+
+        let mut child1 = QueueItem::new_child(
+            "child-1".to_string(),
+            "parent-1".to_string(),
+            DownloadContentType::TrackAudio,
+            "track-1".to_string(),
+            QueuePriority::User,
+            RequestSource::User,
+            None,
+            3,
+        );
+        child1.status = QueueStatus::Completed;
+
+        let mut child2 = QueueItem::new_child(
+            "child-2".to_string(),
+            "parent-1".to_string(),
+            DownloadContentType::TrackAudio,
+            "track-2".to_string(),
+            QueuePriority::User,
+            RequestSource::User,
+            None,
+            3,
+        );
+        child2.status = QueueStatus::Completed;
+
+        store.create_children("parent-1", vec![child1, child2]).unwrap();
+
+        let result = store.check_parent_completion("parent-1").unwrap();
+        assert_eq!(result, Some(QueueStatus::Completed));
+    }
+
+    #[test]
+    fn test_check_parent_completion_some_failed() {
+        let store = SqliteDownloadQueueStore::in_memory().unwrap();
+
+        let parent = QueueItem::new(
+            "parent-1".to_string(),
+            DownloadContentType::Album,
+            "album-1".to_string(),
+            QueuePriority::User,
+            RequestSource::User,
+            5,
+        );
+        store.enqueue(parent).unwrap();
+
+        let mut child1 = QueueItem::new_child(
+            "child-1".to_string(),
+            "parent-1".to_string(),
+            DownloadContentType::TrackAudio,
+            "track-1".to_string(),
+            QueuePriority::User,
+            RequestSource::User,
+            None,
+            3,
+        );
+        child1.status = QueueStatus::Completed;
+
+        let mut child2 = QueueItem::new_child(
+            "child-2".to_string(),
+            "parent-1".to_string(),
+            DownloadContentType::TrackAudio,
+            "track-2".to_string(),
+            QueuePriority::User,
+            RequestSource::User,
+            None,
+            3,
+        );
+        child2.status = QueueStatus::Failed;
+
+        store.create_children("parent-1", vec![child1, child2]).unwrap();
+
+        let result = store.check_parent_completion("parent-1").unwrap();
+        assert_eq!(result, Some(QueueStatus::Failed));
+    }
+
+    #[test]
+    fn test_get_user_requests() {
+        let store = SqliteDownloadQueueStore::in_memory().unwrap();
+
+        // Create some parent items
+        let parent1 = QueueItem::new(
+            "parent-1".to_string(),
+            DownloadContentType::Album,
+            "album-1".to_string(),
+            QueuePriority::User,
+            RequestSource::User,
+            5,
+        )
+        .with_user("user-1".to_string());
+
+        let parent2 = QueueItem::new(
+            "parent-2".to_string(),
+            DownloadContentType::Album,
+            "album-2".to_string(),
+            QueuePriority::User,
+            RequestSource::User,
+            5,
+        )
+        .with_user("user-1".to_string());
+
+        let parent3 = QueueItem::new(
+            "parent-3".to_string(),
+            DownloadContentType::Album,
+            "album-3".to_string(),
+            QueuePriority::User,
+            RequestSource::User,
+            5,
+        )
+        .with_user("user-2".to_string()); // Different user
+
+        store.enqueue(parent1).unwrap();
+        store.enqueue(parent2).unwrap();
+        store.enqueue(parent3).unwrap();
+
+        // Create a child for parent-1 (should not show up in user requests)
+        let child = QueueItem::new_child(
+            "child-1".to_string(),
+            "parent-1".to_string(),
+            DownloadContentType::TrackAudio,
+            "track-1".to_string(),
+            QueuePriority::User,
+            RequestSource::User,
+            Some("user-1".to_string()),
+            3,
+        );
+        store.create_children("parent-1", vec![child]).unwrap();
+
+        // Get user-1 requests
+        let requests = store.get_user_requests("user-1", 100, 0).unwrap();
+        assert_eq!(requests.len(), 2);
+
+        // All should be parent items (no parent_id)
+        for req in &requests {
+            assert!(req.parent_id.is_none());
+        }
+
+        // Get user-2 requests
+        let requests = store.get_user_requests("user-2", 100, 0).unwrap();
+        assert_eq!(requests.len(), 1);
+        assert_eq!(requests[0].id, "parent-3");
+    }
+
+    #[test]
+    fn test_get_user_requests_pagination() {
+        let store = SqliteDownloadQueueStore::in_memory().unwrap();
+
+        // Create 5 parent items
+        for i in 0..5 {
+            let mut item = QueueItem::new(
+                format!("parent-{}", i),
+                DownloadContentType::Album,
+                format!("album-{}", i),
+                QueuePriority::User,
+                RequestSource::User,
+                5,
+            )
+            .with_user("user-1".to_string());
+            item.created_at = i as i64; // Ensure consistent ordering
+            store.enqueue(item).unwrap();
+        }
+
+        // Get first page (2 items)
+        let page1 = store.get_user_requests("user-1", 2, 0).unwrap();
+        assert_eq!(page1.len(), 2);
+
+        // Get second page (2 items)
+        let page2 = store.get_user_requests("user-1", 2, 2).unwrap();
+        assert_eq!(page2.len(), 2);
+
+        // Get third page (1 item)
+        let page3 = store.get_user_requests("user-1", 2, 4).unwrap();
+        assert_eq!(page3.len(), 1);
     }
 }

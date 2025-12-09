@@ -1923,7 +1923,7 @@ Queue processing order: `ORDER BY priority ASC, created_at ASC`
 
   **Important:** Use transactions for atomic state changes. Verify current status before transition.
 
-- [ ] **Task DM-1.4.5: Implement parent-child management methods**
+- [x] **Task DM-1.4.5: Implement parent-child management methods**
 
   **File:** `catalog-server/src/download_manager/queue_store.rs`
 
