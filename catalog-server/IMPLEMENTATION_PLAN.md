@@ -3026,13 +3026,13 @@ Queue processing order: `ORDER BY priority ASC, created_at ASC`
 
 #### DM-6.3 Cleanup Jobs
 
-- [ ] **Task DM-6.3.1: Create audit log cleanup background job**
+- [x] **Task DM-6.3.1: Create audit log cleanup background job**
 
   **File:** `catalog-server/src/background_jobs/jobs/audit_log_cleanup.rs`
 
   **Context:** Uses `config.download_manager.audit_log_retention_days`. Runs daily. Deletes entries older than retention period.
 
-- [ ] **Task DM-6.3.2: Register audit log cleanup job**
+- [x] **Task DM-6.3.2: Register audit log cleanup job**
 
   **File:** `catalog-server/src/main.rs`
 
