@@ -2243,7 +2243,7 @@ Queue processing order: `ORDER BY priority ASC, created_at ASC`
   }
   ```
 
-- [ ] **Task DM-1.7.2: Implement search proxy methods in DownloadManager**
+- [x] **Task DM-1.7.2: Implement search proxy methods in DownloadManager**
 
   **File:** `catalog-server/src/download_manager/manager.rs`
 
