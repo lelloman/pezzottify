@@ -1947,7 +1947,7 @@ Queue processing order: `ORDER BY priority ASC, created_at ASC`
 
   **Methods:** `find_by_content`, `is_in_queue`, `is_in_active_queue`
 
-- [ ] **Task DM-1.4.8: Implement user rate limiting methods**
+- [x] **Task DM-1.4.8: Implement user rate limiting methods**
 
   **File:** `catalog-server/src/download_manager/queue_store.rs`
 
