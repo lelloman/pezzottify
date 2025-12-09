@@ -103,6 +103,16 @@ impl DownloadManager {
         &self.media_path
     }
 
+    /// Get the stale threshold from configuration.
+    pub fn get_stale_threshold_secs(&self) -> u64 {
+        self.config.stale_in_progress_threshold_secs
+    }
+
+    /// Get items stuck in IN_PROGRESS state longer than the threshold.
+    pub fn get_stale_in_progress(&self, threshold_secs: i64) -> Result<Vec<QueueItem>> {
+        self.queue_store.get_stale_in_progress(threshold_secs)
+    }
+
     // =========================================================================
     // Search Proxy Methods (async - calls external downloader service)
     // =========================================================================
