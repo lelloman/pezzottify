@@ -18,8 +18,9 @@ import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
 import com.lelloman.pezzottify.android.domain.auth.AuthState
 import com.lelloman.pezzottify.android.domain.auth.AuthStore
+import com.lelloman.pezzottify.android.domain.config.ConfigStore
+import com.lelloman.pezzottify.android.remoteapi.internal.OkHttpClientFactory
 import dagger.hilt.android.AndroidEntryPoint
-import okhttp3.OkHttpClient
 import javax.inject.Inject
 
 @AndroidEntryPoint
@@ -29,18 +30,27 @@ class PlaybackService : MediaSessionService() {
     lateinit var authStore: AuthStore
 
     @Inject
+    lateinit var configStore: ConfigStore
+
+    @Inject
+    lateinit var okHttpClientFactory: OkHttpClientFactory
+
+    @Inject
     internal lateinit var playerServiceEventsEmitter: PlayerServiceEventsEmitter
 
     private val authToken get() = (authStore.getAuthState().value as? AuthState.LoggedIn)?.authToken.orEmpty()
-    private val okHttpClient = OkHttpClient.Builder()
-        .addInterceptor {
-            it.proceed(
-                it.request().newBuilder()
-                    .addHeader("Authorization", authToken)
-                    .build()
-            )
-        }
-        .build()
+
+    private val okHttpClient by lazy {
+        okHttpClientFactory.createBuilder(configStore.baseUrl.value)
+            .addInterceptor {
+                it.proceed(
+                    it.request().newBuilder()
+                        .addHeader("Authorization", authToken)
+                        .build()
+                )
+            }
+            .build()
+    }
 
     private var mediaSession: MediaSession? = null
 
