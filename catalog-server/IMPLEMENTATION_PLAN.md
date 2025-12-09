@@ -1823,7 +1823,7 @@ Queue processing order: `ORDER BY priority ASC, created_at ASC`
 
 #### DM-1.4 Queue Store
 
-- [ ] **Task DM-1.4.1: Define `DownloadQueueStore` trait**
+- [x] **Task DM-1.4.1: Define `DownloadQueueStore` trait**
 
   **File:** `catalog-server/src/download_manager/queue_store.rs`
 
