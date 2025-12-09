@@ -2845,7 +2845,7 @@ Queue processing order: `ORDER BY priority ASC, created_at ASC`
 
 #### DM-5.2 Background Job
 
-- [ ] **Task DM-5.2.1: Create `IntegrityWatchdogJob`**
+- [x] **Task DM-5.2.1: Create `IntegrityWatchdogJob`**
 
   **File:** `catalog-server/src/background_jobs/jobs/integrity_watchdog.rs`
 
@@ -2883,7 +2883,7 @@ Queue processing order: `ORDER BY priority ASC, created_at ASC`
   }
   ```
 
-- [ ] **Task DM-5.2.2: Register watchdog job conditionally**
+- [x] **Task DM-5.2.2: Register watchdog job conditionally**
 
   **File:** `catalog-server/src/main.rs`
 
@@ -2900,7 +2900,7 @@ Queue processing order: `ORDER BY priority ASC, created_at ASC`
   }
   ```
 
-- [ ] **Task DM-5.2.3: Add unit tests for watchdog**
+- [x] **Task DM-5.2.3: Add unit tests for watchdog**
 
   **File:** `catalog-server/src/download_manager/watchdog.rs` (test module)
 
