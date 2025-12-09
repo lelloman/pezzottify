@@ -289,6 +289,83 @@ impl QueueItem {
     }
 }
 
+/// Progress information for a download with children (e.g., album with tracks).
+#[derive(Debug, Clone, Serialize, Default)]
+pub struct DownloadProgress {
+    /// Total number of child items
+    pub total_children: usize,
+    /// Number of completed children
+    pub completed: usize,
+    /// Number of failed children
+    pub failed: usize,
+    /// Number of pending children
+    pub pending: usize,
+    /// Number of in-progress children
+    pub in_progress: usize,
+}
+
+impl DownloadProgress {
+    /// Returns the percentage of completion (0-100).
+    pub fn percentage(&self) -> u8 {
+        if self.total_children == 0 {
+            return 0;
+        }
+        let terminal = self.completed + self.failed;
+        ((terminal * 100) / self.total_children) as u8
+    }
+
+    /// Returns true if all children have reached a terminal state.
+    pub fn is_complete(&self) -> bool {
+        self.total_children > 0 && (self.completed + self.failed) == self.total_children
+    }
+}
+
+/// Simplified view of a queue item for user-facing API responses.
+#[derive(Debug, Clone, Serialize)]
+pub struct UserRequestView {
+    /// Queue item ID
+    pub id: String,
+    /// Type of content being downloaded
+    pub content_type: DownloadContentType,
+    /// External content ID
+    pub content_id: String,
+    /// Display name (album/artist name)
+    pub content_name: String,
+    /// Artist name for display
+    pub artist_name: Option<String>,
+    /// Current status
+    pub status: QueueStatus,
+    /// When the request was created (Unix timestamp)
+    pub created_at: i64,
+    /// When the request completed (Unix timestamp)
+    pub completed_at: Option<i64>,
+    /// Error message if failed
+    pub error_message: Option<String>,
+    /// Progress for album requests (shows child item status)
+    pub progress: Option<DownloadProgress>,
+    /// Position in queue (for pending items)
+    pub queue_position: Option<usize>,
+}
+
+impl UserRequestView {
+    /// Create a UserRequestView from a QueueItem.
+    pub fn from_queue_item(item: &QueueItem, progress: Option<DownloadProgress>, queue_position: Option<usize>) -> Self {
+        Self {
+            id: item.id.clone(),
+            content_type: item.content_type,
+            content_id: item.content_id.clone(),
+            content_name: item.content_name.clone().unwrap_or_else(|| item.content_id.clone()),
+            artist_name: item.artist_name.clone(),
+            status: item.status,
+            created_at: item.created_at,
+            completed_at: item.completed_at,
+            error_message: item.error_message.clone(),
+            progress,
+            queue_position,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -484,5 +561,108 @@ mod tests {
         .with_user("user-123".to_string());
 
         assert_eq!(item.requested_by_user_id, Some("user-123".to_string()));
+    }
+
+    #[test]
+    fn test_download_progress_percentage() {
+        let progress = DownloadProgress {
+            total_children: 10,
+            completed: 5,
+            failed: 2,
+            pending: 2,
+            in_progress: 1,
+        };
+        assert_eq!(progress.percentage(), 70); // (5+2)/10 * 100 = 70%
+
+        let empty = DownloadProgress::default();
+        assert_eq!(empty.percentage(), 0);
+    }
+
+    #[test]
+    fn test_download_progress_is_complete() {
+        let incomplete = DownloadProgress {
+            total_children: 10,
+            completed: 5,
+            failed: 2,
+            pending: 2,
+            in_progress: 1,
+        };
+        assert!(!incomplete.is_complete());
+
+        let complete = DownloadProgress {
+            total_children: 10,
+            completed: 8,
+            failed: 2,
+            pending: 0,
+            in_progress: 0,
+        };
+        assert!(complete.is_complete());
+
+        let empty = DownloadProgress::default();
+        assert!(!empty.is_complete());
+    }
+
+    #[test]
+    fn test_user_request_view_from_queue_item() {
+        let item = QueueItem::new(
+            "test-id".to_string(),
+            DownloadContentType::Album,
+            "album-123".to_string(),
+            QueuePriority::User,
+            RequestSource::User,
+            5,
+        )
+        .with_names(Some("Test Album".to_string()), Some("Test Artist".to_string()));
+
+        let progress = DownloadProgress {
+            total_children: 10,
+            completed: 5,
+            failed: 0,
+            pending: 3,
+            in_progress: 2,
+        };
+
+        let view = UserRequestView::from_queue_item(&item, Some(progress.clone()), Some(3));
+
+        assert_eq!(view.id, "test-id");
+        assert_eq!(view.content_type, DownloadContentType::Album);
+        assert_eq!(view.content_id, "album-123");
+        assert_eq!(view.content_name, "Test Album");
+        assert_eq!(view.artist_name, Some("Test Artist".to_string()));
+        assert_eq!(view.status, QueueStatus::Pending);
+        assert!(view.progress.is_some());
+        assert_eq!(view.queue_position, Some(3));
+    }
+
+    #[test]
+    fn test_user_request_view_fallback_content_name() {
+        let item = QueueItem::new(
+            "test-id".to_string(),
+            DownloadContentType::Album,
+            "album-123".to_string(),
+            QueuePriority::User,
+            RequestSource::User,
+            5,
+        );
+        // No content_name set, should fall back to content_id
+
+        let view = UserRequestView::from_queue_item(&item, None, None);
+
+        assert_eq!(view.content_name, "album-123"); // Falls back to content_id
+    }
+
+    #[test]
+    fn test_download_progress_serialization() {
+        let progress = DownloadProgress {
+            total_children: 10,
+            completed: 5,
+            failed: 2,
+            pending: 2,
+            in_progress: 1,
+        };
+
+        let json = serde_json::to_string(&progress).unwrap();
+        assert!(json.contains("\"total_children\":10"));
+        assert!(json.contains("\"completed\":5"));
     }
 }
