@@ -11,6 +11,7 @@ import com.lelloman.pezzottify.android.domain.user.PermissionsStore
 import com.lelloman.pezzottify.android.domain.usercontent.LikedContent
 import com.lelloman.pezzottify.android.domain.usercontent.SyncStatus
 import com.lelloman.pezzottify.android.domain.usercontent.UserContentStore
+import com.lelloman.pezzottify.android.domain.usercontent.UserPlaylistStore
 import com.lelloman.pezzottify.android.logger.Logger
 import io.mockk.coEvery
 import io.mockk.coVerify
@@ -29,6 +30,7 @@ class SyncManagerImplTest {
     private lateinit var remoteApiClient: RemoteApiClient
     private lateinit var syncStateStore: SyncStateStore
     private lateinit var userContentStore: UserContentStore
+    private lateinit var userPlaylistStore: UserPlaylistStore
     private lateinit var permissionsStore: PermissionsStore
     private lateinit var userSettingsStore: UserSettingsStore
     private lateinit var logger: Logger
@@ -42,6 +44,7 @@ class SyncManagerImplTest {
         remoteApiClient = mockk(relaxed = true)
         syncStateStore = mockk(relaxed = true)
         userContentStore = mockk(relaxed = true)
+        userPlaylistStore = mockk(relaxed = true)
         permissionsStore = mockk(relaxed = true)
         userSettingsStore = mockk(relaxed = true)
         logger = mockk(relaxed = true)
@@ -50,6 +53,7 @@ class SyncManagerImplTest {
             remoteApiClient = remoteApiClient,
             syncStateStore = syncStateStore,
             userContentStore = userContentStore,
+            userPlaylistStore = userPlaylistStore,
             permissionsStore = permissionsStore,
             userSettingsStore = userSettingsStore,
             logger = logger,
