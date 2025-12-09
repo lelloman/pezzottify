@@ -1213,6 +1213,103 @@ A queue-based asynchronous download manager that handles content downloads from 
 2. **Catalog Integrity Watchdog** - Daily scan for missing files, auto-queues repairs
 3. **Catalog Expansion Agent** - Smart expansion based on listening stats (Phase 2, deferred)
 
+### External Downloader Service API
+
+The download manager integrates with an external downloader service via HTTP. Full API documentation: `/home/lelloman/pezzottify-downloader/API.md`
+
+**Base URL:** Configured via `downloader_url` (e.g., `http://downloader:8080`)
+
+#### Metadata Endpoints
+
+| Endpoint | Description |
+|----------|-------------|
+| `GET /search?q=...&type=album,artist&limit=N` | Search catalog |
+| `GET /album/:id` | Album metadata (name, artists, covers, discs with track IDs) |
+| `GET /album/:id/tracks` | All track metadata for album |
+| `GET /artist/:id` | Artist metadata (name, portraits) |
+| `GET /track/:id` | Single track metadata |
+
+#### Download Endpoints (Raw Bytes)
+
+| Endpoint | Response | Description |
+|----------|----------|-------------|
+| `GET /track/:id/audio` | `audio/ogg`, `audio/mpeg`, etc. | Track audio file |
+| `GET /image/:id` | `image/jpeg` | Cover art or artist portrait |
+
+#### ID Formats
+
+- **Content IDs (base62):** 22-character alphanumeric (e.g., `4u7EnebtmKWzUH433cf5Qv`) - used for tracks, albums, artists
+- **File IDs (hex):** 40-character lowercase hex (e.g., `2c9a122b0f6a1c6f083b1725f309d3a25636f4ae`) - used for audio files and images
+
+#### Rate Limiting
+
+- Only one audio download at a time (returns 429 if busy)
+- Metadata requests have no rate limit
+
+#### Error Responses
+
+```json
+{
+  "error": "ERROR_CODE",
+  "code": "ERROR_CODE",
+  "message": "Human readable error message"
+}
+```
+
+| Code | HTTP Status | Description |
+|------|-------------|-------------|
+| `NOT_FOUND` | 404 | Resource not found |
+| `BAD_REQUEST` | 400 | Invalid ID format |
+| `TIMEOUT` | 504 | Request timed out |
+| `TOO_MANY_REQUESTS` | 429 | Server busy (audio download in progress) |
+| `SERVICE_UNAVAILABLE` | 503 | Downloader not ready |
+
+### Parent-Child Queue Model
+
+Album downloads are broken into parent and child queue items for explicit tracking and easy recovery.
+
+**Why parent-child:**
+- Each download is atomic and independently retryable
+- Progress is explicit: "8/12 tracks downloaded"
+- Recovery is trivial: on restart, just process remaining PENDING children
+- Same model works for album requests, watchdog repairs, and future single-track requests
+
+**Flow:**
+
+```
+1. User requests album ABC
+   → QueueItem(id=1, type=Album, parent_id=null, status=PENDING)
+
+2. Processor picks up item 1:
+   - Fetch metadata: GET /album/:id, GET /album/:id/tracks, GET /artist/:id
+   - Create catalog entries (artists, album, tracks - without audio files)
+   - Create children:
+     → QueueItem(id=2, type=AlbumImage, parent_id=1, content_id=img1)
+     → QueueItem(id=3, type=ArtistImage, parent_id=1, content_id=img2)
+     → QueueItem(id=4, type=TrackAudio, parent_id=1, content_id=track1)
+     → QueueItem(id=5, type=TrackAudio, parent_id=1, content_id=track2)
+     → ...
+   - Item 1 status → IN_PROGRESS
+
+3. Children processed individually:
+   - GET /image/:id → write to {media_path}/images/{id}.jpg → COMPLETED
+   - GET /track/:id/audio → write to {media_path}/audio/{id}.{ext} → COMPLETED
+   - Failed downloads → RETRY_WAITING or FAILED
+
+4. When all children reach terminal state:
+   - All COMPLETED → parent COMPLETED
+   - Any FAILED → parent FAILED (partial album, watchdog can retry failed tracks later)
+```
+
+**Child items inherit from parent:**
+- Priority
+- Request source
+- User ID (for audit trail)
+
+**User's "my requests" view:** Shows only `parent_id IS NULL` items. Can expand to see children/progress.
+
+**Watchdog repairs:** Creates items with `parent_id = null` and `source = Watchdog`. These are standalone, not tied to a user request.
+
 ### State Machine
 
 ```
@@ -1239,8 +1336,6 @@ A queue-based asynchronous download manager that handles content downloads from 
            │           └─→ (after backoff) → PENDING
            │
            └─→ retry_count >= max_retries → [FAILED] (terminal)
-
-[CANCELLED] (terminal) ← User cancellation (own requests only)
 ```
 
 ### Priority System
@@ -1252,6 +1347,22 @@ A queue-based asynchronous download manager that handles content downloads from 
 | Lowest | 3 | Expansion | Smart catalog growth (Phase 2) |
 
 Queue processing order: `ORDER BY priority ASC, created_at ASC`
+
+### Design Notes
+
+**ID System:** External content IDs from the music provider ARE our catalog IDs. No mapping needed - duplicate detection is a direct catalog lookup.
+
+**Content ID Types in Queue:**
+- `Album`, `TrackAudio`: `content_id` is base62 ID (22 chars, e.g., `4u7EnebtmKWzUH433cf5Qv`)
+- `AlbumImage`, `ArtistImage`: `content_id` is hex ID (40 chars, e.g., `2c9a122b0f6a1c6f...`) from `covers[].id` or `portraits[].id`
+
+**Discography Requests:** Best-effort processing. If some albums fail rate limits or are already in catalog, the rest are still queued. Response includes `albums_queued` and `albums_skipped` counts.
+
+**User Cancellation:** Not supported. Users cannot cancel requests once submitted. With timeouts in place and low volume, this simplifies the API without meaningful loss. Admins can manually intervene if needed.
+
+**Stale In-Progress Handling:** Items stuck in IN_PROGRESS beyond the threshold trigger alerts (metrics + warning logs) rather than automatic failure. This signals human intervention is needed rather than hiding underlying issues.
+
+**Queue Position:** `get_queue_position` returns the count of ALL items ahead in the queue (across all priorities), not just same-priority items. Returns `None` if item not found or in terminal state.
 
 ---
 
@@ -1268,7 +1379,10 @@ Queue processing order: `ORDER BY priority ASC, created_at ASC`
   - `catalog-server/src/download_manager/audit_logger.rs`
   - `catalog-server/src/download_manager/retry_policy.rs`
   - `catalog-server/src/download_manager/schema.rs`
+  - `catalog-server/src/download_manager/downloader_client.rs`
+  - `catalog-server/src/download_manager/downloader_types.rs`
   - `catalog-server/src/download_manager/search_proxy.rs`
+  - `catalog-server/src/download_manager/catalog_ingestion.rs`
   - `catalog-server/src/download_manager/job_processor.rs`
   - `catalog-server/src/download_manager/watchdog.rs`
   - `catalog-server/src/download_manager/manager.rs`
@@ -1294,7 +1408,6 @@ Queue processing order: `ORDER BY priority ASC, created_at ASC`
       RetryWaiting,
       Completed,    // terminal
       Failed,       // terminal
-      Cancelled,    // terminal
   }
 
   #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -1341,6 +1454,7 @@ Queue processing order: `ORDER BY priority ASC, created_at ASC`
   #[derive(Debug, Clone)]
   pub struct QueueItem {
       pub id: String,                          // UUID
+      pub parent_id: Option<String>,           // Parent queue item ID (for child items)
       pub status: QueueStatus,
       pub priority: QueuePriority,
       pub content_type: DownloadContentType,
@@ -1367,7 +1481,7 @@ Queue processing order: `ORDER BY priority ASC, created_at ASC`
 
   **File:** `catalog-server/src/download_manager/models.rs`
 
-  **Context:** Simplified view for user-facing API responses.
+  **Context:** Simplified view for user-facing API responses. Includes child progress for album requests.
 
   ```rust
   #[derive(Debug, Clone, Serialize)]
@@ -1381,7 +1495,17 @@ Queue processing order: `ORDER BY priority ASC, created_at ASC`
       pub created_at: i64,
       pub completed_at: Option<i64>,
       pub error_message: Option<String>,
+      pub progress: Option<DownloadProgress>,  // For album requests
       pub queue_position: Option<usize>,  // Position in queue (for pending items)
+  }
+
+  #[derive(Debug, Clone, Serialize)]
+  pub struct DownloadProgress {
+      pub total_children: usize,
+      pub completed: usize,
+      pub failed: usize,
+      pub pending: usize,
+      pub in_progress: usize,
   }
   ```
 
@@ -1393,14 +1517,14 @@ Queue processing order: `ORDER BY priority ASC, created_at ASC`
   #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
   #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
   pub enum AuditEventType {
-      RequestCreated,
-      DownloadStarted,
-      DownloadCompleted,
-      DownloadFailed,
-      RetryScheduled,
-      RequestCancelled,
-      AdminRetry,
-      WatchdogQueued,
+      RequestCreated,        // User submitted album request
+      DownloadStarted,       // Item claimed for processing
+      ChildrenCreated,       // Album spawned child items (includes count in details)
+      DownloadCompleted,     // Item finished successfully (child binary or parent all-children-done)
+      DownloadFailed,        // Item failed (after max retries)
+      RetryScheduled,        // Item scheduled for retry
+      AdminRetry,            // Admin reset failed item to pending
+      WatchdogQueued,        // Watchdog queued repair item
       WatchdogScanStarted,
       WatchdogScanCompleted,
   }
@@ -1585,9 +1709,9 @@ Queue processing order: `ORDER BY priority ASC, created_at ASC`
   ```rust
   #[derive(Debug, Default, Clone)]
   pub struct WatchdogReport {
-      pub missing_track_audio: Vec<String>,     // Track IDs
-      pub missing_album_images: Vec<String>,    // Album IDs
-      pub missing_artist_images: Vec<String>,   // Artist IDs
+      pub missing_track_audio: Vec<String>,     // Track IDs (base62)
+      pub missing_album_images: Vec<String>,    // Image IDs (hex) from album covers
+      pub missing_artist_images: Vec<String>,   // Image IDs (hex) from artist portraits
       pub items_queued: usize,
       pub items_skipped: usize,  // Already in queue
       pub scan_duration_ms: i64,
@@ -1619,6 +1743,7 @@ Queue processing order: `ORDER BY priority ASC, created_at ASC`
               -- Main queue table
               CREATE TABLE download_queue (
                   id TEXT PRIMARY KEY,
+                  parent_id TEXT,                      -- Parent queue item ID (for child items)
                   status TEXT NOT NULL,
                   priority INTEGER NOT NULL,
                   content_type TEXT NOT NULL,
@@ -1637,12 +1762,14 @@ Queue processing order: `ORDER BY priority ASC, created_at ASC`
                   error_type TEXT,
                   error_message TEXT,
                   bytes_downloaded INTEGER,
-                  processing_duration_ms INTEGER
+                  processing_duration_ms INTEGER,
+                  FOREIGN KEY (parent_id) REFERENCES download_queue(id) ON DELETE CASCADE
               );
 
               CREATE INDEX idx_queue_status_priority ON download_queue(status, priority, created_at);
               CREATE INDEX idx_queue_content ON download_queue(content_type, content_id);
               CREATE INDEX idx_queue_user ON download_queue(requested_by_user_id);
+              CREATE INDEX idx_queue_parent ON download_queue(parent_id) WHERE parent_id IS NOT NULL;
               CREATE INDEX idx_queue_next_retry ON download_queue(next_retry_at) WHERE status = 'RETRY_WAITING';
 
               -- Activity tracking for capacity limits
@@ -1718,7 +1845,13 @@ Queue processing order: `ORDER BY priority ASC, created_at ASC`
       fn mark_completed(&self, id: &str, bytes: u64, duration_ms: i64) -> Result<()>;
       fn mark_retry_waiting(&self, id: &str, next_retry_at: i64, error: &DownloadError) -> Result<()>;
       fn mark_failed(&self, id: &str, error: &DownloadError) -> Result<()>;
-      fn mark_cancelled(&self, id: &str) -> Result<()>;
+
+      // === Parent-Child Management ===
+      fn create_children(&self, parent_id: &str, children: Vec<QueueItem>) -> Result<()>;
+      fn get_children(&self, parent_id: &str) -> Result<Vec<QueueItem>>;
+      fn get_children_progress(&self, parent_id: &str) -> Result<DownloadProgress>;
+      fn check_parent_completion(&self, parent_id: &str) -> Result<Option<QueueStatus>>;  // Returns new status if all children terminal
+      fn get_user_requests(&self, user_id: &str, limit: usize, offset: usize) -> Result<Vec<QueueItem>>;  // parent_id IS NULL only
 
       // === Retry Handling ===
       fn get_retry_ready(&self) -> Result<Vec<QueueItem>>;  // next_retry_at <= now
@@ -1744,10 +1877,7 @@ Queue processing order: `ORDER BY priority ASC, created_at ASC`
       // === Statistics ===
       fn get_queue_stats(&self) -> Result<QueueStats>;
       fn get_failed_items(&self, limit: usize, offset: usize) -> Result<Vec<QueueItem>>;
-
-      // === Cleanup ===
-      fn cleanup_stale_in_progress(&self, stale_threshold_secs: i64) -> Result<usize>;
-      fn cleanup_old_completed(&self, older_than: i64) -> Result<usize>;
+      fn get_stale_in_progress(&self, stale_threshold_secs: i64) -> Result<Vec<QueueItem>>;  // For alerting, not auto-cleanup
 
       // === Audit Logging ===
       fn log_audit_event(&self, event: AuditLogEntry) -> Result<()>;
@@ -1789,23 +1919,35 @@ Queue processing order: `ORDER BY priority ASC, created_at ASC`
 
   **File:** `catalog-server/src/download_manager/queue_store.rs`
 
-  **Methods:** `claim_for_processing`, `mark_completed`, `mark_retry_waiting`, `mark_failed`, `mark_cancelled`
+  **Methods:** `claim_for_processing`, `mark_completed`, `mark_retry_waiting`, `mark_failed`
 
   **Important:** Use transactions for atomic state changes. Verify current status before transition.
 
-- [ ] **Task DM-1.4.5: Implement retry handling methods**
+- [ ] **Task DM-1.4.5: Implement parent-child management methods**
+
+  **File:** `catalog-server/src/download_manager/queue_store.rs`
+
+  **Methods:** `create_children`, `get_children`, `get_children_progress`, `check_parent_completion`, `get_user_requests`
+
+  **Logic for `check_parent_completion`:**
+  - Query children: `SELECT status FROM download_queue WHERE parent_id = ?`
+  - If any child still non-terminal (PENDING, IN_PROGRESS, RETRY_WAITING) → return None
+  - If all children COMPLETED → return Some(COMPLETED)
+  - If any child FAILED (and all others terminal) → return Some(FAILED)
+
+- [ ] **Task DM-1.4.6: Implement retry handling methods**
 
   **File:** `catalog-server/src/download_manager/queue_store.rs`
 
   **Methods:** `get_retry_ready`, `promote_retry_to_pending`
 
-- [ ] **Task DM-1.4.6: Implement duplicate check methods**
+- [ ] **Task DM-1.4.7: Implement duplicate check methods**
 
   **File:** `catalog-server/src/download_manager/queue_store.rs`
 
   **Methods:** `find_by_content`, `is_in_queue`, `is_in_active_queue`
 
-- [ ] **Task DM-1.4.7: Implement user rate limiting methods**
+- [ ] **Task DM-1.4.8: Implement user rate limiting methods**
 
   **File:** `catalog-server/src/download_manager/queue_store.rs`
 
@@ -1813,7 +1955,7 @@ Queue processing order: `ORDER BY priority ASC, created_at ASC`
 
   **Note:** Daily reset should check `last_request_date` and reset if different from today.
 
-- [ ] **Task DM-1.4.8: Implement activity tracking methods**
+- [ ] **Task DM-1.4.9: Implement activity tracking methods**
 
   **File:** `catalog-server/src/download_manager/queue_store.rs`
 
@@ -1821,19 +1963,19 @@ Queue processing order: `ORDER BY priority ASC, created_at ASC`
 
   **Note:** Use hour-truncated timestamps as bucket keys.
 
-- [ ] **Task DM-1.4.9: Implement statistics and cleanup methods**
+- [ ] **Task DM-1.4.10: Implement statistics methods**
 
   **File:** `catalog-server/src/download_manager/queue_store.rs`
 
-  **Methods:** `get_queue_stats`, `get_failed_items`, `cleanup_stale_in_progress`, `cleanup_old_completed`
+  **Methods:** `get_queue_stats`, `get_failed_items`, `get_stale_in_progress`
 
-- [ ] **Task DM-1.4.10: Implement audit logging methods**
+- [ ] **Task DM-1.4.11: Implement audit logging methods**
 
   **File:** `catalog-server/src/download_manager/queue_store.rs`
 
   **Methods:** `log_audit_event`, `get_audit_log`, `get_audit_for_item`, `get_audit_for_user`, `cleanup_old_audit_entries`
 
-- [ ] **Task DM-1.4.11: Add unit tests for queue store**
+- [ ] **Task DM-1.4.12: Add unit tests for queue store**
 
   **File:** `catalog-server/src/download_manager/queue_store.rs` (test module)
 
@@ -1841,6 +1983,9 @@ Queue processing order: `ORDER BY priority ASC, created_at ASC`
   - Enqueue and retrieve items
   - Priority ordering (watchdog > user > expansion)
   - State transitions (atomic, valid transitions only)
+  - Parent-child: create children, get progress, check completion
+  - Parent completion: all children complete → parent complete
+  - Parent failure: any child failed → parent failed
   - User stats tracking and daily reset
   - Activity logging and hourly/daily counts
   - Duplicate detection
@@ -1918,6 +2063,14 @@ Queue processing order: `ORDER BY priority ASC, created_at ASC`
 
       pub fn log_download_started(&self, queue_item: &QueueItem) -> Result<()>;
 
+      pub fn log_children_created(
+          &self,
+          parent_item: &QueueItem,
+          children_count: usize,
+          track_count: usize,
+          image_count: usize,
+      ) -> Result<()>;
+
       pub fn log_download_completed(
           &self,
           queue_item: &QueueItem,
@@ -1938,12 +2091,6 @@ Queue processing order: `ORDER BY priority ASC, created_at ASC`
           next_retry_at: i64,
           backoff_secs: u64,
           error: &DownloadError,
-      ) -> Result<()>;
-
-      pub fn log_request_cancelled(
-          &self,
-          queue_item: &QueueItem,
-          cancelled_by_user_id: &str,
       ) -> Result<()>;
 
       pub fn log_admin_retry(
@@ -2047,7 +2194,7 @@ Queue processing order: `ORDER BY priority ASC, created_at ASC`
   ```rust
   pub struct DownloadManager {
       queue_store: Arc<dyn DownloadQueueStore>,
-      downloader: Arc<dyn Downloader>,
+      downloader_client: DownloaderClient,
       catalog_store: Arc<dyn CatalogStore>,
       media_path: PathBuf,
       config: DownloadManagerSettings,
@@ -2058,39 +2205,38 @@ Queue processing order: `ORDER BY priority ASC, created_at ASC`
   impl DownloadManager {
       pub fn new(
           queue_store: Arc<dyn DownloadQueueStore>,
-          downloader: Arc<dyn Downloader>,
+          downloader_client: DownloaderClient,
           catalog_store: Arc<dyn CatalogStore>,
           media_path: PathBuf,
           config: DownloadManagerSettings,
       ) -> Self;
 
-      // Search proxy
-      pub fn search(&self, query: &str, search_type: SearchType) -> Result<SearchResults>;
-      pub fn search_discography(&self, artist_id: &str) -> Result<DiscographyResult>;
+      // Search proxy (async - calls external downloader service)
+      pub async fn search(&self, query: &str, search_type: SearchType) -> Result<SearchResults>;
+      pub async fn search_discography(&self, artist_id: &str) -> Result<DiscographyResult>;
 
-      // User requests
+      // User requests (sync - only touches local queue store)
       pub fn request_album(&self, user_id: &str, request: AlbumRequest) -> Result<RequestResult>;
       pub fn request_discography(&self, user_id: &str, request: DiscographyRequest) -> Result<DiscographyRequestResult>;
       pub fn get_user_requests(&self, user_id: &str, status: Option<QueueStatus>) -> Result<Vec<UserRequestView>>;
       pub fn get_request_status(&self, user_id: &str, request_id: &str) -> Result<UserRequestView>;
-      pub fn cancel_request(&self, user_id: &str, request_id: &str) -> Result<()>;
 
-      // Rate limiting
+      // Rate limiting (sync - only touches local queue store)
       pub fn check_user_limits(&self, user_id: &str) -> Result<UserLimitStatus>;
       pub fn check_global_capacity(&self) -> Result<CapacityStatus>;
 
-      // Queue processing (called by background processor)
-      pub fn process_next(&self) -> Result<Option<ProcessingResult>>;
+      // Queue processing (async - calls external downloader service)
+      pub async fn process_next(&self) -> Result<Option<ProcessingResult>>;
       pub fn promote_ready_retries(&self) -> Result<usize>;
 
-      // Admin
+      // Admin (sync - only touches local queue store)
       pub fn get_queue_stats(&self) -> Result<QueueStats>;
       pub fn get_failed_items(&self, limit: usize, offset: usize) -> Result<Vec<QueueItem>>;
       pub fn retry_failed(&self, admin_user_id: &str, request_id: &str) -> Result<()>;
       pub fn get_activity(&self, hours: usize) -> Result<Vec<ActivityLogEntry>>;
       pub fn get_all_requests(&self, status: Option<QueueStatus>, user_id: Option<&str>, limit: usize, offset: usize) -> Result<Vec<QueueItem>>;
 
-      // Audit
+      // Audit (sync - only touches local queue store)
       pub fn get_audit_log(&self, filter: AuditLogFilter) -> Result<(Vec<AuditLogEntry>, usize)>;
       pub fn get_audit_for_item(&self, queue_item_id: &str) -> Result<(QueueItem, Vec<AuditLogEntry>)>;
       pub fn get_audit_for_user(&self, user_id: &str, filter: AuditLogFilter) -> Result<(Vec<AuditLogEntry>, usize)>;
@@ -2139,7 +2285,7 @@ Queue processing order: `ORDER BY priority ASC, created_at ASC`
 
 - [ ] **Task DM-2.1.1: Create `DownloaderClient` for HTTP communication**
 
-  **File:** `catalog-server/src/download_manager/search_proxy.rs`
+  **File:** `catalog-server/src/download_manager/downloader_client.rs`
 
   ```rust
   pub struct DownloaderClient {
@@ -2162,15 +2308,27 @@ Queue processing order: `ORDER BY priority ASC, created_at ASC`
           }
       }
 
+      // Search endpoints
       pub async fn search(&self, query: &str, search_type: SearchType) -> Result<Vec<ExternalSearchResult>>;
       pub async fn get_discography(&self, artist_id: &str) -> Result<ExternalDiscographyResult>;
+
+      // Metadata endpoints
+      pub async fn get_album(&self, album_id: &str) -> Result<ExternalAlbum>;
+      pub async fn get_album_tracks(&self, album_id: &str) -> Result<Vec<ExternalTrack>>;
+      pub async fn get_artist(&self, artist_id: &str) -> Result<ExternalArtist>;
+      pub async fn get_track(&self, track_id: &str) -> Result<ExternalTrack>;
+
+      // Download endpoints (return raw bytes)
+      pub async fn download_track_audio(&self, track_id: &str) -> Result<(Vec<u8>, String)>;  // (bytes, content_type)
+      pub async fn download_image(&self, image_id: &str) -> Result<Vec<u8>>;
   }
   ```
 
 - [ ] **Task DM-2.1.2: Define external API response types**
 
-  **File:** `catalog-server/src/download_manager/search_proxy.rs`
+  **File:** `catalog-server/src/download_manager/downloader_types.rs`
 
+  **Search types:**
   ```rust
   #[derive(Debug, Deserialize)]
   pub struct ExternalSearchResult {
@@ -2187,6 +2345,57 @@ Queue processing order: `ORDER BY priority ASC, created_at ASC`
   pub struct ExternalDiscographyResult {
       pub artist: ExternalSearchResult,
       pub albums: Vec<ExternalSearchResult>,
+  }
+  ```
+
+  **Metadata types (matching downloader API responses):**
+  ```rust
+  #[derive(Debug, Deserialize)]
+  pub struct ExternalAlbum {
+      pub id: String,
+      pub name: String,
+      pub album_type: String,
+      pub artists_ids: Vec<String>,
+      pub label: String,
+      pub date: i64,  // Unix timestamp
+      pub genres: Vec<String>,
+      pub covers: Vec<ExternalImage>,
+      pub discs: Vec<ExternalDisc>,
+  }
+
+  #[derive(Debug, Deserialize)]
+  pub struct ExternalDisc {
+      pub number: i32,
+      pub name: String,
+      pub tracks: Vec<String>,  // Track IDs
+  }
+
+  #[derive(Debug, Deserialize)]
+  pub struct ExternalImage {
+      pub id: String,  // Hex ID for download
+      pub size: String,
+      pub width: i32,
+      pub height: i32,
+  }
+
+  #[derive(Debug, Deserialize)]
+  pub struct ExternalTrack {
+      pub id: String,
+      pub name: String,
+      pub album_id: String,
+      pub artists_ids: Vec<String>,
+      pub number: i32,
+      pub disc_number: i32,
+      pub duration: i64,  // milliseconds
+      pub is_explicit: bool,
+  }
+
+  #[derive(Debug, Deserialize)]
+  pub struct ExternalArtist {
+      pub id: String,
+      pub name: String,
+      pub genre: Vec<String>,
+      pub portraits: Vec<ExternalImage>,
   }
   ```
 
@@ -2232,7 +2441,7 @@ Queue processing order: `ORDER BY priority ASC, created_at ASC`
           _ => SearchType::Album,
       };
 
-      dm.search(&params.q, search_type).map(Json)
+      dm.search(&params.q, search_type).await.map(Json)
   }
   ```
 
@@ -2301,14 +2510,33 @@ Queue processing order: `ORDER BY priority ASC, created_at ASC`
 
   **Note:** Only returns requests owned by the current user.
 
-- [ ] **Task DM-3.1.5: Create `DELETE /v1/download/request/:id` handler**
+- [ ] **Task DM-3.1.5: Create `GET /v1/download/limits` handler**
 
   **File:** `catalog-server/src/server/server.rs`
 
-  **Constraints:**
-  - Only pending or retry_waiting can be cancelled
-  - Only owner can cancel
-  - Returns 409 if in_progress/completed/failed
+  **Permission:** `RequestContent`
+
+  **Response:**
+  ```json
+  {
+      "user": {
+          "requests_today": 15,
+          "max_per_day": 100,
+          "in_queue": 8,
+          "max_queue": 200,
+          "can_request": true
+      },
+      "global": {
+          "albums_this_hour": 7,
+          "max_per_hour": 10,
+          "albums_today": 52,
+          "max_per_day": 60,
+          "at_capacity": false
+      }
+  }
+  ```
+
+  **Note:** Allows users to check their limits before attempting a request.
 
 #### DM-3.2 Rate Limiting
 
@@ -2359,7 +2587,7 @@ Queue processing order: `ORDER BY priority ASC, created_at ASC`
                       }
 
                       // Process next item
-                      match self.download_manager.process_next() {
+                      match self.download_manager.process_next().await {
                           Ok(Some(result)) => {
                               info!("Processed download: {:?}", result);
                           }
@@ -2387,22 +2615,102 @@ Queue processing order: `ORDER BY priority ASC, created_at ASC`
 
   **Logic in `process_next()`:**
   1. Check global capacity limits
-  2. Get next pending item
+  2. Get next pending item (priority order, then age)
   3. Claim for processing
-  4. Execute download via Downloader trait
+  4. Branch based on content type (see DM-4.1.3)
   5. Handle success/failure with retry policy
   6. Record activity metrics
   7. Log audit events
+  8. **For child items:** After completion, call `check_parent_completion()` and update parent if all children done
 
 - [ ] **Task DM-4.1.3: Handle different content types**
 
   **File:** `catalog-server/src/download_manager/job_processor.rs`
 
-  **Content type handling:**
-  - `Album`: Full download including metadata, tracks, audio, images
-  - `TrackAudio`: Single audio file
-  - `ArtistImage`: Single image file
-  - `AlbumImage`: Single image file
+  **Content type handling (parent-child model):**
+
+  **`Album` (parent item):**
+  1. Fetch metadata: `GET /album/:id`, `GET /album/:id/tracks`, `GET /artist/:id` for each artist
+  2. Create catalog entries via CatalogStore (see DM-4.1.4)
+  3. Create child queue items:
+     - `TrackAudio` for each track (`content_id` = track's base62 ID)
+     - `AlbumImage` for covers (`content_id` = image's 40-char hex ID from `covers[].id`)
+     - `ArtistImage` for portraits (`content_id` = image's 40-char hex ID from `portraits[].id`)
+  4. Item stays `IN_PROGRESS` until all children complete (not "downloading" - waiting for children)
+
+  **`TrackAudio` (child item):**
+  1. `GET /track/:id/audio` from downloader → returns `(bytes, content_type)`
+  2. Determine file extension from content_type (`audio/ogg` → `.ogg`, `audio/mpeg` → `.mp3`, etc.)
+  3. Write bytes to `{media_path}/audio/{track_id}.{ext}`
+  4. Mark `COMPLETED`, call `check_parent_completion()`
+
+  **`AlbumImage` / `ArtistImage` (child item):**
+  1. `GET /image/:id` from downloader (id is 40-char hex)
+  2. Write bytes to `{media_path}/images/{id}.jpg`
+  3. Mark `COMPLETED`, call `check_parent_completion()`
+
+- [ ] **Task DM-4.1.4: Implement catalog ingestion logic**
+
+  **File:** `catalog-server/src/download_manager/catalog_ingestion.rs`
+
+  **Purpose:** Convert external types to catalog types and insert into CatalogStore.
+
+  **Types:**
+  ```rust
+  /// Result of ingesting an album - contains IDs needed for creating child queue items
+  pub struct IngestedAlbum {
+      pub album_id: String,
+      pub track_ids: Vec<String>,           // Base62 track IDs
+      pub album_image_ids: Vec<String>,     // Hex image IDs from covers
+      pub artist_image_ids: Vec<String>,    // Hex image IDs from portraits
+  }
+  ```
+
+  **Logic for Album processing:**
+  ```rust
+  pub fn ingest_album(
+      catalog_store: &dyn CatalogStore,
+      album: ExternalAlbum,
+      tracks: Vec<ExternalTrack>,
+      artists: Vec<ExternalArtist>,
+  ) -> Result<IngestedAlbum> {
+      // Extract IDs needed for child queue items BEFORE consuming the structs
+      let album_id = album.id.clone();
+      let album_image_ids: Vec<String> = album.covers.iter().map(|c| c.id.clone()).collect();
+      let track_ids: Vec<String> = tracks.iter().map(|t| t.id.clone()).collect();
+      let artist_image_ids: Vec<String> = artists.iter()
+          .flat_map(|a| a.portraits.iter().map(|p| p.id.clone()))
+          .collect();
+
+      // 1. For each artist: check if exists, insert if not
+      for artist in artists {
+          if !catalog_store.artist_exists(&artist.id)? {
+              let catalog_artist = convert_artist(artist);
+              catalog_store.insert_artist(catalog_artist)?;
+          }
+      }
+
+      // 2. Insert album (links to artists)
+      let catalog_album = convert_album(album);
+      catalog_store.insert_album(catalog_album)?;
+
+      // 3. Insert tracks (links to album and artists)
+      for track in tracks {
+          let catalog_track = convert_track(track);
+          catalog_store.insert_track(catalog_track)?;
+      }
+
+      // 4. Return info needed for child creation
+      Ok(IngestedAlbum {
+          album_id,
+          track_ids,
+          album_image_ids,
+          artist_image_ids,
+      })
+  }
+  ```
+
+  **Note:** Uses existing CatalogStore write methods. Verify these methods exist and support the required operations.
 
 #### DM-4.2 Main Integration
 
@@ -2413,10 +2721,14 @@ Queue processing order: `ORDER BY priority ASC, created_at ASC`
   ```rust
   let download_manager = if config.download_manager.enabled {
       let queue_store = Arc::new(SqliteDownloadQueueStore::new(&config.download_queue_db_path())?);
+      let downloader_client = DownloaderClient::new(
+          config.downloader_url.as_ref().unwrap().clone(),
+          config.downloader_timeout_sec,
+      );
 
       let manager = Arc::new(DownloadManager::new(
           queue_store,
-          downloader.clone(),
+          downloader_client,
           catalog_store.clone(),
           config.media_path.clone(),
           config.download_manager.clone(),
@@ -2458,15 +2770,17 @@ Queue processing order: `ORDER BY priority ASC, created_at ASC`
   }
   ```
 
-#### DM-4.3 Stale Cleanup
+#### DM-4.3 Stale Detection
 
-- [ ] **Task DM-4.3.1: Implement stale in-progress cleanup**
+- [ ] **Task DM-4.3.1: Implement stale in-progress detection and alerting**
 
   **File:** `catalog-server/src/download_manager/job_processor.rs`
 
-  **Logic:** Items stuck in IN_PROGRESS longer than `stale_in_progress_threshold_secs` should be marked FAILED.
+  **Logic:** Items stuck in IN_PROGRESS longer than `stale_in_progress_threshold_secs` should trigger alerts (warning logs + Prometheus metric increment). Do NOT auto-fail - stale items indicate something is broken and needs human investigation.
 
   **Trigger:** Run on startup and periodically (hourly).
+
+  **Metric:** `pezzottify_download_stale_in_progress` gauge showing count of stale items.
 
 ---
 
@@ -2737,7 +3051,7 @@ Queue processing order: `ORDER BY priority ASC, created_at ASC`
           .route("/request/discography", post(request_discography))
           .route("/my-requests", get(list_my_requests))
           .route("/request/:id", get(get_request_status))
-          .route("/request/:id", delete(cancel_request))
+          .route("/limits", get(get_user_limits))
           // Admin
           .route("/admin/stats", get(admin_download_stats))
           .route("/admin/failed", get(admin_failed_downloads))
@@ -2911,6 +3225,9 @@ Queue processing order: `ORDER BY priority ASC, created_at ASC`
 5. **Priority-based processing**: Watchdog (1) > User (2) > Expansion (3)
 6. **Synchronous traits**: Following existing codebase patterns
 7. **not_found errors don't retry**: Immediate failure for content that doesn't exist
+8. **Parent-child queue model**: Album requests spawn child items (tracks, images) for granular tracking and easy recovery
+9. **No user cancellation**: Simplifies API; admins can intervene if needed
+10. **Stale items trigger alerts, not auto-fail**: Human investigation preferred over hiding issues
 
 ### Notes on Implementation
 
@@ -2925,15 +3242,15 @@ Queue processing order: `ORDER BY priority ASC, created_at ASC`
 |-------|------------|
 | Phase 0 (TOML Config) | 18 tasks ✅ |
 | Part 1 (Background Jobs) | 25 tasks ✅ |
-| Part 2, DM-1 (Core Infrastructure) | 35 tasks |
-| Part 2, DM-2 (Search Proxy) | 5 tasks |
+| Part 2, DM-1 (Core Infrastructure) | 38 tasks |
+| Part 2, DM-2 (Search Proxy) | 7 tasks |
 | Part 2, DM-3 (User Request API) | 7 tasks |
-| Part 2, DM-4 (Queue Processor) | 6 tasks |
-| Part 2, DM-5 (Integrity Watchdog) | 7 tasks |
-| Part 2, DM-6 (Admin API & Polish) | 14 tasks |
+| Part 2, DM-4 (Queue Processor) | 8 tasks |
+| Part 2, DM-5 (Integrity Watchdog) | 8 tasks |
+| Part 2, DM-6 (Admin API & Polish) | 16 tasks |
 | Part 2, DM-7 (Metrics) | 5 tasks |
 | Part 2, DM-8 (Documentation) | 3 tasks |
 
-**Total Part 2 (Download Manager): 82 tasks**
+**Total Part 2 (Download Manager): 92 tasks**
 
-**Grand Total: ~125 tasks**
+**Grand Total: ~135 tasks**
