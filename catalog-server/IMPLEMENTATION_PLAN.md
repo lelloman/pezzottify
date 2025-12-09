@@ -3038,7 +3038,7 @@ Queue processing order: `ORDER BY priority ASC, created_at ASC`
 
 #### DM-6.4 Router Wiring
 
-- [ ] **Task DM-6.4.1: Create `download_routes` function**
+- [x] **Task DM-6.4.1: Create `download_routes` function**
 
   **File:** `catalog-server/src/server/server.rs`
 
@@ -3068,7 +3068,7 @@ Queue processing order: `ORDER BY priority ASC, created_at ASC`
   }
   ```
 
-- [ ] **Task DM-6.4.2: Wire download routes into main router**
+- [x] **Task DM-6.4.2: Wire download routes into main router**
 
   **File:** `catalog-server/src/server/server.rs`
 
@@ -3080,7 +3080,7 @@ Queue processing order: `ORDER BY priority ASC, created_at ASC`
 
 #### DM-6.5 Tests
 
-- [ ] **Task DM-6.5.1: Write integration tests for user request flow**
+- [x] **Task DM-6.5.1: Write integration tests for user request flow**
 
   **Test scenario:**
   1. User submits album request
@@ -3090,14 +3090,14 @@ Queue processing order: `ORDER BY priority ASC, created_at ASC`
   5. Verify completed status
   6. Verify audit log entries
 
-- [ ] **Task DM-6.5.2: Write integration tests for rate limiting**
+- [x] **Task DM-6.5.2: Write integration tests for rate limiting**
 
   **Test scenario:**
   1. Submit requests up to daily limit
   2. Verify 429 on next request
   3. Verify queue limit separately
 
-- [ ] **Task DM-6.5.3: Write integration tests for watchdog**
+- [x] **Task DM-6.5.3: Write integration tests for watchdog**
 
   **Test scenario:**
   1. Create album in catalog without audio files
@@ -3105,7 +3105,7 @@ Queue processing order: `ORDER BY priority ASC, created_at ASC`
   3. Verify items queued at priority 1
   4. Verify audit events
 
-- [ ] **Task DM-6.5.4: Write integration tests for admin API**
+- [x] **Task DM-6.5.4: Write integration tests for admin API**
 
   **Test scenarios:**
   - Stats endpoint returns correct counts
