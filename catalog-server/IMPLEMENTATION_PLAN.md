@@ -3117,7 +3117,7 @@ Queue processing order: `ORDER BY priority ASC, created_at ASC`
 
 ### Phase DM-7: Metrics
 
-- [ ] **Task DM-7.1: Define Prometheus metrics**
+- [x] **Task DM-7.1: Define Prometheus metrics**
 
   **File:** `catalog-server/src/server/metrics.rs`
 
@@ -3160,19 +3160,19 @@ Queue processing order: `ORDER BY priority ASC, created_at ASC`
   }
   ```
 
-- [ ] **Task DM-7.2: Register download metrics**
+- [x] **Task DM-7.2: Register download metrics**
 
   **File:** `catalog-server/src/server/metrics.rs`
 
-- [ ] **Task DM-7.3: Emit metrics from queue processor**
+- [x] **Task DM-7.3: Emit metrics from queue processor**
 
   **File:** `catalog-server/src/download_manager/job_processor.rs`
 
-- [ ] **Task DM-7.4: Emit metrics from request handlers**
+- [x] **Task DM-7.4: Emit metrics from request handlers**
 
   **File:** `catalog-server/src/server/server.rs`
 
-- [ ] **Task DM-7.5: Update queue size metrics periodically**
+- [x] **Task DM-7.5: Update queue size metrics periodically**
 
   **Context:** Add to queue processor loop to update gauge metrics.
 

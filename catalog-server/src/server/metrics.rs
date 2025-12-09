@@ -157,6 +157,40 @@ lazy_static! {
         "Number of download queue items stuck in IN_PROGRESS state longer than threshold"
     ).expect("Failed to create download_queue_stale_in_progress metric");
 
+    pub static ref DOWNLOAD_QUEUE_SIZE: GaugeVec = GaugeVec::new(
+        Opts::new(format!("{PREFIX}_download_queue_size"), "Current download queue size by status and priority"),
+        &["status", "priority"]
+    ).expect("Failed to create download_queue_size metric");
+
+    pub static ref DOWNLOAD_PROCESSED_TOTAL: CounterVec = CounterVec::new(
+        Opts::new(format!("{PREFIX}_download_processed_total"), "Total processed downloads by content type and result"),
+        &["content_type", "result"]
+    ).expect("Failed to create download_processed_total metric");
+
+    pub static ref DOWNLOAD_PROCESSING_DURATION_SECONDS: HistogramVec = HistogramVec::new(
+        HistogramOpts::new(
+            format!("{PREFIX}_download_processing_duration_seconds"),
+            "Download processing duration in seconds"
+        )
+        .buckets(vec![1.0, 5.0, 10.0, 30.0, 60.0, 120.0, 300.0]),
+        &["content_type"]
+    ).expect("Failed to create download_processing_duration_seconds metric");
+
+    pub static ref DOWNLOAD_CAPACITY_USED: GaugeVec = GaugeVec::new(
+        Opts::new(format!("{PREFIX}_download_capacity_used"), "Download capacity usage by period"),
+        &["period"]
+    ).expect("Failed to create download_capacity_used metric");
+
+    pub static ref DOWNLOAD_USER_REQUESTS_TOTAL: CounterVec = CounterVec::new(
+        Opts::new(format!("{PREFIX}_download_user_requests_total"), "Total user download requests by type"),
+        &["request_type"]
+    ).expect("Failed to create download_user_requests_total metric");
+
+    pub static ref DOWNLOAD_AUDIT_EVENTS_TOTAL: CounterVec = CounterVec::new(
+        Opts::new(format!("{PREFIX}_download_audit_events_total"), "Total download audit events by type"),
+        &["event_type"]
+    ).expect("Failed to create download_audit_events_total metric");
+
     // Background Job Metrics
     pub static ref BACKGROUND_JOB_EXECUTIONS_TOTAL: CounterVec = CounterVec::new(
         Opts::new(format!("{PREFIX}_background_job_executions_total"), "Total background job executions"),
@@ -204,6 +238,12 @@ pub fn init_metrics() {
     let _ = REGISTRY.register(Box::new(DOWNLOADER_ERRORS_TOTAL.clone()));
     let _ = REGISTRY.register(Box::new(DOWNLOADER_BYTES_TOTAL.clone()));
     let _ = REGISTRY.register(Box::new(DOWNLOAD_QUEUE_STALE_IN_PROGRESS.clone()));
+    let _ = REGISTRY.register(Box::new(DOWNLOAD_QUEUE_SIZE.clone()));
+    let _ = REGISTRY.register(Box::new(DOWNLOAD_PROCESSED_TOTAL.clone()));
+    let _ = REGISTRY.register(Box::new(DOWNLOAD_PROCESSING_DURATION_SECONDS.clone()));
+    let _ = REGISTRY.register(Box::new(DOWNLOAD_CAPACITY_USED.clone()));
+    let _ = REGISTRY.register(Box::new(DOWNLOAD_USER_REQUESTS_TOTAL.clone()));
+    let _ = REGISTRY.register(Box::new(DOWNLOAD_AUDIT_EVENTS_TOTAL.clone()));
     let _ = REGISTRY.register(Box::new(BACKGROUND_JOB_EXECUTIONS_TOTAL.clone()));
     let _ = REGISTRY.register(Box::new(BACKGROUND_JOB_DURATION_SECONDS.clone()));
     let _ = REGISTRY.register(Box::new(BACKGROUND_JOB_RUNNING.clone()));
@@ -364,6 +404,45 @@ pub fn record_downloader_bytes(content_type: &str, bytes: u64) {
 /// Set the count of stale in-progress download queue items
 pub fn set_download_stale_in_progress(count: usize) {
     DOWNLOAD_QUEUE_STALE_IN_PROGRESS.set(count as f64);
+}
+
+/// Set the download queue size for a specific status and priority
+pub fn set_download_queue_size(status: &str, priority: u8, count: usize) {
+    DOWNLOAD_QUEUE_SIZE
+        .with_label_values(&[status, &priority.to_string()])
+        .set(count as f64);
+}
+
+/// Record a processed download
+pub fn record_download_processed(content_type: &str, result: &str, duration: Duration) {
+    DOWNLOAD_PROCESSED_TOTAL
+        .with_label_values(&[content_type, result])
+        .inc();
+
+    DOWNLOAD_PROCESSING_DURATION_SECONDS
+        .with_label_values(&[content_type])
+        .observe(duration.as_secs_f64());
+}
+
+/// Set the download capacity usage for a period
+pub fn set_download_capacity_used(period: &str, count: usize) {
+    DOWNLOAD_CAPACITY_USED
+        .with_label_values(&[period])
+        .set(count as f64);
+}
+
+/// Record a user download request
+pub fn record_download_user_request(request_type: &str) {
+    DOWNLOAD_USER_REQUESTS_TOTAL
+        .with_label_values(&[request_type])
+        .inc();
+}
+
+/// Record a download audit event
+pub fn record_download_audit_event(event_type: &str) {
+    DOWNLOAD_AUDIT_EVENTS_TOTAL
+        .with_label_values(&[event_type])
+        .inc();
 }
 
 /// Record a background job execution

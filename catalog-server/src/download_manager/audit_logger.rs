@@ -7,6 +7,8 @@ use std::sync::Arc;
 
 use anyhow::Result;
 
+use crate::server::metrics;
+
 use super::models::{
     AuditEventType, AuditLogEntry, DownloadError, QueueItem, RequestSource, WatchdogReport,
 };
@@ -24,6 +26,16 @@ impl AuditLogger {
     /// Create a new AuditLogger with the given queue store.
     pub fn new(queue_store: Arc<dyn DownloadQueueStore>) -> Self {
         Self { queue_store }
+    }
+
+    /// Log an audit event and emit a corresponding Prometheus metric.
+    fn log_event(&self, entry: AuditLogEntry) -> Result<()> {
+        let event_type = entry.event_type.as_str().to_lowercase();
+        let result = self.queue_store.log_audit_event(entry);
+        if result.is_ok() {
+            metrics::record_download_audit_event(&event_type);
+        }
+        result
     }
 
     /// Log a new download request being created.
@@ -47,7 +59,7 @@ impl AuditLogger {
             entry
         };
 
-        self.queue_store.log_audit_event(entry)
+        self.log_event(entry)
     }
 
     /// Log a download starting processing.
@@ -63,7 +75,7 @@ impl AuditLogger {
             entry
         };
 
-        self.queue_store.log_audit_event(entry)
+        self.log_event(entry)
     }
 
     /// Log children being created for a parent album item.
@@ -92,7 +104,7 @@ impl AuditLogger {
             entry
         };
 
-        self.queue_store.log_audit_event(entry)
+        self.log_event(entry)
     }
 
     /// Log a download completing successfully.
@@ -126,7 +138,7 @@ impl AuditLogger {
             entry
         };
 
-        self.queue_store.log_audit_event(entry)
+        self.log_event(entry)
     }
 
     /// Log a download failing permanently (after max retries).
@@ -147,7 +159,7 @@ impl AuditLogger {
             entry
         };
 
-        self.queue_store.log_audit_event(entry)
+        self.log_event(entry)
     }
 
     /// Log a retry being scheduled for a failed download.
@@ -176,7 +188,7 @@ impl AuditLogger {
             entry
         };
 
-        self.queue_store.log_audit_event(entry)
+        self.log_event(entry)
     }
 
     /// Log an admin manually retrying a failed item.
@@ -192,7 +204,7 @@ impl AuditLogger {
                 "previous_error_message": queue_item.error_message,
             }));
 
-        self.queue_store.log_audit_event(entry)
+        self.log_event(entry)
     }
 
     /// Log the watchdog queuing an item for repair.
@@ -205,7 +217,7 @@ impl AuditLogger {
                 "reason": reason,
             }));
 
-        self.queue_store.log_audit_event(entry)
+        self.log_event(entry)
     }
 
     /// Log a watchdog scan starting.
@@ -213,7 +225,7 @@ impl AuditLogger {
         let entry = AuditLogEntry::new(AuditEventType::WatchdogScanStarted)
             .with_source(RequestSource::Watchdog);
 
-        self.queue_store.log_audit_event(entry)
+        self.log_event(entry)
     }
 
     /// Log a watchdog scan completing.
@@ -231,7 +243,7 @@ impl AuditLogger {
                 "is_clean": report.is_clean(),
             }));
 
-        self.queue_store.log_audit_event(entry)
+        self.log_event(entry)
     }
 }
 

@@ -44,9 +44,9 @@ use tower_governor::GovernorLayer;
 #[cfg(feature = "slowdown")]
 use super::slowdown_request;
 use super::{
-    http_cache, log_requests, make_search_routes, state::*, IpKeyExtractor, RequestsLoggingLevel,
-    ServerConfig, UserOrIpKeyExtractor, CONTENT_READ_PER_MINUTE, GLOBAL_PER_MINUTE,
-    LOGIN_PER_MINUTE, SEARCH_PER_MINUTE, STREAM_PER_MINUTE, WRITE_PER_MINUTE,
+    http_cache, log_requests, make_search_routes, metrics, state::*, IpKeyExtractor,
+    RequestsLoggingLevel, ServerConfig, UserOrIpKeyExtractor, CONTENT_READ_PER_MINUTE,
+    GLOBAL_PER_MINUTE, LOGIN_PER_MINUTE, SEARCH_PER_MINUTE, STREAM_PER_MINUTE, WRITE_PER_MINUTE,
 };
 use crate::server::session::Session;
 use crate::user::auth::AuthTokenValue;
@@ -3035,7 +3035,10 @@ async fn request_album_download(
 
     let user_id = session.user_id.to_string();
     match dm.request_album(&user_id, request) {
-        Ok(result) => Json(result).into_response(),
+        Ok(result) => {
+            metrics::record_download_user_request("album");
+            Json(result).into_response()
+        }
         Err(err) => {
             let err_msg = err.to_string();
             if err_msg.contains("Rate limit exceeded") {
@@ -3069,7 +3072,10 @@ async fn request_discography_download(
 
     let user_id = session.user_id.to_string();
     match dm.request_discography(&user_id, request) {
-        Ok(result) => Json(result).into_response(),
+        Ok(result) => {
+            metrics::record_download_user_request("discography");
+            Json(result).into_response()
+        }
         Err(err) => {
             let err_msg = err.to_string();
             if err_msg.contains("Rate limit exceeded") {
