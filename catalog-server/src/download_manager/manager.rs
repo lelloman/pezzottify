@@ -16,6 +16,7 @@ use super::downloader_client::DownloaderClient;
 use super::models::*;
 use super::queue_store::DownloadQueueStore;
 use super::retry_policy::RetryPolicy;
+use super::search_proxy::SearchProxy;
 
 /// Main download manager that orchestrates all download operations.
 ///
@@ -44,6 +45,8 @@ pub struct DownloadManager {
     retry_policy: RetryPolicy,
     /// Audit logger for tracking operations.
     audit_logger: AuditLogger,
+    /// Search proxy for querying the downloader service.
+    search_proxy: SearchProxy,
 }
 
 impl DownloadManager {
@@ -64,6 +67,11 @@ impl DownloadManager {
     ) -> Self {
         let retry_policy = RetryPolicy::new(&config);
         let audit_logger = AuditLogger::new(queue_store.clone());
+        let search_proxy = SearchProxy::new(
+            downloader_client.clone(),
+            catalog_store.clone(),
+            queue_store.clone(),
+        );
 
         Self {
             queue_store,
@@ -73,6 +81,7 @@ impl DownloadManager {
             config,
             retry_policy,
             audit_logger,
+            search_proxy,
         }
     }
 
@@ -97,20 +106,21 @@ impl DownloadManager {
 
     /// Search for content via the external downloader service.
     ///
-    /// Forwards the search request to the downloader and returns results.
+    /// Forwards the search request to the downloader and returns results
+    /// enriched with `in_catalog` and `in_queue` flags.
     pub async fn search(
         &self,
-        _query: &str,
-        _search_type: SearchType,
+        query: &str,
+        search_type: SearchType,
     ) -> Result<SearchResults> {
-        // TODO: Implement in DM-1.7.2
-        todo!("search not yet implemented")
+        self.search_proxy.search(query, search_type).await
     }
 
     /// Search for an artist's discography via the external downloader service.
-    pub async fn search_discography(&self, _artist_id: &str) -> Result<DiscographyResult> {
-        // TODO: Implement in DM-1.7.2
-        todo!("search_discography not yet implemented")
+    ///
+    /// Returns the artist's albums enriched with `in_catalog` and `in_queue` flags.
+    pub async fn search_discography(&self, artist_id: &str) -> Result<DiscographyResult> {
+        self.search_proxy.search_discography(artist_id).await
     }
 
     // =========================================================================
