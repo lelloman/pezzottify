@@ -13,6 +13,9 @@ monitoring/.env
 # Catalog server production config (may contain secrets)
 catalog-server/config.toml
 
+# Android SSL certificate pin (deployment-specific)
+android/ssl_pin.txt
+
 # Dynamic DNS updater
 infra/dns-config.json
 infra/.current-ip
