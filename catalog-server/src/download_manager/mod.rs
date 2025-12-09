@@ -18,6 +18,7 @@ mod watchdog;
 
 pub use audit_logger::AuditLogger;
 pub use downloader_client::DownloaderClient;
+pub use job_processor::QueueProcessor;
 pub use manager::DownloadManager;
 pub use models::*;
 pub use queue_store::{DownloadQueueStore, SqliteDownloadQueueStore};

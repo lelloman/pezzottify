@@ -2563,7 +2563,7 @@ Queue processing order: `ORDER BY priority ASC, created_at ASC`
 
 #### DM-4.1 Job Processor
 
-- [ ] **Task DM-4.1.1: Create `QueueProcessor` struct**
+- [x] **Task DM-4.1.1: Create `QueueProcessor` struct**
 
   **File:** `catalog-server/src/download_manager/job_processor.rs`
 
