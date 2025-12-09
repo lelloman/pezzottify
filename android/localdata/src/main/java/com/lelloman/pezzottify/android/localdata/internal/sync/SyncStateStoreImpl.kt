@@ -28,7 +28,7 @@ internal class SyncStateStoreImpl(
 
     override val cursor: StateFlow<Long> = mutableCursor.asStateFlow()
 
-    override fun getCursor(): Long = mutableCursor.value
+    override fun getCurrentCursor(): Long = mutableCursor.value
 
     override suspend fun saveCursor(cursor: Long) {
         withContext(dispatcher) {
