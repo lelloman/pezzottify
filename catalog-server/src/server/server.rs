@@ -3494,8 +3494,8 @@ fn load_rustls_config(ssl: &SslSettings) -> Result<axum_server::tls_rustls::Rust
     }
 
     // Load private key
-    let key_file = File::open(&ssl.key_path)
-        .map_err(|e| anyhow::anyhow!("Failed to open key file: {}", e))?;
+    let key_file =
+        File::open(&ssl.key_path).map_err(|e| anyhow::anyhow!("Failed to open key file: {}", e))?;
     let mut key_reader = BufReader::new(key_file);
     let key = rustls_pemfile::private_key(&mut key_reader)
         .map_err(|e| anyhow::anyhow!("Failed to parse private key: {}", e))?
