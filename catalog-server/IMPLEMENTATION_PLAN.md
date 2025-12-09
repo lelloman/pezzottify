@@ -2411,7 +2411,7 @@ Queue processing order: `ORDER BY priority ASC, created_at ASC`
   3. For each result, check `in_queue` via queue store
   4. Return enriched results
 
-- [ ] **Task DM-2.2.2: Implement discography search with enrichment**
+- [x] **Task DM-2.2.2: Implement discography search with enrichment**
 
   **File:** `catalog-server/src/download_manager/search_proxy.rs`
 

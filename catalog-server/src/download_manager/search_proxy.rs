@@ -112,13 +112,21 @@ impl SearchProxy {
     ///
     /// # Arguments
     /// * `artist_id` - External artist ID from the music provider
-    pub async fn search_discography(&self, _artist_id: &str) -> Result<DiscographyResult> {
-        // TODO: Implement in DM-2.2.2
-        // 1. Call downloader service discography endpoint via downloader_client
-        // 2. For the artist, check in_catalog via catalog_store
-        // 3. For each album, check in_catalog and in_queue
-        // 4. Return enriched results
-        todo!("search_discography proxy not yet implemented - requires DM-2.1.1 and DM-2.2.2")
+    pub async fn search_discography(&self, artist_id: &str) -> Result<DiscographyResult> {
+        // 1. Call downloader service discography endpoint
+        let external_disco = self.downloader_client.get_discography(artist_id).await?;
+
+        // 2. Enrich the artist result
+        let artist = self.enrich_search_result(external_disco.artist, SearchType::Artist);
+
+        // 3. Enrich each album result
+        let albums = external_disco
+            .albums
+            .into_iter()
+            .map(|ext| self.enrich_search_result(ext, SearchType::Album))
+            .collect();
+
+        Ok(DiscographyResult { artist, albums })
     }
 
     /// Check if an album exists in the catalog by external ID.
