@@ -8,7 +8,9 @@ use tracing::{error, info, level_filters::LevelFilter};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
 
 // Import modules from the library crate
-use pezzottify_catalog_server::background_jobs::jobs::{IntegrityWatchdogJob, PopularContentJob};
+use pezzottify_catalog_server::background_jobs::jobs::{
+    AuditLogCleanupJob, IntegrityWatchdogJob, PopularContentJob,
+};
 use pezzottify_catalog_server::background_jobs::{create_scheduler, JobContext};
 use pezzottify_catalog_server::catalog_store::{CatalogStore, SqliteCatalogStore};
 use pezzottify_catalog_server::config;
@@ -364,6 +366,18 @@ async fn main() -> Result<()> {
             .register_job(Arc::new(IntegrityWatchdogJob::new(watchdog)))
             .await;
         info!("Integrity watchdog job registered");
+
+        // Register audit log cleanup job
+        scheduler
+            .register_job(Arc::new(AuditLogCleanupJob::new(
+                queue_store.clone(),
+                app_config.download_manager.audit_log_retention_days,
+            )))
+            .await;
+        info!(
+            "Audit log cleanup job registered (retention: {} days)",
+            app_config.download_manager.audit_log_retention_days
+        );
     }
 
     info!("Ready to serve at port {}!", app_config.port);
