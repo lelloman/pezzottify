@@ -4,14 +4,17 @@ import android.content.Context
 import coil3.ImageLoader
 import coil3.intercept.Interceptor
 import coil3.network.httpHeaders
+import coil3.network.okhttp.OkHttpNetworkFetcherFactory
 import coil3.request.ImageResult
 import com.lelloman.pezzottify.android.domain.auth.AuthState
 import com.lelloman.pezzottify.android.domain.auth.AuthStore
 import com.lelloman.pezzottify.android.domain.config.BuildInfo
+import com.lelloman.pezzottify.android.domain.config.ConfigStore
 import com.lelloman.pezzottify.android.domain.settings.UserSettingsStore
 import com.lelloman.pezzottify.android.logger.LogLevel
 import com.lelloman.pezzottify.android.logger.LoggerFactory
 import com.lelloman.pezzottify.android.logging.LogFileManager
+import com.lelloman.pezzottify.android.remoteapi.internal.OkHttpClientFactory
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -61,10 +64,18 @@ class ApplicationModule {
     fun provideImageLoader(
         @ApplicationContext context: Context,
         authStore: AuthStore,
+        configStore: ConfigStore,
+        okHttpClientFactory: OkHttpClientFactory,
     ): ImageLoader {
+        // Create OkHttpClient with SSL pinning for image loading
+        val okHttpClient = okHttpClientFactory
+            .createBuilder(configStore.baseUrl.value)
+            .build()
+
         return ImageLoader.Builder(context)
             .components {
                 add(CoilAuthTokenInterceptor(authStore))
+                add(OkHttpNetworkFetcherFactory(callFactory = { okHttpClient }))
             }
             .build()
     }

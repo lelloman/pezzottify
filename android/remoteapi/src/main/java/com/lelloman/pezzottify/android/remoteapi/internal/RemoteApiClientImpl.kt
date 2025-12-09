@@ -34,22 +34,17 @@ import kotlinx.serialization.json.JsonNamingStrategy
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.Interceptor
 import okhttp3.MediaType.Companion.toMediaType
-import okhttp3.OkHttpClient
 import retrofit2.Response
 import retrofit2.Retrofit
 import retrofit2.converter.kotlinx.serialization.asConverterFactory
 
 internal class RemoteApiClientImpl(
     hostUrlProvider: RemoteApiClient.HostUrlProvider,
-    private val okhttpClientBuilder: OkHttpClient.Builder,
+    private val okHttpClientFactory: OkHttpClientFactory,
     private val credentialsProvider: RemoteApiCredentialsProvider,
     coroutineScope: CoroutineScope = GlobalScope,
-    interceptors: List<Interceptor> = emptyList(),
+    private val interceptors: List<Interceptor> = emptyList(),
 ) : RemoteApiClient {
-
-    init {
-        interceptors.forEach { okhttpClientBuilder.addInterceptor(it) }
-    }
 
     private val authToken get() = credentialsProvider.authToken
 
@@ -98,12 +93,16 @@ internal class RemoteApiClientImpl(
     private fun <T> Response<T>.returnFromRetrofitResponse(): RemoteApiResponse<T> =
         commonError ?: parsedBody
 
-    private fun makeRetrofit(baseUrl: String) = Retrofit.Builder()
-        .client(okhttpClientBuilder.build())
-        .baseUrl(baseUrl)
-        .addConverterFactory(jsonConverter.asConverterFactory("application/json".toMediaType()))
-        .build()
-        .create(RetrofitApiClient::class.java)
+    private fun makeRetrofit(baseUrl: String): RetrofitApiClient {
+        val okHttpBuilder = okHttpClientFactory.createBuilder(baseUrl)
+        interceptors.forEach { okHttpBuilder.addInterceptor(it) }
+        return Retrofit.Builder()
+            .client(okHttpBuilder.build())
+            .baseUrl(baseUrl)
+            .addConverterFactory(jsonConverter.asConverterFactory("application/json".toMediaType()))
+            .build()
+            .create(RetrofitApiClient::class.java)
+    }
 
     override suspend fun login(
         userHandle: String,

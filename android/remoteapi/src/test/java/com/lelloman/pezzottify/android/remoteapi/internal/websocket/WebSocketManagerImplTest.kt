@@ -8,6 +8,7 @@ import com.lelloman.pezzottify.android.domain.websocket.ConnectionState
 import com.lelloman.pezzottify.android.domain.websocket.MessageHandler
 import com.lelloman.pezzottify.android.logger.Logger
 import com.lelloman.pezzottify.android.logger.LoggerFactory
+import com.lelloman.pezzottify.android.remoteapi.internal.OkHttpClientFactory
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -32,6 +33,7 @@ class WebSocketManagerImplTest {
     private lateinit var loggerFactory: LoggerFactory
     private lateinit var testScope: TestScope
     private lateinit var webSocketManager: WebSocketManagerImpl
+    private lateinit var mockOkHttpClientFactory: OkHttpClientFactory
     private lateinit var mockOkHttpClient: OkHttpClient
     private lateinit var mockWebSocket: WebSocket
 
@@ -44,12 +46,14 @@ class WebSocketManagerImplTest {
         configStore = mockk()
         val mockLogger = mockk<Logger>(relaxed = true)
         loggerFactory = mockk()
+        mockOkHttpClientFactory = mockk()
         mockOkHttpClient = mockk()
         mockWebSocket = mockk(relaxed = true)
 
         every { loggerFactory.getValue(any(), any<KProperty<*>>()) } returns mockLogger
         every { authStore.getAuthState() } returns authStateFlow
         every { configStore.baseUrl } returns baseUrlFlow
+        every { mockOkHttpClientFactory.createBuilder(any()) } returns OkHttpClient.Builder()
         every { mockOkHttpClient.newWebSocket(any<Request>(), any<WebSocketListener>()) } returns mockWebSocket
 
         testScope = TestScope(StandardTestDispatcher())
@@ -57,9 +61,9 @@ class WebSocketManagerImplTest {
         webSocketManager = WebSocketManagerImpl(
             authStore = authStore,
             configStore = configStore,
+            okHttpClientFactory = mockOkHttpClientFactory,
             coroutineScope = testScope,
             loggerFactory = loggerFactory,
-            okHttpClient = mockOkHttpClient,
         )
     }
 

@@ -71,8 +71,37 @@ fun getGitCommit(): String {
     }
 }
 
+/**
+ * Gets SSL certificate pin hash for certificate pinning.
+ * Reads from (in order of precedence):
+ * 1. Gradle property: -PsslPinHash=sha256/...
+ * 2. File: ssl_pin.txt in project root (or path specified by -PsslPinFile=...)
+ * 3. Empty string (pinning disabled)
+ */
+fun getSslPinHash(): String {
+    // 1. Check gradle property
+    val propValue = findProperty("sslPinHash") as? String
+    if (!propValue.isNullOrBlank()) {
+        return propValue.trim()
+    }
+
+    // 2. Check file
+    val pinFilePath = (findProperty("sslPinFile") as? String) ?: "ssl_pin.txt"
+    val pinFile = rootProject.file(pinFilePath)
+    if (pinFile.exists()) {
+        val content = pinFile.readText().trim()
+        if (content.isNotBlank()) {
+            return content
+        }
+    }
+
+    // 3. No pin configured
+    return ""
+}
+
 android.defaultConfig {
     buildConfigField("String", "GIT_COMMIT", "\"${getGitCommit()}\"")
+    buildConfigField("String", "SSL_PIN_HASH", "\"${getSslPinHash()}\"")
 }
 
 dependencies {

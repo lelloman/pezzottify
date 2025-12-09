@@ -8,6 +8,7 @@ import com.lelloman.pezzottify.android.domain.remoteapi.RemoteApiCredentialsProv
 import com.lelloman.pezzottify.android.domain.websocket.WebSocketManager
 import com.lelloman.pezzottify.android.logger.LoggerFactory
 import com.lelloman.pezzottify.android.remoteapi.internal.HttpLoggingInterceptor
+import com.lelloman.pezzottify.android.remoteapi.internal.OkHttpClientFactory
 import com.lelloman.pezzottify.android.remoteapi.internal.RemoteApiClientImpl
 import com.lelloman.pezzottify.android.remoteapi.internal.websocket.WebSocketManagerImpl
 import dagger.Module
@@ -18,7 +19,6 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.StateFlow
-import okhttp3.OkHttpClient
 import javax.inject.Qualifier
 import javax.inject.Singleton
 
@@ -41,11 +41,13 @@ class RemoteApiModule {
     fun provideWebSocketManager(
         authStore: AuthStore,
         configStore: ConfigStore,
+        okHttpClientFactory: OkHttpClientFactory,
         @WebSocketScope coroutineScope: CoroutineScope,
         loggerFactory: LoggerFactory,
     ): WebSocketManager = WebSocketManagerImpl(
         authStore = authStore,
         configStore = configStore,
+        okHttpClientFactory = okHttpClientFactory,
         coroutineScope = coroutineScope,
         loggerFactory = loggerFactory,
     )
@@ -55,11 +57,12 @@ class RemoteApiModule {
     fun provideRemoteApiClient(
         authStore: AuthStore,
         configStore: ConfigStore,
+        okHttpClientFactory: OkHttpClientFactory,
         loggerFactory: LoggerFactory,
     ): RemoteApiClient {
         val httpLogger = loggerFactory.getLogger("HTTP")
         return RemoteApiClientImpl(
-            okhttpClientBuilder = OkHttpClient.Builder(),
+            okHttpClientFactory = okHttpClientFactory,
             hostUrlProvider = object : RemoteApiClient.HostUrlProvider {
                 override val hostUrl: StateFlow<String>
                     get() = configStore.baseUrl
