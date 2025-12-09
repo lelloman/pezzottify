@@ -1935,7 +1935,7 @@ Queue processing order: `ORDER BY priority ASC, created_at ASC`
   - If all children COMPLETED → return Some(COMPLETED)
   - If any child FAILED (and all others terminal) → return Some(FAILED)
 
-- [ ] **Task DM-1.4.6: Implement retry handling methods**
+- [x] **Task DM-1.4.6: Implement retry handling methods**
 
   **File:** `catalog-server/src/download_manager/queue_store.rs`
 
