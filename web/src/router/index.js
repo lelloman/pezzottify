@@ -78,6 +78,11 @@ const router = createRouter({
           name: "admin-server",
           meta: { requiresAuth: true, section: "server" },
         },
+        {
+          path: "downloads",
+          name: "admin-downloads",
+          meta: { requiresAuth: true, section: "downloads" },
+        },
       ],
     },
 

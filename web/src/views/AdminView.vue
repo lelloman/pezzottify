@@ -35,6 +35,7 @@ import AdminSidebar from "@/components/admin/AdminSidebar.vue";
 import UserManagement from "@/components/admin/UserManagement.vue";
 import AnalyticsDashboard from "@/components/admin/AnalyticsDashboard.vue";
 import ServerControl from "@/components/admin/ServerControl.vue";
+import DownloadManager from "@/components/admin/DownloadManager.vue";
 import { wsConnectionStatus, wsServerVersion } from "@/services/websocket";
 
 const route = useRoute();
@@ -87,6 +88,13 @@ const allSections = [
     permission: "ServerAdmin",
     component: ServerControl,
     route: "/admin/server",
+  },
+  {
+    id: "downloads",
+    label: "Downloads",
+    permission: "DownloadManagerAdmin",
+    component: DownloadManager,
+    route: "/admin/downloads",
   },
 ];
 

@@ -512,6 +512,104 @@ export const useRemoteStore = defineStore("remote", () => {
     }
   };
 
+  // =====================================================
+  // Admin API - Download Manager (DownloadManagerAdmin)
+  // =====================================================
+
+  const fetchDownloadStats = async () => {
+    try {
+      const response = await axios.get("/v1/download/admin/stats");
+      return response.data;
+    } catch (error) {
+      console.error("Failed to fetch download stats:", error);
+      return null;
+    }
+  };
+
+  const fetchFailedDownloads = async (limit = 50, offset = 0) => {
+    try {
+      const response = await axios.get("/v1/download/admin/failed", {
+        params: { limit, offset },
+      });
+      return response.data;
+    } catch (error) {
+      console.error("Failed to fetch failed downloads:", error);
+      return null;
+    }
+  };
+
+  const fetchDownloadActivity = async (limit = 50) => {
+    try {
+      const response = await axios.get("/v1/download/admin/activity", {
+        params: { limit },
+      });
+      return response.data;
+    } catch (error) {
+      console.error("Failed to fetch download activity:", error);
+      return null;
+    }
+  };
+
+  const fetchDownloadRequests = async (limit = 100, offset = 0) => {
+    try {
+      const response = await axios.get("/v1/download/admin/requests", {
+        params: { limit, offset },
+      });
+      return response.data;
+    } catch (error) {
+      console.error("Failed to fetch download requests:", error);
+      return null;
+    }
+  };
+
+  const fetchDownloadAuditLog = async (limit = 100, offset = 0) => {
+    try {
+      const response = await axios.get("/v1/download/admin/audit", {
+        params: { limit, offset },
+      });
+      return response.data;
+    } catch (error) {
+      console.error("Failed to fetch download audit log:", error);
+      return null;
+    }
+  };
+
+  const fetchDownloadAuditForItem = async (itemId) => {
+    try {
+      const response = await axios.get(`/v1/download/admin/audit/item/${itemId}`);
+      return response.data;
+    } catch (error) {
+      console.error("Failed to fetch audit for item:", error);
+      return null;
+    }
+  };
+
+  const fetchDownloadAuditForUser = async (userId) => {
+    try {
+      const response = await axios.get(`/v1/download/admin/audit/user/${userId}`);
+      return response.data;
+    } catch (error) {
+      console.error("Failed to fetch audit for user:", error);
+      return null;
+    }
+  };
+
+  const retryDownload = async (itemId) => {
+    try {
+      const response = await axios.post(`/v1/download/admin/retry/${itemId}`);
+      return { success: true, data: response.data };
+    } catch (error) {
+      console.error("Failed to retry download:", error);
+      if (error.response?.status === 400) {
+        return { error: error.response.data || "Item not eligible for retry" };
+      }
+      if (error.response?.status === 404) {
+        return { error: "Item not found" };
+      }
+      return { error: "Failed to retry download" };
+    }
+  };
+
   return {
     setBlockHttpCache,
     fetchLikedAlbums,
@@ -557,5 +655,14 @@ export const useRemoteStore = defineStore("remote", () => {
     fetchOnlineUsers,
     // Admin API - Server Control
     rebootServer,
+    // Admin API - Download Manager
+    fetchDownloadStats,
+    fetchFailedDownloads,
+    fetchDownloadActivity,
+    fetchDownloadRequests,
+    fetchDownloadAuditLog,
+    fetchDownloadAuditForItem,
+    fetchDownloadAuditForUser,
+    retryDownload,
   };
 });
