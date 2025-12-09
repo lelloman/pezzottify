@@ -19,6 +19,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -91,6 +92,9 @@ fun SearchScreenContent(
                 .fillMaxWidth()
                 .padding(16.dp),
             query = state.query,
+            leadingIcon = {
+                Icon(Icons.Default.Search, contentDescription = null)
+            },
             trailingIcon = {
                 if (state.query.isNotEmpty()) {
                     IconButton(onClick = { actions.updateQuery("") }) {
@@ -430,16 +434,22 @@ private fun AlbumSearchResult(
             .clickable { actions.clickOnAlbumSearchResult(searchResult.id) }
     ) {
         NullablePezzottifyImage(url = searchResult.imageUrl)
-        Column(modifier = Modifier.weight(1f)) {
+        Spacer(modifier = Modifier.width(Spacing.Medium))
+        Column(
+            modifier = Modifier.weight(1f).fillMaxHeight(),
+            verticalArrangement = Arrangement.Center
+        ) {
             Text(
-                searchResult.name, modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp)
+                text = searchResult.name,
+                style = MaterialTheme.typography.titleMedium,
+                maxLines = 1,
+                color = MaterialTheme.colorScheme.onSurface
             )
             Text(
-                searchResult.artistsIds.joinToString(", "), modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp)
+                text = searchResult.artistNames.joinToString(", "),
+                style = MaterialTheme.typography.bodySmall,
+                maxLines = 1,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
     }
@@ -457,19 +467,25 @@ private fun TrackSearchResult(
             .height(PezzottifyImageShape.SmallSquare.size)
             .clickable { actions.clickOnTrackSearchResult(searchResult.id) }
     ) {
-        NullablePezzottifyImage(url = null)
+        NullablePezzottifyImage(url = searchResult.albumImageUrl)
+        Spacer(modifier = Modifier.width(Spacing.Medium))
         Column(
             modifier = Modifier
                 .weight(1f)
                 .fillMaxHeight(),
+            verticalArrangement = Arrangement.Center
         ) {
             Text(
-                searchResult.name, modifier = Modifier
-                    .fillMaxWidth()
+                text = searchResult.name,
+                style = MaterialTheme.typography.titleMedium,
+                maxLines = 1,
+                color = MaterialTheme.colorScheme.onSurface
             )
             Text(
-                searchResult.artistsIds.joinToString(", "), modifier = Modifier
-                    .fillMaxWidth()
+                text = searchResult.artistNames.joinToString(", "),
+                style = MaterialTheme.typography.bodySmall,
+                maxLines = 1,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
         DurationText(
@@ -489,17 +505,18 @@ private fun ArtistSearchResult(
         modifier = Modifier
             .fillMaxWidth()
             .padding(8.dp)
-            .height(PezzottifyImageShape.SmallSquare.size)
+            .height(PezzottifyImageShape.SmallCircle.size)
             .clickable { actions.clickOnArtistSearchResult(searchResult.id) }
     ) {
         NullablePezzottifyImage(
             url = searchResult.imageUrl,
+            shape = PezzottifyImageShape.SmallCircle,
             placeholder = PezzottifyImagePlaceholder.Head
         )
+        Spacer(modifier = Modifier.width(Spacing.Medium))
         Text(
             searchResult.name, modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp)
                 .align(Alignment.CenterVertically)
         )
     }
