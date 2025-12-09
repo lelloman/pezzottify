@@ -69,6 +69,7 @@ import com.lelloman.pezzottify.android.ui.screen.main.profile.ProfileScreen
 import com.lelloman.pezzottify.android.ui.screen.main.profile.stylesettings.StyleSettingsScreen
 import com.lelloman.pezzottify.android.ui.screen.main.search.SearchScreen
 import com.lelloman.pezzottify.android.ui.screen.main.settings.SettingsScreen
+import com.lelloman.pezzottify.android.ui.screen.main.settings.logviewer.LogViewerScreen
 
 enum class BottomNavigationRoute(
     val route: Screen.Main,
@@ -105,6 +106,7 @@ private val overlayRoutes = setOf(
     Screen.Main.Player::class.qualifiedName,
     Screen.Main.Queue::class.qualifiedName,
     Screen.Main.FullScreenImage::class.qualifiedName,
+    Screen.Main.Home.LogViewer::class.qualifiedName,
 )
 
 @Composable
@@ -173,6 +175,9 @@ private fun MainScreenContent(state: MainScreenState, actions: MainScreenActions
                 }
                 composable<Screen.Main.Home.StyleSettings> {
                     StyleSettingsScreen(navController)
+                }
+                composable<Screen.Main.Home.LogViewer> {
+                    LogViewerScreen(navController)
                 }
                 composable<Screen.Main.Artist> {
                     ArtistScreen(it.toRoute<Screen.Main.Artist>().artistId, navController)

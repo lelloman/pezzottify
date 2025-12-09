@@ -43,6 +43,7 @@ import com.lelloman.pezzottify.android.ui.theme.AppFontFamily
 import com.lelloman.pezzottify.android.ui.theme.ColorPalette
 import com.lelloman.pezzottify.android.ui.theme.PezzottifyTheme
 import com.lelloman.pezzottify.android.ui.theme.ThemeMode
+import com.lelloman.pezzottify.android.ui.toLogViewer
 import com.lelloman.pezzottify.android.ui.toStyleSettings
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -207,6 +208,7 @@ private fun SettingsScreenInternal(
                 hasLogs = currentState.hasLogFiles,
                 logSize = currentState.logFilesSize,
                 onEnabledChanged = actions::setFileLoggingEnabled,
+                onViewLogs = { navController.toLogViewer() },
                 onShareLogs = actions::shareLogs,
                 onClearLogs = actions::clearLogs,
             )

@@ -65,6 +65,7 @@ import com.lelloman.pezzottify.android.ui.screen.main.profile.ProfileScreenViewM
 import com.lelloman.pezzottify.android.ui.screen.main.profile.stylesettings.StyleSettingsViewModel
 import com.lelloman.pezzottify.android.ui.screen.main.search.SearchScreenViewModel
 import com.lelloman.pezzottify.android.ui.screen.main.settings.SettingsScreenViewModel
+import com.lelloman.pezzottify.android.ui.screen.main.settings.logviewer.LogViewerScreenViewModel
 import com.lelloman.pezzottify.android.ui.screen.player.PlayerScreenViewModel
 import com.lelloman.pezzottify.android.ui.screen.queue.QueueScreenViewModel
 import com.lelloman.pezzottify.android.ui.screen.splash.SplashViewModel
@@ -283,6 +284,13 @@ class InteractorsModule {
         override suspend fun setFontFamily(fontFamily: UiAppFontFamily) {
             userSettingsStore.setFontFamily(fontFamily.toDomain())
         }
+    }
+
+    @Provides
+    fun provideLogViewerScreenInteractor(
+        logFileManager: LogFileManager,
+    ): LogViewerScreenViewModel.Interactor = object : LogViewerScreenViewModel.Interactor {
+        override fun getLogContent(): String = logFileManager.getLogContent()
     }
 
     @Provides
