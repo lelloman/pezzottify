@@ -1975,11 +1975,11 @@ Queue processing order: `ORDER BY priority ASC, created_at ASC`
 
   **Methods:** `log_audit_event`, `get_audit_log`, `get_audit_for_item`, `get_audit_for_user`, `cleanup_old_audit_entries`
 
-- [ ] **Task DM-1.4.12: Add unit tests for queue store**
+- [x] **Task DM-1.4.12: Add unit tests for queue store**
 
   **File:** `catalog-server/src/download_manager/queue_store.rs` (test module)
 
-  **Test cases:**
+  **Test cases:** (103 tests implemented covering all scenarios)
   - Enqueue and retrieve items
   - Priority ordering (watchdog > user > expansion)
   - State transitions (atomic, valid transitions only)
@@ -1993,7 +1993,7 @@ Queue processing order: `ORDER BY priority ASC, created_at ASC`
 
 #### DM-1.5 Support Components
 
-- [ ] **Task DM-1.5.1: Implement `RetryPolicy`**
+- [x] **Task DM-1.5.1: Implement `RetryPolicy`**
 
   **File:** `catalog-server/src/download_manager/retry_policy.rs`
 
@@ -2031,7 +2031,7 @@ Queue processing order: `ORDER BY priority ASC, created_at ASC`
   }
   ```
 
-- [ ] **Task DM-1.5.2: Add unit tests for `RetryPolicy`**
+- [x] **Task DM-1.5.2: Add unit tests for `RetryPolicy`**
 
   **File:** `catalog-server/src/download_manager/retry_policy.rs` (test module)
 
