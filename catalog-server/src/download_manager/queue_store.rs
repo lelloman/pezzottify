@@ -824,15 +824,40 @@ impl DownloadQueueStore for SqliteDownloadQueueStore {
         Ok(items)
     }
 
-    // Stub implementations for remaining trait methods (to be implemented in later tasks)
+    // === Retry Handling ===
 
     fn get_retry_ready(&self) -> Result<Vec<QueueItem>> {
-        todo!("Implement in DM-1.4.6")
+        let conn = self.conn.lock().unwrap();
+        let now = Self::now();
+
+        let mut stmt = conn.prepare(
+            r#"SELECT * FROM download_queue
+               WHERE status = 'RETRY_WAITING' AND next_retry_at <= ?1
+               ORDER BY priority ASC, next_retry_at ASC"#,
+        )?;
+
+        let items = stmt
+            .query_map([now], Self::row_to_queue_item)?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+
+        Ok(items)
     }
 
-    fn promote_retry_to_pending(&self, _id: &str) -> Result<()> {
-        todo!("Implement in DM-1.4.6")
+    fn promote_retry_to_pending(&self, id: &str) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+
+        conn.execute(
+            r#"UPDATE download_queue
+               SET status = 'PENDING',
+                   next_retry_at = NULL
+               WHERE id = ?1 AND status = 'RETRY_WAITING'"#,
+            [id],
+        )?;
+
+        Ok(())
     }
+
+    // Stub implementations for remaining trait methods (to be implemented in later tasks)
 
     fn find_by_content(&self, _content_type: DownloadContentType, _content_id: &str) -> Result<Option<QueueItem>> {
         todo!("Implement in DM-1.4.7")
@@ -2031,5 +2056,200 @@ mod tests {
         // Get third page (1 item)
         let page3 = store.get_user_requests("user-1", 2, 4).unwrap();
         assert_eq!(page3.len(), 1);
+    }
+
+    // === Retry Handling Tests ===
+
+    #[test]
+    fn test_get_retry_ready_none() {
+        let store = SqliteDownloadQueueStore::in_memory().unwrap();
+
+        // No items
+        let ready = store.get_retry_ready().unwrap();
+        assert!(ready.is_empty());
+    }
+
+    #[test]
+    fn test_get_retry_ready_with_items() {
+        let store = SqliteDownloadQueueStore::in_memory().unwrap();
+
+        // Create item and put it in retry waiting state
+        let item = QueueItem::new(
+            "item-1".to_string(),
+            DownloadContentType::Album,
+            "album-1".to_string(),
+            QueuePriority::User,
+            RequestSource::User,
+            5,
+        );
+        store.enqueue(item).unwrap();
+
+        // Mark it for retry with a past retry time
+        let error = DownloadError::new(DownloadErrorType::Timeout, "Timeout");
+        let past_time = 1000; // Far in the past
+        store.mark_retry_waiting("item-1", past_time, &error).unwrap();
+
+        // Should be ready for retry
+        let ready = store.get_retry_ready().unwrap();
+        assert_eq!(ready.len(), 1);
+        assert_eq!(ready[0].id, "item-1");
+    }
+
+    #[test]
+    fn test_get_retry_ready_not_yet() {
+        let store = SqliteDownloadQueueStore::in_memory().unwrap();
+
+        let item = QueueItem::new(
+            "item-1".to_string(),
+            DownloadContentType::Album,
+            "album-1".to_string(),
+            QueuePriority::User,
+            RequestSource::User,
+            5,
+        );
+        store.enqueue(item).unwrap();
+
+        // Mark for retry with a far future time
+        let error = DownloadError::new(DownloadErrorType::Timeout, "Timeout");
+        let future_time = 9999999999; // Far in the future
+        store.mark_retry_waiting("item-1", future_time, &error).unwrap();
+
+        // Should not be ready yet
+        let ready = store.get_retry_ready().unwrap();
+        assert!(ready.is_empty());
+    }
+
+    #[test]
+    fn test_get_retry_ready_priority_order() {
+        let store = SqliteDownloadQueueStore::in_memory().unwrap();
+
+        // Create items with different priorities
+        let high = QueueItem::new(
+            "high".to_string(),
+            DownloadContentType::Album,
+            "album-1".to_string(),
+            QueuePriority::Watchdog,
+            RequestSource::Watchdog,
+            5,
+        );
+        let low = QueueItem::new(
+            "low".to_string(),
+            DownloadContentType::Album,
+            "album-2".to_string(),
+            QueuePriority::Expansion,
+            RequestSource::Expansion,
+            5,
+        );
+
+        store.enqueue(low).unwrap();
+        store.enqueue(high).unwrap();
+
+        let error = DownloadError::new(DownloadErrorType::Timeout, "Timeout");
+        store.mark_retry_waiting("low", 1000, &error).unwrap();
+        store.mark_retry_waiting("high", 1000, &error).unwrap();
+
+        // Should return high priority first
+        let ready = store.get_retry_ready().unwrap();
+        assert_eq!(ready.len(), 2);
+        assert_eq!(ready[0].id, "high");
+        assert_eq!(ready[1].id, "low");
+    }
+
+    #[test]
+    fn test_promote_retry_to_pending() {
+        let store = SqliteDownloadQueueStore::in_memory().unwrap();
+
+        let item = QueueItem::new(
+            "item-1".to_string(),
+            DownloadContentType::Album,
+            "album-1".to_string(),
+            QueuePriority::User,
+            RequestSource::User,
+            5,
+        );
+        store.enqueue(item).unwrap();
+
+        // Mark for retry
+        let error = DownloadError::new(DownloadErrorType::Timeout, "Timeout");
+        store.mark_retry_waiting("item-1", 1000, &error).unwrap();
+
+        // Verify retry waiting state
+        let item = store.get_item("item-1").unwrap().unwrap();
+        assert_eq!(item.status, QueueStatus::RetryWaiting);
+        assert!(item.next_retry_at.is_some());
+
+        // Promote to pending
+        store.promote_retry_to_pending("item-1").unwrap();
+
+        // Verify pending state
+        let item = store.get_item("item-1").unwrap().unwrap();
+        assert_eq!(item.status, QueueStatus::Pending);
+        assert!(item.next_retry_at.is_none());
+    }
+
+    #[test]
+    fn test_promote_retry_to_pending_not_retry_waiting() {
+        let store = SqliteDownloadQueueStore::in_memory().unwrap();
+
+        let item = QueueItem::new(
+            "item-1".to_string(),
+            DownloadContentType::Album,
+            "album-1".to_string(),
+            QueuePriority::User,
+            RequestSource::User,
+            5,
+        );
+        store.enqueue(item).unwrap();
+
+        // Item is pending, not retry waiting
+        // Promoting should have no effect (WHERE clause won't match)
+        store.promote_retry_to_pending("item-1").unwrap();
+
+        // Still pending
+        let item = store.get_item("item-1").unwrap().unwrap();
+        assert_eq!(item.status, QueueStatus::Pending);
+    }
+
+    #[test]
+    fn test_retry_workflow() {
+        let store = SqliteDownloadQueueStore::in_memory().unwrap();
+
+        // Create and process an item
+        let item = QueueItem::new(
+            "item-1".to_string(),
+            DownloadContentType::TrackAudio,
+            "track-1".to_string(),
+            QueuePriority::User,
+            RequestSource::User,
+            3,
+        );
+        store.enqueue(item).unwrap();
+
+        // Start processing
+        store.claim_for_processing("item-1").unwrap();
+
+        // Simulate failure - mark for retry
+        let error = DownloadError::new(DownloadErrorType::Connection, "Connection refused");
+        store.mark_retry_waiting("item-1", 1000, &error).unwrap();
+
+        // Item should be retry waiting
+        let item = store.get_item("item-1").unwrap().unwrap();
+        assert_eq!(item.status, QueueStatus::RetryWaiting);
+        assert_eq!(item.retry_count, 1);
+
+        // Get items ready for retry
+        let ready = store.get_retry_ready().unwrap();
+        assert_eq!(ready.len(), 1);
+
+        // Promote back to pending
+        store.promote_retry_to_pending("item-1").unwrap();
+
+        // Should be pending again
+        let item = store.get_item("item-1").unwrap().unwrap();
+        assert_eq!(item.status, QueueStatus::Pending);
+
+        // Claim again for second attempt
+        assert!(store.claim_for_processing("item-1").unwrap());
+        assert_eq!(store.get_item("item-1").unwrap().unwrap().status, QueueStatus::InProgress);
     }
 }
