@@ -14,6 +14,7 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 TELEGRAM_BOT_TOKEN = os.environ.get('TELEGRAM_BOT_TOKEN')
 TELEGRAM_CHAT_ID = os.environ.get('TELEGRAM_CHAT_ID')
 TELEGRAM_API_URL = f'https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage'
+HOST_HOSTNAME = os.environ.get('HOST_HOSTNAME', 'unknown')
 
 
 def format_alert(alert: dict) -> str:
@@ -32,6 +33,7 @@ def format_alert(alert: dict) -> str:
     emoji = '🔴' if status == 'FIRING' else '✅'
 
     lines = [f"{emoji} <b>{status}: {alertname}</b>"]
+    lines.append(f"Host: {HOST_HOSTNAME}")
 
     if severity:
         lines.append(f"Severity: {severity}")
