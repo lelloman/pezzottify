@@ -3465,6 +3465,100 @@ async fn admin_get_download_requests(
     }
 }
 
+/// Query parameters for audit log endpoint
+#[derive(serde::Deserialize)]
+struct AuditLogQuery {
+    queue_item_id: Option<String>,
+    user_id: Option<String>,
+    event_type: Option<String>,
+    content_type: Option<String>,
+    content_id: Option<String>,
+    since: Option<i64>,
+    until: Option<i64>,
+    limit: Option<usize>,
+    offset: Option<usize>,
+}
+
+/// Response for audit log endpoint
+#[derive(serde::Serialize)]
+struct AuditLogResponse {
+    entries: Vec<crate::download_manager::AuditLogEntry>,
+    total_count: usize,
+    has_more: bool,
+}
+
+/// GET /v1/download/admin/audit - Get audit log entries
+async fn admin_get_audit_log(
+    _session: Session,
+    State(download_manager): State<super::state::OptionalDownloadManager>,
+    Query(query): Query<AuditLogQuery>,
+) -> Response {
+    let dm = match download_manager {
+        Some(dm) => dm,
+        None => {
+            return (
+                StatusCode::SERVICE_UNAVAILABLE,
+                "Download manager not enabled",
+            )
+                .into_response()
+        }
+    };
+
+    let limit = query.limit.unwrap_or(100).min(500);
+    let offset = query.offset.unwrap_or(0);
+
+    // Build filter from query params
+    let mut filter = crate::download_manager::AuditLogFilter::new()
+        .paginate(limit, offset);
+
+    if let Some(queue_item_id) = query.queue_item_id {
+        filter = filter.for_queue_item(queue_item_id);
+    }
+
+    if let Some(user_id) = query.user_id {
+        filter = filter.for_user(user_id);
+    }
+
+    if let Some(event_type_str) = query.event_type {
+        if let Some(event_type) = crate::download_manager::AuditEventType::from_str(&event_type_str) {
+            filter = filter.with_event_types(vec![event_type]);
+        }
+    }
+
+    if let Some(content_type_str) = query.content_type {
+        if let Some(content_type) = crate::download_manager::DownloadContentType::from_str(&content_type_str) {
+            filter = filter.for_content_type(content_type);
+        }
+    }
+
+    if let Some(content_id) = query.content_id {
+        filter = filter.for_content_id(content_id);
+    }
+
+    // Apply time range filters
+    let since = query.since.or(filter.since);
+    let until = query.until.or(filter.until);
+    if since.is_some() || until.is_some() {
+        filter = filter.in_range(since, until);
+    }
+
+    match dm.get_audit_log(filter) {
+        Ok((entries, total_count)) => {
+            let has_more = offset + entries.len() < total_count;
+            let response = AuditLogResponse {
+                entries,
+                total_count,
+                has_more,
+            };
+            Json(response).into_response()
+        }
+        Err(err) => {
+            error!("Error getting audit log: {}", err);
+            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+        }
+    }
+}
+
 impl ServerState {
     #[allow(clippy::arc_with_non_send_sync, clippy::too_many_arguments)]
     fn new(
@@ -3910,6 +4004,7 @@ pub fn make_app(
         .route("/admin/failed", get(admin_get_download_failed))
         .route("/admin/activity", get(admin_get_download_activity))
         .route("/admin/requests", get(admin_get_download_requests))
+        .route("/admin/audit", get(admin_get_audit_log))
         .route_layer(middleware::from_fn_with_state(
             state.clone(),
             require_view_analytics,

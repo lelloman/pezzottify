@@ -2987,7 +2987,7 @@ Queue processing order: `ORDER BY priority ASC, created_at ASC`
 
 #### DM-6.2 Audit Log Handlers
 
-- [ ] **Task DM-6.2.1: Create `GET /v1/download/admin/audit` handler**
+- [x] **Task DM-6.2.1: Create `GET /v1/download/admin/audit` handler**
 
   **File:** `catalog-server/src/server/server.rs`
 
