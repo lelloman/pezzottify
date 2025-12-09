@@ -9,6 +9,7 @@ import com.lelloman.pezzottify.android.domain.player.PlaybackPlaylistContext
 import com.lelloman.pezzottify.android.domain.statics.Album
 import com.lelloman.pezzottify.android.domain.statics.StaticsItem
 import com.lelloman.pezzottify.android.domain.statics.StaticsProvider
+import com.lelloman.pezzottify.android.domain.usercontent.UserPlaylistStore
 import com.lelloman.pezzottify.android.logger.LoggerFactory
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.DelicateCoroutinesApi
@@ -30,6 +31,7 @@ internal class PlayerImpl(
     loggerFactory: LoggerFactory,
     private val platformPlayer: PlatformPlayer,
     private val configStore: ConfigStore,
+    private val userPlaylistStore: UserPlaylistStore,
     private val coroutineScope: CoroutineScope = GlobalScope,
 ) : PezzottifyPlayer, ControlsAndStatePlayer by platformPlayer {
 
@@ -116,7 +118,29 @@ internal class PlayerImpl(
     }
 
     override fun loadUserPlaylist(userPlaylistId: String) {
-        TODO("Not yet implemented")
+        runOnPlayerThread {
+            loadNexPlaylistJob?.cancel()
+            loadNexPlaylistJob = runOnPlayerThread {
+                val playlist = withTimeoutOrNull(2.seconds) {
+                    userPlaylistStore.getPlaylist(userPlaylistId).first()
+                }
+                if (playlist != null && playlist.trackIds.isNotEmpty()) {
+                    val tracksIds = playlist.trackIds
+                    mutablePlaybackPlaylist.value = PlaybackPlaylist(
+                        context = PlaybackPlaylistContext.UserPlaylist(userPlaylistId, isEdited = false),
+                        tracksIds = tracksIds,
+                    )
+                    platformPlayer.setIsPlaying(true)
+                    logger.info("Loading user playlist into platform player.")
+                    val baseUrl = configStore.baseUrl.value
+                    val urls = tracksIds.map { "$baseUrl/v1/content/stream/$it" }
+                    platformPlayer.loadPlaylist(urls)
+                    logger.info("Loaded user playlist $userPlaylistId with ${tracksIds.size} tracks")
+                } else {
+                    logger.warn("User playlist $userPlaylistId not found or empty")
+                }
+            }
+        }
     }
 
     override fun forward10Sec() {

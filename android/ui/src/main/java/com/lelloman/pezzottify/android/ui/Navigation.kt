@@ -43,6 +43,8 @@ fun NavController.toTrack(trackId: String) = navigate(Main.Track(trackId))
 
 fun NavController.toAlbum(albumId: String) = navigate(Main.Album(albumId))
 
+fun NavController.toUserPlaylist(playlistId: String) = navigate(Main.UserPlaylist(playlistId))
+
 sealed interface Screen {
 
     @Serializable
@@ -86,6 +88,9 @@ sealed interface Screen {
 
         @Serializable
         data class Album(val albumId: String) : Main
+
+        @Serializable
+        data class UserPlaylist(val playlistId: String) : Main
 
         @Serializable
         data class FullScreenImage(val imageUrl: String) : Main

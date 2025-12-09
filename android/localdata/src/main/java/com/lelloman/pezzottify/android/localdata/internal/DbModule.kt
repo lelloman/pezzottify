@@ -34,6 +34,6 @@ internal class DbModule {
     @Singleton
     internal fun provideUserContentDb(@ApplicationContext context: Context): UserContentDb = Room
         .databaseBuilder(context, UserContentDb::class.java, UserContentDb.NAME)
-        .addMigrations(UserContentDb.MIGRATION_1_2)
+        .addMigrations(UserContentDb.MIGRATION_1_2, UserContentDb.MIGRATION_2_3)
         .build()
 }

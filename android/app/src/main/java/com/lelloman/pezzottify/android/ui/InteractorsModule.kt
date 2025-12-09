@@ -47,6 +47,7 @@ import com.lelloman.pezzottify.android.domain.user.ViewedContent
 import com.lelloman.pezzottify.android.domain.usercontent.GetLikedStateUseCase
 import com.lelloman.pezzottify.android.domain.usercontent.ToggleLikeUseCase
 import com.lelloman.pezzottify.android.domain.usercontent.UserContentStore
+import com.lelloman.pezzottify.android.domain.usercontent.UserPlaylistStore
 import com.lelloman.pezzottify.android.logger.LoggerFactory
 import com.lelloman.pezzottify.android.logging.LogFileManager
 import com.lelloman.pezzottify.android.ui.screen.login.LoginViewModel
@@ -60,6 +61,8 @@ import com.lelloman.pezzottify.android.ui.screen.main.home.PopularAlbumState
 import com.lelloman.pezzottify.android.ui.screen.main.home.PopularArtistState
 import com.lelloman.pezzottify.android.ui.screen.main.home.PopularContentState
 import com.lelloman.pezzottify.android.ui.screen.main.home.ViewedContentType
+import com.lelloman.pezzottify.android.ui.screen.main.content.userplaylist.UiUserPlaylistDetails
+import com.lelloman.pezzottify.android.ui.screen.main.content.userplaylist.UserPlaylistScreenViewModel
 import com.lelloman.pezzottify.android.ui.screen.main.library.LibraryScreenViewModel
 import com.lelloman.pezzottify.android.ui.screen.main.profile.ProfileScreenViewModel
 import com.lelloman.pezzottify.android.ui.screen.main.profile.stylesettings.StyleSettingsViewModel
@@ -720,10 +723,72 @@ class InteractorsModule {
     @Provides
     fun provideLibraryScreenInteractor(
         userContentStore: UserContentStore,
+        userPlaylistStore: UserPlaylistStore,
+        player: PezzottifyPlayer,
     ): LibraryScreenViewModel.Interactor =
         object : LibraryScreenViewModel.Interactor {
             override fun getLikedContent(): Flow<List<UiLikedContent>> =
                 userContentStore.getLikedContent().map { it.toUi() }
+
+            override fun getPlaylists() = userPlaylistStore.getPlaylists().map { playlists ->
+                playlists.map { playlist ->
+                    com.lelloman.pezzottify.android.ui.screen.main.library.UiUserPlaylist(
+                        id = playlist.id,
+                        name = playlist.name,
+                        trackCount = playlist.trackIds.size,
+                    )
+                }
+            }
+
+            override fun playTrack(trackId: String) {
+                player.addTracksToPlaylist(listOf(trackId))
+            }
+        }
+
+    @Provides
+    fun provideUserPlaylistScreenInteractor(
+        userPlaylistStore: UserPlaylistStore,
+        player: PezzottifyPlayer,
+        userSettingsStore: UserSettingsStore,
+        logViewedContentUseCase: LogViewedContentUseCase,
+    ): UserPlaylistScreenViewModel.Interactor =
+        object : UserPlaylistScreenViewModel.Interactor {
+            override fun getPlaylist(playlistId: String): Flow<UiUserPlaylistDetails?> =
+                userPlaylistStore.getPlaylist(playlistId).map { playlist ->
+                    playlist?.let {
+                        UiUserPlaylistDetails(
+                            id = it.id,
+                            name = it.name,
+                            trackIds = it.trackIds,
+                        )
+                    }
+                }
+
+            override fun playPlaylist(playlistId: String) {
+                player.loadUserPlaylist(playlistId)
+            }
+
+            override fun playTrack(playlistId: String, trackId: String) {
+                // For now, clicking a track adds it to the queue
+                // The play button plays the entire playlist
+                player.addTracksToPlaylist(listOf(trackId))
+            }
+
+            override fun logViewedPlaylist(playlistId: String) {
+                logViewedContentUseCase(playlistId, ViewedContent.Type.UserPlaylist)
+            }
+
+            override fun getCurrentPlayingTrackId(): Flow<String?> =
+                player.playbackPlaylist.combine(player.currentTrackIndex) { playlist, currentTrackIndex ->
+                    if (playlist != null && currentTrackIndex != null && currentTrackIndex in playlist.tracksIds.indices) {
+                        playlist.tracksIds[currentTrackIndex]
+                    } else {
+                        null
+                    }
+                }
+
+            override fun getIsAddToQueueMode(): Flow<Boolean> =
+                userSettingsStore.playBehavior.map { it == DomainPlayBehavior.AddToPlaylist }
         }
 
 }

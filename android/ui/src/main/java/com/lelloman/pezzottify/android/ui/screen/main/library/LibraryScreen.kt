@@ -1,5 +1,6 @@
 package com.lelloman.pezzottify.android.ui.screen.main.library
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -8,9 +9,12 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SegmentedButton
@@ -25,20 +29,28 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import com.lelloman.pezzottify.android.ui.component.AlbumGridItem
 import com.lelloman.pezzottify.android.ui.component.ArtistGridItem
+import com.lelloman.pezzottify.android.ui.component.DurationText
 import com.lelloman.pezzottify.android.ui.component.LoadingScreen
+import com.lelloman.pezzottify.android.ui.component.PlaylistGridItem
+import com.lelloman.pezzottify.android.ui.component.ScrollingArtistsRow
 import com.lelloman.pezzottify.android.ui.content.Content
 import com.lelloman.pezzottify.android.ui.content.ContentResolver
+import com.lelloman.pezzottify.android.ui.content.Track
 import com.lelloman.pezzottify.android.ui.toAlbum
 import com.lelloman.pezzottify.android.ui.toArtist
+import com.lelloman.pezzottify.android.ui.toUserPlaylist
 
 private enum class LibraryTab {
     Albums,
     Artists,
+    Tracks,
+    Playlists,
 }
 
 @Composable
@@ -48,6 +60,7 @@ fun LibraryScreen(navController: NavController) {
         state = viewModel.state.collectAsState().value,
         contentResolver = viewModel.contentResolver,
         navController = navController,
+        onPlayTrack = viewModel::playTrack,
     )
 }
 
@@ -57,6 +70,7 @@ private fun LibraryScreenContent(
     state: LibraryScreenState,
     contentResolver: ContentResolver,
     navController: NavController,
+    onPlayTrack: (String) -> Unit,
 ) {
     var selectedTab by rememberSaveable { mutableStateOf(LibraryTab.Albums) }
 
@@ -102,6 +116,7 @@ private fun LibraryScreenContent(
                     selectedTab = selectedTab,
                     contentResolver = contentResolver,
                     navController = navController,
+                    onPlayTrack = onPlayTrack,
                 )
             }
         }
@@ -135,6 +150,7 @@ private fun LibraryLoadedScreen(
     selectedTab: LibraryTab,
     contentResolver: ContentResolver,
     navController: NavController,
+    onPlayTrack: (String) -> Unit,
 ) {
     when (selectedTab) {
         LibraryTab.Albums -> {
@@ -167,6 +183,37 @@ private fun LibraryLoadedScreen(
                         ArtistGrid(
                             artistIds = state.likedArtistIds,
                             contentResolver = contentResolver,
+                            navController = navController,
+                        )
+                    }
+                }
+            }
+        }
+        LibraryTab.Tracks -> {
+            if (state.likedTrackIds.isEmpty()) {
+                EmptyLibraryScreen(
+                    title = "No liked tracks yet",
+                    subtitle = "Tracks you like will appear here"
+                )
+            } else {
+                TrackList(
+                    trackIds = state.likedTrackIds,
+                    contentResolver = contentResolver,
+                    onPlayTrack = onPlayTrack,
+                )
+            }
+        }
+        LibraryTab.Playlists -> {
+            if (state.playlists.isEmpty()) {
+                EmptyLibraryScreen(
+                    title = "No playlists yet",
+                    subtitle = "Your playlists will appear here"
+                )
+            } else {
+                LazyColumn(modifier = Modifier.fillMaxSize()) {
+                    item {
+                        PlaylistGrid(
+                            playlists = state.playlists,
                             navController = navController,
                         )
                     }
@@ -248,11 +295,114 @@ private fun ArtistGrid(
 }
 
 @Composable
+private fun PlaylistGrid(
+    playlists: List<UiUserPlaylist>,
+    navController: NavController,
+) {
+    val maxGroupSize = 2
+    playlists.forEachGroup(maxGroupSize) { items ->
+        Row(modifier = Modifier.fillMaxWidth()) {
+            for (i in 0 until maxGroupSize) {
+                val playlist = items.getOrNull(i)
+                if (playlist != null) {
+                    PlaylistGridItem(
+                        modifier = Modifier.weight(1f),
+                        playlistName = playlist.name,
+                        trackCount = playlist.trackCount,
+                        onClick = { navController.toUserPlaylist(playlist.id) },
+                    )
+                } else {
+                    Spacer(modifier = Modifier.weight(1f))
+                }
+            }
+        }
+    }
+}
+
+@Composable
 private fun <T> List<T>.forEachGroup(maxGroupSize: Int, action: @Composable (List<T>) -> Unit) {
     val nGroups = size / maxGroupSize + (if (size % maxGroupSize > 0) 1 else 0)
     for (i in 0 until nGroups) {
         val start = i * maxGroupSize
         val end = minOf(start + maxGroupSize, size)
         action(subList(start, end))
+    }
+}
+
+@Composable
+private fun TrackList(
+    trackIds: List<String>,
+    contentResolver: ContentResolver,
+    onPlayTrack: (String) -> Unit,
+) {
+    LazyColumn(modifier = Modifier.fillMaxSize()) {
+        items(trackIds) { trackId ->
+            val trackFlow = contentResolver.resolveTrack(trackId)
+            val trackState = trackFlow.collectAsState(Content.Loading(trackId))
+            when (val track = trackState.value) {
+                is Content.Resolved -> TrackListItem(
+                    track = track.data,
+                    onClick = { onPlayTrack(trackId) },
+                )
+                is Content.Loading -> LoadingTrackListItem()
+                is Content.Error -> ErrorTrackListItem()
+            }
+        }
+    }
+}
+
+@Composable
+private fun TrackListItem(
+    track: Track,
+    onClick: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = track.name,
+                style = MaterialTheme.typography.bodyLarge,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            ScrollingArtistsRow(artists = track.artists)
+        }
+        DurationText(
+            durationSeconds = track.durationSeconds,
+            modifier = Modifier.padding(start = 16.dp)
+        )
+    }
+}
+
+@Composable
+private fun LoadingTrackListItem() {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        CircularProgressIndicator(modifier = Modifier.size(24.dp))
+    }
+}
+
+@Composable
+private fun ErrorTrackListItem() {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = "Error loading track",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.error
+        )
     }
 }
