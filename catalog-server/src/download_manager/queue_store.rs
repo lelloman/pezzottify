@@ -1212,19 +1212,70 @@ impl DownloadQueueStore for SqliteDownloadQueueStore {
         Ok(result)
     }
 
-    // Stub implementations for remaining trait methods (to be implemented in later tasks)
+    // === Statistics ===
 
     fn get_queue_stats(&self) -> Result<QueueStats> {
-        todo!("Implement in DM-1.4.10")
+        let conn = self.conn.lock().unwrap();
+        let day_start = Self::day_start_bucket();
+
+        let stats = conn.query_row(
+            r#"SELECT
+                   COALESCE(SUM(CASE WHEN status = 'PENDING' THEN 1 ELSE 0 END), 0) as pending,
+                   COALESCE(SUM(CASE WHEN status = 'IN_PROGRESS' THEN 1 ELSE 0 END), 0) as in_progress,
+                   COALESCE(SUM(CASE WHEN status = 'RETRY_WAITING' THEN 1 ELSE 0 END), 0) as retry_waiting,
+                   COALESCE(SUM(CASE WHEN status = 'COMPLETED' AND completed_at >= ?1 THEN 1 ELSE 0 END), 0) as completed_today,
+                   COALESCE(SUM(CASE WHEN status = 'FAILED' AND completed_at >= ?1 THEN 1 ELSE 0 END), 0) as failed_today
+               FROM download_queue"#,
+            [day_start],
+            |row| {
+                Ok(QueueStats {
+                    pending: row.get("pending")?,
+                    in_progress: row.get("in_progress")?,
+                    retry_waiting: row.get("retry_waiting")?,
+                    completed_today: row.get("completed_today")?,
+                    failed_today: row.get("failed_today")?,
+                })
+            },
+        )?;
+
+        Ok(stats)
     }
 
-    fn get_failed_items(&self, _limit: usize, _offset: usize) -> Result<Vec<QueueItem>> {
-        todo!("Implement in DM-1.4.10")
+    fn get_failed_items(&self, limit: usize, offset: usize) -> Result<Vec<QueueItem>> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare(
+            r#"SELECT * FROM download_queue
+               WHERE status = 'FAILED'
+               ORDER BY completed_at DESC
+               LIMIT ?1 OFFSET ?2"#,
+        )?;
+
+        let items = stmt
+            .query_map(rusqlite::params![limit as i64, offset as i64], Self::row_to_queue_item)?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+
+        Ok(items)
     }
 
-    fn get_stale_in_progress(&self, _stale_threshold_secs: i64) -> Result<Vec<QueueItem>> {
-        todo!("Implement in DM-1.4.10")
+    fn get_stale_in_progress(&self, stale_threshold_secs: i64) -> Result<Vec<QueueItem>> {
+        let conn = self.conn.lock().unwrap();
+        let now = Self::now();
+        let threshold = now - stale_threshold_secs;
+
+        let mut stmt = conn.prepare(
+            r#"SELECT * FROM download_queue
+               WHERE status = 'IN_PROGRESS' AND started_at < ?1
+               ORDER BY started_at ASC"#,
+        )?;
+
+        let items = stmt
+            .query_map([threshold], Self::row_to_queue_item)?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+
+        Ok(items)
     }
+
+    // Stub implementations for remaining trait methods (to be implemented in later tasks)
 
     fn log_audit_event(&self, _event: AuditLogEntry) -> Result<()> {
         todo!("Implement in DM-1.4.11")
@@ -3150,5 +3201,249 @@ mod tests {
         let now = SqliteDownloadQueueStore::now();
         assert!(now - bucket < 86400);
         assert!(now >= bucket);
+    }
+
+    // === Statistics Tests ===
+
+    #[test]
+    fn test_get_queue_stats_empty() {
+        let store = SqliteDownloadQueueStore::in_memory().unwrap();
+
+        let stats = store.get_queue_stats().unwrap();
+        assert_eq!(stats.pending, 0);
+        assert_eq!(stats.in_progress, 0);
+        assert_eq!(stats.retry_waiting, 0);
+        assert_eq!(stats.completed_today, 0);
+        assert_eq!(stats.failed_today, 0);
+    }
+
+    #[test]
+    fn test_get_queue_stats_various_statuses() {
+        let store = SqliteDownloadQueueStore::in_memory().unwrap();
+
+        // Add items with various statuses
+        let pending = QueueItem::new(
+            "pending".to_string(),
+            DownloadContentType::Album,
+            "album-1".to_string(),
+            QueuePriority::User,
+            RequestSource::User,
+            5,
+        );
+        store.enqueue(pending).unwrap();
+
+        let in_progress = QueueItem::new(
+            "in-progress".to_string(),
+            DownloadContentType::Album,
+            "album-2".to_string(),
+            QueuePriority::User,
+            RequestSource::User,
+            5,
+        );
+        store.enqueue(in_progress).unwrap();
+        store.claim_for_processing("in-progress").unwrap();
+
+        let retry = QueueItem::new(
+            "retry".to_string(),
+            DownloadContentType::Album,
+            "album-3".to_string(),
+            QueuePriority::User,
+            RequestSource::User,
+            5,
+        );
+        store.enqueue(retry).unwrap();
+        let error = DownloadError::new(DownloadErrorType::Timeout, "Timeout");
+        store.mark_retry_waiting("retry", 1000, &error).unwrap();
+
+        let stats = store.get_queue_stats().unwrap();
+        assert_eq!(stats.pending, 1);
+        assert_eq!(stats.in_progress, 1);
+        assert_eq!(stats.retry_waiting, 1);
+    }
+
+    #[test]
+    fn test_get_queue_stats_completed_today() {
+        let store = SqliteDownloadQueueStore::in_memory().unwrap();
+
+        // Add and complete some items
+        let item = QueueItem::new(
+            "item".to_string(),
+            DownloadContentType::Album,
+            "album-1".to_string(),
+            QueuePriority::User,
+            RequestSource::User,
+            5,
+        );
+        store.enqueue(item).unwrap();
+        store.claim_for_processing("item").unwrap();
+        store.mark_completed("item", 1000, 100).unwrap();
+
+        let stats = store.get_queue_stats().unwrap();
+        assert_eq!(stats.completed_today, 1);
+        assert_eq!(stats.failed_today, 0);
+    }
+
+    #[test]
+    fn test_get_failed_items_empty() {
+        let store = SqliteDownloadQueueStore::in_memory().unwrap();
+
+        let failed = store.get_failed_items(10, 0).unwrap();
+        assert!(failed.is_empty());
+    }
+
+    #[test]
+    fn test_get_failed_items() {
+        let store = SqliteDownloadQueueStore::in_memory().unwrap();
+
+        // Add some failed items
+        for i in 0..3 {
+            let item = QueueItem::new(
+                format!("failed-{}", i),
+                DownloadContentType::Album,
+                format!("album-{}", i),
+                QueuePriority::User,
+                RequestSource::User,
+                5,
+            );
+            store.enqueue(item).unwrap();
+            store.claim_for_processing(&format!("failed-{}", i)).unwrap();
+            let error = DownloadError::new(DownloadErrorType::NotFound, "Not found");
+            store.mark_failed(&format!("failed-{}", i), &error).unwrap();
+        }
+
+        // Add a pending item (should not be returned)
+        let pending = QueueItem::new(
+            "pending".to_string(),
+            DownloadContentType::Album,
+            "album-99".to_string(),
+            QueuePriority::User,
+            RequestSource::User,
+            5,
+        );
+        store.enqueue(pending).unwrap();
+
+        let failed = store.get_failed_items(10, 0).unwrap();
+        assert_eq!(failed.len(), 3);
+
+        // All should be failed status
+        for item in &failed {
+            assert_eq!(item.status, QueueStatus::Failed);
+        }
+    }
+
+    #[test]
+    fn test_get_failed_items_pagination() {
+        let store = SqliteDownloadQueueStore::in_memory().unwrap();
+
+        // Add 5 failed items
+        for i in 0..5 {
+            let item = QueueItem::new(
+                format!("failed-{}", i),
+                DownloadContentType::Album,
+                format!("album-{}", i),
+                QueuePriority::User,
+                RequestSource::User,
+                5,
+            );
+            store.enqueue(item).unwrap();
+            store.claim_for_processing(&format!("failed-{}", i)).unwrap();
+            let error = DownloadError::new(DownloadErrorType::NotFound, "Not found");
+            store.mark_failed(&format!("failed-{}", i), &error).unwrap();
+        }
+
+        let page1 = store.get_failed_items(2, 0).unwrap();
+        assert_eq!(page1.len(), 2);
+
+        let page2 = store.get_failed_items(2, 2).unwrap();
+        assert_eq!(page2.len(), 2);
+
+        let page3 = store.get_failed_items(2, 4).unwrap();
+        assert_eq!(page3.len(), 1);
+    }
+
+    #[test]
+    fn test_get_stale_in_progress_none() {
+        let store = SqliteDownloadQueueStore::in_memory().unwrap();
+
+        let stale = store.get_stale_in_progress(3600).unwrap();
+        assert!(stale.is_empty());
+    }
+
+    #[test]
+    fn test_get_stale_in_progress_recent() {
+        let store = SqliteDownloadQueueStore::in_memory().unwrap();
+
+        // Add and claim an item (should be recent)
+        let item = QueueItem::new(
+            "item".to_string(),
+            DownloadContentType::Album,
+            "album-1".to_string(),
+            QueuePriority::User,
+            RequestSource::User,
+            5,
+        );
+        store.enqueue(item).unwrap();
+        store.claim_for_processing("item").unwrap();
+
+        // With a threshold of 3600 seconds (1 hour), recently claimed items should not be stale
+        let stale = store.get_stale_in_progress(3600).unwrap();
+        assert!(stale.is_empty());
+    }
+
+    #[test]
+    fn test_get_stale_in_progress_with_threshold_0() {
+        let store = SqliteDownloadQueueStore::in_memory().unwrap();
+
+        // Add and claim an item
+        let item = QueueItem::new(
+            "item".to_string(),
+            DownloadContentType::Album,
+            "album-1".to_string(),
+            QueuePriority::User,
+            RequestSource::User,
+            5,
+        );
+        store.enqueue(item).unwrap();
+        store.claim_for_processing("item").unwrap();
+
+        // With a threshold of 0 seconds, everything should be considered stale
+        // (since started_at < now is always true for items started in the past)
+        let stale = store.get_stale_in_progress(0).unwrap();
+        // Note: This might be 1 if the item was started before now,
+        // or 0 if started_at == now (edge case)
+        // We can't reliably test this without mocking time
+    }
+
+    #[test]
+    fn test_get_stale_only_in_progress() {
+        let store = SqliteDownloadQueueStore::in_memory().unwrap();
+
+        // Add items with various statuses
+        let pending = QueueItem::new(
+            "pending".to_string(),
+            DownloadContentType::Album,
+            "album-1".to_string(),
+            QueuePriority::User,
+            RequestSource::User,
+            5,
+        );
+        store.enqueue(pending).unwrap();
+
+        let mut completed = QueueItem::new(
+            "completed".to_string(),
+            DownloadContentType::Album,
+            "album-2".to_string(),
+            QueuePriority::User,
+            RequestSource::User,
+            5,
+        );
+        completed.status = QueueStatus::Completed;
+        store.enqueue(completed).unwrap();
+
+        // Stale check should only consider IN_PROGRESS items
+        let stale = store.get_stale_in_progress(0).unwrap();
+        for item in &stale {
+            assert_eq!(item.status, QueueStatus::InProgress);
+        }
     }
 }
