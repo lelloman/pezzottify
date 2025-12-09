@@ -3223,8 +3223,17 @@ async fn get_download_limits(
 /// Response for download queue statistics
 #[derive(serde::Serialize)]
 struct DownloadStatsResponse {
+    downloader: DownloaderStatusResponse,
     queue: QueueStatsResponse,
     capacity: CapacityStatsResponse,
+}
+
+#[derive(serde::Serialize)]
+struct DownloaderStatusResponse {
+    online: bool,
+    state: Option<String>,
+    uptime_secs: Option<u64>,
+    last_error: Option<String>,
 }
 
 #[derive(serde::Serialize)]
@@ -3276,7 +3285,25 @@ async fn admin_get_download_stats(
         }
     };
 
+    // Get downloader service status
+    let downloader_status = dm.get_downloader_status().await;
+    let downloader = match downloader_status {
+        Some(status) => DownloaderStatusResponse {
+            online: status.state == "Healthy",
+            state: Some(status.state),
+            uptime_secs: Some(status.uptime_secs),
+            last_error: status.last_error,
+        },
+        None => DownloaderStatusResponse {
+            online: false,
+            state: None,
+            uptime_secs: None,
+            last_error: Some("Unable to connect to downloader service".to_string()),
+        },
+    };
+
     let response = DownloadStatsResponse {
+        downloader,
         queue: QueueStatsResponse {
             pending: queue_stats.pending,
             in_progress: queue_stats.in_progress,
@@ -3331,8 +3358,43 @@ async fn admin_get_download_failed(
     }
 }
 
+/// Query parameters for retry endpoint
+#[derive(serde::Deserialize)]
+struct RetryQuery {
+    force: Option<bool>,
+}
+
 /// POST /v1/download/admin/retry/:id - Retry a failed download
 async fn admin_retry_download(
+    session: Session,
+    State(download_manager): State<super::state::OptionalDownloadManager>,
+    Path(request_id): Path<String>,
+    Query(query): Query<RetryQuery>,
+) -> Response {
+    let dm = match download_manager {
+        Some(dm) => dm,
+        None => {
+            return (
+                StatusCode::SERVICE_UNAVAILABLE,
+                "Download manager not enabled",
+            )
+                .into_response()
+        }
+    };
+
+    let force = query.force.unwrap_or(false);
+    let user_id = session.user_id.to_string();
+    match dm.retry_failed(&user_id, &request_id, force) {
+        Ok(()) => StatusCode::OK.into_response(),
+        Err(err) => {
+            error!("Error retrying download {}: {}", request_id, err);
+            (StatusCode::BAD_REQUEST, err.to_string()).into_response()
+        }
+    }
+}
+
+/// DELETE /v1/download/admin/request/:id - Delete a download request
+async fn admin_delete_download(
     session: Session,
     State(download_manager): State<super::state::OptionalDownloadManager>,
     Path(request_id): Path<String>,
@@ -3349,10 +3411,10 @@ async fn admin_retry_download(
     };
 
     let user_id = session.user_id.to_string();
-    match dm.retry_failed(&user_id, &request_id) {
+    match dm.delete_request(&user_id, &request_id) {
         Ok(()) => StatusCode::OK.into_response(),
         Err(err) => {
-            error!("Error retrying download {}: {}", request_id, err);
+            error!("Error deleting download {}: {}", request_id, err);
             (StatusCode::BAD_REQUEST, err.to_string()).into_response()
         }
     }
@@ -3454,6 +3516,13 @@ struct RequestsQuery {
     user_id: Option<String>,
     limit: Option<usize>,
     offset: Option<usize>,
+    exclude_completed: Option<bool>,
+}
+
+/// Response for requests endpoint
+#[derive(serde::Serialize)]
+struct DownloadRequestsResponse {
+    items: Vec<crate::download_manager::QueueItem>,
 }
 
 /// GET /v1/download/admin/requests - Get all download requests
@@ -3475,6 +3544,7 @@ async fn admin_get_download_requests(
 
     let limit = query.limit.unwrap_or(50).min(200);
     let offset = query.offset.unwrap_or(0);
+    let exclude_completed = query.exclude_completed.unwrap_or(false);
 
     let status = query.status.as_deref().and_then(|s| match s.to_lowercase().as_str() {
         "pending" => Some(crate::download_manager::QueueStatus::Pending),
@@ -3486,7 +3556,18 @@ async fn admin_get_download_requests(
     });
 
     match dm.get_all_requests(status, query.user_id.as_deref(), limit, offset) {
-        Ok(items) => Json(items).into_response(),
+        Ok(items) => {
+            // Filter out completed items if requested
+            let items = if exclude_completed {
+                items
+                    .into_iter()
+                    .filter(|i| i.status != crate::download_manager::QueueStatus::Completed)
+                    .collect()
+            } else {
+                items
+            };
+            Json(DownloadRequestsResponse { items }).into_response()
+        }
         Err(err) => {
             error!("Error getting download requests: {}", err);
             StatusCode::INTERNAL_SERVER_ERROR.into_response()
@@ -4135,6 +4216,7 @@ pub fn make_app(
     // Download manager admin write routes (requires DownloadManagerAdmin permission)
     let download_admin_write_routes: Router = Router::new()
         .route("/admin/retry/{id}", post(admin_retry_download))
+        .route("/admin/request/{id}", delete(admin_delete_download))
         .route_layer(middleware::from_fn_with_state(
             state.clone(),
             require_download_manager_admin,

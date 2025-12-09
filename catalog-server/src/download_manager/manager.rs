@@ -98,6 +98,18 @@ impl DownloadManager {
         &self.config
     }
 
+    /// Check if the downloader service is healthy and reachable.
+    pub async fn check_downloader_health(&self) -> bool {
+        self.downloader_client.health_check().await.is_ok()
+    }
+
+    /// Get the current status of the downloader service.
+    pub async fn get_downloader_status(
+        &self,
+    ) -> Option<crate::downloader::models::DownloaderStatus> {
+        self.downloader_client.get_status().await.ok()
+    }
+
     /// Get the media path.
     pub fn media_path(&self) -> &PathBuf {
         &self.media_path
@@ -769,27 +781,69 @@ impl DownloadManager {
     }
 
     /// Retry a failed item (admin action).
-    pub fn retry_failed(&self, admin_user_id: &str, request_id: &str) -> Result<()> {
+    pub fn retry_failed(&self, admin_user_id: &str, request_id: &str, force: bool) -> Result<()> {
         // Get the item
         let item = self
             .queue_store
             .get_item(request_id)?
             .ok_or_else(|| anyhow::anyhow!("Item not found: {}", request_id))?;
 
-        // Verify it's in failed status
-        if item.status != QueueStatus::Failed {
+        // Verify status is retryable
+        let allowed_statuses = if force {
+            vec![
+                QueueStatus::Failed,
+                QueueStatus::InProgress,
+                QueueStatus::RetryWaiting,
+            ]
+        } else {
+            vec![QueueStatus::Failed]
+        };
+
+        if !allowed_statuses.contains(&item.status) {
             return Err(anyhow::anyhow!(
-                "Can only retry failed items, current status: {:?}",
-                item.status
+                "Cannot retry item with status: {:?}{}",
+                item.status,
+                if !force { " (use force=true for stuck items)" } else { "" }
             ));
         }
 
-        // TODO: Implement reset_failed_to_pending in DownloadQueueStore trait
-        // For now, log the attempt but cannot actually reset the status
-        // Need to add a trait method like `reset_to_pending(id)` that handles FAILED -> PENDING
+        // Reset the item to pending status
+        self.queue_store.reset_to_pending(request_id)?;
 
         // Log the admin retry
         self.audit_logger.log_admin_retry(&item, admin_user_id)?;
+
+        info!(
+            "Admin {} triggered retry for item {} ({:?})",
+            admin_user_id, request_id, item.content_name
+        );
+
+        Ok(())
+    }
+
+    /// Delete a queue item (admin action).
+    pub fn delete_request(&self, admin_user_id: &str, request_id: &str) -> Result<()> {
+        // Get the item first to verify it exists and log it
+        let item = self
+            .queue_store
+            .get_item(request_id)?
+            .ok_or_else(|| anyhow::anyhow!("Item not found: {}", request_id))?;
+
+        // Don't allow deleting items that are currently being processed
+        if item.status == QueueStatus::InProgress {
+            return Err(anyhow::anyhow!(
+                "Cannot delete item that is currently in progress"
+            ));
+        }
+
+        // Delete the item
+        self.queue_store.delete_item(request_id)?;
+
+        // Log the deletion
+        info!(
+            "Admin {} deleted queue item {} ({:?})",
+            admin_user_id, request_id, item.content_name
+        );
 
         Ok(())
     }

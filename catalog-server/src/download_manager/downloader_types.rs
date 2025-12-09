@@ -4,6 +4,7 @@
 //! These types match the JSON structure returned by the downloader API.
 
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 // =============================================================================
 // Search Types
@@ -50,17 +51,38 @@ pub struct ExternalAlbum {
     /// Album type: "album", "single", "ep", "compilation"
     pub album_type: String,
     /// IDs of artists on this album
+    #[serde(default)]
     pub artists_ids: Vec<String>,
     /// Record label
+    #[serde(default)]
     pub label: String,
     /// Release date as Unix timestamp
+    #[serde(default)]
     pub date: i64,
     /// Genre tags
+    #[serde(default)]
     pub genres: Vec<String>,
     /// Cover images in various sizes
+    #[serde(default)]
     pub covers: Vec<ExternalImage>,
     /// Disc information with track listings
+    #[serde(default)]
     pub discs: Vec<ExternalDisc>,
+    /// Related album IDs
+    #[serde(default)]
+    pub related: Vec<String>,
+    /// Cover images (alternative to covers)
+    #[serde(default)]
+    pub cover_group: Vec<ExternalImage>,
+    /// Original title
+    #[serde(default)]
+    pub original_title: Option<String>,
+    /// Version title
+    #[serde(default)]
+    pub version_title: String,
+    /// Type string
+    #[serde(default)]
+    pub type_str: String,
 }
 
 /// Disc information within an album.
@@ -87,6 +109,14 @@ pub struct ExternalImage {
     pub height: i32,
 }
 
+/// Artist with role on a track.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct ExternalArtistWithRole {
+    pub artist_id: String,
+    pub name: String,
+    pub role: String,
+}
+
 /// Track metadata from the external downloader service.
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct ExternalTrack {
@@ -105,7 +135,35 @@ pub struct ExternalTrack {
     /// Duration in milliseconds
     pub duration: i64,
     /// Whether the track has explicit content
+    #[serde(default)]
     pub is_explicit: bool,
+    /// Available audio files (format -> file hash)
+    #[serde(default)]
+    pub files: HashMap<String, String>,
+    /// Alternative track IDs
+    #[serde(default)]
+    pub alternatives: Vec<String>,
+    /// Tags
+    #[serde(default)]
+    pub tags: Vec<String>,
+    /// Earliest live timestamp
+    #[serde(default)]
+    pub earliest_live_timestamp: Option<i64>,
+    /// Whether the track has lyrics
+    #[serde(default)]
+    pub has_lyrics: bool,
+    /// Languages of performance
+    #[serde(default)]
+    pub language_of_performance: Vec<String>,
+    /// Original title
+    #[serde(default)]
+    pub original_title: Option<String>,
+    /// Version title
+    #[serde(default)]
+    pub version_title: String,
+    /// Artists with their roles
+    #[serde(default)]
+    pub artists_with_role: Vec<ExternalArtistWithRole>,
 }
 
 /// Artist metadata from the external downloader service.
@@ -117,9 +175,19 @@ pub struct ExternalArtist {
     pub name: String,
     /// Genre tags
     #[serde(default)]
-    pub genres: Vec<String>,
+    pub genre: Vec<String>,
     /// Profile images in various sizes
+    #[serde(default)]
     pub portraits: Vec<ExternalImage>,
+    /// Activity periods
+    #[serde(default)]
+    pub activity_periods: Vec<serde_json::Value>,
+    /// Related artist IDs
+    #[serde(default)]
+    pub related: Vec<String>,
+    /// Portrait images (alternative to portraits)
+    #[serde(default)]
+    pub portrait_group: Vec<ExternalImage>,
 }
 
 // =============================================================================
@@ -131,13 +199,6 @@ pub struct ExternalArtist {
 pub struct SearchResponse {
     /// List of search results
     pub results: Vec<ExternalSearchResult>,
-}
-
-/// Wrapper for tracks list API response.
-#[derive(Debug, Clone, Deserialize)]
-pub struct TracksResponse {
-    /// List of tracks
-    pub tracks: Vec<ExternalTrack>,
 }
 
 #[cfg(test)]

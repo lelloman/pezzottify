@@ -3,8 +3,25 @@
 //! These types match the JSON structure returned by the downloader service
 //! and include conversion methods to catalog models.
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+
+// =============================================================================
+// Downloader Service Status
+// =============================================================================
+
+/// Status response from the downloader service /status endpoint
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct DownloaderStatus {
+    /// Current state of the downloader
+    pub state: String,
+    /// Seconds since the downloader started
+    pub uptime_secs: u64,
+    /// Process ID of the downloader subprocess
+    pub downloader_pid: Option<u32>,
+    /// Most recent error message
+    pub last_error: Option<String>,
+}
 
 use crate::catalog_store::{
     ActivityPeriod, Album, AlbumType, Artist, ArtistRole, Format, Image, ImageSize, ImageType,
