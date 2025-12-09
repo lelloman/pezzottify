@@ -168,4 +168,16 @@ impl CatalogStore for NullCatalogStore {
     fn close_stale_batches(&self) -> Result<usize> {
         Ok(0)
     }
+
+    fn list_all_track_ids(&self) -> Result<Vec<String>> {
+        Ok(Vec::new())
+    }
+
+    fn list_all_album_image_ids(&self) -> Result<Vec<String>> {
+        Ok(Vec::new())
+    }
+
+    fn list_all_artist_image_ids(&self) -> Result<Vec<String>> {
+        Ok(Vec::new())
+    }
 }

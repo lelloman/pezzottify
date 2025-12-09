@@ -2790,7 +2790,7 @@ Queue processing order: `ORDER BY priority ASC, created_at ASC`
 
 #### DM-5.1 Watchdog Implementation
 
-- [ ] **Task DM-5.1.1: Create `IntegrityWatchdog` struct**
+- [x] **Task DM-5.1.1: Create `IntegrityWatchdog` struct**
 
   **File:** `catalog-server/src/download_manager/watchdog.rs`
 
@@ -2815,7 +2815,7 @@ Queue processing order: `ORDER BY priority ASC, created_at ASC`
   }
   ```
 
-- [ ] **Task DM-5.1.2: Implement `scan_missing_track_audio`**
+- [x] **Task DM-5.1.2: Implement `scan_missing_track_audio`**
 
   **File:** `catalog-server/src/download_manager/watchdog.rs`
 
@@ -2824,15 +2824,15 @@ Queue processing order: `ORDER BY priority ASC, created_at ASC`
   2. For each track, check if audio file exists at expected path
   3. Return list of track IDs with missing audio
 
-- [ ] **Task DM-5.1.3: Implement `scan_missing_album_images`**
+- [x] **Task DM-5.1.3: Implement `scan_missing_album_images`**
 
   **File:** `catalog-server/src/download_manager/watchdog.rs`
 
-- [ ] **Task DM-5.1.4: Implement `scan_missing_artist_images`**
+- [x] **Task DM-5.1.4: Implement `scan_missing_artist_images`**
 
   **File:** `catalog-server/src/download_manager/watchdog.rs`
 
-- [ ] **Task DM-5.1.5: Implement `queue_repairs`**
+- [x] **Task DM-5.1.5: Implement `queue_repairs`**
 
   **File:** `catalog-server/src/download_manager/watchdog.rs`
 
