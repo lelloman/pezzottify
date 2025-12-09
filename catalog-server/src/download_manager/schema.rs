@@ -139,7 +139,7 @@ const DOWNLOAD_AUDIT_LOG_TABLE_V1: Table = Table {
 };
 
 pub const DOWNLOAD_QUEUE_VERSIONED_SCHEMAS: &[VersionedSchema] = &[VersionedSchema {
-    version: 1,
+    version: 0,
     tables: &[
         DOWNLOAD_QUEUE_TABLE_V1,
         DOWNLOAD_ACTIVITY_LOG_TABLE_V1,

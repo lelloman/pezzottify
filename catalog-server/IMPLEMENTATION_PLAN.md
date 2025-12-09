@@ -1815,7 +1815,7 @@ Queue processing order: `ORDER BY priority ASC, created_at ASC`
   ];
   ```
 
-- [ ] **Task DM-1.3.2: Implement schema initialization in store**
+- [x] **Task DM-1.3.2: Implement schema initialization in store**
 
   **File:** `catalog-server/src/download_manager/queue_store.rs`
 
