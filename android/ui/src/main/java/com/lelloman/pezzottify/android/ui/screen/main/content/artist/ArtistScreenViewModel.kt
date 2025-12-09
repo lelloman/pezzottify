@@ -2,8 +2,10 @@ package com.lelloman.pezzottify.android.ui.screen.main.content.artist
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.navigation.NavController
 import com.lelloman.pezzottify.android.ui.content.Content
 import com.lelloman.pezzottify.android.ui.content.ContentResolver
+import com.lelloman.pezzottify.android.ui.toFullScreenImage
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedFactory
 import dagger.assisted.AssistedInject
@@ -19,6 +21,7 @@ class ArtistScreenViewModel @AssistedInject constructor(
     private val interactor: Interactor,
     val contentResolver: ContentResolver,
     @Assisted private val artistId: String,
+    @Assisted private val navController: NavController,
 ) : ViewModel(), ArtistScreenActions {
 
     private var hasLoggedView = false
@@ -58,6 +61,12 @@ class ArtistScreenViewModel @AssistedInject constructor(
         interactor.toggleLike(artistId, state.value.isLiked)
     }
 
+    override fun clickOnArtistImage(imageUrl: String?) {
+        if (imageUrl != null) {
+            navController.toFullScreenImage(imageUrl)
+        }
+    }
+
     interface Interactor {
         fun logViewedArtist(artistId: String)
         fun isLiked(contentId: String): Flow<Boolean>
@@ -66,6 +75,6 @@ class ArtistScreenViewModel @AssistedInject constructor(
 
     @AssistedFactory
     interface Factory {
-        fun create(artistId: String): ArtistScreenViewModel
+        fun create(artistId: String, navController: NavController): ArtistScreenViewModel
     }
 }

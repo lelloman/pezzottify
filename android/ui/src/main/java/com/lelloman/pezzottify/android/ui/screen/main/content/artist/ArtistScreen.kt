@@ -64,7 +64,7 @@ fun ArtistScreen(
     navController: NavController
 ) {
     val viewModel = hiltViewModel<ArtistScreenViewModel, ArtistScreenViewModel.Factory>(
-        creationCallback = { factory -> factory.create(artistId = artistId) }
+        creationCallback = { factory -> factory.create(artistId = artistId, navController = navController) }
     )
     ArtistScreenContent(
         state = viewModel.state.collectAsState().value,
@@ -233,6 +233,13 @@ fun ArtistLoadedScreen(
                     modifier = Modifier
                         .fillMaxSize()
                         .alpha(imageAlpha)
+                        .let { modifier ->
+                            if (artist.imageUrl != null) {
+                                modifier.clickable { actions.clickOnArtistImage(artist.imageUrl) }
+                            } else {
+                                modifier
+                            }
+                        }
                 ) {
                     NullablePezzottifyImage(
                         url = artist.imageUrl,

@@ -233,7 +233,14 @@ private fun TrackLoadedScreen(
                     modifier = Modifier
                         .fillMaxSize()
                         .alpha(imageAlpha)
-                        .clickable { onAlbumImageClick(album?.imageUrl) }
+                        .let { modifier ->
+                            val imageUrl = album?.imageUrl
+                            if (imageUrl != null) {
+                                modifier.clickable { onAlbumImageClick(imageUrl) }
+                            } else {
+                                modifier
+                            }
+                        }
                 ) {
                     NullablePezzottifyImage(
                         url = album?.imageUrl,
