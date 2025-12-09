@@ -238,7 +238,13 @@ fun AlbumLoadedScreen(
                     modifier = Modifier
                         .fillMaxSize()
                         .alpha(imageAlpha)
-                        .clickable { actions.clickOnAlbumImage(album.imageUrl) }
+                        .let { modifier ->
+                            if (album.imageUrl != null) {
+                                modifier.clickable { actions.clickOnAlbumImage(album.imageUrl) }
+                            } else {
+                                modifier
+                            }
+                        }
                 ) {
                     NullablePezzottifyImage(
                         url = album.imageUrl,
