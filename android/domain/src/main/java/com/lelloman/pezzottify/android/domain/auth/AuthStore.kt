@@ -11,7 +11,5 @@ interface AuthStore : AppInitializer {
 
     fun getLastUsedHandle(): String?
 
-    fun getLastUsedBaseUrl(): String?
-
-    suspend fun storeLastUsedCredentials(handle: String, baseUrl: String)
+    suspend fun storeLastUsedHandle(handle: String)
 }

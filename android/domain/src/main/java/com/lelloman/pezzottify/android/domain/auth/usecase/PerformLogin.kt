@@ -27,10 +27,7 @@ class PerformLogin @Inject constructor(
 
     suspend operator fun invoke(email: String, password: String): LoginResult {
         logger.info("invoke() attempting login for user: $email")
-        authStore.storeLastUsedCredentials(
-            handle = email,
-            baseUrl = configStore.baseUrl.value,
-        )
+        authStore.storeLastUsedHandle(email)
         val deviceInfo = deviceInfoProvider.getDeviceInfo()
         logger.debug("invoke() device info: $deviceInfo")
         when (val remoteResponse = remoteApiClient.login(email, password, deviceInfo)) {
