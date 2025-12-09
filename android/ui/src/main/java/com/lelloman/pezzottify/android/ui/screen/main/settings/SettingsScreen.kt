@@ -217,6 +217,17 @@ private fun SettingsScreenInternal(
                 storageInfo = currentState.storageInfo
             )
 
+            HorizontalDivider(modifier = Modifier.padding(vertical = 24.dp))
+
+            ServerSection(
+                baseUrl = currentState.baseUrl,
+                baseUrlInput = currentState.baseUrlInput,
+                baseUrlError = currentState.baseUrlError,
+                isSaving = currentState.isBaseUrlSaving,
+                onBaseUrlInputChanged = actions::onBaseUrlInputChanged,
+                onSaveBaseUrl = actions::saveBaseUrl
+            )
+
             Spacer(modifier = Modifier.height(24.dp))
         }
     }
@@ -257,6 +268,8 @@ private fun SettingsScreenPreview() {
                 override fun setFileLoggingEnabled(enabled: Boolean) {}
                 override fun shareLogs() {}
                 override fun clearLogs() {}
+                override fun onBaseUrlInputChanged(input: String) {}
+                override fun saveBaseUrl() {}
             },
         )
     }
@@ -288,6 +301,8 @@ private fun SettingsScreenPreviewDark() {
                 override fun setFileLoggingEnabled(enabled: Boolean) {}
                 override fun shareLogs() {}
                 override fun clearLogs() {}
+                override fun onBaseUrlInputChanged(input: String) {}
+                override fun saveBaseUrl() {}
             },
         )
     }

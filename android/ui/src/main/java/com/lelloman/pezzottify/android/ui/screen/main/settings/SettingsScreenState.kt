@@ -18,4 +18,8 @@ data class SettingsScreenState(
     val isFileLoggingEnabled: Boolean = false,
     val hasLogFiles: Boolean = false,
     val logFilesSize: String = "",
+    val baseUrl: String = "",
+    val baseUrlInput: String = "",
+    val baseUrlError: String? = null,
+    val isBaseUrlSaving: Boolean = false,
 )
