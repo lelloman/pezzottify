@@ -334,6 +334,8 @@ const availablePermissions = [
   "IssueContentDownload",
   "ServerAdmin",
   "ViewAnalytics",
+  "RequestContent",
+  "DownloadManagerAdmin",
 ];
 
 const loadUsers = async () => {
