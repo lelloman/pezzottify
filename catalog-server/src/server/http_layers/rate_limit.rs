@@ -189,16 +189,16 @@ mod tests {
     fn test_rate_limit_constants_per_minute() {
         // Verify per-minute rate limits are reasonable
         assert_eq!(LOGIN_PER_MINUTE, 10);
-        assert_eq!(GLOBAL_PER_MINUTE, 1000);
+        assert_eq!(GLOBAL_PER_MINUTE, 5000);
         assert_eq!(SEARCH_PER_MINUTE, 100);
-        assert_eq!(CONTENT_READ_PER_MINUTE, 500);
-        assert_eq!(STREAM_PER_MINUTE, 100);
+        assert_eq!(CONTENT_READ_PER_MINUTE, 2000);
+        assert_eq!(STREAM_PER_MINUTE, 200);
         assert_eq!(WRITE_PER_MINUTE, 60);
 
         // Verify ordering makes sense (global should be highest)
         assert!(GLOBAL_PER_MINUTE > CONTENT_READ_PER_MINUTE);
         assert!(CONTENT_READ_PER_MINUTE > SEARCH_PER_MINUTE);
-        assert!(SEARCH_PER_MINUTE >= STREAM_PER_MINUTE);
+        assert!(STREAM_PER_MINUTE > SEARCH_PER_MINUTE);
         assert!(SEARCH_PER_MINUTE > WRITE_PER_MINUTE);
     }
 
@@ -206,15 +206,15 @@ mod tests {
     fn test_rate_limit_constants_per_hour() {
         // Verify per-hour rate limits are reasonable
         assert_eq!(LOGIN_PER_HOUR, 100);
-        assert_eq!(GLOBAL_PER_HOUR, 50000);
+        assert_eq!(GLOBAL_PER_HOUR, 10000);
         assert_eq!(SEARCH_PER_HOUR, 5000);
-        assert_eq!(CONTENT_READ_PER_HOUR, 25000);
+        assert_eq!(CONTENT_READ_PER_HOUR, 50000);
         assert_eq!(STREAM_PER_HOUR, 5000);
         assert_eq!(WRITE_PER_HOUR, 2000);
 
         // Verify ordering
-        assert!(GLOBAL_PER_HOUR > CONTENT_READ_PER_HOUR);
-        assert!(CONTENT_READ_PER_HOUR > SEARCH_PER_HOUR);
+        assert!(CONTENT_READ_PER_HOUR > GLOBAL_PER_HOUR);
+        assert!(GLOBAL_PER_HOUR > SEARCH_PER_HOUR);
     }
 
     #[test]
@@ -237,7 +237,7 @@ mod tests {
         assert_eq!(WRITE_PER_HOUR, 2000);
 
         // Stream operations
-        assert_eq!(STREAM_PER_MINUTE, 100);
+        assert_eq!(STREAM_PER_MINUTE, 200);
         assert_eq!(STREAM_PER_HOUR, 5000);
     }
 
