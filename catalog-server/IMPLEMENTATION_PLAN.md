@@ -1969,7 +1969,7 @@ Queue processing order: `ORDER BY priority ASC, created_at ASC`
 
   **Methods:** `get_queue_stats`, `get_failed_items`, `get_stale_in_progress`
 
-- [ ] **Task DM-1.4.11: Implement audit logging methods**
+- [x] **Task DM-1.4.11: Implement audit logging methods**
 
   **File:** `catalog-server/src/download_manager/queue_store.rs`
 
