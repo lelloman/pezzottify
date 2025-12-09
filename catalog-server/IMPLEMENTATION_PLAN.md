@@ -2041,7 +2041,7 @@ Queue processing order: `ORDER BY priority ASC, created_at ASC`
   - Not-found errors are not retried
   - Other errors are retried up to max
 
-- [ ] **Task DM-1.5.3: Implement `AuditLogger` helper**
+- [x] **Task DM-1.5.3: Implement `AuditLogger` helper**
 
   **File:** `catalog-server/src/download_manager/audit_logger.rs`
 
@@ -2111,7 +2111,7 @@ Queue processing order: `ORDER BY priority ASC, created_at ASC`
   }
   ```
 
-- [ ] **Task DM-1.5.4: Add unit tests for `AuditLogger`**
+- [x] **Task DM-1.5.4: Add unit tests for `AuditLogger`**
 
   **File:** `catalog-server/src/download_manager/audit_logger.rs` (test module)
 
