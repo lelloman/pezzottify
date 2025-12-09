@@ -7,9 +7,9 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -29,6 +29,7 @@ fun FileLoggingSection(
     hasLogs: Boolean,
     logSize: String,
     onEnabledChanged: (Boolean) -> Unit,
+    onViewLogs: () -> Unit,
     onShareLogs: () -> Unit,
     onClearLogs: () -> Unit,
     modifier: Modifier = Modifier,
@@ -73,15 +74,23 @@ fun FileLoggingSection(
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 OutlinedButton(
+                    onClick = onViewLogs,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.List,
+                        contentDescription = "View logs"
+                    )
+                }
+
+                OutlinedButton(
                     onClick = onShareLogs,
                     modifier = Modifier.weight(1f)
                 ) {
                     Icon(
                         imageVector = Icons.Default.Share,
-                        contentDescription = null
+                        contentDescription = "Share logs"
                     )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("Share")
                 }
 
                 OutlinedButton(
@@ -90,10 +99,8 @@ fun FileLoggingSection(
                 ) {
                     Icon(
                         imageVector = Icons.Default.Delete,
-                        contentDescription = null
+                        contentDescription = "Clear logs"
                     )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("Clear")
                 }
             }
         }
@@ -109,6 +116,7 @@ private fun FileLoggingSectionPreviewDisabled() {
             hasLogs = false,
             logSize = "",
             onEnabledChanged = {},
+            onViewLogs = {},
             onShareLogs = {},
             onClearLogs = {},
             modifier = Modifier.padding(16.dp)
@@ -125,6 +133,7 @@ private fun FileLoggingSectionPreviewEnabledNoLogs() {
             hasLogs = false,
             logSize = "",
             onEnabledChanged = {},
+            onViewLogs = {},
             onShareLogs = {},
             onClearLogs = {},
             modifier = Modifier.padding(16.dp)
@@ -141,6 +150,7 @@ private fun FileLoggingSectionPreviewEnabledWithLogs() {
             hasLogs = true,
             logSize = "2.3 MB",
             onEnabledChanged = {},
+            onViewLogs = {},
             onShareLogs = {},
             onClearLogs = {},
             modifier = Modifier.padding(16.dp)
@@ -157,6 +167,7 @@ private fun FileLoggingSectionPreviewDark() {
             hasLogs = true,
             logSize = "1.5 MB",
             onEnabledChanged = {},
+            onViewLogs = {},
             onShareLogs = {},
             onClearLogs = {},
             modifier = Modifier.padding(16.dp)

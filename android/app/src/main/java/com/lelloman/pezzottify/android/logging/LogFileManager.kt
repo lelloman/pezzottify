@@ -28,6 +28,15 @@ class LogFileManager(private val context: Context) {
         ?: emptyList()
 
     /**
+     * Returns the concatenated content of all log files.
+     * Files are read in order (oldest first) and joined together.
+     */
+    fun getLogContent(): String = getLogFiles()
+        .joinToString(separator = "") { file ->
+            file.readText()
+        }
+
+    /**
      * Returns true if there are any log files.
      */
     fun hasLogs(): Boolean = getLogFiles().isNotEmpty()
