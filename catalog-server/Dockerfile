@@ -26,7 +26,13 @@ COPY catalog-server/ catalog-server/
 WORKDIR /app/catalog-server
 
 # Build with version info from build args
-RUN GIT_HASH="$GIT_HASH" GIT_DIRTY="$GIT_DIRTY" cargo build --release
+# Use BuildKit cache mounts for cargo registry and target directory
+# Binaries are copied out because cache mounts aren't available in later stages
+RUN --mount=type=cache,target=/usr/local/cargo/registry \
+    --mount=type=cache,target=/app/catalog-server/target \
+    GIT_HASH="$GIT_HASH" GIT_DIRTY="$GIT_DIRTY" cargo build --release && \
+    cp target/release/cli-auth /tmp/ && \
+    cp target/release/catalog-server /tmp/
 
 
 # ------------------------------------------
@@ -40,8 +46,8 @@ RUN apt-get update && apt-get install -y libsqlite3-dev && rm -rf /var/lib/apt/l
 WORKDIR /app
 
 # Copy the binaries from the builder stage
-COPY --from=rust-builder /app/catalog-server/target/release/cli-auth /usr/local/bin/cli-auth
-COPY --from=rust-builder /app/catalog-server/target/release/catalog-server /usr/local/bin/catalog-server
+COPY --from=rust-builder /tmp/cli-auth /usr/local/bin/cli-auth
+COPY --from=rust-builder /tmp/catalog-server /usr/local/bin/catalog-server
 
 # Copy the web frontend from the web builder stage
 COPY --from=web-builder /web/dist /app/web
@@ -64,4 +70,4 @@ CMD ["catalog-server", "/data/db/catalog.db", "/data/db/user.db", "--media-path"
 #   ./build-docker.sh catalog-server
 # Or manually:
 #   GIT_HASH=$(git rev-parse --short HEAD) GIT_DIRTY=$(git status --porcelain | grep -q . && echo 1 || echo 0) \
-#   docker-compose up --build catalog-server
+#   docker compose up --build catalog-server
