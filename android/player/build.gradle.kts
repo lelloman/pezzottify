@@ -43,6 +43,7 @@ dependencies {
     implementation(libs.androidx.media3.session)
     implementation(project(":logger"))
     implementation(project(":domain"))
+    implementation(project(":remoteapi"))
 
     implementation(libs.hilt)
     kapt(libs.hilt.compiler)
