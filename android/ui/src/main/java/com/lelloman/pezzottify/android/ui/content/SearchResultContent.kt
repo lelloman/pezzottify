@@ -9,15 +9,16 @@ sealed class SearchResultContent {
     class Album(
         override val id: String,
         val name: String,
-        val artistsIds: List<String>,
+        val artistNames: List<String>,
         val imageUrl: String?
     ) : SearchResultContent()
 
     class Track(
         override val id: String,
         val name: String,
-        val artistsIds: List<String>,
+        val artistNames: List<String>,
         val durationSeconds: Int,
         val albumId: String,
+        val albumImageUrl: String?,
     ) : SearchResultContent()
 }

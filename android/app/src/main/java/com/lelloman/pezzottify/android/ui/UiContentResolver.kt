@@ -116,39 +116,94 @@ class UiContentResolver(
         itemType: SearchScreenViewModel.SearchedItemType
     ): Flow<Content<SearchResultContent>> = when (itemType) {
         SearchScreenViewModel.SearchedItemType.Album -> staticsProvider.provideAlbum(itemId)
-            .map {
-                when (it) {
-                    is StaticsItem.Error -> Content.Error(it.id)
-                    is StaticsItem.Loading -> Content.Loading(it.id)
-                    is StaticsItem.Loaded -> Content.Resolved(
-                        it.id, SearchResultContent.Album(
-                            id = it.id,
-                            name = it.data.name,
-                            artistsIds = it.data.artistsIds,
-                            imageUrl = ImageUrlProvider.buildImageUrl(
-                                baseUrl = configStore.baseUrl.value,
-                                displayImageId = it.data.displayImageId,
-                            ) ?: "",
-                        )
-                    )
+            .flatMapLatest { albumItem ->
+                when (albumItem) {
+                    is StaticsItem.Error -> flowOf(Content.Error(albumItem.id))
+                    is StaticsItem.Loading -> flowOf(Content.Loading(albumItem.id))
+                    is StaticsItem.Loaded -> {
+                        val artistFlows = albumItem.data.artistsIds.map { artistId ->
+                            staticsProvider.provideArtist(artistId).map { artistItem ->
+                                when (artistItem) {
+                                    is StaticsItem.Loaded -> artistItem.data.name
+                                    else -> ""
+                                }
+                            }
+                        }
+                        if (artistFlows.isEmpty()) {
+                            flowOf(
+                                Content.Resolved(
+                                    albumItem.id, SearchResultContent.Album(
+                                        id = albumItem.id,
+                                        name = albumItem.data.name,
+                                        artistNames = emptyList(),
+                                        imageUrl = ImageUrlProvider.buildImageUrl(
+                                            baseUrl = configStore.baseUrl.value,
+                                            displayImageId = albumItem.data.displayImageId,
+                                        ),
+                                    )
+                                )
+                            )
+                        } else {
+                            combine(artistFlows) { artistNames ->
+                                Content.Resolved(
+                                    albumItem.id, SearchResultContent.Album(
+                                        id = albumItem.id,
+                                        name = albumItem.data.name,
+                                        artistNames = artistNames.toList(),
+                                        imageUrl = ImageUrlProvider.buildImageUrl(
+                                            baseUrl = configStore.baseUrl.value,
+                                            displayImageId = albumItem.data.displayImageId,
+                                        ),
+                                    )
+                                )
+                            }
+                        }
+                    }
                 }
             }
 
-        SearchScreenViewModel.SearchedItemType.Track -> staticsProvider.provideTrack(itemId).map {
-            when (it) {
-                is StaticsItem.Error -> Content.Error(it.id)
-                is StaticsItem.Loading -> Content.Loading(it.id)
-                is StaticsItem.Loaded -> Content.Resolved(
-                    it.id, SearchResultContent.Track(
-                        id = it.id,
-                        name = it.data.name,
-                        artistsIds = it.data.artistsIds,
-                        durationSeconds = it.data.durationSeconds,
-                        albumId = it.data.albumId,
-                    )
-                )
+        SearchScreenViewModel.SearchedItemType.Track -> staticsProvider.provideTrack(itemId)
+            .flatMapLatest { trackItem ->
+                when (trackItem) {
+                    is StaticsItem.Error -> flowOf(Content.Error(trackItem.id))
+                    is StaticsItem.Loading -> flowOf(Content.Loading(trackItem.id))
+                    is StaticsItem.Loaded -> {
+                        val albumFlow = staticsProvider.provideAlbum(trackItem.data.albumId)
+                            .map { albumItem ->
+                                when (albumItem) {
+                                    is StaticsItem.Loaded -> ImageUrlProvider.buildImageUrl(
+                                        baseUrl = configStore.baseUrl.value,
+                                        displayImageId = albumItem.data.displayImageId,
+                                    )
+                                    else -> null
+                                }
+                            }
+                        val artistFlows = trackItem.data.artistsIds.map { artistId ->
+                            staticsProvider.provideArtist(artistId).map { artistItem ->
+                                when (artistItem) {
+                                    is StaticsItem.Loaded -> artistItem.data.name
+                                    else -> ""
+                                }
+                            }
+                        }
+                        val allFlows = listOf(albumFlow) + artistFlows
+                        combine(allFlows) { results ->
+                            val albumImageUrl = results[0] as String?
+                            val artistNames = results.drop(1).map { it as String }
+                            Content.Resolved(
+                                trackItem.id, SearchResultContent.Track(
+                                    id = trackItem.id,
+                                    name = trackItem.data.name,
+                                    artistNames = artistNames,
+                                    durationSeconds = trackItem.data.durationSeconds,
+                                    albumId = trackItem.data.albumId,
+                                    albumImageUrl = albumImageUrl,
+                                )
+                            )
+                        }
+                    }
+                }
             }
-        }
 
         SearchScreenViewModel.SearchedItemType.Artist -> staticsProvider.provideArtist(itemId).map {
             when (it) {
