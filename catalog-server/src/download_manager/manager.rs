@@ -835,15 +835,14 @@ impl DownloadManager {
         }
     }
 
-    /// Get audit log entries for a specific user.
+    /// Get audit log entries for a specific user. Returns (entries, total_count).
     pub fn get_audit_for_user(
         &self,
         user_id: &str,
         limit: usize,
         offset: usize,
-    ) -> Result<Vec<AuditLogEntry>> {
-        let (entries, _total) = self.queue_store.get_audit_for_user(user_id, None, None, limit, offset)?;
-        Ok(entries)
+    ) -> Result<(Vec<AuditLogEntry>, usize)> {
+        self.queue_store.get_audit_for_user(user_id, None, None, limit, offset)
     }
 }
 
@@ -994,9 +993,10 @@ mod tests {
     fn test_get_audit_for_user_empty() {
         let ctx = create_test_manager();
 
-        let entries = ctx.manager.get_audit_for_user("user-123", 10, 0).unwrap();
+        let (entries, total) = ctx.manager.get_audit_for_user("user-123", 10, 0).unwrap();
 
         assert!(entries.is_empty());
+        assert_eq!(total, 0);
     }
 
     #[test]
