@@ -2744,7 +2744,7 @@ Queue processing order: `ORDER BY priority ASC, created_at ASC`
   };
   ```
 
-- [ ] **Task DM-4.2.2: Spawn queue processor task**
+- [x] **Task DM-4.2.2: Spawn queue processor task**
 
   **File:** `catalog-server/src/main.rs`
 
