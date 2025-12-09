@@ -884,6 +884,37 @@ pub struct DiscographyRequestResult {
     pub status: QueueStatus,
 }
 
+/// Report from the watchdog scan showing missing content and actions taken.
+#[derive(Debug, Default, Clone)]
+pub struct WatchdogReport {
+    /// Track IDs (base62) for tracks missing audio files
+    pub missing_track_audio: Vec<String>,
+    /// Image IDs (hex) for missing album cover images
+    pub missing_album_images: Vec<String>,
+    /// Image IDs (hex) for missing artist portrait images
+    pub missing_artist_images: Vec<String>,
+    /// Number of items queued for download
+    pub items_queued: usize,
+    /// Number of items skipped (already in queue)
+    pub items_skipped: usize,
+    /// Time taken to complete the scan in milliseconds
+    pub scan_duration_ms: i64,
+}
+
+impl WatchdogReport {
+    /// Returns the total number of missing items found.
+    pub fn total_missing(&self) -> usize {
+        self.missing_track_audio.len()
+            + self.missing_album_images.len()
+            + self.missing_artist_images.len()
+    }
+
+    /// Returns true if no missing content was found.
+    pub fn is_clean(&self) -> bool {
+        self.total_missing() == 0
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1450,5 +1481,42 @@ mod tests {
         assert!(json.contains("\"request_id\":\"req-123\""));
         assert!(json.contains("\"status\":\"PENDING\""));
         assert!(json.contains("\"queue_position\":5"));
+    }
+
+    #[test]
+    fn test_watchdog_report_default() {
+        let report = WatchdogReport::default();
+        assert!(report.missing_track_audio.is_empty());
+        assert!(report.missing_album_images.is_empty());
+        assert!(report.missing_artist_images.is_empty());
+        assert_eq!(report.items_queued, 0);
+        assert_eq!(report.items_skipped, 0);
+        assert_eq!(report.scan_duration_ms, 0);
+    }
+
+    #[test]
+    fn test_watchdog_report_total_missing() {
+        let report = WatchdogReport {
+            missing_track_audio: vec!["track1".to_string(), "track2".to_string()],
+            missing_album_images: vec!["img1".to_string()],
+            missing_artist_images: vec!["art1".to_string(), "art2".to_string(), "art3".to_string()],
+            items_queued: 5,
+            items_skipped: 1,
+            scan_duration_ms: 1500,
+        };
+
+        assert_eq!(report.total_missing(), 6); // 2 + 1 + 3
+    }
+
+    #[test]
+    fn test_watchdog_report_is_clean() {
+        let clean_report = WatchdogReport::default();
+        assert!(clean_report.is_clean());
+
+        let dirty_report = WatchdogReport {
+            missing_track_audio: vec!["track1".to_string()],
+            ..Default::default()
+        };
+        assert!(!dirty_report.is_clean());
     }
 }
