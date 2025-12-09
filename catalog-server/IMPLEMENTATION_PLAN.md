@@ -2401,7 +2401,7 @@ Queue processing order: `ORDER BY priority ASC, created_at ASC`
 
 #### DM-2.2 Search Implementation
 
-- [ ] **Task DM-2.2.1: Implement search with enrichment**
+- [x] **Task DM-2.2.1: Implement search with enrichment**
 
   **File:** `catalog-server/src/download_manager/search_proxy.rs`
 
