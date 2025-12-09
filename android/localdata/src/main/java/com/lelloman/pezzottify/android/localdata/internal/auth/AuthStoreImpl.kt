@@ -91,14 +91,10 @@ internal class AuthStoreImpl(
     override fun getLastUsedHandle(): String? =
         sharedPrefs.getString(KEY_LAST_USED_HANDLE, null)
 
-    override fun getLastUsedBaseUrl(): String? =
-        sharedPrefs.getString(KEY_LAST_USED_BASE_URL, null)
-
-    override suspend fun storeLastUsedCredentials(handle: String, baseUrl: String) {
+    override suspend fun storeLastUsedHandle(handle: String) {
         withContext(dispatcher) {
             sharedPrefs.edit {
                 putString(KEY_LAST_USED_HANDLE, handle)
-                    .putString(KEY_LAST_USED_BASE_URL, baseUrl)
             }
         }
     }
@@ -107,6 +103,5 @@ internal class AuthStoreImpl(
         const val SHARED_PREF_FILE_NAME = "AuthStore"
         private const val KEY_AUTH_STATE = "AuthState"
         private const val KEY_LAST_USED_HANDLE = "LastUsedHandle"
-        private const val KEY_LAST_USED_BASE_URL = "LastUsedBaseUrl"
     }
 }
