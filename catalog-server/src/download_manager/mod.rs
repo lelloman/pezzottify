@@ -17,6 +17,7 @@ mod search_proxy;
 mod watchdog;
 
 pub use audit_logger::AuditLogger;
+pub use downloader_client::DownloaderClient;
 pub use manager::DownloadManager;
 pub use models::*;
 pub use queue_store::{DownloadQueueStore, SqliteDownloadQueueStore};

@@ -2187,7 +2187,7 @@ Queue processing order: `ORDER BY priority ASC, created_at ASC`
 
 #### DM-1.7 DownloadManager Struct
 
-- [ ] **Task DM-1.7.1: Create `DownloadManager` struct**
+- [x] **Task DM-1.7.1: Create `DownloadManager` struct**
 
   **File:** `catalog-server/src/download_manager/manager.rs`
 
