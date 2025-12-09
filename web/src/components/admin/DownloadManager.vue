@@ -196,12 +196,74 @@
                   {{ formatEventType(entry.event_type) }}
                 </span>
               </td>
-              <td>{{ entry.user_handle || "system" }}</td>
-              <td class="idCell">{{ entry.external_id || "—" }}</td>
+              <td>
+                <button
+                  v-if="entry.user_handle"
+                  class="linkButton"
+                  @click="showUserAudit(entry.user_handle)"
+                >
+                  {{ entry.user_handle }}
+                </button>
+                <span v-else>system</span>
+              </td>
+              <td class="idCell">
+                <button
+                  v-if="entry.external_id"
+                  class="linkButton"
+                  @click="showItemAudit(entry.external_id)"
+                >
+                  {{ entry.external_id }}
+                </button>
+                <span v-else>—</span>
+              </td>
               <td class="detailsCell">{{ entry.details || "—" }}</td>
             </tr>
           </tbody>
         </table>
+      </div>
+    </div>
+
+    <!-- Audit Detail Panel -->
+    <div v-if="showAuditDetail" class="detailOverlay" @click.self="closeAuditDetail">
+      <div class="detailPanel">
+        <div class="detailHeader">
+          <h3 class="detailTitle">
+            {{ auditDetailType === "item" ? "Item History" : "User History" }}
+          </h3>
+          <span class="detailSubtitle">{{ auditDetailId }}</span>
+          <button class="closeDetailButton" @click="closeAuditDetail">×</button>
+        </div>
+        <div v-if="loadingAuditDetail" class="detailLoading">
+          Loading history...
+        </div>
+        <div v-else-if="auditDetailEntries.length === 0" class="detailEmpty">
+          No audit entries found.
+        </div>
+        <div v-else class="detailContent">
+          <div
+            v-for="entry in auditDetailEntries"
+            :key="entry.id"
+            class="auditEntry"
+          >
+            <div class="auditEntryHeader">
+              <span class="eventBadge" :class="eventClass(entry.event_type)">
+                {{ formatEventType(entry.event_type) }}
+              </span>
+              <span class="auditEntryTime">{{ formatDate(entry.created_at) }}</span>
+            </div>
+            <div class="auditEntryBody">
+              <div v-if="auditDetailType === 'item' && entry.user_handle" class="auditEntryMeta">
+                User: {{ entry.user_handle }}
+              </div>
+              <div v-if="auditDetailType === 'user' && entry.external_id" class="auditEntryMeta">
+                Item: {{ entry.external_id }}
+              </div>
+              <div v-if="entry.details" class="auditEntryDetails">
+                {{ entry.details }}
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -230,6 +292,44 @@ const activity = ref([]);
 const requests = ref([]);
 const auditLog = ref([]);
 const retryingItems = reactive({});
+
+// Audit detail panel state
+const showAuditDetail = ref(false);
+const auditDetailType = ref(null); // "item" or "user"
+const auditDetailId = ref(null);
+const auditDetailEntries = ref([]);
+const loadingAuditDetail = ref(false);
+
+const showItemAudit = async (externalId) => {
+  showAuditDetail.value = true;
+  auditDetailType.value = "item";
+  auditDetailId.value = externalId;
+  loadingAuditDetail.value = true;
+  auditDetailEntries.value = [];
+
+  const result = await remoteStore.fetchDownloadAuditForItem(externalId);
+  auditDetailEntries.value = result?.entries || [];
+  loadingAuditDetail.value = false;
+};
+
+const showUserAudit = async (userHandle) => {
+  showAuditDetail.value = true;
+  auditDetailType.value = "user";
+  auditDetailId.value = userHandle;
+  loadingAuditDetail.value = true;
+  auditDetailEntries.value = [];
+
+  const result = await remoteStore.fetchDownloadAuditForUser(userHandle);
+  auditDetailEntries.value = result?.entries || [];
+  loadingAuditDetail.value = false;
+};
+
+const closeAuditDetail = () => {
+  showAuditDetail.value = false;
+  auditDetailType.value = null;
+  auditDetailId.value = null;
+  auditDetailEntries.value = [];
+};
 
 const loadData = async () => {
   isLoading.value = true;
@@ -655,6 +755,144 @@ onUnmounted(() => {
 .retryButton:disabled {
   opacity: 0.6;
   cursor: not-allowed;
+}
+
+/* Link Button (clickable text) */
+.linkButton {
+  background: none;
+  border: none;
+  color: var(--spotify-green);
+  font-size: inherit;
+  font-family: inherit;
+  cursor: pointer;
+  padding: 0;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.linkButton:hover {
+  color: #1ed760;
+}
+
+/* Audit Detail Panel */
+.detailOverlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: var(--spacing-4);
+}
+
+.detailPanel {
+  background-color: var(--bg-elevated-base);
+  border-radius: var(--radius-lg);
+  max-width: 600px;
+  width: 100%;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.detailHeader {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-3);
+  padding: var(--spacing-4);
+  border-bottom: 1px solid var(--border-subdued);
+  flex-shrink: 0;
+}
+
+.detailTitle {
+  font-size: var(--text-lg);
+  font-weight: var(--font-bold);
+  color: var(--text-base);
+  margin: 0;
+}
+
+.detailSubtitle {
+  font-size: var(--text-sm);
+  color: var(--text-subdued);
+  font-family: monospace;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.closeDetailButton {
+  background: none;
+  border: none;
+  color: var(--text-subdued);
+  font-size: var(--text-2xl);
+  cursor: pointer;
+  padding: var(--spacing-1);
+  line-height: 1;
+  border-radius: var(--radius-md);
+  transition: all var(--transition-fast);
+}
+
+.closeDetailButton:hover {
+  color: var(--text-base);
+  background-color: var(--bg-highlight);
+}
+
+.detailLoading,
+.detailEmpty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--spacing-8);
+  color: var(--text-subdued);
+}
+
+.detailContent {
+  overflow-y: auto;
+  padding: var(--spacing-4);
+}
+
+.auditEntry {
+  padding: var(--spacing-3);
+  background-color: var(--bg-base);
+  border-radius: var(--radius-md);
+  margin-bottom: var(--spacing-3);
+}
+
+.auditEntry:last-child {
+  margin-bottom: 0;
+}
+
+.auditEntryHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-2);
+  margin-bottom: var(--spacing-2);
+}
+
+.auditEntryTime {
+  font-size: var(--text-xs);
+  color: var(--text-subdued);
+}
+
+.auditEntryBody {
+  font-size: var(--text-sm);
+}
+
+.auditEntryMeta {
+  color: var(--text-subdued);
+  margin-bottom: var(--spacing-1);
+}
+
+.auditEntryDetails {
+  color: var(--text-base);
+  word-break: break-word;
 }
 
 @media (max-width: 768px) {
