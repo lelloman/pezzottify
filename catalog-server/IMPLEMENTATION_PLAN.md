@@ -3004,7 +3004,7 @@ Queue processing order: `ORDER BY priority ASC, created_at ASC`
   }
   ```
 
-- [ ] **Task DM-6.2.2: Create `GET /v1/download/admin/audit/item/:queue_item_id` handler**
+- [x] **Task DM-6.2.2: Create `GET /v1/download/admin/audit/item/:queue_item_id` handler**
 
   **File:** `catalog-server/src/server/server.rs`
 
@@ -3018,7 +3018,7 @@ Queue processing order: `ORDER BY priority ASC, created_at ASC`
   }
   ```
 
-- [ ] **Task DM-6.2.3: Create `GET /v1/download/admin/audit/user/:user_id` handler**
+- [x] **Task DM-6.2.3: Create `GET /v1/download/admin/audit/user/:user_id` handler**
 
   **File:** `catalog-server/src/server/server.rs`
 

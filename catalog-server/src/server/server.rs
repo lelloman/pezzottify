@@ -3559,6 +3559,96 @@ async fn admin_get_audit_log(
     }
 }
 
+/// Response for audit item endpoint
+#[derive(serde::Serialize)]
+struct AuditItemResponse {
+    queue_item: crate::download_manager::QueueItem,
+    events: Vec<crate::download_manager::AuditLogEntry>,
+}
+
+/// GET /v1/download/admin/audit/item/:id - Get audit history for a specific queue item
+async fn admin_get_audit_for_item(
+    _session: Session,
+    State(download_manager): State<super::state::OptionalDownloadManager>,
+    Path(queue_item_id): Path<String>,
+) -> Response {
+    let dm = match download_manager {
+        Some(dm) => dm,
+        None => {
+            return (
+                StatusCode::SERVICE_UNAVAILABLE,
+                "Download manager not enabled",
+            )
+                .into_response()
+        }
+    };
+
+    match dm.get_audit_for_item(&queue_item_id) {
+        Ok(Some((queue_item, events))) => {
+            let response = AuditItemResponse { queue_item, events };
+            Json(response).into_response()
+        }
+        Ok(None) => StatusCode::NOT_FOUND.into_response(),
+        Err(err) => {
+            error!("Error getting audit for item: {}", err);
+            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+        }
+    }
+}
+
+/// Query parameters for user audit endpoint
+#[derive(serde::Deserialize)]
+struct UserAuditQuery {
+    limit: Option<usize>,
+    offset: Option<usize>,
+}
+
+/// Response for user audit endpoint
+#[derive(serde::Serialize)]
+struct UserAuditResponse {
+    entries: Vec<crate::download_manager::AuditLogEntry>,
+    total_count: usize,
+    has_more: bool,
+}
+
+/// GET /v1/download/admin/audit/user/:id - Get audit history for a specific user
+async fn admin_get_audit_for_user(
+    _session: Session,
+    State(download_manager): State<super::state::OptionalDownloadManager>,
+    Path(user_id): Path<String>,
+    Query(query): Query<UserAuditQuery>,
+) -> Response {
+    let dm = match download_manager {
+        Some(dm) => dm,
+        None => {
+            return (
+                StatusCode::SERVICE_UNAVAILABLE,
+                "Download manager not enabled",
+            )
+                .into_response()
+        }
+    };
+
+    let limit = query.limit.unwrap_or(100).min(500);
+    let offset = query.offset.unwrap_or(0);
+
+    match dm.get_audit_for_user(&user_id, limit, offset) {
+        Ok((entries, total_count)) => {
+            let has_more = offset + entries.len() < total_count;
+            let response = UserAuditResponse {
+                entries,
+                total_count,
+                has_more,
+            };
+            Json(response).into_response()
+        }
+        Err(err) => {
+            error!("Error getting audit for user: {}", err);
+            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+        }
+    }
+}
+
 impl ServerState {
     #[allow(clippy::arc_with_non_send_sync, clippy::too_many_arguments)]
     fn new(
@@ -4005,6 +4095,8 @@ pub fn make_app(
         .route("/admin/activity", get(admin_get_download_activity))
         .route("/admin/requests", get(admin_get_download_requests))
         .route("/admin/audit", get(admin_get_audit_log))
+        .route("/admin/audit/item/{id}", get(admin_get_audit_for_item))
+        .route("/admin/audit/user/{id}", get(admin_get_audit_for_user))
         .route_layer(middleware::from_fn_with_state(
             state.clone(),
             require_view_analytics,
