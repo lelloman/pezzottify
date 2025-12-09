@@ -2069,6 +2069,29 @@ impl CatalogStore for SqliteCatalogStore {
     fn close_stale_batches(&self) -> Result<usize> {
         self.changelog.close_stale_batches()
     }
+
+    fn list_all_track_ids(&self) -> Result<Vec<String>> {
+        self.list_track_ids()
+    }
+
+    fn list_all_album_image_ids(&self) -> Result<Vec<String>> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare("SELECT DISTINCT image_id FROM album_images ORDER BY image_id")?;
+        let ids: Vec<String> = stmt
+            .query_map([], |row| row.get(0))?
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(ids)
+    }
+
+    fn list_all_artist_image_ids(&self) -> Result<Vec<String>> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt =
+            conn.prepare("SELECT DISTINCT image_id FROM artist_images ORDER BY image_id")?;
+        let ids: Vec<String> = stmt
+            .query_map([], |row| row.get(0))?
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(ids)
+    }
 }
 
 impl WritableCatalogStore for SqliteCatalogStore {

@@ -160,6 +160,22 @@ pub trait CatalogStore: Send + Sync {
     /// Close all stale batches (inactive for longer than the configured threshold).
     /// Returns the number of batches closed.
     fn close_stale_batches(&self) -> Result<usize>;
+
+    // =========================================================================
+    // Integrity Watchdog Support
+    // =========================================================================
+
+    /// List all track IDs in the catalog.
+    /// Used by the integrity watchdog to scan for missing audio files.
+    fn list_all_track_ids(&self) -> Result<Vec<String>>;
+
+    /// List all unique image IDs referenced by albums (from album_images table).
+    /// Used by the integrity watchdog to scan for missing album cover images.
+    fn list_all_album_image_ids(&self) -> Result<Vec<String>>;
+
+    /// List all unique image IDs referenced by artists (from artist_images table).
+    /// Used by the integrity watchdog to scan for missing artist portrait images.
+    fn list_all_artist_image_ids(&self) -> Result<Vec<String>>;
 }
 
 /// A searchable item for the search index.

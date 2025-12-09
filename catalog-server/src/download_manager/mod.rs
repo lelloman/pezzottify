@@ -24,3 +24,4 @@ pub use models::*;
 pub use queue_store::{DownloadQueueStore, SqliteDownloadQueueStore};
 pub use retry_policy::RetryPolicy;
 pub use schema::DOWNLOAD_QUEUE_VERSIONED_SCHEMAS;
+pub use watchdog::IntegrityWatchdog;
