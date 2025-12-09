@@ -20,6 +20,29 @@ impl QueueStatus {
     pub fn is_terminal(&self) -> bool {
         matches!(self, QueueStatus::Completed | QueueStatus::Failed)
     }
+
+    /// Convert to database string representation.
+    pub fn as_db_str(&self) -> &'static str {
+        match self {
+            QueueStatus::Pending => "PENDING",
+            QueueStatus::InProgress => "IN_PROGRESS",
+            QueueStatus::RetryWaiting => "RETRY_WAITING",
+            QueueStatus::Completed => "COMPLETED",
+            QueueStatus::Failed => "FAILED",
+        }
+    }
+
+    /// Parse from database string representation.
+    pub fn from_db_str(s: &str) -> Self {
+        match s {
+            "PENDING" => QueueStatus::Pending,
+            "IN_PROGRESS" => QueueStatus::InProgress,
+            "RETRY_WAITING" => QueueStatus::RetryWaiting,
+            "COMPLETED" => QueueStatus::Completed,
+            "FAILED" => QueueStatus::Failed,
+            _ => QueueStatus::Pending, // Default fallback
+        }
+    }
 }
 
 /// Priority level for queue items.

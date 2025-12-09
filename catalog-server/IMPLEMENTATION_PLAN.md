@@ -1888,7 +1888,7 @@ Queue processing order: `ORDER BY priority ASC, created_at ASC`
   }
   ```
 
-- [ ] **Task DM-1.4.2: Implement `SqliteDownloadQueueStore` constructor and schema init**
+- [x] **Task DM-1.4.2: Implement `SqliteDownloadQueueStore` constructor and schema init**
 
   **File:** `catalog-server/src/download_manager/queue_store.rs`
 
@@ -1909,7 +1909,7 @@ Queue processing order: `ORDER BY priority ASC, created_at ASC`
   }
   ```
 
-- [ ] **Task DM-1.4.3: Implement queue management methods**
+- [x] **Task DM-1.4.3: Implement queue management methods**
 
   **File:** `catalog-server/src/download_manager/queue_store.rs`
 
