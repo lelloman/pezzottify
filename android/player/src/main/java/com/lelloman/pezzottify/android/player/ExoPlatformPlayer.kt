@@ -3,9 +3,11 @@ package com.lelloman.pezzottify.android.player
 import android.content.ComponentName
 import android.content.Context
 import androidx.media3.common.MediaItem
+import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
-import androidx.media3.common.util.Log
 import androidx.media3.common.util.UnstableApi
+import com.lelloman.pezzottify.android.logger.Logger
+import com.lelloman.pezzottify.android.logger.LoggerFactory
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
 import com.google.common.util.concurrent.MoreExecutors
@@ -33,8 +35,11 @@ import kotlinx.coroutines.launch
 internal class ExoPlatformPlayer(
     private val context: Context,
     playerServiceEventsEmitter: PlayerServiceEventsEmitter,
+    loggerFactory: LoggerFactory,
     private val coroutineScope: CoroutineScope = GlobalScope,
 ) : PlatformPlayer {
+
+    private val logger: Logger by loggerFactory
 
     private var mediaController: MediaController? = null
 
@@ -77,24 +82,17 @@ internal class ExoPlatformPlayer(
     private val playerListener = object : Player.Listener {
         override fun onEvents(player: Player, events: Player.Events) {
             super.onEvents(player, events)
-            Log.d("ASDASD", "ExoPlatformPlayer: onEvents $events")
             for (i in 0 until events.size()) {
-                val event = events.get(i)
-                val eventName = when (event) {
+                when (events.get(i)) {
                     Player.EVENT_PLAY_WHEN_READY_CHANGED -> {
                         mutableIsPlaying.value = player.playWhenReady
                         updateProgressPolling(player.playWhenReady)
-                        "EVENT_PLAY_WHEN_READY_CHANGED"
                     }
 
                     Player.EVENT_POSITION_DISCONTINUITY -> {
                         mutableCurrentTrackIndex.value = player.currentMediaItemIndex
-                        "EVENT_POSITION_DISCONTINUITY"
                     }
-
-                    else -> "$event"
                 }
-                Log.d("ASDASD", "events has: $eventName")
             }
         }
 
@@ -107,12 +105,12 @@ internal class ExoPlatformPlayer(
                 Player.STATE_ENDED -> "STATE_ENDED"
                 else -> "$playbackState"
             }
-            Log.d("ASDASD", "ExoPlatformPlayer: onPlaybackStateChanged $playbackStateText")
+            logger.debug("onPlaybackStateChanged: $playbackStateText")
         }
 
-        override fun onAudioSessionIdChanged(audioSessionId: Int) {
-            super.onAudioSessionIdChanged(audioSessionId)
-            Log.d("ASDASD", "ExoPlatformPlayer: audioSessionIdChanged $audioSessionId")
+        override fun onPlayerError(error: PlaybackException) {
+            super.onPlayerError(error)
+            logger.error("Player error: ${error.errorCodeName} - ${error.message}", error)
         }
     }
 

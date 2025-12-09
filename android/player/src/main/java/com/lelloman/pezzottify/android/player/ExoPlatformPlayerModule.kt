@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.annotation.OptIn
 import androidx.media3.common.util.UnstableApi
 import com.lelloman.pezzottify.android.domain.player.PlatformPlayer
+import com.lelloman.pezzottify.android.logger.LoggerFactory
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -25,5 +26,6 @@ internal class ExoPlatformPlayerModule {
     fun providePlatformPlayer(
         @ApplicationContext context: Context,
         playerServiceEventsEmitter: PlayerServiceEventsEmitter,
-    ): PlatformPlayer = ExoPlatformPlayer(context, playerServiceEventsEmitter)
+        loggerFactory: LoggerFactory,
+    ): PlatformPlayer = ExoPlatformPlayer(context, playerServiceEventsEmitter, loggerFactory)
 }
