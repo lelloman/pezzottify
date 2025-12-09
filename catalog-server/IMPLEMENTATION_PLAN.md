@@ -2283,7 +2283,7 @@ Queue processing order: `ORDER BY priority ASC, created_at ASC`
 
 #### DM-2.1 HTTP Client
 
-- [ ] **Task DM-2.1.1: Create `DownloaderClient` for HTTP communication**
+- [x] **Task DM-2.1.1: Create `DownloaderClient` for HTTP communication**
 
   **File:** `catalog-server/src/download_manager/downloader_client.rs`
 
@@ -2324,7 +2324,7 @@ Queue processing order: `ORDER BY priority ASC, created_at ASC`
   }
   ```
 
-- [ ] **Task DM-2.1.2: Define external API response types**
+- [x] **Task DM-2.1.2: Define external API response types**
 
   **File:** `catalog-server/src/download_manager/downloader_types.rs`
 
