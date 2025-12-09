@@ -12,3 +12,8 @@ monitoring/.env
 
 # Catalog server production config (may contain secrets)
 catalog-server/config.toml
+
+# Dynamic DNS updater
+infra/dns-config.json
+infra/.current-ip
+infra/dns-update.log
