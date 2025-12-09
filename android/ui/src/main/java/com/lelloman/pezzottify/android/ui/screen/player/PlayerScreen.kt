@@ -64,6 +64,7 @@ import com.lelloman.pezzottify.android.ui.component.ScrollingArtistsRow
 import com.lelloman.pezzottify.android.ui.toAlbum
 import com.lelloman.pezzottify.android.ui.toArtist
 import com.lelloman.pezzottify.android.ui.toQueue
+import com.lelloman.pezzottify.android.ui.toTrack
 import kotlinx.coroutines.launch
 import kotlin.math.abs
 
@@ -232,6 +233,11 @@ private fun PlayerScreenContent(
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                     textAlign = TextAlign.Center,
+                    modifier = Modifier.clickable {
+                        if (state.trackId.isNotEmpty()) {
+                            navController.toTrack(state.trackId)
+                        }
+                    }
                 )
 
                 Spacer(modifier = Modifier.height(4.dp))

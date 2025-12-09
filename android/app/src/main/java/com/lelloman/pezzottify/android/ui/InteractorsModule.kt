@@ -724,7 +724,6 @@ class InteractorsModule {
     fun provideLibraryScreenInteractor(
         userContentStore: UserContentStore,
         userPlaylistStore: UserPlaylistStore,
-        player: PezzottifyPlayer,
     ): LibraryScreenViewModel.Interactor =
         object : LibraryScreenViewModel.Interactor {
             override fun getLikedContent(): Flow<List<UiLikedContent>> =
@@ -738,10 +737,6 @@ class InteractorsModule {
                         trackCount = playlist.trackIds.size,
                     )
                 }
-            }
-
-            override fun playTrack(trackId: String) {
-                player.addTracksToPlaylist(listOf(trackId))
             }
         }
 

@@ -65,6 +65,7 @@ class PlayerScreenViewModel @Inject constructor(
                 }
                 .collect { resolved ->
                     mutableState.value = mutableState.value.copy(
+                        trackId = resolved.data.id,
                         trackName = resolved.data.name,
                         albumId = resolved.data.albumId,
                         artists = resolved.data.artists,

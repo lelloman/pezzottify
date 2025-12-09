@@ -39,13 +39,8 @@ class LibraryScreenViewModel @Inject constructor(
         )
     }.stateIn(viewModelScope, SharingStarted.Eagerly, LibraryScreenState())
 
-    fun playTrack(trackId: String) {
-        interactor.playTrack(trackId)
-    }
-
     interface Interactor {
         fun getLikedContent(): Flow<List<LikedContent>>
         fun getPlaylists(): Flow<List<UiUserPlaylist>>
-        fun playTrack(trackId: String)
     }
 }

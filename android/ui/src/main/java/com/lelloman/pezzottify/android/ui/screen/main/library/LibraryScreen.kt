@@ -44,6 +44,7 @@ import com.lelloman.pezzottify.android.ui.content.ContentResolver
 import com.lelloman.pezzottify.android.ui.content.Track
 import com.lelloman.pezzottify.android.ui.toAlbum
 import com.lelloman.pezzottify.android.ui.toArtist
+import com.lelloman.pezzottify.android.ui.toTrack
 import com.lelloman.pezzottify.android.ui.toUserPlaylist
 
 private enum class LibraryTab {
@@ -60,7 +61,6 @@ fun LibraryScreen(navController: NavController) {
         state = viewModel.state.collectAsState().value,
         contentResolver = viewModel.contentResolver,
         navController = navController,
-        onPlayTrack = viewModel::playTrack,
     )
 }
 
@@ -70,7 +70,6 @@ private fun LibraryScreenContent(
     state: LibraryScreenState,
     contentResolver: ContentResolver,
     navController: NavController,
-    onPlayTrack: (String) -> Unit,
 ) {
     var selectedTab by rememberSaveable { mutableStateOf(LibraryTab.Albums) }
 
@@ -116,7 +115,6 @@ private fun LibraryScreenContent(
                     selectedTab = selectedTab,
                     contentResolver = contentResolver,
                     navController = navController,
-                    onPlayTrack = onPlayTrack,
                 )
             }
         }
@@ -150,7 +148,6 @@ private fun LibraryLoadedScreen(
     selectedTab: LibraryTab,
     contentResolver: ContentResolver,
     navController: NavController,
-    onPlayTrack: (String) -> Unit,
 ) {
     when (selectedTab) {
         LibraryTab.Albums -> {
@@ -199,7 +196,7 @@ private fun LibraryLoadedScreen(
                 TrackList(
                     trackIds = state.likedTrackIds,
                     contentResolver = contentResolver,
-                    onPlayTrack = onPlayTrack,
+                    onTrackClick = { trackId -> navController.toTrack(trackId) },
                 )
             }
         }
@@ -333,7 +330,7 @@ private fun <T> List<T>.forEachGroup(maxGroupSize: Int, action: @Composable (Lis
 private fun TrackList(
     trackIds: List<String>,
     contentResolver: ContentResolver,
-    onPlayTrack: (String) -> Unit,
+    onTrackClick: (String) -> Unit,
 ) {
     LazyColumn(modifier = Modifier.fillMaxSize()) {
         items(trackIds) { trackId ->
@@ -342,7 +339,7 @@ private fun TrackList(
             when (val track = trackState.value) {
                 is Content.Resolved -> TrackListItem(
                     track = track.data,
-                    onClick = { onPlayTrack(trackId) },
+                    onClick = { onTrackClick(trackId) },
                 )
                 is Content.Loading -> LoadingTrackListItem()
                 is Content.Error -> ErrorTrackListItem()
