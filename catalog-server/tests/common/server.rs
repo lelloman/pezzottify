@@ -104,6 +104,7 @@ impl TestServer {
             None,
             None,
             None,
+            None, // no download_manager
         )
         .expect("Failed to build app");
 

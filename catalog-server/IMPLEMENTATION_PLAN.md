@@ -2716,7 +2716,7 @@ Queue processing order: `ORDER BY priority ASC, created_at ASC`
 
 #### DM-4.2 Main Integration
 
-- [ ] **Task DM-4.2.1: Initialize DownloadManager in main.rs**
+- [x] **Task DM-4.2.1: Initialize DownloadManager in main.rs**
 
   **File:** `catalog-server/src/main.rs`
 
@@ -2761,7 +2761,7 @@ Queue processing order: `ORDER BY priority ASC, created_at ASC`
   }
   ```
 
-- [ ] **Task DM-4.2.3: Add DownloadManager to ServerState**
+- [x] **Task DM-4.2.3: Add DownloadManager to ServerState**
 
   **File:** `catalog-server/src/server/server.rs`
 

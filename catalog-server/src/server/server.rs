@@ -3198,6 +3198,7 @@ impl ServerState {
         downloader: Option<Arc<dyn crate::downloader::Downloader>>,
         media_base_path: Option<std::path::PathBuf>,
         scheduler_handle: Option<SchedulerHandle>,
+        download_manager: Option<Arc<crate::download_manager::DownloadManager>>,
     ) -> ServerState {
         // Create proxy if downloader and media_base_path are available
         let proxy = match (&downloader, media_base_path) {
@@ -3220,7 +3221,7 @@ impl ServerState {
             proxy,
             ws_connection_manager: Arc::new(super::websocket::ConnectionManager::new()),
             scheduler_handle,
-            download_manager: None, // Initialized in main.rs when configured
+            download_manager,
             hash: "123456".to_owned(),
         }
     }
@@ -3234,6 +3235,7 @@ pub fn make_app(
     downloader: Option<Arc<dyn crate::downloader::Downloader>>,
     media_base_path: Option<std::path::PathBuf>,
     scheduler_handle: Option<SchedulerHandle>,
+    download_manager: Option<Arc<crate::download_manager::DownloadManager>>,
 ) -> Result<Router> {
     let user_manager = UserManager::new(catalog_store.clone(), user_store.clone());
     let state = ServerState::new(
@@ -3245,6 +3247,7 @@ pub fn make_app(
         downloader,
         media_base_path,
         scheduler_handle,
+        download_manager,
     );
 
     // Login route with strict IP-based rate limiting
@@ -3690,6 +3693,7 @@ pub async fn run_server(
     media_base_path: Option<std::path::PathBuf>,
     scheduler_handle: Option<SchedulerHandle>,
     ssl_settings: Option<SslSettings>,
+    download_manager: Option<Arc<crate::download_manager::DownloadManager>>,
 ) -> Result<()> {
     let config = ServerConfig {
         port,
@@ -3705,6 +3709,7 @@ pub async fn run_server(
         downloader,
         media_base_path,
         scheduler_handle,
+        download_manager,
     )?;
 
     // Create a minimal metrics-only server (always HTTP, internal use)
@@ -3843,6 +3848,7 @@ mod tests {
             None, // no downloader
             None, // no media_base_path
             None, // no scheduler_handle
+            None, // no download_manager
         )
         .unwrap();
 
