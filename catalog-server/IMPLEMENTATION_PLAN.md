@@ -2910,7 +2910,7 @@ Queue processing order: `ORDER BY priority ASC, created_at ASC`
 
 #### DM-6.1 Admin Handlers
 
-- [ ] **Task DM-6.1.1: Create `GET /v1/download/admin/stats` handler**
+- [x] **Task DM-6.1.1: Create `GET /v1/download/admin/stats` handler**
 
   **File:** `catalog-server/src/server/server.rs`
 
@@ -2939,7 +2939,7 @@ Queue processing order: `ORDER BY priority ASC, created_at ASC`
   }
   ```
 
-- [ ] **Task DM-6.1.2: Create `GET /v1/download/admin/failed` handler**
+- [x] **Task DM-6.1.2: Create `GET /v1/download/admin/failed` handler**
 
   **File:** `catalog-server/src/server/server.rs`
 
@@ -2947,7 +2947,7 @@ Queue processing order: `ORDER BY priority ASC, created_at ASC`
 
   **Query params:** `limit`, `offset`
 
-- [ ] **Task DM-6.1.3: Create `POST /v1/download/admin/retry/:id` handler**
+- [x] **Task DM-6.1.3: Create `POST /v1/download/admin/retry/:id` handler**
 
   **File:** `catalog-server/src/server/server.rs`
 
@@ -2955,7 +2955,7 @@ Queue processing order: `ORDER BY priority ASC, created_at ASC`
 
   **Logic:** Reset failed item to pending, log admin retry audit event.
 
-- [ ] **Task DM-6.1.4: Create `GET /v1/download/admin/activity` handler**
+- [x] **Task DM-6.1.4: Create `GET /v1/download/admin/activity` handler**
 
   **File:** `catalog-server/src/server/server.rs`
 
@@ -2977,7 +2977,7 @@ Queue processing order: `ORDER BY priority ASC, created_at ASC`
   }
   ```
 
-- [ ] **Task DM-6.1.5: Create `GET /v1/download/admin/requests` handler**
+- [x] **Task DM-6.1.5: Create `GET /v1/download/admin/requests` handler**
 
   **File:** `catalog-server/src/server/server.rs`
 

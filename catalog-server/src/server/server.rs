@@ -3187,6 +3187,284 @@ async fn get_download_limits(
     }
 }
 
+// ============================================================================
+// Download Admin Handlers
+// ============================================================================
+
+/// Response for download queue statistics
+#[derive(serde::Serialize)]
+struct DownloadStatsResponse {
+    queue: QueueStatsResponse,
+    capacity: CapacityStatsResponse,
+}
+
+#[derive(serde::Serialize)]
+struct QueueStatsResponse {
+    pending: i64,
+    in_progress: i64,
+    retry_waiting: i64,
+    completed_today: i64,
+    failed_today: i64,
+}
+
+#[derive(serde::Serialize)]
+struct CapacityStatsResponse {
+    albums_this_hour: i32,
+    max_per_hour: i32,
+    albums_today: i32,
+    max_per_day: i32,
+}
+
+/// GET /v1/download/admin/stats - Get download queue statistics
+async fn admin_get_download_stats(
+    _session: Session,
+    State(download_manager): State<super::state::OptionalDownloadManager>,
+) -> Response {
+    let dm = match download_manager {
+        Some(dm) => dm,
+        None => {
+            return (
+                StatusCode::SERVICE_UNAVAILABLE,
+                "Download manager not enabled",
+            )
+                .into_response()
+        }
+    };
+
+    let queue_stats = match dm.get_queue_stats() {
+        Ok(stats) => stats,
+        Err(err) => {
+            error!("Error getting queue stats: {}", err);
+            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+        }
+    };
+
+    let capacity = match dm.check_global_capacity() {
+        Ok(cap) => cap,
+        Err(err) => {
+            error!("Error getting capacity: {}", err);
+            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+        }
+    };
+
+    let response = DownloadStatsResponse {
+        queue: QueueStatsResponse {
+            pending: queue_stats.pending,
+            in_progress: queue_stats.in_progress,
+            retry_waiting: queue_stats.retry_waiting,
+            completed_today: queue_stats.completed_today,
+            failed_today: queue_stats.failed_today,
+        },
+        capacity: CapacityStatsResponse {
+            albums_this_hour: capacity.albums_this_hour,
+            max_per_hour: capacity.max_per_hour,
+            albums_today: capacity.albums_today,
+            max_per_day: capacity.max_per_day,
+        },
+    };
+
+    Json(response).into_response()
+}
+
+/// Query parameters for failed items endpoint
+#[derive(serde::Deserialize)]
+struct FailedItemsQuery {
+    limit: Option<usize>,
+    offset: Option<usize>,
+}
+
+/// GET /v1/download/admin/failed - Get failed download items
+async fn admin_get_download_failed(
+    _session: Session,
+    State(download_manager): State<super::state::OptionalDownloadManager>,
+    Query(query): Query<FailedItemsQuery>,
+) -> Response {
+    let dm = match download_manager {
+        Some(dm) => dm,
+        None => {
+            return (
+                StatusCode::SERVICE_UNAVAILABLE,
+                "Download manager not enabled",
+            )
+                .into_response()
+        }
+    };
+
+    let limit = query.limit.unwrap_or(50).min(200);
+    let offset = query.offset.unwrap_or(0);
+
+    match dm.get_failed_items(limit, offset) {
+        Ok(items) => Json(items).into_response(),
+        Err(err) => {
+            error!("Error getting failed items: {}", err);
+            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+        }
+    }
+}
+
+/// POST /v1/download/admin/retry/:id - Retry a failed download
+async fn admin_retry_download(
+    session: Session,
+    State(download_manager): State<super::state::OptionalDownloadManager>,
+    Path(request_id): Path<String>,
+) -> Response {
+    let dm = match download_manager {
+        Some(dm) => dm,
+        None => {
+            return (
+                StatusCode::SERVICE_UNAVAILABLE,
+                "Download manager not enabled",
+            )
+                .into_response()
+        }
+    };
+
+    let user_id = session.user_id.to_string();
+    match dm.retry_failed(&user_id, &request_id) {
+        Ok(()) => StatusCode::OK.into_response(),
+        Err(err) => {
+            error!("Error retrying download {}: {}", request_id, err);
+            (StatusCode::BAD_REQUEST, err.to_string()).into_response()
+        }
+    }
+}
+
+/// Query parameters for activity endpoint
+#[derive(serde::Deserialize)]
+struct ActivityQuery {
+    hours: Option<usize>,
+}
+
+/// Response for activity endpoint
+#[derive(serde::Serialize)]
+struct ActivityResponse {
+    hourly: Vec<HourlyActivity>,
+    totals: ActivityTotals,
+}
+
+#[derive(serde::Serialize)]
+struct HourlyActivity {
+    hour: String,
+    albums: i64,
+    tracks: i64,
+    bytes: i64,
+}
+
+#[derive(serde::Serialize)]
+struct ActivityTotals {
+    albums: i64,
+    tracks: i64,
+    bytes: i64,
+}
+
+/// GET /v1/download/admin/activity - Get download activity
+async fn admin_get_download_activity(
+    _session: Session,
+    State(download_manager): State<super::state::OptionalDownloadManager>,
+    Query(query): Query<ActivityQuery>,
+) -> Response {
+    let dm = match download_manager {
+        Some(dm) => dm,
+        None => {
+            return (
+                StatusCode::SERVICE_UNAVAILABLE,
+                "Download manager not enabled",
+            )
+                .into_response()
+        }
+    };
+
+    let hours = query.hours.unwrap_or(24).min(168); // Max 7 days
+
+    match dm.get_activity(hours) {
+        Ok(entries) => {
+            let mut total_albums = 0i64;
+            let mut total_tracks = 0i64;
+            let mut total_bytes = 0i64;
+
+            let hourly: Vec<HourlyActivity> = entries
+                .iter()
+                .map(|e| {
+                    total_albums += e.albums_downloaded;
+                    total_tracks += e.tracks_downloaded;
+                    total_bytes += e.bytes_downloaded;
+
+                    HourlyActivity {
+                        hour: chrono::DateTime::from_timestamp(e.hour_bucket, 0)
+                            .map(|dt| dt.to_rfc3339())
+                            .unwrap_or_default(),
+                        albums: e.albums_downloaded,
+                        tracks: e.tracks_downloaded,
+                        bytes: e.bytes_downloaded,
+                    }
+                })
+                .collect();
+
+            let response = ActivityResponse {
+                hourly,
+                totals: ActivityTotals {
+                    albums: total_albums,
+                    tracks: total_tracks,
+                    bytes: total_bytes,
+                },
+            };
+
+            Json(response).into_response()
+        }
+        Err(err) => {
+            error!("Error getting download activity: {}", err);
+            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+        }
+    }
+}
+
+/// Query parameters for requests endpoint
+#[derive(serde::Deserialize)]
+struct RequestsQuery {
+    status: Option<String>,
+    user_id: Option<String>,
+    limit: Option<usize>,
+    offset: Option<usize>,
+}
+
+/// GET /v1/download/admin/requests - Get all download requests
+async fn admin_get_download_requests(
+    _session: Session,
+    State(download_manager): State<super::state::OptionalDownloadManager>,
+    Query(query): Query<RequestsQuery>,
+) -> Response {
+    let dm = match download_manager {
+        Some(dm) => dm,
+        None => {
+            return (
+                StatusCode::SERVICE_UNAVAILABLE,
+                "Download manager not enabled",
+            )
+                .into_response()
+        }
+    };
+
+    let limit = query.limit.unwrap_or(50).min(200);
+    let offset = query.offset.unwrap_or(0);
+
+    let status = query.status.as_deref().and_then(|s| match s.to_lowercase().as_str() {
+        "pending" => Some(crate::download_manager::QueueStatus::Pending),
+        "in_progress" => Some(crate::download_manager::QueueStatus::InProgress),
+        "retry_waiting" => Some(crate::download_manager::QueueStatus::RetryWaiting),
+        "completed" => Some(crate::download_manager::QueueStatus::Completed),
+        "failed" => Some(crate::download_manager::QueueStatus::Failed),
+        _ => None,
+    });
+
+    match dm.get_all_requests(status, query.user_id.as_deref(), limit, offset) {
+        Ok(items) => Json(items).into_response(),
+        Err(err) => {
+            error!("Error getting download requests: {}", err);
+            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+        }
+    }
+}
+
 impl ServerState {
     #[allow(clippy::arc_with_non_send_sync, clippy::too_many_arguments)]
     fn new(
@@ -3611,8 +3889,8 @@ pub fn make_app(
         .merge(admin_listening_routes)
         .merge(admin_changelog_routes);
 
-    // Download manager routes (requires RequestContent permission)
-    let download_routes: Router = Router::new()
+    // Download manager user routes (requires RequestContent permission)
+    let download_user_routes: Router = Router::new()
         .route("/search", get(search_download_content))
         .route("/search/discography/{artist_id}", get(search_download_discography))
         .route("/request/album", post(request_album_download))
@@ -3625,6 +3903,32 @@ pub fn make_app(
             require_request_content,
         ))
         .with_state(state.clone());
+
+    // Download manager admin read routes (requires ViewAnalytics permission)
+    let download_admin_read_routes: Router = Router::new()
+        .route("/admin/stats", get(admin_get_download_stats))
+        .route("/admin/failed", get(admin_get_download_failed))
+        .route("/admin/activity", get(admin_get_download_activity))
+        .route("/admin/requests", get(admin_get_download_requests))
+        .route_layer(middleware::from_fn_with_state(
+            state.clone(),
+            require_view_analytics,
+        ))
+        .with_state(state.clone());
+
+    // Download manager admin write routes (requires EditCatalog permission)
+    let download_admin_write_routes: Router = Router::new()
+        .route("/admin/retry/{id}", post(admin_retry_download))
+        .route_layer(middleware::from_fn_with_state(
+            state.clone(),
+            require_edit_catalog,
+        ))
+        .with_state(state.clone());
+
+    // Combine all download routes
+    let download_routes: Router = download_user_routes
+        .merge(download_admin_read_routes)
+        .merge(download_admin_write_routes);
 
     let home_router: Router = match config.frontend_dir_path {
         Some(ref frontend_path) => {
