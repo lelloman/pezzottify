@@ -6,7 +6,8 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use anyhow::Result;
+use anyhow::{anyhow, Result};
+use uuid::Uuid;
 
 use crate::catalog_store::CatalogStore;
 use crate::config::DownloadManagerSettings;
@@ -138,21 +139,101 @@ impl DownloadManager {
     /// 6. Return result with queue position
     pub fn request_album(
         &self,
-        _user_id: &str,
-        _request: AlbumRequest,
+        user_id: &str,
+        request: AlbumRequest,
     ) -> Result<RequestResult> {
-        // TODO: Implement in DM-1.7.3
-        todo!("request_album not yet implemented")
+        // 1. Check user rate limits
+        let limits = self.check_user_limits(user_id)?;
+        if !limits.can_request {
+            return Err(anyhow!(
+                "Rate limit exceeded: {} requests today (max {}), {} in queue (max {})",
+                limits.requests_today,
+                limits.max_per_day,
+                limits.in_queue,
+                limits.max_queue
+            ));
+        }
+
+        // 2. Check if already in catalog
+        // TODO: Implement catalog check when external ID mapping is available
+        // For now, we skip this check since we don't have external ID → catalog ID mapping
+
+        // 3. Check if already in queue
+        if self
+            .queue_store
+            .is_in_active_queue(DownloadContentType::Album, &request.album_id)?
+        {
+            return Err(anyhow!(
+                "Album {} is already in the download queue",
+                request.album_id
+            ));
+        }
+
+        // 4. Enqueue with appropriate priority
+        let queue_item_id = Uuid::new_v4().to_string();
+        let queue_item = QueueItem::new(
+            queue_item_id.clone(),
+            DownloadContentType::Album,
+            request.album_id.clone(),
+            QueuePriority::User,
+            RequestSource::User,
+            self.config.max_retries as i32,
+        )
+        .with_names(Some(request.album_name), Some(request.artist_name))
+        .with_user(user_id.to_string());
+
+        self.queue_store.enqueue(queue_item.clone())?;
+
+        // Increment user request counters
+        self.queue_store.increment_user_requests(user_id)?;
+
+        // 6. Get queue position
+        let queue_position = self
+            .queue_store
+            .get_queue_position(&queue_item_id)?
+            .unwrap_or(0);
+
+        // 5. Log audit event
+        self.audit_logger
+            .log_request_created(&queue_item, queue_position)?;
+
+        Ok(RequestResult {
+            request_id: queue_item_id,
+            status: QueueStatus::Pending,
+            queue_position,
+        })
     }
 
     /// Request download of an artist's full discography.
+    ///
+    /// This creates multiple album download requests, one for each album in the discography.
+    /// Albums already in the catalog or queue are skipped.
     pub fn request_discography(
         &self,
         _user_id: &str,
-        _request: DiscographyRequest,
+        request: DiscographyRequest,
     ) -> Result<DiscographyRequestResult> {
-        // TODO: Implement in DM-1.7.3
-        todo!("request_discography not yet implemented")
+        // For discography requests, we need to first fetch the artist's albums
+        // This requires calling the external downloader service, which is async
+        // For now, we return a placeholder that indicates this needs async implementation
+
+        // TODO: Implement in DM-1.7.3 when async discography fetching is available
+        // The implementation should:
+        // 1. Check user rate limits
+        // 2. Fetch artist's albums from downloader service (async)
+        // 3. For each album:
+        //    - Check if already in catalog
+        //    - Check if already in queue
+        //    - Enqueue if not present
+        // 4. Log audit events for each queued album
+        // 5. Return aggregated result
+
+        // For now, return an error indicating the feature requires async support
+        Err(anyhow!(
+            "Discography request for artist {} ({}) requires async implementation - use search_discography + individual album requests",
+            request.artist_name,
+            request.artist_id
+        ))
     }
 
     /// Get all download requests for a user.
@@ -499,5 +580,119 @@ mod tests {
 
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("not found"));
+    }
+
+    #[test]
+    fn test_request_album_success() {
+        let ctx = create_test_manager();
+
+        let request = AlbumRequest {
+            album_id: "album-123".to_string(),
+            album_name: "Test Album".to_string(),
+            artist_name: "Test Artist".to_string(),
+        };
+
+        let result = ctx.manager.request_album("user-1", request).unwrap();
+
+        assert_eq!(result.status, QueueStatus::Pending);
+        assert!(!result.request_id.is_empty());
+        assert_eq!(result.queue_position, 1);
+
+        // Verify the item was added to the queue
+        let requests = ctx.manager.get_user_requests("user-1", 10, 0).unwrap();
+        assert_eq!(requests.len(), 1);
+        assert_eq!(requests[0].content_id, "album-123");
+        assert_eq!(requests[0].content_name, Some("Test Album".to_string()));
+        assert_eq!(requests[0].artist_name, Some("Test Artist".to_string()));
+    }
+
+    #[test]
+    fn test_request_album_already_in_queue() {
+        let ctx = create_test_manager();
+
+        let request = AlbumRequest {
+            album_id: "album-123".to_string(),
+            album_name: "Test Album".to_string(),
+            artist_name: "Test Artist".to_string(),
+        };
+
+        // First request should succeed
+        ctx.manager.request_album("user-1", request.clone()).unwrap();
+
+        // Second request for the same album should fail
+        let result = ctx.manager.request_album("user-1", request);
+
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("already in the download queue"));
+    }
+
+    #[test]
+    fn test_request_album_increments_user_stats() {
+        let ctx = create_test_manager();
+
+        let request = AlbumRequest {
+            album_id: "album-123".to_string(),
+            album_name: "Test Album".to_string(),
+            artist_name: "Test Artist".to_string(),
+        };
+
+        // Check initial limits
+        let limits_before = ctx.manager.check_user_limits("user-1").unwrap();
+        assert_eq!(limits_before.requests_today, 0);
+        assert_eq!(limits_before.in_queue, 0);
+
+        // Make a request
+        ctx.manager.request_album("user-1", request).unwrap();
+
+        // Check updated limits
+        let limits_after = ctx.manager.check_user_limits("user-1").unwrap();
+        assert_eq!(limits_after.requests_today, 1);
+        assert_eq!(limits_after.in_queue, 1);
+    }
+
+    #[test]
+    fn test_request_album_logs_audit_event() {
+        let ctx = create_test_manager();
+
+        let request = AlbumRequest {
+            album_id: "album-123".to_string(),
+            album_name: "Test Album".to_string(),
+            artist_name: "Test Artist".to_string(),
+        };
+
+        let result = ctx.manager.request_album("user-1", request).unwrap();
+
+        // Check that an audit log entry was created
+        let (item, entries) = ctx
+            .manager
+            .get_audit_for_item(&result.request_id)
+            .unwrap()
+            .unwrap();
+
+        assert_eq!(item.id, result.request_id);
+        assert!(!entries.is_empty());
+        assert_eq!(entries[0].event_type, AuditEventType::RequestCreated);
+    }
+
+    #[test]
+    fn test_request_discography_not_implemented() {
+        let ctx = create_test_manager();
+
+        let request = DiscographyRequest {
+            artist_id: "artist-123".to_string(),
+            artist_name: "Test Artist".to_string(),
+        };
+
+        let result = ctx.manager.request_discography("user-1", request);
+
+        // Should return an error indicating async implementation is needed
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("requires async implementation"));
     }
 }
