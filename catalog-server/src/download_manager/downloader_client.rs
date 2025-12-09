@@ -4,8 +4,11 @@
 
 use std::time::Duration;
 
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use reqwest::Client;
+
+use super::downloader_types::*;
+use super::models::SearchType;
 
 /// Client for communicating with the external downloader service.
 ///
@@ -38,6 +41,10 @@ impl DownloaderClient {
         &self.base_url
     }
 
+    // =========================================================================
+    // Health Check
+    // =========================================================================
+
     /// Check if the downloader service is reachable.
     pub async fn health_check(&self) -> Result<bool> {
         let url = format!("{}/health", self.base_url);
@@ -45,6 +52,194 @@ impl DownloaderClient {
             Ok(response) => Ok(response.status().is_success()),
             Err(_) => Ok(false),
         }
+    }
+
+    // =========================================================================
+    // Search Endpoints
+    // =========================================================================
+
+    /// Search for content via the downloader service.
+    ///
+    /// # Arguments
+    /// * `query` - Search query string
+    /// * `search_type` - Type of content to search for
+    pub async fn search(
+        &self,
+        query: &str,
+        search_type: SearchType,
+    ) -> Result<Vec<ExternalSearchResult>> {
+        let type_param = match search_type {
+            SearchType::Album => "album",
+            SearchType::Artist => "artist",
+        };
+
+        let url = format!("{}/search", self.base_url);
+        let response = self
+            .client
+            .get(&url)
+            .query(&[("q", query), ("type", type_param)])
+            .send()
+            .await?;
+
+        if !response.status().is_success() {
+            return Err(anyhow!(
+                "Search request failed with status: {}",
+                response.status()
+            ));
+        }
+
+        let search_response: SearchResponse = response.json().await?;
+        Ok(search_response.results)
+    }
+
+    /// Get an artist's discography from the downloader service.
+    ///
+    /// # Arguments
+    /// * `artist_id` - External artist ID
+    pub async fn get_discography(&self, artist_id: &str) -> Result<ExternalDiscographyResult> {
+        let url = format!("{}/artist/{}/discography", self.base_url, artist_id);
+        let response = self.client.get(&url).send().await?;
+
+        if !response.status().is_success() {
+            return Err(anyhow!(
+                "Discography request failed with status: {}",
+                response.status()
+            ));
+        }
+
+        let discography: ExternalDiscographyResult = response.json().await?;
+        Ok(discography)
+    }
+
+    // =========================================================================
+    // Metadata Endpoints
+    // =========================================================================
+
+    /// Get album metadata from the downloader service.
+    ///
+    /// # Arguments
+    /// * `album_id` - External album ID
+    pub async fn get_album(&self, album_id: &str) -> Result<ExternalAlbum> {
+        let url = format!("{}/album/{}", self.base_url, album_id);
+        let response = self.client.get(&url).send().await?;
+
+        if !response.status().is_success() {
+            return Err(anyhow!(
+                "Album metadata request failed with status: {}",
+                response.status()
+            ));
+        }
+
+        let album: ExternalAlbum = response.json().await?;
+        Ok(album)
+    }
+
+    /// Get tracks for an album from the downloader service.
+    ///
+    /// # Arguments
+    /// * `album_id` - External album ID
+    pub async fn get_album_tracks(&self, album_id: &str) -> Result<Vec<ExternalTrack>> {
+        let url = format!("{}/album/{}/tracks", self.base_url, album_id);
+        let response = self.client.get(&url).send().await?;
+
+        if !response.status().is_success() {
+            return Err(anyhow!(
+                "Album tracks request failed with status: {}",
+                response.status()
+            ));
+        }
+
+        let tracks_response: TracksResponse = response.json().await?;
+        Ok(tracks_response.tracks)
+    }
+
+    /// Get artist metadata from the downloader service.
+    ///
+    /// # Arguments
+    /// * `artist_id` - External artist ID
+    pub async fn get_artist(&self, artist_id: &str) -> Result<ExternalArtist> {
+        let url = format!("{}/artist/{}", self.base_url, artist_id);
+        let response = self.client.get(&url).send().await?;
+
+        if !response.status().is_success() {
+            return Err(anyhow!(
+                "Artist metadata request failed with status: {}",
+                response.status()
+            ));
+        }
+
+        let artist: ExternalArtist = response.json().await?;
+        Ok(artist)
+    }
+
+    /// Get track metadata from the downloader service.
+    ///
+    /// # Arguments
+    /// * `track_id` - External track ID
+    pub async fn get_track(&self, track_id: &str) -> Result<ExternalTrack> {
+        let url = format!("{}/track/{}", self.base_url, track_id);
+        let response = self.client.get(&url).send().await?;
+
+        if !response.status().is_success() {
+            return Err(anyhow!(
+                "Track metadata request failed with status: {}",
+                response.status()
+            ));
+        }
+
+        let track: ExternalTrack = response.json().await?;
+        Ok(track)
+    }
+
+    // =========================================================================
+    // Download Endpoints
+    // =========================================================================
+
+    /// Download track audio from the downloader service.
+    ///
+    /// Returns the audio bytes and content type (e.g., "audio/flac").
+    ///
+    /// # Arguments
+    /// * `track_id` - External track ID
+    pub async fn download_track_audio(&self, track_id: &str) -> Result<(Vec<u8>, String)> {
+        let url = format!("{}/track/{}/audio", self.base_url, track_id);
+        let response = self.client.get(&url).send().await?;
+
+        if !response.status().is_success() {
+            return Err(anyhow!(
+                "Track audio download failed with status: {}",
+                response.status()
+            ));
+        }
+
+        let content_type = response
+            .headers()
+            .get("content-type")
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or("audio/flac")
+            .to_string();
+
+        let bytes = response.bytes().await?.to_vec();
+        Ok((bytes, content_type))
+    }
+
+    /// Download an image from the downloader service.
+    ///
+    /// # Arguments
+    /// * `image_id` - Hex image ID
+    pub async fn download_image(&self, image_id: &str) -> Result<Vec<u8>> {
+        let url = format!("{}/image/{}", self.base_url, image_id);
+        let response = self.client.get(&url).send().await?;
+
+        if !response.status().is_success() {
+            return Err(anyhow!(
+                "Image download failed with status: {}",
+                response.status()
+            ));
+        }
+
+        let bytes = response.bytes().await?.to_vec();
+        Ok(bytes)
     }
 }
 
@@ -58,5 +253,12 @@ mod tests {
         assert!(client.is_ok());
         let client = client.unwrap();
         assert_eq!(client.base_url(), "http://localhost:8080");
+    }
+
+    #[test]
+    fn test_new_client_with_trailing_slash() {
+        let client = DownloaderClient::new("http://localhost:8080/".to_string(), 30).unwrap();
+        // Note: trailing slash is preserved, which may need to be handled by callers
+        assert_eq!(client.base_url(), "http://localhost:8080/");
     }
 }
