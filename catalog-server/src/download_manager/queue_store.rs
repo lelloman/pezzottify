@@ -417,6 +417,27 @@ impl SqliteDownloadQueueStore {
         // Truncate to day (86400 seconds)
         (now / 86400) * 86400
     }
+
+    /// Helper to convert a database row to an AuditLogEntry.
+    fn row_to_audit_entry(row: &rusqlite::Row) -> rusqlite::Result<AuditLogEntry> {
+        let event_type_str: String = row.get("event_type")?;
+        let content_type_str: Option<String> = row.get("content_type")?;
+        let request_source_str: Option<String> = row.get("request_source")?;
+        let details_str: Option<String> = row.get("details")?;
+
+        Ok(AuditLogEntry {
+            id: row.get("id")?,
+            timestamp: row.get("timestamp")?,
+            event_type: AuditEventType::from_str(&event_type_str)
+                .unwrap_or(AuditEventType::RequestCreated),
+            queue_item_id: row.get("queue_item_id")?,
+            content_type: content_type_str.and_then(|s| DownloadContentType::from_str(&s)),
+            content_id: row.get("content_id")?,
+            user_id: row.get("user_id")?,
+            request_source: request_source_str.and_then(|s| RequestSource::from_str(&s)),
+            details: details_str.and_then(|s| serde_json::from_str(&s).ok()),
+        })
+    }
 }
 
 impl DownloadQueueStore for SqliteDownloadQueueStore {
@@ -1275,33 +1296,196 @@ impl DownloadQueueStore for SqliteDownloadQueueStore {
         Ok(items)
     }
 
-    // Stub implementations for remaining trait methods (to be implemented in later tasks)
+    // === Audit Logging ===
 
-    fn log_audit_event(&self, _event: AuditLogEntry) -> Result<()> {
-        todo!("Implement in DM-1.4.11")
+    fn log_audit_event(&self, event: AuditLogEntry) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+
+        conn.execute(
+            r#"INSERT INTO download_audit_log (
+                   timestamp, event_type, queue_item_id, content_type, content_id,
+                   user_id, request_source, details
+               ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)"#,
+            rusqlite::params![
+                event.timestamp,
+                event.event_type.as_str(),
+                event.queue_item_id,
+                event.content_type.as_ref().map(|ct| ct.as_str()),
+                event.content_id,
+                event.user_id,
+                event.request_source.as_ref().map(|rs| rs.as_str()),
+                event.details.as_ref().map(|d| d.to_string()),
+            ],
+        )?;
+
+        Ok(())
     }
 
-    fn get_audit_log(&self, _filter: AuditLogFilter) -> Result<(Vec<AuditLogEntry>, usize)> {
-        todo!("Implement in DM-1.4.11")
+    fn get_audit_log(&self, filter: AuditLogFilter) -> Result<(Vec<AuditLogEntry>, usize)> {
+        let conn = self.conn.lock().unwrap();
+
+        // Build WHERE clauses dynamically
+        let mut conditions: Vec<String> = vec![];
+        let mut params: Vec<Box<dyn rusqlite::ToSql>> = vec![];
+
+        if let Some(ref queue_item_id) = filter.queue_item_id {
+            conditions.push(format!("queue_item_id = ?{}", params.len() + 1));
+            params.push(Box::new(queue_item_id.clone()));
+        }
+
+        if let Some(ref user_id) = filter.user_id {
+            conditions.push(format!("user_id = ?{}", params.len() + 1));
+            params.push(Box::new(user_id.clone()));
+        }
+
+        if let Some(ref content_type) = filter.content_type {
+            conditions.push(format!("content_type = ?{}", params.len() + 1));
+            params.push(Box::new(content_type.as_str().to_string()));
+        }
+
+        if let Some(ref content_id) = filter.content_id {
+            conditions.push(format!("content_id = ?{}", params.len() + 1));
+            params.push(Box::new(content_id.clone()));
+        }
+
+        if let Some(since) = filter.since {
+            conditions.push(format!("timestamp >= ?{}", params.len() + 1));
+            params.push(Box::new(since));
+        }
+
+        if let Some(until) = filter.until {
+            conditions.push(format!("timestamp <= ?{}", params.len() + 1));
+            params.push(Box::new(until));
+        }
+
+        if let Some(ref event_types) = filter.event_types {
+            if !event_types.is_empty() {
+                let placeholders: Vec<String> = event_types
+                    .iter()
+                    .enumerate()
+                    .map(|(i, _)| format!("?{}", params.len() + i + 1))
+                    .collect();
+                conditions.push(format!("event_type IN ({})", placeholders.join(", ")));
+                for et in event_types {
+                    params.push(Box::new(et.as_str().to_string()));
+                }
+            }
+        }
+
+        let where_clause = if conditions.is_empty() {
+            String::new()
+        } else {
+            format!("WHERE {}", conditions.join(" AND "))
+        };
+
+        // Get total count first
+        let count_sql = format!("SELECT COUNT(*) FROM download_audit_log {}", where_clause);
+        let total: usize = {
+            let params_refs: Vec<&dyn rusqlite::ToSql> =
+                params.iter().map(|p| p.as_ref()).collect();
+            conn.query_row(&count_sql, params_refs.as_slice(), |row| row.get::<_, i64>(0))? as usize
+        };
+
+        // Now get the actual rows with pagination
+        let select_sql = format!(
+            "SELECT * FROM download_audit_log {} ORDER BY timestamp DESC LIMIT ?{} OFFSET ?{}",
+            where_clause,
+            params.len() + 1,
+            params.len() + 2
+        );
+
+        params.push(Box::new(filter.limit as i64));
+        params.push(Box::new(filter.offset as i64));
+
+        let params_refs: Vec<&dyn rusqlite::ToSql> = params.iter().map(|p| p.as_ref()).collect();
+
+        let mut stmt = conn.prepare(&select_sql)?;
+        let entries = stmt
+            .query_map(params_refs.as_slice(), Self::row_to_audit_entry)?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+
+        Ok((entries, total))
     }
 
-    fn get_audit_for_item(&self, _queue_item_id: &str) -> Result<Vec<AuditLogEntry>> {
-        todo!("Implement in DM-1.4.11")
+    fn get_audit_for_item(&self, queue_item_id: &str) -> Result<Vec<AuditLogEntry>> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare(
+            r#"SELECT * FROM download_audit_log
+               WHERE queue_item_id = ?1
+               ORDER BY timestamp ASC"#,
+        )?;
+
+        let entries = stmt
+            .query_map([queue_item_id], Self::row_to_audit_entry)?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+
+        Ok(entries)
     }
 
     fn get_audit_for_user(
         &self,
-        _user_id: &str,
-        _since: Option<i64>,
-        _until: Option<i64>,
-        _limit: usize,
-        _offset: usize,
+        user_id: &str,
+        since: Option<i64>,
+        until: Option<i64>,
+        limit: usize,
+        offset: usize,
     ) -> Result<(Vec<AuditLogEntry>, usize)> {
-        todo!("Implement in DM-1.4.11")
+        let conn = self.conn.lock().unwrap();
+
+        // Build conditions
+        let mut conditions = vec!["user_id = ?1".to_string()];
+        let mut params: Vec<Box<dyn rusqlite::ToSql>> = vec![Box::new(user_id.to_string())];
+
+        if let Some(s) = since {
+            conditions.push(format!("timestamp >= ?{}", params.len() + 1));
+            params.push(Box::new(s));
+        }
+
+        if let Some(u) = until {
+            conditions.push(format!("timestamp <= ?{}", params.len() + 1));
+            params.push(Box::new(u));
+        }
+
+        let where_clause = format!("WHERE {}", conditions.join(" AND "));
+
+        // Get total count
+        let count_sql = format!("SELECT COUNT(*) FROM download_audit_log {}", where_clause);
+        let total: usize = {
+            let params_refs: Vec<&dyn rusqlite::ToSql> =
+                params.iter().map(|p| p.as_ref()).collect();
+            conn.query_row(&count_sql, params_refs.as_slice(), |row| row.get::<_, i64>(0))? as usize
+        };
+
+        // Get rows with pagination
+        let select_sql = format!(
+            "SELECT * FROM download_audit_log {} ORDER BY timestamp DESC LIMIT ?{} OFFSET ?{}",
+            where_clause,
+            params.len() + 1,
+            params.len() + 2
+        );
+
+        params.push(Box::new(limit as i64));
+        params.push(Box::new(offset as i64));
+
+        let params_refs: Vec<&dyn rusqlite::ToSql> = params.iter().map(|p| p.as_ref()).collect();
+
+        let mut stmt = conn.prepare(&select_sql)?;
+        let entries = stmt
+            .query_map(params_refs.as_slice(), Self::row_to_audit_entry)?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+
+        Ok((entries, total))
     }
 
-    fn cleanup_old_audit_entries(&self, _older_than: i64) -> Result<usize> {
-        todo!("Implement in DM-1.4.11")
+    fn cleanup_old_audit_entries(&self, older_than: i64) -> Result<usize> {
+        let conn = self.conn.lock().unwrap();
+
+        let rows_deleted = conn.execute(
+            "DELETE FROM download_audit_log WHERE timestamp < ?1",
+            [older_than],
+        )?;
+
+        Ok(rows_deleted)
     }
 }
 
@@ -3445,5 +3629,277 @@ mod tests {
         for item in &stale {
             assert_eq!(item.status, QueueStatus::InProgress);
         }
+    }
+
+    // === Audit Logging Tests ===
+
+    #[test]
+    fn test_log_audit_event_basic() {
+        let store = SqliteDownloadQueueStore::in_memory().unwrap();
+
+        let event = AuditLogEntry::new(AuditEventType::RequestCreated)
+            .with_queue_item("queue-123".to_string())
+            .with_content(DownloadContentType::Album, "album-456".to_string())
+            .with_user("user-789".to_string())
+            .with_source(RequestSource::User);
+
+        store.log_audit_event(event).unwrap();
+
+        let (entries, total) = store.get_audit_log(AuditLogFilter::new()).unwrap();
+        assert_eq!(total, 1);
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].event_type, AuditEventType::RequestCreated);
+        assert_eq!(entries[0].queue_item_id, Some("queue-123".to_string()));
+    }
+
+    #[test]
+    fn test_log_audit_event_with_details() {
+        let store = SqliteDownloadQueueStore::in_memory().unwrap();
+
+        let details = serde_json::json!({
+            "child_count": 12,
+            "album_name": "Test Album"
+        });
+
+        let event = AuditLogEntry::new(AuditEventType::ChildrenCreated)
+            .with_queue_item("parent-123".to_string())
+            .with_details(details);
+
+        store.log_audit_event(event).unwrap();
+
+        let (entries, _) = store.get_audit_log(AuditLogFilter::new()).unwrap();
+        assert_eq!(entries.len(), 1);
+
+        let details = entries[0].details.as_ref().unwrap();
+        assert_eq!(details["child_count"], 12);
+        assert_eq!(details["album_name"], "Test Album");
+    }
+
+    #[test]
+    fn test_get_audit_log_empty() {
+        let store = SqliteDownloadQueueStore::in_memory().unwrap();
+
+        let (entries, total) = store.get_audit_log(AuditLogFilter::new()).unwrap();
+        assert!(entries.is_empty());
+        assert_eq!(total, 0);
+    }
+
+    #[test]
+    fn test_get_audit_log_filter_by_user() {
+        let store = SqliteDownloadQueueStore::in_memory().unwrap();
+
+        // Log events for different users
+        store.log_audit_event(
+            AuditLogEntry::new(AuditEventType::RequestCreated)
+                .with_user("user-1".to_string())
+        ).unwrap();
+        store.log_audit_event(
+            AuditLogEntry::new(AuditEventType::RequestCreated)
+                .with_user("user-2".to_string())
+        ).unwrap();
+        store.log_audit_event(
+            AuditLogEntry::new(AuditEventType::DownloadCompleted)
+                .with_user("user-1".to_string())
+        ).unwrap();
+
+        let filter = AuditLogFilter::new().for_user("user-1".to_string());
+        let (entries, total) = store.get_audit_log(filter).unwrap();
+
+        assert_eq!(total, 2);
+        assert_eq!(entries.len(), 2);
+        for entry in &entries {
+            assert_eq!(entry.user_id, Some("user-1".to_string()));
+        }
+    }
+
+    #[test]
+    fn test_get_audit_log_filter_by_queue_item() {
+        let store = SqliteDownloadQueueStore::in_memory().unwrap();
+
+        store.log_audit_event(
+            AuditLogEntry::new(AuditEventType::RequestCreated)
+                .with_queue_item("queue-1".to_string())
+        ).unwrap();
+        store.log_audit_event(
+            AuditLogEntry::new(AuditEventType::DownloadStarted)
+                .with_queue_item("queue-1".to_string())
+        ).unwrap();
+        store.log_audit_event(
+            AuditLogEntry::new(AuditEventType::RequestCreated)
+                .with_queue_item("queue-2".to_string())
+        ).unwrap();
+
+        let filter = AuditLogFilter::new().for_queue_item("queue-1".to_string());
+        let (entries, total) = store.get_audit_log(filter).unwrap();
+
+        assert_eq!(total, 2);
+        for entry in &entries {
+            assert_eq!(entry.queue_item_id, Some("queue-1".to_string()));
+        }
+    }
+
+    #[test]
+    fn test_get_audit_log_filter_by_event_types() {
+        let store = SqliteDownloadQueueStore::in_memory().unwrap();
+
+        store.log_audit_event(AuditLogEntry::new(AuditEventType::RequestCreated)).unwrap();
+        store.log_audit_event(AuditLogEntry::new(AuditEventType::DownloadStarted)).unwrap();
+        store.log_audit_event(AuditLogEntry::new(AuditEventType::DownloadCompleted)).unwrap();
+        store.log_audit_event(AuditLogEntry::new(AuditEventType::DownloadFailed)).unwrap();
+
+        let filter = AuditLogFilter::new().with_event_types(vec![
+            AuditEventType::DownloadCompleted,
+            AuditEventType::DownloadFailed,
+        ]);
+        let (entries, total) = store.get_audit_log(filter).unwrap();
+
+        assert_eq!(total, 2);
+        for entry in &entries {
+            assert!(
+                entry.event_type == AuditEventType::DownloadCompleted
+                    || entry.event_type == AuditEventType::DownloadFailed
+            );
+        }
+    }
+
+    #[test]
+    fn test_get_audit_log_pagination() {
+        let store = SqliteDownloadQueueStore::in_memory().unwrap();
+
+        // Log 10 events
+        for i in 0..10 {
+            let mut event = AuditLogEntry::new(AuditEventType::RequestCreated);
+            event.timestamp = i as i64; // Different timestamps
+            store.log_audit_event(event).unwrap();
+        }
+
+        let filter = AuditLogFilter::new().paginate(3, 0);
+        let (entries, total) = store.get_audit_log(filter).unwrap();
+        assert_eq!(total, 10);
+        assert_eq!(entries.len(), 3);
+
+        let filter = AuditLogFilter::new().paginate(3, 3);
+        let (entries, total) = store.get_audit_log(filter).unwrap();
+        assert_eq!(total, 10);
+        assert_eq!(entries.len(), 3);
+    }
+
+    #[test]
+    fn test_get_audit_for_item() {
+        let store = SqliteDownloadQueueStore::in_memory().unwrap();
+
+        // Log a sequence of events for an item
+        store.log_audit_event(
+            AuditLogEntry::new(AuditEventType::RequestCreated)
+                .with_queue_item("item-1".to_string())
+        ).unwrap();
+        store.log_audit_event(
+            AuditLogEntry::new(AuditEventType::DownloadStarted)
+                .with_queue_item("item-1".to_string())
+        ).unwrap();
+        store.log_audit_event(
+            AuditLogEntry::new(AuditEventType::DownloadCompleted)
+                .with_queue_item("item-1".to_string())
+        ).unwrap();
+        // Different item
+        store.log_audit_event(
+            AuditLogEntry::new(AuditEventType::RequestCreated)
+                .with_queue_item("item-2".to_string())
+        ).unwrap();
+
+        let entries = store.get_audit_for_item("item-1").unwrap();
+        assert_eq!(entries.len(), 3);
+
+        // Should be in chronological order (ASC)
+        assert_eq!(entries[0].event_type, AuditEventType::RequestCreated);
+        assert_eq!(entries[1].event_type, AuditEventType::DownloadStarted);
+        assert_eq!(entries[2].event_type, AuditEventType::DownloadCompleted);
+    }
+
+    #[test]
+    fn test_get_audit_for_item_empty() {
+        let store = SqliteDownloadQueueStore::in_memory().unwrap();
+
+        let entries = store.get_audit_for_item("nonexistent").unwrap();
+        assert!(entries.is_empty());
+    }
+
+    #[test]
+    fn test_get_audit_for_user() {
+        let store = SqliteDownloadQueueStore::in_memory().unwrap();
+
+        // Log events for user-1
+        for i in 0..5 {
+            let mut event = AuditLogEntry::new(AuditEventType::RequestCreated)
+                .with_user("user-1".to_string());
+            event.timestamp = i as i64;
+            store.log_audit_event(event).unwrap();
+        }
+
+        // Log events for user-2
+        store.log_audit_event(
+            AuditLogEntry::new(AuditEventType::RequestCreated)
+                .with_user("user-2".to_string())
+        ).unwrap();
+
+        let (entries, total) = store.get_audit_for_user("user-1", None, None, 100, 0).unwrap();
+        assert_eq!(total, 5);
+        assert_eq!(entries.len(), 5);
+    }
+
+    #[test]
+    fn test_get_audit_for_user_time_range() {
+        let store = SqliteDownloadQueueStore::in_memory().unwrap();
+
+        // Log events at different times
+        for i in 0..10 {
+            let mut event = AuditLogEntry::new(AuditEventType::RequestCreated)
+                .with_user("user-1".to_string());
+            event.timestamp = (i * 100) as i64; // 0, 100, 200, ..., 900
+            store.log_audit_event(event).unwrap();
+        }
+
+        // Get events from time 300 to 600 (should be 4 events: 300, 400, 500, 600)
+        let (entries, total) = store.get_audit_for_user("user-1", Some(300), Some(600), 100, 0).unwrap();
+        assert_eq!(total, 4);
+        assert_eq!(entries.len(), 4);
+    }
+
+    #[test]
+    fn test_cleanup_old_audit_entries() {
+        let store = SqliteDownloadQueueStore::in_memory().unwrap();
+
+        // Log events with different timestamps
+        for i in 0..10 {
+            let mut event = AuditLogEntry::new(AuditEventType::RequestCreated);
+            event.timestamp = (i * 100) as i64;
+            store.log_audit_event(event).unwrap();
+        }
+
+        // Delete entries older than timestamp 500 (should delete 0, 100, 200, 300, 400)
+        let deleted = store.cleanup_old_audit_entries(500).unwrap();
+        assert_eq!(deleted, 5);
+
+        // Verify remaining entries
+        let (entries, total) = store.get_audit_log(AuditLogFilter::new()).unwrap();
+        assert_eq!(total, 5);
+        for entry in &entries {
+            assert!(entry.timestamp >= 500);
+        }
+    }
+
+    #[test]
+    fn test_cleanup_old_audit_entries_none() {
+        let store = SqliteDownloadQueueStore::in_memory().unwrap();
+
+        // Log events with recent timestamps
+        for _ in 0..5 {
+            let event = AuditLogEntry::new(AuditEventType::RequestCreated);
+            store.log_audit_event(event).unwrap();
+        }
+
+        // Try to delete entries older than timestamp 0 (none should match)
+        let deleted = store.cleanup_old_audit_entries(0).unwrap();
+        assert_eq!(deleted, 0);
     }
 }
