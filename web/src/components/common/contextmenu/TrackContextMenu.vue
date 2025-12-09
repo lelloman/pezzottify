@@ -46,10 +46,10 @@ const makeAddToPlaylistSubMenu = () => {
     "Make add to playlist sub menu, userStore.playlistsData.list.length: ",
     userStore.playlistsData.list.length,
   );
-  return userStore.playlistsData.list.map((playlistId) => ({
-    name: userStore.playlistsData.by_id[playlistId].name,
+  return userStore.playlistsData.list.map((playlist) => ({
+    name: playlist.name,
     action: () =>
-      userStore.addTracksToPlaylist(playlistId, [trackId.value], () => {}),
+      userStore.addTracksToPlaylist(playlist.id, [trackId.value], () => {}),
   }));
 };
 
