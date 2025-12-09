@@ -1477,7 +1477,7 @@ Queue processing order: `ORDER BY priority ASC, created_at ASC`
   }
   ```
 
-- [ ] **Task DM-1.2.3: Define `UserRequestView` struct**
+- [x] **Task DM-1.2.3: Define `UserRequestView` struct**
 
   **File:** `catalog-server/src/download_manager/models.rs`
 
