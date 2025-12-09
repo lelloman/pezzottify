@@ -91,6 +91,8 @@ services:
     container_name: telegram-bot
     env_file:
       - ./monitoring/.env
+    environment:
+      - HOST_HOSTNAME=${ALERT_HOSTNAME:-unknown}
     networks:
       - monitoring
     restart: unless-stopped
