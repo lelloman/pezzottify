@@ -4,27 +4,42 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import com.lelloman.pezzottify.android.ui.component.AlbumGridItem
+import com.lelloman.pezzottify.android.ui.component.ArtistGridItem
 import com.lelloman.pezzottify.android.ui.component.LoadingScreen
 import com.lelloman.pezzottify.android.ui.content.Content
 import com.lelloman.pezzottify.android.ui.content.ContentResolver
 import com.lelloman.pezzottify.android.ui.toAlbum
+import com.lelloman.pezzottify.android.ui.toArtist
+
+private enum class LibraryTab {
+    Albums,
+    Artists,
+}
 
 @Composable
 fun LibraryScreen(navController: NavController) {
@@ -43,19 +58,48 @@ private fun LibraryScreenContent(
     contentResolver: ContentResolver,
     navController: NavController,
 ) {
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("Your albums") }
+    var selectedTab by rememberSaveable { mutableStateOf(LibraryTab.Albums) }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .windowInsetsPadding(WindowInsets.statusBars)
+    ) {
+        // Header with segmented button
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 12.dp)
+        ) {
+            Text(
+                text = "Your Library",
+                style = MaterialTheme.typography.headlineMedium,
+                modifier = Modifier.padding(bottom = 12.dp)
             )
+
+            SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+                LibraryTab.entries.forEachIndexed { index, tab ->
+                    SegmentedButton(
+                        shape = SegmentedButtonDefaults.itemShape(
+                            index = index,
+                            count = LibraryTab.entries.size
+                        ),
+                        onClick = { selectedTab = tab },
+                        selected = selectedTab == tab
+                    ) {
+                        Text(text = tab.name)
+                    }
+                }
+            }
         }
-    ) { paddingValues ->
-        Box(modifier = Modifier.padding(paddingValues)) {
+
+        // Content area
+        Box(modifier = Modifier.fillMaxSize()) {
             when {
                 state.isLoading -> LoadingScreen()
-                state.likedAlbumIds.isEmpty() -> EmptyLibraryScreen()
                 else -> LibraryLoadedScreen(
                     state = state,
+                    selectedTab = selectedTab,
                     contentResolver = contentResolver,
                     navController = navController,
                 )
@@ -65,15 +109,18 @@ private fun LibraryScreenContent(
 }
 
 @Composable
-private fun EmptyLibraryScreen() {
+private fun EmptyLibraryScreen(
+    title: String,
+    subtitle: String,
+) {
     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Text(
-                text = "No liked albums yet",
-                style = MaterialTheme.typography.headlineSmall,
+                text = title,
+                style = MaterialTheme.typography.titleLarge,
             )
             Text(
-                text = "Albums you like will appear here",
+                text = subtitle,
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(top = 8.dp),
@@ -85,18 +132,46 @@ private fun EmptyLibraryScreen() {
 @Composable
 private fun LibraryLoadedScreen(
     state: LibraryScreenState,
+    selectedTab: LibraryTab,
     contentResolver: ContentResolver,
     navController: NavController,
 ) {
-    LazyColumn(
-        modifier = Modifier.fillMaxSize()
-    ) {
-        item {
-            AlbumGrid(
-                albumIds = state.likedAlbumIds,
-                contentResolver = contentResolver,
-                navController = navController,
-            )
+    when (selectedTab) {
+        LibraryTab.Albums -> {
+            if (state.likedAlbumIds.isEmpty()) {
+                EmptyLibraryScreen(
+                    title = "No liked albums yet",
+                    subtitle = "Albums you like will appear here"
+                )
+            } else {
+                LazyColumn(modifier = Modifier.fillMaxSize()) {
+                    item {
+                        AlbumGrid(
+                            albumIds = state.likedAlbumIds,
+                            contentResolver = contentResolver,
+                            navController = navController,
+                        )
+                    }
+                }
+            }
+        }
+        LibraryTab.Artists -> {
+            if (state.likedArtistIds.isEmpty()) {
+                EmptyLibraryScreen(
+                    title = "No liked artists yet",
+                    subtitle = "Artists you like will appear here"
+                )
+            } else {
+                LazyColumn(modifier = Modifier.fillMaxSize()) {
+                    item {
+                        ArtistGrid(
+                            artistIds = state.likedArtistIds,
+                            contentResolver = contentResolver,
+                            navController = navController,
+                        )
+                    }
+                }
+            }
         }
     }
 }
@@ -123,6 +198,41 @@ private fun AlbumGrid(
                                 albumDate = album.data.date,
                                 albumCoverUrl = album.data.imageUrl,
                                 onClick = { navController.toAlbum(albumId) }
+                            )
+                        }
+                        is Content.Loading, is Content.Error -> {
+                            Spacer(modifier = Modifier.weight(1f))
+                        }
+                    }
+                } else {
+                    Spacer(modifier = Modifier.weight(1f))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ArtistGrid(
+    artistIds: List<String>,
+    contentResolver: ContentResolver,
+    navController: NavController,
+) {
+    val maxGroupSize = 2
+    artistIds.forEachGroup(maxGroupSize) { ids ->
+        Row(modifier = Modifier.fillMaxWidth()) {
+            for (i in 0 until maxGroupSize) {
+                val artistId = ids.getOrNull(i)
+                if (artistId != null) {
+                    val artistFlow = contentResolver.resolveArtist(artistId)
+                    val artistState = artistFlow.collectAsState(Content.Loading(artistId))
+                    when (val artist = artistState.value) {
+                        is Content.Resolved -> {
+                            ArtistGridItem(
+                                modifier = Modifier.weight(1f),
+                                artistName = artist.data.name,
+                                artistImageUrl = artist.data.imageUrl,
+                                onClick = { navController.toArtist(artistId) }
                             )
                         }
                         is Content.Loading, is Content.Error -> {

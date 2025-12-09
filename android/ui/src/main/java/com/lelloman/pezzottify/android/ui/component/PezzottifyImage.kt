@@ -181,6 +181,14 @@ sealed interface PezzottifyImageShape {
         override fun modifier(modifier: Modifier) = modifier.size(size).clip(CircleShape)
     }
 
+    data object FillWidthCircle : PezzottifyImageShape {
+        override fun modifier(modifier: Modifier) = modifier
+            .fillMaxWidth()
+            .aspectRatio(1f)
+            .clip(CircleShape)
+        override val contentScale: ContentScale = ContentScale.Crop
+    }
+
     data object MiniPlayer : PezzottifyImageShape {
         val size = 52.dp
         override fun modifier(modifier: Modifier) = modifier.size(size)
