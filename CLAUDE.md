@@ -209,16 +209,25 @@ When no pin is configured, certificate pinning is disabled (suitable for develop
 - `background_jobs/`: Scheduled background tasks
   - Job scheduler with configurable intervals
   - `PopularContentJob`: Computes popular content metrics
+  - `IntegrityWatchdogJob`: Periodic catalog integrity scans
+  - `AuditLogCleanupJob`: Cleans old download audit entries
 - `server_store/`: Server-level data persistence
   - `SqliteServerStore`: Stores server state (job history, etc.)
 - `downloader/`: External content fetching (optional)
   - Integration with external downloader service for missing content
+- `download_manager/`: Queue-based content acquisition (optional)
+  - `DownloadManager`: Main facade for download operations
+  - `DownloadQueueStore`: SQLite queue persistence
+  - `QueueProcessor`: Background download processing
+  - `AuditLogger`: Comprehensive audit trail
+  - `IntegrityWatchdog`: Scans for missing content
+  - `SearchProxy`: External provider search
 
 **Key types:**
 - `SqliteCatalogStore`: SQLite-backed catalog with CRUD operations
 - `CatalogStore`: Trait for catalog access (read and write)
 - `Session`: Request session with user permissions
-- `Permission`: Enum for access control (AccessCatalog, LikeContent, OwnPlaylists, EditCatalog, ManagePermissions, IssueContentDownload, ServerAdmin, ViewAnalytics)
+- `Permission`: Enum for access control (AccessCatalog, LikeContent, OwnPlaylists, EditCatalog, ManagePermissions, IssueContentDownload, ServerAdmin, ViewAnalytics, RequestContent)
 - `UserRole`: Admin or Regular with different permission sets
 
 **Server routes structure:**
@@ -246,6 +255,22 @@ When no pin is configured, certificate pinning is disabled (suitable for develop
   - Server control: `POST /reboot`
 - `/v1/sync/*`: Multi-device sync
   - `GET /state`, `GET /events`
+- `/v1/download/*`: Download manager (requires RequestContent permission)
+  - User endpoints:
+    - `GET /search?q={query}&type={album|artist}`: Search external provider
+    - `GET /limits`: Get user's rate limit status
+    - `GET /my-requests`: Get user's queued requests
+    - `POST /request/album`: Request album download
+    - `POST /request/discography`: Request artist discography
+  - Admin endpoints (require ViewAnalytics/EditCatalog):
+    - `GET /admin/stats`: Queue statistics
+    - `GET /admin/failed`: Failed download items
+    - `GET /admin/activity`: Recent activity log
+    - `GET /admin/requests`: All queued requests
+    - `POST /admin/retry/{id}`: Retry failed download
+    - `GET /admin/audit`: Query audit log
+    - `GET /admin/audit/item/{id}`: Audit for queue item
+    - `GET /admin/audit/user/{user_id}`: Audit for user
 - `/v1/ws`: WebSocket for real-time updates
 
 **Authentication flow:**
@@ -320,7 +345,7 @@ Multi-module Gradle project with clean architecture layers:
 - Permissions are checked via middleware functions in server.rs
 - Each protected route has a `require_*` middleware (e.g., `require_access_catalog`)
 - Permission grants can be role-based or temporary/counted extras
-- Admin role has: AccessCatalog, EditCatalog, ManagePermissions, IssueContentDownload, ServerAdmin, ViewAnalytics
+- Admin role has: AccessCatalog, EditCatalog, ManagePermissions, IssueContentDownload, ServerAdmin, ViewAnalytics, RequestContent
 - Regular role has: AccessCatalog, LikeContent, OwnPlaylists
 
 **Database operations:**

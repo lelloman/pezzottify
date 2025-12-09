@@ -3180,7 +3180,7 @@ Queue processing order: `ORDER BY priority ASC, created_at ASC`
 
 ### Phase DM-8: Documentation
 
-- [ ] **Task DM-8.1: Update `catalog-server/README.md` with download manager section**
+- [x] **Task DM-8.1: Update `catalog-server/README.md` with download manager section**
 
   **Content:**
   - Overview and architecture
@@ -3188,13 +3188,13 @@ Queue processing order: `ORDER BY priority ASC, created_at ASC`
   - API endpoint documentation
   - Permission requirements
 
-- [ ] **Task DM-8.2: Update `CLAUDE.md` with download manager routes**
+- [x] **Task DM-8.2: Update `CLAUDE.md` with download manager routes**
 
   **File:** `CLAUDE.md`
 
   **Add to server routes structure section.**
 
-- [ ] **Task DM-8.3: Create example TOML config with download manager settings**
+- [x] **Task DM-8.3: Create example TOML config with download manager settings**
 
   **File:** `catalog-server/config.example.toml`
 

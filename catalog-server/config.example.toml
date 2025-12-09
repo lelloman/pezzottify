@@ -20,18 +20,41 @@ downloader_timeout_sec = 300
 event_retention_days = 30
 prune_interval_hours = 24
 
-# Download Manager settings (only used if downloader_url is set)
+# Download Manager settings
+# Enables queue-based content acquisition from external music providers.
+# Requires downloader_url to be set. Set enabled = false to disable even with downloader_url.
 [download_manager]
+# Enable/disable the download manager (default: true when downloader_url is set)
+enabled = true
+
+# Rate Limiting
+# Maximum albums a user can request per hour
 max_albums_per_hour = 10
+# Maximum albums a user can request per day
 max_albums_per_day = 60
+# Maximum requests a user can make per day (across all types)
 user_max_requests_per_day = 100
+# Maximum items a user can have in the queue at once
 user_max_queue_size = 200
+
+# Queue Processing
+# Interval between queue processing ticks (seconds)
 process_interval_secs = 5
+# Time before in-progress items are flagged as stale (seconds)
 stale_in_progress_threshold_secs = 3600
+
+# Retry Settings
+# Maximum retry attempts for failed downloads
 max_retries = 5
+# Initial delay before first retry (seconds)
 initial_backoff_secs = 60
+# Maximum delay between retries (seconds)
 max_backoff_secs = 3600
+# Multiplier for exponential backoff
 backoff_multiplier = 2.0
+
+# Audit Log
+# Days to retain audit log entries (0 to disable cleanup)
 audit_log_retention_days = 90
 
 # Background Jobs settings

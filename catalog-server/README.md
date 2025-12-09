@@ -19,6 +19,7 @@ A high-performance Rust backend server for the Pezzottify music streaming platfo
   - [HTTP Caching](#http-caching)
   - [SSL/TLS Configuration](#ssltls-configuration)
 - [API Endpoints](#api-endpoints)
+- [Download Manager](#download-manager)
 - [Authentication & Authorization](#authentication--authorization)
 - [CLI Auth Tool](#cli-auth-tool)
 - [Testing](#testing)
@@ -36,6 +37,7 @@ The catalog server is the backend component of Pezzottify that provides:
 - **Search**: Full-text search across artists, albums, and tracks
 - **User Content**: Playlists and liked content management
 - **Rate Limiting**: Per-endpoint rate limiting to prevent abuse
+- **Download Manager**: Queue-based content acquisition from external music providers
 
 ## Architecture
 
@@ -67,6 +69,22 @@ The catalog server is the backend component of Pezzottify that provides:
 
   - `PezzotHashSearchVault`: Custom full-text search implementation
   - `NoOpSearchVault`: Disabled search stub (for `no_search` feature)
+
+- **`download_manager/`**: Content acquisition from external providers
+
+  - `DownloadManager`: Main facade for download operations
+  - `DownloadQueueStore`: SQLite-backed queue persistence
+  - `QueueProcessor`: Background processor for download queue
+  - `AuditLogger`: Comprehensive audit trail for all operations
+  - `IntegrityWatchdog`: Scans catalog for missing content
+  - `SearchProxy`: Forwards searches to external downloader service
+
+- **`background_jobs/`**: Scheduled background task system
+
+  - `JobScheduler`: Manages job scheduling and execution
+  - `PopularContentJob`: Computes popular content metrics
+  - `IntegrityWatchdogJob`: Periodic integrity scans
+  - `AuditLogCleanupJob`: Cleans old audit log entries
 
 - **`sqlite_persistence/`**: Database schema management
   - `versioned_schema.rs`: Schema migrations with version tracking
@@ -580,6 +598,157 @@ Requires `EditCatalog` permission.
 | Method | Endpoint | Description                                |
 | ------ | -------- | ------------------------------------------ |
 | GET    | `/ws`    | WebSocket connection for real-time updates |
+
+## Download Manager
+
+The download manager enables users to request content from external music providers. It provides a queue-based system with rate limiting, retry logic, and comprehensive audit logging.
+
+### Overview
+
+- **Search Proxy**: Search external providers without downloading
+- **Queue-based Downloads**: Album and discography requests are queued for background processing
+- **Rate Limiting**: Per-user hourly/daily limits prevent abuse
+- **Retry Logic**: Failed downloads are automatically retried with exponential backoff
+- **Integrity Watchdog**: Periodic scans detect and repair missing content
+- **Audit Trail**: All operations are logged for compliance and debugging
+
+### Architecture
+
+```
+User Request → Rate Check → Queue → Background Processor → Downloader Service → Catalog
+                                           ↓
+                                      Audit Logger
+```
+
+The download manager uses a priority-based queue:
+1. **Watchdog (Priority 1)**: Repair items from integrity scans
+2. **User (Priority 2)**: User-requested downloads
+3. **Expansion (Priority 3)**: Child items (tracks, images) spawned from album downloads
+
+### Configuration
+
+Enable the download manager by configuring the downloader service URL:
+
+```toml
+# In config.toml
+downloader_url = "http://downloader:3002"
+
+[download_manager]
+enabled = true
+max_albums_per_hour = 10
+max_albums_per_day = 60
+max_user_queue_size = 20
+process_interval_secs = 30
+max_retries = 5
+initial_retry_delay_secs = 60
+max_retry_delay_secs = 3600
+stale_in_progress_threshold_secs = 3600
+audit_log_retention_days = 90
+```
+
+| Option | Default | Description |
+| ------ | ------- | ----------- |
+| `enabled` | `true` | Enable/disable the download manager |
+| `max_albums_per_hour` | `10` | Maximum albums a user can request per hour |
+| `max_albums_per_day` | `60` | Maximum albums a user can request per day |
+| `max_user_queue_size` | `20` | Maximum items a user can have in the queue |
+| `process_interval_secs` | `30` | Interval between queue processing ticks |
+| `max_retries` | `5` | Maximum retry attempts for failed downloads |
+| `initial_retry_delay_secs` | `60` | Initial delay before first retry |
+| `max_retry_delay_secs` | `3600` | Maximum delay between retries |
+| `stale_in_progress_threshold_secs` | `3600` | Time before in-progress items are flagged as stale |
+| `audit_log_retention_days` | `90` | Days to retain audit log entries |
+
+### User Endpoints (`/v1/download`)
+
+Require `RequestContent` permission.
+
+| Method | Endpoint | Description |
+| ------ | -------- | ----------- |
+| GET | `/search?q={query}&type={album\|artist}` | Search external provider |
+| GET | `/limits` | Get user's rate limit status |
+| GET | `/my-requests` | Get user's queued/recent requests |
+| POST | `/request/album` | Request an album download |
+| POST | `/request/discography` | Request an artist's discography |
+
+#### Search Request
+
+```bash
+GET /v1/download/search?q=pink+floyd&type=album
+```
+
+Response:
+```json
+{
+  "results": [
+    {
+      "id": "external-album-id",
+      "type": "album",
+      "name": "The Dark Side of the Moon",
+      "artist_name": "Pink Floyd",
+      "image_url": "https://...",
+      "release_year": 1973,
+      "in_catalog": false,
+      "in_queue": false
+    }
+  ]
+}
+```
+
+#### Album Request
+
+```bash
+POST /v1/download/request/album
+Content-Type: application/json
+
+{
+  "album_id": "external-album-id",
+  "album_name": "The Dark Side of the Moon",
+  "artist_name": "Pink Floyd"
+}
+```
+
+### Admin Endpoints (`/v1/download/admin`)
+
+Require `ViewAnalytics` or `EditCatalog` permission.
+
+| Method | Endpoint | Permission | Description |
+| ------ | -------- | ---------- | ----------- |
+| GET | `/stats` | ViewAnalytics | Queue statistics and activity summary |
+| GET | `/failed` | ViewAnalytics | List failed download items |
+| GET | `/activity` | ViewAnalytics | Recent download activity log |
+| GET | `/requests` | ViewAnalytics | All queued/recent requests |
+| POST | `/retry/{id}` | EditCatalog | Retry a failed download |
+| GET | `/audit` | ViewAnalytics | Query audit log |
+| GET | `/audit/item/{id}` | ViewAnalytics | Audit history for a queue item |
+| GET | `/audit/user/{user_id}` | ViewAnalytics | Audit history for a user |
+
+### Error Handling
+
+Downloads may fail with different error types:
+
+| Error Type | Retryable | Description |
+| ---------- | --------- | ----------- |
+| `not_found` | No | Content doesn't exist on provider |
+| `connection` | Yes | Network connectivity issues |
+| `timeout` | Yes | Request timed out |
+| `rate_limited` | Yes | Provider rate limit hit |
+| `parse_error` | No | Invalid response from provider |
+| `internal` | Yes | Internal server error |
+
+Non-retryable errors immediately mark the item as `FAILED`. Retryable errors trigger exponential backoff retries up to `max_retries`.
+
+### Prometheus Metrics
+
+| Metric | Type | Description |
+| ------ | ---- | ----------- |
+| `pezzottify_download_queue_size` | Gauge | Queue size by status and priority |
+| `pezzottify_download_processed_total` | Counter | Processed downloads by type and result |
+| `pezzottify_download_processing_duration_seconds` | Histogram | Download processing duration |
+| `pezzottify_download_capacity_used` | Gauge | Capacity usage by period |
+| `pezzottify_download_user_requests_total` | Counter | User requests by type |
+| `pezzottify_download_audit_events_total` | Counter | Audit events by type |
+| `pezzottify_download_queue_stale_in_progress` | Gauge | Stale in-progress items |
 
 ## Authentication & Authorization
 
