@@ -11,6 +11,7 @@ use anyhow::Result;
 use crate::catalog_store::CatalogStore;
 
 use super::downloader_client::DownloaderClient;
+use super::downloader_types::ExternalSearchResult;
 use super::models::*;
 use super::queue_store::DownloadQueueStore;
 
@@ -21,10 +22,9 @@ use super::queue_store::DownloadQueueStore;
 /// - `in_queue`: Whether the content is currently in the download queue
 pub struct SearchProxy {
     /// HTTP client for the external downloader service.
-    #[allow(dead_code)]
     downloader_client: DownloaderClient,
     /// Catalog store for checking existing content.
-    #[allow(dead_code)]
+    #[allow(dead_code)] // Will be used when external ID tracking is added
     catalog_store: Arc<dyn CatalogStore>,
     /// Queue store for checking pending downloads.
     queue_store: Arc<dyn DownloadQueueStore>,
@@ -52,13 +52,60 @@ impl SearchProxy {
     /// # Arguments
     /// * `query` - Search query string
     /// * `search_type` - Type of content to search for (Album or Artist)
-    pub async fn search(&self, _query: &str, _search_type: SearchType) -> Result<SearchResults> {
-        // TODO: Implement in DM-2.2.1
-        // 1. Call downloader service search endpoint via downloader_client
-        // 2. For each result, check in_catalog via catalog_store
-        // 3. For each result, check in_queue via queue_store
-        // 4. Return enriched results
-        todo!("search proxy not yet implemented - requires DM-2.1.1 and DM-2.2.1")
+    pub async fn search(&self, query: &str, search_type: SearchType) -> Result<SearchResults> {
+        // 1. Call downloader service search endpoint
+        let external_results = self.downloader_client.search(query, search_type).await?;
+
+        // 2. Convert and enrich each result
+        let total = external_results.len();
+        let results = external_results
+            .into_iter()
+            .map(|ext| self.enrich_search_result(ext, search_type))
+            .collect();
+
+        Ok(SearchResults { results, total })
+    }
+
+    /// Convert an external search result to an enriched internal search result.
+    fn enrich_search_result(
+        &self,
+        external: ExternalSearchResult,
+        search_type: SearchType,
+    ) -> SearchResult {
+        // Determine content type for queue lookup
+        let content_type = match search_type {
+            SearchType::Album => DownloadContentType::Album,
+            SearchType::Artist => DownloadContentType::Album, // Artists don't have a direct queue type
+        };
+
+        // Check if in queue (albums only, artists don't go directly in queue)
+        let in_queue = if search_type == SearchType::Album {
+            self.check_in_queue(content_type, &external.id).unwrap_or(false)
+        } else {
+            false
+        };
+
+        // Check if in catalog
+        let in_catalog = match search_type {
+            SearchType::Album => self.check_album_in_catalog(&external.id).unwrap_or(false),
+            SearchType::Artist => self.check_artist_in_catalog(&external.id).unwrap_or(false),
+        };
+
+        // Create the search result based on type
+        match search_type {
+            SearchType::Album => SearchResult::album(
+                external.id,
+                external.name,
+                external.artist_name.unwrap_or_default(),
+                external.year,
+                external.image_url,
+            )
+            .with_in_catalog(in_catalog)
+            .with_in_queue(in_queue),
+            SearchType::Artist => SearchResult::artist(external.id, external.name, external.image_url)
+                .with_in_catalog(in_catalog)
+                .with_in_queue(in_queue),
+        }
     }
 
     /// Search for an artist's discography via the external downloader service.
@@ -74,23 +121,25 @@ impl SearchProxy {
         todo!("search_discography proxy not yet implemented - requires DM-2.1.1 and DM-2.2.2")
     }
 
-    /// Check if an album exists in the catalog.
-    #[allow(dead_code)]
+    /// Check if an album exists in the catalog by external ID.
+    ///
+    /// Note: Currently returns false as catalog doesn't track external IDs.
+    /// Future implementation may add external ID mapping to catalog store.
     fn check_album_in_catalog(&self, _album_id: &str) -> Result<bool> {
-        // TODO: Implement catalog lookup
-        // Note: May need to convert external ID format to internal ID
+        // TODO: Implement catalog lookup when external ID tracking is added
+        // This requires mapping external IDs to internal catalog IDs
         Ok(false)
     }
 
-    /// Check if an artist exists in the catalog.
-    #[allow(dead_code)]
+    /// Check if an artist exists in the catalog by external ID.
+    ///
+    /// Note: Currently returns false as catalog doesn't track external IDs.
     fn check_artist_in_catalog(&self, _artist_id: &str) -> Result<bool> {
-        // TODO: Implement catalog lookup
+        // TODO: Implement catalog lookup when external ID tracking is added
         Ok(false)
     }
 
     /// Check if content is in the download queue.
-    #[allow(dead_code)]
     fn check_in_queue(&self, content_type: DownloadContentType, content_id: &str) -> Result<bool> {
         self.queue_store.is_in_active_queue(content_type, content_id)
     }
