@@ -82,25 +82,14 @@ services:
       - monitoring
     restart: unless-stopped
 
-  # Telegram Bot for alerts
+  # Telegram webhook receiver for alerts
   # Requires TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID in .env
   telegram-bot:
-    image: metalmatze/alertmanager-bot:0.4.3
+    build:
+      context: ./monitoring/telegram-webhook
     container_name: telegram-bot
     env_file:
       - ./monitoring/.env
-    entrypoint: [ "/bin/sh", "-c" ]
-    command:
-      - |
-        /usr/bin/alertmanager-bot \
-          --telegram.admin=$$TELEGRAM_CHAT_ID \
-          --telegram.token=$$TELEGRAM_BOT_TOKEN \
-          --store=bolt \
-          --bolt.path=/data/bot.db \
-          --alertmanager.url=http://alertmanager:9093 \
-          --listen.addr=0.0.0.0:8080
-    volumes:
-      - telegram-bot-data:/data
     networks:
       - monitoring
     restart: unless-stopped
@@ -118,4 +107,3 @@ volumes:
   prometheus-data:
   grafana-data:
   alertmanager-data:
-  telegram-bot-data:
