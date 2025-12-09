@@ -31,6 +31,7 @@ class SettingsScreenViewModel @Inject constructor(
 
     init {
         viewModelScope.launch {
+            val baseUrl = interactor.getBaseUrl()
             val initialState = SettingsScreenState(
                 playBehavior = interactor.getPlayBehavior(),
                 themeMode = interactor.getThemeMode(),
@@ -43,6 +44,8 @@ class SettingsScreenViewModel @Inject constructor(
                 isFileLoggingEnabled = interactor.isFileLoggingEnabled(),
                 hasLogFiles = interactor.hasLogFiles(),
                 logFilesSize = interactor.getLogFilesSize(),
+                baseUrl = baseUrl,
+                baseUrlInput = baseUrl,
             )
             mutableState.value = initialState
 
@@ -158,6 +161,45 @@ class SettingsScreenViewModel @Inject constructor(
         refreshLogFileState()
     }
 
+    override fun onBaseUrlInputChanged(input: String) {
+        mutableState.update { it.copy(baseUrlInput = input, baseUrlError = null) }
+    }
+
+    override fun saveBaseUrl() {
+        val input = mutableState.value.baseUrlInput.trim()
+        if (input == mutableState.value.baseUrl) {
+            return
+        }
+        mutableState.update { it.copy(isBaseUrlSaving = true, baseUrlError = null) }
+        viewModelScope.launch {
+            when (interactor.setBaseUrl(input)) {
+                SetBaseUrlResult.Success -> {
+                    mutableState.update {
+                        it.copy(
+                            baseUrl = input,
+                            baseUrlInput = input,
+                            isBaseUrlSaving = false,
+                            baseUrlError = null
+                        )
+                    }
+                }
+                SetBaseUrlResult.InvalidUrl -> {
+                    mutableState.update {
+                        it.copy(
+                            isBaseUrlSaving = false,
+                            baseUrlError = "Invalid URL"
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    sealed interface SetBaseUrlResult {
+        data object Success : SetBaseUrlResult
+        data object InvalidUrl : SetBaseUrlResult
+    }
+
     interface Interactor {
         fun getPlayBehavior(): PlayBehavior
         fun getThemeMode(): ThemeMode
@@ -188,5 +230,7 @@ class SettingsScreenViewModel @Inject constructor(
         fun getLogFilesSize(): String
         fun getShareLogsIntent(): android.content.Intent
         fun clearLogs()
+        fun getBaseUrl(): String
+        suspend fun setBaseUrl(url: String): SetBaseUrlResult
     }
 }

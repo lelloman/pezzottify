@@ -169,6 +169,7 @@ class InteractorsModule {
         permissionsStore: PermissionsStore,
         updateDirectDownloadsSetting: UpdateDirectDownloadsSetting,
         logFileManager: LogFileManager,
+        configStore: ConfigStore,
     ): SettingsScreenViewModel.Interactor = object : SettingsScreenViewModel.Interactor {
         override fun getPlayBehavior(): UiPlayBehavior =
             userSettingsStore.playBehavior.value.toUi()
@@ -245,6 +246,14 @@ class InteractorsModule {
         override fun getShareLogsIntent(): android.content.Intent = logFileManager.createShareIntent()
 
         override fun clearLogs() = logFileManager.clearLogs()
+
+        override fun getBaseUrl(): String = configStore.baseUrl.value
+
+        override suspend fun setBaseUrl(url: String): SettingsScreenViewModel.SetBaseUrlResult =
+            when (configStore.setBaseUrl(url)) {
+                ConfigStore.SetBaseUrlResult.Success -> SettingsScreenViewModel.SetBaseUrlResult.Success
+                ConfigStore.SetBaseUrlResult.InvalidUrl -> SettingsScreenViewModel.SetBaseUrlResult.InvalidUrl
+            }
     }
 
     @Provides

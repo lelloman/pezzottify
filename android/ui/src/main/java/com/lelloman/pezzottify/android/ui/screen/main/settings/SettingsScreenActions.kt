@@ -24,4 +24,8 @@ interface SettingsScreenActions {
     fun shareLogs()
 
     fun clearLogs()
+
+    fun onBaseUrlInputChanged(input: String)
+
+    fun saveBaseUrl()
 }
