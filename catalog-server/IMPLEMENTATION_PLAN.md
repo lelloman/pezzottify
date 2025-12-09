@@ -1915,7 +1915,7 @@ Queue processing order: `ORDER BY priority ASC, created_at ASC`
 
   **Methods:** `enqueue`, `get_item`, `get_next_pending`, `list_by_user`, `list_all`, `get_queue_position`
 
-- [ ] **Task DM-1.4.4: Implement state transition methods**
+- [x] **Task DM-1.4.4: Implement state transition methods**
 
   **File:** `catalog-server/src/download_manager/queue_store.rs`
 

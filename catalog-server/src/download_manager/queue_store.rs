@@ -549,23 +549,92 @@ impl DownloadQueueStore for SqliteDownloadQueueStore {
         }
     }
 
+    // === State Transitions ===
+
+    fn claim_for_processing(&self, id: &str) -> Result<bool> {
+        let conn = self.conn.lock().unwrap();
+        let now = Self::now();
+
+        // Atomically update only if currently PENDING
+        let rows_affected = conn.execute(
+            r#"UPDATE download_queue
+               SET status = 'IN_PROGRESS',
+                   started_at = ?1,
+                   last_attempt_at = ?1
+               WHERE id = ?2 AND status = 'PENDING'"#,
+            rusqlite::params![now, id],
+        )?;
+
+        Ok(rows_affected > 0)
+    }
+
+    fn mark_completed(&self, id: &str, bytes: u64, duration_ms: i64) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        let now = Self::now();
+
+        conn.execute(
+            r#"UPDATE download_queue
+               SET status = 'COMPLETED',
+                   completed_at = ?1,
+                   bytes_downloaded = ?2,
+                   processing_duration_ms = ?3,
+                   error_type = NULL,
+                   error_message = NULL
+               WHERE id = ?4"#,
+            rusqlite::params![now, bytes as i64, duration_ms, id],
+        )?;
+
+        Ok(())
+    }
+
+    fn mark_retry_waiting(
+        &self,
+        id: &str,
+        next_retry_at: i64,
+        error: &DownloadError,
+    ) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        let now = Self::now();
+
+        conn.execute(
+            r#"UPDATE download_queue
+               SET status = 'RETRY_WAITING',
+                   last_attempt_at = ?1,
+                   next_retry_at = ?2,
+                   retry_count = retry_count + 1,
+                   error_type = ?3,
+                   error_message = ?4
+               WHERE id = ?5"#,
+            rusqlite::params![
+                now,
+                next_retry_at,
+                error.error_type.as_str(),
+                error.message,
+                id
+            ],
+        )?;
+
+        Ok(())
+    }
+
+    fn mark_failed(&self, id: &str, error: &DownloadError) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        let now = Self::now();
+
+        conn.execute(
+            r#"UPDATE download_queue
+               SET status = 'FAILED',
+                   completed_at = ?1,
+                   error_type = ?2,
+                   error_message = ?3
+               WHERE id = ?4"#,
+            rusqlite::params![now, error.error_type.as_str(), error.message, id],
+        )?;
+
+        Ok(())
+    }
+
     // Stub implementations for remaining trait methods (to be implemented in later tasks)
-
-    fn claim_for_processing(&self, _id: &str) -> Result<bool> {
-        todo!("Implement in DM-1.4.4")
-    }
-
-    fn mark_completed(&self, _id: &str, _bytes: u64, _duration_ms: i64) -> Result<()> {
-        todo!("Implement in DM-1.4.4")
-    }
-
-    fn mark_retry_waiting(&self, _id: &str, _next_retry_at: i64, _error: &DownloadError) -> Result<()> {
-        todo!("Implement in DM-1.4.4")
-    }
-
-    fn mark_failed(&self, _id: &str, _error: &DownloadError) -> Result<()> {
-        todo!("Implement in DM-1.4.4")
-    }
 
     fn create_children(&self, _parent_id: &str, _children: Vec<QueueItem>) -> Result<()> {
         todo!("Implement in DM-1.4.5")
@@ -1093,5 +1162,284 @@ mod tests {
         let store = SqliteDownloadQueueStore::in_memory().unwrap();
 
         assert_eq!(store.get_queue_position("nonexistent").unwrap(), None);
+    }
+
+    // === State Transition Tests ===
+
+    #[test]
+    fn test_claim_for_processing_success() {
+        let store = SqliteDownloadQueueStore::in_memory().unwrap();
+
+        let item = QueueItem::new(
+            "item-1".to_string(),
+            DownloadContentType::Album,
+            "album-1".to_string(),
+            QueuePriority::User,
+            RequestSource::User,
+            5,
+        );
+        store.enqueue(item).unwrap();
+
+        // Claim the item
+        let claimed = store.claim_for_processing("item-1").unwrap();
+        assert!(claimed);
+
+        // Verify status changed
+        let item = store.get_item("item-1").unwrap().unwrap();
+        assert_eq!(item.status, QueueStatus::InProgress);
+        assert!(item.started_at.is_some());
+        assert!(item.last_attempt_at.is_some());
+    }
+
+    #[test]
+    fn test_claim_for_processing_already_claimed() {
+        let store = SqliteDownloadQueueStore::in_memory().unwrap();
+
+        let item = QueueItem::new(
+            "item-1".to_string(),
+            DownloadContentType::Album,
+            "album-1".to_string(),
+            QueuePriority::User,
+            RequestSource::User,
+            5,
+        );
+        store.enqueue(item).unwrap();
+
+        // First claim succeeds
+        assert!(store.claim_for_processing("item-1").unwrap());
+
+        // Second claim fails
+        assert!(!store.claim_for_processing("item-1").unwrap());
+    }
+
+    #[test]
+    fn test_claim_for_processing_not_pending() {
+        let store = SqliteDownloadQueueStore::in_memory().unwrap();
+
+        let mut item = QueueItem::new(
+            "item-1".to_string(),
+            DownloadContentType::Album,
+            "album-1".to_string(),
+            QueuePriority::User,
+            RequestSource::User,
+            5,
+        );
+        item.status = QueueStatus::Completed;
+        store.enqueue(item).unwrap();
+
+        // Cannot claim a completed item
+        let claimed = store.claim_for_processing("item-1").unwrap();
+        assert!(!claimed);
+    }
+
+    #[test]
+    fn test_claim_for_processing_nonexistent() {
+        let store = SqliteDownloadQueueStore::in_memory().unwrap();
+
+        // Claiming nonexistent item returns false (not an error)
+        let claimed = store.claim_for_processing("nonexistent").unwrap();
+        assert!(!claimed);
+    }
+
+    #[test]
+    fn test_mark_completed() {
+        let store = SqliteDownloadQueueStore::in_memory().unwrap();
+
+        let item = QueueItem::new(
+            "item-1".to_string(),
+            DownloadContentType::TrackAudio,
+            "track-1".to_string(),
+            QueuePriority::User,
+            RequestSource::User,
+            5,
+        );
+        store.enqueue(item).unwrap();
+        store.claim_for_processing("item-1").unwrap();
+
+        // Mark as completed
+        store.mark_completed("item-1", 1024000, 500).unwrap();
+
+        let item = store.get_item("item-1").unwrap().unwrap();
+        assert_eq!(item.status, QueueStatus::Completed);
+        assert!(item.completed_at.is_some());
+        assert_eq!(item.bytes_downloaded, Some(1024000));
+        assert_eq!(item.processing_duration_ms, Some(500));
+        assert!(item.error_type.is_none());
+        assert!(item.error_message.is_none());
+    }
+
+    #[test]
+    fn test_mark_completed_clears_error() {
+        let store = SqliteDownloadQueueStore::in_memory().unwrap();
+
+        // Create item with previous error
+        let mut item = QueueItem::new(
+            "item-1".to_string(),
+            DownloadContentType::TrackAudio,
+            "track-1".to_string(),
+            QueuePriority::User,
+            RequestSource::User,
+            5,
+        );
+        item.error_type = Some(DownloadErrorType::Connection);
+        item.error_message = Some("Previous error".to_string());
+        store.enqueue(item).unwrap();
+
+        // Mark as completed
+        store.mark_completed("item-1", 1024000, 500).unwrap();
+
+        let item = store.get_item("item-1").unwrap().unwrap();
+        assert_eq!(item.status, QueueStatus::Completed);
+        assert!(item.error_type.is_none());
+        assert!(item.error_message.is_none());
+    }
+
+    #[test]
+    fn test_mark_retry_waiting() {
+        let store = SqliteDownloadQueueStore::in_memory().unwrap();
+
+        let item = QueueItem::new(
+            "item-1".to_string(),
+            DownloadContentType::Album,
+            "album-1".to_string(),
+            QueuePriority::User,
+            RequestSource::User,
+            5,
+        );
+        store.enqueue(item).unwrap();
+        store.claim_for_processing("item-1").unwrap();
+
+        // Mark for retry
+        let error = DownloadError::new(DownloadErrorType::Timeout, "Request timed out");
+        let next_retry = 1700000000;
+        store.mark_retry_waiting("item-1", next_retry, &error).unwrap();
+
+        let item = store.get_item("item-1").unwrap().unwrap();
+        assert_eq!(item.status, QueueStatus::RetryWaiting);
+        assert_eq!(item.retry_count, 1);
+        assert_eq!(item.next_retry_at, Some(next_retry));
+        assert_eq!(item.error_type, Some(DownloadErrorType::Timeout));
+        assert_eq!(item.error_message, Some("Request timed out".to_string()));
+        assert!(item.last_attempt_at.is_some());
+    }
+
+    #[test]
+    fn test_mark_retry_waiting_increments_count() {
+        let store = SqliteDownloadQueueStore::in_memory().unwrap();
+
+        let item = QueueItem::new(
+            "item-1".to_string(),
+            DownloadContentType::Album,
+            "album-1".to_string(),
+            QueuePriority::User,
+            RequestSource::User,
+            5,
+        );
+        store.enqueue(item).unwrap();
+
+        let error = DownloadError::new(DownloadErrorType::Connection, "Connection refused");
+
+        // First retry
+        store.mark_retry_waiting("item-1", 1000, &error).unwrap();
+        let item = store.get_item("item-1").unwrap().unwrap();
+        assert_eq!(item.retry_count, 1);
+
+        // Second retry
+        store.mark_retry_waiting("item-1", 2000, &error).unwrap();
+        let item = store.get_item("item-1").unwrap().unwrap();
+        assert_eq!(item.retry_count, 2);
+
+        // Third retry
+        store.mark_retry_waiting("item-1", 3000, &error).unwrap();
+        let item = store.get_item("item-1").unwrap().unwrap();
+        assert_eq!(item.retry_count, 3);
+    }
+
+    #[test]
+    fn test_mark_failed() {
+        let store = SqliteDownloadQueueStore::in_memory().unwrap();
+
+        let item = QueueItem::new(
+            "item-1".to_string(),
+            DownloadContentType::Album,
+            "album-1".to_string(),
+            QueuePriority::User,
+            RequestSource::User,
+            5,
+        );
+        store.enqueue(item).unwrap();
+        store.claim_for_processing("item-1").unwrap();
+
+        // Mark as failed
+        let error = DownloadError::new(DownloadErrorType::NotFound, "Album not found");
+        store.mark_failed("item-1", &error).unwrap();
+
+        let item = store.get_item("item-1").unwrap().unwrap();
+        assert_eq!(item.status, QueueStatus::Failed);
+        assert!(item.completed_at.is_some());
+        assert_eq!(item.error_type, Some(DownloadErrorType::NotFound));
+        assert_eq!(item.error_message, Some("Album not found".to_string()));
+    }
+
+    #[test]
+    fn test_state_transition_sequence() {
+        let store = SqliteDownloadQueueStore::in_memory().unwrap();
+
+        let item = QueueItem::new(
+            "item-1".to_string(),
+            DownloadContentType::TrackAudio,
+            "track-1".to_string(),
+            QueuePriority::User,
+            RequestSource::User,
+            3,
+        );
+        store.enqueue(item).unwrap();
+
+        // PENDING -> IN_PROGRESS
+        assert!(store.claim_for_processing("item-1").unwrap());
+        assert_eq!(store.get_item("item-1").unwrap().unwrap().status, QueueStatus::InProgress);
+
+        // IN_PROGRESS -> RETRY_WAITING (simulating failure)
+        let error = DownloadError::new(DownloadErrorType::Timeout, "Timeout");
+        store.mark_retry_waiting("item-1", 1000, &error).unwrap();
+        assert_eq!(store.get_item("item-1").unwrap().unwrap().status, QueueStatus::RetryWaiting);
+
+        // Item no longer shows up as next pending
+        assert!(store.get_next_pending().unwrap().is_none());
+    }
+
+    #[test]
+    fn test_get_next_pending_skips_in_progress() {
+        let store = SqliteDownloadQueueStore::in_memory().unwrap();
+
+        let mut item1 = QueueItem::new(
+            "item-1".to_string(),
+            DownloadContentType::Album,
+            "album-1".to_string(),
+            QueuePriority::User,
+            RequestSource::User,
+            5,
+        );
+        item1.created_at = 1000;
+
+        let mut item2 = QueueItem::new(
+            "item-2".to_string(),
+            DownloadContentType::Album,
+            "album-2".to_string(),
+            QueuePriority::User,
+            RequestSource::User,
+            5,
+        );
+        item2.created_at = 2000;
+
+        store.enqueue(item1).unwrap();
+        store.enqueue(item2).unwrap();
+
+        // Claim item-1
+        store.claim_for_processing("item-1").unwrap();
+
+        // Next pending should be item-2
+        let next = store.get_next_pending().unwrap().unwrap();
+        assert_eq!(next.id, "item-2");
     }
 }
