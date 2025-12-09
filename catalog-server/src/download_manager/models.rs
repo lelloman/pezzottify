@@ -744,6 +744,146 @@ impl ProcessingResult {
     }
 }
 
+/// Type of search being performed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum SearchType {
+    Album,
+    Artist,
+}
+
+/// A single search result from the downloader service.
+#[derive(Debug, Clone, Serialize)]
+pub struct SearchResult {
+    /// External ID from the music provider
+    pub id: String,
+    /// Result type ("album" or "artist")
+    #[serde(rename = "type")]
+    pub result_type: String,
+    /// Name of the album or artist
+    pub name: String,
+    /// Artist name (for albums)
+    pub artist_name: Option<String>,
+    /// URL to cover/portrait image
+    pub image_url: Option<String>,
+    /// Release year (for albums)
+    pub year: Option<i32>,
+    /// Whether this content is already in the catalog
+    pub in_catalog: bool,
+    /// Whether this content is currently in the download queue
+    pub in_queue: bool,
+}
+
+impl SearchResult {
+    /// Create a new album search result.
+    pub fn album(
+        id: String,
+        name: String,
+        artist_name: String,
+        year: Option<i32>,
+        image_url: Option<String>,
+    ) -> Self {
+        Self {
+            id,
+            result_type: "album".to_string(),
+            name,
+            artist_name: Some(artist_name),
+            image_url,
+            year,
+            in_catalog: false,
+            in_queue: false,
+        }
+    }
+
+    /// Create a new artist search result.
+    pub fn artist(id: String, name: String, image_url: Option<String>) -> Self {
+        Self {
+            id,
+            result_type: "artist".to_string(),
+            name,
+            artist_name: None,
+            image_url,
+            year: None,
+            in_catalog: false,
+            in_queue: false,
+        }
+    }
+
+    /// Mark this result as being in the catalog.
+    pub fn with_in_catalog(mut self, in_catalog: bool) -> Self {
+        self.in_catalog = in_catalog;
+        self
+    }
+
+    /// Mark this result as being in the queue.
+    pub fn with_in_queue(mut self, in_queue: bool) -> Self {
+        self.in_queue = in_queue;
+        self
+    }
+}
+
+/// Collection of search results.
+#[derive(Debug, Clone, Serialize)]
+pub struct SearchResults {
+    /// The search results
+    pub results: Vec<SearchResult>,
+    /// Total number of results (may be more than returned)
+    pub total: usize,
+}
+
+/// Artist discography with all albums.
+#[derive(Debug, Clone, Serialize)]
+pub struct DiscographyResult {
+    /// The artist
+    pub artist: SearchResult,
+    /// All albums by this artist
+    pub albums: Vec<SearchResult>,
+}
+
+/// Request to download an album.
+#[derive(Debug, Clone, Deserialize)]
+pub struct AlbumRequest {
+    /// External album ID
+    pub album_id: String,
+    /// Album name for display
+    pub album_name: String,
+    /// Artist name for display
+    pub artist_name: String,
+}
+
+/// Request to download an artist's discography.
+#[derive(Debug, Clone, Deserialize)]
+pub struct DiscographyRequest {
+    /// External artist ID
+    pub artist_id: String,
+    /// Artist name for display
+    pub artist_name: String,
+}
+
+/// Result of submitting a download request.
+#[derive(Debug, Clone, Serialize)]
+pub struct RequestResult {
+    /// ID of the created queue item
+    pub request_id: String,
+    /// Initial status (usually PENDING)
+    pub status: QueueStatus,
+    /// Position in the queue
+    pub queue_position: usize,
+}
+
+/// Result of submitting a discography download request.
+#[derive(Debug, Clone, Serialize)]
+pub struct DiscographyRequestResult {
+    /// IDs of the created queue items
+    pub request_ids: Vec<String>,
+    /// Number of albums queued
+    pub albums_queued: usize,
+    /// Number of albums skipped (already in catalog)
+    pub albums_skipped: usize,
+    /// Initial status
+    pub status: QueueStatus,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1200,5 +1340,115 @@ mod tests {
         assert_eq!(stats.retry_waiting, 0);
         assert_eq!(stats.completed_today, 0);
         assert_eq!(stats.failed_today, 0);
+    }
+
+    #[test]
+    fn test_search_type_serialization() {
+        let album = SearchType::Album;
+        let json = serde_json::to_string(&album).unwrap();
+        assert_eq!(json, "\"album\"");
+
+        let artist = SearchType::Artist;
+        let json = serde_json::to_string(&artist).unwrap();
+        assert_eq!(json, "\"artist\"");
+    }
+
+    #[test]
+    fn test_search_result_album() {
+        let result = SearchResult::album(
+            "album-123".to_string(),
+            "Test Album".to_string(),
+            "Test Artist".to_string(),
+            Some(2023),
+            Some("https://example.com/cover.jpg".to_string()),
+        );
+
+        assert_eq!(result.id, "album-123");
+        assert_eq!(result.result_type, "album");
+        assert_eq!(result.name, "Test Album");
+        assert_eq!(result.artist_name, Some("Test Artist".to_string()));
+        assert_eq!(result.year, Some(2023));
+        assert!(!result.in_catalog);
+        assert!(!result.in_queue);
+    }
+
+    #[test]
+    fn test_search_result_artist() {
+        let result = SearchResult::artist(
+            "artist-456".to_string(),
+            "Test Artist".to_string(),
+            None,
+        );
+
+        assert_eq!(result.id, "artist-456");
+        assert_eq!(result.result_type, "artist");
+        assert_eq!(result.name, "Test Artist");
+        assert!(result.artist_name.is_none());
+        assert!(result.year.is_none());
+    }
+
+    #[test]
+    fn test_search_result_with_flags() {
+        let result = SearchResult::album(
+            "album-123".to_string(),
+            "Test Album".to_string(),
+            "Test Artist".to_string(),
+            None,
+            None,
+        )
+        .with_in_catalog(true)
+        .with_in_queue(true);
+
+        assert!(result.in_catalog);
+        assert!(result.in_queue);
+    }
+
+    #[test]
+    fn test_search_result_serialization() {
+        let result = SearchResult::album(
+            "album-123".to_string(),
+            "Test Album".to_string(),
+            "Test Artist".to_string(),
+            Some(2023),
+            None,
+        );
+
+        let json = serde_json::to_string(&result).unwrap();
+        assert!(json.contains("\"type\":\"album\""));
+        assert!(json.contains("\"name\":\"Test Album\""));
+        assert!(json.contains("\"in_catalog\":false"));
+    }
+
+    #[test]
+    fn test_album_request_deserialization() {
+        let json = r#"{"album_id":"abc123","album_name":"My Album","artist_name":"My Artist"}"#;
+        let request: AlbumRequest = serde_json::from_str(json).unwrap();
+
+        assert_eq!(request.album_id, "abc123");
+        assert_eq!(request.album_name, "My Album");
+        assert_eq!(request.artist_name, "My Artist");
+    }
+
+    #[test]
+    fn test_discography_request_deserialization() {
+        let json = r#"{"artist_id":"xyz789","artist_name":"Some Artist"}"#;
+        let request: DiscographyRequest = serde_json::from_str(json).unwrap();
+
+        assert_eq!(request.artist_id, "xyz789");
+        assert_eq!(request.artist_name, "Some Artist");
+    }
+
+    #[test]
+    fn test_request_result_serialization() {
+        let result = RequestResult {
+            request_id: "req-123".to_string(),
+            status: QueueStatus::Pending,
+            queue_position: 5,
+        };
+
+        let json = serde_json::to_string(&result).unwrap();
+        assert!(json.contains("\"request_id\":\"req-123\""));
+        assert!(json.contains("\"status\":\"PENDING\""));
+        assert!(json.contains("\"queue_position\":5"));
     }
 }
