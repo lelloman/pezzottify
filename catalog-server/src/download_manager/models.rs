@@ -148,7 +148,7 @@ impl DownloadErrorType {
 }
 
 /// A download queue item representing a single download task.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct QueueItem {
     /// Unique identifier (UUID)
     pub id: String,
@@ -426,7 +426,7 @@ impl AuditEventType {
 }
 
 /// An entry in the audit log.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct AuditLogEntry {
     /// Auto-incremented ID
     pub id: i64,
@@ -1518,5 +1518,180 @@ mod tests {
             ..Default::default()
         };
         assert!(!dirty_report.is_clean());
+    }
+
+    // === Model serialization tests (DM-1.2.8) ===
+
+    #[test]
+    fn test_request_source_serialization() {
+        // Verify all variants serialize to expected strings
+        assert_eq!(serde_json::to_string(&RequestSource::User).unwrap(), "\"USER\"");
+        assert_eq!(serde_json::to_string(&RequestSource::Watchdog).unwrap(), "\"WATCHDOG\"");
+        assert_eq!(serde_json::to_string(&RequestSource::Expansion).unwrap(), "\"EXPANSION\"");
+
+        // Verify round-trip
+        let source = RequestSource::Watchdog;
+        let json = serde_json::to_string(&source).unwrap();
+        let deserialized: RequestSource = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized, source);
+    }
+
+    #[test]
+    fn test_queue_priority_serialization() {
+        // Verify all variants serialize correctly
+        let watchdog = QueuePriority::Watchdog;
+        let user = QueuePriority::User;
+        let expansion = QueuePriority::Expansion;
+
+        let json_w = serde_json::to_string(&watchdog).unwrap();
+        let json_u = serde_json::to_string(&user).unwrap();
+        let json_e = serde_json::to_string(&expansion).unwrap();
+
+        // Round-trip test
+        assert_eq!(serde_json::from_str::<QueuePriority>(&json_w).unwrap(), watchdog);
+        assert_eq!(serde_json::from_str::<QueuePriority>(&json_u).unwrap(), user);
+        assert_eq!(serde_json::from_str::<QueuePriority>(&json_e).unwrap(), expansion);
+    }
+
+    #[test]
+    fn test_queue_item_json_round_trip() {
+        let item = QueueItem::new(
+            "queue-item-123".to_string(),
+            DownloadContentType::Album,
+            "album-456".to_string(),
+            QueuePriority::User,
+            RequestSource::User,
+            5,
+        )
+        .with_names(Some("Test Album".to_string()), Some("Test Artist".to_string()))
+        .with_user("user-789".to_string());
+
+        // Serialize to JSON
+        let json = serde_json::to_string(&item).unwrap();
+
+        // Verify key fields are present
+        assert!(json.contains("\"id\":\"queue-item-123\""));
+        assert!(json.contains("\"content_type\":\"ALBUM\""));
+        assert!(json.contains("\"content_id\":\"album-456\""));
+        assert!(json.contains("\"content_name\":\"Test Album\""));
+        assert!(json.contains("\"artist_name\":\"Test Artist\""));
+        assert!(json.contains("\"status\":\"PENDING\""));
+
+        // Deserialize back
+        let deserialized: QueueItem = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized.id, item.id);
+        assert_eq!(deserialized.content_type, item.content_type);
+        assert_eq!(deserialized.content_id, item.content_id);
+        assert_eq!(deserialized.content_name, item.content_name);
+        assert_eq!(deserialized.artist_name, item.artist_name);
+        assert_eq!(deserialized.status, item.status);
+        assert_eq!(deserialized.priority, item.priority);
+        assert_eq!(deserialized.request_source, item.request_source);
+        assert_eq!(deserialized.requested_by_user_id, item.requested_by_user_id);
+        assert_eq!(deserialized.max_retries, item.max_retries);
+    }
+
+    #[test]
+    fn test_queue_item_with_optional_fields_json_round_trip() {
+        // Create a more complex item with error info
+        let mut item = QueueItem::new(
+            "failed-item".to_string(),
+            DownloadContentType::TrackAudio,
+            "track-123".to_string(),
+            QueuePriority::Watchdog,
+            RequestSource::Watchdog,
+            3,
+        );
+        item.status = QueueStatus::Failed;
+        item.error_type = Some(DownloadErrorType::NotFound);
+        item.error_message = Some("Track not found on provider".to_string());
+        item.retry_count = 3;
+        item.bytes_downloaded = Some(0);
+        item.processing_duration_ms = Some(1500);
+
+        let json = serde_json::to_string(&item).unwrap();
+        let deserialized: QueueItem = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(deserialized.status, QueueStatus::Failed);
+        assert_eq!(deserialized.error_type, Some(DownloadErrorType::NotFound));
+        assert_eq!(deserialized.error_message, Some("Track not found on provider".to_string()));
+        assert_eq!(deserialized.retry_count, 3);
+    }
+
+    #[test]
+    fn test_audit_log_entry_serialization_basic() {
+        let entry = AuditLogEntry::new(AuditEventType::RequestCreated)
+            .with_queue_item("queue-123".to_string())
+            .with_content(DownloadContentType::Album, "album-456".to_string())
+            .with_user("user-789".to_string())
+            .with_source(RequestSource::User);
+
+        let json = serde_json::to_string(&entry).unwrap();
+
+        assert!(json.contains("\"event_type\":\"REQUEST_CREATED\""));
+        assert!(json.contains("\"queue_item_id\":\"queue-123\""));
+        assert!(json.contains("\"content_type\":\"ALBUM\""));
+        assert!(json.contains("\"content_id\":\"album-456\""));
+        assert!(json.contains("\"user_id\":\"user-789\""));
+        assert!(json.contains("\"request_source\":\"USER\""));
+    }
+
+    #[test]
+    fn test_audit_log_entry_with_object_details() {
+        let details = serde_json::json!({
+            "child_count": 12,
+            "track_ids": ["track-1", "track-2", "track-3"]
+        });
+
+        let entry = AuditLogEntry::new(AuditEventType::ChildrenCreated)
+            .with_queue_item("parent-123".to_string())
+            .with_details(details);
+
+        let json = serde_json::to_string(&entry).unwrap();
+
+        assert!(json.contains("\"event_type\":\"CHILDREN_CREATED\""));
+        assert!(json.contains("\"child_count\":12"));
+        assert!(json.contains("\"track_ids\":[\"track-1\",\"track-2\",\"track-3\"]"));
+    }
+
+    #[test]
+    fn test_audit_log_entry_with_error_details() {
+        let details = serde_json::json!({
+            "error_type": "connection",
+            "error_message": "Connection refused",
+            "retry_count": 2,
+            "next_retry_at": 1700000000
+        });
+
+        let entry = AuditLogEntry::new(AuditEventType::RetryScheduled)
+            .with_queue_item("retry-item".to_string())
+            .with_details(details);
+
+        let json = serde_json::to_string(&entry).unwrap();
+
+        assert!(json.contains("\"event_type\":\"RETRY_SCHEDULED\""));
+        assert!(json.contains("\"error_type\":\"connection\""));
+        assert!(json.contains("\"retry_count\":2"));
+    }
+
+    #[test]
+    fn test_audit_log_entry_watchdog_scan_details() {
+        let details = serde_json::json!({
+            "missing_tracks": 5,
+            "missing_images": 3,
+            "items_queued": 8,
+            "scan_duration_ms": 2500
+        });
+
+        let entry = AuditLogEntry::new(AuditEventType::WatchdogScanCompleted)
+            .with_source(RequestSource::Watchdog)
+            .with_details(details);
+
+        let json = serde_json::to_string(&entry).unwrap();
+
+        assert!(json.contains("\"event_type\":\"WATCHDOG_SCAN_COMPLETED\""));
+        assert!(json.contains("\"request_source\":\"WATCHDOG\""));
+        assert!(json.contains("\"missing_tracks\":5"));
+        assert!(json.contains("\"items_queued\":8"));
     }
 }

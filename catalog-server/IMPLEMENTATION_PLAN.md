@@ -1718,7 +1718,7 @@ Queue processing order: `ORDER BY priority ASC, created_at ASC`
   }
   ```
 
-- [ ] **Task DM-1.2.8: Add unit tests for model serialization**
+- [x] **Task DM-1.2.8: Add unit tests for model serialization**
 
   **File:** `catalog-server/src/download_manager/models.rs` (test module)
 
