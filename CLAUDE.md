@@ -140,6 +140,39 @@ The Android project uses a multi-module Gradle setup with modules: `app`, `ui`, 
 - Run via `./run-integration-tests.sh` script
 - Not included in `./gradlew test` to keep unit tests fast
 
+**SSL Certificate Pinning:**
+
+The Android app supports optional SSL certificate pinning for self-signed certificates. Configure at build time via:
+
+1. Gradle property:
+```bash
+./gradlew assembleRelease -PsslPinHash="sha256/YOUR_BASE64_HASH"
+```
+
+2. File (for CI/build servers):
+```bash
+# Create ssl_pin.txt in android/ directory
+echo "sha256/YOUR_BASE64_HASH" > android/ssl_pin.txt
+./gradlew assembleRelease
+```
+
+3. Custom file path:
+```bash
+./gradlew assembleRelease -PsslPinFile=/path/to/pin.txt
+```
+
+Extract the pin hash from your server certificate:
+```bash
+openssl x509 -in cert.pem -pubkey -noout | \
+  openssl pkey -pubin -outform der | \
+  openssl dgst -sha256 -binary | \
+  openssl enc -base64
+```
+
+Then prefix with `sha256/`: `sha256/ABC123...`
+
+When no pin is configured, certificate pinning is disabled (suitable for development or CA-signed certificates).
+
 ## Architecture
 
 ### Catalog Server Architecture

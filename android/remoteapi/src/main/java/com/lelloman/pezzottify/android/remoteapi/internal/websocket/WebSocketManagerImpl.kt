@@ -12,6 +12,7 @@ import com.lelloman.pezzottify.android.domain.websocket.ServerMessage
 import com.lelloman.pezzottify.android.domain.websocket.WebSocketManager
 import com.lelloman.pezzottify.android.logger.Logger
 import com.lelloman.pezzottify.android.logger.LoggerFactory
+import com.lelloman.pezzottify.android.remoteapi.internal.OkHttpClientFactory
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -34,9 +35,9 @@ import java.util.concurrent.TimeUnit
 internal class WebSocketManagerImpl(
     private val authStore: AuthStore,
     private val configStore: ConfigStore,
+    private val okHttpClientFactory: OkHttpClientFactory,
     private val coroutineScope: CoroutineScope,
     loggerFactory: LoggerFactory,
-    okHttpClient: OkHttpClient? = null,
 ) : WebSocketManager {
 
     private val logger: Logger by loggerFactory
@@ -46,9 +47,7 @@ internal class WebSocketManagerImpl(
         encodeDefaults = true
     }
 
-    private val okHttpClient = okHttpClient ?: OkHttpClient.Builder()
-        .pingInterval(PING_INTERVAL_SECONDS, TimeUnit.SECONDS)
-        .build()
+    private var okHttpClient: OkHttpClient? = null
 
     private val _connectionState = MutableStateFlow<ConnectionState>(ConnectionState.Disconnected)
     override val connectionState: StateFlow<ConnectionState> = _connectionState.asStateFlow()
@@ -84,12 +83,18 @@ internal class WebSocketManagerImpl(
 
         logger.info("Connecting to WebSocket: $wsUrl")
 
+        // Create OkHttpClient with SSL pinning if configured
+        val client = okHttpClientFactory.createBuilder(baseUrl)
+            .pingInterval(PING_INTERVAL_SECONDS, TimeUnit.SECONDS)
+            .build()
+        okHttpClient = client
+
         val request = Request.Builder()
             .url(wsUrl)
             .header("Authorization", authState.authToken)
             .build()
 
-        webSocket = okHttpClient.newWebSocket(request, createWebSocketListener())
+        webSocket = client.newWebSocket(request, createWebSocketListener())
     }
 
     override suspend fun disconnect() {
