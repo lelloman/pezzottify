@@ -292,14 +292,14 @@ mod tests {
         let json = r#"{
             "id": "artist123",
             "name": "Test Artist",
-            "genres": ["rock"],
+            "genre": ["rock"],
             "portraits": []
         }"#;
 
         let artist: ExternalArtist = serde_json::from_str(json).unwrap();
         assert_eq!(artist.id, "artist123");
         assert_eq!(artist.name, "Test Artist");
-        assert_eq!(artist.genres.len(), 1);
+        assert_eq!(artist.genre.len(), 1);
     }
 
     #[test]

@@ -35,11 +35,11 @@ pub struct IngestedAlbum {
 /// 5. Return IDs needed for child queue item creation
 pub fn ingest_album(
     catalog_store: &dyn WritableCatalogStore,
-    album: ExternalAlbum,
-    tracks: Vec<ExternalTrack>,
-    artists: Vec<ExternalArtist>,
+    album: &ExternalAlbum,
+    tracks: &[ExternalTrack],
+    artists: &[ExternalArtist],
 ) -> Result<IngestedAlbum> {
-    // Extract IDs needed for child queue items BEFORE consuming the structs
+    // Extract IDs for return value
     let album_id = album.id.clone();
     let album_image_ids: Vec<String> = album.covers.iter().map(|c| c.id.clone()).collect();
     let track_ids: Vec<String> = tracks.iter().map(|t| t.id.clone()).collect();
@@ -89,7 +89,7 @@ pub fn ingest_album(
     }
 
     // 3. Insert tracks (links to album and artists)
-    for track in &tracks {
+    for track in tracks {
         let catalog_track = convert_track(track);
         catalog_store.insert_track(&catalog_track)?;
 
@@ -129,11 +129,23 @@ fn convert_album(external: &ExternalAlbum) -> Album {
         id: external.id.clone(),
         name: external.name.clone(),
         album_type: convert_album_type(&external.album_type),
-        label: Some(external.label.clone()),
-        release_date: Some(external.date),
+        label: if external.label.is_empty() {
+            None
+        } else {
+            Some(external.label.clone())
+        },
+        release_date: if external.date == 0 {
+            None
+        } else {
+            Some(external.date)
+        },
         genres: external.genres.clone(),
-        original_title: None,
-        version_title: None,
+        original_title: external.original_title.clone(),
+        version_title: if external.version_title.is_empty() {
+            None
+        } else {
+            Some(external.version_title.clone())
+        },
     }
 }
 
@@ -149,11 +161,15 @@ fn convert_track(external: &ExternalTrack) -> Track {
         is_explicit: external.is_explicit,
         audio_uri: format!("audio/{}.flac", external.id), // Default to flac, actual extension determined at download
         format: Format::Flac, // Default format, actual format determined at download
-        tags: vec![],
-        has_lyrics: false,
-        languages: vec![],
-        original_title: None,
-        version_title: None,
+        tags: external.tags.clone(),
+        has_lyrics: external.has_lyrics,
+        languages: external.language_of_performance.clone(),
+        original_title: external.original_title.clone(),
+        version_title: if external.version_title.is_empty() {
+            None
+        } else {
+            Some(external.version_title.clone())
+        },
     }
 }
 
@@ -219,8 +235,11 @@ mod tests {
         let external = ExternalArtist {
             id: "artist123".to_string(),
             name: "Test Artist".to_string(),
-            genres: vec!["rock".to_string(), "pop".to_string()],
+            genre: vec!["rock".to_string(), "pop".to_string()],
             portraits: vec![],
+            activity_periods: vec![],
+            related: vec![],
+            portrait_group: vec![],
         };
 
         let catalog = convert_artist(&external);
@@ -243,6 +262,11 @@ mod tests {
             genres: vec!["rock".to_string()],
             covers: vec![],
             discs: vec![],
+            related: vec![],
+            cover_group: vec![],
+            original_title: Some("Original Title".to_string()),
+            version_title: "Deluxe".to_string(),
+            type_str: String::new(),
         };
 
         let catalog = convert_album(&external);
@@ -253,10 +277,14 @@ mod tests {
         assert_eq!(catalog.label, Some("Test Label".to_string()));
         assert_eq!(catalog.release_date, Some(1704067200));
         assert_eq!(catalog.genres, vec!["rock"]);
+        assert_eq!(catalog.original_title, Some("Original Title".to_string()));
+        assert_eq!(catalog.version_title, Some("Deluxe".to_string()));
     }
 
     #[test]
     fn test_convert_track() {
+        use std::collections::HashMap;
+
         let external = ExternalTrack {
             id: "track123".to_string(),
             name: "Test Track".to_string(),
@@ -266,6 +294,15 @@ mod tests {
             disc_number: 1,
             duration: 180000, // 180 seconds in ms
             is_explicit: true,
+            files: HashMap::new(),
+            alternatives: vec![],
+            tags: vec!["live".to_string()],
+            earliest_live_timestamp: None,
+            has_lyrics: true,
+            language_of_performance: vec!["en".to_string()],
+            original_title: None,
+            version_title: String::new(),
+            artists_with_role: vec![],
         };
 
         let catalog = convert_track(&external);
@@ -278,6 +315,9 @@ mod tests {
         assert_eq!(catalog.duration_secs, Some(180));
         assert!(catalog.is_explicit);
         assert_eq!(catalog.audio_uri, "audio/track123.flac");
+        assert_eq!(catalog.tags, vec!["live"]);
+        assert!(catalog.has_lyrics);
+        assert_eq!(catalog.languages, vec!["en"]);
     }
 
     #[test]
