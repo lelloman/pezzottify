@@ -373,24 +373,55 @@ impl DownloadManager {
 
         match download_result {
             Ok(bytes_downloaded) => {
-                // 6. On success: mark completed, record activity, log audit
-                self.queue_store
-                    .mark_completed(&item.id, bytes_downloaded, duration_ms)?;
+                // 6. On success: handle completion based on item type
+                //
+                // For Album items (parent items that spawn children), do NOT mark as
+                // completed here. They should remain IN_PROGRESS until all children
+                // complete, which is handled by check_and_complete_parent().
+                //
+                // For child items (tracks, images), mark as completed immediately.
+                let is_parent_item = item.content_type == DownloadContentType::Album;
 
-                self.queue_store
-                    .record_activity(item.content_type, bytes_downloaded, true)?;
+                if is_parent_item {
+                    // Parent items stay IN_PROGRESS - children will complete them
+                    // Record activity but don't mark completed or decrement queue
+                    self.queue_store
+                        .record_activity(item.content_type, bytes_downloaded, true)?;
 
-                // Decrement user's queue count
-                if let Some(user_id) = &item.requested_by_user_id {
-                    self.queue_store.decrement_user_queue(user_id)?;
+                    self.audit_logger.log_download_completed(
+                        &item,
+                        bytes_downloaded,
+                        duration_ms,
+                        None,
+                    )?;
+
+                    info!(
+                        "Album {} metadata processed, waiting for {} children to complete",
+                        item.content_id,
+                        self.queue_store.get_children(&item.id).map(|c| c.len()).unwrap_or(0)
+                    );
+                } else {
+                    // Child items - mark as completed immediately
+                    self.queue_store
+                        .mark_completed(&item.id, bytes_downloaded, duration_ms)?;
+
+                    self.queue_store
+                        .record_activity(item.content_type, bytes_downloaded, true)?;
+
+                    // Decrement user's queue count (only for top-level items, not children)
+                    if item.parent_id.is_none() {
+                        if let Some(user_id) = &item.requested_by_user_id {
+                            self.queue_store.decrement_user_queue(user_id)?;
+                        }
+                    }
+
+                    self.audit_logger.log_download_completed(
+                        &item,
+                        bytes_downloaded,
+                        duration_ms,
+                        None,
+                    )?;
                 }
-
-                self.audit_logger.log_download_completed(
-                    &item,
-                    bytes_downloaded,
-                    duration_ms,
-                    None, // tracks_downloaded - only for albums
-                )?;
 
                 Ok(Some(ProcessingResult::success(
                     item.id,
