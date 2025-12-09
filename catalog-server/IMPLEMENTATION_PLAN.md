@@ -1556,7 +1556,7 @@ Queue processing order: `ORDER BY priority ASC, created_at ASC`
   }
   ```
 
-- [ ] **Task DM-1.2.5: Define statistics and status types**
+- [x] **Task DM-1.2.5: Define statistics and status types**
 
   **File:** `catalog-server/src/download_manager/models.rs`
 

@@ -561,6 +561,189 @@ impl AuditLogFilter {
     }
 }
 
+/// User's rate limit status for download requests.
+#[derive(Debug, Clone, Serialize)]
+pub struct UserLimitStatus {
+    /// Number of requests made today
+    pub requests_today: i32,
+    /// Maximum requests allowed per day
+    pub max_per_day: i32,
+    /// Number of items currently in queue for this user
+    pub in_queue: i32,
+    /// Maximum items allowed in queue
+    pub max_queue: i32,
+    /// Whether the user can make more requests
+    pub can_request: bool,
+}
+
+impl UserLimitStatus {
+    /// Create a new status indicating the user can make requests.
+    pub fn available(requests_today: i32, max_per_day: i32, in_queue: i32, max_queue: i32) -> Self {
+        Self {
+            requests_today,
+            max_per_day,
+            in_queue,
+            max_queue,
+            can_request: requests_today < max_per_day && in_queue < max_queue,
+        }
+    }
+}
+
+/// System-wide capacity status for download rate limiting.
+#[derive(Debug, Clone, Serialize)]
+pub struct CapacityStatus {
+    /// Albums downloaded this hour
+    pub albums_this_hour: i32,
+    /// Maximum albums per hour
+    pub max_per_hour: i32,
+    /// Albums downloaded today
+    pub albums_today: i32,
+    /// Maximum albums per day
+    pub max_per_day: i32,
+    /// Whether the system is at capacity
+    pub at_capacity: bool,
+}
+
+impl CapacityStatus {
+    /// Create a new capacity status.
+    pub fn new(albums_this_hour: i32, max_per_hour: i32, albums_today: i32, max_per_day: i32) -> Self {
+        Self {
+            albums_this_hour,
+            max_per_hour,
+            albums_today,
+            max_per_day,
+            at_capacity: albums_this_hour >= max_per_hour || albums_today >= max_per_day,
+        }
+    }
+}
+
+/// Queue statistics summary.
+#[derive(Debug, Clone, Serialize, Default)]
+pub struct QueueStats {
+    /// Items waiting to be processed
+    pub pending: i64,
+    /// Items currently being processed
+    pub in_progress: i64,
+    /// Items waiting to retry
+    pub retry_waiting: i64,
+    /// Items completed today
+    pub completed_today: i64,
+    /// Items failed today
+    pub failed_today: i64,
+}
+
+/// Activity log entry for tracking download throughput.
+#[derive(Debug, Clone)]
+pub struct ActivityLogEntry {
+    /// Unix timestamp truncated to hour
+    pub hour_bucket: i64,
+    /// Number of albums downloaded in this hour
+    pub albums_downloaded: i64,
+    /// Number of tracks downloaded in this hour
+    pub tracks_downloaded: i64,
+    /// Number of images downloaded in this hour
+    pub images_downloaded: i64,
+    /// Total bytes downloaded in this hour
+    pub bytes_downloaded: i64,
+    /// Number of failed downloads in this hour
+    pub failed_count: i64,
+}
+
+/// Download counts for the current hour.
+#[derive(Debug, Clone, Serialize, Default)]
+pub struct HourlyCounts {
+    pub albums: i64,
+    pub tracks: i64,
+    pub images: i64,
+    pub bytes: i64,
+}
+
+/// Download counts for the current day.
+#[derive(Debug, Clone, Serialize, Default)]
+pub struct DailyCounts {
+    pub albums: i64,
+    pub tracks: i64,
+    pub images: i64,
+    pub bytes: i64,
+}
+
+/// Error information for failed downloads.
+#[derive(Debug, Clone)]
+pub struct DownloadError {
+    /// Type of error
+    pub error_type: DownloadErrorType,
+    /// Human-readable error message
+    pub message: String,
+}
+
+impl DownloadError {
+    /// Create a new download error.
+    pub fn new(error_type: DownloadErrorType, message: impl Into<String>) -> Self {
+        Self {
+            error_type,
+            message: message.into(),
+        }
+    }
+
+    /// Returns true if this error should trigger a retry.
+    pub fn is_retryable(&self) -> bool {
+        self.error_type.is_retryable()
+    }
+}
+
+/// Result of processing a queue item.
+#[derive(Debug, Clone)]
+pub struct ProcessingResult {
+    /// ID of the processed queue item
+    pub queue_item_id: String,
+    /// Type of content that was processed
+    pub content_type: DownloadContentType,
+    /// Whether the processing succeeded
+    pub success: bool,
+    /// Number of bytes downloaded (if successful)
+    pub bytes_downloaded: Option<u64>,
+    /// Time spent processing in milliseconds
+    pub duration_ms: i64,
+    /// Error information (if failed)
+    pub error: Option<DownloadError>,
+}
+
+impl ProcessingResult {
+    /// Create a successful result.
+    pub fn success(
+        queue_item_id: String,
+        content_type: DownloadContentType,
+        bytes_downloaded: u64,
+        duration_ms: i64,
+    ) -> Self {
+        Self {
+            queue_item_id,
+            content_type,
+            success: true,
+            bytes_downloaded: Some(bytes_downloaded),
+            duration_ms,
+            error: None,
+        }
+    }
+
+    /// Create a failed result.
+    pub fn failure(
+        queue_item_id: String,
+        content_type: DownloadContentType,
+        duration_ms: i64,
+        error: DownloadError,
+    ) -> Self {
+        Self {
+            queue_item_id,
+            content_type,
+            success: false,
+            bytes_downloaded: None,
+            duration_ms,
+            error: Some(error),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -932,5 +1115,90 @@ mod tests {
         assert_eq!(filter.offset, 0);
         assert!(filter.user_id.is_none());
         assert!(filter.queue_item_id.is_none());
+    }
+
+    #[test]
+    fn test_user_limit_status_can_request() {
+        // Under limits - can request
+        let status = UserLimitStatus::available(5, 10, 3, 20);
+        assert!(status.can_request);
+        assert_eq!(status.requests_today, 5);
+        assert_eq!(status.max_per_day, 10);
+
+        // At daily limit - cannot request
+        let status = UserLimitStatus::available(10, 10, 3, 20);
+        assert!(!status.can_request);
+
+        // At queue limit - cannot request
+        let status = UserLimitStatus::available(5, 10, 20, 20);
+        assert!(!status.can_request);
+    }
+
+    #[test]
+    fn test_capacity_status_at_capacity() {
+        // Under limits
+        let status = CapacityStatus::new(5, 10, 30, 60);
+        assert!(!status.at_capacity);
+
+        // At hourly limit
+        let status = CapacityStatus::new(10, 10, 30, 60);
+        assert!(status.at_capacity);
+
+        // At daily limit
+        let status = CapacityStatus::new(5, 10, 60, 60);
+        assert!(status.at_capacity);
+    }
+
+    #[test]
+    fn test_download_error() {
+        let error = DownloadError::new(DownloadErrorType::Connection, "Connection refused");
+        assert!(error.is_retryable());
+        assert_eq!(error.message, "Connection refused");
+
+        let not_found = DownloadError::new(DownloadErrorType::NotFound, "Album not found");
+        assert!(!not_found.is_retryable());
+    }
+
+    #[test]
+    fn test_processing_result_success() {
+        let result = ProcessingResult::success(
+            "item-123".to_string(),
+            DownloadContentType::TrackAudio,
+            1024000,
+            500,
+        );
+
+        assert!(result.success);
+        assert_eq!(result.queue_item_id, "item-123");
+        assert_eq!(result.content_type, DownloadContentType::TrackAudio);
+        assert_eq!(result.bytes_downloaded, Some(1024000));
+        assert_eq!(result.duration_ms, 500);
+        assert!(result.error.is_none());
+    }
+
+    #[test]
+    fn test_processing_result_failure() {
+        let error = DownloadError::new(DownloadErrorType::Timeout, "Request timed out");
+        let result = ProcessingResult::failure(
+            "item-123".to_string(),
+            DownloadContentType::AlbumImage,
+            1000,
+            error,
+        );
+
+        assert!(!result.success);
+        assert!(result.bytes_downloaded.is_none());
+        assert!(result.error.is_some());
+        assert_eq!(result.error.as_ref().unwrap().error_type, DownloadErrorType::Timeout);
+    }
+
+    #[test]
+    fn test_queue_stats_default() {
+        let stats = QueueStats::default();
+        assert_eq!(stats.pending, 0);
+        assert_eq!(stats.in_progress, 0);
+        assert_eq!(stats.retry_waiting, 0);
+        assert_eq!(stats.completed_today, 0);
+        assert_eq!(stats.failed_today, 0);
     }
 }
