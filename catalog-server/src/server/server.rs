@@ -2945,6 +2945,77 @@ async fn admin_get_changelog_entity_history(
     }
 }
 
+// ============================================================================
+// Download Manager Endpoints
+// ============================================================================
+
+/// Query parameters for download search.
+#[derive(Deserialize)]
+struct DownloadSearchParams {
+    /// Search query string
+    q: String,
+    /// Content type to search for: "album" (default) or "artist"
+    #[serde(rename = "type")]
+    content_type: Option<String>,
+}
+
+/// GET /v1/download/search - Search for downloadable content
+async fn search_download_content(
+    _session: Session,
+    State(download_manager): State<super::state::OptionalDownloadManager>,
+    Query(params): Query<DownloadSearchParams>,
+) -> Response {
+    let dm = match download_manager {
+        Some(dm) => dm,
+        None => {
+            return (
+                StatusCode::SERVICE_UNAVAILABLE,
+                "Download manager not enabled",
+            )
+                .into_response()
+        }
+    };
+
+    let search_type = match params.content_type.as_deref() {
+        Some("artist") => crate::download_manager::SearchType::Artist,
+        _ => crate::download_manager::SearchType::Album,
+    };
+
+    match dm.search(&params.q, search_type).await {
+        Ok(results) => Json(results).into_response(),
+        Err(err) => {
+            error!("Error searching download content: {}", err);
+            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+        }
+    }
+}
+
+/// GET /v1/download/search/discography/:artist_id - Get artist discography
+async fn search_download_discography(
+    _session: Session,
+    State(download_manager): State<super::state::OptionalDownloadManager>,
+    Path(artist_id): Path<String>,
+) -> Response {
+    let dm = match download_manager {
+        Some(dm) => dm,
+        None => {
+            return (
+                StatusCode::SERVICE_UNAVAILABLE,
+                "Download manager not enabled",
+            )
+                .into_response()
+        }
+    };
+
+    match dm.search_discography(&artist_id).await {
+        Ok(result) => Json(result).into_response(),
+        Err(err) => {
+            error!("Error fetching discography: {}", err);
+            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+        }
+    }
+}
+
 impl ServerState {
     #[allow(clippy::arc_with_non_send_sync, clippy::too_many_arguments)]
     fn new(
@@ -2978,6 +3049,7 @@ impl ServerState {
             proxy,
             ws_connection_manager: Arc::new(super::websocket::ConnectionManager::new()),
             scheduler_handle,
+            download_manager: None, // Initialized in main.rs when configured
             hash: "123456".to_owned(),
         }
     }
@@ -3365,6 +3437,16 @@ pub fn make_app(
         .merge(admin_listening_routes)
         .merge(admin_changelog_routes);
 
+    // Download manager routes (requires RequestContent permission)
+    let download_routes: Router = Router::new()
+        .route("/search", get(search_download_content))
+        .route("/search/discography/{artist_id}", get(search_download_discography))
+        .route_layer(middleware::from_fn_with_state(
+            state.clone(),
+            require_request_content,
+        ))
+        .with_state(state.clone());
+
     let home_router: Router = match config.frontend_dir_path {
         Some(ref frontend_path) => {
             let index_path = std::path::Path::new(frontend_path).join("index.html");
@@ -3389,6 +3471,7 @@ pub fn make_app(
         .nest("/v1/user", user_routes)
         .nest("/v1/admin", admin_routes)
         .nest("/v1/sync", sync_routes)
+        .nest("/v1/download", download_routes)
         .nest("/v1", ws_routes);
 
     #[cfg(feature = "slowdown")]

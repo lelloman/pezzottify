@@ -2421,7 +2421,7 @@ Queue processing order: `ORDER BY priority ASC, created_at ASC`
 
 #### DM-2.3 API Handlers
 
-- [ ] **Task DM-2.3.1: Create `GET /v1/download/search` handler**
+- [x] **Task DM-2.3.1: Create `GET /v1/download/search` handler**
 
   **File:** `catalog-server/src/server/server.rs`
 
@@ -2445,7 +2445,7 @@ Queue processing order: `ORDER BY priority ASC, created_at ASC`
   }
   ```
 
-- [ ] **Task DM-2.3.2: Create `GET /v1/download/search/discography/:artist_id` handler**
+- [x] **Task DM-2.3.2: Create `GET /v1/download/search/discography/:artist_id` handler**
 
   **File:** `catalog-server/src/server/server.rs`
 
