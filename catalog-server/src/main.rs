@@ -12,7 +12,7 @@ use pezzottify_catalog_server::background_jobs::jobs::{
     AuditLogCleanupJob, IntegrityWatchdogJob, PopularContentJob,
 };
 use pezzottify_catalog_server::background_jobs::{create_scheduler, JobContext};
-use pezzottify_catalog_server::catalog_store::{CatalogStore, SqliteCatalogStore};
+use pezzottify_catalog_server::catalog_store::{CatalogStore, SqliteCatalogStore, WritableCatalogStore};
 use pezzottify_catalog_server::config;
 use pezzottify_catalog_server::download_manager::{
     AuditLogger, DownloadManager, DownloadQueueStore, DownloaderClient, IntegrityWatchdog,
@@ -326,7 +326,7 @@ async fn main() -> Result<()> {
         let manager = Arc::new(DownloadManager::new(
             queue_store.clone(),
             dm_downloader_client,
-            catalog_store.clone() as Arc<dyn CatalogStore>,
+            catalog_store.clone() as Arc<dyn WritableCatalogStore>,
             app_config.media_path.clone(),
             app_config.download_manager.clone(),
         ));

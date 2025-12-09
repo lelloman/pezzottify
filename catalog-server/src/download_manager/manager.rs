@@ -11,7 +11,7 @@ use tokio::fs;
 use tracing::{debug, info};
 use uuid::Uuid;
 
-use crate::catalog_store::CatalogStore;
+use crate::catalog_store::{CatalogStore, WritableCatalogStore};
 use crate::config::DownloadManagerSettings;
 
 use super::audit_logger::AuditLogger;
@@ -36,9 +36,8 @@ pub struct DownloadManager {
     /// HTTP client for communicating with the external downloader service.
     #[allow(dead_code)]
     downloader_client: DownloaderClient,
-    /// Catalog store for checking existing content.
-    #[allow(dead_code)]
-    catalog_store: Arc<dyn CatalogStore>,
+    /// Catalog store for checking existing content and ingesting new content.
+    catalog_store: Arc<dyn WritableCatalogStore>,
     /// Path to media files directory.
     media_path: PathBuf,
     /// Configuration settings.
@@ -58,13 +57,13 @@ impl DownloadManager {
     /// # Arguments
     /// * `queue_store` - Store for persisting download queue state
     /// * `downloader_client` - HTTP client for the downloader service
-    /// * `catalog_store` - Store for checking existing catalog content
+    /// * `catalog_store` - Store for checking and writing catalog content
     /// * `media_path` - Path to the media files directory
     /// * `config` - Download manager configuration settings
     pub fn new(
         queue_store: Arc<dyn DownloadQueueStore>,
         downloader_client: DownloaderClient,
-        catalog_store: Arc<dyn CatalogStore>,
+        catalog_store: Arc<dyn WritableCatalogStore>,
         media_path: PathBuf,
         config: DownloadManagerSettings,
     ) -> Self {
@@ -72,7 +71,7 @@ impl DownloadManager {
         let audit_logger = AuditLogger::new(queue_store.clone());
         let search_proxy = SearchProxy::new(
             downloader_client.clone(),
-            catalog_store.clone(),
+            catalog_store.clone() as Arc<dyn CatalogStore>,
             queue_store.clone(),
         );
 
@@ -573,8 +572,27 @@ impl DownloadManager {
             item.content_id, children_count, track_count, image_count
         );
 
-        // TODO: Implement catalog ingestion in DM-4.1.4
-        // For now, just queue the children without creating catalog entries
+        // 6. Ingest album, tracks, and artists into the catalog
+        match super::catalog_ingestion::ingest_album(
+            self.catalog_store.as_ref(),
+            &album,
+            &tracks,
+            &artists,
+        ) {
+            Ok(ingested) => {
+                info!(
+                    "Ingested album {} with {} tracks, {} album images, {} artist images",
+                    ingested.album_id,
+                    ingested.track_ids.len(),
+                    ingested.album_image_ids.len(),
+                    ingested.artist_image_ids.len()
+                );
+            }
+            Err(e) => {
+                // Log but don't fail - children are already queued
+                tracing::warn!("Failed to ingest album {} to catalog: {}", item.content_id, e);
+            }
+        }
 
         // Return 0 bytes - album itself doesn't download data, children do
         Ok(0)
@@ -1057,7 +1075,7 @@ mod tests {
     fn test_retry_failed_not_found() {
         let ctx = create_test_manager();
 
-        let result = ctx.manager.retry_failed("admin", "nonexistent");
+        let result = ctx.manager.retry_failed("admin", "nonexistent", false);
 
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("not found"));
@@ -1452,16 +1470,16 @@ mod tests {
             )
             .unwrap();
 
-        // Try to retry a non-failed item
+        // Try to retry a non-failed item (without force)
         let result = ctx
             .manager
-            .retry_failed("admin", &request_result.request_id);
+            .retry_failed("admin", &request_result.request_id, false);
 
         assert!(result.is_err());
         assert!(result
             .unwrap_err()
             .to_string()
-            .contains("Can only retry failed items"));
+            .contains("Cannot retry item with status"));
     }
 
     #[test]
