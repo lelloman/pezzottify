@@ -97,6 +97,9 @@ impl QueueProcessor {
 
     /// Process a single tick of the queue processor.
     async fn process_tick(&self) {
+        // Update queue size metrics
+        self.update_queue_metrics();
+
         // 1. Promote ready retries
         match self.download_manager.promote_ready_retries() {
             Ok(count) => {
@@ -112,6 +115,12 @@ impl QueueProcessor {
         // 2. Process next item
         match self.download_manager.process_next().await {
             Ok(Some(result)) => {
+                // Emit metrics for processed download
+                let content_type_str = result.content_type.as_str().to_lowercase();
+                let result_str = if result.success { "success" } else { "failure" };
+                let duration = Duration::from_millis(result.duration_ms as u64);
+                metrics::record_download_processed(&content_type_str, result_str, duration);
+
                 if result.success {
                     info!(
                         "Successfully processed download: {} ({:?})",
@@ -130,6 +139,25 @@ impl QueueProcessor {
             }
             Err(e) => {
                 error!("Queue processor error: {}", e);
+            }
+        }
+    }
+
+    /// Update Prometheus metrics with current queue sizes.
+    ///
+    /// Gets queue stats from the download manager and updates the
+    /// corresponding Prometheus gauges.
+    fn update_queue_metrics(&self) {
+        match self.download_manager.get_queue_stats() {
+            Ok(stats) => {
+                // Update queue size metrics for each status
+                // Using priority "0" as a catch-all since we don't have per-priority breakdown
+                metrics::set_download_queue_size("pending", 0, stats.pending as usize);
+                metrics::set_download_queue_size("in_progress", 0, stats.in_progress as usize);
+                metrics::set_download_queue_size("retry_waiting", 0, stats.retry_waiting as usize);
+            }
+            Err(e) => {
+                error!("Failed to get queue stats for metrics: {}", e);
             }
         }
     }
