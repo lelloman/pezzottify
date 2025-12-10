@@ -19,6 +19,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.HourglassEmpty
 import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -36,6 +37,7 @@ import com.lelloman.pezzottify.android.ui.theme.Spacing
 fun ExternalAlbumSearchResult(
     result: ExternalSearchResultContent.Album,
     canRequest: Boolean,
+    isRequesting: Boolean,
     onRequestClick: () -> Unit,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
@@ -92,6 +94,7 @@ fun ExternalAlbumSearchResult(
             inCatalog = result.inCatalog,
             inQueue = result.inQueue,
             canRequest = canRequest,
+            isRequesting = isRequesting,
             onRequestClick = onRequestClick,
         )
     }
@@ -101,6 +104,7 @@ fun ExternalAlbumSearchResult(
 fun ExternalArtistSearchResult(
     result: ExternalSearchResultContent.Artist,
     canRequest: Boolean,
+    isRequesting: Boolean,
     onRequestClick: () -> Unit,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
@@ -141,6 +145,7 @@ fun ExternalArtistSearchResult(
             inCatalog = result.inCatalog,
             inQueue = result.inQueue,
             canRequest = canRequest,
+            isRequesting = isRequesting,
             onRequestClick = onRequestClick,
         )
     }
@@ -151,6 +156,7 @@ private fun ExternalResultActionButton(
     inCatalog: Boolean,
     inQueue: Boolean,
     canRequest: Boolean,
+    isRequesting: Boolean,
     onRequestClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -171,6 +177,13 @@ private fun ExternalResultActionButton(
                 contentDescription = "In queue",
                 tint = MaterialTheme.colorScheme.secondary,
                 modifier = modifier.size(24.dp),
+            )
+        }
+        isRequesting -> {
+            // Currently sending request - show loading
+            CircularProgressIndicator(
+                modifier = modifier.size(24.dp),
+                strokeWidth = 2.dp,
             )
         }
         else -> {

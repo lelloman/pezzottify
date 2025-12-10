@@ -27,12 +27,17 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SearchBar
+import androidx.compose.material3.Snackbar
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.foundation.layout.Row
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -73,21 +78,27 @@ fun SearchScreenContent(
     events: Flow<SearchScreensEvents>,
     navController: NavController,
 ) {
+    val snackbarHostState = remember { SnackbarHostState() }
+
     LaunchedEffect(Unit) {
         events.collect {
             when (it) {
                 is SearchScreensEvents.NavigateToArtistScreen -> navController.toArtist(it.artistId)
                 is SearchScreensEvents.NavigateToAlbumScreen -> navController.toAlbum(it.albumId)
                 is SearchScreensEvents.NavigateToTrackScreen -> navController.toTrack(it.trackId)
+                is SearchScreensEvents.ShowRequestError -> snackbarHostState.showSnackbar(it.message)
+                is SearchScreensEvents.ShowRequestSuccess -> snackbarHostState.showSnackbar("Request added to queue")
             }
         }
     }
-    Column(
-        modifier = Modifier.fillMaxSize(),
-    ) {
-        BackHandler(state.query.isNotEmpty()) {
-            actions.updateQuery("")
-        }
+
+    Box(modifier = Modifier.fillMaxSize()) {
+        Column(
+            modifier = Modifier.fillMaxSize(),
+        ) {
+            BackHandler(state.query.isNotEmpty()) {
+                actions.updateQuery("")
+            }
         SearchBar(
             modifier = Modifier
                 .fillMaxWidth()
@@ -170,12 +181,14 @@ fun SearchScreenContent(
                                     is ExternalSearchResultContent.Album -> ExternalAlbumSearchResult(
                                         result = result,
                                         canRequest = state.downloadLimits?.canRequest ?: false,
+                                        isRequesting = state.requestingAlbumIds.contains(result.id),
                                         onRequestClick = { actions.requestAlbumDownload(result) },
                                         onClick = { actions.clickOnExternalResult(result) },
                                     )
                                     is ExternalSearchResultContent.Artist -> ExternalArtistSearchResult(
                                         result = result,
                                         canRequest = false, // Artists can't be requested directly
+                                        isRequesting = false,
                                         onRequestClick = { },
                                         onClick = { actions.clickOnExternalResult(result) },
                                     )
@@ -211,6 +224,12 @@ fun SearchScreenContent(
                 }
             }
         }
+        }
+
+        SnackbarHost(
+            hostState = snackbarHostState,
+            modifier = Modifier.align(Alignment.BottomCenter),
+        )
     }
 }
 

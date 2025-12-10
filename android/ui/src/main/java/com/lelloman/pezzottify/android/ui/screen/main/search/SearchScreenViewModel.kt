@@ -137,11 +137,22 @@ class SearchScreenViewModel(
 
     override fun requestAlbumDownload(result: ExternalSearchResultContent.Album) {
         viewModelScope.launch(coroutineContext) {
+            // Add to requesting set (shows loading state)
+            mutableState.value = mutableState.value.copy(
+                requestingAlbumIds = mutableState.value.requestingAlbumIds + result.id
+            )
+
             val requestResult = interactor.requestAlbumDownload(
                 albumId = result.id,
                 albumName = result.name,
                 artistName = result.artistName,
             )
+
+            // Remove from requesting set
+            mutableState.value = mutableState.value.copy(
+                requestingAlbumIds = mutableState.value.requestingAlbumIds - result.id
+            )
+
             if (requestResult.isSuccess) {
                 // Update the result to show it's now in queue
                 val currentExternalResults = mutableState.value.externalResults
@@ -155,8 +166,13 @@ class SearchScreenViewModel(
                 mutableState.value = mutableState.value.copy(externalResults = updatedResults)
                 // Refresh limits
                 refreshLimits()
+                // Show success feedback
+                mutableEvents.emit(SearchScreensEvents.ShowRequestSuccess)
+            } else {
+                // Show error feedback
+                val errorMessage = requestResult.exceptionOrNull()?.message ?: "Failed to request download"
+                mutableEvents.emit(SearchScreensEvents.ShowRequestError(errorMessage))
             }
-            // TODO: Handle errors with snackbar/toast
         }
     }
 
