@@ -317,6 +317,26 @@ impl JobScheduler {
             state.running_jobs.insert(job_id.to_string());
         }
 
+        // Initialize schedule state for interval-based jobs to prevent tight loops
+        // before the job completes. This sets next_run_at to now + interval.
+        let interval = match job.schedule() {
+            JobSchedule::Interval(int) => Some(int),
+            JobSchedule::Combined { interval, .. } => interval,
+            _ => None,
+        };
+        if let Some(interval) = interval {
+            let next_run =
+                chrono::Utc::now() + chrono::Duration::from_std(interval).unwrap_or_default();
+            let schedule_state = crate::server_store::JobScheduleState {
+                job_id: job_id.to_string(),
+                next_run_at: next_run,
+                last_run_at: None, // Will be set when job completes
+            };
+            if let Err(e) = self.server_store.update_schedule_state(&schedule_state) {
+                warn!("Failed to initialize schedule state for {}: {}", job_id, e);
+            }
+        }
+
         // Set metric indicating job is running
         metrics::set_background_job_running(job_id, true);
 
