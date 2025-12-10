@@ -127,18 +127,26 @@ const fetchResults = async (newQuery, queryParams) => {
 
     const filters = queryParams.type ? queryParams.type.split(",") : null;
 
-    // Fetch catalog results
-    results.value = await fetchCatalogResults(newQuery, filters);
+    // Fetch both searches in parallel
+    const catalogPromise = fetchCatalogResults(newQuery, filters);
 
-    // Fetch external results if enabled
     if (showExternalSearch.value) {
       const externalType = getExternalSearchType(filters);
-      const [extResults, limits] = await Promise.all([
-        fetchExternalResults(newQuery, externalType),
-        fetchExternalLimits(),
+      const externalPromise = fetchExternalResults(newQuery, externalType);
+      const limitsPromise = fetchExternalLimits();
+
+      // Run all in parallel
+      const [catalogData, extResults, limits] = await Promise.all([
+        catalogPromise,
+        externalPromise,
+        limitsPromise,
       ]);
-      externalResults.value = extResults;
+
+      results.value = catalogData;
+      externalResults.value = extResults || { results: [] };
       externalLimits.value = limits;
+    } else {
+      results.value = await catalogPromise;
     }
   } else {
     results.value = [];

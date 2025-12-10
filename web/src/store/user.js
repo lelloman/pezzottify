@@ -391,6 +391,15 @@ export const useUserStore = defineStore("user", () => {
             ? "true"
             : "false",
         };
+      }
+      // Handle legacy format: { ExternalSearchEnabled: true }
+      else if ("ExternalSearchEnabled" in setting) {
+        settings.value = {
+          ...settings.value,
+          [SETTING_ENABLE_EXTERNAL_SEARCH]: setting.ExternalSearchEnabled
+            ? "true"
+            : "false",
+        };
       } else {
         // Handle direct key-value pairs
         settings.value = { ...settings.value, ...setting };
