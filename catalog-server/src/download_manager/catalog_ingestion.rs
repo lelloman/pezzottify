@@ -102,14 +102,41 @@ pub fn ingest_album(
             catalog_store.insert_track(&catalog_track)?;
         }
 
-        // Link artists to track (ignore error if already linked)
-        for (position, artist_id) in track.artists_ids.iter().enumerate() {
-            let role = if position == 0 {
-                ArtistRole::MainArtist
-            } else {
-                ArtistRole::FeaturedArtist
-            };
-            let _ = catalog_store.add_track_artist(&track.id, artist_id, &role, position as i32);
+        // Link artists to track - merge artists_with_role and artists_ids
+        let mut seen_artist_ids = std::collections::HashSet::new();
+        let mut has_main_artist = false;
+        let mut position = 0i32;
+
+        // First, add all artists with their actual roles
+        for artist_with_role in &track.artists_with_role {
+            let role = convert_artist_role(&artist_with_role.role);
+            if role == ArtistRole::MainArtist {
+                has_main_artist = true;
+            }
+            let _ = catalog_store.add_track_artist(
+                &track.id,
+                &artist_with_role.artist_id,
+                &role,
+                position,
+            );
+            seen_artist_ids.insert(artist_with_role.artist_id.clone());
+            position += 1;
+        }
+
+        // Then, add any artists from artists_ids that weren't in artists_with_role
+        for artist_id in &track.artists_ids {
+            if !seen_artist_ids.contains(artist_id) {
+                // If no main artist yet, first unseen artist becomes main
+                let role = if !has_main_artist {
+                    has_main_artist = true;
+                    ArtistRole::MainArtist
+                } else {
+                    ArtistRole::FeaturedArtist
+                };
+                let _ = catalog_store.add_track_artist(&track.id, artist_id, &role, position);
+                seen_artist_ids.insert(artist_id.clone());
+                position += 1;
+            }
         }
     }
 
@@ -212,6 +239,20 @@ fn convert_image_size(s: &str) -> ImageSize {
         "large" => ImageSize::Large,
         "xlarge" | "xl" => ImageSize::XLarge,
         _ => ImageSize::Default,
+    }
+}
+
+/// Convert external artist role string to ArtistRole enum.
+fn convert_artist_role(s: &str) -> ArtistRole {
+    match s.to_uppercase().as_str() {
+        "MAIN_ARTIST" | "MAIN" | "PRIMARY" => ArtistRole::MainArtist,
+        "FEATURED_ARTIST" | "FEATURED" | "FEAT" => ArtistRole::FeaturedArtist,
+        "REMIXER" | "REMIX" => ArtistRole::Remixer,
+        "COMPOSER" | "WRITER" | "SONGWRITER" => ArtistRole::Composer,
+        "CONDUCTOR" => ArtistRole::Conductor,
+        "ORCHESTRA" => ArtistRole::Orchestra,
+        "ACTOR" => ArtistRole::Actor,
+        _ => ArtistRole::Unknown,
     }
 }
 
