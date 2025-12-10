@@ -13,9 +13,11 @@ pub enum UserSetting {
     /// When enabled, the catalog proxy will fetch missing content on-demand.
     #[serde(rename = "enable_direct_downloads")]
     DirectDownloadsEnabled(bool),
-    // Future settings:
-    // #[serde(rename = "preferred_audio_quality")]
-    // PreferredAudioQuality(AudioQuality),
+    /// Whether the user has enabled external search.
+    /// When enabled, searches will also query external providers for content
+    /// that can be requested for download.
+    #[serde(rename = "enable_external_search")]
+    ExternalSearchEnabled(bool),
 }
 
 impl UserSetting {
@@ -23,6 +25,7 @@ impl UserSetting {
     pub fn key(&self) -> &'static str {
         match self {
             Self::DirectDownloadsEnabled(_) => "enable_direct_downloads",
+            Self::ExternalSearchEnabled(_) => "enable_external_search",
         }
     }
 
@@ -30,6 +33,7 @@ impl UserSetting {
     pub fn value_to_string(&self) -> String {
         match self {
             Self::DirectDownloadsEnabled(enabled) => enabled.to_string(),
+            Self::ExternalSearchEnabled(enabled) => enabled.to_string(),
         }
     }
 
@@ -45,19 +49,26 @@ impl UserSetting {
                     .map_err(|_| format!("Invalid boolean value for {}: {}", key, value))?;
                 Ok(Self::DirectDownloadsEnabled(enabled))
             }
+            "enable_external_search" => {
+                let enabled = value
+                    .parse::<bool>()
+                    .map_err(|_| format!("Invalid boolean value for {}: {}", key, value))?;
+                Ok(Self::ExternalSearchEnabled(enabled))
+            }
             _ => Err(format!("Unknown setting key: {}", key)),
         }
     }
 
     /// Check if a key is a known setting key.
     pub fn is_known_key(key: &str) -> bool {
-        matches!(key, "enable_direct_downloads")
+        matches!(key, "enable_direct_downloads" | "enable_external_search")
     }
 
     /// Get the default value for a setting by key.
     pub fn default_for_key(key: &str) -> Option<Self> {
         match key {
             "enable_direct_downloads" => Some(Self::DirectDownloadsEnabled(false)),
+            "enable_external_search" => Some(Self::ExternalSearchEnabled(false)),
             _ => None,
         }
     }
@@ -71,6 +82,9 @@ mod tests {
     fn test_key() {
         let setting = UserSetting::DirectDownloadsEnabled(true);
         assert_eq!(setting.key(), "enable_direct_downloads");
+
+        let setting = UserSetting::ExternalSearchEnabled(true);
+        assert_eq!(setting.key(), "enable_external_search");
     }
 
     #[test]
@@ -81,6 +95,14 @@ mod tests {
         );
         assert_eq!(
             UserSetting::DirectDownloadsEnabled(false).value_to_string(),
+            "false"
+        );
+        assert_eq!(
+            UserSetting::ExternalSearchEnabled(true).value_to_string(),
+            "true"
+        );
+        assert_eq!(
+            UserSetting::ExternalSearchEnabled(false).value_to_string(),
             "false"
         );
     }
@@ -94,6 +116,14 @@ mod tests {
         assert_eq!(
             UserSetting::from_key_value("enable_direct_downloads", "false"),
             Ok(UserSetting::DirectDownloadsEnabled(false))
+        );
+        assert_eq!(
+            UserSetting::from_key_value("enable_external_search", "true"),
+            Ok(UserSetting::ExternalSearchEnabled(true))
+        );
+        assert_eq!(
+            UserSetting::from_key_value("enable_external_search", "false"),
+            Ok(UserSetting::ExternalSearchEnabled(false))
         );
     }
 
@@ -114,6 +144,7 @@ mod tests {
     #[test]
     fn test_is_known_key() {
         assert!(UserSetting::is_known_key("enable_direct_downloads"));
+        assert!(UserSetting::is_known_key("enable_external_search"));
         assert!(!UserSetting::is_known_key("unknown_key"));
     }
 
@@ -123,6 +154,10 @@ mod tests {
             UserSetting::default_for_key("enable_direct_downloads"),
             Some(UserSetting::DirectDownloadsEnabled(false))
         );
+        assert_eq!(
+            UserSetting::default_for_key("enable_external_search"),
+            Some(UserSetting::ExternalSearchEnabled(false))
+        );
         assert_eq!(UserSetting::default_for_key("unknown_key"), None);
     }
 
@@ -131,6 +166,10 @@ mod tests {
         let setting = UserSetting::DirectDownloadsEnabled(true);
         let json = serde_json::to_string(&setting).unwrap();
         assert_eq!(json, r#"{"key":"enable_direct_downloads","value":true}"#);
+
+        let setting = UserSetting::ExternalSearchEnabled(true);
+        let json = serde_json::to_string(&setting).unwrap();
+        assert_eq!(json, r#"{"key":"enable_external_search","value":true}"#);
     }
 
     #[test]
@@ -138,5 +177,9 @@ mod tests {
         let json = r#"{"key":"enable_direct_downloads","value":true}"#;
         let setting: UserSetting = serde_json::from_str(json).unwrap();
         assert_eq!(setting, UserSetting::DirectDownloadsEnabled(true));
+
+        let json = r#"{"key":"enable_external_search","value":true}"#;
+        let setting: UserSetting = serde_json::from_str(json).unwrap();
+        assert_eq!(setting, UserSetting::ExternalSearchEnabled(true));
     }
 }

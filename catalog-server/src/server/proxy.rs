@@ -68,6 +68,14 @@ impl CatalogProxy {
                 }
                 enabled
             }
+            Ok(Some(_)) => {
+                // Unexpected setting type for this key - treat as error
+                warn!(
+                    "Unexpected setting type returned for enable_direct_downloads for user {}",
+                    user_id
+                );
+                false
+            }
             Ok(None) => {
                 debug!(
                     "User {} cannot trigger download: preference not set (default: disabled)",
