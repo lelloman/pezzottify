@@ -40,8 +40,10 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry \
 # ------------------------------------------
 FROM debian:stable-slim
 
-# Install SQLite if your app loads sqlite dynamically
-RUN apt-get update && apt-get install -y libsqlite3-dev && rm -rf /var/lib/apt/lists/*
+# Install runtime dependencies:
+# - libsqlite3-dev: SQLite dynamic loading
+# - ffmpeg: ffprobe for content validation
+RUN apt-get update && apt-get install -y libsqlite3-dev ffmpeg && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
