@@ -202,7 +202,8 @@ class SearchScreenViewModel(
                     return@launch
                 }
 
-                if (mutableState.value.isExternalMode) {
+                // Only do external search if both external mode is enabled AND user can use it
+                if (mutableState.value.isExternalMode && mutableState.value.canUseExternalSearch) {
                     performExternalSearch()
                 } else {
                     performCatalogSearch()

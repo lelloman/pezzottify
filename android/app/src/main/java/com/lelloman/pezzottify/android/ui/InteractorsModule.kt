@@ -854,6 +854,11 @@ class InteractorsModule {
                     )
                 }
             }
+
+            override suspend fun createPlaylist(name: String) {
+                val id = UUID.randomUUID().toString()
+                userPlaylistStore.createOrUpdatePlaylist(id, name, emptyList())
+            }
         }
 
     @Provides
