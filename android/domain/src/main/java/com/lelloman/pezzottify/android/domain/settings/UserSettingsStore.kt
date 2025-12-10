@@ -21,6 +21,12 @@ interface UserSettingsStore {
     val isExternalSearchEnabled: StateFlow<Boolean>
 
     /**
+     * Whether external search mode is currently active in the search screen.
+     * This is a local-only setting that persists the toggle state.
+     */
+    val isExternalModeEnabled: StateFlow<Boolean>
+
+    /**
      * Whether direct downloads are enabled.
      * This setting is synced with the server and is only visible to users with IssueContentDownload permission.
      */
@@ -32,6 +38,7 @@ interface UserSettingsStore {
     suspend fun setInMemoryCacheEnabled(enabled: Boolean)
     suspend fun setFileLoggingEnabled(enabled: Boolean)
     suspend fun setExternalSearchEnabled(enabled: Boolean)
+    suspend fun setExternalModeEnabled(enabled: Boolean)
 
     /**
      * Set whether direct downloads are enabled.

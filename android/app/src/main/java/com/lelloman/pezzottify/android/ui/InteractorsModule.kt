@@ -34,6 +34,7 @@ import com.lelloman.pezzottify.android.ui.model.StoragePressureLevel as UiStorag
 import com.lelloman.pezzottify.android.ui.model.LikedContent as UiLikedContent
 import com.lelloman.pezzottify.android.ui.model.PlaybackPlaylist as UiPlaybackPlaylist
 import com.lelloman.pezzottify.android.ui.model.PlaybackPlaylistContext as UiPlaybackPlaylistContext
+import com.lelloman.pezzottify.android.domain.remoteapi.RemoteApiClient
 import com.lelloman.pezzottify.android.domain.statics.usecase.GetPopularContent
 import com.lelloman.pezzottify.android.domain.statics.usecase.PerformSearch
 import com.lelloman.pezzottify.android.domain.user.GetRecentlyViewedContentUseCase
@@ -309,6 +310,8 @@ class InteractorsModule {
         getRecentlyViewedContent: GetRecentlyViewedContentUseCase,
         getSearchHistoryEntries: GetSearchHistoryEntriesUseCase,
         logSearchHistoryEntry: LogSearchHistoryEntryUseCase,
+        userSettingsStore: UserSettingsStore,
+        permissionsStore: PermissionsStore,
     ): SearchScreenViewModel.Interactor =
         object : SearchScreenViewModel.Interactor {
             private val logger = loggerFactory.getLogger("SearchScreenViewModel.Interactor")
@@ -381,6 +384,20 @@ class InteractorsModule {
                     SearchScreenViewModel.SearchHistoryEntryType.Track -> SearchHistoryEntry.Type.Track
                 }
                 logSearchHistoryEntry(query, domainType, contentId)
+            }
+
+            override fun canUseExternalSearch(): Flow<Boolean> =
+                userSettingsStore.isExternalSearchEnabled.combine(
+                    permissionsStore.permissions
+                ) { isEnabled, permissions ->
+                    isEnabled && permissions.contains(DomainPermission.RequestContent)
+                }
+
+            override fun isExternalModeEnabled(): Flow<Boolean> =
+                userSettingsStore.isExternalModeEnabled
+
+            override suspend fun setExternalModeEnabled(enabled: Boolean) {
+                userSettingsStore.setExternalModeEnabled(enabled)
             }
         }
 
