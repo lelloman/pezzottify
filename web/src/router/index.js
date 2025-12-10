@@ -50,6 +50,12 @@ const router = createRouter({
           component: HomeView,
           meta: { requiresAuth: true },
         },
+        {
+          path: "/requests",
+          name: "requests",
+          component: HomeView,
+          meta: { requiresAuth: true },
+        },
       ],
     },
 
