@@ -35,9 +35,15 @@ const makeImageIdsSortingFunction = (sortingPreferences, objectProps) => {
     const allImages = targetObject[objectProps[0]]
       ? targetObject[objectProps[0]].map(mapImg(true))
       : [];
-    allImages.push(...targetObject[objectProps[1]].map(mapImg(false)));
+    // Safely handle missing secondary image array (e.g., missing cover_group or portraits)
+    const secondary = targetObject[objectProps[1]];
+    if (secondary && Array.isArray(secondary)) {
+      allImages.push(...secondary.map(mapImg(false)));
+    }
     function imageSizeValue(x) {
-      return sortingPreferences[x.size] || 0;
+      // Handle both PascalCase (from server) and UPPERCASE (legacy format)
+      const sizeUpper = (x.size || "").toUpperCase();
+      return sortingPreferences[sizeUpper] || sortingPreferences[x.size] || 0;
     }
     const sortedImages = allImages.sort((a, b) => {
       if (a.preferred === b.preferred) {

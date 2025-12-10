@@ -1049,6 +1049,26 @@ impl SqliteCatalogStore {
         Ok(())
     }
 
+    /// Set the display image for an album.
+    pub fn set_album_display_image(&self, album_id: &str, image_id: &str) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "UPDATE albums SET display_image_id = ?2 WHERE id = ?1",
+            params![album_id, image_id],
+        )?;
+        Ok(())
+    }
+
+    /// Set the display image for an artist.
+    pub fn set_artist_display_image(&self, artist_id: &str, image_id: &str) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "UPDATE artists SET display_image_id = ?2 WHERE id = ?1",
+            params![artist_id, image_id],
+        )?;
+        Ok(())
+    }
+
     // =========================================================================
     // Update Operations
     // =========================================================================
@@ -2178,6 +2198,14 @@ impl WritableCatalogStore for SqliteCatalogStore {
 
     fn update_track_audio(&self, track_id: &str, audio_uri: &str, format: &Format) -> Result<()> {
         SqliteCatalogStore::update_track_audio(self, track_id, audio_uri, format)
+    }
+
+    fn set_album_display_image(&self, album_id: &str, image_id: &str) -> Result<()> {
+        SqliteCatalogStore::set_album_display_image(self, album_id, image_id)
+    }
+
+    fn set_artist_display_image(&self, artist_id: &str, image_id: &str) -> Result<()> {
+        SqliteCatalogStore::set_artist_display_image(self, artist_id, image_id)
     }
 }
 
