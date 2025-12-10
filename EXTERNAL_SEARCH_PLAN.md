@@ -235,19 +235,24 @@ Extend `SearchScreenViewModel`:
 
 ### Phase 2: Domain Layer (domain module)
 
-- [ ] **2.1** Create `ExternalSearchResult` domain model (mirror of API model or map from it)
-- [ ] **2.2** Create `DownloadLimits` domain model
-- [ ] **2.3** Create `DownloadRequest` domain model with status enum (Pending, InProgress, Completed, Failed)
-- [ ] **2.4** Create `PerformExternalSearchUseCase`
+Note: Response types in `domain/remoteapi/response/` serve as domain models (already in domain module).
+
+- [x] **2.1** Create `ExternalSearchResult` domain model (mirror of API model or map from it)
+  - Using `ExternalSearchResponse.kt` types from Phase 1
+- [x] **2.2** Create `DownloadLimits` domain model
+  - Using `DownloadLimitsResponse.kt` from Phase 1
+- [x] **2.3** Create `DownloadRequest` domain model with status enum (Pending, InProgress, Completed, Failed)
+  - Using `DownloadRequestResponse.kt` types from Phase 1
+- [x] **2.4** Create `PerformExternalSearchUseCase`
   - Input: query (String), type (Album/Artist)
   - Output: Result<List<ExternalSearchResult>>
-- [ ] **2.5** Create `GetDownloadLimitsUseCase`
+- [x] **2.5** Create `GetDownloadLimitsUseCase`
   - Output: Result<DownloadLimits>
-- [ ] **2.6** Create `RequestAlbumDownloadUseCase`
+- [x] **2.6** Create `RequestAlbumDownloadUseCase`
   - Input: albumId, albumName, artistName
-  - Output: Result<Unit>
-- [ ] **2.7** Create `GetMyDownloadRequestsUseCase`
-  - Output: Result<List<DownloadRequest>>
+  - Output: Result<RequestAlbumResponse>
+- [x] **2.7** Create `GetMyDownloadRequestsUseCase`
+  - Output: Result<MyDownloadRequestsResponse>
 
 ### Phase 3: Settings Integration
 
