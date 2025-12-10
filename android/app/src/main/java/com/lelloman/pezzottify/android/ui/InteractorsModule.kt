@@ -26,6 +26,7 @@ import com.lelloman.pezzottify.android.domain.usercontent.LikedContent as Domain
 import com.lelloman.pezzottify.android.domain.player.PlaybackPlaylist as DomainPlaybackPlaylist
 import com.lelloman.pezzottify.android.domain.player.PlaybackPlaylistContext as DomainPlaybackPlaylistContext
 import com.lelloman.pezzottify.android.domain.settings.usecase.UpdateDirectDownloadsSetting
+import com.lelloman.pezzottify.android.domain.settings.usecase.UpdateExternalSearchSetting
 import com.lelloman.pezzottify.android.ui.theme.AppFontFamily as UiAppFontFamily
 import com.lelloman.pezzottify.android.ui.theme.ColorPalette as UiColorPalette
 import com.lelloman.pezzottify.android.ui.theme.ThemeMode as UiThemeMode
@@ -174,6 +175,7 @@ class InteractorsModule {
         storageMonitor: com.lelloman.pezzottify.android.domain.storage.StorageMonitor,
         permissionsStore: PermissionsStore,
         updateDirectDownloadsSetting: UpdateDirectDownloadsSetting,
+        updateExternalSearchSetting: UpdateExternalSearchSetting,
         logFileManager: LogFileManager,
         configStore: ConfigStore,
     ): SettingsScreenViewModel.Interactor = object : SettingsScreenViewModel.Interactor {
@@ -239,7 +241,7 @@ class InteractorsModule {
         }
 
         override suspend fun setExternalSearchEnabled(enabled: Boolean) {
-            userSettingsStore.setExternalSearchEnabled(enabled)
+            updateExternalSearchSetting(enabled)
         }
 
         override fun observeFileLoggingEnabled(): Flow<Boolean> = userSettingsStore.isFileLoggingEnabled
@@ -1089,4 +1091,5 @@ private fun DomainPermission.toUi(): UiPermission? = when (this) {
     DomainPermission.ServerAdmin -> UiPermission.ServerAdmin
     DomainPermission.ViewAnalytics -> UiPermission.ViewAnalytics
     DomainPermission.RequestContent -> UiPermission.RequestContent
+    DomainPermission.DownloadManagerAdmin -> UiPermission.DownloadManagerAdmin
 }

@@ -15,7 +15,7 @@ interface UserSettingsStore {
 
     /**
      * Whether external search is enabled.
-     * This is a local-only setting (not synced with server).
+     * This setting is synced with the server.
      * Only meaningful for users with RequestContent permission.
      */
     val isExternalSearchEnabled: StateFlow<Boolean>

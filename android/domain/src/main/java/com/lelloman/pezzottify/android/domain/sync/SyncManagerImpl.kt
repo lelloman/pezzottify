@@ -12,13 +12,21 @@ import com.lelloman.pezzottify.android.domain.usercontent.UserPlaylistStore
 import com.lelloman.pezzottify.android.logger.Logger
 import com.lelloman.pezzottify.android.logger.LoggerFactory
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.minutes
+import kotlin.time.Duration.Companion.seconds
 
 @Singleton
 class SyncManagerImpl internal constructor(
@@ -30,6 +38,9 @@ class SyncManagerImpl internal constructor(
     private val userSettingsStore: UserSettingsStore,
     private val logger: Logger,
     private val dispatcher: CoroutineDispatcher,
+    private val scope: CoroutineScope,
+    private val minRetryDelay: Duration = MIN_RETRY_DELAY,
+    private val maxRetryDelay: Duration = MAX_RETRY_DELAY,
 ) : SyncManager {
 
     @Inject
@@ -50,19 +61,24 @@ class SyncManagerImpl internal constructor(
         userSettingsStore,
         loggerFactory.getLogger(SyncManagerImpl::class),
         Dispatchers.IO,
+        CoroutineScope(SupervisorJob() + Dispatchers.IO),
     )
 
     private val mutableState = MutableStateFlow<SyncState>(SyncState.Idle)
     override val state: StateFlow<SyncState> = mutableState.asStateFlow()
 
+    private var retryJob: Job? = null
+    private var currentRetryDelay: Duration = minRetryDelay
+
     override suspend fun initialize(): Boolean = withContext(dispatcher) {
         logger.info("initialize()")
 
         val cursor = syncStateStore.getCurrentCursor()
+        val needsFullSync = syncStateStore.needsFullSync()
 
-        if (cursor == 0L) {
-            // No cursor, do full sync
-            logger.info("No cursor, performing full sync")
+        if (cursor == 0L || needsFullSync) {
+            // No cursor or full sync needed, do full sync
+            logger.info("Performing full sync (cursor=$cursor, needsFullSync=$needsFullSync)")
             fullSync()
         } else {
             // Have cursor, catch up
@@ -95,9 +111,12 @@ class SyncManagerImpl internal constructor(
                 // Apply playlists
                 applyPlaylistsState(syncState.playlists)
 
-                // Save cursor
+                // Save cursor and clear needsFullSync flag
                 syncStateStore.saveCursor(syncState.seq)
+                syncStateStore.setNeedsFullSync(false)
                 mutableState.value = SyncState.Synced(syncState.seq)
+                // Reset retry delay on success
+                currentRetryDelay = minRetryDelay
                 logger.info("Full sync complete, cursor=${syncState.seq}")
                 true
             }
@@ -105,7 +124,10 @@ class SyncManagerImpl internal constructor(
             is RemoteApiResponse.Error -> {
                 val errorMsg = errorToMessage(response)
                 logger.error("Full sync failed: $errorMsg")
+                // Mark that we need full sync (persisted across app restarts)
+                syncStateStore.setNeedsFullSync(true)
                 mutableState.value = SyncState.Error(errorMsg)
+                scheduleRetry()
                 false
             }
         }
@@ -139,13 +161,19 @@ class SyncManagerImpl internal constructor(
                     syncStateStore.saveCursor(eventsResponse.currentSeq)
                 }
 
+                // Clear needsFullSync flag on successful catch-up
+                syncStateStore.setNeedsFullSync(false)
                 mutableState.value = SyncState.Synced(eventsResponse.currentSeq)
+                // Reset retry delay on success
+                currentRetryDelay = minRetryDelay
                 logger.info("Catch-up complete, cursor=${eventsResponse.currentSeq}")
                 true
             }
 
             is RemoteApiResponse.Error.EventsPruned -> {
-                logger.info("Events pruned, performing full sync")
+                logger.info("Events pruned, marking full sync needed")
+                // Mark that we need full sync before attempting it
+                syncStateStore.setNeedsFullSync(true)
                 fullSync()
             }
 
@@ -153,6 +181,7 @@ class SyncManagerImpl internal constructor(
                 val errorMsg = errorToMessage(response)
                 logger.error("Catch-up failed: $errorMsg")
                 mutableState.value = SyncState.Error(errorMsg)
+                scheduleRetry()
                 false
             }
         }
@@ -178,6 +207,7 @@ class SyncManagerImpl internal constructor(
 
     override suspend fun cleanup() = withContext(dispatcher) {
         logger.info("cleanup()")
+        cancelRetry()
         syncStateStore.clearCursor()
         mutableState.value = SyncState.Idle
     }
@@ -322,6 +352,9 @@ class SyncManagerImpl internal constructor(
             is UserSetting.DirectDownloadsEnabled -> {
                 userSettingsStore.setDirectDownloadsEnabled(setting.value)
             }
+            is UserSetting.ExternalSearchEnabled -> {
+                userSettingsStore.setExternalSearchEnabled(setting.value)
+            }
         }
     }
 
@@ -333,5 +366,33 @@ class SyncManagerImpl internal constructor(
             is RemoteApiResponse.Error.EventsPruned -> "Events pruned"
             is RemoteApiResponse.Error.Unknown -> error.message
         }
+    }
+
+    private fun scheduleRetry() {
+        // Cancel any existing retry job
+        retryJob?.cancel()
+
+        retryJob = scope.launch {
+            logger.info("Scheduling retry in $currentRetryDelay")
+            delay(currentRetryDelay)
+
+            // Increase delay for next retry (exponential backoff)
+            currentRetryDelay = (currentRetryDelay * BACKOFF_MULTIPLIER).coerceAtMost(maxRetryDelay)
+
+            logger.info("Retrying sync...")
+            initialize()
+        }
+    }
+
+    private fun cancelRetry() {
+        retryJob?.cancel()
+        retryJob = null
+        currentRetryDelay = minRetryDelay
+    }
+
+    companion object {
+        private val MIN_RETRY_DELAY = 5.seconds
+        private val MAX_RETRY_DELAY = 5.minutes
+        private const val BACKOFF_MULTIPLIER = 2.0
     }
 }

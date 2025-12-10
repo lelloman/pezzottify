@@ -26,6 +26,10 @@ internal class SyncStateStoreImpl(
         MutableStateFlow(prefs.getLong(KEY_CURSOR, DEFAULT_CURSOR))
     }
 
+    private val mutableNeedsFullSync by lazy {
+        MutableStateFlow(prefs.getBoolean(KEY_NEEDS_FULL_SYNC, DEFAULT_NEEDS_FULL_SYNC))
+    }
+
     override val cursor: StateFlow<Long> = mutableCursor.asStateFlow()
 
     override fun getCurrentCursor(): Long = mutableCursor.value
@@ -40,13 +44,28 @@ internal class SyncStateStoreImpl(
     override suspend fun clearCursor() {
         withContext(dispatcher) {
             mutableCursor.value = DEFAULT_CURSOR
-            prefs.edit().remove(KEY_CURSOR).commit()
+            mutableNeedsFullSync.value = DEFAULT_NEEDS_FULL_SYNC
+            prefs.edit()
+                .remove(KEY_CURSOR)
+                .remove(KEY_NEEDS_FULL_SYNC)
+                .commit()
+        }
+    }
+
+    override fun needsFullSync(): Boolean = mutableNeedsFullSync.value
+
+    override suspend fun setNeedsFullSync(needsFullSync: Boolean) {
+        withContext(dispatcher) {
+            mutableNeedsFullSync.value = needsFullSync
+            prefs.edit().putBoolean(KEY_NEEDS_FULL_SYNC, needsFullSync).commit()
         }
     }
 
     internal companion object {
         const val SHARED_PREF_FILE_NAME = "SyncStateStore"
         private const val KEY_CURSOR = "sync_cursor"
+        private const val KEY_NEEDS_FULL_SYNC = "needs_full_sync"
         private const val DEFAULT_CURSOR = 0L
+        private const val DEFAULT_NEEDS_FULL_SYNC = true // Default to needing full sync
     }
 }
