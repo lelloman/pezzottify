@@ -201,7 +201,7 @@ fn convert_track(external: &ExternalTrack) -> Track {
         track_number: external.number,
         duration_secs: Some((external.duration / 1000) as i32), // Convert ms to seconds
         is_explicit: external.is_explicit,
-        audio_uri: format!("audio/{}.flac", external.id), // Default to flac, actual extension determined at download
+        audio_uri: sharded_uri("audio", &external.id, "flac"), // Default to flac, actual extension determined at download
         format: Format::Flac, // Default format, actual format determined at download
         tags: external.tags.clone(),
         has_lyrics: external.has_lyrics,
@@ -219,7 +219,7 @@ fn convert_track(external: &ExternalTrack) -> Track {
 fn convert_image(external: &ExternalImage) -> Image {
     Image {
         id: external.id.clone(),
-        uri: format!("images/{}.jpg", external.id),
+        uri: sharded_uri("images", &external.id, "jpg"),
         size: convert_image_size(&external.size),
         width: external.width as u16,
         height: external.height as u16,
@@ -245,6 +245,28 @@ fn convert_image_size(s: &str) -> ImageSize {
         "large" => ImageSize::Large,
         "xlarge" | "xl" => ImageSize::XLarge,
         _ => ImageSize::Default,
+    }
+}
+
+/// Generate a sharded URI path from an ID.
+///
+/// Uses first 6 characters split into 3 pairs as directory levels.
+/// Example: `sharded_uri("audio", "2Ueco3C1xLw5RXl39lAPkL", "flac")`
+/// returns `audio/2U/ec/o3/2Ueco3C1xLw5RXl39lAPkL.flac`
+fn sharded_uri(prefix: &str, id: &str, ext: &str) -> String {
+    if id.len() >= 6 {
+        format!(
+            "{}/{}/{}/{}/{}.{}",
+            prefix,
+            &id[0..2],
+            &id[2..4],
+            &id[4..6],
+            id,
+            ext
+        )
+    } else {
+        // Fallback for short IDs (shouldn't happen with real IDs)
+        format!("{}/{}.{}", prefix, id, ext)
     }
 }
 
