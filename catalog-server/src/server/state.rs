@@ -14,6 +14,7 @@ use super::websocket::ConnectionManager;
 use super::ServerConfig;
 
 pub type GuardedCatalogStore = Arc<dyn CatalogStore>;
+pub type GuardedSearchVault = Arc<Mutex<Box<dyn SearchVault>>>;
 pub type GuardedUserManager = Arc<Mutex<UserManager>>;
 pub type OptionalDownloader = Option<Arc<dyn Downloader>>;
 pub type OptionalProxy = Option<Arc<CatalogProxy>>;
@@ -45,7 +46,7 @@ impl FromRef<ServerState> for GuardedCatalogStore {
     }
 }
 
-impl FromRef<ServerState> for Arc<Mutex<Box<dyn SearchVault>>> {
+impl FromRef<ServerState> for GuardedSearchVault {
     fn from_ref(input: &ServerState) -> Self {
         input.search_vault.clone()
     }

@@ -246,9 +246,15 @@ engine = "fts5"  # or "pezzothash", "noop"
 cargo run -- --db-dir /path/to/db --search-engine fts5
 ```
 
-### 8. Live index sync (no server reboot)
+### 8. Live index sync (no server reboot) ✅ DONE
 
 Since catalog updates are now a requirement, all search engines must support live index updates.
+
+**Implementation completed:**
+- Added `add_item`, `update_item`, `remove_item` methods to `SearchVault` trait
+- `PezzotHashSearchVault` now uses `RwLock<Vec<HashedItem>>` for interior mutability
+- `NoOpSearchVault` has empty implementations
+- Admin CRUD handlers (artists, albums, tracks) now call search vault mutations after successful catalog operations
 
 **Modify `SearchVault` trait to support mutations:**
 
