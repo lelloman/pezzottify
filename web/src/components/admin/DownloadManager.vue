@@ -99,7 +99,6 @@
                 {{ retryingItems[item.id] ? "..." : "Force" }}
               </button>
               <button
-                v-if="item.status !== 'IN_PROGRESS'"
                 class="deleteButton"
                 @click="confirmDelete(item)"
                 :disabled="deletingItems[item.id]"
