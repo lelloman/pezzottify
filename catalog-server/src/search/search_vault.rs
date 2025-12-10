@@ -7,7 +7,7 @@ use super::pezzott_hash::PezzottHash;
 use crate::catalog_store::{CatalogStore, SearchableContentType};
 
 use std::iter;
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize)]
 pub enum HashedItemType {
@@ -170,13 +170,22 @@ impl SearchResultsHolder {
     }
 }
 
-pub trait SearchVault {
+pub trait SearchVault: Send + Sync {
     fn search(
         &self,
         query: &str,
         max_results: usize,
         filter: Option<Vec<HashedItemType>>,
     ) -> Vec<SearchResult>;
+
+    /// Add a new item to the search index
+    fn add_item(&self, id: &str, item_type: HashedItemType, name: &str);
+
+    /// Update an existing item in the search index
+    fn update_item(&self, id: &str, item_type: HashedItemType, name: &str);
+
+    /// Remove an item from the search index
+    fn remove_item(&self, id: &str, item_type: HashedItemType);
 }
 
 pub struct NoOpSearchVault {}
@@ -190,10 +199,16 @@ impl SearchVault for NoOpSearchVault {
     ) -> Vec<SearchResult> {
         Vec::new()
     }
+
+    fn add_item(&self, _id: &str, _item_type: HashedItemType, _name: &str) {}
+
+    fn update_item(&self, _id: &str, _item_type: HashedItemType, _name: &str) {}
+
+    fn remove_item(&self, _id: &str, _item_type: HashedItemType) {}
 }
 
 pub struct PezzotHashSearchVault {
-    items: Vec<HashedItem>,
+    items: RwLock<Vec<HashedItem>>,
 }
 
 impl PezzotHashSearchVault {
@@ -217,7 +232,9 @@ impl PezzotHashSearchVault {
             items.push(item);
         }
 
-        PezzotHashSearchVault { items }
+        PezzotHashSearchVault {
+            items: RwLock::new(items),
+        }
     }
 }
 
@@ -239,7 +256,8 @@ impl SearchVault for PezzotHashSearchVault {
             ]
         });
 
-        for item in self.items.iter() {
+        let items = self.items.read().unwrap();
+        for item in items.iter() {
             if !allowed_types.contains(&item.item_type) {
                 continue;
             }
@@ -249,6 +267,31 @@ impl SearchVault for PezzotHashSearchVault {
         results.re_sort(query);
 
         results.consume()
+    }
+
+    fn add_item(&self, id: &str, item_type: HashedItemType, name: &str) {
+        let item = HashedItem {
+            item_type,
+            item_id: id.to_string(),
+            hash: PezzottHash::calc(name),
+        };
+        let mut items = self.items.write().unwrap();
+        items.push(item);
+    }
+
+    fn update_item(&self, id: &str, item_type: HashedItemType, name: &str) {
+        let mut items = self.items.write().unwrap();
+        if let Some(item) = items
+            .iter_mut()
+            .find(|i| i.item_id == id && i.item_type == item_type)
+        {
+            item.hash = PezzottHash::calc(name);
+        }
+    }
+
+    fn remove_item(&self, id: &str, item_type: HashedItemType) {
+        let mut items = self.items.write().unwrap();
+        items.retain(|i| !(i.item_id == id && i.item_type == item_type));
     }
 }
 

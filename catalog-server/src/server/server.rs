@@ -18,7 +18,10 @@ use tracing::{debug, error, info, warn};
 
 use crate::background_jobs::{JobError, JobInfo, SchedulerHandle};
 use crate::catalog_store::CatalogStore;
-use crate::{search::SearchVault, user::UserManager};
+use crate::{
+    search::{HashedItemType, SearchVault},
+    user::UserManager,
+};
 use crate::{
     server::stream_track::stream_track,
     user::{
@@ -699,10 +702,22 @@ async fn get_image(
 async fn create_artist(
     _session: Session,
     State(catalog_store): State<GuardedCatalogStore>,
+    State(search_vault): State<super::state::GuardedSearchVault>,
     Json(data): Json<serde_json::Value>,
 ) -> Response {
     match catalog_store.create_artist(data) {
-        Ok(artist) => (StatusCode::CREATED, Json(artist)).into_response(),
+        Ok(artist) => {
+            if let (Some(id), Some(name)) = (
+                artist.get("id").and_then(|v| v.as_str()),
+                artist.get("name").and_then(|v| v.as_str()),
+            ) {
+                search_vault
+                    .lock()
+                    .unwrap()
+                    .add_item(id, HashedItemType::Artist, name);
+            }
+            (StatusCode::CREATED, Json(artist)).into_response()
+        }
         Err(err) => (StatusCode::BAD_REQUEST, format!("{}", err)).into_response(),
     }
 }
@@ -710,11 +725,20 @@ async fn create_artist(
 async fn update_artist(
     _session: Session,
     State(catalog_store): State<GuardedCatalogStore>,
+    State(search_vault): State<super::state::GuardedSearchVault>,
     Path(id): Path<String>,
     Json(data): Json<serde_json::Value>,
 ) -> Response {
     match catalog_store.update_artist(&id, data) {
-        Ok(artist) => Json(artist).into_response(),
+        Ok(artist) => {
+            if let Some(name) = artist.get("name").and_then(|v| v.as_str()) {
+                search_vault
+                    .lock()
+                    .unwrap()
+                    .update_item(&id, HashedItemType::Artist, name);
+            }
+            Json(artist).into_response()
+        }
         Err(err) => {
             if err.to_string().contains("not found") {
                 StatusCode::NOT_FOUND.into_response()
@@ -728,10 +752,17 @@ async fn update_artist(
 async fn delete_artist(
     _session: Session,
     State(catalog_store): State<GuardedCatalogStore>,
+    State(search_vault): State<super::state::GuardedSearchVault>,
     Path(id): Path<String>,
 ) -> Response {
     match catalog_store.delete_artist(&id) {
-        Ok(()) => StatusCode::NO_CONTENT.into_response(),
+        Ok(()) => {
+            search_vault
+                .lock()
+                .unwrap()
+                .remove_item(&id, HashedItemType::Artist);
+            StatusCode::NO_CONTENT.into_response()
+        }
         Err(err) => {
             if err.to_string().contains("not found") {
                 StatusCode::NOT_FOUND.into_response()
@@ -745,10 +776,22 @@ async fn delete_artist(
 async fn create_album(
     _session: Session,
     State(catalog_store): State<GuardedCatalogStore>,
+    State(search_vault): State<super::state::GuardedSearchVault>,
     Json(data): Json<serde_json::Value>,
 ) -> Response {
     match catalog_store.create_album(data) {
-        Ok(album) => (StatusCode::CREATED, Json(album)).into_response(),
+        Ok(album) => {
+            if let (Some(id), Some(name)) = (
+                album.get("id").and_then(|v| v.as_str()),
+                album.get("name").and_then(|v| v.as_str()),
+            ) {
+                search_vault
+                    .lock()
+                    .unwrap()
+                    .add_item(id, HashedItemType::Album, name);
+            }
+            (StatusCode::CREATED, Json(album)).into_response()
+        }
         Err(err) => (StatusCode::BAD_REQUEST, format!("{}", err)).into_response(),
     }
 }
@@ -756,11 +799,20 @@ async fn create_album(
 async fn update_album(
     _session: Session,
     State(catalog_store): State<GuardedCatalogStore>,
+    State(search_vault): State<super::state::GuardedSearchVault>,
     Path(id): Path<String>,
     Json(data): Json<serde_json::Value>,
 ) -> Response {
     match catalog_store.update_album(&id, data) {
-        Ok(album) => Json(album).into_response(),
+        Ok(album) => {
+            if let Some(name) = album.get("name").and_then(|v| v.as_str()) {
+                search_vault
+                    .lock()
+                    .unwrap()
+                    .update_item(&id, HashedItemType::Album, name);
+            }
+            Json(album).into_response()
+        }
         Err(err) => {
             if err.to_string().contains("not found") {
                 StatusCode::NOT_FOUND.into_response()
@@ -774,10 +826,17 @@ async fn update_album(
 async fn delete_album(
     _session: Session,
     State(catalog_store): State<GuardedCatalogStore>,
+    State(search_vault): State<super::state::GuardedSearchVault>,
     Path(id): Path<String>,
 ) -> Response {
     match catalog_store.delete_album(&id) {
-        Ok(()) => StatusCode::NO_CONTENT.into_response(),
+        Ok(()) => {
+            search_vault
+                .lock()
+                .unwrap()
+                .remove_item(&id, HashedItemType::Album);
+            StatusCode::NO_CONTENT.into_response()
+        }
         Err(err) => {
             if err.to_string().contains("not found") {
                 StatusCode::NOT_FOUND.into_response()
@@ -791,10 +850,22 @@ async fn delete_album(
 async fn create_track(
     _session: Session,
     State(catalog_store): State<GuardedCatalogStore>,
+    State(search_vault): State<super::state::GuardedSearchVault>,
     Json(data): Json<serde_json::Value>,
 ) -> Response {
     match catalog_store.create_track(data) {
-        Ok(track) => (StatusCode::CREATED, Json(track)).into_response(),
+        Ok(track) => {
+            if let (Some(id), Some(name)) = (
+                track.get("id").and_then(|v| v.as_str()),
+                track.get("name").and_then(|v| v.as_str()),
+            ) {
+                search_vault
+                    .lock()
+                    .unwrap()
+                    .add_item(id, HashedItemType::Track, name);
+            }
+            (StatusCode::CREATED, Json(track)).into_response()
+        }
         Err(err) => (StatusCode::BAD_REQUEST, format!("{}", err)).into_response(),
     }
 }
@@ -802,11 +873,20 @@ async fn create_track(
 async fn update_track(
     _session: Session,
     State(catalog_store): State<GuardedCatalogStore>,
+    State(search_vault): State<super::state::GuardedSearchVault>,
     Path(id): Path<String>,
     Json(data): Json<serde_json::Value>,
 ) -> Response {
     match catalog_store.update_track(&id, data) {
-        Ok(track) => Json(track).into_response(),
+        Ok(track) => {
+            if let Some(name) = track.get("name").and_then(|v| v.as_str()) {
+                search_vault
+                    .lock()
+                    .unwrap()
+                    .update_item(&id, HashedItemType::Track, name);
+            }
+            Json(track).into_response()
+        }
         Err(err) => {
             if err.to_string().contains("not found") {
                 StatusCode::NOT_FOUND.into_response()
@@ -820,10 +900,17 @@ async fn update_track(
 async fn delete_track(
     _session: Session,
     State(catalog_store): State<GuardedCatalogStore>,
+    State(search_vault): State<super::state::GuardedSearchVault>,
     Path(id): Path<String>,
 ) -> Response {
     match catalog_store.delete_track(&id) {
-        Ok(()) => StatusCode::NO_CONTENT.into_response(),
+        Ok(()) => {
+            search_vault
+                .lock()
+                .unwrap()
+                .remove_item(&id, HashedItemType::Track);
+            StatusCode::NO_CONTENT.into_response()
+        }
         Err(err) => {
             if err.to_string().contains("not found") {
                 StatusCode::NOT_FOUND.into_response()
