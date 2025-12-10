@@ -10,7 +10,51 @@ use std::collections::HashMap;
 // Search Types
 // =============================================================================
 
+/// Image from search results
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct SearchImage {
+    pub url: String,
+    pub width: Option<i32>,
+    pub height: Option<i32>,
+}
+
+/// Artist reference in search results
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct SearchArtistRef {
+    pub id: String,
+    pub name: String,
+}
+
+/// Album item from search results
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct SearchAlbumItem {
+    pub id: String,
+    pub name: String,
+    #[serde(default)]
+    pub album_type: String,
+    #[serde(default)]
+    pub total_tracks: i32,
+    #[serde(default)]
+    pub release_date: Option<String>,
+    #[serde(default)]
+    pub images: Vec<SearchImage>,
+    #[serde(default)]
+    pub artists: Vec<SearchArtistRef>,
+}
+
+/// Artist item from search results
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct SearchArtistItem {
+    pub id: String,
+    pub name: String,
+    #[serde(default)]
+    pub genres: Vec<String>,
+    #[serde(default)]
+    pub images: Vec<SearchImage>,
+}
+
 /// Search result from the external downloader service.
+/// This is a normalized format used by the API response.
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct ExternalSearchResult {
     /// Unique identifier for this result
@@ -26,6 +70,55 @@ pub struct ExternalSearchResult {
     pub image_url: Option<String>,
     /// Release year (for albums)
     pub year: Option<i32>,
+}
+
+impl From<SearchAlbumItem> for ExternalSearchResult {
+    fn from(album: SearchAlbumItem) -> Self {
+        let artist_name = if !album.artists.is_empty() {
+            Some(
+                album
+                    .artists
+                    .iter()
+                    .map(|a| a.name.clone())
+                    .collect::<Vec<_>>()
+                    .join(", "),
+            )
+        } else {
+            None
+        };
+
+        let image_url = album.images.first().map(|img| img.url.clone());
+
+        let year = album.release_date.as_ref().and_then(|date| {
+            date.split('-')
+                .next()
+                .and_then(|y| y.parse::<i32>().ok())
+        });
+
+        ExternalSearchResult {
+            id: album.id,
+            result_type: "album".to_string(),
+            name: album.name,
+            artist_name,
+            image_url,
+            year,
+        }
+    }
+}
+
+impl From<SearchArtistItem> for ExternalSearchResult {
+    fn from(artist: SearchArtistItem) -> Self {
+        let image_url = artist.images.first().map(|img| img.url.clone());
+
+        ExternalSearchResult {
+            id: artist.id,
+            result_type: "artist".to_string(),
+            name: artist.name,
+            artist_name: None,
+            image_url,
+            year: None,
+        }
+    }
 }
 
 /// Discography result containing artist info and their albums.
@@ -194,11 +287,46 @@ pub struct ExternalArtist {
 // API Response Wrappers
 // =============================================================================
 
+/// Container for album search results
+#[derive(Debug, Clone, Deserialize)]
+pub struct AlbumsContainer {
+    #[serde(default)]
+    pub items: Vec<SearchAlbumItem>,
+}
+
+/// Container for artist search results
+#[derive(Debug, Clone, Deserialize)]
+pub struct ArtistsContainer {
+    #[serde(default)]
+    pub items: Vec<SearchArtistItem>,
+}
+
 /// Wrapper for search API response.
 #[derive(Debug, Clone, Deserialize)]
 pub struct SearchResponse {
-    /// List of search results
-    pub results: Vec<ExternalSearchResult>,
+    /// Album search results
+    #[serde(default)]
+    pub albums: Option<AlbumsContainer>,
+    /// Artist search results
+    #[serde(default)]
+    pub artists: Option<ArtistsContainer>,
+}
+
+impl SearchResponse {
+    /// Convert to normalized ExternalSearchResult list
+    pub fn into_results(self) -> Vec<ExternalSearchResult> {
+        let mut results = Vec::new();
+
+        if let Some(albums) = self.albums {
+            results.extend(albums.items.into_iter().map(ExternalSearchResult::from));
+        }
+
+        if let Some(artists) = self.artists {
+            results.extend(artists.items.into_iter().map(ExternalSearchResult::from));
+        }
+
+        results
+    }
 }
 
 #[cfg(test)]
@@ -331,5 +459,74 @@ mod tests {
         let disco: ExternalDiscographyResult = serde_json::from_str(json).unwrap();
         assert_eq!(disco.artist.id, "artist1");
         assert_eq!(disco.albums.len(), 2);
+    }
+
+    #[test]
+    fn test_search_response_album_format() {
+        let json = r#"{
+            "albums": {
+                "items": [
+                    {
+                        "id": "2umoqwMrmjBBPeaqgYu6J9",
+                        "name": "Purple Rain",
+                        "album_type": "album",
+                        "total_tracks": 9,
+                        "release_date": "1984-06-25",
+                        "images": [
+                            {"url": "https://example.com/large.jpg", "width": 640, "height": 640},
+                            {"url": "https://example.com/small.jpg", "width": 64, "height": 64}
+                        ],
+                        "artists": [
+                            {"id": "5a2EaR3hamoenG9rDuVn8j", "name": "Prince"}
+                        ]
+                    }
+                ]
+            }
+        }"#;
+
+        let response: SearchResponse = serde_json::from_str(json).unwrap();
+        let results = response.into_results();
+
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].id, "2umoqwMrmjBBPeaqgYu6J9");
+        assert_eq!(results[0].name, "Purple Rain");
+        assert_eq!(results[0].result_type, "album");
+        assert_eq!(results[0].artist_name, Some("Prince".to_string()));
+        assert_eq!(results[0].year, Some(1984));
+        assert_eq!(
+            results[0].image_url,
+            Some("https://example.com/large.jpg".to_string())
+        );
+    }
+
+    #[test]
+    fn test_search_response_artist_format() {
+        let json = r#"{
+            "artists": {
+                "items": [
+                    {
+                        "id": "artist123",
+                        "name": "Test Artist",
+                        "genres": ["rock", "pop"],
+                        "images": [
+                            {"url": "https://example.com/artist.jpg", "width": 320, "height": 320}
+                        ]
+                    }
+                ]
+            }
+        }"#;
+
+        let response: SearchResponse = serde_json::from_str(json).unwrap();
+        let results = response.into_results();
+
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].id, "artist123");
+        assert_eq!(results[0].name, "Test Artist");
+        assert_eq!(results[0].result_type, "artist");
+        assert!(results[0].artist_name.is_none());
+        assert_eq!(
+            results[0].image_url,
+            Some("https://example.com/artist.jpg".to_string())
+        );
     }
 }

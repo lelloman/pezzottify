@@ -104,8 +104,15 @@ impl DownloaderClient {
             ));
         }
 
-        let search_response: SearchResponse = response.json().await?;
-        Ok(search_response.results)
+        let text = response.text().await?;
+        let search_response: SearchResponse = serde_json::from_str(&text).map_err(|e| {
+            anyhow!(
+                "Failed to parse search response: {}. Response body: {}",
+                e,
+                &text[..text.len().min(500)]
+            )
+        })?;
+        Ok(search_response.into_results())
     }
 
     /// Get an artist's discography from the downloader service.
