@@ -971,7 +971,7 @@ class InteractorsModule {
                                 )
                             },
                             errorMessage = request.errorMessage,
-                            catalogId = null, // Not provided by server yet
+                            catalogId = request.contentId,
                         )
                     }
                 }
