@@ -15,10 +15,15 @@ import com.lelloman.pezzottify.android.domain.remoteapi.response.RemoteApiRespon
 import com.lelloman.pezzottify.android.domain.remoteapi.response.SearchResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.SyncEventsResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.SyncStateResponse
+import com.lelloman.pezzottify.android.domain.remoteapi.response.DownloadLimitsResponse
+import com.lelloman.pezzottify.android.domain.remoteapi.response.ExternalSearchResponse
+import com.lelloman.pezzottify.android.domain.remoteapi.response.MyDownloadRequestsResponse
+import com.lelloman.pezzottify.android.domain.remoteapi.response.RequestAlbumResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.TrackResponse
 import com.lelloman.pezzottify.android.domain.sync.UserSetting
 import com.lelloman.pezzottify.android.remoteapi.internal.requests.ListeningEventRequest
 import com.lelloman.pezzottify.android.remoteapi.internal.requests.LoginRequest
+import com.lelloman.pezzottify.android.remoteapi.internal.requests.RequestAlbumDownloadBody
 import com.lelloman.pezzottify.android.remoteapi.internal.requests.SearchRequest
 import com.lelloman.pezzottify.android.remoteapi.internal.requests.UpdateUserSettingsRequest
 import kotlinx.coroutines.CoroutineScope
@@ -267,6 +272,58 @@ internal class RemoteApiClientImpl(
                 )
                 .returnFromRetrofitResponse()
         }
+
+    // Download manager endpoints
+
+    override suspend fun externalSearch(
+        query: String,
+        type: RemoteApiClient.ExternalSearchType
+    ): RemoteApiResponse<ExternalSearchResponse> = catchingNetworkError {
+        getRetrofit()
+            .externalSearch(
+                authToken = authToken,
+                query = query,
+                type = type.name.lowercase()
+            )
+            .returnFromRetrofitResponse()
+    }
+
+    override suspend fun getDownloadLimits(): RemoteApiResponse<DownloadLimitsResponse> =
+        catchingNetworkError {
+            getRetrofit()
+                .getDownloadLimits(authToken = authToken)
+                .returnFromRetrofitResponse()
+        }
+
+    override suspend fun requestAlbumDownload(
+        albumId: String,
+        albumName: String,
+        artistName: String
+    ): RemoteApiResponse<RequestAlbumResponse> = catchingNetworkError {
+        getRetrofit()
+            .requestAlbumDownload(
+                authToken = authToken,
+                request = RequestAlbumDownloadBody(
+                    albumId = albumId,
+                    albumName = albumName,
+                    artistName = artistName
+                )
+            )
+            .returnFromRetrofitResponse()
+    }
+
+    override suspend fun getMyDownloadRequests(
+        limit: Int?,
+        offset: Int?
+    ): RemoteApiResponse<MyDownloadRequestsResponse> = catchingNetworkError {
+        getRetrofit()
+            .getMyDownloadRequests(
+                authToken = authToken,
+                limit = limit,
+                offset = offset
+            )
+            .returnFromRetrofitResponse()
+    }
 
     private suspend fun <T> catchingNetworkError(block: suspend () -> RemoteApiResponse<T>): RemoteApiResponse<T> =
         try {
