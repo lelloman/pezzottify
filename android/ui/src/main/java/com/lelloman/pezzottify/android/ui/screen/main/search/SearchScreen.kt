@@ -29,6 +29,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SearchBar
 import androidx.compose.material3.Text
+import androidx.compose.foundation.layout.Row
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -96,9 +97,17 @@ fun SearchScreenContent(
                 Icon(Icons.Default.Search, contentDescription = null)
             },
             trailingIcon = {
-                if (state.query.isNotEmpty()) {
-                    IconButton(onClick = { actions.updateQuery("") }) {
-                        Icon(Icons.Default.Close, contentDescription = "")
+                Row {
+                    if (state.query.isNotEmpty()) {
+                        IconButton(onClick = { actions.updateQuery("") }) {
+                            Icon(Icons.Default.Close, contentDescription = "Clear search")
+                        }
+                    }
+                    if (state.canUseExternalSearch) {
+                        ExternalSearchToggle(
+                            isExternalMode = state.isExternalMode,
+                            onToggle = actions::toggleExternalMode
+                        )
                     }
                 }
             },
@@ -110,7 +119,7 @@ fun SearchScreenContent(
 
         }
         SearchFilterChips(
-            availableFilters = SearchFilter.catalogFilters,
+            availableFilters = if (state.isExternalMode) SearchFilter.externalFilters else SearchFilter.catalogFilters,
             selectedFilters = state.selectedFilters,
             onFilterToggled = actions::toggleFilter
         )

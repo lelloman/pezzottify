@@ -64,6 +64,16 @@ class SearchScreenViewModel(
                     mutableState.value = mutableState.value.copy(searchHistoryItems = it)
                 }
         }
+        viewModelScope.launch(coroutineContext) {
+            interactor.canUseExternalSearch().collect { canUse ->
+                mutableState.value = mutableState.value.copy(canUseExternalSearch = canUse)
+            }
+        }
+        viewModelScope.launch(coroutineContext) {
+            interactor.isExternalModeEnabled().collect { isEnabled ->
+                mutableState.value = mutableState.value.copy(isExternalMode = isEnabled)
+            }
+        }
     }
 
     override fun updateQuery(query: String) {
@@ -84,6 +94,24 @@ class SearchScreenViewModel(
         }
         mutableState.value = mutableState.value.copy(selectedFilters = newFilters)
         // Re-run search with new filters if there's a query
+        if (currentQuery.isNotEmpty()) {
+            performSearch()
+        }
+    }
+
+    override fun toggleExternalMode() {
+        val newMode = !mutableState.value.isExternalMode
+        viewModelScope.launch(coroutineContext) {
+            interactor.setExternalModeEnabled(newMode)
+        }
+        // Clear current results when switching modes
+        mutableState.value = mutableState.value.copy(
+            isExternalMode = newMode,
+            searchResults = null,
+            searchError = null,
+            selectedFilters = emptySet(),
+        )
+        // Re-run search if there's a query
         if (currentQuery.isNotEmpty()) {
             performSearch()
         }
@@ -304,6 +332,9 @@ class SearchScreenViewModel(
         suspend fun getRecentlyViewedContent(maxCount: Int): Flow<List<RecentlyViewedContent>>
         fun getSearchHistoryEntries(maxCount: Int): Flow<List<SearchHistoryEntry>>
         fun logSearchHistoryEntry(query: String, contentType: SearchHistoryEntryType, contentId: String)
+        fun canUseExternalSearch(): Flow<Boolean>
+        fun isExternalModeEnabled(): Flow<Boolean>
+        suspend fun setExternalModeEnabled(enabled: Boolean)
     }
 
     enum class InteractorSearchFilter {

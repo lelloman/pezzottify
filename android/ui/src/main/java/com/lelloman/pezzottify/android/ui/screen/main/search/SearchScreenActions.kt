@@ -8,6 +8,8 @@ interface SearchScreenActions {
 
     fun toggleFilter(filter: SearchFilter)
 
+    fun toggleExternalMode()
+
     fun clickOnArtistSearchResult(artistId: String)
 
     fun clickOnAlbumSearchResult(albumId: String)

@@ -14,6 +14,8 @@ data class SearchScreenState(
     val recentlyViewedContent: List<Flow<Content<ResolvedRecentlyViewedContent>>>? = null,
     val searchHistoryItems: List<Flow<Content<SearchHistoryItem>>>? = null,
     val selectedFilters: Set<SearchFilter> = emptySet(),
+    val canUseExternalSearch: Boolean = false,
+    val isExternalMode: Boolean = false,
 )
 
 data class SearchHistoryItem(

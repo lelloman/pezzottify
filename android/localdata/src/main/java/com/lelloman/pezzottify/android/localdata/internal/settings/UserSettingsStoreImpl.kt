@@ -81,6 +81,12 @@ internal class UserSettingsStoreImpl(
     }
     override val isExternalSearchEnabled: StateFlow<Boolean> = mutableExternalSearchEnabled.asStateFlow()
 
+    private val mutableExternalModeEnabled by lazy {
+        val enabled = prefs.getBoolean(KEY_EXTERNAL_MODE_ENABLED, DEFAULT_EXTERNAL_MODE_ENABLED)
+        MutableStateFlow(enabled)
+    }
+    override val isExternalModeEnabled: StateFlow<Boolean> = mutableExternalModeEnabled.asStateFlow()
+
     private val mutableDirectDownloadsEnabled by lazy {
         val enabled = prefs.getBoolean(KEY_DIRECT_DOWNLOADS_ENABLED, DEFAULT_DIRECT_DOWNLOADS_ENABLED)
         MutableStateFlow(enabled)
@@ -144,6 +150,13 @@ internal class UserSettingsStoreImpl(
         withContext(dispatcher) {
             mutableExternalSearchEnabled.value = enabled
             prefs.edit().putBoolean(KEY_EXTERNAL_SEARCH_ENABLED, enabled).commit()
+        }
+    }
+
+    override suspend fun setExternalModeEnabled(enabled: Boolean) {
+        withContext(dispatcher) {
+            mutableExternalModeEnabled.value = enabled
+            prefs.edit().putBoolean(KEY_EXTERNAL_MODE_ENABLED, enabled).commit()
         }
     }
 
@@ -267,6 +280,8 @@ internal class UserSettingsStoreImpl(
         const val DEFAULT_FILE_LOGGING_ENABLED = false
         const val KEY_EXTERNAL_SEARCH_ENABLED = "ExternalSearchEnabled"
         const val DEFAULT_EXTERNAL_SEARCH_ENABLED = false
+        const val KEY_EXTERNAL_MODE_ENABLED = "ExternalModeEnabled"
+        const val DEFAULT_EXTERNAL_MODE_ENABLED = false
         const val KEY_DIRECT_DOWNLOADS_ENABLED = "DirectDownloadsEnabled"
         const val KEY_DIRECT_DOWNLOADS_SYNC_STATUS = "DirectDownloadsSyncStatus"
         const val KEY_DIRECT_DOWNLOADS_MODIFIED_AT = "DirectDownloadsModifiedAt"
