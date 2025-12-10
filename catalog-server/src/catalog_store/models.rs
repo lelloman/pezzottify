@@ -253,6 +253,8 @@ pub struct Album {
     pub name: String,
     pub album_type: AlbumType,
     pub label: Option<String>,
+    /// Release date as Unix timestamp. Serialized as "date" for frontend compatibility.
+    #[serde(rename = "date")]
     pub release_date: Option<i64>,
     pub genres: Vec<String>,
     pub original_title: Option<String>,

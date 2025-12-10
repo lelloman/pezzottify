@@ -49,7 +49,7 @@ pub fn ingest_album(
         .collect();
 
     // 1. For each artist: check if exists, insert if not
-    for (position, artist) in artists.iter().enumerate() {
+    for artist in artists.iter() {
         if !catalog_store.artist_exists(&artist.id)? {
             let catalog_artist = convert_artist(artist);
             catalog_store.insert_artist(&catalog_artist)?;
@@ -69,16 +69,19 @@ pub fn ingest_album(
                 img_pos as i32,
             );
         }
+    }
 
+    // 2. Insert album FIRST (before linking artists - foreign key constraint)
+    let catalog_album = convert_album(&album);
+    catalog_store.insert_album(&catalog_album)?;
+
+    // 3. Now link artists to album (album must exist first)
+    for (position, artist) in artists.iter().enumerate() {
         // Link artist to album (ignore error if already linked)
         let _ = catalog_store.add_album_artist(&album_id, &artist.id, position as i32);
     }
 
-    // 2. Insert album (links to artists via add_album_artist above)
-    let catalog_album = convert_album(&album);
-    catalog_store.insert_album(&catalog_album)?;
-
-    // Insert album cover images
+    // 4. Insert album cover images
     for (position, cover) in album.covers.iter().enumerate() {
         if !catalog_store.image_exists(&cover.id)? {
             let catalog_image = convert_image(cover);
@@ -88,7 +91,7 @@ pub fn ingest_album(
         let _ = catalog_store.add_album_image(&album_id, &cover.id, &ImageType::Cover, position as i32);
     }
 
-    // 3. Insert tracks (links to album and artists)
+    // 5. Insert tracks (links to album and artists)
     for track in tracks {
         let catalog_track = convert_track(track);
         catalog_store.insert_track(&catalog_track)?;
@@ -104,7 +107,7 @@ pub fn ingest_album(
         }
     }
 
-    // 4. Return info needed for child creation
+    // 6. Return info needed for child creation
     Ok(IngestedAlbum {
         album_id,
         track_ids,

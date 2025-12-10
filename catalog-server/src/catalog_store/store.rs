@@ -1034,6 +1034,21 @@ impl SqliteCatalogStore {
         Ok(())
     }
 
+    /// Update a track's audio URI and format.
+    ///
+    /// Used after downloading track audio to set the actual file path and format.
+    pub fn update_track_audio(&self, track_id: &str, audio_uri: &str, format: &Format) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        let rows = conn.execute(
+            "UPDATE tracks SET audio_uri = ?2, format = ?3 WHERE id = ?1",
+            params![track_id, audio_uri, format.to_db_str()],
+        )?;
+        if rows == 0 {
+            anyhow::bail!("Track not found: {}", track_id);
+        }
+        Ok(())
+    }
+
     // =========================================================================
     // Update Operations
     // =========================================================================
@@ -2155,6 +2170,10 @@ impl WritableCatalogStore for SqliteCatalogStore {
         position: i32,
     ) -> Result<()> {
         SqliteCatalogStore::add_album_image(self, album_id, image_id, image_type, position)
+    }
+
+    fn update_track_audio(&self, track_id: &str, audio_uri: &str, format: &Format) -> Result<()> {
+        SqliteCatalogStore::update_track_audio(self, track_id, audio_uri, format)
     }
 }
 
