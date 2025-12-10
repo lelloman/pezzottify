@@ -2118,6 +2118,10 @@ impl WritableCatalogStore for SqliteCatalogStore {
         SqliteCatalogStore::album_exists(self, id)
     }
 
+    fn track_exists(&self, id: &str) -> Result<bool> {
+        SqliteCatalogStore::track_exists(self, id)
+    }
+
     fn image_exists(&self, id: &str) -> Result<bool> {
         SqliteCatalogStore::image_exists(self, id)
     }

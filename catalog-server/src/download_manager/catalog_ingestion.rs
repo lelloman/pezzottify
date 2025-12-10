@@ -72,8 +72,11 @@ pub fn ingest_album(
     }
 
     // 2. Insert album FIRST (before linking artists - foreign key constraint)
-    let catalog_album = convert_album(&album);
-    catalog_store.insert_album(&catalog_album)?;
+    // Skip if album already exists (e.g., re-download or retry)
+    if !catalog_store.album_exists(&album_id)? {
+        let catalog_album = convert_album(&album);
+        catalog_store.insert_album(&catalog_album)?;
+    }
 
     // 3. Now link artists to album (album must exist first)
     for (position, artist) in artists.iter().enumerate() {
@@ -92,11 +95,14 @@ pub fn ingest_album(
     }
 
     // 5. Insert tracks (links to album and artists)
+    // Skip tracks that already exist (e.g., re-download or retry)
     for track in tracks {
-        let catalog_track = convert_track(track);
-        catalog_store.insert_track(&catalog_track)?;
+        if !catalog_store.track_exists(&track.id)? {
+            let catalog_track = convert_track(track);
+            catalog_store.insert_track(&catalog_track)?;
+        }
 
-        // Link artists to track
+        // Link artists to track (ignore error if already linked)
         for (position, artist_id) in track.artists_ids.iter().enumerate() {
             let role = if position == 0 {
                 ArtistRole::MainArtist

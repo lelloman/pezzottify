@@ -212,6 +212,9 @@ pub trait WritableCatalogStore: CatalogStore {
     /// Check if an album exists in the catalog.
     fn album_exists(&self, id: &str) -> Result<bool>;
 
+    /// Check if a track exists in the catalog.
+    fn track_exists(&self, id: &str) -> Result<bool>;
+
     /// Check if an image exists in the catalog.
     fn image_exists(&self, id: &str) -> Result<bool>;
 
