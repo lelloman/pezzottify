@@ -80,7 +80,8 @@ impl SearchProxy {
 
         // Check if in queue (albums only, artists don't go directly in queue)
         let in_queue = if search_type == SearchType::Album {
-            self.check_in_queue(content_type, &external.id).unwrap_or(false)
+            self.check_in_queue(content_type, &external.id)
+                .unwrap_or(false)
         } else {
             false
         };
@@ -102,9 +103,11 @@ impl SearchProxy {
             )
             .with_in_catalog(in_catalog)
             .with_in_queue(in_queue),
-            SearchType::Artist => SearchResult::artist(external.id, external.name, external.image_url)
-                .with_in_catalog(in_catalog)
-                .with_in_queue(in_queue),
+            SearchType::Artist => {
+                SearchResult::artist(external.id, external.name, external.image_url)
+                    .with_in_catalog(in_catalog)
+                    .with_in_queue(in_queue)
+            }
         }
     }
 
@@ -149,7 +152,8 @@ impl SearchProxy {
 
     /// Check if content is in the download queue.
     fn check_in_queue(&self, content_type: DownloadContentType, content_id: &str) -> Result<bool> {
-        self.queue_store.is_in_active_queue(content_type, content_id)
+        self.queue_store
+            .is_in_active_queue(content_type, content_id)
     }
 }
 

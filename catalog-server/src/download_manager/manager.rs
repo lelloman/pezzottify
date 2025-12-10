@@ -132,11 +132,7 @@ impl DownloadManager {
     ///
     /// Forwards the search request to the downloader and returns results
     /// enriched with `in_catalog` and `in_queue` flags.
-    pub async fn search(
-        &self,
-        query: &str,
-        search_type: SearchType,
-    ) -> Result<SearchResults> {
+    pub async fn search(&self, query: &str, search_type: SearchType) -> Result<SearchResults> {
         self.search_proxy.search(query, search_type).await
     }
 
@@ -160,11 +156,7 @@ impl DownloadManager {
     /// 4. Enqueue with appropriate priority
     /// 5. Log audit event
     /// 6. Return result with queue position
-    pub fn request_album(
-        &self,
-        user_id: &str,
-        request: AlbumRequest,
-    ) -> Result<RequestResult> {
+    pub fn request_album(&self, user_id: &str, request: AlbumRequest) -> Result<RequestResult> {
         // 1. Check user rate limits
         let limits = self.check_user_limits(user_id)?;
         if !limits.can_request {
@@ -270,11 +262,7 @@ impl DownloadManager {
     }
 
     /// Get the status of a specific request for a user.
-    pub fn get_request_status(
-        &self,
-        user_id: &str,
-        request_id: &str,
-    ) -> Result<Option<QueueItem>> {
+    pub fn get_request_status(&self, user_id: &str, request_id: &str) -> Result<Option<QueueItem>> {
         let requests = self.queue_store.get_user_requests(user_id, 1000, 0)?;
         Ok(requests.into_iter().find(|r| r.id == request_id))
     }
@@ -398,7 +386,10 @@ impl DownloadManager {
                     info!(
                         "Album {} metadata processed, waiting for {} children to complete",
                         item.content_id,
-                        self.queue_store.get_children(&item.id).map(|c| c.len()).unwrap_or(0)
+                        self.queue_store
+                            .get_children(&item.id)
+                            .map(|c| c.len())
+                            .unwrap_or(0)
                     );
                 } else {
                     // Child items - mark as completed immediately
@@ -445,8 +436,12 @@ impl DownloadManager {
                     self.queue_store
                         .mark_retry_waiting(&item.id, next_retry_at, &error)?;
 
-                    self.audit_logger
-                        .log_retry_scheduled(&item, next_retry_at, backoff_secs, &error)?;
+                    self.audit_logger.log_retry_scheduled(
+                        &item,
+                        next_retry_at,
+                        backoff_secs,
+                        &error,
+                    )?;
                 } else {
                     // Mark as permanently failed
                     self.queue_store.mark_failed(&item.id, &error)?;
@@ -611,12 +606,14 @@ impl DownloadManager {
 
         // 6. Insert children into queue
         if !children.is_empty() {
-            self.queue_store.create_children(&item.id, children).map_err(|e| {
-                DownloadError::new(
-                    DownloadErrorType::Storage,
-                    format!("Failed to create child items: {}", e),
-                )
-            })?;
+            self.queue_store
+                .create_children(&item.id, children)
+                .map_err(|e| {
+                    DownloadError::new(
+                        DownloadErrorType::Storage,
+                        format!("Failed to create child items: {}", e),
+                    )
+                })?;
 
             // Log children created
             self.audit_logger
@@ -653,7 +650,7 @@ impl DownloadManager {
         let ext = Self::content_type_to_extension(&content_type);
 
         // 3. Write to disk using sharded directory structure
-        let sharded_subpath = Self::sharded_path(&item.content_id, &ext);
+        let sharded_subpath = Self::sharded_path(&item.content_id, ext);
         let file_path = self.media_path.join("audio").join(&sharded_subpath);
 
         // Create parent directories
@@ -763,10 +760,7 @@ impl DownloadManager {
             Some(QueueStatus::Completed) => {
                 // All children done - calculate total bytes and mark parent as completed
                 let children = self.queue_store.get_children(parent_id)?;
-                let total_bytes: u64 = children
-                    .iter()
-                    .filter_map(|c| c.bytes_downloaded)
-                    .sum();
+                let total_bytes: u64 = children.iter().filter_map(|c| c.bytes_downloaded).sum();
                 let children_count = children.len();
 
                 self.queue_store.mark_completed(parent_id, total_bytes, 0)?;
@@ -844,14 +838,7 @@ impl DownloadManager {
     fn sharded_path(id: &str, ext: &str) -> String {
         // Ensure we have enough characters for sharding (at least 6)
         if id.len() >= 6 {
-            format!(
-                "{}/{}/{}/{}.{}",
-                &id[0..2],
-                &id[2..4],
-                &id[4..6],
-                id,
-                ext
-            )
+            format!("{}/{}/{}/{}.{}", &id[0..2], &id[2..4], &id[4..6], id, ext)
         } else {
             // Fallback for short IDs (shouldn't happen with real IDs)
             format!("{}.{}", id, ext)
@@ -907,7 +894,11 @@ impl DownloadManager {
             return Err(anyhow::anyhow!(
                 "Cannot retry item with status: {:?}{}",
                 item.status,
-                if !force { " (use force=true for stuck items)" } else { "" }
+                if !force {
+                    " (use force=true for stuck items)"
+                } else {
+                    ""
+                }
             ));
         }
 
@@ -993,7 +984,8 @@ impl DownloadManager {
         limit: usize,
         offset: usize,
     ) -> Result<(Vec<AuditLogEntry>, usize)> {
-        self.queue_store.get_audit_for_user(user_id, None, None, limit, offset)
+        self.queue_store
+            .get_audit_for_user(user_id, None, None, limit, offset)
     }
 }
 
@@ -1015,7 +1007,8 @@ mod tests {
         let temp_dir = TempDir::new().unwrap();
         let queue_store = Arc::new(SqliteDownloadQueueStore::in_memory().unwrap());
         let catalog_db_path = temp_dir.path().join("catalog.db");
-        let catalog_store = Arc::new(SqliteCatalogStore::new(&catalog_db_path, temp_dir.path()).unwrap());
+        let catalog_store =
+            Arc::new(SqliteCatalogStore::new(&catalog_db_path, temp_dir.path()).unwrap());
         let downloader_client =
             DownloaderClient::new("http://localhost:8080".to_string(), 30).unwrap();
         let config = DownloadManagerSettings::default();
@@ -1096,7 +1089,8 @@ mod tests {
     fn test_get_request_status_not_found() {
         let ctx = create_test_manager();
 
-        let status = ctx.manager
+        let status = ctx
+            .manager
             .get_request_status("user-123", "nonexistent")
             .unwrap();
 
@@ -1195,7 +1189,9 @@ mod tests {
         };
 
         // First request should succeed
-        ctx.manager.request_album("user-1", request.clone()).unwrap();
+        ctx.manager
+            .request_album("user-1", request.clone())
+            .unwrap();
 
         // Second request for the same album should fail
         let result = ctx.manager.request_album("user-1", request);
@@ -1393,10 +1389,7 @@ mod tests {
     fn test_get_all_requests_empty() {
         let ctx = create_test_manager();
 
-        let requests = ctx
-            .manager
-            .get_all_requests(None, None, 100, 0)
-            .unwrap();
+        let requests = ctx.manager.get_all_requests(None, None, 100, 0).unwrap();
 
         assert!(requests.is_empty());
     }
@@ -1428,10 +1421,7 @@ mod tests {
             )
             .unwrap();
 
-        let requests = ctx
-            .manager
-            .get_all_requests(None, None, 100, 0)
-            .unwrap();
+        let requests = ctx.manager.get_all_requests(None, None, 100, 0).unwrap();
 
         assert_eq!(requests.len(), 2);
     }
@@ -1630,7 +1620,12 @@ mod tests {
         assert_eq!(result.content_type, DownloadContentType::Album);
 
         // The processed item should be album-first (first in, first out)
-        let item = ctx.manager.queue_store.get_item(&result.queue_item_id).unwrap().unwrap();
+        let item = ctx
+            .manager
+            .queue_store
+            .get_item(&result.queue_item_id)
+            .unwrap()
+            .unwrap();
         assert_eq!(item.content_id, "album-first");
     }
 }

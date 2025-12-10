@@ -89,6 +89,7 @@ impl DownloadContentType {
         }
     }
 
+    #[allow(clippy::should_implement_trait)]
     pub fn from_str(s: &str) -> Option<Self> {
         match s {
             "ALBUM" => Some(DownloadContentType::Album),
@@ -118,6 +119,7 @@ impl RequestSource {
         }
     }
 
+    #[allow(clippy::should_implement_trait)]
     pub fn from_str(s: &str) -> Option<Self> {
         match s {
             "USER" => Some(RequestSource::User),
@@ -157,6 +159,7 @@ impl DownloadErrorType {
         }
     }
 
+    #[allow(clippy::should_implement_trait)]
     pub fn from_str(s: &str) -> Option<Self> {
         match s {
             "connection" => Some(DownloadErrorType::Connection),
@@ -253,6 +256,7 @@ impl QueueItem {
     }
 
     /// Create a new queue item as a child of another item.
+    #[allow(clippy::too_many_arguments)]
     pub fn new_child(
         id: String,
         parent_id: String,
@@ -372,12 +376,19 @@ pub struct UserRequestView {
 
 impl UserRequestView {
     /// Create a UserRequestView from a QueueItem.
-    pub fn from_queue_item(item: &QueueItem, progress: Option<DownloadProgress>, queue_position: Option<usize>) -> Self {
+    pub fn from_queue_item(
+        item: &QueueItem,
+        progress: Option<DownloadProgress>,
+        queue_position: Option<usize>,
+    ) -> Self {
         Self {
             id: item.id.clone(),
             content_type: item.content_type,
             content_id: item.content_id.clone(),
-            content_name: item.content_name.clone().unwrap_or_else(|| item.content_id.clone()),
+            content_name: item
+                .content_name
+                .clone()
+                .unwrap_or_else(|| item.content_id.clone()),
             artist_name: item.artist_name.clone(),
             status: item.status,
             created_at: item.created_at,
@@ -431,6 +442,7 @@ impl AuditEventType {
         }
     }
 
+    #[allow(clippy::should_implement_trait)]
     pub fn from_str(s: &str) -> Option<Self> {
         match s {
             "REQUEST_CREATED" => Some(AuditEventType::RequestCreated),
@@ -641,7 +653,12 @@ pub struct CapacityStatus {
 
 impl CapacityStatus {
     /// Create a new capacity status.
-    pub fn new(albums_this_hour: i32, max_per_hour: i32, albums_today: i32, max_per_day: i32) -> Self {
+    pub fn new(
+        albums_this_hour: i32,
+        max_per_hour: i32,
+        albums_today: i32,
+        max_per_day: i32,
+    ) -> Self {
         Self {
             albums_this_hour,
             max_per_hour,
@@ -1126,7 +1143,10 @@ mod tests {
             RequestSource::User,
             5,
         )
-        .with_names(Some("Album Name".to_string()), Some("Artist Name".to_string()));
+        .with_names(
+            Some("Album Name".to_string()),
+            Some("Artist Name".to_string()),
+        );
 
         assert_eq!(item.content_name, Some("Album Name".to_string()));
         assert_eq!(item.artist_name, Some("Artist Name".to_string()));
@@ -1196,7 +1216,10 @@ mod tests {
             RequestSource::User,
             5,
         )
-        .with_names(Some("Test Album".to_string()), Some("Test Artist".to_string()));
+        .with_names(
+            Some("Test Album".to_string()),
+            Some("Test Artist".to_string()),
+        );
 
         let progress = DownloadProgress {
             total_children: 10,
@@ -1255,7 +1278,10 @@ mod tests {
         assert_eq!(AuditEventType::RequestCreated.as_str(), "REQUEST_CREATED");
         assert_eq!(AuditEventType::DownloadStarted.as_str(), "DOWNLOAD_STARTED");
         assert_eq!(AuditEventType::ChildrenCreated.as_str(), "CHILDREN_CREATED");
-        assert_eq!(AuditEventType::DownloadCompleted.as_str(), "DOWNLOAD_COMPLETED");
+        assert_eq!(
+            AuditEventType::DownloadCompleted.as_str(),
+            "DOWNLOAD_COMPLETED"
+        );
         assert_eq!(AuditEventType::DownloadFailed.as_str(), "DOWNLOAD_FAILED");
 
         assert_eq!(
@@ -1301,7 +1327,10 @@ mod tests {
     fn test_audit_log_filter_builder() {
         let filter = AuditLogFilter::new()
             .for_user("user-123".to_string())
-            .with_event_types(vec![AuditEventType::RequestCreated, AuditEventType::DownloadCompleted])
+            .with_event_types(vec![
+                AuditEventType::RequestCreated,
+                AuditEventType::DownloadCompleted,
+            ])
             .in_range(Some(1000), Some(2000))
             .paginate(50, 100);
 
@@ -1395,7 +1424,10 @@ mod tests {
         assert!(!result.success);
         assert!(result.bytes_downloaded.is_none());
         assert!(result.error.is_some());
-        assert_eq!(result.error.as_ref().unwrap().error_type, DownloadErrorType::Timeout);
+        assert_eq!(
+            result.error.as_ref().unwrap().error_type,
+            DownloadErrorType::Timeout
+        );
     }
 
     #[test]
@@ -1440,11 +1472,8 @@ mod tests {
 
     #[test]
     fn test_search_result_artist() {
-        let result = SearchResult::artist(
-            "artist-456".to_string(),
-            "Test Artist".to_string(),
-            None,
-        );
+        let result =
+            SearchResult::artist("artist-456".to_string(), "Test Artist".to_string(), None);
 
         assert_eq!(result.id, "artist-456");
         assert_eq!(result.result_type, "artist");
@@ -1560,9 +1589,18 @@ mod tests {
     #[test]
     fn test_request_source_serialization() {
         // Verify all variants serialize to expected strings
-        assert_eq!(serde_json::to_string(&RequestSource::User).unwrap(), "\"USER\"");
-        assert_eq!(serde_json::to_string(&RequestSource::Watchdog).unwrap(), "\"WATCHDOG\"");
-        assert_eq!(serde_json::to_string(&RequestSource::Expansion).unwrap(), "\"EXPANSION\"");
+        assert_eq!(
+            serde_json::to_string(&RequestSource::User).unwrap(),
+            "\"USER\""
+        );
+        assert_eq!(
+            serde_json::to_string(&RequestSource::Watchdog).unwrap(),
+            "\"WATCHDOG\""
+        );
+        assert_eq!(
+            serde_json::to_string(&RequestSource::Expansion).unwrap(),
+            "\"EXPANSION\""
+        );
 
         // Verify round-trip
         let source = RequestSource::Watchdog;
@@ -1583,9 +1621,18 @@ mod tests {
         let json_e = serde_json::to_string(&expansion).unwrap();
 
         // Round-trip test
-        assert_eq!(serde_json::from_str::<QueuePriority>(&json_w).unwrap(), watchdog);
-        assert_eq!(serde_json::from_str::<QueuePriority>(&json_u).unwrap(), user);
-        assert_eq!(serde_json::from_str::<QueuePriority>(&json_e).unwrap(), expansion);
+        assert_eq!(
+            serde_json::from_str::<QueuePriority>(&json_w).unwrap(),
+            watchdog
+        );
+        assert_eq!(
+            serde_json::from_str::<QueuePriority>(&json_u).unwrap(),
+            user
+        );
+        assert_eq!(
+            serde_json::from_str::<QueuePriority>(&json_e).unwrap(),
+            expansion
+        );
     }
 
     #[test]
@@ -1598,7 +1645,10 @@ mod tests {
             RequestSource::User,
             5,
         )
-        .with_names(Some("Test Album".to_string()), Some("Test Artist".to_string()))
+        .with_names(
+            Some("Test Album".to_string()),
+            Some("Test Artist".to_string()),
+        )
         .with_user("user-789".to_string());
 
         // Serialize to JSON
@@ -1649,7 +1699,10 @@ mod tests {
 
         assert_eq!(deserialized.status, QueueStatus::Failed);
         assert_eq!(deserialized.error_type, Some(DownloadErrorType::NotFound));
-        assert_eq!(deserialized.error_message, Some("Track not found on provider".to_string()));
+        assert_eq!(
+            deserialized.error_message,
+            Some("Track not found on provider".to_string())
+        );
         assert_eq!(deserialized.retry_count, 3);
     }
 

@@ -1037,7 +1037,12 @@ impl SqliteCatalogStore {
     /// Update a track's audio URI and format.
     ///
     /// Used after downloading track audio to set the actual file path and format.
-    pub fn update_track_audio(&self, track_id: &str, audio_uri: &str, format: &Format) -> Result<()> {
+    pub fn update_track_audio(
+        &self,
+        track_id: &str,
+        audio_uri: &str,
+        format: &Format,
+    ) -> Result<()> {
         let conn = self.conn.lock().unwrap();
         let rows = conn.execute(
             "UPDATE tracks SET audio_uri = ?2, format = ?3 WHERE id = ?1",
@@ -2111,7 +2116,8 @@ impl CatalogStore for SqliteCatalogStore {
 
     fn list_all_album_image_ids(&self) -> Result<Vec<String>> {
         let conn = self.conn.lock().unwrap();
-        let mut stmt = conn.prepare("SELECT DISTINCT image_id FROM album_images ORDER BY image_id")?;
+        let mut stmt =
+            conn.prepare("SELECT DISTINCT image_id FROM album_images ORDER BY image_id")?;
         let ids: Vec<String> = stmt
             .query_map([], |row| row.get(0))?
             .collect::<Result<Vec<_>, _>>()?;
