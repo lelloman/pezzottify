@@ -102,6 +102,38 @@ impl DownloadManager {
         self.downloader_client.health_check().await.is_ok()
     }
 
+    /// Check if ffprobe is available on the system.
+    ///
+    /// This should be called at startup to ensure media validation will work.
+    /// Returns Ok(version) if ffprobe is available, Err with message otherwise.
+    pub async fn check_ffprobe_available() -> Result<String, String> {
+        use tokio::process::Command;
+
+        let output = Command::new("ffprobe")
+            .arg("-version")
+            .output()
+            .await
+            .map_err(|e| {
+                format!(
+                    "ffprobe not found. Install ffmpeg package for media validation. Error: {}",
+                    e
+                )
+            })?;
+
+        if output.status.success() {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            // Extract version from first line (e.g., "ffprobe version 6.1.1-3ubuntu5 ...")
+            let version = stdout
+                .lines()
+                .next()
+                .unwrap_or("unknown")
+                .to_string();
+            Ok(version)
+        } else {
+            Err("ffprobe command failed".to_string())
+        }
+    }
+
     /// Get the current status of the downloader service.
     pub async fn get_downloader_status(
         &self,
@@ -671,14 +703,28 @@ impl DownloadManager {
         })?;
 
         let bytes_downloaded = bytes.len() as u64;
+
+        // 4. Validate audio file with ffprobe before finalizing
+        if let Err(e) = Self::validate_audio_with_ffprobe(&file_path).await {
+            // Delete the corrupted file
+            let _ = fs::remove_file(&file_path).await;
+            return Err(DownloadError::new(
+                DownloadErrorType::Parse,
+                format!(
+                    "Audio validation failed for track {} (file deleted): {}",
+                    item.content_id, e
+                ),
+            ));
+        }
+
         info!(
-            "Track {} downloaded: {} bytes -> {}",
+            "Track {} downloaded and validated: {} bytes -> {}",
             item.content_id,
             bytes_downloaded,
             file_path.display()
         );
 
-        // 4. Update track in catalog with actual audio path and format
+        // 5. Update track in catalog with actual audio path and format
         // This should always succeed since ingestion happens before children are created.
         // If it fails, the track doesn't exist in the catalog which is a bug.
         let audio_uri = format!("audio/{}", sharded_subpath);
@@ -737,8 +783,22 @@ impl DownloadManager {
         })?;
 
         let bytes_downloaded = bytes.len() as u64;
+
+        // 3. Validate image file with ffprobe before finalizing
+        if let Err(e) = Self::validate_image_with_ffprobe(&file_path).await {
+            // Delete the corrupted file
+            let _ = fs::remove_file(&file_path).await;
+            return Err(DownloadError::new(
+                DownloadErrorType::Parse,
+                format!(
+                    "Image validation failed for {} (file deleted): {}",
+                    item.content_id, e
+                ),
+            ));
+        }
+
         info!(
-            "Image {} downloaded: {} bytes -> {}",
+            "Image {} downloaded and validated: {} bytes -> {}",
             item.content_id,
             bytes_downloaded,
             file_path.display()
@@ -827,6 +887,55 @@ impl DownloadManager {
             "audio/ogg" | "audio/vorbis" => Format::OggVorbis320, // Assume high quality
             "audio/aac" => Format::Aac160,
             _ => Format::Flac, // Default to flac
+        }
+    }
+
+    /// Validate an audio file using ffprobe.
+    ///
+    /// Returns Ok(()) if valid, Err with message if invalid or ffprobe fails.
+    async fn validate_audio_with_ffprobe(path: &std::path::Path) -> Result<(), String> {
+        use tokio::process::Command;
+
+        let output = Command::new("ffprobe")
+            .args(["-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0"])
+            .arg(path)
+            .output()
+            .await
+            .map_err(|e| format!("Failed to run ffprobe: {}", e))?;
+
+        if output.status.success() {
+            Ok(())
+        } else {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            Err(format!("ffprobe validation failed: {}", stderr.trim()))
+        }
+    }
+
+    /// Validate an image file using ffprobe.
+    ///
+    /// Returns Ok(()) if valid, Err with message if invalid or ffprobe fails.
+    /// Note: ffprobe may return exit code 0 even for invalid files, but writes
+    /// errors to stderr with `-v error`. We check both exit code and stderr.
+    async fn validate_image_with_ffprobe(path: &std::path::Path) -> Result<(), String> {
+        use tokio::process::Command;
+
+        let output = Command::new("ffprobe")
+            .args(["-v", "error", "-show_entries", "format=format_name", "-of", "csv=p=0"])
+            .arg(path)
+            .output()
+            .await
+            .map_err(|e| format!("Failed to run ffprobe: {}", e))?;
+
+        let stderr = String::from_utf8_lossy(&output.stderr);
+
+        // Check both exit code and stderr - ffprobe may return 0 but log errors
+        if output.status.success() && stderr.trim().is_empty() {
+            Ok(())
+        } else if !output.status.success() {
+            Err(format!("ffprobe validation failed: {}", stderr.trim()))
+        } else {
+            // Exit code 0 but errors in stderr
+            Err(format!("ffprobe detected issues: {}", stderr.trim()))
         }
     }
 
@@ -1627,5 +1736,181 @@ mod tests {
             .unwrap()
             .unwrap();
         assert_eq!(item.content_id, "album-first");
+    }
+
+    // =========================================================================
+    // FFprobe Validation Tests
+    // =========================================================================
+
+    #[tokio::test]
+    async fn test_validate_audio_with_ffprobe_valid_file() {
+        // Create a valid audio file using ffmpeg
+        let temp_dir = TempDir::new().unwrap();
+        let audio_path = temp_dir.path().join("test.mp3");
+
+        // Generate a 1-second silent audio file
+        let status = tokio::process::Command::new("ffmpeg")
+            .args([
+                "-f",
+                "lavfi",
+                "-i",
+                "anullsrc=r=44100:cl=mono",
+                "-t",
+                "0.1",
+                "-q:a",
+                "9",
+            ])
+            .arg(&audio_path)
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status()
+            .await;
+
+        // Skip test if ffmpeg not available
+        if status.is_err() {
+            eprintln!("Skipping test: ffmpeg not available");
+            return;
+        }
+
+        let result = DownloadManager::validate_audio_with_ffprobe(&audio_path).await;
+        assert!(result.is_ok(), "Valid audio file should pass validation");
+    }
+
+    #[tokio::test]
+    async fn test_validate_audio_with_ffprobe_invalid_file() {
+        let temp_dir = TempDir::new().unwrap();
+        let audio_path = temp_dir.path().join("invalid.mp3");
+
+        // Write garbage data that looks nothing like an audio file
+        std::fs::write(&audio_path, b"this is not an audio file at all").unwrap();
+
+        let result = DownloadManager::validate_audio_with_ffprobe(&audio_path).await;
+        assert!(result.is_err(), "Invalid audio file should fail validation");
+    }
+
+    #[tokio::test]
+    async fn test_validate_audio_with_ffprobe_nonexistent_file() {
+        let path = std::path::Path::new("/nonexistent/path/to/audio.mp3");
+
+        let result = DownloadManager::validate_audio_with_ffprobe(path).await;
+        assert!(
+            result.is_err(),
+            "Nonexistent file should fail validation"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_validate_image_with_ffprobe_valid_file() {
+        // Create a valid image file using ffmpeg
+        let temp_dir = TempDir::new().unwrap();
+        let image_path = temp_dir.path().join("test.png");
+
+        // Generate a small test image (10x10 red)
+        // -update 1 is required for image2 muxer to output a single file
+        let status = tokio::process::Command::new("ffmpeg")
+            .args([
+                "-f",
+                "lavfi",
+                "-i",
+                "color=c=red:s=10x10",
+                "-frames:v",
+                "1",
+                "-update",
+                "1",
+            ])
+            .arg(&image_path)
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status()
+            .await;
+
+        // Skip test if ffmpeg not available
+        if status.is_err() {
+            eprintln!("Skipping test: ffmpeg not available");
+            return;
+        }
+
+        let result = DownloadManager::validate_image_with_ffprobe(&image_path).await;
+        assert!(result.is_ok(), "Valid image file should pass validation: {:?}", result);
+    }
+
+    #[tokio::test]
+    async fn test_validate_image_with_ffprobe_invalid_file() {
+        let temp_dir = TempDir::new().unwrap();
+        let image_path = temp_dir.path().join("invalid.png");
+
+        // Write garbage data
+        std::fs::write(&image_path, b"this is not an image file").unwrap();
+
+        let result = DownloadManager::validate_image_with_ffprobe(&image_path).await;
+        assert!(result.is_err(), "Invalid image file should fail validation");
+    }
+
+    #[tokio::test]
+    async fn test_validate_image_with_ffprobe_nonexistent_file() {
+        let path = std::path::Path::new("/nonexistent/path/to/image.png");
+
+        let result = DownloadManager::validate_image_with_ffprobe(path).await;
+        assert!(
+            result.is_err(),
+            "Nonexistent file should fail validation"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_validate_audio_with_ffprobe_truncated_file() {
+        // Create a valid audio file, then truncate it to simulate corruption
+        let temp_dir = TempDir::new().unwrap();
+        let audio_path = temp_dir.path().join("truncated.mp3");
+
+        // Generate a valid audio file first
+        let status = tokio::process::Command::new("ffmpeg")
+            .args([
+                "-f",
+                "lavfi",
+                "-i",
+                "anullsrc=r=44100:cl=mono",
+                "-t",
+                "1",
+                "-q:a",
+                "9",
+            ])
+            .arg(&audio_path)
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status()
+            .await;
+
+        if status.is_err() {
+            eprintln!("Skipping test: ffmpeg not available");
+            return;
+        }
+
+        // Read the file and truncate it to half
+        let data = std::fs::read(&audio_path).unwrap();
+        if data.len() > 100 {
+            std::fs::write(&audio_path, &data[..data.len() / 2]).unwrap();
+        }
+
+        // Truncated file may or may not pass ffprobe depending on where truncation happened
+        // The important thing is it doesn't panic
+        let _result = DownloadManager::validate_audio_with_ffprobe(&audio_path).await;
+    }
+
+    #[tokio::test]
+    async fn test_check_ffprobe_available() {
+        // This test verifies ffprobe check returns version info
+        // Will pass if ffprobe is installed, skip message if not
+        let result = DownloadManager::check_ffprobe_available().await;
+
+        match result {
+            Ok(version) => {
+                assert!(version.contains("ffprobe"), "Version should mention ffprobe: {}", version);
+            }
+            Err(e) => {
+                // If ffprobe is not installed, the test should pass but log a message
+                eprintln!("Note: ffprobe not installed, skipping version check. Error: {}", e);
+            }
+        }
     }
 }

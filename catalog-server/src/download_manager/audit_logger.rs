@@ -18,6 +18,7 @@ use super::queue_store::DownloadQueueStore;
 ///
 /// Provides convenient methods that automatically populate audit entries
 /// from queue items and other context.
+#[derive(Clone)]
 pub struct AuditLogger {
     queue_store: Arc<dyn DownloadQueueStore>,
 }

@@ -333,6 +333,18 @@ async fn main() -> Result<()> {
             app_config.download_manager.clone(),
         ));
 
+        // Verify ffprobe is available for media validation
+        match DownloadManager::check_ffprobe_available().await {
+            Ok(version) => info!("ffprobe available: {}", version),
+            Err(e) => {
+                error!("{}", e);
+                return Err(anyhow::anyhow!(
+                    "Download manager requires ffprobe for media validation. {}",
+                    e
+                ));
+            }
+        }
+
         info!(
             "Download manager initialized (process_interval={}s)",
             app_config.download_manager.process_interval_secs
