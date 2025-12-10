@@ -275,4 +275,10 @@ pub trait WritableCatalogStore: CatalogStore {
         audio_uri: &str,
         format: &super::Format,
     ) -> Result<()>;
+
+    /// Set the display image for an album (the "best" image to show).
+    fn set_album_display_image(&self, album_id: &str, image_id: &str) -> Result<()>;
+
+    /// Set the display image for an artist (the "best" image to show).
+    fn set_artist_display_image(&self, artist_id: &str, image_id: &str) -> Result<()>;
 }

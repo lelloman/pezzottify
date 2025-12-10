@@ -74,6 +74,11 @@ pub fn ingest_album(
                 img_pos as i32,
             );
         }
+
+        // Set the largest image as the display image
+        if let Some(best) = find_largest_image(&all_portraits) {
+            let _ = catalog_store.set_artist_display_image(&artist.id, &best.id);
+        }
     }
 
     // 2. Insert album FIRST (before linking artists - foreign key constraint)
@@ -98,6 +103,11 @@ pub fn ingest_album(
         }
         // Link image to album (ignore error if already linked)
         let _ = catalog_store.add_album_image(&album_id, &cover.id, &ImageType::Cover, position as i32);
+    }
+
+    // Set the largest image as the display image for the album
+    if let Some(best) = find_largest_image(&all_covers) {
+        let _ = catalog_store.set_album_display_image(&album_id, &best.id);
     }
 
     // 5. Insert tracks (links to album and artists)
@@ -290,6 +300,13 @@ pub fn merge_images(primary: &[ExternalImage], secondary: &[ExternalImage]) -> V
     }
 
     result
+}
+
+/// Find the largest image by pixel count (width * height).
+fn find_largest_image(images: &[ExternalImage]) -> Option<&ExternalImage> {
+    images
+        .iter()
+        .max_by_key(|img| (img.width as i64) * (img.height as i64))
 }
 
 /// Convert external artist role string to ArtistRole enum.

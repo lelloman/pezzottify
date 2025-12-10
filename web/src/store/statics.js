@@ -123,6 +123,12 @@ export const useStaticsStore = defineStore("statics", () => {
     if (!item) return false;
     // Tracks must have artists_ids (may be missing from old cache)
     if (itemType === "tracks" && !item.artists_ids) return false;
+    // Albums must have covers array (may be missing from old cache before display_image transform)
+    // We check for the array existence, not length - albums may genuinely have no images
+    // but the array should exist after the transform
+    if (itemType === "albums" && !Array.isArray(item.covers)) return false;
+    // Artists must have portrait_group array (may be missing from old cache before display_image transform)
+    if (itemType === "artists" && !Array.isArray(item.portrait_group)) return false;
     return true;
   };
 
