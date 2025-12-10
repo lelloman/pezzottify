@@ -63,6 +63,7 @@ import com.lelloman.pezzottify.android.ui.screen.main.content.track.TrackScreen
 import com.lelloman.pezzottify.android.ui.screen.main.content.userplaylist.UserPlaylistScreen
 import com.lelloman.pezzottify.android.ui.screen.player.PlayerScreen
 import com.lelloman.pezzottify.android.ui.screen.queue.QueueScreen
+import com.lelloman.pezzottify.android.ui.toAlbum
 import com.lelloman.pezzottify.android.ui.toPlayer
 import com.lelloman.pezzottify.android.ui.screen.main.home.HomeScreen
 import com.lelloman.pezzottify.android.ui.screen.main.library.LibraryScreen
@@ -191,6 +192,12 @@ private fun MainScreenContent(state: MainScreenState, actions: MainScreenActions
                 }
                 composable<Screen.Main.UserPlaylist> {
                     UserPlaylistScreen(it.toRoute<Screen.Main.UserPlaylist>().playlistId, navController)
+                }
+                composable<Screen.Main.MyRequests> {
+                    com.lelloman.pezzottify.android.ui.screen.main.myrequests.MyRequestsScreen(
+                        onNavigateBack = { navController.popBackStack() },
+                        onNavigateToAlbum = { albumId -> navController.toAlbum(albumId) },
+                    )
                 }
 
                 // Overlay screens (no bottom nav/player)
