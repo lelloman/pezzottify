@@ -986,7 +986,7 @@ impl SqliteCatalogStore {
     ) -> Result<()> {
         let conn = self.conn.lock().unwrap();
         conn.execute(
-            "INSERT INTO track_artists (track_id, artist_id, role, position) VALUES (?1, ?2, ?3, ?4)",
+            "INSERT OR IGNORE INTO track_artists (track_id, artist_id, role, position) VALUES (?1, ?2, ?3, ?4)",
             params![track_id, artist_id, role.to_db_str(), position],
         )?;
         Ok(())

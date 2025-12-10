@@ -48,10 +48,10 @@ fn resolve_album(
         .unwrap_or("")
         .to_string();
 
-    // Get release date/year from the album
+    // Get release date/year from the album (field is renamed to "date" in JSON)
     let year = album_json
         .get("album")
-        .and_then(|a| a.get("release_date"))
+        .and_then(|a| a.get("date"))
         .and_then(|d| d.as_i64())
         .and_then(|ts| chrono::DateTime::from_timestamp(ts, 0))
         .map(|d| d.year() as i64);

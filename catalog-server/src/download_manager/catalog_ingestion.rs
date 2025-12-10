@@ -109,6 +109,7 @@ pub fn ingest_album(
         }
 
         // Link artists to track - merge artists_with_role and artists_ids
+        // Artists can appear multiple times with different roles (e.g., Main Artist + Composer)
         let mut seen_artist_ids = std::collections::HashSet::new();
         let mut has_main_artist = false;
         let mut position = 0i32;
@@ -130,6 +131,7 @@ pub fn ingest_album(
         }
 
         // Then, add any artists from artists_ids that weren't in artists_with_role
+        // (these are artists without explicit role info)
         for artist_id in &track.artists_ids {
             if !seen_artist_ids.contains(artist_id) {
                 // If no main artist yet, first unseen artist becomes main

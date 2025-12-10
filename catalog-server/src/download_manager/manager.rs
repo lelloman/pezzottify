@@ -576,19 +576,16 @@ impl DownloadManager {
         // Add album cover images (merge covers + cover_group, deduplicated)
         let all_covers = super::catalog_ingestion::merge_images(&album.covers, &album.cover_group);
         for cover in &all_covers {
-            // Only download medium/large sizes
-            if cover.size == "medium" || cover.size == "large" {
-                children.push(QueueItem::new_child(
-                    Uuid::new_v4().to_string(),
-                    item.id.clone(),
-                    DownloadContentType::AlbumImage,
-                    cover.id.clone(),
-                    QueuePriority::Expansion,
-                    item.request_source,
-                    item.requested_by_user_id.clone(),
-                    self.config.max_retries as i32,
-                ));
-            }
+            children.push(QueueItem::new_child(
+                Uuid::new_v4().to_string(),
+                item.id.clone(),
+                DownloadContentType::AlbumImage,
+                cover.id.clone(),
+                QueuePriority::Expansion,
+                item.request_source,
+                item.requested_by_user_id.clone(),
+                self.config.max_retries as i32,
+            ));
         }
 
         // Add artist portrait images (merge portraits + portrait_group, deduplicated)
@@ -596,18 +593,16 @@ impl DownloadManager {
             let all_portraits =
                 super::catalog_ingestion::merge_images(&artist.portraits, &artist.portrait_group);
             for portrait in &all_portraits {
-                if portrait.size == "medium" || portrait.size == "large" {
-                    children.push(QueueItem::new_child(
-                        Uuid::new_v4().to_string(),
-                        item.id.clone(),
-                        DownloadContentType::ArtistImage,
-                        portrait.id.clone(),
-                        QueuePriority::Expansion,
-                        item.request_source,
-                        item.requested_by_user_id.clone(),
-                        self.config.max_retries as i32,
-                    ));
-                }
+                children.push(QueueItem::new_child(
+                    Uuid::new_v4().to_string(),
+                    item.id.clone(),
+                    DownloadContentType::ArtistImage,
+                    portrait.id.clone(),
+                    QueuePriority::Expansion,
+                    item.request_source,
+                    item.requested_by_user_id.clone(),
+                    self.config.max_retries as i32,
+                ));
             }
         }
 
