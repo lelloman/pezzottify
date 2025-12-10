@@ -109,7 +109,10 @@ impl IntegrityWatchdog {
         for track_id in track_ids {
             if let Some(audio_path) = self.catalog_store.get_track_audio_path(&track_id) {
                 if !audio_path.exists() {
-                    debug!("Missing audio file for track {}: {:?}", track_id, audio_path);
+                    debug!(
+                        "Missing audio file for track {}: {:?}",
+                        track_id, audio_path
+                    );
                     missing.push(track_id);
                 }
             } else {
@@ -236,10 +239,7 @@ impl IntegrityWatchdog {
                     queued += 1;
                 }
                 Err(e) => {
-                    warn!(
-                        "Failed to queue album image repair for {}: {}",
-                        image_id, e
-                    );
+                    warn!("Failed to queue album image repair for {}: {}", image_id, e);
                 }
             }
         }
@@ -439,9 +439,7 @@ mod tests {
             self.track_ids.len()
         }
 
-        fn get_searchable_content(
-            &self,
-        ) -> Result<Vec<SearchableItem>> {
+        fn get_searchable_content(&self) -> Result<Vec<SearchableItem>> {
             Ok(vec![])
         }
 
@@ -579,8 +577,7 @@ mod tests {
         let queue_store = Arc::new(SqliteDownloadQueueStore::in_memory().unwrap());
         let audit_logger = AuditLogger::new(queue_store.clone());
 
-        let watchdog =
-            IntegrityWatchdog::new(catalog_store, queue_store.clone(), audit_logger);
+        let watchdog = IntegrityWatchdog::new(catalog_store, queue_store.clone(), audit_logger);
 
         (watchdog, queue_store)
     }
@@ -710,9 +707,8 @@ mod tests {
         let temp_dir = TempDir::new().unwrap();
         let media_path = temp_dir.path().to_path_buf();
 
-        let catalog = Arc::new(
-            MockCatalogStore::new(media_path.clone()).with_tracks(vec!["track1"]),
-        );
+        let catalog =
+            Arc::new(MockCatalogStore::new(media_path.clone()).with_tracks(vec!["track1"]));
 
         let (watchdog, queue_store) = create_test_watchdog(catalog);
 

@@ -60,12 +60,8 @@ pub trait DownloadQueueStore: Send + Sync {
     fn mark_completed(&self, id: &str, bytes: u64, duration_ms: i64) -> Result<()>;
 
     /// Mark an item for retry with next retry time and error details.
-    fn mark_retry_waiting(
-        &self,
-        id: &str,
-        next_retry_at: i64,
-        error: &DownloadError,
-    ) -> Result<()>;
+    fn mark_retry_waiting(&self, id: &str, next_retry_at: i64, error: &DownloadError)
+        -> Result<()>;
 
     /// Mark an item as permanently failed.
     fn mark_failed(&self, id: &str, error: &DownloadError) -> Result<()>;
@@ -222,7 +218,10 @@ impl SqliteDownloadQueueStore {
                 .last()
                 .context("No schemas defined")?
                 .create(&conn)?;
-            info!("Created new download queue database at {:?}", db_path.as_ref());
+            info!(
+                "Created new download queue database at {:?}",
+                db_path.as_ref()
+            );
             conn
         };
 
@@ -295,7 +294,10 @@ impl SqliteDownloadQueueStore {
             current_version, target_version
         );
 
-        for schema in DOWNLOAD_QUEUE_VERSIONED_SCHEMAS.iter().skip(current_version + 1) {
+        for schema in DOWNLOAD_QUEUE_VERSIONED_SCHEMAS
+            .iter()
+            .skip(current_version + 1)
+        {
             if let Some(migration_fn) = schema.migration {
                 info!(
                     "Running download queue migration to version {}",
@@ -307,10 +309,7 @@ impl SqliteDownloadQueueStore {
 
         // Update version
         conn.execute(
-            &format!(
-                "PRAGMA user_version = {}",
-                BASE_DB_VERSION + target_version
-            ),
+            &format!("PRAGMA user_version = {}", BASE_DB_VERSION + target_version),
             [],
         )?;
 
@@ -492,13 +491,9 @@ impl DownloadQueueStore for SqliteDownloadQueueStore {
 
     fn get_item(&self, id: &str) -> Result<Option<QueueItem>> {
         let conn = self.conn.lock().unwrap();
-        let mut stmt = conn.prepare(
-            "SELECT * FROM download_queue WHERE id = ?1",
-        )?;
+        let mut stmt = conn.prepare("SELECT * FROM download_queue WHERE id = ?1")?;
 
-        let item = stmt
-            .query_row([id], Self::row_to_queue_item)
-            .optional()?;
+        let item = stmt.query_row([id], Self::row_to_queue_item).optional()?;
 
         Ok(item)
     }
@@ -518,9 +513,7 @@ impl DownloadQueueStore for SqliteDownloadQueueStore {
                LIMIT 1"#,
         )?;
 
-        let item = stmt
-            .query_row([], Self::row_to_queue_item)
-            .optional()?;
+        let item = stmt.query_row([], Self::row_to_queue_item).optional()?;
 
         Ok(item)
     }
@@ -539,7 +532,8 @@ impl DownloadQueueStore for SqliteDownloadQueueStore {
                 r#"SELECT * FROM download_queue
                    WHERE requested_by_user_id = ?1 AND status = ?2
                    ORDER BY created_at DESC
-                   LIMIT ?3 OFFSET ?4"#.to_string(),
+                   LIMIT ?3 OFFSET ?4"#
+                    .to_string(),
                 vec![
                     Box::new(user_id.to_string()),
                     Box::new(s.as_db_str().to_string()),
@@ -551,7 +545,8 @@ impl DownloadQueueStore for SqliteDownloadQueueStore {
                 r#"SELECT * FROM download_queue
                    WHERE requested_by_user_id = ?1
                    ORDER BY created_at DESC
-                   LIMIT ?2 OFFSET ?3"#.to_string(),
+                   LIMIT ?2 OFFSET ?3"#
+                    .to_string(),
                 vec![
                     Box::new(user_id.to_string()),
                     Box::new(limit as i64),
@@ -582,7 +577,8 @@ impl DownloadQueueStore for SqliteDownloadQueueStore {
                 r#"SELECT * FROM download_queue
                    WHERE status = ?1
                    ORDER BY priority ASC, created_at ASC
-                   LIMIT ?2 OFFSET ?3"#.to_string(),
+                   LIMIT ?2 OFFSET ?3"#
+                    .to_string(),
                 vec![
                     Box::new(s.as_db_str().to_string()),
                     Box::new(limit as i64),
@@ -592,11 +588,9 @@ impl DownloadQueueStore for SqliteDownloadQueueStore {
             None => (
                 r#"SELECT * FROM download_queue
                    ORDER BY priority ASC, created_at ASC
-                   LIMIT ?1 OFFSET ?2"#.to_string(),
-                vec![
-                    Box::new(limit as i64),
-                    Box::new(offset as i64),
-                ],
+                   LIMIT ?1 OFFSET ?2"#
+                    .to_string(),
+                vec![Box::new(limit as i64), Box::new(offset as i64)],
             ),
         };
 
@@ -622,7 +616,7 @@ impl DownloadQueueStore for SqliteDownloadQueueStore {
             .optional()?;
 
         match status {
-            None => Ok(None), // Item doesn't exist
+            None => Ok(None),                      // Item doesn't exist
             Some(s) if s != "PENDING" => Ok(None), // Not pending, no queue position
             Some(_) => {
                 // Get the item's priority and created_at
@@ -1003,11 +997,7 @@ impl DownloadQueueStore for SqliteDownloadQueueStore {
         Ok(item)
     }
 
-    fn is_in_queue(
-        &self,
-        content_type: DownloadContentType,
-        content_id: &str,
-    ) -> Result<bool> {
+    fn is_in_queue(&self, content_type: DownloadContentType, content_id: &str) -> Result<bool> {
         let conn = self.conn.lock().unwrap();
         let count: i64 = conn.query_row(
             r#"SELECT COUNT(*) FROM download_queue
@@ -1162,8 +1152,9 @@ impl DownloadQueueStore for SqliteDownloadQueueStore {
         let (albums_inc, tracks_inc, images_inc, failed_inc) = match (content_type, success) {
             (DownloadContentType::Album, true) => (1, 0, 0, 0),
             (DownloadContentType::TrackAudio, true) => (0, 1, 0, 0),
-            (DownloadContentType::ArtistImage, true)
-            | (DownloadContentType::AlbumImage, true) => (0, 0, 1, 0),
+            (DownloadContentType::ArtistImage, true) | (DownloadContentType::AlbumImage, true) => {
+                (0, 0, 1, 0)
+            }
             (_, false) => (0, 0, 0, 1),
         };
 
@@ -1247,25 +1238,24 @@ impl DownloadQueueStore for SqliteDownloadQueueStore {
         let conn = self.conn.lock().unwrap();
         let day_start = Self::day_start_bucket();
 
-        let result = conn
-            .query_row(
-                r#"SELECT
+        let result = conn.query_row(
+            r#"SELECT
                        COALESCE(SUM(albums_downloaded), 0) as albums,
                        COALESCE(SUM(tracks_downloaded), 0) as tracks,
                        COALESCE(SUM(images_downloaded), 0) as images,
                        COALESCE(SUM(bytes_downloaded), 0) as bytes
                    FROM download_activity_log
                    WHERE hour_bucket >= ?1"#,
-                [day_start],
-                |row| {
-                    Ok(DailyCounts {
-                        albums: row.get("albums")?,
-                        tracks: row.get("tracks")?,
-                        images: row.get("images")?,
-                        bytes: row.get("bytes")?,
-                    })
-                },
-            )?;
+            [day_start],
+            |row| {
+                Ok(DailyCounts {
+                    albums: row.get("albums")?,
+                    tracks: row.get("tracks")?,
+                    images: row.get("images")?,
+                    bytes: row.get("bytes")?,
+                })
+            },
+        )?;
 
         Ok(result)
     }
@@ -1309,7 +1299,10 @@ impl DownloadQueueStore for SqliteDownloadQueueStore {
         )?;
 
         let items = stmt
-            .query_map(rusqlite::params![limit as i64, offset as i64], Self::row_to_queue_item)?
+            .query_map(
+                rusqlite::params![limit as i64, offset as i64],
+                Self::row_to_queue_item,
+            )?
             .collect::<rusqlite::Result<Vec<_>>>()?;
 
         Ok(items)
@@ -1420,7 +1413,9 @@ impl DownloadQueueStore for SqliteDownloadQueueStore {
         let total: usize = {
             let params_refs: Vec<&dyn rusqlite::ToSql> =
                 params.iter().map(|p| p.as_ref()).collect();
-            conn.query_row(&count_sql, params_refs.as_slice(), |row| row.get::<_, i64>(0))? as usize
+            conn.query_row(&count_sql, params_refs.as_slice(), |row| {
+                row.get::<_, i64>(0)
+            })? as usize
         };
 
         // Now get the actual rows with pagination
@@ -1490,7 +1485,9 @@ impl DownloadQueueStore for SqliteDownloadQueueStore {
         let total: usize = {
             let params_refs: Vec<&dyn rusqlite::ToSql> =
                 params.iter().map(|p| p.as_ref()).collect();
-            conn.query_row(&count_sql, params_refs.as_slice(), |row| row.get::<_, i64>(0))? as usize
+            conn.query_row(&count_sql, params_refs.as_slice(), |row| {
+                row.get::<_, i64>(0)
+            })? as usize
         };
 
         // Get rows with pagination
@@ -1638,7 +1635,10 @@ mod tests {
             RequestSource::User,
             5,
         )
-        .with_names(Some("Test Album".to_string()), Some("Test Artist".to_string()))
+        .with_names(
+            Some("Test Album".to_string()),
+            Some("Test Artist".to_string()),
+        )
         .with_user("user-456".to_string());
 
         store.enqueue(item.clone()).unwrap();
@@ -1834,7 +1834,9 @@ mod tests {
         assert_eq!(pending[0].id, "item-1");
 
         // List completed only
-        let completed = store.list_all(Some(QueueStatus::Completed), 100, 0).unwrap();
+        let completed = store
+            .list_all(Some(QueueStatus::Completed), 100, 0)
+            .unwrap();
         assert_eq!(completed.len(), 1);
         assert_eq!(completed[0].id, "item-2");
     }
@@ -2090,7 +2092,9 @@ mod tests {
         // Mark for retry
         let error = DownloadError::new(DownloadErrorType::Timeout, "Request timed out");
         let next_retry = 1700000000;
-        store.mark_retry_waiting("item-1", next_retry, &error).unwrap();
+        store
+            .mark_retry_waiting("item-1", next_retry, &error)
+            .unwrap();
 
         let item = store.get_item("item-1").unwrap().unwrap();
         assert_eq!(item.status, QueueStatus::RetryWaiting);
@@ -2175,12 +2179,18 @@ mod tests {
 
         // PENDING -> IN_PROGRESS
         assert!(store.claim_for_processing("item-1").unwrap());
-        assert_eq!(store.get_item("item-1").unwrap().unwrap().status, QueueStatus::InProgress);
+        assert_eq!(
+            store.get_item("item-1").unwrap().unwrap().status,
+            QueueStatus::InProgress
+        );
 
         // IN_PROGRESS -> RETRY_WAITING (simulating failure)
         let error = DownloadError::new(DownloadErrorType::Timeout, "Timeout");
         store.mark_retry_waiting("item-1", 1000, &error).unwrap();
-        assert_eq!(store.get_item("item-1").unwrap().unwrap().status, QueueStatus::RetryWaiting);
+        assert_eq!(
+            store.get_item("item-1").unwrap().unwrap().status,
+            QueueStatus::RetryWaiting
+        );
 
         // Item no longer shows up as next pending
         assert!(store.get_next_pending().unwrap().is_none());
@@ -2396,7 +2406,9 @@ mod tests {
         );
         child4.status = QueueStatus::InProgress;
 
-        store.create_children("parent-1", vec![child1, child2, child3, child4]).unwrap();
+        store
+            .create_children("parent-1", vec![child1, child2, child3, child4])
+            .unwrap();
 
         let progress = store.get_children_progress("parent-1").unwrap();
         assert_eq!(progress.total_children, 4);
@@ -2492,7 +2504,9 @@ mod tests {
         );
         child2.status = QueueStatus::Completed;
 
-        store.create_children("parent-1", vec![child1, child2]).unwrap();
+        store
+            .create_children("parent-1", vec![child1, child2])
+            .unwrap();
 
         let result = store.check_parent_completion("parent-1").unwrap();
         assert_eq!(result, Some(QueueStatus::Completed));
@@ -2536,7 +2550,9 @@ mod tests {
         );
         child2.status = QueueStatus::Failed;
 
-        store.create_children("parent-1", vec![child1, child2]).unwrap();
+        store
+            .create_children("parent-1", vec![child1, child2])
+            .unwrap();
 
         let result = store.check_parent_completion("parent-1").unwrap();
         assert_eq!(result, Some(QueueStatus::Failed));
@@ -2670,7 +2686,9 @@ mod tests {
         // Mark it for retry with a past retry time
         let error = DownloadError::new(DownloadErrorType::Timeout, "Timeout");
         let past_time = 1000; // Far in the past
-        store.mark_retry_waiting("item-1", past_time, &error).unwrap();
+        store
+            .mark_retry_waiting("item-1", past_time, &error)
+            .unwrap();
 
         // Should be ready for retry
         let ready = store.get_retry_ready().unwrap();
@@ -2695,7 +2713,9 @@ mod tests {
         // Mark for retry with a far future time
         let error = DownloadError::new(DownloadErrorType::Timeout, "Timeout");
         let future_time = 9999999999; // Far in the future
-        store.mark_retry_waiting("item-1", future_time, &error).unwrap();
+        store
+            .mark_retry_waiting("item-1", future_time, &error)
+            .unwrap();
 
         // Should not be ready yet
         let ready = store.get_retry_ready().unwrap();
@@ -2833,7 +2853,10 @@ mod tests {
 
         // Claim again for second attempt
         assert!(store.claim_for_processing("item-1").unwrap());
-        assert_eq!(store.get_item("item-1").unwrap().unwrap().status, QueueStatus::InProgress);
+        assert_eq!(
+            store.get_item("item-1").unwrap().unwrap().status,
+            QueueStatus::InProgress
+        );
     }
 
     // === Duplicate Check Tests ===
@@ -3274,7 +3297,9 @@ mod tests {
     fn test_record_activity_album() {
         let store = SqliteDownloadQueueStore::in_memory().unwrap();
 
-        store.record_activity(DownloadContentType::Album, 1000, true).unwrap();
+        store
+            .record_activity(DownloadContentType::Album, 1000, true)
+            .unwrap();
 
         let hourly = store.get_hourly_counts().unwrap();
         assert_eq!(hourly.albums, 1);
@@ -3287,7 +3312,9 @@ mod tests {
     fn test_record_activity_track() {
         let store = SqliteDownloadQueueStore::in_memory().unwrap();
 
-        store.record_activity(DownloadContentType::TrackAudio, 5000000, true).unwrap();
+        store
+            .record_activity(DownloadContentType::TrackAudio, 5000000, true)
+            .unwrap();
 
         let hourly = store.get_hourly_counts().unwrap();
         assert_eq!(hourly.albums, 0);
@@ -3299,7 +3326,9 @@ mod tests {
     fn test_record_activity_image() {
         let store = SqliteDownloadQueueStore::in_memory().unwrap();
 
-        store.record_activity(DownloadContentType::AlbumImage, 50000, true).unwrap();
+        store
+            .record_activity(DownloadContentType::AlbumImage, 50000, true)
+            .unwrap();
 
         let hourly = store.get_hourly_counts().unwrap();
         assert_eq!(hourly.images, 1);
@@ -3311,7 +3340,9 @@ mod tests {
         let store = SqliteDownloadQueueStore::in_memory().unwrap();
 
         // Record a failed download - should not increment content counts
-        store.record_activity(DownloadContentType::Album, 0, false).unwrap();
+        store
+            .record_activity(DownloadContentType::Album, 0, false)
+            .unwrap();
 
         let hourly = store.get_hourly_counts().unwrap();
         assert_eq!(hourly.albums, 0);
@@ -3324,11 +3355,21 @@ mod tests {
         let store = SqliteDownloadQueueStore::in_memory().unwrap();
 
         // Record multiple downloads
-        store.record_activity(DownloadContentType::Album, 1000, true).unwrap();
-        store.record_activity(DownloadContentType::Album, 2000, true).unwrap();
-        store.record_activity(DownloadContentType::TrackAudio, 5000000, true).unwrap();
-        store.record_activity(DownloadContentType::TrackAudio, 6000000, true).unwrap();
-        store.record_activity(DownloadContentType::TrackAudio, 7000000, true).unwrap();
+        store
+            .record_activity(DownloadContentType::Album, 1000, true)
+            .unwrap();
+        store
+            .record_activity(DownloadContentType::Album, 2000, true)
+            .unwrap();
+        store
+            .record_activity(DownloadContentType::TrackAudio, 5000000, true)
+            .unwrap();
+        store
+            .record_activity(DownloadContentType::TrackAudio, 6000000, true)
+            .unwrap();
+        store
+            .record_activity(DownloadContentType::TrackAudio, 7000000, true)
+            .unwrap();
 
         let hourly = store.get_hourly_counts().unwrap();
         assert_eq!(hourly.albums, 2);
@@ -3363,9 +3404,15 @@ mod tests {
         let store = SqliteDownloadQueueStore::in_memory().unwrap();
 
         // Record various activities
-        store.record_activity(DownloadContentType::Album, 1000, true).unwrap();
-        store.record_activity(DownloadContentType::TrackAudio, 5000000, true).unwrap();
-        store.record_activity(DownloadContentType::AlbumImage, 50000, true).unwrap();
+        store
+            .record_activity(DownloadContentType::Album, 1000, true)
+            .unwrap();
+        store
+            .record_activity(DownloadContentType::TrackAudio, 5000000, true)
+            .unwrap();
+        store
+            .record_activity(DownloadContentType::AlbumImage, 50000, true)
+            .unwrap();
 
         let daily = store.get_daily_counts().unwrap();
         assert_eq!(daily.albums, 1);
@@ -3387,7 +3434,9 @@ mod tests {
         let store = SqliteDownloadQueueStore::in_memory().unwrap();
 
         // Record some activity
-        store.record_activity(DownloadContentType::Album, 1000, true).unwrap();
+        store
+            .record_activity(DownloadContentType::Album, 1000, true)
+            .unwrap();
 
         // Get all activity since epoch
         let entries = store.get_activity_since(0).unwrap();
@@ -3527,7 +3576,9 @@ mod tests {
                 5,
             );
             store.enqueue(item).unwrap();
-            store.claim_for_processing(&format!("failed-{}", i)).unwrap();
+            store
+                .claim_for_processing(&format!("failed-{}", i))
+                .unwrap();
             let error = DownloadError::new(DownloadErrorType::NotFound, "Not found");
             store.mark_failed(&format!("failed-{}", i), &error).unwrap();
         }
@@ -3567,7 +3618,9 @@ mod tests {
                 5,
             );
             store.enqueue(item).unwrap();
-            store.claim_for_processing(&format!("failed-{}", i)).unwrap();
+            store
+                .claim_for_processing(&format!("failed-{}", i))
+                .unwrap();
             let error = DownloadError::new(DownloadErrorType::NotFound, "Not found");
             store.mark_failed(&format!("failed-{}", i), &error).unwrap();
         }
@@ -3726,18 +3779,22 @@ mod tests {
         let store = SqliteDownloadQueueStore::in_memory().unwrap();
 
         // Log events for different users
-        store.log_audit_event(
-            AuditLogEntry::new(AuditEventType::RequestCreated)
-                .with_user("user-1".to_string())
-        ).unwrap();
-        store.log_audit_event(
-            AuditLogEntry::new(AuditEventType::RequestCreated)
-                .with_user("user-2".to_string())
-        ).unwrap();
-        store.log_audit_event(
-            AuditLogEntry::new(AuditEventType::DownloadCompleted)
-                .with_user("user-1".to_string())
-        ).unwrap();
+        store
+            .log_audit_event(
+                AuditLogEntry::new(AuditEventType::RequestCreated).with_user("user-1".to_string()),
+            )
+            .unwrap();
+        store
+            .log_audit_event(
+                AuditLogEntry::new(AuditEventType::RequestCreated).with_user("user-2".to_string()),
+            )
+            .unwrap();
+        store
+            .log_audit_event(
+                AuditLogEntry::new(AuditEventType::DownloadCompleted)
+                    .with_user("user-1".to_string()),
+            )
+            .unwrap();
 
         let filter = AuditLogFilter::new().for_user("user-1".to_string());
         let (entries, total) = store.get_audit_log(filter).unwrap();
@@ -3753,18 +3810,24 @@ mod tests {
     fn test_get_audit_log_filter_by_queue_item() {
         let store = SqliteDownloadQueueStore::in_memory().unwrap();
 
-        store.log_audit_event(
-            AuditLogEntry::new(AuditEventType::RequestCreated)
-                .with_queue_item("queue-1".to_string())
-        ).unwrap();
-        store.log_audit_event(
-            AuditLogEntry::new(AuditEventType::DownloadStarted)
-                .with_queue_item("queue-1".to_string())
-        ).unwrap();
-        store.log_audit_event(
-            AuditLogEntry::new(AuditEventType::RequestCreated)
-                .with_queue_item("queue-2".to_string())
-        ).unwrap();
+        store
+            .log_audit_event(
+                AuditLogEntry::new(AuditEventType::RequestCreated)
+                    .with_queue_item("queue-1".to_string()),
+            )
+            .unwrap();
+        store
+            .log_audit_event(
+                AuditLogEntry::new(AuditEventType::DownloadStarted)
+                    .with_queue_item("queue-1".to_string()),
+            )
+            .unwrap();
+        store
+            .log_audit_event(
+                AuditLogEntry::new(AuditEventType::RequestCreated)
+                    .with_queue_item("queue-2".to_string()),
+            )
+            .unwrap();
 
         let filter = AuditLogFilter::new().for_queue_item("queue-1".to_string());
         let (entries, total) = store.get_audit_log(filter).unwrap();
@@ -3779,10 +3842,18 @@ mod tests {
     fn test_get_audit_log_filter_by_event_types() {
         let store = SqliteDownloadQueueStore::in_memory().unwrap();
 
-        store.log_audit_event(AuditLogEntry::new(AuditEventType::RequestCreated)).unwrap();
-        store.log_audit_event(AuditLogEntry::new(AuditEventType::DownloadStarted)).unwrap();
-        store.log_audit_event(AuditLogEntry::new(AuditEventType::DownloadCompleted)).unwrap();
-        store.log_audit_event(AuditLogEntry::new(AuditEventType::DownloadFailed)).unwrap();
+        store
+            .log_audit_event(AuditLogEntry::new(AuditEventType::RequestCreated))
+            .unwrap();
+        store
+            .log_audit_event(AuditLogEntry::new(AuditEventType::DownloadStarted))
+            .unwrap();
+        store
+            .log_audit_event(AuditLogEntry::new(AuditEventType::DownloadCompleted))
+            .unwrap();
+        store
+            .log_audit_event(AuditLogEntry::new(AuditEventType::DownloadFailed))
+            .unwrap();
 
         let filter = AuditLogFilter::new().with_event_types(vec![
             AuditEventType::DownloadCompleted,
@@ -3826,23 +3897,31 @@ mod tests {
         let store = SqliteDownloadQueueStore::in_memory().unwrap();
 
         // Log a sequence of events for an item
-        store.log_audit_event(
-            AuditLogEntry::new(AuditEventType::RequestCreated)
-                .with_queue_item("item-1".to_string())
-        ).unwrap();
-        store.log_audit_event(
-            AuditLogEntry::new(AuditEventType::DownloadStarted)
-                .with_queue_item("item-1".to_string())
-        ).unwrap();
-        store.log_audit_event(
-            AuditLogEntry::new(AuditEventType::DownloadCompleted)
-                .with_queue_item("item-1".to_string())
-        ).unwrap();
+        store
+            .log_audit_event(
+                AuditLogEntry::new(AuditEventType::RequestCreated)
+                    .with_queue_item("item-1".to_string()),
+            )
+            .unwrap();
+        store
+            .log_audit_event(
+                AuditLogEntry::new(AuditEventType::DownloadStarted)
+                    .with_queue_item("item-1".to_string()),
+            )
+            .unwrap();
+        store
+            .log_audit_event(
+                AuditLogEntry::new(AuditEventType::DownloadCompleted)
+                    .with_queue_item("item-1".to_string()),
+            )
+            .unwrap();
         // Different item
-        store.log_audit_event(
-            AuditLogEntry::new(AuditEventType::RequestCreated)
-                .with_queue_item("item-2".to_string())
-        ).unwrap();
+        store
+            .log_audit_event(
+                AuditLogEntry::new(AuditEventType::RequestCreated)
+                    .with_queue_item("item-2".to_string()),
+            )
+            .unwrap();
 
         let entries = store.get_audit_for_item("item-1").unwrap();
         assert_eq!(entries.len(), 3);
@@ -3867,19 +3946,22 @@ mod tests {
 
         // Log events for user-1
         for i in 0..5 {
-            let mut event = AuditLogEntry::new(AuditEventType::RequestCreated)
-                .with_user("user-1".to_string());
+            let mut event =
+                AuditLogEntry::new(AuditEventType::RequestCreated).with_user("user-1".to_string());
             event.timestamp = i as i64;
             store.log_audit_event(event).unwrap();
         }
 
         // Log events for user-2
-        store.log_audit_event(
-            AuditLogEntry::new(AuditEventType::RequestCreated)
-                .with_user("user-2".to_string())
-        ).unwrap();
+        store
+            .log_audit_event(
+                AuditLogEntry::new(AuditEventType::RequestCreated).with_user("user-2".to_string()),
+            )
+            .unwrap();
 
-        let (entries, total) = store.get_audit_for_user("user-1", None, None, 100, 0).unwrap();
+        let (entries, total) = store
+            .get_audit_for_user("user-1", None, None, 100, 0)
+            .unwrap();
         assert_eq!(total, 5);
         assert_eq!(entries.len(), 5);
     }
@@ -3890,14 +3972,16 @@ mod tests {
 
         // Log events at different times
         for i in 0..10 {
-            let mut event = AuditLogEntry::new(AuditEventType::RequestCreated)
-                .with_user("user-1".to_string());
+            let mut event =
+                AuditLogEntry::new(AuditEventType::RequestCreated).with_user("user-1".to_string());
             event.timestamp = (i * 100) as i64; // 0, 100, 200, ..., 900
             store.log_audit_event(event).unwrap();
         }
 
         // Get events from time 300 to 600 (should be 4 events: 300, 400, 500, 600)
-        let (entries, total) = store.get_audit_for_user("user-1", Some(300), Some(600), 100, 0).unwrap();
+        let (entries, total) = store
+            .get_audit_for_user("user-1", Some(300), Some(600), 100, 0)
+            .unwrap();
         assert_eq!(total, 4);
         assert_eq!(entries.len(), 4);
     }

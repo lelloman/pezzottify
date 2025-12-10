@@ -3546,14 +3546,17 @@ async fn admin_get_download_requests(
     let offset = query.offset.unwrap_or(0);
     let exclude_completed = query.exclude_completed.unwrap_or(false);
 
-    let status = query.status.as_deref().and_then(|s| match s.to_lowercase().as_str() {
-        "pending" => Some(crate::download_manager::QueueStatus::Pending),
-        "in_progress" => Some(crate::download_manager::QueueStatus::InProgress),
-        "retry_waiting" => Some(crate::download_manager::QueueStatus::RetryWaiting),
-        "completed" => Some(crate::download_manager::QueueStatus::Completed),
-        "failed" => Some(crate::download_manager::QueueStatus::Failed),
-        _ => None,
-    });
+    let status = query
+        .status
+        .as_deref()
+        .and_then(|s| match s.to_lowercase().as_str() {
+            "pending" => Some(crate::download_manager::QueueStatus::Pending),
+            "in_progress" => Some(crate::download_manager::QueueStatus::InProgress),
+            "retry_waiting" => Some(crate::download_manager::QueueStatus::RetryWaiting),
+            "completed" => Some(crate::download_manager::QueueStatus::Completed),
+            "failed" => Some(crate::download_manager::QueueStatus::Failed),
+            _ => None,
+        });
 
     match dm.get_all_requests(status, query.user_id.as_deref(), limit, offset) {
         Ok(items) => {
@@ -3618,8 +3621,7 @@ async fn admin_get_audit_log(
     let offset = query.offset.unwrap_or(0);
 
     // Build filter from query params
-    let mut filter = crate::download_manager::AuditLogFilter::new()
-        .paginate(limit, offset);
+    let mut filter = crate::download_manager::AuditLogFilter::new().paginate(limit, offset);
 
     if let Some(queue_item_id) = query.queue_item_id {
         filter = filter.for_queue_item(queue_item_id);
@@ -3630,13 +3632,16 @@ async fn admin_get_audit_log(
     }
 
     if let Some(event_type_str) = query.event_type {
-        if let Some(event_type) = crate::download_manager::AuditEventType::from_str(&event_type_str) {
+        if let Some(event_type) = crate::download_manager::AuditEventType::from_str(&event_type_str)
+        {
             filter = filter.with_event_types(vec![event_type]);
         }
     }
 
     if let Some(content_type_str) = query.content_type {
-        if let Some(content_type) = crate::download_manager::DownloadContentType::from_str(&content_type_str) {
+        if let Some(content_type) =
+            crate::download_manager::DownloadContentType::from_str(&content_type_str)
+        {
             filter = filter.for_content_type(content_type);
         }
     }
@@ -3799,6 +3804,7 @@ impl ServerState {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn make_app(
     config: ServerConfig,
     catalog_store: Arc<dyn CatalogStore>,
@@ -4186,7 +4192,10 @@ pub fn make_app(
     // Download manager user routes (requires RequestContent permission)
     let download_user_routes: Router = Router::new()
         .route("/search", get(search_download_content))
-        .route("/search/discography/{artist_id}", get(search_download_discography))
+        .route(
+            "/search/discography/{artist_id}",
+            get(search_download_discography),
+        )
         .route("/request/album", post(request_album_download))
         .route("/request/discography", post(request_discography_download))
         .route("/my-requests", get(get_my_download_requests))

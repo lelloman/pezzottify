@@ -181,7 +181,8 @@ mod tests {
     fn test_should_retry_retryable_errors() {
         let policy = RetryPolicy::default();
 
-        let connection_error = DownloadError::new(DownloadErrorType::Connection, "Connection refused");
+        let connection_error =
+            DownloadError::new(DownloadErrorType::Connection, "Connection refused");
         let timeout_error = DownloadError::new(DownloadErrorType::Timeout, "Request timed out");
         let parse_error = DownloadError::new(DownloadErrorType::Parse, "Invalid response format");
         let storage_error = DownloadError::new(DownloadErrorType::Storage, "Disk full");
@@ -214,7 +215,8 @@ mod tests {
             ..Default::default()
         };
 
-        let connection_error = DownloadError::new(DownloadErrorType::Connection, "Connection refused");
+        let connection_error =
+            DownloadError::new(DownloadErrorType::Connection, "Connection refused");
 
         // Under max_retries: should retry
         assert!(policy.should_retry(&connection_error, 0));

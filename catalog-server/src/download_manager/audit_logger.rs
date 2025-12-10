@@ -502,10 +502,7 @@ mod tests {
             .get_audit_log(crate::download_manager::AuditLogFilter::new())
             .unwrap();
         assert_eq!(entries.len(), 1);
-        assert_eq!(
-            entries[0].event_type,
-            AuditEventType::WatchdogScanCompleted
-        );
+        assert_eq!(entries[0].event_type, AuditEventType::WatchdogScanCompleted);
 
         let details = entries[0].details.as_ref().unwrap();
         assert_eq!(details["missing_track_audio_count"], 2);

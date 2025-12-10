@@ -84,7 +84,7 @@ pub fn ingest_album(
     // 2. Insert album FIRST (before linking artists - foreign key constraint)
     // Skip if album already exists (e.g., re-download or retry)
     if !catalog_store.album_exists(&album_id)? {
-        let catalog_album = convert_album(&album);
+        let catalog_album = convert_album(album);
         catalog_store.insert_album(&catalog_album)?;
     }
 
@@ -102,7 +102,8 @@ pub fn ingest_album(
             catalog_store.insert_image(&catalog_image)?;
         }
         // Link image to album (ignore error if already linked)
-        let _ = catalog_store.add_album_image(&album_id, &cover.id, &ImageType::Cover, position as i32);
+        let _ =
+            catalog_store.add_album_image(&album_id, &cover.id, &ImageType::Cover, position as i32);
     }
 
     // Set the largest image as the display image for the album
@@ -334,7 +335,10 @@ mod tests {
         assert!(matches!(convert_album_type("ALBUM"), AlbumType::Album));
         assert!(matches!(convert_album_type("single"), AlbumType::Single));
         assert!(matches!(convert_album_type("ep"), AlbumType::Ep));
-        assert!(matches!(convert_album_type("compilation"), AlbumType::Compilation));
+        assert!(matches!(
+            convert_album_type("compilation"),
+            AlbumType::Compilation
+        ));
         assert!(matches!(convert_album_type("unknown"), AlbumType::Album));
     }
 
@@ -453,5 +457,39 @@ mod tests {
         assert!(matches!(catalog.size, ImageSize::Large));
         assert_eq!(catalog.width, 640);
         assert_eq!(catalog.height, 640);
+    }
+
+    #[test]
+    fn test_find_largest_image() {
+        let images = vec![
+            ExternalImage {
+                id: "small".to_string(),
+                size: "small".to_string(),
+                width: 64,
+                height: 64,
+            },
+            ExternalImage {
+                id: "large".to_string(),
+                size: "large".to_string(),
+                width: 640,
+                height: 640,
+            },
+            ExternalImage {
+                id: "medium".to_string(),
+                size: "default".to_string(),
+                width: 300,
+                height: 300,
+            },
+        ];
+
+        let largest = find_largest_image(&images);
+        assert!(largest.is_some());
+        assert_eq!(largest.unwrap().id, "large");
+    }
+
+    #[test]
+    fn test_find_largest_image_empty() {
+        let images: Vec<ExternalImage> = vec![];
+        assert!(find_largest_image(&images).is_none());
     }
 }

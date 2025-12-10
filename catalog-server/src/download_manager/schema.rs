@@ -159,8 +159,12 @@ mod tests {
         let conn = Connection::open_in_memory().unwrap();
 
         let schema = &DOWNLOAD_QUEUE_VERSIONED_SCHEMAS[0];
-        schema.create(&conn).expect("Schema v1 should create successfully");
-        schema.validate(&conn).expect("Schema v1 should validate successfully");
+        schema
+            .create(&conn)
+            .expect("Schema v1 should create successfully");
+        schema
+            .validate(&conn)
+            .expect("Schema v1 should validate successfully");
     }
 
     #[test]

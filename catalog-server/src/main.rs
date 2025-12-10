@@ -12,7 +12,9 @@ use pezzottify_catalog_server::background_jobs::jobs::{
     AuditLogCleanupJob, IntegrityWatchdogJob, PopularContentJob,
 };
 use pezzottify_catalog_server::background_jobs::{create_scheduler, JobContext};
-use pezzottify_catalog_server::catalog_store::{CatalogStore, SqliteCatalogStore, WritableCatalogStore};
+use pezzottify_catalog_server::catalog_store::{
+    CatalogStore, SqliteCatalogStore, WritableCatalogStore,
+};
 use pezzottify_catalog_server::config;
 use pezzottify_catalog_server::download_manager::{
     AuditLogger, DownloadManager, DownloadQueueStore, DownloaderClient, IntegrityWatchdog,
