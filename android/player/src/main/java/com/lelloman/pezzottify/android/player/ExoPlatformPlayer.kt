@@ -154,6 +154,7 @@ internal class ExoPlatformPlayer(
             playerServiceEventsEmitter.events.collect {
                 when (it) {
                     PlayerServiceEventsEmitter.Event.Shutdown -> {
+                        logger.info("Received Shutdown event - clearing player state")
                         stopProgressPolling()
                         mediaController?.removeListener(playerListener)
                         mediaController?.release()
@@ -168,10 +169,13 @@ internal class ExoPlatformPlayer(
     }
 
     override fun setIsPlaying(isPlaying: Boolean) {
-        mediaController?.playWhenReady = isPlaying
+        val controller = mediaController
+        logger.info("setIsPlaying($isPlaying) - controller=${controller != null}, isConnected=${controller?.isConnected}")
+        controller?.playWhenReady = isPlaying
     }
 
     override fun loadPlaylist(tracksUrls: List<String>) {
+        logger.info("loadPlaylist() - ${tracksUrls.size} tracks, sessionToken=${sessionToken != null}")
         mutableIsPlaying.value = true
         pendingTrackIndex = null
         if (sessionToken == null) {
@@ -181,6 +185,7 @@ internal class ExoPlatformPlayer(
             controllerFuture.addListener(
                 {
                     mediaController = controllerFuture.get()
+                    logger.info("MediaController created - isConnected=${mediaController?.isConnected}")
                     mediaController?.addListener(playerListener)
                     loadPlaylistWhenMediaControllerIsReady(tracksUrls)
                 },
@@ -221,8 +226,11 @@ internal class ExoPlatformPlayer(
     }
 
     override fun togglePlayPause() {
-        mutableIsPlaying.value = !isPlaying.value
-        mediaController?.playWhenReady = isPlaying.value
+        val controller = mediaController
+        val newState = !isPlaying.value
+        logger.info("togglePlayPause() - newState=$newState, controller=${controller != null}, isConnected=${controller?.isConnected}, playbackState=${controller?.playbackState}")
+        mutableIsPlaying.value = newState
+        controller?.playWhenReady = newState
     }
 
     override fun seekToPercentage(percentage: Float) {
