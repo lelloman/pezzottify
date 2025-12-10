@@ -20,11 +20,13 @@ class LogFileManager(private val context: Context) {
     val logDir: File = File(context.filesDir, "logs").also { it.mkdirs() }
 
     /**
-     * Returns all log files sorted by name (oldest first).
+     * Returns all log files sorted chronologically (oldest first).
+     * Since pezzottify_0.log is always the current/newest file and higher
+     * numbers are older, we sort by descending name to get oldest first.
      */
     fun getLogFiles(): List<File> = logDir.listFiles()
         ?.filter { it.name.startsWith("pezzottify_") && it.name.endsWith(".log") }
-        ?.sortedBy { it.name }
+        ?.sortedByDescending { it.name }
         ?: emptyList()
 
     /**

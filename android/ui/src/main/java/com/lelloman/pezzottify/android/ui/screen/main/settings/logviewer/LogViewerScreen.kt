@@ -19,6 +19,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -127,10 +128,18 @@ private fun LogViewerScreenInternal(
     }
 
     // Show FAB when not at bottom
-    val showScrollToBottom by remember {
+    val showScrollToBottom by remember(filteredLines) {
         derivedStateOf {
             val lastVisibleItem = listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
             filteredLines.isNotEmpty() && lastVisibleItem < filteredLines.lastIndex - 5
+        }
+    }
+
+    // Show FAB when not at top
+    val showScrollToTop by remember(filteredLines) {
+        derivedStateOf {
+            val firstVisibleItem = listState.firstVisibleItemIndex
+            filteredLines.isNotEmpty() && firstVisibleItem > 5
         }
     }
 
@@ -149,20 +158,38 @@ private fun LogViewerScreenInternal(
             )
         },
         floatingActionButton = {
-            if (showScrollToBottom) {
-                FloatingActionButton(
-                    onClick = {
-                        scope.launch {
-                            if (filteredLines.isNotEmpty()) {
-                                listState.animateScrollToItem(filteredLines.lastIndex)
+            Column(
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                if (showScrollToTop) {
+                    FloatingActionButton(
+                        onClick = {
+                            scope.launch {
+                                listState.animateScrollToItem(0)
                             }
                         }
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.KeyboardArrowUp,
+                            contentDescription = "Scroll to top"
+                        )
                     }
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.KeyboardArrowDown,
-                        contentDescription = "Scroll to bottom"
-                    )
+                }
+                if (showScrollToBottom) {
+                    FloatingActionButton(
+                        onClick = {
+                            scope.launch {
+                                if (filteredLines.isNotEmpty()) {
+                                    listState.animateScrollToItem(filteredLines.lastIndex)
+                                }
+                            }
+                        }
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.KeyboardArrowDown,
+                            contentDescription = "Scroll to bottom"
+                        )
+                    }
                 }
             }
         }
