@@ -901,4 +901,5 @@ private fun DomainPermission.toUi(): UiPermission? = when (this) {
     DomainPermission.IssueContentDownload -> UiPermission.IssueContentDownload
     DomainPermission.ServerAdmin -> UiPermission.ServerAdmin
     DomainPermission.ViewAnalytics -> UiPermission.ViewAnalytics
+    DomainPermission.RequestContent -> UiPermission.RequestContent
 }
