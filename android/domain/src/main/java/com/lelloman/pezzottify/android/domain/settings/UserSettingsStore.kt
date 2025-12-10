@@ -14,6 +14,13 @@ interface UserSettingsStore {
     val isFileLoggingEnabled: StateFlow<Boolean>
 
     /**
+     * Whether external search is enabled.
+     * This is a local-only setting (not synced with server).
+     * Only meaningful for users with RequestContent permission.
+     */
+    val isExternalSearchEnabled: StateFlow<Boolean>
+
+    /**
      * Whether direct downloads are enabled.
      * This setting is synced with the server and is only visible to users with IssueContentDownload permission.
      */
@@ -24,6 +31,7 @@ interface UserSettingsStore {
     suspend fun setFontFamily(fontFamily: AppFontFamily)
     suspend fun setInMemoryCacheEnabled(enabled: Boolean)
     suspend fun setFileLoggingEnabled(enabled: Boolean)
+    suspend fun setExternalSearchEnabled(enabled: Boolean)
 
     /**
      * Set whether direct downloads are enabled.

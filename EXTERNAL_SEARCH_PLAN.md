@@ -256,15 +256,15 @@ Note: Response types in `domain/remoteapi/response/` serve as domain models (alr
 
 ### Phase 3: Settings Integration
 
-- [ ] **3.1** Add `enable_external_search` key constant to user settings
-- [ ] **3.2** Add `isExternalSearchEnabled` property to UserSettingsStore (or equivalent)
+- [x] **3.1** Add `enable_external_search` key constant to user settings
+- [x] **3.2** Add `isExternalSearchEnabled` property to UserSettingsStore (or equivalent)
   - Persist locally (not synced to server)
-- [ ] **3.3** Add `setExternalSearchEnabled(enabled)` method
-- [ ] **3.4** Check if `RequestContent` permission is exposed in session/auth state
-  - If not, add `hasRequestContentPermission` to auth state
-- [ ] **3.5** Add external search toggle row to Settings screen composable
+- [x] **3.3** Add `setExternalSearchEnabled(enabled)` method
+- [x] **3.4** Check if `RequestContent` permission is exposed in session/auth state
+  - Already exists as `Permission.RequestContent`
+- [x] **3.5** Add external search toggle row to Settings screen composable
   - Only visible when hasRequestContentPermission is true
-- [ ] **3.6** Wire toggle to UserSettingsStore
+- [x] **3.6** Wire toggle to UserSettingsStore
 
 ### Phase 4: Filter Chips for Catalog Search
 

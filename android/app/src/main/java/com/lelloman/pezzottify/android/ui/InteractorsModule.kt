@@ -191,6 +191,11 @@ class InteractorsModule {
         override fun hasIssueContentDownloadPermission(): Boolean =
             permissionsStore.permissions.value.contains(DomainPermission.IssueContentDownload)
 
+        override fun isExternalSearchEnabled(): Boolean = userSettingsStore.isExternalSearchEnabled.value
+
+        override fun hasRequestContentPermission(): Boolean =
+            permissionsStore.permissions.value.contains(DomainPermission.RequestContent)
+
         override fun observeThemeMode(): Flow<UiThemeMode> = userSettingsStore.themeMode.map { it.toUi()}
 
         override fun observeColorPalette(): Flow<UiColorPalette>  = userSettingsStore.colorPalette.map { it.toUi() }
@@ -205,6 +210,11 @@ class InteractorsModule {
 
         override fun observeHasIssueContentDownloadPermission(): Flow<Boolean> =
             permissionsStore.permissions.map { it.contains(DomainPermission.IssueContentDownload) }
+
+        override fun observeExternalSearchEnabled(): Flow<Boolean> = userSettingsStore.isExternalSearchEnabled
+
+        override fun observeHasRequestContentPermission(): Flow<Boolean> =
+            permissionsStore.permissions.map { it.contains(DomainPermission.RequestContent) }
 
         override suspend fun setThemeMode(themeMode: UiThemeMode) {
             userSettingsStore.setThemeMode(themeMode.toDomain())
@@ -225,6 +235,10 @@ class InteractorsModule {
         override suspend fun setDirectDownloadsEnabled(enabled: Boolean): Boolean {
             updateDirectDownloadsSetting(enabled)
             return true // Setting is saved locally and synced in background
+        }
+
+        override suspend fun setExternalSearchEnabled(enabled: Boolean) {
+            userSettingsStore.setExternalSearchEnabled(enabled)
         }
 
         override fun observeFileLoggingEnabled(): Flow<Boolean> = userSettingsStore.isFileLoggingEnabled
