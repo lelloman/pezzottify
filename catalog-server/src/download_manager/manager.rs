@@ -908,14 +908,7 @@ impl DownloadManager {
             .get_item(request_id)?
             .ok_or_else(|| anyhow::anyhow!("Item not found: {}", request_id))?;
 
-        // Don't allow deleting items that are currently being processed
-        if item.status == QueueStatus::InProgress {
-            return Err(anyhow::anyhow!(
-                "Cannot delete item that is currently in progress"
-            ));
-        }
-
-        // Delete the item
+        // Delete the item (children are cascade-deleted)
         self.queue_store.delete_item(request_id)?;
 
         // Log the deletion
