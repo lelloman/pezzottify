@@ -213,25 +213,25 @@ Extend `SearchScreenViewModel`:
 
 ### Phase 1: API Layer (remoteapi module)
 
-- [ ] **1.1** Create `ExternalSearchResult` data class in remoteapi
+- [x] **1.1** Create `ExternalSearchResult` data class in remoteapi
   - Fields: id, name, artist_name, year, image_url, in_catalog, in_queue, score, type (album/artist)
-- [ ] **1.2** Create `ExternalSearchResponse` data class (wrapper with results list)
-- [ ] **1.3** Create `DownloadLimits` data class
+- [x] **1.2** Create `ExternalSearchResponse` data class (wrapper with results list)
+- [x] **1.3** Create `DownloadLimits` data class
   - Fields: requests_today, max_per_day, can_request, in_queue, max_queue
-- [ ] **1.4** Create `DownloadRequest` data class for my-requests response
+- [x] **1.4** Create `DownloadRequest` data class for my-requests response
   - Fields: id, album_id, album_name, artist_name, status, progress, error_message, created_at, catalog_album_id (nullable)
-- [ ] **1.5** Create `RequestAlbumBody` data class
+- [x] **1.5** Create `RequestAlbumBody` data class
   - Fields: album_id, album_name, artist_name
-- [ ] **1.6** Add `externalSearch(query, type)` to `RetrofitApiClient` interface
+- [x] **1.6** Add `externalSearch(query, type)` to `RetrofitApiClient` interface
   - GET /v1/download/search with query params
-- [ ] **1.7** Add `getDownloadLimits()` to `RetrofitApiClient` interface
+- [x] **1.7** Add `getDownloadLimits()` to `RetrofitApiClient` interface
   - GET /v1/download/limits
-- [ ] **1.8** Add `requestAlbumDownload(body)` to `RetrofitApiClient` interface
+- [x] **1.8** Add `requestAlbumDownload(body)` to `RetrofitApiClient` interface
   - POST /v1/download/request/album
-- [ ] **1.9** Add `getMyRequests()` to `RetrofitApiClient` interface
+- [x] **1.9** Add `getMyRequests()` to `RetrofitApiClient` interface
   - GET /v1/download/my-requests
-- [ ] **1.10** Implement all 4 methods in `RemoteApiClientImpl`
-- [ ] **1.11** Add corresponding methods to `RemoteApiClient` interface
+- [x] **1.10** Implement all 4 methods in `RemoteApiClientImpl`
+- [x] **1.11** Add corresponding methods to `RemoteApiClient` interface
 
 ### Phase 2: Domain Layer (domain module)
 

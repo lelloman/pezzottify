@@ -3,9 +3,14 @@ package com.lelloman.pezzottify.android.remoteapi.internal
 import com.lelloman.pezzottify.android.remoteapi.internal.requests.ListeningEventRequest
 import com.lelloman.pezzottify.android.remoteapi.internal.requests.ListeningEventResponse
 import com.lelloman.pezzottify.android.remoteapi.internal.requests.LoginRequest
+import com.lelloman.pezzottify.android.remoteapi.internal.requests.RequestAlbumDownloadBody
 import com.lelloman.pezzottify.android.remoteapi.internal.requests.SearchRequest
 import com.lelloman.pezzottify.android.remoteapi.internal.requests.UpdateUserSettingsRequest
 import com.lelloman.pezzottify.android.domain.remoteapi.response.AlbumResponse
+import com.lelloman.pezzottify.android.domain.remoteapi.response.DownloadLimitsResponse
+import com.lelloman.pezzottify.android.domain.remoteapi.response.ExternalSearchResponse
+import com.lelloman.pezzottify.android.domain.remoteapi.response.MyDownloadRequestsResponse
+import com.lelloman.pezzottify.android.domain.remoteapi.response.RequestAlbumResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.ArtistDiscographyResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.ArtistResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.ImageResponse
@@ -119,4 +124,31 @@ internal interface RetrofitApiClient {
         @Header("Authorization") authToken: String,
         @Body request: UpdateUserSettingsRequest,
     ): Response<Unit>
+
+    // Download manager endpoints
+
+    @GET("/v1/download/search")
+    suspend fun externalSearch(
+        @Header("Authorization") authToken: String,
+        @Query("q") query: String,
+        @Query("type") type: String,
+    ): Response<ExternalSearchResponse>
+
+    @GET("/v1/download/limits")
+    suspend fun getDownloadLimits(
+        @Header("Authorization") authToken: String,
+    ): Response<DownloadLimitsResponse>
+
+    @POST("/v1/download/request/album")
+    suspend fun requestAlbumDownload(
+        @Header("Authorization") authToken: String,
+        @Body request: RequestAlbumDownloadBody,
+    ): Response<RequestAlbumResponse>
+
+    @GET("/v1/download/my-requests")
+    suspend fun getMyDownloadRequests(
+        @Header("Authorization") authToken: String,
+        @Query("limit") limit: Int? = null,
+        @Query("offset") offset: Int? = null,
+    ): Response<MyDownloadRequestsResponse>
 }

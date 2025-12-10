@@ -4,11 +4,15 @@ import com.lelloman.pezzottify.android.domain.listening.ListeningEventSyncData
 import com.lelloman.pezzottify.android.domain.remoteapi.response.AlbumResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.ArtistDiscographyResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.ArtistResponse
+import com.lelloman.pezzottify.android.domain.remoteapi.response.DownloadLimitsResponse
+import com.lelloman.pezzottify.android.domain.remoteapi.response.ExternalSearchResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.ImageResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.ListeningEventRecordedResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.LoginSuccessResponse
+import com.lelloman.pezzottify.android.domain.remoteapi.response.MyDownloadRequestsResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.PopularContentResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.RemoteApiResponse
+import com.lelloman.pezzottify.android.domain.remoteapi.response.RequestAlbumResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.SearchResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.SyncEventsResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.SyncStateResponse
@@ -83,11 +87,49 @@ interface RemoteApiClient {
      */
     suspend fun updateUserSettings(settings: List<UserSetting>): RemoteApiResponse<Unit>
 
+    // Download manager endpoints
+
+    /**
+     * Search for content in the external downloader service.
+     */
+    suspend fun externalSearch(
+        query: String,
+        type: ExternalSearchType
+    ): RemoteApiResponse<ExternalSearchResponse>
+
+    /**
+     * Get user's rate limit status for download requests.
+     */
+    suspend fun getDownloadLimits(): RemoteApiResponse<DownloadLimitsResponse>
+
+    /**
+     * Request download of an album from the external downloader service.
+     */
+    suspend fun requestAlbumDownload(
+        albumId: String,
+        albumName: String,
+        artistName: String
+    ): RemoteApiResponse<RequestAlbumResponse>
+
+    /**
+     * Get user's download requests.
+     */
+    suspend fun getMyDownloadRequests(
+        limit: Int? = null,
+        offset: Int? = null
+    ): RemoteApiResponse<MyDownloadRequestsResponse>
+
     @Serializable
     enum class SearchFilter {
         Album,
         Artist,
         Track,
+    }
+
+    @Serializable
+    enum class ExternalSearchType {
+        Album,
+        Artist,
     }
 
     interface HostUrlProvider {
