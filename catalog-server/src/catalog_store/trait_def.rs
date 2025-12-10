@@ -264,4 +264,12 @@ pub trait WritableCatalogStore: CatalogStore {
         image_type: &super::ImageType,
         position: i32,
     ) -> Result<()>;
+
+    /// Update a track's audio URI and format after download.
+    fn update_track_audio(
+        &self,
+        track_id: &str,
+        audio_uri: &str,
+        format: &super::Format,
+    ) -> Result<()>;
 }

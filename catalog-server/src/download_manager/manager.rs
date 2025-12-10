@@ -673,7 +673,14 @@ impl DownloadManager {
             file_path.display()
         );
 
-        // 4. Check if parent is complete (for child items)
+        // 4. Update track in catalog with actual audio path and format
+        let audio_uri = format!("audio/{}.{}", item.content_id, ext);
+        let format = Self::content_type_to_format(&content_type);
+        if let Err(e) = self.catalog_store.update_track_audio(&item.content_id, &audio_uri, &format) {
+            debug!("Failed to update track audio path (track may not exist in catalog): {}", e);
+        }
+
+        // 5. Check if parent is complete (for child items)
         if let Some(parent_id) = &item.parent_id {
             self.check_and_complete_parent(parent_id).ok();
         }
@@ -800,6 +807,18 @@ impl DownloadManager {
             "audio/aac" => "aac",
             "audio/mp4" | "audio/m4a" => "m4a",
             _ => "flac", // Default to flac
+        }
+    }
+
+    /// Convert content type to Format enum.
+    fn content_type_to_format(content_type: &str) -> crate::catalog_store::Format {
+        use crate::catalog_store::Format;
+        match content_type {
+            "audio/flac" => Format::Flac,
+            "audio/mpeg" | "audio/mp3" => Format::Mp3_320, // Assume high quality
+            "audio/ogg" | "audio/vorbis" => Format::OggVorbis320, // Assume high quality
+            "audio/aac" => Format::Aac160,
+            _ => Format::Flac, // Default to flac
         }
     }
 
