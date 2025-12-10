@@ -931,6 +931,58 @@ class InteractorsModule {
             }
         }
 
+    @Provides
+    fun provideMyRequestsScreenInteractor(
+        getMyDownloadRequestsUseCase: com.lelloman.pezzottify.android.domain.download.GetMyDownloadRequestsUseCase,
+        getDownloadLimitsUseCase: com.lelloman.pezzottify.android.domain.download.GetDownloadLimitsUseCase,
+    ): com.lelloman.pezzottify.android.ui.screen.main.myrequests.MyRequestsScreenViewModel.Interactor =
+        object : com.lelloman.pezzottify.android.ui.screen.main.myrequests.MyRequestsScreenViewModel.Interactor {
+            override suspend fun getMyRequests(): Result<List<com.lelloman.pezzottify.android.ui.screen.main.myrequests.UiDownloadRequest>> {
+                val result = getMyDownloadRequestsUseCase()
+                return result.map { response ->
+                    response.requests.map { request ->
+                        com.lelloman.pezzottify.android.ui.screen.main.myrequests.UiDownloadRequest(
+                            id = request.id,
+                            albumName = request.contentName,
+                            artistName = request.artistName ?: "",
+                            status = when (request.status) {
+                                com.lelloman.pezzottify.android.domain.remoteapi.response.DownloadQueueStatus.Pending ->
+                                    com.lelloman.pezzottify.android.ui.screen.main.myrequests.RequestStatus.Pending
+                                com.lelloman.pezzottify.android.domain.remoteapi.response.DownloadQueueStatus.InProgress ->
+                                    com.lelloman.pezzottify.android.ui.screen.main.myrequests.RequestStatus.InProgress
+                                com.lelloman.pezzottify.android.domain.remoteapi.response.DownloadQueueStatus.RetryWaiting ->
+                                    com.lelloman.pezzottify.android.ui.screen.main.myrequests.RequestStatus.Pending
+                                com.lelloman.pezzottify.android.domain.remoteapi.response.DownloadQueueStatus.Completed ->
+                                    com.lelloman.pezzottify.android.ui.screen.main.myrequests.RequestStatus.Completed
+                                com.lelloman.pezzottify.android.domain.remoteapi.response.DownloadQueueStatus.Failed ->
+                                    com.lelloman.pezzottify.android.ui.screen.main.myrequests.RequestStatus.Failed
+                            },
+                            progress = request.progress?.let { progress ->
+                                com.lelloman.pezzottify.android.ui.screen.main.myrequests.RequestProgress(
+                                    current = progress.completed,
+                                    total = progress.totalChildren,
+                                )
+                            },
+                            errorMessage = request.errorMessage,
+                            catalogId = null, // Not provided by server yet
+                        )
+                    }
+                }
+            }
+
+            override suspend fun getDownloadLimits(): Result<com.lelloman.pezzottify.android.ui.screen.main.myrequests.MyRequestsScreenViewModel.DownloadLimitsData> {
+                val result = getDownloadLimitsUseCase()
+                return result.map { limits ->
+                    com.lelloman.pezzottify.android.ui.screen.main.myrequests.MyRequestsScreenViewModel.DownloadLimitsData(
+                        requestsToday = limits.requestsToday,
+                        maxPerDay = limits.maxPerDay,
+                        inQueue = limits.inQueue,
+                        maxQueue = limits.maxQueue,
+                    )
+                }
+            }
+        }
+
 }
 
 private fun DomainThemeMode.toUi(): UiThemeMode = when (this) {

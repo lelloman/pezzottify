@@ -39,6 +39,7 @@ import androidx.navigation.NavController
 import androidx.navigation.compose.rememberNavController
 import com.lelloman.pezzottify.android.ui.model.Permission
 import com.lelloman.pezzottify.android.ui.fromProfileBackToLogin
+import com.lelloman.pezzottify.android.ui.toMyRequests
 import com.lelloman.pezzottify.android.ui.theme.PezzottifyTheme
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -173,6 +174,17 @@ private fun ProfileScreenInternal(
                             label = { Text(permission.displayName) }
                         )
                     }
+                }
+            }
+
+            // My Requests (only visible if user has RequestContent permission)
+            if (currentState.permissions.contains(Permission.RequestContent)) {
+                Spacer(modifier = Modifier.height(16.dp))
+                Button(
+                    onClick = { navController.toMyRequests() },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text("My Requests")
                 }
             }
 
