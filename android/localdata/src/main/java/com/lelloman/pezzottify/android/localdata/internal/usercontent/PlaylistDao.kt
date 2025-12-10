@@ -17,6 +17,9 @@ internal interface PlaylistDao {
     @Query("SELECT * FROM ${PlaylistEntity.TABLE_NAME} WHERE ${PlaylistEntity.COLUMN_ID} = :playlistId")
     fun getById(playlistId: String): Flow<PlaylistEntity?>
 
+    @Query("SELECT * FROM ${PlaylistEntity.TABLE_NAME} WHERE ${PlaylistEntity.COLUMN_ID} = :playlistId")
+    suspend fun getByIdOnce(playlistId: String): PlaylistEntity?
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsert(item: PlaylistEntity)
 

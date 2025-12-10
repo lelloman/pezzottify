@@ -5,7 +5,6 @@ import androidx.test.core.app.ApplicationProvider
 import com.google.common.truth.Truth.assertThat
 import com.lelloman.pezzottify.android.domain.settings.AppFontFamily
 import com.lelloman.pezzottify.android.domain.settings.ColorPalette
-import com.lelloman.pezzottify.android.domain.settings.PlayBehavior
 import com.lelloman.pezzottify.android.domain.settings.ThemeMode
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.StandardTestDispatcher
@@ -33,28 +32,11 @@ class UserSettingsStoreImplTest {
     }
 
     @Test
-    fun `playBehavior returns default value when not set`() {
-        val store = UserSettingsStoreImpl(context, testDispatcher)
-
-        assertThat(store.playBehavior.value).isEqualTo(PlayBehavior.Default)
-        assertThat(store.playBehavior.value).isEqualTo(PlayBehavior.ReplacePlaylist)
-    }
-
-    @Test
     fun `themeMode returns default value when not set`() {
         val store = UserSettingsStoreImpl(context, testDispatcher)
 
         assertThat(store.themeMode.value).isEqualTo(ThemeMode.Default)
         assertThat(store.themeMode.value).isEqualTo(ThemeMode.Dark)
-    }
-
-    @Test
-    fun `setPlayBehavior persists value`() = runTest(testDispatcher) {
-        val store = UserSettingsStoreImpl(context, testDispatcher)
-
-        store.setPlayBehavior(PlayBehavior.AddToPlaylist)
-
-        assertThat(store.playBehavior.value).isEqualTo(PlayBehavior.AddToPlaylist)
     }
 
     @Test
@@ -64,16 +46,6 @@ class UserSettingsStoreImplTest {
         store.setThemeMode(ThemeMode.Dark)
 
         assertThat(store.themeMode.value).isEqualTo(ThemeMode.Dark)
-    }
-
-    @Test
-    fun `playBehavior value survives store recreation`() = runTest(testDispatcher) {
-        val store1 = UserSettingsStoreImpl(context, testDispatcher)
-        store1.setPlayBehavior(PlayBehavior.AddToPlaylist)
-
-        val store2 = UserSettingsStoreImpl(context, testDispatcher)
-
-        assertThat(store2.playBehavior.value).isEqualTo(PlayBehavior.AddToPlaylist)
     }
 
     @Test
@@ -104,24 +76,12 @@ class UserSettingsStoreImplTest {
     }
 
     @Test
-    fun `setting both play behaviors works correctly`() = runTest(testDispatcher) {
-        val store = UserSettingsStoreImpl(context, testDispatcher)
-
-        store.setPlayBehavior(PlayBehavior.ReplacePlaylist)
-        assertThat(store.playBehavior.value).isEqualTo(PlayBehavior.ReplacePlaylist)
-
-        store.setPlayBehavior(PlayBehavior.AddToPlaylist)
-        assertThat(store.playBehavior.value).isEqualTo(PlayBehavior.AddToPlaylist)
-    }
-
-    @Test
     fun `invalid stored value falls back to default`() {
         // Manually write invalid value
         context.getSharedPreferences(
             UserSettingsStoreImpl.SHARED_PREF_FILE_NAME,
             Context.MODE_PRIVATE
         ).edit()
-            .putString(UserSettingsStoreImpl.KEY_PLAY_BEHAVIOR, "InvalidValue")
             .putString(UserSettingsStoreImpl.KEY_THEME_MODE, "InvalidValue")
             .putString(UserSettingsStoreImpl.KEY_COLOR_PALETTE, "InvalidValue")
             .putString(UserSettingsStoreImpl.KEY_FONT_FAMILY, "InvalidValue")
@@ -129,7 +89,6 @@ class UserSettingsStoreImplTest {
 
         val store = UserSettingsStoreImpl(context, testDispatcher)
 
-        assertThat(store.playBehavior.value).isEqualTo(PlayBehavior.Default)
         assertThat(store.themeMode.value).isEqualTo(ThemeMode.Default)
         assertThat(store.colorPalette.value).isEqualTo(ColorPalette.Default)
         assertThat(store.fontFamily.value).isEqualTo(AppFontFamily.Default)

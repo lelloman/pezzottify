@@ -83,7 +83,6 @@ private fun TrackScreenContent(
             track = state.track,
             album = state.album,
             currentPlayingTrackId = state.currentPlayingTrackId,
-            isAddToQueueMode = state.isAddToQueueMode,
             isLiked = state.isLiked,
             contentResolver = contentResolver,
             actions = actions,
@@ -99,7 +98,6 @@ private fun TrackLoadedScreen(
     track: Track,
     album: Album?,
     currentPlayingTrackId: String?,
-    isAddToQueueMode: Boolean,
     isLiked: Boolean,
     contentResolver: ContentResolver,
     actions: TrackScreenActions,
@@ -330,11 +328,8 @@ private fun TrackLoadedScreen(
                 )
                 Icon(
                     modifier = Modifier.size(28.dp),
-                    painter = painterResource(
-                        if (isAddToQueueMode) R.drawable.baseline_playlist_add_24
-                        else R.drawable.baseline_play_arrow_24
-                    ),
-                    contentDescription = if (isAddToQueueMode) "Add to queue" else "Play",
+                    painter = painterResource(R.drawable.baseline_play_arrow_24),
+                    contentDescription = "Play",
                     tint = MaterialTheme.colorScheme.onPrimary,
                 )
             }

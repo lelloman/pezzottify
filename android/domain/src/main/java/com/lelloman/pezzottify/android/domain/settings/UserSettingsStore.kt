@@ -7,7 +7,6 @@ import kotlinx.coroutines.flow.StateFlow
 
 interface UserSettingsStore {
 
-    val playBehavior: StateFlow<PlayBehavior>
     val themeMode: StateFlow<ThemeMode>
     val colorPalette: StateFlow<ColorPalette>
     val fontFamily: StateFlow<AppFontFamily>
@@ -20,7 +19,6 @@ interface UserSettingsStore {
      */
     val directDownloadsEnabled: StateFlow<Boolean>
 
-    suspend fun setPlayBehavior(playBehavior: PlayBehavior)
     suspend fun setThemeMode(themeMode: ThemeMode)
     suspend fun setColorPalette(colorPalette: ColorPalette)
     suspend fun setFontFamily(fontFamily: AppFontFamily)
@@ -56,15 +54,6 @@ interface UserSettingsStore {
      * Called on logout.
      */
     suspend fun clearSyncedSettings()
-}
-
-enum class PlayBehavior {
-    ReplacePlaylist,
-    AddToPlaylist;
-
-    companion object {
-        val Default = ReplacePlaylist
-    }
 }
 
 enum class ThemeMode {

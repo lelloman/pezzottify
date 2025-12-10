@@ -3,7 +3,6 @@ package com.lelloman.pezzottify.android.localdata.internal.settings
 import android.content.Context
 import com.lelloman.pezzottify.android.domain.settings.AppFontFamily
 import com.lelloman.pezzottify.android.domain.settings.ColorPalette
-import com.lelloman.pezzottify.android.domain.settings.PlayBehavior
 import com.lelloman.pezzottify.android.domain.settings.SyncedUserSetting
 import com.lelloman.pezzottify.android.domain.settings.ThemeMode
 import com.lelloman.pezzottify.android.domain.settings.UserSettingsStore
@@ -30,13 +29,6 @@ internal class UserSettingsStoreImpl(
         val storedPalette = prefs.getString(KEY_COLOR_PALETTE, null)
         storedPalette == LEGACY_AMOLED_BLACK_PALETTE
     }
-
-    private val mutablePlayBehavior by lazy {
-        val storedValue = prefs.getString(KEY_PLAY_BEHAVIOR, null)
-        val playBehavior = storedValue?.let { parsePlayBehavior(it) } ?: PlayBehavior.Default
-        MutableStateFlow(playBehavior)
-    }
-    override val playBehavior: StateFlow<PlayBehavior> = mutablePlayBehavior.asStateFlow()
 
     private val mutableThemeMode by lazy {
         val storedValue = prefs.getString(KEY_THEME_MODE, null)
@@ -105,13 +97,6 @@ internal class UserSettingsStoreImpl(
             )
         }
         MutableStateFlow(settings.toMap())
-    }
-
-    override suspend fun setPlayBehavior(playBehavior: PlayBehavior) {
-        withContext(dispatcher) {
-            mutablePlayBehavior.value = playBehavior
-            prefs.edit().putString(KEY_PLAY_BEHAVIOR, playBehavior.name).commit()
-        }
     }
 
     override suspend fun setThemeMode(themeMode: ThemeMode) {
@@ -234,12 +219,6 @@ internal class UserSettingsStoreImpl(
         }
     }
 
-    private fun parsePlayBehavior(value: String): PlayBehavior? = try {
-        PlayBehavior.valueOf(value)
-    } catch (e: IllegalArgumentException) {
-        null
-    }
-
     private fun parseThemeMode(value: String): ThemeMode? = try {
         ThemeMode.valueOf(value)
     } catch (e: IllegalArgumentException) {
@@ -266,7 +245,6 @@ internal class UserSettingsStoreImpl(
 
     internal companion object {
         const val SHARED_PREF_FILE_NAME = "UserSettingsStore"
-        const val KEY_PLAY_BEHAVIOR = "PlayBehavior"
         const val KEY_THEME_MODE = "ThemeMode"
         const val KEY_COLOR_PALETTE = "ColorPalette"
         const val KEY_FONT_FAMILY = "FontFamily"

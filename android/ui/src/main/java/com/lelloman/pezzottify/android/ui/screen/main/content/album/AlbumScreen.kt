@@ -16,6 +16,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -25,12 +26,15 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -56,11 +60,17 @@ import com.lelloman.pezzottify.android.ui.component.NullablePezzottifyImage
 import com.lelloman.pezzottify.android.ui.component.PezzottifyImagePlaceholder
 import com.lelloman.pezzottify.android.ui.component.PezzottifyImageShape
 import com.lelloman.pezzottify.android.ui.component.ScrollingArtistsRow
+import com.lelloman.pezzottify.android.ui.component.bottomsheet.AlbumActionsBottomSheet
+import com.lelloman.pezzottify.android.ui.component.bottomsheet.PlaylistPickerBottomSheet
+import com.lelloman.pezzottify.android.ui.component.bottomsheet.TrackActionsBottomSheet
+import com.lelloman.pezzottify.android.ui.component.dialog.CreatePlaylistDialog
 import com.lelloman.pezzottify.android.ui.content.Album
 import com.lelloman.pezzottify.android.ui.content.Content
 import com.lelloman.pezzottify.android.ui.content.ContentResolver
 import com.lelloman.pezzottify.android.ui.content.Track
+import com.lelloman.pezzottify.android.ui.screen.main.library.UiUserPlaylist
 import com.lelloman.pezzottify.android.ui.toArtist
+import com.lelloman.pezzottify.android.ui.toTrack
 
 @Composable
 fun AlbumScreen(albumId: String, navController: NavController) {
@@ -75,6 +85,7 @@ fun AlbumScreen(albumId: String, navController: NavController) {
     )
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun AlbumScreenContent(
     state: AlbumScreenState,
@@ -85,7 +96,22 @@ private fun AlbumScreenContent(
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
 
-    val showAddedToQueueSnackbar: (String) -> Unit = { message ->
+    // Bottom sheet states
+    val trackSheetState = rememberModalBottomSheetState()
+    val albumSheetState = rememberModalBottomSheetState()
+    val playlistPickerSheetState = rememberModalBottomSheetState()
+
+    // Selected item for bottom sheets
+    var selectedTrack by remember { mutableStateOf<Track?>(null) }
+    var showAlbumSheet by remember { mutableStateOf(false) }
+    var showPlaylistPicker by remember { mutableStateOf(false) }
+    var showCreatePlaylistDialog by remember { mutableStateOf(false) }
+
+    // Track whether we're adding a track or album to playlist
+    var pendingAddToPlaylistTrackId by remember { mutableStateOf<String?>(null) }
+    var pendingAddToPlaylistAlbumId by remember { mutableStateOf<String?>(null) }
+
+    val showSnackbar: (String) -> Unit = { message ->
         scope.launch {
             snackbarHostState.showSnackbar(message)
         }
@@ -107,15 +133,101 @@ private fun AlbumScreenContent(
                     album = state.album,
                     tracks = state.tracks,
                     currentPlayingTrackId = state.currentPlayingTrackId,
-                    isAddToQueueMode = state.isAddToQueueMode,
                     isLiked = state.isLiked,
                     contentResolver = contentResolver,
                     actions = actions,
-                    onAddedToQueue = showAddedToQueueSnackbar,
+                    onShowSnackbar = showSnackbar,
                     onArtistClick = { navController.toArtist(it) },
+                    onTrackMoreClick = { track -> selectedTrack = track },
+                    onAlbumMoreClick = { showAlbumSheet = true },
                 )
             }
         }
+    }
+
+    // Track actions bottom sheet
+    selectedTrack?.let { track ->
+        TrackActionsBottomSheet(
+            track = track,
+            sheetState = trackSheetState,
+            onDismiss = { selectedTrack = null },
+            onPlay = {
+                actions.playTrackDirectly(track.id)
+            },
+            onAddToQueue = {
+                actions.addTrackToQueue(track.id)
+                showSnackbar("Added to queue")
+            },
+            onAddToPlaylist = {
+                pendingAddToPlaylistTrackId = track.id
+                pendingAddToPlaylistAlbumId = null
+                showPlaylistPicker = true
+            },
+            onViewTrack = {
+                navController.toTrack(track.id)
+            },
+        )
+    }
+
+    // Album actions bottom sheet
+    if (showAlbumSheet && state.album != null) {
+        AlbumActionsBottomSheet(
+            album = state.album,
+            sheetState = albumSheetState,
+            onDismiss = { showAlbumSheet = false },
+            onPlay = {
+                actions.clickOnPlayAlbum(state.album.id)
+            },
+            onAddToQueue = {
+                actions.addAlbumToQueue(state.album.id)
+                showSnackbar("Album added to queue")
+            },
+            onAddToPlaylist = {
+                pendingAddToPlaylistTrackId = null
+                pendingAddToPlaylistAlbumId = state.album.id
+                showPlaylistPicker = true
+            },
+        )
+    }
+
+    // Playlist picker bottom sheet
+    if (showPlaylistPicker) {
+        PlaylistPickerBottomSheet(
+            playlists = state.userPlaylists,
+            sheetState = playlistPickerSheetState,
+            onDismiss = {
+                showPlaylistPicker = false
+                pendingAddToPlaylistTrackId = null
+                pendingAddToPlaylistAlbumId = null
+            },
+            onPlaylistSelected = { playlistId ->
+                pendingAddToPlaylistTrackId?.let { trackId ->
+                    actions.addTrackToPlaylist(trackId, playlistId)
+                    showSnackbar("Added to playlist")
+                }
+                pendingAddToPlaylistAlbumId?.let { albumId ->
+                    actions.addAlbumToPlaylist(albumId, playlistId)
+                    showSnackbar("Album added to playlist")
+                }
+                showPlaylistPicker = false
+                pendingAddToPlaylistTrackId = null
+                pendingAddToPlaylistAlbumId = null
+            },
+            onCreateNewPlaylist = {
+                showCreatePlaylistDialog = true
+            },
+        )
+    }
+
+    // Create playlist dialog
+    if (showCreatePlaylistDialog) {
+        CreatePlaylistDialog(
+            onDismiss = { showCreatePlaylistDialog = false },
+            onCreate = { name ->
+                actions.createPlaylist(name)
+                showSnackbar("Playlist created")
+            },
+        )
     }
 }
 
@@ -124,12 +236,13 @@ fun AlbumLoadedScreen(
     album: Album,
     tracks: List<kotlinx.coroutines.flow.Flow<Content<Track>>>?,
     currentPlayingTrackId: String?,
-    isAddToQueueMode: Boolean,
     isLiked: Boolean,
     contentResolver: ContentResolver,
     actions: AlbumScreenActions,
-    onAddedToQueue: (String) -> Unit = {},
+    onShowSnackbar: (String) -> Unit = {},
     onArtistClick: (String) -> Unit = {},
+    onTrackMoreClick: (Track) -> Unit = {},
+    onAlbumMoreClick: () -> Unit = {},
 ) {
     val listState = rememberLazyListState()
     val density = LocalDensity.current
@@ -214,9 +327,8 @@ fun AlbumLoadedScreen(
                         is Content.Resolved -> TrackItem(
                             track = track.data,
                             isPlaying = track.data.id == currentPlayingTrackId,
-                            isAddToQueueMode = isAddToQueueMode,
-                            actions = actions,
-                            onAddedToQueue = onAddedToQueue,
+                            onClick = { actions.clickOnTrack(track.data.id) },
+                            onMoreClick = { onTrackMoreClick(track.data) },
                         )
                         null, is Content.Loading -> LoadingTrackItem()
                         is Content.Error -> ErrorTrackItem()
@@ -291,13 +403,13 @@ fun AlbumLoadedScreen(
             }
         }
 
-        // Floating like button - positioned to the left of play button
+        // Floating like button - positioned to the left of other buttons
         IconButton(
             onClick = { actions.clickOnLike() },
             modifier = Modifier
                 .align(Alignment.TopEnd)
                 .offset(y = headerHeight - playButtonSize / 2)
-                .padding(end = 80.dp)
+                .padding(end = 144.dp)
                 .size(playButtonSize)
         ) {
             Box(contentAlignment = Alignment.Center) {
@@ -321,13 +433,40 @@ fun AlbumLoadedScreen(
             }
         }
 
+        // Floating add to queue button
+        IconButton(
+            onClick = {
+                actions.addAlbumToQueue(album.id)
+                onShowSnackbar("Album added to queue")
+            },
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .offset(y = headerHeight - playButtonSize / 2)
+                .padding(end = 80.dp)
+                .size(playButtonSize)
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                // Background circle
+                Icon(
+                    modifier = Modifier.size(playButtonSize),
+                    painter = painterResource(R.drawable.baseline_circle_24),
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.surfaceVariant,
+                )
+                // Add to queue icon
+                Icon(
+                    modifier = Modifier.size(28.dp),
+                    painter = painterResource(R.drawable.baseline_playlist_add_24),
+                    contentDescription = "Add to queue",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+
         // Floating play button - positioned at bottom-right of header, straddling the boundary
         IconButton(
             onClick = {
                 actions.clickOnPlayAlbum(album.id)
-                if (isAddToQueueMode) {
-                    onAddedToQueue("Album added to queue")
-                }
             },
             modifier = Modifier
                 .align(Alignment.TopEnd)
@@ -343,14 +482,11 @@ fun AlbumLoadedScreen(
                     contentDescription = null,
                     tint = MaterialTheme.colorScheme.primary,
                 )
-                // Icon on top - play or add-to-queue based on mode
+                // Play icon
                 Icon(
                     modifier = Modifier.size(28.dp),
-                    painter = painterResource(
-                        if (isAddToQueueMode) R.drawable.baseline_playlist_add_24
-                        else R.drawable.baseline_play_arrow_24
-                    ),
-                    contentDescription = if (isAddToQueueMode) "Add to queue" else "Play",
+                    painter = painterResource(R.drawable.baseline_play_arrow_24),
+                    contentDescription = "Play",
                     tint = MaterialTheme.colorScheme.onPrimary,
                 )
             }
@@ -362,9 +498,8 @@ fun AlbumLoadedScreen(
 private fun TrackItem(
     track: Track,
     isPlaying: Boolean,
-    isAddToQueueMode: Boolean,
-    actions: AlbumScreenActions,
-    onAddedToQueue: (String) -> Unit,
+    onClick: () -> Unit,
+    onMoreClick: () -> Unit,
 ) {
     val backgroundColor = if (isPlaying) {
         MaterialTheme.colorScheme.primaryContainer
@@ -381,13 +516,8 @@ private fun TrackItem(
         modifier = Modifier
             .fillMaxWidth()
             .background(backgroundColor)
-            .clickable {
-                actions.clickOnTrack(track.id)
-                if (isAddToQueueMode) {
-                    onAddedToQueue("Added to queue")
-                }
-            }
-            .padding(horizontal = 16.dp, vertical = 12.dp),
+            .clickable(onClick = onClick)
+            .padding(start = 16.dp, top = 8.dp, bottom = 8.dp, end = 4.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Column(
@@ -406,8 +536,18 @@ private fun TrackItem(
         }
         DurationText(
             durationSeconds = track.durationSeconds,
-            modifier = Modifier.padding(start = 16.dp)
+            modifier = Modifier.padding(start = 8.dp)
         )
+        IconButton(
+            onClick = onMoreClick,
+            modifier = Modifier.size(40.dp)
+        ) {
+            Icon(
+                painter = painterResource(R.drawable.baseline_more_vert_24),
+                contentDescription = "More options",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
     }
 }
 

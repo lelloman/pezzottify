@@ -2,7 +2,6 @@ package com.lelloman.pezzottify.android.ui.screen.main.settings
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.lelloman.pezzottify.android.ui.model.PlayBehavior
 import com.lelloman.pezzottify.android.ui.model.StorageInfo
 import com.lelloman.pezzottify.android.ui.theme.AppFontFamily
 import com.lelloman.pezzottify.android.ui.theme.ColorPalette
@@ -33,7 +32,6 @@ class SettingsScreenViewModel @Inject constructor(
         viewModelScope.launch {
             val baseUrl = interactor.getBaseUrl()
             val initialState = SettingsScreenState(
-                playBehavior = interactor.getPlayBehavior(),
                 themeMode = interactor.getThemeMode(),
                 colorPalette = interactor.getColorPalette(),
                 fontFamily = interactor.getFontFamily(),
@@ -49,11 +47,6 @@ class SettingsScreenViewModel @Inject constructor(
             )
             mutableState.value = initialState
 
-            launch {
-                interactor.observePlayBehavior().collect { playBehavior ->
-                    mutableState.update { it.copy(playBehavior = playBehavior) }
-                }
-            }
             launch {
                 interactor.observeThemeMode().collect { themeMode ->
                     mutableState.update { it.copy(themeMode = themeMode) }
@@ -103,12 +96,6 @@ class SettingsScreenViewModel @Inject constructor(
                 hasLogFiles = interactor.hasLogFiles(),
                 logFilesSize = interactor.getLogFilesSize(),
             )
-        }
-    }
-
-    override fun selectPlayBehavior(playBehavior: PlayBehavior) {
-        viewModelScope.launch {
-            interactor.setPlayBehavior(playBehavior)
         }
     }
 
@@ -201,7 +188,6 @@ class SettingsScreenViewModel @Inject constructor(
     }
 
     interface Interactor {
-        fun getPlayBehavior(): PlayBehavior
         fun getThemeMode(): ThemeMode
         fun getColorPalette(): ColorPalette
         fun getFontFamily(): AppFontFamily
@@ -209,7 +195,6 @@ class SettingsScreenViewModel @Inject constructor(
         fun getStorageInfo(): StorageInfo?
         fun isDirectDownloadsEnabled(): Boolean
         fun hasIssueContentDownloadPermission(): Boolean
-        fun observePlayBehavior(): kotlinx.coroutines.flow.Flow<PlayBehavior>
         fun observeThemeMode(): kotlinx.coroutines.flow.Flow<ThemeMode>
         fun observeColorPalette(): kotlinx.coroutines.flow.Flow<ColorPalette>
         fun observeFontFamily(): kotlinx.coroutines.flow.Flow<AppFontFamily>
@@ -218,7 +203,6 @@ class SettingsScreenViewModel @Inject constructor(
         fun observeDirectDownloadsEnabled(): kotlinx.coroutines.flow.Flow<Boolean>
         fun observeHasIssueContentDownloadPermission(): kotlinx.coroutines.flow.Flow<Boolean>
         fun observeFileLoggingEnabled(): kotlinx.coroutines.flow.Flow<Boolean>
-        suspend fun setPlayBehavior(playBehavior: PlayBehavior)
         suspend fun setThemeMode(themeMode: ThemeMode)
         suspend fun setColorPalette(colorPalette: ColorPalette)
         suspend fun setFontFamily(fontFamily: AppFontFamily)

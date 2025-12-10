@@ -20,9 +20,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SegmentedButton
-import androidx.compose.material3.SegmentedButtonDefaults
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
@@ -36,7 +33,6 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import androidx.navigation.compose.rememberNavController
-import com.lelloman.pezzottify.android.ui.model.PlayBehavior
 import com.lelloman.pezzottify.android.ui.screen.main.profile.CacheSettingsSection
 import com.lelloman.pezzottify.android.ui.screen.main.profile.StorageInfoSection
 import com.lelloman.pezzottify.android.ui.theme.AppFontFamily
@@ -104,48 +100,6 @@ private fun SettingsScreenInternal(
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 16.dp)
         ) {
-            // Play Behavior Setting
-            Text(
-                text = "Playback",
-                style = MaterialTheme.typography.titleLarge,
-                color = MaterialTheme.colorScheme.onSurface
-            )
-            Spacer(modifier = Modifier.height(16.dp))
-
-            SettingsLabel(text = "Track tap behavior")
-            Spacer(modifier = Modifier.height(8.dp))
-            SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
-                PlayBehavior.entries.forEachIndexed { index, playBehavior ->
-                    SegmentedButton(
-                        shape = SegmentedButtonDefaults.itemShape(
-                            index = index,
-                            count = PlayBehavior.entries.size
-                        ),
-                        onClick = { actions.selectPlayBehavior(playBehavior) },
-                        selected = currentState.playBehavior == playBehavior
-                    ) {
-                        Text(
-                            text = when (playBehavior) {
-                                PlayBehavior.ReplacePlaylist -> "Replace"
-                                PlayBehavior.AddToPlaylist -> "Add to queue"
-                            },
-                            maxLines = 1
-                        )
-                    }
-                }
-            }
-            Text(
-                text = when (currentState.playBehavior) {
-                    PlayBehavior.ReplacePlaylist -> "Tapping a track replaces the current playlist"
-                    PlayBehavior.AddToPlaylist -> "Tapping a track adds it to the current playlist"
-                },
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = 4.dp)
-            )
-
-            HorizontalDivider(modifier = Modifier.padding(vertical = 24.dp))
-
             // Appearance Section
             Text(
                 text = "Appearance",
@@ -251,7 +205,6 @@ private fun SettingsScreenPreview() {
         SettingsScreenInternal(
             state = MutableStateFlow(
                 SettingsScreenState(
-                    playBehavior = PlayBehavior.ReplacePlaylist,
                     themeMode = ThemeMode.System,
                     colorPalette = ColorPalette.Classic,
                     fontFamily = AppFontFamily.System,
@@ -261,7 +214,6 @@ private fun SettingsScreenPreview() {
             events = flow {},
             navController = rememberNavController(),
             actions = object : SettingsScreenActions {
-                override fun selectPlayBehavior(playBehavior: PlayBehavior) {}
                 override fun selectThemeMode(themeMode: ThemeMode) {}
                 override fun selectColorPalette(colorPalette: ColorPalette) {}
                 override fun selectFontFamily(fontFamily: AppFontFamily) {}
@@ -284,7 +236,6 @@ private fun SettingsScreenPreviewDark() {
         SettingsScreenInternal(
             state = MutableStateFlow(
                 SettingsScreenState(
-                    playBehavior = PlayBehavior.AddToPlaylist,
                     themeMode = ThemeMode.Dark,
                     colorPalette = ColorPalette.PurpleHaze,
                     fontFamily = AppFontFamily.Monospace,
@@ -294,7 +245,6 @@ private fun SettingsScreenPreviewDark() {
             events = flow {},
             navController = rememberNavController(),
             actions = object : SettingsScreenActions {
-                override fun selectPlayBehavior(playBehavior: PlayBehavior) {}
                 override fun selectThemeMode(themeMode: ThemeMode) {}
                 override fun selectColorPalette(colorPalette: ColorPalette) {}
                 override fun selectFontFamily(fontFamily: AppFontFamily) {}
