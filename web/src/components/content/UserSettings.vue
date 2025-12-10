@@ -33,6 +33,38 @@
         </label>
       </div>
     </div>
+
+    <div v-if="canRequestContent" class="settings-section">
+      <h2 class="section-title">External Search</h2>
+      <div class="setting-item">
+        <div class="setting-info">
+          <label class="setting-label" for="external-search">
+            Enable External Search
+            <span
+              v-if="isExternalSearchPending"
+              class="sync-pending"
+              title="Syncing..."
+            >
+              <span class="sync-dot"></span>
+            </span>
+          </label>
+          <p class="setting-description">
+            When enabled, searches will also query external providers for
+            content that can be requested for download. Results from external
+            sources will appear in a separate section.
+          </p>
+        </div>
+        <label class="toggle">
+          <input
+            type="checkbox"
+            id="external-search"
+            :checked="isExternalSearchEnabled"
+            @change="handleExternalSearchToggle"
+          />
+          <span class="toggle-slider"></span>
+        </label>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -42,6 +74,7 @@ import { useUserStore } from "@/store/user";
 
 const userStore = useUserStore();
 
+// Direct downloads setting
 const isDirectDownloadsEnabled = computed(
   () => userStore.isDirectDownloadsEnabled,
 );
@@ -52,7 +85,21 @@ const isDirectDownloadsPending = computed(
 const handleDirectDownloadsToggle = async (event) => {
   const newValue = event.target.checked;
   await userStore.setDirectDownloadsEnabled(newValue);
-  // No need to revert - optimistic update always succeeds locally
+};
+
+// External search setting (only visible with RequestContent permission)
+const canRequestContent = computed(() => userStore.canRequestContent);
+
+const isExternalSearchEnabled = computed(
+  () => userStore.isExternalSearchEnabled,
+);
+const isExternalSearchPending = computed(
+  () => userStore.isExternalSearchPending,
+);
+
+const handleExternalSearchToggle = async (event) => {
+  const newValue = event.target.checked;
+  await userStore.setExternalSearchEnabled(newValue);
 };
 </script>
 
