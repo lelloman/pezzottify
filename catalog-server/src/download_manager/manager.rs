@@ -123,11 +123,7 @@ impl DownloadManager {
         if output.status.success() {
             let stdout = String::from_utf8_lossy(&output.stdout);
             // Extract version from first line (e.g., "ffprobe version 6.1.1-3ubuntu5 ...")
-            let version = stdout
-                .lines()
-                .next()
-                .unwrap_or("unknown")
-                .to_string();
+            let version = stdout.lines().next().unwrap_or("unknown").to_string();
             Ok(version)
         } else {
             Err("ffprobe command failed".to_string())
@@ -897,7 +893,14 @@ impl DownloadManager {
         use tokio::process::Command;
 
         let output = Command::new("ffprobe")
-            .args(["-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0"])
+            .args([
+                "-v",
+                "error",
+                "-show_entries",
+                "format=duration",
+                "-of",
+                "csv=p=0",
+            ])
             .arg(path)
             .output()
             .await
@@ -920,7 +923,14 @@ impl DownloadManager {
         use tokio::process::Command;
 
         let output = Command::new("ffprobe")
-            .args(["-v", "error", "-show_entries", "format=format_name", "-of", "csv=p=0"])
+            .args([
+                "-v",
+                "error",
+                "-show_entries",
+                "format=format_name",
+                "-of",
+                "csv=p=0",
+            ])
             .arg(path)
             .output()
             .await
@@ -1793,10 +1803,7 @@ mod tests {
         let path = std::path::Path::new("/nonexistent/path/to/audio.mp3");
 
         let result = DownloadManager::validate_audio_with_ffprobe(path).await;
-        assert!(
-            result.is_err(),
-            "Nonexistent file should fail validation"
-        );
+        assert!(result.is_err(), "Nonexistent file should fail validation");
     }
 
     #[tokio::test]
@@ -1831,7 +1838,11 @@ mod tests {
         }
 
         let result = DownloadManager::validate_image_with_ffprobe(&image_path).await;
-        assert!(result.is_ok(), "Valid image file should pass validation: {:?}", result);
+        assert!(
+            result.is_ok(),
+            "Valid image file should pass validation: {:?}",
+            result
+        );
     }
 
     #[tokio::test]
@@ -1851,10 +1862,7 @@ mod tests {
         let path = std::path::Path::new("/nonexistent/path/to/image.png");
 
         let result = DownloadManager::validate_image_with_ffprobe(path).await;
-        assert!(
-            result.is_err(),
-            "Nonexistent file should fail validation"
-        );
+        assert!(result.is_err(), "Nonexistent file should fail validation");
     }
 
     #[tokio::test]
@@ -1905,11 +1913,18 @@ mod tests {
 
         match result {
             Ok(version) => {
-                assert!(version.contains("ffprobe"), "Version should mention ffprobe: {}", version);
+                assert!(
+                    version.contains("ffprobe"),
+                    "Version should mention ffprobe: {}",
+                    version
+                );
             }
             Err(e) => {
                 // If ffprobe is not installed, the test should pass but log a message
-                eprintln!("Note: ffprobe not installed, skipping version check. Error: {}", e);
+                eprintln!(
+                    "Note: ffprobe not installed, skipping version check. Error: {}",
+                    e
+                );
             }
         }
     }
