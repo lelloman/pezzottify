@@ -649,16 +649,20 @@ impl DownloadManager {
         // 2. Determine file extension from content type
         let ext = Self::content_type_to_extension(&content_type);
 
-        // 3. Write to disk
-        let audio_dir = self.media_path.join("audio");
-        fs::create_dir_all(&audio_dir).await.map_err(|e| {
-            DownloadError::new(
-                DownloadErrorType::Storage,
-                format!("Failed to create audio directory: {}", e),
-            )
-        })?;
+        // 3. Write to disk using sharded directory structure
+        let sharded_subpath = Self::sharded_path(&item.content_id, &ext);
+        let file_path = self.media_path.join("audio").join(&sharded_subpath);
 
-        let file_path = audio_dir.join(format!("{}.{}", item.content_id, ext));
+        // Create parent directories
+        if let Some(parent) = file_path.parent() {
+            fs::create_dir_all(parent).await.map_err(|e| {
+                DownloadError::new(
+                    DownloadErrorType::Storage,
+                    format!("Failed to create audio directory: {}", e),
+                )
+            })?;
+        }
+
         fs::write(&file_path, &bytes).await.map_err(|e| {
             DownloadError::new(
                 DownloadErrorType::Storage,
@@ -677,7 +681,7 @@ impl DownloadManager {
         // 4. Update track in catalog with actual audio path and format
         // This should always succeed since ingestion happens before children are created.
         // If it fails, the track doesn't exist in the catalog which is a bug.
-        let audio_uri = format!("audio/{}.{}", item.content_id, ext);
+        let audio_uri = format!("audio/{}", sharded_subpath);
         let format = Self::content_type_to_format(&content_type);
         self.catalog_store
             .update_track_audio(&item.content_id, &audio_uri, &format)
@@ -715,16 +719,20 @@ impl DownloadManager {
                 )
             })?;
 
-        // 2. Write to disk (images are stored as .jpg)
-        let images_dir = self.media_path.join("images");
-        fs::create_dir_all(&images_dir).await.map_err(|e| {
-            DownloadError::new(
-                DownloadErrorType::Storage,
-                format!("Failed to create images directory: {}", e),
-            )
-        })?;
+        // 2. Write to disk using sharded directory structure
+        let sharded_subpath = Self::sharded_path(&item.content_id, "jpg");
+        let file_path = self.media_path.join("images").join(&sharded_subpath);
 
-        let file_path = images_dir.join(format!("{}.jpg", item.content_id));
+        // Create parent directories
+        if let Some(parent) = file_path.parent() {
+            fs::create_dir_all(parent).await.map_err(|e| {
+                DownloadError::new(
+                    DownloadErrorType::Storage,
+                    format!("Failed to create images directory: {}", e),
+                )
+            })?;
+        }
+
         fs::write(&file_path, &bytes).await.map_err(|e| {
             DownloadError::new(
                 DownloadErrorType::Storage,
@@ -830,6 +838,28 @@ impl DownloadManager {
             "audio/ogg" | "audio/vorbis" => Format::OggVorbis320, // Assume high quality
             "audio/aac" => Format::Aac160,
             _ => Format::Flac, // Default to flac
+        }
+    }
+
+    /// Generate a sharded file path from an ID.
+    ///
+    /// Uses first 6 characters split into 3 pairs as directory levels.
+    /// Example: `2Ueco3C1xLw5RXl39lAPkL` with ext `flac` becomes
+    /// `2U/ec/o3/2Ueco3C1xLw5RXl39lAPkL.flac`
+    fn sharded_path(id: &str, ext: &str) -> String {
+        // Ensure we have enough characters for sharding (at least 6)
+        if id.len() >= 6 {
+            format!(
+                "{}/{}/{}/{}.{}",
+                &id[0..2],
+                &id[2..4],
+                &id[4..6],
+                id,
+                ext
+            )
+        } else {
+            // Fallback for short IDs (shouldn't happen with real IDs)
+            format!("{}.{}", id, ext)
         }
     }
 
