@@ -137,7 +137,56 @@ fun SearchScreenContent(
                     actions = actions
                 )
             }
+        } else if (state.isExternalMode) {
+            // External search results
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+            ) {
+                // Download limits bar
+                state.downloadLimits?.let { limits ->
+                    DownloadLimitsBar(limits = limits)
+                }
+
+                // External results list
+                LazyColumn(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth()
+                ) {
+                    if (state.externalSearchLoading) {
+                        item {
+                            LoadingSearchResult()
+                        }
+                    } else if (state.externalSearchError != null) {
+                        item {
+                            ErrorSearchResult()
+                        }
+                    } else {
+                        state.externalResults?.let { results ->
+                            items(results, key = { it.id }) { result ->
+                                when (result) {
+                                    is ExternalSearchResultContent.Album -> ExternalAlbumSearchResult(
+                                        result = result,
+                                        canRequest = state.downloadLimits?.canRequest ?: false,
+                                        onRequestClick = { actions.requestAlbumDownload(result) },
+                                        onClick = { actions.clickOnExternalResult(result) },
+                                    )
+                                    is ExternalSearchResultContent.Artist -> ExternalArtistSearchResult(
+                                        result = result,
+                                        canRequest = false, // Artists can't be requested directly
+                                        onRequestClick = { },
+                                        onClick = { actions.clickOnExternalResult(result) },
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         } else {
+            // Catalog search results
             LazyColumn(
                 modifier = Modifier
                     .weight(1f)

@@ -312,6 +312,9 @@ class InteractorsModule {
         logSearchHistoryEntry: LogSearchHistoryEntryUseCase,
         userSettingsStore: UserSettingsStore,
         permissionsStore: PermissionsStore,
+        performExternalSearchUseCase: com.lelloman.pezzottify.android.domain.download.PerformExternalSearchUseCase,
+        getDownloadLimitsUseCase: com.lelloman.pezzottify.android.domain.download.GetDownloadLimitsUseCase,
+        requestAlbumDownloadUseCase: com.lelloman.pezzottify.android.domain.download.RequestAlbumDownloadUseCase,
     ): SearchScreenViewModel.Interactor =
         object : SearchScreenViewModel.Interactor {
             private val logger = loggerFactory.getLogger("SearchScreenViewModel.Interactor")
@@ -398,6 +401,57 @@ class InteractorsModule {
 
             override suspend fun setExternalModeEnabled(enabled: Boolean) {
                 userSettingsStore.setExternalModeEnabled(enabled)
+            }
+
+            override suspend fun externalSearch(
+                query: String,
+                type: SearchScreenViewModel.InteractorExternalSearchType
+            ): Result<List<SearchScreenViewModel.ExternalSearchItem>> {
+                logger.debug("externalSearch($query, type=$type)")
+                val domainType = when (type) {
+                    SearchScreenViewModel.InteractorExternalSearchType.Album ->
+                        RemoteApiClient.ExternalSearchType.Album
+                    SearchScreenViewModel.InteractorExternalSearchType.Artist ->
+                        RemoteApiClient.ExternalSearchType.Artist
+                }
+                val result = performExternalSearchUseCase(query, domainType)
+                return result.map { items ->
+                    items.map { item ->
+                        SearchScreenViewModel.ExternalSearchItem(
+                            id = item.id,
+                            name = item.name,
+                            artistName = item.artistName,
+                            year = item.year,
+                            imageUrl = item.imageUrl,
+                            inCatalog = item.inCatalog,
+                            inQueue = item.inQueue,
+                            catalogId = null, // Server doesn't return catalog ID yet
+                        )
+                    }
+                }
+            }
+
+            override suspend fun getDownloadLimits(): Result<SearchScreenViewModel.DownloadLimitsData> {
+                logger.debug("getDownloadLimits()")
+                val result = getDownloadLimitsUseCase()
+                return result.map { limits ->
+                    SearchScreenViewModel.DownloadLimitsData(
+                        requestsToday = limits.requestsToday,
+                        maxPerDay = limits.maxPerDay,
+                        canRequest = limits.canRequest,
+                        inQueue = limits.inQueue,
+                        maxQueue = limits.maxQueue,
+                    )
+                }
+            }
+
+            override suspend fun requestAlbumDownload(
+                albumId: String,
+                albumName: String,
+                artistName: String
+            ): Result<Unit> {
+                logger.debug("requestAlbumDownload($albumId, $albumName, $artistName)")
+                return requestAlbumDownloadUseCase(albumId, albumName, artistName).map { }
             }
         }
 

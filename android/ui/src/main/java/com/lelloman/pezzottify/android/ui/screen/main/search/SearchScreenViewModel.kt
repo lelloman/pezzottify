@@ -109,11 +109,71 @@ class SearchScreenViewModel(
             isExternalMode = newMode,
             searchResults = null,
             searchError = null,
+            externalResults = null,
+            externalSearchError = null,
             selectedFilters = emptySet(),
         )
         // Re-run search if there's a query
         if (currentQuery.isNotEmpty()) {
             performSearch()
+        }
+    }
+
+    override fun clickOnExternalResult(result: ExternalSearchResultContent) {
+        // If the item is in catalog, navigate to it
+        val catalogId = result.catalogId
+        if (result.inCatalog && catalogId != null) {
+            viewModelScope.launch {
+                when (result) {
+                    is ExternalSearchResultContent.Album ->
+                        mutableEvents.emit(SearchScreensEvents.NavigateToAlbumScreen(catalogId))
+                    is ExternalSearchResultContent.Artist ->
+                        mutableEvents.emit(SearchScreensEvents.NavigateToArtistScreen(catalogId))
+                }
+            }
+        }
+        // If not in catalog, clicking does nothing (user should use Request button)
+    }
+
+    override fun requestAlbumDownload(result: ExternalSearchResultContent.Album) {
+        viewModelScope.launch(coroutineContext) {
+            val requestResult = interactor.requestAlbumDownload(
+                albumId = result.id,
+                albumName = result.name,
+                artistName = result.artistName,
+            )
+            if (requestResult.isSuccess) {
+                // Update the result to show it's now in queue
+                val currentExternalResults = mutableState.value.externalResults
+                val updatedResults = currentExternalResults?.map { existing ->
+                    if (existing is ExternalSearchResultContent.Album && existing.id == result.id) {
+                        existing.copy(inQueue = true)
+                    } else {
+                        existing
+                    }
+                }
+                mutableState.value = mutableState.value.copy(externalResults = updatedResults)
+                // Refresh limits
+                refreshLimits()
+            }
+            // TODO: Handle errors with snackbar/toast
+        }
+    }
+
+    private fun refreshLimits() {
+        viewModelScope.launch(coroutineContext) {
+            val limitsResult = interactor.getDownloadLimits()
+            limitsResult.getOrNull()?.let { limits ->
+                mutableState.value = mutableState.value.copy(
+                    downloadLimits = UiDownloadLimits(
+                        requestsToday = limits.requestsToday,
+                        maxPerDay = limits.maxPerDay,
+                        canRequest = limits.canRequest,
+                        inQueue = limits.inQueue,
+                        maxQueue = limits.maxQueue,
+                    )
+                )
+            }
         }
     }
 
@@ -125,25 +185,117 @@ class SearchScreenViewModel(
                 if (!isActive) {
                     return@launch
                 }
-                val filters = mutableState.value.selectedFilters.map { it.toInteractorFilter() }
-                val searchResultsResult = interactor.search(
-                    query = currentQuery,
-                    filters = filters.ifEmpty { null }
-                )
-                mutableState.value = mutableState.value.copy(
-                    isLoading = false,
-                    searchResults = searchResultsResult.getOrNull()
-                        ?.map { contentResolver.resolveSearchResult(it.first, it.second) },
-                    searchError = searchResultsResult.exceptionOrNull()?.let { "Error" }
-                )
+
+                if (mutableState.value.isExternalMode) {
+                    performExternalSearch()
+                } else {
+                    performCatalogSearch()
+                }
             }
         } else {
             mutableState.value = mutableState.value.copy(
                 isLoading = false,
                 searchResults = null,
-                searchError = null
+                searchError = null,
+                externalResults = null,
+                externalSearchError = null,
             )
         }
+    }
+
+    private suspend fun performCatalogSearch() {
+        val filters = mutableState.value.selectedFilters.map { it.toInteractorFilter() }
+        val searchResultsResult = interactor.search(
+            query = currentQuery,
+            filters = filters.ifEmpty { null }
+        )
+        mutableState.value = mutableState.value.copy(
+            isLoading = false,
+            searchResults = searchResultsResult.getOrNull()
+                ?.map { contentResolver.resolveSearchResult(it.first, it.second) },
+            searchError = searchResultsResult.exceptionOrNull()?.let { "Error" }
+        )
+    }
+
+    private suspend fun performExternalSearch() {
+        mutableState.value = mutableState.value.copy(
+            externalSearchLoading = true,
+            isLoading = true,
+        )
+
+        // Fetch limits in parallel with search
+        val limitsDeferred = viewModelScope.launch(coroutineContext) {
+            val limitsResult = interactor.getDownloadLimits()
+            limitsResult.getOrNull()?.let { limits ->
+                mutableState.value = mutableState.value.copy(
+                    downloadLimits = UiDownloadLimits(
+                        requestsToday = limits.requestsToday,
+                        maxPerDay = limits.maxPerDay,
+                        canRequest = limits.canRequest,
+                        inQueue = limits.inQueue,
+                        maxQueue = limits.maxQueue,
+                    )
+                )
+            }
+        }
+
+        // Get selected filters or default to Album
+        val selectedFilters = mutableState.value.selectedFilters
+        val searchTypes = if (selectedFilters.isEmpty()) {
+            listOf(InteractorExternalSearchType.Album)
+        } else {
+            selectedFilters.mapNotNull { filter ->
+                when (filter) {
+                    SearchFilter.Album -> InteractorExternalSearchType.Album
+                    SearchFilter.Artist -> InteractorExternalSearchType.Artist
+                    SearchFilter.Track -> null // External search doesn't support tracks
+                }
+            }.ifEmpty { listOf(InteractorExternalSearchType.Album) }
+        }
+
+        // Perform searches for each type and merge results
+        val allResults = mutableListOf<ExternalSearchResultContent>()
+        var hasError = false
+
+        for (searchType in searchTypes) {
+            val searchResult = interactor.externalSearch(currentQuery, searchType)
+            if (searchResult.isSuccess) {
+                searchResult.getOrNull()?.forEach { result ->
+                    val content = when (searchType) {
+                        InteractorExternalSearchType.Album -> ExternalSearchResultContent.Album(
+                            id = result.id,
+                            name = result.name,
+                            artistName = result.artistName ?: "",
+                            year = result.year,
+                            imageUrl = result.imageUrl,
+                            inCatalog = result.inCatalog,
+                            inQueue = result.inQueue,
+                            catalogId = result.catalogId,
+                        )
+                        InteractorExternalSearchType.Artist -> ExternalSearchResultContent.Artist(
+                            id = result.id,
+                            name = result.name,
+                            imageUrl = result.imageUrl,
+                            inCatalog = result.inCatalog,
+                            inQueue = result.inQueue,
+                            catalogId = result.catalogId,
+                        )
+                    }
+                    allResults.add(content)
+                }
+            } else {
+                hasError = true
+            }
+        }
+
+        limitsDeferred.join()
+
+        mutableState.value = mutableState.value.copy(
+            isLoading = false,
+            externalSearchLoading = false,
+            externalResults = allResults.ifEmpty { null },
+            externalSearchError = if (hasError && allResults.isEmpty()) "Search failed" else null,
+        )
     }
 
     private fun SearchFilter.toInteractorFilter(): InteractorSearchFilter = when (this) {
@@ -335,6 +487,33 @@ class SearchScreenViewModel(
         fun canUseExternalSearch(): Flow<Boolean>
         fun isExternalModeEnabled(): Flow<Boolean>
         suspend fun setExternalModeEnabled(enabled: Boolean)
+        suspend fun externalSearch(query: String, type: InteractorExternalSearchType): Result<List<ExternalSearchItem>>
+        suspend fun getDownloadLimits(): Result<DownloadLimitsData>
+        suspend fun requestAlbumDownload(albumId: String, albumName: String, artistName: String): Result<Unit>
+    }
+
+    data class ExternalSearchItem(
+        val id: String,
+        val name: String,
+        val artistName: String?,
+        val year: Int?,
+        val imageUrl: String?,
+        val inCatalog: Boolean,
+        val inQueue: Boolean,
+        val catalogId: String?,
+    )
+
+    data class DownloadLimitsData(
+        val requestsToday: Int,
+        val maxPerDay: Int,
+        val canRequest: Boolean,
+        val inQueue: Int,
+        val maxQueue: Int,
+    )
+
+    enum class InteractorExternalSearchType {
+        Album,
+        Artist,
     }
 
     enum class InteractorSearchFilter {
