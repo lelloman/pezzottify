@@ -421,6 +421,11 @@ impl DownloadManager {
                         duration_ms,
                         None,
                     )?;
+
+                    // Check if parent is now complete (must be AFTER mark_completed)
+                    if let Some(parent_id) = &item.parent_id {
+                        self.check_and_complete_parent(parent_id).ok();
+                    }
                 }
 
                 Ok(Some(ProcessingResult::success(
@@ -568,8 +573,9 @@ impl DownloadManager {
             ));
         }
 
-        // Add album cover images
-        for cover in &album.covers {
+        // Add album cover images (merge covers + cover_group, deduplicated)
+        let all_covers = super::catalog_ingestion::merge_images(&album.covers, &album.cover_group);
+        for cover in &all_covers {
             // Only download medium/large sizes
             if cover.size == "medium" || cover.size == "large" {
                 children.push(QueueItem::new_child(
@@ -585,9 +591,11 @@ impl DownloadManager {
             }
         }
 
-        // Add artist portrait images
+        // Add artist portrait images (merge portraits + portrait_group, deduplicated)
         for artist in &artists {
-            for portrait in &artist.portraits {
+            let all_portraits =
+                super::catalog_ingestion::merge_images(&artist.portraits, &artist.portrait_group);
+            for portrait in &all_portraits {
                 if portrait.size == "medium" || portrait.size == "large" {
                     children.push(QueueItem::new_child(
                         Uuid::new_v4().to_string(),
@@ -695,11 +703,7 @@ impl DownloadManager {
                 )
             })?;
 
-        // 5. Check if parent is complete (for child items)
-        if let Some(parent_id) = &item.parent_id {
-            self.check_and_complete_parent(parent_id).ok();
-        }
-
+        // Note: Parent completion check is done in process_next() after mark_completed()
         Ok(bytes_downloaded)
     }
 
@@ -748,11 +752,7 @@ impl DownloadManager {
             file_path.display()
         );
 
-        // 3. Check if parent is complete (for child items)
-        if let Some(parent_id) = &item.parent_id {
-            self.check_and_complete_parent(parent_id).ok();
-        }
-
+        // Note: Parent completion check is done in process_next() after mark_completed()
         Ok(bytes_downloaded)
     }
 

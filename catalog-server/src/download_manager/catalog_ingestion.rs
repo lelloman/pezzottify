@@ -272,7 +272,7 @@ fn sharded_uri(prefix: &str, id: &str, ext: &str) -> String {
 
 /// Merge two image lists, deduplicating by ID.
 /// First list takes precedence (images from second list only added if ID not seen).
-fn merge_images(primary: &[ExternalImage], secondary: &[ExternalImage]) -> Vec<ExternalImage> {
+pub fn merge_images(primary: &[ExternalImage], secondary: &[ExternalImage]) -> Vec<ExternalImage> {
     let mut seen = std::collections::HashSet::new();
     let mut result = Vec::new();
 
@@ -412,7 +412,7 @@ mod tests {
         assert_eq!(catalog.track_number, 1);
         assert_eq!(catalog.duration_secs, Some(180));
         assert!(catalog.is_explicit);
-        assert_eq!(catalog.audio_uri, "audio/track123.flac");
+        assert_eq!(catalog.audio_uri, "audio/tr/ac/k1/track123.flac");
         assert_eq!(catalog.tags, vec!["live"]);
         assert!(catalog.has_lyrics);
         assert_eq!(catalog.languages, vec!["en"]);
@@ -430,7 +430,7 @@ mod tests {
         let catalog = convert_image(&external);
 
         assert_eq!(catalog.id, "abc123def456");
-        assert_eq!(catalog.uri, "images/abc123def456.jpg");
+        assert_eq!(catalog.uri, "images/ab/c1/23/abc123def456.jpg");
         assert!(matches!(catalog.size, ImageSize::Large));
         assert_eq!(catalog.width, 640);
         assert_eq!(catalog.height, 640);
