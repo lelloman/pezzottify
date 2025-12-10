@@ -824,6 +824,8 @@ pub struct SearchResult {
     pub in_catalog: bool,
     /// Whether this content is currently in the download queue
     pub in_queue: bool,
+    /// Relevance score (0.0 to 1.0, higher is better match)
+    pub score: f32,
 }
 
 impl SearchResult {
@@ -844,6 +846,7 @@ impl SearchResult {
             year,
             in_catalog: false,
             in_queue: false,
+            score: 0.0,
         }
     }
 
@@ -858,6 +861,7 @@ impl SearchResult {
             year: None,
             in_catalog: false,
             in_queue: false,
+            score: 0.0,
         }
     }
 
@@ -870,6 +874,12 @@ impl SearchResult {
     /// Mark this result as being in the queue.
     pub fn with_in_queue(mut self, in_queue: bool) -> Self {
         self.in_queue = in_queue;
+        self
+    }
+
+    /// Set the relevance score.
+    pub fn with_score(mut self, score: f32) -> Self {
+        self.score = score;
         self
     }
 }

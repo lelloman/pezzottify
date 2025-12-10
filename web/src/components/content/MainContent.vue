@@ -55,21 +55,23 @@ const showExternalSearch = computed(() => {
   return userStore.canRequestContent && userStore.isExternalSearchEnabled;
 });
 
-// Determine external search type based on selected filters
-const getExternalSearchType = (filters) => {
+// Determine external search types based on selected filters
+const getExternalSearchTypes = (filters) => {
   if (!filters || filters.length === 0) {
-    return "album"; // Default to album
+    // All selected - search both albums and artists
+    return ["album", "artist"];
   }
-  // If only artist is selected, search artists
-  if (filters.length === 1 && filters[0] === "artist") {
-    return "artist";
+
+  const types = [];
+  if (filters.includes("album") || filters.includes("track")) {
+    types.push("album");
   }
-  // If album is selected (alone or with others), search albums
-  if (filters.includes("album")) {
-    return "album";
+  if (filters.includes("artist")) {
+    types.push("artist");
   }
-  // If only track is selected, default to album (tracks not supported in external)
-  return "album";
+
+  // Default to album if nothing else matches
+  return types.length > 0 ? types : ["album"];
 };
 
 const fetchCatalogResults = async (query, filters) => {
@@ -131,19 +133,28 @@ const fetchResults = async (newQuery, queryParams) => {
     const catalogPromise = fetchCatalogResults(newQuery, filters);
 
     if (showExternalSearch.value) {
-      const externalType = getExternalSearchType(filters);
-      const externalPromise = fetchExternalResults(newQuery, externalType);
+      const externalTypes = getExternalSearchTypes(filters);
+      // Fetch all external search types in parallel
+      const externalPromises = externalTypes.map((type) =>
+        fetchExternalResults(newQuery, type),
+      );
       const limitsPromise = fetchExternalLimits();
 
       // Run all in parallel
-      const [catalogData, extResults, limits] = await Promise.all([
+      const [catalogData, limits, ...extResultsArray] = await Promise.all([
         catalogPromise,
-        externalPromise,
         limitsPromise,
+        ...externalPromises,
       ]);
 
+      // Combine external results and sort by relevance score (highest first)
+      const combinedResults = extResultsArray
+        .filter((r) => r && r.results)
+        .flatMap((r) => r.results)
+        .sort((a, b) => (b.score || 0) - (a.score || 0));
+
       results.value = catalogData;
-      externalResults.value = extResults || { results: [] };
+      externalResults.value = { results: combinedResults };
       externalLimits.value = limits;
     } else {
       results.value = await catalogPromise;
