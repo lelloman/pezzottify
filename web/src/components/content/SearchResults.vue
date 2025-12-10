@@ -1,35 +1,48 @@
 <template>
   <div class="wrapper">
-    <div class="filtersContainer">
-      <div
-        :class="{
-          filter: true,
-          selectedFilter: selectedFilters.indexOf('album') > -1,
-          scaleClickFeedback: true,
-        }"
-        @click.stop="toggleFilter('album')"
-      >
-        Albums
-      </div>
-      <div
-        :class="{
-          filter: true,
-          selectedFilter: selectedFilters.indexOf('artist') > -1,
-          scaleClickFeedback: true,
-        }"
-        @click.stop="toggleFilter('artist')"
-      >
-        Artists
-      </div>
-      <div
-        :class="{
-          filter: true,
-          selectedFilter: selectedFilters.indexOf('track') > -1,
-          scaleClickFeedback: true,
-        }"
-        @click.stop="toggleFilter('track')"
-      >
-        Tracks
+    <div class="filtersSection">
+      <span class="filtersLabel">Search for:</span>
+      <div class="filtersContainer">
+        <div
+          :class="{
+            filter: true,
+            selectedFilter: isAllSelected,
+            scaleClickFeedback: true,
+          }"
+          @click.stop="selectAll"
+        >
+          All
+        </div>
+        <div
+          :class="{
+            filter: true,
+            selectedFilter: selectedFilters.indexOf('album') > -1 && !isAllSelected,
+            scaleClickFeedback: true,
+          }"
+          @click.stop="toggleFilter('album')"
+        >
+          Albums
+        </div>
+        <div
+          :class="{
+            filter: true,
+            selectedFilter: selectedFilters.indexOf('artist') > -1 && !isAllSelected,
+            scaleClickFeedback: true,
+          }"
+          @click.stop="toggleFilter('artist')"
+        >
+          Artists
+        </div>
+        <div
+          :class="{
+            filter: true,
+            selectedFilter: selectedFilters.indexOf('track') > -1 && !isAllSelected,
+            scaleClickFeedback: true,
+          }"
+          @click.stop="toggleFilter('track')"
+        >
+          Tracks
+        </div>
       </div>
     </div>
     <div class="searchResultsContainer">
@@ -46,11 +59,13 @@
 </template>
 
 <script setup>
-import { ref, watch, defineProps } from "vue";
+import { ref, watch, computed, defineProps } from "vue";
 import AlbumResult from "@/components/search/AlbumResult.vue";
 import ArtistResult from "@/components/search/ArtistResult.vue";
 import TrackResult from "@/components/search/TrackResult.vue";
 import { useRoute, useRouter } from "vue-router";
+
+const ALL_FILTERS = ["album", "artist", "track"];
 
 const props = defineProps({
   results: {
@@ -59,11 +74,20 @@ const props = defineProps({
   },
 });
 
-const selectedFilters = ref(["album", "artist", "track"]);
+const selectedFilters = ref([...ALL_FILTERS]);
 const isLoading = ref(true);
 
 const router = useRouter();
 const route = useRoute();
+
+// Computed to check if all filters are selected
+const isAllSelected = computed(() => {
+  return ALL_FILTERS.every((f) => selectedFilters.value.includes(f));
+});
+
+const selectAll = () => {
+  selectedFilters.value = [...ALL_FILTERS];
+};
 
 const toggleFilter = (filter) => {
   if (selectedFilters.value.indexOf(filter) > -1) {
@@ -82,8 +106,8 @@ watch(props.results, (newResults) => {
 });
 watch(selectedFilters, (newFilters) => {
   if (newFilters) {
-    if (newFilters.length == 3) {
-      // remove query parameters
+    if (newFilters.length === ALL_FILTERS.length) {
+      // remove query parameters when all selected
       router.push({ query: {} });
     } else {
       const args = newFilters.join(",");
@@ -95,13 +119,12 @@ watch(selectedFilters, (newFilters) => {
 watch(
   route,
   (newRoute) => {
-    const possibleValues = ["album", "artist", "track"];
     if (newRoute.query.type) {
       selectedFilters.value = newRoute.query.type
         .split(",")
-        .filter((i) => possibleValues.indexOf(i) > -1);
+        .filter((i) => ALL_FILTERS.indexOf(i) > -1);
     } else {
-      selectedFilters.value = possibleValues;
+      selectedFilters.value = [...ALL_FILTERS];
     }
   },
   { immediate: true },
@@ -115,10 +138,24 @@ watch(
   gap: 16px;
 }
 
+.filtersSection {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 12px;
+}
+
+.filtersLabel {
+  font-size: var(--text-sm);
+  color: var(--text-subdued);
+  white-space: nowrap;
+}
+
 .filtersContainer {
   display: flex;
   flex-direction: row;
-  gap: 16px;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 .filter {
