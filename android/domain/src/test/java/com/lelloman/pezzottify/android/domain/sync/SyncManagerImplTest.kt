@@ -20,9 +20,12 @@ import io.mockk.mockk
 import io.mockk.slot
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runTest
+import org.junit.After
 import org.junit.Before
 import org.junit.Test
+import kotlin.time.Duration.Companion.hours
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class SyncManagerImplTest {
@@ -36,6 +39,7 @@ class SyncManagerImplTest {
     private lateinit var logger: Logger
 
     private val testDispatcher = StandardTestDispatcher()
+    private val testScope = TestScope(testDispatcher)
 
     private lateinit var syncManager: SyncManagerImpl
 
@@ -49,6 +53,9 @@ class SyncManagerImplTest {
         userSettingsStore = mockk(relaxed = true)
         logger = mockk(relaxed = true)
 
+        // Default: no full sync needed (tests can override)
+        every { syncStateStore.needsFullSync() } returns false
+
         syncManager = SyncManagerImpl(
             remoteApiClient = remoteApiClient,
             syncStateStore = syncStateStore,
@@ -58,7 +65,17 @@ class SyncManagerImplTest {
             userSettingsStore = userSettingsStore,
             logger = logger,
             dispatcher = testDispatcher,
+            scope = testScope,
+            // Use very long retry delays to effectively disable retries in tests
+            minRetryDelay = 1.hours,
+            maxRetryDelay = 1.hours,
         )
+    }
+
+    @After
+    fun tearDown() {
+        // Cancel any pending operations in test scope
+        testScope.testScheduler.advanceUntilIdle()
     }
 
     // region initialize

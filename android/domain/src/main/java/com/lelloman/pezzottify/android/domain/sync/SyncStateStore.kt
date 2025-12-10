@@ -35,4 +35,16 @@ interface SyncStateStore {
      * This should be called on logout or when a full sync is required.
      */
     suspend fun clearCursor()
+
+    /**
+     * Check if a full sync is needed.
+     * This persists across app restarts so that failed syncs are retried.
+     */
+    fun needsFullSync(): Boolean
+
+    /**
+     * Mark that a full sync is needed.
+     * Called when sync fails or when events are pruned.
+     */
+    suspend fun setNeedsFullSync(needsFullSync: Boolean)
 }
