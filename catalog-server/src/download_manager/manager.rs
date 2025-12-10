@@ -527,7 +527,30 @@ impl DownloadManager {
             }
         }
 
-        // 4. Create child queue items for tracks and images
+        // 4. Ingest album, tracks, and artists into the catalog FIRST
+        // This must happen before creating children so tracks exist when audio downloads complete
+        let ingested = super::catalog_ingestion::ingest_album(
+            self.catalog_store.as_ref(),
+            &album,
+            &tracks,
+            &artists,
+        )
+        .map_err(|e| {
+            DownloadError::new(
+                DownloadErrorType::Storage,
+                format!("Failed to ingest album to catalog: {}", e),
+            )
+        })?;
+
+        info!(
+            "Ingested album {} with {} tracks, {} album images, {} artist images",
+            ingested.album_id,
+            ingested.track_ids.len(),
+            ingested.album_image_ids.len(),
+            ingested.artist_image_ids.len()
+        );
+
+        // 5. Create child queue items for tracks and images
         let mut children = Vec::new();
         let track_count = tracks.len();
 
@@ -583,7 +606,7 @@ impl DownloadManager {
         let children_count = children.len();
         let image_count = children_count - track_count;
 
-        // 5. Insert children into queue
+        // 6. Insert children into queue
         if !children.is_empty() {
             self.queue_store.create_children(&item.id, children).map_err(|e| {
                 DownloadError::new(
@@ -602,28 +625,6 @@ impl DownloadManager {
             "Album {} queued {} child items ({} tracks, {} images)",
             item.content_id, children_count, track_count, image_count
         );
-
-        // 6. Ingest album, tracks, and artists into the catalog
-        match super::catalog_ingestion::ingest_album(
-            self.catalog_store.as_ref(),
-            &album,
-            &tracks,
-            &artists,
-        ) {
-            Ok(ingested) => {
-                info!(
-                    "Ingested album {} with {} tracks, {} album images, {} artist images",
-                    ingested.album_id,
-                    ingested.track_ids.len(),
-                    ingested.album_image_ids.len(),
-                    ingested.artist_image_ids.len()
-                );
-            }
-            Err(e) => {
-                // Log but don't fail - children are already queued
-                tracing::warn!("Failed to ingest album {} to catalog: {}", item.content_id, e);
-            }
-        }
 
         // Return 0 bytes - album itself doesn't download data, children do
         Ok(0)
@@ -674,11 +675,21 @@ impl DownloadManager {
         );
 
         // 4. Update track in catalog with actual audio path and format
+        // This should always succeed since ingestion happens before children are created.
+        // If it fails, the track doesn't exist in the catalog which is a bug.
         let audio_uri = format!("audio/{}.{}", item.content_id, ext);
         let format = Self::content_type_to_format(&content_type);
-        if let Err(e) = self.catalog_store.update_track_audio(&item.content_id, &audio_uri, &format) {
-            debug!("Failed to update track audio path (track may not exist in catalog): {}", e);
-        }
+        self.catalog_store
+            .update_track_audio(&item.content_id, &audio_uri, &format)
+            .map_err(|e| {
+                DownloadError::new(
+                    DownloadErrorType::Storage,
+                    format!(
+                        "Failed to update track audio path (track {} not in catalog): {}",
+                        item.content_id, e
+                    ),
+                )
+            })?;
 
         // 5. Check if parent is complete (for child items)
         if let Some(parent_id) = &item.parent_id {
