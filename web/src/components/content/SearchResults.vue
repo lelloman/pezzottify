@@ -46,66 +46,69 @@
       </div>
     </div>
 
-    <!-- Catalog Results Section -->
-    <div class="resultsSection">
-      <h2 class="sectionTitle">Catalog Results</h2>
-      <div v-if="results && results.length > 0" class="searchResultsContainer">
-        <div v-for="(result, index) in results" :key="index" class="searchResult">
-          <AlbumResult v-if="result.type === 'Album'" :result="result" />
-          <ArtistResult v-else-if="result.type === 'Artist'" :result="result" />
-          <TrackResult v-else-if="result.type === 'Track'" :result="result" />
+    <!-- Results Container - side by side when external search enabled -->
+    <div :class="['resultsWrapper', { sideBySide: showExternalSearch }]">
+      <!-- Catalog Results Section -->
+      <div class="resultsSection">
+        <h2 class="sectionTitle">Catalog Results</h2>
+        <div v-if="results && results.length > 0" class="searchResultsContainer">
+          <div v-for="(result, index) in results" :key="index" class="searchResult">
+            <AlbumResult v-if="result.type === 'Album'" :result="result" />
+            <ArtistResult v-else-if="result.type === 'Artist'" :result="result" />
+            <TrackResult v-else-if="result.type === 'Track'" :result="result" />
+          </div>
         </div>
+        <p v-else class="noResults">No results found in catalog</p>
       </div>
-      <p v-else class="noResults">No results found in catalog</p>
-    </div>
 
-    <!-- External Results Section -->
-    <div v-if="showExternalSearch" class="resultsSection externalSection">
-      <div class="sectionHeader">
-        <h2 class="sectionTitle">External Results</h2>
-        <div v-if="externalLimits" class="limitsInfo">
-          <span class="limitBadge" :class="{ limitWarning: !externalLimits.can_request }">
-            {{ externalLimits.requests_today }}/{{ externalLimits.max_per_day }} today
-          </span>
-          <span class="limitBadge" :class="{ limitWarning: externalLimits.in_queue >= externalLimits.max_queue }">
-            {{ externalLimits.in_queue }}/{{ externalLimits.max_queue }} in queue
-          </span>
+      <!-- External Results Section -->
+      <div v-if="showExternalSearch" class="resultsSection externalSection">
+        <div class="sectionHeader">
+          <h2 class="sectionTitle">External Results</h2>
+          <div v-if="externalLimits" class="limitsInfo">
+            <span class="limitBadge" :class="{ limitWarning: !externalLimits.can_request }">
+              {{ externalLimits.requests_today }}/{{ externalLimits.max_per_day }} today
+            </span>
+            <span class="limitBadge" :class="{ limitWarning: externalLimits.in_queue >= externalLimits.max_queue }">
+              {{ externalLimits.in_queue }}/{{ externalLimits.max_queue }} in queue
+            </span>
+          </div>
         </div>
-      </div>
-      <div v-if="externalResults && externalResults.results && externalResults.results.length > 0" class="searchResultsContainer">
-        <div v-for="result in externalResults.results" :key="result.id" class="externalResult">
-          <div class="externalResultCard">
-            <img
-              v-if="result.image_url"
-              :src="result.image_url"
-              :alt="result.name"
-              class="externalResultImage"
-            />
-            <div v-else class="externalResultImagePlaceholder"></div>
-            <div class="externalResultInfo">
-              <span class="externalResultName">{{ result.name }}</span>
-              <span v-if="result.artist_name" class="externalResultArtist">
-                {{ result.artist_name }}
-              </span>
-              <span v-if="result.year" class="externalResultYear">{{ result.year }}</span>
-            </div>
-            <div class="externalResultActions">
-              <span v-if="result.in_catalog" class="statusBadge inCatalog">In Catalog</span>
-              <span v-else-if="result.in_queue" class="statusBadge inQueue">In Queue</span>
-              <button
-                v-else
-                class="requestButton scaleClickFeedback"
-                :disabled="!externalLimits || !externalLimits.can_request"
-                @click="$emit('request-album', result)"
-              >
-                Request
-              </button>
+        <div v-if="externalResults && externalResults.results && externalResults.results.length > 0" class="externalResultsList">
+          <div v-for="result in externalResults.results" :key="result.id" class="externalResult">
+            <div class="externalResultCard">
+              <img
+                v-if="result.image_url"
+                :src="result.image_url"
+                :alt="result.name"
+                class="externalResultImage"
+              />
+              <div v-else class="externalResultImagePlaceholder"></div>
+              <div class="externalResultInfo">
+                <span class="externalResultName">{{ result.name }}</span>
+                <span v-if="result.artist_name" class="externalResultArtist">
+                  {{ result.artist_name }}
+                </span>
+                <span v-if="result.year" class="externalResultYear">{{ result.year }}</span>
+              </div>
+              <div class="externalResultActions">
+                <span v-if="result.in_catalog" class="statusBadge inCatalog">In Catalog</span>
+                <span v-else-if="result.in_queue" class="statusBadge inQueue">In Queue</span>
+                <button
+                  v-else
+                  class="requestButton scaleClickFeedback"
+                  :disabled="!externalLimits || !externalLimits.can_request"
+                  @click="$emit('request-album', result)"
+                >
+                  Request
+                </button>
+              </div>
             </div>
           </div>
         </div>
+        <p v-else-if="externalResults" class="noResults">No external results found</p>
+        <p v-else class="noResults loadingText">Searching external providers...</p>
       </div>
-      <p v-else-if="externalResults" class="noResults">No external results found</p>
-      <p v-else class="noResults loadingText">Searching external providers...</p>
     </div>
   </div>
 </template>
@@ -281,9 +284,32 @@ watch(
   }
 }
 
+/* Results Wrapper - side by side layout */
+.resultsWrapper {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-4);
+}
+
+.resultsWrapper.sideBySide {
+  flex-direction: row;
+  align-items: flex-start;
+}
+
+.resultsWrapper.sideBySide > .resultsSection {
+  flex: 1;
+  min-width: 0;
+}
+
+@media (max-width: 1024px) {
+  .resultsWrapper.sideBySide {
+    flex-direction: column;
+  }
+}
+
 /* Results Section */
 .resultsSection {
-  margin-top: var(--spacing-4);
+  margin-top: 0;
 }
 
 .sectionHeader {
@@ -318,9 +344,23 @@ watch(
 
 /* External Section */
 .externalSection {
-  margin-top: var(--spacing-6);
-  padding-top: var(--spacing-4);
-  border-top: 1px solid var(--border-subdued);
+  padding-left: var(--spacing-4);
+  border-left: 1px solid var(--border-subdued);
+}
+
+@media (max-width: 1024px) {
+  .externalSection {
+    padding-left: 0;
+    padding-top: var(--spacing-4);
+    border-left: none;
+    border-top: 1px solid var(--border-subdued);
+  }
+}
+
+.externalResultsList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-3);
 }
 
 .limitsInfo {
