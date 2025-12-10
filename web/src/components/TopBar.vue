@@ -35,6 +35,14 @@
           <AdminIcon class="adminIcon" />
         </router-link>
         <router-link
+          v-if="userStore.canRequestContent"
+          to="/requests"
+          class="requestsLink scaleClickFeedback"
+          title="My Requests"
+        >
+          <DownloadIcon class="requestsIcon" />
+        </router-link>
+        <router-link
           to="/settings"
           class="settingsLink scaleClickFeedback"
           title="Settings"
@@ -61,6 +69,7 @@ import CrossIcon from "./icons/CrossIcon.vue";
 import SettingsIcon from "./icons/SettingsIcon.vue";
 import LogoutIcon from "./icons/LogoutIcon.vue";
 import AdminIcon from "./icons/AdminIcon.vue";
+import DownloadIcon from "./icons/DownloadIcon.vue";
 import { wsConnectionStatus, wsServerVersion } from "../services/websocket";
 import { useUserStore } from "../store/user";
 
@@ -214,6 +223,7 @@ const connectionTitle = computed(() => {
 }
 
 .adminLink,
+.requestsLink,
 .settingsLink,
 .logoutLink {
   display: flex;
@@ -229,6 +239,7 @@ const connectionTitle = computed(() => {
 }
 
 .adminLink:hover,
+.requestsLink:hover,
 .settingsLink:hover,
 .logoutLink:hover {
   color: var(--text-base);
@@ -236,6 +247,7 @@ const connectionTitle = computed(() => {
 }
 
 .adminIcon,
+.requestsIcon,
 .settingsIcon,
 .logoutIcon {
   width: 20px;
