@@ -89,11 +89,10 @@ impl From<SearchAlbumItem> for ExternalSearchResult {
 
         let image_url = album.images.first().map(|img| img.url.clone());
 
-        let year = album.release_date.as_ref().and_then(|date| {
-            date.split('-')
-                .next()
-                .and_then(|y| y.parse::<i32>().ok())
-        });
+        let year = album
+            .release_date
+            .as_ref()
+            .and_then(|date| date.split('-').next().and_then(|y| y.parse::<i32>().ok()));
 
         ExternalSearchResult {
             id: album.id,
