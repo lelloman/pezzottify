@@ -16,6 +16,10 @@ data class SearchScreenState(
     val selectedFilters: Set<SearchFilter> = emptySet(),
     val canUseExternalSearch: Boolean = false,
     val isExternalMode: Boolean = false,
+    val externalResults: List<ExternalSearchResultContent>? = null,
+    val externalSearchLoading: Boolean = false,
+    val externalSearchError: String? = null,
+    val downloadLimits: UiDownloadLimits? = null,
 )
 
 data class SearchHistoryItem(
