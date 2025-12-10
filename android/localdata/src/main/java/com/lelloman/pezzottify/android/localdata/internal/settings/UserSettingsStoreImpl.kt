@@ -196,7 +196,7 @@ internal class UserSettingsStoreImpl(
 
     override suspend fun setSyncedSetting(setting: UserSetting, syncStatus: SyncStatus) {
         withContext(dispatcher) {
-            when (setting) {
+            when (setting ) {
                 is UserSetting.DirectDownloadsEnabled -> {
                     val enabled = setting.value
                     val modifiedAt = System.currentTimeMillis()

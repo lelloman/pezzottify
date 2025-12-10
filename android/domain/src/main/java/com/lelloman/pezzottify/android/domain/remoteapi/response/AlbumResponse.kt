@@ -61,8 +61,7 @@ data class AlbumData(
     @SerialName("album_type")
     val albumType: AlbumType,
     val label: String?,
-    @SerialName("release_date")
-    val releaseDate: Long?,
+    val date: Long?,
     val genres: List<String>,
     @SerialName("original_title")
     val originalTitle: String?,
@@ -88,7 +87,7 @@ fun AlbumResponse.toDomain() = object : Album {
     override val name: String
         get() = this@toDomain.album.name
     override val date: Long
-        get() = this@toDomain.album.releaseDate ?: 0L
+        get() = this@toDomain.album.date ?: 0L
     override val artistsIds: List<String>
         get() = this@toDomain.artists.map { it.id }
     override val displayImageId: String?
