@@ -39,13 +39,17 @@ pub fn ingest_album(
     tracks: &[ExternalTrack],
     artists: &[ExternalArtist],
 ) -> Result<IngestedAlbum> {
-    // Extract IDs for return value
+    // Extract IDs for return value (merge both image sources, deduplicated)
     let album_id = album.id.clone();
-    let album_image_ids: Vec<String> = album.covers.iter().map(|c| c.id.clone()).collect();
+    let album_image_ids: Vec<String> = merge_images(&album.covers, &album.cover_group)
+        .iter()
+        .map(|c| c.id.clone())
+        .collect();
     let track_ids: Vec<String> = tracks.iter().map(|t| t.id.clone()).collect();
     let artist_image_ids: Vec<String> = artists
         .iter()
-        .flat_map(|a| a.portraits.iter().map(|p| p.id.clone()))
+        .flat_map(|a| merge_images(&a.portraits, &a.portrait_group))
+        .map(|p| p.id.clone())
         .collect();
 
     // 1. For each artist: check if exists, insert if not
@@ -55,8 +59,9 @@ pub fn ingest_album(
             catalog_store.insert_artist(&catalog_artist)?;
         }
 
-        // Insert artist images
-        for (img_pos, portrait) in artist.portraits.iter().enumerate() {
+        // Insert artist images (merge portraits + portrait_group)
+        let all_portraits = merge_images(&artist.portraits, &artist.portrait_group);
+        for (img_pos, portrait) in all_portraits.iter().enumerate() {
             if !catalog_store.image_exists(&portrait.id)? {
                 let catalog_image = convert_image(portrait);
                 catalog_store.insert_image(&catalog_image)?;
@@ -84,8 +89,9 @@ pub fn ingest_album(
         let _ = catalog_store.add_album_artist(&album_id, &artist.id, position as i32);
     }
 
-    // 4. Insert album cover images
-    for (position, cover) in album.covers.iter().enumerate() {
+    // 4. Insert album cover images (merge covers + cover_group)
+    let all_covers = merge_images(&album.covers, &album.cover_group);
+    for (position, cover) in all_covers.iter().enumerate() {
         if !catalog_store.image_exists(&cover.id)? {
             let catalog_image = convert_image(cover);
             catalog_store.insert_image(&catalog_image)?;
@@ -240,6 +246,26 @@ fn convert_image_size(s: &str) -> ImageSize {
         "xlarge" | "xl" => ImageSize::XLarge,
         _ => ImageSize::Default,
     }
+}
+
+/// Merge two image lists, deduplicating by ID.
+/// First list takes precedence (images from second list only added if ID not seen).
+fn merge_images(primary: &[ExternalImage], secondary: &[ExternalImage]) -> Vec<ExternalImage> {
+    let mut seen = std::collections::HashSet::new();
+    let mut result = Vec::new();
+
+    for img in primary {
+        if seen.insert(img.id.clone()) {
+            result.push(img.clone());
+        }
+    }
+    for img in secondary {
+        if seen.insert(img.id.clone()) {
+            result.push(img.clone());
+        }
+    }
+
+    result
 }
 
 /// Convert external artist role string to ArtistRole enum.
