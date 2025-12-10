@@ -90,11 +90,26 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from "vue";
+import { ref, computed, onMounted, watch } from "vue";
+import { useRouter } from "vue-router";
+import { useUserStore } from "@/store/user";
+
+const router = useRouter();
+const userStore = useUserStore();
 
 const limits = ref(null);
 const requests = ref([]);
 const isLoading = ref(true);
+
+// Redirect if permission is revoked while on this page
+watch(
+  () => userStore.canRequestContent,
+  (canRequest) => {
+    if (!canRequest) {
+      router.push("/");
+    }
+  },
+);
 
 const pendingRequests = computed(() => {
   return requests.value.filter(

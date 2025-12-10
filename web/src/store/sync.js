@@ -137,6 +137,10 @@ export const useSyncStore = defineStore("sync", () => {
               settingsObj["enable_direct_downloads"] = setting[key]
                 ? "true"
                 : "false";
+            } else if (key === "ExternalSearchEnabled") {
+              settingsObj["enable_external_search"] = setting[key]
+                ? "true"
+                : "false";
             } else {
               settingsObj[key] = setting[key];
             }
