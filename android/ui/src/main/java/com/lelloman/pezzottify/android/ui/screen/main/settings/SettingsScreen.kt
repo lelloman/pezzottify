@@ -155,6 +155,17 @@ private fun SettingsScreenInternal(
                 )
             }
 
+            // External Search Section - only shown if user has RequestContent permission
+            if (currentState.hasRequestContentPermission) {
+                HorizontalDivider(modifier = Modifier.padding(vertical = 24.dp))
+
+                ExternalSearchSection(
+                    isEnabled = currentState.externalSearchEnabled,
+                    hasPermission = currentState.hasRequestContentPermission,
+                    onEnabledChanged = actions::setExternalSearchEnabled
+                )
+            }
+
             HorizontalDivider(modifier = Modifier.padding(vertical = 24.dp))
 
             FileLoggingSection(
@@ -219,6 +230,7 @@ private fun SettingsScreenPreview() {
                 override fun selectFontFamily(fontFamily: AppFontFamily) {}
                 override fun setCacheEnabled(enabled: Boolean) {}
                 override fun setDirectDownloadsEnabled(enabled: Boolean) {}
+                override fun setExternalSearchEnabled(enabled: Boolean) {}
                 override fun setFileLoggingEnabled(enabled: Boolean) {}
                 override fun shareLogs() {}
                 override fun clearLogs() {}
@@ -250,6 +262,7 @@ private fun SettingsScreenPreviewDark() {
                 override fun selectFontFamily(fontFamily: AppFontFamily) {}
                 override fun setCacheEnabled(enabled: Boolean) {}
                 override fun setDirectDownloadsEnabled(enabled: Boolean) {}
+                override fun setExternalSearchEnabled(enabled: Boolean) {}
                 override fun setFileLoggingEnabled(enabled: Boolean) {}
                 override fun shareLogs() {}
                 override fun clearLogs() {}

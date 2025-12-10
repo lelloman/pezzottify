@@ -16,6 +16,8 @@ interface SettingsScreenActions {
 
     fun setDirectDownloadsEnabled(enabled: Boolean)
 
+    fun setExternalSearchEnabled(enabled: Boolean)
+
     fun setFileLoggingEnabled(enabled: Boolean)
 
     fun shareLogs()

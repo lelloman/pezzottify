@@ -39,6 +39,8 @@ class SettingsScreenViewModel @Inject constructor(
                 storageInfo = interactor.getStorageInfo(),
                 directDownloadsEnabled = interactor.isDirectDownloadsEnabled(),
                 hasIssueContentDownloadPermission = interactor.hasIssueContentDownloadPermission(),
+                externalSearchEnabled = interactor.isExternalSearchEnabled(),
+                hasRequestContentPermission = interactor.hasRequestContentPermission(),
                 isFileLoggingEnabled = interactor.isFileLoggingEnabled(),
                 hasLogFiles = interactor.hasLogFiles(),
                 logFilesSize = interactor.getLogFilesSize(),
@@ -80,6 +82,16 @@ class SettingsScreenViewModel @Inject constructor(
             launch {
                 interactor.observeHasIssueContentDownloadPermission().collect { hasPermission ->
                     mutableState.update { it.copy(hasIssueContentDownloadPermission = hasPermission) }
+                }
+            }
+            launch {
+                interactor.observeExternalSearchEnabled().collect { enabled ->
+                    mutableState.update { it.copy(externalSearchEnabled = enabled) }
+                }
+            }
+            launch {
+                interactor.observeHasRequestContentPermission().collect { hasPermission ->
+                    mutableState.update { it.copy(hasRequestContentPermission = hasPermission) }
                 }
             }
             launch {
@@ -126,6 +138,12 @@ class SettingsScreenViewModel @Inject constructor(
     override fun setDirectDownloadsEnabled(enabled: Boolean) {
         viewModelScope.launch {
             interactor.setDirectDownloadsEnabled(enabled)
+        }
+    }
+
+    override fun setExternalSearchEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            interactor.setExternalSearchEnabled(enabled)
         }
     }
 
@@ -195,6 +213,8 @@ class SettingsScreenViewModel @Inject constructor(
         fun getStorageInfo(): StorageInfo?
         fun isDirectDownloadsEnabled(): Boolean
         fun hasIssueContentDownloadPermission(): Boolean
+        fun isExternalSearchEnabled(): Boolean
+        fun hasRequestContentPermission(): Boolean
         fun observeThemeMode(): kotlinx.coroutines.flow.Flow<ThemeMode>
         fun observeColorPalette(): kotlinx.coroutines.flow.Flow<ColorPalette>
         fun observeFontFamily(): kotlinx.coroutines.flow.Flow<AppFontFamily>
@@ -202,12 +222,15 @@ class SettingsScreenViewModel @Inject constructor(
         fun observeStorageInfo(): kotlinx.coroutines.flow.Flow<StorageInfo>
         fun observeDirectDownloadsEnabled(): kotlinx.coroutines.flow.Flow<Boolean>
         fun observeHasIssueContentDownloadPermission(): kotlinx.coroutines.flow.Flow<Boolean>
+        fun observeExternalSearchEnabled(): kotlinx.coroutines.flow.Flow<Boolean>
+        fun observeHasRequestContentPermission(): kotlinx.coroutines.flow.Flow<Boolean>
         fun observeFileLoggingEnabled(): kotlinx.coroutines.flow.Flow<Boolean>
         suspend fun setThemeMode(themeMode: ThemeMode)
         suspend fun setColorPalette(colorPalette: ColorPalette)
         suspend fun setFontFamily(fontFamily: AppFontFamily)
         suspend fun setCacheEnabled(enabled: Boolean)
         suspend fun setDirectDownloadsEnabled(enabled: Boolean): Boolean
+        suspend fun setExternalSearchEnabled(enabled: Boolean)
         suspend fun setFileLoggingEnabled(enabled: Boolean)
         fun isFileLoggingEnabled(): Boolean
         fun hasLogFiles(): Boolean
