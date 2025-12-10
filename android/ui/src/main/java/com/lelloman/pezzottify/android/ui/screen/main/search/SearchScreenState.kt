@@ -20,6 +20,7 @@ data class SearchScreenState(
     val externalSearchLoading: Boolean = false,
     val externalSearchError: String? = null,
     val downloadLimits: UiDownloadLimits? = null,
+    val requestingAlbumIds: Set<String> = emptySet(),
 )
 
 data class SearchHistoryItem(

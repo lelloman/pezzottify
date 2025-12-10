@@ -268,91 +268,91 @@ Note: Response types in `domain/remoteapi/response/` serve as domain models (alr
 
 ### Phase 4: Filter Chips for Catalog Search
 
-- [ ] **4.1** Create `SearchFilter` enum in ui module (Album, Artist, Track)
-- [ ] **4.2** Add `selectedFilters: Set<SearchFilter>` to `SearchScreenState`
-- [ ] **4.3** Add `toggleFilter(filter)` action to `SearchScreenActions`
-- [ ] **4.4** Implement `toggleFilter` in `SearchScreenViewModel`
-- [ ] **4.5** Create `SearchFilterChips` composable (row of FilterChip components)
-- [ ] **4.6** Add `SearchFilterChips` to `SearchScreen` below SearchBar
-- [ ] **4.7** Update search logic to pass filters to catalog search API
-- [ ] **4.8** Test filter chips with catalog search
+- [x] **4.1** Create `SearchFilter` enum in ui module (Album, Artist, Track)
+- [x] **4.2** Add `selectedFilters: Set<SearchFilter>` to `SearchScreenState`
+- [x] **4.3** Add `toggleFilter(filter)` action to `SearchScreenActions`
+- [x] **4.4** Implement `toggleFilter` in `SearchScreenViewModel`
+- [x] **4.5** Create `SearchFilterChips` composable (row of FilterChip components)
+- [x] **4.6** Add `SearchFilterChips` to `SearchScreen` below SearchBar
+- [x] **4.7** Update search logic to pass filters to catalog search API
+- [x] **4.8** Test filter chips with catalog search
 
 ### Phase 5: External Mode Toggle
 
-- [ ] **5.1** Add `canUseExternalSearch: Boolean` to `SearchScreenState`
+- [x] **5.1** Add `canUseExternalSearch: Boolean` to `SearchScreenState`
   - Computed from: hasRequestContentPermission AND isExternalSearchEnabled
-- [ ] **5.2** Add `isExternalMode: Boolean` to `SearchScreenState`
-- [ ] **5.3** Add `externalModeEnabled` to local preferences (persist toggle state)
-- [ ] **5.4** Add `toggleExternalMode()` action to `SearchScreenActions`
-- [ ] **5.5** Implement `toggleExternalMode` in `SearchScreenViewModel`
+- [x] **5.2** Add `isExternalMode: Boolean` to `SearchScreenState`
+- [x] **5.3** Add `externalModeEnabled` to local preferences (persist toggle state)
+- [x] **5.4** Add `toggleExternalMode()` action to `SearchScreenActions`
+- [x] **5.5** Implement `toggleExternalMode` in `SearchScreenViewModel`
   - Persist to local preferences
   - Clear current results when switching modes
-- [ ] **5.6** Create external mode toggle icon/button composable
-- [ ] **5.7** Add toggle to SearchBar trailing area (only visible when canUseExternalSearch)
-- [ ] **5.8** Update filter chips visibility: hide Track chip when in external mode
-- [ ] **5.9** Wire search logic to call external API when isExternalMode is true
+- [x] **5.6** Create external mode toggle icon/button composable
+- [x] **5.7** Add toggle to SearchBar trailing area (only visible when canUseExternalSearch)
+- [x] **5.8** Update filter chips visibility: hide Track chip when in external mode
+- [x] **5.9** Wire search logic to call external API when isExternalMode is true
 
 ### Phase 6: External Search Result UI
 
-- [ ] **6.1** Create `ExternalSearchResultContent` sealed class in ui module
+- [x] **6.1** Create `ExternalSearchResultContent` sealed class in ui module
   - Album(id, name, artistName, year, imageUrl, inCatalog, inQueue, catalogId?)
   - Artist(id, name, imageUrl, inCatalog, inQueue, catalogId?)
-- [ ] **6.2** Add external search state fields to `SearchScreenState`
+- [x] **6.2** Add external search state fields to `SearchScreenState`
   - externalResults: List<ExternalSearchResultContent>?
   - externalSearchLoading: Boolean
   - externalSearchError: String?
   - downloadLimits: DownloadLimits?
-- [ ] **6.3** Create `ExternalAlbumSearchResult` composable
+- [x] **6.3** Create `ExternalAlbumSearchResult` composable
   - Image (from URL), name, artist, year
   - Status badge or Request button
-- [ ] **6.4** Create `ExternalArtistSearchResult` composable
+- [x] **6.4** Create `ExternalArtistSearchResult` composable
   - Image (from URL), name
   - Status badge or Request button
-- [ ] **6.5** Create `DownloadLimitsBar` composable
+- [x] **6.5** Create `DownloadLimitsBar` composable
   - Shows "X/Y today · X/Y in queue"
   - Warning color when at limit
-- [ ] **6.6** Update `SearchScreen` to show external results when in external mode
-- [ ] **6.7** Add `DownloadLimitsBar` above external results list
-- [ ] **6.8** Load external image URLs with Coil (already used in app)
+- [x] **6.6** Update `SearchScreen` to show external results when in external mode
+- [x] **6.7** Add `DownloadLimitsBar` above external results list
+- [x] **6.8** Load external image URLs with Coil (already used in app)
 
 ### Phase 7: Request Functionality
 
-- [ ] **7.1** Add `requestAlbumDownload(result)` action to `SearchScreenActions`
-- [ ] **7.2** Implement `requestAlbumDownload` in `SearchScreenViewModel`
+- [x] **7.1** Add `requestAlbumDownload(result)` action to `SearchScreenActions`
+- [x] **7.2** Implement `requestAlbumDownload` in `SearchScreenViewModel`
   - Call RequestAlbumDownloadUseCase
   - Update result's inQueue status on success
   - Refresh limits after request
-- [ ] **7.3** Add `onExternalResultClick(result)` action
-- [ ] **7.4** Implement navigation for "In Catalog" items
+- [x] **7.3** Add `onExternalResultClick(result)` action
+- [x] **7.4** Implement navigation for "In Catalog" items
   - If result.inCatalog && result.catalogId != null → navigate to album/artist screen
-- [ ] **7.5** Wire Request button in result cards to requestAlbumDownload
-- [ ] **7.6** Disable Request button when limits.canRequest is false
-- [ ] **7.7** Show loading state on Request button while request is in progress
-- [ ] **7.8** Handle request errors (show snackbar/toast)
+- [x] **7.5** Wire Request button in result cards to requestAlbumDownload
+- [x] **7.6** Disable Request button when limits.canRequest is false
+- [x] **7.7** Show loading state on Request button while request is in progress
+- [x] **7.8** Handle request errors (show snackbar/toast)
 
 ### Phase 8: My Requests Screen
 
-- [ ] **8.1** Create `MyRequestsScreenState` data class
+- [x] **8.1** Create `MyRequestsScreenState` data class
   - requests: List<DownloadRequest>?, isLoading, error, limits
-- [ ] **8.2** Create `MyRequestsScreenActions` interface
+- [x] **8.2** Create `MyRequestsScreenActions` interface
   - refresh(), onRequestClick(request)
-- [ ] **8.3** Create `MyRequestsScreenViewModel`
+- [x] **8.3** Create `MyRequestsScreenViewModel`
   - Load requests and limits on init
   - Pull-to-refresh support
-- [ ] **8.4** Create `MyRequestsScreen` composable
+- [x] **8.4** Create `MyRequestsScreen` composable
   - Header with limits display
   - Sections: Pending, Completed, Failed
-- [ ] **8.5** Create `PendingRequestItem` composable
+- [x] **8.5** Create `PendingRequestItem` composable
   - Shows album name, artist, queue position, progress bar
-- [ ] **8.6** Create `CompletedRequestItem` composable
+- [x] **8.6** Create `CompletedRequestItem` composable
   - Shows album info, clickable to navigate to catalog
-- [ ] **8.7** Create `FailedRequestItem` composable
+- [x] **8.7** Create `FailedRequestItem` composable
   - Shows album info and error message
-- [ ] **8.8** Add navigation route for MyRequestsScreen
-- [ ] **8.9** Add "My Requests" entry to Profile screen
+- [x] **8.8** Add navigation route for MyRequestsScreen
+- [x] **8.9** Add "My Requests" entry to Profile screen
   - Only visible when hasRequestContentPermission
-- [ ] **8.10** Wire navigation from Profile to MyRequestsScreen
-- [ ] **8.11** Add Interactor for MyRequestsViewModel in InteractorsModule
+- [x] **8.10** Wire navigation from Profile to MyRequestsScreen
+- [x] **8.11** Add Interactor for MyRequestsViewModel in InteractorsModule
 
 ---
 

@@ -8,4 +8,8 @@ sealed interface SearchScreensEvents {
 
     data class NavigateToTrackScreen(val trackId: String) : SearchScreensEvents
 
+    data class ShowRequestError(val message: String) : SearchScreensEvents
+
+    data object ShowRequestSuccess : SearchScreensEvents
+
 }
