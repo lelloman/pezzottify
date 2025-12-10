@@ -4,6 +4,7 @@ import { useRemoteStore } from "./remote";
 
 // Settings key constants
 export const SETTING_ENABLE_DIRECT_DOWNLOADS = "enable_direct_downloads";
+export const SETTING_ENABLE_EXTERNAL_SEARCH = "enable_external_search";
 
 // Admin permissions that grant access to admin panel
 const ADMIN_PERMISSIONS = [
@@ -299,6 +300,22 @@ export const useUserStore = defineStore("user", () => {
     );
   };
 
+  // Convenience computed for external search setting
+  const isExternalSearchEnabled = computed(() => {
+    return settings.value[SETTING_ENABLE_EXTERNAL_SEARCH] === "true";
+  });
+
+  const isExternalSearchPending = computed(() => {
+    return isSettingPending(SETTING_ENABLE_EXTERNAL_SEARCH);
+  });
+
+  const setExternalSearchEnabled = async (enabled) => {
+    return await setSetting(
+      SETTING_ENABLE_EXTERNAL_SEARCH,
+      enabled ? "true" : "false",
+    );
+  };
+
   // =====================================================
   // Sync Event Apply Methods
   // These methods apply incoming sync events to local state
@@ -544,6 +561,9 @@ export const useUserStore = defineStore("user", () => {
     isDirectDownloadsEnabled,
     isDirectDownloadsPending,
     setDirectDownloadsEnabled,
+    isExternalSearchEnabled,
+    isExternalSearchPending,
+    setExternalSearchEnabled,
 
     // Sync event apply methods
     applyContentLiked,
