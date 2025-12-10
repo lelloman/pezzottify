@@ -1,7 +1,13 @@
 <template>
   <main class="mainContent">
     <div v-if="searchQuery">
-      <SearchResults :results="results" />
+      <SearchResults
+        :results="results"
+        :externalResults="externalResults"
+        :externalLimits="externalLimits"
+        :showExternalSearch="showExternalSearch"
+        @request-album="handleRequestAlbum"
+      />
     </div>
     <Track v-else-if="trackId" :trackId="trackId" />
     <Album v-else-if="albumId" :albumId="albumId" />
@@ -25,8 +31,13 @@ import UserPlaylist from "@/components/content/UserPlaylist.vue";
 import UserSettings from "@/components/content/UserSettings.vue";
 import { useRoute } from "vue-router";
 import SearchResults from "./SearchResults.vue";
+import { useUserStore } from "@/store/user";
+
+const userStore = useUserStore();
 
 const results = ref(null);
+const externalResults = ref(null);
+const externalLimits = ref(null);
 
 const route = useRoute();
 const searchQuery = ref(route.params.query || "");
@@ -36,33 +47,131 @@ const albumId = ref(route.params.albumId || "");
 const playlistId = ref(route.params.playlistId || "");
 const isSettingsRoute = computed(() => route.name === "settings");
 
+// Check if external search should be shown
+const showExternalSearch = computed(() => {
+  return userStore.canRequestContent && userStore.isExternalSearchEnabled;
+});
+
+// Determine external search type based on selected filters
+const getExternalSearchType = (filters) => {
+  if (!filters || filters.length === 0) {
+    return "album"; // Default to album
+  }
+  // If only artist is selected, search artists
+  if (filters.length === 1 && filters[0] === "artist") {
+    return "artist";
+  }
+  // If album is selected (alone or with others), search albums
+  if (filters.includes("album")) {
+    return "album";
+  }
+  // If only track is selected, default to album (tracks not supported in external)
+  return "album";
+};
+
+const fetchCatalogResults = async (query, filters) => {
+  const requestBody = { query, resolve: true };
+  if (filters) {
+    requestBody.filters = filters;
+  }
+  try {
+    const response = await fetch("/v1/content/search", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(requestBody),
+    });
+    return await response.json();
+  } catch (error) {
+    console.error("Catalog search error:", error);
+    return [];
+  }
+};
+
+const fetchExternalResults = async (query, type) => {
+  try {
+    const response = await fetch(
+      `/v1/download/search?q=${encodeURIComponent(query)}&type=${type}`,
+    );
+    if (!response.ok) {
+      console.error("External search error:", response.status);
+      return null;
+    }
+    return await response.json();
+  } catch (error) {
+    console.error("External search error:", error);
+    return null;
+  }
+};
+
+const fetchExternalLimits = async () => {
+  try {
+    const response = await fetch("/v1/download/limits");
+    if (!response.ok) {
+      return null;
+    }
+    return await response.json();
+  } catch (error) {
+    console.error("Error fetching limits:", error);
+    return null;
+  }
+};
+
 const fetchResults = async (newQuery, queryParams) => {
-  console.log("watch query? " + newQuery);
   if (newQuery) {
     results.value = [];
-    const requestBody = { query: newQuery, resolve: true };
+    externalResults.value = null;
+    externalLimits.value = null;
 
     const filters = queryParams.type ? queryParams.type.split(",") : null;
-    if (filters) {
-      requestBody.filters = filters;
-    }
-    try {
-      const response = await fetch("/v1/content/search", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(requestBody),
-      });
-      const data = await response.json();
-      console.log("search response: ");
-      console.log(data);
-      results.value = data;
-    } catch (error) {
-      console.error("Search error:", error);
+
+    // Fetch catalog results
+    results.value = await fetchCatalogResults(newQuery, filters);
+
+    // Fetch external results if enabled
+    if (showExternalSearch.value) {
+      const externalType = getExternalSearchType(filters);
+      const [extResults, limits] = await Promise.all([
+        fetchExternalResults(newQuery, externalType),
+        fetchExternalLimits(),
+      ]);
+      externalResults.value = extResults;
+      externalLimits.value = limits;
     }
   } else {
     results.value = [];
+    externalResults.value = null;
+    externalLimits.value = null;
+  }
+};
+
+const handleRequestAlbum = async (album) => {
+  try {
+    const response = await fetch("/v1/download/request/album", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        album_id: album.id,
+        album_name: album.name,
+        artist_name: album.artist_name,
+      }),
+    });
+    if (response.ok) {
+      // Refresh limits and mark item as in_queue
+      externalLimits.value = await fetchExternalLimits();
+      // Update the result to show it's now in queue
+      if (externalResults.value && externalResults.value.results) {
+        externalResults.value = {
+          ...externalResults.value,
+          results: externalResults.value.results.map((r) =>
+            r.id === album.id ? { ...r, in_queue: true } : r,
+          ),
+        };
+      }
+    } else {
+      console.error("Failed to request album:", response.status);
+    }
+  } catch (error) {
+    console.error("Error requesting album:", error);
   }
 };
 watch(
