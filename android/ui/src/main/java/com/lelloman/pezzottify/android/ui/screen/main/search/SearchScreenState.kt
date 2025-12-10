@@ -13,6 +13,7 @@ data class SearchScreenState(
     val searchError: String? = null,
     val recentlyViewedContent: List<Flow<Content<ResolvedRecentlyViewedContent>>>? = null,
     val searchHistoryItems: List<Flow<Content<SearchHistoryItem>>>? = null,
+    val selectedFilters: Set<SearchFilter> = emptySet(),
 )
 
 data class SearchHistoryItem(

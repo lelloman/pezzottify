@@ -313,9 +313,19 @@ class InteractorsModule {
         object : SearchScreenViewModel.Interactor {
             private val logger = loggerFactory.getLogger("SearchScreenViewModel.Interactor")
 
-            override suspend fun search(query: String): Result<List<Pair<String, SearchScreenViewModel.SearchedItemType>>> {
-                logger.debug("search($query)")
-                val performSearchResult = performSearch(query)
+            override suspend fun search(
+                query: String,
+                filters: List<SearchScreenViewModel.InteractorSearchFilter>?
+            ): Result<List<Pair<String, SearchScreenViewModel.SearchedItemType>>> {
+                logger.debug("search($query, filters=$filters)")
+                val domainFilters = filters?.map { filter ->
+                    when (filter) {
+                        SearchScreenViewModel.InteractorSearchFilter.Album -> RemoteApiClient.SearchFilter.Album
+                        SearchScreenViewModel.InteractorSearchFilter.Artist -> RemoteApiClient.SearchFilter.Artist
+                        SearchScreenViewModel.InteractorSearchFilter.Track -> RemoteApiClient.SearchFilter.Track
+                    }
+                }
+                val performSearchResult = performSearch(query, domainFilters)
                 if (performSearchResult.isFailure) {
                     logger.debug("search($query) returning failure")
                     return Result.failure(

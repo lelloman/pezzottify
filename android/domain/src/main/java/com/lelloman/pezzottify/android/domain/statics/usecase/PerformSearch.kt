@@ -16,9 +16,12 @@ class PerformSearch @Inject constructor(
 
     private val logger: Logger by loggerFactory
 
-    suspend operator fun invoke(query: String): Result<List<Pair<String, SearchedItemType>>> {
-        logger.info("invoke() searching for: $query")
-        return when (val response = remoteApiClient.search(query, null)) {
+    suspend operator fun invoke(
+        query: String,
+        filters: List<RemoteApiClient.SearchFilter>? = null
+    ): Result<List<Pair<String, SearchedItemType>>> {
+        logger.info("invoke() searching for: $query, filters: $filters")
+        return when (val response = remoteApiClient.search(query, filters)) {
             is RemoteApiResponse.Success -> {
                 logger.debug("invoke() search returned ${response.data.size} results")
                 Result.success(response.data.map { it.itemId to it.itemType })

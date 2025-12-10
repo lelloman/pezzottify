@@ -72,14 +72,36 @@ class SearchScreenViewModel(
             query = query,
             isLoading = true,
         )
+        performSearch()
+    }
+
+    override fun toggleFilter(filter: SearchFilter) {
+        val currentFilters = mutableState.value.selectedFilters
+        val newFilters = if (currentFilters.contains(filter)) {
+            currentFilters - filter
+        } else {
+            currentFilters + filter
+        }
+        mutableState.value = mutableState.value.copy(selectedFilters = newFilters)
+        // Re-run search with new filters if there's a query
+        if (currentQuery.isNotEmpty()) {
+            performSearch()
+        }
+    }
+
+    private fun performSearch() {
         previousSearchJob?.cancel()
-        if (query.isNotEmpty()) {
+        if (currentQuery.isNotEmpty()) {
             previousSearchJob = viewModelScope.launch {
                 delay(400)
                 if (!isActive) {
                     return@launch
                 }
-                val searchResultsResult = interactor.search(query)
+                val filters = mutableState.value.selectedFilters.map { it.toInteractorFilter() }
+                val searchResultsResult = interactor.search(
+                    query = currentQuery,
+                    filters = filters.ifEmpty { null }
+                )
                 mutableState.value = mutableState.value.copy(
                     isLoading = false,
                     searchResults = searchResultsResult.getOrNull()
@@ -94,6 +116,12 @@ class SearchScreenViewModel(
                 searchError = null
             )
         }
+    }
+
+    private fun SearchFilter.toInteractorFilter(): InteractorSearchFilter = when (this) {
+        SearchFilter.Album -> InteractorSearchFilter.Album
+        SearchFilter.Artist -> InteractorSearchFilter.Artist
+        SearchFilter.Track -> InteractorSearchFilter.Track
     }
 
     override fun clickOnArtistSearchResult(artistId: String) {
@@ -269,10 +297,19 @@ class SearchScreenViewModel(
     )
 
     interface Interactor {
-        suspend fun search(query: String): Result<List<Pair<String, SearchedItemType>>>
+        suspend fun search(
+            query: String,
+            filters: List<InteractorSearchFilter>? = null
+        ): Result<List<Pair<String, SearchedItemType>>>
         suspend fun getRecentlyViewedContent(maxCount: Int): Flow<List<RecentlyViewedContent>>
         fun getSearchHistoryEntries(maxCount: Int): Flow<List<SearchHistoryEntry>>
         fun logSearchHistoryEntry(query: String, contentType: SearchHistoryEntryType, contentId: String)
+    }
+
+    enum class InteractorSearchFilter {
+        Album,
+        Artist,
+        Track,
     }
 
     enum class SearchedItemType {
