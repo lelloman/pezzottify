@@ -6,6 +6,8 @@ interface SearchScreenActions {
 
     fun updateQuery(query: String)
 
+    fun toggleFilter(filter: SearchFilter)
+
     fun clickOnArtistSearchResult(artistId: String)
 
     fun clickOnAlbumSearchResult(albumId: String)

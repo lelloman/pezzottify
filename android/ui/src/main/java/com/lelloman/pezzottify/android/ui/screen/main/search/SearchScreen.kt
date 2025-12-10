@@ -109,6 +109,11 @@ fun SearchScreenContent(
         ) {
 
         }
+        SearchFilterChips(
+            availableFilters = SearchFilter.catalogFilters,
+            selectedFilters = state.selectedFilters,
+            onFilterToggled = actions::toggleFilter
+        )
         if (state.query.isEmpty()) {
             if (!state.searchHistoryItems.isNullOrEmpty()) {
                 SearchHistorySection(
