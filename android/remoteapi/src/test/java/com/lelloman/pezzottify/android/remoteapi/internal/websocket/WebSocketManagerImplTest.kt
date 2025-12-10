@@ -35,6 +35,7 @@ class WebSocketManagerImplTest {
     private lateinit var webSocketManager: WebSocketManagerImpl
     private lateinit var mockOkHttpClientFactory: OkHttpClientFactory
     private lateinit var mockOkHttpClient: OkHttpClient
+    private lateinit var mockOkHttpClientBuilder: OkHttpClient.Builder
     private lateinit var mockWebSocket: WebSocket
 
     private val authStateFlow = MutableStateFlow<AuthState>(AuthState.LoggedOut)
@@ -47,13 +48,16 @@ class WebSocketManagerImplTest {
         val mockLogger = mockk<Logger>(relaxed = true)
         loggerFactory = mockk()
         mockOkHttpClientFactory = mockk()
-        mockOkHttpClient = mockk()
+        mockOkHttpClient = mockk(relaxed = true)
+        mockOkHttpClientBuilder = mockk(relaxed = true)
         mockWebSocket = mockk(relaxed = true)
 
         every { loggerFactory.getValue(any(), any<KProperty<*>>()) } returns mockLogger
         every { authStore.getAuthState() } returns authStateFlow
         every { configStore.baseUrl } returns baseUrlFlow
-        every { mockOkHttpClientFactory.createBuilder(any()) } returns OkHttpClient.Builder()
+        every { mockOkHttpClientFactory.createBuilder(any()) } returns mockOkHttpClientBuilder
+        every { mockOkHttpClientBuilder.pingInterval(any(), any()) } returns mockOkHttpClientBuilder
+        every { mockOkHttpClientBuilder.build() } returns mockOkHttpClient
         every { mockOkHttpClient.newWebSocket(any<Request>(), any<WebSocketListener>()) } returns mockWebSocket
 
         testScope = TestScope(StandardTestDispatcher())
