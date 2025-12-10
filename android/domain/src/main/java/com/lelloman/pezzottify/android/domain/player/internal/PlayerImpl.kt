@@ -117,7 +117,7 @@ internal class PlayerImpl(
         }
     }
 
-    override fun loadUserPlaylist(userPlaylistId: String) {
+    override fun loadUserPlaylist(userPlaylistId: String, startTrackId: String?) {
         runOnPlayerThread {
             loadNexPlaylistJob?.cancel()
             loadNexPlaylistJob = runOnPlayerThread {
@@ -135,10 +135,53 @@ internal class PlayerImpl(
                     val baseUrl = configStore.baseUrl.value
                     val urls = tracksIds.map { "$baseUrl/v1/content/stream/$it" }
                     platformPlayer.loadPlaylist(urls)
+
+                    // If a specific track was requested, start from that track
+                    if (startTrackId != null) {
+                        val startIndex = tracksIds.indexOf(startTrackId)
+                        if (startIndex >= 0) {
+                            platformPlayer.loadTrackIndex(startIndex)
+                            logger.info("Starting user playlist $userPlaylistId at track index $startIndex (trackId: $startTrackId)")
+                        } else {
+                            logger.warn("Start track $startTrackId not found in user playlist $userPlaylistId, starting from beginning")
+                        }
+                    }
+
                     logger.info("Loaded user playlist $userPlaylistId with ${tracksIds.size} tracks")
                 } else {
                     logger.warn("User playlist $userPlaylistId not found or empty")
                 }
+            }
+        }
+    }
+
+    override fun addUserPlaylistToQueue(userPlaylistId: String) {
+        runOnPlayerThread {
+            val playlist = withTimeoutOrNull(2.seconds) {
+                userPlaylistStore.getPlaylist(userPlaylistId).first()
+            }
+            if (playlist != null && playlist.trackIds.isNotEmpty()) {
+                addTracksToPlaylist(playlist.trackIds)
+                logger.info("Added user playlist $userPlaylistId (${playlist.trackIds.size} tracks) to queue")
+            } else {
+                logger.warn("User playlist $userPlaylistId not found or empty")
+            }
+        }
+    }
+
+    override fun loadSingleTrack(trackId: String) {
+        runOnPlayerThread {
+            loadNexPlaylistJob?.cancel()
+            loadNexPlaylistJob = runOnPlayerThread {
+                mutablePlaybackPlaylist.value = PlaybackPlaylist(
+                    context = PlaybackPlaylistContext.UserMix,
+                    tracksIds = listOf(trackId),
+                )
+                platformPlayer.setIsPlaying(true)
+                val baseUrl = configStore.baseUrl.value
+                val url = "$baseUrl/v1/content/stream/$trackId"
+                platformPlayer.loadPlaylist(listOf(url))
+                logger.info("Loaded single track $trackId")
             }
         }
     }

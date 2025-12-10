@@ -11,7 +11,9 @@ interface PezzottifyPlayer : ControlsAndStatePlayer, AppInitializer{
 
     fun loadAlbum(albumId: String, startTrackId: String? = null)
     fun addAlbumToPlaylist(albumId: String)
-    fun loadUserPlaylist(userPlaylistId: String)
+    fun loadUserPlaylist(userPlaylistId: String, startTrackId: String? = null)
+    fun addUserPlaylistToQueue(userPlaylistId: String)
+    fun loadSingleTrack(trackId: String)
 
 
     fun goToPreviousPlaylist()

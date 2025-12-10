@@ -18,7 +18,6 @@ import com.lelloman.pezzottify.android.ui.model.Permission as UiPermission
 import com.lelloman.pezzottify.android.ui.screen.player.RepeatModeUi
 import com.lelloman.pezzottify.android.domain.settings.AppFontFamily as DomainAppFontFamily
 import com.lelloman.pezzottify.android.domain.settings.ColorPalette as DomainColorPalette
-import com.lelloman.pezzottify.android.domain.settings.PlayBehavior as DomainPlayBehavior
 import com.lelloman.pezzottify.android.domain.settings.ThemeMode as DomainThemeMode
 import com.lelloman.pezzottify.android.domain.settings.UserSettingsStore
 import com.lelloman.pezzottify.android.domain.storage.StorageInfo as DomainStorageInfo
@@ -30,7 +29,6 @@ import com.lelloman.pezzottify.android.domain.settings.usecase.UpdateDirectDownl
 import com.lelloman.pezzottify.android.ui.theme.AppFontFamily as UiAppFontFamily
 import com.lelloman.pezzottify.android.ui.theme.ColorPalette as UiColorPalette
 import com.lelloman.pezzottify.android.ui.theme.ThemeMode as UiThemeMode
-import com.lelloman.pezzottify.android.ui.model.PlayBehavior as UiPlayBehavior
 import com.lelloman.pezzottify.android.ui.model.StorageInfo as UiStorageInfo
 import com.lelloman.pezzottify.android.ui.model.StoragePressureLevel as UiStoragePressureLevel
 import com.lelloman.pezzottify.android.ui.model.LikedContent as UiLikedContent
@@ -44,10 +42,14 @@ import com.lelloman.pezzottify.android.domain.user.LogSearchHistoryEntryUseCase
 import com.lelloman.pezzottify.android.domain.user.LogViewedContentUseCase
 import com.lelloman.pezzottify.android.domain.user.SearchHistoryEntry
 import com.lelloman.pezzottify.android.domain.user.ViewedContent
+import com.lelloman.pezzottify.android.domain.statics.StaticsStore
 import com.lelloman.pezzottify.android.domain.usercontent.GetLikedStateUseCase
 import com.lelloman.pezzottify.android.domain.usercontent.ToggleLikeUseCase
 import com.lelloman.pezzottify.android.domain.usercontent.UserContentStore
 import com.lelloman.pezzottify.android.domain.usercontent.UserPlaylistStore
+import com.lelloman.pezzottify.android.ui.screen.main.library.UiUserPlaylist
+import java.util.UUID
+import kotlinx.coroutines.flow.first
 import com.lelloman.pezzottify.android.logger.LoggerFactory
 import com.lelloman.pezzottify.android.logging.LogFileManager
 import com.lelloman.pezzottify.android.ui.screen.login.LoginViewModel
@@ -174,9 +176,6 @@ class InteractorsModule {
         logFileManager: LogFileManager,
         configStore: ConfigStore,
     ): SettingsScreenViewModel.Interactor = object : SettingsScreenViewModel.Interactor {
-        override fun getPlayBehavior(): UiPlayBehavior =
-            userSettingsStore.playBehavior.value.toUi()
-
         override fun getThemeMode(): UiThemeMode = userSettingsStore.themeMode.value.toUi()
 
         override fun getColorPalette(): UiColorPalette = userSettingsStore.colorPalette.value.toUi()
@@ -192,8 +191,6 @@ class InteractorsModule {
         override fun hasIssueContentDownloadPermission(): Boolean =
             permissionsStore.permissions.value.contains(DomainPermission.IssueContentDownload)
 
-        override fun observePlayBehavior(): Flow<UiPlayBehavior> = userSettingsStore.playBehavior.map { it.toUi() }
-
         override fun observeThemeMode(): Flow<UiThemeMode> = userSettingsStore.themeMode.map { it.toUi()}
 
         override fun observeColorPalette(): Flow<UiColorPalette>  = userSettingsStore.colorPalette.map { it.toUi() }
@@ -208,10 +205,6 @@ class InteractorsModule {
 
         override fun observeHasIssueContentDownloadPermission(): Flow<Boolean> =
             permissionsStore.permissions.map { it.contains(DomainPermission.IssueContentDownload) }
-
-        override suspend fun setPlayBehavior(playBehavior: UiPlayBehavior) {
-            userSettingsStore.setPlayBehavior(playBehavior.toDomain())
-        }
 
         override suspend fun setThemeMode(themeMode: UiThemeMode) {
             userSettingsStore.setThemeMode(themeMode.toDomain())
@@ -371,22 +364,17 @@ class InteractorsModule {
     fun provideAlbumScreenInteractor(
         player: PezzottifyPlayer,
         logViewedContentUseCase: LogViewedContentUseCase,
-        userSettingsStore: UserSettingsStore,
         getLikedStateUseCase: GetLikedStateUseCase,
         toggleLikeUseCase: ToggleLikeUseCase,
+        userPlaylistStore: UserPlaylistStore,
+        staticsStore: StaticsStore,
     ): AlbumScreenViewModel.Interactor = object : AlbumScreenViewModel.Interactor {
         override fun playAlbum(albumId: String) {
-            when (userSettingsStore.playBehavior.value) {
-                DomainPlayBehavior.ReplacePlaylist -> player.loadAlbum(albumId)
-                DomainPlayBehavior.AddToPlaylist -> player.addAlbumToPlaylist(albumId)
-            }
+            player.loadAlbum(albumId)
         }
 
         override fun playTrack(albumId: String, trackId: String) {
-            when (userSettingsStore.playBehavior.value) {
-                DomainPlayBehavior.ReplacePlaylist -> player.loadAlbum(albumId, trackId)
-                DomainPlayBehavior.AddToPlaylist -> player.addTracksToPlaylist(listOf(trackId))
-            }
+            player.loadAlbum(albumId, trackId)
         }
 
         override fun logViewedAlbum(albumId: String) {
@@ -402,14 +390,51 @@ class InteractorsModule {
                 }
             }
 
-        override fun getIsAddToQueueMode(): Flow<Boolean> =
-            userSettingsStore.playBehavior.map { it == DomainPlayBehavior.AddToPlaylist }
-
         override fun isLiked(contentId: String): Flow<Boolean> =
             getLikedStateUseCase(contentId)
 
         override fun toggleLike(contentId: String, currentlyLiked: Boolean) {
             toggleLikeUseCase(contentId, DomainLikedContent.ContentType.Album, currentlyLiked)
+        }
+
+        override fun getUserPlaylists(): Flow<List<UiUserPlaylist>> =
+            userPlaylistStore.getPlaylists().map { playlists ->
+                playlists.map { playlist ->
+                    UiUserPlaylist(
+                        id = playlist.id,
+                        name = playlist.name,
+                        trackCount = playlist.trackIds.size,
+                    )
+                }
+            }
+
+        override fun playTrackDirectly(trackId: String) {
+            player.loadSingleTrack(trackId)
+        }
+
+        override fun addTrackToQueue(trackId: String) {
+            player.addTracksToPlaylist(listOf(trackId))
+        }
+
+        override fun addAlbumToQueue(albumId: String) {
+            player.addAlbumToPlaylist(albumId)
+        }
+
+        override suspend fun addTrackToPlaylist(trackId: String, playlistId: String) {
+            userPlaylistStore.addTrackToPlaylist(playlistId, trackId)
+        }
+
+        override suspend fun addAlbumToPlaylist(albumId: String, playlistId: String) {
+            val album = staticsStore.getAlbum(albumId).first()
+            if (album != null) {
+                val trackIds = album.discs.flatMap { it.tracksIds }
+                userPlaylistStore.addTracksToPlaylist(playlistId, trackIds)
+            }
+        }
+
+        override suspend fun createPlaylist(name: String) {
+            val id = UUID.randomUUID().toString()
+            userPlaylistStore.createOrUpdatePlaylist(id, name, emptyList())
         }
     }
 
@@ -435,15 +460,12 @@ class InteractorsModule {
     fun provideTrackScreenInteractor(
         player: PezzottifyPlayer,
         logViewedContentUseCase: LogViewedContentUseCase,
-        userSettingsStore: UserSettingsStore,
         getLikedStateUseCase: GetLikedStateUseCase,
         toggleLikeUseCase: ToggleLikeUseCase,
     ): TrackScreenViewModel.Interactor = object : TrackScreenViewModel.Interactor {
         override fun playTrack(albumId: String, trackId: String) {
-            when (userSettingsStore.playBehavior.value) {
-                DomainPlayBehavior.ReplacePlaylist -> player.loadAlbum(albumId, trackId)
-                DomainPlayBehavior.AddToPlaylist -> player.addTracksToPlaylist(listOf(trackId))
-            }
+            // Always play the track by loading the album starting from this track
+            player.loadAlbum(albumId, trackId)
         }
 
         override fun logViewedTrack(trackId: String) {
@@ -458,9 +480,6 @@ class InteractorsModule {
                     null
                 }
             }
-
-        override fun getIsAddToQueueMode(): Flow<Boolean> =
-            userSettingsStore.playBehavior.map { it == DomainPlayBehavior.AddToPlaylist }
 
         override fun isLiked(contentId: String): Flow<Boolean> =
             getLikedStateUseCase(contentId)
@@ -744,7 +763,6 @@ class InteractorsModule {
     fun provideUserPlaylistScreenInteractor(
         userPlaylistStore: UserPlaylistStore,
         player: PezzottifyPlayer,
-        userSettingsStore: UserSettingsStore,
         logViewedContentUseCase: LogViewedContentUseCase,
     ): UserPlaylistScreenViewModel.Interactor =
         object : UserPlaylistScreenViewModel.Interactor {
@@ -764,9 +782,8 @@ class InteractorsModule {
             }
 
             override fun playTrack(playlistId: String, trackId: String) {
-                // For now, clicking a track adds it to the queue
-                // The play button plays the entire playlist
-                player.addTracksToPlaylist(listOf(trackId))
+                // Clicking a track in playlist loads the playlist starting from that track
+                player.loadUserPlaylist(playlistId, trackId)
             }
 
             override fun logViewedPlaylist(playlistId: String) {
@@ -782,8 +799,41 @@ class InteractorsModule {
                     }
                 }
 
-            override fun getIsAddToQueueMode(): Flow<Boolean> =
-                userSettingsStore.playBehavior.map { it == DomainPlayBehavior.AddToPlaylist }
+            override fun getUserPlaylists(): Flow<List<UiUserPlaylist>> =
+                userPlaylistStore.getPlaylists().map { playlists ->
+                    playlists.map { playlist ->
+                        UiUserPlaylist(
+                            id = playlist.id,
+                            name = playlist.name,
+                            trackCount = playlist.trackIds.size,
+                        )
+                    }
+                }
+
+            override fun playTrackDirectly(trackId: String) {
+                player.loadSingleTrack(trackId)
+            }
+
+            override fun addTrackToQueue(trackId: String) {
+                player.addTracksToPlaylist(listOf(trackId))
+            }
+
+            override fun addPlaylistToQueue(playlistId: String) {
+                player.addUserPlaylistToQueue(playlistId)
+            }
+
+            override suspend fun addTrackToPlaylist(trackId: String, playlistId: String) {
+                userPlaylistStore.addTrackToPlaylist(playlistId, trackId)
+            }
+
+            override suspend fun removeTrackFromPlaylist(playlistId: String, trackId: String) {
+                userPlaylistStore.removeTrackFromPlaylist(playlistId, trackId)
+            }
+
+            override suspend fun createPlaylist(name: String) {
+                val id = UUID.randomUUID().toString()
+                userPlaylistStore.createOrUpdatePlaylist(id, name, emptyList())
+            }
         }
 
 }
@@ -810,16 +860,6 @@ private fun DomainAppFontFamily.toUi(): UiAppFontFamily = when (this) {
     DomainAppFontFamily.SansSerif -> UiAppFontFamily.SansSerif
     DomainAppFontFamily.Serif -> UiAppFontFamily.Serif
     DomainAppFontFamily.Monospace -> UiAppFontFamily.Monospace
-}
-
-private fun DomainPlayBehavior.toUi(): UiPlayBehavior = when (this) {
-    DomainPlayBehavior.ReplacePlaylist -> UiPlayBehavior.ReplacePlaylist
-    DomainPlayBehavior.AddToPlaylist -> UiPlayBehavior.AddToPlaylist
-}
-
-private fun UiPlayBehavior.toDomain(): DomainPlayBehavior = when (this) {
-    UiPlayBehavior.ReplacePlaylist -> DomainPlayBehavior.ReplacePlaylist
-    UiPlayBehavior.AddToPlaylist -> DomainPlayBehavior.AddToPlaylist
 }
 
 private fun UiThemeMode.toDomain(): DomainThemeMode = when (this) {

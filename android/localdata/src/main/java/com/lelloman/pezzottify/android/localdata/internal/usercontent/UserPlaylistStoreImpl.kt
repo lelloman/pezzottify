@@ -43,6 +43,29 @@ internal class UserPlaylistStoreImpl(
         playlistDao.updateTrackIds(playlistId, trackIds)
     }
 
+    override suspend fun addTrackToPlaylist(playlistId: String, trackId: String) {
+        val playlist = playlistDao.getByIdOnce(playlistId) ?: return
+        if (trackId !in playlist.trackIds) {
+            playlistDao.updateTrackIds(playlistId, playlist.trackIds + trackId)
+        }
+    }
+
+    override suspend fun addTracksToPlaylist(playlistId: String, trackIds: List<String>) {
+        val playlist = playlistDao.getByIdOnce(playlistId) ?: return
+        val existingIds = playlist.trackIds.toSet()
+        val newTracks = trackIds.filter { it !in existingIds }
+        if (newTracks.isNotEmpty()) {
+            playlistDao.updateTrackIds(playlistId, playlist.trackIds + newTracks)
+        }
+    }
+
+    override suspend fun removeTrackFromPlaylist(playlistId: String, trackId: String) {
+        val playlist = playlistDao.getByIdOnce(playlistId) ?: return
+        if (trackId in playlist.trackIds) {
+            playlistDao.updateTrackIds(playlistId, playlist.trackIds - trackId)
+        }
+    }
+
     override suspend fun deleteAll() {
         playlistDao.deleteAll()
     }

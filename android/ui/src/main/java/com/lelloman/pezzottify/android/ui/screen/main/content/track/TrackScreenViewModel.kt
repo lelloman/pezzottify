@@ -57,9 +57,6 @@ class TrackScreenViewModel @AssistedInject constructor(
         .combine(interactor.getCurrentPlayingTrackId()) { trackState, currentTrackId ->
             trackState.copy(currentPlayingTrackId = currentTrackId)
         }
-        .combine(interactor.getIsAddToQueueMode()) { trackState, isAddToQueue ->
-            trackState.copy(isAddToQueueMode = isAddToQueue)
-        }
         .combine(interactor.isLiked(trackId)) { trackState, isLiked ->
             trackState.copy(isLiked = isLiked)
         }
@@ -97,7 +94,6 @@ class TrackScreenViewModel @AssistedInject constructor(
         fun playTrack(albumId: String, trackId: String)
         fun logViewedTrack(trackId: String)
         fun getCurrentPlayingTrackId(): Flow<String?>
-        fun getIsAddToQueueMode(): Flow<Boolean>
         fun isLiked(contentId: String): Flow<Boolean>
         fun toggleLike(contentId: String, currentlyLiked: Boolean)
     }

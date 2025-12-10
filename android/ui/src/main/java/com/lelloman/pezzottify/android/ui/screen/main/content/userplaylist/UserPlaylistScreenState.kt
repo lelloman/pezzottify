@@ -2,6 +2,7 @@ package com.lelloman.pezzottify.android.ui.screen.main.content.userplaylist
 
 import com.lelloman.pezzottify.android.ui.content.Content
 import com.lelloman.pezzottify.android.ui.content.Track
+import com.lelloman.pezzottify.android.ui.screen.main.library.UiUserPlaylist
 import kotlinx.coroutines.flow.Flow
 
 data class UserPlaylistScreenState(
@@ -11,5 +12,5 @@ data class UserPlaylistScreenState(
     val isLoading: Boolean = true,
     val isError: Boolean = false,
     val currentPlayingTrackId: String? = null,
-    val isAddToQueueMode: Boolean = false,
+    val userPlaylists: List<UiUserPlaylist> = emptyList(),
 )

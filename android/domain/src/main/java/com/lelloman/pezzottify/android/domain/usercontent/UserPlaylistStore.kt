@@ -18,5 +18,11 @@ interface UserPlaylistStore {
 
     suspend fun updatePlaylistTracks(playlistId: String, trackIds: List<String>)
 
+    suspend fun addTrackToPlaylist(playlistId: String, trackId: String)
+
+    suspend fun addTracksToPlaylist(playlistId: String, trackIds: List<String>)
+
+    suspend fun removeTrackFromPlaylist(playlistId: String, trackId: String)
+
     suspend fun deleteAll()
 }
