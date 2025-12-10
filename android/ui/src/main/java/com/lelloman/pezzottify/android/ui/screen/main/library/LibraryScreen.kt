@@ -14,8 +14,12 @@ import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
@@ -25,6 +29,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -39,6 +44,7 @@ import com.lelloman.pezzottify.android.ui.component.DurationText
 import com.lelloman.pezzottify.android.ui.component.LoadingScreen
 import com.lelloman.pezzottify.android.ui.component.PlaylistGridItem
 import com.lelloman.pezzottify.android.ui.component.ScrollingArtistsRow
+import com.lelloman.pezzottify.android.ui.component.dialog.CreatePlaylistDialog
 import com.lelloman.pezzottify.android.ui.content.Content
 import com.lelloman.pezzottify.android.ui.content.ContentResolver
 import com.lelloman.pezzottify.android.ui.content.Track
@@ -59,6 +65,7 @@ fun LibraryScreen(navController: NavController) {
     val viewModel = hiltViewModel<LibraryScreenViewModel>()
     LibraryScreenContent(
         state = viewModel.state.collectAsState().value,
+        actions = viewModel,
         contentResolver = viewModel.contentResolver,
         navController = navController,
     )
@@ -68,56 +75,84 @@ fun LibraryScreen(navController: NavController) {
 @Composable
 private fun LibraryScreenContent(
     state: LibraryScreenState,
+    actions: LibraryScreenActions,
     contentResolver: ContentResolver,
     navController: NavController,
 ) {
     var selectedTab by rememberSaveable { mutableStateOf(LibraryTab.Albums) }
+    var showCreatePlaylistDialog by remember { mutableStateOf(false) }
 
-    Column(
+    Box(
         modifier = Modifier
             .fillMaxSize()
             .windowInsetsPadding(WindowInsets.statusBars)
     ) {
-        // Header with segmented button
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 12.dp)
-        ) {
-            Text(
-                text = "Your Library",
-                style = MaterialTheme.typography.headlineMedium,
-                modifier = Modifier.padding(bottom = 12.dp)
-            )
+        Column(modifier = Modifier.fillMaxSize()) {
+            // Header with segmented button
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 12.dp)
+            ) {
+                Text(
+                    text = "Your Library",
+                    style = MaterialTheme.typography.headlineMedium,
+                    modifier = Modifier.padding(bottom = 12.dp)
+                )
 
-            SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
-                LibraryTab.entries.forEachIndexed { index, tab ->
-                    SegmentedButton(
-                        shape = SegmentedButtonDefaults.itemShape(
-                            index = index,
-                            count = LibraryTab.entries.size
-                        ),
-                        onClick = { selectedTab = tab },
-                        selected = selectedTab == tab
-                    ) {
-                        Text(text = tab.name)
+                SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+                    LibraryTab.entries.forEachIndexed { index, tab ->
+                        SegmentedButton(
+                            shape = SegmentedButtonDefaults.itemShape(
+                                index = index,
+                                count = LibraryTab.entries.size
+                            ),
+                            onClick = { selectedTab = tab },
+                            selected = selectedTab == tab
+                        ) {
+                            Text(text = tab.name)
+                        }
                     }
+                }
+            }
+
+            // Content area
+            Box(modifier = Modifier.fillMaxSize()) {
+                when {
+                    state.isLoading -> LoadingScreen()
+                    else -> LibraryLoadedScreen(
+                        state = state,
+                        selectedTab = selectedTab,
+                        contentResolver = contentResolver,
+                        navController = navController,
+                    )
                 }
             }
         }
 
-        // Content area
-        Box(modifier = Modifier.fillMaxSize()) {
-            when {
-                state.isLoading -> LoadingScreen()
-                else -> LibraryLoadedScreen(
-                    state = state,
-                    selectedTab = selectedTab,
-                    contentResolver = contentResolver,
-                    navController = navController,
+        // FAB for creating playlist (only shown on Playlists tab)
+        if (selectedTab == LibraryTab.Playlists) {
+            FloatingActionButton(
+                onClick = { showCreatePlaylistDialog = true },
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(16.dp),
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Add,
+                    contentDescription = "Create playlist",
                 )
             }
         }
+    }
+
+    if (showCreatePlaylistDialog) {
+        CreatePlaylistDialog(
+            onDismiss = { showCreatePlaylistDialog = false },
+            onCreate = { name ->
+                actions.createPlaylist(name)
+            },
+        )
     }
 }
 

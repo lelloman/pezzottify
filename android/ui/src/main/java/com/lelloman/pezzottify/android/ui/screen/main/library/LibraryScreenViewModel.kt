@@ -9,13 +9,14 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 @HiltViewModel
 class LibraryScreenViewModel @Inject constructor(
     private val interactor: Interactor,
     val contentResolver: ContentResolver,
-) : ViewModel() {
+) : ViewModel(), LibraryScreenActions {
 
     val state = combine(
         interactor.getLikedContent(),
@@ -39,8 +40,15 @@ class LibraryScreenViewModel @Inject constructor(
         )
     }.stateIn(viewModelScope, SharingStarted.Eagerly, LibraryScreenState())
 
+    override fun createPlaylist(name: String) {
+        viewModelScope.launch {
+            interactor.createPlaylist(name)
+        }
+    }
+
     interface Interactor {
         fun getLikedContent(): Flow<List<LikedContent>>
         fun getPlaylists(): Flow<List<UiUserPlaylist>>
+        suspend fun createPlaylist(name: String)
     }
 }
