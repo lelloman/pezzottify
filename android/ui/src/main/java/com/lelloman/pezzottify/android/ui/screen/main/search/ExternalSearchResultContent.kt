@@ -7,6 +7,7 @@ sealed class ExternalSearchResultContent {
     abstract val inCatalog: Boolean
     abstract val inQueue: Boolean
     abstract val catalogId: String?
+    abstract val score: Float
 
     data class Album(
         override val id: String,
@@ -17,6 +18,7 @@ sealed class ExternalSearchResultContent {
         override val inCatalog: Boolean,
         override val inQueue: Boolean,
         override val catalogId: String?,
+        override val score: Float,
     ) : ExternalSearchResultContent()
 
     data class Artist(
@@ -26,5 +28,6 @@ sealed class ExternalSearchResultContent {
         override val inCatalog: Boolean,
         override val inQueue: Boolean,
         override val catalogId: String?,
+        override val score: Float,
     ) : ExternalSearchResultContent()
 }

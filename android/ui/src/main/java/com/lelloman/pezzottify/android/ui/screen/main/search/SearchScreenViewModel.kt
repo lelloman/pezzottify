@@ -295,6 +295,7 @@ class SearchScreenViewModel(
                             inCatalog = result.inCatalog,
                             inQueue = result.inQueue,
                             catalogId = result.catalogId,
+                            score = result.score,
                         )
                         InteractorExternalSearchType.Artist -> ExternalSearchResultContent.Artist(
                             id = result.id,
@@ -303,6 +304,7 @@ class SearchScreenViewModel(
                             inCatalog = result.inCatalog,
                             inQueue = result.inQueue,
                             catalogId = result.catalogId,
+                            score = result.score,
                         )
                     }
                     allResults.add(content)
@@ -312,13 +314,16 @@ class SearchScreenViewModel(
             }
         }
 
+        // Sort combined results by score (descending) for relevance ordering
+        val sortedResults = allResults.sortedByDescending { it.score }
+
         limitsDeferred.join()
 
         mutableState.value = mutableState.value.copy(
             isLoading = false,
             externalSearchLoading = false,
-            externalResults = allResults.ifEmpty { null },
-            externalSearchErrorRes = if (hasError && allResults.isEmpty()) R.string.search_failed else null,
+            externalResults = sortedResults.ifEmpty { null },
+            externalSearchErrorRes = if (hasError && sortedResults.isEmpty()) R.string.search_failed else null,
         )
     }
 
@@ -525,6 +530,7 @@ class SearchScreenViewModel(
         val inCatalog: Boolean,
         val inQueue: Boolean,
         val catalogId: String?,
+        val score: Float,
     )
 
     data class DownloadLimitsData(
