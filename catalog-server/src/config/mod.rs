@@ -126,10 +126,10 @@ impl AppConfig {
             stale_in_progress_threshold_secs: dm_file
                 .stale_in_progress_threshold_secs
                 .unwrap_or(3600),
-            max_retries: dm_file.max_retries.unwrap_or(5),
+            max_retries: dm_file.max_retries.unwrap_or(8),
             initial_backoff_secs: dm_file.initial_backoff_secs.unwrap_or(60),
-            max_backoff_secs: dm_file.max_backoff_secs.unwrap_or(3600),
-            backoff_multiplier: dm_file.backoff_multiplier.unwrap_or(2.0),
+            max_backoff_secs: dm_file.max_backoff_secs.unwrap_or(86400), // 24 hours
+            backoff_multiplier: dm_file.backoff_multiplier.unwrap_or(2.5),
             audit_log_retention_days: dm_file.audit_log_retention_days.unwrap_or(90),
         };
 
@@ -230,10 +230,10 @@ impl Default for DownloadManagerSettings {
             user_max_queue_size: 200,
             process_interval_secs: 5,
             stale_in_progress_threshold_secs: 3600,
-            max_retries: 5,
+            max_retries: 8,
             initial_backoff_secs: 60,
-            max_backoff_secs: 3600,
-            backoff_multiplier: 2.0,
+            max_backoff_secs: 86400, // 24 hours
+            backoff_multiplier: 2.5,
             audit_log_retention_days: 90,
         }
     }
