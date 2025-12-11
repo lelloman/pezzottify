@@ -42,6 +42,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
@@ -63,6 +65,9 @@ fun MyRequestsScreen(
     onNavigateToAlbum: (String) -> Unit,
 ) {
     val state by viewModel.state.collectAsState()
+
+    // Track current time, updated when requests change (on refresh)
+    val currentTimeMillis = remember(state.requests) { mutableLongStateOf(System.currentTimeMillis()) }
 
     LaunchedEffect(Unit) {
         viewModel.events.collect { event ->
@@ -157,11 +162,13 @@ fun MyRequestsScreen(
                         when (state.selectedTab) {
                             MyRequestsTab.Queue -> QueueTabContent(
                                 requests = state.requests ?: emptyList(),
+                                currentTimeMillis = currentTimeMillis.longValue,
                             )
                             MyRequestsTab.Completed -> CompletedTabContent(
                                 requests = state.requests ?: emptyList(),
                                 contentResolver = viewModel.contentResolver,
                                 actions = viewModel,
+                                currentTimeMillis = currentTimeMillis.longValue,
                             )
                         }
                     }
@@ -227,6 +234,7 @@ private fun LimitItem(
 @Composable
 private fun QueueTabContent(
     requests: List<UiDownloadRequest>,
+    currentTimeMillis: Long,
     modifier: Modifier = Modifier,
 ) {
     val queueRequests = requests.filter {
@@ -255,7 +263,7 @@ private fun QueueTabContent(
             modifier = modifier.fillMaxSize(),
         ) {
             items(queueRequests, key = { it.id }) { request ->
-                QueueRequestItem(request = request)
+                QueueRequestItem(request = request, currentTimeMillis = currentTimeMillis)
             }
         }
     }
@@ -264,6 +272,7 @@ private fun QueueTabContent(
 @Composable
 private fun QueueRequestItem(
     request: UiDownloadRequest,
+    currentTimeMillis: Long,
     modifier: Modifier = Modifier,
 ) {
     val isFailed = request.status == RequestStatus.Failed
@@ -320,7 +329,7 @@ private fun QueueRequestItem(
                 modifier = Modifier.padding(top = 2.dp),
             ) {
                 Text(
-                    text = stringResource(R.string.my_requests_requested_time, formatRelativeTime(request.createdAt)),
+                    text = stringResource(R.string.my_requests_requested_time, formatRelativeTime(request.createdAt, currentTimeMillis)),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -370,6 +379,7 @@ private fun CompletedTabContent(
     requests: List<UiDownloadRequest>,
     contentResolver: ContentResolver,
     actions: MyRequestsScreenActions,
+    currentTimeMillis: Long,
     modifier: Modifier = Modifier,
 ) {
     val completedRequests = requests.filter {
@@ -398,6 +408,7 @@ private fun CompletedTabContent(
                     request = request,
                     contentResolver = contentResolver,
                     onClick = { actions.onRequestClick(request) },
+                    currentTimeMillis = currentTimeMillis,
                 )
             }
         }
@@ -409,6 +420,7 @@ private fun CompletedAlbumCard(
     request: UiDownloadRequest,
     contentResolver: ContentResolver,
     onClick: () -> Unit,
+    currentTimeMillis: Long,
     modifier: Modifier = Modifier,
 ) {
     val catalogId = request.catalogId
@@ -434,7 +446,7 @@ private fun CompletedAlbumCard(
                     // Show completion time
                     request.completedAt?.let { completedAt ->
                         Text(
-                            text = formatRelativeTime(completedAt),
+                            text = formatRelativeTime(completedAt, currentTimeMillis),
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.padding(horizontal = 12.dp),
@@ -451,7 +463,7 @@ private fun CompletedAlbumCard(
                     )
                     request.completedAt?.let { completedAt ->
                         Text(
-                            text = formatRelativeTime(completedAt),
+                            text = formatRelativeTime(completedAt, currentTimeMillis),
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.padding(horizontal = 12.dp),
@@ -476,7 +488,7 @@ private fun CompletedAlbumCard(
             )
             request.completedAt?.let { completedAt ->
                 Text(
-                    text = formatRelativeTime(completedAt),
+                    text = formatRelativeTime(completedAt, currentTimeMillis),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(horizontal = 12.dp),
@@ -487,10 +499,9 @@ private fun CompletedAlbumCard(
 }
 
 @Composable
-private fun formatRelativeTime(timestampSeconds: Long): String {
-    val nowMillis = System.currentTimeMillis()
+private fun formatRelativeTime(timestampSeconds: Long, currentTimeMillis: Long): String {
     val timestampMillis = timestampSeconds * 1000
-    val diffMillis = nowMillis - timestampMillis
+    val diffMillis = currentTimeMillis - timestampMillis
 
     val minutes = diffMillis / (1000 * 60)
     val hours = diffMillis / (1000 * 60 * 60)

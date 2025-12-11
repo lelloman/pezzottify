@@ -289,6 +289,52 @@ impl DownloadManager {
         self.queue_store.get_user_requests(user_id, limit, offset)
     }
 
+    /// Get all download requests for a user with progress information.
+    /// Returns UserRequestView which includes progress for album downloads.
+    pub fn get_user_requests_with_progress(
+        &self,
+        user_id: &str,
+        limit: usize,
+        offset: usize,
+    ) -> Result<Vec<UserRequestView>> {
+        let requests = self.queue_store.get_user_requests(user_id, limit, offset)?;
+
+        // Calculate queue positions for pending items
+        let pending_items: Vec<_> = requests
+            .iter()
+            .filter(|r| r.status == QueueStatus::Pending)
+            .collect();
+
+        let views: Vec<UserRequestView> = requests
+            .iter()
+            .map(|item| {
+                // Get progress for album items that have children
+                let progress = if item.content_type == DownloadContentType::Album {
+                    self.queue_store
+                        .get_children_progress(&item.id)
+                        .ok()
+                        .filter(|p| p.total_children > 0)
+                } else {
+                    None
+                };
+
+                // Calculate queue position for pending items
+                let queue_position = if item.status == QueueStatus::Pending {
+                    pending_items
+                        .iter()
+                        .position(|p| p.id == item.id)
+                        .map(|pos| pos + 1)
+                } else {
+                    None
+                };
+
+                UserRequestView::from_queue_item(item, progress, queue_position)
+            })
+            .collect();
+
+        Ok(views)
+    }
+
     /// Get the status of a specific request for a user.
     pub fn get_request_status(&self, user_id: &str, request_id: &str) -> Result<Option<QueueItem>> {
         let requests = self.queue_store.get_user_requests(user_id, 1000, 0)?;
