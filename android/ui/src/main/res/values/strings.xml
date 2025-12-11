@@ -299,6 +299,20 @@
     <string name="track_fallback">Track</string>
     <!-- ERROR MESSAGES -->
 
+    <!-- EXTERNAL ALBUM SCREEN -->
+    <string name="tracks">Tracks</string>
+    <string name="retry">Retry</string>
+    <string name="in_your_catalog">In Your Catalog</string>
+    <string name="download_completed">Download Completed</string>
+    <string name="downloading">Downloading…</string>
+    <string name="pending_in_queue">Pending in Queue</string>
+    <string name="queue_position">Position #%1$d</string>
+    <string name="download_failed">Download Failed</string>
+    <string name="retry_waiting">Waiting to Retry</string>
+    <string name="requesting_download">Requesting Download…</string>
+    <string name="request_download">Request Download</string>
+    <!-- EXTERNAL ALBUM SCREEN -->
+
     <!-- MY REQUESTS SCREEN -->
     <string name="my_requests_title">My Requests</string>
     <string name="my_requests_tab_queue">Queue (%1$d)</string>

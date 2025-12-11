@@ -14,4 +14,8 @@ sealed interface SearchScreensEvents {
 
     data object ShowRequestSuccess : SearchScreensEvents
 
+    data class NavigateToExternalAlbumScreen(val albumId: String) : SearchScreensEvents
+
+    data class NavigateToExternalArtistScreen(val artistId: String) : SearchScreensEvents
+
 }

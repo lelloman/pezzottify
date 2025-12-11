@@ -35,9 +35,9 @@ Add the ability to view external (not-yet-downloaded) albums in a dedicated scre
 
 ---
 
-## Phase 1: Server Enhancements (catalog-server - Rust)
+## Phase 1: Server Enhancements (catalog-server - Rust) [DONE]
 
-### 1.1 Add External Album Details Endpoint
+### 1.1 Add External Album Details Endpoint [DONE]
 
 **New endpoint:** `GET /v1/download/album/:album_id`
 
@@ -88,7 +88,7 @@ pub struct RequestStatusInfo {
 - `catalog-server/src/download_manager/search_proxy.rs` - Add method to fetch album details
 - `catalog-server/src/server/server.rs` - Add route handler
 
-### 1.2 Enhance Discography Endpoint
+### 1.2 Enhance Discography Endpoint [DONE]
 
 **Existing endpoint:** `GET /v1/download/search/discography/:artist_id`
 
@@ -118,7 +118,7 @@ pub struct DiscographyAlbum {
 - `catalog-server/src/download_manager/search_proxy.rs` - Enrich with request status
 - `catalog-server/src/server/server.rs` - Update handler
 
-### 1.3 Add WebSocket Messages for Download Status
+### 1.3 Add WebSocket Messages for Download Status [DONE]
 
 **New sync event types** (added to existing sync event system):
 
@@ -169,9 +169,9 @@ pub enum UserEvent {
 
 ---
 
-## Phase 2: Android Remote API Layer
+## Phase 2: Android Remote API Layer [DONE]
 
-### 2.1 Add New API Methods
+### 2.1 Add New API Methods [DONE]
 
 **File:** `android/remoteapi/src/main/java/.../RemoteApiClient.kt`
 
@@ -182,7 +182,7 @@ suspend fun getExternalAlbumDetails(albumId: String): RemoteApiResponse<External
 suspend fun getExternalArtistDiscography(artistId: String): RemoteApiResponse<ExternalArtistDiscographyResponse>
 ```
 
-### 2.2 Add Response DTOs
+### 2.2 Add Response DTOs [DONE]
 
 **File:** `android/remoteapi/src/main/java/.../dto/`
 
@@ -241,7 +241,7 @@ data class DiscographyAlbumDto(
 )
 ```
 
-### 2.3 Handle New Sync Event Types
+### 2.3 Handle New Sync Event Types [DONE]
 
 **Files to modify:**
 - `android/domain/src/main/java/.../domain/sync/SyncEvent.kt` - Add new event types
