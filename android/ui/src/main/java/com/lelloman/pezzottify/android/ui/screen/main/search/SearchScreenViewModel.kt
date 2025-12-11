@@ -266,10 +266,10 @@ class SearchScreenViewModel(
             }
         }
 
-        // Get selected filters or default to Album
+        // Get selected filters or default to Album + Artist
         val selectedFilters = mutableState.value.selectedFilters
         val searchTypes = if (selectedFilters.isEmpty()) {
-            listOf(InteractorExternalSearchType.Album)
+            listOf(InteractorExternalSearchType.Album, InteractorExternalSearchType.Artist)
         } else {
             selectedFilters.mapNotNull { filter ->
                 when (filter) {
@@ -277,7 +277,7 @@ class SearchScreenViewModel(
                     SearchFilter.Artist -> InteractorExternalSearchType.Artist
                     SearchFilter.Track -> null // External search doesn't support tracks
                 }
-            }.ifEmpty { listOf(InteractorExternalSearchType.Album) }
+            }.ifEmpty { listOf(InteractorExternalSearchType.Album, InteractorExternalSearchType.Artist) }
         }
 
         // Perform searches for each type and merge results
