@@ -100,6 +100,9 @@ impl QueueProcessor {
         // Update queue size metrics
         self.update_queue_metrics();
 
+        // Update throttle and corruption handler metrics
+        self.update_throttle_handler_metrics().await;
+
         // 1. Promote ready retries
         match self.download_manager.promote_ready_retries() {
             Ok(count) => {
@@ -160,6 +163,29 @@ impl QueueProcessor {
                 error!("Failed to get queue stats for metrics: {}", e);
             }
         }
+    }
+
+    /// Update throttle and corruption handler metrics.
+    ///
+    /// These are updated on each tick to provide real-time visibility.
+    async fn update_throttle_handler_metrics(&self) {
+        // Update throttle metrics
+        let throttle_stats = self.download_manager.get_throttle_stats().await;
+        metrics::update_throttle_metrics(
+            throttle_stats.bytes_last_minute,
+            throttle_stats.bytes_last_hour,
+            throttle_stats.max_bytes_per_minute,
+            throttle_stats.max_bytes_per_hour,
+            throttle_stats.is_throttled,
+        );
+
+        // Update corruption handler metrics
+        let handler_state = self.download_manager.get_corruption_handler_state().await;
+        metrics::update_corruption_handler_metrics(
+            handler_state.current_level,
+            handler_state.in_cooldown,
+            handler_state.cooldown_remaining_secs.unwrap_or(0),
+        );
     }
 
     /// Check for stale in-progress items and log warnings.

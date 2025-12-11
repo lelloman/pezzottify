@@ -3880,6 +3880,177 @@ async fn admin_get_audit_for_user(
     }
 }
 
+// =============================================================================
+// Download Admin - Throttle & Corruption Handler
+// =============================================================================
+
+/// Response for GET /admin/throttle
+#[derive(Debug, Serialize)]
+struct ThrottleStateResponse {
+    enabled: bool,
+    max_mb_per_minute: f64,
+    max_mb_per_hour: f64,
+    current_mb_last_minute: f64,
+    current_mb_last_hour: f64,
+    is_throttled: bool,
+}
+
+/// Get current throttle state
+async fn admin_get_throttle_state(
+    _session: Session,
+    State(download_manager): State<super::state::OptionalDownloadManager>,
+) -> Response {
+    let dm = match download_manager {
+        Some(dm) => dm,
+        None => {
+            return (
+                StatusCode::SERVICE_UNAVAILABLE,
+                "Download manager not enabled",
+            )
+                .into_response()
+        }
+    };
+
+    let stats = dm.get_throttle_stats().await;
+    let response = ThrottleStateResponse {
+        enabled: dm.config().throttle_enabled,
+        max_mb_per_minute: stats.max_bytes_per_minute as f64 / (1024.0 * 1024.0),
+        max_mb_per_hour: stats.max_bytes_per_hour as f64 / (1024.0 * 1024.0),
+        current_mb_last_minute: stats.bytes_last_minute as f64 / (1024.0 * 1024.0),
+        current_mb_last_hour: stats.bytes_last_hour as f64 / (1024.0 * 1024.0),
+        is_throttled: stats.is_throttled,
+    };
+
+    Json(response).into_response()
+}
+
+/// Response for GET /admin/corruption-handler
+#[derive(Debug, Serialize)]
+struct CorruptionHandlerStateResponse {
+    current_level: u32,
+    successes_since_last_level_change: u32,
+    successes_to_deescalate: u32,
+    in_cooldown: bool,
+    cooldown_remaining_secs: Option<u64>,
+    current_cooldown_duration_secs: u64,
+    recent_results: Vec<bool>,
+    window_size: usize,
+    failure_threshold: usize,
+}
+
+/// Get current corruption handler state
+async fn admin_get_corruption_handler_state(
+    _session: Session,
+    State(download_manager): State<super::state::OptionalDownloadManager>,
+) -> Response {
+    let dm = match download_manager {
+        Some(dm) => dm,
+        None => {
+            return (
+                StatusCode::SERVICE_UNAVAILABLE,
+                "Download manager not enabled",
+            )
+                .into_response()
+        }
+    };
+
+    let state = dm.get_corruption_handler_state().await;
+    let config = dm.config();
+
+    let response = CorruptionHandlerStateResponse {
+        current_level: state.current_level,
+        successes_since_last_level_change: state.successes_since_last_level_change,
+        successes_to_deescalate: config.corruption_successes_to_deescalate,
+        in_cooldown: state.in_cooldown,
+        cooldown_remaining_secs: state.cooldown_remaining_secs,
+        current_cooldown_duration_secs: state.current_cooldown_duration_secs,
+        recent_results: state.recent_results,
+        window_size: config.corruption_window_size,
+        failure_threshold: config.corruption_failure_threshold,
+    };
+
+    Json(response).into_response()
+}
+
+/// Reset corruption handler state (admin action)
+async fn admin_reset_corruption_handler(
+    session: Session,
+    State(download_manager): State<super::state::OptionalDownloadManager>,
+) -> Response {
+    let dm = match download_manager {
+        Some(dm) => dm,
+        None => {
+            return (
+                StatusCode::SERVICE_UNAVAILABLE,
+                "Download manager not enabled",
+            )
+                .into_response()
+        }
+    };
+
+    info!(
+        "Admin {:?} resetting corruption handler state",
+        session.user_id
+    );
+
+    dm.reset_corruption_handler().await;
+
+    // Return updated state
+    let state = dm.get_corruption_handler_state().await;
+    let config = dm.config();
+
+    let response = CorruptionHandlerStateResponse {
+        current_level: state.current_level,
+        successes_since_last_level_change: state.successes_since_last_level_change,
+        successes_to_deescalate: config.corruption_successes_to_deescalate,
+        in_cooldown: state.in_cooldown,
+        cooldown_remaining_secs: state.cooldown_remaining_secs,
+        current_cooldown_duration_secs: state.current_cooldown_duration_secs,
+        recent_results: state.recent_results,
+        window_size: config.corruption_window_size,
+        failure_threshold: config.corruption_failure_threshold,
+    };
+
+    Json(response).into_response()
+}
+
+/// Reset throttle state (admin action)
+async fn admin_reset_throttle(
+    session: Session,
+    State(download_manager): State<super::state::OptionalDownloadManager>,
+) -> Response {
+    let dm = match download_manager {
+        Some(dm) => dm,
+        None => {
+            return (
+                StatusCode::SERVICE_UNAVAILABLE,
+                "Download manager not enabled",
+            )
+                .into_response()
+        }
+    };
+
+    info!(
+        "Admin {:?} resetting throttle state",
+        session.user_id
+    );
+
+    dm.reset_throttle().await;
+
+    // Return updated stats
+    let stats = dm.get_throttle_stats().await;
+    let response = ThrottleStateResponse {
+        enabled: dm.config().throttle_enabled,
+        max_mb_per_minute: stats.max_bytes_per_minute as f64 / (1024.0 * 1024.0),
+        max_mb_per_hour: stats.max_bytes_per_hour as f64 / (1024.0 * 1024.0),
+        current_mb_last_minute: stats.bytes_last_minute as f64 / (1024.0 * 1024.0),
+        current_mb_last_hour: stats.bytes_last_hour as f64 / (1024.0 * 1024.0),
+        is_throttled: stats.is_throttled,
+    };
+
+    Json(response).into_response()
+}
+
 impl ServerState {
     #[allow(clippy::arc_with_non_send_sync, clippy::too_many_arguments)]
     fn new(
@@ -4332,6 +4503,11 @@ pub fn make_app(
         .route("/admin/audit", get(admin_get_audit_log))
         .route("/admin/audit/item/{id}", get(admin_get_audit_for_item))
         .route("/admin/audit/user/{id}", get(admin_get_audit_for_user))
+        .route("/admin/throttle", get(admin_get_throttle_state))
+        .route(
+            "/admin/corruption-handler",
+            get(admin_get_corruption_handler_state),
+        )
         .route_layer(middleware::from_fn_with_state(
             state.clone(),
             require_download_manager_admin,
@@ -4342,6 +4518,11 @@ pub fn make_app(
     let download_admin_write_routes: Router = Router::new()
         .route("/admin/retry/{id}", post(admin_retry_download))
         .route("/admin/request/{id}", delete(admin_delete_download))
+        .route("/admin/throttle/reset", post(admin_reset_throttle))
+        .route(
+            "/admin/corruption-handler/reset",
+            post(admin_reset_corruption_handler),
+        )
         .route_layer(middleware::from_fn_with_state(
             state.clone(),
             require_download_manager_admin,
