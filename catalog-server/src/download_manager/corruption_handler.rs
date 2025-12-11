@@ -41,8 +41,8 @@ impl Default for CorruptionHandlerConfig {
         Self {
             window_size: 4,
             failure_threshold: 2,
-            base_cooldown_secs: 600,       // 10 minutes
-            max_cooldown_secs: 7200,       // 2 hours
+            base_cooldown_secs: 600, // 10 minutes
+            max_cooldown_secs: 7200, // 2 hours
             cooldown_multiplier: 2.0,
             successes_to_deescalate: 10,
         }
@@ -119,7 +119,10 @@ impl CorruptionHandler {
     }
 
     /// Create a handler and restore state from persistence.
-    pub fn with_persisted_state(config: CorruptionHandlerConfig, persisted: PersistedState) -> Self {
+    pub fn with_persisted_state(
+        config: CorruptionHandlerConfig,
+        persisted: PersistedState,
+    ) -> Self {
         let last_restart_at = persisted.last_restart_at_unix.and_then(|unix_ts| {
             let now_unix = chrono::Utc::now().timestamp();
             let elapsed_secs = (now_unix - unix_ts).max(0) as u64;
@@ -165,8 +168,7 @@ impl CorruptionHandler {
                     state.current_level -= 1;
                     info!(
                         "Corruption handler de-escalated to level {} after {} successes",
-                        state.current_level,
-                        self.config.successes_to_deescalate
+                        state.current_level, self.config.successes_to_deescalate
                     );
                 }
                 state.successes_since_last_level_change = 0;
@@ -250,17 +252,17 @@ impl CorruptionHandler {
         let results = self.recent_results.lock().await;
 
         let cooldown_duration = self.calculate_cooldown_duration(state.current_level);
-        let (in_cooldown, cooldown_remaining_secs) = if let Some(last_restart) = state.last_restart_at
-        {
-            let elapsed = last_restart.elapsed();
-            if elapsed < cooldown_duration {
-                (true, Some((cooldown_duration - elapsed).as_secs()))
+        let (in_cooldown, cooldown_remaining_secs) =
+            if let Some(last_restart) = state.last_restart_at {
+                let elapsed = last_restart.elapsed();
+                if elapsed < cooldown_duration {
+                    (true, Some((cooldown_duration - elapsed).as_secs()))
+                } else {
+                    (false, None)
+                }
             } else {
                 (false, None)
-            }
-        } else {
-            (false, None)
-        };
+            };
 
         HandlerState {
             current_level: state.current_level,

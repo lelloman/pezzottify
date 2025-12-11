@@ -60,7 +60,10 @@ impl SqliteServerStore {
             conn.execute_batch(schema.up)
                 .with_context(|| format!("Failed to run schema version {}", schema.version))?;
         }
-        let last_version = SERVER_VERSIONED_SCHEMAS.last().expect("No schemas defined").version;
+        let last_version = SERVER_VERSIONED_SCHEMAS
+            .last()
+            .expect("No schemas defined")
+            .version;
         conn.execute(
             &format!("PRAGMA user_version = {}", BASE_DB_VERSION + last_version),
             [],
@@ -273,9 +276,7 @@ impl ServerStore for SqliteServerStore {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare("SELECT value FROM server_state WHERE key = ?1")?;
 
-        let value: Option<String> = stmt
-            .query_row(params![key], |row| row.get(0))
-            .optional()?;
+        let value: Option<String> = stmt.query_row(params![key], |row| row.get(0)).optional()?;
 
         Ok(value)
     }
