@@ -89,6 +89,8 @@ private fun ArtistScreenContent(
             albums = state.albums,
             features = state.features,
             relatedArtists = state.relatedArtists,
+            externalAlbums = state.externalAlbums,
+            isLoadingExternalAlbums = state.isLoadingExternalAlbums,
             isLiked = state.isLiked,
             contentResolver = contentResolver,
             navController = navController,
@@ -103,6 +105,8 @@ fun ArtistLoadedScreen(
     albums: List<String>,
     features: List<String>,
     relatedArtists: List<String>,
+    externalAlbums: List<UiExternalAlbumItem>,
+    isLoadingExternalAlbums: Boolean,
     isLiked: Boolean,
     contentResolver: ContentResolver,
     navController: NavController,
@@ -217,6 +221,32 @@ fun ArtistLoadedScreen(
                         contentResolver = contentResolver,
                         navController = navController
                     )
+                }
+            }
+
+            // External albums (not in library)
+            if (externalAlbums.isNotEmpty() || isLoadingExternalAlbums) {
+                item {
+                    Text(
+                        text = stringResource(R.string.not_in_library),
+                        style = MaterialTheme.typography.headlineSmall,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                    )
+                }
+                if (isLoadingExternalAlbums) {
+                    item {
+                        Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp)) {
+                            SkeletonAlbumGridItem(modifier = Modifier.weight(1f))
+                            SkeletonAlbumGridItem(modifier = Modifier.weight(1f))
+                        }
+                    }
+                } else {
+                    item {
+                        ExternalAlbumGrid(
+                            albums = externalAlbums,
+                            onAlbumClick = { actions.clickOnExternalAlbum(it) }
+                        )
+                    }
                 }
             }
         }
@@ -355,6 +385,43 @@ private fun AlbumGrid(
             }
         }
     }
+}
+
+@Composable
+private fun ExternalAlbumGrid(
+    albums: List<UiExternalAlbumItem>,
+    onAlbumClick: (String) -> Unit
+) {
+    Column(modifier = Modifier.padding(horizontal = 12.dp)) {
+        val maxGroupSize = 2
+        albums.forEachGroup(maxGroupSize) { items ->
+            Row(modifier = Modifier.fillMaxWidth()) {
+                for (i in 0 until maxGroupSize) {
+                    val album = items.getOrNull(i)
+                    if (album != null) {
+                        AlbumGridItem(
+                            modifier = Modifier.weight(1f),
+                            albumName = album.name,
+                            albumDate = album.year?.toYearTimestamp() ?: 0L,
+                            albumCoverUrl = album.imageUrl,
+                            onClick = { onAlbumClick(album.id) }
+                        )
+                    } else {
+                        Spacer(modifier = Modifier.weight(1f))
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Convert a year integer to a Unix timestamp (January 1st of that year).
+ */
+private fun Int.toYearTimestamp(): Long {
+    val calendar = java.util.Calendar.getInstance()
+    calendar.set(this, 0, 1, 0, 0, 0)
+    return calendar.timeInMillis / 1000
 }
 
 @Composable

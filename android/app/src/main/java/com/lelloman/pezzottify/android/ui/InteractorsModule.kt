@@ -540,6 +540,9 @@ class InteractorsModule {
         logViewedContentUseCase: LogViewedContentUseCase,
         getLikedStateUseCase: GetLikedStateUseCase,
         toggleLikeUseCase: ToggleLikeUseCase,
+        userSettingsStore: UserSettingsStore,
+        permissionsStore: PermissionsStore,
+        getExternalArtistDiscographyUseCase: com.lelloman.pezzottify.android.domain.download.GetExternalArtistDiscographyUseCase,
     ): ArtistScreenViewModel.Interactor = object : ArtistScreenViewModel.Interactor {
         override fun logViewedArtist(artistId: String) {
             logViewedContentUseCase(artistId, ViewedContent.Type.Artist)
@@ -550,6 +553,30 @@ class InteractorsModule {
 
         override fun toggleLike(contentId: String, currentlyLiked: Boolean) {
             toggleLikeUseCase(contentId, DomainLikedContent.ContentType.Artist, currentlyLiked)
+        }
+
+        override suspend fun canShowExternalAlbums(): Boolean {
+            val hasPermission = permissionsStore.permissions.value.contains(DomainPermission.RequestContent)
+            val isEnabled = userSettingsStore.isExternalSearchEnabled.value
+            return hasPermission && isEnabled
+        }
+
+        override suspend fun getExternalDiscography(artistId: String): Result<List<com.lelloman.pezzottify.android.ui.screen.main.content.artist.UiExternalAlbumItem>> {
+            val result = getExternalArtistDiscographyUseCase(artistId)
+            return result.map { discography ->
+                // Filter to only show albums not in catalog
+                discography.albums
+                    .filter { !it.inCatalog }
+                    .map { album ->
+                        com.lelloman.pezzottify.android.ui.screen.main.content.artist.UiExternalAlbumItem(
+                            id = album.id,
+                            name = album.name,
+                            imageUrl = album.imageUrl,
+                            year = album.year,
+                            inQueue = album.inQueue,
+                        )
+                    }
+            }
         }
     }
 

@@ -220,6 +220,7 @@
     <string name="related_artists">Related Artists</string>
     <string name="albums">Albums</string>
     <string name="features">Features</string>
+    <string name="not_in_library">Not in Library</string>
     <!-- ARTIST SCREEN -->
 
     <!-- LIBRARY SCREEN -->
