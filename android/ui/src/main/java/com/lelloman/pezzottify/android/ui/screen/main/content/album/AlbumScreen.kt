@@ -318,6 +318,9 @@ fun AlbumLoadedScreen(
                         onArtistClick = onArtistClick
                     )
                 }
+                item {
+                    Spacer(modifier = Modifier.height(16.dp))
+                }
             }
 
             // Track list
