@@ -23,4 +23,26 @@
     <!-- CONNECTION STATUS -->
     <string name="back_online">Back online</string>
     <!-- CONNECTION STATUS -->
+
+    <!-- MY REQUESTS SCREEN -->
+    <string name="my_requests_title">My Requests</string>
+    <string name="my_requests_tab_queue">Queue (%1$d)</string>
+    <string name="my_requests_tab_completed">Completed (%1$d)</string>
+    <string name="my_requests_limit_today">Today</string>
+    <string name="my_requests_limit_in_queue">In Queue</string>
+    <string name="my_requests_empty_queue">No items in queue</string>
+    <string name="my_requests_empty_completed">No completed downloads yet</string>
+    <string name="my_requests_requested_time">Requested %1$s</string>
+    <string name="my_requests_queue_position">#%1$d in queue</string>
+    <string name="my_requests_tracks_progress">%1$d / %2$d tracks</string>
+    <string name="my_requests_status_pending">Pending</string>
+    <string name="my_requests_status_in_progress">In Progress</string>
+    <string name="my_requests_status_failed">Failed</string>
+    <string name="my_requests_time_just_now">just now</string>
+    <string name="my_requests_time_minutes_ago">%1$d min ago</string>
+    <string name="my_requests_time_hours_ago">%1$d hr ago</string>
+    <string name="my_requests_time_days_ago">%1$d days ago</string>
+    <string name="my_requests_time_months_ago">%1$d months ago</string>
+    <string name="my_requests_time_years_ago">%1$d years ago</string>
+    <!-- MY REQUESTS SCREEN -->
 </resources>
