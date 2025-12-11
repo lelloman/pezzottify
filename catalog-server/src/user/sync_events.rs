@@ -9,6 +9,42 @@ use crate::user::permissions::Permission;
 use crate::user::settings::UserSetting;
 use crate::user::user_models::LikedContentType;
 
+// =============================================================================
+// Download Status Types (for sync events)
+// =============================================================================
+
+/// Download content type for sync events.
+///
+/// Simplified version of the full DownloadContentType for sync purposes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum SyncDownloadContentType {
+    Album,
+}
+
+/// Download queue status for sync events.
+///
+/// Mirrors the QueueStatus enum from download_manager.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum SyncQueueStatus {
+    Pending,
+    InProgress,
+    Completed,
+    Failed,
+    RetryWaiting,
+}
+
+/// Download progress for sync events.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SyncDownloadProgress {
+    pub total_children: i32,
+    pub completed: i32,
+    pub failed: i32,
+    pub pending: i32,
+    pub in_progress: i32,
+}
+
 /// All sync event types that can be recorded in the user event log.
 ///
 /// Events are serialized using serde's adjacently tagged representation:
@@ -58,6 +94,39 @@ pub enum UserEvent {
 
     #[serde(rename = "permissions_reset")]
     PermissionsReset { permissions: Vec<Permission> },
+
+    // Download status events
+    #[serde(rename = "download_request_created")]
+    DownloadRequestCreated {
+        request_id: String,
+        content_id: String,
+        content_type: SyncDownloadContentType,
+        content_name: String,
+        artist_name: Option<String>,
+        queue_position: i32,
+    },
+
+    #[serde(rename = "download_status_changed")]
+    DownloadStatusChanged {
+        request_id: String,
+        content_id: String,
+        status: SyncQueueStatus,
+        queue_position: Option<i32>,
+        error_message: Option<String>,
+    },
+
+    #[serde(rename = "download_progress_updated")]
+    DownloadProgressUpdated {
+        request_id: String,
+        content_id: String,
+        progress: SyncDownloadProgress,
+    },
+
+    #[serde(rename = "download_completed")]
+    DownloadCompleted {
+        request_id: String,
+        content_id: String,
+    },
 }
 
 impl UserEvent {
@@ -74,6 +143,10 @@ impl UserEvent {
             UserEvent::PermissionGranted { .. } => "permission_granted",
             UserEvent::PermissionRevoked { .. } => "permission_revoked",
             UserEvent::PermissionsReset { .. } => "permissions_reset",
+            UserEvent::DownloadRequestCreated { .. } => "download_request_created",
+            UserEvent::DownloadStatusChanged { .. } => "download_status_changed",
+            UserEvent::DownloadProgressUpdated { .. } => "download_progress_updated",
+            UserEvent::DownloadCompleted { .. } => "download_completed",
         }
     }
 }
@@ -329,6 +402,184 @@ mod tests {
             }
             .event_type(),
             "permissions_reset"
+        );
+        assert_eq!(
+            UserEvent::DownloadRequestCreated {
+                request_id: "x".to_string(),
+                content_id: "y".to_string(),
+                content_type: SyncDownloadContentType::Album,
+                content_name: "Album".to_string(),
+                artist_name: None,
+                queue_position: 1,
+            }
+            .event_type(),
+            "download_request_created"
+        );
+        assert_eq!(
+            UserEvent::DownloadStatusChanged {
+                request_id: "x".to_string(),
+                content_id: "y".to_string(),
+                status: SyncQueueStatus::InProgress,
+                queue_position: None,
+                error_message: None,
+            }
+            .event_type(),
+            "download_status_changed"
+        );
+        assert_eq!(
+            UserEvent::DownloadProgressUpdated {
+                request_id: "x".to_string(),
+                content_id: "y".to_string(),
+                progress: SyncDownloadProgress {
+                    total_children: 10,
+                    completed: 5,
+                    failed: 0,
+                    pending: 3,
+                    in_progress: 2,
+                },
+            }
+            .event_type(),
+            "download_progress_updated"
+        );
+        assert_eq!(
+            UserEvent::DownloadCompleted {
+                request_id: "x".to_string(),
+                content_id: "y".to_string(),
+            }
+            .event_type(),
+            "download_completed"
+        );
+    }
+
+    // =========================================================================
+    // Download Event Serialization Tests
+    // =========================================================================
+
+    #[test]
+    fn test_download_request_created_serialization() {
+        let event = UserEvent::DownloadRequestCreated {
+            request_id: "req-123".to_string(),
+            content_id: "album-456".to_string(),
+            content_type: SyncDownloadContentType::Album,
+            content_name: "Test Album".to_string(),
+            artist_name: Some("Test Artist".to_string()),
+            queue_position: 5,
+        };
+        let json = serde_json::to_string(&event).unwrap();
+        assert!(json.contains("download_request_created"));
+        assert!(json.contains("req-123"));
+        assert!(json.contains("album-456"));
+        assert!(json.contains("album"));
+        assert!(json.contains("Test Album"));
+        assert!(json.contains("Test Artist"));
+        assert!(json.contains("5"));
+
+        let parsed: UserEvent = serde_json::from_str(&json).unwrap();
+        assert_eq!(event, parsed);
+    }
+
+    #[test]
+    fn test_download_status_changed_serialization() {
+        let event = UserEvent::DownloadStatusChanged {
+            request_id: "req-123".to_string(),
+            content_id: "album-456".to_string(),
+            status: SyncQueueStatus::InProgress,
+            queue_position: None,
+            error_message: None,
+        };
+        let json = serde_json::to_string(&event).unwrap();
+        assert!(json.contains("download_status_changed"));
+        assert!(json.contains("IN_PROGRESS"));
+
+        let parsed: UserEvent = serde_json::from_str(&json).unwrap();
+        assert_eq!(event, parsed);
+    }
+
+    #[test]
+    fn test_download_status_changed_with_error_serialization() {
+        let event = UserEvent::DownloadStatusChanged {
+            request_id: "req-123".to_string(),
+            content_id: "album-456".to_string(),
+            status: SyncQueueStatus::Failed,
+            queue_position: None,
+            error_message: Some("Connection timeout".to_string()),
+        };
+        let json = serde_json::to_string(&event).unwrap();
+        assert!(json.contains("FAILED"));
+        assert!(json.contains("Connection timeout"));
+
+        let parsed: UserEvent = serde_json::from_str(&json).unwrap();
+        assert_eq!(event, parsed);
+    }
+
+    #[test]
+    fn test_download_progress_updated_serialization() {
+        let event = UserEvent::DownloadProgressUpdated {
+            request_id: "req-123".to_string(),
+            content_id: "album-456".to_string(),
+            progress: SyncDownloadProgress {
+                total_children: 12,
+                completed: 8,
+                failed: 1,
+                pending: 2,
+                in_progress: 1,
+            },
+        };
+        let json = serde_json::to_string(&event).unwrap();
+        assert!(json.contains("download_progress_updated"));
+        assert!(json.contains("total_children"));
+        assert!(json.contains("12"));
+        assert!(json.contains("completed"));
+        assert!(json.contains("8"));
+
+        let parsed: UserEvent = serde_json::from_str(&json).unwrap();
+        assert_eq!(event, parsed);
+    }
+
+    #[test]
+    fn test_download_completed_serialization() {
+        let event = UserEvent::DownloadCompleted {
+            request_id: "req-123".to_string(),
+            content_id: "album-456".to_string(),
+        };
+        let json = serde_json::to_string(&event).unwrap();
+        assert!(json.contains("download_completed"));
+        assert!(json.contains("req-123"));
+        assert!(json.contains("album-456"));
+
+        let parsed: UserEvent = serde_json::from_str(&json).unwrap();
+        assert_eq!(event, parsed);
+    }
+
+    #[test]
+    fn test_sync_queue_status_serialization() {
+        assert_eq!(
+            serde_json::to_string(&SyncQueueStatus::Pending).unwrap(),
+            "\"PENDING\""
+        );
+        assert_eq!(
+            serde_json::to_string(&SyncQueueStatus::InProgress).unwrap(),
+            "\"IN_PROGRESS\""
+        );
+        assert_eq!(
+            serde_json::to_string(&SyncQueueStatus::Completed).unwrap(),
+            "\"COMPLETED\""
+        );
+        assert_eq!(
+            serde_json::to_string(&SyncQueueStatus::Failed).unwrap(),
+            "\"FAILED\""
+        );
+        assert_eq!(
+            serde_json::to_string(&SyncQueueStatus::RetryWaiting).unwrap(),
+            "\"RETRY_WAITING\""
+        );
+    }
+
+    #[test]
+    fn test_sync_download_content_type_serialization() {
+        assert_eq!(
+            serde_json::to_string(&SyncDownloadContentType::Album).unwrap(),
+            "\"album\""
         );
     }
 }
