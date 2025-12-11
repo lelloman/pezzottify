@@ -39,12 +39,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import androidx.navigation.compose.rememberNavController
+import com.lelloman.pezzottify.android.ui.R
 import com.lelloman.pezzottify.android.ui.theme.AppFontFamily
 import com.lelloman.pezzottify.android.ui.theme.ColorPalette
 import com.lelloman.pezzottify.android.ui.theme.PezzottifyTheme
@@ -75,12 +77,12 @@ private fun StyleSettingsScreenInternal(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Appearance") },
+                title = { Text(stringResource(R.string.appearance)) },
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Back"
+                            contentDescription = stringResource(R.string.back)
                         )
                     }
                 }
@@ -96,7 +98,7 @@ private fun StyleSettingsScreenInternal(
             // Theme Mode Section
             item {
                 Text(
-                    text = "Theme",
+                    text = stringResource(R.string.theme),
                     style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.padding(vertical = 16.dp)
@@ -136,7 +138,7 @@ private fun StyleSettingsScreenInternal(
             // Color Palette Section
             item {
                 Text(
-                    text = "Color Palette",
+                    text = stringResource(R.string.color_palette),
                     style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.padding(bottom = 16.dp)
@@ -158,7 +160,7 @@ private fun StyleSettingsScreenInternal(
             // Font Family Section
             item {
                 Text(
-                    text = "Font",
+                    text = stringResource(R.string.font),
                     style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.padding(bottom = 16.dp)
@@ -243,7 +245,7 @@ private fun PaletteItem(
         if (isSelected) {
             Icon(
                 imageVector = Icons.Default.Check,
-                contentDescription = "Selected",
+                contentDescription = stringResource(R.string.selected),
                 tint = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.size(24.dp)
             )
@@ -294,7 +296,7 @@ private fun FontFamilyItem(
             contentAlignment = Alignment.Center
         ) {
             Text(
-                text = "Aa",
+                text = stringResource(R.string.font_preview),
                 style = MaterialTheme.typography.titleLarge.copy(
                     fontFamily = previewFontFamily
                 ),
@@ -320,7 +322,7 @@ private fun FontFamilyItem(
         if (isSelected) {
             Icon(
                 imageVector = Icons.Default.Check,
-                contentDescription = "Selected",
+                contentDescription = stringResource(R.string.selected),
                 tint = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.size(24.dp)
             )
@@ -330,52 +332,58 @@ private fun FontFamilyItem(
     Spacer(modifier = Modifier.height(8.dp))
 }
 
+@Composable
 private fun getThemeModeName(themeMode: ThemeMode): String = when (themeMode) {
-    ThemeMode.System -> "System"
-    ThemeMode.Light -> "Light"
-    ThemeMode.Dark -> "Dark"
-    ThemeMode.Amoled -> "AMOLED"
+    ThemeMode.System -> stringResource(R.string.theme_system)
+    ThemeMode.Light -> stringResource(R.string.theme_light)
+    ThemeMode.Dark -> stringResource(R.string.theme_dark)
+    ThemeMode.Amoled -> stringResource(R.string.theme_amoled)
 }
 
+@Composable
 private fun getThemeModeDescription(themeMode: ThemeMode): String = when (themeMode) {
-    ThemeMode.System -> "Follow system theme settings"
-    ThemeMode.Light -> "Always use light theme"
-    ThemeMode.Dark -> "Always use dark theme"
-    ThemeMode.Amoled -> "True black for OLED screens"
+    ThemeMode.System -> stringResource(R.string.theme_system_description)
+    ThemeMode.Light -> stringResource(R.string.theme_light_description)
+    ThemeMode.Dark -> stringResource(R.string.theme_dark_description)
+    ThemeMode.Amoled -> stringResource(R.string.theme_amoled_description)
 }
 
+@Composable
 private fun getPaletteName(palette: ColorPalette): String = when (palette) {
-    ColorPalette.Classic -> "Classic Green"
-    ColorPalette.OceanBlue -> "Ocean Blue"
-    ColorPalette.SunsetCoral -> "Sunset Coral"
-    ColorPalette.PurpleHaze -> "Purple Haze"
-    ColorPalette.RoseGold -> "Rose Gold"
-    ColorPalette.Midnight -> "Midnight"
-    ColorPalette.Forest -> "Forest"
+    ColorPalette.Classic -> stringResource(R.string.palette_classic)
+    ColorPalette.OceanBlue -> stringResource(R.string.palette_ocean_blue)
+    ColorPalette.SunsetCoral -> stringResource(R.string.palette_sunset_coral)
+    ColorPalette.PurpleHaze -> stringResource(R.string.palette_purple_haze)
+    ColorPalette.RoseGold -> stringResource(R.string.palette_rose_gold)
+    ColorPalette.Midnight -> stringResource(R.string.palette_midnight)
+    ColorPalette.Forest -> stringResource(R.string.palette_forest)
 }
 
+@Composable
 private fun getPaletteDescription(palette: ColorPalette): String = when (palette) {
-    ColorPalette.Classic -> "Vibrant green, music industry standard"
-    ColorPalette.OceanBlue -> "Cool, calming blue tones"
-    ColorPalette.SunsetCoral -> "Warm coral and orange"
-    ColorPalette.PurpleHaze -> "Rich violet and purple"
-    ColorPalette.RoseGold -> "Warm pink and rose tones"
-    ColorPalette.Midnight -> "Deep navy and indigo"
-    ColorPalette.Forest -> "Earthy green and brown"
+    ColorPalette.Classic -> stringResource(R.string.palette_classic_description)
+    ColorPalette.OceanBlue -> stringResource(R.string.palette_ocean_blue_description)
+    ColorPalette.SunsetCoral -> stringResource(R.string.palette_sunset_coral_description)
+    ColorPalette.PurpleHaze -> stringResource(R.string.palette_purple_haze_description)
+    ColorPalette.RoseGold -> stringResource(R.string.palette_rose_gold_description)
+    ColorPalette.Midnight -> stringResource(R.string.palette_midnight_description)
+    ColorPalette.Forest -> stringResource(R.string.palette_forest_description)
 }
 
+@Composable
 private fun getFontFamilyName(fontFamily: AppFontFamily): String = when (fontFamily) {
-    AppFontFamily.System -> "System Default"
-    AppFontFamily.SansSerif -> "Sans Serif"
-    AppFontFamily.Serif -> "Serif"
-    AppFontFamily.Monospace -> "Monospace"
+    AppFontFamily.System -> stringResource(R.string.font_system)
+    AppFontFamily.SansSerif -> stringResource(R.string.font_sans_serif)
+    AppFontFamily.Serif -> stringResource(R.string.font_serif)
+    AppFontFamily.Monospace -> stringResource(R.string.font_monospace)
 }
 
+@Composable
 private fun getFontFamilyDescription(fontFamily: AppFontFamily): String = when (fontFamily) {
-    AppFontFamily.System -> "Default device font"
-    AppFontFamily.SansSerif -> "Clean, modern sans-serif"
-    AppFontFamily.Serif -> "Classic, traditional style"
-    AppFontFamily.Monospace -> "Fixed-width, developer style"
+    AppFontFamily.System -> stringResource(R.string.font_system_description)
+    AppFontFamily.SansSerif -> stringResource(R.string.font_sans_serif_description)
+    AppFontFamily.Serif -> stringResource(R.string.font_serif_description)
+    AppFontFamily.Monospace -> stringResource(R.string.font_monospace_description)
 }
 
 @Composable

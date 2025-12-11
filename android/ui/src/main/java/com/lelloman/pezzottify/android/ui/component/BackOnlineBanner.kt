@@ -99,7 +99,7 @@ private fun PreviewBackOnlineBanner() {
         contentAlignment = Alignment.Center,
     ) {
         Text(
-            text = "Back online",
+            text = stringResource(R.string.back_online),
             style = MaterialTheme.typography.bodyMedium,
             color = Color.White,
         )

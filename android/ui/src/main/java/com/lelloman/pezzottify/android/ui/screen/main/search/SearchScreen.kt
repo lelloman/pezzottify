@@ -90,7 +90,7 @@ fun SearchScreenContent(
                 is SearchScreensEvents.NavigateToArtistScreen -> navController.toArtist(it.artistId)
                 is SearchScreensEvents.NavigateToAlbumScreen -> navController.toAlbum(it.albumId)
                 is SearchScreensEvents.NavigateToTrackScreen -> navController.toTrack(it.trackId)
-                is SearchScreensEvents.ShowRequestError -> snackbarHostState.showSnackbar(it.message)
+                is SearchScreensEvents.ShowRequestError -> snackbarHostState.showSnackbar(context.getString(it.messageRes))
                 is SearchScreensEvents.ShowRequestSuccess -> snackbarHostState.showSnackbar(context.getString(R.string.request_added_to_queue))
             }
         }
@@ -174,7 +174,7 @@ fun SearchScreenContent(
                         item {
                             LoadingSearchResult()
                         }
-                    } else if (state.externalSearchError != null) {
+                    } else if (state.externalSearchErrorRes != null) {
                         item {
                             ErrorSearchResult()
                         }

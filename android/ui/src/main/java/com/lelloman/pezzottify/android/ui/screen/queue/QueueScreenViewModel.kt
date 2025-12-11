@@ -41,7 +41,7 @@ class QueueScreenViewModel @Inject constructor(
                     )
                     is PlaybackPlaylistContext.UserMix -> Triple(
                         QueueContextType.UserMix,
-                        "Your Mix",
+                        "user_mix", // Not displayed - UI uses stringResource
                         true
                     )
                 }

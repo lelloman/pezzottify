@@ -226,7 +226,7 @@ private fun SwipeableQueueItem(
     if (isPendingDeletion) {
         // Show undo placeholder
         PendingDeletionItem(
-            trackName = (trackContent as? Content.Resolved)?.data?.name ?: "Track",
+            trackName = (trackContent as? Content.Resolved)?.data?.name ?: stringResource(R.string.track_fallback),
             onUndo = { isPendingDeletion = false }
         )
     } else {

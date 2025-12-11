@@ -2,6 +2,7 @@ package com.lelloman.pezzottify.android.ui.screen.main.myrequests
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.lelloman.pezzottify.android.ui.R
 import com.lelloman.pezzottify.android.ui.content.ContentResolver
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
@@ -43,7 +44,7 @@ class MyRequestsScreenViewModel(
 
     private fun loadData() {
         viewModelScope.launch(coroutineContext) {
-            mutableState.value = mutableState.value.copy(isLoading = true, error = null)
+            mutableState.value = mutableState.value.copy(isLoading = true, errorRes = null)
 
             // Load limits
             val limitsResult = interactor.getDownloadLimits()
@@ -64,12 +65,12 @@ class MyRequestsScreenViewModel(
                 mutableState.value.copy(
                     isLoading = false,
                     requests = requestsResult.getOrNull(),
-                    error = null,
+                    errorRes = null,
                 )
             } else {
                 mutableState.value.copy(
                     isLoading = false,
-                    error = "Failed to load requests",
+                    errorRes = R.string.failed_to_load_requests,
                 )
             }
         }
