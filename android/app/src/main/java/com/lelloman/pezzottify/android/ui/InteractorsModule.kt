@@ -972,6 +972,9 @@ class InteractorsModule {
                             },
                             errorMessage = request.errorMessage,
                             catalogId = request.contentId,
+                            createdAt = request.createdAt,
+                            completedAt = request.completedAt,
+                            queuePosition = request.queuePosition,
                         )
                     }
                 }

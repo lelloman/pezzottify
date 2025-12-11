@@ -2,6 +2,7 @@ package com.lelloman.pezzottify.android.ui.screen.main.myrequests
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.lelloman.pezzottify.android.ui.content.ContentResolver
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -15,6 +16,7 @@ import kotlin.coroutines.CoroutineContext
 @HiltViewModel
 class MyRequestsScreenViewModel(
     private val interactor: Interactor,
+    val contentResolver: ContentResolver,
     private val coroutineContext: CoroutineContext,
 ) : ViewModel(),
     MyRequestsScreenActions {
@@ -22,8 +24,10 @@ class MyRequestsScreenViewModel(
     @Inject
     constructor(
         interactor: Interactor,
+        contentResolver: ContentResolver,
     ) : this(
         interactor,
+        contentResolver,
         Dispatchers.IO,
     )
 
@@ -82,6 +86,10 @@ class MyRequestsScreenViewModel(
                 mutableEvents.emit(MyRequestsScreenEvent.NavigateToAlbum(request.catalogId))
             }
         }
+    }
+
+    override fun onTabSelected(tab: MyRequestsTab) {
+        mutableState.value = mutableState.value.copy(selectedTab = tab)
     }
 
     interface Interactor {

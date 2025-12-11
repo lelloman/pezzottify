@@ -5,7 +5,13 @@ data class MyRequestsScreenState(
     val isLoading: Boolean = true,
     val error: String? = null,
     val limits: UiRequestLimits? = null,
+    val selectedTab: MyRequestsTab = MyRequestsTab.Queue,
 )
+
+enum class MyRequestsTab {
+    Queue,
+    Completed,
+}
 
 data class UiDownloadRequest(
     val id: String,
@@ -15,6 +21,9 @@ data class UiDownloadRequest(
     val progress: RequestProgress? = null,
     val errorMessage: String? = null,
     val catalogId: String? = null,
+    val createdAt: Long = 0L,
+    val completedAt: Long? = null,
+    val queuePosition: Int? = null,
 )
 
 enum class RequestStatus {
