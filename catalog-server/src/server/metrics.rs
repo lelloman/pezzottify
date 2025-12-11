@@ -191,6 +191,48 @@ lazy_static! {
         &["event_type"]
     ).expect("Failed to create download_audit_events_total metric");
 
+    // Download Throttle Metrics
+    pub static ref DOWNLOAD_THROTTLE_BYTES: GaugeVec = GaugeVec::new(
+        Opts::new(format!("{PREFIX}_download_throttle_bytes"), "Current throttle bytes usage by period"),
+        &["period"]
+    ).expect("Failed to create download_throttle_bytes metric");
+
+    pub static ref DOWNLOAD_THROTTLE_LIMIT_BYTES: GaugeVec = GaugeVec::new(
+        Opts::new(format!("{PREFIX}_download_throttle_limit_bytes"), "Throttle limit by period"),
+        &["period"]
+    ).expect("Failed to create download_throttle_limit_bytes metric");
+
+    pub static ref DOWNLOAD_THROTTLE_IS_THROTTLED: Gauge = Gauge::new(
+        format!("{PREFIX}_download_throttle_is_throttled"),
+        "Whether downloads are currently throttled (1 = yes, 0 = no)"
+    ).expect("Failed to create download_throttle_is_throttled metric");
+
+    // Corruption Handler Metrics
+    pub static ref CORRUPTION_HANDLER_LEVEL: Gauge = Gauge::new(
+        format!("{PREFIX}_corruption_handler_level"),
+        "Current corruption handler escalation level (0 = base)"
+    ).expect("Failed to create corruption_handler_level metric");
+
+    pub static ref CORRUPTION_HANDLER_IN_COOLDOWN: Gauge = Gauge::new(
+        format!("{PREFIX}_corruption_handler_in_cooldown"),
+        "Whether corruption handler is in cooldown (1 = yes, 0 = no)"
+    ).expect("Failed to create corruption_handler_in_cooldown metric");
+
+    pub static ref CORRUPTION_HANDLER_COOLDOWN_SECS: Gauge = Gauge::new(
+        format!("{PREFIX}_corruption_handler_cooldown_remaining_secs"),
+        "Remaining cooldown time in seconds (0 if not in cooldown)"
+    ).expect("Failed to create corruption_handler_cooldown_remaining_secs metric");
+
+    pub static ref CORRUPTION_HANDLER_RESTARTS_TOTAL: Counter = Counter::new(
+        format!("{PREFIX}_corruption_handler_restarts_total"),
+        "Total downloader restarts triggered by corruption handler"
+    ).expect("Failed to create corruption_handler_restarts_total metric");
+
+    pub static ref CORRUPTION_HANDLER_CORRUPTIONS_TOTAL: Counter = Counter::new(
+        format!("{PREFIX}_corruption_handler_corruptions_total"),
+        "Total corruption events (ffprobe failures) detected"
+    ).expect("Failed to create corruption_handler_corruptions_total metric");
+
     // Background Job Metrics
     pub static ref BACKGROUND_JOB_EXECUTIONS_TOTAL: CounterVec = CounterVec::new(
         Opts::new(format!("{PREFIX}_background_job_executions_total"), "Total background job executions"),
@@ -244,6 +286,14 @@ pub fn init_metrics() {
     let _ = REGISTRY.register(Box::new(DOWNLOAD_CAPACITY_USED.clone()));
     let _ = REGISTRY.register(Box::new(DOWNLOAD_USER_REQUESTS_TOTAL.clone()));
     let _ = REGISTRY.register(Box::new(DOWNLOAD_AUDIT_EVENTS_TOTAL.clone()));
+    let _ = REGISTRY.register(Box::new(DOWNLOAD_THROTTLE_BYTES.clone()));
+    let _ = REGISTRY.register(Box::new(DOWNLOAD_THROTTLE_LIMIT_BYTES.clone()));
+    let _ = REGISTRY.register(Box::new(DOWNLOAD_THROTTLE_IS_THROTTLED.clone()));
+    let _ = REGISTRY.register(Box::new(CORRUPTION_HANDLER_LEVEL.clone()));
+    let _ = REGISTRY.register(Box::new(CORRUPTION_HANDLER_IN_COOLDOWN.clone()));
+    let _ = REGISTRY.register(Box::new(CORRUPTION_HANDLER_COOLDOWN_SECS.clone()));
+    let _ = REGISTRY.register(Box::new(CORRUPTION_HANDLER_RESTARTS_TOTAL.clone()));
+    let _ = REGISTRY.register(Box::new(CORRUPTION_HANDLER_CORRUPTIONS_TOTAL.clone()));
     let _ = REGISTRY.register(Box::new(BACKGROUND_JOB_EXECUTIONS_TOTAL.clone()));
     let _ = REGISTRY.register(Box::new(BACKGROUND_JOB_DURATION_SECONDS.clone()));
     let _ = REGISTRY.register(Box::new(BACKGROUND_JOB_RUNNING.clone()));
@@ -443,6 +493,50 @@ pub fn record_download_audit_event(event_type: &str) {
     DOWNLOAD_AUDIT_EVENTS_TOTAL
         .with_label_values(&[event_type])
         .inc();
+}
+
+/// Update throttle metrics with current stats
+pub fn update_throttle_metrics(
+    bytes_last_minute: u64,
+    bytes_last_hour: u64,
+    max_bytes_per_minute: u64,
+    max_bytes_per_hour: u64,
+    is_throttled: bool,
+) {
+    DOWNLOAD_THROTTLE_BYTES
+        .with_label_values(&["minute"])
+        .set(bytes_last_minute as f64);
+    DOWNLOAD_THROTTLE_BYTES
+        .with_label_values(&["hour"])
+        .set(bytes_last_hour as f64);
+    DOWNLOAD_THROTTLE_LIMIT_BYTES
+        .with_label_values(&["minute"])
+        .set(max_bytes_per_minute as f64);
+    DOWNLOAD_THROTTLE_LIMIT_BYTES
+        .with_label_values(&["hour"])
+        .set(max_bytes_per_hour as f64);
+    DOWNLOAD_THROTTLE_IS_THROTTLED.set(if is_throttled { 1.0 } else { 0.0 });
+}
+
+/// Update corruption handler metrics with current state
+pub fn update_corruption_handler_metrics(
+    level: u32,
+    in_cooldown: bool,
+    cooldown_remaining_secs: u64,
+) {
+    CORRUPTION_HANDLER_LEVEL.set(level as f64);
+    CORRUPTION_HANDLER_IN_COOLDOWN.set(if in_cooldown { 1.0 } else { 0.0 });
+    CORRUPTION_HANDLER_COOLDOWN_SECS.set(cooldown_remaining_secs as f64);
+}
+
+/// Record a corruption event (ffprobe failure)
+pub fn record_corruption_event() {
+    CORRUPTION_HANDLER_CORRUPTIONS_TOTAL.inc();
+}
+
+/// Record a downloader restart triggered by corruption handler
+pub fn record_corruption_handler_restart() {
+    CORRUPTION_HANDLER_RESTARTS_TOTAL.inc();
 }
 
 /// Record a background job execution

@@ -8,18 +8,20 @@ use std::sync::Arc;
 
 use anyhow::{anyhow, Result};
 use tokio::fs;
-use tracing::{debug, info};
+use tracing::{debug, info, warn};
 use uuid::Uuid;
 
 use crate::catalog_store::{CatalogStore, WritableCatalogStore};
 use crate::config::DownloadManagerSettings;
 
 use super::audit_logger::AuditLogger;
+use super::corruption_handler::{CorruptionHandler, CorruptionHandlerConfig, HandlerAction};
 use super::downloader_client::DownloaderClient;
 use super::models::*;
 use super::queue_store::DownloadQueueStore;
 use super::retry_policy::RetryPolicy;
 use super::search_proxy::SearchProxy;
+use super::throttle::{DownloadThrottler, SlidingWindowThrottler, ThrottlerConfig};
 
 /// Main download manager that orchestrates all download operations.
 ///
@@ -34,7 +36,6 @@ pub struct DownloadManager {
     /// Queue store for persisting download requests.
     queue_store: Arc<dyn DownloadQueueStore>,
     /// HTTP client for communicating with the external downloader service.
-    #[allow(dead_code)]
     downloader_client: DownloaderClient,
     /// Catalog store for checking existing content and ingesting new content.
     catalog_store: Arc<dyn WritableCatalogStore>,
@@ -49,6 +50,10 @@ pub struct DownloadManager {
     audit_logger: AuditLogger,
     /// Search proxy for querying the downloader service.
     search_proxy: SearchProxy,
+    /// Bandwidth throttler for rate limiting downloads.
+    throttler: Arc<SlidingWindowThrottler>,
+    /// Corruption handler for detecting file corruption and managing restarts.
+    corruption_handler: Arc<CorruptionHandler>,
 }
 
 impl DownloadManager {
@@ -75,6 +80,25 @@ impl DownloadManager {
             queue_store.clone(),
         );
 
+        // Initialize throttler from config
+        let throttler_config = ThrottlerConfig {
+            max_bytes_per_minute: config.throttle_max_mb_per_minute * 1024 * 1024,
+            max_bytes_per_hour: config.throttle_max_mb_per_hour * 1024 * 1024,
+            enabled: config.throttle_enabled,
+        };
+        let throttler = Arc::new(SlidingWindowThrottler::new(throttler_config));
+
+        // Initialize corruption handler from config
+        let corruption_config = CorruptionHandlerConfig {
+            window_size: config.corruption_window_size,
+            failure_threshold: config.corruption_failure_threshold,
+            base_cooldown_secs: config.corruption_base_cooldown_secs,
+            max_cooldown_secs: config.corruption_max_cooldown_secs,
+            cooldown_multiplier: config.corruption_cooldown_multiplier,
+            successes_to_deescalate: config.corruption_successes_to_deescalate,
+        };
+        let corruption_handler = Arc::new(CorruptionHandler::new(corruption_config));
+
         Self {
             queue_store,
             downloader_client,
@@ -84,6 +108,8 @@ impl DownloadManager {
             retry_policy,
             audit_logger,
             search_proxy,
+            throttler,
+            corruption_handler,
         }
     }
 
@@ -397,45 +423,70 @@ impl DownloadManager {
     /// Returns `Ok(None)` if the queue is empty or capacity limits are reached.
     ///
     /// # Logic:
-    /// 1. Check global capacity limits
-    /// 2. Get next pending item (by priority)
-    /// 3. Claim for processing (atomic)
-    /// 4. Log download started
-    /// 5. Call downloader
-    /// 6. On success: mark completed, record activity, log audit
-    /// 7. On failure: check retry policy, either mark retry or failed, log audit
+    /// 1. Check corruption handler cooldown
+    /// 2. Check bandwidth throttle
+    /// 3. Check global capacity limits
+    /// 4. Get next pending item (by priority)
+    /// 5. Claim for processing (atomic)
+    /// 6. Log download started
+    /// 7. Call downloader
+    /// 8. On success: mark completed, record activity, log audit, update throttler
+    /// 9. On failure: check retry policy, handle corruption if applicable
     pub async fn process_next(&self) -> Result<Option<ProcessingResult>> {
-        // 1. Check global capacity limits
+        // 1. Check if corruption handler is in cooldown
+        if self.corruption_handler.is_in_cooldown().await {
+            debug!("Corruption handler in cooldown, skipping processing");
+            return Ok(None);
+        }
+
+        // 2. Check bandwidth throttle
+        if let Err(wait_duration) = self.throttler.check_bandwidth().await {
+            debug!(
+                "Bandwidth throttled, wait {} seconds",
+                wait_duration.as_secs()
+            );
+            return Ok(None);
+        }
+
+        // 3. Check global capacity limits
         let capacity = self.check_global_capacity()?;
         if capacity.at_capacity {
             return Ok(None);
         }
 
-        // 2. Get next pending item (by priority)
+        // 4. Get next pending item (by priority)
         let item = match self.queue_store.get_next_pending()? {
             Some(item) => item,
             None => return Ok(None),
         };
 
-        // 3. Claim for processing (atomic)
+        // 5. Claim for processing (atomic)
         if !self.queue_store.claim_for_processing(&item.id)? {
             // Another processor claimed it, try again
             return Ok(None);
         }
 
-        // 4. Log download started
+        // 6. Log download started
         self.audit_logger.log_download_started(&item)?;
 
         let start_time = std::time::Instant::now();
 
-        // 5. Execute download based on content type
+        // 7. Execute download based on content type
         let download_result = self.execute_download(&item).await;
 
         let duration_ms = start_time.elapsed().as_millis() as i64;
 
+        // Determine if this is a media item (track/image) for throttle/corruption tracking
+        let is_media_item = matches!(
+            item.content_type,
+            DownloadContentType::TrackAudio
+                | DownloadContentType::AlbumImage
+                | DownloadContentType::ArtistImage
+        );
+
         match download_result {
             Ok(bytes_downloaded) => {
-                // 6. On success: handle completion based on item type
+                // 8. On success: handle completion based on item type
                 //
                 // For Album items (parent items that spawn children), do NOT mark as
                 // completed here. They should remain IN_PROGRESS until all children
@@ -443,6 +494,12 @@ impl DownloadManager {
                 //
                 // For child items (tracks, images), mark as completed immediately.
                 let is_parent_item = item.content_type == DownloadContentType::Album;
+
+                // Update throttler and corruption handler for media items
+                if is_media_item {
+                    self.throttler.record_download(bytes_downloaded).await;
+                    self.corruption_handler.record_result(true).await;
+                }
 
                 if is_parent_item {
                     // Parent items stay IN_PROGRESS - children will complete them
@@ -501,7 +558,42 @@ impl DownloadManager {
                 )))
             }
             Err(error) => {
-                // 7. On failure: check retry policy, either mark retry or failed
+                // 9. On failure: check for corruption and handle accordingly
+                let is_corruption = error.error_type == DownloadErrorType::Corruption;
+
+                // Handle corruption tracking for media items
+                if is_media_item && is_corruption {
+                    // Record corruption event in metrics
+                    crate::server::metrics::record_corruption_event();
+
+                    let action = self.corruption_handler.record_result(false).await;
+
+                    if action == HandlerAction::RestartNeeded {
+                        // Try to trigger restart if we can acquire the lock
+                        if self.corruption_handler.try_acquire_restart_lock() {
+                            info!("Corruption threshold exceeded, triggering downloader restart");
+
+                            // Record restart in metrics
+                            crate::server::metrics::record_corruption_handler_restart();
+
+                            // Fire-and-forget restart
+                            let client = self.downloader_client.clone();
+                            tokio::spawn(async move {
+                                if let Err(e) = client.restart().await {
+                                    warn!("Failed to restart downloader: {}", e);
+                                } else {
+                                    info!("Downloader restart request sent");
+                                }
+                            });
+
+                            // Record the restart (escalates cooldown)
+                            self.corruption_handler.record_restart().await;
+                            self.corruption_handler.release_restart_lock();
+                        }
+                    }
+                }
+
+                // Check retry policy
                 if self.retry_policy.should_retry(&error, item.retry_count) {
                     // Schedule retry
                     let next_retry_at = self.retry_policy.next_retry_at(item.retry_count);
@@ -1189,6 +1281,42 @@ impl DownloadManager {
     ) -> Result<(Vec<AuditLogEntry>, usize)> {
         self.queue_store
             .get_audit_for_user(user_id, None, None, limit, offset)
+    }
+
+    // =========================================================================
+    // Throttle & Corruption Handler Methods (for admin API)
+    // =========================================================================
+
+    /// Get current throttle statistics.
+    pub async fn get_throttle_stats(&self) -> super::throttle::ThrottleStats {
+        self.throttler.get_stats().await
+    }
+
+    /// Reset throttle state (admin action).
+    pub async fn reset_throttle(&self) {
+        self.throttler.reset().await;
+        info!("Throttle state reset by admin");
+    }
+
+    /// Get current corruption handler state.
+    pub async fn get_corruption_handler_state(&self) -> super::corruption_handler::HandlerState {
+        self.corruption_handler.get_state().await
+    }
+
+    /// Reset corruption handler state (admin action).
+    /// Clears cooldown immediately and resets level to 0.
+    pub async fn reset_corruption_handler(&self) {
+        self.corruption_handler.admin_reset().await;
+    }
+
+    /// Get reference to the corruption handler for persistence operations.
+    pub fn corruption_handler(&self) -> &Arc<CorruptionHandler> {
+        &self.corruption_handler
+    }
+
+    /// Get reference to the throttler.
+    pub fn throttler(&self) -> &Arc<SlidingWindowThrottler> {
+        &self.throttler
     }
 }
 
