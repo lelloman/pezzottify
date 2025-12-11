@@ -457,3 +457,34 @@ Add to existing admin panel, likely under a "Downloads" or "System" section.
 - Unit tests for SlidingWindowThrottler
 - Unit tests for CorruptionWatchdog (escalation, de-escalation, threshold detection)
 - Integration test for restart flow (mock downloader)
+
+---
+
+## Part 7: Retry Policy Changes
+
+### Current values
+```
+max_retries: 5
+initial_backoff_secs: 60
+max_backoff_secs: 3600
+backoff_multiplier: 2.0
+```
+
+Sequence: 1 min → 2 min → 4 min → 8 min → 16 min (5 attempts)
+
+### New values
+```
+max_retries: 8
+initial_backoff_secs: 60
+max_backoff_secs: 3600
+backoff_multiplier: 2.5
+```
+
+Sequence: 1 min → 2.5 min → 6.25 min → 15.6 min → 39 min → 60 min (capped) → 60 min → 60 min (8 attempts)
+
+### Files to modify
+
+| File | Action |
+|------|--------|
+| `retry_policy.rs` | MODIFY - Update defaults |
+| `models.rs` | MODIFY - Update DownloadManagerSettings defaults |

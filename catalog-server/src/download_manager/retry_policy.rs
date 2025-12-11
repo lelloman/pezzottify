@@ -62,10 +62,10 @@ impl RetryPolicy {
 impl Default for RetryPolicy {
     fn default() -> Self {
         Self {
-            max_retries: 5,
+            max_retries: 8,
             initial_backoff_secs: 60,
-            max_backoff_secs: 3600,
-            backoff_multiplier: 2.0,
+            max_backoff_secs: 86400, // 24 hours
+            backoff_multiplier: 2.5,
         }
     }
 }
@@ -84,10 +84,10 @@ mod tests {
             user_max_queue_size: 200,
             process_interval_secs: 5,
             stale_in_progress_threshold_secs: 3600,
-            max_retries: 5,
+            max_retries: 8,
             initial_backoff_secs: 60,
-            max_backoff_secs: 3600,
-            backoff_multiplier: 2.0,
+            max_backoff_secs: 86400,
+            backoff_multiplier: 2.5,
             audit_log_retention_days: 90,
         }
     }
@@ -97,20 +97,20 @@ mod tests {
         let config = make_default_config();
         let policy = RetryPolicy::new(&config);
 
-        assert_eq!(policy.max_retries, 5);
+        assert_eq!(policy.max_retries, 8);
         assert_eq!(policy.initial_backoff_secs, 60);
-        assert_eq!(policy.max_backoff_secs, 3600);
-        assert_eq!(policy.backoff_multiplier, 2.0);
+        assert_eq!(policy.max_backoff_secs, 86400);
+        assert_eq!(policy.backoff_multiplier, 2.5);
     }
 
     #[test]
     fn test_default() {
         let policy = RetryPolicy::default();
 
-        assert_eq!(policy.max_retries, 5);
+        assert_eq!(policy.max_retries, 8);
         assert_eq!(policy.initial_backoff_secs, 60);
-        assert_eq!(policy.max_backoff_secs, 3600);
-        assert_eq!(policy.backoff_multiplier, 2.0);
+        assert_eq!(policy.max_backoff_secs, 86400);
+        assert_eq!(policy.backoff_multiplier, 2.5);
     }
 
     #[test]
