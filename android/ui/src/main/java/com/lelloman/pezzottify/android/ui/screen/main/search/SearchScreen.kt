@@ -60,7 +60,6 @@ import com.lelloman.pezzottify.android.ui.theme.Spacing
 import com.lelloman.pezzottify.android.ui.toAlbum
 import com.lelloman.pezzottify.android.ui.toArtist
 import com.lelloman.pezzottify.android.ui.toExternalAlbum
-import com.lelloman.pezzottify.android.ui.toExternalArtist
 import com.lelloman.pezzottify.android.ui.toTrack
 import kotlinx.coroutines.flow.Flow
 
@@ -93,7 +92,9 @@ fun SearchScreenContent(
                 is SearchScreensEvents.NavigateToAlbumScreen -> navController.toAlbum(it.albumId)
                 is SearchScreensEvents.NavigateToTrackScreen -> navController.toTrack(it.trackId)
                 is SearchScreensEvents.NavigateToExternalAlbumScreen -> navController.toExternalAlbum(it.albumId)
-                is SearchScreensEvents.NavigateToExternalArtistScreen -> navController.toExternalArtist(it.artistId)
+                is SearchScreensEvents.NavigateToExternalArtistScreen -> {
+                    // TODO: Navigate to ExternalArtistScreen when implemented
+                }
                 is SearchScreensEvents.ShowRequestError -> snackbarHostState.showSnackbar(context.getString(it.messageRes))
                 is SearchScreensEvents.ShowRequestSuccess -> snackbarHostState.showSnackbar(context.getString(R.string.request_added_to_queue))
             }
