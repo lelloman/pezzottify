@@ -1024,6 +1024,24 @@ impl DownloadManager {
         // Reset the item to pending status
         self.queue_store.reset_to_pending(request_id)?;
 
+        // If this is a parent item (no parent_id), also reset any failed children
+        if item.parent_id.is_none() {
+            let children = self.queue_store.get_children(request_id)?;
+            let mut reset_count = 0;
+            for child in children {
+                if allowed_statuses.contains(&child.status) {
+                    self.queue_store.reset_to_pending(&child.id)?;
+                    reset_count += 1;
+                }
+            }
+            if reset_count > 0 {
+                info!(
+                    "Admin {} also reset {} failed children for parent {}",
+                    admin_user_id, reset_count, request_id
+                );
+            }
+        }
+
         // Log the admin retry
         self.audit_logger.log_admin_retry(&item, admin_user_id)?;
 
@@ -1066,12 +1084,30 @@ impl DownloadManager {
         &self,
         status: Option<QueueStatus>,
         exclude_completed: bool,
+        top_level_only: bool,
         _user_id: Option<&str>,
         limit: usize,
         offset: usize,
     ) -> Result<Vec<QueueItem>> {
         self.queue_store
-            .list_all(status, exclude_completed, limit, offset)
+            .list_all(status, exclude_completed, top_level_only, limit, offset)
+    }
+
+    /// Get progress for a parent item's children.
+    pub fn get_request_progress(&self, request_id: &str) -> Result<Option<DownloadProgress>> {
+        let item = self.queue_store.get_item(request_id)?;
+        match item {
+            Some(item) if item.parent_id.is_none() => {
+                // This is a top-level request, get children progress
+                let progress = self.queue_store.get_children_progress(request_id)?;
+                if progress.total_children > 0 {
+                    Ok(Some(progress))
+                } else {
+                    Ok(None)
+                }
+            }
+            _ => Ok(None),
+        }
     }
 
     // =========================================================================
@@ -1510,7 +1546,7 @@ mod tests {
     fn test_get_all_requests_empty() {
         let ctx = create_test_manager();
 
-        let requests = ctx.manager.get_all_requests(None, false, None, 100, 0).unwrap();
+        let requests = ctx.manager.get_all_requests(None, false, false, None, 100, 0).unwrap();
 
         assert!(requests.is_empty());
     }
@@ -1542,7 +1578,7 @@ mod tests {
             )
             .unwrap();
 
-        let requests = ctx.manager.get_all_requests(None, false, None, 100, 0).unwrap();
+        let requests = ctx.manager.get_all_requests(None, false, false, None, 100, 0).unwrap();
 
         assert_eq!(requests.len(), 2);
     }
@@ -1566,14 +1602,14 @@ mod tests {
         // Filter by PENDING status
         let pending = ctx
             .manager
-            .get_all_requests(Some(QueueStatus::Pending), false, None, 100, 0)
+            .get_all_requests(Some(QueueStatus::Pending), false, false, None, 100, 0)
             .unwrap();
         assert_eq!(pending.len(), 1);
 
         // Filter by COMPLETED status (should be empty)
         let completed = ctx
             .manager
-            .get_all_requests(Some(QueueStatus::Completed), false, None, 100, 0)
+            .get_all_requests(Some(QueueStatus::Completed), false, false, None, 100, 0)
             .unwrap();
         assert!(completed.is_empty());
     }

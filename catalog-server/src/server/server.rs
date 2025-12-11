@@ -3604,12 +3604,27 @@ struct RequestsQuery {
     limit: Option<usize>,
     offset: Option<usize>,
     exclude_completed: Option<bool>,
+    top_level_only: Option<bool>,
 }
 
 /// Response for requests endpoint
 #[derive(serde::Serialize)]
 struct DownloadRequestsResponse {
     items: Vec<crate::download_manager::QueueItem>,
+}
+
+/// A request item with optional progress info (for top-level requests with children)
+#[derive(serde::Serialize)]
+struct RequestWithProgress {
+    #[serde(flatten)]
+    item: crate::download_manager::QueueItem,
+    progress: Option<crate::download_manager::DownloadProgress>,
+}
+
+/// Response for requests endpoint with progress info
+#[derive(serde::Serialize)]
+struct RequestsWithProgressResponse {
+    items: Vec<RequestWithProgress>,
 }
 
 /// GET /v1/download/admin/requests - Get all download requests
@@ -3632,6 +3647,7 @@ async fn admin_get_download_requests(
     let limit = query.limit.unwrap_or(50).min(200);
     let offset = query.offset.unwrap_or(0);
     let exclude_completed = query.exclude_completed.unwrap_or(false);
+    let top_level_only = query.top_level_only.unwrap_or(false);
 
     let status = query
         .status
@@ -3645,9 +3661,31 @@ async fn admin_get_download_requests(
             _ => None,
         });
 
-    match dm.get_all_requests(status, exclude_completed, query.user_id.as_deref(), limit, offset) {
+    match dm.get_all_requests(
+        status,
+        exclude_completed,
+        top_level_only,
+        query.user_id.as_deref(),
+        limit,
+        offset,
+    ) {
         Ok(items) => {
-            Json(DownloadRequestsResponse { items }).into_response()
+            // If top_level_only, enrich with progress info
+            if top_level_only {
+                let items_with_progress: Vec<_> = items
+                    .into_iter()
+                    .map(|item| {
+                        let progress = dm.get_request_progress(&item.id).ok().flatten();
+                        RequestWithProgress { item, progress }
+                    })
+                    .collect();
+                Json(RequestsWithProgressResponse {
+                    items: items_with_progress,
+                })
+                .into_response()
+            } else {
+                Json(DownloadRequestsResponse { items }).into_response()
+            }
         }
         Err(err) => {
             error!("Error getting download requests: {}", err);

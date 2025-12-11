@@ -716,7 +716,7 @@ mod tests {
 
         // Check that the queued item has Watchdog priority
         let pending = queue_store
-            .list_all(Some(QueueStatus::Pending), false, 10, 0)
+            .list_all(Some(QueueStatus::Pending), false, false, 10, 0)
             .unwrap();
         assert_eq!(pending.len(), 1);
         assert_eq!(pending[0].priority, QueuePriority::Watchdog);
