@@ -42,6 +42,13 @@ pub struct DownloadManagerConfig {
     pub throttle_enabled: Option<bool>,
     pub throttle_max_mb_per_minute: Option<u64>,
     pub throttle_max_mb_per_hour: Option<u64>,
+    // Corruption handler settings
+    pub corruption_window_size: Option<usize>,
+    pub corruption_failure_threshold: Option<usize>,
+    pub corruption_base_cooldown_secs: Option<u64>,
+    pub corruption_max_cooldown_secs: Option<u64>,
+    pub corruption_cooldown_multiplier: Option<f64>,
+    pub corruption_successes_to_deescalate: Option<u32>,
 }
 
 #[derive(Debug, Deserialize, Default, Clone)]

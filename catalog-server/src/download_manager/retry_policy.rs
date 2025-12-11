@@ -92,6 +92,12 @@ mod tests {
             throttle_enabled: true,
             throttle_max_mb_per_minute: 20,
             throttle_max_mb_per_hour: 1500,
+            corruption_window_size: 4,
+            corruption_failure_threshold: 2,
+            corruption_base_cooldown_secs: 600,
+            corruption_max_cooldown_secs: 7200,
+            corruption_cooldown_multiplier: 2.0,
+            corruption_successes_to_deescalate: 10,
         }
     }
 

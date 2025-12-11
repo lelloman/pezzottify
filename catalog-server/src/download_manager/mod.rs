@@ -5,6 +5,7 @@
 
 mod audit_logger;
 mod catalog_ingestion;
+mod corruption_handler;
 mod downloader_client;
 mod downloader_types;
 mod job_processor;
@@ -18,6 +19,9 @@ mod throttle;
 mod watchdog;
 
 pub use audit_logger::AuditLogger;
+pub use corruption_handler::{
+    CorruptionHandler, CorruptionHandlerConfig, HandlerAction, HandlerState, PersistedState as CorruptionPersistedState,
+};
 pub use downloader_client::DownloaderClient;
 pub use job_processor::QueueProcessor;
 pub use manager::DownloadManager;

@@ -135,6 +135,13 @@ impl AppConfig {
             throttle_enabled: dm_file.throttle_enabled.unwrap_or(true),
             throttle_max_mb_per_minute: dm_file.throttle_max_mb_per_minute.unwrap_or(20),
             throttle_max_mb_per_hour: dm_file.throttle_max_mb_per_hour.unwrap_or(1500),
+            // Corruption handler settings
+            corruption_window_size: dm_file.corruption_window_size.unwrap_or(4),
+            corruption_failure_threshold: dm_file.corruption_failure_threshold.unwrap_or(2),
+            corruption_base_cooldown_secs: dm_file.corruption_base_cooldown_secs.unwrap_or(600),
+            corruption_max_cooldown_secs: dm_file.corruption_max_cooldown_secs.unwrap_or(7200),
+            corruption_cooldown_multiplier: dm_file.corruption_cooldown_multiplier.unwrap_or(2.0),
+            corruption_successes_to_deescalate: dm_file.corruption_successes_to_deescalate.unwrap_or(10),
         };
 
         let background_jobs = BackgroundJobsSettings::default();
@@ -226,6 +233,13 @@ pub struct DownloadManagerSettings {
     pub throttle_enabled: bool,
     pub throttle_max_mb_per_minute: u64,
     pub throttle_max_mb_per_hour: u64,
+    // Corruption handler settings
+    pub corruption_window_size: usize,
+    pub corruption_failure_threshold: usize,
+    pub corruption_base_cooldown_secs: u64,
+    pub corruption_max_cooldown_secs: u64,
+    pub corruption_cooldown_multiplier: f64,
+    pub corruption_successes_to_deescalate: u32,
 }
 
 impl Default for DownloadManagerSettings {
@@ -247,6 +261,13 @@ impl Default for DownloadManagerSettings {
             throttle_enabled: true,
             throttle_max_mb_per_minute: 20,
             throttle_max_mb_per_hour: 1500,
+            // Corruption handler defaults
+            corruption_window_size: 4,
+            corruption_failure_threshold: 2,
+            corruption_base_cooldown_secs: 600,  // 10 minutes
+            corruption_max_cooldown_secs: 7200,  // 2 hours
+            corruption_cooldown_multiplier: 2.0,
+            corruption_successes_to_deescalate: 10,
         }
     }
 }
