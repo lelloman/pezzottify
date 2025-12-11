@@ -3126,6 +3126,40 @@ async fn search_download_discography(
     }
 }
 
+/// GET /v1/download/album/:album_id - Get detailed external album information
+///
+/// Fetches album metadata and tracks from the external downloader service,
+/// enriched with catalog status and request status if in download queue.
+async fn get_external_album_details(
+    _session: Session,
+    State(download_manager): State<super::state::OptionalDownloadManager>,
+    Path(album_id): Path<String>,
+) -> Response {
+    let dm = match download_manager {
+        Some(dm) => dm,
+        None => {
+            return (
+                StatusCode::SERVICE_UNAVAILABLE,
+                "Download manager not enabled",
+            )
+                .into_response()
+        }
+    };
+
+    match dm.get_external_album_details(&album_id).await {
+        Ok(result) => Json(result).into_response(),
+        Err(err) => {
+            let err_msg = err.to_string();
+            if err_msg.contains("404") || err_msg.contains("not found") {
+                (StatusCode::NOT_FOUND, "Album not found").into_response()
+            } else {
+                error!("Error fetching external album details: {}", err);
+                StatusCode::INTERNAL_SERVER_ERROR.into_response()
+            }
+        }
+    }
+}
+
 /// POST /v1/download/request/album - Request download of an album
 async fn request_album_download(
     session: Session,
@@ -4480,6 +4514,7 @@ pub fn make_app(
             "/search/discography/{artist_id}",
             get(search_download_discography),
         )
+        .route("/album/{album_id}", get(get_external_album_details))
         .route("/request/album", post(request_album_download))
         .route("/request/discography", post(request_discography_download))
         .route("/my-requests", get(get_my_download_requests))

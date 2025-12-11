@@ -237,6 +237,120 @@ impl SearchProxy {
         Ok(DiscographyResult { artist, albums })
     }
 
+    /// Get detailed information about an external album.
+    ///
+    /// Fetches album metadata and tracks from the downloader service,
+    /// then enriches with catalog and queue status.
+    ///
+    /// # Arguments
+    /// * `album_id` - External album ID from the music provider
+    pub async fn get_album_details(&self, album_id: &str) -> Result<ExternalAlbumDetails> {
+        // 1. Fetch album metadata
+        let album = self.downloader_client.get_album(album_id).await?;
+
+        // 2. Fetch album tracks
+        let tracks = self.downloader_client.get_album_tracks(album_id).await?;
+
+        // 3. Get the primary artist name
+        let artist_id = album.artists_ids.first().cloned().unwrap_or_default();
+        let artist_name = if !artist_id.is_empty() {
+            // Try to get artist name from downloader
+            match self.downloader_client.get_artist(&artist_id).await {
+                Ok(artist) => artist.name,
+                Err(_) => String::new(),
+            }
+        } else {
+            String::new()
+        };
+
+        // 4. Get year from album date
+        let year = if album.date > 0 {
+            Some(
+                chrono::DateTime::from_timestamp(album.date, 0)
+                    .map(|dt| dt.format("%Y").to_string().parse::<i32>().unwrap_or(0))
+                    .unwrap_or(0),
+            )
+            .filter(|&y| y > 0)
+        } else {
+            None
+        };
+
+        // 5. Get image URL from covers
+        let image_url = album
+            .covers
+            .iter()
+            .chain(album.cover_group.iter())
+            .find(|img| img.size == "large" || img.size == "xlarge")
+            .or_else(|| album.covers.first())
+            .or_else(|| album.cover_group.first())
+            .map(|img| format!("{}/image/{}", self.downloader_client.base_url(), img.id));
+
+        // 6. Convert tracks to ExternalTrackInfo
+        let track_infos: Vec<ExternalTrackInfo> = tracks
+            .iter()
+            .map(|t| ExternalTrackInfo {
+                id: t.id.clone(),
+                name: t.name.clone(),
+                track_number: t.number,
+                disc_number: Some(t.disc_number),
+                duration_ms: Some(t.duration),
+            })
+            .collect();
+
+        // 7. Check if album is in catalog
+        let in_catalog = self.check_album_in_catalog(album_id).unwrap_or(false);
+
+        // 8. Get request status if in queue
+        let request_status = self.get_request_status_for_album(album_id)?;
+
+        Ok(ExternalAlbumDetails {
+            id: album.id,
+            name: album.name,
+            artist_id,
+            artist_name,
+            image_url,
+            year,
+            album_type: Some(album.album_type),
+            total_tracks: track_infos.len() as i32,
+            tracks: track_infos,
+            in_catalog,
+            request_status,
+        })
+    }
+
+    /// Get request status for an album if it's in the download queue.
+    fn get_request_status_for_album(&self, album_id: &str) -> Result<Option<RequestStatusInfo>> {
+        // Find the queue item for this album
+        let item = self
+            .queue_store
+            .find_by_content(DownloadContentType::Album, album_id)?;
+
+        match item {
+            Some(item) => {
+                // Get queue position for pending items
+                let queue_position = if item.status == QueueStatus::Pending {
+                    self.queue_store.get_queue_position(&item.id)?
+                } else {
+                    None
+                };
+
+                // Get progress for album downloads
+                let progress = self
+                    .queue_store
+                    .get_children_progress(&item.id)
+                    .ok()
+                    .filter(|p| p.total_children > 0);
+
+                Ok(Some(RequestStatusInfo::from_queue_item(
+                    &item,
+                    queue_position,
+                    progress,
+                )))
+            }
+            None => Ok(None),
+        }
+    }
+
     /// Check if an album exists in the catalog by external ID.
     ///
     /// Albums ingested via the downloader use the external ID as their catalog ID.

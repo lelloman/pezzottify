@@ -910,6 +910,91 @@ pub struct DiscographyResult {
     pub albums: Vec<SearchResult>,
 }
 
+// =============================================================================
+// External Album Details (for ExternalAlbumScreen)
+// =============================================================================
+
+/// Detailed information about an external album, including tracks and request status.
+///
+/// Used for the ExternalAlbumScreen to show album details before/during download.
+#[derive(Debug, Clone, Serialize)]
+pub struct ExternalAlbumDetails {
+    /// External album ID
+    pub id: String,
+    /// Album name
+    pub name: String,
+    /// Primary artist ID
+    pub artist_id: String,
+    /// Primary artist name
+    pub artist_name: String,
+    /// URL to cover image
+    pub image_url: Option<String>,
+    /// Release year
+    pub year: Option<i32>,
+    /// Album type: "album", "single", "ep", "compilation"
+    pub album_type: Option<String>,
+    /// Total number of tracks on the album
+    pub total_tracks: i32,
+    /// List of tracks on the album
+    pub tracks: Vec<ExternalTrackInfo>,
+    /// Whether this album is already in the local catalog
+    pub in_catalog: bool,
+    /// Request status if the album is in the download queue
+    pub request_status: Option<RequestStatusInfo>,
+}
+
+/// Track information for external album details.
+#[derive(Debug, Clone, Serialize)]
+pub struct ExternalTrackInfo {
+    /// External track ID
+    pub id: String,
+    /// Track name
+    pub name: String,
+    /// Track number within the disc
+    pub track_number: i32,
+    /// Disc number (for multi-disc albums)
+    pub disc_number: Option<i32>,
+    /// Duration in milliseconds
+    pub duration_ms: Option<i64>,
+}
+
+/// Request status information for an item in the download queue.
+///
+/// Provides current status, queue position, progress, and error information.
+#[derive(Debug, Clone, Serialize)]
+pub struct RequestStatusInfo {
+    /// Queue item ID (UUID)
+    pub request_id: String,
+    /// Current status in the queue
+    pub status: QueueStatus,
+    /// Position in queue (1-based, only for pending items)
+    pub queue_position: Option<usize>,
+    /// Download progress (for album downloads with children)
+    pub progress: Option<DownloadProgress>,
+    /// Error message (for failed items)
+    pub error_message: Option<String>,
+    /// When the request was created (Unix timestamp)
+    pub created_at: i64,
+}
+
+impl RequestStatusInfo {
+    /// Create a RequestStatusInfo from a QueueItem.
+    pub fn from_queue_item(
+        item: &QueueItem,
+        queue_position: Option<usize>,
+        progress: Option<DownloadProgress>,
+    ) -> Self {
+        Self {
+            request_id: item.id.clone(),
+            status: item.status,
+            queue_position,
+            progress,
+            error_message: item.error_message.clone(),
+            created_at: item.created_at,
+        }
+    }
+}
+
 /// Request to download an album.
 #[derive(Debug, Clone, Deserialize)]
 pub struct AlbumRequest {
@@ -1807,5 +1892,199 @@ mod tests {
         assert!(json.contains("\"request_source\":\"WATCHDOG\""));
         assert!(json.contains("\"missing_tracks\":5"));
         assert!(json.contains("\"items_queued\":8"));
+    }
+
+    // =========================================================================
+    // External Album Details Tests
+    // =========================================================================
+
+    #[test]
+    fn test_external_album_details_serialization() {
+        let details = ExternalAlbumDetails {
+            id: "album-123".to_string(),
+            name: "Test Album".to_string(),
+            artist_id: "artist-456".to_string(),
+            artist_name: "Test Artist".to_string(),
+            image_url: Some("https://example.com/cover.jpg".to_string()),
+            year: Some(2023),
+            album_type: Some("album".to_string()),
+            total_tracks: 10,
+            tracks: vec![
+                ExternalTrackInfo {
+                    id: "track-1".to_string(),
+                    name: "Track One".to_string(),
+                    track_number: 1,
+                    disc_number: Some(1),
+                    duration_ms: Some(180000),
+                },
+                ExternalTrackInfo {
+                    id: "track-2".to_string(),
+                    name: "Track Two".to_string(),
+                    track_number: 2,
+                    disc_number: Some(1),
+                    duration_ms: Some(240000),
+                },
+            ],
+            in_catalog: false,
+            request_status: None,
+        };
+
+        let json = serde_json::to_string(&details).unwrap();
+
+        assert!(json.contains("\"id\":\"album-123\""));
+        assert!(json.contains("\"name\":\"Test Album\""));
+        assert!(json.contains("\"artist_id\":\"artist-456\""));
+        assert!(json.contains("\"artist_name\":\"Test Artist\""));
+        assert!(json.contains("\"year\":2023"));
+        assert!(json.contains("\"album_type\":\"album\""));
+        assert!(json.contains("\"total_tracks\":10"));
+        assert!(json.contains("\"in_catalog\":false"));
+        assert!(json.contains("\"tracks\":["));
+    }
+
+    #[test]
+    fn test_external_album_details_with_request_status() {
+        let details = ExternalAlbumDetails {
+            id: "album-123".to_string(),
+            name: "Test Album".to_string(),
+            artist_id: "artist-456".to_string(),
+            artist_name: "Test Artist".to_string(),
+            image_url: None,
+            year: None,
+            album_type: None,
+            total_tracks: 5,
+            tracks: vec![],
+            in_catalog: false,
+            request_status: Some(RequestStatusInfo {
+                request_id: "req-789".to_string(),
+                status: QueueStatus::InProgress,
+                queue_position: None,
+                progress: Some(DownloadProgress {
+                    total_children: 10,
+                    completed: 5,
+                    failed: 0,
+                    pending: 3,
+                    in_progress: 2,
+                }),
+                error_message: None,
+                created_at: 1700000000,
+            }),
+        };
+
+        let json = serde_json::to_string(&details).unwrap();
+
+        assert!(json.contains("\"request_status\":{"));
+        assert!(json.contains("\"request_id\":\"req-789\""));
+        assert!(json.contains("\"status\":\"IN_PROGRESS\""));
+        assert!(json.contains("\"total_children\":10"));
+        assert!(json.contains("\"completed\":5"));
+    }
+
+    #[test]
+    fn test_external_track_info_serialization() {
+        let track = ExternalTrackInfo {
+            id: "track-abc".to_string(),
+            name: "My Song".to_string(),
+            track_number: 3,
+            disc_number: Some(2),
+            duration_ms: Some(195000),
+        };
+
+        let json = serde_json::to_string(&track).unwrap();
+
+        assert!(json.contains("\"id\":\"track-abc\""));
+        assert!(json.contains("\"name\":\"My Song\""));
+        assert!(json.contains("\"track_number\":3"));
+        assert!(json.contains("\"disc_number\":2"));
+        assert!(json.contains("\"duration_ms\":195000"));
+    }
+
+    #[test]
+    fn test_external_track_info_minimal() {
+        let track = ExternalTrackInfo {
+            id: "track-min".to_string(),
+            name: "Minimal".to_string(),
+            track_number: 1,
+            disc_number: None,
+            duration_ms: None,
+        };
+
+        let json = serde_json::to_string(&track).unwrap();
+
+        assert!(json.contains("\"id\":\"track-min\""));
+        assert!(json.contains("\"disc_number\":null"));
+        assert!(json.contains("\"duration_ms\":null"));
+    }
+
+    #[test]
+    fn test_request_status_info_from_queue_item() {
+        let item = QueueItem::new(
+            "queue-item-123".to_string(),
+            DownloadContentType::Album,
+            "album-456".to_string(),
+            QueuePriority::User,
+            RequestSource::User,
+            5,
+        );
+
+        let progress = DownloadProgress {
+            total_children: 10,
+            completed: 3,
+            failed: 1,
+            pending: 4,
+            in_progress: 2,
+        };
+
+        let status = RequestStatusInfo::from_queue_item(&item, Some(5), Some(progress));
+
+        assert_eq!(status.request_id, "queue-item-123");
+        assert_eq!(status.status, QueueStatus::Pending);
+        assert_eq!(status.queue_position, Some(5));
+        assert!(status.progress.is_some());
+        assert_eq!(status.progress.unwrap().total_children, 10);
+        assert!(status.error_message.is_none());
+    }
+
+    #[test]
+    fn test_request_status_info_with_error() {
+        let mut item = QueueItem::new(
+            "failed-item".to_string(),
+            DownloadContentType::Album,
+            "album-789".to_string(),
+            QueuePriority::User,
+            RequestSource::User,
+            5,
+        );
+        item.status = QueueStatus::Failed;
+        item.error_message = Some("Download failed: Connection timeout".to_string());
+
+        let status = RequestStatusInfo::from_queue_item(&item, None, None);
+
+        assert_eq!(status.status, QueueStatus::Failed);
+        assert!(status.queue_position.is_none());
+        assert!(status.progress.is_none());
+        assert_eq!(
+            status.error_message,
+            Some("Download failed: Connection timeout".to_string())
+        );
+    }
+
+    #[test]
+    fn test_request_status_info_serialization() {
+        let status = RequestStatusInfo {
+            request_id: "req-123".to_string(),
+            status: QueueStatus::Pending,
+            queue_position: Some(3),
+            progress: None,
+            error_message: None,
+            created_at: 1700000000,
+        };
+
+        let json = serde_json::to_string(&status).unwrap();
+
+        assert!(json.contains("\"request_id\":\"req-123\""));
+        assert!(json.contains("\"status\":\"PENDING\""));
+        assert!(json.contains("\"queue_position\":3"));
+        assert!(json.contains("\"created_at\":1700000000"));
     }
 }
