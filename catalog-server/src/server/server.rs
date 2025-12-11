@@ -3645,17 +3645,8 @@ async fn admin_get_download_requests(
             _ => None,
         });
 
-    match dm.get_all_requests(status, query.user_id.as_deref(), limit, offset) {
+    match dm.get_all_requests(status, exclude_completed, query.user_id.as_deref(), limit, offset) {
         Ok(items) => {
-            // Filter out completed items if requested
-            let items = if exclude_completed {
-                items
-                    .into_iter()
-                    .filter(|i| i.status != crate::download_manager::QueueStatus::Completed)
-                    .collect()
-            } else {
-                items
-            };
             Json(DownloadRequestsResponse { items }).into_response()
         }
         Err(err) => {
