@@ -45,17 +45,40 @@ stale_in_progress_threshold_secs = 3600
 
 # Retry Settings
 # Maximum retry attempts for failed downloads
-max_retries = 5
+max_retries = 8
 # Initial delay before first retry (seconds)
 initial_backoff_secs = 60
 # Maximum delay between retries (seconds)
-max_backoff_secs = 3600
+max_backoff_secs = 86400
 # Multiplier for exponential backoff
-backoff_multiplier = 2.0
+backoff_multiplier = 2.5
 
 # Audit Log
 # Days to retain audit log entries (0 to disable cleanup)
 audit_log_retention_days = 90
+
+# Bandwidth Throttling
+# Prevents overwhelming the downloader service
+throttle_enabled = true
+# Maximum MB per minute
+throttle_max_mb_per_minute = 20
+# Maximum MB per hour
+throttle_max_mb_per_hour = 1500
+
+# Corruption Handler
+# Detects file corruption (ffprobe failures) and triggers downloader restarts
+# Size of sliding window for tracking recent results
+corruption_window_size = 4
+# Number of failures in window that triggers restart
+corruption_failure_threshold = 2
+# Base cooldown duration in seconds after restart (level 0)
+corruption_base_cooldown_secs = 600
+# Maximum cooldown duration in seconds
+corruption_max_cooldown_secs = 7200
+# Multiplier for cooldown escalation (2.0 = double each level)
+corruption_cooldown_multiplier = 2.0
+# Successful downloads needed to de-escalate one level
+corruption_successes_to_deescalate = 10
 
 # Background Jobs settings
 [background_jobs]

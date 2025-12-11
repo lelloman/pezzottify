@@ -54,6 +54,24 @@ impl DownloaderClient {
         }
     }
 
+    /// Request the downloader service to restart.
+    ///
+    /// This is a fire-and-forget request. The caller should use
+    /// cooldown periods rather than waiting for confirmation.
+    pub async fn restart(&self) -> Result<()> {
+        let url = format!("{}/restart", self.base_url);
+        let response = self.client.post(&url).send().await?;
+
+        if !response.status().is_success() {
+            return Err(anyhow!(
+                "Restart request failed with status: {}",
+                response.status()
+            ));
+        }
+
+        Ok(())
+    }
+
     /// Get the current status of the downloader service.
     pub async fn get_status(&self) -> Result<crate::downloader::models::DownloaderStatus> {
         let url = format!("{}/status", self.base_url);
