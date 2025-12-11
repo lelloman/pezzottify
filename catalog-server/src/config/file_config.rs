@@ -38,6 +38,10 @@ pub struct DownloadManagerConfig {
     pub max_backoff_secs: Option<u64>,
     pub backoff_multiplier: Option<f64>,
     pub audit_log_retention_days: Option<u64>,
+    // Throttle settings
+    pub throttle_enabled: Option<bool>,
+    pub throttle_max_mb_per_minute: Option<u64>,
+    pub throttle_max_mb_per_hour: Option<u64>,
 }
 
 #[derive(Debug, Deserialize, Default, Clone)]
