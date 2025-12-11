@@ -52,6 +52,50 @@ enum class Permission {
     DownloadManagerAdmin,
 }
 
+// =============================================================================
+// Download Status Types (for sync events)
+// =============================================================================
+
+/**
+ * Download content type for sync events.
+ */
+@Serializable
+enum class SyncDownloadContentType {
+    @SerialName("album")
+    Album,
+}
+
+/**
+ * Download queue status for sync events.
+ */
+@Serializable
+enum class SyncQueueStatus {
+    @SerialName("PENDING")
+    Pending,
+    @SerialName("IN_PROGRESS")
+    InProgress,
+    @SerialName("COMPLETED")
+    Completed,
+    @SerialName("FAILED")
+    Failed,
+    @SerialName("RETRY_WAITING")
+    RetryWaiting,
+}
+
+/**
+ * Download progress for sync events.
+ */
+@Serializable
+data class SyncDownloadProgress(
+    @SerialName("total_children")
+    val totalChildren: Int,
+    val completed: Int,
+    val failed: Int,
+    val pending: Int,
+    @SerialName("in_progress")
+    val inProgress: Int,
+)
+
 /**
  * Sync event types for multi-device synchronization.
  *
@@ -164,6 +208,70 @@ sealed interface SyncEvent {
     data class PermissionsReset(
         val permissions: List<Permission>,
     ) : SyncEvent
+
+    // Download status events
+
+    /**
+     * A download request was created (album added to queue).
+     */
+    @Serializable
+    @SerialName("download_request_created")
+    data class DownloadRequestCreated(
+        @SerialName("request_id")
+        val requestId: String,
+        @SerialName("content_id")
+        val contentId: String,
+        @SerialName("content_type")
+        val contentType: SyncDownloadContentType,
+        @SerialName("content_name")
+        val contentName: String,
+        @SerialName("artist_name")
+        val artistName: String?,
+        @SerialName("queue_position")
+        val queuePosition: Int,
+    ) : SyncEvent
+
+    /**
+     * Download status changed (e.g., pending -> in_progress -> completed/failed).
+     */
+    @Serializable
+    @SerialName("download_status_changed")
+    data class DownloadStatusChanged(
+        @SerialName("request_id")
+        val requestId: String,
+        @SerialName("content_id")
+        val contentId: String,
+        val status: SyncQueueStatus,
+        @SerialName("queue_position")
+        val queuePosition: Int?,
+        @SerialName("error_message")
+        val errorMessage: String?,
+    ) : SyncEvent
+
+    /**
+     * Download progress updated (for album downloads with multiple tracks).
+     */
+    @Serializable
+    @SerialName("download_progress_updated")
+    data class DownloadProgressUpdated(
+        @SerialName("request_id")
+        val requestId: String,
+        @SerialName("content_id")
+        val contentId: String,
+        val progress: SyncDownloadProgress,
+    ) : SyncEvent
+
+    /**
+     * Download completed successfully.
+     */
+    @Serializable
+    @SerialName("download_completed")
+    data class DownloadCompleted(
+        @SerialName("request_id")
+        val requestId: String,
+        @SerialName("content_id")
+        val contentId: String,
+    ) : SyncEvent
 }
 
 /**
@@ -207,6 +315,23 @@ data class SyncEventPayload(
     // Permission events
     val permission: Permission? = null,
     val permissions: List<Permission>? = null,
+
+    // Download events
+    // Note: Download events also use content_type and content_id fields above
+    // Since SyncDownloadContentType.Album maps to "album" same as LikedContentType.Album,
+    // we reuse contentType and convert in toSyncEvent
+    @SerialName("request_id")
+    val requestId: String? = null,
+    @SerialName("content_name")
+    val contentName: String? = null,
+    @SerialName("artist_name")
+    val artistName: String? = null,
+    @SerialName("queue_position")
+    val queuePosition: Int? = null,
+    val status: SyncQueueStatus? = null,
+    @SerialName("error_message")
+    val errorMessage: String? = null,
+    val progress: SyncDownloadProgress? = null,
 ) {
     /**
      * Convert payload to a typed SyncEvent based on the event type.
@@ -260,6 +385,36 @@ data class SyncEventPayload(
         "permissions_reset" -> {
             if (permissions != null) {
                 SyncEvent.PermissionsReset(permissions)
+            } else null
+        }
+        "download_request_created" -> {
+            // contentType is reused from liked events - Album maps to SyncDownloadContentType.Album
+            val downloadType = when (contentType) {
+                LikedContentType.Album -> SyncDownloadContentType.Album
+                else -> null
+            }
+            if (requestId != null && contentId != null && downloadType != null &&
+                contentName != null && queuePosition != null) {
+                SyncEvent.DownloadRequestCreated(
+                    requestId, contentId, downloadType, contentName, artistName, queuePosition
+                )
+            } else null
+        }
+        "download_status_changed" -> {
+            if (requestId != null && contentId != null && status != null) {
+                SyncEvent.DownloadStatusChanged(
+                    requestId, contentId, status, queuePosition, errorMessage
+                )
+            } else null
+        }
+        "download_progress_updated" -> {
+            if (requestId != null && contentId != null && progress != null) {
+                SyncEvent.DownloadProgressUpdated(requestId, contentId, progress)
+            } else null
+        }
+        "download_completed" -> {
+            if (requestId != null && contentId != null) {
+                SyncEvent.DownloadCompleted(requestId, contentId)
             } else null
         }
         else -> null

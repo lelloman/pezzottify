@@ -291,6 +291,23 @@ class SyncManagerImpl internal constructor(
                 permissionsStore.setPermissions(event.permissions.toSet())
                 logger.debug("Applied PermissionsReset: ${event.permissions}")
             }
+
+            // Download status events - currently just logged, real-time updates handled via WebSocket
+            is SyncEvent.DownloadRequestCreated -> {
+                logger.debug("Download request created: ${event.requestId} for ${event.contentName}")
+            }
+
+            is SyncEvent.DownloadStatusChanged -> {
+                logger.debug("Download status changed: ${event.requestId} -> ${event.status}")
+            }
+
+            is SyncEvent.DownloadProgressUpdated -> {
+                logger.debug("Download progress: ${event.requestId} ${event.progress.completed}/${event.progress.totalChildren}")
+            }
+
+            is SyncEvent.DownloadCompleted -> {
+                logger.debug("Download completed: ${event.requestId} content=${event.contentId}")
+            }
         }
     }
 
