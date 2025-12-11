@@ -372,6 +372,12 @@ class SyncManagerImpl internal constructor(
         // Cancel any existing retry job
         retryJob?.cancel()
 
+        // Skip scheduling if retries are disabled (infinite delay)
+        if (!currentRetryDelay.isFinite()) {
+            logger.info("Retries disabled, not scheduling")
+            return
+        }
+
         retryJob = scope.launch {
             logger.info("Scheduling retry in $currentRetryDelay")
             delay(currentRetryDelay)

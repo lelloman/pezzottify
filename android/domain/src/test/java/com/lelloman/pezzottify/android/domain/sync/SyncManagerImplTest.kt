@@ -25,7 +25,7 @@ import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Before
 import org.junit.Test
-import kotlin.time.Duration.Companion.hours
+import kotlin.time.Duration
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class SyncManagerImplTest {
@@ -66,15 +66,15 @@ class SyncManagerImplTest {
             logger = logger,
             dispatcher = testDispatcher,
             scope = testScope,
-            // Use very long retry delays to effectively disable retries in tests
-            minRetryDelay = 1.hours,
-            maxRetryDelay = 1.hours,
+            // Use infinite retry delays to disable retries in tests
+            minRetryDelay = Duration.INFINITE,
+            maxRetryDelay = Duration.INFINITE,
         )
     }
 
     @After
     fun tearDown() {
-        // Cancel any pending operations in test scope
+        // Advance any pending coroutines (retries are disabled so this is safe)
         testScope.testScheduler.advanceUntilIdle()
     }
 
