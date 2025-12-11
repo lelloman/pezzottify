@@ -1065,11 +1065,13 @@ impl DownloadManager {
     pub fn get_all_requests(
         &self,
         status: Option<QueueStatus>,
+        exclude_completed: bool,
         _user_id: Option<&str>,
         limit: usize,
         offset: usize,
     ) -> Result<Vec<QueueItem>> {
-        self.queue_store.list_all(status, limit, offset)
+        self.queue_store
+            .list_all(status, exclude_completed, limit, offset)
     }
 
     // =========================================================================
@@ -1508,7 +1510,7 @@ mod tests {
     fn test_get_all_requests_empty() {
         let ctx = create_test_manager();
 
-        let requests = ctx.manager.get_all_requests(None, None, 100, 0).unwrap();
+        let requests = ctx.manager.get_all_requests(None, false, None, 100, 0).unwrap();
 
         assert!(requests.is_empty());
     }
@@ -1540,7 +1542,7 @@ mod tests {
             )
             .unwrap();
 
-        let requests = ctx.manager.get_all_requests(None, None, 100, 0).unwrap();
+        let requests = ctx.manager.get_all_requests(None, false, None, 100, 0).unwrap();
 
         assert_eq!(requests.len(), 2);
     }
@@ -1564,14 +1566,14 @@ mod tests {
         // Filter by PENDING status
         let pending = ctx
             .manager
-            .get_all_requests(Some(QueueStatus::Pending), None, 100, 0)
+            .get_all_requests(Some(QueueStatus::Pending), false, None, 100, 0)
             .unwrap();
         assert_eq!(pending.len(), 1);
 
         // Filter by COMPLETED status (should be empty)
         let completed = ctx
             .manager
-            .get_all_requests(Some(QueueStatus::Completed), None, 100, 0)
+            .get_all_requests(Some(QueueStatus::Completed), false, None, 100, 0)
             .unwrap();
         assert!(completed.is_empty());
     }

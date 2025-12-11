@@ -137,6 +137,57 @@
       </div>
     </div>
 
+    <!-- Failed Tab -->
+    <div v-if="activeTab === 'failed'" class="tabContent">
+      <div v-if="failedItems.length === 0" class="emptyState">
+        No failed downloads.
+      </div>
+      <div v-else class="queueList">
+        <div v-for="item in failedItems" :key="item.id" class="queueItem status-failed">
+          <div class="queueItemHeader">
+            <div class="queueItemMain">
+              <span class="queueItemType">{{ formatContentType(item.content_type) }}</span>
+              <span class="queueItemName">{{ formatItemName(item) }}</span>
+            </div>
+            <div class="queueItemActions">
+              <button
+                class="retryButton"
+                @click="handleRetry(item.id, false)"
+                :disabled="retryingItems[item.id]"
+              >
+                {{ retryingItems[item.id] ? "..." : "Retry" }}
+              </button>
+              <button
+                class="deleteButton"
+                @click="confirmDelete(item)"
+                :disabled="deletingItems[item.id]"
+              >
+                {{ deletingItems[item.id] ? "..." : "Delete" }}
+              </button>
+            </div>
+          </div>
+          <div class="queueItemDetails">
+            <span class="detailItem">
+              <span class="detailLabel">Created:</span>
+              <span class="detailValue">{{ formatDate(item.created_at) }}</span>
+            </span>
+            <span v-if="item.last_attempt_at" class="detailItem">
+              <span class="detailLabel">Last attempt:</span>
+              <span class="detailValue">{{ formatDate(item.last_attempt_at) }}</span>
+            </span>
+            <span class="detailItem">
+              <span class="detailLabel">Retries:</span>
+              <span class="detailValue">{{ item.retry_count }} / {{ item.max_retries }}</span>
+            </span>
+          </div>
+          <div v-if="item.error_type || item.error_message" class="queueItemError">
+            <span v-if="item.error_type" class="errorType">{{ item.error_type }}</span>
+            <span v-if="item.error_message">{{ item.error_message }}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- Downloaded Tab -->
     <div v-if="activeTab === 'downloaded'" class="tabContent">
       <div v-if="completedItems.length === 0" class="emptyState">
@@ -365,6 +416,7 @@ const loadError = ref(null);
 
 const stats = ref(null);
 const queueItems = ref([]);
+const failedItems = ref([]);
 const completedItems = ref([]);
 const auditLog = ref([]);
 const retryingItems = reactive({});
@@ -378,6 +430,7 @@ const deleteError = ref(null);
 
 const tabs = computed(() => [
   { id: "queue", label: "Queue", count: queueItems.value.length },
+  { id: "failed", label: "Failed", count: failedItems.value.length },
   { id: "downloaded", label: "Downloaded", count: completedItems.value.length },
   { id: "audit", label: "Audit Log" },
 ]);
@@ -387,15 +440,17 @@ const loadData = async () => {
   loadError.value = null;
 
   try {
-    const [statsResult, queueResult, completedResult, auditResult] = await Promise.all([
+    const [statsResult, queueResult, failedResult, completedResult, auditResult] = await Promise.all([
       remoteStore.fetchDownloadStats(),
       remoteStore.fetchDownloadQueue(),
+      remoteStore.fetchFailedDownloads(100, 0),
       remoteStore.fetchDownloadCompleted(100, 0),
       remoteStore.fetchDownloadAuditLog(100, 0),
     ]);
 
     stats.value = statsResult;
     queueItems.value = queueResult?.items || [];
+    failedItems.value = failedResult?.items || [];
     completedItems.value = completedResult?.items || [];
     auditLog.value = auditResult?.entries || [];
 
