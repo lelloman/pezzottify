@@ -3231,7 +3231,7 @@ async fn get_my_download_requests(
     };
 
     let user_id = session.user_id.to_string();
-    match dm.get_user_requests(&user_id, params.limit, params.offset) {
+    match dm.get_user_requests_with_progress(&user_id, params.limit, params.offset) {
         Ok(requests) => {
             let limits = dm.check_user_limits(&user_id).unwrap_or_else(|_| {
                 crate::download_manager::UserLimitStatus::available(0, 0, 0, 0)
