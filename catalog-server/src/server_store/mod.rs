@@ -25,4 +25,9 @@ pub trait ServerStore: Send + Sync {
     fn get_schedule_state(&self, job_id: &str) -> Result<Option<JobScheduleState>>;
     fn update_schedule_state(&self, state: &JobScheduleState) -> Result<()>;
     fn get_all_schedule_states(&self) -> Result<Vec<JobScheduleState>>;
+
+    // Key-value state storage
+    fn get_state(&self, key: &str) -> Result<Option<String>>;
+    fn set_state(&self, key: &str, value: &str) -> Result<()>;
+    fn delete_state(&self, key: &str) -> Result<()>;
 }
