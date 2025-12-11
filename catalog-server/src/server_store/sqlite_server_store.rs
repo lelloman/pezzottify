@@ -55,11 +55,14 @@ impl SqliteServerStore {
     }
 
     fn initialize_schema(conn: &Connection) -> Result<()> {
-        let schema = SERVER_VERSIONED_SCHEMAS.last().expect("No schemas defined");
-        conn.execute_batch(schema.up)
-            .context("Failed to initialize server database schema")?;
+        // Run all schemas in order for a fresh database
+        for schema in SERVER_VERSIONED_SCHEMAS.iter() {
+            conn.execute_batch(schema.up)
+                .with_context(|| format!("Failed to run schema version {}", schema.version))?;
+        }
+        let last_version = SERVER_VERSIONED_SCHEMAS.last().expect("No schemas defined").version;
         conn.execute(
-            &format!("PRAGMA user_version = {}", BASE_DB_VERSION + schema.version),
+            &format!("PRAGMA user_version = {}", BASE_DB_VERSION + last_version),
             [],
         )?;
         Ok(())
@@ -265,6 +268,37 @@ impl ServerStore for SqliteServerStore {
 
         Ok(states)
     }
+
+    fn get_state(&self, key: &str) -> Result<Option<String>> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare("SELECT value FROM server_state WHERE key = ?1")?;
+
+        let value: Option<String> = stmt
+            .query_row(params![key], |row| row.get(0))
+            .optional()?;
+
+        Ok(value)
+    }
+
+    fn set_state(&self, key: &str, value: &str) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        let now = Self::format_datetime(&Utc::now());
+
+        conn.execute(
+            "INSERT INTO server_state (key, value, updated_at)
+             VALUES (?1, ?2, ?3)
+             ON CONFLICT(key) DO UPDATE SET value = ?2, updated_at = ?3",
+            params![key, value, now],
+        )?;
+
+        Ok(())
+    }
+
+    fn delete_state(&self, key: &str) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute("DELETE FROM server_state WHERE key = ?1", params![key])?;
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -441,5 +475,59 @@ mod tests {
         let store = &test.store;
         let last_run = store.get_last_run("nonexistent").unwrap();
         assert!(last_run.is_none());
+    }
+
+    #[test]
+    fn test_state_get_nonexistent() {
+        let test = create_test_store();
+        let store = &test.store;
+        let value = store.get_state("nonexistent").unwrap();
+        assert!(value.is_none());
+    }
+
+    #[test]
+    fn test_state_set_and_get() {
+        let test = create_test_store();
+        let store = &test.store;
+
+        store.set_state("test_key", "test_value").unwrap();
+        let value = store.get_state("test_key").unwrap();
+        assert_eq!(value, Some("test_value".to_string()));
+    }
+
+    #[test]
+    fn test_state_update() {
+        let test = create_test_store();
+        let store = &test.store;
+
+        store.set_state("key", "value1").unwrap();
+        store.set_state("key", "value2").unwrap();
+
+        let value = store.get_state("key").unwrap();
+        assert_eq!(value, Some("value2".to_string()));
+    }
+
+    #[test]
+    fn test_state_delete() {
+        let test = create_test_store();
+        let store = &test.store;
+
+        store.set_state("to_delete", "value").unwrap();
+        assert!(store.get_state("to_delete").unwrap().is_some());
+
+        store.delete_state("to_delete").unwrap();
+        assert!(store.get_state("to_delete").unwrap().is_none());
+    }
+
+    #[test]
+    fn test_state_json_value() {
+        let test = create_test_store();
+        let store = &test.store;
+
+        let json = r#"{"level":2,"successes":5}"#;
+        store.set_state("corruption_handler", json).unwrap();
+
+        let value = store.get_state("corruption_handler").unwrap();
+        assert_eq!(value, Some(json.to_string()));
     }
 }
