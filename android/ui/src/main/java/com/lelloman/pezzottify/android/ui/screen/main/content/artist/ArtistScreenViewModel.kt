@@ -1,5 +1,6 @@
 package com.lelloman.pezzottify.android.ui.screen.main.content.artist
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.navigation.NavController
@@ -18,6 +19,8 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+
+private const val TAG = "ArtistScreenViewModel"
 
 @HiltViewModel(assistedFactory = ArtistScreenViewModel.Factory::class)
 class ArtistScreenViewModel @AssistedInject constructor(
@@ -80,13 +83,22 @@ class ArtistScreenViewModel @AssistedInject constructor(
 
     private fun loadExternalAlbums() {
         viewModelScope.launch {
-            if (!interactor.canShowExternalAlbums()) return@launch
+            val canShow = interactor.canShowExternalAlbums()
+            Log.d(TAG, "loadExternalAlbums($artistId) canShowExternalAlbums=$canShow")
+            if (!canShow) return@launch
 
             externalAlbumsState.value = ExternalAlbumsState.Loading
             val result = interactor.getExternalDiscography(artistId)
+            Log.d(TAG, "loadExternalAlbums($artistId) result=$result")
             externalAlbumsState.value = result.fold(
-                onSuccess = { ExternalAlbumsState.Loaded(it) },
-                onFailure = { ExternalAlbumsState.Error }
+                onSuccess = { albums ->
+                    Log.d(TAG, "loadExternalAlbums($artistId) loaded ${albums.size} albums")
+                    ExternalAlbumsState.Loaded(albums)
+                },
+                onFailure = { error ->
+                    Log.e(TAG, "loadExternalAlbums($artistId) error", error)
+                    ExternalAlbumsState.Error
+                }
             )
         }
     }

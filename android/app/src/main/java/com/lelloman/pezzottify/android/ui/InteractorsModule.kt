@@ -428,6 +428,7 @@ class InteractorsModule {
                             inCatalog = item.inCatalog,
                             inQueue = item.inQueue,
                             catalogId = null, // Server doesn't return catalog ID yet
+                            score = item.score,
                         )
                     }
                 }

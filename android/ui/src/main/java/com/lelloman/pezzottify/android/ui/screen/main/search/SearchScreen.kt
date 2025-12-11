@@ -188,16 +188,10 @@ fun SearchScreenContent(
                                 when (result) {
                                     is ExternalSearchResultContent.Album -> ExternalAlbumSearchResult(
                                         result = result,
-                                        canRequest = state.downloadLimits?.canRequest ?: false,
-                                        isRequesting = state.requestingAlbumIds.contains(result.id),
-                                        onRequestClick = { actions.requestAlbumDownload(result) },
                                         onClick = { actions.clickOnExternalResult(result) },
                                     )
                                     is ExternalSearchResultContent.Artist -> ExternalArtistSearchResult(
                                         result = result,
-                                        canRequest = false, // Artists can't be requested directly
-                                        isRequesting = false,
-                                        onRequestClick = { },
                                         onClick = { actions.clickOnExternalResult(result) },
                                     )
                                 }

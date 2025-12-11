@@ -3,7 +3,6 @@ package com.lelloman.pezzottify.android.ui.screen.main.search
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -15,11 +14,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.HourglassEmpty
-import androidx.compose.material3.Button
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -38,9 +34,6 @@ import com.lelloman.pezzottify.android.ui.theme.Spacing
 @Composable
 fun ExternalAlbumSearchResult(
     result: ExternalSearchResultContent.Album,
-    canRequest: Boolean,
-    isRequesting: Boolean,
-    onRequestClick: () -> Unit,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -91,13 +84,10 @@ fun ExternalAlbumSearchResult(
 
         Spacer(modifier = Modifier.width(Spacing.Small))
 
-        // Status/Action button
-        ExternalResultActionButton(
+        // Status icon (checkmark for catalog, hourglass for queue)
+        ExternalResultStatusIcon(
             inCatalog = result.inCatalog,
             inQueue = result.inQueue,
-            canRequest = canRequest,
-            isRequesting = isRequesting,
-            onRequestClick = onRequestClick,
         )
     }
 }
@@ -105,9 +95,6 @@ fun ExternalAlbumSearchResult(
 @Composable
 fun ExternalArtistSearchResult(
     result: ExternalSearchResultContent.Artist,
-    canRequest: Boolean,
-    isRequesting: Boolean,
-    onRequestClick: () -> Unit,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -142,26 +129,22 @@ fun ExternalArtistSearchResult(
 
         Spacer(modifier = Modifier.width(Spacing.Small))
 
-        // Status/Action button
-        ExternalResultActionButton(
+        // Status icon (checkmark for catalog, hourglass for queue)
+        ExternalResultStatusIcon(
             inCatalog = result.inCatalog,
             inQueue = result.inQueue,
-            canRequest = canRequest,
-            isRequesting = isRequesting,
-            onRequestClick = onRequestClick,
         )
     }
 }
 
 @Composable
-private fun ExternalResultActionButton(
+private fun ExternalResultStatusIcon(
     inCatalog: Boolean,
     inQueue: Boolean,
-    canRequest: Boolean,
-    isRequesting: Boolean,
-    onRequestClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    // Only show status icons - no Request button here.
+    // Users click on the item to go to ExternalAlbumScreen and request there.
     when {
         inCatalog -> {
             // Already in catalog - show check icon
@@ -181,32 +164,6 @@ private fun ExternalResultActionButton(
                 modifier = modifier.size(24.dp),
             )
         }
-        isRequesting -> {
-            // Currently sending request - show loading
-            CircularProgressIndicator(
-                modifier = modifier.size(24.dp),
-                strokeWidth = 2.dp,
-            )
-        }
-        else -> {
-            // Can request download
-            Button(
-                onClick = onRequestClick,
-                enabled = canRequest,
-                modifier = modifier.height(32.dp),
-                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Add,
-                    contentDescription = null,
-                    modifier = Modifier.size(16.dp),
-                )
-                Spacer(modifier = Modifier.width(4.dp))
-                Text(
-                    text = stringResource(R.string.request),
-                    style = MaterialTheme.typography.labelMedium,
-                )
-            }
-        }
+        // No icon shown for items not in catalog/queue - user clicks item to go to ExternalAlbumScreen
     }
 }
