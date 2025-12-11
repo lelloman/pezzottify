@@ -136,8 +136,11 @@ class SearchScreenViewModel(
                 when (result) {
                     is ExternalSearchResultContent.Album ->
                         mutableEvents.emit(SearchScreensEvents.NavigateToExternalAlbumScreen(result.id))
-                    is ExternalSearchResultContent.Artist ->
-                        mutableEvents.emit(SearchScreensEvents.NavigateToExternalArtistScreen(result.id))
+                    is ExternalSearchResultContent.Artist -> {
+                        // TODO: Implement ExternalArtistScreen to show artist's discography
+                        // For now, external artists not in catalog cannot be navigated to
+                        // (only albums can be requested for download)
+                    }
                 }
             }
         }
