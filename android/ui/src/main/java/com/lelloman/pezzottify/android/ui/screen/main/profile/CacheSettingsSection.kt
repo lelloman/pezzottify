@@ -12,8 +12,10 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import com.lelloman.pezzottify.android.ui.R
 import com.lelloman.pezzottify.android.ui.theme.PezzottifyTheme
 
 @Composable
@@ -24,7 +26,7 @@ fun CacheSettingsSection(
 ) {
     Column(modifier = modifier) {
         Text(
-            text = "Performance",
+            text = stringResource(R.string.performance),
             style = MaterialTheme.typography.titleLarge,
             color = MaterialTheme.colorScheme.onSurface
         )
@@ -37,12 +39,12 @@ fun CacheSettingsSection(
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = "In-memory cache",
+                    text = stringResource(R.string.in_memory_cache),
                     style = MaterialTheme.typography.bodyLarge,
                     color = MaterialTheme.colorScheme.onSurface
                 )
                 Text(
-                    text = "Cache content in memory for faster loading",
+                    text = stringResource(R.string.cache_description),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )

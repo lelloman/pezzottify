@@ -31,6 +31,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
@@ -169,7 +170,7 @@ fun ArtistLoadedScreen(
             if (relatedArtists.isNotEmpty()) {
                 item {
                     Text(
-                        text = "Related Artists",
+                        text = stringResource(R.string.related_artists),
                         style = MaterialTheme.typography.headlineSmall,
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
                     )
@@ -187,7 +188,7 @@ fun ArtistLoadedScreen(
             if (albums.isNotEmpty()) {
                 item {
                     Text(
-                        text = "Albums",
+                        text = stringResource(R.string.albums),
                         style = MaterialTheme.typography.headlineSmall,
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
                     )
@@ -205,7 +206,7 @@ fun ArtistLoadedScreen(
             if (features.isNotEmpty()) {
                 item {
                     Text(
-                        text = "Features",
+                        text = stringResource(R.string.features),
                         style = MaterialTheme.typography.headlineSmall,
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
                     )
@@ -310,7 +311,7 @@ fun ArtistLoadedScreen(
                         if (isLiked) R.drawable.baseline_favorite_24
                         else R.drawable.baseline_favorite_border_24
                     ),
-                    contentDescription = if (isLiked) "Unlike" else "Like",
+                    contentDescription = stringResource(if (isLiked) R.string.unlike else R.string.like),
                     tint = if (isLiked) Color.Red else MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }

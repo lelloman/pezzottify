@@ -29,6 +29,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.tooling.preview.Preview
@@ -36,6 +37,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import androidx.navigation.compose.rememberNavController
+import com.lelloman.pezzottify.android.ui.R
 import com.lelloman.pezzottify.android.ui.fromLoginToMain
 import com.lelloman.pezzottify.android.ui.theme.PezzottifyTheme
 import kotlinx.coroutines.Dispatchers
@@ -94,7 +96,7 @@ internal fun LoginScreenInternal(
                 enabled = !state.isLoading,
                 value = state.host,
                 onValueChange = actions::updateHost,
-                label = { Text("Server URL") },
+                label = { Text(stringResource(R.string.server_url)) },
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
                 modifier = Modifier
                     .fillMaxWidth()
@@ -108,7 +110,7 @@ internal fun LoginScreenInternal(
                 enabled = !state.isLoading,
                 value = state.email,
                 onValueChange = actions::updateEmail,
-                label = { Text("Email") },
+                label = { Text(stringResource(R.string.email)) },
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
                 modifier = Modifier
                     .fillMaxWidth()
@@ -120,7 +122,7 @@ internal fun LoginScreenInternal(
                 enabled = !state.isLoading,
                 value = state.password,
                 onValueChange = actions::updatePassword,
-                label = { Text("Password") },
+                label = { Text(stringResource(R.string.password)) },
                 visualTransformation = PasswordVisualTransformation(),
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
                 modifier = Modifier
@@ -157,7 +159,7 @@ internal fun LoginScreenInternal(
                         .fillMaxWidth()
                         .alpha(1f - loaderAlpha),
                 ) {
-                    Text("Login")
+                    Text(stringResource(R.string.login))
                 }
             }
         }

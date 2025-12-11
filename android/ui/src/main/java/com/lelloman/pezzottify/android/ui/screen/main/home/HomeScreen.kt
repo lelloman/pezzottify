@@ -136,7 +136,7 @@ private fun HomeScreenContent(
                     }) {
                         Icon(
                             imageVector = Icons.Default.Settings,
-                            contentDescription = "Settings",
+                            contentDescription = stringResource(R.string.settings),
                             tint = MaterialTheme.colorScheme.onSurface
                         )
                     }

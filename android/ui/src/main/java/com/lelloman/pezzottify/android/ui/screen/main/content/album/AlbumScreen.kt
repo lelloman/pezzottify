@@ -44,8 +44,10 @@ import androidx.compose.ui.graphics.lerp
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import kotlin.math.min
@@ -95,6 +97,7 @@ private fun AlbumScreenContent(
 ) {
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
 
     // Bottom sheet states
     val trackSheetState = rememberModalBottomSheetState()
@@ -156,7 +159,7 @@ private fun AlbumScreenContent(
             },
             onAddToQueue = {
                 actions.addTrackToQueue(track.id)
-                showSnackbar("Added to queue")
+                showSnackbar(context.getString(R.string.added_to_queue))
             },
             onAddToPlaylist = {
                 pendingAddToPlaylistTrackId = track.id
@@ -180,7 +183,7 @@ private fun AlbumScreenContent(
             },
             onAddToQueue = {
                 actions.addAlbumToQueue(state.album.id)
-                showSnackbar("Album added to queue")
+                showSnackbar(context.getString(R.string.added_to_queue))
             },
             onAddToPlaylist = {
                 pendingAddToPlaylistTrackId = null
@@ -203,11 +206,11 @@ private fun AlbumScreenContent(
             onPlaylistSelected = { playlistId ->
                 pendingAddToPlaylistTrackId?.let { trackId ->
                     actions.addTrackToPlaylist(trackId, playlistId)
-                    showSnackbar("Added to playlist")
+                    showSnackbar(context.getString(R.string.added_to_playlist))
                 }
                 pendingAddToPlaylistAlbumId?.let { albumId ->
                     actions.addAlbumToPlaylist(albumId, playlistId)
-                    showSnackbar("Album added to playlist")
+                    showSnackbar(context.getString(R.string.added_to_playlist))
                 }
                 showPlaylistPicker = false
                 pendingAddToPlaylistTrackId = null
@@ -225,7 +228,7 @@ private fun AlbumScreenContent(
             onDismiss = { showCreatePlaylistDialog = false },
             onCreate = { name ->
                 actions.createPlaylist(name)
-                showSnackbar("Playlist created")
+                showSnackbar(context.getString(R.string.playlist_created))
             },
         )
     }
@@ -246,6 +249,7 @@ fun AlbumLoadedScreen(
 ) {
     val listState = rememberLazyListState()
     val density = LocalDensity.current
+    val context = LocalContext.current
 
     // Get status bar height for proper inset handling
     val statusBarHeight = with(density) {
@@ -306,7 +310,7 @@ fun AlbumLoadedScreen(
             if (album.artistsIds.isNotEmpty()) {
                 item {
                     Text(
-                        text = "Artists",
+                        text = stringResource(R.string.artists),
                         style = MaterialTheme.typography.headlineSmall,
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
                     )
@@ -430,7 +434,7 @@ fun AlbumLoadedScreen(
                         if (isLiked) R.drawable.baseline_favorite_24
                         else R.drawable.baseline_favorite_border_24
                     ),
-                    contentDescription = if (isLiked) "Unlike" else "Like",
+                    contentDescription = stringResource(if (isLiked) R.string.unlike else R.string.like),
                     tint = if (isLiked) Color.Red else MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
@@ -440,7 +444,7 @@ fun AlbumLoadedScreen(
         IconButton(
             onClick = {
                 actions.addAlbumToQueue(album.id)
-                onShowSnackbar("Album added to queue")
+                onShowSnackbar(context.getString(R.string.added_to_queue))
             },
             modifier = Modifier
                 .align(Alignment.TopEnd)
@@ -460,7 +464,7 @@ fun AlbumLoadedScreen(
                 Icon(
                     modifier = Modifier.size(28.dp),
                     painter = painterResource(R.drawable.baseline_playlist_add_24),
-                    contentDescription = "Add to queue",
+                    contentDescription = stringResource(R.string.add_to_queue),
                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
@@ -489,7 +493,7 @@ fun AlbumLoadedScreen(
                 Icon(
                     modifier = Modifier.size(28.dp),
                     painter = painterResource(R.drawable.baseline_play_arrow_24),
-                    contentDescription = "Play",
+                    contentDescription = stringResource(R.string.play),
                     tint = MaterialTheme.colorScheme.onPrimary,
                 )
             }
@@ -547,7 +551,7 @@ private fun TrackItem(
         ) {
             Icon(
                 painter = painterResource(R.drawable.baseline_more_vert_24),
-                contentDescription = "More options",
+                contentDescription = stringResource(R.string.more_options),
                 tint = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
@@ -574,6 +578,6 @@ private fun ErrorTrackItem() {
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text("Error loading track")
+        Text(stringResource(R.string.error_loading_track))
     }
 }

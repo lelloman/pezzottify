@@ -20,9 +20,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.lelloman.pezzottify.android.ui.R
 
 /**
  * Connection status indicator that shows:
@@ -53,7 +55,7 @@ fun OfflineIndicator(
             state is ConnectionState.Error -> {
                 Icon(
                     imageVector = Icons.Default.CloudOff,
-                    contentDescription = "Offline",
+                    contentDescription = stringResource(R.string.offline),
                     tint = MaterialTheme.colorScheme.error,
                     modifier = Modifier.size(size)
                 )
@@ -84,7 +86,7 @@ private fun RotatingSyncIcon(
 
     Icon(
         imageVector = Icons.Default.CloudSync,
-        contentDescription = "Connecting",
+        contentDescription = stringResource(R.string.connecting),
         tint = MaterialTheme.colorScheme.onSurfaceVariant,
         modifier = modifier
             .size(size)

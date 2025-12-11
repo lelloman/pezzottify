@@ -19,7 +19,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import com.lelloman.pezzottify.android.ui.R
 
 @Composable
 fun CreatePlaylistDialog(
@@ -37,14 +39,14 @@ fun CreatePlaylistDialog(
         onDismissRequest = onDismiss,
         title = {
             Text(
-                text = "Create playlist",
+                text = stringResource(R.string.create_playlist),
                 style = MaterialTheme.typography.titleLarge
             )
         },
         text = {
             Column {
                 Text(
-                    text = "Enter a name for your new playlist",
+                    text = stringResource(R.string.create_playlist_prompt),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -52,7 +54,7 @@ fun CreatePlaylistDialog(
                 OutlinedTextField(
                     value = playlistName,
                     onValueChange = { playlistName = it },
-                    label = { Text("Playlist name") },
+                    label = { Text(stringResource(R.string.playlist_name)) },
                     singleLine = true,
                     modifier = Modifier
                         .fillMaxWidth()
@@ -70,12 +72,12 @@ fun CreatePlaylistDialog(
                 },
                 enabled = playlistName.isNotBlank()
             ) {
-                Text("Create")
+                Text(stringResource(R.string.create))
             }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text("Cancel")
+                Text(stringResource(R.string.cancel))
             }
         }
     )

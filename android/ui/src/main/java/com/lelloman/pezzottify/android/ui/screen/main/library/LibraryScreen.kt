@@ -34,10 +34,12 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
+import com.lelloman.pezzottify.android.ui.R
 import com.lelloman.pezzottify.android.ui.component.AlbumGridItem
 import com.lelloman.pezzottify.android.ui.component.ArtistGridItem
 import com.lelloman.pezzottify.android.ui.component.DurationText
@@ -95,7 +97,7 @@ private fun LibraryScreenContent(
                     .padding(horizontal = 16.dp, vertical = 12.dp)
             ) {
                 Text(
-                    text = "Your Library",
+                    text = stringResource(R.string.your_library),
                     style = MaterialTheme.typography.headlineMedium,
                     modifier = Modifier.padding(bottom = 12.dp)
                 )
@@ -140,7 +142,7 @@ private fun LibraryScreenContent(
             ) {
                 Icon(
                     imageVector = Icons.Default.Add,
-                    contentDescription = "Create playlist",
+                    contentDescription = stringResource(R.string.create_playlist),
                 )
             }
         }
@@ -188,8 +190,8 @@ private fun LibraryLoadedScreen(
         LibraryTab.Albums -> {
             if (state.likedAlbumIds.isEmpty()) {
                 EmptyLibraryScreen(
-                    title = "No liked albums yet",
-                    subtitle = "Albums you like will appear here"
+                    title = stringResource(R.string.no_liked_albums_yet),
+                    subtitle = stringResource(R.string.albums_you_like_will_appear_here)
                 )
             } else {
                 LazyColumn(modifier = Modifier.fillMaxSize()) {
@@ -206,8 +208,8 @@ private fun LibraryLoadedScreen(
         LibraryTab.Artists -> {
             if (state.likedArtistIds.isEmpty()) {
                 EmptyLibraryScreen(
-                    title = "No liked artists yet",
-                    subtitle = "Artists you like will appear here"
+                    title = stringResource(R.string.no_liked_artists_yet),
+                    subtitle = stringResource(R.string.artists_you_like_will_appear_here)
                 )
             } else {
                 LazyColumn(modifier = Modifier.fillMaxSize()) {
@@ -224,8 +226,8 @@ private fun LibraryLoadedScreen(
         LibraryTab.Tracks -> {
             if (state.likedTrackIds.isEmpty()) {
                 EmptyLibraryScreen(
-                    title = "No liked tracks yet",
-                    subtitle = "Tracks you like will appear here"
+                    title = stringResource(R.string.no_liked_tracks_yet),
+                    subtitle = stringResource(R.string.tracks_you_like_will_appear_here)
                 )
             } else {
                 TrackList(
@@ -238,8 +240,8 @@ private fun LibraryLoadedScreen(
         LibraryTab.Playlists -> {
             if (state.playlists.isEmpty()) {
                 EmptyLibraryScreen(
-                    title = "No playlists yet",
-                    subtitle = "Your playlists will appear here"
+                    title = stringResource(R.string.no_playlists_yet),
+                    subtitle = stringResource(R.string.your_playlists_will_appear_here)
                 )
             } else {
                 LazyColumn(modifier = Modifier.fillMaxSize()) {
@@ -432,7 +434,7 @@ private fun ErrorTrackListItem() {
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(
-            text = "Error loading track",
+            text = stringResource(R.string.error_loading_track),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.error
         )

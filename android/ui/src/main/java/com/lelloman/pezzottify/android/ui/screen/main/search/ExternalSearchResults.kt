@@ -28,9 +28,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil3.compose.SubcomposeAsyncImage
+import com.lelloman.pezzottify.android.ui.R
 import com.lelloman.pezzottify.android.ui.theme.Spacing
 
 @Composable
@@ -165,7 +167,7 @@ private fun ExternalResultActionButton(
             // Already in catalog - show check icon
             Icon(
                 imageVector = Icons.Default.Check,
-                contentDescription = "In catalog",
+                contentDescription = stringResource(R.string.in_catalog),
                 tint = MaterialTheme.colorScheme.primary,
                 modifier = modifier.size(24.dp),
             )
@@ -174,7 +176,7 @@ private fun ExternalResultActionButton(
             // In download queue - show hourglass
             Icon(
                 imageVector = Icons.Default.HourglassEmpty,
-                contentDescription = "In queue",
+                contentDescription = stringResource(R.string.in_queue),
                 tint = MaterialTheme.colorScheme.secondary,
                 modifier = modifier.size(24.dp),
             )
@@ -201,7 +203,7 @@ private fun ExternalResultActionButton(
                 )
                 Spacer(modifier = Modifier.width(4.dp))
                 Text(
-                    text = "Request",
+                    text = stringResource(R.string.request),
                     style = MaterialTheme.typography.labelMedium,
                 )
             }

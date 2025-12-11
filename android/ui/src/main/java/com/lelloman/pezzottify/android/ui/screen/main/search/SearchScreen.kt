@@ -40,9 +40,12 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
+import com.lelloman.pezzottify.android.ui.R
 import com.lelloman.pezzottify.android.ui.component.DurationText
 import com.lelloman.pezzottify.android.ui.component.NullablePezzottifyImage
 import com.lelloman.pezzottify.android.ui.component.PezzottifyImagePlaceholder
@@ -79,6 +82,7 @@ fun SearchScreenContent(
     navController: NavController,
 ) {
     val snackbarHostState = remember { SnackbarHostState() }
+    val context = LocalContext.current
 
     LaunchedEffect(Unit) {
         events.collect {
@@ -87,7 +91,7 @@ fun SearchScreenContent(
                 is SearchScreensEvents.NavigateToAlbumScreen -> navController.toAlbum(it.albumId)
                 is SearchScreensEvents.NavigateToTrackScreen -> navController.toTrack(it.trackId)
                 is SearchScreensEvents.ShowRequestError -> snackbarHostState.showSnackbar(it.message)
-                is SearchScreensEvents.ShowRequestSuccess -> snackbarHostState.showSnackbar("Request added to queue")
+                is SearchScreensEvents.ShowRequestSuccess -> snackbarHostState.showSnackbar(context.getString(R.string.request_added_to_queue))
             }
         }
     }
@@ -111,7 +115,7 @@ fun SearchScreenContent(
                 Row {
                     if (state.query.isNotEmpty()) {
                         IconButton(onClick = { actions.updateQuery("") }) {
-                            Icon(Icons.Default.Close, contentDescription = "Clear search")
+                            Icon(Icons.Default.Close, contentDescription = stringResource(R.string.clear_search))
                         }
                     }
                     if (state.canUseExternalSearch) {
