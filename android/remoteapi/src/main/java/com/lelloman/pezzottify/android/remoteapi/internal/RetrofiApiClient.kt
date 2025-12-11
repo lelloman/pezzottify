@@ -8,6 +8,8 @@ import com.lelloman.pezzottify.android.remoteapi.internal.requests.SearchRequest
 import com.lelloman.pezzottify.android.remoteapi.internal.requests.UpdateUserSettingsRequest
 import com.lelloman.pezzottify.android.domain.remoteapi.response.AlbumResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.DownloadLimitsResponse
+import com.lelloman.pezzottify.android.domain.remoteapi.response.ExternalAlbumDetailsResponse
+import com.lelloman.pezzottify.android.domain.remoteapi.response.ExternalDiscographyResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.ExternalSearchResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.MyDownloadRequestsResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.RequestAlbumResponse
@@ -151,4 +153,16 @@ internal interface RetrofitApiClient {
         @Query("limit") limit: Int? = null,
         @Query("offset") offset: Int? = null,
     ): Response<MyDownloadRequestsResponse>
+
+    @GET("/v1/download/album/{albumId}")
+    suspend fun getExternalAlbumDetails(
+        @Header("Authorization") authToken: String,
+        @Path("albumId") albumId: String,
+    ): Response<ExternalAlbumDetailsResponse>
+
+    @GET("/v1/download/search/discography/{artistId}")
+    suspend fun getExternalDiscography(
+        @Header("Authorization") authToken: String,
+        @Path("artistId") artistId: String,
+    ): Response<ExternalDiscographyResponse>
 }

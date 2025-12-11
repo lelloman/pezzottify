@@ -16,6 +16,8 @@ import com.lelloman.pezzottify.android.domain.remoteapi.response.SearchResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.SyncEventsResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.SyncStateResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.DownloadLimitsResponse
+import com.lelloman.pezzottify.android.domain.remoteapi.response.ExternalAlbumDetailsResponse
+import com.lelloman.pezzottify.android.domain.remoteapi.response.ExternalDiscographyResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.ExternalSearchResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.MyDownloadRequestsResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.RequestAlbumResponse
@@ -321,6 +323,28 @@ internal class RemoteApiClientImpl(
                 authToken = authToken,
                 limit = limit,
                 offset = offset
+            )
+            .returnFromRetrofitResponse()
+    }
+
+    override suspend fun getExternalAlbumDetails(
+        albumId: String
+    ): RemoteApiResponse<ExternalAlbumDetailsResponse> = catchingNetworkError {
+        getRetrofit()
+            .getExternalAlbumDetails(
+                authToken = authToken,
+                albumId = albumId
+            )
+            .returnFromRetrofitResponse()
+    }
+
+    override suspend fun getExternalDiscography(
+        artistId: String
+    ): RemoteApiResponse<ExternalDiscographyResponse> = catchingNetworkError {
+        getRetrofit()
+            .getExternalDiscography(
+                authToken = authToken,
+                artistId = artistId
             )
             .returnFromRetrofitResponse()
     }
