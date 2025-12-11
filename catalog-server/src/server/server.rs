@@ -4030,10 +4030,7 @@ async fn admin_reset_throttle(
         }
     };
 
-    info!(
-        "Admin {:?} resetting throttle state",
-        session.user_id
-    );
+    info!("Admin {:?} resetting throttle state", session.user_id);
 
     dm.reset_throttle().await;
 

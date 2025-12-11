@@ -141,7 +141,9 @@ impl AppConfig {
             corruption_base_cooldown_secs: dm_file.corruption_base_cooldown_secs.unwrap_or(600),
             corruption_max_cooldown_secs: dm_file.corruption_max_cooldown_secs.unwrap_or(7200),
             corruption_cooldown_multiplier: dm_file.corruption_cooldown_multiplier.unwrap_or(2.0),
-            corruption_successes_to_deescalate: dm_file.corruption_successes_to_deescalate.unwrap_or(10),
+            corruption_successes_to_deescalate: dm_file
+                .corruption_successes_to_deescalate
+                .unwrap_or(10),
         };
 
         let background_jobs = BackgroundJobsSettings::default();
@@ -264,8 +266,8 @@ impl Default for DownloadManagerSettings {
             // Corruption handler defaults
             corruption_window_size: 4,
             corruption_failure_threshold: 2,
-            corruption_base_cooldown_secs: 600,  // 10 minutes
-            corruption_max_cooldown_secs: 7200,  // 2 hours
+            corruption_base_cooldown_secs: 600, // 10 minutes
+            corruption_max_cooldown_secs: 7200, // 2 hours
             corruption_cooldown_multiplier: 2.0,
             corruption_successes_to_deescalate: 10,
         }

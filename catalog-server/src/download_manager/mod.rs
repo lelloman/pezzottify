@@ -20,7 +20,8 @@ mod watchdog;
 
 pub use audit_logger::AuditLogger;
 pub use corruption_handler::{
-    CorruptionHandler, CorruptionHandlerConfig, HandlerAction, HandlerState, PersistedState as CorruptionPersistedState,
+    CorruptionHandler, CorruptionHandlerConfig, HandlerAction, HandlerState,
+    PersistedState as CorruptionPersistedState,
 };
 pub use downloader_client::DownloaderClient;
 pub use job_processor::QueueProcessor;
@@ -29,5 +30,7 @@ pub use models::*;
 pub use queue_store::{DownloadQueueStore, SqliteDownloadQueueStore};
 pub use retry_policy::RetryPolicy;
 pub use schema::DOWNLOAD_QUEUE_VERSIONED_SCHEMAS;
-pub use throttle::{DownloadThrottler, NoOpThrottler, SlidingWindowThrottler, ThrottleStats, ThrottlerConfig};
+pub use throttle::{
+    DownloadThrottler, NoOpThrottler, SlidingWindowThrottler, ThrottleStats, ThrottlerConfig,
+};
 pub use watchdog::IntegrityWatchdog;

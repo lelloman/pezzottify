@@ -105,7 +105,11 @@ impl SlidingWindowThrottler {
     }
 
     /// Calculate bytes in a given time window.
-    fn bytes_in_window(downloads: &VecDeque<DownloadRecord>, now: Instant, window: Duration) -> u64 {
+    fn bytes_in_window(
+        downloads: &VecDeque<DownloadRecord>,
+        now: Instant,
+        window: Duration,
+    ) -> u64 {
         let cutoff = now - window;
         downloads
             .iter()
@@ -179,10 +183,8 @@ impl DownloadThrottler for SlidingWindowThrottler {
         let downloads = self.downloads.lock().await;
         let now = Instant::now();
 
-        let bytes_last_minute =
-            Self::bytes_in_window(&downloads, now, Duration::from_secs(60));
-        let bytes_last_hour =
-            Self::bytes_in_window(&downloads, now, Duration::from_secs(3600));
+        let bytes_last_minute = Self::bytes_in_window(&downloads, now, Duration::from_secs(60));
+        let bytes_last_hour = Self::bytes_in_window(&downloads, now, Duration::from_secs(3600));
 
         let is_throttled = bytes_last_minute >= self.config.max_bytes_per_minute
             || bytes_last_hour >= self.config.max_bytes_per_hour;
