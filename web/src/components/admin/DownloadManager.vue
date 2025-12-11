@@ -212,21 +212,31 @@
       <div v-if="auditLog.length === 0" class="emptyState">
         No audit log entries.
       </div>
-      <div v-else class="auditList">
-        <div v-for="entry in auditLog" :key="entry.id" class="auditEntry">
-          <div class="auditEntryHeader">
-            <span class="eventBadge" :class="eventClass(entry.event_type)">
-              {{ formatEventType(entry.event_type) }}
-            </span>
-            <span class="auditEntryTime">{{ formatDate(entry.created_at) }}</span>
-          </div>
-          <div class="auditEntryBody">
-            <span v-if="entry.user_handle" class="auditUser">{{ entry.user_handle }}</span>
-            <span v-if="entry.external_id" class="auditItem">{{ entry.external_id }}</span>
-            <span v-if="entry.details" class="auditDetails">{{ entry.details }}</span>
-          </div>
-        </div>
-      </div>
+      <table v-else class="auditTable">
+        <thead>
+          <tr>
+            <th class="colTime">Time</th>
+            <th class="colEvent">Event</th>
+            <th class="colUser">User</th>
+            <th class="colDetails">Details</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="entry in auditLog" :key="entry.id" class="auditRow">
+            <td class="colTime">{{ formatDate(entry.timestamp) }}</td>
+            <td class="colEvent">
+              <span class="eventBadge" :class="eventClass(entry.event_type)">
+                {{ formatEventType(entry.event_type) }}
+              </span>
+            </td>
+            <td class="colUser">
+              <span v-if="entry.user_id" class="auditUser">{{ entry.user_id }}</span>
+              <span v-else class="textMuted">—</span>
+            </td>
+            <td class="colDetails">{{ formatAuditDetails(entry) }}</td>
+          </tr>
+        </tbody>
+      </table>
     </div>
 
     <!-- Download Request Modal -->
@@ -587,6 +597,122 @@ const formatEventType = (eventType) => {
     .split("_")
     .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
     .join(" ");
+};
+
+const formatBytes = (bytes) => {
+  if (bytes == null || bytes === 0) return "0 B";
+  const units = ["B", "KB", "MB", "GB"];
+  let value = bytes;
+  let unitIndex = 0;
+  while (value >= 1024 && unitIndex < units.length - 1) {
+    value /= 1024;
+    unitIndex++;
+  }
+  return `${value.toFixed(unitIndex > 0 ? 1 : 0)} ${units[unitIndex]}`;
+};
+
+const formatDuration = (ms) => {
+  if (ms == null) return "—";
+  if (ms < 1000) return `${ms}ms`;
+  const secs = ms / 1000;
+  if (secs < 60) return `${secs.toFixed(1)}s`;
+  const mins = Math.floor(secs / 60);
+  const remainingSecs = Math.floor(secs % 60);
+  return `${mins}m ${remainingSecs}s`;
+};
+
+const formatAuditDetails = (entry) => {
+  const details = entry.details;
+  const contentName = entry.content_id || "";
+  const eventType = entry.event_type;
+
+  // Build context prefix from content info
+  let prefix = "";
+  if (entry.content_type && contentName) {
+    const type = entry.content_type.replace("_", " ").toLowerCase();
+    prefix = `${type} "${contentName}" — `;
+  }
+
+  if (!details) {
+    return prefix || "—";
+  }
+
+  // Parse details based on event type
+  switch (eventType) {
+    case "REQUEST_CREATED": {
+      const name = details.content_name || contentName;
+      const artist = details.artist_name ? ` by ${details.artist_name}` : "";
+      const pos = details.queue_position != null ? `, queue #${details.queue_position}` : "";
+      return `${name}${artist}${pos}`;
+    }
+
+    case "CHILDREN_CREATED": {
+      const tracks = details.track_count || 0;
+      const images = details.image_count || 0;
+      const parts = [];
+      if (tracks > 0) parts.push(`${tracks} track${tracks !== 1 ? "s" : ""}`);
+      if (images > 0) parts.push(`${images} image${images !== 1 ? "s" : ""}`);
+      return `${prefix}spawned ${parts.join(", ") || "no children"}`;
+    }
+
+    case "DOWNLOAD_COMPLETED": {
+      const size = formatBytes(details.bytes_downloaded);
+      const duration = formatDuration(details.duration_ms);
+      const tracks = details.tracks_downloaded;
+      let result = `${prefix}${size} in ${duration}`;
+      if (tracks != null) {
+        result += ` (${tracks} track${tracks !== 1 ? "s" : ""})`;
+      }
+      return result;
+    }
+
+    case "DOWNLOAD_FAILED": {
+      const errType = details.error_type || "unknown";
+      const errMsg = details.error_message || "";
+      const retries = details.retry_count || 0;
+      return `${prefix}${errType}: ${errMsg} (after ${retries} retries)`;
+    }
+
+    case "RETRY_SCHEDULED": {
+      const errType = details.error_type || "error";
+      const backoff = details.backoff_secs ? `${details.backoff_secs}s` : "?";
+      const attempt = details.retry_count || 0;
+      return `${prefix}${errType}, retry #${attempt + 1} in ${backoff}`;
+    }
+
+    case "ADMIN_RETRY": {
+      const prevErr = details.previous_error_type || "unknown";
+      return `${prefix}reset from ${prevErr} error`;
+    }
+
+    case "WATCHDOG_QUEUED": {
+      const reason = details.reason || "missing content";
+      return `${prefix}${reason}`;
+    }
+
+    case "WATCHDOG_SCAN_STARTED":
+      return "Integrity scan started";
+
+    case "WATCHDOG_SCAN_COMPLETED": {
+      const total = details.total_missing || 0;
+      const queued = details.items_queued || 0;
+      const skipped = details.items_skipped || 0;
+      const duration = formatDuration(details.scan_duration_ms);
+      if (total === 0) {
+        return `No issues found (${duration})`;
+      }
+      return `Found ${total} missing, queued ${queued}, skipped ${skipped} (${duration})`;
+    }
+
+    case "DOWNLOAD_STARTED":
+      return prefix || "Processing started";
+
+    default:
+      // Fallback: show raw details as key-value pairs
+      return prefix + Object.entries(details)
+        .map(([k, v]) => `${k}: ${v}`)
+        .join(", ");
+  }
 };
 
 // Auto-refresh every 10 seconds
@@ -1056,50 +1182,65 @@ onUnmounted(() => {
   cursor: not-allowed;
 }
 
-/* Audit List */
-.auditList {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-2);
-}
-
-.auditEntry {
-  background-color: var(--bg-elevated-base);
-  border-radius: var(--radius-md);
-  padding: var(--spacing-3);
-}
-
-.auditEntryHeader {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: var(--spacing-2);
-}
-
-.auditEntryTime {
-  font-size: var(--text-xs);
-  color: var(--text-subdued);
-}
-
-.auditEntryBody {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--spacing-2);
+/* Audit Table */
+.auditTable {
+  width: 100%;
+  border-collapse: collapse;
   font-size: var(--text-sm);
+}
+
+.auditTable thead {
+  position: sticky;
+  top: 0;
+  background-color: var(--bg-base);
+}
+
+.auditTable th {
+  text-align: left;
+  padding: var(--spacing-2) var(--spacing-3);
   color: var(--text-subdued);
+  font-weight: var(--font-medium);
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  border-bottom: 1px solid var(--border-subdued);
+}
+
+.auditTable td {
+  padding: var(--spacing-2) var(--spacing-3);
+  border-bottom: 1px solid var(--border-subdued);
+  vertical-align: top;
+}
+
+.auditRow:hover {
+  background-color: var(--bg-highlight);
+}
+
+.colTime {
+  width: 140px;
+  white-space: nowrap;
+  color: var(--text-subdued);
+  font-size: var(--text-xs);
+}
+
+.colEvent {
+  width: 160px;
+}
+
+.colUser {
+  width: 120px;
+}
+
+.colDetails {
+  color: var(--text-base);
 }
 
 .auditUser {
   color: var(--spotify-green);
-}
-
-.auditItem {
-  font-family: monospace;
   font-size: var(--text-xs);
 }
 
-.auditDetails {
-  color: var(--text-base);
+.textMuted {
+  color: var(--text-subdued);
 }
 
 /* Event Badge */
