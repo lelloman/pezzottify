@@ -5,6 +5,8 @@ import com.lelloman.pezzottify.android.domain.remoteapi.response.AlbumResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.ArtistDiscographyResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.ArtistResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.DownloadLimitsResponse
+import com.lelloman.pezzottify.android.domain.remoteapi.response.ExternalAlbumDetailsResponse
+import com.lelloman.pezzottify.android.domain.remoteapi.response.ExternalDiscographyResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.ExternalSearchResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.ImageResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.ListeningEventRecordedResponse
@@ -118,6 +120,22 @@ interface RemoteApiClient {
         limit: Int? = null,
         offset: Int? = null
     ): RemoteApiResponse<MyDownloadRequestsResponse>
+
+    /**
+     * Get detailed information about an external album.
+     * Includes track listing, cover image URL, and download request status.
+     */
+    suspend fun getExternalAlbumDetails(
+        albumId: String
+    ): RemoteApiResponse<ExternalAlbumDetailsResponse>
+
+    /**
+     * Get an external artist's discography with download status.
+     * Returns album list with in_catalog, in_queue, and request_status fields.
+     */
+    suspend fun getExternalDiscography(
+        artistId: String
+    ): RemoteApiResponse<ExternalDiscographyResponse>
 
     @Serializable
     enum class SearchFilter {

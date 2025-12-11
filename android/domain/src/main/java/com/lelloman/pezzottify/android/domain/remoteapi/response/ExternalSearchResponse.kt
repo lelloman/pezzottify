@@ -15,6 +15,30 @@ enum class ExternalSearchResultType {
 }
 
 /**
+ * Request status information for an item in the download queue.
+ * Used by ExternalSearchResult and ExternalAlbumDetailsResponse.
+ */
+@Serializable
+data class RequestStatusInfo(
+    /** Queue item ID (UUID) */
+    @SerialName("request_id")
+    val requestId: String,
+    /** Current status in the queue */
+    val status: DownloadQueueStatus,
+    /** Position in queue (1-based, only for pending items) */
+    @SerialName("queue_position")
+    val queuePosition: Int? = null,
+    /** Download progress (for album downloads with children) */
+    val progress: DownloadProgress? = null,
+    /** Error message (for failed items) */
+    @SerialName("error_message")
+    val errorMessage: String? = null,
+    /** When the request was created (Unix timestamp) */
+    @SerialName("created_at")
+    val createdAt: Long,
+)
+
+/**
  * A single search result from the external downloader service.
  */
 @Serializable
@@ -42,6 +66,9 @@ data class ExternalSearchResult(
     val inQueue: Boolean = false,
     /** Relevance score (0.0 to 1.0, higher is better match) */
     val score: Float = 0f,
+    /** Download request status if in queue (for discography results) */
+    @SerialName("request_status")
+    val requestStatus: RequestStatusInfo? = null,
 )
 
 /**
@@ -53,4 +80,16 @@ data class ExternalSearchResponse(
     val results: List<ExternalSearchResult>,
     /** Total number of results (may be more than returned) */
     val total: Int,
+)
+
+/**
+ * Artist discography response from the external downloader.
+ * Used by GET /v1/download/search/discography/:artist_id
+ */
+@Serializable
+data class ExternalDiscographyResponse(
+    /** The artist information */
+    val artist: ExternalSearchResult,
+    /** All albums by this artist */
+    val albums: List<ExternalSearchResult>,
 )
