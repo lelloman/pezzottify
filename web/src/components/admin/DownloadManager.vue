@@ -107,6 +107,25 @@
               </button>
             </div>
           </div>
+          <!-- Progress bar for requests with children -->
+          <div v-if="item.progress && item.progress.total_children > 0" class="progressSection">
+            <div class="progressBar">
+              <div
+                class="progressFill"
+                :style="{ width: getProgressPercent(item.progress) + '%' }"
+                :class="{ 'has-failed': item.progress.failed > 0 }"
+              ></div>
+            </div>
+            <span class="progressText">
+              {{ item.progress.completed }}/{{ item.progress.total_children }} completed
+              <span v-if="item.progress.failed > 0" class="progressFailed">
+                ({{ item.progress.failed }} failed)
+              </span>
+              <span v-if="item.progress.in_progress > 0" class="progressActive">
+                ({{ item.progress.in_progress }} active)
+              </span>
+            </span>
+          </div>
           <div class="queueItemDetails">
             <span class="detailItem">
               <span class="detailLabel">Priority:</span>
@@ -165,6 +184,13 @@
                 {{ deletingItems[item.id] ? "..." : "Delete" }}
               </button>
             </div>
+          </div>
+          <!-- Progress info for failed requests with children -->
+          <div v-if="item.progress && item.progress.total_children > 0" class="progressSection">
+            <span class="progressText">
+              {{ item.progress.completed }}/{{ item.progress.total_children }} completed,
+              {{ item.progress.failed }} failed
+            </span>
           </div>
           <div class="queueItemDetails">
             <span class="detailItem">
@@ -597,6 +623,12 @@ const formatEventType = (eventType) => {
     .split("_")
     .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
     .join(" ");
+};
+
+const getProgressPercent = (progress) => {
+  if (!progress || progress.total_children === 0) return 0;
+  const terminal = progress.completed + progress.failed;
+  return Math.round((terminal / progress.total_children) * 100);
 };
 
 const formatBytes = (bytes) => {
@@ -1036,6 +1068,47 @@ onUnmounted(() => {
 .status-retry {
   background-color: rgba(249, 115, 22, 0.15);
   color: #f97316;
+}
+
+/* Progress Bar */
+.progressSection {
+  margin: var(--spacing-2) 0;
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-2);
+}
+
+.progressBar {
+  flex: 1;
+  height: 6px;
+  background-color: var(--bg-highlight);
+  border-radius: 3px;
+  overflow: hidden;
+  max-width: 200px;
+}
+
+.progressFill {
+  height: 100%;
+  background-color: var(--spotify-green);
+  border-radius: 3px;
+  transition: width 0.3s ease;
+}
+
+.progressFill.has-failed {
+  background-color: #f97316;
+}
+
+.progressText {
+  font-size: var(--text-xs);
+  color: var(--text-subdued);
+}
+
+.progressFailed {
+  color: #dc2626;
+}
+
+.progressActive {
+  color: #3b82f6;
 }
 
 /* Retry Button */

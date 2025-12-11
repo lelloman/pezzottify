@@ -41,10 +41,12 @@ pub trait DownloadQueueStore: Send + Sync {
 
     /// List all queue items with optional status filter.
     /// If `exclude_completed` is true, completed items are excluded from results.
+    /// If `top_level_only` is true, only items with parent_id IS NULL are returned.
     fn list_all(
         &self,
         status: Option<QueueStatus>,
         exclude_completed: bool,
+        top_level_only: bool,
         limit: usize,
         offset: usize,
     ) -> Result<Vec<QueueItem>>;
@@ -570,6 +572,7 @@ impl DownloadQueueStore for SqliteDownloadQueueStore {
         &self,
         status: Option<QueueStatus>,
         exclude_completed: bool,
+        top_level_only: bool,
         limit: usize,
         offset: usize,
     ) -> Result<Vec<QueueItem>> {
@@ -592,6 +595,10 @@ impl DownloadQueueStore for SqliteDownloadQueueStore {
                 QueueStatus::Completed.as_db_str().to_string(),
             ));
             param_idx += 1;
+        }
+
+        if top_level_only {
+            conditions.push("parent_id IS NULL".to_string());
         }
 
         let where_clause = if conditions.is_empty() {
@@ -1842,17 +1849,17 @@ mod tests {
         store.enqueue(item2).unwrap();
 
         // List all
-        let all = store.list_all(None, false, 100, 0).unwrap();
+        let all = store.list_all(None, false, false, 100, 0).unwrap();
         assert_eq!(all.len(), 2);
 
         // List pending only
-        let pending = store.list_all(Some(QueueStatus::Pending), false, 100, 0).unwrap();
+        let pending = store.list_all(Some(QueueStatus::Pending), false, false, 100, 0).unwrap();
         assert_eq!(pending.len(), 1);
         assert_eq!(pending[0].id, "item-1");
 
         // List completed only
         let completed = store
-            .list_all(Some(QueueStatus::Completed), false, 100, 0)
+            .list_all(Some(QueueStatus::Completed), false, false, 100, 0)
             .unwrap();
         assert_eq!(completed.len(), 1);
         assert_eq!(completed[0].id, "item-2");
@@ -1877,15 +1884,15 @@ mod tests {
         }
 
         // Get first page
-        let page1 = store.list_all(None, false, 2, 0).unwrap();
+        let page1 = store.list_all(None, false, false, 2, 0).unwrap();
         assert_eq!(page1.len(), 2);
 
         // Get second page
-        let page2 = store.list_all(None, false, 2, 2).unwrap();
+        let page2 = store.list_all(None, false, false, 2, 2).unwrap();
         assert_eq!(page2.len(), 2);
 
         // Get third page
-        let page3 = store.list_all(None, false, 2, 4).unwrap();
+        let page3 = store.list_all(None, false, false, 2, 4).unwrap();
         assert_eq!(page3.len(), 1);
     }
 

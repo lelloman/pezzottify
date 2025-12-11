@@ -528,9 +528,9 @@ export const useRemoteStore = defineStore("remote", () => {
 
   const fetchDownloadQueue = async () => {
     try {
-      // Fetch all non-completed items for the queue view
+      // Fetch top-level non-completed requests (user requests as atomic units)
       const response = await axios.get("/v1/download/admin/requests", {
-        params: { limit: 200, offset: 0, exclude_completed: true },
+        params: { limit: 200, offset: 0, exclude_completed: true, top_level_only: true },
       });
       return response.data;
     } catch (error) {
@@ -541,8 +541,9 @@ export const useRemoteStore = defineStore("remote", () => {
 
   const fetchDownloadCompleted = async (limit = 100, offset = 0) => {
     try {
+      // Fetch top-level completed requests
       const response = await axios.get("/v1/download/admin/requests", {
-        params: { limit, offset, status: "COMPLETED" },
+        params: { limit, offset, status: "COMPLETED", top_level_only: true },
       });
       return response.data;
     } catch (error) {
@@ -553,8 +554,9 @@ export const useRemoteStore = defineStore("remote", () => {
 
   const fetchFailedDownloads = async (limit = 50, offset = 0) => {
     try {
-      const response = await axios.get("/v1/download/admin/failed", {
-        params: { limit, offset },
+      // Fetch top-level failed requests
+      const response = await axios.get("/v1/download/admin/requests", {
+        params: { limit, offset, status: "FAILED", top_level_only: true },
       });
       return response.data;
     } catch (error) {
