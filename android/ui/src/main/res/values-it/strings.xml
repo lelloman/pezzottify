@@ -1,0 +1,323 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <!-- COMMON -->
+    <string name="back">Indietro</string>
+    <string name="cancel">Annulla</string>
+    <string name="ok">OK</string>
+    <string name="create">Crea</string>
+    <string name="save">Salva</string>
+    <string name="error">Errore</string>
+    <string name="undo">Annulla</string>
+    <string name="play">Riproduci</string>
+    <string name="pause">Pausa</string>
+    <string name="login">Accedi</string>
+    <string name="logout">Esci</string>
+    <string name="logging_out">Disconnessione in corso…</string>
+    <!-- COMMON -->
+
+    <!-- ABOUT SCREEN -->
+    <string name="version">Versione app: %1$s</string>
+    <string name="commit">Hash commit: %1$s</string>
+    <!-- ABOUT SCREEN -->
+
+    <!-- MAIN SCREEN -->
+    <string name="home_navigation_item_description">Home</string>
+    <string name="search_navigation_item_description">Cerca</string>
+    <string name="library_navigation_item_description">Libreria</string>
+    <!-- MAIN SCREEN -->
+
+    <!-- HOME SCREEN -->
+    <string name="app_name">Pezzottify</string>
+    <string name="recently_viewed_item_header">Visti di recente</string>
+    <string name="popular_albums_header">Album popolari</string>
+    <string name="popular_artists_header">Artisti popolari</string>
+    <string name="home_empty_state">Inizia a esplorare per vedere qui i contenuti visti di recente!</string>
+    <string name="settings">Impostazioni</string>
+    <!-- HOME SCREEN -->
+
+    <!-- CONNECTION STATUS -->
+    <string name="back_online">Di nuovo online</string>
+    <string name="offline">Offline</string>
+    <string name="connecting">Connessione in corso</string>
+    <!-- CONNECTION STATUS -->
+
+    <!-- LOGIN SCREEN -->
+    <string name="server_url">URL del server</string>
+    <string name="server_url_placeholder">http://esempio.com:3001</string>
+    <string name="email">Email</string>
+    <string name="password">Password</string>
+    <!-- LOGIN SCREEN -->
+
+    <!-- PROFILE SCREEN -->
+    <string name="profile_title">Profilo</string>
+    <string name="logged_in_as">Connesso come</string>
+    <string name="permissions">Permessi</string>
+    <string name="about">Informazioni</string>
+    <string name="version_label">Versione</string>
+    <string name="git_commit">Commit Git</string>
+    <string name="server_version">Versione server</string>
+    <string name="logout_confirmation_title">Esci</string>
+    <string name="logout_confirmation_message">Sei sicuro di voler uscire?</string>
+    <!-- PROFILE SCREEN -->
+
+    <!-- SETTINGS SCREEN -->
+    <string name="settings_title">Impostazioni</string>
+    <string name="appearance">Aspetto</string>
+    <string name="theme_color_font">Tema, colore e font</string>
+    <string name="customize_app_appearance">Personalizza l\'aspetto dell\'app</string>
+    <string name="open_appearance_settings">Apri impostazioni aspetto</string>
+    <!-- SETTINGS SCREEN -->
+
+    <!-- STYLE SETTINGS SCREEN -->
+    <string name="theme">Tema</string>
+    <string name="color_palette">Palette colori</string>
+    <string name="font">Font</string>
+    <string name="selected">Selezionato</string>
+    <string name="font_preview">Aa</string>
+    <string name="theme_system">Sistema</string>
+    <string name="theme_light">Chiaro</string>
+    <string name="theme_dark">Scuro</string>
+    <string name="theme_amoled">AMOLED</string>
+    <string name="theme_system_description">Segui le impostazioni di sistema</string>
+    <string name="theme_light_description">Usa sempre il tema chiaro</string>
+    <string name="theme_dark_description">Usa sempre il tema scuro</string>
+    <string name="theme_amoled_description">Nero assoluto per schermi OLED</string>
+    <string name="palette_classic">Verde classico</string>
+    <string name="palette_ocean_blue">Blu oceano</string>
+    <string name="palette_sunset_coral">Corallo tramonto</string>
+    <string name="palette_purple_haze">Nebbia viola</string>
+    <string name="palette_rose_gold">Oro rosa</string>
+    <string name="palette_midnight">Mezzanotte</string>
+    <string name="palette_forest">Foresta</string>
+    <string name="palette_classic_description">Verde vibrante, standard dell\'industria musicale</string>
+    <string name="palette_ocean_blue_description">Toni blu freschi e rilassanti</string>
+    <string name="palette_sunset_coral_description">Corallo e arancione caldi</string>
+    <string name="palette_purple_haze_description">Viola e porpora intensi</string>
+    <string name="palette_rose_gold_description">Toni rosa e rosati caldi</string>
+    <string name="palette_midnight_description">Blu navy e indaco profondi</string>
+    <string name="palette_forest_description">Verde terroso e marrone</string>
+    <string name="font_system">Predefinito di sistema</string>
+    <string name="font_sans_serif">Sans Serif</string>
+    <string name="font_serif">Serif</string>
+    <string name="font_monospace">Monospace</string>
+    <string name="font_system_description">Font predefinito del dispositivo</string>
+    <string name="font_sans_serif_description">Sans-serif pulito e moderno</string>
+    <string name="font_serif_description">Stile classico e tradizionale</string>
+    <string name="font_monospace_description">Larghezza fissa, stile sviluppatore</string>
+    <!-- STYLE SETTINGS SCREEN -->
+
+    <!-- SERVER SECTION -->
+    <string name="server">Server</string>
+    <string name="press_save_to_apply">Premi Salva per applicare le modifiche</string>
+    <string name="current_server_address">Indirizzo server attuale</string>
+    <string name="server_url_change_warning">La modifica dell\'URL del server influenzerà la connessione dell\'app. Assicurati che l\'URL sia corretto prima di salvare.</string>
+    <!-- SERVER SECTION -->
+
+    <!-- CACHE SETTINGS SECTION -->
+    <string name="performance">Prestazioni</string>
+    <string name="in_memory_cache">Cache in memoria</string>
+    <string name="cache_description">Memorizza i contenuti in memoria per un caricamento più veloce</string>
+    <!-- CACHE SETTINGS SECTION -->
+
+    <!-- STORAGE INFO SECTION -->
+    <string name="storage">Archiviazione</string>
+    <string name="storage_used">Usato: %1$s GB / %2$s GB</string>
+    <string name="storage_available">Disponibile: %1$s GB</string>
+    <string name="storage_plenty">Molto spazio</string>
+    <string name="storage_moderate">Spazio moderato</string>
+    <string name="storage_low">Poco spazio</string>
+    <string name="storage_critical">Spazio molto basso</string>
+    <string name="storage_unavailable">Informazioni archiviazione non disponibili</string>
+    <!-- STORAGE INFO SECTION -->
+
+    <!-- FILE LOGGING SECTION -->
+    <string name="logging">Log</string>
+    <string name="save_logs_to_file">Salva log su file</string>
+    <string name="log_size">Dimensione: %1$s</string>
+    <string name="logs_saved_when_enabled">I log verranno salvati quando abilitato</string>
+    <string name="view_logs">Visualizza log</string>
+    <string name="share_logs">Condividi log</string>
+    <string name="clear_logs">Cancella log</string>
+    <!-- FILE LOGGING SECTION -->
+
+    <!-- LOG VIEWER SCREEN -->
+    <string name="logs_title">Log</string>
+    <string name="filter_logs">Filtra log…</string>
+    <string name="clear_search">Cancella ricerca</string>
+    <string name="no_logs">Nessun log</string>
+    <string name="scroll_to_top">Scorri in alto</string>
+    <string name="scroll_to_bottom">Scorri in basso</string>
+    <!-- LOG VIEWER SCREEN -->
+
+    <!-- EXTERNAL SEARCH SECTION -->
+    <string name="external_search">Ricerca esterna</string>
+    <string name="enable_external_search">Abilita ricerca esterna</string>
+    <string name="external_search_description">Cerca su provider musicali esterni e richiedi download di contenuti</string>
+    <!-- EXTERNAL SEARCH SECTION -->
+
+    <!-- DIRECT DOWNLOADS SECTION -->
+    <string name="downloads">Download</string>
+    <string name="direct_downloads">Download diretti</string>
+    <string name="direct_downloads_description">Abilita il download di brani per l\'ascolto offline</string>
+    <!-- DIRECT DOWNLOADS SECTION -->
+
+    <!-- CREATE PLAYLIST DIALOG -->
+    <string name="create_playlist">Crea playlist</string>
+    <string name="create_playlist_prompt">Inserisci un nome per la nuova playlist</string>
+    <string name="playlist_name">Nome playlist</string>
+    <!-- CREATE PLAYLIST DIALOG -->
+
+    <!-- PLAYLIST PICKER BOTTOM SHEET -->
+    <string name="add_to_playlist">Aggiungi a playlist</string>
+    <string name="create_new_playlist">Crea nuova playlist</string>
+    <plurals name="tracks_count">
+        <item quantity="one">%1$d brano</item>
+        <item quantity="other">%1$d brani</item>
+    </plurals>
+    <!-- PLAYLIST PICKER BOTTOM SHEET -->
+
+    <!-- PLAYER SCREEN -->
+    <string name="queue">Coda</string>
+    <string name="shuffle">Riproduzione casuale</string>
+    <string name="previous">Precedente</string>
+    <string name="next">Successivo</string>
+    <string name="repeat">Ripeti</string>
+    <string name="mute">Disattiva audio</string>
+    <string name="unmute">Attiva audio</string>
+    <!-- PLAYER SCREEN -->
+
+    <!-- QUEUE SCREEN -->
+    <string name="queue_title">Coda</string>
+    <string name="playing_from_album">In riproduzione dall\'album</string>
+    <string name="playing_from_playlist">In riproduzione dalla playlist</string>
+    <string name="your_mix">Il tuo mix</string>
+    <string name="no_playback_queue">Nessuna coda di riproduzione</string>
+    <string name="remove_from_queue">Rimuovi dalla coda</string>
+    <string name="removed_from_queue">Rimosso dalla coda</string>
+    <string name="error_loading_track">Errore nel caricamento del brano</string>
+    <!-- QUEUE SCREEN -->
+
+    <!-- SEARCH SCREEN -->
+    <string name="request_added_to_queue">Richiesta aggiunta alla coda</string>
+    <!-- SEARCH SCREEN -->
+
+    <!-- ALBUM SCREEN -->
+    <string name="artists">Artisti</string>
+    <string name="like">Mi piace</string>
+    <string name="unlike">Non mi piace più</string>
+    <string name="add_to_queue">Aggiungi alla coda</string>
+    <string name="added_to_queue">Aggiunto alla coda</string>
+    <string name="more_options">Altre opzioni</string>
+    <!-- ALBUM SCREEN -->
+
+    <!-- TRACK SCREEN -->
+    <string name="album">Album</string>
+    <string name="go_to_album">Vai all\'album</string>
+    <!-- TRACK SCREEN -->
+
+    <!-- ARTIST SCREEN -->
+    <string name="related_artists">Artisti correlati</string>
+    <string name="albums">Album</string>
+    <string name="features">Collaborazioni</string>
+    <!-- ARTIST SCREEN -->
+
+    <!-- LIBRARY SCREEN -->
+    <string name="your_library">La tua libreria</string>
+    <string name="no_liked_albums_yet">Ancora nessun album preferito</string>
+    <string name="albums_you_like_will_appear_here">Gli album che ti piacciono appariranno qui</string>
+    <string name="no_liked_artists_yet">Ancora nessun artista preferito</string>
+    <string name="artists_you_like_will_appear_here">Gli artisti che ti piacciono appariranno qui</string>
+    <string name="no_liked_tracks_yet">Ancora nessun brano preferito</string>
+    <string name="tracks_you_like_will_appear_here">I brani che ti piacciono appariranno qui</string>
+    <string name="no_playlists_yet">Ancora nessuna playlist</string>
+    <string name="your_playlists_will_appear_here">Le tue playlist appariranno qui</string>
+    <!-- LIBRARY SCREEN -->
+
+    <!-- USER PLAYLIST SCREEN -->
+    <string name="could_not_load_playlist">Impossibile caricare la playlist</string>
+    <string name="playlist_added_to_queue">Playlist aggiunta alla coda</string>
+    <string name="removed_from_playlist">Rimosso dalla playlist</string>
+    <string name="playlist_created">Playlist creata</string>
+    <string name="added_to_playlist">Aggiunto alla playlist</string>
+    <!-- USER PLAYLIST SCREEN -->
+
+    <!-- ALBUM ACTIONS BOTTOM SHEET -->
+    <string name="add_all_tracks_to_playlist">Aggiungi tutti i brani alla playlist</string>
+    <!-- ALBUM ACTIONS BOTTOM SHEET -->
+
+    <!-- TRACK ACTIONS BOTTOM SHEET -->
+    <string name="remove_from_playlist">Rimuovi dalla playlist</string>
+    <string name="view_track">Visualizza brano</string>
+    <string name="view_album">Visualizza album</string>
+    <!-- TRACK ACTIONS BOTTOM SHEET -->
+
+    <!-- EXTERNAL SEARCH RESULTS -->
+    <string name="in_catalog">Nel catalogo</string>
+    <string name="in_queue">In coda</string>
+    <string name="request">Richiedi</string>
+    <string name="switch_to_catalog_search">Passa alla ricerca nel catalogo</string>
+    <string name="switch_to_external_search">Passa alla ricerca esterna</string>
+    <!-- EXTERNAL SEARCH RESULTS -->
+
+    <!-- PERMISSIONS -->
+    <string name="permission_access_catalog">Accesso al catalogo</string>
+    <string name="permission_like_content">Metti Mi piace</string>
+    <string name="permission_own_playlists">Playlist personali</string>
+    <string name="permission_edit_catalog">Modifica catalogo</string>
+    <string name="permission_manage_permissions">Gestione permessi</string>
+    <string name="permission_issue_content_download">Scarica contenuti</string>
+    <string name="permission_server_admin">Amministratore server</string>
+    <string name="permission_view_analytics">Visualizza statistiche</string>
+    <string name="permission_request_content">Richiedi contenuti</string>
+    <string name="permission_download_manager_admin">Amministratore download</string>
+    <string name="permission_access_catalog_desc">Sfoglia e riproduci musica dal catalogo.</string>
+    <string name="permission_like_content_desc">Metti Mi piace ad album, artisti e brani.</string>
+    <string name="permission_own_playlists_desc">Crea e gestisci playlist personali.</string>
+    <string name="permission_edit_catalog_desc">Aggiungi, modifica o rimuovi contenuti dal catalogo.</string>
+    <string name="permission_manage_permissions_desc">Concedi o revoca permessi ad altri utenti.</string>
+    <string name="permission_issue_content_download_desc">Richiedi download di contenuti mancanti.</string>
+    <string name="permission_server_admin_desc">Amministrazione server (riavvio, ecc.).</string>
+    <string name="permission_view_analytics_desc">Visualizza statistiche di ascolto e analytics.</string>
+    <string name="permission_request_content_desc">Cerca su provider musicali esterni e richiedi download di contenuti.</string>
+    <string name="permission_download_manager_admin_desc">Gestisci la coda download, visualizza log di audit e riprova download falliti.</string>
+    <!-- PERMISSIONS -->
+
+    <!-- SEARCH FILTERS -->
+    <string name="filter_albums">Album</string>
+    <string name="filter_artists">Artisti</string>
+    <string name="filter_tracks">Brani</string>
+    <!-- SEARCH FILTERS -->
+
+    <!-- ERROR MESSAGES -->
+    <string name="invalid_url">URL non valido</string>
+    <string name="invalid_credentials">Credenziali non valide</string>
+    <string name="unknown_error">Errore sconosciuto</string>
+    <string name="failed_to_load_requests">Impossibile caricare le richieste</string>
+    <string name="failed_to_request_download">Impossibile richiedere il download</string>
+    <string name="search_failed">Ricerca fallita</string>
+    <string name="track_fallback">Brano</string>
+    <!-- ERROR MESSAGES -->
+
+    <!-- MY REQUESTS SCREEN -->
+    <string name="my_requests_title">Le mie richieste</string>
+    <string name="my_requests_tab_queue">In coda (%1$d)</string>
+    <string name="my_requests_tab_completed">Completate (%1$d)</string>
+    <string name="my_requests_limit_today">Oggi</string>
+    <string name="my_requests_limit_in_queue">In coda</string>
+    <string name="my_requests_empty_queue">Nessun elemento in coda</string>
+    <string name="my_requests_empty_completed">Ancora nessun download completato</string>
+    <string name="my_requests_requested_time">Richiesto %1$s</string>
+    <string name="my_requests_queue_position">#%1$d in coda</string>
+    <string name="my_requests_tracks_progress">%1$d / %2$d brani</string>
+    <string name="my_requests_status_pending">In attesa</string>
+    <string name="my_requests_status_in_progress">In corso</string>
+    <string name="my_requests_status_failed">Fallito</string>
+    <string name="my_requests_time_just_now">proprio ora</string>
+    <string name="my_requests_time_minutes_ago">%1$d min fa</string>
+    <string name="my_requests_time_hours_ago">%1$d ore fa</string>
+    <string name="my_requests_time_days_ago">%1$d giorni fa</string>
+    <string name="my_requests_time_months_ago">%1$d mesi fa</string>
+    <string name="my_requests_time_years_ago">%1$d anni fa</string>
+    <!-- MY REQUESTS SCREEN -->
+</resources>
