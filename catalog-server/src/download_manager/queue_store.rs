@@ -591,9 +591,7 @@ impl DownloadQueueStore for SqliteDownloadQueueStore {
 
         if exclude_completed {
             conditions.push(format!("status != ?{}", param_idx));
-            params.push(Box::new(
-                QueueStatus::Completed.as_db_str().to_string(),
-            ));
+            params.push(Box::new(QueueStatus::Completed.as_db_str().to_string()));
             param_idx += 1;
         }
 
@@ -612,7 +610,9 @@ impl DownloadQueueStore for SqliteDownloadQueueStore {
                {}
                ORDER BY priority ASC, created_at ASC
                LIMIT ?{} OFFSET ?{}"#,
-            where_clause, param_idx, param_idx + 1
+            where_clause,
+            param_idx,
+            param_idx + 1
         );
 
         params.push(Box::new(limit as i64));
@@ -1853,7 +1853,9 @@ mod tests {
         assert_eq!(all.len(), 2);
 
         // List pending only
-        let pending = store.list_all(Some(QueueStatus::Pending), false, false, 100, 0).unwrap();
+        let pending = store
+            .list_all(Some(QueueStatus::Pending), false, false, 100, 0)
+            .unwrap();
         assert_eq!(pending.len(), 1);
         assert_eq!(pending[0].id, "item-1");
 
