@@ -227,11 +227,19 @@ impl SearchProxy {
         // 2. Enrich the artist result (no query for discography, score is irrelevant)
         let artist = self.enrich_search_result(external_disco.artist, SearchType::Artist, "");
 
-        // 3. Enrich each album result
+        // 3. Enrich each album result with catalog status, queue status, and request status
         let albums = external_disco
             .albums
             .into_iter()
-            .map(|ext| self.enrich_search_result(ext, SearchType::Album, ""))
+            .map(|ext| {
+                let album_id = ext.id.clone();
+                let mut result = self.enrich_search_result(ext, SearchType::Album, "");
+                // Add request status if album is in queue
+                if result.in_queue {
+                    result.request_status = self.get_request_status_for_album(&album_id).ok().flatten();
+                }
+                result
+            })
             .collect();
 
         Ok(DiscographyResult { artist, albums })
