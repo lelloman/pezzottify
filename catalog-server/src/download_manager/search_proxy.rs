@@ -236,7 +236,8 @@ impl SearchProxy {
                 let mut result = self.enrich_search_result(ext, SearchType::Album, "");
                 // Add request status if album is in queue
                 if result.in_queue {
-                    result.request_status = self.get_request_status_for_album(&album_id).ok().flatten();
+                    result.request_status =
+                        self.get_request_status_for_album(&album_id).ok().flatten();
                 }
                 result
             })

@@ -201,10 +201,7 @@ impl DownloadManager {
     ///
     /// Fetches album metadata and tracks from the downloader service,
     /// then enriches with catalog and queue status.
-    pub async fn get_external_album_details(
-        &self,
-        album_id: &str,
-    ) -> Result<ExternalAlbumDetails> {
+    pub async fn get_external_album_details(&self, album_id: &str) -> Result<ExternalAlbumDetails> {
         self.search_proxy.get_album_details(album_id).await
     }
 
