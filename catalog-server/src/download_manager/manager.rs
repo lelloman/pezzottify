@@ -751,7 +751,7 @@ impl DownloadManager {
             // Delete the corrupted file
             let _ = fs::remove_file(&file_path).await;
             return Err(DownloadError::new(
-                DownloadErrorType::Parse,
+                DownloadErrorType::Corruption,
                 format!(
                     "Audio validation failed for track {} (file deleted): {}",
                     item.content_id, e
@@ -831,7 +831,7 @@ impl DownloadManager {
             // Delete the corrupted file
             let _ = fs::remove_file(&file_path).await;
             return Err(DownloadError::new(
-                DownloadErrorType::Parse,
+                DownloadErrorType::Corruption,
                 format!(
                     "Image validation failed for {} (file deleted): {}",
                     item.content_id, e

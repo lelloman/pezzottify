@@ -139,6 +139,7 @@ pub enum DownloadErrorType {
     NotFound,   // Content not found - NO retry (immediate fail)
     Parse,      // Response parse error - retry
     Storage,    // File system error - retry
+    Corruption, // File validation failed (ffprobe) - retry, triggers corruption handler
     Unknown,    // Unknown error - retry
 }
 
@@ -155,6 +156,7 @@ impl DownloadErrorType {
             DownloadErrorType::NotFound => "not_found",
             DownloadErrorType::Parse => "parse",
             DownloadErrorType::Storage => "storage",
+            DownloadErrorType::Corruption => "corruption",
             DownloadErrorType::Unknown => "unknown",
         }
     }
@@ -167,9 +169,15 @@ impl DownloadErrorType {
             "not_found" => Some(DownloadErrorType::NotFound),
             "parse" => Some(DownloadErrorType::Parse),
             "storage" => Some(DownloadErrorType::Storage),
+            "corruption" => Some(DownloadErrorType::Corruption),
             "unknown" => Some(DownloadErrorType::Unknown),
             _ => None,
         }
+    }
+
+    /// Returns true if this error type indicates file corruption (ffprobe failure).
+    pub fn is_corruption(&self) -> bool {
+        matches!(self, DownloadErrorType::Corruption)
     }
 }
 
@@ -1048,7 +1056,15 @@ mod tests {
         assert!(!DownloadErrorType::NotFound.is_retryable());
         assert!(DownloadErrorType::Parse.is_retryable());
         assert!(DownloadErrorType::Storage.is_retryable());
+        assert!(DownloadErrorType::Corruption.is_retryable());
         assert!(DownloadErrorType::Unknown.is_retryable());
+    }
+
+    #[test]
+    fn test_download_error_type_is_corruption() {
+        assert!(!DownloadErrorType::Connection.is_corruption());
+        assert!(!DownloadErrorType::Parse.is_corruption());
+        assert!(DownloadErrorType::Corruption.is_corruption());
     }
 
     #[test]
