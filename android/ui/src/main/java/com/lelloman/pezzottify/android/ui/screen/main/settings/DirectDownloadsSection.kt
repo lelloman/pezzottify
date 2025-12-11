@@ -17,8 +17,10 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import com.lelloman.pezzottify.android.ui.R
 import com.lelloman.pezzottify.android.ui.theme.PezzottifyTheme
 
 @Composable
@@ -36,7 +38,7 @@ fun DirectDownloadsSection(
     ) {
         Column {
             Text(
-                text = "Downloads",
+                text = stringResource(R.string.downloads),
                 style = MaterialTheme.typography.titleLarge,
                 color = MaterialTheme.colorScheme.onSurface
             )
@@ -49,12 +51,12 @@ fun DirectDownloadsSection(
             ) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = "Direct downloads",
+                        text = stringResource(R.string.direct_downloads),
                         style = MaterialTheme.typography.bodyLarge,
                         color = MaterialTheme.colorScheme.onSurface
                     )
                     Text(
-                        text = "Enable downloading tracks for offline listening",
+                        text = stringResource(R.string.direct_downloads_description),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )

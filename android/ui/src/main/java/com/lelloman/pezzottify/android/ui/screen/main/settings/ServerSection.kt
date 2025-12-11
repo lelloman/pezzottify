@@ -14,10 +14,12 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import com.lelloman.pezzottify.android.ui.R
 import com.lelloman.pezzottify.android.ui.theme.PezzottifyTheme
 
 @Composable
@@ -34,7 +36,7 @@ fun ServerSection(
 
     Column(modifier = modifier) {
         Text(
-            text = "Server",
+            text = stringResource(R.string.server),
             style = MaterialTheme.typography.titleLarge,
             color = MaterialTheme.colorScheme.onSurface
         )
@@ -44,8 +46,8 @@ fun ServerSection(
         OutlinedTextField(
             value = baseUrlInput,
             onValueChange = onBaseUrlInputChanged,
-            label = { Text("Server URL") },
-            placeholder = { Text("http://example.com:3001") },
+            label = { Text(stringResource(R.string.server_url)) },
+            placeholder = { Text(stringResource(R.string.server_url_placeholder)) },
             isError = baseUrlError != null,
             supportingText = {
                 when {
@@ -54,11 +56,11 @@ fun ServerSection(
                         color = MaterialTheme.colorScheme.error
                     )
                     hasChanges -> Text(
-                        text = "Press Save to apply changes",
+                        text = stringResource(R.string.press_save_to_apply),
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     else -> Text(
-                        text = "Current server address",
+                        text = stringResource(R.string.current_server_address),
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
@@ -89,14 +91,14 @@ fun ServerSection(
                     color = MaterialTheme.colorScheme.onPrimary
                 )
             } else {
-                Text("Save")
+                Text(stringResource(R.string.save))
             }
         }
 
         Spacer(modifier = Modifier.height(8.dp))
 
         Text(
-            text = "Changing the server URL will affect where the app connects. Make sure the URL is correct before saving.",
+            text = stringResource(R.string.server_url_change_warning),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )

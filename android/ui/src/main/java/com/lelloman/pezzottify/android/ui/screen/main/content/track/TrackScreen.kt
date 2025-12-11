@@ -37,6 +37,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -182,7 +183,7 @@ private fun TrackLoadedScreen(
             if (track.artists.isNotEmpty()) {
                 item {
                     Text(
-                        text = "Artists",
+                        text = stringResource(R.string.artists),
                         style = MaterialTheme.typography.headlineSmall,
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
                     )
@@ -200,7 +201,7 @@ private fun TrackLoadedScreen(
             if (album != null) {
                 item {
                     Text(
-                        text = "Album",
+                        text = stringResource(R.string.album),
                         style = MaterialTheme.typography.headlineSmall,
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
                     )
@@ -304,7 +305,7 @@ private fun TrackLoadedScreen(
                         if (isLiked) R.drawable.baseline_favorite_24
                         else R.drawable.baseline_favorite_border_24
                     ),
-                    contentDescription = if (isLiked) "Unlike" else "Like",
+                    contentDescription = stringResource(if (isLiked) R.string.unlike else R.string.like),
                     tint = if (isLiked) Color.Red else MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
@@ -329,7 +330,7 @@ private fun TrackLoadedScreen(
                 Icon(
                     modifier = Modifier.size(28.dp),
                     painter = painterResource(R.drawable.baseline_play_arrow_24),
-                    contentDescription = "Play",
+                    contentDescription = stringResource(R.string.play),
                     tint = MaterialTheme.colorScheme.onPrimary,
                 )
             }
@@ -368,7 +369,7 @@ private fun AlbumCard(
         }
         Icon(
             painter = painterResource(R.drawable.baseline_chevron_right_24),
-            contentDescription = "Go to album",
+            contentDescription = stringResource(R.string.go_to_album),
             tint = MaterialTheme.colorScheme.onSurfaceVariant
         )
     }

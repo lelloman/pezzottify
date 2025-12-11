@@ -9,7 +9,9 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import com.lelloman.pezzottify.android.ui.R
 
 @Composable
 fun ExternalSearchToggle(
@@ -28,9 +30,9 @@ fun ExternalSearchToggle(
                 Icons.Outlined.CloudDownload
             },
             contentDescription = if (isExternalMode) {
-                "Switch to catalog search"
+                stringResource(R.string.switch_to_catalog_search)
             } else {
-                "Switch to external search"
+                stringResource(R.string.switch_to_external_search)
             },
             tint = if (isExternalMode) {
                 MaterialTheme.colorScheme.primary

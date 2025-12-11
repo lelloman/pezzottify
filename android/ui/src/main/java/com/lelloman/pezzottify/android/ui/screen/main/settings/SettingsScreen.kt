@@ -28,10 +28,12 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
+import com.lelloman.pezzottify.android.ui.R
 import androidx.navigation.compose.rememberNavController
 import com.lelloman.pezzottify.android.ui.screen.main.profile.CacheSettingsSection
 import com.lelloman.pezzottify.android.ui.screen.main.profile.StorageInfoSection
@@ -81,12 +83,12 @@ private fun SettingsScreenInternal(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Settings") },
+                title = { Text(stringResource(R.string.settings_title)) },
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Back"
+                            contentDescription = stringResource(R.string.back)
                         )
                     }
                 }
@@ -102,7 +104,7 @@ private fun SettingsScreenInternal(
         ) {
             // Appearance Section
             Text(
-                text = "Appearance",
+                text = stringResource(R.string.appearance),
                 style = MaterialTheme.typography.titleLarge,
                 color = MaterialTheme.colorScheme.onSurface
             )
@@ -118,19 +120,19 @@ private fun SettingsScreenInternal(
             ) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = "Theme, color and font",
+                        text = stringResource(R.string.theme_color_font),
                         style = MaterialTheme.typography.bodyLarge,
                         color = MaterialTheme.colorScheme.onSurface
                     )
                     Text(
-                        text = "Customize the app appearance",
+                        text = stringResource(R.string.customize_app_appearance),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
                 Icon(
                     imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                    contentDescription = "Open appearance settings",
+                    contentDescription = stringResource(R.string.open_appearance_settings),
                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.size(24.dp)
                 )

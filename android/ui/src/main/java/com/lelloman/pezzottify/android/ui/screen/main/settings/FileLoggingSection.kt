@@ -19,8 +19,10 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import com.lelloman.pezzottify.android.ui.R
 import com.lelloman.pezzottify.android.ui.theme.PezzottifyTheme
 
 @Composable
@@ -36,7 +38,7 @@ fun FileLoggingSection(
 ) {
     Column(modifier = modifier) {
         Text(
-            text = "Logging",
+            text = stringResource(R.string.logging),
             style = MaterialTheme.typography.titleLarge,
             color = MaterialTheme.colorScheme.onSurface
         )
@@ -49,12 +51,12 @@ fun FileLoggingSection(
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = "Save logs to file",
+                    text = stringResource(R.string.save_logs_to_file),
                     style = MaterialTheme.typography.bodyLarge,
                     color = MaterialTheme.colorScheme.onSurface
                 )
                 Text(
-                    text = if (hasLogs) "Size: $logSize" else "Logs will be saved when enabled",
+                    text = if (hasLogs) stringResource(R.string.log_size, logSize) else stringResource(R.string.logs_saved_when_enabled),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -79,7 +81,7 @@ fun FileLoggingSection(
                 ) {
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.List,
-                        contentDescription = "View logs"
+                        contentDescription = stringResource(R.string.view_logs)
                     )
                 }
 
@@ -89,7 +91,7 @@ fun FileLoggingSection(
                 ) {
                     Icon(
                         imageVector = Icons.Default.Share,
-                        contentDescription = "Share logs"
+                        contentDescription = stringResource(R.string.share_logs)
                     )
                 }
 
@@ -99,7 +101,7 @@ fun FileLoggingSection(
                 ) {
                     Icon(
                         imageVector = Icons.Default.Delete,
-                        contentDescription = "Clear logs"
+                        contentDescription = stringResource(R.string.clear_logs)
                     )
                 }
             }

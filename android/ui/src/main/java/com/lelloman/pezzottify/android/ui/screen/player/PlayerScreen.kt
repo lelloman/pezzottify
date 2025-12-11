@@ -50,6 +50,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -173,7 +174,7 @@ private fun PlayerScreenContent(
                         IconButton(onClick = { dismiss() }) {
                             Icon(
                                 imageVector = Icons.AutoMirrored.Filled.KeyboardArrowLeft,
-                                contentDescription = "Back",
+                                contentDescription = stringResource(R.string.back),
                                 modifier = Modifier.size(32.dp)
                             )
                         }
@@ -182,7 +183,7 @@ private fun PlayerScreenContent(
                         IconButton(onClick = { navController.toQueue() }) {
                             Icon(
                                 painter = painterResource(R.drawable.baseline_queue_music_24),
-                                contentDescription = "Queue",
+                                contentDescription = stringResource(R.string.queue),
                                 modifier = Modifier.size(24.dp)
                             )
                         }
@@ -401,7 +402,7 @@ private fun PlaybackControls(
         ) {
             Icon(
                 painter = painterResource(R.drawable.baseline_shuffle_24),
-                contentDescription = "Shuffle",
+                contentDescription = stringResource(R.string.shuffle),
                 modifier = Modifier.size(24.dp),
                 tint = if (shuffleEnabled) {
                     MaterialTheme.colorScheme.primary
@@ -419,7 +420,7 @@ private fun PlaybackControls(
         ) {
             Icon(
                 painter = painterResource(R.drawable.baseline_skip_previous_24),
-                contentDescription = "Previous",
+                contentDescription = stringResource(R.string.previous),
                 modifier = Modifier.size(36.dp),
                 tint = if (hasPrevious) {
                     MaterialTheme.colorScheme.onSurface
@@ -442,7 +443,7 @@ private fun PlaybackControls(
                 painter = painterResource(
                     if (isPlaying) R.drawable.baseline_pause_24 else R.drawable.baseline_play_arrow_24
                 ),
-                contentDescription = if (isPlaying) "Pause" else "Play",
+                contentDescription = if (isPlaying) stringResource(R.string.pause) else stringResource(R.string.play),
                 modifier = Modifier.size(40.dp),
                 tint = MaterialTheme.colorScheme.onSurface,
             )
@@ -458,7 +459,7 @@ private fun PlaybackControls(
         ) {
             Icon(
                 painter = painterResource(R.drawable.baseline_skip_next_24),
-                contentDescription = "Next",
+                contentDescription = stringResource(R.string.next),
                 modifier = Modifier.size(36.dp),
                 tint = if (hasNext) {
                     MaterialTheme.colorScheme.onSurface
@@ -481,7 +482,7 @@ private fun PlaybackControls(
                         RepeatModeUi.ONE -> R.drawable.baseline_repeat_one_24
                     }
                 ),
-                contentDescription = "Repeat",
+                contentDescription = stringResource(R.string.repeat),
                 modifier = Modifier.size(24.dp),
                 tint = when (repeatMode) {
                     RepeatModeUi.OFF -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
@@ -513,7 +514,7 @@ private fun VolumeControl(
                         else -> R.drawable.baseline_volume_up_24
                     }
                 ),
-                contentDescription = if (isMuted) "Unmute" else "Mute",
+                contentDescription = if (isMuted) stringResource(R.string.unmute) else stringResource(R.string.mute),
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }

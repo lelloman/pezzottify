@@ -36,7 +36,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -77,6 +80,7 @@ private fun UserPlaylistScreenContent(
     navController: NavController,
     actions: UserPlaylistScreenActions
 ) {
+    val context = LocalContext.current
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
 
@@ -132,7 +136,7 @@ private fun UserPlaylistScreenContent(
             },
             onAddToQueue = {
                 actions.addTrackToQueue(track.id)
-                showSnackbar("Added to queue")
+                showSnackbar(context.getString(R.string.added_to_queue))
             },
             onAddToPlaylist = {
                 pendingAddToPlaylistTrackId = track.id
@@ -140,7 +144,7 @@ private fun UserPlaylistScreenContent(
             },
             onRemoveFromPlaylist = {
                 actions.removeTrackFromPlaylist(track.id)
-                showSnackbar("Removed from playlist")
+                showSnackbar(context.getString(R.string.removed_from_playlist))
             },
             onViewTrack = {
                 navController.toTrack(track.id)
@@ -163,7 +167,7 @@ private fun UserPlaylistScreenContent(
             onPlaylistSelected = { playlistId ->
                 pendingAddToPlaylistTrackId?.let { trackId ->
                     actions.addTrackToPlaylist(trackId, playlistId)
-                    showSnackbar("Added to playlist")
+                    showSnackbar(context.getString(R.string.added_to_playlist))
                 }
                 showPlaylistPicker = false
                 pendingAddToPlaylistTrackId = null
@@ -180,7 +184,7 @@ private fun UserPlaylistScreenContent(
             onDismiss = { showCreatePlaylistDialog = false },
             onCreate = { name ->
                 actions.createPlaylist(name)
-                showSnackbar("Playlist created")
+                showSnackbar(context.getString(R.string.playlist_created))
             },
         )
     }
@@ -190,7 +194,7 @@ private fun UserPlaylistScreenContent(
 private fun ErrorScreen() {
     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         Text(
-            text = "Could not load playlist",
+            text = stringResource(R.string.could_not_load_playlist),
             style = MaterialTheme.typography.bodyLarge,
             color = MaterialTheme.colorScheme.error,
         )
@@ -205,6 +209,7 @@ private fun UserPlaylistLoadedScreen(
     onShowSnackbar: (String) -> Unit,
     onTrackMoreClick: (Track) -> Unit,
 ) {
+    val playlistAddedToQueueMessage = stringResource(R.string.playlist_added_to_queue)
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -217,7 +222,7 @@ private fun UserPlaylistLoadedScreen(
             onPlayClick = { actions.clickOnPlayPlaylist() },
             onAddToQueueClick = {
                 actions.addPlaylistToQueue()
-                onShowSnackbar("Playlist added to queue")
+                onShowSnackbar(playlistAddedToQueueMessage)
             },
         )
 
@@ -279,7 +284,7 @@ private fun PlaylistHeader(
                     overflow = TextOverflow.Ellipsis,
                 )
                 Text(
-                    text = "$trackCount tracks",
+                    text = pluralStringResource(R.plurals.tracks_count, trackCount, trackCount),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(top = 4.dp),
@@ -301,7 +306,7 @@ private fun PlaylistHeader(
                     Icon(
                         modifier = Modifier.size(24.dp),
                         painter = painterResource(R.drawable.baseline_playlist_add_24),
-                        contentDescription = "Add to queue",
+                        contentDescription = stringResource(R.string.add_to_queue),
                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
@@ -322,7 +327,7 @@ private fun PlaylistHeader(
                     Icon(
                         modifier = Modifier.size(28.dp),
                         painter = painterResource(R.drawable.baseline_play_arrow_24),
-                        contentDescription = "Play",
+                        contentDescription = stringResource(R.string.play),
                         tint = MaterialTheme.colorScheme.onPrimary,
                     )
                 }
@@ -400,7 +405,7 @@ private fun TrackItem(
         ) {
             Icon(
                 painter = painterResource(R.drawable.baseline_more_vert_24),
-                contentDescription = "More options",
+                contentDescription = stringResource(R.string.more_options),
                 tint = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
@@ -428,7 +433,7 @@ private fun ErrorTrackItem() {
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(
-            text = "Error loading track",
+            text = stringResource(R.string.error_loading_track),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.error
         )

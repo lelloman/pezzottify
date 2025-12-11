@@ -50,10 +50,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
+import com.lelloman.pezzottify.android.ui.R
 import com.lelloman.pezzottify.android.ui.component.DurationText
 import com.lelloman.pezzottify.android.ui.component.LoadingScreen
 import com.lelloman.pezzottify.android.ui.component.ScrollingArtistsRow
@@ -81,15 +83,15 @@ private fun QueueScreenContent(
                 title = {
                     Column {
                         Text(
-                            text = "Queue",
+                            text = stringResource(R.string.queue_title),
                             style = MaterialTheme.typography.titleLarge,
                         )
                         if (state.contextName.isNotEmpty()) {
                             Text(
                                 text = when (state.contextType) {
-                                    QueueContextType.Album -> "Playing from album"
-                                    QueueContextType.UserPlaylist -> "Playing from playlist"
-                                    QueueContextType.UserMix -> "Your mix"
+                                    QueueContextType.Album -> stringResource(R.string.playing_from_album)
+                                    QueueContextType.UserPlaylist -> stringResource(R.string.playing_from_playlist)
+                                    QueueContextType.UserMix -> stringResource(R.string.your_mix)
                                     QueueContextType.Unknown -> ""
                                 },
                                 style = MaterialTheme.typography.bodySmall,
@@ -102,7 +104,7 @@ private fun QueueScreenContent(
                     IconButton(onClick = { navController.popBackStack() }) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.KeyboardArrowLeft,
-                            contentDescription = "Back",
+                            contentDescription = stringResource(R.string.back),
                             modifier = Modifier.size(32.dp)
                         )
                     }
@@ -133,7 +135,7 @@ private fun ErrorContent() {
         contentAlignment = Alignment.Center,
     ) {
         Text(
-            text = "No playback queue",
+            text = stringResource(R.string.no_playback_queue),
             style = MaterialTheme.typography.bodyLarge,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -249,7 +251,7 @@ private fun SwipeableQueueItem(
                     if (dismissState.targetValue == SwipeToDismissBoxValue.EndToStart) {
                         Icon(
                             imageVector = Icons.Default.Delete,
-                            contentDescription = "Remove from queue",
+                            contentDescription = stringResource(R.string.remove_from_queue),
                             tint = MaterialTheme.colorScheme.onErrorContainer,
                         )
                     }
@@ -281,14 +283,14 @@ private fun PendingDeletionItem(
         horizontalArrangement = Arrangement.SpaceBetween,
     ) {
         Text(
-            text = "Removed from queue",
+            text = stringResource(R.string.removed_from_queue),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onErrorContainer,
             modifier = Modifier.weight(1f),
         )
         TextButton(onClick = onUndo) {
             Text(
-                text = "Undo",
+                text = stringResource(R.string.undo),
                 color = MaterialTheme.colorScheme.onErrorContainer,
                 style = MaterialTheme.typography.labelLarge,
             )
@@ -341,7 +343,7 @@ private fun QueueTrackItem(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "Error loading track",
+                    text = stringResource(R.string.error_loading_track),
                     color = MaterialTheme.colorScheme.error,
                 )
             }

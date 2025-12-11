@@ -20,6 +20,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.lelloman.pezzottify.android.ui.R
@@ -58,7 +59,7 @@ fun TrackActionsBottomSheet(
             // Actions
             ActionItem(
                 iconRes = R.drawable.baseline_play_arrow_24,
-                label = "Play",
+                label = stringResource(R.string.play),
                 onClick = {
                     onPlay()
                     onDismiss()
@@ -67,7 +68,7 @@ fun TrackActionsBottomSheet(
 
             ActionItem(
                 iconRes = R.drawable.baseline_playlist_add_24,
-                label = "Add to queue",
+                label = stringResource(R.string.add_to_queue),
                 onClick = {
                     onAddToQueue()
                     onDismiss()
@@ -76,7 +77,7 @@ fun TrackActionsBottomSheet(
 
             ActionItem(
                 iconRes = R.drawable.baseline_queue_music_24,
-                label = "Add to playlist",
+                label = stringResource(R.string.add_to_playlist),
                 onClick = {
                     onAddToPlaylist()
                 }
@@ -85,7 +86,7 @@ fun TrackActionsBottomSheet(
             onRemoveFromPlaylist?.let { removeAction ->
                 ActionItem(
                     iconRes = R.drawable.baseline_remove_circle_outline_24,
-                    label = "Remove from playlist",
+                    label = stringResource(R.string.remove_from_playlist),
                     onClick = {
                         removeAction()
                         onDismiss()
@@ -96,7 +97,7 @@ fun TrackActionsBottomSheet(
             onViewTrack?.let { viewAction ->
                 ActionItem(
                     iconRes = R.drawable.baseline_music_note_24,
-                    label = "View track",
+                    label = stringResource(R.string.view_track),
                     onClick = {
                         viewAction()
                         onDismiss()
@@ -107,7 +108,7 @@ fun TrackActionsBottomSheet(
             onViewAlbum?.let { viewAction ->
                 ActionItem(
                     iconRes = R.drawable.baseline_album_24,
-                    label = "View album",
+                    label = stringResource(R.string.view_album),
                     onClick = {
                         viewAction()
                         onDismiss()

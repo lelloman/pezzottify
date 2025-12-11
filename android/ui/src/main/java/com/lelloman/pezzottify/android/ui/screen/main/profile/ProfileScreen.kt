@@ -31,6 +31,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.foundation.layout.WindowInsets
@@ -38,6 +39,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import androidx.navigation.compose.rememberNavController
+import com.lelloman.pezzottify.android.ui.R
 import com.lelloman.pezzottify.android.ui.model.Permission
 import com.lelloman.pezzottify.android.ui.fromProfileBackToLogin
 import com.lelloman.pezzottify.android.ui.toMyRequests
@@ -83,8 +85,8 @@ private fun ProfileScreenInternal(
     if (currentState.showLogoutConfirmation) {
         AlertDialog(
             onDismissRequest = actions::dismissLogoutConfirmation,
-            title = { Text("Logout") },
-            text = { Text("Are you sure you want to logout?") },
+            title = { Text(stringResource(R.string.logout_confirmation_title)) },
+            text = { Text(stringResource(R.string.logout_confirmation_message)) },
             confirmButton = {
                 TextButton(
                     onClick = actions::confirmLogout,
@@ -92,12 +94,12 @@ private fun ProfileScreenInternal(
                         contentColor = MaterialTheme.colorScheme.error
                     )
                 ) {
-                    Text("Logout")
+                    Text(stringResource(R.string.logout))
                 }
             },
             dismissButton = {
                 TextButton(onClick = actions::dismissLogoutConfirmation) {
-                    Text("Cancel")
+                    Text(stringResource(R.string.cancel))
                 }
             }
         )
@@ -111,7 +113,7 @@ private fun ProfileScreenInternal(
             text = { Text(permission.description) },
             confirmButton = {
                 TextButton(onClick = actions::onPermissionDialogDismissed) {
-                    Text("OK")
+                    Text(stringResource(R.string.ok))
                 }
             }
         )
@@ -120,12 +122,12 @@ private fun ProfileScreenInternal(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Profile") },
+                title = { Text(stringResource(R.string.profile_title)) },
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Back"
+                            contentDescription = stringResource(R.string.back)
                         )
                     }
                 }
@@ -142,7 +144,7 @@ private fun ProfileScreenInternal(
         ) {
             // User Info Section
             if (currentState.userName.isNotEmpty()) {
-                SettingsLabel(text = "Logged in as")
+                SettingsLabel(text = stringResource(R.string.logged_in_as))
                 Text(
                     text = currentState.userName,
                     style = MaterialTheme.typography.bodyLarge,
@@ -151,7 +153,7 @@ private fun ProfileScreenInternal(
                 Spacer(modifier = Modifier.height(16.dp))
             }
 
-            SettingsLabel(text = "Server URL")
+            SettingsLabel(text = stringResource(R.string.server_url))
             Text(
                 text = currentState.baseUrl,
                 style = MaterialTheme.typography.bodyMedium,
@@ -163,7 +165,7 @@ private fun ProfileScreenInternal(
             // Permissions Section
             if (currentState.permissions.isNotEmpty()) {
                 Spacer(modifier = Modifier.height(16.dp))
-                SettingsLabel(text = "Permissions")
+                SettingsLabel(text = stringResource(R.string.permissions))
                 Spacer(modifier = Modifier.height(8.dp))
                 FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -186,7 +188,7 @@ private fun ProfileScreenInternal(
                     onClick = { navController.toMyRequests() },
                     modifier = Modifier.fillMaxWidth(),
                 ) {
-                    Text("My Requests")
+                    Text(stringResource(R.string.my_requests_title))
                 }
             }
 
@@ -194,13 +196,13 @@ private fun ProfileScreenInternal(
 
             // About Section
             Text(
-                text = "About",
+                text = stringResource(R.string.about),
                 style = MaterialTheme.typography.titleLarge,
                 color = MaterialTheme.colorScheme.onSurface
             )
             Spacer(modifier = Modifier.height(16.dp))
 
-            SettingsLabel(text = "Version")
+            SettingsLabel(text = stringResource(R.string.version_label))
             Text(
                 text = "${currentState.versionName} (${currentState.buildVariant})",
                 style = MaterialTheme.typography.bodyMedium,
@@ -208,7 +210,7 @@ private fun ProfileScreenInternal(
             )
             Spacer(modifier = Modifier.height(8.dp))
 
-            SettingsLabel(text = "Git Commit")
+            SettingsLabel(text = stringResource(R.string.git_commit))
             Text(
                 text = currentState.gitCommit,
                 style = MaterialTheme.typography.bodyMedium,
@@ -216,7 +218,7 @@ private fun ProfileScreenInternal(
             )
             Spacer(modifier = Modifier.height(8.dp))
 
-            SettingsLabel(text = "Server Version")
+            SettingsLabel(text = stringResource(R.string.server_version))
             Text(
                 text = currentState.serverVersion,
                 style = MaterialTheme.typography.bodyMedium,
@@ -237,7 +239,7 @@ private fun ProfileScreenInternal(
                     contentColor = MaterialTheme.colorScheme.onError
                 )
             ) {
-                Text(if (currentState.isLoggingOut) "Logging out..." else "Logout")
+                Text(if (currentState.isLoggingOut) stringResource(R.string.logging_out) else stringResource(R.string.logout))
             }
         }
     }

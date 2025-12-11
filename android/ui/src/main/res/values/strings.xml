@@ -1,6 +1,21 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
 
+    <!-- COMMON -->
+    <string name="back">Back</string>
+    <string name="cancel">Cancel</string>
+    <string name="ok">OK</string>
+    <string name="create">Create</string>
+    <string name="save">Save</string>
+    <string name="error">Error</string>
+    <string name="undo">Undo</string>
+    <string name="play">Play</string>
+    <string name="pause">Pause</string>
+    <string name="login">Login</string>
+    <string name="logout">Logout</string>
+    <string name="logging_out">Logging out…</string>
+    <!-- COMMON -->
+
     <!-- ABOUT SCREEN -->
     <string name="version">App version: %1$s</string>
     <string name="commit">Commit hash: %1$s</string>
@@ -18,11 +33,232 @@
     <string name="popular_albums_header">Popular albums</string>
     <string name="popular_artists_header">Popular artists</string>
     <string name="home_empty_state">Start exploring to see your recently viewed content here!</string>
+    <string name="settings">Settings</string>
     <!-- HOME SCREEN -->
 
     <!-- CONNECTION STATUS -->
     <string name="back_online">Back online</string>
+    <string name="offline">Offline</string>
+    <string name="connecting">Connecting</string>
     <!-- CONNECTION STATUS -->
+
+    <!-- LOGIN SCREEN -->
+    <string name="server_url">Server URL</string>
+    <string name="server_url_placeholder">http://example.com:3001</string>
+    <string name="email">Email</string>
+    <string name="password">Password</string>
+    <!-- LOGIN SCREEN -->
+
+    <!-- PROFILE SCREEN -->
+    <string name="profile_title">Profile</string>
+    <string name="logged_in_as">Logged in as</string>
+    <string name="permissions">Permissions</string>
+    <string name="about">About</string>
+    <string name="version_label">Version</string>
+    <string name="git_commit">Git Commit</string>
+    <string name="server_version">Server Version</string>
+    <string name="logout_confirmation_title">Logout</string>
+    <string name="logout_confirmation_message">Are you sure you want to logout?</string>
+    <!-- PROFILE SCREEN -->
+
+    <!-- SETTINGS SCREEN -->
+    <string name="settings_title">Settings</string>
+    <string name="appearance">Appearance</string>
+    <string name="theme_color_font">Theme, color and font</string>
+    <string name="customize_app_appearance">Customize the app appearance</string>
+    <string name="open_appearance_settings">Open appearance settings</string>
+    <!-- SETTINGS SCREEN -->
+
+    <!-- STYLE SETTINGS SCREEN -->
+    <string name="theme">Theme</string>
+    <string name="color_palette">Color Palette</string>
+    <string name="font">Font</string>
+    <string name="selected">Selected</string>
+    <string name="font_preview">Aa</string>
+    <string name="theme_system">System</string>
+    <string name="theme_light">Light</string>
+    <string name="theme_dark">Dark</string>
+    <string name="theme_amoled">AMOLED</string>
+    <string name="theme_system_description">Follow system theme settings</string>
+    <string name="theme_light_description">Always use light theme</string>
+    <string name="theme_dark_description">Always use dark theme</string>
+    <string name="theme_amoled_description">True black for OLED screens</string>
+    <string name="palette_classic">Classic Green</string>
+    <string name="palette_ocean_blue">Ocean Blue</string>
+    <string name="palette_sunset_coral">Sunset Coral</string>
+    <string name="palette_purple_haze">Purple Haze</string>
+    <string name="palette_rose_gold">Rose Gold</string>
+    <string name="palette_midnight">Midnight</string>
+    <string name="palette_forest">Forest</string>
+    <string name="palette_classic_description">Vibrant green, music industry standard</string>
+    <string name="palette_ocean_blue_description">Cool, calming blue tones</string>
+    <string name="palette_sunset_coral_description">Warm coral and orange</string>
+    <string name="palette_purple_haze_description">Rich violet and purple</string>
+    <string name="palette_rose_gold_description">Warm pink and rose tones</string>
+    <string name="palette_midnight_description">Deep navy and indigo</string>
+    <string name="palette_forest_description">Earthy green and brown</string>
+    <string name="font_system">System Default</string>
+    <string name="font_sans_serif">Sans Serif</string>
+    <string name="font_serif">Serif</string>
+    <string name="font_monospace">Monospace</string>
+    <string name="font_system_description">Default device font</string>
+    <string name="font_sans_serif_description">Clean, modern sans-serif</string>
+    <string name="font_serif_description">Classic, traditional style</string>
+    <string name="font_monospace_description">Fixed-width, developer style</string>
+    <!-- STYLE SETTINGS SCREEN -->
+
+    <!-- SERVER SECTION -->
+    <string name="server">Server</string>
+    <string name="press_save_to_apply">Press Save to apply changes</string>
+    <string name="current_server_address">Current server address</string>
+    <string name="server_url_change_warning">Changing the server URL will affect where the app connects. Make sure the URL is correct before saving.</string>
+    <!-- SERVER SECTION -->
+
+    <!-- CACHE SETTINGS SECTION -->
+    <string name="performance">Performance</string>
+    <string name="in_memory_cache">In-memory cache</string>
+    <string name="cache_description">Cache content in memory for faster loading</string>
+    <!-- CACHE SETTINGS SECTION -->
+
+    <!-- STORAGE INFO SECTION -->
+    <string name="storage">Storage</string>
+    <string name="storage_used">Used: %1$s GB / %2$s GB</string>
+    <string name="storage_available">Available: %1$s GB</string>
+    <string name="storage_plenty">Plenty of space</string>
+    <string name="storage_moderate">Moderate space</string>
+    <string name="storage_low">Low space</string>
+    <string name="storage_critical">Very low space</string>
+    <string name="storage_unavailable">Storage information unavailable</string>
+    <!-- STORAGE INFO SECTION -->
+
+    <!-- FILE LOGGING SECTION -->
+    <string name="logging">Logging</string>
+    <string name="save_logs_to_file">Save logs to file</string>
+    <string name="log_size">Size: %1$s</string>
+    <string name="logs_saved_when_enabled">Logs will be saved when enabled</string>
+    <string name="view_logs">View logs</string>
+    <string name="share_logs">Share logs</string>
+    <string name="clear_logs">Clear logs</string>
+    <!-- FILE LOGGING SECTION -->
+
+    <!-- LOG VIEWER SCREEN -->
+    <string name="logs_title">Logs</string>
+    <string name="filter_logs">Filter logs…</string>
+    <string name="clear_search">Clear search</string>
+    <string name="no_logs">No logs</string>
+    <string name="scroll_to_top">Scroll to top</string>
+    <string name="scroll_to_bottom">Scroll to bottom</string>
+    <!-- LOG VIEWER SCREEN -->
+
+    <!-- EXTERNAL SEARCH SECTION -->
+    <string name="external_search">External Search</string>
+    <string name="enable_external_search">Enable external search</string>
+    <string name="external_search_description">Search external music providers and request content downloads</string>
+    <!-- EXTERNAL SEARCH SECTION -->
+
+    <!-- DIRECT DOWNLOADS SECTION -->
+    <string name="downloads">Downloads</string>
+    <string name="direct_downloads">Direct downloads</string>
+    <string name="direct_downloads_description">Enable downloading tracks for offline listening</string>
+    <!-- DIRECT DOWNLOADS SECTION -->
+
+    <!-- CREATE PLAYLIST DIALOG -->
+    <string name="create_playlist">Create playlist</string>
+    <string name="create_playlist_prompt">Enter a name for your new playlist</string>
+    <string name="playlist_name">Playlist name</string>
+    <!-- CREATE PLAYLIST DIALOG -->
+
+    <!-- PLAYLIST PICKER BOTTOM SHEET -->
+    <string name="add_to_playlist">Add to playlist</string>
+    <string name="create_new_playlist">Create new playlist</string>
+    <plurals name="tracks_count">
+        <item quantity="one">%1$d track</item>
+        <item quantity="other">%1$d tracks</item>
+    </plurals>
+    <!-- PLAYLIST PICKER BOTTOM SHEET -->
+
+    <!-- PLAYER SCREEN -->
+    <string name="queue">Queue</string>
+    <string name="shuffle">Shuffle</string>
+    <string name="previous">Previous</string>
+    <string name="next">Next</string>
+    <string name="repeat">Repeat</string>
+    <string name="mute">Mute</string>
+    <string name="unmute">Unmute</string>
+    <!-- PLAYER SCREEN -->
+
+    <!-- QUEUE SCREEN -->
+    <string name="queue_title">Queue</string>
+    <string name="playing_from_album">Playing from album</string>
+    <string name="playing_from_playlist">Playing from playlist</string>
+    <string name="your_mix">Your mix</string>
+    <string name="no_playback_queue">No playback queue</string>
+    <string name="remove_from_queue">Remove from queue</string>
+    <string name="removed_from_queue">Removed from queue</string>
+    <string name="error_loading_track">Error loading track</string>
+    <!-- QUEUE SCREEN -->
+
+    <!-- SEARCH SCREEN -->
+    <string name="request_added_to_queue">Request added to queue</string>
+    <!-- SEARCH SCREEN -->
+
+    <!-- ALBUM SCREEN -->
+    <string name="artists">Artists</string>
+    <string name="like">Like</string>
+    <string name="unlike">Unlike</string>
+    <string name="add_to_queue">Add to queue</string>
+    <string name="added_to_queue">Added to queue</string>
+    <string name="more_options">More options</string>
+    <!-- ALBUM SCREEN -->
+
+    <!-- TRACK SCREEN -->
+    <string name="album">Album</string>
+    <string name="go_to_album">Go to album</string>
+    <!-- TRACK SCREEN -->
+
+    <!-- ARTIST SCREEN -->
+    <string name="related_artists">Related Artists</string>
+    <string name="albums">Albums</string>
+    <string name="features">Features</string>
+    <!-- ARTIST SCREEN -->
+
+    <!-- LIBRARY SCREEN -->
+    <string name="your_library">Your Library</string>
+    <string name="no_liked_albums_yet">No liked albums yet</string>
+    <string name="albums_you_like_will_appear_here">Albums you like will appear here</string>
+    <string name="no_liked_artists_yet">No liked artists yet</string>
+    <string name="artists_you_like_will_appear_here">Artists you like will appear here</string>
+    <string name="no_liked_tracks_yet">No liked tracks yet</string>
+    <string name="tracks_you_like_will_appear_here">Tracks you like will appear here</string>
+    <string name="no_playlists_yet">No playlists yet</string>
+    <string name="your_playlists_will_appear_here">Your playlists will appear here</string>
+    <!-- LIBRARY SCREEN -->
+
+    <!-- USER PLAYLIST SCREEN -->
+    <string name="could_not_load_playlist">Could not load playlist</string>
+    <string name="playlist_added_to_queue">Playlist added to queue</string>
+    <string name="removed_from_playlist">Removed from playlist</string>
+    <string name="playlist_created">Playlist created</string>
+    <string name="added_to_playlist">Added to playlist</string>
+    <!-- USER PLAYLIST SCREEN -->
+
+    <!-- ALBUM ACTIONS BOTTOM SHEET -->
+    <string name="add_all_tracks_to_playlist">Add all tracks to playlist</string>
+    <!-- ALBUM ACTIONS BOTTOM SHEET -->
+
+    <!-- TRACK ACTIONS BOTTOM SHEET -->
+    <string name="remove_from_playlist">Remove from playlist</string>
+    <string name="view_track">View track</string>
+    <string name="view_album">View album</string>
+    <!-- TRACK ACTIONS BOTTOM SHEET -->
+
+    <!-- EXTERNAL SEARCH RESULTS -->
+    <string name="in_catalog">In catalog</string>
+    <string name="in_queue">In queue</string>
+    <string name="request">Request</string>
+    <string name="switch_to_catalog_search">Switch to catalog search</string>
+    <string name="switch_to_external_search">Switch to external search</string>
+    <!-- EXTERNAL SEARCH RESULTS -->
 
     <!-- MY REQUESTS SCREEN -->
     <string name="my_requests_title">My Requests</string>
