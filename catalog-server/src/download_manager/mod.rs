@@ -14,6 +14,7 @@ mod queue_store;
 mod retry_policy;
 mod schema;
 mod search_proxy;
+mod throttle;
 mod watchdog;
 
 pub use audit_logger::AuditLogger;
@@ -24,4 +25,5 @@ pub use models::*;
 pub use queue_store::{DownloadQueueStore, SqliteDownloadQueueStore};
 pub use retry_policy::RetryPolicy;
 pub use schema::DOWNLOAD_QUEUE_VERSIONED_SCHEMAS;
+pub use throttle::{DownloadThrottler, NoOpThrottler, SlidingWindowThrottler, ThrottleStats, ThrottlerConfig};
 pub use watchdog::IntegrityWatchdog;

@@ -89,6 +89,9 @@ mod tests {
             max_backoff_secs: 86400,
             backoff_multiplier: 2.5,
             audit_log_retention_days: 90,
+            throttle_enabled: true,
+            throttle_max_mb_per_minute: 20,
+            throttle_max_mb_per_hour: 1500,
         }
     }
 

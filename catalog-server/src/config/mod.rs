@@ -131,6 +131,10 @@ impl AppConfig {
             max_backoff_secs: dm_file.max_backoff_secs.unwrap_or(86400), // 24 hours
             backoff_multiplier: dm_file.backoff_multiplier.unwrap_or(2.5),
             audit_log_retention_days: dm_file.audit_log_retention_days.unwrap_or(90),
+            // Throttle settings
+            throttle_enabled: dm_file.throttle_enabled.unwrap_or(true),
+            throttle_max_mb_per_minute: dm_file.throttle_max_mb_per_minute.unwrap_or(20),
+            throttle_max_mb_per_hour: dm_file.throttle_max_mb_per_hour.unwrap_or(1500),
         };
 
         let background_jobs = BackgroundJobsSettings::default();
@@ -218,6 +222,10 @@ pub struct DownloadManagerSettings {
     pub max_backoff_secs: u64,
     pub backoff_multiplier: f64,
     pub audit_log_retention_days: u64,
+    // Throttle settings
+    pub throttle_enabled: bool,
+    pub throttle_max_mb_per_minute: u64,
+    pub throttle_max_mb_per_hour: u64,
 }
 
 impl Default for DownloadManagerSettings {
@@ -235,6 +243,10 @@ impl Default for DownloadManagerSettings {
             max_backoff_secs: 86400, // 24 hours
             backoff_multiplier: 2.5,
             audit_log_retention_days: 90,
+            // Throttle defaults
+            throttle_enabled: true,
+            throttle_max_mb_per_minute: 20,
+            throttle_max_mb_per_hour: 1500,
         }
     }
 }
