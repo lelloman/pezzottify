@@ -1546,7 +1546,10 @@ mod tests {
     fn test_get_all_requests_empty() {
         let ctx = create_test_manager();
 
-        let requests = ctx.manager.get_all_requests(None, false, false, None, 100, 0).unwrap();
+        let requests = ctx
+            .manager
+            .get_all_requests(None, false, false, None, 100, 0)
+            .unwrap();
 
         assert!(requests.is_empty());
     }
@@ -1578,7 +1581,10 @@ mod tests {
             )
             .unwrap();
 
-        let requests = ctx.manager.get_all_requests(None, false, false, None, 100, 0).unwrap();
+        let requests = ctx
+            .manager
+            .get_all_requests(None, false, false, None, 100, 0)
+            .unwrap();
 
         assert_eq!(requests.len(), 2);
     }
