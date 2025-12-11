@@ -834,6 +834,9 @@ pub struct SearchResult {
     pub in_queue: bool,
     /// Relevance score (0.0 to 1.0, higher is better match)
     pub score: f32,
+    /// Download request status if in queue (for discography results)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub request_status: Option<RequestStatusInfo>,
 }
 
 impl SearchResult {
@@ -855,6 +858,7 @@ impl SearchResult {
             in_catalog: false,
             in_queue: false,
             score: 0.0,
+            request_status: None,
         }
     }
 
@@ -870,6 +874,7 @@ impl SearchResult {
             in_catalog: false,
             in_queue: false,
             score: 0.0,
+            request_status: None,
         }
     }
 
@@ -888,6 +893,12 @@ impl SearchResult {
     /// Set the relevance score.
     pub fn with_score(mut self, score: f32) -> Self {
         self.score = score;
+        self
+    }
+
+    /// Set the request status.
+    pub fn with_request_status(mut self, request_status: Option<RequestStatusInfo>) -> Self {
+        self.request_status = request_status;
         self
     }
 }
