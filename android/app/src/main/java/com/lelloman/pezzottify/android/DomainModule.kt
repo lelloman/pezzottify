@@ -3,6 +3,8 @@ package com.lelloman.pezzottify.android
 import com.lelloman.pezzottify.android.device.AndroidDeviceInfoProvider
 import com.lelloman.pezzottify.android.domain.config.SslPinConfig
 import com.lelloman.pezzottify.android.domain.device.DeviceInfoProvider
+import com.lelloman.pezzottify.android.domain.download.DownloadStatusRepository
+import com.lelloman.pezzottify.android.domain.download.DownloadStatusRepositoryImpl
 import com.lelloman.pezzottify.android.domain.sync.SyncManager
 import com.lelloman.pezzottify.android.domain.sync.SyncManagerImpl
 import com.lelloman.pezzottify.android.localdata.DefaultHostUrl
@@ -22,6 +24,10 @@ abstract class DomainModule {
 
     @Binds
     abstract fun bindSyncManager(impl: SyncManagerImpl): SyncManager
+
+    @Binds
+    @Singleton
+    abstract fun bindDownloadStatusRepository(impl: DownloadStatusRepositoryImpl): DownloadStatusRepository
 
     companion object {
         @Provides

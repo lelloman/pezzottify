@@ -103,6 +103,12 @@ sealed interface Screen {
 
         @Serializable
         data object MyRequests : Main
+
+        @Serializable
+        data class ExternalAlbum(val albumId: String) : Main
+
+        @Serializable
+        data class ExternalArtist(val artistId: String) : Main
     }
 }
 
@@ -117,3 +123,7 @@ fun NavController.toPlayer() = navigate(Screen.Main.Player)
 fun NavController.toQueue() = navigate(Screen.Main.Queue)
 
 fun NavController.toMyRequests() = navigate(Screen.Main.MyRequests)
+
+fun NavController.toExternalAlbum(albumId: String) = navigate(Screen.Main.ExternalAlbum(albumId))
+
+fun NavController.toExternalArtist(artistId: String) = navigate(Screen.Main.ExternalArtist(artistId))

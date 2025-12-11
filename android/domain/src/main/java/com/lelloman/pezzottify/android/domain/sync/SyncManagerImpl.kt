@@ -1,5 +1,6 @@
 package com.lelloman.pezzottify.android.domain.sync
 
+import com.lelloman.pezzottify.android.domain.download.DownloadStatusRepository
 import com.lelloman.pezzottify.android.domain.remoteapi.RemoteApiClient
 import com.lelloman.pezzottify.android.domain.remoteapi.response.PlaylistState
 import com.lelloman.pezzottify.android.domain.remoteapi.response.RemoteApiResponse
@@ -36,6 +37,7 @@ class SyncManagerImpl internal constructor(
     private val userPlaylistStore: UserPlaylistStore,
     private val permissionsStore: PermissionsStore,
     private val userSettingsStore: UserSettingsStore,
+    private val downloadStatusRepository: DownloadStatusRepository,
     private val logger: Logger,
     private val dispatcher: CoroutineDispatcher,
     private val scope: CoroutineScope,
@@ -51,6 +53,7 @@ class SyncManagerImpl internal constructor(
         userPlaylistStore: UserPlaylistStore,
         permissionsStore: PermissionsStore,
         userSettingsStore: UserSettingsStore,
+        downloadStatusRepository: DownloadStatusRepository,
         loggerFactory: LoggerFactory,
     ) : this(
         remoteApiClient,
@@ -59,6 +62,7 @@ class SyncManagerImpl internal constructor(
         userPlaylistStore,
         permissionsStore,
         userSettingsStore,
+        downloadStatusRepository,
         loggerFactory.getLogger(SyncManagerImpl::class),
         Dispatchers.IO,
         CoroutineScope(SupervisorJob() + Dispatchers.IO),
@@ -209,6 +213,7 @@ class SyncManagerImpl internal constructor(
         logger.info("cleanup()")
         cancelRetry()
         syncStateStore.clearCursor()
+        downloadStatusRepository.clear()
         mutableState.value = SyncState.Idle
     }
 
@@ -292,21 +297,44 @@ class SyncManagerImpl internal constructor(
                 logger.debug("Applied PermissionsReset: ${event.permissions}")
             }
 
-            // Download status events - currently just logged, real-time updates handled via WebSocket
+            // Download status events - forward to repository for UI updates
             is SyncEvent.DownloadRequestCreated -> {
-                logger.debug("Download request created: ${event.requestId} for ${event.contentName}")
+                downloadStatusRepository.onRequestCreated(
+                    requestId = event.requestId,
+                    contentId = event.contentId,
+                    contentName = event.contentName,
+                    artistName = event.artistName,
+                    queuePosition = event.queuePosition,
+                )
+                logger.debug("Applied DownloadRequestCreated: ${event.requestId} for ${event.contentName}")
             }
 
             is SyncEvent.DownloadStatusChanged -> {
-                logger.debug("Download status changed: ${event.requestId} -> ${event.status}")
+                downloadStatusRepository.onStatusChanged(
+                    requestId = event.requestId,
+                    contentId = event.contentId,
+                    status = event.status,
+                    queuePosition = event.queuePosition,
+                    errorMessage = event.errorMessage,
+                )
+                logger.debug("Applied DownloadStatusChanged: ${event.requestId} -> ${event.status}")
             }
 
             is SyncEvent.DownloadProgressUpdated -> {
-                logger.debug("Download progress: ${event.requestId} ${event.progress.completed}/${event.progress.totalChildren}")
+                downloadStatusRepository.onProgressUpdated(
+                    requestId = event.requestId,
+                    contentId = event.contentId,
+                    progress = event.progress,
+                )
+                logger.debug("Applied DownloadProgressUpdated: ${event.requestId} ${event.progress.completed}/${event.progress.totalChildren}")
             }
 
             is SyncEvent.DownloadCompleted -> {
-                logger.debug("Download completed: ${event.requestId} content=${event.contentId}")
+                downloadStatusRepository.onCompleted(
+                    requestId = event.requestId,
+                    contentId = event.contentId,
+                )
+                logger.debug("Applied DownloadCompleted: ${event.requestId} content=${event.contentId}")
             }
         }
     }

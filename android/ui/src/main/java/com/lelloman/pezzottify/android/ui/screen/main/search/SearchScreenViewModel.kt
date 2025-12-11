@@ -121,19 +121,26 @@ class SearchScreenViewModel(
     }
 
     override fun clickOnExternalResult(result: ExternalSearchResultContent) {
-        // If the item is in catalog, navigate to it
-        val catalogId = result.catalogId
-        if (result.inCatalog && catalogId != null) {
-            viewModelScope.launch {
+        viewModelScope.launch {
+            // If the item is in catalog, navigate to catalog screen
+            val catalogId = result.catalogId
+            if (result.inCatalog && catalogId != null) {
                 when (result) {
                     is ExternalSearchResultContent.Album ->
                         mutableEvents.emit(SearchScreensEvents.NavigateToAlbumScreen(catalogId))
                     is ExternalSearchResultContent.Artist ->
                         mutableEvents.emit(SearchScreensEvents.NavigateToArtistScreen(catalogId))
                 }
+            } else {
+                // Navigate to external content screen
+                when (result) {
+                    is ExternalSearchResultContent.Album ->
+                        mutableEvents.emit(SearchScreensEvents.NavigateToExternalAlbumScreen(result.id))
+                    is ExternalSearchResultContent.Artist ->
+                        mutableEvents.emit(SearchScreensEvents.NavigateToExternalArtistScreen(result.id))
+                }
             }
         }
-        // If not in catalog, clicking does nothing (user should use Request button)
     }
 
     override fun requestAlbumDownload(result: ExternalSearchResultContent.Album) {

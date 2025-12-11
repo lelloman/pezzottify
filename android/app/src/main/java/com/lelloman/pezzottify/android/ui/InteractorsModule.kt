@@ -993,6 +993,90 @@ class InteractorsModule {
             }
         }
 
+    @Provides
+    fun provideExternalAlbumScreenInteractor(
+        getExternalAlbumDetailsUseCase: com.lelloman.pezzottify.android.domain.download.GetExternalAlbumDetailsUseCase,
+        requestAlbumDownloadUseCase: com.lelloman.pezzottify.android.domain.download.RequestAlbumDownloadUseCase,
+        downloadStatusRepository: com.lelloman.pezzottify.android.domain.download.DownloadStatusRepository,
+    ): com.lelloman.pezzottify.android.ui.screen.main.content.externalalbum.ExternalAlbumScreenViewModel.Interactor =
+        object : com.lelloman.pezzottify.android.ui.screen.main.content.externalalbum.ExternalAlbumScreenViewModel.Interactor {
+            override suspend fun getExternalAlbumDetails(albumId: String): Result<com.lelloman.pezzottify.android.ui.screen.main.content.externalalbum.UiExternalAlbumWithStatus> {
+                val result = getExternalAlbumDetailsUseCase(albumId)
+                return result.map { album ->
+                    com.lelloman.pezzottify.android.ui.screen.main.content.externalalbum.UiExternalAlbumWithStatus(
+                        id = album.id,
+                        name = album.name,
+                        artistId = album.artistId,
+                        artistName = album.artistName,
+                        imageUrl = album.imageUrl,
+                        year = album.year,
+                        albumType = album.albumType,
+                        totalTracks = album.totalTracks,
+                        tracks = album.tracks.map { track ->
+                            com.lelloman.pezzottify.android.ui.screen.main.content.externalalbum.UiExternalTrack(
+                                id = track.id,
+                                name = track.name,
+                                trackNumber = track.trackNumber,
+                                durationMs = track.durationMs,
+                            )
+                        },
+                        inCatalog = album.inCatalog,
+                        requestStatus = album.requestStatus?.toUi(),
+                    )
+                }
+            }
+
+            override suspend fun requestAlbumDownload(
+                albumId: String,
+                albumName: String,
+                artistName: String,
+            ): Result<com.lelloman.pezzottify.android.ui.screen.main.content.externalalbum.UiRequestStatus> {
+                val result = requestAlbumDownloadUseCase(albumId, albumName, artistName)
+                return result.map { response ->
+                    com.lelloman.pezzottify.android.ui.screen.main.content.externalalbum.UiRequestStatus(
+                        requestId = response.requestId,
+                        status = com.lelloman.pezzottify.android.ui.screen.main.content.externalalbum.UiDownloadStatus.Pending,
+                        queuePosition = response.queuePosition,
+                        progress = null,
+                        errorMessage = null,
+                    )
+                }
+            }
+
+            override fun observeDownloadStatus(albumId: String): Flow<com.lelloman.pezzottify.android.ui.screen.main.content.externalalbum.UiRequestStatus?> =
+                downloadStatusRepository.observeStatus(albumId).map { status ->
+                    status?.toUi()
+                }
+
+            private fun com.lelloman.pezzottify.android.domain.remoteapi.response.RequestStatusInfo.toUi(): com.lelloman.pezzottify.android.ui.screen.main.content.externalalbum.UiRequestStatus =
+                com.lelloman.pezzottify.android.ui.screen.main.content.externalalbum.UiRequestStatus(
+                    requestId = requestId,
+                    status = status.toUi(),
+                    queuePosition = queuePosition,
+                    progress = progress?.let { p ->
+                        com.lelloman.pezzottify.android.ui.screen.main.content.externalalbum.UiDownloadProgress(
+                            completed = p.completed,
+                            total = p.totalChildren,
+                        )
+                    },
+                    errorMessage = errorMessage,
+                )
+
+            private fun com.lelloman.pezzottify.android.domain.remoteapi.response.DownloadQueueStatus.toUi(): com.lelloman.pezzottify.android.ui.screen.main.content.externalalbum.UiDownloadStatus =
+                when (this) {
+                    com.lelloman.pezzottify.android.domain.remoteapi.response.DownloadQueueStatus.Pending ->
+                        com.lelloman.pezzottify.android.ui.screen.main.content.externalalbum.UiDownloadStatus.Pending
+                    com.lelloman.pezzottify.android.domain.remoteapi.response.DownloadQueueStatus.InProgress ->
+                        com.lelloman.pezzottify.android.ui.screen.main.content.externalalbum.UiDownloadStatus.InProgress
+                    com.lelloman.pezzottify.android.domain.remoteapi.response.DownloadQueueStatus.RetryWaiting ->
+                        com.lelloman.pezzottify.android.ui.screen.main.content.externalalbum.UiDownloadStatus.RetryWaiting
+                    com.lelloman.pezzottify.android.domain.remoteapi.response.DownloadQueueStatus.Completed ->
+                        com.lelloman.pezzottify.android.ui.screen.main.content.externalalbum.UiDownloadStatus.Completed
+                    com.lelloman.pezzottify.android.domain.remoteapi.response.DownloadQueueStatus.Failed ->
+                        com.lelloman.pezzottify.android.ui.screen.main.content.externalalbum.UiDownloadStatus.Failed
+                }
+        }
+
 }
 
 private fun DomainThemeMode.toUi(): UiThemeMode = when (this) {

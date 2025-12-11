@@ -63,6 +63,7 @@ fun MyRequestsScreen(
     viewModel: MyRequestsScreenViewModel = hiltViewModel(),
     onNavigateBack: () -> Unit,
     onNavigateToAlbum: (String) -> Unit,
+    onNavigateToExternalAlbum: (String) -> Unit,
 ) {
     val state by viewModel.state.collectAsState()
 
@@ -73,6 +74,7 @@ fun MyRequestsScreen(
         viewModel.events.collect { event ->
             when (event) {
                 is MyRequestsScreenEvent.NavigateToAlbum -> onNavigateToAlbum(event.albumId)
+                is MyRequestsScreenEvent.NavigateToExternalAlbum -> onNavigateToExternalAlbum(event.albumId)
             }
         }
     }

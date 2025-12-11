@@ -58,12 +58,14 @@ import com.lelloman.pezzottify.android.ui.component.ScrollingTextRow
 import com.lelloman.pezzottify.android.ui.content.ArtistInfo
 import com.lelloman.pezzottify.android.ui.screen.main.content.album.AlbumScreen
 import com.lelloman.pezzottify.android.ui.screen.main.content.artist.ArtistScreen
+import com.lelloman.pezzottify.android.ui.screen.main.content.externalalbum.ExternalAlbumScreen
 import com.lelloman.pezzottify.android.ui.screen.main.content.fullscreenimage.FullScreenImageScreen
 import com.lelloman.pezzottify.android.ui.screen.main.content.track.TrackScreen
 import com.lelloman.pezzottify.android.ui.screen.main.content.userplaylist.UserPlaylistScreen
 import com.lelloman.pezzottify.android.ui.screen.player.PlayerScreen
 import com.lelloman.pezzottify.android.ui.screen.queue.QueueScreen
 import com.lelloman.pezzottify.android.ui.toAlbum
+import com.lelloman.pezzottify.android.ui.toExternalAlbum
 import com.lelloman.pezzottify.android.ui.toPlayer
 import com.lelloman.pezzottify.android.ui.screen.main.home.HomeScreen
 import com.lelloman.pezzottify.android.ui.screen.main.library.LibraryScreen
@@ -197,6 +199,13 @@ private fun MainScreenContent(state: MainScreenState, actions: MainScreenActions
                     com.lelloman.pezzottify.android.ui.screen.main.myrequests.MyRequestsScreen(
                         onNavigateBack = { navController.popBackStack() },
                         onNavigateToAlbum = { albumId -> navController.toAlbum(albumId) },
+                        onNavigateToExternalAlbum = { albumId -> navController.toExternalAlbum(albumId) },
+                    )
+                }
+                composable<Screen.Main.ExternalAlbum> {
+                    ExternalAlbumScreen(
+                        albumId = it.toRoute<Screen.Main.ExternalAlbum>().albumId,
+                        navController = navController
                     )
                 }
 

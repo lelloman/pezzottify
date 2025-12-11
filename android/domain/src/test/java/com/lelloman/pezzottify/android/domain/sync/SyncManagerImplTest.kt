@@ -1,6 +1,7 @@
 package com.lelloman.pezzottify.android.domain.sync
 
 import com.google.common.truth.Truth.assertThat
+import com.lelloman.pezzottify.android.domain.download.DownloadStatusRepository
 import com.lelloman.pezzottify.android.domain.remoteapi.RemoteApiClient
 import com.lelloman.pezzottify.android.domain.remoteapi.response.LikesState
 import com.lelloman.pezzottify.android.domain.remoteapi.response.RemoteApiResponse
@@ -36,6 +37,7 @@ class SyncManagerImplTest {
     private lateinit var userPlaylistStore: UserPlaylistStore
     private lateinit var permissionsStore: PermissionsStore
     private lateinit var userSettingsStore: UserSettingsStore
+    private lateinit var downloadStatusRepository: DownloadStatusRepository
     private lateinit var logger: Logger
 
     private val testDispatcher = StandardTestDispatcher()
@@ -51,6 +53,7 @@ class SyncManagerImplTest {
         userPlaylistStore = mockk(relaxed = true)
         permissionsStore = mockk(relaxed = true)
         userSettingsStore = mockk(relaxed = true)
+        downloadStatusRepository = mockk(relaxed = true)
         logger = mockk(relaxed = true)
 
         // Default: no full sync needed (tests can override)
@@ -63,6 +66,7 @@ class SyncManagerImplTest {
             userPlaylistStore = userPlaylistStore,
             permissionsStore = permissionsStore,
             userSettingsStore = userSettingsStore,
+            downloadStatusRepository = downloadStatusRepository,
             logger = logger,
             dispatcher = testDispatcher,
             scope = testScope,
@@ -397,6 +401,7 @@ class SyncManagerImplTest {
         syncManager.cleanup()
 
         coVerify { syncStateStore.clearCursor() }
+        coVerify { downloadStatusRepository.clear() }
         assertThat(syncManager.state.value).isEqualTo(SyncState.Idle)
     }
 
