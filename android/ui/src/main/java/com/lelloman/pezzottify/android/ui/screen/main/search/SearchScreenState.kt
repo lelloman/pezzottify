@@ -1,5 +1,6 @@
 package com.lelloman.pezzottify.android.ui.screen.main.search
 
+import androidx.annotation.StringRes
 import com.lelloman.pezzottify.android.ui.content.Content
 import com.lelloman.pezzottify.android.ui.content.SearchResultContent
 import com.lelloman.pezzottify.android.ui.screen.main.home.ResolvedRecentlyViewedContent
@@ -10,7 +11,7 @@ data class SearchScreenState(
     val query: String = "",
     val isLoading: Boolean = false,
     val searchResults: List<Flow<Content<SearchResultContent>>>? = null,
-    val searchError: String? = null,
+    @StringRes val searchErrorRes: Int? = null,
     val recentlyViewedContent: List<Flow<Content<ResolvedRecentlyViewedContent>>>? = null,
     val searchHistoryItems: List<Flow<Content<SearchHistoryItem>>>? = null,
     val selectedFilters: Set<SearchFilter> = emptySet(),
@@ -18,7 +19,7 @@ data class SearchScreenState(
     val isExternalMode: Boolean = false,
     val externalResults: List<ExternalSearchResultContent>? = null,
     val externalSearchLoading: Boolean = false,
-    val externalSearchError: String? = null,
+    @StringRes val externalSearchErrorRes: Int? = null,
     val downloadLimits: UiDownloadLimits? = null,
     val requestingAlbumIds: Set<String> = emptySet(),
 )

@@ -1,5 +1,6 @@
 package com.lelloman.pezzottify.android.ui.screen.main.settings
 
+import androidx.annotation.StringRes
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -26,7 +27,7 @@ import com.lelloman.pezzottify.android.ui.theme.PezzottifyTheme
 fun ServerSection(
     baseUrl: String,
     baseUrlInput: String,
-    baseUrlError: String?,
+    @StringRes baseUrlErrorRes: Int?,
     isSaving: Boolean,
     onBaseUrlInputChanged: (String) -> Unit,
     onSaveBaseUrl: () -> Unit,
@@ -48,11 +49,11 @@ fun ServerSection(
             onValueChange = onBaseUrlInputChanged,
             label = { Text(stringResource(R.string.server_url)) },
             placeholder = { Text(stringResource(R.string.server_url_placeholder)) },
-            isError = baseUrlError != null,
+            isError = baseUrlErrorRes != null,
             supportingText = {
                 when {
-                    baseUrlError != null -> Text(
-                        text = baseUrlError,
+                    baseUrlErrorRes != null -> Text(
+                        text = stringResource(baseUrlErrorRes),
                         color = MaterialTheme.colorScheme.error
                     )
                     hasChanges -> Text(
@@ -81,7 +82,7 @@ fun ServerSection(
 
         Button(
             onClick = onSaveBaseUrl,
-            enabled = hasChanges && !isSaving && baseUrlError == null,
+            enabled = hasChanges && !isSaving && baseUrlErrorRes == null,
             modifier = Modifier.fillMaxWidth()
         ) {
             if (isSaving) {
@@ -112,7 +113,7 @@ private fun ServerSectionPreviewUnchanged() {
         ServerSection(
             baseUrl = "http://10.0.2.2:3001",
             baseUrlInput = "http://10.0.2.2:3001",
-            baseUrlError = null,
+            baseUrlErrorRes = null,
             isSaving = false,
             onBaseUrlInputChanged = {},
             onSaveBaseUrl = {},
@@ -128,7 +129,7 @@ private fun ServerSectionPreviewWithChanges() {
         ServerSection(
             baseUrl = "http://10.0.2.2:3001",
             baseUrlInput = "http://192.168.1.100:3001",
-            baseUrlError = null,
+            baseUrlErrorRes = null,
             isSaving = false,
             onBaseUrlInputChanged = {},
             onSaveBaseUrl = {},
@@ -144,7 +145,7 @@ private fun ServerSectionPreviewWithError() {
         ServerSection(
             baseUrl = "http://10.0.2.2:3001",
             baseUrlInput = "invalid-url",
-            baseUrlError = "Invalid URL",
+            baseUrlErrorRes = R.string.invalid_url,
             isSaving = false,
             onBaseUrlInputChanged = {},
             onSaveBaseUrl = {},
@@ -160,7 +161,7 @@ private fun ServerSectionPreviewSaving() {
         ServerSection(
             baseUrl = "http://10.0.2.2:3001",
             baseUrlInput = "http://192.168.1.100:3001",
-            baseUrlError = null,
+            baseUrlErrorRes = null,
             isSaving = true,
             onBaseUrlInputChanged = {},
             onSaveBaseUrl = {},
@@ -176,7 +177,7 @@ private fun ServerSectionPreviewDark() {
         ServerSection(
             baseUrl = "http://10.0.2.2:3001",
             baseUrlInput = "http://192.168.1.100:3001",
-            baseUrlError = null,
+            baseUrlErrorRes = null,
             isSaving = false,
             onBaseUrlInputChanged = {},
             onSaveBaseUrl = {},

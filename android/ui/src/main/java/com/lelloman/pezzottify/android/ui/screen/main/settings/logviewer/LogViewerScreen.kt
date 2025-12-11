@@ -47,10 +47,12 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import androidx.navigation.compose.rememberNavController
+import com.lelloman.pezzottify.android.ui.R
 import com.lelloman.pezzottify.android.ui.theme.PezzottifyTheme
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -146,12 +148,12 @@ private fun LogViewerScreenInternal(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Logs") },
+                title = { Text(stringResource(R.string.logs_title)) },
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Back"
+                            contentDescription = stringResource(R.string.back)
                         )
                     }
                 }
@@ -171,7 +173,7 @@ private fun LogViewerScreenInternal(
                     ) {
                         Icon(
                             imageVector = Icons.Default.KeyboardArrowUp,
-                            contentDescription = "Scroll to top"
+                            contentDescription = stringResource(R.string.scroll_to_top)
                         )
                     }
                 }
@@ -187,7 +189,7 @@ private fun LogViewerScreenInternal(
                     ) {
                         Icon(
                             imageVector = Icons.Default.KeyboardArrowDown,
-                            contentDescription = "Scroll to bottom"
+                            contentDescription = stringResource(R.string.scroll_to_bottom)
                         )
                     }
                 }
@@ -206,7 +208,7 @@ private fun LogViewerScreenInternal(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp, vertical = 8.dp),
-                placeholder = { Text("Filter logs...") },
+                placeholder = { Text(stringResource(R.string.filter_logs)) },
                 leadingIcon = {
                     Icon(
                         imageVector = Icons.Default.Search,
@@ -218,7 +220,7 @@ private fun LogViewerScreenInternal(
                         IconButton(onClick = { onSearchQueryChanged("") }) {
                             Icon(
                                 imageVector = Icons.Default.Clear,
-                                contentDescription = "Clear search"
+                                contentDescription = stringResource(R.string.clear_search)
                             )
                         }
                     }
@@ -266,7 +268,7 @@ private fun LogViewerScreenInternal(
                             contentAlignment = Alignment.Center
                         ) {
                             Text(
-                                text = "No logs",
+                                text = stringResource(R.string.no_logs),
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }

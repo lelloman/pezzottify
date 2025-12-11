@@ -2,6 +2,7 @@ package com.lelloman.pezzottify.android.ui.screen.login
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.lelloman.pezzottify.android.ui.R
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -28,7 +29,7 @@ class LoginViewModel @Inject constructor(
     val events = mutableEvents.asSharedFlow()
 
     override fun updateHost(host: String) {
-        mutableState.value = mutableState.value.copy(host = host, hostError = null)
+        mutableState.value = mutableState.value.copy(host = host, hostErrorRes = null)
     }
 
     override fun updateEmail(email: String) {
@@ -47,7 +48,7 @@ class LoginViewModel @Inject constructor(
                 if (hostResult is Interactor.SetHostResult.InvalidUrl) {
                     mutableState.value = mutableState.value.copy(
                         isLoading = false,
-                        hostError = "Invalid URL",
+                        hostErrorRes = R.string.invalid_url,
                     )
                     return@launch
                 }
@@ -62,12 +63,12 @@ class LoginViewModel @Inject constructor(
                     }
                     is Interactor.LoginResult.Failure.InvalidCredentials -> {
                         mutableState.value = mutableState.value.copy(
-                            error = "Invalid credentials",
+                            errorRes = R.string.invalid_credentials,
                         )
                     }
                     is Interactor.LoginResult.Failure.Unknown -> {
                         mutableState.value = mutableState.value.copy(
-                            error = "Unknown error",
+                            errorRes = R.string.unknown_error,
                         )
                     }
                 }

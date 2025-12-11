@@ -109,8 +109,8 @@ private fun ProfileScreenInternal(
     currentState.selectedPermission?.let { permission ->
         AlertDialog(
             onDismissRequest = actions::onPermissionDialogDismissed,
-            title = { Text(permission.displayName) },
-            text = { Text(permission.description) },
+            title = { Text(stringResource(permission.displayNameRes)) },
+            text = { Text(stringResource(permission.descriptionRes)) },
             confirmButton = {
                 TextButton(onClick = actions::onPermissionDialogDismissed) {
                     Text(stringResource(R.string.ok))
@@ -175,7 +175,7 @@ private fun ProfileScreenInternal(
                         FilterChip(
                             selected = true,
                             onClick = { actions.onPermissionClicked(permission) },
-                            label = { Text(permission.displayName) }
+                            label = { Text(stringResource(permission.displayNameRes)) }
                         )
                     }
                 }

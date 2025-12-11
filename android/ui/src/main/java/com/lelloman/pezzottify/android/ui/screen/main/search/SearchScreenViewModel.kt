@@ -2,6 +2,7 @@ package com.lelloman.pezzottify.android.ui.screen.main.search
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.lelloman.pezzottify.android.ui.R
 import com.lelloman.pezzottify.android.ui.content.Content
 import com.lelloman.pezzottify.android.ui.content.ContentResolver
 import com.lelloman.pezzottify.android.ui.screen.main.home.ResolvedRecentlyViewedContent
@@ -108,9 +109,9 @@ class SearchScreenViewModel(
         mutableState.value = mutableState.value.copy(
             isExternalMode = newMode,
             searchResults = null,
-            searchError = null,
+            searchErrorRes = null,
             externalResults = null,
-            externalSearchError = null,
+            externalSearchErrorRes = null,
             selectedFilters = emptySet(),
         )
         // Re-run search if there's a query
@@ -170,8 +171,7 @@ class SearchScreenViewModel(
                 mutableEvents.emit(SearchScreensEvents.ShowRequestSuccess)
             } else {
                 // Show error feedback
-                val errorMessage = requestResult.exceptionOrNull()?.message ?: "Failed to request download"
-                mutableEvents.emit(SearchScreensEvents.ShowRequestError(errorMessage))
+                mutableEvents.emit(SearchScreensEvents.ShowRequestError(R.string.failed_to_request_download))
             }
         }
     }
@@ -213,9 +213,9 @@ class SearchScreenViewModel(
             mutableState.value = mutableState.value.copy(
                 isLoading = false,
                 searchResults = null,
-                searchError = null,
+                searchErrorRes = null,
                 externalResults = null,
-                externalSearchError = null,
+                externalSearchErrorRes = null,
             )
         }
     }
@@ -230,7 +230,7 @@ class SearchScreenViewModel(
             isLoading = false,
             searchResults = searchResultsResult.getOrNull()
                 ?.map { contentResolver.resolveSearchResult(it.first, it.second) },
-            searchError = searchResultsResult.exceptionOrNull()?.let { "Error" }
+            searchErrorRes = searchResultsResult.exceptionOrNull()?.let { R.string.error }
         )
     }
 
@@ -311,7 +311,7 @@ class SearchScreenViewModel(
             isLoading = false,
             externalSearchLoading = false,
             externalResults = allResults.ifEmpty { null },
-            externalSearchError = if (hasError && allResults.isEmpty()) "Search failed" else null,
+            externalSearchErrorRes = if (hasError && allResults.isEmpty()) R.string.search_failed else null,
         )
     }
 

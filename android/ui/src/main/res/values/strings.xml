@@ -260,6 +260,45 @@
     <string name="switch_to_external_search">Switch to external search</string>
     <!-- EXTERNAL SEARCH RESULTS -->
 
+    <!-- PERMISSIONS -->
+    <string name="permission_access_catalog">Access Catalog</string>
+    <string name="permission_like_content">Like Content</string>
+    <string name="permission_own_playlists">Own Playlists</string>
+    <string name="permission_edit_catalog">Edit Catalog</string>
+    <string name="permission_manage_permissions">Manage Permissions</string>
+    <string name="permission_issue_content_download">Download Content</string>
+    <string name="permission_server_admin">Server Admin</string>
+    <string name="permission_view_analytics">View Analytics</string>
+    <string name="permission_request_content">Request Content</string>
+    <string name="permission_download_manager_admin">Download Manager Admin</string>
+    <string name="permission_access_catalog_desc">Browse and play music from the catalog.</string>
+    <string name="permission_like_content_desc">Like albums, artists, and tracks.</string>
+    <string name="permission_own_playlists_desc">Create and manage personal playlists.</string>
+    <string name="permission_edit_catalog_desc">Add, edit, or remove catalog content.</string>
+    <string name="permission_manage_permissions_desc">Grant or revoke permissions for other users.</string>
+    <string name="permission_issue_content_download_desc">Request downloads of missing content.</string>
+    <string name="permission_server_admin_desc">Server administration (reboot, etc.).</string>
+    <string name="permission_view_analytics_desc">View listening statistics and analytics.</string>
+    <string name="permission_request_content_desc">Search external music provider and request content downloads.</string>
+    <string name="permission_download_manager_admin_desc">Manage download queue, view audit logs, and retry failed downloads.</string>
+    <!-- PERMISSIONS -->
+
+    <!-- SEARCH FILTERS -->
+    <string name="filter_albums">Albums</string>
+    <string name="filter_artists">Artists</string>
+    <string name="filter_tracks">Tracks</string>
+    <!-- SEARCH FILTERS -->
+
+    <!-- ERROR MESSAGES -->
+    <string name="invalid_url">Invalid URL</string>
+    <string name="invalid_credentials">Invalid credentials</string>
+    <string name="unknown_error">Unknown error</string>
+    <string name="failed_to_load_requests">Failed to load requests</string>
+    <string name="failed_to_request_download">Failed to request download</string>
+    <string name="search_failed">Search failed</string>
+    <string name="track_fallback">Track</string>
+    <!-- ERROR MESSAGES -->
+
     <!-- MY REQUESTS SCREEN -->
     <string name="my_requests_title">My Requests</string>
     <string name="my_requests_tab_queue">Queue (%1$d)</string>

@@ -2,6 +2,7 @@ package com.lelloman.pezzottify.android.ui.screen.main.settings
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.lelloman.pezzottify.android.ui.R
 import com.lelloman.pezzottify.android.ui.model.StorageInfo
 import com.lelloman.pezzottify.android.ui.theme.AppFontFamily
 import com.lelloman.pezzottify.android.ui.theme.ColorPalette
@@ -167,7 +168,7 @@ class SettingsScreenViewModel @Inject constructor(
     }
 
     override fun onBaseUrlInputChanged(input: String) {
-        mutableState.update { it.copy(baseUrlInput = input, baseUrlError = null) }
+        mutableState.update { it.copy(baseUrlInput = input, baseUrlErrorRes = null) }
     }
 
     override fun saveBaseUrl() {
@@ -175,7 +176,7 @@ class SettingsScreenViewModel @Inject constructor(
         if (input == mutableState.value.baseUrl) {
             return
         }
-        mutableState.update { it.copy(isBaseUrlSaving = true, baseUrlError = null) }
+        mutableState.update { it.copy(isBaseUrlSaving = true, baseUrlErrorRes = null) }
         viewModelScope.launch {
             when (interactor.setBaseUrl(input)) {
                 SetBaseUrlResult.Success -> {
@@ -184,7 +185,7 @@ class SettingsScreenViewModel @Inject constructor(
                             baseUrl = input,
                             baseUrlInput = input,
                             isBaseUrlSaving = false,
-                            baseUrlError = null
+                            baseUrlErrorRes = null
                         )
                     }
                 }
@@ -192,7 +193,7 @@ class SettingsScreenViewModel @Inject constructor(
                     mutableState.update {
                         it.copy(
                             isBaseUrlSaving = false,
-                            baseUrlError = "Invalid URL"
+                            baseUrlErrorRes = R.string.invalid_url
                         )
                     }
                 }

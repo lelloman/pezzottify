@@ -10,6 +10,7 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.lelloman.pezzottify.android.ui.theme.PezzottifyTheme
@@ -41,7 +42,7 @@ fun SearchFilterChips(
             FilterChip(
                 selected = selectedFilters.contains(filter),
                 onClick = { onFilterToggled(filter) },
-                label = { Text(filter.displayName) }
+                label = { Text(stringResource(filter.displayNameRes)) }
             )
         }
     }

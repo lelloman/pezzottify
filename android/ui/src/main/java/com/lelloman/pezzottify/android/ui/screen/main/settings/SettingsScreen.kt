@@ -191,7 +191,7 @@ private fun SettingsScreenInternal(
             ServerSection(
                 baseUrl = currentState.baseUrl,
                 baseUrlInput = currentState.baseUrlInput,
-                baseUrlError = currentState.baseUrlError,
+                baseUrlErrorRes = currentState.baseUrlErrorRes,
                 isSaving = currentState.isBaseUrlSaving,
                 onBaseUrlInputChanged = actions::onBaseUrlInputChanged,
                 onSaveBaseUrl = actions::saveBaseUrl

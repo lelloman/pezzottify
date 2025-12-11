@@ -1,9 +1,11 @@
 package com.lelloman.pezzottify.android.ui.screen.main.myrequests
 
+import androidx.annotation.StringRes
+
 data class MyRequestsScreenState(
     val requests: List<UiDownloadRequest>? = null,
     val isLoading: Boolean = true,
-    val error: String? = null,
+    @StringRes val errorRes: Int? = null,
     val limits: UiRequestLimits? = null,
     val selectedTab: MyRequestsTab = MyRequestsTab.Queue,
 )

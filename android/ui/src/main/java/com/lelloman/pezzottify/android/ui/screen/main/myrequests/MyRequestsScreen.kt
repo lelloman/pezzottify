@@ -138,14 +138,15 @@ fun MyRequestsScreen(
                     }
                 }
 
+                val errorRes = state.errorRes
                 when {
-                    state.error != null -> {
+                    errorRes != null -> {
                         Box(
                             modifier = Modifier.fillMaxSize(),
                             contentAlignment = Alignment.Center,
                         ) {
                             Text(
-                                text = state.error ?: "Error",
+                                text = stringResource(errorRes),
                                 color = MaterialTheme.colorScheme.error,
                             )
                         }

@@ -1,5 +1,6 @@
 package com.lelloman.pezzottify.android.ui.screen.main.settings
 
+import androidx.annotation.StringRes
 import com.lelloman.pezzottify.android.ui.model.StorageInfo
 import com.lelloman.pezzottify.android.ui.theme.AppFontFamily
 import com.lelloman.pezzottify.android.ui.theme.ColorPalette
@@ -20,6 +21,6 @@ data class SettingsScreenState(
     val logFilesSize: String = "",
     val baseUrl: String = "",
     val baseUrlInput: String = "",
-    val baseUrlError: String? = null,
+    @StringRes val baseUrlErrorRes: Int? = null,
     val isBaseUrlSaving: Boolean = false,
 )

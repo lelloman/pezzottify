@@ -11,8 +11,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import com.lelloman.pezzottify.android.ui.R
 import com.lelloman.pezzottify.android.ui.model.StorageInfo
 import com.lelloman.pezzottify.android.ui.model.StoragePressureLevel
 import com.lelloman.pezzottify.android.ui.theme.PezzottifyTheme
@@ -25,7 +27,7 @@ fun StorageInfoSection(
 ) {
     Column(modifier = modifier) {
         Text(
-            text = "Storage",
+            text = stringResource(R.string.storage),
             style = MaterialTheme.typography.titleLarge,
             color = MaterialTheme.colorScheme.onSurface
         )
@@ -43,7 +45,7 @@ fun StorageInfoSection(
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Text(
-                        text = "Used: ${String.format("%.2f", usedGB)} GB / ${String.format("%.2f", totalGB)} GB",
+                        text = stringResource(R.string.storage_used, String.format("%.2f", usedGB), String.format("%.2f", totalGB)),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurface
                     )
@@ -68,17 +70,17 @@ fun StorageInfoSection(
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Text(
-                        text = "Available: ${String.format("%.2f", availableGB)} GB",
+                        text = stringResource(R.string.storage_available, String.format("%.2f", availableGB)),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Spacer(modifier = Modifier.weight(1f))
                     Text(
                         text = when (storageInfo.pressureLevel) {
-                            StoragePressureLevel.LOW -> "Plenty of space"
-                            StoragePressureLevel.MEDIUM -> "Moderate space"
-                            StoragePressureLevel.HIGH -> "Low space"
-                            StoragePressureLevel.CRITICAL -> "Very low space"
+                            StoragePressureLevel.LOW -> stringResource(R.string.storage_plenty)
+                            StoragePressureLevel.MEDIUM -> stringResource(R.string.storage_moderate)
+                            StoragePressureLevel.HIGH -> stringResource(R.string.storage_low)
+                            StoragePressureLevel.CRITICAL -> stringResource(R.string.storage_critical)
                         },
                         style = MaterialTheme.typography.bodySmall,
                         color = when (storageInfo.pressureLevel) {
@@ -92,7 +94,7 @@ fun StorageInfoSection(
             }
         } else {
             Text(
-                text = "Storage information unavailable",
+                text = stringResource(R.string.storage_unavailable),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )

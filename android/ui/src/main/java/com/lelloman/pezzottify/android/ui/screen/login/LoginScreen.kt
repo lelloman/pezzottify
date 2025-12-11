@@ -101,8 +101,8 @@ internal fun LoginScreenInternal(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(bottom = 8.dp),
-                isError = state.hostError != null,
-                supportingText = state.hostError?.let { { Text(it) } },
+                isError = state.hostErrorRes != null,
+                supportingText = state.hostErrorRes?.let { { Text(stringResource(it)) } },
                 colors = textFieldColors,
             )
 
@@ -179,9 +179,9 @@ private fun LoginPreview() {
                 email = "william.henry.harrison@example-pet-store.com",
                 password = "password",
                 isLoading = false,
-                hostError = null,
-                emailError = null,
-                error = null,
+                hostErrorRes = null,
+                emailErrorRes = null,
+                errorRes = null,
             )
         )
     }
