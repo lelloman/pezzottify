@@ -353,6 +353,14 @@ internal class RemoteApiClientImpl(
         try {
             block()
         } catch (t: Throwable) {
-            RemoteApiResponse.Error.Network
+            // Distinguish between actual network errors and other errors (like JSON parsing)
+            when (t) {
+                is java.net.UnknownHostException,
+                is java.net.ConnectException,
+                is java.net.SocketTimeoutException,
+                is java.net.SocketException,
+                is javax.net.ssl.SSLException -> RemoteApiResponse.Error.Network
+                else -> RemoteApiResponse.Error.Unknown(t.message ?: t.javaClass.simpleName)
+            }
         }
 }

@@ -221,27 +221,71 @@ impl SearchProxy {
     /// # Arguments
     /// * `artist_id` - External artist ID from the music provider
     pub async fn search_discography(&self, artist_id: &str) -> Result<DiscographyResult> {
-        // 1. Call downloader service discography endpoint
-        let external_disco = self.downloader_client.get_discography(artist_id).await?;
+        use tracing::info;
 
-        // 2. Enrich the artist result (no query for discography, score is irrelevant)
-        let artist = self.enrich_search_result(external_disco.artist, SearchType::Artist, "");
+        // 1. Get album IDs from discography endpoint
+        let album_ids = self.downloader_client.get_discography_ids(artist_id).await?;
+        info!(
+            "Got {} album IDs for artist {}",
+            album_ids.len(),
+            artist_id
+        );
 
-        // 3. Enrich each album result with catalog status, queue status, and request status
-        let albums = external_disco
-            .albums
-            .into_iter()
-            .map(|ext| {
-                let album_id = ext.id.clone();
-                let mut result = self.enrich_search_result(ext, SearchType::Album, "");
-                // Add request status if album is in queue
-                if result.in_queue {
-                    result.request_status =
-                        self.get_request_status_for_album(&album_id).ok().flatten();
+        // 2. Get artist metadata
+        let artist_meta = self.downloader_client.get_artist(artist_id).await?;
+        let artist_result = ExternalSearchResult {
+            id: artist_meta.id.clone(),
+            result_type: "artist".to_string(),
+            name: artist_meta.name.clone(),
+            artist_name: None,
+            image_url: artist_meta
+                .portraits
+                .first()
+                .or(artist_meta.portrait_group.first())
+                .map(|img| format!("{}/image/{}", self.downloader_client.base_url(), img.id)),
+            year: None,
+        };
+        let artist = self.enrich_search_result(artist_result, SearchType::Artist, "");
+
+        // 3. Fetch metadata for each album and build search results
+        let mut albums = Vec::new();
+        for album_id in album_ids {
+            match self.downloader_client.get_album(&album_id).await {
+                Ok(album_meta) => {
+                    let album_result = ExternalSearchResult {
+                        id: album_meta.id.clone(),
+                        result_type: "album".to_string(),
+                        name: album_meta.name.clone(),
+                        artist_name: Some(artist_meta.name.clone()),
+                        image_url: album_meta
+                            .covers
+                            .first()
+                            .or(album_meta.cover_group.first())
+                            .map(|img| {
+                                format!("{}/image/{}", self.downloader_client.base_url(), img.id)
+                            }),
+                        year: if album_meta.date > 0 {
+                            chrono::DateTime::from_timestamp(album_meta.date, 0)
+                                .map(|dt| dt.format("%Y").to_string().parse::<i32>().ok())
+                                .flatten()
+                        } else {
+                            None
+                        },
+                    };
+                    let mut result = self.enrich_search_result(album_result, SearchType::Album, "");
+                    // Add request status if album is in queue
+                    if result.in_queue {
+                        result.request_status =
+                            self.get_request_status_for_album(&album_id).ok().flatten();
+                    }
+                    albums.push(result);
                 }
-                result
-            })
-            .collect();
+                Err(e) => {
+                    // Log but continue - don't fail entire discography for one bad album
+                    tracing::warn!("Failed to fetch album {}: {}", album_id, e);
+                }
+            }
+        }
 
         Ok(DiscographyResult { artist, albums })
     }

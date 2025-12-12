@@ -137,7 +137,8 @@ impl DownloaderClient {
     ///
     /// # Arguments
     /// * `artist_id` - External artist ID
-    pub async fn get_discography(&self, artist_id: &str) -> Result<ExternalDiscographyResult> {
+    /// Get an artist's discography (album IDs) from the downloader service.
+    pub async fn get_discography_ids(&self, artist_id: &str) -> Result<Vec<String>> {
         let url = format!("{}/artist/{}/discography", self.base_url, artist_id);
         let response = self.client.get(&url).send().await?;
 
@@ -148,8 +149,24 @@ impl DownloaderClient {
             ));
         }
 
-        let discography: ExternalDiscographyResult = response.json().await?;
-        Ok(discography)
+        // Get the response text first to help debug parsing errors
+        let text = response.text().await?;
+        match serde_json::from_str::<RawDiscographyResult>(&text) {
+            Ok(raw) => Ok(raw.albums),
+            Err(e) => {
+                // Log the first 500 chars of the response to help debug
+                let preview = if text.len() > 500 {
+                    format!("{}...", &text[..500])
+                } else {
+                    text.clone()
+                };
+                Err(anyhow!(
+                    "Failed to parse discography response: {}. Response preview: {}",
+                    e,
+                    preview
+                ))
+            }
+        }
     }
 
     // =========================================================================

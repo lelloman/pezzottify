@@ -139,8 +139,8 @@ class SearchScreenViewModel(
                     is ExternalSearchResultContent.Album ->
                         mutableEvents.emit(SearchScreensEvents.NavigateToExternalAlbumScreen(result.id))
                     is ExternalSearchResultContent.Artist -> {
-                        // TODO: Implement ExternalArtistScreen to show artist's discography
-                        mutableEvents.emit(SearchScreensEvents.ShowMessage(R.string.external_artist_not_available))
+                        // Navigate to regular artist screen - server will create artist from external ID if needed
+                        mutableEvents.emit(SearchScreensEvents.NavigateToArtistScreen(result.id))
                     }
                     is ExternalSearchResultContent.Track -> {
                         // TODO: Implement ExternalTrackScreen or play preview

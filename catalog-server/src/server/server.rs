@@ -3120,8 +3120,13 @@ async fn search_download_discography(
     match dm.search_discography(&artist_id).await {
         Ok(result) => Json(result).into_response(),
         Err(err) => {
-            error!("Error fetching discography: {}", err);
-            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+            let err_msg = err.to_string();
+            error!("Error fetching discography for artist {}: {}", artist_id, err_msg);
+            if err_msg.contains("404") || err_msg.contains("not found") {
+                (StatusCode::NOT_FOUND, "Artist not found").into_response()
+            } else {
+                (StatusCode::INTERNAL_SERVER_ERROR, err_msg).into_response()
+            }
         }
     }
 }

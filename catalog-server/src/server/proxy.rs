@@ -8,7 +8,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use tracing::{debug, info, warn};
 
-use crate::catalog_store::CatalogStore;
+use crate::catalog_store::{CatalogStore, ImageType};
 use crate::downloader::models::{
     DownloaderAlbum, DownloaderArtist, DownloaderImage, DownloaderTrack,
 };
@@ -41,56 +41,32 @@ impl CatalogProxy {
 
     /// Check if a user can trigger downloads based on permission and preference.
     ///
-    /// Returns true only if:
-    /// 1. User has IssueContentDownload permission
-    /// 2. User has enabled the "enable_direct_downloads" setting
+    /// Returns true if either:
+    /// A) User has IssueContentDownload permission AND enabled "enable_direct_downloads"
+    /// B) User has RequestContent permission AND enabled "enable_external_search"
+    ///
+    /// Option A is for full direct download (audio files), option B is for metadata-only
+    /// fetching when viewing external search results.
     fn can_user_trigger_download(&self, user_id: usize, permissions: &[Permission]) -> bool {
-        // Check permission first
-        if !permissions.contains(&Permission::IssueContentDownload) {
-            debug!(
-                "User {} cannot trigger download: missing IssueContentDownload permission",
-                user_id
-            );
-            return false;
+        // Option A: IssueContentDownload + enable_direct_downloads
+        if permissions.contains(&Permission::IssueContentDownload) {
+            if let Ok(Some(UserSetting::DirectDownloadsEnabled(true))) =
+                self.user_store.get_user_setting(user_id, "enable_direct_downloads")
+            {
+                return true;
+            }
         }
 
-        // Check user preference (disabled by default)
-        match self
-            .user_store
-            .get_user_setting(user_id, "enable_direct_downloads")
-        {
-            Ok(Some(UserSetting::DirectDownloadsEnabled(enabled))) => {
-                if !enabled {
-                    debug!(
-                        "User {} cannot trigger download: preference disabled",
-                        user_id
-                    );
-                }
-                enabled
-            }
-            Ok(Some(_)) => {
-                // Unexpected setting type for this key - treat as error
-                warn!(
-                    "Unexpected setting type returned for enable_direct_downloads for user {}",
-                    user_id
-                );
-                false
-            }
-            Ok(None) => {
-                debug!(
-                    "User {} cannot trigger download: preference not set (default: disabled)",
-                    user_id
-                );
-                false // Disabled by default
-            }
-            Err(e) => {
-                warn!(
-                    "Error checking download preference for user {}: {}",
-                    user_id, e
-                );
-                false // On error, default to disabled
+        // Option B: RequestContent + enable_external_search
+        if permissions.contains(&Permission::RequestContent) {
+            if let Ok(Some(UserSetting::ExternalSearchEnabled(true))) =
+                self.user_store.get_user_setting(user_id, "enable_external_search")
+            {
+                return true;
             }
         }
+
+        false
     }
 
     /// Ensure an artist has complete data, fetching from downloader if needed.
@@ -216,10 +192,41 @@ impl CatalogProxy {
         // Store the artist
         self.store_artist(&dl_artist).await?;
 
-        // Store portrait images
-        for image in dl_artist.get_images() {
+        // Store portrait images and track successfully stored IDs
+        let images = dl_artist.get_images();
+        let mut stored_image_ids = Vec::new();
+        for (position, image) in images.iter().enumerate() {
             if let Err(e) = self.store_image(image, "artists").await {
                 warn!("Failed to store artist image {}: {}", image.id, e);
+            } else {
+                stored_image_ids.push((image.id.clone(), position as i32));
+            }
+        }
+
+        // Link images to artist and set display image
+        let mut display_image_set = false;
+        for (image_id, position) in &stored_image_ids {
+            // Add to artist_images relationship table
+            if let Err(e) = self.catalog_store.add_artist_image(
+                id,
+                image_id,
+                &ImageType::PortraitGroup,
+                *position,
+            ) {
+                warn!("Failed to link image {} to artist {}: {}", image_id, id, e);
+            }
+
+            // Set the first image as display image
+            if !display_image_set {
+                if let Err(e) = self.catalog_store.set_artist_display_image(id, image_id) {
+                    warn!(
+                        "Failed to set display image {} for artist {}: {}",
+                        image_id, id, e
+                    );
+                } else {
+                    info!("Set display image {} for artist {}", image_id, id);
+                    display_image_set = true;
+                }
             }
         }
 
@@ -277,10 +284,41 @@ impl CatalogProxy {
         // Store the album
         self.store_album(&dl_album).await?;
 
-        // Store cover images
-        for image in dl_album.get_images() {
+        // Store cover images and track successfully stored IDs
+        let images = dl_album.get_images();
+        let mut stored_image_ids = Vec::new();
+        for (position, image) in images.iter().enumerate() {
             if let Err(e) = self.store_image(image, "albums").await {
                 warn!("Failed to store album image {}: {}", image.id, e);
+            } else {
+                stored_image_ids.push((image.id.clone(), position as i32));
+            }
+        }
+
+        // Link images to album and set display image
+        let mut display_image_set = false;
+        for (image_id, position) in &stored_image_ids {
+            // Add to album_images relationship table
+            if let Err(e) = self.catalog_store.add_album_image(
+                id,
+                image_id,
+                &ImageType::CoverGroup,
+                *position,
+            ) {
+                warn!("Failed to link image {} to album {}: {}", image_id, id, e);
+            }
+
+            // Set the first image as display image
+            if !display_image_set {
+                if let Err(e) = self.catalog_store.set_album_display_image(id, image_id) {
+                    warn!(
+                        "Failed to set display image {} for album {}: {}",
+                        image_id, id, e
+                    );
+                } else {
+                    info!("Set display image {} for album {}", image_id, id);
+                    display_image_set = true;
+                }
             }
         }
 
