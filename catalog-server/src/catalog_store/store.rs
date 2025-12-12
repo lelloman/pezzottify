@@ -2133,6 +2133,34 @@ impl CatalogStore for SqliteCatalogStore {
             .collect::<Result<Vec<_>, _>>()?;
         Ok(ids)
     }
+
+    fn add_artist_image(
+        &self,
+        artist_id: &str,
+        image_id: &str,
+        image_type: &super::ImageType,
+        position: i32,
+    ) -> Result<()> {
+        SqliteCatalogStore::add_artist_image(self, artist_id, image_id, image_type, position)
+    }
+
+    fn add_album_image(
+        &self,
+        album_id: &str,
+        image_id: &str,
+        image_type: &super::ImageType,
+        position: i32,
+    ) -> Result<()> {
+        SqliteCatalogStore::add_album_image(self, album_id, image_id, image_type, position)
+    }
+
+    fn set_artist_display_image(&self, artist_id: &str, image_id: &str) -> Result<()> {
+        SqliteCatalogStore::set_artist_display_image(self, artist_id, image_id)
+    }
+
+    fn set_album_display_image(&self, album_id: &str, image_id: &str) -> Result<()> {
+        SqliteCatalogStore::set_album_display_image(self, album_id, image_id)
+    }
 }
 
 impl WritableCatalogStore for SqliteCatalogStore {
@@ -2182,36 +2210,8 @@ impl WritableCatalogStore for SqliteCatalogStore {
         SqliteCatalogStore::add_track_artist(self, track_id, artist_id, role, position)
     }
 
-    fn add_artist_image(
-        &self,
-        artist_id: &str,
-        image_id: &str,
-        image_type: &ImageType,
-        position: i32,
-    ) -> Result<()> {
-        SqliteCatalogStore::add_artist_image(self, artist_id, image_id, image_type, position)
-    }
-
-    fn add_album_image(
-        &self,
-        album_id: &str,
-        image_id: &str,
-        image_type: &ImageType,
-        position: i32,
-    ) -> Result<()> {
-        SqliteCatalogStore::add_album_image(self, album_id, image_id, image_type, position)
-    }
-
     fn update_track_audio(&self, track_id: &str, audio_uri: &str, format: &Format) -> Result<()> {
         SqliteCatalogStore::update_track_audio(self, track_id, audio_uri, format)
-    }
-
-    fn set_album_display_image(&self, album_id: &str, image_id: &str) -> Result<()> {
-        SqliteCatalogStore::set_album_display_image(self, album_id, image_id)
-    }
-
-    fn set_artist_display_image(&self, artist_id: &str, image_id: &str) -> Result<()> {
-        SqliteCatalogStore::set_artist_display_image(self, artist_id, image_id)
     }
 }
 

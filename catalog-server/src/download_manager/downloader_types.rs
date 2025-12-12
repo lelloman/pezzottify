@@ -120,7 +120,14 @@ impl From<SearchArtistItem> for ExternalSearchResult {
     }
 }
 
-/// Discography result containing artist info and their albums.
+/// Raw discography result from the downloader - just album IDs.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct RawDiscographyResult {
+    /// List of album IDs by this artist
+    pub albums: Vec<String>,
+}
+
+/// Enriched discography result with full album details.
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct ExternalDiscographyResult {
     /// Artist information

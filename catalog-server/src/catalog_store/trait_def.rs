@@ -176,6 +176,34 @@ pub trait CatalogStore: Send + Sync {
     /// List all unique image IDs referenced by artists (from artist_images table).
     /// Used by the integrity watchdog to scan for missing artist portrait images.
     fn list_all_artist_image_ids(&self) -> Result<Vec<String>>;
+
+    // =========================================================================
+    // Image Relationship Operations
+    // =========================================================================
+
+    /// Add an image to an artist at the given position.
+    fn add_artist_image(
+        &self,
+        artist_id: &str,
+        image_id: &str,
+        image_type: &super::ImageType,
+        position: i32,
+    ) -> Result<()>;
+
+    /// Add an image to an album at the given position.
+    fn add_album_image(
+        &self,
+        album_id: &str,
+        image_id: &str,
+        image_type: &super::ImageType,
+        position: i32,
+    ) -> Result<()>;
+
+    /// Set the display image for an artist (the "best" image to show).
+    fn set_artist_display_image(&self, artist_id: &str, image_id: &str) -> Result<()>;
+
+    /// Set the display image for an album (the "best" image to show).
+    fn set_album_display_image(&self, album_id: &str, image_id: &str) -> Result<()>;
 }
 
 /// A searchable item for the search index.
@@ -250,24 +278,6 @@ pub trait WritableCatalogStore: CatalogStore {
         position: i32,
     ) -> Result<()>;
 
-    /// Add an image to an artist.
-    fn add_artist_image(
-        &self,
-        artist_id: &str,
-        image_id: &str,
-        image_type: &super::ImageType,
-        position: i32,
-    ) -> Result<()>;
-
-    /// Add an image to an album.
-    fn add_album_image(
-        &self,
-        album_id: &str,
-        image_id: &str,
-        image_type: &super::ImageType,
-        position: i32,
-    ) -> Result<()>;
-
     /// Update a track's audio URI and format after download.
     fn update_track_audio(
         &self,
@@ -275,10 +285,4 @@ pub trait WritableCatalogStore: CatalogStore {
         audio_uri: &str,
         format: &super::Format,
     ) -> Result<()>;
-
-    /// Set the display image for an album (the "best" image to show).
-    fn set_album_display_image(&self, album_id: &str, image_id: &str) -> Result<()>;
-
-    /// Set the display image for an artist (the "best" image to show).
-    fn set_artist_display_image(&self, artist_id: &str, image_id: &str) -> Result<()>;
 }

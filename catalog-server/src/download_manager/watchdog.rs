@@ -569,6 +569,34 @@ mod tests {
         fn list_all_artist_image_ids(&self) -> Result<Vec<String>> {
             Ok(self.artist_image_ids.clone())
         }
+
+        fn add_artist_image(
+            &self,
+            _artist_id: &str,
+            _image_id: &str,
+            _image_type: &crate::catalog_store::ImageType,
+            _position: i32,
+        ) -> Result<()> {
+            unimplemented!()
+        }
+
+        fn add_album_image(
+            &self,
+            _album_id: &str,
+            _image_id: &str,
+            _image_type: &crate::catalog_store::ImageType,
+            _position: i32,
+        ) -> Result<()> {
+            unimplemented!()
+        }
+
+        fn set_artist_display_image(&self, _artist_id: &str, _image_id: &str) -> Result<()> {
+            unimplemented!()
+        }
+
+        fn set_album_display_image(&self, _album_id: &str, _image_id: &str) -> Result<()> {
+            unimplemented!()
+        }
     }
 
     fn create_test_watchdog(

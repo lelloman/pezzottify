@@ -180,4 +180,32 @@ impl CatalogStore for NullCatalogStore {
     fn list_all_artist_image_ids(&self) -> Result<Vec<String>> {
         Ok(Vec::new())
     }
+
+    fn add_artist_image(
+        &self,
+        _artist_id: &str,
+        _image_id: &str,
+        _image_type: &super::ImageType,
+        _position: i32,
+    ) -> Result<()> {
+        anyhow::bail!("NullCatalogStore does not support write operations")
+    }
+
+    fn add_album_image(
+        &self,
+        _album_id: &str,
+        _image_id: &str,
+        _image_type: &super::ImageType,
+        _position: i32,
+    ) -> Result<()> {
+        anyhow::bail!("NullCatalogStore does not support write operations")
+    }
+
+    fn set_artist_display_image(&self, _artist_id: &str, _image_id: &str) -> Result<()> {
+        anyhow::bail!("NullCatalogStore does not support write operations")
+    }
+
+    fn set_album_display_image(&self, _album_id: &str, _image_id: &str) -> Result<()> {
+        anyhow::bail!("NullCatalogStore does not support write operations")
+    }
 }
