@@ -143,7 +143,7 @@ fun SearchScreenContent(
 
         }
         SearchFilterChips(
-            availableFilters = if (state.isExternalMode) SearchFilter.externalFilters else SearchFilter.catalogFilters,
+            availableFilters = if (state.isExternalMode && state.canUseExternalSearch) SearchFilter.externalFilters else SearchFilter.catalogFilters,
             selectedFilters = state.selectedFilters,
             onFilterToggled = actions::toggleFilter
         )
@@ -161,7 +161,7 @@ fun SearchScreenContent(
                     actions = actions
                 )
             }
-        } else if (state.isExternalMode) {
+        } else if (state.isExternalMode && state.canUseExternalSearch) {
             // External search results
             Column(
                 modifier = Modifier
