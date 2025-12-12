@@ -222,6 +222,7 @@
     <string name="related_artists">Artisti correlati</string>
     <string name="albums">Album</string>
     <string name="features">Collaborazioni</string>
+    <string name="not_in_library">Non nella libreria</string>
     <!-- ARTIST SCREEN -->
 
     <!-- LIBRARY SCREEN -->
@@ -300,6 +301,20 @@
     <string name="search_failed">Ricerca fallita</string>
     <string name="track_fallback">Brano</string>
     <!-- ERROR MESSAGES -->
+
+    <!-- EXTERNAL ALBUM SCREEN -->
+    <string name="tracks">Brani</string>
+    <string name="retry">Riprova</string>
+    <string name="in_your_catalog">Nel tuo catalogo</string>
+    <string name="download_completed">Download completato</string>
+    <string name="downloading">Download in corso…</string>
+    <string name="pending_in_queue">In attesa nella coda</string>
+    <string name="queue_position">Posizione #%1$d</string>
+    <string name="download_failed">Download fallito</string>
+    <string name="retry_waiting">In attesa di riprovare</string>
+    <string name="requesting_download">Richiesta download…</string>
+    <string name="request_download">Richiedi download</string>
+    <!-- EXTERNAL ALBUM SCREEN -->
 
     <!-- MY REQUESTS SCREEN -->
     <string name="my_requests_title">Le mie richieste</string>
