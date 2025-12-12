@@ -129,6 +129,7 @@ pub struct RawDiscographyResult {
 
 /// Enriched discography result with full album details.
 #[derive(Debug, Clone, Deserialize, Serialize)]
+#[allow(dead_code)]
 pub struct ExternalDiscographyResult {
     /// Artist information
     pub artist: ExternalSearchResult,

@@ -3121,7 +3121,10 @@ async fn search_download_discography(
         Ok(result) => Json(result).into_response(),
         Err(err) => {
             let err_msg = err.to_string();
-            error!("Error fetching discography for artist {}: {}", artist_id, err_msg);
+            error!(
+                "Error fetching discography for artist {}: {}",
+                artist_id, err_msg
+            );
             if err_msg.contains("404") || err_msg.contains("not found") {
                 (StatusCode::NOT_FOUND, "Artist not found").into_response()
             } else {

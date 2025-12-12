@@ -133,11 +133,10 @@ impl DownloaderClient {
         Ok(search_response.into_results())
     }
 
-    /// Get an artist's discography from the downloader service.
+    /// Get an artist's discography (album IDs) from the downloader service.
     ///
     /// # Arguments
     /// * `artist_id` - External artist ID
-    /// Get an artist's discography (album IDs) from the downloader service.
     pub async fn get_discography_ids(&self, artist_id: &str) -> Result<Vec<String>> {
         let url = format!("{}/artist/{}/discography", self.base_url, artist_id);
         let response = self.client.get(&url).send().await?;
