@@ -224,12 +224,11 @@ impl SearchProxy {
         use tracing::info;
 
         // 1. Get album IDs from discography endpoint
-        let album_ids = self.downloader_client.get_discography_ids(artist_id).await?;
-        info!(
-            "Got {} album IDs for artist {}",
-            album_ids.len(),
-            artist_id
-        );
+        let album_ids = self
+            .downloader_client
+            .get_discography_ids(artist_id)
+            .await?;
+        info!("Got {} album IDs for artist {}", album_ids.len(), artist_id);
 
         // 2. Get artist metadata
         let artist_meta = self.downloader_client.get_artist(artist_id).await?;
@@ -266,8 +265,7 @@ impl SearchProxy {
                             }),
                         year: if album_meta.date > 0 {
                             chrono::DateTime::from_timestamp(album_meta.date, 0)
-                                .map(|dt| dt.format("%Y").to_string().parse::<i32>().ok())
-                                .flatten()
+                                .and_then(|dt| dt.format("%Y").to_string().parse::<i32>().ok())
                         } else {
                             None
                         },

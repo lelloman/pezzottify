@@ -50,8 +50,9 @@ impl CatalogProxy {
     fn can_user_trigger_download(&self, user_id: usize, permissions: &[Permission]) -> bool {
         // Option A: IssueContentDownload + enable_direct_downloads
         if permissions.contains(&Permission::IssueContentDownload) {
-            if let Ok(Some(UserSetting::DirectDownloadsEnabled(true))) =
-                self.user_store.get_user_setting(user_id, "enable_direct_downloads")
+            if let Ok(Some(UserSetting::DirectDownloadsEnabled(true))) = self
+                .user_store
+                .get_user_setting(user_id, "enable_direct_downloads")
             {
                 return true;
             }
@@ -59,8 +60,9 @@ impl CatalogProxy {
 
         // Option B: RequestContent + enable_external_search
         if permissions.contains(&Permission::RequestContent) {
-            if let Ok(Some(UserSetting::ExternalSearchEnabled(true))) =
-                self.user_store.get_user_setting(user_id, "enable_external_search")
+            if let Ok(Some(UserSetting::ExternalSearchEnabled(true))) = self
+                .user_store
+                .get_user_setting(user_id, "enable_external_search")
             {
                 return true;
             }
@@ -299,12 +301,10 @@ impl CatalogProxy {
         let mut display_image_set = false;
         for (image_id, position) in &stored_image_ids {
             // Add to album_images relationship table
-            if let Err(e) = self.catalog_store.add_album_image(
-                id,
-                image_id,
-                &ImageType::CoverGroup,
-                *position,
-            ) {
+            if let Err(e) =
+                self.catalog_store
+                    .add_album_image(id, image_id, &ImageType::CoverGroup, *position)
+            {
                 warn!("Failed to link image {} to album {}: {}", image_id, id, e);
             }
 
