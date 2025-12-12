@@ -148,6 +148,7 @@ interface RemoteApiClient {
     enum class ExternalSearchType {
         Album,
         Artist,
+        Track,
     }
 
     interface HostUrlProvider {

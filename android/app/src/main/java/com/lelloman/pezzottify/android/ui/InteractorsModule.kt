@@ -415,6 +415,8 @@ class InteractorsModule {
                         RemoteApiClient.ExternalSearchType.Album
                     SearchScreenViewModel.InteractorExternalSearchType.Artist ->
                         RemoteApiClient.ExternalSearchType.Artist
+                    SearchScreenViewModel.InteractorExternalSearchType.Track ->
+                        RemoteApiClient.ExternalSearchType.Track
                 }
                 val result = performExternalSearchUseCase(query, domainType)
                 return result.map { items ->
@@ -423,7 +425,9 @@ class InteractorsModule {
                             id = item.id,
                             name = item.name,
                             artistName = item.artistName,
+                            albumName = item.albumName,
                             year = item.year,
+                            duration = item.durationMs,
                             imageUrl = item.imageUrl,
                             inCatalog = item.inCatalog,
                             inQueue = item.inQueue,
