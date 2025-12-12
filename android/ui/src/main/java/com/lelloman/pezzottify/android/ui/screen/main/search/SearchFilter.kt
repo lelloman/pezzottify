@@ -16,7 +16,7 @@ enum class SearchFilter(@StringRes val displayNameRes: Int) {
         /** Filters available for catalog search (all types) */
         val catalogFilters = listOf(Album, Artist, Track)
 
-        /** Filters available for external search (no Track support) */
-        val externalFilters = listOf(Album, Artist)
+        /** Filters available for external search */
+        val externalFilters = listOf(Album, Artist, Track)
     }
 }

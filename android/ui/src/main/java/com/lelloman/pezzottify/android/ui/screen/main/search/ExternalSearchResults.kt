@@ -138,6 +138,67 @@ fun ExternalArtistSearchResult(
 }
 
 @Composable
+fun ExternalTrackSearchResult(
+    result: ExternalSearchResultContent.Track,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(horizontal = Spacing.Medium, vertical = Spacing.Small),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        // Track cover (album artwork)
+        SubcomposeAsyncImage(
+            model = result.imageUrl,
+            contentDescription = result.name,
+            modifier = Modifier
+                .size(56.dp)
+                .clip(RoundedCornerShape(4.dp)),
+            contentScale = ContentScale.Crop,
+        )
+
+        Spacer(modifier = Modifier.width(Spacing.Medium))
+
+        // Track info
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxHeight(),
+            verticalArrangement = Arrangement.Center,
+        ) {
+            Text(
+                text = result.name,
+                style = MaterialTheme.typography.titleMedium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            Text(
+                text = buildString {
+                    append(result.artistName)
+                    result.albumName?.let { append(" • $it") }
+                },
+                style = MaterialTheme.typography.bodySmall,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+
+        Spacer(modifier = Modifier.width(Spacing.Small))
+
+        // Status icon (checkmark for catalog, hourglass for queue)
+        ExternalResultStatusIcon(
+            inCatalog = result.inCatalog,
+            inQueue = result.inQueue,
+        )
+    }
+}
+
+@Composable
 private fun ExternalResultStatusIcon(
     inCatalog: Boolean,
     inQueue: Boolean,

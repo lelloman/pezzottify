@@ -130,6 +130,8 @@ class SearchScreenViewModel(
                         mutableEvents.emit(SearchScreensEvents.NavigateToAlbumScreen(catalogId))
                     is ExternalSearchResultContent.Artist ->
                         mutableEvents.emit(SearchScreensEvents.NavigateToArtistScreen(catalogId))
+                    is ExternalSearchResultContent.Track ->
+                        mutableEvents.emit(SearchScreensEvents.NavigateToTrackScreen(catalogId))
                 }
             } else {
                 // Navigate to external content screen
@@ -138,8 +140,11 @@ class SearchScreenViewModel(
                         mutableEvents.emit(SearchScreensEvents.NavigateToExternalAlbumScreen(result.id))
                     is ExternalSearchResultContent.Artist -> {
                         // TODO: Implement ExternalArtistScreen to show artist's discography
-                        // For now, external artists not in catalog cannot be navigated to
-                        // (only albums can be requested for download)
+                        mutableEvents.emit(SearchScreensEvents.ShowMessage(R.string.external_artist_not_available))
+                    }
+                    is ExternalSearchResultContent.Track -> {
+                        // TODO: Implement ExternalTrackScreen or play preview
+                        mutableEvents.emit(SearchScreensEvents.ShowMessage(R.string.external_track_not_available))
                     }
                 }
             }
@@ -266,18 +271,12 @@ class SearchScreenViewModel(
             }
         }
 
-        // Get selected filters or default to Album + Artist
+        // Determine which types to search based on selected filters (all if none selected)
         val selectedFilters = mutableState.value.selectedFilters
         val searchTypes = if (selectedFilters.isEmpty()) {
-            listOf(InteractorExternalSearchType.Album, InteractorExternalSearchType.Artist)
+            listOf(InteractorExternalSearchType.Album, InteractorExternalSearchType.Artist, InteractorExternalSearchType.Track)
         } else {
-            selectedFilters.mapNotNull { filter ->
-                when (filter) {
-                    SearchFilter.Album -> InteractorExternalSearchType.Album
-                    SearchFilter.Artist -> InteractorExternalSearchType.Artist
-                    SearchFilter.Track -> null // External search doesn't support tracks
-                }
-            }.ifEmpty { listOf(InteractorExternalSearchType.Album, InteractorExternalSearchType.Artist) }
+            selectedFilters.map { it.toExternalSearchType() }
         }
 
         // Perform searches for each type and merge results
@@ -309,6 +308,18 @@ class SearchScreenViewModel(
                             catalogId = result.catalogId,
                             score = result.score,
                         )
+                        InteractorExternalSearchType.Track -> ExternalSearchResultContent.Track(
+                            id = result.id,
+                            name = result.name,
+                            artistName = result.artistName ?: "",
+                            albumName = result.albumName,
+                            duration = result.duration,
+                            imageUrl = result.imageUrl,
+                            inCatalog = result.inCatalog,
+                            inQueue = result.inQueue,
+                            catalogId = result.catalogId,
+                            score = result.score,
+                        )
                     }
                     allResults.add(content)
                 }
@@ -334,6 +345,12 @@ class SearchScreenViewModel(
         SearchFilter.Album -> InteractorSearchFilter.Album
         SearchFilter.Artist -> InteractorSearchFilter.Artist
         SearchFilter.Track -> InteractorSearchFilter.Track
+    }
+
+    private fun SearchFilter.toExternalSearchType(): InteractorExternalSearchType = when (this) {
+        SearchFilter.Album -> InteractorExternalSearchType.Album
+        SearchFilter.Artist -> InteractorExternalSearchType.Artist
+        SearchFilter.Track -> InteractorExternalSearchType.Track
     }
 
     override fun clickOnArtistSearchResult(artistId: String) {
@@ -528,7 +545,9 @@ class SearchScreenViewModel(
         val id: String,
         val name: String,
         val artistName: String?,
+        val albumName: String?,
         val year: Int?,
+        val duration: Int?,
         val imageUrl: String?,
         val inCatalog: Boolean,
         val inQueue: Boolean,
@@ -547,6 +566,7 @@ class SearchScreenViewModel(
     enum class InteractorExternalSearchType {
         Album,
         Artist,
+        Track,
     }
 
     enum class InteractorSearchFilter {

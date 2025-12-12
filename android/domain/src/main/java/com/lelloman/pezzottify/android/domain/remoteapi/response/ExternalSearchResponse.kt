@@ -12,6 +12,8 @@ enum class ExternalSearchResultType {
     Album,
     @SerialName("artist")
     Artist,
+    @SerialName("track")
+    Track,
 }
 
 /**
@@ -45,19 +47,25 @@ data class RequestStatusInfo(
 data class ExternalSearchResult(
     /** External ID from the music provider */
     val id: String,
-    /** Result type ("album" or "artist") */
+    /** Result type ("album" or "artist" or "track") */
     @SerialName("type")
     val resultType: ExternalSearchResultType,
-    /** Name of the album or artist */
+    /** Name of the album, artist, or track */
     val name: String,
-    /** Artist name (for albums) */
+    /** Artist name (for albums and tracks) */
     @SerialName("artist_name")
     val artistName: String? = null,
+    /** Album name (for tracks) */
+    @SerialName("album_name")
+    val albumName: String? = null,
     /** URL to cover/portrait image */
     @SerialName("image_url")
     val imageUrl: String? = null,
     /** Release year (for albums) */
     val year: Int? = null,
+    /** Duration in milliseconds (for tracks) */
+    @SerialName("duration_ms")
+    val durationMs: Int? = null,
     /** Whether this content is already in the catalog */
     @SerialName("in_catalog")
     val inCatalog: Boolean = false,

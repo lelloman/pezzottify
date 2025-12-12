@@ -95,8 +95,12 @@ fun SearchScreenContent(
                 is SearchScreensEvents.NavigateToExternalArtistScreen -> {
                     // TODO: Navigate to ExternalArtistScreen when implemented
                 }
+                is SearchScreensEvents.NavigateToExternalTrackScreen -> {
+                    // TODO: Navigate to ExternalTrackScreen when implemented
+                }
                 is SearchScreensEvents.ShowRequestError -> snackbarHostState.showSnackbar(context.getString(it.messageRes))
                 is SearchScreensEvents.ShowRequestSuccess -> snackbarHostState.showSnackbar(context.getString(R.string.request_added_to_queue))
+                is SearchScreensEvents.ShowMessage -> snackbarHostState.showSnackbar(context.getString(it.messageRes))
             }
         }
     }
@@ -185,13 +189,17 @@ fun SearchScreenContent(
                         }
                     } else {
                         state.externalResults?.let { results ->
-                            items(results, key = { it.id }) { result ->
+                            items(results, key = { "${it::class.simpleName}_${it.id}" }) { result ->
                                 when (result) {
                                     is ExternalSearchResultContent.Album -> ExternalAlbumSearchResult(
                                         result = result,
                                         onClick = { actions.clickOnExternalResult(result) },
                                     )
                                     is ExternalSearchResultContent.Artist -> ExternalArtistSearchResult(
+                                        result = result,
+                                        onClick = { actions.clickOnExternalResult(result) },
+                                    )
+                                    is ExternalSearchResultContent.Track -> ExternalTrackSearchResult(
                                         result = result,
                                         onClick = { actions.clickOnExternalResult(result) },
                                     )

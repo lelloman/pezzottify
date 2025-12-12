@@ -30,4 +30,17 @@ sealed class ExternalSearchResultContent {
         override val catalogId: String?,
         override val score: Float,
     ) : ExternalSearchResultContent()
+
+    data class Track(
+        override val id: String,
+        override val name: String,
+        val artistName: String,
+        val albumName: String?,
+        val duration: Int?,
+        override val imageUrl: String?,
+        override val inCatalog: Boolean,
+        override val inQueue: Boolean,
+        override val catalogId: String?,
+        override val score: Float,
+    ) : ExternalSearchResultContent()
 }

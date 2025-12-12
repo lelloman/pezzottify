@@ -18,4 +18,8 @@ sealed interface SearchScreensEvents {
 
     data class NavigateToExternalArtistScreen(val artistId: String) : SearchScreensEvents
 
+    data class NavigateToExternalTrackScreen(val trackId: String) : SearchScreensEvents
+
+    data class ShowMessage(@StringRes val messageRes: Int) : SearchScreensEvents
+
 }
