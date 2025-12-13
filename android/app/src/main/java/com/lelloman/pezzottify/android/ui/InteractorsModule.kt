@@ -667,8 +667,8 @@ class InteractorsModule {
                     }
                     .combine(player.currentTrackPercent) { (playlist, isPlaying, currentTrackIndex), trackPercent ->
                         logger.debug("Combining new playlist + isPlaying + currentTrackIndex + trackPercent $playlist - $isPlaying - $currentTrackIndex - $trackPercent")
-                        if (playlist != null) {
-                            val index = currentTrackIndex ?: 0
+                        if (playlist != null && playlist.tracksIds.isNotEmpty()) {
+                            val index = (currentTrackIndex ?: 0).coerceIn(0, playlist.tracksIds.lastIndex)
                             val nextTrackId = if (index < playlist.tracksIds.lastIndex) {
                                 playlist.tracksIds[index + 1]
                             } else null
