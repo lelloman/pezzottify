@@ -199,6 +199,11 @@ class ListeningTracker internal constructor(
 
         if (duration < MIN_DURATION_THRESHOLD_SEC) return
 
+        // If paused and already saved, skip update - nothing has changed
+        if (session.lastResumeTime == null && session.savedEventId != null) {
+            return
+        }
+
         val event = createEventFromSession(session, endedAt = null)
 
         if (session.savedEventId == null) {
