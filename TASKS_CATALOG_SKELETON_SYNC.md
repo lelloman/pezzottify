@@ -801,7 +801,7 @@ Test cases:
 
 ---
 
-[ ] **Task 2.3.2: Write integration tests for skeleton endpoints**
+[x] **Task 2.3.2: Write integration tests for skeleton endpoints**
 
 **File:** `catalog-server/tests/skeleton_api_tests.rs`
 
@@ -1565,9 +1565,9 @@ End-to-end test with catalog-server: sync, verify data, modify catalog, sync aga
 | Phase | Tasks | Status |
 |-------|-------|--------|
 | 1. Server Data Model | 1.1.1 - 1.3.3 | 11/11 |
-| 2. Server Endpoints | 2.1.1 - 2.3.2 | 8/9 |
+| 2. Server Endpoints | 2.1.1 - 2.3.2 | 9/9 |
 | 3. Android Storage | 3.1.1 - 3.2.3 | 0/7 |
 | 4. Android Sync | 4.1.1 - 4.3.2 | 0/7 |
 | 5. Use Skeleton | 5.1.1 - 5.1.2 | 0/2 |
 | 6. Testing | 6.1.1 - 6.2.3 | 0/6 |
-| **Total** | | **19/42** |
+| **Total** | | **20/42** |
