@@ -817,7 +817,7 @@ Test cases:
 
 ### 3.1 Create Skeleton Database
 
-[ ] **Task 3.1.1: Create skeleton entity classes**
+[x] **Task 3.1.1: Create skeleton entity classes**
 
 **File:** `android/localdata/src/main/java/com/lelloman/pezzottify/android/localdata/internal/skeleton/model/SkeletonEntities.kt`
 
@@ -884,7 +884,7 @@ data class SkeletonMeta(
 
 ---
 
-[ ] **Task 3.1.2: Create SkeletonDao interface**
+[x] **Task 3.1.2: Create SkeletonDao interface**
 
 **File:** `android/localdata/src/main/java/com/lelloman/pezzottify/android/localdata/internal/skeleton/SkeletonDao.kt`
 
@@ -993,7 +993,7 @@ interface SkeletonDao {
 
 ---
 
-[ ] **Task 3.1.3: Create SkeletonDb Room database**
+[x] **Task 3.1.3: Create SkeletonDb Room database**
 
 **File:** `android/localdata/src/main/java/com/lelloman/pezzottify/android/localdata/internal/skeleton/SkeletonDb.kt`
 
@@ -1026,7 +1026,7 @@ internal abstract class SkeletonDb : RoomDatabase() {
 
 ---
 
-[ ] **Task 3.1.4: Add SkeletonDb to DbModule**
+[x] **Task 3.1.4: Add SkeletonDb to DbModule**
 
 **File:** `android/localdata/src/main/java/com/lelloman/pezzottify/android/localdata/internal/DbModule.kt`
 
@@ -1052,7 +1052,7 @@ fun provideSkeletonDao(db: SkeletonDb): SkeletonDao = db.skeletonDao()
 
 ### 3.2 Create Domain Interface
 
-[ ] **Task 3.2.1: Create SkeletonStore interface in domain**
+[x] **Task 3.2.1: Create SkeletonStore interface in domain**
 
 **File:** `android/domain/src/main/java/com/lelloman/pezzottify/android/domain/skeleton/SkeletonStore.kt`
 
@@ -1102,7 +1102,7 @@ data class SkeletonChange(
 
 ---
 
-[ ] **Task 3.2.2: Implement SkeletonStoreImpl**
+[x] **Task 3.2.2: Implement SkeletonStoreImpl**
 
 **File:** `android/localdata/src/main/java/com/lelloman/pezzottify/android/localdata/internal/skeleton/SkeletonStoreImpl.kt`
 
@@ -1196,7 +1196,7 @@ class SkeletonStoreImpl @Inject constructor(
 
 ---
 
-[ ] **Task 3.2.3: Add SkeletonStore binding to LocalDataModule**
+[x] **Task 3.2.3: Add SkeletonStore binding to LocalDataModule**
 
 **File:** `android/localdata/src/main/java/com/lelloman/pezzottify/android/localdata/LocalDataModule.kt`
 
@@ -1566,8 +1566,8 @@ End-to-end test with catalog-server: sync, verify data, modify catalog, sync aga
 |-------|-------|--------|
 | 1. Server Data Model | 1.1.1 - 1.3.3 | 11/11 |
 | 2. Server Endpoints | 2.1.1 - 2.3.2 | 9/9 |
-| 3. Android Storage | 3.1.1 - 3.2.3 | 0/7 |
+| 3. Android Storage | 3.1.1 - 3.2.3 | 7/7 |
 | 4. Android Sync | 4.1.1 - 4.3.2 | 0/7 |
 | 5. Use Skeleton | 5.1.1 - 5.1.2 | 0/2 |
 | 6. Testing | 6.1.1 - 6.2.3 | 0/6 |
-| **Total** | | **20/42** |
+| **Total** | | **27/42** |

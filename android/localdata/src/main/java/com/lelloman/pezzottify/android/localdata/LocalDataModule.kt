@@ -5,6 +5,7 @@ import com.lelloman.pezzottify.android.domain.app.TimeProvider
 import com.lelloman.pezzottify.android.domain.auth.AuthStore
 import com.lelloman.pezzottify.android.domain.config.ConfigStore
 import com.lelloman.pezzottify.android.domain.settings.UserSettingsStore
+import com.lelloman.pezzottify.android.domain.skeleton.SkeletonStore
 import com.lelloman.pezzottify.android.domain.sync.SyncStateStore
 import com.lelloman.pezzottify.android.domain.statics.StaticsStore
 import com.lelloman.pezzottify.android.domain.statics.fetchstate.StaticItemFetchStateStore
@@ -18,6 +19,7 @@ import com.lelloman.pezzottify.android.localdata.internal.listening.ListeningEve
 import com.lelloman.pezzottify.android.localdata.internal.listening.ListeningEventStoreImpl
 import com.lelloman.pezzottify.android.localdata.internal.config.ConfigStoreImpl
 import com.lelloman.pezzottify.android.localdata.internal.settings.UserSettingsStoreImpl
+import com.lelloman.pezzottify.android.localdata.internal.skeleton.SkeletonStoreImpl
 import com.lelloman.pezzottify.android.localdata.internal.sync.SyncStateStoreImpl
 import com.lelloman.pezzottify.android.localdata.internal.statics.StaticsDb
 import com.lelloman.pezzottify.android.localdata.internal.statics.StaticsItemFetchStateStoreImpl
@@ -121,4 +123,10 @@ class LocalDataModule {
     fun providePermissionsStore(
         @ApplicationContext context: Context
     ): PermissionsStore = PermissionsStoreImpl(context)
+
+    @Provides
+    @Singleton
+    internal fun provideSkeletonStore(
+        staticsDb: StaticsDb
+    ): SkeletonStore = SkeletonStoreImpl(staticsDb.skeletonDao())
 }
