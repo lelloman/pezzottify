@@ -41,33 +41,27 @@ impl CatalogProxy {
 
     /// Check if a user can trigger downloads based on permission and preference.
     ///
-    /// Returns true if either:
-    /// A) User has IssueContentDownload permission AND enabled "enable_direct_downloads"
-    /// B) User has RequestContent permission AND enabled "enable_external_search"
-    ///
-    /// Option A is for full direct download (audio files), option B is for metadata-only
-    /// fetching when viewing external search results.
+    /// Returns true if user has RequestContent permission AND enabled "enable_external_search".
+    /// This is for metadata-only fetching when viewing external search results.
     fn can_user_trigger_download(&self, user_id: usize, permissions: &[Permission]) -> bool {
-        // Option A: IssueContentDownload + enable_direct_downloads
-        if permissions.contains(&Permission::IssueContentDownload) {
-            if let Ok(Some(UserSetting::DirectDownloadsEnabled(true))) = self
+        let has_request_content = permissions.contains(&Permission::RequestContent);
+        if has_request_content {
+            let setting = self
                 .user_store
-                .get_user_setting(user_id, "enable_direct_downloads")
-            {
+                .get_user_setting(user_id, "enable_external_search");
+            debug!(
+                "can_user_trigger_download: user_id={}, RequestContent=true, enable_external_search={:?}",
+                user_id, setting
+            );
+            if let Ok(Some(UserSetting::ExternalSearchEnabled(true))) = setting {
                 return true;
             }
         }
 
-        // Option B: RequestContent + enable_external_search
-        if permissions.contains(&Permission::RequestContent) {
-            if let Ok(Some(UserSetting::ExternalSearchEnabled(true))) = self
-                .user_store
-                .get_user_setting(user_id, "enable_external_search")
-            {
-                return true;
-            }
-        }
-
+        debug!(
+            "can_user_trigger_download: user_id={}, DENIED - RequestContent={}",
+            user_id, has_request_content
+        );
         false
     }
 
@@ -780,7 +774,7 @@ mod tests {
             Ok(())
         }
         fn resolve_user_permissions(&self, _user_id: usize) -> anyhow::Result<Vec<Permission>> {
-            Ok(vec![Permission::IssueContentDownload])
+            Ok(vec![Permission::RequestContent])
         }
         fn add_user_extra_permission(
             &self,
@@ -941,8 +935,8 @@ mod tests {
             _user_id: usize,
             key: &str,
         ) -> anyhow::Result<Option<UserSetting>> {
-            if key == "enable_direct_downloads" && self.downloads_enabled {
-                Ok(Some(UserSetting::DirectDownloadsEnabled(true)))
+            if key == "enable_external_search" && self.downloads_enabled {
+                Ok(Some(UserSetting::ExternalSearchEnabled(true)))
             } else {
                 Ok(None)
             }
@@ -1130,7 +1124,7 @@ mod tests {
         );
 
         // Artist doesn't exist in catalog, should fetch from downloader
-        let permissions = vec![Permission::IssueContentDownload];
+        let permissions = vec![Permission::RequestContent];
         let result = proxy
             .ensure_artist_complete("artist1", 1, &permissions)
             .await;
@@ -1183,7 +1177,7 @@ mod tests {
         );
 
         // Artist exists with related artists, should not call fetch_and_store_artist
-        let permissions = vec![Permission::IssueContentDownload];
+        let permissions = vec![Permission::RequestContent];
         let result = proxy
             .ensure_artist_complete("artist1", 1, &permissions)
             .await;
@@ -1219,7 +1213,7 @@ mod tests {
         );
 
         // Album doesn't exist, should fetch
-        let permissions = vec![Permission::IssueContentDownload];
+        let permissions = vec![Permission::RequestContent];
         let result = proxy.ensure_album_complete("album1", 1, &permissions).await;
         assert!(result.is_ok());
 
@@ -1604,8 +1598,14 @@ mod tests {
             _user_id: usize,
             key: &str,
         ) -> anyhow::Result<Option<UserSetting>> {
-            if key == "enable_direct_downloads" {
-                Ok(self.downloads_enabled_setting.clone())
+            if key == "enable_external_search" {
+                // Map downloads_enabled_setting to external search setting
+                match &self.downloads_enabled_setting {
+                    Some(UserSetting::DirectDownloadsEnabled(enabled)) => {
+                        Ok(Some(UserSetting::ExternalSearchEnabled(*enabled)))
+                    }
+                    _ => Ok(None),
+                }
             } else {
                 Ok(None)
             }
@@ -1706,7 +1706,7 @@ mod tests {
         // User has setting enabled but NO permission
         let user_store: Arc<dyn FullUserStore> = Arc::new(ConfigurableTestUserStore::new(
             Some(UserSetting::DirectDownloadsEnabled(true)),
-            vec![Permission::AccessCatalog], // Not IssueContentDownload
+            vec![Permission::AccessCatalog], // Not RequestContent
         ));
 
         mock_downloader.add_artist(create_test_artist("artist1", "Test Artist"));
@@ -1719,7 +1719,7 @@ mod tests {
         );
 
         // Should skip download due to missing permission
-        let permissions = vec![Permission::AccessCatalog]; // Not IssueContentDownload
+        let permissions = vec![Permission::AccessCatalog]; // Not RequestContent
         let result = proxy
             .ensure_artist_complete("artist1", 1, &permissions)
             .await;
@@ -1736,7 +1736,7 @@ mod tests {
         // User has permission but setting is NOT set (default disabled)
         let user_store: Arc<dyn FullUserStore> = Arc::new(ConfigurableTestUserStore::new(
             None, // Setting not set
-            vec![Permission::IssueContentDownload],
+            vec![Permission::RequestContent],
         ));
 
         mock_downloader.add_artist(create_test_artist("artist1", "Test Artist"));
@@ -1749,7 +1749,7 @@ mod tests {
         );
 
         // Should skip download due to setting not enabled
-        let permissions = vec![Permission::IssueContentDownload];
+        let permissions = vec![Permission::RequestContent];
         let result = proxy
             .ensure_artist_complete("artist1", 1, &permissions)
             .await;
@@ -1766,7 +1766,7 @@ mod tests {
         // User has permission but setting is explicitly false
         let user_store: Arc<dyn FullUserStore> = Arc::new(ConfigurableTestUserStore::new(
             Some(UserSetting::DirectDownloadsEnabled(false)),
-            vec![Permission::IssueContentDownload],
+            vec![Permission::RequestContent],
         ));
 
         mock_downloader.add_artist(create_test_artist("artist1", "Test Artist"));
@@ -1779,7 +1779,7 @@ mod tests {
         );
 
         // Should skip download due to setting being "false"
-        let permissions = vec![Permission::IssueContentDownload];
+        let permissions = vec![Permission::RequestContent];
         let result = proxy
             .ensure_artist_complete("artist1", 1, &permissions)
             .await;
@@ -1796,7 +1796,7 @@ mod tests {
         // User has both permission AND setting enabled
         let user_store: Arc<dyn FullUserStore> = Arc::new(ConfigurableTestUserStore::new(
             Some(UserSetting::DirectDownloadsEnabled(true)),
-            vec![Permission::IssueContentDownload],
+            vec![Permission::RequestContent],
         ));
 
         mock_downloader.add_artist(create_test_artist("artist1", "Test Artist"));
@@ -1809,7 +1809,7 @@ mod tests {
         );
 
         // Should trigger download since user has permission and setting
-        let permissions = vec![Permission::IssueContentDownload];
+        let permissions = vec![Permission::RequestContent];
         let result = proxy
             .ensure_artist_complete("artist1", 1, &permissions)
             .await;
@@ -1830,7 +1830,7 @@ mod tests {
         // User has NO permission
         let user_store: Arc<dyn FullUserStore> = Arc::new(ConfigurableTestUserStore::new(
             Some(UserSetting::DirectDownloadsEnabled(true)),
-            vec![Permission::AccessCatalog], // Not IssueContentDownload
+            vec![Permission::AccessCatalog], // Not RequestContent
         ));
 
         mock_downloader.add_artist(create_test_artist("artist1", "Test Artist"));

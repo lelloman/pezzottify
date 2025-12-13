@@ -294,7 +294,6 @@ class SettingsScreenViewModelTest {
         private var _cacheEnabled = true
         private var _storageInfo: StorageInfo? = null
         private var _directDownloadsEnabled = false
-        private var _hasIssueContentDownloadPermission = false
         private var _externalSearchEnabled = false
         private var _hasRequestContentPermission = false
         private var _fileLoggingEnabled = false

@@ -10,8 +10,6 @@ Add server-synced user settings to the Android app, built on top of the multi-de
 - Settings changes via `PUT /v1/user/settings` generate `setting_changed` sync events
 - Cursor-based catch-up on reconnection
 
-The `enable_direct_downloads` setting is only visible to users with `IssueContentDownload` permission.
-
 ---
 
 ## API Contract (from SYNC)
@@ -91,7 +89,6 @@ enum class Permission {
     OwnPlaylists,
     EditCatalog,
     ManagePermissions,
-    IssueContentDownload,
     ServerAdmin,
     ViewAnalytics;
 
@@ -907,9 +904,6 @@ class SettingsScreenInteractor @Inject constructor(
             UpdateDirectDownloadsSetting.Result.Error -> false
         }
     }
-
-    override fun hasDirectDownloadPermission(): Boolean =
-        Permission.IssueContentDownload in syncStateStore.permissions.value
 
     override fun observePermissions(): Flow<Set<Permission>> =
         syncStateStore.permissions

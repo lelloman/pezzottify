@@ -91,7 +91,6 @@ internal class UserSettingsStoreImpl(
         val enabled = prefs.getBoolean(KEY_DIRECT_DOWNLOADS_ENABLED, DEFAULT_DIRECT_DOWNLOADS_ENABLED)
         MutableStateFlow(enabled)
     }
-    override val directDownloadsEnabled: StateFlow<Boolean> = mutableDirectDownloadsEnabled.asStateFlow()
 
     // Track sync status for synced settings (key -> SyncedUserSetting)
     private val mutableSyncedSettings by lazy {

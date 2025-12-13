@@ -217,8 +217,6 @@ class InteractorsModule {
 
         override fun getStorageInfo(): UiStorageInfo = storageMonitor.storageInfo.value.toUi()
 
-        override fun isDirectDownloadsEnabled(): Boolean = userSettingsStore.directDownloadsEnabled.value
-
         override fun isExternalSearchEnabled(): Boolean = userSettingsStore.isExternalSearchEnabled.value
 
         override fun hasRequestContentPermission(): Boolean =
@@ -233,8 +231,6 @@ class InteractorsModule {
         override fun observeCacheEnabled() = userSettingsStore.isInMemoryCacheEnabled
 
         override fun observeStorageInfo(): Flow<UiStorageInfo> = storageMonitor.storageInfo.map { it.toUi() }
-
-        override fun observeDirectDownloadsEnabled(): Flow<Boolean> = userSettingsStore.directDownloadsEnabled
 
         override fun observeExternalSearchEnabled(): Flow<Boolean> = userSettingsStore.isExternalSearchEnabled
 
@@ -255,11 +251,6 @@ class InteractorsModule {
 
         override suspend fun setCacheEnabled(enabled: Boolean) {
             userSettingsStore.setInMemoryCacheEnabled(enabled)
-        }
-
-        override suspend fun setDirectDownloadsEnabled(enabled: Boolean): Boolean {
-            updateDirectDownloadsSetting(enabled)
-            return true // Setting is saved locally and synced in background
         }
 
         override suspend fun setExternalSearchEnabled(enabled: Boolean) {

@@ -279,7 +279,7 @@ mod tests {
     #[test]
     fn test_permission_revoked_serialization() {
         let event = UserEvent::PermissionRevoked {
-            permission: Permission::IssueContentDownload,
+            permission: Permission::RequestContent,
         };
         let json = serde_json::to_string(&event).unwrap();
         assert!(json.contains("permission_revoked"));

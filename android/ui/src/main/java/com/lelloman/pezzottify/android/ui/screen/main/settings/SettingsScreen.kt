@@ -155,17 +155,6 @@ private fun SettingsScreenInternal(
                 onForceResync = actions::forceSkeletonResync
             )
 
-            // Direct Downloads Section - only shown if user has permission
-            if (currentState.hasIssueContentDownloadPermission) {
-                HorizontalDivider(modifier = Modifier.padding(vertical = 24.dp))
-
-                DirectDownloadsSection(
-                    isEnabled = currentState.directDownloadsEnabled,
-                    hasPermission = currentState.hasIssueContentDownloadPermission,
-                    onEnabledChanged = actions::setDirectDownloadsEnabled
-                )
-            }
-
             // External Search Section - only shown if user has RequestContent permission
             if (currentState.hasRequestContentPermission) {
                 HorizontalDivider(modifier = Modifier.padding(vertical = 24.dp))
@@ -240,7 +229,6 @@ private fun SettingsScreenPreview() {
                 override fun selectColorPalette(colorPalette: ColorPalette) {}
                 override fun selectFontFamily(fontFamily: AppFontFamily) {}
                 override fun setCacheEnabled(enabled: Boolean) {}
-                override fun setDirectDownloadsEnabled(enabled: Boolean) {}
                 override fun setExternalSearchEnabled(enabled: Boolean) {}
                 override fun setFileLoggingEnabled(enabled: Boolean) {}
                 override fun shareLogs() {}
@@ -273,7 +261,6 @@ private fun SettingsScreenPreviewDark() {
                 override fun selectColorPalette(colorPalette: ColorPalette) {}
                 override fun selectFontFamily(fontFamily: AppFontFamily) {}
                 override fun setCacheEnabled(enabled: Boolean) {}
-                override fun setDirectDownloadsEnabled(enabled: Boolean) {}
                 override fun setExternalSearchEnabled(enabled: Boolean) {}
                 override fun setFileLoggingEnabled(enabled: Boolean) {}
                 override fun shareLogs() {}

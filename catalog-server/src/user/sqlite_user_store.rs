@@ -3431,7 +3431,6 @@ mod tests {
         assert!(permissions.contains(&Permission::OwnPlaylists));
         assert!(permissions.contains(&Permission::EditCatalog));
         assert!(permissions.contains(&Permission::ManagePermissions));
-        assert!(permissions.contains(&Permission::IssueContentDownload));
         assert!(permissions.contains(&Permission::ServerAdmin));
     }
 
@@ -4962,7 +4961,7 @@ mod tests {
                 permission: Permission::EditCatalog,
             },
             UserEvent::PermissionRevoked {
-                permission: Permission::IssueContentDownload,
+                permission: Permission::RequestContent,
             },
             UserEvent::PermissionsReset {
                 permissions: vec![Permission::AccessCatalog, Permission::LikeContent],

@@ -26,12 +26,6 @@ interface UserSettingsStore {
      */
     val isExternalModeEnabled: StateFlow<Boolean>
 
-    /**
-     * Whether direct downloads are enabled.
-     * This setting is synced with the server and is only visible to users with IssueContentDownload permission.
-     */
-    val directDownloadsEnabled: StateFlow<Boolean>
-
     suspend fun setThemeMode(themeMode: ThemeMode)
     suspend fun setColorPalette(colorPalette: ColorPalette)
     suspend fun setFontFamily(fontFamily: AppFontFamily)
