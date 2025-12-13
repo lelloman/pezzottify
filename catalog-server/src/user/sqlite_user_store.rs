@@ -804,6 +804,27 @@ pub const VERSIONED_SCHEMAS: &[VersionedSchema] = &[
             Ok(())
         }),
     },
+    // V10: No-op migration to maintain compatibility with databases
+    // that were migrated when direct download feature was temporarily removed
+    VersionedSchema {
+        version: 10,
+        tables: &[
+            USER_TABLE_V_0,
+            LIKED_CONTENT_TABLE_V_2,
+            AUTH_TOKEN_TABLE_V_8,
+            USER_PASSWORD_CREDENTIALS_V_0,
+            USER_PLAYLIST_TABLE_V_3,
+            USER_PLAYLIST_TRACKS_TABLE_V_3,
+            USER_ROLE_TABLE_V_4,
+            USER_EXTRA_PERMISSION_TABLE_V_4,
+            BANDWIDTH_USAGE_TABLE_V_5,
+            LISTENING_EVENTS_TABLE_V_6,
+            USER_SETTINGS_TABLE_V_7,
+            DEVICE_TABLE_V_8,
+            USER_EVENTS_TABLE_V_9,
+        ],
+        migration: Some(|_conn: &Connection| Ok(())),
+    },
 ];
 
 /// A random A-z0-9 string
@@ -2982,16 +3003,16 @@ mod tests {
             assert_eq!(db_version, BASE_DB_VERSION as i64 + 3);
         }
 
-        // Now open with SqliteUserStore, which should trigger migration to latest (V9)
+        // Now open with SqliteUserStore, which should trigger migration to latest (V10)
         let store = SqliteUserStore::new(&temp_file_path).unwrap();
 
-        // Verify we're now at the latest version (V9)
+        // Verify we're now at the latest version (V10)
         {
             let conn = store.conn.lock().unwrap();
             let db_version: i64 = conn
                 .query_row("PRAGMA user_version;", [], |row| row.get(0))
                 .unwrap();
-            assert_eq!(db_version, BASE_DB_VERSION as i64 + 9);
+            assert_eq!(db_version, BASE_DB_VERSION as i64 + 10);
 
             // Verify new tables exist
             let user_role_table_exists: i64 = conn
@@ -3133,13 +3154,13 @@ mod tests {
         // Now open with SqliteUserStore, which should trigger migration to latest
         let store = SqliteUserStore::new(&temp_file_path).unwrap();
 
-        // Verify we're now at the latest version
+        // Verify we're now at the latest version (V10)
         {
             let conn = store.conn.lock().unwrap();
             let db_version: i64 = conn
                 .query_row("PRAGMA user_version;", [], |row| row.get(0))
                 .unwrap();
-            assert_eq!(db_version, BASE_DB_VERSION as i64 + 9);
+            assert_eq!(db_version, BASE_DB_VERSION as i64 + 10);
 
             // Verify device table exists
             let device_table_exists: i64 = conn
