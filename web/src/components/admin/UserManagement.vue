@@ -331,7 +331,6 @@ const availablePermissions = [
   "OwnPlaylists",
   "EditCatalog",
   "ManagePermissions",
-  "IssueContentDownload",
   "ServerAdmin",
   "ViewAnalytics",
   "RequestContent",

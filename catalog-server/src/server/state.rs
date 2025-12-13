@@ -9,7 +9,6 @@ use crate::user::UserManager;
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
-use super::proxy::CatalogProxy;
 use super::websocket::ConnectionManager;
 use super::ServerConfig;
 
@@ -17,7 +16,6 @@ pub type GuardedCatalogStore = Arc<dyn CatalogStore>;
 pub type GuardedSearchVault = Arc<Mutex<Box<dyn SearchVault>>>;
 pub type GuardedUserManager = Arc<Mutex<UserManager>>;
 pub type OptionalDownloader = Option<Arc<dyn Downloader>>;
-pub type OptionalProxy = Option<Arc<CatalogProxy>>;
 pub type GuardedConnectionManager = Arc<ConnectionManager>;
 pub type OptionalSchedulerHandle = Option<SchedulerHandle>;
 pub type OptionalDownloadManager = Option<Arc<DownloadManager>>;
@@ -30,7 +28,6 @@ pub struct ServerState {
     pub search_vault: Arc<Mutex<Box<dyn SearchVault>>>,
     pub user_manager: GuardedUserManager,
     pub downloader: OptionalDownloader,
-    pub proxy: OptionalProxy,
     pub ws_connection_manager: GuardedConnectionManager,
     pub scheduler_handle: OptionalSchedulerHandle,
     pub download_manager: OptionalDownloadManager,
@@ -67,12 +64,6 @@ impl FromRef<ServerState> for ServerConfig {
 impl FromRef<ServerState> for OptionalDownloader {
     fn from_ref(input: &ServerState) -> Self {
         input.downloader.clone()
-    }
-}
-
-impl FromRef<ServerState> for OptionalProxy {
-    fn from_ref(input: &ServerState) -> Self {
-        input.proxy.clone()
     }
 }
 

@@ -1,7 +1,6 @@
 pub mod config;
 mod http_layers;
 pub mod metrics;
-pub mod proxy;
 mod search;
 #[allow(clippy::module_inception)]
 pub mod server;

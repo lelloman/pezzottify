@@ -865,11 +865,11 @@ mod tests {
                 thread::spawn(move || {
                     for j in 0..operations_per_thread {
                         // Alternate between set_user_setting and get operations
-                        let setting = UserSetting::DirectDownloadsEnabled(j % 2 == 0);
+                        let setting = UserSetting::ExternalSearchEnabled(j % 2 == 0);
                         manager.set_user_setting(user_id, setting).unwrap();
                         let _ = manager.get_all_user_settings(user_id).unwrap();
                         let _ = manager
-                            .get_user_setting(user_id, "enable_direct_downloads")
+                            .get_user_setting(user_id, "enable_external_search")
                             .unwrap();
                     }
                 })
@@ -906,7 +906,7 @@ mod tests {
                     let enabled = i % 2 == 0;
                     for _ in 0..5 {
                         manager
-                            .set_user_setting(user_id, UserSetting::DirectDownloadsEnabled(enabled))
+                            .set_user_setting(user_id, UserSetting::ExternalSearchEnabled(enabled))
                             .unwrap();
                     }
                 })
@@ -919,11 +919,11 @@ mod tests {
 
         // Verify the setting exists and is valid (either true or false)
         let setting = manager
-            .get_user_setting(user_id, "enable_direct_downloads")
+            .get_user_setting(user_id, "enable_external_search")
             .unwrap();
         assert!(matches!(
             setting,
-            Some(UserSetting::DirectDownloadsEnabled(_))
+            Some(UserSetting::ExternalSearchEnabled(_))
         ));
     }
 
@@ -937,7 +937,7 @@ mod tests {
 
         // Initialize the setting
         manager
-            .set_user_setting(user_id, UserSetting::DirectDownloadsEnabled(false))
+            .set_user_setting(user_id, UserSetting::ExternalSearchEnabled(false))
             .unwrap();
 
         let num_readers = 4;
@@ -951,7 +951,7 @@ mod tests {
             handles.push(thread::spawn(move || {
                 for _ in 0..10 {
                     let _ = manager
-                        .get_user_setting(user_id, "enable_direct_downloads")
+                        .get_user_setting(user_id, "enable_external_search")
                         .unwrap();
                     let _ = manager.get_all_user_settings(user_id).unwrap();
                 }
@@ -965,7 +965,7 @@ mod tests {
                 for j in 0..5 {
                     let enabled = (i + j) % 2 == 0;
                     manager
-                        .set_user_setting(user_id, UserSetting::DirectDownloadsEnabled(enabled))
+                        .set_user_setting(user_id, UserSetting::ExternalSearchEnabled(enabled))
                         .unwrap();
                 }
             }));
@@ -999,7 +999,7 @@ mod tests {
                         manager
                             .set_user_setting(
                                 user_id,
-                                UserSetting::DirectDownloadsEnabled(j % 2 == 0),
+                                UserSetting::ExternalSearchEnabled(j % 2 == 0),
                             )
                             .unwrap();
                         let _ = manager.get_all_user_settings(user_id).unwrap();
