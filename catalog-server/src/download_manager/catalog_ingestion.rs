@@ -89,12 +89,17 @@ pub fn ingest_album(
     }
 
     // 3. Now link artists to album (album must exist first)
+    let artist_ids: Vec<String> = artists.iter().map(|a| a.id.clone()).collect();
     for (position, artist) in artists.iter().enumerate() {
         // Link artist to album (ignore error if already linked)
         let _ = catalog_store.add_album_artist(&album_id, &artist.id, position as i32);
     }
 
-    // 4. Insert album cover images (merge covers + cover_group)
+    // 4. Emit skeleton event for the album with artist IDs
+    // This must be done AFTER linking artists so clients can associate the album with its artists
+    catalog_store.emit_album_skeleton_event(&album_id, &artist_ids)?;
+
+    // 5. Insert album cover images (merge covers + cover_group)
     let all_covers = merge_images(&album.covers, &album.cover_group);
     for (position, cover) in all_covers.iter().enumerate() {
         if !catalog_store.image_exists(&cover.id)? {
@@ -111,7 +116,7 @@ pub fn ingest_album(
         let _ = catalog_store.set_album_display_image(&album_id, &best.id);
     }
 
-    // 5. Insert tracks (links to album and artists)
+    // 6. Insert tracks (links to album and artists)
     // Skip tracks that already exist (e.g., re-download or retry)
     for track in tracks {
         if !catalog_store.track_exists(&track.id)? {
@@ -159,7 +164,7 @@ pub fn ingest_album(
         }
     }
 
-    // 6. Return info needed for child creation
+    // 7. Return info needed for child creation
     Ok(IngestedAlbum {
         album_id,
         track_ids,

@@ -23,4 +23,12 @@ data class SettingsScreenState(
     val baseUrlInput: String = "",
     @StringRes val baseUrlErrorRes: Int? = null,
     val isBaseUrlSaving: Boolean = false,
+    val isSkeletonResyncing: Boolean = false,
+    val skeletonResyncResult: SkeletonResyncResult? = null,
 )
+
+sealed interface SkeletonResyncResult {
+    data object Success : SkeletonResyncResult
+    data object AlreadyUpToDate : SkeletonResyncResult
+    data class Failed(val error: String) : SkeletonResyncResult
+}

@@ -12,8 +12,8 @@ import com.lelloman.pezzottify.android.logger.LoggerFactory
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
 import kotlin.coroutines.CoroutineContext
@@ -206,56 +206,25 @@ class StaticsProvider internal constructor(
     }
 
     fun provideDiscography(artistId: String): StaticsItemFlow<ArtistDiscography> {
-        // First try to get discography from skeleton (instant, local data)
-        val skeletonFlow = flow {
-            val albumIds = skeletonStore.getAlbumIdsForArtist(artistId)
-            emit(albumIds)
+        // Skeleton is the source of truth for artist-album relationships
+        return skeletonStore.observeAlbumIdsForArtist(artistId).map { skeletonAlbumIds ->
+            val output = if (skeletonAlbumIds.isNotEmpty()) {
+                logger.debug("provideDiscography($artistId) skeleton has ${skeletonAlbumIds.size} albums")
+                StaticsItem.Loaded(
+                    artistId,
+                    object : ArtistDiscography {
+                        override val artistId = artistId
+                        override val albumsIds = skeletonAlbumIds
+                        override val featuresIds = emptyList<String>()
+                    }
+                )
+            } else {
+                // No skeleton data yet - show loading (skeleton sync should populate this)
+                logger.debug("provideDiscography($artistId) no skeleton data, showing loading")
+                StaticsItem.Loading(artistId)
+            }
+            output
         }
-
-        return staticsStore.getDiscography(artistId)
-            .combine(staticItemFetchStateStore.get(artistId)) { discography, fetchState ->
-                Pair(discography, fetchState)
-            }
-            .combine(skeletonFlow) { (discography, fetchState), skeletonAlbumIds ->
-                val output = when {
-                    // If we have discography from local store, use it (includes features)
-                    discography != null -> StaticsItem.Loaded(
-                        artistId,
-                        discography
-                    )
-
-                    // If skeleton has album IDs, use them (fast path, no network)
-                    skeletonAlbumIds.isNotEmpty() -> {
-                        logger.debug("provideDiscography($artistId) using skeleton data: ${skeletonAlbumIds.size} albums")
-                        StaticsItem.Loaded(
-                            artistId,
-                            object : ArtistDiscography {
-                                override val artistId = artistId
-                                override val albumsIds = skeletonAlbumIds
-                                override val featuresIds = emptyList<String>() // Skeleton doesn't track features
-                            }
-                        )
-                    }
-
-                    fetchState?.isLoading == true -> StaticsItem.Loading(artistId)
-                    fetchState?.errorReason != null -> {
-                        if (fetchState.isBackoffExpired()) {
-                            scheduleItemFetch(artistId, StaticItemType.Discography)
-                        }
-                        StaticsItem.Error(
-                            artistId,
-                            Throwable("${fetchState.errorReason}")
-                        )
-                    }
-
-                    else -> {
-                        scheduleItemFetch(artistId, StaticItemType.Discography)
-                        StaticsItem.Loading(artistId)
-                    }
-                }
-                logger.debug("provideDiscography($artistId) newOutput = $output")
-                output
-            }
     }
 
     fun clearCache() {

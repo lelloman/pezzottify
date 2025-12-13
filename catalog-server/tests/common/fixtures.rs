@@ -96,9 +96,11 @@ pub fn create_test_catalog() -> Result<(TempDir, PathBuf, PathBuf)> {
     store.insert_album(&album1)?;
     store.insert_album(&album2)?;
 
-    // Link albums to artists
+    // Link albums to artists and emit skeleton events
     store.add_album_artist(ALBUM_1_ID, ARTIST_1_ID, 0)?;
+    store.emit_album_skeleton_event(ALBUM_1_ID, &[ARTIST_1_ID.to_string()])?;
     store.add_album_artist(ALBUM_2_ID, ARTIST_2_ID, 0)?;
+    store.emit_album_skeleton_event(ALBUM_2_ID, &[ARTIST_2_ID.to_string()])?;
 
     // Insert tracks for album 1 (use IDs from constants: T1, T2, T3)
     let tracks_album1 = [

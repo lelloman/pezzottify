@@ -31,6 +31,9 @@ internal class SkeletonStoreImpl @Inject constructor(
             skeletonDao.getAlbumIdsForArtist(artistId)
         }
 
+    override fun observeAlbumIdsForArtist(artistId: String): kotlinx.coroutines.flow.Flow<List<String>> =
+        skeletonDao.observeAlbumIdsForArtist(artistId)
+
     override suspend fun getTrackIdsForAlbum(albumId: String): List<String> =
         withContext(Dispatchers.IO) {
             skeletonDao.getTrackIdsForAlbum(albumId)

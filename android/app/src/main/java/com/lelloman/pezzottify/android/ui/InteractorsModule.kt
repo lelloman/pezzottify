@@ -182,6 +182,7 @@ class InteractorsModule {
         updateExternalSearchSetting: UpdateExternalSearchSetting,
         logFileManager: LogFileManager,
         configStore: ConfigStore,
+        catalogSkeletonSyncer: com.lelloman.pezzottify.android.domain.skeleton.CatalogSkeletonSyncer,
     ): SettingsScreenViewModel.Interactor = object : SettingsScreenViewModel.Interactor {
         override fun getThemeMode(): UiThemeMode = userSettingsStore.themeMode.value.toUi()
 
@@ -271,6 +272,17 @@ class InteractorsModule {
                 ConfigStore.SetBaseUrlResult.Success -> SettingsScreenViewModel.SetBaseUrlResult.Success
                 ConfigStore.SetBaseUrlResult.InvalidUrl -> SettingsScreenViewModel.SetBaseUrlResult.InvalidUrl
             }
+
+        override suspend fun forceSkeletonResync(): com.lelloman.pezzottify.android.ui.screen.main.settings.SkeletonResyncResult {
+            return when (val result = catalogSkeletonSyncer.forceFullSync()) {
+                is com.lelloman.pezzottify.android.domain.skeleton.CatalogSkeletonSyncer.SyncResult.Success ->
+                    com.lelloman.pezzottify.android.ui.screen.main.settings.SkeletonResyncResult.Success
+                is com.lelloman.pezzottify.android.domain.skeleton.CatalogSkeletonSyncer.SyncResult.AlreadyUpToDate ->
+                    com.lelloman.pezzottify.android.ui.screen.main.settings.SkeletonResyncResult.AlreadyUpToDate
+                is com.lelloman.pezzottify.android.domain.skeleton.CatalogSkeletonSyncer.SyncResult.Failed ->
+                    com.lelloman.pezzottify.android.ui.screen.main.settings.SkeletonResyncResult.Failed(result.error)
+            }
+        }
     }
 
     @Provides

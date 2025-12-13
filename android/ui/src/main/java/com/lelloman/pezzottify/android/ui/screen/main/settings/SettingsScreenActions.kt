@@ -27,4 +27,6 @@ interface SettingsScreenActions {
     fun onBaseUrlInputChanged(input: String)
 
     fun saveBaseUrl()
+
+    fun forceSkeletonResync()
 }
