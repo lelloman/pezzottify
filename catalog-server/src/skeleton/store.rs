@@ -129,7 +129,7 @@ impl SkeletonEventStore {
         let events = stmt
             .query_map(params![seq], |row| {
                 let event_type_str: String = row.get(1)?;
-                let event_type = SkeletonEventType::from_str(&event_type_str)
+                let event_type = SkeletonEventType::parse(&event_type_str)
                     .unwrap_or(SkeletonEventType::ArtistAdded);
 
                 Ok(SkeletonEvent {
@@ -240,7 +240,11 @@ mod tests {
         assert_eq!(version, 1);
 
         let version = store
-            .emit_event(SkeletonEventType::AlbumAdded, "album1", Some(r#"{"artist_ids":["artist1"]}"#))
+            .emit_event(
+                SkeletonEventType::AlbumAdded,
+                "album1",
+                Some(r#"{"artist_ids":["artist1"]}"#),
+            )
             .unwrap();
         assert_eq!(version, 2);
 
@@ -258,7 +262,11 @@ mod tests {
             .emit_event(SkeletonEventType::ArtistAdded, "artist2", None)
             .unwrap();
         store
-            .emit_event(SkeletonEventType::AlbumAdded, "album1", Some(r#"{"artist_ids":["artist1"]}"#))
+            .emit_event(
+                SkeletonEventType::AlbumAdded,
+                "album1",
+                Some(r#"{"artist_ids":["artist1"]}"#),
+            )
             .unwrap();
 
         let events = store.get_events_since(0).unwrap();
@@ -279,7 +287,10 @@ mod tests {
         assert!(store.get_checksum().unwrap().is_none());
 
         store.set_checksum("sha256:abc123").unwrap();
-        assert_eq!(store.get_checksum().unwrap(), Some("sha256:abc123".to_string()));
+        assert_eq!(
+            store.get_checksum().unwrap(),
+            Some("sha256:abc123".to_string())
+        );
 
         // Emit event should invalidate checksum
         store
@@ -313,7 +324,11 @@ mod tests {
 
         let artist_ids = vec!["artist1".to_string(), "artist2".to_string()];
         let album_ids = vec!["album1".to_string()];
-        let track_ids = vec!["track1".to_string(), "track2".to_string(), "track3".to_string()];
+        let track_ids = vec![
+            "track1".to_string(),
+            "track2".to_string(),
+            "track3".to_string(),
+        ];
 
         let checksum = store
             .calculate_and_set_checksum(&artist_ids, &album_ids, &track_ids)

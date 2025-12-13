@@ -14,7 +14,9 @@ use super::schema::CATALOG_VERSIONED_SCHEMAS;
 use super::validation::{
     validate_album, validate_artist, validate_image, validate_track, ValidationError,
 };
-use crate::skeleton::{AlbumAddedPayload, SkeletonEventStore, SkeletonEventType, TrackAddedPayload};
+use crate::skeleton::{
+    AlbumAddedPayload, SkeletonEventStore, SkeletonEventType, TrackAddedPayload,
+};
 use crate::sqlite_persistence::BASE_DB_VERSION;
 use anyhow::{bail, Context, Result};
 use rusqlite::{params, Connection};
@@ -913,9 +915,7 @@ impl SqliteCatalogStore {
         // Emit skeleton event
         // Note: artist_ids is empty here because artists are linked separately via add_album_artist.
         // For accurate relationships, clients should perform a full skeleton sync.
-        let payload = AlbumAddedPayload {
-            artist_ids: vec![],
-        };
+        let payload = AlbumAddedPayload { artist_ids: vec![] };
         drop(conn);
         self.skeleton_events.emit_event(
             SkeletonEventType::AlbumAdded,
@@ -2290,8 +2290,8 @@ impl CatalogStore for SqliteCatalogStore {
             .query_map([], |row| row.get(0))?
             .collect::<std::result::Result<Vec<_>, _>>()?;
 
-        let mut artist_stmt =
-            conn.prepare("SELECT artist_id FROM album_artists WHERE album_id = ?1 ORDER BY position")?;
+        let mut artist_stmt = conn
+            .prepare("SELECT artist_id FROM album_artists WHERE album_id = ?1 ORDER BY position")?;
 
         let mut albums = Vec::with_capacity(album_ids.len());
         for album_id in album_ids {
