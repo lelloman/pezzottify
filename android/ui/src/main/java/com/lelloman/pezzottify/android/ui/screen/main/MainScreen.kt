@@ -1,5 +1,6 @@
 package com.lelloman.pezzottify.android.ui.screen.main
 
+import androidx.activity.compose.BackHandler
 import androidx.annotation.StringRes
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -143,6 +144,11 @@ private fun MainScreenContent(state: MainScreenState, actions: MainScreenActions
             drawerState.open()
             shouldRestoreDrawer = false
         }
+    }
+
+    // Close drawer on back press instead of exiting the app
+    BackHandler(enabled = drawerState.isOpen) {
+        drawerScope.launch { drawerState.close() }
     }
 
     ModalNavigationDrawer(
