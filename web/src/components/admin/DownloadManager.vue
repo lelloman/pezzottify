@@ -265,6 +265,95 @@
       </table>
     </div>
 
+    <!-- Statistics Tab -->
+    <div v-if="activeTab === 'statistics'" class="tabContent">
+      <!-- Period Selector -->
+      <div class="periodSelector">
+        <button
+          v-for="p in periods"
+          :key="p.id"
+          class="periodButton"
+          :class="{ active: selectedPeriod === p.id }"
+          @click="selectPeriod(p.id)"
+        >
+          {{ p.label }}
+        </button>
+      </div>
+
+      <!-- Totals Summary Cards -->
+      <div v-if="statsHistory" class="statsTotals">
+        <div class="totalCard">
+          <span class="totalValue">{{ statsHistory.total_albums }}</span>
+          <span class="totalLabel">Albums</span>
+        </div>
+        <div class="totalCard">
+          <span class="totalValue">{{ statsHistory.total_tracks }}</span>
+          <span class="totalLabel">Tracks</span>
+        </div>
+        <div class="totalCard">
+          <span class="totalValue">{{ statsHistory.total_images }}</span>
+          <span class="totalLabel">Images</span>
+        </div>
+        <div class="totalCard">
+          <span class="totalValue">{{ formatBytes(statsHistory.total_bytes) }}</span>
+          <span class="totalLabel">Downloaded</span>
+        </div>
+        <div class="totalCard totalFailures">
+          <span class="totalValue">{{ statsHistory.total_failures }}</span>
+          <span class="totalLabel">Failures</span>
+        </div>
+      </div>
+
+      <!-- Downloads Chart -->
+      <div v-if="statsHistory" class="chartSection">
+        <h4 class="chartTitle">Downloads Over Time</h4>
+        <div class="chartContainer">
+          <Line
+            v-if="downloadsChartData"
+            :data="downloadsChartData"
+            :options="lineChartOptions"
+          />
+          <div v-else class="noData">No data available for this period.</div>
+        </div>
+      </div>
+
+      <!-- Data Table -->
+      <div v-if="statsHistory?.entries?.length > 0" class="tableSection">
+        <h4 class="chartTitle">Period Breakdown</h4>
+        <div class="tableWrapper">
+          <table class="dataTable">
+            <thead>
+              <tr>
+                <th>Period</th>
+                <th>Albums</th>
+                <th>Tracks</th>
+                <th>Images</th>
+                <th>Size</th>
+                <th>Failures</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="entry in statsHistory.entries" :key="entry.period_start">
+                <td>{{ formatPeriodDate(entry.period_start) }}</td>
+                <td>{{ entry.albums }}</td>
+                <td>{{ entry.tracks }}</td>
+                <td>{{ entry.images }}</td>
+                <td>{{ formatBytes(entry.bytes) }}</td>
+                <td :class="{ 'text-danger': entry.failures > 0 }">{{ entry.failures }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div v-if="!statsHistory && !isLoadingStats" class="emptyState">
+        No statistics data available.
+      </div>
+      <div v-if="isLoadingStats" class="emptyState">
+        Loading statistics...
+      </div>
+    </div>
+
     <!-- Download Request Modal -->
     <div v-if="showDownloadModal" class="detailOverlay" @click.self="closeDownloadModal">
       <div class="detailPanel downloadModal">
@@ -359,8 +448,32 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted, onUnmounted } from "vue";
+import { ref, reactive, computed, onMounted, onUnmounted, watch } from "vue";
+import { Line } from "vue-chartjs";
+import {
+  Chart as ChartJS,
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  Title,
+  Tooltip,
+  Legend,
+  Filler,
+} from "chart.js";
 import { useRemoteStore } from "@/store/remote";
+
+// Register Chart.js components
+ChartJS.register(
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  Title,
+  Tooltip,
+  Legend,
+  Filler,
+);
 
 const remoteStore = useRemoteStore();
 
@@ -464,11 +577,147 @@ const itemToDelete = ref(null);
 const isDeleting = ref(false);
 const deleteError = ref(null);
 
+// Statistics state
+const selectedPeriod = ref("daily");
+const statsHistory = ref(null);
+const isLoadingStats = ref(false);
+
+const periods = [
+  { id: "hourly", label: "Last 48 Hours" },
+  { id: "daily", label: "Last 30 Days" },
+  { id: "weekly", label: "Last 12 Weeks" },
+];
+
+const loadStatsHistory = async () => {
+  isLoadingStats.value = true;
+  const result = await remoteStore.fetchDownloadStatsHistory(selectedPeriod.value);
+  statsHistory.value = result;
+  isLoadingStats.value = false;
+};
+
+const selectPeriod = async (period) => {
+  selectedPeriod.value = period;
+  await loadStatsHistory();
+};
+
+// Watch for tab change to load statistics when needed
+watch(
+  () => activeTab.value,
+  async (newTab) => {
+    if (newTab === "statistics" && !statsHistory.value) {
+      await loadStatsHistory();
+    }
+  },
+);
+
+// Chart configuration
+const formatPeriodDate = (timestamp) => {
+  const date = new Date(timestamp * 1000);
+  if (selectedPeriod.value === "hourly") {
+    return date.toLocaleString(undefined, {
+      month: "short",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  } else if (selectedPeriod.value === "weekly") {
+    return `Week of ${date.toLocaleDateString(undefined, { month: "short", day: "numeric" })}`;
+  }
+  return date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+};
+
+const downloadsChartData = computed(() => {
+  if (!statsHistory.value?.entries?.length) return null;
+
+  const entries = statsHistory.value.entries;
+  const labels = entries.map((e) => formatPeriodDate(e.period_start));
+
+  return {
+    labels,
+    datasets: [
+      {
+        label: "Albums",
+        data: entries.map((e) => e.albums),
+        borderColor: "#1db954",
+        backgroundColor: "rgba(29, 185, 84, 0.1)",
+        fill: true,
+        tension: 0.3,
+      },
+      {
+        label: "Tracks",
+        data: entries.map((e) => e.tracks),
+        borderColor: "#3b82f6",
+        backgroundColor: "rgba(59, 130, 246, 0.1)",
+        fill: true,
+        tension: 0.3,
+      },
+      {
+        label: "Failures",
+        data: entries.map((e) => e.failures),
+        borderColor: "#dc2626",
+        backgroundColor: "rgba(220, 38, 38, 0.1)",
+        fill: true,
+        tension: 0.3,
+      },
+    ],
+  };
+});
+
+const lineChartOptions = {
+  responsive: true,
+  maintainAspectRatio: false,
+  interaction: {
+    mode: "index",
+    intersect: false,
+  },
+  plugins: {
+    legend: {
+      position: "top",
+      labels: {
+        color: "#a1a1aa",
+        usePointStyle: true,
+        padding: 16,
+      },
+    },
+    tooltip: {
+      backgroundColor: "#27272a",
+      titleColor: "#fafafa",
+      bodyColor: "#a1a1aa",
+      borderColor: "#3f3f46",
+      borderWidth: 1,
+      padding: 12,
+    },
+  },
+  scales: {
+    x: {
+      grid: {
+        color: "rgba(63, 63, 70, 0.3)",
+      },
+      ticks: {
+        color: "#a1a1aa",
+        maxRotation: 45,
+        minRotation: 45,
+      },
+    },
+    y: {
+      grid: {
+        color: "rgba(63, 63, 70, 0.3)",
+      },
+      ticks: {
+        color: "#a1a1aa",
+        precision: 0,
+      },
+      beginAtZero: true,
+    },
+  },
+};
+
 const tabs = computed(() => [
   { id: "queue", label: "Queue", count: queueItems.value.length },
   { id: "failed", label: "Failed", count: failedItems.value.length },
   { id: "downloaded", label: "Downloaded", count: completedItems.value.length },
   { id: "audit", label: "Audit Log" },
+  { id: "statistics", label: "Statistics" },
 ]);
 
 const loadData = async () => {
@@ -1507,5 +1756,139 @@ onUnmounted(() => {
     flex-direction: column;
     gap: var(--spacing-2);
   }
+}
+
+/* Statistics Tab */
+.periodSelector {
+  display: flex;
+  gap: var(--spacing-2);
+  margin-bottom: var(--spacing-4);
+}
+
+.periodButton {
+  padding: var(--spacing-2) var(--spacing-4);
+  background: none;
+  border: 1px solid var(--border-subdued);
+  border-radius: var(--radius-md);
+  color: var(--text-subdued);
+  font-size: var(--text-sm);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.periodButton:hover {
+  border-color: var(--text-base);
+  color: var(--text-base);
+}
+
+.periodButton.active {
+  background-color: var(--spotify-green);
+  border-color: var(--spotify-green);
+  color: white;
+}
+
+.statsTotals {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-3);
+  margin-bottom: var(--spacing-6);
+}
+
+.totalCard {
+  flex: 1;
+  min-width: 120px;
+  padding: var(--spacing-4);
+  background-color: var(--bg-elevated-base);
+  border-radius: var(--radius-lg);
+  text-align: center;
+}
+
+.totalValue {
+  display: block;
+  font-size: var(--text-2xl);
+  font-weight: var(--font-bold);
+  color: var(--text-base);
+  margin-bottom: var(--spacing-1);
+}
+
+.totalLabel {
+  font-size: var(--text-sm);
+  color: var(--text-subdued);
+}
+
+.totalFailures .totalValue {
+  color: #dc2626;
+}
+
+.chartSection {
+  margin-bottom: var(--spacing-6);
+}
+
+.chartTitle {
+  font-size: var(--text-base);
+  font-weight: var(--font-semibold);
+  color: var(--text-base);
+  margin: 0 0 var(--spacing-3) 0;
+}
+
+.chartContainer {
+  background-color: var(--bg-elevated-base);
+  border-radius: var(--radius-lg);
+  padding: var(--spacing-4);
+  height: 300px;
+}
+
+.noData {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--text-subdued);
+}
+
+.tableSection {
+  margin-bottom: var(--spacing-6);
+}
+
+.tableWrapper {
+  background-color: var(--bg-elevated-base);
+  border-radius: var(--radius-lg);
+  overflow-x: auto;
+}
+
+.dataTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-sm);
+}
+
+.dataTable th,
+.dataTable td {
+  padding: var(--spacing-3) var(--spacing-4);
+  text-align: left;
+  border-bottom: 1px solid var(--border-subdued);
+}
+
+.dataTable th {
+  font-weight: var(--font-semibold);
+  color: var(--text-subdued);
+  background-color: rgba(0, 0, 0, 0.2);
+}
+
+.dataTable td {
+  color: var(--text-base);
+}
+
+.dataTable tr:last-child td {
+  border-bottom: none;
+}
+
+.dataTable tr:hover td {
+  background-color: var(--bg-highlight);
+}
+
+.text-danger {
+  color: #dc2626;
+  font-weight: var(--font-semibold);
 }
 </style>

@@ -1328,6 +1328,11 @@ impl DownloadManager {
         self.queue_store.get_activity_since(since)
     }
 
+    /// Get aggregated download statistics over time.
+    pub fn get_stats_history(&self, period: StatsPeriod) -> Result<DownloadStatsHistory> {
+        self.queue_store.get_stats_history(period)
+    }
+
     /// Get all requests with optional filters.
     pub fn get_all_requests(
         &self,
