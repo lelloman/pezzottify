@@ -204,7 +204,7 @@ class ArtistScreenViewModelTest {
         advanceUntilIdle()
 
         assertThat(viewModel.state.value.externalAlbums).isEmpty()
-        assertThat(viewModel.state.value.isLoadingExternalAlbums).isFalse()
+        assertThat(viewModel.state.value.isExternalAlbumsError).isFalse()
     }
 
     @Test
@@ -219,7 +219,7 @@ class ArtistScreenViewModelTest {
         advanceUntilIdle()
 
         assertThat(viewModel.state.value.externalAlbums).isEmpty()
-        assertThat(viewModel.state.value.isLoadingExternalAlbums).isFalse()
+        assertThat(viewModel.state.value.isExternalAlbumsError).isTrue()
     }
 
     private class FakeInteractor : ArtistScreenViewModel.Interactor {

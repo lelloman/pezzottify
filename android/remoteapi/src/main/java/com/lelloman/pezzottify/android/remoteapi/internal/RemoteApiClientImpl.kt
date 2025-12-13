@@ -7,23 +7,24 @@ import com.lelloman.pezzottify.android.domain.remoteapi.RemoteApiCredentialsProv
 import com.lelloman.pezzottify.android.domain.remoteapi.response.AlbumResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.ArtistDiscographyResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.ArtistResponse
-import com.lelloman.pezzottify.android.domain.remoteapi.response.ImageResponse
-import com.lelloman.pezzottify.android.domain.remoteapi.response.ListeningEventRecordedResponse
-import com.lelloman.pezzottify.android.domain.remoteapi.response.LoginSuccessResponse
-import com.lelloman.pezzottify.android.domain.remoteapi.response.PopularContentResponse
-import com.lelloman.pezzottify.android.domain.remoteapi.response.RemoteApiResponse
-import com.lelloman.pezzottify.android.domain.remoteapi.response.SearchResponse
-import com.lelloman.pezzottify.android.domain.remoteapi.response.SyncEventsResponse
-import com.lelloman.pezzottify.android.domain.remoteapi.response.SyncStateResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.DownloadLimitsResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.ExternalAlbumDetailsResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.ExternalDiscographyResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.ExternalSearchResponse
+import com.lelloman.pezzottify.android.domain.remoteapi.response.FullSkeletonResponse
+import com.lelloman.pezzottify.android.domain.remoteapi.response.ImageResponse
+import com.lelloman.pezzottify.android.domain.remoteapi.response.ListeningEventItem
+import com.lelloman.pezzottify.android.domain.remoteapi.response.ListeningEventRecordedResponse
+import com.lelloman.pezzottify.android.domain.remoteapi.response.LoginSuccessResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.MyDownloadRequestsResponse
+import com.lelloman.pezzottify.android.domain.remoteapi.response.PopularContentResponse
+import com.lelloman.pezzottify.android.domain.remoteapi.response.RemoteApiResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.RequestAlbumResponse
+import com.lelloman.pezzottify.android.domain.remoteapi.response.SearchResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.SkeletonDeltaResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.SkeletonVersionResponse
-import com.lelloman.pezzottify.android.domain.remoteapi.response.FullSkeletonResponse
+import com.lelloman.pezzottify.android.domain.remoteapi.response.SyncEventsResponse
+import com.lelloman.pezzottify.android.domain.remoteapi.response.SyncStateResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.TrackResponse
 import com.lelloman.pezzottify.android.domain.sync.UserSetting
 import com.lelloman.pezzottify.android.remoteapi.internal.requests.ListeningEventRequest
@@ -249,6 +250,23 @@ internal class RemoteApiClientImpl(
         RemoteApiResponse.Success(
             ListeningEventRecordedResponse(id = body.id, created = body.created)
         )
+    }
+
+    override suspend fun getListeningEvents(
+        startDate: Int?,
+        endDate: Int?,
+        limit: Int?,
+        offset: Int?,
+    ): RemoteApiResponse<List<ListeningEventItem>> = catchingNetworkError {
+        getRetrofit()
+            .getListeningEvents(
+                authToken = authToken,
+                startDate = startDate,
+                endDate = endDate,
+                limit = limit,
+                offset = offset,
+            )
+            .returnFromRetrofitResponse()
     }
 
     override suspend fun getSyncState(): RemoteApiResponse<SyncStateResponse> =

@@ -42,6 +42,7 @@ import androidx.navigation.compose.rememberNavController
 import com.lelloman.pezzottify.android.ui.R
 import com.lelloman.pezzottify.android.ui.model.Permission
 import com.lelloman.pezzottify.android.ui.fromProfileBackToLogin
+import com.lelloman.pezzottify.android.ui.toListeningHistory
 import com.lelloman.pezzottify.android.ui.toMyRequests
 import com.lelloman.pezzottify.android.ui.theme.PezzottifyTheme
 import kotlinx.coroutines.flow.Flow
@@ -190,6 +191,15 @@ private fun ProfileScreenInternal(
                 ) {
                     Text(stringResource(R.string.my_requests_title))
                 }
+            }
+
+            // Listening History
+            Spacer(modifier = Modifier.height(16.dp))
+            Button(
+                onClick = { navController.toListeningHistory() },
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(stringResource(R.string.listening_history_title))
             }
 
             HorizontalDivider(modifier = Modifier.padding(vertical = 24.dp))

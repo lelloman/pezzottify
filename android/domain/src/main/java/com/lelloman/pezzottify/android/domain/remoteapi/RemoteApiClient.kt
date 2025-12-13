@@ -8,7 +8,9 @@ import com.lelloman.pezzottify.android.domain.remoteapi.response.DownloadLimitsR
 import com.lelloman.pezzottify.android.domain.remoteapi.response.ExternalAlbumDetailsResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.ExternalDiscographyResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.ExternalSearchResponse
+import com.lelloman.pezzottify.android.domain.remoteapi.response.FullSkeletonResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.ImageResponse
+import com.lelloman.pezzottify.android.domain.remoteapi.response.ListeningEventItem
 import com.lelloman.pezzottify.android.domain.remoteapi.response.ListeningEventRecordedResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.LoginSuccessResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.MyDownloadRequestsResponse
@@ -18,7 +20,6 @@ import com.lelloman.pezzottify.android.domain.remoteapi.response.RequestAlbumRes
 import com.lelloman.pezzottify.android.domain.remoteapi.response.SearchResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.SkeletonDeltaResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.SkeletonVersionResponse
-import com.lelloman.pezzottify.android.domain.remoteapi.response.FullSkeletonResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.SyncEventsResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.SyncStateResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.TrackResponse
@@ -74,6 +75,17 @@ interface RemoteApiClient {
     suspend fun unlikeContent(contentType: String, contentId: String): RemoteApiResponse<Unit>
 
     suspend fun recordListeningEvent(data: ListeningEventSyncData): RemoteApiResponse<ListeningEventRecordedResponse>
+
+    /**
+     * Get user's listening history events.
+     * Returns detailed listening events with pagination support.
+     */
+    suspend fun getListeningEvents(
+        startDate: Int? = null,
+        endDate: Int? = null,
+        limit: Int? = null,
+        offset: Int? = null,
+    ): RemoteApiResponse<List<ListeningEventItem>>
 
     /**
      * Get full user sync state for initial sync.

@@ -9,6 +9,7 @@ import com.lelloman.pezzottify.android.remoteapi.internal.requests.UpdateUserSet
 import com.lelloman.pezzottify.android.domain.remoteapi.response.AlbumResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.DownloadLimitsResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.ExternalAlbumDetailsResponse
+import com.lelloman.pezzottify.android.domain.remoteapi.response.ListeningEventItem
 import com.lelloman.pezzottify.android.domain.remoteapi.response.ExternalDiscographyResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.ExternalSearchResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.MyDownloadRequestsResponse
@@ -112,6 +113,15 @@ internal interface RetrofitApiClient {
         @Header("Authorization") authToken: String,
         @Body request: ListeningEventRequest,
     ): Response<ListeningEventResponse>
+
+    @GET("/v1/user/listening/events")
+    suspend fun getListeningEvents(
+        @Header("Authorization") authToken: String,
+        @Query("start_date") startDate: Int? = null,
+        @Query("end_date") endDate: Int? = null,
+        @Query("limit") limit: Int? = null,
+        @Query("offset") offset: Int? = null,
+    ): Response<List<ListeningEventItem>>
 
     @GET("/v1/sync/state")
     suspend fun getSyncState(

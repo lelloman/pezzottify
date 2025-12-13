@@ -14,6 +14,7 @@
     <string name="login">Login</string>
     <string name="logout">Logout</string>
     <string name="logging_out">Logging out…</string>
+    <string name="loading">Loading…</string>
     <!-- COMMON -->
 
     <!-- ABOUT SCREEN -->
@@ -197,6 +198,30 @@
     <string name="removed_from_queue">Removed from queue</string>
     <string name="error_loading_track">Error loading track</string>
     <!-- QUEUE SCREEN -->
+
+    <!-- LISTENING HISTORY SCREEN -->
+    <string name="listening_history_title">Listening History</string>
+    <string name="listening_history_empty">No listening history yet. Start playing some music!</string>
+    <string name="listening_history_error_network">Network error. Check your connection and try again.</string>
+    <string name="listening_history_error_unauthorized">Session expired. Please log in again.</string>
+    <string name="listening_history_error_unknown">Failed to load listening history</string>
+    <string name="listening_history_completed">Completed</string>
+    <string name="date_section_today">Today</string>
+    <string name="date_section_yesterday">Yesterday</string>
+    <string name="date_section_last_sunday">Last Sunday</string>
+    <string name="date_section_last_monday">Last Monday</string>
+    <string name="date_section_last_tuesday">Last Tuesday</string>
+    <string name="date_section_last_wednesday">Last Wednesday</string>
+    <string name="date_section_last_thursday">Last Thursday</string>
+    <string name="date_section_last_friday">Last Friday</string>
+    <string name="date_section_last_saturday">Last Saturday</string>
+    <string name="date_section_last_week">Last Week</string>
+    <string name="date_section_last_month">Last Month</string>
+    <string name="date_section_months_ago_one">1 month ago</string>
+    <string name="date_section_months_ago">%1$d months ago</string>
+    <string name="date_section_years_ago_one">1 year ago</string>
+    <string name="date_section_years_ago">%1$d years ago</string>
+    <!-- LISTENING HISTORY SCREEN -->
 
     <!-- SEARCH SCREEN -->
     <string name="request_added_to_queue">Request added to queue</string>

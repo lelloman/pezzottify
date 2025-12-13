@@ -68,6 +68,10 @@ import com.lelloman.pezzottify.android.ui.screen.main.home.ViewedContentType
 import com.lelloman.pezzottify.android.ui.screen.main.content.userplaylist.UiUserPlaylistDetails
 import com.lelloman.pezzottify.android.ui.screen.main.content.userplaylist.UserPlaylistScreenViewModel
 import com.lelloman.pezzottify.android.ui.screen.main.library.LibraryScreenViewModel
+import com.lelloman.pezzottify.android.ui.screen.main.listeninghistory.ListeningHistoryErrorType
+import com.lelloman.pezzottify.android.ui.screen.main.listeninghistory.ListeningHistoryException
+import com.lelloman.pezzottify.android.ui.screen.main.listeninghistory.ListeningHistoryScreenViewModel
+import com.lelloman.pezzottify.android.ui.screen.main.listeninghistory.UiListeningEvent
 import com.lelloman.pezzottify.android.ui.screen.main.profile.ProfileScreenViewModel
 import com.lelloman.pezzottify.android.ui.screen.main.profile.stylesettings.StyleSettingsViewModel
 import com.lelloman.pezzottify.android.ui.screen.main.search.SearchScreenViewModel
@@ -1151,6 +1155,50 @@ class InteractorsModule {
                     com.lelloman.pezzottify.android.domain.remoteapi.response.DownloadQueueStatus.Failed ->
                         com.lelloman.pezzottify.android.ui.screen.main.content.externalalbum.UiDownloadStatus.Failed
                 }
+        }
+
+    @Provides
+    fun provideListeningHistoryScreenInteractor(
+        remoteApiClient: RemoteApiClient,
+    ): ListeningHistoryScreenViewModel.Interactor =
+        object : ListeningHistoryScreenViewModel.Interactor {
+            override suspend fun getListeningEvents(
+                limit: Int,
+                offset: Int,
+            ): Result<List<UiListeningEvent>> {
+                val response = remoteApiClient.getListeningEvents(
+                    limit = limit,
+                    offset = offset,
+                )
+                return when (response) {
+                    is com.lelloman.pezzottify.android.domain.remoteapi.response.RemoteApiResponse.Success -> {
+                        Result.success(
+                            response.data.map { event ->
+                                UiListeningEvent(
+                                    id = event.id,
+                                    trackId = event.trackId,
+                                    startedAt = event.startedAt,
+                                    durationSeconds = event.durationSeconds,
+                                    trackDurationSeconds = event.trackDurationSeconds,
+                                    completed = event.completed,
+                                    playbackContext = event.playbackContext,
+                                    clientType = event.clientType,
+                                )
+                            }
+                        )
+                    }
+                    is com.lelloman.pezzottify.android.domain.remoteapi.response.RemoteApiResponse.Error -> {
+                        val errorType = when (response) {
+                            is com.lelloman.pezzottify.android.domain.remoteapi.response.RemoteApiResponse.Error.Network ->
+                                ListeningHistoryErrorType.Network
+                            is com.lelloman.pezzottify.android.domain.remoteapi.response.RemoteApiResponse.Error.Unauthorized ->
+                                ListeningHistoryErrorType.Unauthorized
+                            else -> ListeningHistoryErrorType.Unknown
+                        }
+                        Result.failure(ListeningHistoryException(errorType))
+                    }
+                }
+            }
         }
 
 }

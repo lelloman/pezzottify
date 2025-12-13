@@ -202,6 +202,12 @@ private fun MainScreenContent(state: MainScreenState, actions: MainScreenActions
                         onNavigateToExternalAlbum = { albumId -> navController.toExternalAlbum(albumId) },
                     )
                 }
+                composable<Screen.Main.ListeningHistory> {
+                    com.lelloman.pezzottify.android.ui.screen.main.listeninghistory.ListeningHistoryScreen(
+                        onNavigateBack = { navController.popBackStack() },
+                        onNavigateToTrack = { trackId -> navController.navigate(Screen.Main.Track(trackId)) },
+                    )
+                }
                 composable<Screen.Main.ExternalAlbum> {
                     ExternalAlbumScreen(
                         albumId = it.toRoute<Screen.Main.ExternalAlbum>().albumId,
