@@ -207,7 +207,7 @@ pub mod skeleton;
 
 ### 1.2 Integrate Event Emission with Catalog Store
 
-[ ] **Task 1.2.1: Add SkeletonEventStore to SqliteCatalogStore**
+[x] **Task 1.2.1: Add SkeletonEventStore to SqliteCatalogStore**
 
 **File:** `catalog-server/src/catalog_store/store.rs`
 
@@ -226,7 +226,7 @@ Update `new()` to initialize skeleton event store after connection setup.
 
 ---
 
-[ ] **Task 1.2.2: Emit event on insert_artist**
+[x] **Task 1.2.2: Emit event on insert_artist**
 
 **File:** `catalog-server/src/catalog_store/store.rs` (line ~784)
 
@@ -249,7 +249,7 @@ pub fn insert_artist(&self, artist: &Artist) -> Result<()> {
 
 ---
 
-[ ] **Task 1.2.3: Emit event on insert_album**
+[x] **Task 1.2.3: Emit event on insert_album**
 
 **File:** `catalog-server/src/catalog_store/store.rs` (line ~823)
 
@@ -275,7 +275,7 @@ pub fn insert_album(&self, album: &Album) -> Result<()> {
 
 ---
 
-[ ] **Task 1.2.4: Emit event on insert_track**
+[x] **Task 1.2.4: Emit event on insert_track**
 
 **File:** `catalog-server/src/catalog_store/store.rs` (line ~871)
 
@@ -301,7 +301,7 @@ pub fn insert_track(&self, track: &Track) -> Result<()> {
 
 ---
 
-[ ] **Task 1.2.5: Emit event on delete_artist_record**
+[x] **Task 1.2.5: Emit event on delete_artist_record**
 
 **File:** `catalog-server/src/catalog_store/store.rs` (line ~1436)
 
@@ -322,7 +322,7 @@ pub fn delete_artist_record(&self, id: &str) -> Result<()> {
 
 ---
 
-[ ] **Task 1.2.6: Emit event on delete_album_record**
+[x] **Task 1.2.6: Emit event on delete_album_record**
 
 **File:** `catalog-server/src/catalog_store/store.rs` (line ~1475)
 
@@ -342,7 +342,7 @@ pub fn delete_album_record(&self, id: &str) -> Result<()> {
 
 ---
 
-[ ] **Task 1.2.7: Emit event on delete_track_record**
+[x] **Task 1.2.7: Emit event on delete_track_record**
 
 **File:** `catalog-server/src/catalog_store/store.rs` (line ~1514)
 
@@ -362,7 +362,7 @@ pub fn delete_track_record(&self, id: &str) -> Result<()> {
 
 ---
 
-[ ] **Task 1.2.8: Expose skeleton_events getter on SqliteCatalogStore**
+[x] **Task 1.2.8: Expose skeleton_events getter on SqliteCatalogStore**
 
 **File:** `catalog-server/src/catalog_store/store.rs`
 

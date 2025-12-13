@@ -14,6 +14,7 @@ use super::schema::CATALOG_VERSIONED_SCHEMAS;
 use super::validation::{
     validate_album, validate_artist, validate_image, validate_track, ValidationError,
 };
+use crate::skeleton::{AlbumAddedPayload, SkeletonEventStore, SkeletonEventType, TrackAddedPayload};
 use crate::sqlite_persistence::BASE_DB_VERSION;
 use anyhow::{bail, Context, Result};
 use rusqlite::{params, Connection};
@@ -31,6 +32,7 @@ pub struct SqliteCatalogStore {
     conn: Arc<Mutex<Connection>>,
     media_base_path: PathBuf,
     changelog: ChangeLogStore,
+    skeleton_events: SkeletonEventStore,
 }
 
 impl SqliteCatalogStore {
@@ -85,11 +87,14 @@ impl SqliteCatalogStore {
 
         let conn = Arc::new(Mutex::new(conn));
         let changelog = ChangeLogStore::new(conn.clone());
+        let skeleton_events = SkeletonEventStore::new(conn.clone())
+            .context("Failed to initialize skeleton event store")?;
 
         Ok(SqliteCatalogStore {
             conn,
             media_base_path: media_base_path.as_ref().to_path_buf(),
             changelog,
+            skeleton_events,
         })
     }
 
@@ -98,6 +103,13 @@ impl SqliteCatalogStore {
     /// Use this to manage batches and query change history.
     pub fn changelog(&self) -> &ChangeLogStore {
         &self.changelog
+    }
+
+    /// Get a reference to the skeleton event store.
+    ///
+    /// Use this to emit and query catalog skeleton events.
+    pub fn skeleton_events(&self) -> &SkeletonEventStore {
+        &self.skeleton_events
     }
 
     fn migrate_if_needed(conn: &mut Connection, version: usize) -> Result<()> {
@@ -814,6 +826,11 @@ impl SqliteCatalogStore {
             Some(&summary),
         )?;
 
+        // Emit skeleton event
+        drop(conn); // Release lock before calling skeleton_events
+        self.skeleton_events
+            .emit_event(SkeletonEventType::ArtistAdded, &artist.id, None)?;
+
         Ok(())
     }
 
@@ -860,6 +877,19 @@ impl SqliteCatalogStore {
             &diff,
             &snapshot,
             Some(&summary),
+        )?;
+
+        // Emit skeleton event
+        // Note: artist_ids is empty here because artists are linked separately via add_album_artist.
+        // For accurate relationships, clients should perform a full skeleton sync.
+        let payload = AlbumAddedPayload {
+            artist_ids: vec![],
+        };
+        drop(conn);
+        self.skeleton_events.emit_event(
+            SkeletonEventType::AlbumAdded,
+            &album.id,
+            Some(&serde_json::to_string(&payload)?),
         )?;
 
         Ok(())
@@ -916,6 +946,17 @@ impl SqliteCatalogStore {
             &diff,
             &snapshot,
             Some(&summary),
+        )?;
+
+        // Emit skeleton event
+        let payload = TrackAddedPayload {
+            album_id: track.album_id.clone(),
+        };
+        drop(conn);
+        self.skeleton_events.emit_event(
+            SkeletonEventType::TrackAdded,
+            &track.id,
+            Some(&serde_json::to_string(&payload)?),
         )?;
 
         Ok(())
@@ -1466,6 +1507,11 @@ impl SqliteCatalogStore {
             Some(&summary),
         )?;
 
+        // Emit skeleton event
+        drop(conn);
+        self.skeleton_events
+            .emit_event(SkeletonEventType::ArtistRemoved, id, None)?;
+
         Ok(())
     }
 
@@ -1505,6 +1551,11 @@ impl SqliteCatalogStore {
             Some(&summary),
         )?;
 
+        // Emit skeleton event
+        drop(conn);
+        self.skeleton_events
+            .emit_event(SkeletonEventType::AlbumRemoved, id, None)?;
+
         Ok(())
     }
 
@@ -1543,6 +1594,11 @@ impl SqliteCatalogStore {
             &old_snapshot,
             Some(&summary),
         )?;
+
+        // Emit skeleton event
+        drop(conn);
+        self.skeleton_events
+            .emit_event(SkeletonEventType::TrackRemoved, id, None)?;
 
         Ok(())
     }
