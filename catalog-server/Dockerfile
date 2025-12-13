@@ -62,10 +62,10 @@ EXPOSE 3001
 EXPOSE 9091
 
 # Start the server
-# Args: <catalog-db-path> <user-db-path> [--media-path <path>] [options]
+# Args: --db-dir <path> [--media-path <path>] [options]
 # Optional: --downloader-url <URL> --downloader-timeout-sec <SECONDS>
 #   Enables on-demand content fetching from an external downloader service
-CMD ["catalog-server", "/data/db/catalog.db", "/data/db/user.db", "--media-path", "/data/media", "--content-cache-age-sec=60", "--logging-level", "path", "--frontend-dir-path", "/app/web"]
+CMD ["catalog-server", "--db-dir", "/data/db", "--media-path", "/data/media", "--content-cache-age-sec=60", "--logging-level", "path", "--frontend-dir-path", "/app/web"]
 
 # NOTE: Build context must be the repository root (not catalog-server/)
 # Build with (from repo root):

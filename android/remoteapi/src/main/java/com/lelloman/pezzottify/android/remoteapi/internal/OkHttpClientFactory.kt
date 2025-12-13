@@ -20,7 +20,7 @@ import javax.net.ssl.X509TrustManager
  * self-signed certificates while maintaining security through pinning.
  */
 @Singleton
-class OkHttpClientFactory @Inject constructor(
+open class OkHttpClientFactory @Inject constructor(
     private val sslPinConfig: SslPinConfig,
 ) {
     /**
@@ -32,7 +32,7 @@ class OkHttpClientFactory @Inject constructor(
      * @param baseUrl The base URL (used for logging/debugging, pinning applies to all HTTPS)
      * @return OkHttpClient.Builder configured with certificate pinning if enabled
      */
-    fun createBuilder(baseUrl: String): OkHttpClient.Builder {
+    open fun createBuilder(baseUrl: String): OkHttpClient.Builder {
         val builder = OkHttpClient.Builder()
 
         if (sslPinConfig.isEnabled && baseUrl.startsWith("https://")) {
