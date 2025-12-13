@@ -43,11 +43,7 @@ impl DownloadSyncNotifier {
     /// Notify that a download request was created.
     ///
     /// Called when a user requests an album download.
-    pub async fn notify_request_created(
-        &self,
-        queue_item: &QueueItem,
-        queue_position: i32,
-    ) {
+    pub async fn notify_request_created(&self, queue_item: &QueueItem, queue_position: i32) {
         let Some(user_id) = self.parse_user_id(&queue_item.requested_by_user_id) else {
             return;
         };
@@ -137,10 +133,8 @@ impl DownloadSyncNotifier {
     /// Called when new content is added to the catalog (after download completes).
     /// This is a broadcast to all users, not just the one who requested the download.
     pub async fn notify_catalog_updated(&self, skeleton_version: i64) {
-        let ws_msg = ServerMessage::new(
-            CATALOG_UPDATED,
-            CatalogUpdatedMessage { skeleton_version },
-        );
+        let ws_msg =
+            ServerMessage::new(CATALOG_UPDATED, CatalogUpdatedMessage { skeleton_version });
 
         let failed_count = self.connection_manager.broadcast_to_all(ws_msg).await;
 
@@ -184,7 +178,12 @@ impl DownloadSyncNotifier {
         };
 
         // Broadcast to all connected devices
-        let ws_msg = ServerMessage::new(SYNC, SyncEventMessage { event: stored_event });
+        let ws_msg = ServerMessage::new(
+            SYNC,
+            SyncEventMessage {
+                event: stored_event,
+            },
+        );
 
         let failed = self
             .connection_manager

@@ -606,7 +606,10 @@ mod tests {
             Ok("sha256:mock".to_string())
         }
 
-        fn get_skeleton_events_since(&self, _seq: i64) -> Result<Vec<crate::skeleton::SkeletonEvent>> {
+        fn get_skeleton_events_since(
+            &self,
+            _seq: i64,
+        ) -> Result<Vec<crate::skeleton::SkeletonEvent>> {
             Ok(Vec::new())
         }
 

@@ -596,9 +596,7 @@ impl DownloadManager {
                                 if let Ok(progress) =
                                     self.queue_store.get_children_progress(parent_id)
                                 {
-                                    notifier
-                                        .notify_progress_updated(&parent, &progress)
-                                        .await;
+                                    notifier.notify_progress_updated(&parent, &progress).await;
                                 }
                             }
                         }

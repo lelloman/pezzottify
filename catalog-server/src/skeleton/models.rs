@@ -26,7 +26,7 @@ impl SkeletonEventType {
         }
     }
 
-    pub fn from_str(s: &str) -> Option<Self> {
+    pub fn parse(s: &str) -> Option<Self> {
         match s {
             "artist_added" => Some(SkeletonEventType::ArtistAdded),
             "artist_removed" => Some(SkeletonEventType::ArtistRemoved),
