@@ -34,8 +34,11 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -131,6 +134,16 @@ private fun MainScreenContent(state: MainScreenState, actions: MainScreenActions
     // Drawer state for profile drawer
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val drawerScope = rememberCoroutineScope()
+    var shouldRestoreDrawer by rememberSaveable { mutableStateOf(false) }
+
+    // Restore drawer when navigating back to Home
+    LaunchedEffect(currentRoute) {
+        val isOnHome = currentRoute == Screen.Main.Home::class.qualifiedName
+        if (isOnHome && shouldRestoreDrawer) {
+            drawerState.open()
+            shouldRestoreDrawer = false
+        }
+    }
 
     ModalNavigationDrawer(
         drawerState = drawerState,
@@ -138,16 +151,19 @@ private fun MainScreenContent(state: MainScreenState, actions: MainScreenActions
         drawerContent = {
             ProfileDrawerContent(
                 onNavigateToProfile = {
+                    shouldRestoreDrawer = true
                     navController.toProfile()
                 },
                 onNavigateToMyRequests = {
+                    shouldRestoreDrawer = true
                     navController.navigate(Screen.Main.MyRequests)
                 },
                 onNavigateToListeningHistory = {
+                    shouldRestoreDrawer = true
                     navController.navigate(Screen.Main.ListeningHistory)
                 },
                 onNavigateToAbout = {
-                    // Navigate to About screen (root nav)
+                    // Navigate to About screen (root nav) - don't restore drawer
                     rootNavController.navigate(Screen.About)
                 },
                 onNavigateToLogin = {
