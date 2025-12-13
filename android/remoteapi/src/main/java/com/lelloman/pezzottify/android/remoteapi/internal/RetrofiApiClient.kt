@@ -19,6 +19,9 @@ import com.lelloman.pezzottify.android.domain.remoteapi.response.ImageResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.LoginSuccessResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.PopularContentResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.SearchResponse
+import com.lelloman.pezzottify.android.domain.remoteapi.response.SkeletonDeltaResponse
+import com.lelloman.pezzottify.android.domain.remoteapi.response.SkeletonVersionResponse
+import com.lelloman.pezzottify.android.domain.remoteapi.response.FullSkeletonResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.SyncEventsResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.SyncStateResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.TrackResponse
@@ -165,4 +168,22 @@ internal interface RetrofitApiClient {
         @Header("Authorization") authToken: String,
         @Path("artistId") artistId: String,
     ): Response<ExternalDiscographyResponse>
+
+    // Skeleton sync endpoints
+
+    @GET("/v1/catalog/skeleton/version")
+    suspend fun getSkeletonVersion(
+        @Header("Authorization") authToken: String,
+    ): Response<SkeletonVersionResponse>
+
+    @GET("/v1/catalog/skeleton")
+    suspend fun getFullSkeleton(
+        @Header("Authorization") authToken: String,
+    ): Response<FullSkeletonResponse>
+
+    @GET("/v1/catalog/skeleton/delta")
+    suspend fun getSkeletonDelta(
+        @Header("Authorization") authToken: String,
+        @Query("since") sinceVersion: Long,
+    ): Response<SkeletonDeltaResponse>
 }

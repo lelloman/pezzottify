@@ -3,6 +3,7 @@ package com.lelloman.pezzottify.android.domain.usecase
 import com.lelloman.pezzottify.android.domain.app.AppInitializer
 import com.lelloman.pezzottify.android.domain.auth.AuthState
 import com.lelloman.pezzottify.android.domain.auth.AuthStore
+import com.lelloman.pezzottify.android.domain.skeleton.CatalogSkeletonSyncer
 import com.lelloman.pezzottify.android.domain.sync.StaticsSynchronizer
 import com.lelloman.pezzottify.android.domain.sync.SyncManager
 import com.lelloman.pezzottify.android.domain.websocket.WebSocketManager
@@ -20,6 +21,7 @@ class InitializeApp @Inject internal constructor(
     private val staticsSynchronizer: StaticsSynchronizer,
     private val syncManager: SyncManager,
     private val webSocketManager: WebSocketManager,
+    private val skeletonSyncer: CatalogSkeletonSyncer,
     loggerFactory: LoggerFactory,
 ) : UseCase() {
 
@@ -43,6 +45,18 @@ class InitializeApp @Inject internal constructor(
             scope.launch {
                 webSocketManager.connect()
                 syncManager.initialize()
+            }
+            // Sync catalog skeleton (artist/album/track IDs) in background
+            scope.launch {
+                logger.debug("invoke() starting skeleton sync")
+                when (val result = skeletonSyncer.sync()) {
+                    is CatalogSkeletonSyncer.SyncResult.Success ->
+                        logger.info("invoke() skeleton sync completed")
+                    is CatalogSkeletonSyncer.SyncResult.AlreadyUpToDate ->
+                        logger.info("invoke() skeleton already up to date")
+                    is CatalogSkeletonSyncer.SyncResult.Failed ->
+                        logger.error("invoke() skeleton sync failed: ${result.error}")
+                }
             }
         }
     }

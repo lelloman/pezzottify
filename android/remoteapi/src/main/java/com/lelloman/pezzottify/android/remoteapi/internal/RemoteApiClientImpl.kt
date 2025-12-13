@@ -21,6 +21,9 @@ import com.lelloman.pezzottify.android.domain.remoteapi.response.ExternalDiscogr
 import com.lelloman.pezzottify.android.domain.remoteapi.response.ExternalSearchResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.MyDownloadRequestsResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.RequestAlbumResponse
+import com.lelloman.pezzottify.android.domain.remoteapi.response.SkeletonDeltaResponse
+import com.lelloman.pezzottify.android.domain.remoteapi.response.SkeletonVersionResponse
+import com.lelloman.pezzottify.android.domain.remoteapi.response.FullSkeletonResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.TrackResponse
 import com.lelloman.pezzottify.android.domain.sync.UserSetting
 import com.lelloman.pezzottify.android.remoteapi.internal.requests.ListeningEventRequest
@@ -348,6 +351,32 @@ internal class RemoteApiClientImpl(
             )
             .returnFromRetrofitResponse()
     }
+
+    // Skeleton sync endpoints
+
+    override suspend fun getSkeletonVersion(): RemoteApiResponse<SkeletonVersionResponse> =
+        catchingNetworkError {
+            getRetrofit()
+                .getSkeletonVersion(authToken = authToken)
+                .returnFromRetrofitResponse()
+        }
+
+    override suspend fun getFullSkeleton(): RemoteApiResponse<FullSkeletonResponse> =
+        catchingNetworkError {
+            getRetrofit()
+                .getFullSkeleton(authToken = authToken)
+                .returnFromRetrofitResponse()
+        }
+
+    override suspend fun getSkeletonDelta(sinceVersion: Long): RemoteApiResponse<SkeletonDeltaResponse> =
+        catchingNetworkError {
+            val response = getRetrofit().getSkeletonDelta(authToken = authToken, sinceVersion = sinceVersion)
+            // Handle 404 (version too old/pruned)
+            if (response.code() == 404) {
+                return@catchingNetworkError RemoteApiResponse.Error.NotFound
+            }
+            response.returnFromRetrofitResponse()
+        }
 
     private suspend fun <T> catchingNetworkError(block: suspend () -> RemoteApiResponse<T>): RemoteApiResponse<T> =
         try {
