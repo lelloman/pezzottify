@@ -431,5 +431,9 @@ class SettingsScreenViewModelTest {
             setBaseUrlCallCount++
             return setBaseUrlResultValue
         }
+
+        override suspend fun forceSkeletonResync(): SkeletonResyncResult {
+            return SkeletonResyncResult.Success
+        }
     }
 }
