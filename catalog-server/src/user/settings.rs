@@ -9,6 +9,10 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "key", content = "value")]
 pub enum UserSetting {
+    /// Whether the user has enabled direct downloads.
+    /// When enabled, the catalog proxy will fetch missing content on-demand.
+    #[serde(rename = "enable_direct_downloads")]
+    DirectDownloadsEnabled(bool),
     /// Whether the user has enabled external search.
     /// When enabled, searches will also query external providers for content
     /// that can be requested for download.
@@ -20,6 +24,7 @@ impl UserSetting {
     /// Get the storage key for this setting.
     pub fn key(&self) -> &'static str {
         match self {
+            Self::DirectDownloadsEnabled(_) => "enable_direct_downloads",
             Self::ExternalSearchEnabled(_) => "enable_external_search",
         }
     }
@@ -27,6 +32,7 @@ impl UserSetting {
     /// Serialize the value to a string for database storage.
     pub fn value_to_string(&self) -> String {
         match self {
+            Self::DirectDownloadsEnabled(enabled) => enabled.to_string(),
             Self::ExternalSearchEnabled(enabled) => enabled.to_string(),
         }
     }
@@ -37,6 +43,12 @@ impl UserSetting {
     /// `Err` with a description if the key is unknown or value is invalid.
     pub fn from_key_value(key: &str, value: &str) -> Result<Self, String> {
         match key {
+            "enable_direct_downloads" => {
+                let enabled = value
+                    .parse::<bool>()
+                    .map_err(|_| format!("Invalid boolean value for {}: {}", key, value))?;
+                Ok(Self::DirectDownloadsEnabled(enabled))
+            }
             "enable_external_search" => {
                 let enabled = value
                     .parse::<bool>()
@@ -49,12 +61,13 @@ impl UserSetting {
 
     /// Check if a key is a known setting key.
     pub fn is_known_key(key: &str) -> bool {
-        matches!(key, "enable_external_search")
+        matches!(key, "enable_direct_downloads" | "enable_external_search")
     }
 
     /// Get the default value for a setting by key.
     pub fn default_for_key(key: &str) -> Option<Self> {
         match key {
+            "enable_direct_downloads" => Some(Self::DirectDownloadsEnabled(false)),
             "enable_external_search" => Some(Self::ExternalSearchEnabled(false)),
             _ => None,
         }
@@ -67,12 +80,23 @@ mod tests {
 
     #[test]
     fn test_key() {
+        let setting = UserSetting::DirectDownloadsEnabled(true);
+        assert_eq!(setting.key(), "enable_direct_downloads");
+
         let setting = UserSetting::ExternalSearchEnabled(true);
         assert_eq!(setting.key(), "enable_external_search");
     }
 
     #[test]
     fn test_value_to_string() {
+        assert_eq!(
+            UserSetting::DirectDownloadsEnabled(true).value_to_string(),
+            "true"
+        );
+        assert_eq!(
+            UserSetting::DirectDownloadsEnabled(false).value_to_string(),
+            "false"
+        );
         assert_eq!(
             UserSetting::ExternalSearchEnabled(true).value_to_string(),
             "true"
@@ -86,6 +110,14 @@ mod tests {
     #[test]
     fn test_from_key_value_valid() {
         assert_eq!(
+            UserSetting::from_key_value("enable_direct_downloads", "true"),
+            Ok(UserSetting::DirectDownloadsEnabled(true))
+        );
+        assert_eq!(
+            UserSetting::from_key_value("enable_direct_downloads", "false"),
+            Ok(UserSetting::DirectDownloadsEnabled(false))
+        );
+        assert_eq!(
             UserSetting::from_key_value("enable_external_search", "true"),
             Ok(UserSetting::ExternalSearchEnabled(true))
         );
@@ -97,7 +129,7 @@ mod tests {
 
     #[test]
     fn test_from_key_value_invalid_value() {
-        let result = UserSetting::from_key_value("enable_external_search", "yes");
+        let result = UserSetting::from_key_value("enable_direct_downloads", "yes");
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("Invalid boolean value"));
     }
@@ -111,26 +143,30 @@ mod tests {
 
     #[test]
     fn test_is_known_key() {
+        assert!(UserSetting::is_known_key("enable_direct_downloads"));
         assert!(UserSetting::is_known_key("enable_external_search"));
-        assert!(!UserSetting::is_known_key("enable_direct_downloads"));
         assert!(!UserSetting::is_known_key("unknown_key"));
     }
 
     #[test]
     fn test_default_for_key() {
         assert_eq!(
-            UserSetting::default_for_key("enable_external_search"),
-            Some(UserSetting::ExternalSearchEnabled(false))
+            UserSetting::default_for_key("enable_direct_downloads"),
+            Some(UserSetting::DirectDownloadsEnabled(false))
         );
         assert_eq!(
-            UserSetting::default_for_key("enable_direct_downloads"),
-            None
+            UserSetting::default_for_key("enable_external_search"),
+            Some(UserSetting::ExternalSearchEnabled(false))
         );
         assert_eq!(UserSetting::default_for_key("unknown_key"), None);
     }
 
     #[test]
     fn test_serde_serialization() {
+        let setting = UserSetting::DirectDownloadsEnabled(true);
+        let json = serde_json::to_string(&setting).unwrap();
+        assert_eq!(json, r#"{"key":"enable_direct_downloads","value":true}"#);
+
         let setting = UserSetting::ExternalSearchEnabled(true);
         let json = serde_json::to_string(&setting).unwrap();
         assert_eq!(json, r#"{"key":"enable_external_search","value":true}"#);
@@ -138,6 +174,10 @@ mod tests {
 
     #[test]
     fn test_serde_deserialization() {
+        let json = r#"{"key":"enable_direct_downloads","value":true}"#;
+        let setting: UserSetting = serde_json::from_str(json).unwrap();
+        assert_eq!(setting, UserSetting::DirectDownloadsEnabled(true));
+
         let json = r#"{"key":"enable_external_search","value":true}"#;
         let setting: UserSetting = serde_json::from_str(json).unwrap();
         assert_eq!(setting, UserSetting::ExternalSearchEnabled(true));

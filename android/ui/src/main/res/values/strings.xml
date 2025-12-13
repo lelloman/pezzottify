@@ -265,6 +265,7 @@
     <string name="features">Features</string>
     <string name="not_in_library">Not in Library</string>
     <string name="external_albums_error">Could not load external albums</string>
+    <string name="could_not_load_artist">Could not load artist</string>
     <!-- ARTIST SCREEN -->
 
     <!-- LIBRARY SCREEN -->

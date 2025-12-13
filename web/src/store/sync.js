@@ -141,10 +141,14 @@ export const useSyncStore = defineStore("sync", () => {
                   : String(setting.value);
               settingsObj[setting.key] = value;
             }
-            // Format 2: Legacy enum format { ExternalSearchEnabled: true }
+            // Format 2: Legacy enum format { DirectDownloadsEnabled: true }
             else {
               const key = Object.keys(setting)[0];
-              if (key === "ExternalSearchEnabled") {
+              if (key === "DirectDownloadsEnabled") {
+                settingsObj["enable_direct_downloads"] = setting[key]
+                  ? "true"
+                  : "false";
+              } else if (key === "ExternalSearchEnabled") {
                 settingsObj["enable_external_search"] = setting[key]
                   ? "true"
                   : "false";

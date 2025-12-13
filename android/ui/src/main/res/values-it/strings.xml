@@ -265,6 +265,7 @@
     <string name="features">Collaborazioni</string>
     <string name="not_in_library">Non nella libreria</string>
     <string name="external_albums_error">Impossibile caricare album esterni</string>
+    <string name="could_not_load_artist">Impossibile caricare artista</string>
     <!-- ARTIST SCREEN -->
 
     <!-- LIBRARY SCREEN -->

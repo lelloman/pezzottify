@@ -93,10 +93,12 @@ fun SearchScreenContent(
                 is SearchScreensEvents.NavigateToTrackScreen -> navController.toTrack(it.trackId)
                 is SearchScreensEvents.NavigateToExternalAlbumScreen -> navController.toExternalAlbum(it.albumId)
                 is SearchScreensEvents.NavigateToExternalArtistScreen -> {
-                    // TODO: Navigate to ExternalArtistScreen when implemented
+                    // Navigate to regular ArtistScreen - server proxy will fetch metadata if needed
+                    navController.toArtist(it.artistId)
                 }
                 is SearchScreensEvents.NavigateToExternalTrackScreen -> {
-                    // TODO: Navigate to ExternalTrackScreen when implemented
+                    // Navigate to regular TrackScreen - server proxy will fetch metadata if needed
+                    navController.toTrack(it.trackId)
                 }
                 is SearchScreensEvents.ShowRequestError -> snackbarHostState.showSnackbar(context.getString(it.messageRes))
                 is SearchScreensEvents.ShowRequestSuccess -> snackbarHostState.showSnackbar(context.getString(R.string.request_added_to_queue))

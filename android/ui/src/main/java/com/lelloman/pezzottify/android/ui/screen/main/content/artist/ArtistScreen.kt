@@ -86,6 +86,7 @@ private fun ArtistScreenContent(
 ) {
     when {
         state.isLoading -> LoadingScreen()
+        state.isError -> ErrorScreen()
         state.artist != null -> ArtistLoadedScreen(
             artist = state.artist,
             albums = state.albums,
@@ -97,6 +98,17 @@ private fun ArtistScreenContent(
             contentResolver = contentResolver,
             navController = navController,
             actions = actions
+        )
+    }
+}
+
+@Composable
+private fun ErrorScreen() {
+    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        Text(
+            text = stringResource(R.string.could_not_load_artist),
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.error,
         )
     }
 }

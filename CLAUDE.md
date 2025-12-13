@@ -227,7 +227,7 @@ When no pin is configured, certificate pinning is disabled (suitable for develop
 - `SqliteCatalogStore`: SQLite-backed catalog with CRUD operations
 - `CatalogStore`: Trait for catalog access (read and write)
 - `Session`: Request session with user permissions
-- `Permission`: Enum for access control (AccessCatalog, LikeContent, OwnPlaylists, EditCatalog, ManagePermissions, ServerAdmin, ViewAnalytics, RequestContent, DownloadManagerAdmin)
+- `Permission`: Enum for access control (AccessCatalog, LikeContent, OwnPlaylists, EditCatalog, ManagePermissions, IssueContentDownload, ServerAdmin, ViewAnalytics, RequestContent)
 - `UserRole`: Admin or Regular with different permission sets
 
 **Server routes structure:**
@@ -345,7 +345,7 @@ Multi-module Gradle project with clean architecture layers:
 - Permissions are checked via middleware functions in server.rs
 - Each protected route has a `require_*` middleware (e.g., `require_access_catalog`)
 - Permission grants can be role-based or temporary/counted extras
-- Admin role has: AccessCatalog, EditCatalog, ManagePermissions, ServerAdmin, ViewAnalytics, RequestContent, DownloadManagerAdmin
+- Admin role has: AccessCatalog, EditCatalog, ManagePermissions, IssueContentDownload, ServerAdmin, ViewAnalytics, RequestContent
 - Regular role has: AccessCatalog, LikeContent, OwnPlaylists
 
 **Database operations:**

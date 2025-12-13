@@ -804,37 +804,6 @@ pub const VERSIONED_SCHEMAS: &[VersionedSchema] = &[
             Ok(())
         }),
     },
-    // Version 10: Remove direct download feature
-    // - Delete IssueContentDownload (permission=6) extra permission records
-    // - Delete ExternalSearchEnabled user settings
-    VersionedSchema {
-        version: 10,
-        tables: &[
-            USER_TABLE_V_0,
-            LIKED_CONTENT_TABLE_V_2,
-            AUTH_TOKEN_TABLE_V_8,
-            USER_PASSWORD_CREDENTIALS_V_0,
-            USER_PLAYLIST_TABLE_V_3,
-            USER_PLAYLIST_TRACKS_TABLE_V_3,
-            USER_ROLE_TABLE_V_4,
-            USER_EXTRA_PERMISSION_TABLE_V_4,
-            BANDWIDTH_USAGE_TABLE_V_5,
-            LISTENING_EVENTS_TABLE_V_6,
-            USER_SETTINGS_TABLE_V_7,
-            DEVICE_TABLE_V_8,
-            USER_EVENTS_TABLE_V_9,
-        ],
-        migration: Some(|conn: &Connection| {
-            // Delete IssueContentDownload (permission=6) extra permission records
-            conn.execute("DELETE FROM user_extra_permission WHERE permission = 6", [])?;
-            // Delete DirectDownloadsEnabled user settings
-            conn.execute(
-                "DELETE FROM user_settings WHERE setting_key = 'enable_direct_downloads'",
-                [],
-            )?;
-            Ok(())
-        }),
-    },
 ];
 
 /// A random A-z0-9 string
@@ -3013,16 +2982,16 @@ mod tests {
             assert_eq!(db_version, BASE_DB_VERSION as i64 + 3);
         }
 
-        // Now open with SqliteUserStore, which should trigger migration to latest (V10)
+        // Now open with SqliteUserStore, which should trigger migration to latest (V9)
         let store = SqliteUserStore::new(&temp_file_path).unwrap();
 
-        // Verify we're now at the latest version (V10)
+        // Verify we're now at the latest version (V9)
         {
             let conn = store.conn.lock().unwrap();
             let db_version: i64 = conn
                 .query_row("PRAGMA user_version;", [], |row| row.get(0))
                 .unwrap();
-            assert_eq!(db_version, BASE_DB_VERSION as i64 + 10);
+            assert_eq!(db_version, BASE_DB_VERSION as i64 + 9);
 
             // Verify new tables exist
             let user_role_table_exists: i64 = conn
@@ -3164,13 +3133,13 @@ mod tests {
         // Now open with SqliteUserStore, which should trigger migration to latest
         let store = SqliteUserStore::new(&temp_file_path).unwrap();
 
-        // Verify we're now at the latest version (V10)
+        // Verify we're now at the latest version
         {
             let conn = store.conn.lock().unwrap();
             let db_version: i64 = conn
                 .query_row("PRAGMA user_version;", [], |row| row.get(0))
                 .unwrap();
-            assert_eq!(db_version, BASE_DB_VERSION as i64 + 10);
+            assert_eq!(db_version, BASE_DB_VERSION as i64 + 9);
 
             // Verify device table exists
             let device_table_exists: i64 = conn
@@ -3441,6 +3410,7 @@ mod tests {
         assert!(permissions.contains(&Permission::OwnPlaylists));
         assert!(permissions.contains(&Permission::EditCatalog));
         assert!(permissions.contains(&Permission::ManagePermissions));
+        assert!(permissions.contains(&Permission::IssueContentDownload));
         assert!(permissions.contains(&Permission::ServerAdmin));
     }
 
@@ -4581,7 +4551,7 @@ mod tests {
         let user_id = store.create_user("test_user").unwrap();
 
         let result = store
-            .get_user_setting(user_id, "enable_external_search")
+            .get_user_setting(user_id, "enable_direct_downloads")
             .unwrap();
         assert!(result.is_none());
     }
@@ -4601,13 +4571,13 @@ mod tests {
         let user_id = store.create_user("test_user").unwrap();
 
         store
-            .set_user_setting(user_id, UserSetting::ExternalSearchEnabled(true))
+            .set_user_setting(user_id, UserSetting::DirectDownloadsEnabled(true))
             .unwrap();
 
         let result = store
-            .get_user_setting(user_id, "enable_external_search")
+            .get_user_setting(user_id, "enable_direct_downloads")
             .unwrap();
-        assert_eq!(result, Some(UserSetting::ExternalSearchEnabled(true)));
+        assert_eq!(result, Some(UserSetting::DirectDownloadsEnabled(true)));
     }
 
     #[test]
@@ -4616,16 +4586,16 @@ mod tests {
         let user_id = store.create_user("test_user").unwrap();
 
         store
-            .set_user_setting(user_id, UserSetting::ExternalSearchEnabled(false))
+            .set_user_setting(user_id, UserSetting::DirectDownloadsEnabled(false))
             .unwrap();
         store
-            .set_user_setting(user_id, UserSetting::ExternalSearchEnabled(true))
+            .set_user_setting(user_id, UserSetting::DirectDownloadsEnabled(true))
             .unwrap();
 
         let result = store
-            .get_user_setting(user_id, "enable_external_search")
+            .get_user_setting(user_id, "enable_direct_downloads")
             .unwrap();
-        assert_eq!(result, Some(UserSetting::ExternalSearchEnabled(true)));
+        assert_eq!(result, Some(UserSetting::DirectDownloadsEnabled(true)));
     }
 
     #[test]
@@ -4643,12 +4613,12 @@ mod tests {
         let user_id = store.create_user("test_user").unwrap();
 
         store
-            .set_user_setting(user_id, UserSetting::ExternalSearchEnabled(true))
+            .set_user_setting(user_id, UserSetting::DirectDownloadsEnabled(true))
             .unwrap();
 
         let settings = store.get_all_user_settings(user_id).unwrap();
         assert_eq!(settings.len(), 1);
-        assert!(settings.contains(&UserSetting::ExternalSearchEnabled(true)));
+        assert!(settings.contains(&UserSetting::DirectDownloadsEnabled(true)));
     }
 
     #[test]
@@ -4658,7 +4628,7 @@ mod tests {
 
         // Set a known setting
         store
-            .set_user_setting(user_id, UserSetting::ExternalSearchEnabled(true))
+            .set_user_setting(user_id, UserSetting::DirectDownloadsEnabled(true))
             .unwrap();
 
         // Manually insert an unknown setting directly into the database
@@ -4675,7 +4645,7 @@ mod tests {
         // get_all_user_settings should skip the unknown key
         let settings = store.get_all_user_settings(user_id).unwrap();
         assert_eq!(settings.len(), 1);
-        assert!(settings.contains(&UserSetting::ExternalSearchEnabled(true)));
+        assert!(settings.contains(&UserSetting::DirectDownloadsEnabled(true)));
     }
 
     #[test]
@@ -4685,21 +4655,24 @@ mod tests {
         let user2_id = store.create_user("user2").unwrap();
 
         store
-            .set_user_setting(user1_id, UserSetting::ExternalSearchEnabled(true))
+            .set_user_setting(user1_id, UserSetting::DirectDownloadsEnabled(true))
             .unwrap();
         store
-            .set_user_setting(user2_id, UserSetting::ExternalSearchEnabled(false))
+            .set_user_setting(user2_id, UserSetting::DirectDownloadsEnabled(false))
             .unwrap();
 
         let user1_value = store
-            .get_user_setting(user1_id, "enable_external_search")
+            .get_user_setting(user1_id, "enable_direct_downloads")
             .unwrap();
         let user2_value = store
-            .get_user_setting(user2_id, "enable_external_search")
+            .get_user_setting(user2_id, "enable_direct_downloads")
             .unwrap();
 
-        assert_eq!(user1_value, Some(UserSetting::ExternalSearchEnabled(true)));
-        assert_eq!(user2_value, Some(UserSetting::ExternalSearchEnabled(false)));
+        assert_eq!(user1_value, Some(UserSetting::DirectDownloadsEnabled(true)));
+        assert_eq!(
+            user2_value,
+            Some(UserSetting::DirectDownloadsEnabled(false))
+        );
     }
 
     #[test]
@@ -4708,7 +4681,7 @@ mod tests {
         let user_id = store.create_user("test_user").unwrap();
 
         store
-            .set_user_setting(user_id, UserSetting::ExternalSearchEnabled(true))
+            .set_user_setting(user_id, UserSetting::DirectDownloadsEnabled(true))
             .unwrap();
 
         // Delete the user via direct SQL (CASCADE should delete settings)
@@ -4733,33 +4706,33 @@ mod tests {
     }
 
     #[test]
-    fn test_enable_external_search_setting_lifecycle() {
+    fn test_enable_direct_downloads_setting_lifecycle() {
         let (store, _temp_dir) = create_tmp_store();
         let user_id = store.create_user("test_user").unwrap();
 
         // Default should be None (not set)
         let result = store
-            .get_user_setting(user_id, "enable_external_search")
+            .get_user_setting(user_id, "enable_direct_downloads")
             .unwrap();
         assert!(result.is_none());
 
         // Set to true
         store
-            .set_user_setting(user_id, UserSetting::ExternalSearchEnabled(true))
+            .set_user_setting(user_id, UserSetting::DirectDownloadsEnabled(true))
             .unwrap();
         let result = store
-            .get_user_setting(user_id, "enable_external_search")
+            .get_user_setting(user_id, "enable_direct_downloads")
             .unwrap();
-        assert_eq!(result, Some(UserSetting::ExternalSearchEnabled(true)));
+        assert_eq!(result, Some(UserSetting::DirectDownloadsEnabled(true)));
 
         // Set to false
         store
-            .set_user_setting(user_id, UserSetting::ExternalSearchEnabled(false))
+            .set_user_setting(user_id, UserSetting::DirectDownloadsEnabled(false))
             .unwrap();
         let result = store
-            .get_user_setting(user_id, "enable_external_search")
+            .get_user_setting(user_id, "enable_direct_downloads")
             .unwrap();
-        assert_eq!(result, Some(UserSetting::ExternalSearchEnabled(false)));
+        assert_eq!(result, Some(UserSetting::DirectDownloadsEnabled(false)));
     }
 
     // ========================================================================
@@ -4947,7 +4920,7 @@ mod tests {
                 content_id: "track_456".to_string(),
             },
             UserEvent::SettingChanged {
-                setting: UserSetting::ExternalSearchEnabled(true),
+                setting: UserSetting::DirectDownloadsEnabled(true),
             },
             UserEvent::PlaylistCreated {
                 playlist_id: "pl_abc".to_string(),
@@ -4968,7 +4941,7 @@ mod tests {
                 permission: Permission::EditCatalog,
             },
             UserEvent::PermissionRevoked {
-                permission: Permission::EditCatalog,
+                permission: Permission::IssueContentDownload,
             },
             UserEvent::PermissionsReset {
                 permissions: vec![Permission::AccessCatalog, Permission::LikeContent],

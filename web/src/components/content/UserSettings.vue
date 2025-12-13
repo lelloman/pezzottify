@@ -2,6 +2,38 @@
   <div class="settings-container">
     <h1 class="settings-title">Settings</h1>
 
+    <div class="settings-section">
+      <h2 class="section-title">Content Downloads</h2>
+      <div class="setting-item">
+        <div class="setting-info">
+          <label class="setting-label" for="direct-downloads">
+            Enable Direct Downloads
+            <span
+              v-if="isDirectDownloadsPending"
+              class="sync-pending"
+              title="Syncing..."
+            >
+              <span class="sync-dot"></span>
+            </span>
+          </label>
+          <p class="setting-description">
+            When enabled, missing content (albums, artists) will be
+            automatically fetched from the server when you browse to them. This
+            requires the appropriate permission from an administrator.
+          </p>
+        </div>
+        <label class="toggle">
+          <input
+            type="checkbox"
+            id="direct-downloads"
+            :checked="isDirectDownloadsEnabled"
+            @change="handleDirectDownloadsToggle"
+          />
+          <span class="toggle-slider"></span>
+        </label>
+      </div>
+    </div>
+
     <div v-if="canRequestContent" class="settings-section">
       <h2 class="section-title">External Search</h2>
       <div class="setting-item">
@@ -41,6 +73,19 @@ import { computed } from "vue";
 import { useUserStore } from "@/store/user";
 
 const userStore = useUserStore();
+
+// Direct downloads setting
+const isDirectDownloadsEnabled = computed(
+  () => userStore.isDirectDownloadsEnabled,
+);
+const isDirectDownloadsPending = computed(
+  () => userStore.isDirectDownloadsPending,
+);
+
+const handleDirectDownloadsToggle = async (event) => {
+  const newValue = event.target.checked;
+  await userStore.setDirectDownloadsEnabled(newValue);
+};
 
 // External search setting (only visible with RequestContent permission)
 const canRequestContent = computed(() => userStore.canRequestContent);
