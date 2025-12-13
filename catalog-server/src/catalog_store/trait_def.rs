@@ -204,6 +204,34 @@ pub trait CatalogStore: Send + Sync {
 
     /// Set the display image for an album (the "best" image to show).
     fn set_album_display_image(&self, album_id: &str, image_id: &str) -> Result<()>;
+
+    // =========================================================================
+    // Skeleton Sync Operations
+    // =========================================================================
+
+    /// Get the current skeleton version.
+    fn get_skeleton_version(&self) -> Result<i64>;
+
+    /// Get the skeleton checksum, calculating if not cached.
+    fn get_skeleton_checksum(&self) -> Result<String>;
+
+    /// Get skeleton events since a given sequence number.
+    fn get_skeleton_events_since(&self, seq: i64) -> Result<Vec<crate::skeleton::SkeletonEvent>>;
+
+    /// Get the earliest available skeleton event sequence number.
+    fn get_skeleton_earliest_seq(&self) -> Result<i64>;
+
+    /// Get the latest skeleton event sequence number.
+    fn get_skeleton_latest_seq(&self) -> Result<i64>;
+
+    /// Get all artist IDs for skeleton sync.
+    fn get_all_artist_ids(&self) -> Result<Vec<String>>;
+
+    /// Get all albums with their artist IDs for skeleton sync.
+    fn get_all_albums_skeleton(&self) -> Result<Vec<crate::skeleton::SkeletonAlbumEntry>>;
+
+    /// Get all tracks with their album IDs for skeleton sync.
+    fn get_all_tracks_skeleton(&self) -> Result<Vec<crate::skeleton::SkeletonTrackEntry>>;
 }
 
 /// A searchable item for the search index.

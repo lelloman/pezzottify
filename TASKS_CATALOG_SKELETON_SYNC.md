@@ -472,7 +472,7 @@ hex = "0.4"
 
 ### 2.1 Define API Response Types
 
-[ ] **Task 2.1.1: Create skeleton API response models**
+[x] **Task 2.1.1: Create skeleton API response models**
 
 **File:** `catalog-server/src/skeleton/models.rs` (append to existing)
 
@@ -525,7 +525,7 @@ pub struct VersionTooOldError {
 
 ### 2.2 Implement Skeleton Endpoints
 
-[ ] **Task 2.2.1: Create skeleton routes module**
+[x] **Task 2.2.1: Create skeleton routes module**
 
 **File:** `catalog-server/src/server/skeleton.rs`
 
@@ -572,7 +572,7 @@ pub async fn get_skeleton_delta(
 
 ---
 
-[ ] **Task 2.2.2: Implement get_skeleton_version handler**
+[x] **Task 2.2.2: Implement get_skeleton_version handler**
 
 **File:** `catalog-server/src/server/skeleton.rs`
 
@@ -599,7 +599,7 @@ pub async fn get_skeleton_version(
 
 ---
 
-[ ] **Task 2.2.3: Implement get_full_skeleton handler**
+[x] **Task 2.2.3: Implement get_full_skeleton handler**
 
 **File:** `catalog-server/src/server/skeleton.rs`
 
@@ -640,7 +640,7 @@ pub async fn get_full_skeleton(
 
 ---
 
-[ ] **Task 2.2.4: Add skeleton query methods to catalog store**
+[x] **Task 2.2.4: Add skeleton query methods to catalog store**
 
 **File:** `catalog-server/src/catalog_store/store.rs`
 
@@ -683,7 +683,7 @@ pub fn get_all_tracks_skeleton(&self) -> Result<Vec<SkeletonTrackEntry>> {
 
 ---
 
-[ ] **Task 2.2.5: Implement get_skeleton_delta handler**
+[x] **Task 2.2.5: Implement get_skeleton_delta handler**
 
 **File:** `catalog-server/src/server/skeleton.rs`
 
@@ -762,7 +762,7 @@ pub async fn get_skeleton_delta(
 
 ---
 
-[ ] **Task 2.2.6: Register skeleton routes**
+[x] **Task 2.2.6: Register skeleton routes**
 
 **File:** `catalog-server/src/server/server.rs`
 
@@ -777,7 +777,7 @@ Add routes under `/v1/catalog/skeleton`:
 
 ---
 
-[ ] **Task 2.2.7: Add skeleton module to server/mod.rs**
+[x] **Task 2.2.7: Add skeleton module to server/mod.rs**
 
 **File:** `catalog-server/src/server/mod.rs`
 
@@ -789,7 +789,7 @@ pub mod skeleton;
 
 ### 2.3 Write Server Tests
 
-[ ] **Task 2.3.1: Write unit tests for SkeletonEventStore**
+[x] **Task 2.3.1: Write unit tests for SkeletonEventStore**
 
 **File:** `catalog-server/src/skeleton/store.rs` (add tests module)
 
@@ -1565,9 +1565,9 @@ End-to-end test with catalog-server: sync, verify data, modify catalog, sync aga
 | Phase | Tasks | Status |
 |-------|-------|--------|
 | 1. Server Data Model | 1.1.1 - 1.3.3 | 11/11 |
-| 2. Server Endpoints | 2.1.1 - 2.3.2 | 0/9 |
+| 2. Server Endpoints | 2.1.1 - 2.3.2 | 8/9 |
 | 3. Android Storage | 3.1.1 - 3.2.3 | 0/7 |
 | 4. Android Sync | 4.1.1 - 4.3.2 | 0/7 |
 | 5. Use Skeleton | 5.1.1 - 5.1.2 | 0/2 |
 | 6. Testing | 6.1.1 - 6.2.3 | 0/6 |
-| **Total** | | **11/42** |
+| **Total** | | **19/42** |

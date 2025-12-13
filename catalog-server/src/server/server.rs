@@ -4225,7 +4225,7 @@ pub async fn make_app(
         .route("/image/{id}", get(get_image))
         .route("/whatsnew", get(get_whats_new))
         .route("/popular", get(get_popular_content))
-        .layer(GovernorLayer::new(content_read_rate_limit))
+        .layer(GovernorLayer::new(content_read_rate_limit.clone()))
         .with_state(state.clone());
 
     // Merge content routes and apply common middleware
@@ -4584,6 +4584,18 @@ pub async fn make_app(
         .merge(download_admin_read_routes)
         .merge(download_admin_write_routes);
 
+    // Skeleton sync routes (requires AccessCatalog permission)
+    let skeleton_routes: Router = Router::new()
+        .route("/", get(super::skeleton::get_full_skeleton))
+        .route("/version", get(super::skeleton::get_skeleton_version))
+        .route("/delta", get(super::skeleton::get_skeleton_delta))
+        .layer(GovernorLayer::new(content_read_rate_limit.clone()))
+        .route_layer(middleware::from_fn_with_state(
+            state.clone(),
+            require_access_catalog,
+        ))
+        .with_state(state.clone());
+
     let home_router: Router = match config.frontend_dir_path {
         Some(ref frontend_path) => {
             let index_path = std::path::Path::new(frontend_path).join("index.html");
@@ -4609,6 +4621,7 @@ pub async fn make_app(
         .nest("/v1/admin", admin_routes)
         .nest("/v1/sync", sync_routes)
         .nest("/v1/download", download_routes)
+        .nest("/v1/catalog/skeleton", skeleton_routes)
         .nest("/v1", ws_routes);
 
     #[cfg(feature = "slowdown")]
