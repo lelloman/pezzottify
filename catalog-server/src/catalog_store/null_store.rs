@@ -208,4 +208,36 @@ impl CatalogStore for NullCatalogStore {
     fn set_album_display_image(&self, _album_id: &str, _image_id: &str) -> Result<()> {
         anyhow::bail!("NullCatalogStore does not support write operations")
     }
+
+    fn get_skeleton_version(&self) -> Result<i64> {
+        Ok(0)
+    }
+
+    fn get_skeleton_checksum(&self) -> Result<String> {
+        Ok("sha256:empty".to_string())
+    }
+
+    fn get_skeleton_events_since(&self, _seq: i64) -> Result<Vec<crate::skeleton::SkeletonEvent>> {
+        Ok(Vec::new())
+    }
+
+    fn get_skeleton_earliest_seq(&self) -> Result<i64> {
+        Ok(0)
+    }
+
+    fn get_skeleton_latest_seq(&self) -> Result<i64> {
+        Ok(0)
+    }
+
+    fn get_all_artist_ids(&self) -> Result<Vec<String>> {
+        Ok(Vec::new())
+    }
+
+    fn get_all_albums_skeleton(&self) -> Result<Vec<crate::skeleton::SkeletonAlbumEntry>> {
+        Ok(Vec::new())
+    }
+
+    fn get_all_tracks_skeleton(&self) -> Result<Vec<crate::skeleton::SkeletonTrackEntry>> {
+        Ok(Vec::new())
+    }
 }

@@ -6,6 +6,7 @@ mod search;
 #[allow(clippy::module_inception)]
 pub mod server;
 mod session;
+mod skeleton;
 pub mod state;
 mod stream_track;
 pub mod websocket;

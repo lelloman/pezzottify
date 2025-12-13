@@ -2248,6 +2248,77 @@ impl CatalogStore for SqliteCatalogStore {
     fn set_album_display_image(&self, album_id: &str, image_id: &str) -> Result<()> {
         SqliteCatalogStore::set_album_display_image(self, album_id, image_id)
     }
+
+    fn get_skeleton_version(&self) -> Result<i64> {
+        self.skeleton_events.get_version()
+    }
+
+    fn get_skeleton_checksum(&self) -> Result<String> {
+        // Try to get cached checksum first
+        if let Ok(Some(checksum)) = self.skeleton_events.get_checksum() {
+            return Ok(checksum);
+        }
+        // Calculate and cache if not available
+        self.calculate_skeleton_checksum()
+    }
+
+    fn get_skeleton_events_since(&self, seq: i64) -> Result<Vec<crate::skeleton::SkeletonEvent>> {
+        self.skeleton_events.get_events_since(seq)
+    }
+
+    fn get_skeleton_earliest_seq(&self) -> Result<i64> {
+        self.skeleton_events.get_earliest_seq()
+    }
+
+    fn get_skeleton_latest_seq(&self) -> Result<i64> {
+        self.skeleton_events.get_latest_seq()
+    }
+
+    fn get_all_artist_ids(&self) -> Result<Vec<String>> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare("SELECT id FROM artists ORDER BY id")?;
+        let ids = stmt
+            .query_map([], |row| row.get(0))?
+            .collect::<std::result::Result<Vec<String>, _>>()?;
+        Ok(ids)
+    }
+
+    fn get_all_albums_skeleton(&self) -> Result<Vec<crate::skeleton::SkeletonAlbumEntry>> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare("SELECT id FROM albums ORDER BY id")?;
+        let album_ids: Vec<String> = stmt
+            .query_map([], |row| row.get(0))?
+            .collect::<std::result::Result<Vec<_>, _>>()?;
+
+        let mut artist_stmt =
+            conn.prepare("SELECT artist_id FROM album_artists WHERE album_id = ?1 ORDER BY position")?;
+
+        let mut albums = Vec::with_capacity(album_ids.len());
+        for album_id in album_ids {
+            let artist_ids: Vec<String> = artist_stmt
+                .query_map(params![&album_id], |row| row.get(0))?
+                .collect::<std::result::Result<Vec<_>, _>>()?;
+            albums.push(crate::skeleton::SkeletonAlbumEntry {
+                id: album_id,
+                artist_ids,
+            });
+        }
+        Ok(albums)
+    }
+
+    fn get_all_tracks_skeleton(&self) -> Result<Vec<crate::skeleton::SkeletonTrackEntry>> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare("SELECT id, album_id FROM tracks ORDER BY id")?;
+        let tracks = stmt
+            .query_map([], |row| {
+                Ok(crate::skeleton::SkeletonTrackEntry {
+                    id: row.get(0)?,
+                    album_id: row.get(1)?,
+                })
+            })?
+            .collect::<std::result::Result<Vec<_>, _>>()?;
+        Ok(tracks)
+    }
 }
 
 impl WritableCatalogStore for SqliteCatalogStore {
