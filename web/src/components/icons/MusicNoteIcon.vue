@@ -1,11 +1,13 @@
 <template>
+  <!-- Pezzottify official icon: P + Quarter note round italic -->
   <svg
     xmlns="http://www.w3.org/2000/svg"
-    viewBox="0 0 24 24"
+    viewBox="0 0 108 108"
     fill="currentColor"
   >
-    <path
-      d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"
-    />
+    <!-- Italic stem (slanted) -->
+    <path d="M40,24L32,80L42,80L50,24Z" />
+    <!-- Circular note head as P bowl -->
+    <circle cx="58" cy="44" r="18" />
   </svg>
 </template>

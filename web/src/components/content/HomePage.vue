@@ -84,35 +84,6 @@
       </div>
     </section>
 
-    <!-- What's New Section -->
-    <section v-if="whatsNew.length > 0" class="homeSection">
-      <h2 class="sectionTitle">Recently Added</h2>
-      <div class="albumGrid">
-        <router-link
-          v-for="album in whatsNew"
-          :key="album.id"
-          :to="`/album/${album.id}`"
-          class="albumCard"
-        >
-          <div class="albumCover">
-            <img
-              v-if="album.image_id"
-              :src="getImageUrl(album.image_id)"
-              :alt="album.name"
-              loading="lazy"
-            />
-            <div v-else class="placeholderCover">
-              <MusicNoteIcon class="placeholderIcon" />
-            </div>
-          </div>
-          <div class="albumInfo">
-            <span class="albumName">{{ album.name }}</span>
-            <span class="artistName">{{ album.artist_name }}</span>
-          </div>
-        </router-link>
-      </div>
-    </section>
-
     <!-- Your Favorites Section -->
     <section v-if="favorites.length > 0" class="homeSection">
       <h2 class="sectionTitle">Your Favorites</h2>
@@ -125,8 +96,8 @@
         >
           <div class="albumCover">
             <img
-              v-if="album.image_id"
-              :src="getImageUrl(album.image_id)"
+              v-if="getAlbumImageId(album)"
+              :src="getImageUrl(getAlbumImageId(album))"
               :alt="album.name"
               loading="lazy"
             />
@@ -165,7 +136,6 @@ const getImageUrl = formatImageUrl;
 
 const recentlyPlayed = ref([]);
 const popular = ref({ albums: [], artists: [] });
-const whatsNew = ref([]);
 const favorites = ref([]);
 const isLoading = ref(true);
 
@@ -174,10 +144,23 @@ const isEmpty = computed(() => {
     recentlyPlayed.value.length === 0 &&
     popular.value.albums?.length === 0 &&
     popular.value.artists?.length === 0 &&
-    whatsNew.value.length === 0 &&
     favorites.value.length === 0
   );
 });
+
+// Helper to get album cover image ID from album object
+const getAlbumImageId = (album) => {
+  if (!album) return null;
+  // Check covers array first (preferred)
+  if (album.covers && album.covers.length > 0) {
+    return album.covers[0].id;
+  }
+  // Fall back to cover_group
+  if (album.cover_group && album.cover_group.length > 0) {
+    return album.cover_group[0].id;
+  }
+  return null;
+};
 
 const fetchRecentlyPlayed = async () => {
   try {
@@ -210,23 +193,26 @@ const fetchPopular = async () => {
   }
 };
 
-const fetchWhatsNew = async () => {
-  try {
-    const response = await fetch("/v1/content/whatsnew?limit=8");
-    if (response.ok) {
-      whatsNew.value = await response.json();
-    }
-  } catch (error) {
-    console.error("Error fetching what's new:", error);
-  }
-};
-
 const fetchFavorites = async () => {
   try {
+    // First get the list of liked album IDs
     const response = await fetch("/v1/user/liked/album");
     if (response.ok) {
-      const data = await response.json();
-      favorites.value = data.slice(0, 8);
+      const albumIds = await response.json();
+      // Then fetch details for each album (limit to 8)
+      const albumPromises = albumIds.slice(0, 8).map(async (albumId) => {
+        try {
+          const albumResponse = await fetch(`/v1/content/album/${albumId}/resolved`);
+          if (albumResponse.ok) {
+            return await albumResponse.json();
+          }
+        } catch (e) {
+          console.error(`Error fetching album ${albumId}:`, e);
+        }
+        return null;
+      });
+      const albums = await Promise.all(albumPromises);
+      favorites.value = albums.filter((a) => a !== null);
     }
   } catch (error) {
     console.error("Error fetching favorites:", error);
@@ -237,7 +223,6 @@ onMounted(async () => {
   await Promise.all([
     fetchRecentlyPlayed(),
     fetchPopular(),
-    fetchWhatsNew(),
     fetchFavorites(),
   ]);
   isLoading.value = false;
