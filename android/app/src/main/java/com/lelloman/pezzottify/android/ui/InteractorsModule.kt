@@ -974,6 +974,7 @@ class InteractorsModule {
     fun provideMyRequestsScreenInteractor(
         getMyDownloadRequestsUseCase: com.lelloman.pezzottify.android.domain.download.GetMyDownloadRequestsUseCase,
         getDownloadLimitsUseCase: com.lelloman.pezzottify.android.domain.download.GetDownloadLimitsUseCase,
+        downloadStatusRepository: com.lelloman.pezzottify.android.domain.download.DownloadStatusRepository,
     ): com.lelloman.pezzottify.android.ui.screen.main.myrequests.MyRequestsScreenViewModel.Interactor =
         object : com.lelloman.pezzottify.android.ui.screen.main.myrequests.MyRequestsScreenViewModel.Interactor {
             override suspend fun getMyRequests(): Result<List<com.lelloman.pezzottify.android.ui.screen.main.myrequests.UiDownloadRequest>> {
@@ -1021,6 +1022,49 @@ class InteractorsModule {
                         inQueue = limits.inQueue,
                         maxQueue = limits.maxQueue,
                     )
+                }
+            }
+
+            override fun observeUpdates(): kotlinx.coroutines.flow.Flow<com.lelloman.pezzottify.android.ui.screen.main.myrequests.UiDownloadStatusUpdate> {
+                return downloadStatusRepository.observeAllUpdates().map { update ->
+                    when (update) {
+                        is com.lelloman.pezzottify.android.domain.download.DownloadStatusUpdate.Created ->
+                            com.lelloman.pezzottify.android.ui.screen.main.myrequests.UiDownloadStatusUpdate.Created(
+                                requestId = update.requestId,
+                                contentId = update.contentId,
+                                contentName = update.contentName,
+                                artistName = update.artistName,
+                                queuePosition = update.queuePosition,
+                            )
+                        is com.lelloman.pezzottify.android.domain.download.DownloadStatusUpdate.StatusChanged ->
+                            com.lelloman.pezzottify.android.ui.screen.main.myrequests.UiDownloadStatusUpdate.StatusChanged(
+                                requestId = update.requestId,
+                                status = when (update.status) {
+                                    com.lelloman.pezzottify.android.domain.remoteapi.response.DownloadQueueStatus.Pending ->
+                                        com.lelloman.pezzottify.android.ui.screen.main.myrequests.RequestStatus.Pending
+                                    com.lelloman.pezzottify.android.domain.remoteapi.response.DownloadQueueStatus.InProgress ->
+                                        com.lelloman.pezzottify.android.ui.screen.main.myrequests.RequestStatus.InProgress
+                                    com.lelloman.pezzottify.android.domain.remoteapi.response.DownloadQueueStatus.Completed ->
+                                        com.lelloman.pezzottify.android.ui.screen.main.myrequests.RequestStatus.Completed
+                                    com.lelloman.pezzottify.android.domain.remoteapi.response.DownloadQueueStatus.Failed ->
+                                        com.lelloman.pezzottify.android.ui.screen.main.myrequests.RequestStatus.Failed
+                                    com.lelloman.pezzottify.android.domain.remoteapi.response.DownloadQueueStatus.RetryWaiting ->
+                                        com.lelloman.pezzottify.android.ui.screen.main.myrequests.RequestStatus.Pending
+                                },
+                                queuePosition = update.queuePosition,
+                                errorMessage = update.errorMessage,
+                            )
+                        is com.lelloman.pezzottify.android.domain.download.DownloadStatusUpdate.ProgressUpdated ->
+                            com.lelloman.pezzottify.android.ui.screen.main.myrequests.UiDownloadStatusUpdate.ProgressUpdated(
+                                requestId = update.requestId,
+                                completed = update.progress.completed,
+                                total = update.progress.totalChildren,
+                            )
+                        is com.lelloman.pezzottify.android.domain.download.DownloadStatusUpdate.Completed ->
+                            com.lelloman.pezzottify.android.ui.screen.main.myrequests.UiDownloadStatusUpdate.Completed(
+                                requestId = update.requestId,
+                            )
+                    }
                 }
             }
         }
