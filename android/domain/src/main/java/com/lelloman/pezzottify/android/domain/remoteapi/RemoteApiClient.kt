@@ -16,6 +16,9 @@ import com.lelloman.pezzottify.android.domain.remoteapi.response.PopularContentR
 import com.lelloman.pezzottify.android.domain.remoteapi.response.RemoteApiResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.RequestAlbumResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.SearchResponse
+import com.lelloman.pezzottify.android.domain.remoteapi.response.SkeletonDeltaResponse
+import com.lelloman.pezzottify.android.domain.remoteapi.response.SkeletonVersionResponse
+import com.lelloman.pezzottify.android.domain.remoteapi.response.FullSkeletonResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.SyncEventsResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.SyncStateResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.TrackResponse
@@ -136,6 +139,24 @@ interface RemoteApiClient {
     suspend fun getExternalDiscography(
         artistId: String
     ): RemoteApiResponse<ExternalDiscographyResponse>
+
+    // Skeleton sync endpoints
+
+    /**
+     * Get current skeleton version and checksum.
+     */
+    suspend fun getSkeletonVersion(): RemoteApiResponse<SkeletonVersionResponse>
+
+    /**
+     * Get full catalog skeleton data.
+     */
+    suspend fun getFullSkeleton(): RemoteApiResponse<FullSkeletonResponse>
+
+    /**
+     * Get skeleton changes since a given version.
+     * Returns RemoteApiResponse.Error.NotFound if the version is too old (pruned).
+     */
+    suspend fun getSkeletonDelta(sinceVersion: Long): RemoteApiResponse<SkeletonDeltaResponse>
 
     @Serializable
     enum class SearchFilter {

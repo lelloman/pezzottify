@@ -1211,7 +1211,7 @@ abstract fun bindSkeletonStore(impl: SkeletonStoreImpl): SkeletonStore
 
 ### 4.1 Add API Endpoints
 
-[ ] **Task 4.1.1: Add skeleton response DTOs**
+[x] **Task 4.1.1: Add skeleton response DTOs**
 
 **File:** `android/domain/src/main/java/com/lelloman/pezzottify/android/domain/remoteapi/response/SkeletonResponses.kt`
 
@@ -1267,7 +1267,7 @@ data class SkeletonChangeDto(
 
 ---
 
-[ ] **Task 4.1.2: Add skeleton methods to RemoteApiClient interface**
+[x] **Task 4.1.2: Add skeleton methods to RemoteApiClient interface**
 
 **File:** `android/domain/src/main/java/com/lelloman/pezzottify/android/domain/remoteapi/RemoteApiClient.kt`
 
@@ -1283,7 +1283,7 @@ suspend fun getSkeletonDelta(sinceVersion: Long): RemoteApiResponse<SkeletonDelt
 
 ---
 
-[ ] **Task 4.1.3: Add skeleton endpoints to RetrofitApiClient**
+[x] **Task 4.1.3: Add skeleton endpoints to RetrofitApiClient**
 
 **File:** `android/remoteapi/src/main/java/com/lelloman/pezzottify/android/remoteapi/internal/RetrofiApiClient.kt`
 
@@ -1300,7 +1300,7 @@ suspend fun getSkeletonDelta(@Query("since") sinceVersion: Long): Response<Skele
 
 ---
 
-[ ] **Task 4.1.4: Implement skeleton methods in RemoteApiClientImpl**
+[x] **Task 4.1.4: Implement skeleton methods in RemoteApiClientImpl**
 
 **File:** `android/remoteapi/src/main/java/com/lelloman/pezzottify/android/remoteapi/internal/RemoteApiClientImpl.kt`
 
@@ -1319,7 +1319,7 @@ override suspend fun getSkeletonDelta(sinceVersion: Long): RemoteApiResponse<Ske
 
 ### 4.2 Implement Syncer
 
-[ ] **Task 4.2.1: Create CatalogSkeletonSyncer**
+[x] **Task 4.2.1: Create CatalogSkeletonSyncer**
 
 **File:** `android/domain/src/main/java/com/lelloman/pezzottify/android/domain/skeleton/CatalogSkeletonSyncer.kt`
 
@@ -1446,7 +1446,7 @@ class CatalogSkeletonSyncer @Inject constructor(
 
 ### 4.3 Integrate with App Lifecycle
 
-[ ] **Task 4.3.1: Add skeleton sync to app initialization**
+[x] **Task 4.3.1: Add skeleton sync to app initialization**
 
 **File:** `android/domain/src/main/java/com/lelloman/pezzottify/android/domain/usecase/InitializeApp.kt`
 
@@ -1459,7 +1459,7 @@ launch { skeletonSyncer.sync() }
 
 ---
 
-[ ] **Task 4.3.2: Add skeleton sync to SyncManager (if exists) or create sync trigger points**
+[x] **Task 4.3.2: Add skeleton sync to SyncManager (if exists) or create sync trigger points**
 
 **Context:** Trigger skeleton sync on:
 - App start (already done in InitializeApp)
@@ -1567,7 +1567,7 @@ End-to-end test with catalog-server: sync, verify data, modify catalog, sync aga
 | 1. Server Data Model | 1.1.1 - 1.3.3 | 11/11 |
 | 2. Server Endpoints | 2.1.1 - 2.3.2 | 9/9 |
 | 3. Android Storage | 3.1.1 - 3.2.3 | 7/7 |
-| 4. Android Sync | 4.1.1 - 4.3.2 | 0/7 |
+| 4. Android Sync | 4.1.1 - 4.3.2 | 7/7 |
 | 5. Use Skeleton | 5.1.1 - 5.1.2 | 0/2 |
 | 6. Testing | 6.1.1 - 6.2.3 | 0/6 |
-| **Total** | | **27/42** |
+| **Total** | | **34/42** |
