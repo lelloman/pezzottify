@@ -727,6 +727,92 @@ pub struct DailyCounts {
     pub bytes: i64,
 }
 
+/// Time period for aggregating download statistics.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum StatsPeriod {
+    /// Hourly granularity (last 48 hours)
+    Hourly,
+    /// Daily granularity (last 30 days)
+    Daily,
+    /// Weekly granularity (last 12 weeks)
+    Weekly,
+}
+
+impl StatsPeriod {
+    #[allow(clippy::should_implement_trait)]
+    pub fn from_str(s: &str) -> Option<Self> {
+        match s.to_lowercase().as_str() {
+            "hourly" => Some(StatsPeriod::Hourly),
+            "daily" => Some(StatsPeriod::Daily),
+            "weekly" => Some(StatsPeriod::Weekly),
+            _ => None,
+        }
+    }
+}
+
+/// A single entry in aggregated download statistics.
+#[derive(Debug, Clone, Serialize)]
+pub struct StatsHistoryEntry {
+    /// Unix timestamp of the period start (hour/day/week boundary)
+    pub period_start: i64,
+    /// Number of albums downloaded in this period
+    pub albums: i64,
+    /// Number of tracks downloaded in this period
+    pub tracks: i64,
+    /// Number of images downloaded in this period
+    pub images: i64,
+    /// Total bytes downloaded in this period
+    pub bytes: i64,
+    /// Number of failed downloads in this period
+    pub failures: i64,
+}
+
+/// Aggregated download statistics over time.
+#[derive(Debug, Clone, Serialize)]
+pub struct DownloadStatsHistory {
+    /// The aggregation period used
+    pub period: StatsPeriod,
+    /// Time-series entries (oldest first)
+    pub entries: Vec<StatsHistoryEntry>,
+    /// Total albums downloaded across all entries
+    pub total_albums: i64,
+    /// Total tracks downloaded across all entries
+    pub total_tracks: i64,
+    /// Total images downloaded across all entries
+    pub total_images: i64,
+    /// Total bytes downloaded across all entries
+    pub total_bytes: i64,
+    /// Total failures across all entries
+    pub total_failures: i64,
+}
+
+impl DownloadStatsHistory {
+    /// Create a new stats history with computed totals.
+    pub fn new(period: StatsPeriod, entries: Vec<StatsHistoryEntry>) -> Self {
+        let (total_albums, total_tracks, total_images, total_bytes, total_failures) =
+            entries.iter().fold((0, 0, 0, 0, 0), |acc, e| {
+                (
+                    acc.0 + e.albums,
+                    acc.1 + e.tracks,
+                    acc.2 + e.images,
+                    acc.3 + e.bytes,
+                    acc.4 + e.failures,
+                )
+            });
+
+        Self {
+            period,
+            entries,
+            total_albums,
+            total_tracks,
+            total_images,
+            total_bytes,
+            total_failures,
+        }
+    }
+}
+
 /// Error information for failed downloads.
 #[derive(Debug, Clone)]
 pub struct DownloadError {

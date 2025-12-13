@@ -577,6 +577,23 @@ export const useRemoteStore = defineStore("remote", () => {
     }
   };
 
+  /**
+   * Fetch aggregated download statistics over time.
+   * @param {string} period - "hourly" (48h), "daily" (30d), or "weekly" (12w). Default: daily
+   * @returns {Object|null} Stats history with entries and totals, or null on error
+   */
+  const fetchDownloadStatsHistory = async (period = "daily") => {
+    try {
+      const response = await axios.get("/v1/download/admin/stats/history", {
+        params: { period },
+      });
+      return response.data;
+    } catch (error) {
+      console.error("Failed to fetch download stats history:", error);
+      return null;
+    }
+  };
+
   const fetchDownloadRequests = async (limit = 100, offset = 0) => {
     try {
       const response = await axios.get("/v1/download/admin/requests", {
@@ -739,6 +756,7 @@ export const useRemoteStore = defineStore("remote", () => {
     fetchDownloadCompleted,
     fetchFailedDownloads,
     fetchDownloadActivity,
+    fetchDownloadStatsHistory,
     fetchDownloadRequests,
     fetchDownloadAuditLog,
     fetchDownloadAuditForItem,

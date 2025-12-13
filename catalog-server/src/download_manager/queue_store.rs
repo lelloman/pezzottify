@@ -157,6 +157,12 @@ pub trait DownloadQueueStore: Send + Sync {
     /// Get daily download counts.
     fn get_daily_counts(&self) -> Result<DailyCounts>;
 
+    /// Get download statistics history aggregated by period.
+    /// - Hourly: last 48 hours
+    /// - Daily: last 30 days
+    /// - Weekly: last 12 weeks
+    fn get_stats_history(&self, period: StatsPeriod) -> Result<DownloadStatsHistory>;
+
     // === Statistics ===
 
     /// Get overall queue statistics.
@@ -1282,6 +1288,59 @@ impl DownloadQueueStore for SqliteDownloadQueueStore {
         )?;
 
         Ok(result)
+    }
+
+    fn get_stats_history(&self, period: StatsPeriod) -> Result<DownloadStatsHistory> {
+        let conn = self.conn.lock().unwrap();
+        let now = Self::now();
+
+        // Calculate time range and grouping based on period
+        let (since, group_seconds) = match period {
+            StatsPeriod::Hourly => {
+                // Last 48 hours, grouped by hour
+                (now - 48 * 3600, 3600)
+            }
+            StatsPeriod::Daily => {
+                // Last 30 days, grouped by day
+                (now - 30 * 24 * 3600, 24 * 3600)
+            }
+            StatsPeriod::Weekly => {
+                // Last 12 weeks, grouped by week
+                (now - 12 * 7 * 24 * 3600, 7 * 24 * 3600)
+            }
+        };
+
+        // Truncate to period boundary
+        let since_bucket = (since / group_seconds) * group_seconds;
+
+        let mut stmt = conn.prepare(
+            r#"SELECT
+                   (hour_bucket / ?1) * ?1 as period_start,
+                   COALESCE(SUM(albums_downloaded), 0) as albums,
+                   COALESCE(SUM(tracks_downloaded), 0) as tracks,
+                   COALESCE(SUM(images_downloaded), 0) as images,
+                   COALESCE(SUM(bytes_downloaded), 0) as bytes,
+                   COALESCE(SUM(failed_count), 0) as failures
+               FROM download_activity_log
+               WHERE hour_bucket >= ?2
+               GROUP BY period_start
+               ORDER BY period_start ASC"#,
+        )?;
+
+        let entries = stmt
+            .query_map(rusqlite::params![group_seconds, since_bucket], |row| {
+                Ok(StatsHistoryEntry {
+                    period_start: row.get("period_start")?,
+                    albums: row.get("albums")?,
+                    tracks: row.get("tracks")?,
+                    images: row.get("images")?,
+                    bytes: row.get("bytes")?,
+                    failures: row.get("failures")?,
+                })
+            })?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+
+        Ok(DownloadStatsHistory::new(period, entries))
     }
 
     // === Statistics ===
@@ -4048,5 +4107,101 @@ mod tests {
         // Try to delete entries older than timestamp 0 (none should match)
         let deleted = store.cleanup_old_audit_entries(0).unwrap();
         assert_eq!(deleted, 0);
+    }
+
+    // === Stats History Tests ===
+
+    #[test]
+    fn test_get_stats_history_empty() {
+        let store = SqliteDownloadQueueStore::in_memory().unwrap();
+
+        // All periods should return empty history
+        let hourly = store.get_stats_history(StatsPeriod::Hourly).unwrap();
+        assert!(hourly.entries.is_empty());
+        assert_eq!(hourly.total_albums, 0);
+        assert_eq!(hourly.total_tracks, 0);
+
+        let daily = store.get_stats_history(StatsPeriod::Daily).unwrap();
+        assert!(daily.entries.is_empty());
+
+        let weekly = store.get_stats_history(StatsPeriod::Weekly).unwrap();
+        assert!(weekly.entries.is_empty());
+    }
+
+    #[test]
+    fn test_get_stats_history_with_data() {
+        let store = SqliteDownloadQueueStore::in_memory().unwrap();
+
+        // Record activity (current hour)
+        store
+            .record_activity(DownloadContentType::Album, 1_000_000, true)
+            .unwrap();
+        store
+            .record_activity(DownloadContentType::Album, 2_000_000, true)
+            .unwrap();
+        store
+            .record_activity(DownloadContentType::TrackAudio, 10_000_000, true)
+            .unwrap();
+        store
+            .record_activity(DownloadContentType::AlbumImage, 100_000, true)
+            .unwrap();
+        store
+            .record_activity(DownloadContentType::TrackAudio, 0, false) // failure
+            .unwrap();
+
+        // Get hourly stats (should include current hour)
+        let hourly = store.get_stats_history(StatsPeriod::Hourly).unwrap();
+        assert!(!hourly.entries.is_empty());
+        assert_eq!(hourly.total_albums, 2);
+        assert_eq!(hourly.total_tracks, 1);
+        assert_eq!(hourly.total_images, 1);
+        assert_eq!(
+            hourly.total_bytes,
+            1_000_000 + 2_000_000 + 10_000_000 + 100_000
+        );
+        assert_eq!(hourly.total_failures, 1);
+
+        // Daily and weekly should also include the data
+        let daily = store.get_stats_history(StatsPeriod::Daily).unwrap();
+        assert_eq!(daily.total_albums, 2);
+
+        let weekly = store.get_stats_history(StatsPeriod::Weekly).unwrap();
+        assert_eq!(weekly.total_albums, 2);
+    }
+
+    #[test]
+    fn test_stats_history_period_aggregation() {
+        let store = SqliteDownloadQueueStore::in_memory().unwrap();
+
+        // Record activity
+        store
+            .record_activity(DownloadContentType::Album, 1_000_000, true)
+            .unwrap();
+        store
+            .record_activity(DownloadContentType::TrackAudio, 5_000_000, true)
+            .unwrap();
+
+        // Check that different periods are represented correctly
+        let hourly = store.get_stats_history(StatsPeriod::Hourly).unwrap();
+        assert_eq!(hourly.period, StatsPeriod::Hourly);
+        assert!(!hourly.entries.is_empty());
+        // Each entry should have period_start divisible by 3600 (hour)
+        for entry in &hourly.entries {
+            assert_eq!(entry.period_start % 3600, 0);
+        }
+
+        let daily = store.get_stats_history(StatsPeriod::Daily).unwrap();
+        assert_eq!(daily.period, StatsPeriod::Daily);
+        // Each entry should have period_start divisible by 86400 (day)
+        for entry in &daily.entries {
+            assert_eq!(entry.period_start % 86400, 0);
+        }
+
+        let weekly = store.get_stats_history(StatsPeriod::Weekly).unwrap();
+        assert_eq!(weekly.period, StatsPeriod::Weekly);
+        // Each entry should have period_start divisible by 604800 (week)
+        for entry in &weekly.entries {
+            assert_eq!(entry.period_start % 604800, 0);
+        }
     }
 }

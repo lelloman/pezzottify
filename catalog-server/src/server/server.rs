@@ -3638,6 +3638,45 @@ async fn admin_get_download_activity(
     }
 }
 
+/// Query parameters for stats history endpoint
+#[derive(serde::Deserialize)]
+struct StatsHistoryQuery {
+    /// Period: "hourly" (48h), "daily" (30d), or "weekly" (12w). Default: daily
+    period: Option<String>,
+}
+
+/// GET /v1/download/admin/stats/history - Get aggregated download statistics over time
+async fn admin_get_stats_history(
+    _session: Session,
+    State(download_manager): State<super::state::OptionalDownloadManager>,
+    Query(query): Query<StatsHistoryQuery>,
+) -> Response {
+    let dm = match download_manager {
+        Some(dm) => dm,
+        None => {
+            return (
+                StatusCode::SERVICE_UNAVAILABLE,
+                "Download manager not enabled",
+            )
+                .into_response()
+        }
+    };
+
+    let period = query
+        .period
+        .as_deref()
+        .and_then(crate::download_manager::StatsPeriod::from_str)
+        .unwrap_or(crate::download_manager::StatsPeriod::Daily);
+
+    match dm.get_stats_history(period) {
+        Ok(history) => Json(history).into_response(),
+        Err(err) => {
+            error!("Error getting stats history: {}", err);
+            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+        }
+    }
+}
+
 /// Query parameters for requests endpoint
 #[derive(serde::Deserialize)]
 struct RequestsQuery {
@@ -4547,6 +4586,7 @@ pub async fn make_app(
     // Download manager admin read routes (requires DownloadManagerAdmin permission)
     let download_admin_read_routes: Router = Router::new()
         .route("/admin/stats", get(admin_get_download_stats))
+        .route("/admin/stats/history", get(admin_get_stats_history))
         .route("/admin/failed", get(admin_get_download_failed))
         .route("/admin/activity", get(admin_get_download_activity))
         .route("/admin/requests", get(admin_get_download_requests))
