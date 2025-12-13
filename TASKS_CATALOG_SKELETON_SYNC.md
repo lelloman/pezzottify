@@ -1520,19 +1520,19 @@ val albumIds = discographyProvider.getAlbumIdsForArtist(artistId)
 
 ### 6.1 Server Tests
 
-[ ] **Task 6.1.1: Verify event emission with catalog operations**
+[x] **Task 6.1.1: Verify event emission with catalog operations**
 
 Manual test: Insert artist/album/track via admin API, verify events are logged in catalog_events table.
 
 ---
 
-[ ] **Task 6.1.2: Test full skeleton endpoint with sample data**
+[x] **Task 6.1.2: Test full skeleton endpoint with sample data**
 
 Test that GET /v1/catalog/skeleton returns correct structure and data.
 
 ---
 
-[ ] **Task 6.1.3: Test delta endpoint with various scenarios**
+[x] **Task 6.1.3: Test delta endpoint with various scenarios**
 
 - Request delta from version 0 (should get all events)
 - Request delta from recent version (should get subset)
@@ -1542,19 +1542,19 @@ Test that GET /v1/catalog/skeleton returns correct structure and data.
 
 ### 6.2 Android Tests
 
-[ ] **Task 6.2.1: Write unit tests for SkeletonStoreImpl**
+[x] **Task 6.2.1: Write unit tests for SkeletonStoreImpl**
 
 **File:** `android/localdata/src/test/java/com/lelloman/pezzottify/android/localdata/internal/skeleton/SkeletonStoreImplTest.kt`
 
 ---
 
-[ ] **Task 6.2.2: Write unit tests for CatalogSkeletonSyncer**
+[x] **Task 6.2.2: Write unit tests for CatalogSkeletonSyncer**
 
 **File:** `android/domain/src/test/java/com/lelloman/pezzottify/android/domain/skeleton/CatalogSkeletonSyncerTest.kt`
 
 ---
 
-[ ] **Task 6.2.3: Integration test skeleton sync flow**
+[x] **Task 6.2.3: Integration test skeleton sync flow**
 
 End-to-end test with catalog-server: sync, verify data, modify catalog, sync again, verify delta applied.
 
@@ -1569,5 +1569,5 @@ End-to-end test with catalog-server: sync, verify data, modify catalog, sync aga
 | 3. Android Storage | 3.1.1 - 3.2.3 | 7/7 |
 | 4. Android Sync | 4.1.1 - 4.3.2 | 7/7 |
 | 5. Use Skeleton | 5.1.1 - 5.1.2 | 2/2 |
-| 6. Testing | 6.1.1 - 6.2.3 | 0/6 |
-| **Total** | | **36/42** |
+| 6. Testing | 6.1.1 - 6.2.3 | 6/6 |
+| **Total** | | **42/42** |
