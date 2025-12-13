@@ -202,6 +202,25 @@ impl ConnectionManager {
         let conns = self.connections.read().await;
         conns.len()
     }
+
+    /// Broadcast a message to ALL connected users (all devices of all users).
+    ///
+    /// Used for system-wide notifications like catalog updates.
+    /// Returns count of failed sends.
+    pub async fn broadcast_to_all(&self, message: ServerMessage) -> usize {
+        let conns = self.connections.read().await;
+        let mut failed_count = 0;
+
+        for user_conns in conns.values() {
+            for entry in user_conns.values() {
+                if entry.sender.send(message.clone()).await.is_err() {
+                    failed_count += 1;
+                }
+            }
+        }
+
+        failed_count
+    }
 }
 
 #[cfg(test)]
