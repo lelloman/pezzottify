@@ -4,7 +4,7 @@ use super::permissions::{Permission, PermissionGrant, UserRole};
 use super::settings::UserSetting;
 use super::user_models::{
     BandwidthSummary, BandwidthUsage, DailyListeningStats, LikedContentType, ListeningEvent,
-    ListeningSummary, TrackListeningStats, UserListeningHistoryEntry, UserPlaylist,
+    ListeningSummary, TrackListeningStats, TrackPlayCount, UserListeningHistoryEntry, UserPlaylist,
 };
 use anyhow::Result;
 
@@ -248,6 +248,15 @@ pub trait UserListeningStore: Send + Sync {
         end_date: u32,
         limit: usize,
     ) -> Result<Vec<TrackListeningStats>>;
+
+    /// Gets all track play counts within a date range (no limit).
+    /// Returns lightweight (track_id, play_count) pairs for aggregation.
+    /// Used for computing artist popularity where we need ALL tracks, not just top N.
+    fn get_all_track_play_counts(
+        &self,
+        start_date: u32,
+        end_date: u32,
+    ) -> Result<Vec<TrackPlayCount>>;
 
     /// Prunes listening events older than the specified number of days.
     /// Returns the number of events deleted.

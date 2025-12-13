@@ -5209,6 +5209,14 @@ mod tests {
             Ok(vec![])
         }
 
+        fn get_all_track_play_counts(
+            &self,
+            _start_date: u32,
+            _end_date: u32,
+        ) -> Result<Vec<crate::user::user_models::TrackPlayCount>> {
+            Ok(vec![])
+        }
+
         fn prune_listening_events(&self, _older_than_days: u32) -> Result<usize> {
             Ok(0)
         }

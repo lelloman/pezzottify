@@ -105,41 +105,65 @@ impl BackgroundJob for PopularContentJob {
             return Err(JobError::Cancelled);
         }
 
-        // Get top tracks from listening data
-        let track_limit = (self.albums_limit + self.artists_limit) * 5;
+        // =====================================================================
+        // Compute popular albums from top tracks
+        // =====================================================================
+        let track_limit = self.albums_limit * 5;
         let top_tracks = ctx
             .user_store
             .get_top_tracks(start_date, end_date, track_limit)
             .map_err(|e| JobError::ExecutionFailed(format!("Failed to get top tracks: {}", e)))?;
 
-        debug!("Found {} top tracks in listening data", top_tracks.len());
+        debug!("Found {} top tracks for album computation", top_tracks.len());
 
-        if top_tracks.is_empty() {
-            info!(
-                "No listening data found for the date range, skipping popular content computation"
-            );
-            return Ok(());
+        // Aggregate play counts by album
+        let mut album_plays: HashMap<String, u64> = HashMap::new();
+        for track_stats in &top_tracks {
+            if let Some(album_id) = ctx.catalog_store.get_track_album_id(&track_stats.track_id) {
+                *album_plays.entry(album_id).or_insert(0) += track_stats.play_count;
+            }
         }
+
+        // Sort and get top albums
+        let mut album_list: Vec<_> = album_plays.into_iter().collect();
+        album_list.sort_by(|a, b| b.1.cmp(&a.1));
+        let top_albums: Vec<_> = album_list.into_iter().take(self.albums_limit).collect();
 
         // Check for cancellation
         if ctx.is_cancelled() {
             return Err(JobError::Cancelled);
         }
 
-        // Aggregate play counts by album and artist
-        let mut album_plays: HashMap<String, u64> = HashMap::new();
+        // =====================================================================
+        // Compute popular artists from ALL track play counts
+        // This ensures artists with many medium-popularity tracks aren't
+        // underrepresented compared to artists with one viral hit.
+        // =====================================================================
+        let all_track_counts = ctx
+            .user_store
+            .get_all_track_play_counts(start_date, end_date)
+            .map_err(|e| {
+                JobError::ExecutionFailed(format!("Failed to get all track play counts: {}", e))
+            })?;
+
+        debug!(
+            "Found {} unique tracks for artist computation",
+            all_track_counts.len()
+        );
+
+        if all_track_counts.is_empty() {
+            info!(
+                "No listening data found for the date range, skipping popular content computation"
+            );
+            return Ok(());
+        }
+
+        // Aggregate play counts by artist from ALL tracks
         let mut artist_plays: HashMap<String, u64> = HashMap::new();
-
-        for track_stats in &top_tracks {
-            // Get album_id from track
-            if let Some(album_id) = ctx.catalog_store.get_track_album_id(&track_stats.track_id) {
-                *album_plays.entry(album_id).or_insert(0) += track_stats.play_count;
-            }
-
-            // Get track artists from resolved track JSON
+        for track_count in &all_track_counts {
             if let Ok(Some(track_json)) = ctx
                 .catalog_store
-                .get_resolved_track_json(&track_stats.track_id)
+                .get_resolved_track_json(&track_count.track_id)
             {
                 if let Some(artists) = track_json.get("artists").and_then(|a| a.as_array()) {
                     for track_artist in artists {
@@ -149,7 +173,7 @@ impl BackgroundJob for PopularContentJob {
                             .and_then(|id| id.as_str())
                         {
                             *artist_plays.entry(artist_id.to_string()).or_insert(0) +=
-                                track_stats.play_count;
+                                track_count.play_count;
                         }
                     }
                 }
@@ -161,17 +185,14 @@ impl BackgroundJob for PopularContentJob {
             return Err(JobError::Cancelled);
         }
 
-        // Sort and get top albums
-        let mut album_list: Vec<_> = album_plays.into_iter().collect();
-        album_list.sort_by(|a, b| b.1.cmp(&a.1));
-        let top_albums: Vec<_> = album_list.into_iter().take(self.albums_limit).collect();
-
         // Sort and get top artists
         let mut artist_list: Vec<_> = artist_plays.into_iter().collect();
         artist_list.sort_by(|a, b| b.1.cmp(&a.1));
         let top_artists: Vec<_> = artist_list.into_iter().take(self.artists_limit).collect();
 
+        // =====================================================================
         // Warm up catalog store caches by resolving album and artist JSON
+        // =====================================================================
         let mut albums_resolved = 0;
         let mut artists_resolved = 0;
 
