@@ -552,22 +552,10 @@ async fn home(session: Option<Session>, State(state): State<ServerState>) -> imp
 }
 
 async fn get_artist(
-    session: Session,
+    _session: Session,
     State(catalog_store): State<GuardedCatalogStore>,
-    State(proxy): State<super::state::OptionalProxy>,
     Path(id): Path<String>,
 ) -> Response {
-    // If proxy is available, ensure artist has complete data
-    if let Some(ref proxy) = proxy {
-        if let Err(e) = proxy
-            .ensure_artist_complete(&id, session.user_id, &session.permissions)
-            .await
-        {
-            warn!("Proxy fetch failed for artist {}: {}", id, e);
-            // Continue serving what we have
-        }
-    }
-
     match catalog_store.get_artist_json(&id) {
         Ok(Some(artist)) => Json(artist).into_response(),
         Ok(None) => StatusCode::NOT_FOUND.into_response(),
@@ -576,22 +564,10 @@ async fn get_artist(
 }
 
 async fn get_album(
-    session: Session,
+    _session: Session,
     State(catalog_store): State<GuardedCatalogStore>,
-    State(proxy): State<super::state::OptionalProxy>,
     Path(id): Path<String>,
 ) -> Response {
-    // If proxy is available, ensure album has complete data
-    if let Some(ref proxy) = proxy {
-        if let Err(e) = proxy
-            .ensure_album_complete(&id, session.user_id, &session.permissions)
-            .await
-        {
-            warn!("Proxy fetch failed for album {}: {}", id, e);
-            // Continue serving what we have
-        }
-    }
-
     match catalog_store.get_album_json(&id) {
         Ok(Some(album)) => Json(album).into_response(),
         Ok(None) => StatusCode::NOT_FOUND.into_response(),
@@ -600,21 +576,10 @@ async fn get_album(
 }
 
 async fn get_resolved_album(
-    session: Session,
+    _session: Session,
     State(catalog_store): State<GuardedCatalogStore>,
-    State(proxy): State<super::state::OptionalProxy>,
     Path(id): Path<String>,
 ) -> Response {
-    // If proxy is available, ensure album has complete data
-    if let Some(ref proxy) = proxy {
-        if let Err(e) = proxy
-            .ensure_album_complete(&id, session.user_id, &session.permissions)
-            .await
-        {
-            warn!("Proxy fetch failed for album {}: {}", id, e);
-        }
-    }
-
     match catalog_store.get_resolved_album_json(&id) {
         Ok(Some(album)) => Json(album).into_response(),
         Ok(None) => StatusCode::NOT_FOUND.into_response(),
@@ -623,21 +588,10 @@ async fn get_resolved_album(
 }
 
 async fn get_artist_discography(
-    session: Session,
+    _session: Session,
     State(catalog_store): State<GuardedCatalogStore>,
-    State(proxy): State<super::state::OptionalProxy>,
     Path(id): Path<String>,
 ) -> Response {
-    // If proxy is available, ensure artist has complete data
-    if let Some(ref proxy) = proxy {
-        if let Err(e) = proxy
-            .ensure_artist_complete(&id, session.user_id, &session.permissions)
-            .await
-        {
-            warn!("Proxy fetch failed for artist discography {}: {}", id, e);
-        }
-    }
-
     match catalog_store.get_artist_discography_json(&id) {
         Ok(None) => StatusCode::NOT_FOUND.into_response(),
         Ok(Some(discography)) => Json(discography).into_response(),
@@ -2549,9 +2503,10 @@ async fn admin_add_user_extra_permission(
         "OwnPlaylists" => Permission::OwnPlaylists,
         "EditCatalog" => Permission::EditCatalog,
         "ManagePermissions" => Permission::ManagePermissions,
-        "IssueContentDownload" => Permission::IssueContentDownload,
         "ServerAdmin" => Permission::ServerAdmin,
         "ViewAnalytics" => Permission::ViewAnalytics,
+        "RequestContent" => Permission::RequestContent,
+        "DownloadManagerAdmin" => Permission::DownloadManagerAdmin,
         _ => return (StatusCode::BAD_REQUEST, "Invalid permission").into_response(),
     };
 
@@ -4146,23 +4101,10 @@ impl ServerState {
         catalog_store: Arc<dyn CatalogStore>,
         search_vault: Box<dyn SearchVault>,
         user_manager: UserManager,
-        user_store: Arc<dyn FullUserStore>,
         downloader: Option<Arc<dyn crate::downloader::Downloader>>,
-        media_base_path: Option<std::path::PathBuf>,
         scheduler_handle: Option<SchedulerHandle>,
         download_manager: Option<Arc<crate::download_manager::DownloadManager>>,
     ) -> ServerState {
-        // Create proxy if downloader and media_base_path are available
-        let proxy = match (&downloader, media_base_path) {
-            (Some(dl), Some(path)) => Some(Arc::new(super::proxy::CatalogProxy::new(
-                dl.clone(),
-                catalog_store.clone(),
-                user_store,
-                path,
-            ))),
-            _ => None,
-        };
-
         ServerState {
             config,
             start_time: Instant::now(),
@@ -4170,7 +4112,6 @@ impl ServerState {
             search_vault: Arc::new(Mutex::new(search_vault)),
             user_manager: Arc::new(Mutex::new(user_manager)),
             downloader,
-            proxy,
             ws_connection_manager: Arc::new(super::websocket::ConnectionManager::new()),
             scheduler_handle,
             download_manager,
@@ -4186,7 +4127,6 @@ pub async fn make_app(
     search_vault: Box<dyn SearchVault>,
     user_store: Arc<dyn FullUserStore>,
     downloader: Option<Arc<dyn crate::downloader::Downloader>>,
-    media_base_path: Option<std::path::PathBuf>,
     scheduler_handle: Option<SchedulerHandle>,
     download_manager: Option<Arc<crate::download_manager::DownloadManager>>,
 ) -> Result<Router> {
@@ -4196,9 +4136,7 @@ pub async fn make_app(
         catalog_store,
         search_vault,
         user_manager,
-        user_store.clone(),
         downloader,
-        media_base_path,
         scheduler_handle,
         download_manager.clone(),
     );
@@ -4711,7 +4649,6 @@ pub async fn run_server(
     content_cache_age_sec: usize,
     frontend_dir_path: Option<String>,
     downloader: Option<Arc<dyn crate::downloader::Downloader>>,
-    media_base_path: Option<std::path::PathBuf>,
     scheduler_handle: Option<SchedulerHandle>,
     ssl_settings: Option<SslSettings>,
     download_manager: Option<Arc<crate::download_manager::DownloadManager>>,
@@ -4728,7 +4665,6 @@ pub async fn run_server(
         search_vault,
         user_store,
         downloader,
-        media_base_path,
         scheduler_handle,
         download_manager,
     )
@@ -4868,7 +4804,6 @@ mod tests {
             Box::new(NoOpSearchVault {}),
             user_store,
             None, // no downloader
-            None, // no media_base_path
             None, // no scheduler_handle
             None, // no download_manager
         )
@@ -5447,11 +5382,10 @@ mod tests {
             let (store, user_id, _temp_dir) = create_test_store_with_admin_user();
 
             let permissions = store.resolve_user_permissions(user_id).unwrap();
-            // Admin should have: AccessCatalog, EditCatalog, ManagePermissions, IssueContentDownload, ServerAdmin
+            // Admin should have: AccessCatalog, EditCatalog, ManagePermissions, ServerAdmin, etc.
             assert!(permissions.contains(&crate::user::Permission::AccessCatalog));
             assert!(permissions.contains(&crate::user::Permission::EditCatalog));
             assert!(permissions.contains(&crate::user::Permission::ManagePermissions));
-            assert!(permissions.contains(&crate::user::Permission::IssueContentDownload));
             assert!(permissions.contains(&crate::user::Permission::ServerAdmin));
         }
 

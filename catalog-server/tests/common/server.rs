@@ -101,9 +101,8 @@ impl TestServer {
             catalog_store,
             search_vault,
             user_store,
-            None,
-            None,
-            None,
+            None, // no downloader
+            None, // no scheduler_handle
             None, // no download_manager
         )
         .await
