@@ -3186,7 +3186,7 @@ async fn request_album_download(
     };
 
     let user_id = session.user_id.to_string();
-    match dm.request_album(&user_id, request) {
+    match dm.request_album(&user_id, request).await {
         Ok(result) => {
             metrics::record_download_user_request("album");
             Json(result).into_response()
@@ -4131,7 +4131,7 @@ impl ServerState {
 }
 
 #[allow(clippy::too_many_arguments)]
-pub fn make_app(
+pub async fn make_app(
     config: ServerConfig,
     catalog_store: Arc<dyn CatalogStore>,
     search_vault: Box<dyn SearchVault>,
@@ -4147,12 +4147,22 @@ pub fn make_app(
         catalog_store,
         search_vault,
         user_manager,
-        user_store,
+        user_store.clone(),
         downloader,
         media_base_path,
         scheduler_handle,
-        download_manager,
+        download_manager.clone(),
     );
+
+    // Set up sync notifier for download manager if enabled
+    if let Some(ref dm) = download_manager {
+        let sync_notifier = Arc::new(crate::download_manager::DownloadSyncNotifier::new(
+            user_store,
+            state.ws_connection_manager.clone(),
+        ));
+        dm.set_sync_notifier(sync_notifier).await;
+        tracing::info!("Download sync notifier initialized");
+    }
 
     // Login route with strict IP-based rate limiting
     // For rates < 60/min, we use per_second(1) and rely on burst_size to enforce the limit
@@ -4658,7 +4668,8 @@ pub async fn run_server(
         media_base_path,
         scheduler_handle,
         download_manager,
-    )?;
+    )
+    .await?;
 
     // Create a minimal metrics-only server (always HTTP, internal use)
     let metrics_app = Router::new().route("/metrics", get(super::metrics::metrics_handler));
@@ -4798,6 +4809,7 @@ mod tests {
             None, // no scheduler_handle
             None, // no download_manager
         )
+        .await
         .unwrap();
 
         // Create a test socket address for rate limiting

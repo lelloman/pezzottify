@@ -8,6 +8,7 @@ use std::sync::Arc;
 
 use anyhow::{anyhow, Result};
 use tokio::fs;
+use tokio::sync::RwLock;
 use tracing::{debug, info, warn};
 use uuid::Uuid;
 
@@ -21,6 +22,7 @@ use super::models::*;
 use super::queue_store::DownloadQueueStore;
 use super::retry_policy::RetryPolicy;
 use super::search_proxy::SearchProxy;
+use super::sync_notifier::DownloadSyncNotifier;
 use super::throttle::{DownloadThrottler, SlidingWindowThrottler, ThrottlerConfig};
 
 /// Main download manager that orchestrates all download operations.
@@ -54,6 +56,8 @@ pub struct DownloadManager {
     throttler: Arc<SlidingWindowThrottler>,
     /// Corruption handler for detecting file corruption and managing restarts.
     corruption_handler: Arc<CorruptionHandler>,
+    /// Sync event notifier for WebSocket updates (optional, uses interior mutability for late initialization).
+    sync_notifier: RwLock<Option<Arc<DownloadSyncNotifier>>>,
 }
 
 impl DownloadManager {
@@ -110,7 +114,18 @@ impl DownloadManager {
             search_proxy,
             throttler,
             corruption_handler,
+            sync_notifier: RwLock::new(None),
         }
+    }
+
+    /// Set the sync notifier for WebSocket updates.
+    ///
+    /// This should be called after construction to enable real-time
+    /// download status updates via WebSocket. Uses interior mutability
+    /// so it can be called even after the manager is wrapped in Arc.
+    pub async fn set_sync_notifier(&self, notifier: Arc<DownloadSyncNotifier>) {
+        let mut guard = self.sync_notifier.write().await;
+        *guard = Some(notifier);
     }
 
     /// Check if the download manager is enabled.
@@ -206,7 +221,7 @@ impl DownloadManager {
     }
 
     // =========================================================================
-    // User Request Methods (sync - only touches local queue store)
+    // User Request Methods
     // =========================================================================
 
     /// Request download of an album.
@@ -217,8 +232,13 @@ impl DownloadManager {
     /// 3. Check if already in queue
     /// 4. Enqueue with appropriate priority
     /// 5. Log audit event
-    /// 6. Return result with queue position
-    pub fn request_album(&self, user_id: &str, request: AlbumRequest) -> Result<RequestResult> {
+    /// 6. Emit sync event for real-time updates
+    /// 7. Return result with queue position
+    pub async fn request_album(
+        &self,
+        user_id: &str,
+        request: AlbumRequest,
+    ) -> Result<RequestResult> {
         // 1. Check user rate limits
         let limits = self.check_user_limits(user_id)?;
         if !limits.can_request {
@@ -264,15 +284,22 @@ impl DownloadManager {
         // Increment user request counters
         self.queue_store.increment_user_requests(user_id)?;
 
-        // 6. Get queue position
+        // 5. Get queue position
         let queue_position = self
             .queue_store
             .get_queue_position(&queue_item_id)?
             .unwrap_or(0);
 
-        // 5. Log audit event
+        // 6. Log audit event
         self.audit_logger
             .log_request_created(&queue_item, queue_position)?;
+
+        // 7. Emit sync event for real-time WebSocket updates
+        if let Some(ref notifier) = *self.sync_notifier.read().await {
+            notifier
+                .notify_request_created(&queue_item, queue_position as i32)
+                .await;
+        }
 
         Ok(RequestResult {
             request_id: queue_item_id,
@@ -477,6 +504,15 @@ impl DownloadManager {
         // 6. Log download started
         self.audit_logger.log_download_started(&item)?;
 
+        // Emit status change to InProgress for top-level album items
+        if item.content_type == DownloadContentType::Album && item.parent_id.is_none() {
+            if let Some(ref notifier) = *self.sync_notifier.read().await {
+                notifier
+                    .notify_status_changed(&item, QueueStatus::InProgress, None, None)
+                    .await;
+            }
+        }
+
         let start_time = std::time::Instant::now();
 
         // 7. Execute download based on content type
@@ -554,7 +590,19 @@ impl DownloadManager {
 
                     // Check if parent is now complete (must be AFTER mark_completed)
                     if let Some(parent_id) = &item.parent_id {
-                        self.check_and_complete_parent(parent_id).ok();
+                        // Emit progress update for the parent
+                        if let Some(ref notifier) = *self.sync_notifier.read().await {
+                            if let Ok(Some(parent)) = self.queue_store.get_item(parent_id) {
+                                if let Ok(progress) =
+                                    self.queue_store.get_children_progress(parent_id)
+                                {
+                                    notifier
+                                        .notify_progress_updated(&parent, &progress)
+                                        .await;
+                                }
+                            }
+                        }
+                        self.check_and_complete_parent(parent_id).await.ok();
                     }
                 }
 
@@ -616,6 +664,26 @@ impl DownloadManager {
                         backoff_secs,
                         &error,
                     )?;
+
+                    // Emit status change for top-level album items
+                    if item.content_type == DownloadContentType::Album && item.parent_id.is_none() {
+                        if let Some(ref notifier) = *self.sync_notifier.read().await {
+                            let queue_pos = self
+                                .queue_store
+                                .get_queue_position(&item.id)
+                                .ok()
+                                .flatten()
+                                .map(|p| p as i32);
+                            notifier
+                                .notify_status_changed(
+                                    &item,
+                                    QueueStatus::RetryWaiting,
+                                    queue_pos,
+                                    Some(error.message.clone()),
+                                )
+                                .await;
+                        }
+                    }
                 } else {
                     // Mark as permanently failed
                     self.queue_store.mark_failed(&item.id, &error)?;
@@ -629,6 +697,20 @@ impl DownloadManager {
                         .record_activity(item.content_type, 0, false)?;
 
                     self.audit_logger.log_download_failed(&item, &error)?;
+
+                    // Emit status change for top-level album items
+                    if item.content_type == DownloadContentType::Album && item.parent_id.is_none() {
+                        if let Some(ref notifier) = *self.sync_notifier.read().await {
+                            notifier
+                                .notify_status_changed(
+                                    &item,
+                                    QueueStatus::Failed,
+                                    None,
+                                    Some(error.message.clone()),
+                                )
+                                .await;
+                        }
+                    }
                 }
 
                 Ok(Some(ProcessingResult::failure(
@@ -951,7 +1033,7 @@ impl DownloadManager {
     }
 
     /// Check if all children of a parent are complete and update parent status.
-    fn check_and_complete_parent(&self, parent_id: &str) -> Result<()> {
+    async fn check_and_complete_parent(&self, parent_id: &str) -> Result<()> {
         // check_parent_completion returns:
         // - Some(Completed) if all children completed successfully
         // - Some(Failed) if any children failed and none are in progress
@@ -967,9 +1049,15 @@ impl DownloadManager {
 
                 self.queue_store.mark_completed(parent_id, total_bytes, 0)?;
 
-                if let Some(parent) = self.queue_store.get_item(parent_id)? {
+                let parent = self.queue_store.get_item(parent_id)?;
+                if let Some(ref parent) = parent {
                     if let Some(user_id) = &parent.requested_by_user_id {
                         self.queue_store.decrement_user_queue(user_id)?;
+                    }
+
+                    // Emit completion event
+                    if let Some(ref notifier) = *self.sync_notifier.read().await {
+                        notifier.notify_completed(parent).await;
                     }
                 }
 
@@ -982,20 +1070,32 @@ impl DownloadManager {
                 // Some children failed - get failure count for error message
                 let progress = self.queue_store.get_children_progress(parent_id)?;
 
+                let error_msg = format!(
+                    "{} of {} children failed",
+                    progress.failed, progress.total_children
+                );
+
                 self.queue_store.mark_failed(
                     parent_id,
-                    &DownloadError::new(
-                        DownloadErrorType::Unknown,
-                        format!(
-                            "{} of {} children failed",
-                            progress.failed, progress.total_children
-                        ),
-                    ),
+                    &DownloadError::new(DownloadErrorType::Unknown, error_msg.clone()),
                 )?;
 
-                if let Some(parent) = self.queue_store.get_item(parent_id)? {
+                let parent = self.queue_store.get_item(parent_id)?;
+                if let Some(ref parent) = parent {
                     if let Some(user_id) = &parent.requested_by_user_id {
                         self.queue_store.decrement_user_queue(user_id)?;
+                    }
+
+                    // Emit failure event
+                    if let Some(ref notifier) = *self.sync_notifier.read().await {
+                        notifier
+                            .notify_status_changed(
+                                parent,
+                                QueueStatus::Failed,
+                                None,
+                                Some(error_msg),
+                            )
+                            .await;
                     }
                 }
             }
@@ -1493,8 +1593,8 @@ mod tests {
         assert!(result.unwrap_err().to_string().contains("not found"));
     }
 
-    #[test]
-    fn test_request_album_success() {
+    #[tokio::test]
+    async fn test_request_album_success() {
         let ctx = create_test_manager();
 
         let request = AlbumRequest {
@@ -1503,7 +1603,7 @@ mod tests {
             artist_name: "Test Artist".to_string(),
         };
 
-        let result = ctx.manager.request_album("user-1", request).unwrap();
+        let result = ctx.manager.request_album("user-1", request).await.unwrap();
 
         assert_eq!(result.status, QueueStatus::Pending);
         assert!(!result.request_id.is_empty());
@@ -1517,8 +1617,8 @@ mod tests {
         assert_eq!(requests[0].artist_name, Some("Test Artist".to_string()));
     }
 
-    #[test]
-    fn test_request_album_already_in_queue() {
+    #[tokio::test]
+    async fn test_request_album_already_in_queue() {
         let ctx = create_test_manager();
 
         let request = AlbumRequest {
@@ -1530,10 +1630,11 @@ mod tests {
         // First request should succeed
         ctx.manager
             .request_album("user-1", request.clone())
+            .await
             .unwrap();
 
         // Second request for the same album should fail
-        let result = ctx.manager.request_album("user-1", request);
+        let result = ctx.manager.request_album("user-1", request).await;
 
         assert!(result.is_err());
         assert!(result
@@ -1542,8 +1643,8 @@ mod tests {
             .contains("already in the download queue"));
     }
 
-    #[test]
-    fn test_request_album_increments_user_stats() {
+    #[tokio::test]
+    async fn test_request_album_increments_user_stats() {
         let ctx = create_test_manager();
 
         let request = AlbumRequest {
@@ -1558,7 +1659,7 @@ mod tests {
         assert_eq!(limits_before.in_queue, 0);
 
         // Make a request
-        ctx.manager.request_album("user-1", request).unwrap();
+        ctx.manager.request_album("user-1", request).await.unwrap();
 
         // Check updated limits
         let limits_after = ctx.manager.check_user_limits("user-1").unwrap();
@@ -1566,8 +1667,8 @@ mod tests {
         assert_eq!(limits_after.in_queue, 1);
     }
 
-    #[test]
-    fn test_request_album_logs_audit_event() {
+    #[tokio::test]
+    async fn test_request_album_logs_audit_event() {
         let ctx = create_test_manager();
 
         let request = AlbumRequest {
@@ -1576,7 +1677,7 @@ mod tests {
             artist_name: "Test Artist".to_string(),
         };
 
-        let result = ctx.manager.request_album("user-1", request).unwrap();
+        let result = ctx.manager.request_album("user-1", request).await.unwrap();
 
         // Check that an audit log entry was created
         let (item, entries) = ctx
@@ -1629,7 +1730,7 @@ mod tests {
             album_name: "Test Album".to_string(),
             artist_name: "Test Artist".to_string(),
         };
-        let request_result = ctx.manager.request_album("user-1", request).unwrap();
+        let request_result = ctx.manager.request_album("user-1", request).await.unwrap();
 
         // Process the item
         let result = ctx.manager.process_next().await.unwrap();
@@ -1653,7 +1754,7 @@ mod tests {
             album_name: "Test Album".to_string(),
             artist_name: "Test Artist".to_string(),
         };
-        let request_result = ctx.manager.request_album("user-1", request).unwrap();
+        let request_result = ctx.manager.request_album("user-1", request).await.unwrap();
 
         // Process the item (will fail and schedule retry)
         let result = ctx.manager.process_next().await.unwrap();
@@ -1680,7 +1781,7 @@ mod tests {
             album_name: "Test Album".to_string(),
             artist_name: "Test Artist".to_string(),
         };
-        let request_result = ctx.manager.request_album("user-1", request).unwrap();
+        let request_result = ctx.manager.request_album("user-1", request).await.unwrap();
 
         // Process the item
         ctx.manager.process_next().await.unwrap();
@@ -1736,8 +1837,8 @@ mod tests {
         assert!(requests.is_empty());
     }
 
-    #[test]
-    fn test_get_all_requests_with_items() {
+    #[tokio::test]
+    async fn test_get_all_requests_with_items() {
         let ctx = create_test_manager();
 
         // Add some items
@@ -1750,6 +1851,7 @@ mod tests {
                     artist_name: "Artist".to_string(),
                 },
             )
+            .await
             .unwrap();
 
         ctx.manager
@@ -1761,6 +1863,7 @@ mod tests {
                     artist_name: "Artist".to_string(),
                 },
             )
+            .await
             .unwrap();
 
         let requests = ctx
@@ -1771,8 +1874,8 @@ mod tests {
         assert_eq!(requests.len(), 2);
     }
 
-    #[test]
-    fn test_get_all_requests_with_status_filter() {
+    #[tokio::test]
+    async fn test_get_all_requests_with_status_filter() {
         let ctx = create_test_manager();
 
         // Add an item
@@ -1785,6 +1888,7 @@ mod tests {
                     artist_name: "Artist".to_string(),
                 },
             )
+            .await
             .unwrap();
 
         // Filter by PENDING status
@@ -1802,8 +1906,8 @@ mod tests {
         assert!(completed.is_empty());
     }
 
-    #[test]
-    fn test_get_request_status_found() {
+    #[tokio::test]
+    async fn test_get_request_status_found() {
         let ctx = create_test_manager();
 
         let request_result = ctx
@@ -1816,6 +1920,7 @@ mod tests {
                     artist_name: "Artist".to_string(),
                 },
             )
+            .await
             .unwrap();
 
         let status = ctx
@@ -1829,8 +1934,8 @@ mod tests {
         assert_eq!(item.status, QueueStatus::Pending);
     }
 
-    #[test]
-    fn test_multiple_users_separate_queues() {
+    #[tokio::test]
+    async fn test_multiple_users_separate_queues() {
         let ctx = create_test_manager();
 
         // User 1 requests
@@ -1843,6 +1948,7 @@ mod tests {
                     artist_name: "Artist".to_string(),
                 },
             )
+            .await
             .unwrap();
 
         // User 2 requests
@@ -1855,6 +1961,7 @@ mod tests {
                     artist_name: "Artist".to_string(),
                 },
             )
+            .await
             .unwrap();
 
         // Check each user sees only their requests
@@ -1867,8 +1974,8 @@ mod tests {
         assert_eq!(user2_requests[0].content_id, "album-u2");
     }
 
-    #[test]
-    fn test_retry_failed_wrong_status() {
+    #[tokio::test]
+    async fn test_retry_failed_wrong_status() {
         let ctx = create_test_manager();
 
         // Add an item (will be in PENDING status)
@@ -1882,6 +1989,7 @@ mod tests {
                     artist_name: "Artist".to_string(),
                 },
             )
+            .await
             .unwrap();
 
         // Try to retry a non-failed item (without force)
@@ -1896,8 +2004,8 @@ mod tests {
             .contains("Cannot retry item with status"));
     }
 
-    #[test]
-    fn test_queue_position_ordering() {
+    #[tokio::test]
+    async fn test_queue_position_ordering() {
         let ctx = create_test_manager();
 
         // Add multiple items
@@ -1911,6 +2019,7 @@ mod tests {
                     artist_name: "Artist".to_string(),
                 },
             )
+            .await
             .unwrap();
 
         let result2 = ctx
@@ -1923,6 +2032,7 @@ mod tests {
                     artist_name: "Artist".to_string(),
                 },
             )
+            .await
             .unwrap();
 
         // First item should have position 1
@@ -1947,6 +2057,7 @@ mod tests {
                     artist_name: "Artist".to_string(),
                 },
             )
+            .await
             .unwrap();
 
         ctx.manager
@@ -1958,6 +2069,7 @@ mod tests {
                     artist_name: "Artist".to_string(),
                 },
             )
+            .await
             .unwrap();
 
         // Process first item - should be the first one added (FIFO within same priority)
