@@ -1055,9 +1055,14 @@ impl DownloadManager {
                         self.queue_store.decrement_user_queue(user_id)?;
                     }
 
-                    // Emit completion event
+                    // Emit completion event to requesting user
                     if let Some(ref notifier) = *self.sync_notifier.read().await {
                         notifier.notify_completed(parent).await;
+
+                        // Broadcast catalog update to ALL connected users
+                        if let Ok(skeleton_version) = self.catalog_store.get_skeleton_version() {
+                            notifier.notify_catalog_updated(skeleton_version).await;
+                        }
                     }
                 }
 

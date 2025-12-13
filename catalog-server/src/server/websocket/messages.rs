@@ -109,6 +109,8 @@ pub mod msg_types {
     pub const ERROR: &str = "error";
     /// Sync event notification (server -> client).
     pub const SYNC: &str = "sync";
+    /// Catalog updated notification (server -> all clients).
+    pub const CATALOG_UPDATED: &str = "catalog_updated";
 }
 
 /// Sync-related message payloads.
@@ -122,6 +124,21 @@ pub mod sync {
     #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
     pub struct SyncEventMessage {
         pub event: StoredEvent,
+    }
+}
+
+/// Catalog-related message payloads.
+pub mod catalog {
+    use serde::{Deserialize, Serialize};
+
+    /// Payload for catalog_updated messages.
+    ///
+    /// Broadcast to ALL connected clients when new content is added to the catalog.
+    /// Clients should re-sync their skeleton data upon receiving this.
+    #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+    pub struct CatalogUpdatedMessage {
+        /// Current skeleton version on server.
+        pub skeleton_version: i64,
     }
 }
 

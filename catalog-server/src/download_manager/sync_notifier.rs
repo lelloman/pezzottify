@@ -5,10 +5,11 @@
 
 use std::sync::Arc;
 
-use tracing::{debug, warn};
+use tracing::{debug, info, warn};
 
 use crate::server::websocket::connection::ConnectionManager;
-use crate::server::websocket::messages::msg_types::SYNC;
+use crate::server::websocket::messages::catalog::CatalogUpdatedMessage;
+use crate::server::websocket::messages::msg_types::{CATALOG_UPDATED, SYNC};
 use crate::server::websocket::messages::sync::SyncEventMessage;
 use crate::server::websocket::messages::ServerMessage;
 use crate::user::sync_events::{
@@ -129,6 +130,31 @@ impl DownloadSyncNotifier {
         };
 
         self.emit_event(user_id, event).await;
+    }
+
+    /// Notify ALL connected clients that the catalog has been updated.
+    ///
+    /// Called when new content is added to the catalog (after download completes).
+    /// This is a broadcast to all users, not just the one who requested the download.
+    pub async fn notify_catalog_updated(&self, skeleton_version: i64) {
+        let ws_msg = ServerMessage::new(
+            CATALOG_UPDATED,
+            CatalogUpdatedMessage { skeleton_version },
+        );
+
+        let failed_count = self.connection_manager.broadcast_to_all(ws_msg).await;
+
+        if failed_count > 0 {
+            debug!(
+                "Failed to send catalog_updated to {} connections",
+                failed_count
+            );
+        }
+
+        info!(
+            "Broadcast catalog_updated (version={}) to all connected clients",
+            skeleton_version
+        );
     }
 
     /// Parse user ID from the optional string stored in queue items.
