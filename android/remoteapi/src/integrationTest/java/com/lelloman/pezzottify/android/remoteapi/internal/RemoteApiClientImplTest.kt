@@ -596,6 +596,114 @@ class RemoteApiClientImplTest {
         assertThat(response2).isInstanceOf(RemoteApiResponse.Success::class.java)
     }
 
+    @Test
+    fun `listening history - get listening events`() = runTest {
+        val credentialsProvider = object : RemoteApiCredentialsProvider {
+            override var authToken: String = ""
+        }
+        val client = createClient(credentialsProvider, this.backgroundScope)
+
+        testScheduler.advanceUntilIdle()
+        testScheduler.runCurrent()
+
+        // Login
+        val loginResponse = client.login(USER_HANDLE, PASSWORD, createDeviceInfo("-listening-history"))
+        assertThat(loginResponse).isInstanceOf(RemoteApiResponse.Success::class.java)
+        credentialsProvider.authToken = (loginResponse as RemoteApiResponse.Success).data.token
+
+        // First record a listening event so we have something to retrieve
+        val discographyResponse = client.getArtistDiscography(PRINCE_ID)
+        val albumId = (discographyResponse as RemoteApiResponse.Success).data.albums.first().id
+        val albumResponse = client.getAlbum(albumId)
+        val track = (albumResponse as RemoteApiResponse.Success).data.discs.first().tracks.first()
+
+        val now = System.currentTimeMillis() / 1000
+        val event = ListeningEventSyncData(
+            trackId = track.id,
+            sessionId = UUID.randomUUID().toString(),
+            startedAt = now - 300,
+            endedAt = now - 60,
+            durationSeconds = 240,
+            trackDurationSeconds = track.durationSecs ?: 180,
+            seekCount = 1,
+            pauseCount = 2,
+            playbackContext = "album",
+        )
+        val recordResponse = client.recordListeningEvent(event)
+        assertThat(recordResponse).isInstanceOf(RemoteApiResponse.Success::class.java)
+
+        // Now get listening events
+        val eventsResponse = client.getListeningEvents(limit = 50, offset = 0)
+        assertThat(eventsResponse).isInstanceOf(RemoteApiResponse.Success::class.java)
+        val events = (eventsResponse as RemoteApiResponse.Success).data
+
+        // Verify response structure - it's a list directly
+        assertThat(events).isNotEmpty()
+        val lastEvent = events.first()
+        assertThat(lastEvent.trackId).isEqualTo(track.id)
+        assertThat(lastEvent.durationSeconds).isEqualTo(240)
+        assertThat(lastEvent.seekCount).isEqualTo(1)
+        assertThat(lastEvent.pauseCount).isEqualTo(2)
+        assertThat(lastEvent.playbackContext).isEqualTo("album")
+        assertThat(lastEvent.clientType).isEqualTo("android")
+    }
+
+    @Test
+    fun `listening history - get listening events with pagination`() = runTest {
+        val credentialsProvider = object : RemoteApiCredentialsProvider {
+            override var authToken: String = ""
+        }
+        val client = createClient(credentialsProvider, this.backgroundScope)
+
+        testScheduler.advanceUntilIdle()
+        testScheduler.runCurrent()
+
+        // Login
+        val loginResponse = client.login(USER_HANDLE, PASSWORD, createDeviceInfo("-listening-pagination"))
+        assertThat(loginResponse).isInstanceOf(RemoteApiResponse.Success::class.java)
+        credentialsProvider.authToken = (loginResponse as RemoteApiResponse.Success).data.token
+
+        // Get a track for testing
+        val discographyResponse = client.getArtistDiscography(PRINCE_ID)
+        val albumId = (discographyResponse as RemoteApiResponse.Success).data.albums.first().id
+        val albumResponse = client.getAlbum(albumId)
+        val track = (albumResponse as RemoteApiResponse.Success).data.discs.first().tracks.first()
+
+        // Record multiple listening events
+        val now = System.currentTimeMillis() / 1000
+        repeat(5) { i ->
+            val event = ListeningEventSyncData(
+                trackId = track.id,
+                sessionId = UUID.randomUUID().toString(),
+                startedAt = now - (i * 60).toLong(),
+                endedAt = now - (i * 60 - 30).toLong(),
+                durationSeconds = 30,
+                trackDurationSeconds = track.durationSecs ?: 180,
+                seekCount = 0,
+                pauseCount = 0,
+                playbackContext = "album",
+            )
+            client.recordListeningEvent(event)
+        }
+
+        // Get first page with limit 2
+        val page1Response = client.getListeningEvents(limit = 2, offset = 0)
+        assertThat(page1Response).isInstanceOf(RemoteApiResponse.Success::class.java)
+        val page1 = (page1Response as RemoteApiResponse.Success).data
+        assertThat(page1).hasSize(2)
+
+        // Get second page
+        val page2Response = client.getListeningEvents(limit = 2, offset = 2)
+        assertThat(page2Response).isInstanceOf(RemoteApiResponse.Success::class.java)
+        val page2 = (page2Response as RemoteApiResponse.Success).data
+        assertThat(page2).hasSize(2)
+
+        // Events should be different
+        val page1Ids = page1.map { it.id }.toSet()
+        val page2Ids = page2.map { it.id }.toSet()
+        assertThat(page1Ids.intersect(page2Ids)).isEmpty()
+    }
+
     // ==========================================================================
     // Download Manager Tests
     // ==========================================================================

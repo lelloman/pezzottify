@@ -198,6 +198,31 @@
     <string name="error_loading_track">Errore nel caricamento del brano</string>
     <!-- QUEUE SCREEN -->
 
+    <!-- LISTENING HISTORY SCREEN -->
+    <string name="listening_history_title">Cronologia ascolti</string>
+    <string name="listening_history_empty">Nessuna cronologia ancora. Inizia ad ascoltare musica!</string>
+    <string name="listening_history_error_network">Errore di rete. Controlla la connessione e riprova.</string>
+    <string name="listening_history_error_unauthorized">Sessione scaduta. Effettua nuovamente l\'accesso.</string>
+    <string name="listening_history_error_unknown">Impossibile caricare la cronologia ascolti</string>
+    <string name="listening_history_completed">Completato</string>
+    <string name="loading">Caricamento…</string>
+    <string name="date_section_today">Oggi</string>
+    <string name="date_section_yesterday">Ieri</string>
+    <string name="date_section_last_sunday">Domenica scorsa</string>
+    <string name="date_section_last_monday">Lunedì scorso</string>
+    <string name="date_section_last_tuesday">Martedì scorso</string>
+    <string name="date_section_last_wednesday">Mercoledì scorso</string>
+    <string name="date_section_last_thursday">Giovedì scorso</string>
+    <string name="date_section_last_friday">Venerdì scorso</string>
+    <string name="date_section_last_saturday">Sabato scorso</string>
+    <string name="date_section_last_week">Settimana scorsa</string>
+    <string name="date_section_last_month">Mese scorso</string>
+    <string name="date_section_months_ago_one">1 mese fa</string>
+    <string name="date_section_months_ago">%1$d mesi fa</string>
+    <string name="date_section_years_ago_one">1 anno fa</string>
+    <string name="date_section_years_ago">%1$d anni fa</string>
+    <!-- LISTENING HISTORY SCREEN -->
+
     <!-- SEARCH SCREEN -->
     <string name="request_added_to_queue">Richiesta aggiunta alla coda</string>
     <string name="external_artist_not_available">Vista artista esterno non ancora disponibile</string>
