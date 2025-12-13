@@ -5,6 +5,7 @@ import com.lelloman.pezzottify.android.domain.app.TimeProvider
 import com.lelloman.pezzottify.android.domain.cache.CacheMetricsCollector
 import com.lelloman.pezzottify.android.domain.cache.StaticsCache
 import com.lelloman.pezzottify.android.domain.settings.UserSettingsStore
+import com.lelloman.pezzottify.android.domain.skeleton.SkeletonStore
 import com.lelloman.pezzottify.android.domain.statics.fetchstate.ErrorReason
 import com.lelloman.pezzottify.android.domain.statics.fetchstate.StaticItemFetchState
 import com.lelloman.pezzottify.android.domain.statics.fetchstate.StaticItemFetchStateStore
@@ -33,6 +34,7 @@ class StaticsProviderTest {
     private lateinit var staticsCache: StaticsCache
     private lateinit var cacheMetricsCollector: CacheMetricsCollector
     private lateinit var userSettingsStore: UserSettingsStore
+    private lateinit var skeletonStore: SkeletonStore
 
     private var currentTime = 1_000_000L
 
@@ -47,6 +49,7 @@ class StaticsProviderTest {
         staticsCache = mockk(relaxed = true)
         cacheMetricsCollector = mockk(relaxed = true)
         userSettingsStore = mockk()
+        skeletonStore = mockk(relaxed = true)
 
         // Disable cache for these tests (testing Room flow behavior)
         every { userSettingsStore.isInMemoryCacheEnabled } returns MutableStateFlow(false)
@@ -64,6 +67,7 @@ class StaticsProviderTest {
             staticsCache = staticsCache,
             cacheMetricsCollector = cacheMetricsCollector,
             userSettingsStore = userSettingsStore,
+            skeletonStore = skeletonStore,
             loggerFactory = loggerFactory,
             coroutineContext = Dispatchers.Unconfined,
         )
