@@ -6,6 +6,7 @@ import com.lelloman.pezzottify.android.domain.cache.StaticsCache
 import com.lelloman.pezzottify.android.domain.listening.ListeningEventStore
 import com.lelloman.pezzottify.android.domain.player.PezzottifyPlayer
 import com.lelloman.pezzottify.android.domain.remoteapi.RemoteApiClient
+import com.lelloman.pezzottify.android.domain.skeleton.SkeletonStore
 import com.lelloman.pezzottify.android.domain.statics.StaticsStore
 import com.lelloman.pezzottify.android.domain.sync.SyncManager
 import com.lelloman.pezzottify.android.domain.user.PermissionsStore
@@ -28,6 +29,7 @@ class PerformLogoutTest {
     private lateinit var remoteApiClient: RemoteApiClient
     private lateinit var staticsStore: StaticsStore
     private lateinit var staticsCache: StaticsCache
+    private lateinit var skeletonStore: SkeletonStore
     private lateinit var userDataStore: UserDataStore
     private lateinit var userContentStore: UserContentStore
     private lateinit var permissionsStore: PermissionsStore
@@ -45,6 +47,7 @@ class PerformLogoutTest {
         remoteApiClient = mockk(relaxed = true)
         staticsStore = mockk(relaxed = true)
         staticsCache = mockk(relaxed = true)
+        skeletonStore = mockk(relaxed = true)
         userDataStore = mockk(relaxed = true)
         userContentStore = mockk(relaxed = true)
         permissionsStore = mockk(relaxed = true)
@@ -63,6 +66,7 @@ class PerformLogoutTest {
             remoteApiClient = remoteApiClient,
             staticsStore = staticsStore,
             staticsCache = staticsCache,
+            skeletonStore = skeletonStore,
             userDataStore = userDataStore,
             userContentStore = userContentStore,
             permissionsStore = permissionsStore,
@@ -107,6 +111,13 @@ class PerformLogoutTest {
         performLogout()
 
         coVerify { staticsStore.deleteAll() }
+    }
+
+    @Test
+    fun `invoke clears skeleton store`() = runTest {
+        performLogout()
+
+        coVerify { skeletonStore.clear() }
     }
 
     @Test
@@ -161,6 +172,7 @@ class PerformLogoutTest {
             authStore.storeAuthState(AuthState.LoggedOut)
             remoteApiClient.logout()
             staticsStore.deleteAll()
+            skeletonStore.clear()
             userDataStore.deleteAll()
             userContentStore.deleteAll()
             permissionsStore.clear()

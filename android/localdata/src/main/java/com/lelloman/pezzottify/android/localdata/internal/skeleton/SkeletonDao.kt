@@ -27,6 +27,9 @@ internal interface SkeletonDao {
     @Query("SELECT ${SkeletonAlbumArtist.COLUMN_ALBUM_ID} FROM ${SkeletonAlbumArtist.TABLE_NAME} WHERE ${SkeletonAlbumArtist.COLUMN_ARTIST_ID} = :artistId")
     suspend fun getAlbumIdsForArtist(artistId: String): List<String>
 
+    @Query("SELECT ${SkeletonAlbumArtist.COLUMN_ALBUM_ID} FROM ${SkeletonAlbumArtist.TABLE_NAME} WHERE ${SkeletonAlbumArtist.COLUMN_ARTIST_ID} = :artistId")
+    fun observeAlbumIdsForArtist(artistId: String): kotlinx.coroutines.flow.Flow<List<String>>
+
     @Query("SELECT ${SkeletonTrack.COLUMN_ID} FROM ${SkeletonTrack.TABLE_NAME} WHERE ${SkeletonTrack.COLUMN_ALBUM_ID} = :albumId")
     suspend fun getTrackIdsForAlbum(albumId: String): List<String>
 

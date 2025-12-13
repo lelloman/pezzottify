@@ -146,6 +146,15 @@ private fun SettingsScreenInternal(
                 onCacheEnabledChanged = actions::setCacheEnabled
             )
 
+            HorizontalDivider(modifier = Modifier.padding(vertical = 24.dp))
+
+            // Catalog Sync Section
+            CatalogSyncSection(
+                isResyncing = currentState.isSkeletonResyncing,
+                resyncResult = currentState.skeletonResyncResult,
+                onForceResync = actions::forceSkeletonResync
+            )
+
             // Direct Downloads Section - only shown if user has permission
             if (currentState.hasIssueContentDownloadPermission) {
                 HorizontalDivider(modifier = Modifier.padding(vertical = 24.dp))
@@ -238,6 +247,7 @@ private fun SettingsScreenPreview() {
                 override fun clearLogs() {}
                 override fun onBaseUrlInputChanged(input: String) {}
                 override fun saveBaseUrl() {}
+                override fun forceSkeletonResync() {}
             },
         )
     }
@@ -270,6 +280,7 @@ private fun SettingsScreenPreviewDark() {
                 override fun clearLogs() {}
                 override fun onBaseUrlInputChanged(input: String) {}
                 override fun saveBaseUrl() {}
+                override fun forceSkeletonResync() {}
             },
         )
     }

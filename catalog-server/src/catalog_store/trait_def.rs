@@ -313,4 +313,11 @@ pub trait WritableCatalogStore: CatalogStore {
         audio_uri: &str,
         format: &super::Format,
     ) -> Result<()>;
+
+    /// Emit the skeleton event for an album with its artist IDs.
+    ///
+    /// This should be called after all artists have been linked to the album
+    /// via `add_album_artist`. The `insert_album` method does NOT emit a skeleton
+    /// event, so this method must be called to notify clients of new albums.
+    fn emit_album_skeleton_event(&self, album_id: &str, artist_ids: &[String]) -> Result<()>;
 }

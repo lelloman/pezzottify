@@ -6,6 +6,7 @@ import com.lelloman.pezzottify.android.domain.config.ConfigStore
 import com.lelloman.pezzottify.android.domain.device.DeviceInfoProvider
 import com.lelloman.pezzottify.android.domain.remoteapi.RemoteApiClient
 import com.lelloman.pezzottify.android.domain.remoteapi.response.RemoteApiResponse
+import com.lelloman.pezzottify.android.domain.skeleton.CatalogSkeletonSyncer
 import com.lelloman.pezzottify.android.domain.sync.SyncManager
 import com.lelloman.pezzottify.android.domain.usecase.UseCase
 import com.lelloman.pezzottify.android.domain.websocket.WebSocketManager
@@ -20,6 +21,7 @@ class PerformLogin @Inject constructor(
     private val syncManager: SyncManager,
     private val deviceInfoProvider: DeviceInfoProvider,
     private val webSocketManager: WebSocketManager,
+    private val skeletonSyncer: CatalogSkeletonSyncer,
     loggerFactory: LoggerFactory,
 ) : UseCase() {
 
@@ -44,6 +46,15 @@ class PerformLogin @Inject constructor(
                 webSocketManager.connect()
                 logger.debug("invoke() initializing sync manager")
                 syncManager.initialize()
+                logger.debug("invoke() syncing catalog skeleton")
+                when (val result = skeletonSyncer.sync()) {
+                    is CatalogSkeletonSyncer.SyncResult.Success ->
+                        logger.info("invoke() skeleton sync completed")
+                    is CatalogSkeletonSyncer.SyncResult.AlreadyUpToDate ->
+                        logger.info("invoke() skeleton already up to date")
+                    is CatalogSkeletonSyncer.SyncResult.Failed ->
+                        logger.error("invoke() skeleton sync failed: ${result.error}")
+                }
                 return LoginResult.Success
             }
 

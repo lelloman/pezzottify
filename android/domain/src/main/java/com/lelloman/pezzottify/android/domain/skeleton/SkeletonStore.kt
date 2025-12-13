@@ -27,6 +27,12 @@ interface SkeletonStore {
     suspend fun getAlbumIdsForArtist(artistId: String): List<String>
 
     /**
+     * Observe album IDs for a given artist as a Flow.
+     * This is reactive and will emit updates when skeleton data changes.
+     */
+    fun observeAlbumIdsForArtist(artistId: String): kotlinx.coroutines.flow.Flow<List<String>>
+
+    /**
      * Get all track IDs for a given album.
      * Returns empty list if album not found in skeleton.
      */

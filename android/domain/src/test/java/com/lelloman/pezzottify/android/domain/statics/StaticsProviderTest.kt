@@ -191,32 +191,33 @@ class StaticsProviderTest {
     }
 
     @Test
-    fun `provideDiscography does NOT schedule fetch when error state has future tryNextTime`() = runTest {
-        // Given: an error state with tryNextTime in the future
+    fun `provideDiscography returns Loaded when skeleton has album IDs`() = runTest {
+        // Given: skeleton has album IDs for an artist
         val artistId = "artist-discog-123"
-        val futureTime = currentTime + 3_600_000 // 1 hour in future
-        val errorState = StaticItemFetchState.error(
-            itemId = artistId,
-            itemType = StaticItemType.Discography,
-            errorReason = ErrorReason.Client,
-            lastAttemptTime = currentTime - 1000,
-            tryNextTime = futureTime,
-        )
+        val albumIds = listOf("album-1", "album-2", "album-3")
 
-        every { staticsStore.getDiscography(artistId) } returns MutableStateFlow(null)
-        every { fetchStateStore.get(artistId) } returns MutableStateFlow(errorState)
-        coEvery { fetchStateStore.store(any()) } returns Result.success(Unit)
+        every { skeletonStore.observeAlbumIdsForArtist(artistId) } returns MutableStateFlow(albumIds)
 
         // When: we request the discography
         val result = staticsProvider.provideDiscography(artistId).first()
 
-        // Then: result should be Error
-        assertThat(result).isInstanceOf(StaticsItem.Error::class.java)
+        // Then: result should be Loaded with the skeleton album IDs
+        assertThat(result).isInstanceOf(StaticsItem.Loaded::class.java)
+        val loaded = result as StaticsItem.Loaded
+        assertThat(loaded.data.albumsIds).isEqualTo(albumIds)
+    }
 
-        // And: store() should NOT have been called
-        coVerify(exactly = 0) { fetchStateStore.store(any()) }
+    @Test
+    fun `provideDiscography returns Loading when skeleton has no album IDs`() = runTest {
+        // Given: skeleton has no data for this artist
+        val artistId = "artist-discog-456"
 
-        // And: synchronizer should NOT have been woken up
-        verify(exactly = 0) { staticsSynchronizer.wakeUp() }
+        every { skeletonStore.observeAlbumIdsForArtist(artistId) } returns MutableStateFlow(emptyList())
+
+        // When: we request the discography
+        val result = staticsProvider.provideDiscography(artistId).first()
+
+        // Then: result should be Loading (waiting for skeleton sync)
+        assertThat(result).isInstanceOf(StaticsItem.Loading::class.java)
     }
 }

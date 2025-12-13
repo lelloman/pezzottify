@@ -912,16 +912,9 @@ impl SqliteCatalogStore {
             Some(&summary),
         )?;
 
-        // Emit skeleton event
-        // Note: artist_ids is empty here because artists are linked separately via add_album_artist.
-        // For accurate relationships, clients should perform a full skeleton sync.
-        let payload = AlbumAddedPayload { artist_ids: vec![] };
-        drop(conn);
-        self.skeleton_events.emit_event(
-            SkeletonEventType::AlbumAdded,
-            &album.id,
-            Some(&serde_json::to_string(&payload)?),
-        )?;
+        // NOTE: Skeleton event is NOT emitted here because artist_ids are not yet linked.
+        // Callers must call emit_album_skeleton_event() after linking all artists
+        // via add_album_artist() to notify clients of the new album.
 
         Ok(())
     }
@@ -1044,6 +1037,23 @@ impl SqliteCatalogStore {
         conn.execute(
             "INSERT INTO album_artists (album_id, artist_id, position) VALUES (?1, ?2, ?3)",
             params![album_id, artist_id, position],
+        )?;
+        Ok(())
+    }
+
+    /// Emit the skeleton event for an album with its artist IDs.
+    ///
+    /// This should be called after all artists have been linked to the album
+    /// via `add_album_artist`. The `insert_album` method does NOT emit a skeleton
+    /// event, so this method must be called to notify clients of new albums.
+    pub fn emit_album_skeleton_event(&self, album_id: &str, artist_ids: &[String]) -> Result<()> {
+        let payload = AlbumAddedPayload {
+            artist_ids: artist_ids.to_vec(),
+        };
+        self.skeleton_events.emit_event(
+            SkeletonEventType::AlbumAdded,
+            album_id,
+            Some(&serde_json::to_string(&payload)?),
         )?;
         Ok(())
     }
@@ -2370,6 +2380,10 @@ impl WritableCatalogStore for SqliteCatalogStore {
 
     fn update_track_audio(&self, track_id: &str, audio_uri: &str, format: &Format) -> Result<()> {
         SqliteCatalogStore::update_track_audio(self, track_id, audio_uri, format)
+    }
+
+    fn emit_album_skeleton_event(&self, album_id: &str, artist_ids: &[String]) -> Result<()> {
+        SqliteCatalogStore::emit_album_skeleton_event(self, album_id, artist_ids)
     }
 }
 

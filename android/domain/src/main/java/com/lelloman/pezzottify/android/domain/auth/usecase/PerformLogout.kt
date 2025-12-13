@@ -6,6 +6,7 @@ import com.lelloman.pezzottify.android.domain.cache.StaticsCache
 import com.lelloman.pezzottify.android.domain.listening.ListeningEventStore
 import com.lelloman.pezzottify.android.domain.player.PezzottifyPlayer
 import com.lelloman.pezzottify.android.domain.remoteapi.RemoteApiClient
+import com.lelloman.pezzottify.android.domain.skeleton.SkeletonStore
 import com.lelloman.pezzottify.android.domain.statics.StaticsStore
 import com.lelloman.pezzottify.android.domain.sync.SyncManager
 import com.lelloman.pezzottify.android.domain.usecase.UseCase
@@ -22,6 +23,7 @@ class PerformLogout @Inject internal constructor(
     private val remoteApiClient: RemoteApiClient,
     private val staticsStore: StaticsStore,
     private val staticsCache: StaticsCache,
+    private val skeletonStore: SkeletonStore,
     private val userDataStore: UserDataStore,
     private val userContentStore: UserContentStore,
     private val permissionsStore: PermissionsStore,
@@ -50,6 +52,8 @@ class PerformLogout @Inject internal constructor(
         staticsCache.clearAll()
         logger.debug("invoke() deleting statics store")
         staticsStore.deleteAll()
+        logger.debug("invoke() clearing skeleton store")
+        skeletonStore.clear()
         logger.debug("invoke() deleting user data store")
         userDataStore.deleteAll()
         logger.debug("invoke() deleting user content store")

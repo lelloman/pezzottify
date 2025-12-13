@@ -201,6 +201,22 @@ class SettingsScreenViewModel @Inject constructor(
         }
     }
 
+    override fun forceSkeletonResync() {
+        if (mutableState.value.isSkeletonResyncing) {
+            return
+        }
+        mutableState.update { it.copy(isSkeletonResyncing = true, skeletonResyncResult = null) }
+        viewModelScope.launch {
+            val result = interactor.forceSkeletonResync()
+            mutableState.update {
+                it.copy(
+                    isSkeletonResyncing = false,
+                    skeletonResyncResult = result
+                )
+            }
+        }
+    }
+
     sealed interface SetBaseUrlResult {
         data object Success : SetBaseUrlResult
         data object InvalidUrl : SetBaseUrlResult
@@ -240,5 +256,6 @@ class SettingsScreenViewModel @Inject constructor(
         fun clearLogs()
         fun getBaseUrl(): String
         suspend fun setBaseUrl(url: String): SetBaseUrlResult
+        suspend fun forceSkeletonResync(): SkeletonResyncResult
     }
 }
