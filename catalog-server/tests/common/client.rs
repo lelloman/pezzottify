@@ -1025,4 +1025,38 @@ impl TestClient {
             .await
             .expect("Download admin audit user request failed")
     }
+
+    // ========================================================================
+    // Skeleton Sync Endpoints
+    // ========================================================================
+
+    /// GET /v1/catalog/skeleton
+    pub async fn get_skeleton(&self) -> Response {
+        self.client
+            .get(format!("{}/v1/catalog/skeleton", self.base_url))
+            .send()
+            .await
+            .expect("Get skeleton request failed")
+    }
+
+    /// GET /v1/catalog/skeleton/version
+    pub async fn get_skeleton_version(&self) -> Response {
+        self.client
+            .get(format!("{}/v1/catalog/skeleton/version", self.base_url))
+            .send()
+            .await
+            .expect("Get skeleton version request failed")
+    }
+
+    /// GET /v1/catalog/skeleton/delta?since={since}
+    pub async fn get_skeleton_delta(&self, since: i64) -> Response {
+        self.client
+            .get(format!(
+                "{}/v1/catalog/skeleton/delta?since={}",
+                self.base_url, since
+            ))
+            .send()
+            .await
+            .expect("Get skeleton delta request failed")
+    }
 }
