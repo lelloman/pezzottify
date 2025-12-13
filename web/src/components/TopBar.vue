@@ -1,6 +1,9 @@
 <template>
   <header>
     <div class="topBarContent">
+      <router-link to="/" class="logoLink scaleClickFeedback" title="Home">
+        <MusicNoteIcon class="logoIcon" />
+      </router-link>
       <div class="searchInputContainer">
         <div class="searchBar">
           <input
@@ -70,6 +73,7 @@ import SettingsIcon from "./icons/SettingsIcon.vue";
 import LogoutIcon from "./icons/LogoutIcon.vue";
 import AdminIcon from "./icons/AdminIcon.vue";
 import DownloadIcon from "./icons/DownloadIcon.vue";
+import MusicNoteIcon from "./icons/MusicNoteIcon.vue";
 import { wsConnectionStatus, wsServerVersion } from "../services/websocket";
 import { useUserStore } from "../store/user";
 
@@ -213,6 +217,30 @@ const connectionTitle = computed(() => {
   width: 100%;
   height: 100%;
   padding: 0 var(--spacing-4);
+  gap: var(--spacing-3);
+}
+
+.logoLink {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-full);
+  color: var(--spotify-green);
+  flex-shrink: 0;
+  transition:
+    color var(--transition-fast),
+    background-color var(--transition-fast);
+}
+
+.logoLink:hover {
+  background-color: var(--bg-elevated);
+}
+
+.logoIcon {
+  width: 28px;
+  height: 28px;
 }
 
 .userActions {

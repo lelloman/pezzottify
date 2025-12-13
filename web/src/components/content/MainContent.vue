@@ -15,11 +15,7 @@
     <UserPlaylist v-else-if="playlistId" :playlistId="playlistId" />
     <UserSettings v-else-if="isSettingsRoute" />
     <UserRequests v-else-if="isRequestsRoute" />
-    <div v-else>
-      <h1 class="text-2xl font-bold mb-4">Welcome to Home</h1>
-      <p>This is your home content.</p>
-      Showing track {{ trackId }}.
-    </div>
+    <HomePage v-else />
   </main>
 </template>
 
@@ -31,6 +27,7 @@ import Artist from "@/components/content/Artist.vue";
 import UserPlaylist from "@/components/content/UserPlaylist.vue";
 import UserSettings from "@/components/content/UserSettings.vue";
 import UserRequests from "@/components/content/UserRequests.vue";
+import HomePage from "@/components/content/HomePage.vue";
 import { useRoute } from "vue-router";
 import SearchResults from "./SearchResults.vue";
 import { useUserStore } from "@/store/user";
