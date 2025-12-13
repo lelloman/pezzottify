@@ -378,7 +378,7 @@ pub fn skeleton_events(&self) -> &SkeletonEventStore {
 
 ### 1.3 Implement Checksum Calculation
 
-[ ] **Task 1.3.1: Add checksum calculation method**
+[x] **Task 1.3.1: Add checksum calculation method**
 
 **File:** `catalog-server/src/skeleton/store.rs`
 
@@ -422,7 +422,7 @@ impl SkeletonEventStore {
 
 ---
 
-[ ] **Task 1.3.2: Add helper methods to get all IDs from catalog**
+[x] **Task 1.3.2: Add helper methods to get all IDs from catalog**
 
 **File:** `catalog-server/src/catalog_store/store.rs`
 
@@ -456,7 +456,7 @@ pub fn get_all_track_ids(&self) -> Result<Vec<String>> {
 
 ---
 
-[ ] **Task 1.3.3: Add sha2 and hex dependencies**
+[x] **Task 1.3.3: Add sha2 and hex dependencies**
 
 **File:** `catalog-server/Cargo.toml`
 
@@ -1564,10 +1564,10 @@ End-to-end test with catalog-server: sync, verify data, modify catalog, sync aga
 
 | Phase | Tasks | Status |
 |-------|-------|--------|
-| 1. Server Data Model | 1.1.1 - 1.3.3 | 0/11 |
+| 1. Server Data Model | 1.1.1 - 1.3.3 | 11/11 |
 | 2. Server Endpoints | 2.1.1 - 2.3.2 | 0/9 |
 | 3. Android Storage | 3.1.1 - 3.2.3 | 0/7 |
 | 4. Android Sync | 4.1.1 - 4.3.2 | 0/7 |
 | 5. Use Skeleton | 5.1.1 - 5.1.2 | 0/2 |
 | 6. Testing | 6.1.1 - 6.2.3 | 0/6 |
-| **Total** | | **0/42** |
+| **Total** | | **11/42** |

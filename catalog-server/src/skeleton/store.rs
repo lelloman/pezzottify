@@ -4,6 +4,7 @@ use super::models::{SkeletonEvent, SkeletonEventType};
 use super::schema::SKELETON_VERSIONED_SCHEMAS;
 use anyhow::{Context, Result};
 use rusqlite::{params, Connection};
+use sha2::{Digest, Sha256};
 use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -171,6 +172,45 @@ impl SkeletonEventStore {
             Err(e) => Err(e.into()),
         }
     }
+
+    /// Calculate and set the checksum based on catalog IDs.
+    ///
+    /// The checksum is SHA256 of all sorted IDs concatenated together.
+    /// The IDs should be pre-sorted by the caller.
+    pub fn calculate_and_set_checksum(
+        &self,
+        artist_ids: &[String],
+        album_ids: &[String],
+        track_ids: &[String],
+    ) -> Result<String> {
+        let mut hasher = Sha256::new();
+
+        // Hash all artist IDs (should be sorted)
+        for id in artist_ids {
+            hasher.update(id.as_bytes());
+            hasher.update(b"\n");
+        }
+
+        // Hash all album IDs (should be sorted)
+        for id in album_ids {
+            hasher.update(id.as_bytes());
+            hasher.update(b"\n");
+        }
+
+        // Hash all track IDs (should be sorted)
+        for id in track_ids {
+            hasher.update(id.as_bytes());
+            hasher.update(b"\n");
+        }
+
+        let result = hasher.finalize();
+        let checksum = format!("sha256:{:x}", result);
+
+        // Cache the checksum
+        self.set_checksum(&checksum)?;
+
+        Ok(checksum)
+    }
 }
 
 #[cfg(test)]
@@ -265,5 +305,37 @@ mod tests {
 
         assert_eq!(store.get_earliest_seq().unwrap(), 1);
         assert_eq!(store.get_latest_seq().unwrap(), 2);
+    }
+
+    #[test]
+    fn test_calculate_and_set_checksum() {
+        let store = create_test_store();
+
+        let artist_ids = vec!["artist1".to_string(), "artist2".to_string()];
+        let album_ids = vec!["album1".to_string()];
+        let track_ids = vec!["track1".to_string(), "track2".to_string(), "track3".to_string()];
+
+        let checksum = store
+            .calculate_and_set_checksum(&artist_ids, &album_ids, &track_ids)
+            .unwrap();
+
+        // Checksum should start with sha256:
+        assert!(checksum.starts_with("sha256:"));
+        assert!(checksum.len() > 10); // Should have actual hash content
+
+        // Should be stored
+        assert_eq!(store.get_checksum().unwrap(), Some(checksum.clone()));
+
+        // Same inputs should produce same checksum
+        let checksum2 = store
+            .calculate_and_set_checksum(&artist_ids, &album_ids, &track_ids)
+            .unwrap();
+        assert_eq!(checksum, checksum2);
+
+        // Different inputs should produce different checksum
+        let different_checksum = store
+            .calculate_and_set_checksum(&["other".to_string()], &[], &[])
+            .unwrap();
+        assert_ne!(checksum, different_checksum);
     }
 }

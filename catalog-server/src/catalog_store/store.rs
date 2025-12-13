@@ -723,6 +723,37 @@ impl SqliteCatalogStore {
         Ok(ids)
     }
 
+    /// Calculate the catalog skeleton checksum.
+    ///
+    /// This computes SHA256 of all sorted artist, album, and track IDs.
+    /// The result is cached in the skeleton store.
+    pub fn calculate_skeleton_checksum(&self) -> Result<String> {
+        let conn = self.conn.lock().unwrap();
+
+        // Get sorted IDs
+        let mut stmt = conn.prepare("SELECT id FROM artists ORDER BY id")?;
+        let artist_ids: Vec<String> = stmt
+            .query_map([], |row| row.get(0))?
+            .collect::<Result<Vec<_>, _>>()?;
+        drop(stmt);
+
+        let mut stmt = conn.prepare("SELECT id FROM albums ORDER BY id")?;
+        let album_ids: Vec<String> = stmt
+            .query_map([], |row| row.get(0))?
+            .collect::<Result<Vec<_>, _>>()?;
+        drop(stmt);
+
+        let mut stmt = conn.prepare("SELECT id FROM tracks ORDER BY id")?;
+        let track_ids: Vec<String> = stmt
+            .query_map([], |row| row.get(0))?
+            .collect::<Result<Vec<_>, _>>()?;
+        drop(stmt);
+        drop(conn);
+
+        self.skeleton_events
+            .calculate_and_set_checksum(&artist_ids, &album_ids, &track_ids)
+    }
+
     /// Get counts of all entities.
     pub fn get_counts(&self) -> Result<(usize, usize, usize, usize)> {
         let conn = self.conn.lock().unwrap();
