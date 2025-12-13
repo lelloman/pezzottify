@@ -122,6 +122,7 @@ Returns changes since the given version.
 {
   "from_version": 12340,
   "to_version": 12345,
+  "checksum": "sha256:abc123def456...",
   "changes": [
     {"type": "artist_added", "id": "new_artist_1"},
     {"type": "album_added", "id": "new_album_1", "artist_ids": ["new_artist_1"]},
@@ -131,7 +132,7 @@ Returns changes since the given version.
 }
 ```
 
-**Version too old response (410 Gone):**
+**Version too old response (404 Not Found):**
 ```json
 {
   "error": "version_too_old",
@@ -141,7 +142,7 @@ Returns changes since the given version.
 }
 ```
 
-Client should perform full sync when receiving 410.
+Client should perform full sync when receiving 404.
 
 **Note:** For now, never prune catalog events. They're small (append-only IDs) and we want cursors to last forever.
 
@@ -158,6 +159,7 @@ Create a separate database for skeleton data (or add to existing statics DB):
     entities = [
         SkeletonArtist::class,
         SkeletonAlbum::class,
+        SkeletonAlbumArtist::class,
         SkeletonTrack::class,
         SkeletonMeta::class
     ],
@@ -178,9 +180,31 @@ data class SkeletonArtist(
 
 @Entity(tableName = "skeleton_albums")
 data class SkeletonAlbum(
-    @PrimaryKey val id: String,
-    @ColumnInfo(name = "artist_ids")
-    val artistIds: String  // JSON array: ["id1", "id2"]
+    @PrimaryKey val id: String
+)
+
+@Entity(
+    tableName = "skeleton_album_artists",
+    primaryKeys = ["album_id", "artist_id"],
+    foreignKeys = [
+        ForeignKey(
+            entity = SkeletonAlbum::class,
+            parentColumns = ["id"],
+            childColumns = ["album_id"],
+            onDelete = ForeignKey.CASCADE
+        ),
+        ForeignKey(
+            entity = SkeletonArtist::class,
+            parentColumns = ["id"],
+            childColumns = ["artist_id"],
+            onDelete = ForeignKey.CASCADE
+        )
+    ],
+    indices = [Index("artist_id")]
+)
+data class SkeletonAlbumArtist(
+    @ColumnInfo(name = "album_id") val albumId: String,
+    @ColumnInfo(name = "artist_id") val artistId: String
 )
 
 @Entity(
@@ -218,7 +242,10 @@ interface SkeletonDao {
     @Query("SELECT value FROM skeleton_meta WHERE key = 'checksum'")
     suspend fun getChecksum(): String?
 
-    @Query("SELECT id FROM skeleton_albums WHERE artist_ids LIKE '%' || :artistId || '%'")
+    @Query("""
+        SELECT album_id FROM skeleton_album_artists
+        WHERE artist_id = :artistId
+    """)
     suspend fun getAlbumIdsForArtist(artistId: String): List<String>
 
     @Query("SELECT id FROM skeleton_tracks WHERE album_id = :albumId")
@@ -242,6 +269,9 @@ interface SkeletonDao {
     suspend fun insertAlbums(albums: List<SkeletonAlbum>)
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAlbumArtists(albumArtists: List<SkeletonAlbumArtist>)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertTracks(tracks: List<SkeletonTrack>)
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
@@ -253,6 +283,9 @@ interface SkeletonDao {
     @Query("DELETE FROM skeleton_albums")
     suspend fun deleteAllAlbums()
 
+    @Query("DELETE FROM skeleton_album_artists")
+    suspend fun deleteAllAlbumArtists()
+
     @Query("DELETE FROM skeleton_tracks")
     suspend fun deleteAllTracks()
 
@@ -260,15 +293,18 @@ interface SkeletonDao {
     suspend fun replaceAll(
         artists: List<SkeletonArtist>,
         albums: List<SkeletonAlbum>,
+        albumArtists: List<SkeletonAlbumArtist>,
         tracks: List<SkeletonTrack>,
         version: String,
         checksum: String
     ) {
         deleteAllTracks()
+        deleteAllAlbumArtists()
         deleteAllAlbums()
         deleteAllArtists()
         insertArtists(artists)
         insertAlbums(albums)
+        insertAlbumArtists(albumArtists)
         insertTracks(tracks)
         setMeta(SkeletonMeta("version", version))
         setMeta(SkeletonMeta("checksum", checksum))
@@ -281,6 +317,9 @@ interface SkeletonDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAlbum(album: SkeletonAlbum)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAlbumArtist(albumArtist: SkeletonAlbumArtist)
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertTrack(track: SkeletonTrack)
@@ -341,6 +380,7 @@ data class SkeletonTrackDto(
 data class SkeletonDeltaResponse(
     @SerialName("from_version") val fromVersion: Long,
     @SerialName("to_version") val toVersion: Long,
+    val checksum: String,
     val changes: List<SkeletonChange>
 )
 
@@ -357,6 +397,7 @@ data class SkeletonChange(
 ```kotlin
 class CatalogSkeletonSyncer @Inject constructor(
     private val api: RemoteApiClient,
+    private val skeletonDatabase: SkeletonDatabase,
     private val skeletonDao: SkeletonDao,
     private val logger: Logger
 ) {
@@ -389,7 +430,7 @@ class CatalogSkeletonSyncer @Inject constructor(
                 }
             }
             is RemoteApiResponse.Error.NotFound -> {
-                // 410 Gone - version too old, need full sync
+                // 404 - version too old, need full sync
                 logger.w("Skeleton: Version $localVersion too old, performing full sync")
                 fullSync()
             }
@@ -432,9 +473,17 @@ class CatalogSkeletonSyncer @Inject constructor(
                 val data = response.data
                 logger.i("Skeleton: Full sync received - ${data.artists.size} artists, ${data.albums.size} albums, ${data.tracks.size} tracks")
 
+                // Build album-artist junction entries
+                val albumArtists = data.albums.flatMap { album ->
+                    album.artistIds.map { artistId ->
+                        SkeletonAlbumArtist(album.id, artistId)
+                    }
+                }
+
                 skeletonDao.replaceAll(
                     artists = data.artists.map { SkeletonArtist(it) },
-                    albums = data.albums.map { SkeletonAlbum(it.id, Json.encodeToString(it.artistIds)) },
+                    albums = data.albums.map { SkeletonAlbum(it.id) },
+                    albumArtists = albumArtists,
                     tracks = data.tracks.map { SkeletonTrack(it.id, it.albumId) },
                     version = data.version.toString(),
                     checksum = data.checksum
@@ -453,25 +502,30 @@ class CatalogSkeletonSyncer @Inject constructor(
     private suspend fun applyDelta(delta: SkeletonDeltaResponse): SyncResult {
         logger.i("Skeleton: Applying ${delta.changes.size} changes (${delta.fromVersion} -> ${delta.toVersion})")
 
-        for (change in delta.changes) {
-            when (change.type) {
-                "artist_added" -> skeletonDao.insertArtist(SkeletonArtist(change.id))
-                "album_added" -> {
-                    val artistIds = change.artistIds ?: emptyList()
-                    skeletonDao.insertAlbum(SkeletonAlbum(change.id, Json.encodeToString(artistIds)))
+        skeletonDatabase.withTransaction {
+            for (change in delta.changes) {
+                when (change.type) {
+                    "artist_added" -> skeletonDao.insertArtist(SkeletonArtist(change.id))
+                    "album_added" -> {
+                        skeletonDao.insertAlbum(SkeletonAlbum(change.id))
+                        val artistIds = change.artistIds ?: emptyList()
+                        for (artistId in artistIds) {
+                            skeletonDao.insertAlbumArtist(SkeletonAlbumArtist(change.id, artistId))
+                        }
+                    }
+                    "track_added" -> {
+                        val albumId = change.albumId ?: continue
+                        skeletonDao.insertTrack(SkeletonTrack(change.id, albumId))
+                    }
+                    "artist_removed" -> skeletonDao.deleteArtist(change.id)
+                    "album_removed" -> skeletonDao.deleteAlbum(change.id)  // CASCADE deletes junction entries
+                    "track_removed" -> skeletonDao.deleteTrack(change.id)
                 }
-                "track_added" -> {
-                    val albumId = change.albumId ?: continue
-                    skeletonDao.insertTrack(SkeletonTrack(change.id, albumId))
-                }
-                "artist_removed" -> skeletonDao.deleteArtist(change.id)
-                "album_removed" -> skeletonDao.deleteAlbum(change.id)
-                "track_removed" -> skeletonDao.deleteTrack(change.id)
             }
-        }
 
-        skeletonDao.setMeta(SkeletonMeta("version", delta.toVersion.toString()))
-        // Note: checksum not updated on delta - verify periodically
+            skeletonDao.setMeta(SkeletonMeta("version", delta.toVersion.toString()))
+            skeletonDao.setMeta(SkeletonMeta("checksum", delta.checksum))
+        }
 
         logger.i("Skeleton: Delta applied, now at version ${delta.toVersion}")
         return SyncResult.Success
