@@ -20,6 +20,10 @@ TEST_USER_DB="$TEST_DB_DIR/user.db"
 DOCKER_IMAGE="pezzottify-catalog-server"
 CONTAINER_NAME="pezzottify-integration-test"
 
+# Mock downloader configuration
+MOCK_DOWNLOADER_PORT=8090
+MOCK_DOWNLOADER_PID=""
+
 # Test data IDs (artist IDs use R prefix as per test expectations)
 ARTIST_ID="R5a2EaR3hamoenG9rDuVn8j"
 ALBUM_ID="1999"
@@ -200,11 +204,14 @@ echo "💾 Creating test user database..."
 cd "$CATALOG_SERVER_DIR"
 cargo build --release --bin cli-auth 2>&1 | grep -E "(Compiling|Finished|error)" || true
 
-# Use cli-auth to create the test user
+# Use cli-auth to create the test user with both Admin and Regular roles
+# Admin: RequestContent, DownloadManagerAdmin, etc.
+# Regular: LikeContent, OwnPlaylists
 echo "✅ Creating test user 'android-test' with password 'asdasd'..."
 {
     echo "add-user android-test"
     echo "add-login android-test asdasd"
+    echo "add-role android-test Admin"
     echo "add-role android-test Regular"
     echo "exit"
 } | ./target/release/cli-auth "$TEST_USER_DB" > /dev/null
@@ -216,15 +223,41 @@ echo "🛑 Stopping any existing test container..."
 docker stop "$CONTAINER_NAME" 2>/dev/null || true
 docker rm "$CONTAINER_NAME" 2>/dev/null || true
 
-# Start catalog-server container
-# The server expects: catalog-server <catalog-db> <user-db> --media-path <path>
+# Kill any existing mock downloader
+pkill -f "mock_downloader.py" 2>/dev/null || true
+
+# Start mock downloader service
+echo "🔧 Starting mock downloader service on port $MOCK_DOWNLOADER_PORT..."
+python3 "$SCRIPT_DIR/mock_downloader.py" "$MOCK_DOWNLOADER_PORT" &
+MOCK_DOWNLOADER_PID=$!
+sleep 1
+
+# Verify mock downloader is running
+if ! curl -s -f "http://localhost:$MOCK_DOWNLOADER_PORT/health" &> /dev/null; then
+    echo "❌ Mock downloader failed to start"
+    kill $MOCK_DOWNLOADER_PID 2>/dev/null || true
+    rm -rf "$TEST_DATA_DIR"
+    exit 1
+fi
+echo "✅ Mock downloader is ready!"
+
+# Start catalog-server container with downloader URL
+# The container runs on the host network to access the mock downloader
 echo "🚀 Starting catalog-server container..."
 docker run -d \
     --name "$CONTAINER_NAME" \
-    -p 3002:3001 \
+    --network host \
     -v "$TEST_DB_DIR:/data/db" \
     -v "$TEST_MEDIA_DIR:/data/media" \
-    "$DOCKER_IMAGE"
+    -e RUST_LOG=info \
+    "$DOCKER_IMAGE" \
+    catalog-server \
+    --db-dir /data/db \
+    --media-path /data/media \
+    --port 3002 \
+    --content-cache-age-sec=60 \
+    --logging-level path \
+    --downloader-url "http://localhost:$MOCK_DOWNLOADER_PORT"
 
 # Wait for server to be ready
 echo "⏳ Waiting for catalog-server to be ready..."
@@ -237,8 +270,12 @@ for i in {1..30}; do
         echo "❌ Server failed to start in time"
         echo "Container logs:"
         docker logs "$CONTAINER_NAME"
-        docker stop "$CONTAINER_NAME"
-        docker rm "$CONTAINER_NAME"
+        docker stop "$CONTAINER_NAME" 2>/dev/null || true
+        docker rm "$CONTAINER_NAME" 2>/dev/null || true
+        if [ -n "$MOCK_DOWNLOADER_PID" ]; then
+            kill $MOCK_DOWNLOADER_PID 2>/dev/null || true
+        fi
+        pkill -f "mock_downloader.py" 2>/dev/null || true
         rm -rf "$TEST_DATA_DIR"
         exit 1
     fi
@@ -266,9 +303,14 @@ rm -f "$TEST_DEST"
 
 # Cleanup
 echo "🧹 Cleaning up..."
-docker stop "$CONTAINER_NAME" > /dev/null
-docker rm "$CONTAINER_NAME" > /dev/null
-rm -rf "$TEST_DATA_DIR"
+docker stop "$CONTAINER_NAME" > /dev/null 2>&1 || true
+docker rm "$CONTAINER_NAME" > /dev/null 2>&1 || true
+if [ -n "$MOCK_DOWNLOADER_PID" ]; then
+    kill $MOCK_DOWNLOADER_PID 2>/dev/null || true
+fi
+pkill -f "mock_downloader.py" 2>/dev/null || true
+# Some files may be created by Docker with different ownership, use sudo if available
+rm -rf "$TEST_DATA_DIR" 2>/dev/null || sudo rm -rf "$TEST_DATA_DIR" 2>/dev/null || true
 
 echo ""
 if [ $TEST_EXIT_CODE -eq 0 ]; then
