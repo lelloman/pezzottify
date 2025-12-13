@@ -10,6 +10,7 @@ pub mod downloader;
 pub mod search;
 pub mod server;
 pub mod server_store;
+pub mod skeleton;
 pub mod sqlite_persistence;
 pub mod user;
 
