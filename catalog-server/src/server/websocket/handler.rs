@@ -94,7 +94,7 @@ async fn handle_socket(
         msg_types::CONNECTED,
         system::Connected {
             device_id,
-            server_version: format!("{}-{}", env!("CARGO_PKG_VERSION"), env!("GIT_HASH")),
+            server_version: format!("{}-{}", env!("APP_VERSION"), env!("GIT_HASH")),
         },
     );
 

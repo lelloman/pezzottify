@@ -6,6 +6,28 @@ plugins {
     alias(libs.plugins.kotlin.kapt)
 }
 
+// Compute full version: MAJOR.MINOR.COMMIT-COUNT
+val baseVersion: String by lazy {
+    try {
+        rootProject.file("../VERSION").readText().trim()
+    } catch (e: Exception) {
+        "0.0"
+    }
+}
+
+val commitCount: Int by lazy {
+    try {
+        val process = ProcessBuilder("git", "rev-list", "--count", "HEAD")
+            .redirectErrorStream(true)
+            .start()
+        process.inputStream.bufferedReader().readText().trim().toInt()
+    } catch (e: Exception) {
+        0
+    }
+}
+
+val appVersion = "$baseVersion.$commitCount"
+
 android {
     namespace = "com.lelloman.pezzottify.android"
     compileSdk = 36
@@ -14,8 +36,8 @@ android {
         applicationId = "com.lelloman.pezzottify.android"
         minSdk = 24
         targetSdk = 36
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = commitCount
+        versionName = appVersion
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

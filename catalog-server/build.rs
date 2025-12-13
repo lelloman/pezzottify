@@ -3,11 +3,66 @@ use std::path::Path;
 use std::process::Command;
 
 fn main() {
+    // Get version components
+    let base_version = get_base_version().unwrap_or_else(|| "0.0".to_string());
+    let commit_count = get_commit_count().unwrap_or(0);
     let git_hash = get_git_hash().unwrap_or_else(|| "unknown".to_string());
     let dirty_suffix = if is_repo_dirty() { "-dirty" } else { "" };
+
+    // Full version: MAJOR.MINOR.COMMIT-COUNT
+    let full_version = format!("{}.{}", base_version, commit_count);
+
+    println!("cargo:rustc-env=APP_VERSION={}", full_version);
     println!("cargo:rustc-env=GIT_HASH={}{}", git_hash, dirty_suffix);
-    // No rerun-if-changed: let cargo rerun build.rs on any source change
-    // This ensures dirty detection works for unstaged changes
+
+    // Rerun if VERSION file changes
+    println!("cargo:rerun-if-changed=../VERSION");
+}
+
+fn get_base_version() -> Option<String> {
+    // Try to read from VERSION file in repo root
+    for version_path in &["../VERSION", "VERSION"] {
+        if let Ok(content) = fs::read_to_string(version_path) {
+            let version = content.trim().to_string();
+            if !version.is_empty() {
+                return Some(version);
+            }
+        }
+    }
+
+    // Fall back to CARGO_PKG_VERSION (strips patch version if present)
+    std::env::var("CARGO_PKG_VERSION").ok().map(|v| {
+        let parts: Vec<&str> = v.split('.').collect();
+        if parts.len() >= 2 {
+            format!("{}.{}", parts[0], parts[1])
+        } else {
+            v
+        }
+    })
+}
+
+fn get_commit_count() -> Option<u32> {
+    // Check for COMMIT_COUNT env var first (for Docker builds)
+    if let Ok(count) = std::env::var("COMMIT_COUNT") {
+        if let Ok(n) = count.parse() {
+            return Some(n);
+        }
+    }
+
+    // Fall back to git command
+    Command::new("git")
+        .args(["rev-list", "--count", "HEAD"])
+        .output()
+        .ok()
+        .and_then(|o| {
+            if o.status.success() {
+                String::from_utf8(o.stdout)
+                    .ok()
+                    .and_then(|s| s.trim().parse().ok())
+            } else {
+                None
+            }
+        })
 }
 
 fn is_repo_dirty() -> bool {
