@@ -51,3 +51,34 @@ data class UiRequestLimits(
     val isAtDailyLimit: Boolean get() = requestsToday >= maxPerDay
     val isAtQueueLimit: Boolean get() = inQueue >= maxQueue
 }
+
+/**
+ * UI-specific sealed class representing download status updates.
+ * Mirrors the domain DownloadStatusUpdate but keeps UI module independent of domain.
+ */
+sealed class UiDownloadStatusUpdate {
+    data class Created(
+        val requestId: String,
+        val contentId: String,
+        val contentName: String,
+        val artistName: String?,
+        val queuePosition: Int,
+    ) : UiDownloadStatusUpdate()
+
+    data class StatusChanged(
+        val requestId: String,
+        val status: RequestStatus,
+        val queuePosition: Int?,
+        val errorMessage: String?,
+    ) : UiDownloadStatusUpdate()
+
+    data class ProgressUpdated(
+        val requestId: String,
+        val completed: Int,
+        val total: Int,
+    ) : UiDownloadStatusUpdate()
+
+    data class Completed(
+        val requestId: String,
+    ) : UiDownloadStatusUpdate()
+}

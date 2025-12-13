@@ -6,6 +6,7 @@ import com.lelloman.pezzottify.android.ui.R
 import com.lelloman.pezzottify.android.ui.content.ContentResolver
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asSharedFlow
@@ -40,6 +41,68 @@ class MyRequestsScreenViewModel(
 
     init {
         loadData()
+        subscribeToUpdates()
+    }
+
+    private fun subscribeToUpdates() {
+        viewModelScope.launch(coroutineContext) {
+            interactor.observeUpdates().collect { update ->
+                applyUpdate(update)
+            }
+        }
+    }
+
+    private fun applyUpdate(update: UiDownloadStatusUpdate) {
+        val currentRequests = mutableState.value.requests ?: return
+        val updatedRequests = when (update) {
+            is UiDownloadStatusUpdate.ProgressUpdated -> {
+                currentRequests.map { request ->
+                    if (request.id == update.requestId) {
+                        request.copy(
+                            progress = RequestProgress(
+                                current = update.completed,
+                                total = update.total,
+                            ),
+                            status = RequestStatus.InProgress,
+                        )
+                    } else request
+                }
+            }
+            is UiDownloadStatusUpdate.StatusChanged -> {
+                currentRequests.map { request ->
+                    if (request.id == update.requestId) {
+                        request.copy(
+                            status = update.status,
+                            queuePosition = update.queuePosition,
+                            errorMessage = update.errorMessage,
+                        )
+                    } else request
+                }
+            }
+            is UiDownloadStatusUpdate.Completed -> {
+                currentRequests.map { request ->
+                    if (request.id == update.requestId) {
+                        request.copy(
+                            status = RequestStatus.Completed,
+                            completedAt = System.currentTimeMillis(),
+                        )
+                    } else request
+                }
+            }
+            is UiDownloadStatusUpdate.Created -> {
+                // New request - add to list
+                currentRequests + UiDownloadRequest(
+                    id = update.requestId,
+                    albumName = update.contentName,
+                    artistName = update.artistName ?: "",
+                    status = RequestStatus.Pending,
+                    queuePosition = update.queuePosition,
+                    catalogId = update.contentId,
+                    createdAt = System.currentTimeMillis(),
+                )
+            }
+        }
+        mutableState.value = mutableState.value.copy(requests = updatedRequests)
     }
 
     private fun loadData() {
@@ -100,6 +163,7 @@ class MyRequestsScreenViewModel(
     interface Interactor {
         suspend fun getMyRequests(): Result<List<UiDownloadRequest>>
         suspend fun getDownloadLimits(): Result<DownloadLimitsData>
+        fun observeUpdates(): Flow<UiDownloadStatusUpdate>
     }
 
     data class DownloadLimitsData(
