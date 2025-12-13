@@ -18,10 +18,12 @@ FROM rust:1.91.1 AS rust-builder
 # Build args for version info (detected on host, passed by build script)
 ARG GIT_HASH=unknown
 ARG GIT_DIRTY=0
+ARG COMMIT_COUNT=0
 
 WORKDIR /app
 
 COPY catalog-server/ catalog-server/
+COPY VERSION VERSION
 
 WORKDIR /app/catalog-server
 
@@ -30,7 +32,7 @@ WORKDIR /app/catalog-server
 # Binaries are copied out because cache mounts aren't available in later stages
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/app/catalog-server/target \
-    GIT_HASH="$GIT_HASH" GIT_DIRTY="$GIT_DIRTY" cargo build --release && \
+    GIT_HASH="$GIT_HASH" GIT_DIRTY="$GIT_DIRTY" COMMIT_COUNT="$COMMIT_COUNT" cargo build --release && \
     cp target/release/cli-auth /tmp/ && \
     cp target/release/catalog-server /tmp/
 

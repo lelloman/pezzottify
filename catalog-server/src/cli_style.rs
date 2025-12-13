@@ -488,7 +488,7 @@ pub fn print_welcome(db_path: &str) {
     // Content
     let lines = [
         ("Database", db_path),
-        ("Version", env!("CARGO_PKG_VERSION")),
+        ("Version", env!("APP_VERSION")),
     ];
 
     print!("  {}", box_chars::DOUBLE_VERTICAL.with(colors::PURPLE));

@@ -9,6 +9,7 @@ services:
       args:
         GIT_HASH: ${GIT_HASH:-unknown}
         GIT_DIRTY: ${GIT_DIRTY:-0}
+        COMMIT_COUNT: ${COMMIT_COUNT:-0}
     ports:
       - "3001:3001"
     expose:
