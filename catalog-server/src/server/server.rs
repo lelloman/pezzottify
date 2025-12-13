@@ -3642,10 +3642,20 @@ async fn admin_get_download_activity(
 #[derive(serde::Deserialize)]
 struct StatsHistoryQuery {
     /// Period: "hourly" (48h), "daily" (30d), or "weekly" (12w). Default: daily
+    /// Used for aggregation granularity
     period: Option<String>,
+    /// Custom start time (unix timestamp). If provided, overrides period default.
+    since: Option<i64>,
+    /// Custom end time (unix timestamp). If provided, limits results to before this time.
+    until: Option<i64>,
 }
 
 /// GET /v1/download/admin/stats/history - Get aggregated download statistics over time
+///
+/// Query params:
+/// - `period`: "hourly", "daily", or "weekly" (default: daily) - sets aggregation granularity
+/// - `since`: Unix timestamp for custom start time (optional)
+/// - `until`: Unix timestamp for custom end time (optional)
 async fn admin_get_stats_history(
     _session: Session,
     State(download_manager): State<super::state::OptionalDownloadManager>,
@@ -3668,7 +3678,7 @@ async fn admin_get_stats_history(
         .and_then(crate::download_manager::StatsPeriod::from_str)
         .unwrap_or(crate::download_manager::StatsPeriod::Daily);
 
-    match dm.get_stats_history(period) {
+    match dm.get_stats_history(period, query.since, query.until) {
         Ok(history) => Json(history).into_response(),
         Err(err) => {
             error!("Error getting stats history: {}", err);

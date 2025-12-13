@@ -1329,8 +1329,14 @@ impl DownloadManager {
     }
 
     /// Get aggregated download statistics over time.
-    pub fn get_stats_history(&self, period: StatsPeriod) -> Result<DownloadStatsHistory> {
-        self.queue_store.get_stats_history(period)
+    /// If `since`/`until` are provided, uses custom date range instead of period defaults.
+    pub fn get_stats_history(
+        &self,
+        period: StatsPeriod,
+        since: Option<i64>,
+        until: Option<i64>,
+    ) -> Result<DownloadStatsHistory> {
+        self.queue_store.get_stats_history(period, since, until)
     }
 
     /// Get all requests with optional filters.
