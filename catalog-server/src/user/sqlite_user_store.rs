@@ -9,7 +9,7 @@ use crate::sqlite_persistence::{
 use crate::user::device::{Device, DeviceRegistration, DeviceType};
 use crate::user::user_models::{
     BandwidthSummary, BandwidthUsage, CategoryBandwidth, DailyListeningStats, ListeningEvent,
-    ListeningSummary, TrackListeningStats, UserListeningHistoryEntry,
+    ListeningSummary, TrackListeningStats, TrackPlayCount, UserListeningHistoryEntry,
 };
 use crate::user::user_store::{UserBandwidthStore, UserListeningStore, UserSettingsStore};
 use crate::user::*;
@@ -2475,6 +2475,34 @@ impl UserListeningStore for SqliteUserStore {
         Ok(stats)
     }
 
+    fn get_all_track_play_counts(
+        &self,
+        start_date: u32,
+        end_date: u32,
+    ) -> Result<Vec<TrackPlayCount>> {
+        let start = Instant::now();
+        let conn = self.conn.lock().unwrap();
+
+        let mut stmt = conn.prepare(&format!(
+            "SELECT track_id, COUNT(*) as play_count
+             FROM {} WHERE date >= ?1 AND date <= ?2
+             GROUP BY track_id",
+            LISTENING_EVENTS_TABLE_V_6.name
+        ))?;
+
+        let counts = stmt
+            .query_map(params![start_date, end_date], |row| {
+                Ok(TrackPlayCount {
+                    track_id: row.get(0)?,
+                    play_count: row.get::<_, i64>(1)? as u64,
+                })
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+
+        record_db_query("get_all_track_play_counts", start.elapsed());
+        Ok(counts)
+    }
+
     fn prune_listening_events(&self, older_than_days: u32) -> Result<usize> {
         let start = Instant::now();
         let conn = self.conn.lock().unwrap();
@@ -4047,6 +4075,53 @@ mod tests {
         // Test limit
         let top_tracks = store.get_top_tracks(20241201, 20241201, 2).unwrap();
         assert_eq!(top_tracks.len(), 2);
+    }
+
+    #[test]
+    fn test_get_all_track_play_counts() {
+        let (store, _temp_dir) = create_tmp_store();
+        let user_id = store.create_user("test_user").unwrap();
+
+        // tra_001: 3 plays
+        for _ in 0..3 {
+            let event = create_test_listening_event(user_id, "tra_001", 20241201);
+            store.record_listening_event(event).unwrap();
+        }
+
+        // tra_002: 5 plays
+        for _ in 0..5 {
+            let event = create_test_listening_event(user_id, "tra_002", 20241201);
+            store.record_listening_event(event).unwrap();
+        }
+
+        // tra_003: 1 play
+        let event = create_test_listening_event(user_id, "tra_003", 20241201);
+        store.record_listening_event(event).unwrap();
+
+        // Get all track play counts (no limit)
+        let all_counts = store.get_all_track_play_counts(20241201, 20241201).unwrap();
+
+        // Should return all 3 tracks
+        assert_eq!(all_counts.len(), 3);
+
+        // Verify play counts (order is not guaranteed since there's no ORDER BY)
+        let tra_001 = all_counts.iter().find(|t| t.track_id == "tra_001").unwrap();
+        assert_eq!(tra_001.play_count, 3);
+
+        let tra_002 = all_counts.iter().find(|t| t.track_id == "tra_002").unwrap();
+        assert_eq!(tra_002.play_count, 5);
+
+        let tra_003 = all_counts.iter().find(|t| t.track_id == "tra_003").unwrap();
+        assert_eq!(tra_003.play_count, 1);
+    }
+
+    #[test]
+    fn test_get_all_track_play_counts_empty() {
+        let (store, _temp_dir) = create_tmp_store();
+        let _user_id = store.create_user("test_user").unwrap();
+
+        let all_counts = store.get_all_track_play_counts(20241201, 20241231).unwrap();
+        assert!(all_counts.is_empty());
     }
 
     #[test]

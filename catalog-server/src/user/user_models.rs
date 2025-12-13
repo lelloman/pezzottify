@@ -141,6 +141,14 @@ pub struct TrackListeningStats {
     pub unique_listeners: u64,
 }
 
+/// Lightweight track play count for aggregation queries.
+/// Used when we only need track_id and play_count (e.g., for artist popularity).
+#[derive(Debug, Clone)]
+pub struct TrackPlayCount {
+    pub track_id: String,
+    pub play_count: u64,
+}
+
 /// Entry in a user's listening history
 #[derive(Serialize, Debug, Clone)]
 pub struct UserListeningHistoryEntry {

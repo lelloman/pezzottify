@@ -614,7 +614,14 @@ impl UserManager {
         })
     }
 
-    /// Computes popular content by aggregating play counts from top tracks.
+    /// Computes popular content by aggregating play counts.
+    ///
+    /// Albums are computed from top tracks (albums with many low-play tracks
+    /// aren't necessarily "popular albums").
+    ///
+    /// Artists are computed from ALL tracks to ensure artists with many
+    /// medium-popularity tracks aren't underrepresented compared to artists
+    /// with one viral hit.
     fn compute_popular_content(
         &self,
         start_date: u32,
@@ -622,40 +629,36 @@ impl UserManager {
         albums_limit: usize,
         artists_limit: usize,
     ) -> Result<PopularContent> {
+        // Compute popular albums from top tracks
+        let popular_albums = self.compute_popular_albums(start_date, end_date, albums_limit)?;
+
+        // Compute popular artists from ALL track play counts
+        let popular_artists = self.compute_popular_artists(start_date, end_date, artists_limit)?;
+
+        Ok(PopularContent {
+            albums: popular_albums,
+            artists: popular_artists,
+        })
+    }
+
+    /// Computes popular albums by aggregating play counts from top tracks.
+    fn compute_popular_albums(
+        &self,
+        start_date: u32,
+        end_date: u32,
+        limit: usize,
+    ) -> Result<Vec<PopularAlbum>> {
         // Get top tracks with a higher limit to ensure we have enough to aggregate
-        let track_limit = (albums_limit + artists_limit) * 5;
+        let track_limit = limit * 5;
         let top_tracks = self
             .user_store
             .get_top_tracks(start_date, end_date, track_limit)?;
 
-        // Aggregate play counts by album and artist
+        // Aggregate play counts by album
         let mut album_plays: HashMap<String, u64> = HashMap::new();
-        let mut artist_plays: HashMap<String, u64> = HashMap::new();
-
         for track_stats in &top_tracks {
-            // Get album_id from track
             if let Some(album_id) = self.catalog_store.get_track_album_id(&track_stats.track_id) {
                 *album_plays.entry(album_id).or_insert(0) += track_stats.play_count;
-            }
-
-            // Get track artists from resolved track JSON
-            if let Ok(Some(track_json)) = self
-                .catalog_store
-                .get_resolved_track_json(&track_stats.track_id)
-            {
-                if let Some(artists) = track_json.get("artists").and_then(|a| a.as_array()) {
-                    for track_artist in artists {
-                        // TrackArtist has nested structure: { "artist": { "id": "..." }, "role": "..." }
-                        if let Some(artist_id) = track_artist
-                            .get("artist")
-                            .and_then(|a| a.get("id"))
-                            .and_then(|id| id.as_str())
-                        {
-                            *artist_plays.entry(artist_id.to_string()).or_insert(0) +=
-                                track_stats.play_count;
-                        }
-                    }
-                }
             }
         }
 
@@ -665,7 +668,7 @@ impl UserManager {
 
         let popular_albums: Vec<PopularAlbum> = album_list
             .into_iter()
-            .take(albums_limit)
+            .take(limit)
             .filter_map(|(album_id, play_count)| {
                 // Get resolved album JSON to get name, image, and artists
                 if let Ok(Some(album_json)) = self.catalog_store.get_resolved_album_json(&album_id)
@@ -712,13 +715,56 @@ impl UserManager {
             })
             .collect();
 
+        Ok(popular_albums)
+    }
+
+    /// Computes popular artists by aggregating play counts from ALL tracks.
+    ///
+    /// Unlike albums, we consider ALL listened tracks to avoid underrepresenting
+    /// artists who have many tracks with moderate play counts versus artists
+    /// with a single viral hit.
+    fn compute_popular_artists(
+        &self,
+        start_date: u32,
+        end_date: u32,
+        limit: usize,
+    ) -> Result<Vec<PopularArtist>> {
+        // Get ALL track play counts (no limit)
+        let all_track_counts = self
+            .user_store
+            .get_all_track_play_counts(start_date, end_date)?;
+
+        // Aggregate play counts by artist
+        let mut artist_plays: HashMap<String, u64> = HashMap::new();
+        for track_count in &all_track_counts {
+            // Get track artists from resolved track JSON
+            if let Ok(Some(track_json)) = self
+                .catalog_store
+                .get_resolved_track_json(&track_count.track_id)
+            {
+                if let Some(artists) = track_json.get("artists").and_then(|a| a.as_array()) {
+                    for track_artist in artists {
+                        // TrackArtist has nested structure: { "artist": { "id": "..." }, "role": "..." }
+                        if let Some(artist_id) = track_artist
+                            .get("artist")
+                            .and_then(|a| a.get("id"))
+                            .and_then(|id| id.as_str())
+                        {
+                            *artist_plays.entry(artist_id.to_string()).or_insert(0) +=
+                                track_count.play_count;
+                        }
+                    }
+                }
+            }
+        }
+
         // Sort artists by play count and take top N
         let mut artist_list: Vec<_> = artist_plays.into_iter().collect();
         artist_list.sort_by(|a, b| b.1.cmp(&a.1));
 
         let popular_artists: Vec<PopularArtist> = artist_list
             .into_iter()
-            .take(artists_limit)
+            .take(limit)
             .filter_map(|(artist_id, play_count)| {
                 // Get resolved artist JSON to get name and image
                 if let Ok(Some(artist_json)) =
@@ -754,10 +800,7 @@ impl UserManager {
             })
             .collect();
 
-        Ok(PopularContent {
-            albums: popular_albums,
-            artists: popular_artists,
-        })
+        Ok(popular_artists)
     }
 
     // ========================================================================
