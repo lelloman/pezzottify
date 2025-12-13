@@ -1472,7 +1472,7 @@ launch { skeletonSyncer.sync() }
 
 ### 5.1 Create Discography Provider
 
-[ ] **Task 5.1.1: Create DiscographyProvider**
+[x] **Task 5.1.1: Create DiscographyProvider**
 
 **File:** `android/domain/src/main/java/com/lelloman/pezzottify/android/domain/statics/DiscographyProvider.kt`
 
@@ -1499,7 +1499,7 @@ class DiscographyProvider @Inject constructor(
 
 ---
 
-[ ] **Task 5.1.2: Update ArtistScreen ViewModel to use DiscographyProvider**
+[x] **Task 5.1.2: Update ArtistScreen ViewModel to use DiscographyProvider**
 
 **File:** `android/ui/src/main/java/com/lelloman/pezzottify/android/ui/screen/artist/ArtistViewModel.kt`
 
@@ -1568,6 +1568,6 @@ End-to-end test with catalog-server: sync, verify data, modify catalog, sync aga
 | 2. Server Endpoints | 2.1.1 - 2.3.2 | 9/9 |
 | 3. Android Storage | 3.1.1 - 3.2.3 | 7/7 |
 | 4. Android Sync | 4.1.1 - 4.3.2 | 7/7 |
-| 5. Use Skeleton | 5.1.1 - 5.1.2 | 0/2 |
+| 5. Use Skeleton | 5.1.1 - 5.1.2 | 2/2 |
 | 6. Testing | 6.1.1 - 6.2.3 | 0/6 |
-| **Total** | | **34/42** |
+| **Total** | | **36/42** |

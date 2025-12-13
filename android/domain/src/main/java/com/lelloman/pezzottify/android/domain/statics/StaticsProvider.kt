@@ -4,6 +4,7 @@ import com.lelloman.pezzottify.android.domain.app.TimeProvider
 import com.lelloman.pezzottify.android.domain.cache.CacheMetricsCollector
 import com.lelloman.pezzottify.android.domain.cache.StaticsCache
 import com.lelloman.pezzottify.android.domain.settings.UserSettingsStore
+import com.lelloman.pezzottify.android.domain.skeleton.SkeletonStore
 import com.lelloman.pezzottify.android.domain.statics.fetchstate.StaticItemFetchState
 import com.lelloman.pezzottify.android.domain.statics.fetchstate.StaticItemFetchStateStore
 import com.lelloman.pezzottify.android.domain.sync.StaticsSynchronizer
@@ -11,6 +12,7 @@ import com.lelloman.pezzottify.android.logger.LoggerFactory
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
@@ -24,6 +26,7 @@ class StaticsProvider internal constructor(
     private val staticsCache: StaticsCache,
     private val cacheMetricsCollector: CacheMetricsCollector,
     private val userSettingsStore: UserSettingsStore,
+    private val skeletonStore: SkeletonStore,
     loggerFactory: LoggerFactory,
     private val coroutineContext: CoroutineContext,
 ) {
@@ -37,6 +40,7 @@ class StaticsProvider internal constructor(
         staticsCache: StaticsCache,
         cacheMetricsCollector: CacheMetricsCollector,
         userSettingsStore: UserSettingsStore,
+        skeletonStore: SkeletonStore,
         loggerFactory: LoggerFactory,
     ) : this(
         staticsStore,
@@ -46,6 +50,7 @@ class StaticsProvider internal constructor(
         staticsCache,
         cacheMetricsCollector,
         userSettingsStore,
+        skeletonStore,
         loggerFactory,
         Dispatchers.IO
     )
@@ -201,13 +206,36 @@ class StaticsProvider internal constructor(
     }
 
     fun provideDiscography(artistId: String): StaticsItemFlow<ArtistDiscography> {
+        // First try to get discography from skeleton (instant, local data)
+        val skeletonFlow = flow {
+            val albumIds = skeletonStore.getAlbumIdsForArtist(artistId)
+            emit(albumIds)
+        }
+
         return staticsStore.getDiscography(artistId)
             .combine(staticItemFetchStateStore.get(artistId)) { discography, fetchState ->
+                Pair(discography, fetchState)
+            }
+            .combine(skeletonFlow) { (discography, fetchState), skeletonAlbumIds ->
                 val output = when {
+                    // If we have discography from local store, use it (includes features)
                     discography != null -> StaticsItem.Loaded(
                         artistId,
                         discography
                     )
+
+                    // If skeleton has album IDs, use them (fast path, no network)
+                    skeletonAlbumIds.isNotEmpty() -> {
+                        logger.debug("provideDiscography($artistId) using skeleton data: ${skeletonAlbumIds.size} albums")
+                        StaticsItem.Loaded(
+                            artistId,
+                            object : ArtistDiscography {
+                                override val artistId = artistId
+                                override val albumsIds = skeletonAlbumIds
+                                override val featuresIds = emptyList<String>() // Skeleton doesn't track features
+                            }
+                        )
+                    }
 
                     fetchState?.isLoading == true -> StaticsItem.Loading(artistId)
                     fetchState?.errorReason != null -> {
