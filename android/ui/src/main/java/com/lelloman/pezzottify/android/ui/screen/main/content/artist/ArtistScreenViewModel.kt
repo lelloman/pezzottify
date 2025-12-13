@@ -62,12 +62,11 @@ class ArtistScreenViewModel @AssistedInject constructor(
     }.combine(externalAlbumsState) { artistState, externalState ->
         when (externalState) {
             is ExternalAlbumsState.Idle -> artistState
-            is ExternalAlbumsState.Loading -> artistState.copy(isLoadingExternalAlbums = true)
+            is ExternalAlbumsState.Loading -> artistState
             is ExternalAlbumsState.Loaded -> artistState.copy(
                 externalAlbums = externalState.albums,
-                isLoadingExternalAlbums = false
             )
-            is ExternalAlbumsState.Error -> artistState.copy(isLoadingExternalAlbums = false)
+            is ExternalAlbumsState.Error -> artistState.copy(isExternalAlbumsError = true)
         }
     }.onEach { state ->
         if (!state.isLoading && !state.isError && !hasLoggedView) {
@@ -115,6 +114,10 @@ class ArtistScreenViewModel @AssistedInject constructor(
 
     override fun clickOnExternalAlbum(albumId: String) {
         navController.toExternalAlbum(albumId)
+    }
+
+    override fun retryExternalAlbums() {
+        loadExternalAlbums()
     }
 
     interface Interactor {
