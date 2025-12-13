@@ -54,6 +54,7 @@ import java.util.UUID
 import kotlinx.coroutines.flow.first
 import com.lelloman.pezzottify.android.logger.LoggerFactory
 import com.lelloman.pezzottify.android.logging.LogFileManager
+import com.lelloman.pezzottify.android.ui.screen.about.AboutScreenViewModel
 import com.lelloman.pezzottify.android.ui.screen.login.LoginViewModel
 import com.lelloman.pezzottify.android.ui.screen.main.MainScreenViewModel
 import com.lelloman.pezzottify.android.ui.screen.main.content.album.AlbumScreenViewModel
@@ -128,6 +129,28 @@ class InteractorsModule {
                 PerformLogin.LoginResult.WrongCredentials -> LoginViewModel.Interactor.LoginResult.Failure.InvalidCredentials
                 PerformLogin.LoginResult.Error -> LoginViewModel.Interactor.LoginResult.Failure.Unknown
             }
+    }
+
+    @Provides
+    fun provideAboutScreenInteractor(
+        buildInfo: BuildInfo,
+        configStore: ConfigStore,
+        skeletonStore: com.lelloman.pezzottify.android.domain.skeleton.SkeletonStore,
+    ): AboutScreenViewModel.Interactor = object : AboutScreenViewModel.Interactor {
+        override fun getVersionName(): String = buildInfo.versionName
+
+        override fun getGitCommit(): String = buildInfo.gitCommit
+
+        override fun getServerUrl(): String = configStore.baseUrl.value
+
+        override suspend fun getSkeletonCounts(): AboutScreenViewModel.SkeletonCountsData {
+            val counts = skeletonStore.getCounts()
+            return AboutScreenViewModel.SkeletonCountsData(
+                artists = counts.artists,
+                albums = counts.albums,
+                tracks = counts.tracks,
+            )
+        }
     }
 
     @Provides

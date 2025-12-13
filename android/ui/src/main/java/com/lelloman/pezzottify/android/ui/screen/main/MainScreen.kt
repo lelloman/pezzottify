@@ -18,20 +18,24 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -67,8 +71,10 @@ import com.lelloman.pezzottify.android.ui.screen.queue.QueueScreen
 import com.lelloman.pezzottify.android.ui.toAlbum
 import com.lelloman.pezzottify.android.ui.toExternalAlbum
 import com.lelloman.pezzottify.android.ui.toPlayer
+import com.lelloman.pezzottify.android.ui.toProfile
 import com.lelloman.pezzottify.android.ui.screen.main.home.HomeScreen
 import com.lelloman.pezzottify.android.ui.screen.main.library.LibraryScreen
+import com.lelloman.pezzottify.android.ui.screen.main.profile.ProfileDrawerContent
 import com.lelloman.pezzottify.android.ui.screen.main.profile.ProfileScreen
 import com.lelloman.pezzottify.android.ui.screen.main.profile.stylesettings.StyleSettingsScreen
 import com.lelloman.pezzottify.android.ui.screen.main.search.SearchScreen
@@ -122,6 +128,39 @@ private fun MainScreenContent(state: MainScreenState, actions: MainScreenActions
     // Hide bottom bars for overlay screens (Player, Queue, FullScreenImage)
     val isOverlayScreen = overlayRoutes.any { currentRoute?.startsWith(it ?: "") == true }
 
+    // Drawer state for profile drawer
+    val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
+    val drawerScope = rememberCoroutineScope()
+
+    ModalNavigationDrawer(
+        drawerState = drawerState,
+        gesturesEnabled = drawerState.isOpen,
+        drawerContent = {
+            ProfileDrawerContent(
+                onNavigateToProfile = {
+                    navController.toProfile()
+                },
+                onNavigateToMyRequests = {
+                    navController.navigate(Screen.Main.MyRequests)
+                },
+                onNavigateToListeningHistory = {
+                    navController.navigate(Screen.Main.ListeningHistory)
+                },
+                onNavigateToAbout = {
+                    // Navigate to About screen (root nav)
+                    rootNavController.navigate(Screen.About)
+                },
+                onNavigateToLogin = {
+                    rootNavController.navigate(Screen.Login) {
+                        popUpTo(Screen.Main.Home) { inclusive = true }
+                    }
+                },
+                onCloseDrawer = {
+                    drawerScope.launch { drawerState.close() }
+                },
+            )
+        }
+    ) {
     Scaffold(
         bottomBar = {
             if (!isOverlayScreen) {
@@ -166,7 +205,10 @@ private fun MainScreenContent(state: MainScreenState, actions: MainScreenActions
                 startDestination = Screen.Main.Home,
             ) {
                 composable<Screen.Main.Home> {
-                    HomeScreen(navController = navController)
+                    HomeScreen(
+                        navController = navController,
+                        onOpenProfileDrawer = { drawerScope.launch { drawerState.open() } },
+                    )
                 }
                 composable<Screen.Main.Search> { SearchScreen(navController) }
                 composable<Screen.Main.Library> { LibraryScreen(navController) }
@@ -234,6 +276,7 @@ private fun MainScreenContent(state: MainScreenState, actions: MainScreenActions
             }
         }
     }
+    } // End ModalNavigationDrawer
 }
 
 private data class PagerTrackInfo(

@@ -12,8 +12,8 @@
     <string name="play">Riproduci</string>
     <string name="pause">Pausa</string>
     <string name="login">Accedi</string>
-    <string name="logout">Esci</string>
-    <string name="logging_out">Disconnessione in corso…</string>
+    <string name="logout">Log out</string>
+    <string name="logging_out">Log out in corso…</string>
     <!-- COMMON -->
 
     <!-- ABOUT SCREEN -->
@@ -57,8 +57,8 @@
     <string name="version_label">Versione</string>
     <string name="git_commit">Commit Git</string>
     <string name="server_version">Versione server</string>
-    <string name="logout_confirmation_title">Esci</string>
-    <string name="logout_confirmation_message">Sei sicuro di voler uscire?</string>
+    <string name="logout_confirmation_title">Log out</string>
+    <string name="logout_confirmation_message">Sei sicuro di voler effettuare il log out?</string>
     <!-- PROFILE SCREEN -->
 
     <!-- SETTINGS SCREEN -->

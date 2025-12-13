@@ -45,7 +45,7 @@ fun AppUi(
                     LoginScreen(navController)
                 }
                 composable<Screen.About> {
-                    AboutScreen()
+                    AboutScreen(navController)
                 }
                 composable<Screen.Main.Home> {
                     MainScreen(rootNavController = navController)

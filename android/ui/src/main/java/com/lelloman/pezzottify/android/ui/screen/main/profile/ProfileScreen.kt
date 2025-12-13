@@ -18,7 +18,6 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -42,8 +41,6 @@ import androidx.navigation.compose.rememberNavController
 import com.lelloman.pezzottify.android.ui.R
 import com.lelloman.pezzottify.android.ui.model.Permission
 import com.lelloman.pezzottify.android.ui.fromProfileBackToLogin
-import com.lelloman.pezzottify.android.ui.toListeningHistory
-import com.lelloman.pezzottify.android.ui.toMyRequests
 import com.lelloman.pezzottify.android.ui.theme.PezzottifyTheme
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -181,59 +178,6 @@ private fun ProfileScreenInternal(
                     }
                 }
             }
-
-            // My Requests (only visible if user has RequestContent permission)
-            if (currentState.permissions.contains(Permission.RequestContent)) {
-                Spacer(modifier = Modifier.height(16.dp))
-                Button(
-                    onClick = { navController.toMyRequests() },
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text(stringResource(R.string.my_requests_title))
-                }
-            }
-
-            // Listening History
-            Spacer(modifier = Modifier.height(16.dp))
-            Button(
-                onClick = { navController.toListeningHistory() },
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text(stringResource(R.string.listening_history_title))
-            }
-
-            HorizontalDivider(modifier = Modifier.padding(vertical = 24.dp))
-
-            // About Section
-            Text(
-                text = stringResource(R.string.about),
-                style = MaterialTheme.typography.titleLarge,
-                color = MaterialTheme.colorScheme.onSurface
-            )
-            Spacer(modifier = Modifier.height(16.dp))
-
-            SettingsLabel(text = stringResource(R.string.version_label))
-            Text(
-                text = "${currentState.versionName} (${currentState.buildVariant})",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-
-            SettingsLabel(text = stringResource(R.string.git_commit))
-            Text(
-                text = currentState.gitCommit,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-
-            SettingsLabel(text = stringResource(R.string.server_version))
-            Text(
-                text = currentState.serverVersion,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
 
             Spacer(modifier = Modifier.weight(1f))
 

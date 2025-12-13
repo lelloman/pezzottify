@@ -20,6 +20,10 @@
     <!-- ABOUT SCREEN -->
     <string name="version">App version: %1$s</string>
     <string name="commit">Commit hash: %1$s</string>
+    <string name="catalog_section_title">Catalog</string>
+    <string name="catalog_artists_count">%1$d artists</string>
+    <string name="catalog_albums_count">%1$d albums</string>
+    <string name="catalog_tracks_count">%1$d tracks</string>
     <!-- ABOUT SCREEN -->
 
     <!-- MAIN SCREEN -->
@@ -52,6 +56,7 @@
 
     <!-- PROFILE SCREEN -->
     <string name="profile_title">Profile</string>
+    <string name="view_profile">View profile</string>
     <string name="logged_in_as">Logged in as</string>
     <string name="permissions">Permissions</string>
     <string name="about">About</string>
