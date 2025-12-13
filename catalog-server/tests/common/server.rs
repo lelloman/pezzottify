@@ -106,6 +106,7 @@ impl TestServer {
             None,
             None, // no download_manager
         )
+        .await
         .expect("Failed to build app");
 
         // Spawn server in background task with graceful shutdown
