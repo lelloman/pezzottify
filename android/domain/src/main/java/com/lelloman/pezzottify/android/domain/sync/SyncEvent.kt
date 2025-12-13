@@ -45,7 +45,6 @@ enum class Permission {
     OwnPlaylists,
     EditCatalog,
     ManagePermissions,
-    IssueContentDownload,
     ServerAdmin,
     ViewAnalytics,
     RequestContent,

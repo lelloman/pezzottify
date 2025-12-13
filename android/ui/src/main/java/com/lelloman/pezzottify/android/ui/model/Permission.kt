@@ -15,7 +15,6 @@ enum class Permission(
     OwnPlaylists(R.string.permission_own_playlists, R.string.permission_own_playlists_desc),
     EditCatalog(R.string.permission_edit_catalog, R.string.permission_edit_catalog_desc),
     ManagePermissions(R.string.permission_manage_permissions, R.string.permission_manage_permissions_desc),
-    IssueContentDownload(R.string.permission_issue_content_download, R.string.permission_issue_content_download_desc),
     ServerAdmin(R.string.permission_server_admin, R.string.permission_server_admin_desc),
     ViewAnalytics(R.string.permission_view_analytics, R.string.permission_view_analytics_desc),
     RequestContent(R.string.permission_request_content, R.string.permission_request_content_desc),

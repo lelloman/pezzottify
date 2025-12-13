@@ -311,7 +311,6 @@
     <string name="permission_own_playlists">Own Playlists</string>
     <string name="permission_edit_catalog">Edit Catalog</string>
     <string name="permission_manage_permissions">Manage Permissions</string>
-    <string name="permission_issue_content_download">Download Content</string>
     <string name="permission_server_admin">Server Admin</string>
     <string name="permission_view_analytics">View Analytics</string>
     <string name="permission_request_content">Request Content</string>
@@ -321,7 +320,6 @@
     <string name="permission_own_playlists_desc">Create and manage personal playlists.</string>
     <string name="permission_edit_catalog_desc">Add, edit, or remove catalog content.</string>
     <string name="permission_manage_permissions_desc">Grant or revoke permissions for other users.</string>
-    <string name="permission_issue_content_download_desc">Request downloads of missing content.</string>
     <string name="permission_server_admin_desc">Server administration (reboot, etc.).</string>
     <string name="permission_view_analytics_desc">View listening statistics and analytics.</string>
     <string name="permission_request_content_desc">Search external music provider and request content downloads.</string>

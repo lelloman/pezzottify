@@ -277,17 +277,6 @@ class SettingsScreenViewModelTest {
     }
 
     @Test
-    fun `state updates when direct downloads permission changes`() = runTest {
-        createViewModel()
-        advanceUntilIdle()
-
-        fakeInteractor.hasIssueContentDownloadPermissionFlow.value = true
-        advanceUntilIdle()
-
-        assertThat(viewModel.state.value.hasIssueContentDownloadPermission).isTrue()
-    }
-
-    @Test
     fun `state updates when request content permission changes`() = runTest {
         createViewModel()
         advanceUntilIdle()
@@ -319,7 +308,6 @@ class SettingsScreenViewModelTest {
         val cacheEnabledFlow = MutableStateFlow(true)
         val storageInfoFlow = MutableStateFlow(StorageInfo(0L, 0L, 0L, StoragePressureLevel.LOW))
         val directDownloadsEnabledFlow = MutableStateFlow(false)
-        val hasIssueContentDownloadPermissionFlow = MutableStateFlow(false)
         val externalSearchEnabledFlow = MutableStateFlow(false)
         val hasRequestContentPermissionFlow = MutableStateFlow(false)
         val fileLoggingEnabledFlow = MutableStateFlow(false)
@@ -373,7 +361,6 @@ class SettingsScreenViewModelTest {
         override fun isCacheEnabled(): Boolean = _cacheEnabled
         override fun getStorageInfo(): StorageInfo? = _storageInfo
         override fun isDirectDownloadsEnabled(): Boolean = _directDownloadsEnabled
-        override fun hasIssueContentDownloadPermission(): Boolean = _hasIssueContentDownloadPermission
         override fun isExternalSearchEnabled(): Boolean = _externalSearchEnabled
         override fun hasRequestContentPermission(): Boolean = _hasRequestContentPermission
         override fun isFileLoggingEnabled(): Boolean = _fileLoggingEnabled
@@ -387,7 +374,6 @@ class SettingsScreenViewModelTest {
         override fun observeCacheEnabled(): Flow<Boolean> = cacheEnabledFlow
         override fun observeStorageInfo(): Flow<StorageInfo> = storageInfoFlow
         override fun observeDirectDownloadsEnabled(): Flow<Boolean> = directDownloadsEnabledFlow
-        override fun observeHasIssueContentDownloadPermission(): Flow<Boolean> = hasIssueContentDownloadPermissionFlow
         override fun observeExternalSearchEnabled(): Flow<Boolean> = externalSearchEnabledFlow
         override fun observeHasRequestContentPermission(): Flow<Boolean> = hasRequestContentPermissionFlow
         override fun observeFileLoggingEnabled(): Flow<Boolean> = fileLoggingEnabledFlow
