@@ -79,7 +79,7 @@ class ApplicationModule {
 
         // Create a routing call factory that uses the appropriate client based on URL
         val routingCallFactory = RoutingCallFactory(
-            baseUrl = configStore.baseUrl.value,
+            configStore = configStore,
             internalClient = pinnedOkHttpClient,
             externalClient = externalOkHttpClient,
         )
@@ -152,14 +152,13 @@ private class CoilAuthTokenInterceptor(
  * Internal URLs (to our server) use the pinned client, external URLs use a plain client.
  */
 private class RoutingCallFactory(
-    private val baseUrl: String,
+    private val configStore: ConfigStore,
     private val internalClient: OkHttpClient,
     private val externalClient: OkHttpClient,
 ) : okhttp3.Call.Factory {
 
-    private val internalHost = extractHost(baseUrl)
-
     override fun newCall(request: okhttp3.Request): okhttp3.Call {
+        val internalHost = extractHost(configStore.baseUrl.value)
         val requestHost = extractHost(request.url.toString())
         val client = if (requestHost == internalHost) {
             internalClient
