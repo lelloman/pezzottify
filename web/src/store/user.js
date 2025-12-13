@@ -3,6 +3,7 @@ import { ref, computed } from "vue";
 import { useRemoteStore } from "./remote";
 
 // Settings key constants
+export const SETTING_ENABLE_DIRECT_DOWNLOADS = "enable_direct_downloads";
 export const SETTING_ENABLE_EXTERNAL_SEARCH = "enable_external_search";
 
 // Admin permissions that grant access to admin panel
@@ -283,6 +284,22 @@ export const useUserStore = defineStore("user", () => {
     }
   };
 
+  // Convenience computed for direct downloads setting
+  const isDirectDownloadsEnabled = computed(() => {
+    return settings.value[SETTING_ENABLE_DIRECT_DOWNLOADS] === "true";
+  });
+
+  const isDirectDownloadsPending = computed(() => {
+    return isSettingPending(SETTING_ENABLE_DIRECT_DOWNLOADS);
+  });
+
+  const setDirectDownloadsEnabled = async (enabled) => {
+    return await setSetting(
+      SETTING_ENABLE_DIRECT_DOWNLOADS,
+      enabled ? "true" : "false",
+    );
+  };
+
   // Convenience computed for external search setting
   const isExternalSearchEnabled = computed(() => {
     return settings.value[SETTING_ENABLE_EXTERNAL_SEARCH] === "true";
@@ -365,6 +382,15 @@ export const useUserStore = defineStore("user", () => {
               : "false"
             : setting.value;
         settings.value = { ...settings.value, [setting.key]: value };
+      }
+      // Handle legacy format: { DirectDownloadsEnabled: true }
+      else if ("DirectDownloadsEnabled" in setting) {
+        settings.value = {
+          ...settings.value,
+          [SETTING_ENABLE_DIRECT_DOWNLOADS]: setting.DirectDownloadsEnabled
+            ? "true"
+            : "false",
+        };
       }
       // Handle legacy format: { ExternalSearchEnabled: true }
       else if ("ExternalSearchEnabled" in setting) {
@@ -541,6 +567,9 @@ export const useUserStore = defineStore("user", () => {
     isSettingPending,
     hasPendingSettings,
     retryPendingSettings,
+    isDirectDownloadsEnabled,
+    isDirectDownloadsPending,
+    setDirectDownloadsEnabled,
     isExternalSearchEnabled,
     isExternalSearchPending,
     setExternalSearchEnabled,

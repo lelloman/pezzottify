@@ -307,6 +307,13 @@ async fn main() -> Result<()> {
             )) as Arc<dyn downloader::Downloader>
         });
 
+    // Pass media_base_path for proxy if downloader is configured
+    let media_base_path_for_proxy = if downloader.is_some() {
+        Some(app_config.media_path.clone())
+    } else {
+        None
+    };
+
     // Initialize download manager if enabled
     let (download_manager, download_queue_store) = if app_config.download_manager.enabled {
         let queue_store: Arc<dyn DownloadQueueStore> = Arc::new(SqliteDownloadQueueStore::new(
@@ -402,6 +409,7 @@ async fn main() -> Result<()> {
             app_config.content_cache_age_sec,
             app_config.frontend_dir_path.clone(),
             downloader,
+            media_base_path_for_proxy,
             Some(scheduler_handle),
             app_config.ssl.clone(),
             download_manager,

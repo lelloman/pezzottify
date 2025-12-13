@@ -196,11 +196,11 @@ mod tests {
     #[test]
     fn test_setting_changed_serialization() {
         let event = UserEvent::SettingChanged {
-            setting: UserSetting::ExternalSearchEnabled(true),
+            setting: UserSetting::DirectDownloadsEnabled(true),
         };
         let json = serde_json::to_string(&event).unwrap();
         assert!(json.contains("setting_changed"));
-        assert!(json.contains("enable_external_search"));
+        assert!(json.contains("enable_direct_downloads"));
         assert!(json.contains("true"));
 
         let parsed: UserEvent = serde_json::from_str(&json).unwrap();
@@ -279,7 +279,7 @@ mod tests {
     #[test]
     fn test_permission_revoked_serialization() {
         let event = UserEvent::PermissionRevoked {
-            permission: Permission::RequestContent,
+            permission: Permission::IssueContentDownload,
         };
         let json = serde_json::to_string(&event).unwrap();
         assert!(json.contains("permission_revoked"));
@@ -346,7 +346,7 @@ mod tests {
         );
         assert_eq!(
             UserEvent::SettingChanged {
-                setting: UserSetting::ExternalSearchEnabled(false)
+                setting: UserSetting::DirectDownloadsEnabled(false)
             }
             .event_type(),
             "setting_changed"

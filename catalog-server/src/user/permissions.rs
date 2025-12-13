@@ -8,6 +8,7 @@ pub enum Permission {
     OwnPlaylists,
     EditCatalog,
     ManagePermissions,
+    IssueContentDownload,
     ServerAdmin,
     ViewAnalytics,
     RequestContent,
@@ -22,7 +23,7 @@ impl Permission {
             Permission::OwnPlaylists => 3,
             Permission::EditCatalog => 4,
             Permission::ManagePermissions => 5,
-            // Note: ID 6 (IssueContentDownload) was removed in v10 migration
+            Permission::IssueContentDownload => 6,
             Permission::ServerAdmin => 7,
             Permission::ViewAnalytics => 8,
             Permission::RequestContent => 9,
@@ -37,7 +38,7 @@ impl Permission {
             3 => Some(Permission::OwnPlaylists),
             4 => Some(Permission::EditCatalog),
             5 => Some(Permission::ManagePermissions),
-            // Note: ID 6 (IssueContentDownload) was removed in v10 migration
+            6 => Some(Permission::IssueContentDownload),
             7 => Some(Permission::ServerAdmin),
             8 => Some(Permission::ViewAnalytics),
             9 => Some(Permission::RequestContent),
@@ -51,6 +52,7 @@ const ADMIN_PERMISSIONS: &[Permission] = &[
     Permission::AccessCatalog,
     Permission::EditCatalog,
     Permission::ManagePermissions,
+    Permission::IssueContentDownload,
     Permission::ServerAdmin,
     Permission::ViewAnalytics,
     Permission::RequestContent,
@@ -115,7 +117,7 @@ mod tests {
         assert_eq!(Permission::OwnPlaylists.as_int(), 3);
         assert_eq!(Permission::EditCatalog.as_int(), 4);
         assert_eq!(Permission::ManagePermissions.as_int(), 5);
-        // Note: ID 6 (IssueContentDownload) was removed
+        assert_eq!(Permission::IssueContentDownload.as_int(), 6);
         assert_eq!(Permission::ServerAdmin.as_int(), 7);
         assert_eq!(Permission::ViewAnalytics.as_int(), 8);
         assert_eq!(Permission::RequestContent.as_int(), 9);
@@ -129,8 +131,10 @@ mod tests {
         assert_eq!(Permission::from_int(3), Some(Permission::OwnPlaylists));
         assert_eq!(Permission::from_int(4), Some(Permission::EditCatalog));
         assert_eq!(Permission::from_int(5), Some(Permission::ManagePermissions));
-        // Note: ID 6 (IssueContentDownload) was removed
-        assert_eq!(Permission::from_int(6), None);
+        assert_eq!(
+            Permission::from_int(6),
+            Some(Permission::IssueContentDownload)
+        );
         assert_eq!(Permission::from_int(7), Some(Permission::ServerAdmin));
         assert_eq!(Permission::from_int(8), Some(Permission::ViewAnalytics));
         assert_eq!(Permission::from_int(9), Some(Permission::RequestContent));
@@ -158,6 +162,7 @@ mod tests {
             Permission::OwnPlaylists,
             Permission::EditCatalog,
             Permission::ManagePermissions,
+            Permission::IssueContentDownload,
             Permission::ServerAdmin,
             Permission::ViewAnalytics,
             Permission::RequestContent,
@@ -175,10 +180,11 @@ mod tests {
     fn user_role_admin_permissions() {
         let admin_perms = UserRole::Admin.permissions();
 
-        assert_eq!(admin_perms.len(), 7);
+        assert_eq!(admin_perms.len(), 8);
         assert!(admin_perms.contains(&Permission::AccessCatalog));
         assert!(admin_perms.contains(&Permission::EditCatalog));
         assert!(admin_perms.contains(&Permission::ManagePermissions));
+        assert!(admin_perms.contains(&Permission::IssueContentDownload));
         assert!(admin_perms.contains(&Permission::ServerAdmin));
         assert!(admin_perms.contains(&Permission::ViewAnalytics));
         assert!(admin_perms.contains(&Permission::RequestContent));
@@ -199,6 +205,7 @@ mod tests {
 
         assert!(!regular_perms.contains(&Permission::EditCatalog));
         assert!(!regular_perms.contains(&Permission::ManagePermissions));
+        assert!(!regular_perms.contains(&Permission::IssueContentDownload));
         assert!(!regular_perms.contains(&Permission::ServerAdmin));
         assert!(!regular_perms.contains(&Permission::ViewAnalytics));
         assert!(!regular_perms.contains(&Permission::RequestContent));
@@ -322,7 +329,7 @@ mod tests {
         let grant = PermissionGrant::Extra {
             start_time: start,
             end_time: Some(end),
-            permission: Permission::RequestContent,
+            permission: Permission::IssueContentDownload,
             countdown: Some(10),
         };
 
@@ -335,7 +342,7 @@ mod tests {
             } => {
                 assert_eq!(start_time, start);
                 assert_eq!(end_time, Some(end));
-                assert_eq!(permission, Permission::RequestContent);
+                assert_eq!(permission, Permission::IssueContentDownload);
                 assert_eq!(countdown, Some(10));
             }
             _ => panic!("Expected Extra variant"),
