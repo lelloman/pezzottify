@@ -14,7 +14,7 @@ This task list breaks down the implementation of the sync-aware user settings fe
 ### 1.1 Create Permission Enum
 - [x] **Create `Permission.kt` in domain/auth**
   - File: `domain/src/main/java/com/lelloman/pezzottify/android/domain/auth/Permission.kt`
-  - Define enum with values: `AccessCatalog`, `LikeContent`, `OwnPlaylists`, `EditCatalog`, `ManagePermissions`, `IssueContentDownload`, `ServerAdmin`, `ViewAnalytics`
+  - Define enum with values: `AccessCatalog`, `LikeContent`, `OwnPlaylists`, `EditCatalog`, `ManagePermissions`, `ServerAdmin`, `ViewAnalytics`
   - Add companion object with `fromSnakeCase(value: String): Permission?` function to parse server format (e.g., "access_catalog" → AccessCatalog)
   - Use `split("_")` and `joinToString` with capitalization to convert snake_case to PascalCase
 

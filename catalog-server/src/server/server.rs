@@ -557,8 +557,16 @@ async fn get_artist(
     State(proxy): State<super::state::OptionalProxy>,
     Path(id): Path<String>,
 ) -> Response {
+    debug!(
+        "get_artist: id={}, user_id={}, proxy_available={}",
+        id,
+        session.user_id,
+        proxy.is_some()
+    );
+
     // If proxy is available, ensure artist has complete data
     if let Some(ref proxy) = proxy {
+        debug!("get_artist: calling proxy.ensure_artist_complete for {}", id);
         if let Err(e) = proxy
             .ensure_artist_complete(&id, session.user_id, &session.permissions)
             .await
@@ -566,6 +574,8 @@ async fn get_artist(
             warn!("Proxy fetch failed for artist {}: {}", id, e);
             // Continue serving what we have
         }
+    } else {
+        debug!("get_artist: proxy not available for {}", id);
     }
 
     match catalog_store.get_artist_json(&id) {
@@ -2549,9 +2559,10 @@ async fn admin_add_user_extra_permission(
         "OwnPlaylists" => Permission::OwnPlaylists,
         "EditCatalog" => Permission::EditCatalog,
         "ManagePermissions" => Permission::ManagePermissions,
-        "IssueContentDownload" => Permission::IssueContentDownload,
         "ServerAdmin" => Permission::ServerAdmin,
         "ViewAnalytics" => Permission::ViewAnalytics,
+        "RequestContent" => Permission::RequestContent,
+        "DownloadManagerAdmin" => Permission::DownloadManagerAdmin,
         _ => return (StatusCode::BAD_REQUEST, "Invalid permission").into_response(),
     };
 
@@ -5447,11 +5458,10 @@ mod tests {
             let (store, user_id, _temp_dir) = create_test_store_with_admin_user();
 
             let permissions = store.resolve_user_permissions(user_id).unwrap();
-            // Admin should have: AccessCatalog, EditCatalog, ManagePermissions, IssueContentDownload, ServerAdmin
+            // Admin should have: AccessCatalog, EditCatalog, ManagePermissions, ServerAdmin, ViewAnalytics, RequestContent, DownloadManagerAdmin
             assert!(permissions.contains(&crate::user::Permission::AccessCatalog));
             assert!(permissions.contains(&crate::user::Permission::EditCatalog));
             assert!(permissions.contains(&crate::user::Permission::ManagePermissions));
-            assert!(permissions.contains(&crate::user::Permission::IssueContentDownload));
             assert!(permissions.contains(&crate::user::Permission::ServerAdmin));
         }
 

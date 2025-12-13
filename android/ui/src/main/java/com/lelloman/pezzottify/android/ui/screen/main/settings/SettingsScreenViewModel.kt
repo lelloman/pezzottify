@@ -38,7 +38,6 @@ class SettingsScreenViewModel @Inject constructor(
                 fontFamily = interactor.getFontFamily(),
                 isCacheEnabled = interactor.isCacheEnabled(),
                 storageInfo = interactor.getStorageInfo(),
-                directDownloadsEnabled = interactor.isDirectDownloadsEnabled(),
                 externalSearchEnabled = interactor.isExternalSearchEnabled(),
                 hasRequestContentPermission = interactor.hasRequestContentPermission(),
                 isFileLoggingEnabled = interactor.isFileLoggingEnabled(),
@@ -72,11 +71,6 @@ class SettingsScreenViewModel @Inject constructor(
             launch {
                 interactor.observeStorageInfo().collect { storageInfo ->
                     mutableState.update { it.copy(storageInfo = storageInfo) }
-                }
-            }
-            launch {
-                interactor.observeDirectDownloadsEnabled().collect { enabled ->
-                    mutableState.update { it.copy(directDownloadsEnabled = enabled) }
                 }
             }
             launch {
@@ -127,12 +121,6 @@ class SettingsScreenViewModel @Inject constructor(
     override fun setCacheEnabled(enabled: Boolean) {
         viewModelScope.launch {
             interactor.setCacheEnabled(enabled)
-        }
-    }
-
-    override fun setDirectDownloadsEnabled(enabled: Boolean) {
-        viewModelScope.launch {
-            interactor.setDirectDownloadsEnabled(enabled)
         }
     }
 
@@ -222,7 +210,6 @@ class SettingsScreenViewModel @Inject constructor(
         fun getFontFamily(): AppFontFamily
         fun isCacheEnabled(): Boolean
         fun getStorageInfo(): StorageInfo?
-        fun isDirectDownloadsEnabled(): Boolean
         fun isExternalSearchEnabled(): Boolean
         fun hasRequestContentPermission(): Boolean
         fun observeThemeMode(): kotlinx.coroutines.flow.Flow<ThemeMode>
@@ -230,7 +217,6 @@ class SettingsScreenViewModel @Inject constructor(
         fun observeFontFamily(): kotlinx.coroutines.flow.Flow<AppFontFamily>
         fun observeCacheEnabled(): kotlinx.coroutines.flow.Flow<Boolean>
         fun observeStorageInfo(): kotlinx.coroutines.flow.Flow<StorageInfo>
-        fun observeDirectDownloadsEnabled(): kotlinx.coroutines.flow.Flow<Boolean>
         fun observeExternalSearchEnabled(): kotlinx.coroutines.flow.Flow<Boolean>
         fun observeHasRequestContentPermission(): kotlinx.coroutines.flow.Flow<Boolean>
         fun observeFileLoggingEnabled(): kotlinx.coroutines.flow.Flow<Boolean>
@@ -238,7 +224,6 @@ class SettingsScreenViewModel @Inject constructor(
         suspend fun setColorPalette(colorPalette: ColorPalette)
         suspend fun setFontFamily(fontFamily: AppFontFamily)
         suspend fun setCacheEnabled(enabled: Boolean)
-        suspend fun setDirectDownloadsEnabled(enabled: Boolean): Boolean
         suspend fun setExternalSearchEnabled(enabled: Boolean)
         suspend fun setFileLoggingEnabled(enabled: Boolean)
         fun isFileLoggingEnabled(): Boolean
