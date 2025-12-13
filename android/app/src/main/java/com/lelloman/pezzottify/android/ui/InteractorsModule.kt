@@ -219,9 +219,6 @@ class InteractorsModule {
 
         override fun isDirectDownloadsEnabled(): Boolean = userSettingsStore.directDownloadsEnabled.value
 
-        override fun hasIssueContentDownloadPermission(): Boolean =
-            permissionsStore.permissions.value.contains(DomainPermission.IssueContentDownload)
-
         override fun isExternalSearchEnabled(): Boolean = userSettingsStore.isExternalSearchEnabled.value
 
         override fun hasRequestContentPermission(): Boolean =
@@ -238,9 +235,6 @@ class InteractorsModule {
         override fun observeStorageInfo(): Flow<UiStorageInfo> = storageMonitor.storageInfo.map { it.toUi() }
 
         override fun observeDirectDownloadsEnabled(): Flow<Boolean> = userSettingsStore.directDownloadsEnabled
-
-        override fun observeHasIssueContentDownloadPermission(): Flow<Boolean> =
-            permissionsStore.permissions.map { it.contains(DomainPermission.IssueContentDownload) }
 
         override fun observeExternalSearchEnabled(): Flow<Boolean> = userSettingsStore.isExternalSearchEnabled
 
@@ -1338,7 +1332,6 @@ private fun DomainPermission.toUi(): UiPermission? = when (this) {
     DomainPermission.OwnPlaylists -> UiPermission.OwnPlaylists
     DomainPermission.EditCatalog -> UiPermission.EditCatalog
     DomainPermission.ManagePermissions -> UiPermission.ManagePermissions
-    DomainPermission.IssueContentDownload -> UiPermission.IssueContentDownload
     DomainPermission.ServerAdmin -> UiPermission.ServerAdmin
     DomainPermission.ViewAnalytics -> UiPermission.ViewAnalytics
     DomainPermission.RequestContent -> UiPermission.RequestContent

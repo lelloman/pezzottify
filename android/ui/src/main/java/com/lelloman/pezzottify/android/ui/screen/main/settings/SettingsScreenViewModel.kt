@@ -39,7 +39,6 @@ class SettingsScreenViewModel @Inject constructor(
                 isCacheEnabled = interactor.isCacheEnabled(),
                 storageInfo = interactor.getStorageInfo(),
                 directDownloadsEnabled = interactor.isDirectDownloadsEnabled(),
-                hasIssueContentDownloadPermission = interactor.hasIssueContentDownloadPermission(),
                 externalSearchEnabled = interactor.isExternalSearchEnabled(),
                 hasRequestContentPermission = interactor.hasRequestContentPermission(),
                 isFileLoggingEnabled = interactor.isFileLoggingEnabled(),
@@ -78,11 +77,6 @@ class SettingsScreenViewModel @Inject constructor(
             launch {
                 interactor.observeDirectDownloadsEnabled().collect { enabled ->
                     mutableState.update { it.copy(directDownloadsEnabled = enabled) }
-                }
-            }
-            launch {
-                interactor.observeHasIssueContentDownloadPermission().collect { hasPermission ->
-                    mutableState.update { it.copy(hasIssueContentDownloadPermission = hasPermission) }
                 }
             }
             launch {
@@ -229,7 +223,6 @@ class SettingsScreenViewModel @Inject constructor(
         fun isCacheEnabled(): Boolean
         fun getStorageInfo(): StorageInfo?
         fun isDirectDownloadsEnabled(): Boolean
-        fun hasIssueContentDownloadPermission(): Boolean
         fun isExternalSearchEnabled(): Boolean
         fun hasRequestContentPermission(): Boolean
         fun observeThemeMode(): kotlinx.coroutines.flow.Flow<ThemeMode>
@@ -238,7 +231,6 @@ class SettingsScreenViewModel @Inject constructor(
         fun observeCacheEnabled(): kotlinx.coroutines.flow.Flow<Boolean>
         fun observeStorageInfo(): kotlinx.coroutines.flow.Flow<StorageInfo>
         fun observeDirectDownloadsEnabled(): kotlinx.coroutines.flow.Flow<Boolean>
-        fun observeHasIssueContentDownloadPermission(): kotlinx.coroutines.flow.Flow<Boolean>
         fun observeExternalSearchEnabled(): kotlinx.coroutines.flow.Flow<Boolean>
         fun observeHasRequestContentPermission(): kotlinx.coroutines.flow.Flow<Boolean>
         fun observeFileLoggingEnabled(): kotlinx.coroutines.flow.Flow<Boolean>
