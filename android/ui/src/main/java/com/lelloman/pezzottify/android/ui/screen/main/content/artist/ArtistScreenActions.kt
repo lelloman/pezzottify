@@ -7,4 +7,6 @@ interface ArtistScreenActions {
     fun clickOnArtistImage(imageUrl: String?)
 
     fun clickOnExternalAlbum(albumId: String)
+
+    fun retryExternalAlbums()
 }

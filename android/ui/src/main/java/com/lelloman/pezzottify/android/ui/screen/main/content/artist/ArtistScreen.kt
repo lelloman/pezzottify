@@ -2,6 +2,7 @@ package com.lelloman.pezzottify.android.ui.screen.main.content.artist
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -17,6 +18,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -90,7 +92,7 @@ private fun ArtistScreenContent(
             features = state.features,
             relatedArtists = state.relatedArtists,
             externalAlbums = state.externalAlbums,
-            isLoadingExternalAlbums = state.isLoadingExternalAlbums,
+            isExternalAlbumsError = state.isExternalAlbumsError,
             isLiked = state.isLiked,
             contentResolver = contentResolver,
             navController = navController,
@@ -106,7 +108,7 @@ fun ArtistLoadedScreen(
     features: List<String>,
     relatedArtists: List<String>,
     externalAlbums: List<UiExternalAlbumItem>,
-    isLoadingExternalAlbums: Boolean,
+    isExternalAlbumsError: Boolean,
     isLiked: Boolean,
     contentResolver: ContentResolver,
     navController: NavController,
@@ -225,7 +227,7 @@ fun ArtistLoadedScreen(
             }
 
             // External albums (not in library)
-            if (externalAlbums.isNotEmpty() || isLoadingExternalAlbums) {
+            if (externalAlbums.isNotEmpty()) {
                 item {
                     Text(
                         text = stringResource(R.string.not_in_library),
@@ -233,20 +235,17 @@ fun ArtistLoadedScreen(
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
                     )
                 }
-                if (isLoadingExternalAlbums) {
-                    item {
-                        Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp)) {
-                            SkeletonAlbumGridItem(modifier = Modifier.weight(1f))
-                            SkeletonAlbumGridItem(modifier = Modifier.weight(1f))
-                        }
-                    }
-                } else {
-                    item {
-                        ExternalAlbumGrid(
-                            albums = externalAlbums,
-                            onAlbumClick = { actions.clickOnExternalAlbum(it) }
-                        )
-                    }
+                item {
+                    ExternalAlbumGrid(
+                        albums = externalAlbums,
+                        onAlbumClick = { actions.clickOnExternalAlbum(it) }
+                    )
+                }
+            } else if (isExternalAlbumsError) {
+                item {
+                    ExternalAlbumsErrorSection(
+                        onRetry = { actions.retryExternalAlbums() }
+                    )
                 }
             }
         }
@@ -411,6 +410,29 @@ private fun ExternalAlbumGrid(
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun ExternalAlbumsErrorSection(
+    onRetry: () -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 16.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Text(
+            text = stringResource(R.string.external_albums_error),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center
+        )
+        OutlinedButton(onClick = onRetry) {
+            Text(text = stringResource(R.string.retry))
         }
     }
 }
