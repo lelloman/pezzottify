@@ -486,10 +486,7 @@ pub fn print_welcome(db_path: &str) {
     println!("{}", box_chars::DOUBLE_TOP_RIGHT.with(colors::PURPLE));
 
     // Content
-    let lines = [
-        ("Database", db_path),
-        ("Version", env!("APP_VERSION")),
-    ];
+    let lines = [("Database", db_path), ("Version", env!("APP_VERSION"))];
 
     print!("  {}", box_chars::DOUBLE_VERTICAL.with(colors::PURPLE));
     print!("  {}  ", "Connected to user database".with(colors::GREEN));
