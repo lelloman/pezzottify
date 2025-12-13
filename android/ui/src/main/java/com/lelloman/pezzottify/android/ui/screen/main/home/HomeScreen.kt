@@ -71,13 +71,17 @@ import kotlinx.coroutines.launch
 
 
 @Composable
-fun HomeScreen(navController: NavController) {
+fun HomeScreen(
+    navController: NavController,
+    onOpenProfileDrawer: () -> Unit = {},
+) {
     val viewModel = hiltViewModel<HomeScreenViewModel>()
     HomeScreenContent(
         navController = navController,
         actions = viewModel,
         events = viewModel.events,
         state = viewModel.state.collectAsStateWithLifecycle().value,
+        onOpenProfileDrawer = onOpenProfileDrawer,
     )
 }
 
@@ -88,6 +92,7 @@ private fun HomeScreenContent(
     events: Flow<HomeScreenEvents>,
     actions: HomeScreenActions,
     state: HomeScreenState,
+    onOpenProfileDrawer: () -> Unit,
 ) {
     val coroutineScope = rememberCoroutineScope()
 
@@ -95,7 +100,8 @@ private fun HomeScreenContent(
         events.collect {
             when (it) {
                 HomeScreenEvents.NavigateToProfileScreen -> {
-                    navController.toProfile()
+                    // Open the drawer instead of navigating to profile screen
+                    onOpenProfileDrawer()
                 }
 
                 HomeScreenEvents.NavigateToSettingsScreen -> {
