@@ -307,7 +307,7 @@
 
     <!-- PERMISSIONS -->
     <string name="permission_access_catalog">Accesso al catalogo</string>
-    <string name="permission_like_content">Metti Mi piace</string>
+    <string name="permission_like_content">Metti mi piace</string>
     <string name="permission_own_playlists">Playlist personali</string>
     <string name="permission_edit_catalog">Modifica catalogo</string>
     <string name="permission_manage_permissions">Gestione permessi</string>
@@ -316,7 +316,7 @@
     <string name="permission_request_content">Richiedi contenuti</string>
     <string name="permission_download_manager_admin">Amministratore download</string>
     <string name="permission_access_catalog_desc">Sfoglia e riproduci musica dal catalogo.</string>
-    <string name="permission_like_content_desc">Metti Mi piace ad album, artisti e brani.</string>
+    <string name="permission_like_content_desc">Metti mi piace ad album, artisti e brani, crea la tua libreria personale.</string>
     <string name="permission_own_playlists_desc">Crea e gestisci playlist personali.</string>
     <string name="permission_edit_catalog_desc">Aggiungi, modifica o rimuovi contenuti dal catalogo.</string>
     <string name="permission_manage_permissions_desc">Concedi o revoca permessi ad altri utenti.</string>

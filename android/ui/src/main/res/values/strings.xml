@@ -316,7 +316,7 @@
     <string name="permission_request_content">Request Content</string>
     <string name="permission_download_manager_admin">Download Manager Admin</string>
     <string name="permission_access_catalog_desc">Browse and play music from the catalog.</string>
-    <string name="permission_like_content_desc">Like albums, artists, and tracks.</string>
+    <string name="permission_like_content_desc">Like albums, artists, and tracks, make your personal library.</string>
     <string name="permission_own_playlists_desc">Create and manage personal playlists.</string>
     <string name="permission_edit_catalog_desc">Add, edit, or remove catalog content.</string>
     <string name="permission_manage_permissions_desc">Grant or revoke permissions for other users.</string>
