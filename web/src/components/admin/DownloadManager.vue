@@ -280,6 +280,43 @@
         </button>
       </div>
 
+      <!-- Custom Date Range -->
+      <div v-if="selectedPeriod === 'custom'" class="customDateRange">
+        <div class="dateInputGroup">
+          <label for="customDateFrom">From:</label>
+          <input
+            id="customDateFrom"
+            v-model="customDateFrom"
+            type="datetime-local"
+            class="dateInput"
+            @change="loadStatsHistory"
+          />
+        </div>
+        <div class="dateInputGroup">
+          <label for="customDateTo">To:</label>
+          <input
+            id="customDateTo"
+            v-model="customDateTo"
+            type="datetime-local"
+            class="dateInput"
+            @change="loadStatsHistory"
+          />
+        </div>
+        <div class="dateInputGroup">
+          <label for="customGranularity">Granularity:</label>
+          <select
+            id="customGranularity"
+            v-model="customGranularity"
+            class="granularitySelect"
+            @change="loadStatsHistory"
+          >
+            <option value="hourly">Hourly</option>
+            <option value="daily">Daily</option>
+            <option value="weekly">Weekly</option>
+          </select>
+        </div>
+      </div>
+
       <!-- Totals Summary Cards -->
       <div v-if="statsHistory" class="statsTotals">
         <div class="totalCard">
@@ -581,22 +618,54 @@ const deleteError = ref(null);
 const selectedPeriod = ref("daily");
 const statsHistory = ref(null);
 const isLoadingStats = ref(false);
+const customDateFrom = ref("");
+const customDateTo = ref("");
+const customGranularity = ref("hourly");
 
 const periods = [
   { id: "hourly", label: "Last 48 Hours" },
   { id: "daily", label: "Last 30 Days" },
   { id: "weekly", label: "Last 12 Weeks" },
+  { id: "custom", label: "Custom Range" },
 ];
 
 const loadStatsHistory = async () => {
   isLoadingStats.value = true;
-  const result = await remoteStore.fetchDownloadStatsHistory(selectedPeriod.value);
+
+  let period, since, until;
+
+  if (selectedPeriod.value === "custom") {
+    // Use custom granularity for aggregation
+    period = customGranularity.value;
+    // Convert datetime-local values to unix timestamps
+    since = customDateFrom.value
+      ? Math.floor(new Date(customDateFrom.value).getTime() / 1000)
+      : null;
+    until = customDateTo.value
+      ? Math.floor(new Date(customDateTo.value).getTime() / 1000)
+      : null;
+  } else {
+    period = selectedPeriod.value;
+    since = null;
+    until = null;
+  }
+
+  const result = await remoteStore.fetchDownloadStatsHistory(period, since, until);
   statsHistory.value = result;
   isLoadingStats.value = false;
 };
 
 const selectPeriod = async (period) => {
   selectedPeriod.value = period;
+
+  // Initialize custom date range with reasonable defaults
+  if (period === "custom" && !customDateFrom.value) {
+    const now = new Date();
+    const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    customDateFrom.value = weekAgo.toISOString().slice(0, 16);
+    customDateTo.value = now.toISOString().slice(0, 16);
+  }
+
   await loadStatsHistory();
 };
 
@@ -1785,6 +1854,48 @@ onUnmounted(() => {
   background-color: var(--spotify-green);
   border-color: var(--spotify-green);
   color: white;
+}
+
+.customDateRange {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-4);
+  margin-bottom: var(--spacing-4);
+  padding: var(--spacing-4);
+  background-color: var(--bg-elevated-base);
+  border-radius: var(--radius-lg);
+}
+
+.dateInputGroup {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-1);
+}
+
+.dateInputGroup label {
+  font-size: var(--text-sm);
+  color: var(--text-subdued);
+}
+
+.dateInput,
+.granularitySelect {
+  padding: var(--spacing-2) var(--spacing-3);
+  background-color: var(--bg-base);
+  border: 1px solid var(--border-subdued);
+  border-radius: var(--radius-md);
+  color: var(--text-base);
+  font-size: var(--text-sm);
+}
+
+.dateInput:focus,
+.granularitySelect:focus {
+  outline: none;
+  border-color: var(--spotify-green);
+}
+
+.granularitySelect {
+  min-width: 100px;
+  cursor: pointer;
 }
 
 .statsTotals {

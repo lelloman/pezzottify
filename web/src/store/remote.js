@@ -580,12 +580,17 @@ export const useRemoteStore = defineStore("remote", () => {
   /**
    * Fetch aggregated download statistics over time.
    * @param {string} period - "hourly" (48h), "daily" (30d), or "weekly" (12w). Default: daily
+   * @param {number|null} since - Optional custom start time (unix timestamp)
+   * @param {number|null} until - Optional custom end time (unix timestamp)
    * @returns {Object|null} Stats history with entries and totals, or null on error
    */
-  const fetchDownloadStatsHistory = async (period = "daily") => {
+  const fetchDownloadStatsHistory = async (period = "daily", since = null, until = null) => {
     try {
+      const params = { period };
+      if (since !== null) params.since = since;
+      if (until !== null) params.until = until;
       const response = await axios.get("/v1/download/admin/stats/history", {
-        params: { period },
+        params,
       });
       return response.data;
     } catch (error) {
