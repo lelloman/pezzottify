@@ -615,7 +615,7 @@ const isDeleting = ref(false);
 const deleteError = ref(null);
 
 // Statistics state
-const selectedPeriod = ref("daily");
+const selectedPeriod = ref("7d");
 const statsHistory = ref(null);
 const isLoadingStats = ref(false);
 const customDateFrom = ref("");
@@ -623,15 +623,16 @@ const customDateTo = ref("");
 const customGranularity = ref("hourly");
 
 const periods = [
-  { id: "hourly", label: "Last 48 Hours" },
-  { id: "daily", label: "Last 30 Days" },
-  { id: "weekly", label: "Last 12 Weeks" },
+  { id: "24h", label: "Last 24h", seconds: 24 * 3600, granularity: "hourly" },
+  { id: "7d", label: "Last 7 days", seconds: 7 * 24 * 3600, granularity: "hourly" },
+  { id: "30d", label: "Last 30 days", seconds: 30 * 24 * 3600, granularity: "daily" },
   { id: "custom", label: "Custom Range" },
 ];
 
 const loadStatsHistory = async () => {
   isLoadingStats.value = true;
 
+  const now = Math.floor(Date.now() / 1000);
   let period, since, until;
 
   if (selectedPeriod.value === "custom") {
@@ -645,9 +646,17 @@ const loadStatsHistory = async () => {
       ? Math.floor(new Date(customDateTo.value).getTime() / 1000)
       : null;
   } else {
-    period = selectedPeriod.value;
-    since = null;
-    until = null;
+    // Find the preset configuration
+    const preset = periods.find((p) => p.id === selectedPeriod.value);
+    if (preset && preset.seconds) {
+      period = preset.granularity;
+      since = now - preset.seconds;
+      until = null;
+    } else {
+      period = "daily";
+      since = null;
+      until = null;
+    }
   }
 
   const result = await remoteStore.fetchDownloadStatsHistory(period, since, until);
@@ -680,16 +689,26 @@ watch(
 );
 
 // Chart configuration
+const getEffectiveGranularity = () => {
+  if (selectedPeriod.value === "custom") {
+    return customGranularity.value;
+  }
+  const preset = periods.find((p) => p.id === selectedPeriod.value);
+  return preset?.granularity || "daily";
+};
+
 const formatPeriodDate = (timestamp) => {
   const date = new Date(timestamp * 1000);
-  if (selectedPeriod.value === "hourly") {
+  const granularity = getEffectiveGranularity();
+
+  if (granularity === "hourly") {
     return date.toLocaleString(undefined, {
       month: "short",
       day: "numeric",
       hour: "2-digit",
       minute: "2-digit",
     });
-  } else if (selectedPeriod.value === "weekly") {
+  } else if (granularity === "weekly") {
     return `Week of ${date.toLocaleDateString(undefined, { month: "short", day: "numeric" })}`;
   }
   return date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
@@ -711,6 +730,7 @@ const downloadsChartData = computed(() => {
         backgroundColor: "rgba(29, 185, 84, 0.1)",
         fill: true,
         tension: 0.3,
+        yAxisID: "y",
       },
       {
         label: "Tracks",
@@ -719,6 +739,7 @@ const downloadsChartData = computed(() => {
         backgroundColor: "rgba(59, 130, 246, 0.1)",
         fill: true,
         tension: 0.3,
+        yAxisID: "y",
       },
       {
         label: "Failures",
@@ -727,6 +748,16 @@ const downloadsChartData = computed(() => {
         backgroundColor: "rgba(220, 38, 38, 0.1)",
         fill: true,
         tension: 0.3,
+        yAxisID: "y",
+      },
+      {
+        label: "Bytes (MB)",
+        data: entries.map((e) => Math.round(e.bytes / (1024 * 1024))),
+        borderColor: "#f59e0b",
+        backgroundColor: "rgba(245, 158, 11, 0.1)",
+        fill: true,
+        tension: 0.3,
+        yAxisID: "y1",
       },
     ],
   };
@@ -769,11 +800,37 @@ const lineChartOptions = {
       },
     },
     y: {
+      type: "linear",
+      display: true,
+      position: "left",
+      title: {
+        display: true,
+        text: "Count",
+        color: "#a1a1aa",
+      },
       grid: {
         color: "rgba(63, 63, 70, 0.3)",
       },
       ticks: {
         color: "#a1a1aa",
+        precision: 0,
+      },
+      beginAtZero: true,
+    },
+    y1: {
+      type: "linear",
+      display: true,
+      position: "right",
+      title: {
+        display: true,
+        text: "MB",
+        color: "#f59e0b",
+      },
+      grid: {
+        drawOnChartArea: false,
+      },
+      ticks: {
+        color: "#f59e0b",
         precision: 0,
       },
       beginAtZero: true,
