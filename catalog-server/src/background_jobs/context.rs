@@ -1,8 +1,11 @@
 use crate::catalog_store::CatalogStore;
 use crate::server_store::ServerStore;
-use crate::user::FullUserStore;
-use std::sync::Arc;
+use crate::user::{FullUserStore, UserManager};
+use std::sync::{Arc, Mutex};
 use tokio_util::sync::CancellationToken;
+
+/// Type alias for thread-safe UserManager access.
+pub type GuardedUserManager = Arc<Mutex<UserManager>>;
 
 /// Context provided to jobs during execution.
 ///
@@ -21,6 +24,9 @@ pub struct JobContext {
 
     /// Access to server-side state (job history, schedules).
     pub server_store: Arc<dyn ServerStore>,
+
+    /// Access to user manager (for caching, etc.).
+    pub user_manager: GuardedUserManager,
 }
 
 impl JobContext {
@@ -30,12 +36,14 @@ impl JobContext {
         catalog_store: Arc<dyn CatalogStore>,
         user_store: Arc<dyn FullUserStore>,
         server_store: Arc<dyn ServerStore>,
+        user_manager: GuardedUserManager,
     ) -> Self {
         Self {
             cancellation_token,
             catalog_store,
             user_store,
             server_store,
+            user_manager,
         }
     }
 

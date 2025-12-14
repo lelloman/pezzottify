@@ -663,6 +663,18 @@ impl UserManager {
         })
     }
 
+    /// Sets the popular content cache directly.
+    ///
+    /// This is used by background jobs to pre-compute and cache popular content,
+    /// avoiding redundant computation when the endpoint is called.
+    pub fn set_popular_content_cache(&self, content: PopularContent) {
+        let mut cache = self.popular_content_cache.lock().unwrap();
+        *cache = Some(CachedPopularContent {
+            content,
+            computed_at: Instant::now(),
+        });
+    }
+
     /// Computes popular content by aggregating play counts.
     ///
     /// Albums are computed from top tracks (albums with many low-play tracks

@@ -5,12 +5,12 @@
 
 use super::constants::*;
 use super::fixtures::{create_test_catalog, create_test_db_with_users};
-use pezzottify_catalog_server::catalog_store::SqliteCatalogStore;
+use pezzottify_catalog_server::catalog_store::{CatalogStore, SqliteCatalogStore};
 use pezzottify_catalog_server::search::{NoOpSearchVault, SearchVault};
 use pezzottify_catalog_server::server::{server::make_app, RequestsLoggingLevel, ServerConfig};
-use pezzottify_catalog_server::user::{FullUserStore, SqliteUserStore, UserStore};
+use pezzottify_catalog_server::user::{FullUserStore, SqliteUserStore, UserManager, UserStore};
 use std::net::SocketAddr;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tempfile::TempDir;
 use tokio::net::TcpListener;
@@ -96,11 +96,18 @@ impl TestServer {
             frontend_dir_path: None,
         };
 
+        // Create user manager
+        let user_manager = Arc::new(Mutex::new(UserManager::new(
+            catalog_store.clone() as Arc<dyn CatalogStore>,
+            user_store.clone(),
+        )));
+
         let app = make_app(
             config,
             catalog_store,
             search_vault,
             user_store,
+            user_manager,
             None,
             None,
             None,

@@ -28,7 +28,7 @@ use pezzottify_catalog_server::search::PezzotHashSearchVault;
 use pezzottify_catalog_server::search::SearchVault;
 use pezzottify_catalog_server::server::{metrics, run_server, RequestsLoggingLevel};
 use pezzottify_catalog_server::server_store::{self, SqliteServerStore};
-use pezzottify_catalog_server::user::{self, SqliteUserStore};
+use pezzottify_catalog_server::user::{self, SqliteUserStore, UserManager};
 
 fn parse_path(s: &str) -> Result<PathBuf, String> {
     let path_buf = PathBuf::from(s);
@@ -216,6 +216,12 @@ async fn main() -> Result<()> {
     );
     let server_store = Arc::new(SqliteServerStore::new(app_config.server_db_path())?);
 
+    // Create UserManager early so it can be shared with job scheduler
+    let user_manager = Arc::new(std::sync::Mutex::new(UserManager::new(
+        catalog_store.clone() as Arc<dyn CatalogStore>,
+        user_store.clone() as Arc<dyn user::FullUserStore>,
+    )));
+
     // Set up background job scheduler
     let shutdown_token = CancellationToken::new();
     let (hook_sender, hook_receiver) = tokio::sync::mpsc::channel(100);
@@ -225,6 +231,7 @@ async fn main() -> Result<()> {
         catalog_store.clone() as Arc<dyn CatalogStore>,
         user_store.clone() as Arc<dyn user::FullUserStore>,
         server_store.clone() as Arc<dyn server_store::ServerStore>,
+        user_manager.clone(),
     );
 
     let (mut scheduler, scheduler_handle) = create_scheduler(
@@ -403,6 +410,7 @@ async fn main() -> Result<()> {
             catalog_store,
             search_vault,
             user_store,
+            user_manager,
             app_config.logging_level.clone(),
             app_config.port,
             app_config.metrics_port,

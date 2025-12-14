@@ -351,6 +351,7 @@ impl JobScheduler {
             Arc::clone(&self.job_context.catalog_store),
             Arc::clone(&self.job_context.user_store),
             Arc::clone(&self.job_context.server_store),
+            Arc::clone(&self.job_context.user_manager),
         );
 
         let server_store = Arc::clone(&self.server_store);
@@ -599,11 +600,18 @@ mod tests {
         let user_store: Arc<dyn crate::user::FullUserStore> =
             Arc::new(crate::user::SqliteUserStore::new(&user_db_path).unwrap());
 
+        // Create user manager for job context
+        let user_manager = Arc::new(std::sync::Mutex::new(crate::user::UserManager::new(
+            catalog_store.clone(),
+            user_store.clone(),
+        )));
+
         let job_context = JobContext::new(
             shutdown_token.child_token(),
             catalog_store,
             user_store,
             server_store.clone(),
+            user_manager,
         );
 
         let (scheduler, handle) =
@@ -880,12 +888,17 @@ mod tests {
         let user_db_path = temp_dir.path().join("user.db");
         let user_store: Arc<dyn crate::user::FullUserStore> =
             Arc::new(crate::user::SqliteUserStore::new(&user_db_path).unwrap());
+        let user_manager = Arc::new(std::sync::Mutex::new(crate::user::UserManager::new(
+            catalog_store.clone(),
+            user_store.clone(),
+        )));
 
         let job_context = JobContext::new(
             shutdown_token.child_token(),
             catalog_store,
             user_store,
             server_store.clone(),
+            user_manager,
         );
 
         let (mut scheduler, handle) = create_scheduler(
@@ -944,12 +957,17 @@ mod tests {
         let user_db_path = temp_dir.path().join("user.db");
         let user_store: Arc<dyn crate::user::FullUserStore> =
             Arc::new(crate::user::SqliteUserStore::new(&user_db_path).unwrap());
+        let user_manager = Arc::new(std::sync::Mutex::new(crate::user::UserManager::new(
+            catalog_store.clone(),
+            user_store.clone(),
+        )));
 
         let job_context = JobContext::new(
             shutdown_token.child_token(),
             catalog_store,
             user_store,
             server_store.clone(),
+            user_manager,
         );
 
         let (mut scheduler, handle) = create_scheduler(
@@ -1010,12 +1028,17 @@ mod tests {
         let user_db_path = temp_dir.path().join("user.db");
         let user_store: Arc<dyn crate::user::FullUserStore> =
             Arc::new(crate::user::SqliteUserStore::new(&user_db_path).unwrap());
+        let user_manager = Arc::new(std::sync::Mutex::new(crate::user::UserManager::new(
+            catalog_store.clone(),
+            user_store.clone(),
+        )));
 
         let job_context = JobContext::new(
             shutdown_token.child_token(),
             catalog_store,
             user_store,
             server_store.clone(),
+            user_manager,
         );
 
         let (mut scheduler, handle) = create_scheduler(
@@ -1101,12 +1124,17 @@ mod tests {
         let user_db_path = temp_dir.path().join("user.db");
         let user_store: Arc<dyn crate::user::FullUserStore> =
             Arc::new(crate::user::SqliteUserStore::new(&user_db_path).unwrap());
+        let user_manager = Arc::new(std::sync::Mutex::new(crate::user::UserManager::new(
+            catalog_store.clone(),
+            user_store.clone(),
+        )));
 
         let job_context = JobContext::new(
             shutdown_token.child_token(),
             catalog_store,
             user_store,
             server_store.clone(),
+            user_manager,
         );
 
         let (mut scheduler, handle) = create_scheduler(
