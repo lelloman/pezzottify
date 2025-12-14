@@ -78,6 +78,9 @@ pub trait DownloadQueueStore: Send + Sync {
     /// Get all children of a parent item.
     fn get_children(&self, parent_id: &str) -> Result<Vec<QueueItem>>;
 
+    /// Delete all children of a parent item. Returns the number of children deleted.
+    fn delete_children(&self, parent_id: &str) -> Result<usize>;
+
     /// Get download progress for a parent item based on children status.
     fn get_children_progress(&self, parent_id: &str) -> Result<DownloadProgress>;
 
@@ -524,10 +527,24 @@ impl DownloadQueueStore for SqliteDownloadQueueStore {
 
     fn get_next_pending(&self) -> Result<Option<QueueItem>> {
         let conn = self.conn.lock().unwrap();
+        // Order by:
+        // 1. Priority (lower = higher priority)
+        // 2. Content type: children first (tracks, images) then parents (albums)
+        //    This ensures one album completes before the next starts
+        // 3. Creation time (older first)
         let mut stmt = conn.prepare(
             r#"SELECT * FROM download_queue
                WHERE status = 'PENDING'
-               ORDER BY priority ASC, created_at ASC
+               ORDER BY
+                   priority ASC,
+                   CASE content_type
+                       WHEN 'TRACK_AUDIO' THEN 0
+                       WHEN 'ALBUM_IMAGE' THEN 1
+                       WHEN 'ARTIST_IMAGE' THEN 2
+                       WHEN 'ALBUM' THEN 3
+                       ELSE 4
+                   END ASC,
+                   created_at ASC
                LIMIT 1"#,
         )?;
 
@@ -845,6 +862,13 @@ impl DownloadQueueStore for SqliteDownloadQueueStore {
             .collect::<rusqlite::Result<Vec<_>>>()?;
 
         Ok(items)
+    }
+
+    fn delete_children(&self, parent_id: &str) -> Result<usize> {
+        let conn = self.conn.lock().unwrap();
+        let rows_affected =
+            conn.execute("DELETE FROM download_queue WHERE parent_id = ?1", [parent_id])?;
+        Ok(rows_affected)
     }
 
     fn get_children_progress(&self, parent_id: &str) -> Result<DownloadProgress> {

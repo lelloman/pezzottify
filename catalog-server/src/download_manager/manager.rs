@@ -1329,26 +1329,20 @@ impl DownloadManager {
             ));
         }
 
-        // Reset the item to pending status
-        self.queue_store.reset_to_pending(request_id)?;
-
-        // If this is a parent item (no parent_id), also reset any failed children
+        // If this is a parent item (no parent_id), delete all children first.
+        // This prevents duplicate children when the parent is reprocessed.
         if item.parent_id.is_none() {
-            let children = self.queue_store.get_children(request_id)?;
-            let mut reset_count = 0;
-            for child in children {
-                if allowed_statuses.contains(&child.status) {
-                    self.queue_store.reset_to_pending(&child.id)?;
-                    reset_count += 1;
-                }
-            }
-            if reset_count > 0 {
+            let deleted_count = self.queue_store.delete_children(request_id)?;
+            if deleted_count > 0 {
                 info!(
-                    "Admin {} also reset {} failed children for parent {}",
-                    admin_user_id, reset_count, request_id
+                    "Admin {} deleted {} children for parent {} before retry",
+                    admin_user_id, deleted_count, request_id
                 );
             }
         }
+
+        // Reset the item to pending status
+        self.queue_store.reset_to_pending(request_id)?;
 
         // Log the admin retry
         self.audit_logger.log_admin_retry(&item, admin_user_id)?;
