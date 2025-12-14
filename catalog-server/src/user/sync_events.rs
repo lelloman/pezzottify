@@ -5,6 +5,7 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::notifications::Notification;
 use crate::user::permissions::Permission;
 use crate::user::settings::UserSetting;
 use crate::user::user_models::LikedContentType;
@@ -127,6 +128,16 @@ pub enum UserEvent {
         request_id: String,
         content_id: String,
     },
+
+    // Notifications
+    #[serde(rename = "notification_created")]
+    NotificationCreated { notification: Notification },
+
+    #[serde(rename = "notification_read")]
+    NotificationRead {
+        notification_id: String,
+        read_at: i64,
+    },
 }
 
 impl UserEvent {
@@ -147,6 +158,8 @@ impl UserEvent {
             UserEvent::DownloadStatusChanged { .. } => "download_status_changed",
             UserEvent::DownloadProgressUpdated { .. } => "download_progress_updated",
             UserEvent::DownloadCompleted { .. } => "download_completed",
+            UserEvent::NotificationCreated { .. } => "notification_created",
+            UserEvent::NotificationRead { .. } => "notification_read",
         }
     }
 }
@@ -580,6 +593,81 @@ mod tests {
         assert_eq!(
             serde_json::to_string(&SyncDownloadContentType::Album).unwrap(),
             "\"album\""
+        );
+    }
+
+    // =========================================================================
+    // Notification Event Serialization Tests
+    // =========================================================================
+
+    #[test]
+    fn test_notification_created_serialization() {
+        use crate::notifications::{Notification, NotificationType};
+
+        let notification = Notification {
+            id: "notif-123".to_string(),
+            notification_type: NotificationType::DownloadCompleted,
+            title: "Album Ready".to_string(),
+            body: Some("Your album is ready".to_string()),
+            data: serde_json::json!({
+                "album_id": "album-456",
+                "album_name": "Test Album"
+            }),
+            read_at: None,
+            created_at: 1700000000,
+        };
+
+        let event = UserEvent::NotificationCreated { notification };
+        let json = serde_json::to_string(&event).unwrap();
+        assert!(json.contains("notification_created"));
+        assert!(json.contains("notif-123"));
+        assert!(json.contains("Album Ready"));
+
+        let parsed: UserEvent = serde_json::from_str(&json).unwrap();
+        assert_eq!(event, parsed);
+    }
+
+    #[test]
+    fn test_notification_read_serialization() {
+        let event = UserEvent::NotificationRead {
+            notification_id: "notif-123".to_string(),
+            read_at: 1700001000,
+        };
+        let json = serde_json::to_string(&event).unwrap();
+        assert!(json.contains("notification_read"));
+        assert!(json.contains("notif-123"));
+        assert!(json.contains("1700001000"));
+
+        let parsed: UserEvent = serde_json::from_str(&json).unwrap();
+        assert_eq!(event, parsed);
+    }
+
+    #[test]
+    fn test_notification_event_types() {
+        use crate::notifications::{Notification, NotificationType};
+
+        assert_eq!(
+            UserEvent::NotificationCreated {
+                notification: Notification {
+                    id: "x".to_string(),
+                    notification_type: NotificationType::DownloadCompleted,
+                    title: "Test".to_string(),
+                    body: None,
+                    data: serde_json::Value::Null,
+                    read_at: None,
+                    created_at: 0,
+                }
+            }
+            .event_type(),
+            "notification_created"
+        );
+        assert_eq!(
+            UserEvent::NotificationRead {
+                notification_id: "x".to_string(),
+                read_at: 0,
+            }
+            .event_type(),
+            "notification_read"
         );
     }
 }

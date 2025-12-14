@@ -77,7 +77,7 @@ pub use store::NotificationStore;
 ---
 
 ### Task 1.3: Add Notification Sync Events
-**Status:** [ ]
+**Status:** [x]
 
 **Goal:** Add `NotificationCreated` and `NotificationRead` to the `UserEvent` enum.
 
@@ -114,7 +114,7 @@ UserEvent::NotificationRead { .. } => "notification_read",
 ---
 
 ### Task 1.4: Define NotificationStore Trait
-**Status:** [ ]
+**Status:** [x]
 
 **Goal:** Define the trait interface for notification storage.
 

@@ -11,7 +11,7 @@ pub enum NotificationType {
 }
 
 /// A user notification
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Notification {
     pub id: String,
     pub notification_type: NotificationType,
