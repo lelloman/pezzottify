@@ -1,5 +1,6 @@
 package com.lelloman.pezzottify.android.domain.sync
 
+import com.lelloman.pezzottify.android.domain.notifications.Notification
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
@@ -271,6 +272,29 @@ sealed interface SyncEvent {
         @SerialName("content_id")
         val contentId: String,
     ) : SyncEvent
+
+    // Notification events
+
+    /**
+     * A notification was created.
+     */
+    @Serializable
+    @SerialName("notification_created")
+    data class NotificationCreated(
+        val notification: Notification,
+    ) : SyncEvent
+
+    /**
+     * A notification was marked as read.
+     */
+    @Serializable
+    @SerialName("notification_read")
+    data class NotificationRead(
+        @SerialName("notification_id")
+        val notificationId: String,
+        @SerialName("read_at")
+        val readAt: Long,
+    ) : SyncEvent
 }
 
 /**
@@ -331,6 +355,13 @@ data class SyncEventPayload(
     @SerialName("error_message")
     val errorMessage: String? = null,
     val progress: SyncDownloadProgress? = null,
+
+    // Notification events
+    val notification: Notification? = null,
+    @SerialName("notification_id")
+    val notificationId: String? = null,
+    @SerialName("read_at")
+    val readAt: Long? = null,
 ) {
     /**
      * Convert payload to a typed SyncEvent based on the event type.
@@ -414,6 +445,16 @@ data class SyncEventPayload(
         "download_completed" -> {
             if (requestId != null && contentId != null) {
                 SyncEvent.DownloadCompleted(requestId, contentId)
+            } else null
+        }
+        "notification_created" -> {
+            if (notification != null) {
+                SyncEvent.NotificationCreated(notification)
+            } else null
+        }
+        "notification_read" -> {
+            if (notificationId != null && readAt != null) {
+                SyncEvent.NotificationRead(notificationId, readAt)
             } else null
         }
         else -> null

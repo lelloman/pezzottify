@@ -1,5 +1,6 @@
 package com.lelloman.pezzottify.android.domain.remoteapi.response
 
+import com.lelloman.pezzottify.android.domain.notifications.Notification
 import com.lelloman.pezzottify.android.domain.sync.Permission
 import com.lelloman.pezzottify.android.domain.sync.StoredEvent
 import com.lelloman.pezzottify.android.domain.sync.UserSetting
@@ -17,6 +18,7 @@ data class SyncStateResponse(
     val settings: List<UserSetting>,
     val playlists: List<PlaylistState>,
     val permissions: List<Permission>,
+    val notifications: List<Notification> = emptyList(),
 )
 
 /**
