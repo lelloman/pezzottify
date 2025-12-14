@@ -47,3 +47,20 @@ data class DownloadCompletedData(
     @SerialName("request_id")
     val requestId: String,
 )
+
+/**
+ * Extension function to extract album ID from a notification's data payload.
+ * Returns null if the notification type doesn't have an album ID or parsing fails.
+ */
+fun Notification.getAlbumId(): String? = when (notificationType) {
+    NotificationType.DownloadCompleted -> {
+        try {
+            kotlinx.serialization.json.Json.decodeFromJsonElement(
+                DownloadCompletedData.serializer(),
+                data
+            ).albumId
+        } catch (_: Exception) {
+            null
+        }
+    }
+}
