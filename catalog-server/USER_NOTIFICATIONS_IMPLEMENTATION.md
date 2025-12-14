@@ -620,7 +620,7 @@ if let Some(ref notification_service) = *self.notification_service.read().await 
 ---
 
 ### Task 2.3: Initialize NotificationService in Server Startup
-**Status:** [ ]
+**Status:** [x]
 
 **Goal:** Create and wire up `NotificationService` during server initialization.
 
