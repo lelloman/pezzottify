@@ -352,7 +352,7 @@ Json(SyncStateResponse {
 ---
 
 ### Task 1.9: Add Mark-as-Read Endpoint
-**Status:** [ ]
+**Status:** [x]
 
 **Goal:** Implement `POST /v1/user/notifications/{id}/read` endpoint.
 

@@ -553,6 +553,62 @@ async fn get_sync_events(
     .into_response()
 }
 
+/// POST /v1/user/notifications/{id}/read - Mark notification as read
+async fn mark_notification_read(
+    session: Session,
+    State(user_manager): State<GuardedUserManager>,
+    State(connection_manager): State<GuardedConnectionManager>,
+    Path(notification_id): Path<String>,
+) -> Response {
+    let (notification, stored_event) = {
+        let um = user_manager.lock().unwrap();
+
+        // Mark as read
+        let notification = match um.mark_notification_read(&notification_id, session.user_id) {
+            Ok(Some(n)) => n,
+            Ok(None) => return StatusCode::NOT_FOUND.into_response(),
+            Err(err) => {
+                error!("Error marking notification read: {}", err);
+                return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+            }
+        };
+
+        // Log sync event
+        let read_at = notification.read_at.unwrap_or_else(|| chrono::Utc::now().timestamp());
+        let event = UserEvent::NotificationRead {
+            notification_id: notification_id.clone(),
+            read_at,
+        };
+
+        let stored_event = match um.append_event(session.user_id, &event) {
+            Ok(e) => Some(e),
+            Err(err) => {
+                warn!("Failed to log notification_read event: {}", err);
+                None
+            }
+        };
+
+        (notification, stored_event)
+    };
+
+    // Broadcast to other devices
+    if let (Some(stored_event), Some(device_id)) = (stored_event, session.device_id) {
+        let ws_msg = super::websocket::messages::ServerMessage::new(
+            super::websocket::messages::msg_types::SYNC,
+            super::websocket::messages::sync::SyncEventMessage {
+                event: stored_event,
+            },
+        );
+        connection_manager
+            .send_to_other_devices(session.user_id, device_id, ws_msg)
+            .await;
+    }
+
+    // Return the notification (useful for knowing read_at timestamp)
+    let _ = notification;
+    StatusCode::OK.into_response()
+}
+
 async fn home(session: Option<Session>, State(state): State<ServerState>) -> impl IntoResponse {
     let stats = ServerStats {
         uptime: format_uptime(state.start_time.elapsed()),
@@ -4428,10 +4484,21 @@ pub async fn make_app(
         ))
         .with_state(state.clone());
 
+    // Notifications routes (requires AccessCatalog permission)
+    let notifications_routes: Router = Router::new()
+        .route("/notifications/{id}/read", post(mark_notification_read))
+        .layer(GovernorLayer::new(write_rate_limit.clone()))
+        .route_layer(middleware::from_fn_with_state(
+            state.clone(),
+            require_access_catalog,
+        ))
+        .with_state(state.clone());
+
     let user_routes = liked_content_routes
         .merge(playlist_routes)
         .merge(listening_stats_routes)
-        .merge(settings_routes);
+        .merge(settings_routes)
+        .merge(notifications_routes);
 
     // Sync routes (requires AccessCatalog permission)
     // Rate limiting: uses content read limit since these are read operations
