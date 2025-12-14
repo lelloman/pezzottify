@@ -83,7 +83,7 @@ async fn test_get_sync_state_with_settings() {
     // Set a setting
     let settings_body = json!({
         "settings": [
-            { "key": "enable_direct_downloads", "value": true }
+            { "key": "enable_external_search", "value": true }
         ]
     });
     let response = client.update_user_settings_json(settings_body).await;
@@ -98,7 +98,7 @@ async fn test_get_sync_state_with_settings() {
     // Should have the setting
     let settings = body["settings"].as_array().unwrap();
     assert_eq!(settings.len(), 1);
-    assert_eq!(settings[0]["key"], "enable_direct_downloads");
+    assert_eq!(settings[0]["key"], "enable_external_search");
     assert_eq!(settings[0]["value"], true);
 }
 
@@ -244,7 +244,7 @@ async fn test_get_sync_events_setting_changed() {
     // Change a setting
     let settings_body = json!({
         "settings": [
-            { "key": "enable_direct_downloads", "value": true }
+            { "key": "enable_external_search", "value": true }
         ]
     });
     client.update_user_settings_json(settings_body).await;

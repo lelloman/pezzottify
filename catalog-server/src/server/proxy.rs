@@ -625,7 +625,7 @@ mod tests {
         }
     }
 
-    /// Test user store that enables direct downloads by default
+    /// Test user store that enables external search by default
     struct TestUserStore {
         downloads_enabled: bool,
     }
@@ -1333,17 +1333,14 @@ mod tests {
 
     /// Test user store with configurable settings for testing can_user_trigger_download
     struct ConfigurableTestUserStore {
-        downloads_enabled_setting: Option<UserSetting>,
+        external_search_enabled: Option<bool>,
         permissions: Vec<Permission>,
     }
 
     impl ConfigurableTestUserStore {
-        fn new(
-            downloads_enabled_setting: Option<UserSetting>,
-            permissions: Vec<Permission>,
-        ) -> Self {
+        fn new(external_search_enabled: Option<bool>, permissions: Vec<Permission>) -> Self {
             Self {
-                downloads_enabled_setting,
+                external_search_enabled,
                 permissions,
             }
         }
@@ -1647,13 +1644,9 @@ mod tests {
             key: &str,
         ) -> anyhow::Result<Option<UserSetting>> {
             if key == "enable_external_search" {
-                // Map downloads_enabled_setting to external search setting
-                match &self.downloads_enabled_setting {
-                    Some(UserSetting::DirectDownloadsEnabled(enabled)) => {
-                        Ok(Some(UserSetting::ExternalSearchEnabled(*enabled)))
-                    }
-                    _ => Ok(None),
-                }
+                Ok(self
+                    .external_search_enabled
+                    .map(UserSetting::ExternalSearchEnabled))
             } else {
                 Ok(None)
             }
@@ -1801,7 +1794,7 @@ mod tests {
         let mock_downloader = Arc::new(MockDownloader::new());
         // User has setting enabled but NO permission
         let user_store: Arc<dyn FullUserStore> = Arc::new(ConfigurableTestUserStore::new(
-            Some(UserSetting::DirectDownloadsEnabled(true)),
+            Some(true),
             vec![Permission::AccessCatalog], // Not RequestContent
         ));
 
@@ -1861,7 +1854,7 @@ mod tests {
         let mock_downloader = Arc::new(MockDownloader::new());
         // User has permission but setting is explicitly false
         let user_store: Arc<dyn FullUserStore> = Arc::new(ConfigurableTestUserStore::new(
-            Some(UserSetting::DirectDownloadsEnabled(false)),
+            Some(false),
             vec![Permission::RequestContent],
         ));
 
@@ -1891,7 +1884,7 @@ mod tests {
         let mock_downloader = Arc::new(MockDownloader::new());
         // User has both permission AND setting enabled
         let user_store: Arc<dyn FullUserStore> = Arc::new(ConfigurableTestUserStore::new(
-            Some(UserSetting::DirectDownloadsEnabled(true)),
+            Some(true),
             vec![Permission::RequestContent],
         ));
 
@@ -1925,7 +1918,7 @@ mod tests {
         let mock_downloader = Arc::new(MockDownloader::new());
         // User has NO permission
         let user_store: Arc<dyn FullUserStore> = Arc::new(ConfigurableTestUserStore::new(
-            Some(UserSetting::DirectDownloadsEnabled(true)),
+            Some(true),
             vec![Permission::AccessCatalog], // Not RequestContent
         ));
 

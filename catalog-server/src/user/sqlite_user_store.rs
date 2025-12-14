@@ -842,7 +842,7 @@ pub const VERSIONED_SCHEMAS: &[VersionedSchema] = &[
         }),
     },
     // V10: No-op migration to maintain compatibility with databases
-    // that were migrated when direct download feature was temporarily removed
+    // that were migrated when the direct download feature was removed
     VersionedSchema {
         version: 10,
         tables: &[
@@ -4821,7 +4821,7 @@ mod tests {
         let user_id = store.create_user("test_user").unwrap();
 
         let result = store
-            .get_user_setting(user_id, "enable_direct_downloads")
+            .get_user_setting(user_id, "enable_external_search")
             .unwrap();
         assert!(result.is_none());
     }
@@ -4841,13 +4841,13 @@ mod tests {
         let user_id = store.create_user("test_user").unwrap();
 
         store
-            .set_user_setting(user_id, UserSetting::DirectDownloadsEnabled(true))
+            .set_user_setting(user_id, UserSetting::ExternalSearchEnabled(true))
             .unwrap();
 
         let result = store
-            .get_user_setting(user_id, "enable_direct_downloads")
+            .get_user_setting(user_id, "enable_external_search")
             .unwrap();
-        assert_eq!(result, Some(UserSetting::DirectDownloadsEnabled(true)));
+        assert_eq!(result, Some(UserSetting::ExternalSearchEnabled(true)));
     }
 
     #[test]
@@ -4856,16 +4856,16 @@ mod tests {
         let user_id = store.create_user("test_user").unwrap();
 
         store
-            .set_user_setting(user_id, UserSetting::DirectDownloadsEnabled(false))
+            .set_user_setting(user_id, UserSetting::ExternalSearchEnabled(false))
             .unwrap();
         store
-            .set_user_setting(user_id, UserSetting::DirectDownloadsEnabled(true))
+            .set_user_setting(user_id, UserSetting::ExternalSearchEnabled(true))
             .unwrap();
 
         let result = store
-            .get_user_setting(user_id, "enable_direct_downloads")
+            .get_user_setting(user_id, "enable_external_search")
             .unwrap();
-        assert_eq!(result, Some(UserSetting::DirectDownloadsEnabled(true)));
+        assert_eq!(result, Some(UserSetting::ExternalSearchEnabled(true)));
     }
 
     #[test]
@@ -4883,12 +4883,12 @@ mod tests {
         let user_id = store.create_user("test_user").unwrap();
 
         store
-            .set_user_setting(user_id, UserSetting::DirectDownloadsEnabled(true))
+            .set_user_setting(user_id, UserSetting::ExternalSearchEnabled(true))
             .unwrap();
 
         let settings = store.get_all_user_settings(user_id).unwrap();
         assert_eq!(settings.len(), 1);
-        assert!(settings.contains(&UserSetting::DirectDownloadsEnabled(true)));
+        assert!(settings.contains(&UserSetting::ExternalSearchEnabled(true)));
     }
 
     #[test]
@@ -4898,7 +4898,7 @@ mod tests {
 
         // Set a known setting
         store
-            .set_user_setting(user_id, UserSetting::DirectDownloadsEnabled(true))
+            .set_user_setting(user_id, UserSetting::ExternalSearchEnabled(true))
             .unwrap();
 
         // Manually insert an unknown setting directly into the database
@@ -4915,7 +4915,7 @@ mod tests {
         // get_all_user_settings should skip the unknown key
         let settings = store.get_all_user_settings(user_id).unwrap();
         assert_eq!(settings.len(), 1);
-        assert!(settings.contains(&UserSetting::DirectDownloadsEnabled(true)));
+        assert!(settings.contains(&UserSetting::ExternalSearchEnabled(true)));
     }
 
     #[test]
@@ -4925,24 +4925,21 @@ mod tests {
         let user2_id = store.create_user("user2").unwrap();
 
         store
-            .set_user_setting(user1_id, UserSetting::DirectDownloadsEnabled(true))
+            .set_user_setting(user1_id, UserSetting::ExternalSearchEnabled(true))
             .unwrap();
         store
-            .set_user_setting(user2_id, UserSetting::DirectDownloadsEnabled(false))
+            .set_user_setting(user2_id, UserSetting::ExternalSearchEnabled(false))
             .unwrap();
 
         let user1_value = store
-            .get_user_setting(user1_id, "enable_direct_downloads")
+            .get_user_setting(user1_id, "enable_external_search")
             .unwrap();
         let user2_value = store
-            .get_user_setting(user2_id, "enable_direct_downloads")
+            .get_user_setting(user2_id, "enable_external_search")
             .unwrap();
 
-        assert_eq!(user1_value, Some(UserSetting::DirectDownloadsEnabled(true)));
-        assert_eq!(
-            user2_value,
-            Some(UserSetting::DirectDownloadsEnabled(false))
-        );
+        assert_eq!(user1_value, Some(UserSetting::ExternalSearchEnabled(true)));
+        assert_eq!(user2_value, Some(UserSetting::ExternalSearchEnabled(false)));
     }
 
     #[test]
@@ -4951,7 +4948,7 @@ mod tests {
         let user_id = store.create_user("test_user").unwrap();
 
         store
-            .set_user_setting(user_id, UserSetting::DirectDownloadsEnabled(true))
+            .set_user_setting(user_id, UserSetting::ExternalSearchEnabled(true))
             .unwrap();
 
         // Delete the user via direct SQL (CASCADE should delete settings)
@@ -4976,33 +4973,33 @@ mod tests {
     }
 
     #[test]
-    fn test_enable_direct_downloads_setting_lifecycle() {
+    fn test_enable_external_search_setting_lifecycle() {
         let (store, _temp_dir) = create_tmp_store();
         let user_id = store.create_user("test_user").unwrap();
 
         // Default should be None (not set)
         let result = store
-            .get_user_setting(user_id, "enable_direct_downloads")
+            .get_user_setting(user_id, "enable_external_search")
             .unwrap();
         assert!(result.is_none());
 
         // Set to true
         store
-            .set_user_setting(user_id, UserSetting::DirectDownloadsEnabled(true))
+            .set_user_setting(user_id, UserSetting::ExternalSearchEnabled(true))
             .unwrap();
         let result = store
-            .get_user_setting(user_id, "enable_direct_downloads")
+            .get_user_setting(user_id, "enable_external_search")
             .unwrap();
-        assert_eq!(result, Some(UserSetting::DirectDownloadsEnabled(true)));
+        assert_eq!(result, Some(UserSetting::ExternalSearchEnabled(true)));
 
         // Set to false
         store
-            .set_user_setting(user_id, UserSetting::DirectDownloadsEnabled(false))
+            .set_user_setting(user_id, UserSetting::ExternalSearchEnabled(false))
             .unwrap();
         let result = store
-            .get_user_setting(user_id, "enable_direct_downloads")
+            .get_user_setting(user_id, "enable_external_search")
             .unwrap();
-        assert_eq!(result, Some(UserSetting::DirectDownloadsEnabled(false)));
+        assert_eq!(result, Some(UserSetting::ExternalSearchEnabled(false)));
     }
 
     // ========================================================================
@@ -5190,7 +5187,7 @@ mod tests {
                 content_id: "track_456".to_string(),
             },
             UserEvent::SettingChanged {
-                setting: UserSetting::DirectDownloadsEnabled(true),
+                setting: UserSetting::ExternalSearchEnabled(true),
             },
             UserEvent::PlaylistCreated {
                 playlist_id: "pl_abc".to_string(),
