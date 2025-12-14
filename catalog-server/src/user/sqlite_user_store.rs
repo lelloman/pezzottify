@@ -2981,7 +2981,7 @@ impl crate::notifications::NotificationStore for SqliteUserStore {
             "SELECT id, notification_type, title, body, data, read_at, created_at
              FROM user_notifications
              WHERE user_id = ?1
-             ORDER BY created_at DESC",
+             ORDER BY created_at DESC, rowid DESC",
         )?;
 
         let notifications = stmt

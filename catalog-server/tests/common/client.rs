@@ -851,6 +851,18 @@ impl TestClient {
             .expect("Get sync events request failed")
     }
 
+    /// POST /v1/user/notifications/{id}/read
+    pub async fn mark_notification_read(&self, notification_id: &str) -> Response {
+        self.client
+            .post(format!(
+                "{}/v1/user/notifications/{}/read",
+                self.base_url, notification_id
+            ))
+            .send()
+            .await
+            .expect("Mark notification read request failed")
+    }
+
     // ========================================================================
     // Admin Jobs Endpoints
     // ========================================================================

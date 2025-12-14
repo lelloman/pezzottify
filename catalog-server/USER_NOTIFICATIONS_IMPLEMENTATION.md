@@ -674,7 +674,7 @@ let data = serde_json::json!({
 ---
 
 ### Task 2.5: E2E Tests for Download -> Notification Flow
-**Status:** [ ]
+**Status:** [x]
 
 **Goal:** Add integration tests verifying the complete flow.
 
