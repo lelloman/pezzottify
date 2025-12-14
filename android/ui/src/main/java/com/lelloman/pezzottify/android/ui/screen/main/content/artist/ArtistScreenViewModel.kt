@@ -62,9 +62,10 @@ class ArtistScreenViewModel @AssistedInject constructor(
     }.combine(externalAlbumsState) { artistState, externalState ->
         when (externalState) {
             is ExternalAlbumsState.Idle -> artistState
-            is ExternalAlbumsState.Loading -> artistState
+            is ExternalAlbumsState.Loading -> artistState.copy(isExternalAlbumsLoading = true)
             is ExternalAlbumsState.Loaded -> artistState.copy(
                 externalAlbums = externalState.albums,
+                hasLoadedExternalAlbums = true,
             )
             is ExternalAlbumsState.Error -> artistState.copy(isExternalAlbumsError = true)
         }
