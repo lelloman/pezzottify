@@ -83,10 +83,3 @@ corruption_successes_to_deescalate = 10
 # Background Jobs settings
 [background_jobs]
 # Future: per-job configuration
-
-# SSL/TLS settings (optional)
-# Uncomment to enable HTTPS. Both cert_path and key_path are required.
-# The metrics endpoint remains HTTP-only.
-# [ssl]
-# cert_path = "/path/to/cert.pem"
-# key_path = "/path/to/key.pem"

@@ -18,7 +18,6 @@ services:
       - /home/lelloman/pezzottify-catalog/:/data/db # Contains catalog.db and user.db
       - /home/lelloman/pezzottify-catalog/:/data/media # Contains albums/ and images/
       - ./catalog-server/config.toml:/etc/pezzottify/config.toml:ro
-      - /home/lelloman/pezzottify-cert/:/etc/pezzottify/ssl:ro # SSL certificates
     networks:
       - monitoring
       - pezzottify-internal

@@ -6,13 +6,11 @@
 use anyhow::Result;
 use std::{
     fs::File,
-    io::{BufReader, Read},
+    io::Read,
     net::SocketAddr,
     sync::{Arc, Mutex},
     time::{Duration, Instant},
 };
-
-use crate::config::SslSettings;
 
 use tracing::{debug, error, info, warn};
 
@@ -4815,7 +4813,6 @@ pub async fn run_server(
     downloader: Option<Arc<dyn crate::downloader::Downloader>>,
     media_base_path: Option<std::path::PathBuf>,
     scheduler_handle: Option<SchedulerHandle>,
-    ssl_settings: Option<SslSettings>,
     download_manager: Option<Arc<crate::download_manager::DownloadManager>>,
 ) -> Result<()> {
     let config = ServerConfig {
@@ -4855,73 +4852,24 @@ pub async fn run_server(
         }
     });
 
-    // Run main server with or without TLS
-    if let Some(ssl) = ssl_settings {
-        info!("Starting HTTPS server with TLS on port {}", port);
-        let rustls_config = load_rustls_config(&ssl)?;
-        let addr = SocketAddr::from(([0, 0, 0, 0], port));
+    info!("Starting HTTP server on port {}", port);
+    let main_listener = tokio::net::TcpListener::bind(format!("0.0.0.0:{}", port))
+        .await
+        .unwrap();
 
-        tokio::select! {
-            result = axum_server::bind_rustls(addr, rustls_config)
-                .serve(app.into_make_service_with_connect_info::<SocketAddr>()) => {
-                result?;
-            }
-            result = axum::serve(metrics_listener, metrics_app) => {
-                result?;
-            }
+    tokio::select! {
+        result = axum::serve(
+            main_listener,
+            app.into_make_service_with_connect_info::<SocketAddr>(),
+        ) => {
+            result?;
         }
-    } else {
-        info!("Starting HTTP server on port {}", port);
-        let main_listener = tokio::net::TcpListener::bind(format!("0.0.0.0:{}", port))
-            .await
-            .unwrap();
-
-        tokio::select! {
-            result = axum::serve(
-                main_listener,
-                app.into_make_service_with_connect_info::<SocketAddr>(),
-            ) => {
-                result?;
-            }
-            result = axum::serve(metrics_listener, metrics_app) => {
-                result?;
-            }
+        result = axum::serve(metrics_listener, metrics_app) => {
+            result?;
         }
     }
 
     Ok(())
-}
-
-fn load_rustls_config(ssl: &SslSettings) -> Result<axum_server::tls_rustls::RustlsConfig> {
-    use axum_server::tls_rustls::RustlsConfig;
-
-    // Load certificate chain
-    let cert_file = File::open(&ssl.cert_path)
-        .map_err(|e| anyhow::anyhow!("Failed to open certificate file: {}", e))?;
-    let mut cert_reader = BufReader::new(cert_file);
-    let certs: Vec<_> = rustls_pemfile::certs(&mut cert_reader)
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(|e| anyhow::anyhow!("Failed to parse certificate: {}", e))?;
-
-    if certs.is_empty() {
-        anyhow::bail!("No certificates found in {:?}", ssl.cert_path);
-    }
-
-    // Load private key
-    let key_file =
-        File::open(&ssl.key_path).map_err(|e| anyhow::anyhow!("Failed to open key file: {}", e))?;
-    let mut key_reader = BufReader::new(key_file);
-    let key = rustls_pemfile::private_key(&mut key_reader)
-        .map_err(|e| anyhow::anyhow!("Failed to parse private key: {}", e))?
-        .ok_or_else(|| anyhow::anyhow!("No private key found in {:?}", ssl.key_path))?;
-
-    // Create RustlsConfig from the loaded cert and key
-    let config = RustlsConfig::from_der(
-        certs.into_iter().map(|c| c.to_vec()).collect(),
-        key.secret_der().to_vec(),
-    );
-
-    Ok(futures::executor::block_on(config)?)
 }
 
 /// Close stale changelog batches automatically.
