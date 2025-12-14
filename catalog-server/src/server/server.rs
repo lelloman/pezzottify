@@ -18,6 +18,7 @@ use tracing::{debug, error, info, warn};
 
 use crate::background_jobs::{JobError, JobInfo, SchedulerHandle};
 use crate::catalog_store::CatalogStore;
+use crate::notifications::NotificationService;
 use crate::{
     search::{HashedItemType, SearchVault},
     user::UserManager,
@@ -4281,14 +4282,22 @@ pub async fn make_app(
         download_manager.clone(),
     );
 
-    // Set up sync notifier for download manager if enabled
+    // Set up sync notifier and notification service for download manager if enabled
     if let Some(ref dm) = download_manager {
         let sync_notifier = Arc::new(crate::download_manager::DownloadSyncNotifier::new(
-            user_store,
+            user_store.clone(),
             state.ws_connection_manager.clone(),
         ));
         dm.set_sync_notifier(sync_notifier).await;
         tracing::info!("Download sync notifier initialized");
+
+        // Set up notification service for user notifications on download completion
+        let notification_service = Arc::new(NotificationService::new(
+            user_store,
+            state.ws_connection_manager.clone(),
+        ));
+        dm.set_notification_service(notification_service).await;
+        tracing::info!("Notification service initialized for download manager");
     }
 
     // Login route with strict IP-based rate limiting
