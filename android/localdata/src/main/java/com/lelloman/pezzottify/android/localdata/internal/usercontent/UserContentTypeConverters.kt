@@ -1,6 +1,7 @@
 package com.lelloman.pezzottify.android.localdata.internal.usercontent
 
 import androidx.room.TypeConverter
+import com.lelloman.pezzottify.android.domain.notifications.NotificationType
 import com.lelloman.pezzottify.android.domain.usercontent.LikedContent
 import com.lelloman.pezzottify.android.domain.usercontent.SyncStatus
 import kotlinx.serialization.encodeToString
@@ -28,4 +29,10 @@ internal class UserContentTypeConverters {
 
     @TypeConverter
     fun toStringList(value: String): List<String> = json.decodeFromString(value)
+
+    @TypeConverter
+    fun fromNotificationType(notificationType: NotificationType): String = notificationType.name
+
+    @TypeConverter
+    fun toNotificationType(value: String): NotificationType = NotificationType.valueOf(value)
 }

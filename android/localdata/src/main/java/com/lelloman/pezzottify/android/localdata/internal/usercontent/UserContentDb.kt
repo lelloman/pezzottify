@@ -7,11 +7,20 @@ import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 import com.lelloman.pezzottify.android.localdata.internal.listening.ListeningEventDao
 import com.lelloman.pezzottify.android.localdata.internal.listening.ListeningEventEntity
+import com.lelloman.pezzottify.android.localdata.internal.notifications.NotificationDao
+import com.lelloman.pezzottify.android.localdata.internal.notifications.NotificationEntity
+import com.lelloman.pezzottify.android.localdata.internal.notifications.PendingNotificationReadEntity
 import com.lelloman.pezzottify.android.localdata.internal.usercontent.model.LikedContentEntity
 import com.lelloman.pezzottify.android.localdata.internal.usercontent.model.PlaylistEntity
 
 @Database(
-    entities = [LikedContentEntity::class, ListeningEventEntity::class, PlaylistEntity::class],
+    entities = [
+        LikedContentEntity::class,
+        ListeningEventEntity::class,
+        PlaylistEntity::class,
+        NotificationEntity::class,
+        PendingNotificationReadEntity::class,
+    ],
     version = UserContentDb.VERSION,
 )
 @TypeConverters(UserContentTypeConverters::class)
@@ -23,8 +32,10 @@ internal abstract class UserContentDb : RoomDatabase() {
 
     abstract fun playlistDao(): PlaylistDao
 
+    abstract fun notificationDao(): NotificationDao
+
     companion object {
-        const val VERSION = 3
+        const val VERSION = 4
         const val NAME = "user_content"
 
         val MIGRATION_1_2 = object : Migration(1, 2) {
@@ -60,6 +71,38 @@ internal abstract class UserContentDb : RoomDatabase() {
                         id TEXT PRIMARY KEY NOT NULL,
                         name TEXT NOT NULL,
                         track_ids TEXT NOT NULL
+                    )
+                    """.trimIndent()
+                )
+            }
+        }
+
+        val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                // Create notification table
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS notification (
+                        id TEXT PRIMARY KEY NOT NULL,
+                        notification_type TEXT NOT NULL,
+                        title TEXT NOT NULL,
+                        body TEXT,
+                        data TEXT NOT NULL,
+                        read_at INTEGER,
+                        created_at INTEGER NOT NULL
+                    )
+                    """.trimIndent()
+                )
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_notification_created_at ON notification (created_at DESC)")
+
+                // Create pending notification read table for offline queue
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS pending_notification_read (
+                        notification_id TEXT PRIMARY KEY NOT NULL,
+                        read_at INTEGER NOT NULL,
+                        created_at INTEGER NOT NULL,
+                        retry_count INTEGER NOT NULL DEFAULT 0
                     )
                     """.trimIndent()
                 )

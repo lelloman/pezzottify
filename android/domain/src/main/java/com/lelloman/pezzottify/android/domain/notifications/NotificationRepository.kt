@@ -30,6 +30,12 @@ interface NotificationRepository {
 
     /** Clear all notifications (on logout) */
     suspend fun clear()
+
+    /** Check if there are pending mark-as-read operations that need to be synced */
+    suspend fun hasPendingReads(): Boolean
+
+    /** Process pending mark-as-read operations. Returns number of successfully synced items. */
+    suspend fun processPendingReads(): Int
 }
 
 /**
