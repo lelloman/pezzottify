@@ -198,7 +198,7 @@ const USER_NOTIFICATIONS_TABLE_V_1: Table = Table {
 ---
 
 ### Task 1.6: Implement SqliteNotificationStore
-**Status:** [ ]
+**Status:** [x]
 
 **Goal:** Implement `NotificationStore` trait for SQLite.
 
