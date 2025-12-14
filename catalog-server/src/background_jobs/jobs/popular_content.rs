@@ -114,7 +114,10 @@ impl BackgroundJob for PopularContentJob {
             .get_top_tracks(start_date, end_date, track_limit)
             .map_err(|e| JobError::ExecutionFailed(format!("Failed to get top tracks: {}", e)))?;
 
-        debug!("Found {} top tracks for album computation", top_tracks.len());
+        debug!(
+            "Found {} top tracks for album computation",
+            top_tracks.len()
+        );
 
         // Aggregate play counts by album
         let mut album_plays: HashMap<String, u64> = HashMap::new();

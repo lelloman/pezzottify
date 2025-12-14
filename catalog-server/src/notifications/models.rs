@@ -65,9 +65,15 @@ mod tests {
         let deserialized: Notification = serde_json::from_str(&serialized).unwrap();
 
         assert_eq!(deserialized.id, "notif-123");
-        assert_eq!(deserialized.notification_type, NotificationType::DownloadCompleted);
+        assert_eq!(
+            deserialized.notification_type,
+            NotificationType::DownloadCompleted
+        );
         assert_eq!(deserialized.title, "Album Ready");
-        assert_eq!(deserialized.body, Some("Your album is ready to listen".to_string()));
+        assert_eq!(
+            deserialized.body,
+            Some("Your album is ready to listen".to_string())
+        );
         assert!(deserialized.read_at.is_none());
         assert_eq!(deserialized.created_at, 1700000000);
     }

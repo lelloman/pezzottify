@@ -2997,21 +2997,23 @@ impl crate::notifications::NotificationStore for SqliteUserStore {
                 Ok((id, type_str, title, body, data_str, read_at, created_at))
             })?
             .filter_map(|r| r.ok())
-            .filter_map(|(id, type_str, title, body, data_str, read_at, created_at)| {
-                let notification_type: crate::notifications::NotificationType =
-                    serde_json::from_str(&type_str).ok()?;
-                let data: serde_json::Value = serde_json::from_str(&data_str).ok()?;
+            .filter_map(
+                |(id, type_str, title, body, data_str, read_at, created_at)| {
+                    let notification_type: crate::notifications::NotificationType =
+                        serde_json::from_str(&type_str).ok()?;
+                    let data: serde_json::Value = serde_json::from_str(&data_str).ok()?;
 
-                Some(crate::notifications::Notification {
-                    id,
-                    notification_type,
-                    title,
-                    body,
-                    data,
-                    read_at,
-                    created_at,
-                })
-            })
+                    Some(crate::notifications::Notification {
+                        id,
+                        notification_type,
+                        title,
+                        body,
+                        data,
+                        read_at,
+                        created_at,
+                    })
+                },
+            )
             .collect();
 
         record_db_query("get_user_notifications", start.elapsed());
@@ -5680,7 +5682,10 @@ mod tests {
             .unwrap();
 
         assert!(notification.id.starts_with("notif_"));
-        assert_eq!(notification.notification_type, NotificationType::DownloadCompleted);
+        assert_eq!(
+            notification.notification_type,
+            NotificationType::DownloadCompleted
+        );
         assert_eq!(notification.title, "Album Ready");
         assert_eq!(notification.body, Some("Your album is ready".to_string()));
         assert!(notification.read_at.is_none());
@@ -5933,7 +5938,10 @@ mod tests {
             .unwrap();
 
         // Verify notification exists
-        assert!(store.get_notification(&notification.id, user_id).unwrap().is_some());
+        assert!(store
+            .get_notification(&notification.id, user_id)
+            .unwrap()
+            .is_some());
 
         // Delete the user
         store.delete_user(user_id).unwrap();

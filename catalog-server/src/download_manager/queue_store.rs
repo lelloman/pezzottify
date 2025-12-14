@@ -4287,7 +4287,11 @@ mod tests {
 
         // Custom range that includes current data
         let result = store
-            .get_stats_history(StatsPeriod::Hourly, Some(one_hour_ago), Some(one_hour_ahead))
+            .get_stats_history(
+                StatsPeriod::Hourly,
+                Some(one_hour_ago),
+                Some(one_hour_ahead),
+            )
             .unwrap();
         assert!(!result.entries.is_empty());
         assert_eq!(result.total_albums, 1);

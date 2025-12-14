@@ -57,7 +57,12 @@ impl NotificationService {
         };
 
         // 3. Broadcast to all user's devices
-        let ws_msg = ServerMessage::new(SYNC, SyncEventMessage { event: stored_event });
+        let ws_msg = ServerMessage::new(
+            SYNC,
+            SyncEventMessage {
+                event: stored_event,
+            },
+        );
 
         let failed = self
             .connection_manager

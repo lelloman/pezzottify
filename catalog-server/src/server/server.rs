@@ -575,7 +575,9 @@ async fn mark_notification_read(
         };
 
         // Log sync event
-        let read_at = notification.read_at.unwrap_or_else(|| chrono::Utc::now().timestamp());
+        let read_at = notification
+            .read_at
+            .unwrap_or_else(|| chrono::Utc::now().timestamp());
         let event = UserEvent::NotificationRead {
             notification_id: notification_id.clone(),
             read_at,
@@ -633,7 +635,10 @@ async fn get_artist(
 
     // If proxy is available, ensure artist has complete data
     if let Some(ref proxy) = proxy {
-        debug!("get_artist: calling proxy.ensure_artist_complete for {}", id);
+        debug!(
+            "get_artist: calling proxy.ensure_artist_complete for {}",
+            id
+        );
         if let Err(e) = proxy
             .ensure_artist_complete(&id, session.user_id, &session.permissions)
             .await
