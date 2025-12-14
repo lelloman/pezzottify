@@ -553,7 +553,7 @@ pub use service::NotificationService;
 ---
 
 ### Task 2.2: Integrate NotificationService with DownloadManager
-**Status:** [ ]
+**Status:** [x]
 
 **Goal:** Add `NotificationService` to `DownloadManager` and call it on download completion.
 

@@ -3251,16 +3251,16 @@ mod tests {
             assert_eq!(db_version, BASE_DB_VERSION as i64 + 3);
         }
 
-        // Now open with SqliteUserStore, which should trigger migration to latest (V10)
+        // Now open with SqliteUserStore, which should trigger migration to latest (V11)
         let store = SqliteUserStore::new(&temp_file_path).unwrap();
 
-        // Verify we're now at the latest version (V10)
+        // Verify we're now at the latest version (V11)
         {
             let conn = store.conn.lock().unwrap();
             let db_version: i64 = conn
                 .query_row("PRAGMA user_version;", [], |row| row.get(0))
                 .unwrap();
-            assert_eq!(db_version, BASE_DB_VERSION as i64 + 10);
+            assert_eq!(db_version, BASE_DB_VERSION as i64 + 11);
 
             // Verify new tables exist
             let user_role_table_exists: i64 = conn
@@ -3402,13 +3402,13 @@ mod tests {
         // Now open with SqliteUserStore, which should trigger migration to latest
         let store = SqliteUserStore::new(&temp_file_path).unwrap();
 
-        // Verify we're now at the latest version (V10)
+        // Verify we're now at the latest version (V11)
         {
             let conn = store.conn.lock().unwrap();
             let db_version: i64 = conn
                 .query_row("PRAGMA user_version;", [], |row| row.get(0))
                 .unwrap();
-            assert_eq!(db_version, BASE_DB_VERSION as i64 + 10);
+            assert_eq!(db_version, BASE_DB_VERSION as i64 + 11);
 
             // Verify device table exists
             let device_table_exists: i64 = conn

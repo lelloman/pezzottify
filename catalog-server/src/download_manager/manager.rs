@@ -14,6 +14,7 @@ use uuid::Uuid;
 
 use crate::catalog_store::{CatalogStore, WritableCatalogStore};
 use crate::config::DownloadManagerSettings;
+use crate::notifications::{NotificationService, NotificationType};
 
 use super::audit_logger::AuditLogger;
 use super::corruption_handler::{CorruptionHandler, CorruptionHandlerConfig, HandlerAction};
@@ -58,6 +59,8 @@ pub struct DownloadManager {
     corruption_handler: Arc<CorruptionHandler>,
     /// Sync event notifier for WebSocket updates (optional, uses interior mutability for late initialization).
     sync_notifier: RwLock<Option<Arc<DownloadSyncNotifier>>>,
+    /// Notification service for creating user notifications (optional, uses interior mutability for late initialization).
+    notification_service: RwLock<Option<Arc<NotificationService>>>,
 }
 
 impl DownloadManager {
@@ -115,6 +118,7 @@ impl DownloadManager {
             throttler,
             corruption_handler,
             sync_notifier: RwLock::new(None),
+            notification_service: RwLock::new(None),
         }
     }
 
@@ -126,6 +130,16 @@ impl DownloadManager {
     pub async fn set_sync_notifier(&self, notifier: Arc<DownloadSyncNotifier>) {
         let mut guard = self.sync_notifier.write().await;
         *guard = Some(notifier);
+    }
+
+    /// Set the notification service for creating user notifications.
+    ///
+    /// This should be called after construction to enable notification
+    /// creation when downloads complete. Uses interior mutability
+    /// so it can be called even after the manager is wrapped in Arc.
+    pub async fn set_notification_service(&self, service: Arc<NotificationService>) {
+        let mut guard = self.notification_service.write().await;
+        *guard = Some(service);
     }
 
     /// Check if the download manager is enabled.
@@ -1060,6 +1074,40 @@ impl DownloadManager {
                         // Broadcast catalog update to ALL connected users
                         if let Ok(skeleton_version) = self.catalog_store.get_skeleton_version() {
                             notifier.notify_catalog_updated(skeleton_version).await;
+                        }
+                    }
+
+                    // Create user notification for download completion
+                    if let Some(ref notification_service) = *self.notification_service.read().await {
+                        if let Some(user_id_str) = &parent.requested_by_user_id {
+                            if let Ok(user_id) = user_id_str.parse::<usize>() {
+                                let data = serde_json::json!({
+                                    "album_id": parent.content_id,
+                                    "album_name": parent.content_name.clone().unwrap_or_default(),
+                                    "artist_name": parent.artist_name.clone().unwrap_or_default(),
+                                    "image_id": null,  // Will be populated in Task 2.4
+                                    "request_id": parent.id,
+                                });
+
+                                let title = format!(
+                                    "\"{}\" is ready",
+                                    parent.content_name.as_deref().unwrap_or("Album")
+                                );
+                                let body = parent.artist_name.as_ref().map(|a| format!("by {}", a));
+
+                                if let Err(e) = notification_service
+                                    .create_notification(
+                                        user_id,
+                                        NotificationType::DownloadCompleted,
+                                        title,
+                                        body,
+                                        data,
+                                    )
+                                    .await
+                                {
+                                    warn!("Failed to create download completion notification: {}", e);
+                                }
+                            }
                         }
                     }
                 }
