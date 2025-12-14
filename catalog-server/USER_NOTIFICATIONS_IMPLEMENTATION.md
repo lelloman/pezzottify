@@ -424,7 +424,7 @@ async fn mark_notification_read(
 ---
 
 ### Task 1.10: Unit Tests for Core Infrastructure
-**Status:** [ ]
+**Status:** [x]
 
 **Goal:** Add comprehensive tests for all Phase 1 components.
 
