@@ -108,6 +108,9 @@ sealed interface Screen {
         data object ListeningHistory : Main
 
         @Serializable
+        data object Notifications : Main
+
+        @Serializable
         data class ExternalAlbum(val albumId: String) : Main
 
         @Serializable
@@ -128,6 +131,8 @@ fun NavController.toQueue() = navigate(Screen.Main.Queue)
 fun NavController.toMyRequests() = navigate(Screen.Main.MyRequests)
 
 fun NavController.toListeningHistory() = navigate(Screen.Main.ListeningHistory)
+
+fun NavController.toNotifications() = navigate(Screen.Main.Notifications)
 
 fun NavController.toExternalAlbum(albumId: String) = navigate(Screen.Main.ExternalAlbum(albumId))
 

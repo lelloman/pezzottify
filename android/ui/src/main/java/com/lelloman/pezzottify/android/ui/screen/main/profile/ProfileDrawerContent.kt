@@ -19,6 +19,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ExitToApp
 import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material.icons.outlined.Queue
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonDefaults
@@ -52,10 +53,12 @@ import kotlinx.coroutines.flow.StateFlow
 fun ProfileDrawerContent(
     onNavigateToProfile: () -> Unit,
     onNavigateToMyRequests: () -> Unit,
+    onNavigateToNotifications: () -> Unit,
     onNavigateToListeningHistory: () -> Unit,
     onNavigateToAbout: () -> Unit,
     onNavigateToLogin: () -> Unit,
     onCloseDrawer: () -> Unit,
+    notificationUnreadCount: Int = 0,
 ) {
     val viewModel = hiltViewModel<ProfileScreenViewModel>()
     ProfileDrawerContentInternal(
@@ -64,10 +67,12 @@ fun ProfileDrawerContent(
         actions = viewModel,
         onNavigateToProfile = onNavigateToProfile,
         onNavigateToMyRequests = onNavigateToMyRequests,
+        onNavigateToNotifications = onNavigateToNotifications,
         onNavigateToListeningHistory = onNavigateToListeningHistory,
         onNavigateToAbout = onNavigateToAbout,
         onNavigateToLogin = onNavigateToLogin,
         onCloseDrawer = onCloseDrawer,
+        notificationUnreadCount = notificationUnreadCount,
     )
 }
 
@@ -78,10 +83,12 @@ private fun ProfileDrawerContentInternal(
     events: Flow<ProfileScreenEvents>,
     onNavigateToProfile: () -> Unit,
     onNavigateToMyRequests: () -> Unit,
+    onNavigateToNotifications: () -> Unit,
     onNavigateToListeningHistory: () -> Unit,
     onNavigateToAbout: () -> Unit,
     onNavigateToLogin: () -> Unit,
     onCloseDrawer: () -> Unit,
+    notificationUnreadCount: Int,
 ) {
     val currentState by state.collectAsState()
 
@@ -155,6 +162,17 @@ private fun ProfileDrawerContentInternal(
             HorizontalDivider()
 
             Spacer(modifier = Modifier.height(8.dp))
+
+            // Notifications
+            DrawerMenuItemWithBadge(
+                icon = Icons.Outlined.Notifications,
+                label = stringResource(R.string.notifications),
+                badgeCount = notificationUnreadCount,
+                onClick = {
+                    onCloseDrawer()
+                    onNavigateToNotifications()
+                }
+            )
 
             // My Requests (only visible if user has RequestContent permission)
             if (currentState.permissions.contains(Permission.RequestContent)) {
@@ -297,6 +315,46 @@ private fun DrawerMenuItem(
                 imageVector = icon,
                 contentDescription = null
             )
+        },
+        label = { Text(label) },
+        selected = false,
+        onClick = onClick,
+        modifier = Modifier.padding(horizontal = 12.dp)
+    )
+}
+
+@Composable
+private fun DrawerMenuItemWithBadge(
+    icon: ImageVector,
+    label: String,
+    badgeCount: Int,
+    onClick: () -> Unit,
+) {
+    NavigationDrawerItem(
+        icon = {
+            Box {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null
+                )
+                if (badgeCount > 0) {
+                    Surface(
+                        modifier = Modifier
+                            .size(16.dp)
+                            .align(Alignment.TopEnd),
+                        shape = CircleShape,
+                        color = MaterialTheme.colorScheme.error
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Text(
+                                text = if (badgeCount > 9) "9+" else badgeCount.toString(),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onError
+                            )
+                        }
+                    }
+                }
+            }
         },
         label = { Text(label) },
         selected = false,

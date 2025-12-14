@@ -338,12 +338,15 @@ class MainScreenViewModelTest {
 
     private class FakeInteractor : MainScreenViewModel.Interactor {
         val playbackStateFlow = MutableStateFlow<MainScreenViewModel.Interactor.PlaybackState?>(null)
+        val notificationUnreadCountFlow = MutableStateFlow(0)
 
         var playPauseCalled = false
         var skipToNextCalled = false
         var skipToPreviousCalled = false
 
         override fun getPlaybackState(): Flow<MainScreenViewModel.Interactor.PlaybackState?> = playbackStateFlow
+
+        override fun getNotificationUnreadCount(): Flow<Int> = notificationUnreadCountFlow
 
         override fun clickOnPlayPause() {
             playPauseCalled = true
