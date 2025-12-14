@@ -7,7 +7,7 @@ This document breaks down the implementation into small, sequential tasks. Each 
 ## Phase 1: Core Infrastructure
 
 ### Task 1.1: Create Notification Models
-**Status:** [ ]
+**Status:** [x]
 
 **Goal:** Define the core data models for notifications.
 
