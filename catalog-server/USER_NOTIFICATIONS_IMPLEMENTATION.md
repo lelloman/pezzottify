@@ -448,7 +448,7 @@ async fn mark_notification_read(
 ## Phase 2: Download Manager Integration
 
 ### Task 2.1: Create NotificationService
-**Status:** [ ]
+**Status:** [x]
 
 **Goal:** Create a service that creates notifications and handles sync event emission + WebSocket broadcast.
 
