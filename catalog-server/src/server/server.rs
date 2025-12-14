@@ -43,9 +43,10 @@ use tower_governor::GovernorLayer;
 #[cfg(feature = "slowdown")]
 use super::slowdown_request;
 use super::{
-    http_cache, log_requests, make_search_routes, metrics, state::*, IpKeyExtractor,
-    RequestsLoggingLevel, ServerConfig, UserOrIpKeyExtractor, CONTENT_READ_PER_MINUTE,
-    GLOBAL_PER_MINUTE, LOGIN_PER_MINUTE, SEARCH_PER_MINUTE, STREAM_PER_MINUTE, WRITE_PER_MINUTE,
+    extract_user_id_for_rate_limit, http_cache, log_requests, make_search_routes, metrics,
+    state::*, IpKeyExtractor, RequestsLoggingLevel, ServerConfig, UserOrIpKeyExtractor,
+    CONTENT_READ_PER_MINUTE, GLOBAL_PER_MINUTE, LOGIN_PER_MINUTE, SEARCH_PER_MINUTE,
+    STREAM_PER_MINUTE, WRITE_PER_MINUTE,
 };
 use crate::server::session::Session;
 use crate::user::auth::AuthTokenValue;
@@ -4789,6 +4790,12 @@ pub async fn make_app(
     );
 
     app = app.layer(GovernorLayer::new(global_rate_limit));
+
+    // Extract user ID from session for rate limiting (must run before rate limiters)
+    app = app.layer(middleware::from_fn_with_state(
+        state.clone(),
+        extract_user_id_for_rate_limit,
+    ));
 
     app = app.layer(middleware::from_fn_with_state(state.clone(), log_requests));
 
