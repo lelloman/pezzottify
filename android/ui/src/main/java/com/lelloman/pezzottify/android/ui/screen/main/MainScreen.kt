@@ -235,6 +235,7 @@ private fun MainScreenContent(state: MainScreenState, actions: MainScreenActions
                     HomeScreen(
                         navController = navController,
                         onOpenProfileDrawer = { drawerScope.launch { drawerState.open() } },
+                        notificationUnreadCount = state.notificationUnreadCount,
                     )
                 }
                 composable<Screen.Main.Search> { SearchScreen(navController) }
