@@ -19,10 +19,7 @@ use tracing::{debug, error, info, warn};
 use crate::background_jobs::{JobError, JobInfo, SchedulerHandle};
 use crate::catalog_store::CatalogStore;
 use crate::notifications::NotificationService;
-use crate::{
-    search::{HashedItemType, SearchVault},
-    user::UserManager,
-};
+use crate::search::{HashedItemType, SearchVault};
 use crate::{
     server::stream_track::stream_track,
     user::{
@@ -4223,12 +4220,14 @@ async fn admin_reset_throttle(
 }
 
 impl ServerState {
+    /// Create a new ServerState with an existing GuardedUserManager.
+    /// This allows sharing the UserManager with the job scheduler.
     #[allow(clippy::arc_with_non_send_sync, clippy::too_many_arguments)]
-    fn new(
+    fn new_with_user_manager(
         config: ServerConfig,
         catalog_store: Arc<dyn CatalogStore>,
         search_vault: Box<dyn SearchVault>,
-        user_manager: UserManager,
+        user_manager: GuardedUserManager,
         user_store: Arc<dyn FullUserStore>,
         downloader: Option<Arc<dyn crate::downloader::Downloader>>,
         media_base_path: Option<std::path::PathBuf>,
@@ -4251,7 +4250,7 @@ impl ServerState {
             start_time: Instant::now(),
             catalog_store,
             search_vault: Arc::new(Mutex::new(search_vault)),
-            user_manager: Arc::new(Mutex::new(user_manager)),
+            user_manager,
             downloader,
             proxy,
             ws_connection_manager: Arc::new(super::websocket::ConnectionManager::new()),
@@ -4268,13 +4267,13 @@ pub async fn make_app(
     catalog_store: Arc<dyn CatalogStore>,
     search_vault: Box<dyn SearchVault>,
     user_store: Arc<dyn FullUserStore>,
+    user_manager: GuardedUserManager,
     downloader: Option<Arc<dyn crate::downloader::Downloader>>,
     media_base_path: Option<std::path::PathBuf>,
     scheduler_handle: Option<SchedulerHandle>,
     download_manager: Option<Arc<crate::download_manager::DownloadManager>>,
 ) -> Result<Router> {
-    let user_manager = UserManager::new(catalog_store.clone(), user_store.clone());
-    let state = ServerState::new(
+    let state = ServerState::new_with_user_manager(
         config.clone(),
         catalog_store,
         search_vault,
@@ -4807,6 +4806,7 @@ pub async fn run_server(
     catalog_store: Arc<dyn CatalogStore>,
     search_vault: Box<dyn SearchVault>,
     user_store: Arc<dyn FullUserStore>,
+    user_manager: GuardedUserManager,
     requests_logging_level: RequestsLoggingLevel,
     port: u16,
     metrics_port: u16,
@@ -4829,6 +4829,7 @@ pub async fn run_server(
         catalog_store.clone(),
         search_vault,
         user_store,
+        user_manager,
         downloader,
         media_base_path,
         scheduler_handle,
@@ -4962,13 +4963,18 @@ mod tests {
 
     #[tokio::test]
     async fn responds_forbidden_on_protected_routes() {
-        let user_store = Arc::new(InMemoryUserStore::default());
+        let user_store: Arc<dyn FullUserStore> = Arc::new(InMemoryUserStore::default());
         let catalog_store: Arc<dyn CatalogStore> = Arc::new(NullCatalogStore);
+        let user_manager = Arc::new(std::sync::Mutex::new(crate::user::UserManager::new(
+            catalog_store.clone(),
+            user_store.clone(),
+        )));
         let app = &mut make_app(
             ServerConfig::default(),
             catalog_store,
             Box::new(NoOpSearchVault {}),
             user_store,
+            user_manager,
             None, // no downloader
             None, // no media_base_path
             None, // no scheduler_handle

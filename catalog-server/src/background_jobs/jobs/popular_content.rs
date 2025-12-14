@@ -1,13 +1,13 @@
 //! Popular content pre-computation job.
 //!
 //! This job periodically computes popular albums and artists based on
-//! listening data. While the actual caching happens in UserManager,
-//! this job ensures the underlying database queries are warmed up.
+//! listening data and caches the results in UserManager for fast retrieval.
 
 use crate::background_jobs::{
     context::JobContext,
     job::{BackgroundJob, HookEvent, JobError, JobSchedule, ShutdownBehavior},
 };
+use crate::user::user_models::{PopularAlbum, PopularArtist, PopularContent};
 use std::collections::HashMap;
 use std::time::Duration;
 use tracing::{debug, info};
@@ -130,7 +130,7 @@ impl BackgroundJob for PopularContentJob {
         // Sort and get top albums
         let mut album_list: Vec<_> = album_plays.into_iter().collect();
         album_list.sort_by(|a, b| b.1.cmp(&a.1));
-        let top_albums: Vec<_> = album_list.into_iter().take(self.albums_limit).collect();
+        let top_album_ids: Vec<_> = album_list.into_iter().take(self.albums_limit).collect();
 
         // Check for cancellation
         if ctx.is_cancelled() {
@@ -191,44 +191,100 @@ impl BackgroundJob for PopularContentJob {
         // Sort and get top artists
         let mut artist_list: Vec<_> = artist_plays.into_iter().collect();
         artist_list.sort_by(|a, b| b.1.cmp(&a.1));
-        let top_artists: Vec<_> = artist_list.into_iter().take(self.artists_limit).collect();
+        let top_artist_ids: Vec<_> = artist_list.into_iter().take(self.artists_limit).collect();
 
         // =====================================================================
-        // Warm up catalog store caches by resolving album and artist JSON
+        // Build PopularAlbum objects from resolved album JSON
         // =====================================================================
-        let mut albums_resolved = 0;
-        let mut artists_resolved = 0;
-
-        for (album_id, _) in &top_albums {
+        let mut popular_albums = Vec::with_capacity(top_album_ids.len());
+        for (album_id, play_count) in &top_album_ids {
             if ctx.is_cancelled() {
                 return Err(JobError::Cancelled);
             }
-            if ctx.catalog_store.get_resolved_album_json(album_id).is_ok() {
-                albums_resolved += 1;
+            if let Ok(Some(album_json)) = ctx.catalog_store.get_resolved_album_json(album_id) {
+                let name = album_json
+                    .get("name")
+                    .and_then(|n| n.as_str())
+                    .unwrap_or("Unknown Album")
+                    .to_string();
+
+                let image_id = album_json
+                    .get("image_id")
+                    .and_then(|i| i.as_str())
+                    .map(|s| s.to_string());
+
+                let artist_names: Vec<String> = album_json
+                    .get("artists")
+                    .and_then(|a| a.as_array())
+                    .map(|artists| {
+                        artists
+                            .iter()
+                            .filter_map(|a| {
+                                a.get("artist")
+                                    .and_then(|artist| artist.get("name"))
+                                    .and_then(|n| n.as_str())
+                                    .map(|s| s.to_string())
+                            })
+                            .collect()
+                    })
+                    .unwrap_or_default();
+
+                popular_albums.push(PopularAlbum {
+                    id: album_id.clone(),
+                    name,
+                    image_id,
+                    artist_names,
+                    play_count: *play_count,
+                });
             }
         }
 
-        for (artist_id, _) in &top_artists {
+        // =====================================================================
+        // Build PopularArtist objects from resolved artist JSON
+        // =====================================================================
+        let mut popular_artists = Vec::with_capacity(top_artist_ids.len());
+        for (artist_id, play_count) in &top_artist_ids {
             if ctx.is_cancelled() {
                 return Err(JobError::Cancelled);
             }
-            if ctx
-                .catalog_store
-                .get_resolved_artist_json(artist_id)
-                .is_ok()
-            {
-                artists_resolved += 1;
+            if let Ok(Some(artist_json)) = ctx.catalog_store.get_resolved_artist_json(artist_id) {
+                let name = artist_json
+                    .get("name")
+                    .and_then(|n| n.as_str())
+                    .unwrap_or("Unknown Artist")
+                    .to_string();
+
+                let image_id = artist_json
+                    .get("image_id")
+                    .and_then(|i| i.as_str())
+                    .map(|s| s.to_string());
+
+                popular_artists.push(PopularArtist {
+                    id: artist_id.clone(),
+                    name,
+                    image_id,
+                    play_count: *play_count,
+                });
             }
         }
+
+        // =====================================================================
+        // Store the results in UserManager's cache
+        // =====================================================================
+        let content = PopularContent {
+            albums: popular_albums.clone(),
+            artists: popular_artists.clone(),
+        };
+
+        ctx.user_manager
+            .lock()
+            .unwrap()
+            .set_popular_content_cache(content);
 
         info!(
-            "Popular content computed: {} albums, {} artists (resolved {}/{} albums, {}/{} artists)",
-            top_albums.len(),
-            top_artists.len(),
-            albums_resolved,
-            top_albums.len(),
-            artists_resolved,
-            top_artists.len()
+            "Popular content computed and cached: {} albums, {} artists",
+            popular_albums.len(),
+            popular_artists.len()
         );
 
         Ok(())
