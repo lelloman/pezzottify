@@ -8,7 +8,8 @@ default-run = "catalog-server"
 default = []
 no_search = [] # dev feature, the run is faster without building the search index
 no_checks = [] # dev feature, ignore expensive catalog integrity checks
-fast = ["no_search", "no_checks"]
+test-fast-hasher = [] # dev feature, fast password hasher for tests (DO NOT use in production!)
+fast = ["no_search", "no_checks", "test-fast-hasher"]
 slowdown = [] # dev feature, adds a slowdown layer in front of server routes
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
