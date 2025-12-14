@@ -3,19 +3,30 @@
 
 #![allow(dead_code)] // Feature-gated search functionality
 
+#[cfg(not(feature = "no_search"))]
 use crate::catalog_store::CatalogStore;
+#[cfg(not(feature = "no_search"))]
 use crate::search::{
     HashedItemType, ResolvedSearchResult, SearchResult, SearchedAlbum, SearchedArtist,
     SearchedTrack,
 };
 
+#[cfg(feature = "no_search")]
+use axum::Router;
+#[cfg(not(feature = "no_search"))]
 use axum::{extract::State, response::IntoResponse, routing::post, Json, Router};
+#[cfg(not(feature = "no_search"))]
 use chrono::Datelike;
+#[cfg(not(feature = "no_search"))]
 use std::sync::Arc;
 
-use super::{session::Session, state::ServerState};
+#[cfg(not(feature = "no_search"))]
+use super::session::Session;
+use super::state::ServerState;
+#[cfg(not(feature = "no_search"))]
 use serde::Deserialize;
 
+#[cfg(not(feature = "no_search"))]
 #[derive(Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum SearchFilter {
@@ -23,6 +34,8 @@ pub enum SearchFilter {
     Artist,
     Track,
 }
+
+#[cfg(not(feature = "no_search"))]
 #[derive(Deserialize)]
 struct SearchBody {
     pub query: String,
@@ -33,6 +46,7 @@ struct SearchBody {
     pub filters: Option<Vec<SearchFilter>>,
 }
 
+#[cfg(not(feature = "no_search"))]
 fn resolve_album(
     catalog_store: &Arc<dyn CatalogStore>,
     album_id: &str,
@@ -89,6 +103,7 @@ fn resolve_album(
     Some(ResolvedSearchResult::Album(resolved_album))
 }
 
+#[cfg(not(feature = "no_search"))]
 fn resolve_artist(
     catalog_store: &Arc<dyn CatalogStore>,
     artist_id: &str,
@@ -119,6 +134,7 @@ fn resolve_artist(
     Some(ResolvedSearchResult::Artist(resolved_artist))
 }
 
+#[cfg(not(feature = "no_search"))]
 fn resolve_track(
     catalog_store: &Arc<dyn CatalogStore>,
     track_id: &str,
@@ -196,6 +212,7 @@ fn resolve_track(
     Some(ResolvedSearchResult::Track(resolved_track))
 }
 
+#[cfg(not(feature = "no_search"))]
 fn resolve_search_results(
     catalog_store: &Arc<dyn CatalogStore>,
     results: Vec<SearchResult>,
@@ -210,11 +227,13 @@ fn resolve_search_results(
         .collect()
 }
 
+#[cfg(not(feature = "no_search"))]
 enum SearchResponse {
     Resolved(Json<Vec<ResolvedSearchResult>>),
     Raw(Json<Vec<SearchResult>>),
 }
 
+#[cfg(not(feature = "no_search"))]
 impl IntoResponse for SearchResponse {
     fn into_response(self) -> axum::response::Response {
         match self {
@@ -255,16 +274,16 @@ async fn search(
     }
 }
 
+#[cfg(not(feature = "no_search"))]
 pub fn make_search_routes(state: ServerState) -> Option<Router> {
-    #[cfg(not(feature = "no_search"))]
-    {
-        Some(
-            Router::new()
-                .route("/search", post(search))
-                .with_state(state),
-        )
-    }
+    Some(
+        Router::new()
+            .route("/search", post(search))
+            .with_state(state),
+    )
+}
 
-    #[cfg(feature = "no_search")]
+#[cfg(feature = "no_search")]
+pub fn make_search_routes(_state: ServerState) -> Option<Router> {
     None
 }

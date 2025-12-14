@@ -3813,7 +3813,7 @@ mod tests {
 
         // With a threshold of 0 seconds, everything should be considered stale
         // (since started_at < now is always true for items started in the past)
-        let stale = store.get_stale_in_progress(0).unwrap();
+        let _stale = store.get_stale_in_progress(0).unwrap();
         // Note: This might be 1 if the item was started before now,
         // or 0 if started_at == now (edge case)
         // We can't reliably test this without mocking time
