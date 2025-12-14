@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -93,6 +94,8 @@ private fun ArtistScreenContent(
             features = state.features,
             relatedArtists = state.relatedArtists,
             externalAlbums = state.externalAlbums,
+            isExternalAlbumsLoading = state.isExternalAlbumsLoading,
+            hasLoadedExternalAlbums = state.hasLoadedExternalAlbums,
             isExternalAlbumsError = state.isExternalAlbumsError,
             isLiked = state.isLiked,
             contentResolver = contentResolver,
@@ -120,6 +123,8 @@ fun ArtistLoadedScreen(
     features: List<String>,
     relatedArtists: List<String>,
     externalAlbums: List<UiExternalAlbumItem>,
+    isExternalAlbumsLoading: Boolean,
+    hasLoadedExternalAlbums: Boolean,
     isExternalAlbumsError: Boolean,
     isLiked: Boolean,
     contentResolver: ContentResolver,
@@ -239,7 +244,11 @@ fun ArtistLoadedScreen(
             }
 
             // External albums (not in library)
-            if (externalAlbums.isNotEmpty()) {
+            if (isExternalAlbumsLoading) {
+                item {
+                    ExternalAlbumsLoadingSection()
+                }
+            } else if (externalAlbums.isNotEmpty()) {
                 item {
                     Text(
                         text = stringResource(R.string.not_in_library),
@@ -258,6 +267,10 @@ fun ArtistLoadedScreen(
                     ExternalAlbumsErrorSection(
                         onRetry = { actions.retryExternalAlbums() }
                     )
+                }
+            } else if (hasLoadedExternalAlbums) {
+                item {
+                    ExternalAlbumsEmptySection()
                 }
             }
         }
@@ -447,6 +460,28 @@ private fun ExternalAlbumsErrorSection(
             Text(text = stringResource(R.string.retry))
         }
     }
+}
+
+@Composable
+private fun ExternalAlbumsLoadingSection() {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 32.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        CircularProgressIndicator()
+    }
+}
+
+@Composable
+private fun ExternalAlbumsEmptySection() {
+    Text(
+        text = stringResource(R.string.no_external_albums_found),
+        style = MaterialTheme.typography.headlineSmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+    )
 }
 
 /**

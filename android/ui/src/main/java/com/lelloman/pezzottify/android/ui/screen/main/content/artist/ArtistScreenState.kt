@@ -8,6 +8,8 @@ data class ArtistScreenState(
     val features: List<String> = emptyList(),
     val relatedArtists: List<String> = emptyList(),
     val externalAlbums: List<UiExternalAlbumItem> = emptyList(),
+    val isExternalAlbumsLoading: Boolean = false,
+    val hasLoadedExternalAlbums: Boolean = false,
     val isExternalAlbumsError: Boolean = false,
     val isLoading: Boolean = true,
     val isError: Boolean = false,

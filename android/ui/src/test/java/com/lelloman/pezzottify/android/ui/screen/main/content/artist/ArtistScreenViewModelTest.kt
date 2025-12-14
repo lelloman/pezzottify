@@ -222,6 +222,51 @@ class ArtistScreenViewModelTest {
         assertThat(viewModel.state.value.isExternalAlbumsError).isTrue()
     }
 
+    @Test
+    fun `hasLoadedExternalAlbums is true after successful load`() = runTest {
+        val artist = Artist("artist-1", "Artist", null, emptyList())
+        fakeContentResolver.artistResults["artist-1"] = flowOf(Content.Resolved("artist-1", artist))
+        fakeContentResolver.discographyResults["artist-1"] = flowOf(Content.Loading("artist-1"))
+        fakeInteractor.canShowExternalAlbumsResult = true
+        fakeInteractor.externalDiscographyResult = Result.success(
+            listOf(UiExternalAlbumItem("ext-1", "Album", null, 2023, false))
+        )
+
+        createViewModel("artist-1")
+        advanceUntilIdle()
+
+        assertThat(viewModel.state.value.hasLoadedExternalAlbums).isTrue()
+    }
+
+    @Test
+    fun `hasLoadedExternalAlbums is true even with empty result`() = runTest {
+        val artist = Artist("artist-1", "Artist", null, emptyList())
+        fakeContentResolver.artistResults["artist-1"] = flowOf(Content.Resolved("artist-1", artist))
+        fakeContentResolver.discographyResults["artist-1"] = flowOf(Content.Loading("artist-1"))
+        fakeInteractor.canShowExternalAlbumsResult = true
+        fakeInteractor.externalDiscographyResult = Result.success(emptyList())
+
+        createViewModel("artist-1")
+        advanceUntilIdle()
+
+        assertThat(viewModel.state.value.hasLoadedExternalAlbums).isTrue()
+        assertThat(viewModel.state.value.externalAlbums).isEmpty()
+        assertThat(viewModel.state.value.isExternalAlbumsError).isFalse()
+    }
+
+    @Test
+    fun `hasLoadedExternalAlbums is false when external albums disabled`() = runTest {
+        val artist = Artist("artist-1", "Artist", null, emptyList())
+        fakeContentResolver.artistResults["artist-1"] = flowOf(Content.Resolved("artist-1", artist))
+        fakeContentResolver.discographyResults["artist-1"] = flowOf(Content.Loading("artist-1"))
+        fakeInteractor.canShowExternalAlbumsResult = false
+
+        createViewModel("artist-1")
+        advanceUntilIdle()
+
+        assertThat(viewModel.state.value.hasLoadedExternalAlbums).isFalse()
+    }
+
     private class FakeInteractor : ArtistScreenViewModel.Interactor {
         val likedContentIds = mutableSetOf<String>()
 
