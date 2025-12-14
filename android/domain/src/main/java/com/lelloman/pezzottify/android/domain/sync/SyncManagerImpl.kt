@@ -1,6 +1,7 @@
 package com.lelloman.pezzottify.android.domain.sync
 
 import com.lelloman.pezzottify.android.domain.download.DownloadStatusRepository
+import com.lelloman.pezzottify.android.domain.notifications.NotificationRepository
 import com.lelloman.pezzottify.android.domain.remoteapi.RemoteApiClient
 import com.lelloman.pezzottify.android.domain.remoteapi.response.PlaylistState
 import com.lelloman.pezzottify.android.domain.remoteapi.response.RemoteApiResponse
@@ -38,6 +39,7 @@ class SyncManagerImpl internal constructor(
     private val permissionsStore: PermissionsStore,
     private val userSettingsStore: UserSettingsStore,
     private val downloadStatusRepository: DownloadStatusRepository,
+    private val notificationRepository: NotificationRepository,
     private val logger: Logger,
     private val dispatcher: CoroutineDispatcher,
     private val scope: CoroutineScope,
@@ -54,6 +56,7 @@ class SyncManagerImpl internal constructor(
         permissionsStore: PermissionsStore,
         userSettingsStore: UserSettingsStore,
         downloadStatusRepository: DownloadStatusRepository,
+        notificationRepository: NotificationRepository,
         loggerFactory: LoggerFactory,
     ) : this(
         remoteApiClient,
@@ -63,6 +66,7 @@ class SyncManagerImpl internal constructor(
         permissionsStore,
         userSettingsStore,
         downloadStatusRepository,
+        notificationRepository,
         loggerFactory.getLogger(SyncManagerImpl::class),
         Dispatchers.IO,
         CoroutineScope(SupervisorJob() + Dispatchers.IO),
@@ -114,6 +118,10 @@ class SyncManagerImpl internal constructor(
 
                 // Apply playlists
                 applyPlaylistsState(syncState.playlists)
+
+                // Apply notifications
+                notificationRepository.setNotifications(syncState.notifications)
+                logger.debug("Applied ${syncState.notifications.size} notifications")
 
                 // Save cursor and clear needsFullSync flag
                 syncStateStore.saveCursor(syncState.seq)
@@ -214,6 +222,7 @@ class SyncManagerImpl internal constructor(
         cancelRetry()
         syncStateStore.clearCursor()
         downloadStatusRepository.clear()
+        notificationRepository.clear()
         mutableState.value = SyncState.Idle
     }
 
@@ -338,12 +347,12 @@ class SyncManagerImpl internal constructor(
             }
 
             is SyncEvent.NotificationCreated -> {
-                // TODO: Store notification locally when notification store is implemented
+                notificationRepository.onNotificationCreated(event.notification)
                 logger.debug("Applied NotificationCreated: ${event.notification.id} ${event.notification.title}")
             }
 
             is SyncEvent.NotificationRead -> {
-                // TODO: Update notification read state locally when notification store is implemented
+                notificationRepository.onNotificationRead(event.notificationId, event.readAt)
                 logger.debug("Applied NotificationRead: ${event.notificationId}")
             }
         }

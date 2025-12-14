@@ -5,6 +5,8 @@ import com.lelloman.pezzottify.android.domain.config.SslPinConfig
 import com.lelloman.pezzottify.android.domain.device.DeviceInfoProvider
 import com.lelloman.pezzottify.android.domain.download.DownloadStatusRepository
 import com.lelloman.pezzottify.android.domain.download.DownloadStatusRepositoryImpl
+import com.lelloman.pezzottify.android.domain.notifications.NotificationRepository
+import com.lelloman.pezzottify.android.domain.notifications.NotificationRepositoryImpl
 import com.lelloman.pezzottify.android.domain.sync.SyncManager
 import com.lelloman.pezzottify.android.domain.sync.SyncManagerImpl
 import com.lelloman.pezzottify.android.localdata.DefaultHostUrl
@@ -28,6 +30,10 @@ abstract class DomainModule {
     @Binds
     @Singleton
     abstract fun bindDownloadStatusRepository(impl: DownloadStatusRepositoryImpl): DownloadStatusRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindNotificationRepository(impl: NotificationRepositoryImpl): NotificationRepository
 
     companion object {
         @Provides

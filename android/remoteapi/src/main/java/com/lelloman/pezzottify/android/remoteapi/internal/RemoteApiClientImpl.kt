@@ -396,6 +396,13 @@ internal class RemoteApiClientImpl(
             response.returnFromRetrofitResponse()
         }
 
+    override suspend fun markNotificationRead(notificationId: String): RemoteApiResponse<Unit> =
+        catchingNetworkError {
+            getRetrofit()
+                .markNotificationRead(authToken = authToken, notificationId = notificationId)
+                .returnFromRetrofitResponse()
+        }
+
     private suspend fun <T> catchingNetworkError(block: suspend () -> RemoteApiResponse<T>): RemoteApiResponse<T> =
         try {
             block()

@@ -140,6 +140,12 @@ internal interface RetrofitApiClient {
         @Body request: UpdateUserSettingsRequest,
     ): Response<Unit>
 
+    @POST("/v1/user/notifications/{notificationId}/read")
+    suspend fun markNotificationRead(
+        @Header("Authorization") authToken: String,
+        @Path("notificationId") notificationId: String,
+    ): Response<Unit>
+
     // Download manager endpoints
 
     @GET("/v1/download/search")

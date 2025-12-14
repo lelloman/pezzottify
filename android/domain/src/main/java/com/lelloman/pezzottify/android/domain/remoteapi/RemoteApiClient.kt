@@ -170,6 +170,12 @@ interface RemoteApiClient {
      */
     suspend fun getSkeletonDelta(sinceVersion: Long): RemoteApiResponse<SkeletonDeltaResponse>
 
+    /**
+     * Mark a notification as read.
+     * Returns the updated notification.
+     */
+    suspend fun markNotificationRead(notificationId: String): RemoteApiResponse<Unit>
+
     @Serializable
     enum class SearchFilter {
         Album,
