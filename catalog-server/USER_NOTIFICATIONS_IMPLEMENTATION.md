@@ -692,7 +692,7 @@ let data = serde_json::json!({
 ## Phase 3: Android Client
 
 ### Task 3.1: Add Notification Models to domain module
-**Status:** [ ]
+**Status:** [x]
 
 **Goal:** Define Kotlin data classes for notifications.
 
@@ -746,7 +746,7 @@ data class DownloadCompletedData(
 ---
 
 ### Task 3.2: Add Notification Sync Events
-**Status:** [ ]
+**Status:** [x]
 
 **Goal:** Add `NotificationCreated` and `NotificationRead` to the `SyncEvent` sealed interface.
 
@@ -777,7 +777,7 @@ data class NotificationRead(
 ---
 
 ### Task 3.3: Update Sync State Response Parsing
-**Status:** [ ]
+**Status:** [x]
 
 **Goal:** Add notifications to `SyncStateResponse` in the remoteapi module.
 

@@ -336,6 +336,16 @@ class SyncManagerImpl internal constructor(
                 )
                 logger.debug("Applied DownloadCompleted: ${event.requestId} content=${event.contentId}")
             }
+
+            is SyncEvent.NotificationCreated -> {
+                // TODO: Store notification locally when notification store is implemented
+                logger.debug("Applied NotificationCreated: ${event.notification.id} ${event.notification.title}")
+            }
+
+            is SyncEvent.NotificationRead -> {
+                // TODO: Update notification read state locally when notification store is implemented
+                logger.debug("Applied NotificationRead: ${event.notificationId}")
+            }
         }
     }
 
