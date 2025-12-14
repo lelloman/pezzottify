@@ -1,5 +1,7 @@
 <!-- Pezzottify official icon: P + Quarter note round italic -->
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 108 108">
+  <!-- Dark background -->
+  <rect fill="#191414" width="108" height="108" />
   <!-- Italic stem (slanted) -->
   <path fill="#1DB954" d="M40,24L32,80L42,80L50,24Z" />
   <!-- Circular note head as P bowl -->
