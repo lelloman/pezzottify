@@ -110,14 +110,6 @@ struct CliArgs {
     /// Interval in hours between pruning runs. Only used if event_retention_days > 0.
     #[clap(long, default_value_t = 24)]
     pub prune_interval_hours: u64,
-
-    /// Path to SSL certificate file (PEM format). Requires --ssl-key.
-    #[clap(long, value_parser = parse_path)]
-    pub ssl_cert: Option<PathBuf>,
-
-    /// Path to SSL private key file (PEM format). Requires --ssl-cert.
-    #[clap(long, value_parser = parse_path)]
-    pub ssl_key: Option<PathBuf>,
 }
 
 /// Convert CLI args to CliConfig for config resolution
@@ -135,8 +127,6 @@ impl From<&CliArgs> for config::CliConfig {
             downloader_timeout_sec: args.downloader_timeout_sec,
             event_retention_days: args.event_retention_days,
             prune_interval_hours: args.prune_interval_hours,
-            ssl_cert: args.ssl_cert.clone(),
-            ssl_key: args.ssl_key.clone(),
         }
     }
 }
@@ -177,7 +167,6 @@ async fn main() -> Result<()> {
         "  download_manager.enabled: {}",
         app_config.download_manager.enabled
     );
-    info!("  ssl.enabled: {}", app_config.ssl.is_some());
 
     // Create catalog store (will create DB if not exists)
     if !app_config.catalog_db_path().exists() {
@@ -419,7 +408,6 @@ async fn main() -> Result<()> {
             downloader,
             media_base_path_for_proxy,
             Some(scheduler_handle),
-            app_config.ssl.clone(),
             download_manager,
         ) => {
             info!("HTTP server stopped: {:?}", result);

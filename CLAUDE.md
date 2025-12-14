@@ -48,8 +48,6 @@ cargo run -- --db-dir ../../pezzottify-catalog --media-path=../../pezzottify-cat
 - `--downloader-timeout-sec <SECONDS>`: Timeout for downloader requests (default: 300)
 - `--event-retention-days <DAYS>`: Days to retain sync events before pruning (default: 30, 0 to disable)
 - `--prune-interval-hours <HOURS>`: Interval between pruning runs (default: 24)
-- `--ssl-cert <PATH>`: Path to SSL certificate file (PEM format). Requires `--ssl-key`.
-- `--ssl-key <PATH>`: Path to SSL private key file (PEM format). Requires `--ssl-cert`.
 
 **Running tests:**
 ```bash
@@ -73,44 +71,6 @@ cargo test <test_name>
 ```
 
 The wrapper script detects git hash and dirty state on the host and passes them to Docker. This is necessary because Docker builds don't have access to the full git repo.
-
-**SSL/TLS Configuration:**
-
-The server supports HTTPS with TLS using self-signed or CA-signed certificates.
-
-**Important:** The `CN` (Common Name) must match the hostname clients use to connect.
-
-For local development only:
-```bash
-openssl req -x509 -newkey rsa:4096 -keyout key.pem -out cert.pem -days 365 -nodes \
-  -subj "/CN=localhost"
-```
-
-For production with a domain (recommended):
-```bash
-# Replace yourdomain.com with your actual domain
-openssl req -x509 -newkey rsa:4096 -keyout key.pem -out cert.pem -days 365 -nodes \
-  -subj "/CN=yourdomain.com" \
-  -addext "subjectAltName=DNS:yourdomain.com,DNS:localhost,IP:127.0.0.1"
-```
-
-Configure SSL via CLI:
-```bash
-cargo run -- --db-dir /path/to/db --ssl-cert /path/to/cert.pem --ssl-key /path/to/key.pem
-```
-
-Or via config.toml:
-```toml
-[ssl]
-cert_path = "/path/to/cert.pem"
-key_path = "/path/to/key.pem"
-```
-
-Notes:
-- Both `cert_path` and `key_path` are required when enabling SSL
-- Certificate and key must be in PEM format
-- The metrics endpoint remains HTTP-only (internal use)
-- For web browsers: users will see a security warning for self-signed certs (click through once)
 
 ### Web Frontend (Vue 3)
 

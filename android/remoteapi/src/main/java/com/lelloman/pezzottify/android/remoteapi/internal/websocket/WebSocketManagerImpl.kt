@@ -83,7 +83,6 @@ internal class WebSocketManagerImpl(
 
         logger.info("Connecting to WebSocket: $wsUrl")
 
-        // Create OkHttpClient with SSL pinning if configured
         val client = okHttpClientFactory.createBuilder(baseUrl)
             .pingInterval(PING_INTERVAL_SECONDS, TimeUnit.SECONDS)
             .build()
