@@ -2949,10 +2949,11 @@ impl crate::notifications::NotificationStore for SqliteUserStore {
         )?;
 
         // Enforce 100-per-user limit: delete oldest beyond limit
+        // Use rowid as tiebreaker when timestamps are equal (e.g., rapid inserts)
         conn.execute(
             "DELETE FROM user_notifications WHERE user_id = ?1 AND id NOT IN (
                 SELECT id FROM user_notifications WHERE user_id = ?1
-                ORDER BY created_at DESC LIMIT 100
+                ORDER BY created_at DESC, rowid DESC LIMIT 100
             )",
             params![user_id],
         )?;
