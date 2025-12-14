@@ -1146,6 +1146,21 @@ impl SqliteCatalogStore {
         Ok(())
     }
 
+    /// Get the display image ID for an album.
+    pub fn get_album_display_image_id(&self, album_id: &str) -> Result<Option<String>> {
+        let conn = self.conn.lock().unwrap();
+        let result: Result<Option<String>, rusqlite::Error> = conn.query_row(
+            "SELECT display_image_id FROM albums WHERE id = ?1",
+            params![album_id],
+            |row| row.get(0),
+        );
+        match result {
+            Ok(image_id) => Ok(image_id),
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+            Err(e) => Err(e.into()),
+        }
+    }
+
     /// Set the display image for an artist.
     pub fn set_artist_display_image(&self, artist_id: &str, image_id: &str) -> Result<()> {
         let conn = self.conn.lock().unwrap();
@@ -2257,6 +2272,10 @@ impl CatalogStore for SqliteCatalogStore {
 
     fn set_album_display_image(&self, album_id: &str, image_id: &str) -> Result<()> {
         SqliteCatalogStore::set_album_display_image(self, album_id, image_id)
+    }
+
+    fn get_album_display_image_id(&self, album_id: &str) -> Result<Option<String>> {
+        SqliteCatalogStore::get_album_display_image_id(self, album_id)
     }
 
     fn get_skeleton_version(&self) -> Result<i64> {

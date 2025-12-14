@@ -1081,11 +1081,18 @@ impl DownloadManager {
                     if let Some(ref notification_service) = *self.notification_service.read().await {
                         if let Some(user_id_str) = &parent.requested_by_user_id {
                             if let Ok(user_id) = user_id_str.parse::<usize>() {
+                                // Get album image if available
+                                let image_id = self
+                                    .catalog_store
+                                    .get_album_display_image_id(&parent.content_id)
+                                    .ok()
+                                    .flatten();
+
                                 let data = serde_json::json!({
                                     "album_id": parent.content_id,
                                     "album_name": parent.content_name.clone().unwrap_or_default(),
                                     "artist_name": parent.artist_name.clone().unwrap_or_default(),
-                                    "image_id": null,  // Will be populated in Task 2.4
+                                    "image_id": image_id,
                                     "request_id": parent.id,
                                 });
 

@@ -209,6 +209,10 @@ impl CatalogStore for NullCatalogStore {
         anyhow::bail!("NullCatalogStore does not support write operations")
     }
 
+    fn get_album_display_image_id(&self, _album_id: &str) -> Result<Option<String>> {
+        Ok(None)
+    }
+
     fn get_skeleton_version(&self) -> Result<i64> {
         Ok(0)
     }

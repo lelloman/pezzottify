@@ -645,7 +645,7 @@ download_manager.set_notification_service(notification_service.clone()).await;
 ---
 
 ### Task 2.4: Get Album Image ID for Notification
-**Status:** [ ]
+**Status:** [x]
 
 **Goal:** Include `image_id` in download completion notification when available.
 

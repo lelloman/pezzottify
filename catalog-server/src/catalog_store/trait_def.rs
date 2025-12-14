@@ -205,6 +205,9 @@ pub trait CatalogStore: Send + Sync {
     /// Set the display image for an album (the "best" image to show).
     fn set_album_display_image(&self, album_id: &str, image_id: &str) -> Result<()>;
 
+    /// Get the display image ID for an album (used for notifications).
+    fn get_album_display_image_id(&self, album_id: &str) -> Result<Option<String>>;
+
     // =========================================================================
     // Skeleton Sync Operations
     // =========================================================================
