@@ -512,6 +512,32 @@ export const useRemoteStore = defineStore("remote", () => {
     }
   };
 
+  const fetchBackgroundJobs = async () => {
+    try {
+      const response = await axios.get("/v1/admin/jobs");
+      return response.data;
+    } catch (error) {
+      console.error("Failed to fetch background jobs:", error);
+      return null;
+    }
+  };
+
+  const triggerBackgroundJob = async (jobId) => {
+    try {
+      const response = await axios.post(`/v1/admin/jobs/${jobId}/trigger`);
+      return { success: true, data: response.data };
+    } catch (error) {
+      console.error("Failed to trigger background job:", error);
+      if (error.response?.status === 404) {
+        return { error: "Job not found" };
+      }
+      if (error.response?.status === 409) {
+        return { error: "Job is already running" };
+      }
+      return { error: error.response?.data?.error || "Failed to trigger job" };
+    }
+  };
+
   // =====================================================
   // Admin API - Download Manager (DownloadManagerAdmin)
   // =====================================================
@@ -755,6 +781,8 @@ export const useRemoteStore = defineStore("remote", () => {
     fetchOnlineUsers,
     // Admin API - Server Control
     rebootServer,
+    fetchBackgroundJobs,
+    triggerBackgroundJob,
     // Admin API - Download Manager
     fetchDownloadStats,
     fetchDownloadQueue,
