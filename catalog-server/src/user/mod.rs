@@ -18,7 +18,9 @@ pub use sync_events::{StoredEvent, UserEvent};
 pub use user_manager::UserManager;
 
 // Re-export notifications module types for convenience
-pub use crate::notifications::{DownloadCompletedData, Notification, NotificationStore, NotificationType};
+pub use crate::notifications::{
+    DownloadCompletedData, Notification, NotificationStore, NotificationType,
+};
 pub use user_models::{
     BandwidthSummary, BandwidthUsage, CategoryBandwidth, DailyListeningStats, LikedContentType,
     ListeningEvent, ListeningSummary, TrackListeningStats, UserListeningHistoryEntry, UserPlaylist,

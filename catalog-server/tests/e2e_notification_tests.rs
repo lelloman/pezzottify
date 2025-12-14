@@ -209,9 +209,7 @@ async fn test_notification_created_event_in_sync_events() {
     // Should have the notification_created event
     // Note: UserEvent uses adjacently tagged format: {"type": "...", "payload": {...}}
     // StoredEvent flattens this, so we get: {"seq": ..., "type": ..., "payload": {...}, "server_timestamp": ...}
-    let notification_event = events
-        .iter()
-        .find(|e| e["type"] == "notification_created");
+    let notification_event = events.iter().find(|e| e["type"] == "notification_created");
     assert!(
         notification_event.is_some(),
         "Should have notification_created event. Events: {:?}",
@@ -258,9 +256,7 @@ async fn test_notification_read_event_in_sync_events() {
 
     // Should have the notification_read event
     // Note: UserEvent uses adjacently tagged format: {"type": "...", "payload": {...}}
-    let read_event = events
-        .iter()
-        .find(|e| e["type"] == "notification_read");
+    let read_event = events.iter().find(|e| e["type"] == "notification_read");
     assert!(read_event.is_some(), "Should have notification_read event");
 
     let payload = &read_event.unwrap()["payload"];

@@ -1078,7 +1078,8 @@ impl DownloadManager {
                     }
 
                     // Create user notification for download completion
-                    if let Some(ref notification_service) = *self.notification_service.read().await {
+                    if let Some(ref notification_service) = *self.notification_service.read().await
+                    {
                         if let Some(user_id_str) = &parent.requested_by_user_id {
                             if let Ok(user_id) = user_id_str.parse::<usize>() {
                                 // Get album image if available
@@ -1112,7 +1113,10 @@ impl DownloadManager {
                                     )
                                     .await
                                 {
-                                    warn!("Failed to create download completion notification: {}", e);
+                                    warn!(
+                                        "Failed to create download completion notification: {}",
+                                        e
+                                    );
                                 }
                             }
                         }
