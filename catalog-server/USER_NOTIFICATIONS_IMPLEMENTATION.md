@@ -305,7 +305,7 @@ pub use crate::notifications::{Notification, NotificationStore, NotificationType
 ---
 
 ### Task 1.8: Extend SyncStateResponse with Notifications
-**Status:** [ ]
+**Status:** [x]
 
 **Goal:** Add notifications to the sync state response.
 
