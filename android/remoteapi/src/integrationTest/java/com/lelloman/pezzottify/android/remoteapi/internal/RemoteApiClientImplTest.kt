@@ -1,7 +1,6 @@
 package com.lelloman.pezzottify.android.remoteapi.internal
 
 import com.google.common.truth.Truth.assertThat
-import com.lelloman.pezzottify.android.domain.config.SslPinConfig
 import com.lelloman.pezzottify.android.domain.listening.ListeningEventSyncData
 import com.lelloman.pezzottify.android.domain.remoteapi.DeviceInfo
 import com.lelloman.pezzottify.android.domain.remoteapi.RemoteApiClient
@@ -26,18 +25,8 @@ class RemoteApiClientImplTest {
 
         /**
          * Simple OkHttpClientFactory for integration tests.
-         * Overrides createBuilder to return a plain builder without SSL pinning.
          */
-        private val testOkHttpClientFactory = object : OkHttpClientFactory(
-            sslPinConfig = object : SslPinConfig {
-                override val pinHash: String = ""
-                override val isEnabled: Boolean = false
-            }
-        ) {
-            override fun createBuilder(baseUrl: String): OkHttpClient.Builder {
-                return OkHttpClient.Builder()
-            }
-        }
+        private val testOkHttpClientFactory = OkHttpClientFactory()
     }
 
     private fun createClient(
@@ -369,7 +358,7 @@ class RemoteApiClientImplTest {
 
         // Update a setting
         val settingsResponse = client.updateUserSettings(
-            listOf(UserSetting.DirectDownloadsEnabled(value = true))
+            listOf(UserSetting.ExternalSearchEnabled(value = true))
         )
         assertThat(settingsResponse).isInstanceOf(RemoteApiResponse.Success::class.java)
 
@@ -381,7 +370,7 @@ class RemoteApiClientImplTest {
         assertThat(events.events).isNotEmpty()
 
         // Reset the setting
-        client.updateUserSettings(listOf(UserSetting.DirectDownloadsEnabled(value = false)))
+        client.updateUserSettings(listOf(UserSetting.ExternalSearchEnabled(value = false)))
     }
 
     @Test

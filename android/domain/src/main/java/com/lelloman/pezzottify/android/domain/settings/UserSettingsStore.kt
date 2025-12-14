@@ -35,13 +35,6 @@ interface UserSettingsStore {
     suspend fun setExternalModeEnabled(enabled: Boolean)
 
     /**
-     * Set whether direct downloads are enabled.
-     * This is called when receiving a sync event from the server, not directly by the user.
-     * Uses Synced status since it comes from the server.
-     */
-    suspend fun setDirectDownloadsEnabled(enabled: Boolean)
-
-    /**
      * Set a synced setting with specified sync status.
      * Used for local changes that need to be synced (PendingSync) or
      * when applying server state (Synced).

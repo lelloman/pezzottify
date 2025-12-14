@@ -416,7 +416,7 @@ class SyncManagerImplTest {
     @Test
     fun `fullSync applies settings from response`() = runTest(testDispatcher) {
         val settings = listOf(
-            UserSetting.DirectDownloadsEnabled(true)
+            UserSetting.ExternalSearchEnabled(true)
         )
         coEvery { remoteApiClient.getSyncState() } returns RemoteApiResponse.Success(
             createSyncStateResponse(seq = 10L, settings = settings)
@@ -424,7 +424,7 @@ class SyncManagerImplTest {
 
         syncManager.fullSync()
 
-        coVerify { userSettingsStore.setDirectDownloadsEnabled(true) }
+        coVerify { userSettingsStore.setExternalSearchEnabled(true) }
     }
 
     @Test
@@ -432,12 +432,12 @@ class SyncManagerImplTest {
         every { syncStateStore.getCurrentCursor() } returns 5L
         val event = createSettingChangedEvent(
             seq = 6L,
-            setting = UserSetting.DirectDownloadsEnabled(true),
+            setting = UserSetting.ExternalSearchEnabled(true),
         )
 
         syncManager.handleSyncMessage(event)
 
-        coVerify { userSettingsStore.setDirectDownloadsEnabled(true) }
+        coVerify { userSettingsStore.setExternalSearchEnabled(true) }
         coVerify { syncStateStore.saveCursor(6L) }
     }
 
@@ -445,8 +445,8 @@ class SyncManagerImplTest {
     fun `catchUp applies setting changed events`() = runTest(testDispatcher) {
         every { syncStateStore.getCurrentCursor() } returns 5L
         val events = listOf(
-            createSettingChangedEvent(seq = 6L, setting = UserSetting.DirectDownloadsEnabled(false)),
-            createSettingChangedEvent(seq = 7L, setting = UserSetting.DirectDownloadsEnabled(true)),
+            createSettingChangedEvent(seq = 6L, setting = UserSetting.ExternalSearchEnabled(false)),
+            createSettingChangedEvent(seq = 7L, setting = UserSetting.ExternalSearchEnabled(true)),
         )
         coEvery { remoteApiClient.getSyncEvents(5L) } returns RemoteApiResponse.Success(
             SyncEventsResponse(events = events, currentSeq = 7L)
@@ -454,8 +454,8 @@ class SyncManagerImplTest {
 
         syncManager.catchUp()
 
-        coVerify { userSettingsStore.setDirectDownloadsEnabled(false) }
-        coVerify { userSettingsStore.setDirectDownloadsEnabled(true) }
+        coVerify { userSettingsStore.setExternalSearchEnabled(false) }
+        coVerify { userSettingsStore.setExternalSearchEnabled(true) }
     }
 
     // endregion

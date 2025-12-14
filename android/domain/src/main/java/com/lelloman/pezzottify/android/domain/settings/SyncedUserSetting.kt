@@ -17,7 +17,6 @@ data class SyncedUserSetting(
      */
     val key: String
         get() = when (setting) {
-            is UserSetting.DirectDownloadsEnabled -> "enable_direct_downloads"
             is UserSetting.ExternalSearchEnabled -> "enable_external_search"
         }
 }

@@ -457,39 +457,6 @@ The app requires the Pezzottify catalog server to be running:
 - `10.0.2.2` maps to `127.0.0.1` on host machine
 - Use actual IP address for physical devices on same network
 
-**SSL Certificate Pinning:**
-
-For self-signed certificates, the app supports optional build-time certificate pinning:
-
-1. Extract the pin hash from your server certificate:
-```bash
-openssl x509 -in cert.pem -pubkey -noout | \
-  openssl pkey -pubin -outform der | \
-  openssl dgst -sha256 -binary | \
-  openssl enc -base64
-```
-
-2. Build with the pin (choose one method):
-```bash
-# Via gradle property
-./gradlew assembleRelease -PsslPinHash="sha256/YOUR_BASE64_HASH"
-
-# Via file (for CI - create ssl_pin.txt in android/ directory)
-echo "sha256/YOUR_BASE64_HASH" > ssl_pin.txt
-./gradlew assembleRelease
-
-# Via custom file path
-./gradlew assembleRelease -PsslPinFile=/path/to/pin.txt
-```
-
-When no pin is configured, certificate pinning is disabled (development mode or CA-signed certs).
-
-Implementation details:
-- Pin is set at build time via `BuildConfig.SSL_PIN_HASH`
-- `OkHttpClientFactory` applies pinning to all HTTP clients (Retrofit, WebSocket, Coil)
-- Host is extracted from the configured base URL at runtime
-- Pinning only applies to HTTPS connections
-
 ## Debugging
 
 ### Common Issues

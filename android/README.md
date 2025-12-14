@@ -53,7 +53,7 @@ The project follows Clean Architecture principles with a multi-module Gradle set
     - Content: `PerformSearch`, `GetPopularContent`, `InitializeApp`
     - User data: `LogViewedContentUseCase`, `GetRecentlyViewedContentUseCase`, `LogSearchHistoryEntryUseCase`, `GetSearchHistoryEntriesUseCase`
     - User content: `ToggleLikeUseCase`, `GetLikedStateUseCase`
-    - Settings: `UpdateDirectDownloadsSetting`
+    - Settings: `UpdateExternalSearchSetting`
   - Domain models: `Artist`, `Album`, `Track`, `AuthState`, `PopularContent`, `ViewedContent`, `LikedContent`, `ListeningEvent`
   - Store interfaces: `RemoteApiClient`, `StaticsStore`, `AuthStore`, `UserDataStore`, `UserContentStore`, `ConfigStore`, `ListeningEventStore`, `UserSettingsStore`, `SyncStateStore`, `PermissionsStore`
   - Player interfaces: `PezzottifyPlayer`, `PlatformPlayer`, `ControlsAndStatePlayer`
