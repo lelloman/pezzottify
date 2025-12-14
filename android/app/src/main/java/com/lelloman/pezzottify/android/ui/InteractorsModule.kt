@@ -649,11 +649,16 @@ class InteractorsModule {
     @Provides
     fun provideMainScreenInteractor(
         loggerFactory: LoggerFactory,
-        player: PezzottifyPlayer
+        player: PezzottifyPlayer,
+        notificationRepository: NotificationRepository,
     ): MainScreenViewModel.Interactor =
         object : MainScreenViewModel.Interactor {
 
             val logger = loggerFactory.getLogger(MainScreenViewModel.Interactor::class)
+
+            override fun getNotificationUnreadCount(): Flow<Int> =
+                notificationRepository.unreadCount
+
             override fun getPlaybackState(): Flow<MainScreenViewModel.Interactor.PlaybackState?> =
                 player
                     .playbackPlaylist.combine(player.isPlaying) { playlist, isPlaying -> playlist to isPlaying }

@@ -172,6 +172,13 @@ class MainScreenViewModel @Inject constructor(
                     }
                 }
         }
+
+        viewModelScope.launch {
+            interactor.getNotificationUnreadCount().collect { count ->
+                val oldState = mutableState.value
+                mutableState.value = oldState.copy(notificationUnreadCount = count)
+            }
+        }
     }
 
     override fun clickOnPlayPause() = interactor.clickOnPlayPause()
@@ -183,6 +190,8 @@ class MainScreenViewModel @Inject constructor(
     interface Interactor {
 
         fun getPlaybackState(): Flow<PlaybackState?>
+
+        fun getNotificationUnreadCount(): Flow<Int>
 
         fun clickOnPlayPause()
 

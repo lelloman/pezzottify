@@ -164,6 +164,10 @@ private fun MainScreenContent(state: MainScreenState, actions: MainScreenActions
                     shouldRestoreDrawer = true
                     navController.navigate(Screen.Main.MyRequests)
                 },
+                onNavigateToNotifications = {
+                    shouldRestoreDrawer = true
+                    navController.navigate(Screen.Main.Notifications)
+                },
                 onNavigateToListeningHistory = {
                     shouldRestoreDrawer = true
                     navController.navigate(Screen.Main.ListeningHistory)
@@ -180,6 +184,7 @@ private fun MainScreenContent(state: MainScreenState, actions: MainScreenActions
                 onCloseDrawer = {
                     drawerScope.launch { drawerState.close() }
                 },
+                notificationUnreadCount = state.notificationUnreadCount,
             )
         }
     ) {
@@ -270,6 +275,12 @@ private fun MainScreenContent(state: MainScreenState, actions: MainScreenActions
                     com.lelloman.pezzottify.android.ui.screen.main.listeninghistory.ListeningHistoryScreen(
                         onNavigateBack = { navController.popBackStack() },
                         onNavigateToTrack = { trackId -> navController.navigate(Screen.Main.Track(trackId)) },
+                    )
+                }
+                composable<Screen.Main.Notifications> {
+                    com.lelloman.pezzottify.android.ui.screen.main.notifications.NotificationListScreen(
+                        navController = navController,
+                        onNavigateToAlbum = { albumId -> navController.toAlbum(albumId) },
                     )
                 }
                 composable<Screen.Main.ExternalAlbum> {

@@ -1163,7 +1163,7 @@ class NotificationListViewModel @Inject constructor(
 ---
 
 ### Task 3.11: Add Unread Badge to Navigation
-**Status:** [ ]
+**Status:** [x]
 
 **Goal:** Show unread notification count in app navigation.
 
@@ -1202,7 +1202,7 @@ NotificationIconWithBadge(
 ---
 
 ### Task 3.12: Add Navigation Route for Notifications
-**Status:** [ ]
+**Status:** [x]
 
 **Goal:** Add navigation route to reach notification screen.
 

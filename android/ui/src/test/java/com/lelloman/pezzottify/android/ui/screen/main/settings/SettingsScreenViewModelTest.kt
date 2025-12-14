@@ -153,17 +153,6 @@ class SettingsScreenViewModelTest {
     }
 
     @Test
-    fun `setDirectDownloadsEnabled calls interactor`() = runTest {
-        createViewModel()
-        advanceUntilIdle()
-
-        viewModel.setDirectDownloadsEnabled(true)
-        advanceUntilIdle()
-
-        assertThat(fakeInteractor.lastSetDirectDownloadsEnabled).isTrue()
-    }
-
-    @Test
     fun `setExternalSearchEnabled calls interactor`() = runTest {
         createViewModel()
         advanceUntilIdle()
@@ -293,7 +282,6 @@ class SettingsScreenViewModelTest {
         private var _fontFamily = AppFontFamily.Default
         private var _cacheEnabled = true
         private var _storageInfo: StorageInfo? = null
-        private var _directDownloadsEnabled = false
         private var _externalSearchEnabled = false
         private var _hasRequestContentPermission = false
         private var _fileLoggingEnabled = false
@@ -306,7 +294,6 @@ class SettingsScreenViewModelTest {
         val fontFamilyFlow = MutableStateFlow(AppFontFamily.Default)
         val cacheEnabledFlow = MutableStateFlow(true)
         val storageInfoFlow = MutableStateFlow(StorageInfo(0L, 0L, 0L, StoragePressureLevel.LOW))
-        val directDownloadsEnabledFlow = MutableStateFlow(false)
         val externalSearchEnabledFlow = MutableStateFlow(false)
         val hasRequestContentPermissionFlow = MutableStateFlow(false)
         val fileLoggingEnabledFlow = MutableStateFlow(false)
@@ -315,7 +302,6 @@ class SettingsScreenViewModelTest {
         var lastSetColorPalette: ColorPalette? = null
         var lastSetFontFamily: AppFontFamily? = null
         var lastSetCacheEnabled: Boolean? = null
-        var lastSetDirectDownloadsEnabled: Boolean? = null
         var lastSetExternalSearchEnabled: Boolean? = null
         var lastSetFileLoggingEnabled: Boolean? = null
         var clearLogsCalled = false
@@ -359,7 +345,6 @@ class SettingsScreenViewModelTest {
         override fun getFontFamily(): AppFontFamily = _fontFamily
         override fun isCacheEnabled(): Boolean = _cacheEnabled
         override fun getStorageInfo(): StorageInfo? = _storageInfo
-        override fun isDirectDownloadsEnabled(): Boolean = _directDownloadsEnabled
         override fun isExternalSearchEnabled(): Boolean = _externalSearchEnabled
         override fun hasRequestContentPermission(): Boolean = _hasRequestContentPermission
         override fun isFileLoggingEnabled(): Boolean = _fileLoggingEnabled
@@ -372,7 +357,6 @@ class SettingsScreenViewModelTest {
         override fun observeFontFamily(): Flow<AppFontFamily> = fontFamilyFlow
         override fun observeCacheEnabled(): Flow<Boolean> = cacheEnabledFlow
         override fun observeStorageInfo(): Flow<StorageInfo> = storageInfoFlow
-        override fun observeDirectDownloadsEnabled(): Flow<Boolean> = directDownloadsEnabledFlow
         override fun observeExternalSearchEnabled(): Flow<Boolean> = externalSearchEnabledFlow
         override fun observeHasRequestContentPermission(): Flow<Boolean> = hasRequestContentPermissionFlow
         override fun observeFileLoggingEnabled(): Flow<Boolean> = fileLoggingEnabledFlow
@@ -391,11 +375,6 @@ class SettingsScreenViewModelTest {
 
         override suspend fun setCacheEnabled(enabled: Boolean) {
             lastSetCacheEnabled = enabled
-        }
-
-        override suspend fun setDirectDownloadsEnabled(enabled: Boolean): Boolean {
-            lastSetDirectDownloadsEnabled = enabled
-            return true
         }
 
         override suspend fun setExternalSearchEnabled(enabled: Boolean) {

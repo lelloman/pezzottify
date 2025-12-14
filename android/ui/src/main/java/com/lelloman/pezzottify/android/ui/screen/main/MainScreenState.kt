@@ -4,6 +4,7 @@ import com.lelloman.pezzottify.android.ui.content.ArtistInfo
 
 data class MainScreenState(
     val bottomPlayer: BottomPlayer = BottomPlayer(),
+    val notificationUnreadCount: Int = 0,
 ) {
 
     data class BottomPlayer(
