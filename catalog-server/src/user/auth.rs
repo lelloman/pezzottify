@@ -70,6 +70,10 @@ mod pezzottify_argon2 {
 #[derive(Clone, Serialize, Deserialize, Debug)]
 pub enum PezzottifyHasher {
     Argon2,
+    /// Fast test-only hasher - DO NOT use in production!
+    /// Simply stores password with a marker prefix for verification.
+    #[cfg(feature = "test-fast-hasher")]
+    TestFast,
 }
 
 impl FromStr for PezzottifyHasher {
@@ -78,6 +82,8 @@ impl FromStr for PezzottifyHasher {
     fn from_str(s: &str) -> Result<Self> {
         match s {
             "argon2" => Ok(PezzottifyHasher::Argon2),
+            #[cfg(feature = "test-fast-hasher")]
+            "test_fast" => Ok(PezzottifyHasher::TestFast),
             _ => bail!("Unknown hasher {}", s),
         }
     }
@@ -87,6 +93,8 @@ impl std::fmt::Display for PezzottifyHasher {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             PezzottifyHasher::Argon2 => write!(f, "argon2"),
+            #[cfg(feature = "test-fast-hasher")]
+            PezzottifyHasher::TestFast => write!(f, "test_fast"),
         }
     }
 }
@@ -95,11 +103,19 @@ impl PezzottifyHasher {
     pub fn generate_b64_salt(&self) -> String {
         match self {
             PezzottifyHasher::Argon2 => pezzottify_argon2::generate_b64_salt(),
+            #[cfg(feature = "test-fast-hasher")]
+            PezzottifyHasher::TestFast => "test_salt".to_string(),
         }
     }
     pub fn hash<T: AsRef<str>>(&self, plain: &[u8], b64_salt: T) -> Result<String> {
         match self {
             PezzottifyHasher::Argon2 => pezzottify_argon2::hash(plain, b64_salt),
+            #[cfg(feature = "test-fast-hasher")]
+            PezzottifyHasher::TestFast => {
+                // Just store password as hex - instant "hashing"
+                let hex: String = plain.iter().map(|b| format!("{:02x}", b)).collect();
+                Ok(format!("$testfast${}${}", b64_salt.as_ref(), hex))
+            }
         }
     }
 
@@ -107,6 +123,24 @@ impl PezzottifyHasher {
         match self {
             PezzottifyHasher::Argon2 => {
                 pezzottify_argon2::verify(plain_pw.as_ref().as_bytes(), target_hash)
+            }
+            #[cfg(feature = "test-fast-hasher")]
+            PezzottifyHasher::TestFast => {
+                // Extract the hex-encoded password from the hash and compare
+                let hash = target_hash.as_ref();
+                if let Some(hex) = hash
+                    .strip_prefix("$testfast$")
+                    .and_then(|s| s.split('$').nth(1))
+                {
+                    // Decode hex back to bytes
+                    let decoded: Vec<u8> = (0..hex.len())
+                        .step_by(2)
+                        .filter_map(|i| u8::from_str_radix(&hex[i..i + 2], 16).ok())
+                        .collect();
+                    Ok(decoded == plain_pw.as_ref().as_bytes())
+                } else {
+                    Ok(false)
+                }
             }
         }
     }

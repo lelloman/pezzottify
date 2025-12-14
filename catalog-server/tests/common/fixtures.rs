@@ -200,7 +200,10 @@ fn create_user_with_password_and_role(
     // Create the user
     let user_id = store.create_user(handle)?;
 
-    // Hash the password
+    // Use fast test hasher when available, otherwise fall back to Argon2
+    #[cfg(feature = "test-fast-hasher")]
+    let hasher = PezzottifyHasher::TestFast;
+    #[cfg(not(feature = "test-fast-hasher"))]
     let hasher = PezzottifyHasher::Argon2;
     let salt = hasher.generate_b64_salt();
     let hash = hasher.hash(password.as_bytes(), &salt)?;
