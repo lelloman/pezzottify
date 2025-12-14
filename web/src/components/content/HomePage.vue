@@ -52,7 +52,7 @@
           </div>
           <div class="albumInfo">
             <span class="albumName">{{ album.name }}</span>
-            <span class="artistName">{{ album.artist_name }}</span>
+            <span class="artistName">{{ formatArtistNames(album.artist_names) }}</span>
           </div>
         </router-link>
       </div>
@@ -147,6 +147,12 @@ const isEmpty = computed(() => {
     favorites.value.length === 0
   );
 });
+
+// Helper to format artist names array as string
+const formatArtistNames = (names) => {
+  if (!names || names.length === 0) return "Unknown Artist";
+  return names.join(", ");
+};
 
 // Helper to get album cover image ID from album object
 const getAlbumImageId = (album) => {
