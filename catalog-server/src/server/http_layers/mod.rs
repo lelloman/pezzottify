@@ -6,6 +6,8 @@ mod rate_limit;
 mod requests_logging;
 
 pub use http_cache::http_cache;
+#[cfg(feature = "slowdown")]
+pub use random_slowdown::slowdown_request;
 pub use rate_limit::{extract_user_id_for_rate_limit, IpKeyExtractor, UserOrIpKeyExtractor};
 pub use rate_limit::{
     CONTENT_READ_PER_MINUTE, GLOBAL_PER_MINUTE, LOGIN_PER_MINUTE, SEARCH_PER_MINUTE,
