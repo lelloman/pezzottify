@@ -39,6 +39,13 @@ internal class NotificationLocalStoreImpl @Inject constructor(
         notificationDao.markAsRead(notificationId, readAt)
     }
 
+    override suspend fun markAllAsReadLocally(readAt: Long) {
+        notificationDao.markAllAsRead(readAt)
+    }
+
+    override suspend fun getUnreadIds(): List<String> =
+        notificationDao.getUnreadIds()
+
     override suspend fun clear() {
         notificationDao.deleteAll()
         notificationDao.deleteAllPendingReads()

@@ -1244,6 +1244,10 @@ class InteractorsModule {
                 notificationRepository.markAsRead(notificationId)
             }
 
+            override suspend fun markAllAsRead() {
+                notificationRepository.markAllAsRead()
+            }
+
             private fun com.lelloman.pezzottify.android.domain.notifications.Notification.toUiNotification(): UiNotification {
                 return UiNotification(
                     id = id,

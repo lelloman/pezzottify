@@ -30,6 +30,12 @@ internal interface NotificationDao {
     @Query("UPDATE ${NotificationEntity.TABLE_NAME} SET ${NotificationEntity.COLUMN_READ_AT} = :readAt WHERE ${NotificationEntity.COLUMN_ID} = :notificationId")
     suspend fun markAsRead(notificationId: String, readAt: Long)
 
+    @Query("UPDATE ${NotificationEntity.TABLE_NAME} SET ${NotificationEntity.COLUMN_READ_AT} = :readAt WHERE ${NotificationEntity.COLUMN_READ_AT} IS NULL")
+    suspend fun markAllAsRead(readAt: Long)
+
+    @Query("SELECT ${NotificationEntity.COLUMN_ID} FROM ${NotificationEntity.TABLE_NAME} WHERE ${NotificationEntity.COLUMN_READ_AT} IS NULL")
+    suspend fun getUnreadIds(): List<String>
+
     @Query("DELETE FROM ${NotificationEntity.TABLE_NAME}")
     suspend fun deleteAll()
 
