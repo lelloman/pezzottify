@@ -11,7 +11,6 @@ use crate::user::sync_events::UserEvent;
 use crate::user::FullUserStore;
 
 use super::models::{Notification, NotificationType};
-use super::store::NotificationStore;
 
 /// Service for creating notifications and broadcasting to connected clients
 pub struct NotificationService {
