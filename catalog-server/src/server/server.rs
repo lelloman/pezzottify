@@ -606,8 +606,7 @@ async fn mark_notification_read(
     }
 
     // Return the notification (useful for knowing read_at timestamp)
-    let _ = notification;
-    StatusCode::OK.into_response()
+    Json(notification).into_response()
 }
 
 async fn home(session: Option<Session>, State(state): State<ServerState>) -> impl IntoResponse {
