@@ -206,11 +206,11 @@ mod tests {
     fn test_rate_limit_constants_per_hour() {
         // Verify per-hour rate limits are reasonable
         assert_eq!(LOGIN_PER_HOUR, 100);
-        assert_eq!(GLOBAL_PER_HOUR, 10000);
+        assert_eq!(GLOBAL_PER_HOUR, 20000);
         assert_eq!(SEARCH_PER_HOUR, 5000);
-        assert_eq!(CONTENT_READ_PER_HOUR, 50000);
-        assert_eq!(STREAM_PER_HOUR, 5000);
-        assert_eq!(WRITE_PER_HOUR, 2000);
+        assert_eq!(CONTENT_READ_PER_HOUR, 100000);
+        assert_eq!(STREAM_PER_HOUR, 10000);
+        assert_eq!(WRITE_PER_HOUR, 5000);
 
         // Verify ordering
         assert!(CONTENT_READ_PER_HOUR > GLOBAL_PER_HOUR);
@@ -234,11 +234,11 @@ mod tests {
 
         // Write operations have moderate hourly limit
         assert_eq!(WRITE_PER_MINUTE, 60);
-        assert_eq!(WRITE_PER_HOUR, 2000);
+        assert_eq!(WRITE_PER_HOUR, 5000);
 
         // Stream operations
         assert_eq!(STREAM_PER_MINUTE, 200);
-        assert_eq!(STREAM_PER_HOUR, 5000);
+        assert_eq!(STREAM_PER_HOUR, 10000);
     }
 
     #[test]

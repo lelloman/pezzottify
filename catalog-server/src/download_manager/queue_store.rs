@@ -866,8 +866,10 @@ impl DownloadQueueStore for SqliteDownloadQueueStore {
 
     fn delete_children(&self, parent_id: &str) -> Result<usize> {
         let conn = self.conn.lock().unwrap();
-        let rows_affected =
-            conn.execute("DELETE FROM download_queue WHERE parent_id = ?1", [parent_id])?;
+        let rows_affected = conn.execute(
+            "DELETE FROM download_queue WHERE parent_id = ?1",
+            [parent_id],
+        )?;
         Ok(rows_affected)
     }
 
