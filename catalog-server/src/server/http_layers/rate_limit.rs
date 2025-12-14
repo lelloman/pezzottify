@@ -49,7 +49,7 @@ pub const LOGIN_PER_HOUR: u32 = 100;
 
 /// Global requests per hour per user
 #[allow(dead_code)]
-pub const GLOBAL_PER_HOUR: u32 = 10000;
+pub const GLOBAL_PER_HOUR: u32 = 20000;
 
 /// Search requests per hour per user
 #[allow(dead_code)]
@@ -57,15 +57,15 @@ pub const SEARCH_PER_HOUR: u32 = 5000;
 
 /// Content read requests per hour per user
 #[allow(dead_code)]
-pub const CONTENT_READ_PER_HOUR: u32 = 50000;
+pub const CONTENT_READ_PER_HOUR: u32 = 100000;
 
 /// Stream requests per hour per user
 #[allow(dead_code)]
-pub const STREAM_PER_HOUR: u32 = 5000;
+pub const STREAM_PER_HOUR: u32 = 10000;
 
 /// Write operations per hour per user
 #[allow(dead_code)]
-pub const WRITE_PER_HOUR: u32 = 2000;
+pub const WRITE_PER_HOUR: u32 = 5000;
 
 // ============================================================================
 // Key Extractors
