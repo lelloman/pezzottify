@@ -159,7 +159,7 @@ pub trait NotificationStore: Send + Sync {
 ---
 
 ### Task 1.5: Add Database Table Schema
-**Status:** [ ]
+**Status:** [x]
 
 **Goal:** Add the `user_notifications` table to the user database schema.
 
