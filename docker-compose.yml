@@ -10,8 +10,8 @@ services:
         GIT_HASH: ${GIT_HASH:-unknown}
         GIT_DIRTY: ${GIT_DIRTY:-0}
         COMMIT_COUNT: ${COMMIT_COUNT:-0}
-    ports:
-      - "3001:3001"
+    container_name: catalog-server
+    # Port 3001 no longer exposed - traffic goes through Caddy reverse proxy
     expose:
       - "9091" # Metrics port - internal only, not exposed to host
     volumes:
@@ -22,6 +22,7 @@ services:
     networks:
       - monitoring
       - pezzottify-internal
+      - reverse-proxy-net
     environment:
       - LOG_LEVEL=info
     restart: unless-stopped
@@ -106,6 +107,8 @@ networks:
   pezzottify-internal:
     name: pezzottify-internal  # Explicit name prevents docker-compose prefix
     driver: bridge
+  reverse-proxy-net:
+    external: true
 
 volumes:
   prometheus-data:
