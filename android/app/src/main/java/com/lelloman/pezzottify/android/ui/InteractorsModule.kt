@@ -7,6 +7,8 @@ import com.lelloman.pezzottify.android.domain.auth.usecase.PerformLogin
 import com.lelloman.pezzottify.android.domain.auth.usecase.PerformLogout
 import com.lelloman.pezzottify.android.domain.config.BuildInfo
 import com.lelloman.pezzottify.android.domain.config.ConfigStore
+import com.lelloman.pezzottify.android.domain.notifications.NotificationRepository
+import com.lelloman.pezzottify.android.domain.notifications.getAlbumId
 import com.lelloman.pezzottify.android.domain.websocket.ConnectionState as DomainConnectionState
 import com.lelloman.pezzottify.android.domain.websocket.WebSocketManager
 import com.lelloman.pezzottify.android.ui.component.ConnectionState as UiConnectionState
@@ -77,6 +79,8 @@ import com.lelloman.pezzottify.android.ui.screen.main.profile.ProfileScreenViewM
 import com.lelloman.pezzottify.android.ui.screen.main.profile.stylesettings.StyleSettingsViewModel
 import com.lelloman.pezzottify.android.ui.screen.main.search.SearchScreenViewModel
 import com.lelloman.pezzottify.android.ui.screen.main.settings.SettingsScreenViewModel
+import com.lelloman.pezzottify.android.ui.screen.main.notifications.NotificationListScreenViewModel
+import com.lelloman.pezzottify.android.ui.screen.main.notifications.UiNotification
 import com.lelloman.pezzottify.android.ui.screen.main.settings.logviewer.LogViewerScreenViewModel
 import com.lelloman.pezzottify.android.ui.screen.player.PlayerScreenViewModel
 import com.lelloman.pezzottify.android.ui.screen.queue.QueueScreenViewModel
@@ -1216,6 +1220,50 @@ class InteractorsModule {
                             else -> ListeningHistoryErrorType.Unknown
                         }
                         Result.failure(ListeningHistoryException(errorType))
+                    }
+                }
+            }
+        }
+
+    @Provides
+    fun provideNotificationListScreenInteractor(
+        notificationRepository: NotificationRepository,
+    ): NotificationListScreenViewModel.Interactor =
+        object : NotificationListScreenViewModel.Interactor {
+            override fun getNotifications(): Flow<List<UiNotification>> =
+                notificationRepository.notifications.map { notifications ->
+                    notifications.map { it.toUiNotification() }
+                }
+
+            override suspend fun markAsRead(notificationId: String) {
+                notificationRepository.markAsRead(notificationId)
+            }
+
+            private fun com.lelloman.pezzottify.android.domain.notifications.Notification.toUiNotification(): UiNotification {
+                return UiNotification(
+                    id = id,
+                    title = title,
+                    body = body,
+                    readAt = readAt,
+                    createdAt = createdAt,
+                    relativeTime = formatRelativeTime(createdAt),
+                    albumId = getAlbumId(),
+                )
+            }
+
+            private fun formatRelativeTime(timestamp: Long): String {
+                val now = System.currentTimeMillis() / 1000
+                val diff = now - timestamp
+
+                return when {
+                    diff < 60 -> "Just now"
+                    diff < 3600 -> "${diff / 60}m ago"
+                    diff < 86400 -> "${diff / 3600}h ago"
+                    diff < 604800 -> "${diff / 86400}d ago"
+                    else -> {
+                        val date = java.text.SimpleDateFormat("MMM d", java.util.Locale.getDefault())
+                            .format(java.util.Date(timestamp * 1000))
+                        date
                     }
                 }
             }

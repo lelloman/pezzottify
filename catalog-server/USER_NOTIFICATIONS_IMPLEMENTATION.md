@@ -1016,7 +1016,7 @@ abstract class NotificationModule {
 ---
 
 ### Task 3.9: Create NotificationListScreen UI
-**Status:** [ ]
+**Status:** [x]
 
 **Goal:** Create a Compose screen to display notifications.
 
@@ -1130,7 +1130,7 @@ private fun NotificationListItem(
 ---
 
 ### Task 3.10: Create NotificationListViewModel
-**Status:** [ ]
+**Status:** [x]
 
 **Goal:** ViewModel for notification list screen.
 
