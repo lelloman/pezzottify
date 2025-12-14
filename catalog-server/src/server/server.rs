@@ -356,6 +356,7 @@ struct SyncStateResponse {
     settings: Vec<UserSetting>,
     playlists: Vec<PlaylistState>,
     permissions: Vec<Permission>,
+    notifications: Vec<crate::notifications::Notification>,
 }
 
 #[derive(Serialize)]
@@ -470,6 +471,15 @@ async fn get_sync_state(
         }
     };
 
+    // Get notifications
+    let notifications = match um.get_user_notifications(session.user_id) {
+        Ok(n) => n,
+        Err(err) => {
+            error!("Error getting user notifications: {}", err);
+            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+        }
+    };
+
     Json(SyncStateResponse {
         seq,
         likes: LikesState {
@@ -480,6 +490,7 @@ async fn get_sync_state(
         settings,
         playlists,
         permissions,
+        notifications,
     })
     .into_response()
 }
@@ -5328,6 +5339,54 @@ mod tests {
         }
 
         fn prune_events_older_than(&self, _before_timestamp: i64) -> Result<u64> {
+            Ok(0)
+        }
+    }
+
+    impl crate::notifications::NotificationStore for InMemoryUserStore {
+        fn create_notification(
+            &self,
+            _user_id: usize,
+            notification_type: crate::notifications::NotificationType,
+            title: String,
+            body: Option<String>,
+            data: serde_json::Value,
+        ) -> Result<crate::notifications::Notification> {
+            Ok(crate::notifications::Notification {
+                id: "test-notif-1".to_string(),
+                notification_type,
+                title,
+                body,
+                data,
+                read_at: None,
+                created_at: 0,
+            })
+        }
+
+        fn get_user_notifications(
+            &self,
+            _user_id: usize,
+        ) -> Result<Vec<crate::notifications::Notification>> {
+            Ok(vec![])
+        }
+
+        fn get_notification(
+            &self,
+            _notification_id: &str,
+            _user_id: usize,
+        ) -> Result<Option<crate::notifications::Notification>> {
+            Ok(None)
+        }
+
+        fn mark_notification_read(
+            &self,
+            _notification_id: &str,
+            _user_id: usize,
+        ) -> Result<Option<crate::notifications::Notification>> {
+            Ok(None)
+        }
+
+        fn get_unread_count(&self, _user_id: usize) -> Result<usize> {
             Ok(0)
         }
     }

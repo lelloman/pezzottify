@@ -1030,6 +1030,54 @@ mod tests {
         }
     }
 
+    impl crate::notifications::NotificationStore for TestUserStore {
+        fn create_notification(
+            &self,
+            _user_id: usize,
+            notification_type: crate::notifications::NotificationType,
+            title: String,
+            body: Option<String>,
+            data: serde_json::Value,
+        ) -> anyhow::Result<crate::notifications::Notification> {
+            Ok(crate::notifications::Notification {
+                id: "test-notif-1".to_string(),
+                notification_type,
+                title,
+                body,
+                data,
+                read_at: None,
+                created_at: 0,
+            })
+        }
+
+        fn get_user_notifications(
+            &self,
+            _user_id: usize,
+        ) -> anyhow::Result<Vec<crate::notifications::Notification>> {
+            Ok(vec![])
+        }
+
+        fn get_notification(
+            &self,
+            _notification_id: &str,
+            _user_id: usize,
+        ) -> anyhow::Result<Option<crate::notifications::Notification>> {
+            Ok(None)
+        }
+
+        fn mark_notification_read(
+            &self,
+            _notification_id: &str,
+            _user_id: usize,
+        ) -> anyhow::Result<Option<crate::notifications::Notification>> {
+            Ok(None)
+        }
+
+        fn get_unread_count(&self, _user_id: usize) -> anyhow::Result<usize> {
+            Ok(0)
+        }
+    }
+
     fn create_test_user_store() -> Arc<dyn FullUserStore> {
         Arc::new(TestUserStore::new_with_downloads_enabled())
     }
@@ -1695,6 +1743,54 @@ mod tests {
         }
 
         fn prune_events_older_than(&self, _before_timestamp: i64) -> anyhow::Result<u64> {
+            Ok(0)
+        }
+    }
+
+    impl crate::notifications::NotificationStore for ConfigurableTestUserStore {
+        fn create_notification(
+            &self,
+            _user_id: usize,
+            notification_type: crate::notifications::NotificationType,
+            title: String,
+            body: Option<String>,
+            data: serde_json::Value,
+        ) -> anyhow::Result<crate::notifications::Notification> {
+            Ok(crate::notifications::Notification {
+                id: "test-notif-1".to_string(),
+                notification_type,
+                title,
+                body,
+                data,
+                read_at: None,
+                created_at: 0,
+            })
+        }
+
+        fn get_user_notifications(
+            &self,
+            _user_id: usize,
+        ) -> anyhow::Result<Vec<crate::notifications::Notification>> {
+            Ok(vec![])
+        }
+
+        fn get_notification(
+            &self,
+            _notification_id: &str,
+            _user_id: usize,
+        ) -> anyhow::Result<Option<crate::notifications::Notification>> {
+            Ok(None)
+        }
+
+        fn mark_notification_read(
+            &self,
+            _notification_id: &str,
+            _user_id: usize,
+        ) -> anyhow::Result<Option<crate::notifications::Notification>> {
+            Ok(None)
+        }
+
+        fn get_unread_count(&self, _user_id: usize) -> anyhow::Result<usize> {
             Ok(0)
         }
     }

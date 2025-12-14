@@ -552,6 +552,55 @@ impl UserManager {
     }
 
     // ========================================================================
+    // Notification Methods
+    // ========================================================================
+
+    /// Get all notifications for a user, ordered by created_at DESC.
+    pub fn get_user_notifications(
+        &self,
+        user_id: usize,
+    ) -> Result<Vec<crate::notifications::Notification>> {
+        self.user_store.get_user_notifications(user_id)
+    }
+
+    /// Get a single notification by ID (verifies ownership).
+    pub fn get_notification(
+        &self,
+        notification_id: &str,
+        user_id: usize,
+    ) -> Result<Option<crate::notifications::Notification>> {
+        self.user_store.get_notification(notification_id, user_id)
+    }
+
+    /// Mark a notification as read. Returns the updated notification.
+    pub fn mark_notification_read(
+        &self,
+        notification_id: &str,
+        user_id: usize,
+    ) -> Result<Option<crate::notifications::Notification>> {
+        self.user_store
+            .mark_notification_read(notification_id, user_id)
+    }
+
+    /// Get count of unread notifications for a user.
+    pub fn get_unread_count(&self, user_id: usize) -> Result<usize> {
+        self.user_store.get_unread_count(user_id)
+    }
+
+    /// Create a notification for a user.
+    pub fn create_notification(
+        &self,
+        user_id: usize,
+        notification_type: crate::notifications::NotificationType,
+        title: String,
+        body: Option<String>,
+        data: serde_json::Value,
+    ) -> Result<crate::notifications::Notification> {
+        self.user_store
+            .create_notification(user_id, notification_type, title, body, data)
+    }
+
+    // ========================================================================
     // Popular Content Methods
     // ========================================================================
 
