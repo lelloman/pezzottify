@@ -548,6 +548,43 @@ const USER_EVENTS_TABLE_V_9: Table = Table {
     indices: &[("idx_user_events_user_seq", "user_id, seq")],
 };
 
+/// V 11
+/// User notifications table - stores notifications for each user
+const USER_NOTIFICATIONS_TABLE_V_11: Table = Table {
+    name: "user_notifications",
+    columns: &[
+        sqlite_column!(
+            "id",
+            &SqlType::Text,
+            is_primary_key = true,
+            is_unique = true
+        ),
+        sqlite_column!(
+            "user_id",
+            &SqlType::Integer,
+            non_null = true,
+            foreign_key = Some(&ForeignKey {
+                foreign_table: "user",
+                foreign_column: "id",
+                on_delete: ForeignKeyOnChange::Cascade,
+            })
+        ),
+        sqlite_column!("notification_type", &SqlType::Text, non_null = true),
+        sqlite_column!("title", &SqlType::Text, non_null = true),
+        sqlite_column!("body", &SqlType::Text),
+        sqlite_column!("data", &SqlType::Text, non_null = true), // JSON
+        sqlite_column!("read_at", &SqlType::Integer),            // NULL = unread
+        sqlite_column!(
+            "created_at",
+            &SqlType::Integer,
+            non_null = true,
+            default_value = Some(DEFAULT_TIMESTAMP)
+        ),
+    ],
+    unique_constraints: &[],
+    indices: &[("idx_notifications_user_created", "user_id, created_at DESC")],
+};
+
 /// V 8
 /// Auth token table with device_id foreign key
 const AUTH_TOKEN_TABLE_V_8: Table = Table {
@@ -824,6 +861,30 @@ pub const VERSIONED_SCHEMAS: &[VersionedSchema] = &[
             USER_EVENTS_TABLE_V_9,
         ],
         migration: Some(|_conn: &Connection| Ok(())),
+    },
+    // V11: Add user notifications table
+    VersionedSchema {
+        version: 11,
+        tables: &[
+            USER_TABLE_V_0,
+            LIKED_CONTENT_TABLE_V_2,
+            AUTH_TOKEN_TABLE_V_8,
+            USER_PASSWORD_CREDENTIALS_V_0,
+            USER_PLAYLIST_TABLE_V_3,
+            USER_PLAYLIST_TRACKS_TABLE_V_3,
+            USER_ROLE_TABLE_V_4,
+            USER_EXTRA_PERMISSION_TABLE_V_4,
+            BANDWIDTH_USAGE_TABLE_V_5,
+            LISTENING_EVENTS_TABLE_V_6,
+            USER_SETTINGS_TABLE_V_7,
+            DEVICE_TABLE_V_8,
+            USER_EVENTS_TABLE_V_9,
+            USER_NOTIFICATIONS_TABLE_V_11,
+        ],
+        migration: Some(|conn: &Connection| {
+            USER_NOTIFICATIONS_TABLE_V_11.create(conn)?;
+            Ok(())
+        }),
     },
 ];
 
