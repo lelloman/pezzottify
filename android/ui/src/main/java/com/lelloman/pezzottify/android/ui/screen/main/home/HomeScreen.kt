@@ -126,9 +126,11 @@ private fun HomeScreenContent(
             TopAppBar(
                 title = {
                     // Profile button with user initials and notification badge
-                    IconButton(onClick = {
-                        coroutineScope.launch { actions.clickOnProfile() }
-                    }) {
+                    Box(
+                        modifier = Modifier
+                            .padding(end = 8.dp)
+                            .clickable { coroutineScope.launch { actions.clickOnProfile() } }
+                    ) {
                         BadgedBox(
                             badge = {
                                 if (notificationUnreadCount > 0) {
