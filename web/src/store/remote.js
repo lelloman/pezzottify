@@ -515,7 +515,7 @@ export const useRemoteStore = defineStore("remote", () => {
   const fetchBackgroundJobs = async () => {
     try {
       const response = await axios.get("/v1/admin/jobs");
-      return response.data;
+      return response.data.jobs;
     } catch (error) {
       console.error("Failed to fetch background jobs:", error);
       return null;
