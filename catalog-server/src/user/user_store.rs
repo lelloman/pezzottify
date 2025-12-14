@@ -314,6 +314,7 @@ pub trait DeviceStore: Send + Sync {
 }
 
 use super::sync_events::{StoredEvent, UserEvent};
+use crate::notifications::NotificationStore;
 
 /// Trait for sync event storage operations
 pub trait UserEventStore: Send + Sync {
@@ -339,7 +340,7 @@ pub trait UserEventStore: Send + Sync {
     fn prune_events_older_than(&self, before_timestamp: i64) -> Result<u64>;
 }
 
-/// Combined trait for user storage with bandwidth, listening tracking, settings, devices, and events
+/// Combined trait for user storage with bandwidth, listening tracking, settings, devices, events, and notifications
 pub trait FullUserStore:
     UserStore
     + UserBandwidthStore
@@ -347,6 +348,7 @@ pub trait FullUserStore:
     + UserSettingsStore
     + DeviceStore
     + UserEventStore
+    + NotificationStore
 {
 }
 
@@ -357,7 +359,8 @@ impl<
             + UserListeningStore
             + UserSettingsStore
             + DeviceStore
-            + UserEventStore,
+            + UserEventStore
+            + NotificationStore,
     > FullUserStore for T
 {
 }

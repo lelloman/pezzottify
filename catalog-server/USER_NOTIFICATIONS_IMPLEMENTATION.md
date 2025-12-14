@@ -270,7 +270,7 @@ impl NotificationStore for SqliteUserStore {
 ---
 
 ### Task 1.7: Export NotificationStore from user module
-**Status:** [ ]
+**Status:** [x]
 
 **Goal:** Make `NotificationStore` accessible and integrate with `FullUserStore`.
 
