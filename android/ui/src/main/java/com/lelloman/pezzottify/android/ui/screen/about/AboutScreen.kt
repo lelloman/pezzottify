@@ -114,6 +114,16 @@ fun AboutScreenInternal(
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
 
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Server version
+            AboutLabel(text = stringResource(R.string.server_version))
+            Text(
+                text = state.serverVersion,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+
             Spacer(modifier = Modifier.height(24.dp))
 
             // Catalog section
@@ -222,6 +232,7 @@ fun AboutScreenPreview() {
             versionName = "1.0.0",
             gitCommit = "abc1234",
             serverUrl = "https://music.example.com",
+            serverVersion = "0.5.0 (def5678)",
             artistCount = 6137,
             albumCount = 712,
             trackCount = 10666,

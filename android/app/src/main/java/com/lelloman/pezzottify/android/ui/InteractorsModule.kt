@@ -140,12 +140,20 @@ class InteractorsModule {
         buildInfo: BuildInfo,
         configStore: ConfigStore,
         skeletonStore: com.lelloman.pezzottify.android.domain.skeleton.SkeletonStore,
+        webSocketManager: WebSocketManager,
     ): AboutScreenViewModel.Interactor = object : AboutScreenViewModel.Interactor {
         override fun getVersionName(): String = buildInfo.versionName
 
         override fun getGitCommit(): String = buildInfo.gitCommit
 
         override fun getServerUrl(): String = configStore.baseUrl.value
+
+        override fun observeServerVersion() = webSocketManager.connectionState.map { state ->
+            when (state) {
+                is DomainConnectionState.Connected -> state.serverVersion
+                else -> "disconnected"
+            }
+        }
 
         override suspend fun getSkeletonCounts(): AboutScreenViewModel.SkeletonCountsData {
             val counts = skeletonStore.getCounts()

@@ -5,6 +5,7 @@ data class AboutScreenState(
     val versionName: String = "",
     val gitCommit: String = "",
     val serverUrl: String = "",
+    val serverVersion: String = "disconnected",
     val artistCount: Int = 0,
     val albumCount: Int = 0,
     val trackCount: Int = 0,

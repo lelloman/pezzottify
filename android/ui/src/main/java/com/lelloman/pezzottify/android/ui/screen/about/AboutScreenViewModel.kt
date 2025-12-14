@@ -3,9 +3,11 @@ package com.lelloman.pezzottify.android.ui.screen.about
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -20,14 +22,21 @@ class AboutScreenViewModel @Inject constructor(
     init {
         viewModelScope.launch {
             val counts = interactor.getSkeletonCounts()
-            mutableState.value = AboutScreenState(
-                versionName = interactor.getVersionName(),
-                gitCommit = interactor.getGitCommit(),
-                serverUrl = interactor.getServerUrl(),
-                artistCount = counts.artists,
-                albumCount = counts.albums,
-                trackCount = counts.tracks,
-            )
+            mutableState.update {
+                it.copy(
+                    versionName = interactor.getVersionName(),
+                    gitCommit = interactor.getGitCommit(),
+                    serverUrl = interactor.getServerUrl(),
+                    artistCount = counts.artists,
+                    albumCount = counts.albums,
+                    trackCount = counts.tracks,
+                )
+            }
+        }
+        viewModelScope.launch {
+            interactor.observeServerVersion().collect { serverVersion ->
+                mutableState.update { it.copy(serverVersion = serverVersion) }
+            }
         }
     }
 
@@ -35,6 +44,7 @@ class AboutScreenViewModel @Inject constructor(
         fun getVersionName(): String
         fun getGitCommit(): String
         fun getServerUrl(): String
+        fun observeServerVersion(): Flow<String>
         suspend fun getSkeletonCounts(): SkeletonCountsData
     }
 
