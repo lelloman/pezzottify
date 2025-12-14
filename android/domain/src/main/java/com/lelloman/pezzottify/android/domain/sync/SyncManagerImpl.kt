@@ -130,6 +130,10 @@ class SyncManagerImpl internal constructor(
                 // Reset retry delay on success
                 currentRetryDelay = minRetryDelay
                 logger.info("Full sync complete, cursor=${syncState.seq}")
+
+                // Process any pending notification reads that were queued while offline
+                processPendingNotificationReads()
+
                 true
             }
 
@@ -179,6 +183,10 @@ class SyncManagerImpl internal constructor(
                 // Reset retry delay on success
                 currentRetryDelay = minRetryDelay
                 logger.info("Catch-up complete, cursor=${eventsResponse.currentSeq}")
+
+                // Process any pending notification reads that were queued while offline
+                processPendingNotificationReads()
+
                 true
             }
 
@@ -458,6 +466,18 @@ class SyncManagerImpl internal constructor(
         retryJob?.cancel()
         retryJob = null
         currentRetryDelay = minRetryDelay
+    }
+
+    /**
+     * Process pending notification reads that were queued while offline.
+     * This is called after successful fullSync or catchUp.
+     */
+    private suspend fun processPendingNotificationReads() {
+        if (notificationRepository.hasPendingReads()) {
+            logger.info("Processing pending notification reads...")
+            val count = notificationRepository.processPendingReads()
+            logger.info("Processed $count pending notification reads")
+        }
     }
 
     companion object {

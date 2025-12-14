@@ -10,6 +10,7 @@ import com.lelloman.pezzottify.android.domain.sync.SyncStateStore
 import com.lelloman.pezzottify.android.domain.statics.StaticsStore
 import com.lelloman.pezzottify.android.domain.statics.fetchstate.StaticItemFetchStateStore
 import com.lelloman.pezzottify.android.domain.listening.ListeningEventStore
+import com.lelloman.pezzottify.android.domain.notifications.NotificationLocalStore
 import com.lelloman.pezzottify.android.domain.user.UserDataStore
 import com.lelloman.pezzottify.android.domain.user.PermissionsStore
 import com.lelloman.pezzottify.android.domain.usercontent.UserContentStore
@@ -17,6 +18,8 @@ import com.lelloman.pezzottify.android.domain.usercontent.UserPlaylistStore
 import com.lelloman.pezzottify.android.localdata.internal.auth.AuthStoreImpl
 import com.lelloman.pezzottify.android.localdata.internal.listening.ListeningEventDao
 import com.lelloman.pezzottify.android.localdata.internal.listening.ListeningEventStoreImpl
+import com.lelloman.pezzottify.android.localdata.internal.notifications.NotificationDao
+import com.lelloman.pezzottify.android.localdata.internal.notifications.NotificationLocalStoreImpl
 import com.lelloman.pezzottify.android.localdata.internal.config.ConfigStoreImpl
 import com.lelloman.pezzottify.android.localdata.internal.settings.UserSettingsStoreImpl
 import com.lelloman.pezzottify.android.localdata.internal.skeleton.SkeletonStoreImpl
@@ -129,4 +132,16 @@ class LocalDataModule {
     internal fun provideSkeletonStore(
         staticsDb: StaticsDb
     ): SkeletonStore = SkeletonStoreImpl(staticsDb.skeletonDao())
+
+    @Provides
+    @Singleton
+    internal fun provideNotificationDao(
+        userContentDb: UserContentDb
+    ): NotificationDao = userContentDb.notificationDao()
+
+    @Provides
+    @Singleton
+    internal fun provideNotificationLocalStore(
+        notificationDao: NotificationDao
+    ): NotificationLocalStore = NotificationLocalStoreImpl(notificationDao)
 }

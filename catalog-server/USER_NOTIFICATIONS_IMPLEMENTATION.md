@@ -1230,7 +1230,7 @@ composable("notifications") {
 ---
 
 ### Task 3.13: Optional - Room Persistence for Offline Support
-**Status:** [ ]
+**Status:** [x]
 
 **Goal:** Persist notifications to Room database for offline access.
 
