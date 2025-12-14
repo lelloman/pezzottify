@@ -35,7 +35,9 @@ open class OkHttpClientFactory @Inject constructor(
     open fun createBuilder(baseUrl: String): OkHttpClient.Builder {
         val builder = OkHttpClient.Builder()
 
-        if (sslPinConfig.isEnabled && baseUrl.startsWith("https://")) {
+        // Always configure SSL pinning if a pin is configured, regardless of current URL scheme.
+        // This ensures the client is ready for HTTPS connections even if the URL changes later.
+        if (sslPinConfig.isEnabled) {
             val trustManager = PinningTrustManager(sslPinConfig.pinHash)
             val sslContext = SSLContext.getInstance("TLS")
             sslContext.init(null, arrayOf<TrustManager>(trustManager), null)

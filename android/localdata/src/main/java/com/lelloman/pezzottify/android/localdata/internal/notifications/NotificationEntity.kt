@@ -2,13 +2,17 @@ package com.lelloman.pezzottify.android.localdata.internal.notifications
 
 import androidx.room.ColumnInfo
 import androidx.room.Entity
+import androidx.room.Index
 import androidx.room.PrimaryKey
 import com.lelloman.pezzottify.android.domain.notifications.Notification
 import com.lelloman.pezzottify.android.domain.notifications.NotificationType
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
 
-@Entity(tableName = NotificationEntity.TABLE_NAME)
+@Entity(
+    tableName = NotificationEntity.TABLE_NAME,
+    indices = [Index(value = ["created_at"], name = "index_notification_created_at")]
+)
 internal data class NotificationEntity(
     @PrimaryKey
     @ColumnInfo(name = COLUMN_ID)
