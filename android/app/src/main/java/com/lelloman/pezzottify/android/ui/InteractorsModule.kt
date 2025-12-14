@@ -27,7 +27,6 @@ import com.lelloman.pezzottify.android.domain.storage.StoragePressureLevel as Do
 import com.lelloman.pezzottify.android.domain.usercontent.LikedContent as DomainLikedContent
 import com.lelloman.pezzottify.android.domain.player.PlaybackPlaylist as DomainPlaybackPlaylist
 import com.lelloman.pezzottify.android.domain.player.PlaybackPlaylistContext as DomainPlaybackPlaylistContext
-import com.lelloman.pezzottify.android.domain.settings.usecase.UpdateDirectDownloadsSetting
 import com.lelloman.pezzottify.android.domain.settings.usecase.UpdateExternalSearchSetting
 import com.lelloman.pezzottify.android.ui.theme.AppFontFamily as UiAppFontFamily
 import com.lelloman.pezzottify.android.ui.theme.ColorPalette as UiColorPalette
@@ -213,7 +212,6 @@ class InteractorsModule {
         userSettingsStore: UserSettingsStore,
         storageMonitor: com.lelloman.pezzottify.android.domain.storage.StorageMonitor,
         permissionsStore: PermissionsStore,
-        updateDirectDownloadsSetting: UpdateDirectDownloadsSetting,
         updateExternalSearchSetting: UpdateExternalSearchSetting,
         logFileManager: LogFileManager,
         configStore: ConfigStore,

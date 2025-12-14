@@ -69,18 +69,18 @@ class ApplicationModule {
         configStore: ConfigStore,
         okHttpClientFactory: OkHttpClientFactory,
     ): ImageLoader {
-        // Create OkHttpClient with SSL pinning for our server
-        val pinnedOkHttpClient = okHttpClientFactory
+        // Create OkHttpClient for our server
+        val internalOkHttpClient = okHttpClientFactory
             .createBuilder(configStore.baseUrl.value)
             .build()
 
-        // Create a plain OkHttpClient for external URLs (no SSL pinning, no auth)
+        // Create a plain OkHttpClient for external URLs (no auth)
         val externalOkHttpClient = OkHttpClient.Builder().build()
 
         // Create a routing call factory that uses the appropriate client based on URL
         val routingCallFactory = RoutingCallFactory(
             configStore = configStore,
-            internalClient = pinnedOkHttpClient,
+            internalClient = internalOkHttpClient,
             externalClient = externalOkHttpClient,
         )
 
@@ -149,7 +149,7 @@ private class CoilAuthTokenInterceptor(
 
 /**
  * OkHttp Call.Factory that routes requests to different OkHttpClients based on URL host.
- * Internal URLs (to our server) use the pinned client, external URLs use a plain client.
+ * Internal URLs (to our server) use the internal client, external URLs use a plain client.
  */
 private class RoutingCallFactory(
     private val configStore: ConfigStore,

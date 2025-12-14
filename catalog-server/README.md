@@ -403,7 +403,6 @@ key_path = "/path/to/key.pem"
 - Both `cert_path` and `key_path` are required when enabling SSL
 - Certificate and key must be in PEM format
 - The metrics endpoint (port 9091) remains HTTP-only for internal use
-- For Android clients: consider pinning the certificate in the app for enhanced security
 - For web browsers: users will see a security warning for self-signed certificates (click through once to accept)
 
 ## API Endpoints

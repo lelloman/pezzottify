@@ -28,10 +28,6 @@ enum class LikedContentType {
 @Serializable
 sealed interface UserSetting {
     @Serializable
-    @SerialName("enable_direct_downloads")
-    data class DirectDownloadsEnabled(val value: Boolean) : UserSetting
-
-    @Serializable
     @SerialName("enable_external_search")
     data class ExternalSearchEnabled(val value: Boolean) : UserSetting
 }
