@@ -801,7 +801,7 @@ data class SyncStateResponse(
 ---
 
 ### Task 3.4: Create NotificationRepository Interface
-**Status:** [ ]
+**Status:** [x]
 
 **Goal:** Define the repository interface for notifications.
 
@@ -851,7 +851,7 @@ sealed interface NotificationUpdate {
 ---
 
 ### Task 3.5: Implement NotificationRepositoryImpl
-**Status:** [ ]
+**Status:** [x]
 
 **Goal:** Implement the notification repository with in-memory cache.
 
@@ -912,7 +912,7 @@ class NotificationRepositoryImpl @Inject constructor(
 ---
 
 ### Task 3.6: Add RemoteApiClient Method for Mark-as-Read
-**Status:** [ ]
+**Status:** [x]
 
 **Goal:** Add API method to mark notification as read.
 
@@ -932,7 +932,7 @@ override suspend fun markNotificationRead(notificationId: String) {
 ---
 
 ### Task 3.7: Integrate with SyncManager
-**Status:** [ ]
+**Status:** [x]
 
 **Goal:** Handle notification events in SyncManager.
 
@@ -994,7 +994,7 @@ override suspend fun cleanup() {
 ---
 
 ### Task 3.8: Add Hilt Module for NotificationRepository
-**Status:** [ ]
+**Status:** [x]
 
 **Goal:** Register NotificationRepository in Hilt dependency injection.
 
