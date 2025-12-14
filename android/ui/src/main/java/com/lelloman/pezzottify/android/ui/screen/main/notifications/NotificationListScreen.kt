@@ -20,6 +20,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.DoneAll
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -55,6 +56,7 @@ fun NotificationListScreen(
             viewModel.markAsRead(notification.id)
             notification.albumId?.let(onNavigateToAlbum)
         },
+        onMarkAllAsReadClick = { viewModel.markAllAsRead() },
         onBackClick = { navController.popBackStack() },
     )
 }
@@ -64,6 +66,7 @@ fun NotificationListScreen(
 private fun NotificationListScreenContent(
     state: NotificationListScreenState,
     onNotificationClick: (UiNotification) -> Unit,
+    onMarkAllAsReadClick: () -> Unit,
     onBackClick: () -> Unit,
 ) {
     Scaffold(
@@ -78,6 +81,16 @@ private fun NotificationListScreenContent(
                             Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = stringResource(R.string.back)
                         )
+                    }
+                },
+                actions = {
+                    if (state.hasUnread) {
+                        IconButton(onClick = onMarkAllAsReadClick) {
+                            Icon(
+                                Icons.Filled.DoneAll,
+                                contentDescription = stringResource(R.string.mark_all_read)
+                            )
+                        }
                     }
                 }
             )

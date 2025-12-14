@@ -28,6 +28,9 @@ interface NotificationRepository {
     /** Mark notification as read (triggers API call + local update) */
     suspend fun markAsRead(notificationId: String): Result<Unit>
 
+    /** Mark all unread notifications as read (triggers API calls + local updates) */
+    suspend fun markAllAsRead(): Result<Unit>
+
     /** Clear all notifications (on logout) */
     suspend fun clear()
 

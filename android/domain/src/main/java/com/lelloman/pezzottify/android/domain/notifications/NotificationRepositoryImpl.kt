@@ -86,6 +86,39 @@ class NotificationRepositoryImpl @Inject constructor(
         }
     }
 
+    override suspend fun markAllAsRead(): Result<Unit> {
+        val unreadIds = localStore.getUnreadIds()
+        if (unreadIds.isEmpty()) {
+            logger.debug("markAllAsRead() no unread notifications")
+            return Result.success(Unit)
+        }
+
+        logger.debug("markAllAsRead() marking ${unreadIds.size} notifications as read")
+
+        val readAt = System.currentTimeMillis() / 1000
+
+        // Optimistic update - mark all as read locally immediately
+        localStore.markAllAsReadLocally(readAt)
+        unreadIds.forEach { id ->
+            _updates.emit(NotificationUpdate.Read(id, readAt))
+        }
+
+        // Sync each one with server (failures go to offline queue)
+        for (notificationId in unreadIds) {
+            when (val response = remoteApiClient.markNotificationRead(notificationId)) {
+                is RemoteApiResponse.Success -> {
+                    logger.debug("markAllAsRead() synced $notificationId")
+                }
+                is RemoteApiResponse.Error -> {
+                    logger.warn("markAllAsRead() failed for $notificationId, queueing: $response")
+                    localStore.addPendingRead(notificationId, readAt)
+                }
+            }
+        }
+
+        return Result.success(Unit)
+    }
+
     override suspend fun clear() {
         logger.debug("clear()")
         localStore.clear()

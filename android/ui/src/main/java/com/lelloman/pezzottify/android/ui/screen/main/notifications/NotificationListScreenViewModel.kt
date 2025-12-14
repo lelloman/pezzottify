@@ -16,6 +16,7 @@ import javax.inject.Inject
  */
 data class NotificationListScreenState(
     val notifications: List<UiNotification> = emptyList(),
+    val hasUnread: Boolean = false,
 )
 
 /**
@@ -38,7 +39,10 @@ class NotificationListScreenViewModel @Inject constructor(
 
     val state: StateFlow<NotificationListScreenState> = interactor.getNotifications()
         .map { notifications ->
-            NotificationListScreenState(notifications = notifications)
+            NotificationListScreenState(
+                notifications = notifications,
+                hasUnread = notifications.any { it.readAt == null },
+            )
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), NotificationListScreenState())
 
@@ -48,8 +52,15 @@ class NotificationListScreenViewModel @Inject constructor(
         }
     }
 
+    fun markAllAsRead() {
+        viewModelScope.launch {
+            interactor.markAllAsRead()
+        }
+    }
+
     interface Interactor {
         fun getNotifications(): Flow<List<UiNotification>>
         suspend fun markAsRead(notificationId: String)
+        suspend fun markAllAsRead()
     }
 }

@@ -38,6 +38,16 @@ interface NotificationLocalStore {
     suspend fun markAsReadLocally(notificationId: String, readAt: Long)
 
     /**
+     * Mark all unread notifications as read locally.
+     */
+    suspend fun markAllAsReadLocally(readAt: Long)
+
+    /**
+     * Get IDs of all unread notifications.
+     */
+    suspend fun getUnreadIds(): List<String>
+
+    /**
      * Clear all notifications.
      */
     suspend fun clear()
