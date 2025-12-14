@@ -204,53 +204,53 @@ class UserSettingsStoreImplTest {
         assertThat(store.colorPalette.value).isEqualTo(ColorPalette.OceanBlue)
     }
 
-    // region directDownloadsEnabled
+    // region externalSearchEnabled
 
     @Test
-    fun `directDownloadsEnabled returns false by default`() {
+    fun `externalSearchEnabled returns false by default`() {
         val store = UserSettingsStoreImpl(context, testDispatcher)
 
-        assertThat(store.directDownloadsEnabled.value).isFalse()
+        assertThat(store.isExternalSearchEnabled.value).isFalse()
     }
 
     @Test
-    fun `setDirectDownloadsEnabled persists value`() = runTest(testDispatcher) {
+    fun `setExternalSearchEnabled persists value`() = runTest(testDispatcher) {
         val store = UserSettingsStoreImpl(context, testDispatcher)
 
-        store.setDirectDownloadsEnabled(true)
+        store.setExternalSearchEnabled(true)
 
-        assertThat(store.directDownloadsEnabled.value).isTrue()
+        assertThat(store.isExternalSearchEnabled.value).isTrue()
     }
 
     @Test
-    fun `directDownloadsEnabled value survives store recreation`() = runTest(testDispatcher) {
+    fun `externalSearchEnabled value survives store recreation`() = runTest(testDispatcher) {
         val store1 = UserSettingsStoreImpl(context, testDispatcher)
-        store1.setDirectDownloadsEnabled(true)
+        store1.setExternalSearchEnabled(true)
 
         val store2 = UserSettingsStoreImpl(context, testDispatcher)
 
-        assertThat(store2.directDownloadsEnabled.value).isTrue()
+        assertThat(store2.isExternalSearchEnabled.value).isTrue()
     }
 
     @Test
-    fun `clearSyncedSettings resets directDownloadsEnabled to default`() = runTest(testDispatcher) {
+    fun `clearSyncedSettings resets externalSearchEnabled to default`() = runTest(testDispatcher) {
         val store = UserSettingsStoreImpl(context, testDispatcher)
-        store.setDirectDownloadsEnabled(true)
+        store.setExternalSearchEnabled(true)
 
         store.clearSyncedSettings()
 
-        assertThat(store.directDownloadsEnabled.value).isFalse()
+        assertThat(store.isExternalSearchEnabled.value).isFalse()
     }
 
     @Test
     fun `clearSyncedSettings persists reset value`() = runTest(testDispatcher) {
         val store1 = UserSettingsStoreImpl(context, testDispatcher)
-        store1.setDirectDownloadsEnabled(true)
+        store1.setExternalSearchEnabled(true)
         store1.clearSyncedSettings()
 
         val store2 = UserSettingsStoreImpl(context, testDispatcher)
 
-        assertThat(store2.directDownloadsEnabled.value).isFalse()
+        assertThat(store2.isExternalSearchEnabled.value).isFalse()
     }
 
     // endregion

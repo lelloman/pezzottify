@@ -3,6 +3,9 @@
 
     <!-- COMMON -->
     <string name="back">Indietro</string>
+    <string name="notifications">Notifiche</string>
+    <string name="no_notifications">Nessuna notifica</string>
+    <string name="mark_all_read">Segna tutto come letto</string>
     <string name="cancel">Annulla</string>
     <string name="ok">OK</string>
     <string name="create">Crea</string>
