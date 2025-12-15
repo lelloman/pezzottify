@@ -4,11 +4,13 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.graphics.Bitmap
 import android.media.AudioManager
 import androidx.annotation.OptIn
 import androidx.core.content.ContextCompat
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
+import androidx.media3.common.MediaMetadata
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.okhttp.OkHttpDataSource
@@ -16,11 +18,26 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
+import coil3.ImageLoader
+import coil3.request.ImageRequest
+import coil3.request.SuccessResult
+import coil3.request.allowHardware
+import coil3.toBitmap
 import com.lelloman.pezzottify.android.domain.auth.AuthState
 import com.lelloman.pezzottify.android.domain.auth.AuthStore
 import com.lelloman.pezzottify.android.domain.config.ConfigStore
+import com.lelloman.pezzottify.android.domain.player.PlaybackMetadataProvider
+import com.lelloman.pezzottify.android.domain.player.TrackMetadata
+import com.lelloman.pezzottify.android.logger.LoggerFactory
 import com.lelloman.pezzottify.android.remoteapi.internal.OkHttpClientFactory
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 @AndroidEntryPoint
@@ -37,6 +54,22 @@ class PlaybackService : MediaSessionService() {
 
     @Inject
     internal lateinit var playerServiceEventsEmitter: PlayerServiceEventsEmitter
+
+    @Inject
+    lateinit var playbackMetadataProvider: PlaybackMetadataProvider
+
+    @Inject
+    lateinit var imageLoader: ImageLoader
+
+    @Inject
+    lateinit var loggerFactory: LoggerFactory
+
+    private val logger by lazy { loggerFactory.getLogger("PlaybackService") }
+
+    private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+    private var metadataObserverJob: Job? = null
+    private var artworkLoadJob: Job? = null
+    private var currentArtworkUrl: String? = null
 
     private val authToken get() = (authStore.getAuthState().value as? AuthState.LoggedIn)?.authToken.orEmpty()
 
@@ -92,9 +125,112 @@ class PlaybackService : MediaSessionService() {
             IntentFilter(AudioManager.ACTION_AUDIO_BECOMING_NOISY),
             ContextCompat.RECEIVER_NOT_EXPORTED
         )
+        startObservingMetadata()
+    }
+
+    private fun startObservingMetadata() {
+        metadataObserverJob?.cancel()
+        metadataObserverJob = serviceScope.launch {
+            playbackMetadataProvider.queueState.collectLatest { queueState ->
+                val currentTrack = queueState?.currentTrack
+                if (currentTrack != null) {
+                    updateMediaSessionMetadata(currentTrack)
+                } else {
+                    clearMediaSessionMetadata()
+                }
+            }
+        }
+    }
+
+    private fun updateMediaSessionMetadata(track: TrackMetadata) {
+        logger.info("Updating media session metadata: ${track.trackName} by ${track.artistNames.joinToString()}")
+
+        val metadata = MediaMetadata.Builder()
+            .setTitle(track.trackName)
+            .setArtist(track.artistNames.joinToString(", "))
+            .setAlbumTitle(track.albumName)
+            .build()
+
+        // Update the current MediaItem with new metadata
+        updateCurrentMediaItemMetadata(metadata)
+
+        // Load artwork asynchronously if URL changed
+        val artworkUrl = track.artworkUrl
+        if (artworkUrl != null && artworkUrl != currentArtworkUrl) {
+            currentArtworkUrl = artworkUrl
+            loadArtworkAsync(artworkUrl, track)
+        }
+    }
+
+    @OptIn(UnstableApi::class)
+    private fun updateCurrentMediaItemMetadata(metadata: MediaMetadata) {
+        val exoPlayer = player ?: return
+        val currentIndex = exoPlayer.currentMediaItemIndex
+        if (currentIndex < 0 || currentIndex >= exoPlayer.mediaItemCount) return
+
+        val currentItem = exoPlayer.getMediaItemAt(currentIndex)
+        val updatedItem = currentItem.buildUpon()
+            .setMediaMetadata(metadata)
+            .build()
+
+        exoPlayer.replaceMediaItem(currentIndex, updatedItem)
+    }
+
+    private fun loadArtworkAsync(artworkUrl: String, track: TrackMetadata) {
+        artworkLoadJob?.cancel()
+        artworkLoadJob = serviceScope.launch(Dispatchers.IO) {
+            logger.debug("Loading artwork from: $artworkUrl")
+            try {
+                val request = ImageRequest.Builder(this@PlaybackService)
+                    .data(artworkUrl)
+                    .allowHardware(false) // Required to get a software bitmap
+                    .build()
+
+                val result = imageLoader.execute(request)
+                if (result is SuccessResult) {
+                    val bitmap = result.image.toBitmap()
+                    logger.debug("Artwork loaded successfully: ${bitmap.width}x${bitmap.height}")
+                    updateMediaSessionWithArtwork(track, bitmap)
+                } else {
+                    logger.warn("Failed to load artwork: $result")
+                }
+            } catch (e: Exception) {
+                logger.error("Error loading artwork", e)
+            }
+        }
+    }
+
+    private fun updateMediaSessionWithArtwork(track: TrackMetadata, artwork: Bitmap) {
+        serviceScope.launch(Dispatchers.Main) {
+            val metadata = MediaMetadata.Builder()
+                .setTitle(track.trackName)
+                .setArtist(track.artistNames.joinToString(", "))
+                .setAlbumTitle(track.albumName)
+                .setArtworkData(bitmapToByteArray(artwork), MediaMetadata.PICTURE_TYPE_FRONT_COVER)
+                .build()
+
+            updateCurrentMediaItemMetadata(metadata)
+            logger.info("Media session updated with artwork")
+        }
+    }
+
+    private fun bitmapToByteArray(bitmap: Bitmap): ByteArray {
+        val stream = java.io.ByteArrayOutputStream()
+        bitmap.compress(Bitmap.CompressFormat.PNG, 100, stream)
+        return stream.toByteArray()
+    }
+
+    private fun clearMediaSessionMetadata() {
+        currentArtworkUrl = null
+        artworkLoadJob?.cancel()
+        // Clear metadata by updating with empty metadata
+        updateCurrentMediaItemMetadata(MediaMetadata.EMPTY)
     }
 
     override fun onDestroy() {
+        metadataObserverJob?.cancel()
+        artworkLoadJob?.cancel()
+        serviceScope.cancel()
         unregisterReceiver(becomingNoisyReceiver)
         mediaSession?.run {
             player.release()
