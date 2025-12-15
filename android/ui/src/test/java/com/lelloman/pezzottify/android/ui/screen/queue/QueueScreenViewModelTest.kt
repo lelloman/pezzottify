@@ -1,18 +1,8 @@
 package com.lelloman.pezzottify.android.ui.screen.queue
 
 import com.google.common.truth.Truth.assertThat
-import com.lelloman.pezzottify.android.ui.content.Album
-import com.lelloman.pezzottify.android.ui.content.Artist
-import com.lelloman.pezzottify.android.ui.content.ArtistDiscography
-import com.lelloman.pezzottify.android.ui.content.Content
-import com.lelloman.pezzottify.android.ui.content.ContentResolver
-import com.lelloman.pezzottify.android.ui.content.SearchResultContent
-import com.lelloman.pezzottify.android.ui.content.Track
 import com.lelloman.pezzottify.android.ui.content.ArtistInfo
-import com.lelloman.pezzottify.android.ui.model.PlaybackPlaylist
-import com.lelloman.pezzottify.android.ui.model.PlaybackPlaylistContext
 import com.lelloman.pezzottify.android.ui.screen.main.library.UiUserPlaylist
-import com.lelloman.pezzottify.android.ui.screen.main.search.SearchScreenViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
@@ -33,14 +23,12 @@ class QueueScreenViewModelTest {
     private val testDispatcher = StandardTestDispatcher()
 
     private lateinit var fakeInteractor: FakeInteractor
-    private lateinit var fakeContentResolver: FakeContentResolver
     private lateinit var viewModel: QueueScreenViewModel
 
     @Before
     fun setUp() {
         Dispatchers.setMain(testDispatcher)
         fakeInteractor = FakeInteractor()
-        fakeContentResolver = FakeContentResolver()
     }
 
     @After
@@ -51,7 +39,6 @@ class QueueScreenViewModelTest {
     private fun createViewModel() {
         viewModel = QueueScreenViewModel(
             interactor = fakeInteractor,
-            contentResolver = fakeContentResolver,
         )
     }
 
@@ -63,8 +50,8 @@ class QueueScreenViewModelTest {
     }
 
     @Test
-    fun `state shows error when playlist is null`() = runTest {
-        fakeInteractor.playbackPlaylistFlow.value = null
+    fun `state shows error when queue state is null`() = runTest {
+        fakeInteractor.queueStateFlow.value = null
 
         createViewModel()
         advanceUntilIdle()
@@ -74,13 +61,19 @@ class QueueScreenViewModelTest {
     }
 
     @Test
-    fun `state shows tracks from playlist`() = runTest {
-        val playlist = PlaybackPlaylist(
-            tracksIds = listOf("track-1", "track-2", "track-3"),
-            context = PlaybackPlaylistContext.Album("album-1"),
+    fun `state shows tracks from queue`() = runTest {
+        val queueState = QueueScreenViewModel.Interactor.QueueState(
+            tracks = listOf(
+                createQueueTrack("track-1"),
+                createQueueTrack("track-2"),
+                createQueueTrack("track-3"),
+            ),
+            currentIndex = 1,
+            contextName = "Test Album",
+            contextType = QueueContextType.Album,
+            canSaveAsPlaylist = false,
         )
-        fakeInteractor.playbackPlaylistFlow.value = playlist
-        fakeInteractor.currentTrackIndexFlow.value = 1
+        fakeInteractor.queueStateFlow.value = queueState
 
         createViewModel()
         advanceUntilIdle()
@@ -93,9 +86,12 @@ class QueueScreenViewModelTest {
 
     @Test
     fun `state shows Album context type for album playlist`() = runTest {
-        fakeInteractor.playbackPlaylistFlow.value = PlaybackPlaylist(
-            tracksIds = listOf("track-1"),
-            context = PlaybackPlaylistContext.Album("album-1"),
+        fakeInteractor.queueStateFlow.value = QueueScreenViewModel.Interactor.QueueState(
+            tracks = listOf(createQueueTrack("track-1")),
+            currentIndex = 0,
+            contextName = "album-1",
+            contextType = QueueContextType.Album,
+            canSaveAsPlaylist = false,
         )
 
         createViewModel()
@@ -108,9 +104,12 @@ class QueueScreenViewModelTest {
 
     @Test
     fun `state shows UserPlaylist context type for user playlist`() = runTest {
-        fakeInteractor.playbackPlaylistFlow.value = PlaybackPlaylist(
-            tracksIds = listOf("track-1"),
-            context = PlaybackPlaylistContext.UserPlaylist("playlist-1", isEdited = true),
+        fakeInteractor.queueStateFlow.value = QueueScreenViewModel.Interactor.QueueState(
+            tracks = listOf(createQueueTrack("track-1")),
+            currentIndex = 0,
+            contextName = "playlist-1",
+            contextType = QueueContextType.UserPlaylist,
+            canSaveAsPlaylist = true,
         )
 
         createViewModel()
@@ -123,9 +122,12 @@ class QueueScreenViewModelTest {
 
     @Test
     fun `state shows UserMix context type for user mix`() = runTest {
-        fakeInteractor.playbackPlaylistFlow.value = PlaybackPlaylist(
-            tracksIds = listOf("track-1"),
-            context = PlaybackPlaylistContext.UserMix,
+        fakeInteractor.queueStateFlow.value = QueueScreenViewModel.Interactor.QueueState(
+            tracks = listOf(createQueueTrack("track-1")),
+            currentIndex = 0,
+            contextName = "",
+            contextType = QueueContextType.UserMix,
+            canSaveAsPlaylist = true,
         )
 
         createViewModel()
@@ -137,9 +139,12 @@ class QueueScreenViewModelTest {
 
     @Test
     fun `clickOnTrack calls interactor playTrackAtIndex`() = runTest {
-        fakeInteractor.playbackPlaylistFlow.value = PlaybackPlaylist(
-            tracksIds = listOf("track-1", "track-2"),
-            context = PlaybackPlaylistContext.UserMix,
+        fakeInteractor.queueStateFlow.value = QueueScreenViewModel.Interactor.QueueState(
+            tracks = listOf(createQueueTrack("track-1"), createQueueTrack("track-2")),
+            currentIndex = 0,
+            contextName = "",
+            contextType = QueueContextType.UserMix,
+            canSaveAsPlaylist = true,
         )
 
         createViewModel()
@@ -152,9 +157,16 @@ class QueueScreenViewModelTest {
 
     @Test
     fun `moveTrack calls interactor moveTrack`() = runTest {
-        fakeInteractor.playbackPlaylistFlow.value = PlaybackPlaylist(
-            tracksIds = listOf("track-1", "track-2", "track-3"),
-            context = PlaybackPlaylistContext.UserMix,
+        fakeInteractor.queueStateFlow.value = QueueScreenViewModel.Interactor.QueueState(
+            tracks = listOf(
+                createQueueTrack("track-1"),
+                createQueueTrack("track-2"),
+                createQueueTrack("track-3"),
+            ),
+            currentIndex = 0,
+            contextName = "",
+            contextType = QueueContextType.UserMix,
+            canSaveAsPlaylist = true,
         )
 
         createViewModel()
@@ -168,9 +180,12 @@ class QueueScreenViewModelTest {
 
     @Test
     fun `removeTrack calls interactor removeTrack`() = runTest {
-        fakeInteractor.playbackPlaylistFlow.value = PlaybackPlaylist(
-            tracksIds = listOf("track-1", "track-2"),
-            context = PlaybackPlaylistContext.UserMix,
+        fakeInteractor.queueStateFlow.value = QueueScreenViewModel.Interactor.QueueState(
+            tracks = listOf(createQueueTrack("track-1"), createQueueTrack("track-2")),
+            currentIndex = 0,
+            contextName = "",
+            contextType = QueueContextType.UserMix,
+            canSaveAsPlaylist = true,
         )
 
         createViewModel()
@@ -181,18 +196,52 @@ class QueueScreenViewModelTest {
         assertThat(fakeInteractor.lastRemovedTrackId).isEqualTo("track-1")
     }
 
+    @Test
+    fun `state maps track metadata correctly`() = runTest {
+        val queueTrack = QueueScreenViewModel.Interactor.QueueTrack(
+            trackId = "track-123",
+            trackName = "Amazing Song",
+            albumId = "album-456",
+            artists = listOf(ArtistInfo("artist-1", "Artist One")),
+            durationSeconds = 240,
+        )
+        fakeInteractor.queueStateFlow.value = QueueScreenViewModel.Interactor.QueueState(
+            tracks = listOf(queueTrack),
+            currentIndex = 0,
+            contextName = "Test Album",
+            contextType = QueueContextType.Album,
+            canSaveAsPlaylist = false,
+        )
+
+        createViewModel()
+        advanceUntilIdle()
+
+        val track = viewModel.state.value.tracks.first()
+        assertThat(track.trackId).isEqualTo("track-123")
+        assertThat(track.trackName).isEqualTo("Amazing Song")
+        assertThat(track.albumId).isEqualTo("album-456")
+        assertThat(track.artists).hasSize(1)
+        assertThat(track.artists.first().name).isEqualTo("Artist One")
+        assertThat(track.durationSeconds).isEqualTo(240)
+    }
+
+    private fun createQueueTrack(trackId: String) = QueueScreenViewModel.Interactor.QueueTrack(
+        trackId = trackId,
+        trackName = "Track $trackId",
+        albumId = "album-1",
+        artists = emptyList(),
+        durationSeconds = 180,
+    )
+
     private class FakeInteractor : QueueScreenViewModel.Interactor {
-        val playbackPlaylistFlow = MutableStateFlow<PlaybackPlaylist?>(null)
-        val currentTrackIndexFlow = MutableStateFlow<Int?>(null)
+        val queueStateFlow = MutableStateFlow<QueueScreenViewModel.Interactor.QueueState?>(null)
 
         var lastPlayedIndex: Int? = null
         var lastMoveFrom: Int? = null
         var lastMoveTo: Int? = null
         var lastRemovedTrackId: String? = null
 
-        override fun getPlaybackPlaylist(): Flow<PlaybackPlaylist?> = playbackPlaylistFlow
-
-        override fun getCurrentTrackIndex(): Flow<Int?> = currentTrackIndexFlow
+        override fun getQueueState(): Flow<QueueScreenViewModel.Interactor.QueueState?> = queueStateFlow
 
         override fun playTrackAtIndex(index: Int) {
             lastPlayedIndex = index
@@ -230,24 +279,5 @@ class QueueScreenViewModelTest {
         override fun isLiked(trackId: String): Flow<Boolean> = flowOf(false)
 
         override fun getUserPlaylists(): Flow<List<UiUserPlaylist>> = flowOf(emptyList())
-    }
-
-    private class FakeContentResolver : ContentResolver {
-        override fun resolveSearchResult(
-            itemId: String,
-            itemType: SearchScreenViewModel.SearchedItemType
-        ): Flow<Content<SearchResultContent>> = flowOf(Content.Loading(itemId))
-
-        override fun resolveArtist(artistId: String): Flow<Content<Artist>> =
-            flowOf(Content.Loading(artistId))
-
-        override fun resolveAlbum(albumId: String): Flow<Content<Album>> =
-            flowOf(Content.Loading(albumId))
-
-        override fun resolveTrack(trackId: String): Flow<Content<Track>> =
-            flowOf(Content.Resolved(trackId, Track(trackId, "Track $trackId", "album-1", emptyList(), 180)))
-
-        override fun resolveArtistDiscography(artistId: String): Flow<Content<ArtistDiscography>> =
-            flowOf(Content.Loading(artistId))
     }
 }

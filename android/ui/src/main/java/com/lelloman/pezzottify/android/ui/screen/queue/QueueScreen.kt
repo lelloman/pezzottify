@@ -67,7 +67,6 @@ import com.lelloman.pezzottify.android.ui.component.ScrollingArtistsRow
 import com.lelloman.pezzottify.android.ui.component.bottomsheet.PlaylistPickerBottomSheet
 import com.lelloman.pezzottify.android.ui.component.bottomsheet.TrackActionsBottomSheet
 import com.lelloman.pezzottify.android.ui.component.dialog.CreatePlaylistDialog
-import com.lelloman.pezzottify.android.ui.content.Content
 import com.lelloman.pezzottify.android.ui.content.Track
 import com.lelloman.pezzottify.android.ui.toAlbum
 import com.lelloman.pezzottify.android.ui.toTrack
@@ -96,14 +95,14 @@ private fun QueueScreenContent(
     val playlistPickerSheetState = rememberModalBottomSheetState()
 
     // Selected item for bottom sheets
-    var selectedTrack by remember { mutableStateOf<Track?>(null) }
+    var selectedTrackItem by remember { mutableStateOf<QueueTrackItem?>(null) }
     var selectedTrackIsLiked by remember { mutableStateOf(false) }
     var showPlaylistPicker by remember { mutableStateOf(false) }
     var showCreatePlaylistDialog by remember { mutableStateOf(false) }
 
     // Collect like state for the selected track
-    selectedTrack?.let { track ->
-        val likeState by actions.getTrackLikeState(track.id).collectAsState(initial = false)
+    selectedTrackItem?.let { trackItem ->
+        val likeState by actions.getTrackLikeState(trackItem.trackId).collectAsState(initial = false)
         selectedTrackIsLiked = likeState
     }
 
@@ -165,35 +164,43 @@ private fun QueueScreenContent(
                 tracks = state.tracks,
                 currentTrackIndex = state.currentTrackIndex,
                 actions = actions,
-                onTrackMoreClick = { track -> selectedTrack = track },
+                onTrackMoreClick = { trackItem -> selectedTrackItem = trackItem },
                 modifier = Modifier.padding(innerPadding),
             )
         }
     }
 
     // Track actions bottom sheet
-    selectedTrack?.let { track ->
+    selectedTrackItem?.let { trackItem ->
+        // Convert QueueTrackItem to Track for the bottom sheet
+        val track = Track(
+            id = trackItem.trackId,
+            name = trackItem.trackName,
+            albumId = trackItem.albumId,
+            artists = trackItem.artists,
+            durationSeconds = trackItem.durationSeconds,
+        )
         TrackActionsBottomSheet(
             track = track,
             sheetState = trackSheetState,
-            onDismiss = { selectedTrack = null },
+            onDismiss = { selectedTrackItem = null },
             onAddToQueue = {
-                actions.addTrackToQueue(track.id)
+                actions.addTrackToQueue(trackItem.trackId)
                 showSnackbar(context.getString(R.string.added_to_queue))
             },
             onAddToPlaylist = {
-                pendingAddToPlaylistTrackId = track.id
+                pendingAddToPlaylistTrackId = trackItem.trackId
                 showPlaylistPicker = true
             },
             onViewTrack = {
-                navController.toTrack(track.id)
+                navController.toTrack(trackItem.trackId)
             },
             onViewAlbum = {
-                navController.toAlbum(track.albumId)
+                navController.toAlbum(trackItem.albumId)
             },
             isLiked = selectedTrackIsLiked,
             onToggleLike = {
-                actions.toggleTrackLike(track.id, selectedTrackIsLiked)
+                actions.toggleTrackLike(trackItem.trackId, selectedTrackIsLiked)
             },
         )
     }
@@ -253,7 +260,7 @@ private fun QueueList(
     tracks: List<QueueTrackItem>,
     currentTrackIndex: Int?,
     actions: QueueScreenActions,
-    onTrackMoreClick: (Track) -> Unit,
+    onTrackMoreClick: (QueueTrackItem) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val listState = rememberLazyListState()
@@ -275,16 +282,13 @@ private fun QueueList(
             items = tracks,
             key = { index, item -> "$index-${item.trackId}" }
         ) { index, trackItem ->
-            val trackContent by trackItem.trackFlow.collectAsState(initial = Content.Loading(trackItem.trackId))
-
             SwipeableQueueItem(
                 index = index,
-                trackId = trackItem.trackId,
-                trackContent = trackContent,
+                trackItem = trackItem,
                 isCurrentTrack = index == currentTrackIndex,
                 onPlayTrack = { actions.clickOnTrack(index) },
                 onRemoveTrack = { actions.removeTrack(trackItem.trackId) },
-                onMoreClick = { track -> onTrackMoreClick(track) },
+                onMoreClick = { onTrackMoreClick(trackItem) },
             )
         }
     }
@@ -296,12 +300,11 @@ private const val UNDO_TIMEOUT_MS = 5000L
 @Composable
 private fun SwipeableQueueItem(
     index: Int,
-    trackId: String,
-    trackContent: Content<Track>,
+    trackItem: QueueTrackItem,
     isCurrentTrack: Boolean,
     onPlayTrack: () -> Unit,
     onRemoveTrack: () -> Unit,
-    onMoreClick: (Track) -> Unit,
+    onMoreClick: () -> Unit,
 ) {
     var isPendingDeletion by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
@@ -334,7 +337,7 @@ private fun SwipeableQueueItem(
     if (isPendingDeletion) {
         // Show undo placeholder
         PendingDeletionItem(
-            trackName = (trackContent as? Content.Resolved)?.data?.name ?: stringResource(R.string.track_fallback),
+            trackName = trackItem.trackName,
             onUndo = { isPendingDeletion = false }
         )
     } else {
@@ -366,9 +369,9 @@ private fun SwipeableQueueItem(
                 }
             },
             content = {
-                QueueTrackItem(
+                QueueTrackItemRow(
                     index = index,
-                    trackContent = trackContent,
+                    trackItem = trackItem,
                     isCurrentTrack = isCurrentTrack,
                     onClick = onPlayTrack,
                     onMoreClick = onMoreClick,
@@ -408,12 +411,12 @@ private fun PendingDeletionItem(
 }
 
 @Composable
-private fun QueueTrackItem(
+private fun QueueTrackItemRow(
     index: Int,
-    trackContent: Content<Track>,
+    trackItem: QueueTrackItem,
     isCurrentTrack: Boolean,
     onClick: () -> Unit,
-    onMoreClick: (Track) -> Unit,
+    onMoreClick: () -> Unit,
 ) {
     val elevation by animateDpAsState(
         if (isCurrentTrack) 4.dp else 0.dp,
@@ -432,85 +435,55 @@ private fun QueueTrackItem(
         MaterialTheme.colorScheme.onSurface
     }
 
-    when (trackContent) {
-        is Content.Loading -> {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(backgroundColor)
-                    .padding(horizontal = 16.dp, vertical = 12.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                CircularProgressIndicator(modifier = Modifier.size(24.dp))
-            }
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .shadow(elevation)
+            .background(backgroundColor)
+            .clickable(onClick = onClick)
+            .padding(start = 16.dp, top = 12.dp, bottom = 12.dp, end = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        // Track number
+        Text(
+            text = "${index + 1}",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.width(32.dp),
+        )
+
+        // Track info
+        Column(
+            modifier = Modifier.weight(1f)
+        ) {
+            Text(
+                text = trackItem.trackName,
+                style = MaterialTheme.typography.bodyLarge,
+                color = textColor,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            ScrollingArtistsRow(
+                artists = trackItem.artists
+            )
         }
-        is Content.Error -> {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(backgroundColor)
-                    .padding(horizontal = 16.dp, vertical = 12.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = stringResource(R.string.error_loading_track),
-                    color = MaterialTheme.colorScheme.error,
-                )
-            }
-        }
-        is Content.Resolved -> {
-            val track = trackContent.data
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .shadow(elevation)
-                    .background(backgroundColor)
-                    .clickable(onClick = onClick)
-                    .padding(start = 16.dp, top = 12.dp, bottom = 12.dp, end = 4.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                // Track number
-                Text(
-                    text = "${index + 1}",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.width(32.dp),
-                )
 
-                // Track info
-                Column(
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Text(
-                        text = track.name,
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = textColor,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    ScrollingArtistsRow(
-                        artists = track.artists
-                    )
-                }
+        // Duration
+        DurationText(
+            durationSeconds = trackItem.durationSeconds,
+            modifier = Modifier.padding(start = 8.dp)
+        )
 
-                // Duration
-                DurationText(
-                    durationSeconds = track.durationSeconds,
-                    modifier = Modifier.padding(start = 8.dp)
-                )
-
-                // More options button
-                IconButton(
-                    onClick = { onMoreClick(track) },
-                    modifier = Modifier.size(40.dp)
-                ) {
-                    Icon(
-                        painter = painterResource(R.drawable.baseline_more_vert_24),
-                        contentDescription = stringResource(R.string.more_options),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
+        // More options button
+        IconButton(
+            onClick = onMoreClick,
+            modifier = Modifier.size(40.dp)
+        ) {
+            Icon(
+                painter = painterResource(R.drawable.baseline_more_vert_24),
+                contentDescription = stringResource(R.string.more_options),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
     }
 }

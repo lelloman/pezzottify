@@ -1,12 +1,13 @@
 package com.lelloman.pezzottify.android.ui.screen.queue
 
-import com.lelloman.pezzottify.android.ui.content.Content
-import com.lelloman.pezzottify.android.ui.content.Track
-import kotlinx.coroutines.flow.Flow
+import com.lelloman.pezzottify.android.ui.content.ArtistInfo
 
 data class QueueTrackItem(
     val trackId: String,
-    val trackFlow: Flow<Content<Track>>,
+    val trackName: String,
+    val albumId: String,
+    val artists: List<ArtistInfo>,
+    val durationSeconds: Int,
 )
 
 data class QueueScreenState(
