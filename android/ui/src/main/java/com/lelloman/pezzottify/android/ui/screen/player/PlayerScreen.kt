@@ -298,7 +298,18 @@ private fun ProgressSection(
     onSeek: (Float) -> Unit,
 ) {
     var isDragging by remember { mutableFloatStateOf(-1f) }
-    val displayPercent = if (isDragging >= 0f) isDragging else progressPercent
+    var seekTarget by remember { mutableFloatStateOf(-1f) }
+
+    // Reset seek target once player state catches up (within 2%)
+    if (seekTarget >= 0f && abs(progressPercent - seekTarget) < 2f) {
+        seekTarget = -1f
+    }
+
+    val displayPercent = when {
+        isDragging >= 0f -> isDragging
+        seekTarget >= 0f -> seekTarget
+        else -> progressPercent
+    }
 
     Column(modifier = Modifier.fillMaxWidth()) {
         Slider(
@@ -307,6 +318,7 @@ private fun ProgressSection(
             onValueChangeFinished = {
                 if (isDragging >= 0f) {
                     onSeek(isDragging)
+                    seekTarget = isDragging
                     isDragging = -1f
                 }
             },
