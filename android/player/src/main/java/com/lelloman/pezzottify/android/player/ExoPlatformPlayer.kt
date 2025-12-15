@@ -2,12 +2,14 @@ package com.lelloman.pezzottify.android.player
 
 import android.content.ComponentName
 import android.content.Context
-import android.net.Uri
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
+import com.lelloman.pezzottify.android.domain.auth.AuthState
+import com.lelloman.pezzottify.android.domain.auth.AuthStore
+import com.lelloman.pezzottify.android.domain.config.ConfigStore
 import com.lelloman.pezzottify.android.logger.Logger
 import com.lelloman.pezzottify.android.logger.LoggerFactory
 import androidx.media3.session.MediaController
@@ -18,6 +20,7 @@ import com.lelloman.pezzottify.android.domain.player.MediaTrackInfo
 import com.lelloman.pezzottify.android.domain.player.PlatformPlayer
 import com.lelloman.pezzottify.android.domain.player.RepeatMode
 import com.lelloman.pezzottify.android.domain.player.VolumeState
+import com.lelloman.pezzottify.android.remoteapi.internal.OkHttpClientFactory
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.DelicateCoroutinesApi
 import kotlinx.coroutines.Dispatchers
@@ -32,6 +35,9 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import okhttp3.OkHttpClient
+import okhttp3.Request
 
 @OptIn(DelicateCoroutinesApi::class)
 @UnstableApi
@@ -39,10 +45,27 @@ internal class ExoPlatformPlayer(
     private val context: Context,
     playerServiceEventsEmitter: PlayerServiceEventsEmitter,
     loggerFactory: LoggerFactory,
+    okHttpClientFactory: OkHttpClientFactory,
+    private val authStore: AuthStore,
+    private val configStore: ConfigStore,
     private val coroutineScope: CoroutineScope = GlobalScope,
 ) : PlatformPlayer {
 
     private val logger: Logger by loggerFactory
+
+    private val authToken get() = (authStore.getAuthState().value as? AuthState.LoggedIn)?.authToken.orEmpty()
+
+    private val imageClient: OkHttpClient by lazy {
+        okHttpClientFactory.createBuilder(configStore.baseUrl.value)
+            .addInterceptor { chain ->
+                chain.proceed(
+                    chain.request().newBuilder()
+                        .addHeader("Authorization", authToken)
+                        .build()
+                )
+            }
+            .build()
+    }
 
     private var mediaController: MediaController? = null
 
@@ -202,30 +225,38 @@ internal class ExoPlatformPlayer(
     private fun loadPlaylistWhenMediaControllerIsReady(tracks: List<MediaTrackInfo>) {
         mediaController?.let { controller ->
             controller.clearMediaItems()
-            tracks.forEach { track ->
-                controller.addMediaItem(track.toMediaItem())
-            }
-            controller.prepare()
-            controller.playWhenReady = isPlaying.value
-            mutableIsActive.value = true
-            if (isPlaying.value) {
-                startProgressPolling()
-            }
-            // Apply pending track index if one was set before playlist was ready
-            pendingTrackIndex?.let { index ->
-                controller.seekTo(index, 0)
-                pendingTrackIndex = null
+            // Load artwork async and update media items
+            coroutineScope.launch {
+                val mediaItems = tracks.map { track -> track.toMediaItem() }
+                withContext(Dispatchers.Main) {
+                    mediaItems.forEach { controller.addMediaItem(it) }
+                    controller.prepare()
+                    controller.playWhenReady = isPlaying.value
+                    mutableIsActive.value = true
+                    if (isPlaying.value) {
+                        startProgressPolling()
+                    }
+                    // Apply pending track index if one was set before playlist was ready
+                    pendingTrackIndex?.let { index ->
+                        controller.seekTo(index, 0)
+                        pendingTrackIndex = null
+                    }
+                }
             }
         }
     }
 
-    private fun MediaTrackInfo.toMediaItem(): MediaItem {
+    private suspend fun MediaTrackInfo.toMediaItem(): MediaItem {
+        val artworkData = artworkUrl?.let { loadArtwork(it) }
+
         val metadata = MediaMetadata.Builder()
             .setTitle(title)
             .setArtist(artistName)
             .setAlbumTitle(albumName)
             .apply {
-                artworkUrl?.let { setArtworkUri(Uri.parse(it)) }
+                if (artworkData != null) {
+                    setArtworkData(artworkData, MediaMetadata.PICTURE_TYPE_FRONT_COVER)
+                }
             }
             .build()
 
@@ -234,6 +265,22 @@ internal class ExoPlatformPlayer(
             .setUri(streamUrl)
             .setMediaMetadata(metadata)
             .build()
+    }
+
+    private suspend fun loadArtwork(url: String): ByteArray? = withContext(Dispatchers.IO) {
+        try {
+            val request = Request.Builder().url(url).build()
+            val response = imageClient.newCall(request).execute()
+            if (response.isSuccessful) {
+                response.body?.bytes()
+            } else {
+                logger.warn("Failed to load artwork: ${response.code}")
+                null
+            }
+        } catch (e: Exception) {
+            logger.warn("Error loading artwork: ${e.message}")
+            null
+        }
     }
 
     override fun loadTrackIndex(loadTrackIndex: Int) {
@@ -325,8 +372,11 @@ internal class ExoPlatformPlayer(
 
     override fun addMediaItems(tracks: List<MediaTrackInfo>) {
         mediaController?.let { controller ->
-            tracks.forEach { track ->
-                controller.addMediaItem(track.toMediaItem())
+            coroutineScope.launch {
+                val mediaItems = tracks.map { track -> track.toMediaItem() }
+                withContext(Dispatchers.Main) {
+                    mediaItems.forEach { controller.addMediaItem(it) }
+                }
             }
         }
     }
