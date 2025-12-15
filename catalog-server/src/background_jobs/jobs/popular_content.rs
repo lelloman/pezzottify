@@ -6,9 +6,11 @@
 use crate::background_jobs::{
     context::JobContext,
     job::{BackgroundJob, HookEvent, JobError, JobSchedule, ShutdownBehavior},
+    JobAuditLogger,
 };
 use crate::user::user_models::{PopularAlbum, PopularArtist, PopularContent};
 use std::collections::HashMap;
+use std::sync::Arc;
 use std::time::Duration;
 use tracing::{debug, info};
 
@@ -93,6 +95,7 @@ impl BackgroundJob for PopularContentJob {
     }
 
     fn execute(&self, ctx: &JobContext) -> Result<(), JobError> {
+        let audit = JobAuditLogger::new(Arc::clone(&ctx.server_store), self.id());
         let (start_date, end_date) = self.compute_date_range();
 
         info!(
@@ -105,14 +108,29 @@ impl BackgroundJob for PopularContentJob {
             return Err(JobError::Cancelled);
         }
 
+        audit.log_started(Some(serde_json::json!({
+            "start_date": start_date,
+            "end_date": end_date,
+            "albums_limit": self.albums_limit,
+            "artists_limit": self.artists_limit,
+            "lookback_days": self.lookback_days,
+        })));
+
         // =====================================================================
         // Compute popular albums from top tracks
         // =====================================================================
         let track_limit = self.albums_limit * 5;
-        let top_tracks = ctx
+        let top_tracks = match ctx
             .user_store
             .get_top_tracks(start_date, end_date, track_limit)
-            .map_err(|e| JobError::ExecutionFailed(format!("Failed to get top tracks: {}", e)))?;
+        {
+            Ok(tracks) => tracks,
+            Err(e) => {
+                let error_msg = format!("Failed to get top tracks: {}", e);
+                audit.log_failed(&error_msg, None);
+                return Err(JobError::ExecutionFailed(error_msg));
+            }
+        };
 
         debug!(
             "Found {} top tracks for album computation",
@@ -142,12 +160,17 @@ impl BackgroundJob for PopularContentJob {
         // This ensures artists with many medium-popularity tracks aren't
         // underrepresented compared to artists with one viral hit.
         // =====================================================================
-        let all_track_counts = ctx
+        let all_track_counts = match ctx
             .user_store
             .get_all_track_play_counts(start_date, end_date)
-            .map_err(|e| {
-                JobError::ExecutionFailed(format!("Failed to get all track play counts: {}", e))
-            })?;
+        {
+            Ok(counts) => counts,
+            Err(e) => {
+                let error_msg = format!("Failed to get all track play counts: {}", e);
+                audit.log_failed(&error_msg, None);
+                return Err(JobError::ExecutionFailed(error_msg));
+            }
+        };
 
         debug!(
             "Found {} unique tracks for artist computation",
@@ -158,6 +181,12 @@ impl BackgroundJob for PopularContentJob {
             info!(
                 "No listening data found for the date range, skipping popular content computation"
             );
+            audit.log_completed(Some(serde_json::json!({
+                "skipped": true,
+                "reason": "no_listening_data",
+                "albums_count": 0,
+                "artists_count": 0,
+            })));
             return Ok(());
         }
 
@@ -293,6 +322,12 @@ impl BackgroundJob for PopularContentJob {
             popular_albums.len(),
             popular_artists.len()
         );
+
+        audit.log_completed(Some(serde_json::json!({
+            "albums_count": popular_albums.len(),
+            "artists_count": popular_artists.len(),
+            "tracks_analyzed": all_track_counts.len(),
+        })));
 
         Ok(())
     }

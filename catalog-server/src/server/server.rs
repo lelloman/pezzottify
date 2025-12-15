@@ -2144,6 +2144,108 @@ async fn post_challenge(State(_state): State<ServerState>) -> Response {
     todo!()
 }
 
+/// Get job audit log entries (all jobs).
+async fn admin_get_job_audit_log(
+    session: Session,
+    State(scheduler_handle): State<super::state::OptionalSchedulerHandle>,
+    Query(params): Query<std::collections::HashMap<String, String>>,
+) -> Response {
+    let handle = match scheduler_handle {
+        Some(h) => h,
+        None => {
+            return (
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(serde_json::json!({"error": "Job scheduler not available"})),
+            )
+                .into_response();
+        }
+    };
+
+    let limit = params
+        .get("limit")
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(50);
+    let offset = params
+        .get("offset")
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(0);
+
+    match handle.get_job_audit_log(limit, offset) {
+        Ok(entries) => {
+            debug!(
+                "User {} retrieved {} job audit log entries",
+                session.user_id,
+                entries.len()
+            );
+            (
+                StatusCode::OK,
+                Json(serde_json::json!({"entries": entries})),
+            )
+                .into_response()
+        }
+        Err(e) => {
+            error!("Failed to get job audit log: {}", e);
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"error": "Failed to get job audit log"})),
+            )
+                .into_response()
+        }
+    }
+}
+
+/// Get job audit log entries for a specific job.
+async fn admin_get_job_audit_log_by_job(
+    session: Session,
+    State(scheduler_handle): State<super::state::OptionalSchedulerHandle>,
+    Path(job_id): Path<String>,
+    Query(params): Query<std::collections::HashMap<String, String>>,
+) -> Response {
+    let handle = match scheduler_handle {
+        Some(h) => h,
+        None => {
+            return (
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(serde_json::json!({"error": "Job scheduler not available"})),
+            )
+                .into_response();
+        }
+    };
+
+    let limit = params
+        .get("limit")
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(50);
+    let offset = params
+        .get("offset")
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(0);
+
+    match handle.get_job_audit_log_by_job(&job_id, limit, offset) {
+        Ok(entries) => {
+            debug!(
+                "User {} retrieved {} job audit log entries for job {}",
+                session.user_id,
+                entries.len(),
+                job_id
+            );
+            (
+                StatusCode::OK,
+                Json(serde_json::json!({"entries": entries})),
+            )
+                .into_response()
+        }
+        Err(e) => {
+            error!("Failed to get job audit log for {}: {}", job_id, e);
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"error": "Failed to get job audit log"})),
+            )
+                .into_response()
+        }
+    }
+}
+
 // Admin endpoint types and handlers
 
 #[derive(Serialize)]
@@ -4555,9 +4657,11 @@ pub async fn make_app(
     let admin_server_routes: Router = Router::new()
         .route("/reboot", post(reboot_server))
         .route("/jobs", get(admin_list_jobs))
+        .route("/jobs/audit", get(admin_get_job_audit_log))
         .route("/jobs/{job_id}", get(admin_get_job))
         .route("/jobs/{job_id}/trigger", post(admin_trigger_job))
         .route("/jobs/{job_id}/history", get(admin_get_job_history))
+        .route("/jobs/{job_id}/audit", get(admin_get_job_audit_log_by_job))
         .layer(GovernorLayer::new(write_rate_limit.clone()))
         .route_layer(middleware::from_fn_with_state(
             state.clone(),

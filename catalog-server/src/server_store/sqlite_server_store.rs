@@ -134,6 +134,30 @@ impl SqliteServerStore {
             }),
         })
     }
+
+    fn row_to_audit_entry(row: &rusqlite::Row) -> rusqlite::Result<super::JobAuditEntry> {
+        let event_type_str: String = row.get("event_type")?;
+        let event_type = super::JobAuditEventType::parse(&event_type_str)
+            .unwrap_or(super::JobAuditEventType::Progress);
+
+        let timestamp_str: String = row.get("timestamp")?;
+        let timestamp = DateTime::parse_from_rfc3339(&timestamp_str)
+            .map(|dt| dt.with_timezone(&Utc).timestamp())
+            .unwrap_or_else(|_| Utc::now().timestamp());
+
+        let details_str: Option<String> = row.get("details")?;
+        let details = details_str.and_then(|s| serde_json::from_str(&s).ok());
+
+        Ok(super::JobAuditEntry {
+            id: row.get("id")?,
+            job_id: row.get("job_id")?,
+            event_type,
+            timestamp,
+            duration_ms: row.get("duration_ms")?,
+            details,
+            error: row.get("error")?,
+        })
+    }
 }
 
 impl ServerStore for SqliteServerStore {
@@ -299,6 +323,92 @@ impl ServerStore for SqliteServerStore {
         let conn = self.conn.lock().unwrap();
         conn.execute("DELETE FROM server_state WHERE key = ?1", params![key])?;
         Ok(())
+    }
+
+    fn log_job_audit(
+        &self,
+        job_id: &str,
+        event_type: super::JobAuditEventType,
+        duration_ms: Option<i64>,
+        details: Option<&serde_json::Value>,
+        error: Option<&str>,
+    ) -> Result<i64> {
+        let conn = self.conn.lock().unwrap();
+        let now = Self::format_datetime(&Utc::now());
+        let details_str = details.map(|d| d.to_string());
+
+        conn.execute(
+            "INSERT INTO job_audit_log (job_id, event_type, timestamp, duration_ms, details, error)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            params![
+                job_id,
+                event_type.as_str(),
+                now,
+                duration_ms,
+                details_str,
+                error
+            ],
+        )?;
+
+        Ok(conn.last_insert_rowid())
+    }
+
+    fn get_job_audit_log(&self, limit: usize, offset: usize) -> Result<Vec<super::JobAuditEntry>> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare(
+            "SELECT id, job_id, event_type, timestamp, duration_ms, details, error
+             FROM job_audit_log
+             ORDER BY timestamp DESC
+             LIMIT ?1 OFFSET ?2",
+        )?;
+
+        let entries = stmt
+            .query_map(
+                params![limit as i64, offset as i64],
+                Self::row_to_audit_entry,
+            )?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+
+        Ok(entries)
+    }
+
+    fn get_job_audit_log_by_job(
+        &self,
+        job_id: &str,
+        limit: usize,
+        offset: usize,
+    ) -> Result<Vec<super::JobAuditEntry>> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare(
+            "SELECT id, job_id, event_type, timestamp, duration_ms, details, error
+             FROM job_audit_log
+             WHERE job_id = ?1
+             ORDER BY timestamp DESC
+             LIMIT ?2 OFFSET ?3",
+        )?;
+
+        let entries = stmt
+            .query_map(
+                params![job_id, limit as i64, offset as i64],
+                Self::row_to_audit_entry,
+            )?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+
+        Ok(entries)
+    }
+
+    fn cleanup_old_job_audit_entries(&self, before_timestamp: i64) -> Result<usize> {
+        let conn = self.conn.lock().unwrap();
+        let cutoff = chrono::DateTime::from_timestamp(before_timestamp, 0)
+            .map(|dt| Self::format_datetime(&dt.with_timezone(&Utc)))
+            .unwrap_or_default();
+
+        let deleted = conn.execute(
+            "DELETE FROM job_audit_log WHERE timestamp < ?1",
+            params![cutoff],
+        )?;
+
+        Ok(deleted)
     }
 }
 

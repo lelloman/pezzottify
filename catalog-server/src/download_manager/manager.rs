@@ -1053,7 +1053,10 @@ impl DownloadManager {
     }
 
     /// Execute artist related download - fetches related artist IDs and saves them.
-    async fn execute_artist_related_download(&self, item: &QueueItem) -> Result<u64, DownloadError> {
+    async fn execute_artist_related_download(
+        &self,
+        item: &QueueItem,
+    ) -> Result<u64, DownloadError> {
         info!("Fetching related artists for: {}", item.content_id);
 
         // 1. Fetch artist metadata from downloader
@@ -1093,7 +1096,10 @@ impl DownloadManager {
     }
 
     /// Execute artist metadata download - fetches full artist and creates record.
-    async fn execute_artist_metadata_download(&self, item: &QueueItem) -> Result<u64, DownloadError> {
+    async fn execute_artist_metadata_download(
+        &self,
+        item: &QueueItem,
+    ) -> Result<u64, DownloadError> {
         info!("Fetching artist metadata for: {}", item.content_id);
 
         // 1. Fetch artist metadata from downloader
@@ -1109,16 +1115,15 @@ impl DownloadManager {
             })?;
 
         // 2. Ingest artist and images into catalog
-        let image_ids = super::catalog_ingestion::ingest_artist(
-            self.catalog_store.as_ref(),
-            &artist,
-        )
-        .map_err(|e| {
-            DownloadError::new(
-                DownloadErrorType::Storage,
-                format!("Failed to ingest artist to catalog: {}", e),
-            )
-        })?;
+        let image_ids =
+            super::catalog_ingestion::ingest_artist(self.catalog_store.as_ref(), &artist).map_err(
+                |e| {
+                    DownloadError::new(
+                        DownloadErrorType::Storage,
+                        format!("Failed to ingest artist to catalog: {}", e),
+                    )
+                },
+            )?;
 
         // 3. Queue portrait image downloads
         for image_id in &image_ids {
