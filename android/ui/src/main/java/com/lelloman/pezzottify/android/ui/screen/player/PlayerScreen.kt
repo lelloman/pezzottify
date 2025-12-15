@@ -511,7 +511,10 @@ private fun VolumeControl(
 
         Slider(
             value = if (isMuted) 0f else volume,
-            onValueChange = onVolumeChange,
+            onValueChange = {
+                if (isMuted) onToggleMute()
+                onVolumeChange(it)
+            },
             modifier = Modifier.weight(1f),
             colors = SliderDefaults.colors(
                 thumbColor = MaterialTheme.colorScheme.primary,
