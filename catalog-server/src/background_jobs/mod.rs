@@ -3,12 +3,14 @@
 //! This module provides infrastructure for running periodic and event-triggered
 //! background tasks like search reindexing, cache precomputation, and event log pruning.
 
+mod audit_logger;
 mod context;
 mod handle;
 mod job;
 pub mod jobs;
 mod scheduler;
 
+pub use audit_logger::JobAuditLogger;
 pub use context::JobContext;
 pub use handle::{JobInfo, SchedulerHandle};
 pub use job::{BackgroundJob, HookEvent, JobError, JobSchedule, ShutdownBehavior};

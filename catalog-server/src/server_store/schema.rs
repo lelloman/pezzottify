@@ -40,4 +40,22 @@ pub const SERVER_VERSIONED_SCHEMAS: &[ServerSchema] = &[
             );
         "#,
     },
+    ServerSchema {
+        version: 3,
+        up: r#"
+            CREATE TABLE job_audit_log (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                job_id TEXT NOT NULL,
+                event_type TEXT NOT NULL,
+                timestamp TEXT NOT NULL,
+                duration_ms INTEGER,
+                details TEXT,
+                error TEXT
+            );
+
+            CREATE INDEX idx_job_audit_log_job_id ON job_audit_log(job_id);
+            CREATE INDEX idx_job_audit_log_timestamp ON job_audit_log(timestamp DESC);
+            CREATE INDEX idx_job_audit_log_event_type ON job_audit_log(event_type);
+        "#,
+    },
 ];

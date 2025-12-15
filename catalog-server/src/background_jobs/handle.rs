@@ -1,5 +1,5 @@
 use super::job::{BackgroundJob, JobError, JobSchedule};
-use crate::server_store::{JobRun, ServerStore};
+use crate::server_store::{JobAuditEntry, JobRun, ServerStore};
 use anyhow::Result;
 use serde::Serialize;
 use std::collections::HashMap;
@@ -219,6 +219,22 @@ impl SchedulerHandle {
     pub async fn job_exists(&self, job_id: &str) -> bool {
         let state = self.shared_state.read().await;
         state.jobs.contains_key(job_id)
+    }
+
+    /// Get job audit log entries (all jobs).
+    pub fn get_job_audit_log(&self, limit: usize, offset: usize) -> Result<Vec<JobAuditEntry>> {
+        self.server_store.get_job_audit_log(limit, offset)
+    }
+
+    /// Get job audit log entries for a specific job.
+    pub fn get_job_audit_log_by_job(
+        &self,
+        job_id: &str,
+        limit: usize,
+        offset: usize,
+    ) -> Result<Vec<JobAuditEntry>> {
+        self.server_store
+            .get_job_audit_log_by_job(job_id, limit, offset)
     }
 }
 

@@ -6,6 +6,7 @@
 use crate::background_jobs::{
     context::JobContext,
     job::{BackgroundJob, JobError, JobSchedule, ShutdownBehavior},
+    JobAuditLogger,
 };
 use crate::download_manager::DownloadQueueStore;
 use std::sync::Arc;
@@ -55,10 +56,16 @@ impl BackgroundJob for AuditLogCleanupJob {
     }
 
     fn execute(&self, ctx: &JobContext) -> Result<(), JobError> {
+        let audit = JobAuditLogger::new(Arc::clone(&ctx.server_store), self.id());
+
         // Check for cancellation before starting
         if ctx.is_cancelled() {
             return Err(JobError::Cancelled);
         }
+
+        audit.log_started(Some(serde_json::json!({
+            "retention_days": self.retention_days,
+        })));
 
         // Calculate cutoff timestamp
         let now = std::time::SystemTime::now()
@@ -72,16 +79,38 @@ impl BackgroundJob for AuditLogCleanupJob {
             self.retention_days, cutoff
         );
 
-        let deleted = self
-            .queue_store
-            .cleanup_old_audit_entries(cutoff)
-            .map_err(|e| JobError::ExecutionFailed(e.to_string()))?;
+        // Clean up download manager audit entries
+        let download_deleted = match self.queue_store.cleanup_old_audit_entries(cutoff) {
+            Ok(count) => count,
+            Err(e) => {
+                audit.log_failed(&e.to_string(), None);
+                return Err(JobError::ExecutionFailed(e.to_string()));
+            }
+        };
 
-        if deleted > 0 {
-            info!("Deleted {} old audit log entries", deleted);
+        // Also clean up job audit log entries
+        let job_deleted = ctx
+            .server_store
+            .cleanup_old_job_audit_entries(cutoff)
+            .unwrap_or(0);
+
+        let total_deleted = download_deleted + job_deleted;
+
+        if total_deleted > 0 {
+            info!(
+                "Deleted {} old audit log entries ({} download, {} job)",
+                total_deleted, download_deleted, job_deleted
+            );
         } else {
             info!("No audit log entries to clean up");
         }
+
+        audit.log_completed(Some(serde_json::json!({
+            "download_entries_deleted": download_deleted,
+            "job_entries_deleted": job_deleted,
+            "total_deleted": total_deleted,
+            "cutoff_timestamp": cutoff,
+        })));
 
         Ok(())
     }

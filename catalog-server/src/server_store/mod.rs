@@ -30,4 +30,22 @@ pub trait ServerStore: Send + Sync {
     fn get_state(&self, key: &str) -> Result<Option<String>>;
     fn set_state(&self, key: &str, value: &str) -> Result<()>;
     fn delete_state(&self, key: &str) -> Result<()>;
+
+    // Job audit log
+    fn log_job_audit(
+        &self,
+        job_id: &str,
+        event_type: JobAuditEventType,
+        duration_ms: Option<i64>,
+        details: Option<&serde_json::Value>,
+        error: Option<&str>,
+    ) -> Result<i64>;
+    fn get_job_audit_log(&self, limit: usize, offset: usize) -> Result<Vec<JobAuditEntry>>;
+    fn get_job_audit_log_by_job(
+        &self,
+        job_id: &str,
+        limit: usize,
+        offset: usize,
+    ) -> Result<Vec<JobAuditEntry>>;
+    fn cleanup_old_job_audit_entries(&self, before_timestamp: i64) -> Result<usize>;
 }

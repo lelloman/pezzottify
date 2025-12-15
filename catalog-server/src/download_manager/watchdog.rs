@@ -87,10 +87,8 @@ impl IntegrityWatchdog {
         )?;
 
         // Queue artist enrichment items
-        let (enrichment_queued, enrichment_skipped) = self.queue_artist_enrichment(
-            &artists_without_related,
-            &orphan_related_artist_ids,
-        )?;
+        let (enrichment_queued, enrichment_skipped) =
+            self.queue_artist_enrichment(&artists_without_related, &orphan_related_artist_ids)?;
         items_queued += enrichment_queued;
         items_skipped += enrichment_skipped;
 
@@ -325,10 +323,7 @@ impl IntegrityWatchdog {
         // Queue artists without related artists
         for artist_id in artists_without_related {
             if self.is_already_in_queue(DownloadContentType::ArtistRelated, artist_id)? {
-                debug!(
-                    "Artist related {} already in queue, skipping",
-                    artist_id
-                );
+                debug!("Artist related {} already in queue, skipping", artist_id);
                 skipped += 1;
                 continue;
             }
@@ -361,10 +356,7 @@ impl IntegrityWatchdog {
         // Queue orphan related artist IDs (need full metadata)
         for artist_id in orphan_related_artist_ids {
             if self.is_already_in_queue(DownloadContentType::ArtistMetadata, artist_id)? {
-                debug!(
-                    "Artist metadata {} already in queue, skipping",
-                    artist_id
-                );
+                debug!("Artist metadata {} already in queue, skipping", artist_id);
                 skipped += 1;
                 continue;
             }

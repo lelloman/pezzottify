@@ -538,6 +538,30 @@ export const useRemoteStore = defineStore("remote", () => {
     }
   };
 
+  const fetchJobAuditLog = async (limit = 50, offset = 0) => {
+    try {
+      const response = await axios.get("/v1/admin/jobs/audit", {
+        params: { limit, offset },
+      });
+      return response.data.entries;
+    } catch (error) {
+      console.error("Failed to fetch job audit log:", error);
+      return null;
+    }
+  };
+
+  const fetchJobAuditLogByJob = async (jobId, limit = 50, offset = 0) => {
+    try {
+      const response = await axios.get(`/v1/admin/jobs/${jobId}/audit`, {
+        params: { limit, offset },
+      });
+      return response.data.entries;
+    } catch (error) {
+      console.error("Failed to fetch job audit log:", error);
+      return null;
+    }
+  };
+
   // =====================================================
   // Admin API - Download Manager (DownloadManagerAdmin)
   // =====================================================
@@ -783,6 +807,8 @@ export const useRemoteStore = defineStore("remote", () => {
     rebootServer,
     fetchBackgroundJobs,
     triggerBackgroundJob,
+    fetchJobAuditLog,
+    fetchJobAuditLogByJob,
     // Admin API - Download Manager
     fetchDownloadStats,
     fetchDownloadQueue,

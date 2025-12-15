@@ -1,10 +1,55 @@
 use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum JobRunStatus {
     Running,
     Completed,
     Failed,
+}
+
+/// Event types for job audit log entries.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum JobAuditEventType {
+    Started,
+    Completed,
+    Failed,
+    Progress,
+}
+
+impl JobAuditEventType {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            JobAuditEventType::Started => "started",
+            JobAuditEventType::Completed => "completed",
+            JobAuditEventType::Failed => "failed",
+            JobAuditEventType::Progress => "progress",
+        }
+    }
+
+    pub fn parse(s: &str) -> Option<Self> {
+        match s {
+            "started" => Some(JobAuditEventType::Started),
+            "completed" => Some(JobAuditEventType::Completed),
+            "failed" => Some(JobAuditEventType::Failed),
+            "progress" => Some(JobAuditEventType::Progress),
+            _ => None,
+        }
+    }
+}
+
+/// An entry in the job audit log.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct JobAuditEntry {
+    pub id: i64,
+    pub job_id: String,
+    pub event_type: JobAuditEventType,
+    /// Unix timestamp when the event occurred
+    pub timestamp: i64,
+    pub duration_ms: Option<i64>,
+    pub details: Option<serde_json::Value>,
+    pub error: Option<String>,
 }
 
 impl JobRunStatus {
