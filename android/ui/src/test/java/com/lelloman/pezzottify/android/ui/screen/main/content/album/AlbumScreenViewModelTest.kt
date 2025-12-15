@@ -405,6 +405,11 @@ class AlbumScreenViewModelTest {
             lastToggleLikeCurrentlyLiked = currentlyLiked
         }
 
+        override fun toggleTrackLike(trackId: String, currentlyLiked: Boolean) {
+            lastToggleLikeContentId = trackId
+            lastToggleLikeCurrentlyLiked = currentlyLiked
+        }
+
         override fun getUserPlaylists(): Flow<List<UiUserPlaylist>> = userPlaylistsFlow
 
         override fun playTrackDirectly(trackId: String) {

@@ -38,6 +38,8 @@ fun TrackActionsBottomSheet(
     onRemoveFromPlaylist: (() -> Unit)? = null,
     onViewTrack: (() -> Unit)? = null,
     onViewAlbum: (() -> Unit)? = null,
+    isLiked: Boolean? = null,
+    onToggleLike: (() -> Unit)? = null,
 ) {
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -82,6 +84,17 @@ fun TrackActionsBottomSheet(
                     onAddToPlaylist()
                 }
             )
+
+            if (isLiked != null && onToggleLike != null) {
+                ActionItem(
+                    iconRes = if (isLiked) R.drawable.baseline_favorite_24 else R.drawable.baseline_favorite_border_24,
+                    label = stringResource(if (isLiked) R.string.unlike else R.string.like),
+                    onClick = {
+                        onToggleLike()
+                        onDismiss()
+                    }
+                )
+            }
 
             onRemoveFromPlaylist?.let { removeAction ->
                 ActionItem(

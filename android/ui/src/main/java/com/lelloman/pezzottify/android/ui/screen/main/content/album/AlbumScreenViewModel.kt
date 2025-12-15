@@ -117,6 +117,12 @@ class AlbumScreenViewModel @AssistedInject constructor(
         }
     }
 
+    override fun toggleTrackLike(trackId: String, currentlyLiked: Boolean) {
+        interactor.toggleTrackLike(trackId, currentlyLiked)
+    }
+
+    override fun getTrackLikeState(trackId: String): Flow<Boolean> = interactor.isLiked(trackId)
+
     interface Interactor {
         fun playAlbum(albumId: String)
         fun playTrack(albumId: String, trackId: String)
@@ -124,6 +130,7 @@ class AlbumScreenViewModel @AssistedInject constructor(
         fun getCurrentPlayingTrackId(): Flow<String?>
         fun isLiked(contentId: String): Flow<Boolean>
         fun toggleLike(contentId: String, currentlyLiked: Boolean)
+        fun toggleTrackLike(trackId: String, currentlyLiked: Boolean)
         fun getUserPlaylists(): Flow<List<UiUserPlaylist>>
 
         // Methods for bottom sheet actions

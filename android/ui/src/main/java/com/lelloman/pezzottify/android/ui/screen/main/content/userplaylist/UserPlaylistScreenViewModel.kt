@@ -93,6 +93,12 @@ class UserPlaylistScreenViewModel @AssistedInject constructor(
         }
     }
 
+    override fun toggleTrackLike(trackId: String, currentlyLiked: Boolean) {
+        interactor.toggleLike(trackId, currentlyLiked)
+    }
+
+    override fun getTrackLikeState(trackId: String): Flow<Boolean> = interactor.isLiked(trackId)
+
     interface Interactor {
         fun getPlaylist(playlistId: String): Flow<UiUserPlaylistDetails?>
         fun playPlaylist(playlistId: String)
@@ -100,6 +106,8 @@ class UserPlaylistScreenViewModel @AssistedInject constructor(
         fun logViewedPlaylist(playlistId: String)
         fun getCurrentPlayingTrackId(): Flow<String?>
         fun getUserPlaylists(): Flow<List<UiUserPlaylist>>
+        fun isLiked(contentId: String): Flow<Boolean>
+        fun toggleLike(contentId: String, currentlyLiked: Boolean)
 
         // Methods for bottom sheet actions
         fun playTrackDirectly(trackId: String)
@@ -133,4 +141,6 @@ interface UserPlaylistScreenActions {
     fun addTrackToPlaylist(trackId: String, targetPlaylistId: String)
     fun removeTrackFromPlaylist(trackId: String)
     fun createPlaylist(name: String)
+    fun toggleTrackLike(trackId: String, currentlyLiked: Boolean)
+    fun getTrackLikeState(trackId: String): Flow<Boolean>
 }
