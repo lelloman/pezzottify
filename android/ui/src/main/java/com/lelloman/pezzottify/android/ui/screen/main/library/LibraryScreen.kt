@@ -37,6 +37,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import com.lelloman.pezzottify.android.ui.R
@@ -112,7 +113,7 @@ private fun LibraryScreenContent(
                             onClick = { selectedTab = tab },
                             selected = selectedTab == tab
                         ) {
-                            Text(text = tab.name)
+                            AutoShrinkText(text = tab.name)
                         }
                     }
                 }
@@ -439,4 +440,26 @@ private fun ErrorTrackListItem() {
             color = MaterialTheme.colorScheme.error
         )
     }
+}
+
+@Composable
+private fun AutoShrinkText(
+    text: String,
+    modifier: Modifier = Modifier,
+) {
+    var fontSize by remember(text) { mutableStateOf(14.sp) }
+    val minFontSize = 10.sp
+
+    Text(
+        text = text,
+        modifier = modifier,
+        fontSize = fontSize,
+        maxLines = 1,
+        softWrap = false,
+        onTextLayout = { result ->
+            if (result.didOverflowWidth && fontSize > minFontSize) {
+                fontSize = (fontSize.value - 1f).sp
+            }
+        },
+    )
 }
