@@ -447,6 +447,8 @@ private fun BottomPlayer(state: MainScreenState.BottomPlayer, actions: MainScree
                     .height(2.dp),
                 color = MaterialTheme.colorScheme.primary,
                 trackColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                gapSize = 0.dp,
+                drawStopIndicator = {},
             )
         }
     }
