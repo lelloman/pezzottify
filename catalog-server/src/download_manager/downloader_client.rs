@@ -229,6 +229,25 @@ impl DownloaderClient {
         Ok(artist)
     }
 
+    /// Get related artist IDs from the downloader service.
+    ///
+    /// # Arguments
+    /// * `artist_id` - External artist ID
+    pub async fn get_artist_related(&self, artist_id: &str) -> Result<Vec<String>> {
+        let url = format!("{}/artist/{}/related", self.base_url, artist_id);
+        let response = self.client.get(&url).send().await?;
+
+        if !response.status().is_success() {
+            return Err(anyhow!(
+                "Artist related request failed with status: {}",
+                response.status()
+            ));
+        }
+
+        let related_ids: Vec<String> = response.json().await?;
+        Ok(related_ids)
+    }
+
     /// Get track metadata from the downloader service.
     ///
     /// # Arguments

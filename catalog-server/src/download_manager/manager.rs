@@ -1059,21 +1059,21 @@ impl DownloadManager {
     ) -> Result<u64, DownloadError> {
         info!("Fetching related artists for: {}", item.content_id);
 
-        // 1. Fetch artist metadata from downloader
-        let artist = self
+        // 1. Fetch related artist IDs from downloader
+        let related_ids = self
             .downloader_client
-            .get_artist(&item.content_id)
+            .get_artist_related(&item.content_id)
             .await
             .map_err(|e| {
                 DownloadError::new(
                     DownloadErrorType::Connection,
-                    format!("Failed to fetch artist metadata: {}", e),
+                    format!("Failed to fetch related artists: {}", e),
                 )
             })?;
 
         // 2. Save related artist IDs to database
-        let related_count = artist.related.len();
-        for related_id in &artist.related {
+        let related_count = related_ids.len();
+        for related_id in &related_ids {
             if let Err(e) = self
                 .catalog_store
                 .add_related_artist(&item.content_id, related_id)

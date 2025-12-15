@@ -1840,7 +1840,7 @@ mod tests {
             "high-1".to_string(),
             DownloadContentType::TrackAudio,
             "track-1".to_string(),
-            QueuePriority::Watchdog, // Highest priority (1)
+            QueuePriority::Urgent, // Highest priority (1)
             RequestSource::Watchdog,
             3,
         );
@@ -2041,7 +2041,7 @@ mod tests {
             "high".to_string(),
             DownloadContentType::Album,
             "album-1".to_string(),
-            QueuePriority::Watchdog,
+            QueuePriority::Urgent,
             RequestSource::Watchdog,
             5,
         );
@@ -2891,7 +2891,7 @@ mod tests {
             "high".to_string(),
             DownloadContentType::Album,
             "album-1".to_string(),
-            QueuePriority::Watchdog,
+            QueuePriority::Urgent,
             RequestSource::Watchdog,
             5,
         );
