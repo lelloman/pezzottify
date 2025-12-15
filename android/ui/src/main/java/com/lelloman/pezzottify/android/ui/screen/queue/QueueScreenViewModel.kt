@@ -2,14 +2,12 @@ package com.lelloman.pezzottify.android.ui.screen.queue
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.lelloman.pezzottify.android.ui.content.ContentResolver
-import com.lelloman.pezzottify.android.ui.model.PlaybackPlaylist
-import com.lelloman.pezzottify.android.ui.model.PlaybackPlaylistContext
+import com.lelloman.pezzottify.android.ui.content.ArtistInfo
 import com.lelloman.pezzottify.android.ui.screen.main.library.UiUserPlaylist
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.SharingStarted
-import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -17,44 +15,28 @@ import javax.inject.Inject
 @HiltViewModel
 class QueueScreenViewModel @Inject constructor(
     private val interactor: Interactor,
-    private val contentResolver: ContentResolver,
 ) : ViewModel(), QueueScreenActions {
 
-    val state = interactor.getPlaybackPlaylist()
-        .combine(interactor.getCurrentTrackIndex()) { playlist, currentIndex ->
-            if (playlist != null) {
-                val tracks = playlist.tracksIds.map { trackId ->
+    val state = interactor.getQueueState()
+        .map { queueState ->
+            if (queueState != null) {
+                val tracks = queueState.tracks.map { track ->
                     QueueTrackItem(
-                        trackId = trackId,
-                        trackFlow = contentResolver.resolveTrack(trackId),
-                    )
-                }
-                val playlistContext = playlist.context
-                val (contextType, contextName, canSave) = when (playlistContext) {
-                    is PlaybackPlaylistContext.Album -> Triple(
-                        QueueContextType.Album,
-                        playlistContext.albumId,
-                        false
-                    )
-                    is PlaybackPlaylistContext.UserPlaylist -> Triple(
-                        QueueContextType.UserPlaylist,
-                        playlistContext.userPlaylistId,
-                        playlistContext.isEdited
-                    )
-                    is PlaybackPlaylistContext.UserMix -> Triple(
-                        QueueContextType.UserMix,
-                        "user_mix", // Not displayed - UI uses stringResource
-                        true
+                        trackId = track.trackId,
+                        trackName = track.trackName,
+                        albumId = track.albumId,
+                        artists = track.artists,
+                        durationSeconds = track.durationSeconds,
                     )
                 }
                 QueueScreenState(
                     isLoading = false,
                     isError = false,
-                    contextName = contextName,
-                    contextType = contextType,
+                    contextName = queueState.contextName,
+                    contextType = queueState.contextType,
                     tracks = tracks,
-                    currentTrackIndex = currentIndex,
-                    canSaveAsPlaylist = canSave,
+                    currentTrackIndex = queueState.currentIndex,
+                    canSaveAsPlaylist = queueState.canSaveAsPlaylist,
                 )
             } else {
                 QueueScreenState(isLoading = false, isError = true)
@@ -110,8 +92,7 @@ class QueueScreenViewModel @Inject constructor(
         interactor.getUserPlaylists()
 
     interface Interactor {
-        fun getPlaybackPlaylist(): Flow<PlaybackPlaylist?>
-        fun getCurrentTrackIndex(): Flow<Int?>
+        fun getQueueState(): Flow<QueueState?>
         fun playTrackAtIndex(index: Int)
         fun moveTrack(fromIndex: Int, toIndex: Int)
         fun removeTrack(trackId: String)
@@ -124,5 +105,21 @@ class QueueScreenViewModel @Inject constructor(
         fun toggleLike(trackId: String, currentlyLiked: Boolean)
         fun isLiked(trackId: String): Flow<Boolean>
         fun getUserPlaylists(): Flow<List<UiUserPlaylist>>
+
+        data class QueueState(
+            val tracks: List<QueueTrack>,
+            val currentIndex: Int,
+            val contextName: String,
+            val contextType: QueueContextType,
+            val canSaveAsPlaylist: Boolean,
+        )
+
+        data class QueueTrack(
+            val trackId: String,
+            val trackName: String,
+            val albumId: String,
+            val artists: List<ArtistInfo>,
+            val durationSeconds: Int,
+        )
     }
 }

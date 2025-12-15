@@ -891,15 +891,58 @@ class InteractorsModule {
     @Provides
     fun provideQueueScreenInteractor(
         player: PezzottifyPlayer,
+        playbackMetadataProvider: com.lelloman.pezzottify.android.domain.player.PlaybackMetadataProvider,
         userPlaylistStore: UserPlaylistStore,
         getLikedStateUseCase: GetLikedStateUseCase,
         toggleLikeUseCase: ToggleLikeUseCase,
     ): QueueScreenViewModel.Interactor =
         object : QueueScreenViewModel.Interactor {
-            override fun getPlaybackPlaylist(): Flow<UiPlaybackPlaylist?> =
-                player.playbackPlaylist.map { it?.toUi() }
-
-            override fun getCurrentTrackIndex() = player.currentTrackIndex
+            override fun getQueueState(): Flow<QueueScreenViewModel.Interactor.QueueState?> =
+                playbackMetadataProvider.queueState
+                    .combine(player.playbackPlaylist) { queueState, playlist ->
+                        if (queueState != null && playlist != null) {
+                            val playlistContext = playlist.context
+                            val (contextType, contextName, canSave) = when (playlistContext) {
+                                is com.lelloman.pezzottify.android.domain.player.PlaybackPlaylistContext.Album -> Triple(
+                                    com.lelloman.pezzottify.android.ui.screen.queue.QueueContextType.Album,
+                                    playlistContext.albumId,
+                                    false
+                                )
+                                is com.lelloman.pezzottify.android.domain.player.PlaybackPlaylistContext.UserPlaylist -> Triple(
+                                    com.lelloman.pezzottify.android.ui.screen.queue.QueueContextType.UserPlaylist,
+                                    playlistContext.userPlaylistId,
+                                    playlistContext.isEdited
+                                )
+                                is com.lelloman.pezzottify.android.domain.player.PlaybackPlaylistContext.UserMix -> Triple(
+                                    com.lelloman.pezzottify.android.ui.screen.queue.QueueContextType.UserMix,
+                                    "user_mix",
+                                    true
+                                )
+                            }
+                            QueueScreenViewModel.Interactor.QueueState(
+                                tracks = queueState.tracks.map { track ->
+                                    QueueScreenViewModel.Interactor.QueueTrack(
+                                        trackId = track.trackId,
+                                        trackName = track.trackName,
+                                        albumId = track.albumId,
+                                        artists = track.artistNames.mapIndexed { index, name ->
+                                            com.lelloman.pezzottify.android.ui.content.ArtistInfo(
+                                                id = index.toString(),
+                                                name = name,
+                                            )
+                                        },
+                                        durationSeconds = track.durationSeconds,
+                                    )
+                                },
+                                currentIndex = queueState.currentIndex,
+                                contextName = contextName,
+                                contextType = contextType,
+                                canSaveAsPlaylist = canSave,
+                            )
+                        } else {
+                            null
+                        }
+                    }
 
             override fun playTrackAtIndex(index: Int) = player.loadTrackIndex(index)
 
