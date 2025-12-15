@@ -503,13 +503,7 @@ private fun VolumeControl(
     ) {
         IconButton(onClick = onToggleMute) {
             Icon(
-                painter = painterResource(
-                    when {
-                        isMuted || volume == 0f -> R.drawable.baseline_volume_off_24
-                        volume < 0.5f -> R.drawable.baseline_volume_down_24
-                        else -> R.drawable.baseline_volume_up_24
-                    }
-                ),
+                painter = painterResource(R.drawable.baseline_volume_off_24),
                 contentDescription = if (isMuted) stringResource(R.string.unmute) else stringResource(R.string.mute),
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -564,7 +558,10 @@ private fun VolumeControl(
             }
         )
 
-        IconButton(onClick = { onVolumeChange(1f) }) {
+        IconButton(onClick = {
+            if (isMuted) onToggleMute()
+            onVolumeChange(1f)
+        }) {
             Icon(
                 painter = painterResource(R.drawable.baseline_volume_up_24),
                 contentDescription = stringResource(R.string.max_volume),
