@@ -51,7 +51,6 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -62,6 +61,7 @@ import com.lelloman.pezzottify.android.ui.component.NullablePezzottifyImage
 import com.lelloman.pezzottify.android.ui.component.PezzottifyImagePlaceholder
 import com.lelloman.pezzottify.android.ui.component.PezzottifyImageShape
 import com.lelloman.pezzottify.android.ui.component.ScrollingArtistsRow
+import com.lelloman.pezzottify.android.ui.component.ScrollingTextRow
 import com.lelloman.pezzottify.android.ui.toAlbum
 import com.lelloman.pezzottify.android.ui.toArtist
 import com.lelloman.pezzottify.android.ui.toQueue
@@ -228,17 +228,13 @@ private fun PlayerScreenContent(
                 Spacer(modifier = Modifier.height(24.dp))
 
                 // Track info
-                Text(
+                ScrollingTextRow(
                     text = state.trackName,
-                    style = MaterialTheme.typography.headlineSmall,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.clickable {
-                        if (state.trackId.isNotEmpty()) {
-                            navController.toTrack(state.trackId)
-                        }
-                    }
+                    textStyle = MaterialTheme.typography.headlineSmall,
+                    textColor = MaterialTheme.colorScheme.onSurface,
+                    onClick = if (state.trackId.isNotEmpty()) {
+                        { navController.toTrack(state.trackId) }
+                    } else null
                 )
 
                 Spacer(modifier = Modifier.height(4.dp))

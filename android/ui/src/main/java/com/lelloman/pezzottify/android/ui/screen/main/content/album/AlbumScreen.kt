@@ -62,6 +62,7 @@ import com.lelloman.pezzottify.android.ui.component.NullablePezzottifyImage
 import com.lelloman.pezzottify.android.ui.component.PezzottifyImagePlaceholder
 import com.lelloman.pezzottify.android.ui.component.PezzottifyImageShape
 import com.lelloman.pezzottify.android.ui.component.ScrollingArtistsRow
+import com.lelloman.pezzottify.android.ui.component.ScrollingTextRow
 import com.lelloman.pezzottify.android.ui.component.bottomsheet.AlbumActionsBottomSheet
 import com.lelloman.pezzottify.android.ui.component.bottomsheet.PlaylistPickerBottomSheet
 import com.lelloman.pezzottify.android.ui.component.bottomsheet.TrackActionsBottomSheet
@@ -541,12 +542,10 @@ private fun TrackItem(
         Column(
             modifier = Modifier.weight(1f)
         ) {
-            Text(
+            ScrollingTextRow(
                 text = track.name,
-                style = MaterialTheme.typography.bodyLarge,
-                color = textColor,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
+                textStyle = MaterialTheme.typography.bodyLarge,
+                textColor = textColor,
             )
             ScrollingArtistsRow(
                 artists = track.artists
