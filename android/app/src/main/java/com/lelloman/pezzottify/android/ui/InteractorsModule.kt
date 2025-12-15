@@ -895,7 +895,10 @@ class InteractorsModule {
 
     @Provides
     fun provideQueueScreenInteractor(
-        player: PezzottifyPlayer
+        player: PezzottifyPlayer,
+        userPlaylistStore: UserPlaylistStore,
+        getLikedStateUseCase: GetLikedStateUseCase,
+        toggleLikeUseCase: ToggleLikeUseCase,
     ): QueueScreenViewModel.Interactor =
         object : QueueScreenViewModel.Interactor {
             override fun getPlaybackPlaylist(): Flow<UiPlaybackPlaylist?> =
@@ -909,6 +912,40 @@ class InteractorsModule {
                 player.moveTrack(fromIndex, toIndex)
 
             override fun removeTrack(trackId: String) = player.removeTrackFromPlaylist(trackId)
+
+            override fun playTrackDirectly(trackId: String) = player.loadSingleTrack(trackId)
+
+            override fun addTrackToQueue(trackId: String) = player.addTracksToPlaylist(listOf(trackId))
+
+            override suspend fun addTrackToPlaylist(trackId: String, playlistId: String) {
+                val playlist = userPlaylistStore.getPlaylist(playlistId).first()
+                if (playlist != null) {
+                    val updatedTrackIds = playlist.trackIds + trackId
+                    userPlaylistStore.createOrUpdatePlaylist(playlistId, playlist.name, updatedTrackIds)
+                }
+            }
+
+            override suspend fun createPlaylist(name: String) {
+                val id = UUID.randomUUID().toString()
+                userPlaylistStore.createOrUpdatePlaylist(id, name, emptyList())
+            }
+
+            override fun toggleLike(trackId: String, currentlyLiked: Boolean) {
+                toggleLikeUseCase(trackId, DomainLikedContent.ContentType.Track, currentlyLiked)
+            }
+
+            override fun isLiked(trackId: String): Flow<Boolean> = getLikedStateUseCase(trackId)
+
+            override fun getUserPlaylists(): Flow<List<UiUserPlaylist>> =
+                userPlaylistStore.getPlaylists().map { playlists ->
+                    playlists.map { playlist ->
+                        UiUserPlaylist(
+                            id = playlist.id,
+                            name = playlist.name,
+                            trackCount = playlist.trackIds.size,
+                        )
+                    }
+                }
         }
 
     @Provides

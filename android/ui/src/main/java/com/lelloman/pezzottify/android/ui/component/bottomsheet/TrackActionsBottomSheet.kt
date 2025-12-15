@@ -32,9 +32,9 @@ fun TrackActionsBottomSheet(
     track: Track,
     sheetState: SheetState,
     onDismiss: () -> Unit,
-    onPlay: () -> Unit,
     onAddToQueue: () -> Unit,
     onAddToPlaylist: () -> Unit,
+    onPlay: (() -> Unit)? = null,
     onRemoveFromPlaylist: (() -> Unit)? = null,
     onViewTrack: (() -> Unit)? = null,
     onViewAlbum: (() -> Unit)? = null,
@@ -59,14 +59,16 @@ fun TrackActionsBottomSheet(
             )
 
             // Actions
-            ActionItem(
-                iconRes = R.drawable.baseline_play_arrow_24,
-                label = stringResource(R.string.play),
-                onClick = {
-                    onPlay()
-                    onDismiss()
-                }
-            )
+            onPlay?.let { playAction ->
+                ActionItem(
+                    iconRes = R.drawable.baseline_play_arrow_24,
+                    label = stringResource(R.string.play),
+                    onClick = {
+                        playAction()
+                        onDismiss()
+                    }
+                )
+            }
 
             ActionItem(
                 iconRes = R.drawable.baseline_playlist_add_24,

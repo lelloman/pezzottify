@@ -11,6 +11,7 @@ import com.lelloman.pezzottify.android.ui.content.Track
 import com.lelloman.pezzottify.android.ui.content.ArtistInfo
 import com.lelloman.pezzottify.android.ui.model.PlaybackPlaylist
 import com.lelloman.pezzottify.android.ui.model.PlaybackPlaylistContext
+import com.lelloman.pezzottify.android.ui.screen.main.library.UiUserPlaylist
 import com.lelloman.pezzottify.android.ui.screen.main.search.SearchScreenViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -205,6 +206,30 @@ class QueueScreenViewModelTest {
         override fun removeTrack(trackId: String) {
             lastRemovedTrackId = trackId
         }
+
+        override fun playTrackDirectly(trackId: String) {
+            // Not tested
+        }
+
+        override fun addTrackToQueue(trackId: String) {
+            // Not tested
+        }
+
+        override suspend fun addTrackToPlaylist(trackId: String, playlistId: String) {
+            // Not tested
+        }
+
+        override suspend fun createPlaylist(name: String) {
+            // Not tested
+        }
+
+        override fun toggleLike(trackId: String, currentlyLiked: Boolean) {
+            // Not tested
+        }
+
+        override fun isLiked(trackId: String): Flow<Boolean> = flowOf(false)
+
+        override fun getUserPlaylists(): Flow<List<UiUserPlaylist>> = flowOf(emptyList())
     }
 
     private class FakeContentResolver : ContentResolver {
