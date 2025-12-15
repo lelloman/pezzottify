@@ -1,6 +1,7 @@
 package com.lelloman.pezzottify.android.domain.player
 
 import com.lelloman.pezzottify.android.domain.config.ConfigStore
+import com.lelloman.pezzottify.android.domain.player.internal.PlaybackMetadataProviderImpl
 import com.lelloman.pezzottify.android.domain.player.internal.PlayerImpl
 import com.lelloman.pezzottify.android.domain.statics.StaticsProvider
 import com.lelloman.pezzottify.android.domain.usercontent.UserPlaylistStore
@@ -29,5 +30,21 @@ class PlayerModule {
         platformPlayer = platformPlayer,
         configStore = configStore,
         userPlaylistStore = userPlaylistStore,
+    )
+
+    @Provides
+    @Singleton
+    fun providePlaybackMetadataProvider(
+        player: PezzottifyPlayer,
+        platformPlayer: PlatformPlayer,
+        staticsProvider: StaticsProvider,
+        configStore: ConfigStore,
+        loggerFactory: LoggerFactory,
+    ): PlaybackMetadataProvider = PlaybackMetadataProviderImpl(
+        player = player,
+        platformPlayer = platformPlayer,
+        staticsProvider = staticsProvider,
+        configStore = configStore,
+        loggerFactory = loggerFactory,
     )
 }

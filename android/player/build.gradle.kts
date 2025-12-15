@@ -41,6 +41,8 @@ dependencies {
     implementation(libs.exoplayer)
     implementation(libs.exoplayer.okhttp)
     implementation(libs.androidx.media3.session)
+    implementation(libs.coil)
+    implementation(libs.coil.network)
     implementation(project(":logger"))
     implementation(project(":domain"))
     implementation(project(":remoteapi"))
