@@ -204,6 +204,7 @@
     <string name="repeat">Ripeti</string>
     <string name="mute">Disattiva audio</string>
     <string name="unmute">Attiva audio</string>
+    <string name="max_volume">Volume massimo</string>
     <!-- PLAYER SCREEN -->
 
     <!-- QUEUE SCREEN -->
