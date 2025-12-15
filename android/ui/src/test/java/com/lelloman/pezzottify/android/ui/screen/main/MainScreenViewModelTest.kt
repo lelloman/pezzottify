@@ -3,22 +3,13 @@ package com.lelloman.pezzottify.android.ui.screen.main
 import com.google.common.truth.Truth.assertThat
 import com.lelloman.pezzottify.android.logger.Logger
 import com.lelloman.pezzottify.android.logger.LoggerFactory
-import com.lelloman.pezzottify.android.ui.content.Album
-import com.lelloman.pezzottify.android.ui.content.Artist
-import com.lelloman.pezzottify.android.ui.content.ArtistDiscography
 import com.lelloman.pezzottify.android.ui.content.ArtistInfo
-import com.lelloman.pezzottify.android.ui.content.Content
-import com.lelloman.pezzottify.android.ui.content.ContentResolver
-import com.lelloman.pezzottify.android.ui.content.SearchResultContent
-import com.lelloman.pezzottify.android.ui.content.Track
-import com.lelloman.pezzottify.android.ui.screen.main.search.SearchScreenViewModel
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
@@ -34,7 +25,6 @@ class MainScreenViewModelTest {
     private val testDispatcher = StandardTestDispatcher()
 
     private lateinit var fakeInteractor: FakeInteractor
-    private lateinit var fakeContentResolver: FakeContentResolver
     private lateinit var loggerFactory: LoggerFactory
     private lateinit var viewModel: MainScreenViewModel
 
@@ -42,7 +32,6 @@ class MainScreenViewModelTest {
     fun setUp() {
         Dispatchers.setMain(testDispatcher)
         fakeInteractor = FakeInteractor()
-        fakeContentResolver = FakeContentResolver()
         val mockLogger = mockk<Logger>(relaxed = true)
         loggerFactory = mockk<LoggerFactory>()
         every { loggerFactory.getValue(any(), any()) } returns mockLogger
@@ -57,7 +46,6 @@ class MainScreenViewModelTest {
         viewModel = MainScreenViewModel(
             interactor = fakeInteractor,
             loggerFactory = loggerFactory,
-            contentResolver = fakeContentResolver,
         )
     }
 
@@ -70,28 +58,21 @@ class MainScreenViewModelTest {
 
     @Test
     fun `bottom player becomes visible when playback state is loaded`() = runTest {
-        fakeContentResolver.trackResults["track-1"] = flowOf(
-            Content.Resolved(
-                "track-1",
-                Track("track-1", "Test Track", "album-1", emptyList(), 180)
-            )
-        )
-        fakeContentResolver.albumResults["album-1"] = flowOf(
-            Content.Resolved(
-                "album-1",
-                Album("album-1", "Test Album", 1609459200L, "http://img.com/1.jpg", emptyList())
-            )
-        )
-
         createViewModel()
         advanceUntilIdle()
 
         fakeInteractor.playbackStateFlow.value = MainScreenViewModel.Interactor.PlaybackState.Loaded(
             isPlaying = true,
             trackId = "track-1",
+            trackName = "Test Track",
+            albumName = "Test Album",
+            albumImageUrl = "http://img.com/1.jpg",
+            artists = listOf(ArtistInfo("artist-1", "Test Artist")),
             trackPercent = 0.5f,
-            nextTrackId = null,
-            previousTrackId = null,
+            nextTrackName = null,
+            nextTrackArtists = emptyList(),
+            previousTrackName = null,
+            previousTrackArtists = emptyList(),
         )
         advanceUntilIdle()
 
@@ -103,13 +84,6 @@ class MainScreenViewModelTest {
 
     @Test
     fun `bottom player hides when playback state becomes idle`() = runTest {
-        fakeContentResolver.trackResults["track-1"] = flowOf(
-            Content.Resolved("track-1", Track("track-1", "Test", "album-1", emptyList(), 180))
-        )
-        fakeContentResolver.albumResults["album-1"] = flowOf(
-            Content.Resolved("album-1", Album("album-1", "Album", 1609459200L, null, emptyList()))
-        )
-
         createViewModel()
         advanceUntilIdle()
 
@@ -117,9 +91,15 @@ class MainScreenViewModelTest {
         fakeInteractor.playbackStateFlow.value = MainScreenViewModel.Interactor.PlaybackState.Loaded(
             isPlaying = true,
             trackId = "track-1",
+            trackName = "Test Track",
+            albumName = "Test Album",
+            albumImageUrl = null,
+            artists = emptyList(),
             trackPercent = 0.3f,
-            nextTrackId = null,
-            previousTrackId = null,
+            nextTrackName = null,
+            nextTrackArtists = emptyList(),
+            previousTrackName = null,
+            previousTrackArtists = emptyList(),
         )
         advanceUntilIdle()
 
@@ -133,35 +113,22 @@ class MainScreenViewModelTest {
     }
 
     @Test
-    fun `bottom player resolves track name from content resolver`() = runTest {
-        fakeContentResolver.trackResults["track-1"] = flowOf(
-            Content.Resolved(
-                "track-1",
-                Track(
-                    id = "track-1",
-                    name = "Amazing Song",
-                    albumId = "album-1",
-                    artists = listOf(ArtistInfo("artist-1", "Great Artist")),
-                    durationSeconds = 240
-                )
-            )
-        )
-        fakeContentResolver.albumResults["album-1"] = flowOf(
-            Content.Resolved(
-                "album-1",
-                Album("album-1", "Best Album", 1609459200L, "http://img.com/cover.jpg", listOf("artist-1"))
-            )
-        )
-
+    fun `bottom player displays track name and artists from playback state`() = runTest {
         createViewModel()
         advanceUntilIdle()
 
         fakeInteractor.playbackStateFlow.value = MainScreenViewModel.Interactor.PlaybackState.Loaded(
             isPlaying = false,
             trackId = "track-1",
+            trackName = "Amazing Song",
+            albumName = "Best Album",
+            albumImageUrl = "http://img.com/cover.jpg",
+            artists = listOf(ArtistInfo("artist-1", "Great Artist")),
             trackPercent = 0f,
-            nextTrackId = null,
-            previousTrackId = null,
+            nextTrackName = null,
+            nextTrackArtists = emptyList(),
+            previousTrackName = null,
+            previousTrackArtists = emptyList(),
         )
         advanceUntilIdle()
 
@@ -171,32 +138,22 @@ class MainScreenViewModelTest {
     }
 
     @Test
-    fun `bottom player resolves album info from content resolver`() = runTest {
-        fakeContentResolver.trackResults["track-1"] = flowOf(
-            Content.Resolved("track-1", Track("track-1", "Song", "album-1", emptyList(), 180))
-        )
-        fakeContentResolver.albumResults["album-1"] = flowOf(
-            Content.Resolved(
-                "album-1",
-                Album(
-                    id = "album-1",
-                    name = "Epic Album",
-                    date = 1609459200L,
-                    imageUrl = "http://cdn.com/album-cover.jpg",
-                    artistsIds = emptyList()
-                )
-            )
-        )
-
+    fun `bottom player displays album info from playback state`() = runTest {
         createViewModel()
         advanceUntilIdle()
 
         fakeInteractor.playbackStateFlow.value = MainScreenViewModel.Interactor.PlaybackState.Loaded(
             isPlaying = false,
             trackId = "track-1",
+            trackName = "Song",
+            albumName = "Epic Album",
+            albumImageUrl = "http://cdn.com/album-cover.jpg",
+            artists = emptyList(),
             trackPercent = 0f,
-            nextTrackId = null,
-            previousTrackId = null,
+            nextTrackName = null,
+            nextTrackArtists = emptyList(),
+            previousTrackName = null,
+            previousTrackArtists = emptyList(),
         )
         advanceUntilIdle()
 
@@ -233,28 +190,21 @@ class MainScreenViewModelTest {
 
     @Test
     fun `bottom player shows next track info when available`() = runTest {
-        fakeContentResolver.trackResults["track-1"] = flowOf(
-            Content.Resolved("track-1", Track("track-1", "Current Song", "album-1", emptyList(), 180))
-        )
-        fakeContentResolver.trackResults["track-2"] = flowOf(
-            Content.Resolved(
-                "track-2",
-                Track("track-2", "Next Song", "album-1", listOf(ArtistInfo("artist-1", "Next Artist")), 200)
-            )
-        )
-        fakeContentResolver.albumResults["album-1"] = flowOf(
-            Content.Resolved("album-1", Album("album-1", "Album", 1609459200L, null, emptyList()))
-        )
-
         createViewModel()
         advanceUntilIdle()
 
         fakeInteractor.playbackStateFlow.value = MainScreenViewModel.Interactor.PlaybackState.Loaded(
             isPlaying = true,
             trackId = "track-1",
+            trackName = "Current Song",
+            albumName = "Album",
+            albumImageUrl = null,
+            artists = emptyList(),
             trackPercent = 0.5f,
-            nextTrackId = "track-2",
-            previousTrackId = null,
+            nextTrackName = "Next Song",
+            nextTrackArtists = listOf(ArtistInfo("artist-1", "Next Artist")),
+            previousTrackName = null,
+            previousTrackArtists = emptyList(),
         )
         advanceUntilIdle()
 
@@ -265,28 +215,21 @@ class MainScreenViewModelTest {
 
     @Test
     fun `bottom player shows previous track info when available`() = runTest {
-        fakeContentResolver.trackResults["track-1"] = flowOf(
-            Content.Resolved("track-1", Track("track-1", "Current Song", "album-1", emptyList(), 180))
-        )
-        fakeContentResolver.trackResults["track-0"] = flowOf(
-            Content.Resolved(
-                "track-0",
-                Track("track-0", "Previous Song", "album-1", listOf(ArtistInfo("artist-1", "Previous Artist")), 150)
-            )
-        )
-        fakeContentResolver.albumResults["album-1"] = flowOf(
-            Content.Resolved("album-1", Album("album-1", "Album", 1609459200L, null, emptyList()))
-        )
-
         createViewModel()
         advanceUntilIdle()
 
         fakeInteractor.playbackStateFlow.value = MainScreenViewModel.Interactor.PlaybackState.Loaded(
             isPlaying = true,
             trackId = "track-1",
+            trackName = "Current Song",
+            albumName = "Album",
+            albumImageUrl = null,
+            artists = emptyList(),
             trackPercent = 0.5f,
-            nextTrackId = null,
-            previousTrackId = "track-0",
+            nextTrackName = null,
+            nextTrackArtists = emptyList(),
+            previousTrackName = "Previous Song",
+            previousTrackArtists = listOf(ArtistInfo("artist-1", "Previous Artist")),
         )
         advanceUntilIdle()
 
@@ -297,16 +240,6 @@ class MainScreenViewModelTest {
 
     @Test
     fun `bottom player clears next track info when no next track`() = runTest {
-        fakeContentResolver.trackResults["track-1"] = flowOf(
-            Content.Resolved("track-1", Track("track-1", "Song 1", "album-1", emptyList(), 180))
-        )
-        fakeContentResolver.trackResults["track-2"] = flowOf(
-            Content.Resolved("track-2", Track("track-2", "Song 2", "album-1", emptyList(), 180))
-        )
-        fakeContentResolver.albumResults["album-1"] = flowOf(
-            Content.Resolved("album-1", Album("album-1", "Album", 1609459200L, null, emptyList()))
-        )
-
         createViewModel()
         advanceUntilIdle()
 
@@ -314,9 +247,15 @@ class MainScreenViewModelTest {
         fakeInteractor.playbackStateFlow.value = MainScreenViewModel.Interactor.PlaybackState.Loaded(
             isPlaying = true,
             trackId = "track-1",
+            trackName = "Song 1",
+            albumName = "Album",
+            albumImageUrl = null,
+            artists = emptyList(),
             trackPercent = 0.5f,
-            nextTrackId = "track-2",
-            previousTrackId = null,
+            nextTrackName = "Song 2",
+            nextTrackArtists = listOf(ArtistInfo("artist-1", "Artist")),
+            previousTrackName = null,
+            previousTrackArtists = emptyList(),
         )
         advanceUntilIdle()
 
@@ -326,9 +265,15 @@ class MainScreenViewModelTest {
         fakeInteractor.playbackStateFlow.value = MainScreenViewModel.Interactor.PlaybackState.Loaded(
             isPlaying = true,
             trackId = "track-1",
+            trackName = "Song 1",
+            albumName = "Album",
+            albumImageUrl = null,
+            artists = emptyList(),
             trackPercent = 0.7f,
-            nextTrackId = null,
-            previousTrackId = null,
+            nextTrackName = null,
+            nextTrackArtists = emptyList(),
+            previousTrackName = null,
+            previousTrackArtists = emptyList(),
         )
         advanceUntilIdle()
 
@@ -359,27 +304,5 @@ class MainScreenViewModelTest {
         override fun clickOnSkipToPrevious() {
             skipToPreviousCalled = true
         }
-    }
-
-    private class FakeContentResolver : ContentResolver {
-        val trackResults = mutableMapOf<String, Flow<Content<Track>>>()
-        val albumResults = mutableMapOf<String, Flow<Content<Album>>>()
-
-        override fun resolveSearchResult(
-            itemId: String,
-            itemType: SearchScreenViewModel.SearchedItemType
-        ): Flow<Content<SearchResultContent>> = flowOf(Content.Loading(itemId))
-
-        override fun resolveArtist(artistId: String): Flow<Content<Artist>> =
-            flowOf(Content.Loading(artistId))
-
-        override fun resolveAlbum(albumId: String): Flow<Content<Album>> =
-            albumResults[albumId] ?: flowOf(Content.Loading(albumId))
-
-        override fun resolveTrack(trackId: String): Flow<Content<Track>> =
-            trackResults[trackId] ?: flowOf(Content.Loading(trackId))
-
-        override fun resolveArtistDiscography(artistId: String): Flow<Content<ArtistDiscography>> =
-            flowOf(Content.Loading(artistId))
     }
 }

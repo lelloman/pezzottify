@@ -661,6 +661,7 @@ class InteractorsModule {
         loggerFactory: LoggerFactory,
         player: PezzottifyPlayer,
         notificationRepository: NotificationRepository,
+        playbackMetadataProvider: com.lelloman.pezzottify.android.domain.player.PlaybackMetadataProvider,
     ): MainScreenViewModel.Interactor =
         object : MainScreenViewModel.Interactor {
 
@@ -670,27 +671,43 @@ class InteractorsModule {
                 notificationRepository.unreadCount
 
             override fun getPlaybackState(): Flow<MainScreenViewModel.Interactor.PlaybackState?> =
-                player
-                    .playbackPlaylist.combine(player.isPlaying) { playlist, isPlaying -> playlist to isPlaying }
-                    .combine(player.currentTrackIndex) { (playlist, isPlaying), currentTrackIndex ->
-                        Triple(playlist, isPlaying, currentTrackIndex)
-                    }
-                    .combine(player.currentTrackPercent) { (playlist, isPlaying, currentTrackIndex), trackPercent ->
-                        logger.debug("Combining new playlist + isPlaying + currentTrackIndex + trackPercent $playlist - $isPlaying - $currentTrackIndex - $trackPercent")
-                        if (playlist != null && playlist.tracksIds.isNotEmpty()) {
-                            val index = (currentTrackIndex ?: 0).coerceIn(0, playlist.tracksIds.lastIndex)
-                            val nextTrackId = if (index < playlist.tracksIds.lastIndex) {
-                                playlist.tracksIds[index + 1]
-                            } else null
-                            val previousTrackId = if (index > 0) {
-                                playlist.tracksIds[index - 1]
-                            } else null
+                playbackMetadataProvider.queueState
+                    .combine(player.isPlaying) { queueState, isPlaying -> queueState to isPlaying }
+                    .combine(player.currentTrackPercent) { (queueState, isPlaying), trackPercent ->
+                        logger.debug("Combining queueState + isPlaying + trackPercent: ${queueState?.currentTrack?.trackName} - $isPlaying - $trackPercent")
+                        val currentTrack = queueState?.currentTrack
+                        if (currentTrack != null) {
+                            val currentIndex = queueState.currentIndex
+                            val nextTrack = queueState.tracks.getOrNull(currentIndex + 1)
+                            val previousTrack = queueState.tracks.getOrNull(currentIndex - 1)
+
                             MainScreenViewModel.Interactor.PlaybackState.Loaded(
                                 isPlaying = isPlaying,
-                                trackId = playlist.tracksIds[index],
+                                trackId = currentTrack.trackId,
+                                trackName = currentTrack.trackName,
+                                albumName = currentTrack.albumName,
+                                albumImageUrl = currentTrack.artworkUrl,
+                                artists = currentTrack.artistNames.mapIndexed { index, name ->
+                                    com.lelloman.pezzottify.android.ui.content.ArtistInfo(
+                                        id = index.toString(), // We don't have artist IDs in metadata
+                                        name = name,
+                                    )
+                                },
                                 trackPercent = trackPercent ?: 0f,
-                                nextTrackId = nextTrackId,
-                                previousTrackId = previousTrackId,
+                                nextTrackName = nextTrack?.trackName,
+                                nextTrackArtists = nextTrack?.artistNames?.mapIndexed { index, name ->
+                                    com.lelloman.pezzottify.android.ui.content.ArtistInfo(
+                                        id = index.toString(),
+                                        name = name,
+                                    )
+                                } ?: emptyList(),
+                                previousTrackName = previousTrack?.trackName,
+                                previousTrackArtists = previousTrack?.artistNames?.mapIndexed { index, name ->
+                                    com.lelloman.pezzottify.android.ui.content.ArtistInfo(
+                                        id = index.toString(),
+                                        name = name,
+                                    )
+                                } ?: emptyList(),
                             )
                         } else {
                             null
