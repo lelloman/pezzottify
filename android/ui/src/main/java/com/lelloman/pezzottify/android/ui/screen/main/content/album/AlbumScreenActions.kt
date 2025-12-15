@@ -1,5 +1,7 @@
 package com.lelloman.pezzottify.android.ui.screen.main.content.album
 
+import kotlinx.coroutines.flow.Flow
+
 interface AlbumScreenActions {
 
     fun clickOnPlayAlbum(albumId: String)
@@ -14,4 +16,6 @@ interface AlbumScreenActions {
     fun addTrackToPlaylist(trackId: String, playlistId: String)
     fun addAlbumToPlaylist(albumId: String, playlistId: String)
     fun createPlaylist(name: String)
+    fun toggleTrackLike(trackId: String, currentlyLiked: Boolean)
+    fun getTrackLikeState(trackId: String): Flow<Boolean>
 }

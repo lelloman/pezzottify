@@ -533,6 +533,10 @@ class InteractorsModule {
             toggleLikeUseCase(contentId, DomainLikedContent.ContentType.Album, currentlyLiked)
         }
 
+        override fun toggleTrackLike(trackId: String, currentlyLiked: Boolean) {
+            toggleLikeUseCase(trackId, DomainLikedContent.ContentType.Track, currentlyLiked)
+        }
+
         override fun getUserPlaylists(): Flow<List<UiUserPlaylist>> =
             userPlaylistStore.getPlaylists().map { playlists ->
                 playlists.map { playlist ->
@@ -937,6 +941,8 @@ class InteractorsModule {
         userPlaylistStore: UserPlaylistStore,
         player: PezzottifyPlayer,
         logViewedContentUseCase: LogViewedContentUseCase,
+        getLikedStateUseCase: GetLikedStateUseCase,
+        toggleLikeUseCase: ToggleLikeUseCase,
     ): UserPlaylistScreenViewModel.Interactor =
         object : UserPlaylistScreenViewModel.Interactor {
             override fun getPlaylist(playlistId: String): Flow<UiUserPlaylistDetails?> =
@@ -1006,6 +1012,13 @@ class InteractorsModule {
             override suspend fun createPlaylist(name: String) {
                 val id = UUID.randomUUID().toString()
                 userPlaylistStore.createOrUpdatePlaylist(id, name, emptyList())
+            }
+
+            override fun isLiked(contentId: String): Flow<Boolean> =
+                getLikedStateUseCase(contentId)
+
+            override fun toggleLike(contentId: String, currentlyLiked: Boolean) {
+                toggleLikeUseCase(contentId, DomainLikedContent.ContentType.Track, currentlyLiked)
             }
         }
 

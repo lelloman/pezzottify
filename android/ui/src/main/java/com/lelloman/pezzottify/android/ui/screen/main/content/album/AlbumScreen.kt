@@ -106,9 +106,16 @@ private fun AlbumScreenContent(
 
     // Selected item for bottom sheets
     var selectedTrack by remember { mutableStateOf<Track?>(null) }
+    var selectedTrackIsLiked by remember { mutableStateOf(false) }
     var showAlbumSheet by remember { mutableStateOf(false) }
     var showPlaylistPicker by remember { mutableStateOf(false) }
     var showCreatePlaylistDialog by remember { mutableStateOf(false) }
+
+    // Collect like state for the selected track
+    selectedTrack?.let { track ->
+        val likeState by actions.getTrackLikeState(track.id).collectAsState(initial = false)
+        selectedTrackIsLiked = likeState
+    }
 
     // Track whether we're adding a track or album to playlist
     var pendingAddToPlaylistTrackId by remember { mutableStateOf<String?>(null) }
@@ -168,6 +175,10 @@ private fun AlbumScreenContent(
             },
             onViewTrack = {
                 navController.toTrack(track.id)
+            },
+            isLiked = selectedTrackIsLiked,
+            onToggleLike = {
+                actions.toggleTrackLike(track.id, selectedTrackIsLiked)
             },
         )
     }
