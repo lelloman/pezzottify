@@ -2,16 +2,13 @@ package com.lelloman.pezzottify.android.domain.player.internal
 
 import com.lelloman.pezzottify.android.domain.config.ConfigStore
 import com.lelloman.pezzottify.android.domain.player.ControlsAndStatePlayer
-import com.lelloman.pezzottify.android.domain.player.MediaTrackInfo
 import com.lelloman.pezzottify.android.domain.player.PezzottifyPlayer
 import com.lelloman.pezzottify.android.domain.player.PlatformPlayer
 import com.lelloman.pezzottify.android.domain.player.PlaybackPlaylist
 import com.lelloman.pezzottify.android.domain.player.PlaybackPlaylistContext
 import com.lelloman.pezzottify.android.domain.statics.Album
-import com.lelloman.pezzottify.android.domain.statics.Artist
 import com.lelloman.pezzottify.android.domain.statics.StaticsItem
 import com.lelloman.pezzottify.android.domain.statics.StaticsProvider
-import com.lelloman.pezzottify.android.domain.statics.Track
 import com.lelloman.pezzottify.android.domain.usercontent.UserPlaylistStore
 import com.lelloman.pezzottify.android.logger.LoggerFactory
 import kotlinx.coroutines.CoroutineScope
@@ -77,27 +74,16 @@ internal class PlayerImpl(
                         .first()
                 }
                 if (loadedAlbum != null) {
-                    val album = loadedAlbum.data
-                    val tracksIds = album.discs.flatMap { it.tracksIds }
+                    val tracksIds = loadedAlbum.data.discs.flatMap { it.tracksIds }
                     mutablePlaybackPlaylist.value = PlaybackPlaylist(
                         context = PlaybackPlaylistContext.Album(albumId),
                         tracksIds = tracksIds,
                     )
                     platformPlayer.setIsPlaying(true)
                     logger.info("Loading new track list into platform player.")
-
-                    // Get artist name for display
-                    val artistName = album.artistsIds.firstOrNull()
-                        ?.let { tryGetArtistName(it) }
-                        ?: "Unknown Artist"
-
-                    val mediaTrackInfoList = buildMediaTrackInfoList(
-                        tracksIds = tracksIds,
-                        albumName = album.name,
-                        artistName = artistName,
-                        albumImageId = album.displayImageId,
-                    )
-                    platformPlayer.loadPlaylist(mediaTrackInfoList)
+                    val baseUrl = configStore.baseUrl.value
+                    val urls = tracksIds.map { "$baseUrl/v1/content/stream/$it" }
+                    platformPlayer.loadPlaylist(urls)
 
                     // If a specific track was requested, start from that track
                     if (startTrackId != null) {
@@ -146,9 +132,9 @@ internal class PlayerImpl(
                     )
                     platformPlayer.setIsPlaying(true)
                     logger.info("Loading user playlist into platform player.")
-
-                    val mediaTrackInfoList = buildMediaTrackInfoListForMixedTracks(tracksIds)
-                    platformPlayer.loadPlaylist(mediaTrackInfoList)
+                    val baseUrl = configStore.baseUrl.value
+                    val urls = tracksIds.map { "$baseUrl/v1/content/stream/$it" }
+                    platformPlayer.loadPlaylist(urls)
 
                     // If a specific track was requested, start from that track
                     if (startTrackId != null) {
@@ -192,8 +178,9 @@ internal class PlayerImpl(
                     tracksIds = listOf(trackId),
                 )
                 platformPlayer.setIsPlaying(true)
-                val mediaTrackInfoList = buildMediaTrackInfoListForMixedTracks(listOf(trackId))
-                platformPlayer.loadPlaylist(mediaTrackInfoList)
+                val baseUrl = configStore.baseUrl.value
+                val url = "$baseUrl/v1/content/stream/$trackId"
+                platformPlayer.loadPlaylist(listOf(url))
                 logger.info("Loaded single track $trackId")
             }
         }
@@ -251,8 +238,9 @@ internal class PlayerImpl(
                     tracksIds = newTracksIds,
                 )
                 // Add new tracks to platform player
-                val mediaTrackInfoList = buildMediaTrackInfoListForMixedTracks(tracksIds)
-                platformPlayer.addMediaItems(mediaTrackInfoList)
+                val baseUrl = configStore.baseUrl.value
+                val urls = tracksIds.map { "$baseUrl/v1/content/stream/$it" }
+                platformPlayer.addMediaItems(urls)
                 logger.info("Added ${tracksIds.size} tracks to playlist")
             } else {
                 // No playlist exists, create a new UserMix playlist
@@ -261,8 +249,9 @@ internal class PlayerImpl(
                     tracksIds = tracksIds,
                 )
                 platformPlayer.setIsPlaying(true)
-                val mediaTrackInfoList = buildMediaTrackInfoListForMixedTracks(tracksIds)
-                platformPlayer.loadPlaylist(mediaTrackInfoList)
+                val baseUrl = configStore.baseUrl.value
+                val urls = tracksIds.map { "$baseUrl/v1/content/stream/$it" }
+                platformPlayer.loadPlaylist(urls)
                 logger.info("Created new UserMix playlist with ${tracksIds.size} tracks")
             }
         }
@@ -313,86 +302,5 @@ internal class PlayerImpl(
 
     override fun cycleRepeatMode() {
         platformPlayer.cycleRepeatMode()
-    }
-
-    private suspend fun buildMediaTrackInfoList(
-        tracksIds: List<String>,
-        albumName: String,
-        artistName: String,
-        albumImageId: String?,
-    ): List<MediaTrackInfo> {
-        val baseUrl = configStore.baseUrl.value
-        val artworkUrl = albumImageId?.let { "$baseUrl/v1/content/image/$it" }
-
-        return tracksIds.map { trackId ->
-            val track = tryGetTrack(trackId)
-            MediaTrackInfo(
-                id = trackId,
-                streamUrl = "$baseUrl/v1/content/stream/$trackId",
-                title = track?.name ?: "Track",
-                artistName = artistName,
-                albumName = albumName,
-                artworkUrl = artworkUrl,
-                durationSeconds = track?.durationSeconds ?: 0,
-            )
-        }
-    }
-
-    /**
-     * Builds MediaTrackInfo list for tracks that may be from different albums.
-     * Fetches track, album, and artist info individually for each track.
-     */
-    private suspend fun buildMediaTrackInfoListForMixedTracks(
-        tracksIds: List<String>,
-    ): List<MediaTrackInfo> {
-        val baseUrl = configStore.baseUrl.value
-
-        return tracksIds.map { trackId ->
-            val track = tryGetTrack(trackId)
-            val album = track?.albumId?.let { tryGetAlbum(it) }
-            val artistName = track?.artistsIds?.firstOrNull()
-                ?.let { tryGetArtistName(it) }
-                ?: album?.artistsIds?.firstOrNull()?.let { tryGetArtistName(it) }
-                ?: "Unknown Artist"
-            val artworkUrl = album?.displayImageId?.let { "$baseUrl/v1/content/image/$it" }
-
-            MediaTrackInfo(
-                id = trackId,
-                streamUrl = "$baseUrl/v1/content/stream/$trackId",
-                title = track?.name ?: "Track",
-                artistName = artistName,
-                albumName = album?.name ?: "Unknown Album",
-                artworkUrl = artworkUrl,
-                durationSeconds = track?.durationSeconds ?: 0,
-            )
-        }
-    }
-
-    private suspend fun tryGetAlbum(albumId: String): Album? {
-        return withTimeoutOrNull(500L) {
-            staticsProvider.provideAlbum(albumId)
-                .filterIsInstance<StaticsItem.Loaded<Album>>()
-                .first()
-                .data
-        }
-    }
-
-    private suspend fun tryGetTrack(trackId: String): Track? {
-        return withTimeoutOrNull(500L) {
-            staticsProvider.provideTrack(trackId)
-                .filterIsInstance<StaticsItem.Loaded<Track>>()
-                .first()
-                .data
-        }
-    }
-
-    private suspend fun tryGetArtistName(artistId: String): String? {
-        return withTimeoutOrNull(500L) {
-            staticsProvider.provideArtist(artistId)
-                .filterIsInstance<StaticsItem.Loaded<Artist>>()
-                .first()
-                .data
-                .name
-        }
     }
 }
