@@ -1,5 +1,6 @@
 package com.lelloman.pezzottify.android.player
 
+import android.app.PendingIntent
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -14,6 +15,7 @@ import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.okhttp.OkHttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
+import androidx.media3.session.DefaultMediaNotificationProvider
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
 import com.lelloman.pezzottify.android.domain.auth.AuthState
@@ -83,14 +85,43 @@ class PlaybackService : MediaSessionService() {
         .build()
         .apply { player = this }
 
+    @OptIn(UnstableApi::class)
     override fun onCreate() {
         super.onCreate()
-        mediaSession = MediaSession.Builder(this, makePlayer()).build()
+        setMediaNotificationProvider(
+            DefaultMediaNotificationProvider.Builder(this)
+                .setChannelId(MEDIA_PLAYBACK_CHANNEL_ID)
+                .setChannelName(R.string.media_notification_channel_name)
+                .build()
+        )
+        mediaSession = MediaSession.Builder(this, makePlayer())
+            .setSessionActivity(createSessionActivityPendingIntent())
+            .build()
         ContextCompat.registerReceiver(
             this,
             becomingNoisyReceiver,
             IntentFilter(AudioManager.ACTION_AUDIO_BECOMING_NOISY),
             ContextCompat.RECEIVER_NOT_EXPORTED
+        )
+    }
+
+    companion object {
+        const val MEDIA_PLAYBACK_CHANNEL_ID = "pezzottify_media_playback"
+    }
+
+    private fun createSessionActivityPendingIntent(): PendingIntent {
+        val intent = packageManager.getLaunchIntentForPackage(packageName)
+            ?: Intent().apply {
+                setPackage(packageName)
+                action = Intent.ACTION_MAIN
+                addCategory(Intent.CATEGORY_LAUNCHER)
+            }
+        intent.flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
+        return PendingIntent.getActivity(
+            this,
+            0,
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
     }
 

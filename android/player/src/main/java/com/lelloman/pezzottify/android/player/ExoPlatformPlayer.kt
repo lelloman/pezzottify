@@ -2,7 +2,9 @@ package com.lelloman.pezzottify.android.player
 
 import android.content.ComponentName
 import android.content.Context
+import android.net.Uri
 import androidx.media3.common.MediaItem
+import androidx.media3.common.MediaMetadata
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
@@ -12,6 +14,7 @@ import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
 import com.google.common.util.concurrent.MoreExecutors
 import com.lelloman.pezzottify.android.domain.player.ControlsAndStatePlayer.SeekEvent
+import com.lelloman.pezzottify.android.domain.player.MediaTrackInfo
 import com.lelloman.pezzottify.android.domain.player.PlatformPlayer
 import com.lelloman.pezzottify.android.domain.player.RepeatMode
 import com.lelloman.pezzottify.android.domain.player.VolumeState
@@ -174,8 +177,8 @@ internal class ExoPlatformPlayer(
         controller?.playWhenReady = isPlaying
     }
 
-    override fun loadPlaylist(tracksUrls: List<String>) {
-        logger.info("loadPlaylist() - ${tracksUrls.size} tracks, sessionToken=${sessionToken != null}")
+    override fun loadPlaylist(tracks: List<MediaTrackInfo>) {
+        logger.info("loadPlaylist() - ${tracks.size} tracks, sessionToken=${sessionToken != null}")
         mutableIsPlaying.value = true
         pendingTrackIndex = null
         if (sessionToken == null) {
@@ -187,33 +190,50 @@ internal class ExoPlatformPlayer(
                     mediaController = controllerFuture.get()
                     logger.info("MediaController created - isConnected=${mediaController?.isConnected}")
                     mediaController?.addListener(playerListener)
-                    loadPlaylistWhenMediaControllerIsReady(tracksUrls)
+                    loadPlaylistWhenMediaControllerIsReady(tracks)
                 },
                 MoreExecutors.directExecutor()
             )
         } else {
-            loadPlaylistWhenMediaControllerIsReady(tracksUrls)
+            loadPlaylistWhenMediaControllerIsReady(tracks)
         }
     }
 
-    private fun loadPlaylistWhenMediaControllerIsReady(tracksUrls: List<String>) {
-        mediaController?.let {
-            mediaController?.clearMediaItems()
-            tracksUrls.forEach {
-                mediaController?.addMediaItem(MediaItem.fromUri(it))
+    private fun loadPlaylistWhenMediaControllerIsReady(tracks: List<MediaTrackInfo>) {
+        mediaController?.let { controller ->
+            controller.clearMediaItems()
+            tracks.forEach { track ->
+                controller.addMediaItem(track.toMediaItem())
             }
-            mediaController?.prepare()
-            mediaController?.playWhenReady = isPlaying.value
+            controller.prepare()
+            controller.playWhenReady = isPlaying.value
             mutableIsActive.value = true
             if (isPlaying.value) {
                 startProgressPolling()
             }
             // Apply pending track index if one was set before playlist was ready
             pendingTrackIndex?.let { index ->
-                mediaController?.seekTo(index, 0)
+                controller.seekTo(index, 0)
                 pendingTrackIndex = null
             }
         }
+    }
+
+    private fun MediaTrackInfo.toMediaItem(): MediaItem {
+        val metadata = MediaMetadata.Builder()
+            .setTitle(title)
+            .setArtist(artistName)
+            .setAlbumTitle(albumName)
+            .apply {
+                artworkUrl?.let { setArtworkUri(Uri.parse(it)) }
+            }
+            .build()
+
+        return MediaItem.Builder()
+            .setMediaId(id)
+            .setUri(streamUrl)
+            .setMediaMetadata(metadata)
+            .build()
     }
 
     override fun loadTrackIndex(loadTrackIndex: Int) {
@@ -303,10 +323,10 @@ internal class ExoPlatformPlayer(
         mediaController?.seekToPrevious()
     }
 
-    override fun addMediaItems(tracksUrls: List<String>) {
+    override fun addMediaItems(tracks: List<MediaTrackInfo>) {
         mediaController?.let { controller ->
-            tracksUrls.forEach { url ->
-                controller.addMediaItem(MediaItem.fromUri(url))
+            tracks.forEach { track ->
+                controller.addMediaItem(track.toMediaItem())
             }
         }
     }

@@ -2,9 +2,9 @@ package com.lelloman.pezzottify.android.domain.player
 
 interface PlatformPlayer : ControlsAndStatePlayer {
 
-    fun loadPlaylist(tracksUrls: List<String>)
+    fun loadPlaylist(tracks: List<MediaTrackInfo>)
 
-    fun addMediaItems(tracksUrls: List<String>)
+    fun addMediaItems(tracks: List<MediaTrackInfo>)
 
     fun removeMediaItem(index: Int)
 
