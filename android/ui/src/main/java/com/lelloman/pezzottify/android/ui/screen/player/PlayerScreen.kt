@@ -563,6 +563,14 @@ private fun VolumeControl(
                 }
             }
         )
+
+        IconButton(onClick = { onVolumeChange(1f) }) {
+            Icon(
+                painter = painterResource(R.drawable.baseline_volume_up_24),
+                contentDescription = stringResource(R.string.max_volume),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
     }
 }
 
