@@ -73,10 +73,12 @@ impl QueuePriority {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum DownloadContentType {
-    Album,       // Full album (metadata + tracks + audio + images)
-    TrackAudio,  // Single track audio file
-    ArtistImage, // Artist image
-    AlbumImage,  // Album cover art
+    Album,          // Full album (metadata + tracks + audio + images)
+    TrackAudio,     // Single track audio file
+    ArtistImage,    // Artist image
+    AlbumImage,     // Album cover art
+    ArtistRelated,  // Fetch related artist IDs for an artist
+    ArtistMetadata, // Fetch full artist metadata and create record
 }
 
 impl DownloadContentType {
@@ -86,6 +88,8 @@ impl DownloadContentType {
             DownloadContentType::TrackAudio => "TRACK_AUDIO",
             DownloadContentType::ArtistImage => "ARTIST_IMAGE",
             DownloadContentType::AlbumImage => "ALBUM_IMAGE",
+            DownloadContentType::ArtistRelated => "ARTIST_RELATED",
+            DownloadContentType::ArtistMetadata => "ARTIST_METADATA",
         }
     }
 
@@ -96,6 +100,8 @@ impl DownloadContentType {
             "TRACK_AUDIO" => Some(DownloadContentType::TrackAudio),
             "ARTIST_IMAGE" => Some(DownloadContentType::ArtistImage),
             "ALBUM_IMAGE" => Some(DownloadContentType::AlbumImage),
+            "ARTIST_RELATED" => Some(DownloadContentType::ArtistRelated),
+            "ARTIST_METADATA" => Some(DownloadContentType::ArtistMetadata),
             _ => None,
         }
     }
@@ -1145,6 +1151,10 @@ pub struct WatchdogReport {
     pub missing_album_images: Vec<String>,
     /// Image IDs (hex) for missing artist portrait images
     pub missing_artist_images: Vec<String>,
+    /// Artist IDs that have no related artists populated
+    pub artists_without_related: Vec<String>,
+    /// Related artist IDs that don't exist in the artists table
+    pub orphan_related_artist_ids: Vec<String>,
     /// Number of items queued for download
     pub items_queued: usize,
     /// Number of items skipped (already in queue)
@@ -1161,9 +1171,14 @@ impl WatchdogReport {
             + self.missing_artist_images.len()
     }
 
+    /// Returns the total number of artist enrichment items found.
+    pub fn total_artist_enrichment(&self) -> usize {
+        self.artists_without_related.len() + self.orphan_related_artist_ids.len()
+    }
+
     /// Returns true if no missing content was found.
     pub fn is_clean(&self) -> bool {
-        self.total_missing() == 0
+        self.total_missing() == 0 && self.total_artist_enrichment() == 0
     }
 }
 
@@ -1772,6 +1787,8 @@ mod tests {
             missing_track_audio: vec!["track1".to_string(), "track2".to_string()],
             missing_album_images: vec!["img1".to_string()],
             missing_artist_images: vec!["art1".to_string(), "art2".to_string(), "art3".to_string()],
+            artists_without_related: vec![],
+            orphan_related_artist_ids: vec![],
             items_queued: 5,
             items_skipped: 1,
             scan_duration_ms: 1500,

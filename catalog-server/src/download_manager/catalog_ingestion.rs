@@ -173,8 +173,50 @@ pub fn ingest_album(
     })
 }
 
+/// Ingest a single artist and their portrait images into the catalog.
+///
+/// # Returns
+/// A list of portrait image IDs that need to be downloaded.
+pub fn ingest_artist(
+    catalog_store: &dyn WritableCatalogStore,
+    artist: &ExternalArtist,
+) -> Result<Vec<String>> {
+    // 1. Insert artist if not exists
+    if !catalog_store.artist_exists(&artist.id)? {
+        let catalog_artist = convert_artist(artist);
+        catalog_store.insert_artist(&catalog_artist)?;
+    }
+
+    // 2. Insert and link portrait images
+    let all_portraits = merge_images(&artist.portraits, &artist.portrait_group);
+    let mut image_ids = Vec::new();
+
+    for (img_pos, portrait) in all_portraits.iter().enumerate() {
+        if !catalog_store.image_exists(&portrait.id)? {
+            let catalog_image = convert_image(portrait);
+            catalog_store.insert_image(&catalog_image)?;
+        }
+        // Link image to artist (ignore error if already linked)
+        let _ = catalog_store.add_artist_image(
+            &artist.id,
+            &portrait.id,
+            &ImageType::PortraitGroup,
+            img_pos as i32,
+        );
+
+        // Set first portrait as display image
+        if img_pos == 0 {
+            let _ = catalog_store.set_artist_display_image(&artist.id, &portrait.id);
+        }
+
+        image_ids.push(portrait.id.clone());
+    }
+
+    Ok(image_ids)
+}
+
 /// Convert external artist to catalog artist.
-fn convert_artist(external: &ExternalArtist) -> Artist {
+pub fn convert_artist(external: &ExternalArtist) -> Artist {
     Artist {
         id: external.id.clone(),
         name: external.name.clone(),

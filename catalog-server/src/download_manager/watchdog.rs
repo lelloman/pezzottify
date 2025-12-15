@@ -66,19 +66,33 @@ impl IntegrityWatchdog {
         let missing_album_images = self.scan_missing_album_images()?;
         let missing_artist_images = self.scan_missing_artist_images()?;
 
+        // Scan for artist enrichment needs
+        let artists_without_related = self.scan_artists_without_related()?;
+        let orphan_related_artist_ids = self.scan_orphan_related_artists()?;
+
         info!(
-            "Watchdog scan found {} missing track audio, {} missing album images, {} missing artist images",
+            "Watchdog scan found {} missing track audio, {} missing album images, {} missing artist images, {} artists without related, {} orphan related artists",
             missing_track_audio.len(),
             missing_album_images.len(),
-            missing_artist_images.len()
+            missing_artist_images.len(),
+            artists_without_related.len(),
+            orphan_related_artist_ids.len()
         );
 
-        // Queue repairs
-        let (items_queued, items_skipped) = self.queue_repairs(
+        // Queue repairs for missing content
+        let (mut items_queued, mut items_skipped) = self.queue_repairs(
             &missing_track_audio,
             &missing_album_images,
             &missing_artist_images,
         )?;
+
+        // Queue artist enrichment items
+        let (enrichment_queued, enrichment_skipped) = self.queue_artist_enrichment(
+            &artists_without_related,
+            &orphan_related_artist_ids,
+        )?;
+        items_queued += enrichment_queued;
+        items_skipped += enrichment_skipped;
 
         let scan_duration_ms = start.elapsed().as_millis() as i64;
 
@@ -86,6 +100,8 @@ impl IntegrityWatchdog {
             missing_track_audio,
             missing_album_images,
             missing_artist_images,
+            artists_without_related,
+            orphan_related_artist_ids,
             items_queued,
             items_skipped,
             scan_duration_ms,
@@ -165,6 +181,21 @@ impl IntegrityWatchdog {
         }
 
         Ok(missing)
+    }
+
+    /// Scan for artists that have no related artists populated.
+    ///
+    /// Returns a list of artist IDs that don't have any entries in related_artists table.
+    fn scan_artists_without_related(&self) -> Result<Vec<String>> {
+        self.catalog_store.get_artists_without_related()
+    }
+
+    /// Scan for related artist IDs that don't exist in the artists table.
+    ///
+    /// Returns a list of artist IDs that are referenced in related_artists
+    /// but don't have corresponding artist records.
+    fn scan_orphan_related_artists(&self) -> Result<Vec<String>> {
+        self.catalog_store.get_orphan_related_artist_ids()
     }
 
     /// Queue repairs for missing content.
@@ -272,6 +303,92 @@ impl IntegrityWatchdog {
                     warn!(
                         "Failed to queue artist image repair for {}: {}",
                         image_id, e
+                    );
+                }
+            }
+        }
+
+        Ok((queued, skipped))
+    }
+
+    /// Queue artist enrichment items for related artist population and missing artist metadata.
+    ///
+    /// Returns (items_queued, items_skipped).
+    fn queue_artist_enrichment(
+        &self,
+        artists_without_related: &[String],
+        orphan_related_artist_ids: &[String],
+    ) -> Result<(usize, usize)> {
+        let mut queued = 0;
+        let mut skipped = 0;
+
+        // Queue artists without related artists
+        for artist_id in artists_without_related {
+            if self.is_already_in_queue(DownloadContentType::ArtistRelated, artist_id)? {
+                debug!(
+                    "Artist related {} already in queue, skipping",
+                    artist_id
+                );
+                skipped += 1;
+                continue;
+            }
+
+            let queue_item = self.create_watchdog_queue_item(
+                DownloadContentType::ArtistRelated,
+                artist_id.clone(),
+                "missing_related_artists",
+            );
+
+            match self.queue_store.enqueue(queue_item.clone()) {
+                Ok(_) => {
+                    if let Err(e) = self
+                        .audit_logger
+                        .log_watchdog_queued(&queue_item, "missing_related_artists")
+                    {
+                        warn!("Failed to log watchdog queue event: {}", e);
+                    }
+                    queued += 1;
+                }
+                Err(e) => {
+                    warn!(
+                        "Failed to queue artist related fetch for {}: {}",
+                        artist_id, e
+                    );
+                }
+            }
+        }
+
+        // Queue orphan related artist IDs (need full metadata)
+        for artist_id in orphan_related_artist_ids {
+            if self.is_already_in_queue(DownloadContentType::ArtistMetadata, artist_id)? {
+                debug!(
+                    "Artist metadata {} already in queue, skipping",
+                    artist_id
+                );
+                skipped += 1;
+                continue;
+            }
+
+            let queue_item = self.create_watchdog_queue_item(
+                DownloadContentType::ArtistMetadata,
+                artist_id.clone(),
+                "orphan_related_artist",
+            );
+
+            match self.queue_store.enqueue(queue_item.clone()) {
+                Ok(_) => {
+                    if let Err(e) = self
+                        .audit_logger
+                        .log_watchdog_queued(&queue_item, "orphan_related_artist")
+                    {
+                        warn!("Failed to log watchdog queue event: {}", e);
+                    }
+                    queued += 1;
+                }
+                Err(e) => {
+                    warn!(
+                        "Failed to queue artist metadata fetch for {}: {}",
+                        artist_id, e
                     );
                 }
             }
@@ -568,6 +685,14 @@ mod tests {
 
         fn list_all_artist_image_ids(&self) -> Result<Vec<String>> {
             Ok(self.artist_image_ids.clone())
+        }
+
+        fn get_artists_without_related(&self) -> Result<Vec<String>> {
+            Ok(Vec::new())
+        }
+
+        fn get_orphan_related_artist_ids(&self) -> Result<Vec<String>> {
+            Ok(Vec::new())
         }
 
         fn add_artist_image(

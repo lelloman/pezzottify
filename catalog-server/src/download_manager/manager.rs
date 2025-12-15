@@ -752,6 +752,14 @@ impl DownloadManager {
                 // Download image file
                 self.execute_image_download(item).await
             }
+            DownloadContentType::ArtistRelated => {
+                // Fetch related artist IDs and save to database
+                self.execute_artist_related_download(item).await
+            }
+            DownloadContentType::ArtistMetadata => {
+                // Fetch full artist metadata and create record
+                self.execute_artist_metadata_download(item).await
+            }
         }
     }
 
@@ -1042,6 +1050,100 @@ impl DownloadManager {
 
         // Note: Parent completion check is done in process_next() after mark_completed()
         Ok(bytes_downloaded)
+    }
+
+    /// Execute artist related download - fetches related artist IDs and saves them.
+    async fn execute_artist_related_download(&self, item: &QueueItem) -> Result<u64, DownloadError> {
+        info!("Fetching related artists for: {}", item.content_id);
+
+        // 1. Fetch artist metadata from downloader
+        let artist = self
+            .downloader_client
+            .get_artist(&item.content_id)
+            .await
+            .map_err(|e| {
+                DownloadError::new(
+                    DownloadErrorType::Connection,
+                    format!("Failed to fetch artist metadata: {}", e),
+                )
+            })?;
+
+        // 2. Save related artist IDs to database
+        let related_count = artist.related.len();
+        for related_id in &artist.related {
+            if let Err(e) = self
+                .catalog_store
+                .add_related_artist(&item.content_id, related_id)
+            {
+                // Log but don't fail - some may already exist or be duplicates
+                debug!(
+                    "Failed to add related artist {} for {}: {}",
+                    related_id, item.content_id, e
+                );
+            }
+        }
+
+        info!(
+            "Added {} related artists for {}",
+            related_count, item.content_id
+        );
+
+        // No bytes downloaded, but successful
+        Ok(0)
+    }
+
+    /// Execute artist metadata download - fetches full artist and creates record.
+    async fn execute_artist_metadata_download(&self, item: &QueueItem) -> Result<u64, DownloadError> {
+        info!("Fetching artist metadata for: {}", item.content_id);
+
+        // 1. Fetch artist metadata from downloader
+        let artist = self
+            .downloader_client
+            .get_artist(&item.content_id)
+            .await
+            .map_err(|e| {
+                DownloadError::new(
+                    DownloadErrorType::Connection,
+                    format!("Failed to fetch artist metadata: {}", e),
+                )
+            })?;
+
+        // 2. Ingest artist and images into catalog
+        let image_ids = super::catalog_ingestion::ingest_artist(
+            self.catalog_store.as_ref(),
+            &artist,
+        )
+        .map_err(|e| {
+            DownloadError::new(
+                DownloadErrorType::Storage,
+                format!("Failed to ingest artist to catalog: {}", e),
+            )
+        })?;
+
+        // 3. Queue portrait image downloads
+        for image_id in &image_ids {
+            let queue_item = QueueItem::new_child(
+                Uuid::new_v4().to_string(),
+                item.id.clone(),
+                DownloadContentType::ArtistImage,
+                image_id.clone(),
+                QueuePriority::Expansion,
+                item.request_source,
+                item.requested_by_user_id.clone(),
+                self.config.max_retries as i32,
+            );
+            if let Err(e) = self.queue_store.enqueue(queue_item) {
+                debug!("Failed to queue artist image download: {}", e);
+            }
+        }
+
+        info!(
+            "Created artist {} with {} portrait images queued",
+            item.content_id,
+            image_ids.len()
+        );
+
+        Ok(0)
     }
 
     /// Check if all children of a parent are complete and update parent status.

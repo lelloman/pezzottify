@@ -177,6 +177,14 @@ pub trait CatalogStore: Send + Sync {
     /// Used by the integrity watchdog to scan for missing artist portrait images.
     fn list_all_artist_image_ids(&self) -> Result<Vec<String>>;
 
+    /// Get all artist IDs that have no entries in the related_artists table.
+    /// Used by the integrity watchdog to find artists needing related artist enrichment.
+    fn get_artists_without_related(&self) -> Result<Vec<String>>;
+
+    /// Get all related_artist_ids from the related_artists table that don't exist
+    /// in the artists table. These are "orphan" references that need artist records created.
+    fn get_orphan_related_artist_ids(&self) -> Result<Vec<String>>;
+
     // =========================================================================
     // Image Relationship Operations
     // =========================================================================
@@ -308,6 +316,10 @@ pub trait WritableCatalogStore: CatalogStore {
         role: &super::ArtistRole,
         position: i32,
     ) -> Result<()>;
+
+    /// Add a related artist to an artist.
+    /// Used to populate the related_artists table during integrity enrichment.
+    fn add_related_artist(&self, artist_id: &str, related_artist_id: &str) -> Result<()>;
 
     /// Update a track's audio URI and format after download.
     fn update_track_audio(

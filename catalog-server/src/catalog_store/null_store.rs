@@ -181,6 +181,14 @@ impl CatalogStore for NullCatalogStore {
         Ok(Vec::new())
     }
 
+    fn get_artists_without_related(&self) -> Result<Vec<String>> {
+        Ok(Vec::new())
+    }
+
+    fn get_orphan_related_artist_ids(&self) -> Result<Vec<String>> {
+        Ok(Vec::new())
+    }
+
     fn add_artist_image(
         &self,
         _artist_id: &str,

@@ -2246,6 +2246,28 @@ impl CatalogStore for SqliteCatalogStore {
         Ok(ids)
     }
 
+    fn get_artists_without_related(&self) -> Result<Vec<String>> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare(
+            "SELECT id FROM artists WHERE id NOT IN (SELECT DISTINCT artist_id FROM related_artists) ORDER BY id",
+        )?;
+        let ids: Vec<String> = stmt
+            .query_map([], |row| row.get(0))?
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(ids)
+    }
+
+    fn get_orphan_related_artist_ids(&self) -> Result<Vec<String>> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare(
+            "SELECT DISTINCT related_artist_id FROM related_artists WHERE related_artist_id NOT IN (SELECT id FROM artists) ORDER BY related_artist_id",
+        )?;
+        let ids: Vec<String> = stmt
+            .query_map([], |row| row.get(0))?
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(ids)
+    }
+
     fn add_artist_image(
         &self,
         artist_id: &str,
@@ -2395,6 +2417,10 @@ impl WritableCatalogStore for SqliteCatalogStore {
         position: i32,
     ) -> Result<()> {
         SqliteCatalogStore::add_track_artist(self, track_id, artist_id, role, position)
+    }
+
+    fn add_related_artist(&self, artist_id: &str, related_artist_id: &str) -> Result<()> {
+        SqliteCatalogStore::add_related_artist(self, artist_id, related_artist_id)
     }
 
     fn update_track_audio(&self, track_id: &str, audio_uri: &str, format: &Format) -> Result<()> {
