@@ -56,7 +56,6 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
@@ -64,6 +63,7 @@ import com.lelloman.pezzottify.android.ui.R
 import com.lelloman.pezzottify.android.ui.component.DurationText
 import com.lelloman.pezzottify.android.ui.component.LoadingScreen
 import com.lelloman.pezzottify.android.ui.component.ScrollingArtistsRow
+import com.lelloman.pezzottify.android.ui.component.ScrollingTextRow
 import com.lelloman.pezzottify.android.ui.component.bottomsheet.PlaylistPickerBottomSheet
 import com.lelloman.pezzottify.android.ui.component.bottomsheet.TrackActionsBottomSheet
 import com.lelloman.pezzottify.android.ui.component.dialog.CreatePlaylistDialog
@@ -456,12 +456,10 @@ private fun QueueTrackItemRow(
         Column(
             modifier = Modifier.weight(1f)
         ) {
-            Text(
+            ScrollingTextRow(
                 text = trackItem.trackName,
-                style = MaterialTheme.typography.bodyLarge,
-                color = textColor,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
+                textStyle = MaterialTheme.typography.bodyLarge,
+                textColor = textColor,
             )
             ScrollingArtistsRow(
                 artists = trackItem.artists
