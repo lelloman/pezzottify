@@ -787,102 +787,80 @@ class InteractorsModule {
 
     @Provides
     fun providePlayerScreenInteractor(
-        player: PezzottifyPlayer
+        player: PezzottifyPlayer,
+        playbackMetadataProvider: com.lelloman.pezzottify.android.domain.player.PlaybackMetadataProvider,
     ): PlayerScreenViewModel.Interactor =
         object : PlayerScreenViewModel.Interactor {
             override fun getPlaybackState(): Flow<PlayerScreenViewModel.Interactor.PlaybackState?> =
-                player.playbackPlaylist
-                    .combine(player.isPlaying) { playlist, isPlaying -> playlist to isPlaying }
-                    .combine(player.currentTrackIndex) { (playlist, isPlaying), currentTrackIndex ->
-                        Triple(playlist, isPlaying, currentTrackIndex)
+                playbackMetadataProvider.queueState
+                    .combine(player.isPlaying) { queueState, isPlaying -> queueState to isPlaying }
+                    .combine(player.currentTrackPercent) { (queueState, isPlaying), trackPercent ->
+                        Triple(queueState, isPlaying, trackPercent)
                     }
-                    .combine(player.currentTrackPercent) { (playlist, isPlaying, currentTrackIndex), trackPercent ->
-                        data class TempState(
-                            val playlist: com.lelloman.pezzottify.android.domain.player.PlaybackPlaylist?,
+                    .combine(player.currentTrackProgressSec) { (queueState, isPlaying, trackPercent), progressSec ->
+                        data class PlaybackData(
+                            val queueState: com.lelloman.pezzottify.android.domain.player.PlaybackQueueState?,
                             val isPlaying: Boolean,
-                            val currentTrackIndex: Int?,
-                            val trackPercent: Float?,
-                        )
-                        TempState(playlist, isPlaying, currentTrackIndex, trackPercent)
-                    }
-                    .combine(player.currentTrackProgressSec) { tempState, progressSec ->
-                        data class TempState2(
-                            val playlist: com.lelloman.pezzottify.android.domain.player.PlaybackPlaylist?,
-                            val isPlaying: Boolean,
-                            val currentTrackIndex: Int?,
                             val trackPercent: Float?,
                             val progressSec: Int?,
                         )
-                        TempState2(
-                            tempState.playlist,
-                            tempState.isPlaying,
-                            tempState.currentTrackIndex,
-                            tempState.trackPercent,
-                            progressSec
-                        )
+                        PlaybackData(queueState, isPlaying, trackPercent, progressSec)
                     }
-                    .combine(player.volumeState) { tempState, volumeState ->
-                        data class TempState3(
-                            val playlist: com.lelloman.pezzottify.android.domain.player.PlaybackPlaylist?,
+                    .combine(player.volumeState) { data, volumeState ->
+                        data class PlaybackData2(
+                            val queueState: com.lelloman.pezzottify.android.domain.player.PlaybackQueueState?,
                             val isPlaying: Boolean,
-                            val currentTrackIndex: Int?,
                             val trackPercent: Float?,
                             val progressSec: Int?,
                             val volume: Float,
                             val isMuted: Boolean,
                         )
-                        TempState3(
-                            tempState.playlist,
-                            tempState.isPlaying,
-                            tempState.currentTrackIndex,
-                            tempState.trackPercent,
-                            tempState.progressSec,
-                            volumeState.volume,
-                            volumeState.isMuted
-                        )
+                        PlaybackData2(data.queueState, data.isPlaying, data.trackPercent, data.progressSec, volumeState.volume, volumeState.isMuted)
                     }
-                    .combine(player.shuffleEnabled) { tempState, shuffleEnabled ->
-                        data class TempState4(
-                            val playlist: com.lelloman.pezzottify.android.domain.player.PlaybackPlaylist?,
+                    .combine(player.shuffleEnabled) { data, shuffleEnabled ->
+                        data class PlaybackData3(
+                            val queueState: com.lelloman.pezzottify.android.domain.player.PlaybackQueueState?,
                             val isPlaying: Boolean,
-                            val currentTrackIndex: Int?,
                             val trackPercent: Float?,
                             val progressSec: Int?,
                             val volume: Float,
                             val isMuted: Boolean,
                             val shuffleEnabled: Boolean,
                         )
-                        TempState4(
-                            tempState.playlist,
-                            tempState.isPlaying,
-                            tempState.currentTrackIndex,
-                            tempState.trackPercent,
-                            tempState.progressSec,
-                            tempState.volume,
-                            tempState.isMuted,
-                            shuffleEnabled
-                        )
+                        PlaybackData3(data.queueState, data.isPlaying, data.trackPercent, data.progressSec, data.volume, data.isMuted, shuffleEnabled)
                     }
-                    .combine(player.repeatMode) { tempState, repeatMode ->
-                        if (tempState.playlist != null) {
-                            val index = tempState.currentTrackIndex ?: 0
-                            val hasNext = index < tempState.playlist.tracksIds.lastIndex
-                            val hasPrevious = index > 0
+                    .combine(player.repeatMode) { data, repeatMode ->
+                        val currentTrack = data.queueState?.currentTrack
+                        if (currentTrack != null) {
+                            val currentIndex = data.queueState.currentIndex
+                            val hasNext = currentIndex < data.queueState.tracks.lastIndex
+                            val hasPrevious = currentIndex > 0
                             val repeatModeUi = when (repeatMode) {
                                 RepeatMode.OFF -> RepeatModeUi.OFF
                                 RepeatMode.ALL -> RepeatModeUi.ALL
                                 RepeatMode.ONE -> RepeatModeUi.ONE
                             }
                             PlayerScreenViewModel.Interactor.PlaybackState.Loaded(
-                                isPlaying = tempState.isPlaying,
-                                trackId = tempState.playlist.tracksIds[index],
-                                trackPercent = tempState.trackPercent ?: 0f,
-                                trackProgressSec = tempState.progressSec ?: 0,
+                                isPlaying = data.isPlaying,
+                                trackId = currentTrack.trackId,
+                                trackName = currentTrack.trackName,
+                                albumId = currentTrack.albumId,
+                                albumName = currentTrack.albumName,
+                                albumImageUrl = currentTrack.artworkUrl,
+                                artists = currentTrack.artistNames.mapIndexed { index, name ->
+                                    com.lelloman.pezzottify.android.ui.content.ArtistInfo(
+                                        id = index.toString(),
+                                        name = name,
+                                    )
+                                },
+                                trackPercent = data.trackPercent ?: 0f,
+                                trackProgressSec = data.progressSec ?: 0,
+                                trackDurationSec = currentTrack.durationSeconds,
                                 hasNextTrack = hasNext,
                                 hasPreviousTrack = hasPrevious,
-                                volume = tempState.volume,
-                                isMuted = tempState.isMuted,
-                                shuffleEnabled = tempState.shuffleEnabled,
+                                volume = data.volume,
+                                isMuted = data.isMuted,
+                                shuffleEnabled = data.shuffleEnabled,
                                 repeatMode = repeatModeUi,
                             )
                         } else {
