@@ -5,11 +5,13 @@ import androidx.lifecycle.viewModelScope
 import com.lelloman.pezzottify.android.ui.content.ContentResolver
 import com.lelloman.pezzottify.android.ui.model.PlaybackPlaylist
 import com.lelloman.pezzottify.android.ui.model.PlaybackPlaylistContext
+import com.lelloman.pezzottify.android.ui.screen.main.library.UiUserPlaylist
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 @HiltViewModel
@@ -77,11 +79,50 @@ class QueueScreenViewModel @Inject constructor(
         // This will need additional UI for entering playlist name
     }
 
+    override fun playTrackDirectly(trackId: String) {
+        interactor.playTrackDirectly(trackId)
+    }
+
+    override fun addTrackToQueue(trackId: String) {
+        interactor.addTrackToQueue(trackId)
+    }
+
+    override fun addTrackToPlaylist(trackId: String, targetPlaylistId: String) {
+        viewModelScope.launch {
+            interactor.addTrackToPlaylist(trackId, targetPlaylistId)
+        }
+    }
+
+    override fun createPlaylist(name: String) {
+        viewModelScope.launch {
+            interactor.createPlaylist(name)
+        }
+    }
+
+    override fun toggleTrackLike(trackId: String, currentlyLiked: Boolean) {
+        interactor.toggleLike(trackId, currentlyLiked)
+    }
+
+    override fun getTrackLikeState(trackId: String): Flow<Boolean> =
+        interactor.isLiked(trackId)
+
+    override fun getUserPlaylists(): Flow<List<UiUserPlaylist>> =
+        interactor.getUserPlaylists()
+
     interface Interactor {
         fun getPlaybackPlaylist(): Flow<PlaybackPlaylist?>
         fun getCurrentTrackIndex(): Flow<Int?>
         fun playTrackAtIndex(index: Int)
         fun moveTrack(fromIndex: Int, toIndex: Int)
         fun removeTrack(trackId: String)
+
+        // Track actions bottom sheet
+        fun playTrackDirectly(trackId: String)
+        fun addTrackToQueue(trackId: String)
+        suspend fun addTrackToPlaylist(trackId: String, playlistId: String)
+        suspend fun createPlaylist(name: String)
+        fun toggleLike(trackId: String, currentlyLiked: Boolean)
+        fun isLiked(trackId: String): Flow<Boolean>
+        fun getUserPlaylists(): Flow<List<UiUserPlaylist>>
     }
 }

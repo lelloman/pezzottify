@@ -28,12 +28,15 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SwipeToDismissBox
 import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -50,6 +53,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -59,8 +64,13 @@ import com.lelloman.pezzottify.android.ui.R
 import com.lelloman.pezzottify.android.ui.component.DurationText
 import com.lelloman.pezzottify.android.ui.component.LoadingScreen
 import com.lelloman.pezzottify.android.ui.component.ScrollingArtistsRow
+import com.lelloman.pezzottify.android.ui.component.bottomsheet.PlaylistPickerBottomSheet
+import com.lelloman.pezzottify.android.ui.component.bottomsheet.TrackActionsBottomSheet
+import com.lelloman.pezzottify.android.ui.component.dialog.CreatePlaylistDialog
 import com.lelloman.pezzottify.android.ui.content.Content
 import com.lelloman.pezzottify.android.ui.content.Track
+import com.lelloman.pezzottify.android.ui.toAlbum
+import com.lelloman.pezzottify.android.ui.toTrack
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -77,7 +87,40 @@ private fun QueueScreenContent(
     actions: QueueScreenActions,
     navController: NavController,
 ) {
+    val context = LocalContext.current
+    val snackbarHostState = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
+
+    // Bottom sheet states
+    val trackSheetState = rememberModalBottomSheetState()
+    val playlistPickerSheetState = rememberModalBottomSheetState()
+
+    // Selected item for bottom sheets
+    var selectedTrack by remember { mutableStateOf<Track?>(null) }
+    var selectedTrackIsLiked by remember { mutableStateOf(false) }
+    var showPlaylistPicker by remember { mutableStateOf(false) }
+    var showCreatePlaylistDialog by remember { mutableStateOf(false) }
+
+    // Collect like state for the selected track
+    selectedTrack?.let { track ->
+        val likeState by actions.getTrackLikeState(track.id).collectAsState(initial = false)
+        selectedTrackIsLiked = likeState
+    }
+
+    // Collect user playlists for the picker
+    val userPlaylists by actions.getUserPlaylists().collectAsState(initial = emptyList())
+
+    // Track pending add to playlist
+    var pendingAddToPlaylistTrackId by remember { mutableStateOf<String?>(null) }
+
+    val showSnackbar: (String) -> Unit = { message ->
+        scope.launch {
+            snackbarHostState.showSnackbar(message)
+        }
+    }
+
     Scaffold(
+        snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
         topBar = {
             TopAppBar(
                 title = {
@@ -122,9 +165,71 @@ private fun QueueScreenContent(
                 tracks = state.tracks,
                 currentTrackIndex = state.currentTrackIndex,
                 actions = actions,
+                onTrackMoreClick = { track -> selectedTrack = track },
                 modifier = Modifier.padding(innerPadding),
             )
         }
+    }
+
+    // Track actions bottom sheet
+    selectedTrack?.let { track ->
+        TrackActionsBottomSheet(
+            track = track,
+            sheetState = trackSheetState,
+            onDismiss = { selectedTrack = null },
+            onAddToQueue = {
+                actions.addTrackToQueue(track.id)
+                showSnackbar(context.getString(R.string.added_to_queue))
+            },
+            onAddToPlaylist = {
+                pendingAddToPlaylistTrackId = track.id
+                showPlaylistPicker = true
+            },
+            onViewTrack = {
+                navController.toTrack(track.id)
+            },
+            onViewAlbum = {
+                navController.toAlbum(track.albumId)
+            },
+            isLiked = selectedTrackIsLiked,
+            onToggleLike = {
+                actions.toggleTrackLike(track.id, selectedTrackIsLiked)
+            },
+        )
+    }
+
+    // Playlist picker bottom sheet
+    if (showPlaylistPicker) {
+        PlaylistPickerBottomSheet(
+            playlists = userPlaylists,
+            sheetState = playlistPickerSheetState,
+            onDismiss = {
+                showPlaylistPicker = false
+                pendingAddToPlaylistTrackId = null
+            },
+            onPlaylistSelected = { playlistId ->
+                pendingAddToPlaylistTrackId?.let { trackId ->
+                    actions.addTrackToPlaylist(trackId, playlistId)
+                    showSnackbar(context.getString(R.string.added_to_playlist))
+                }
+                showPlaylistPicker = false
+                pendingAddToPlaylistTrackId = null
+            },
+            onCreateNewPlaylist = {
+                showCreatePlaylistDialog = true
+            },
+        )
+    }
+
+    // Create playlist dialog
+    if (showCreatePlaylistDialog) {
+        CreatePlaylistDialog(
+            onDismiss = { showCreatePlaylistDialog = false },
+            onCreate = { name ->
+                actions.createPlaylist(name)
+                showSnackbar(context.getString(R.string.playlist_created))
+            },
+        )
     }
 }
 
@@ -148,6 +253,7 @@ private fun QueueList(
     tracks: List<QueueTrackItem>,
     currentTrackIndex: Int?,
     actions: QueueScreenActions,
+    onTrackMoreClick: (Track) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val listState = rememberLazyListState()
@@ -178,6 +284,7 @@ private fun QueueList(
                 isCurrentTrack = index == currentTrackIndex,
                 onPlayTrack = { actions.clickOnTrack(index) },
                 onRemoveTrack = { actions.removeTrack(trackItem.trackId) },
+                onMoreClick = { track -> onTrackMoreClick(track) },
             )
         }
     }
@@ -194,6 +301,7 @@ private fun SwipeableQueueItem(
     isCurrentTrack: Boolean,
     onPlayTrack: () -> Unit,
     onRemoveTrack: () -> Unit,
+    onMoreClick: (Track) -> Unit,
 ) {
     var isPendingDeletion by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
@@ -263,6 +371,7 @@ private fun SwipeableQueueItem(
                     trackContent = trackContent,
                     isCurrentTrack = isCurrentTrack,
                     onClick = onPlayTrack,
+                    onMoreClick = onMoreClick,
                 )
             }
         )
@@ -304,6 +413,7 @@ private fun QueueTrackItem(
     trackContent: Content<Track>,
     isCurrentTrack: Boolean,
     onClick: () -> Unit,
+    onMoreClick: (Track) -> Unit,
 ) {
     val elevation by animateDpAsState(
         if (isCurrentTrack) 4.dp else 0.dp,
@@ -356,7 +466,7 @@ private fun QueueTrackItem(
                     .shadow(elevation)
                     .background(backgroundColor)
                     .clickable(onClick = onClick)
-                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                    .padding(start = 16.dp, top = 12.dp, bottom = 12.dp, end = 4.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 // Track number
@@ -386,8 +496,20 @@ private fun QueueTrackItem(
                 // Duration
                 DurationText(
                     durationSeconds = track.durationSeconds,
-                    modifier = Modifier.padding(start = 16.dp)
+                    modifier = Modifier.padding(start = 8.dp)
                 )
+
+                // More options button
+                IconButton(
+                    onClick = { onMoreClick(track) },
+                    modifier = Modifier.size(40.dp)
+                ) {
+                    Icon(
+                        painter = painterResource(R.drawable.baseline_more_vert_24),
+                        contentDescription = stringResource(R.string.more_options),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
             }
         }
     }
