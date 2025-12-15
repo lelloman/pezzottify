@@ -17,21 +17,27 @@ A self-hosted music streaming platform with a Rust backend, Vue 3 web frontend, 
 - Docker and Docker Compose
 - Git
 
-### Running with Docker
+### Running with Docker (Development)
 
 ```bash
 # Clone the repository
 git clone https://github.com/lelloman/pezzottify
 cd pezzottify
 
-# Copy and configure environment (for monitoring/alerts)
-cp monitoring/.env.example monitoring/.env
+# Create dev data directory
+mkdir -p dev-data
+
+# Create config from example
+cp catalog-server/config.example.toml catalog-server/config.toml
+# Edit config.toml as needed
 
 # Build and start
-./build-docker.sh -d catalog-server
+docker compose up --build
 ```
 
 The server will be available at http://localhost:3001
+
+> **Production deployment**: For production, see the [homelab](https://github.com/lelloman/homelab) repo which contains the full deployment configuration including monitoring stack.
 
 ### Development Setup
 
@@ -244,18 +250,6 @@ For detailed endpoint documentation, see [catalog-server/README.md](catalog-serv
 
 ## Monitoring
 
-Pezzottify includes a full observability stack for production deployments.
-
-### Components
-
-| Service      | Port | Description                           |
-| ------------ | ---- | ------------------------------------- |
-| Prometheus   | 9090 | Metrics collection and alerting rules |
-| Grafana      | 3000 | Dashboards and visualization          |
-| Alertmanager | 9093 | Alert routing and notifications       |
-
-### Metrics
-
 The server exposes Prometheus metrics (internal port 9091) including:
 
 - HTTP request counts and latencies
@@ -264,21 +258,7 @@ The server exposes Prometheus metrics (internal port 9091) including:
 - Database query performance
 - Active sessions and memory usage
 
-### Alerts
-
-Pre-configured alerts for common issues:
-
-- **Critical**: Service down, brute force attempts, high error rate, database errors
-- **Warning**: Rate limit violations, slow queries, high memory usage
-
-### Notifications
-
-Supports multiple notification channels:
-
-- Telegram bot (built-in)
-- Generic webhook (Slack, Discord, PagerDuty, etc.)
-
-For setup instructions, see [catalog-server/README.md](catalog-server/README.md#monitoring--alerting).
+For the full monitoring stack (Prometheus, Grafana, Alertmanager), see the [homelab](https://github.com/lelloman/homelab) repo.
 
 ## Project Structure
 
@@ -287,9 +267,7 @@ pezzottify/
 ├── catalog-server/     # Rust backend
 ├── web/                # Vue 3 frontend
 ├── android/            # Kotlin/Android app
-├── monitoring/         # Prometheus, Grafana, Alertmanager configs
-├── docker-compose.yml  # Docker orchestration
-└── build-docker.sh     # Docker build script with version detection
+└── docker-compose.yml  # Development docker-compose
 ```
 
 ## License
