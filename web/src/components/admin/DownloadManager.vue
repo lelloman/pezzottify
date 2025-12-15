@@ -934,8 +934,9 @@ const formatItemName = (item) => {
 const formatPriority = (priority) => {
   if (!priority) return "normal";
   const p = priority.toLowerCase();
-  if (p === "high" || p === "system") return "high";
-  if (p === "low") return "low";
+  if (p === "watchdog") return "high";
+  if (p === "user") return "normal";
+  if (p === "expansion") return "low";
   return "normal";
 };
 
