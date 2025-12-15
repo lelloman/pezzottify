@@ -410,7 +410,7 @@ impl IntegrityWatchdog {
             id: uuid::Uuid::new_v4().to_string(),
             parent_id: None,
             status: QueueStatus::Pending,
-            priority: QueuePriority::Watchdog,
+            priority: QueuePriority::Background,
             content_type,
             content_id,
             content_name: None,
@@ -903,7 +903,7 @@ mod tests {
             .list_all(Some(QueueStatus::Pending), false, false, 10, 0)
             .unwrap();
         assert_eq!(pending.len(), 1);
-        assert_eq!(pending[0].priority, QueuePriority::Watchdog);
+        assert_eq!(pending[0].priority, QueuePriority::Background);
         assert_eq!(pending[0].request_source, RequestSource::Watchdog);
     }
 

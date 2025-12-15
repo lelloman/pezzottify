@@ -49,9 +49,10 @@ impl QueueStatus {
 /// Lower values = higher priority.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum QueuePriority {
-    Watchdog = 1,  // Highest priority - integrity repairs
-    User = 2,      // User requests
-    Expansion = 3, // Auto-expansion, discography fills
+    Urgent = 1,     // Highest priority - critical repairs
+    User = 2,       // User requests
+    Expansion = 3,  // Auto-expansion, discography fills
+    Background = 4, // Lowest priority - background enrichment (integrity watchdog)
 }
 
 impl QueuePriority {
@@ -61,9 +62,10 @@ impl QueuePriority {
 
     pub fn from_i32(value: i32) -> Option<Self> {
         match value {
-            1 => Some(QueuePriority::Watchdog),
+            1 => Some(QueuePriority::Urgent),
             2 => Some(QueuePriority::User),
             3 => Some(QueuePriority::Expansion),
+            4 => Some(QueuePriority::Background),
             _ => None,
         }
     }
@@ -1197,21 +1199,24 @@ mod tests {
 
     #[test]
     fn test_queue_priority_ordering() {
-        assert!(QueuePriority::Watchdog < QueuePriority::User);
+        assert!(QueuePriority::Urgent < QueuePriority::User);
         assert!(QueuePriority::User < QueuePriority::Expansion);
+        assert!(QueuePriority::Expansion < QueuePriority::Background);
     }
 
     #[test]
     fn test_queue_priority_conversion() {
-        assert_eq!(QueuePriority::Watchdog.as_i32(), 1);
+        assert_eq!(QueuePriority::Urgent.as_i32(), 1);
         assert_eq!(QueuePriority::User.as_i32(), 2);
         assert_eq!(QueuePriority::Expansion.as_i32(), 3);
+        assert_eq!(QueuePriority::Background.as_i32(), 4);
 
-        assert_eq!(QueuePriority::from_i32(1), Some(QueuePriority::Watchdog));
+        assert_eq!(QueuePriority::from_i32(1), Some(QueuePriority::Urgent));
         assert_eq!(QueuePriority::from_i32(2), Some(QueuePriority::User));
         assert_eq!(QueuePriority::from_i32(3), Some(QueuePriority::Expansion));
+        assert_eq!(QueuePriority::from_i32(4), Some(QueuePriority::Background));
         assert_eq!(QueuePriority::from_i32(0), None);
-        assert_eq!(QueuePriority::from_i32(4), None);
+        assert_eq!(QueuePriority::from_i32(5), None);
     }
 
     #[test]
@@ -1837,26 +1842,32 @@ mod tests {
     #[test]
     fn test_queue_priority_serialization() {
         // Verify all variants serialize correctly
-        let watchdog = QueuePriority::Watchdog;
+        let urgent = QueuePriority::Urgent;
         let user = QueuePriority::User;
         let expansion = QueuePriority::Expansion;
+        let background = QueuePriority::Background;
 
-        let json_w = serde_json::to_string(&watchdog).unwrap();
-        let json_u = serde_json::to_string(&user).unwrap();
+        let json_u = serde_json::to_string(&urgent).unwrap();
+        let json_user = serde_json::to_string(&user).unwrap();
         let json_e = serde_json::to_string(&expansion).unwrap();
+        let json_b = serde_json::to_string(&background).unwrap();
 
         // Round-trip test
         assert_eq!(
-            serde_json::from_str::<QueuePriority>(&json_w).unwrap(),
-            watchdog
+            serde_json::from_str::<QueuePriority>(&json_u).unwrap(),
+            urgent
         );
         assert_eq!(
-            serde_json::from_str::<QueuePriority>(&json_u).unwrap(),
+            serde_json::from_str::<QueuePriority>(&json_user).unwrap(),
             user
         );
         assert_eq!(
             serde_json::from_str::<QueuePriority>(&json_e).unwrap(),
             expansion
+        );
+        assert_eq!(
+            serde_json::from_str::<QueuePriority>(&json_b).unwrap(),
+            background
         );
     }
 
@@ -1908,7 +1919,7 @@ mod tests {
             "failed-item".to_string(),
             DownloadContentType::TrackAudio,
             "track-123".to_string(),
-            QueuePriority::Watchdog,
+            QueuePriority::Urgent,
             RequestSource::Watchdog,
             3,
         );
