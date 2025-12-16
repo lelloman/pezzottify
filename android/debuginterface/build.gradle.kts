@@ -54,6 +54,9 @@ dependencies {
     // HTTP server for debug dashboard
     implementation(libs.nanohttpd)
 
+    // Androidoscopy SDK for real-time debugging
+    implementation(libs.androidoscopy.sdk)
+
     // Hilt for dependency injection
     implementation(libs.hilt)
     kapt(libs.hilt.compiler)

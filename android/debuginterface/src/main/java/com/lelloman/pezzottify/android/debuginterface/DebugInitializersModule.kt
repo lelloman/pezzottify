@@ -14,4 +14,8 @@ abstract class DebugInitializersModule {
     @Binds
     @IntoSet
     abstract fun bindDebugServerInitializer(initializer: DebugServerInitializer): AppInitializer
+
+    @Binds
+    @IntoSet
+    abstract fun bindAndroidoscopyInitializer(initializer: AndroidoscopyInitializer): AppInitializer
 }
