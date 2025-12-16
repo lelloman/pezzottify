@@ -130,10 +130,7 @@ impl SearchVault for Fts5LevenshteinSearchVault {
         let corrected_query = self.correct_query(query);
 
         if corrected_query != query {
-            debug!(
-                "Query corrected: '{}' -> '{}'",
-                query, corrected_query
-            );
+            debug!("Query corrected: '{}' -> '{}'", query, corrected_query);
         }
 
         let conn = self.conn.lock().unwrap();
@@ -349,10 +346,7 @@ mod tests {
             fn get_searchable_content(&self) -> anyhow::Result<Vec<SearchableItem>> {
                 Ok(self.items.clone())
             }
-            fn create_artist(
-                &self,
-                _data: serde_json::Value,
-            ) -> anyhow::Result<serde_json::Value> {
+            fn create_artist(&self, _data: serde_json::Value) -> anyhow::Result<serde_json::Value> {
                 Ok(serde_json::json!({}))
             }
             fn update_artist(
