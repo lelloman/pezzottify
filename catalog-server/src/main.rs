@@ -9,7 +9,7 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilte
 
 // Import modules from the library crate
 use pezzottify_catalog_server::background_jobs::jobs::{
-    AuditLogCleanupJob, IntegrityWatchdogJob, PopularContentJob,
+    AuditLogCleanupJob, ExpandArtistsBaseJob, MissingFilesWatchdogJob, PopularContentJob,
 };
 use pezzottify_catalog_server::background_jobs::{create_scheduler, JobContext};
 use pezzottify_catalog_server::catalog_store::{
@@ -17,7 +17,7 @@ use pezzottify_catalog_server::catalog_store::{
 };
 use pezzottify_catalog_server::config;
 use pezzottify_catalog_server::download_manager::{
-    AuditLogger, DownloadManager, DownloadQueueStore, DownloaderClient, IntegrityWatchdog,
+    AuditLogger, DownloadManager, DownloadQueueStore, DownloaderClient, MissingFilesWatchdog,
     QueueProcessor, SqliteDownloadQueueStore,
 };
 use pezzottify_catalog_server::downloader;
@@ -364,18 +364,18 @@ async fn main() -> Result<()> {
         info!("Queue processor started");
     }
 
-    // Register integrity watchdog job if download manager is enabled
+    // Register missing files watchdog job if download manager is enabled
     if let Some(ref queue_store) = download_queue_store {
         let audit_logger = AuditLogger::new(queue_store.clone());
-        let watchdog = Arc::new(IntegrityWatchdog::new(
+        let watchdog = Arc::new(MissingFilesWatchdog::new(
             catalog_store.clone() as Arc<dyn CatalogStore>,
             queue_store.clone(),
             audit_logger,
         ));
         scheduler
-            .register_job(Arc::new(IntegrityWatchdogJob::new(watchdog)))
+            .register_job(Arc::new(MissingFilesWatchdogJob::new(watchdog)))
             .await;
-        info!("Integrity watchdog job registered");
+        info!("Missing files watchdog job registered");
 
         // Register audit log cleanup job
         scheduler
@@ -388,6 +388,15 @@ async fn main() -> Result<()> {
             "Audit log cleanup job registered (retention: {} days)",
             app_config.download_manager.audit_log_retention_days
         );
+
+        // Register expand artists base job (manual-only)
+        scheduler
+            .register_job(Arc::new(ExpandArtistsBaseJob::new(
+                catalog_store.clone() as Arc<dyn CatalogStore>,
+                queue_store.clone(),
+            )))
+            .await;
+        info!("Expand artists base job registered (manual trigger only)");
     }
 
     info!("Ready to serve at port {}!", app_config.port);

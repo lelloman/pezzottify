@@ -1144,7 +1144,41 @@ pub struct DiscographyRequestResult {
     pub status: QueueStatus,
 }
 
+/// Report from the missing files watchdog scan showing missing media files and actions taken.
+#[derive(Debug, Default, Clone)]
+pub struct MissingFilesReport {
+    /// Track IDs (base62) for tracks missing audio files
+    pub missing_track_audio: Vec<String>,
+    /// Image IDs (hex) for missing album cover images
+    pub missing_album_images: Vec<String>,
+    /// Image IDs (hex) for missing artist portrait images
+    pub missing_artist_images: Vec<String>,
+    /// Number of items queued for download
+    pub items_queued: usize,
+    /// Number of items skipped (already in queue)
+    pub items_skipped: usize,
+    /// Time taken to complete the scan in milliseconds
+    pub scan_duration_ms: i64,
+}
+
+impl MissingFilesReport {
+    /// Returns the total number of missing items found.
+    pub fn total_missing(&self) -> usize {
+        self.missing_track_audio.len()
+            + self.missing_album_images.len()
+            + self.missing_artist_images.len()
+    }
+
+    /// Returns true if no missing content was found.
+    pub fn is_clean(&self) -> bool {
+        self.total_missing() == 0
+    }
+}
+
 /// Report from the watchdog scan showing missing content and actions taken.
+///
+/// Deprecated: Use `MissingFilesReport` for missing file scans.
+/// This struct is kept for backward compatibility with audit logging.
 #[derive(Debug, Default, Clone)]
 pub struct WatchdogReport {
     /// Track IDs (base62) for tracks missing audio files

@@ -1,5 +1,6 @@
 use super::context::JobContext;
 use anyhow::Result;
+use serde_json::Value as JsonValue;
 use std::time::Duration;
 
 /// Schedule for when a job should run.
@@ -101,4 +102,19 @@ pub trait BackgroundJob: Send + Sync {
     /// The implementation should periodically check `ctx.is_cancelled()` for
     /// long-running operations and return early with `JobError::Cancelled` if true.
     fn execute(&self, ctx: &JobContext) -> Result<(), JobError>;
+
+    /// Execute the job with optional parameters.
+    ///
+    /// This method is called when a job is triggered manually via the admin API
+    /// with optional JSON parameters in the request body. The default implementation
+    /// ignores the parameters and delegates to `execute()`.
+    ///
+    /// Jobs that need to accept runtime parameters should override this method.
+    fn execute_with_params(
+        &self,
+        ctx: &JobContext,
+        _params: Option<JsonValue>,
+    ) -> Result<(), JobError> {
+        self.execute(ctx)
+    }
 }

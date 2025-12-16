@@ -4,9 +4,11 @@
 //! for various server maintenance and processing tasks.
 
 pub mod audit_log_cleanup;
-pub mod integrity_watchdog;
+pub mod expand_artists_base;
+pub mod missing_files_watchdog;
 pub mod popular_content;
 
 pub use audit_log_cleanup::AuditLogCleanupJob;
-pub use integrity_watchdog::IntegrityWatchdogJob;
+pub use expand_artists_base::ExpandArtistsBaseJob;
+pub use missing_files_watchdog::MissingFilesWatchdogJob;
 pub use popular_content::PopularContentJob;
