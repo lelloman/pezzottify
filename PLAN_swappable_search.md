@@ -1,5 +1,26 @@
 # Plan: Swappable Search Mechanisms
 
+## Status Summary
+
+### Completed ✅
+- **Step 1-6**: Runtime-configurable search engine via CLI (`--search-engine`) and config (`[search] engine`)
+- **Step 8**: Live index sync (add/update/remove items without restart)
+- **Step 9a**: Typo-tolerant search via FTS5 + Levenshtein (implemented as `fts5-levenshtein` engine)
+
+### Available Search Engines
+| Engine | CLI Value | Description |
+|--------|-----------|-------------|
+| PezzotHash | `pezzothash` | SimHash-based fuzzy search (default) |
+| FTS5 | `fts5` | SQLite FTS5 with trigram tokenizer |
+| FTS5+Levenshtein | `fts5-levenshtein` | FTS5 with typo correction |
+| NoOp | `noop` | Disabled (fastest startup) |
+
+### Not Yet Implemented
+- **Step 9b**: Popularity weighting - requires `item_popularity` table populated by background job
+- **Step 10**: Parallel category search (optional, for 100k+ item catalogs)
+
+---
+
 ## Current State
 
 - `SearchVault` trait in `catalog-server/src/search/search_vault.rs:173` already abstracts search
@@ -649,10 +670,16 @@ This is probably overkill for most catalogs but could help with 100k+ items.
 
 | Engine | Fuzzy | Typo Tolerance | Popularity | Memory |
 |--------|-------|----------------|------------|--------|
-| `PezzotHash` | SimHash | Yes (built-in) | No | Unbounded |
-| `Fts5` | Trigram | Partial | Configurable | Bounded |
-| `Fts5Spellfix` | Trigram + Edit Distance | Yes | Configurable | Bounded |
-| `NoOp` | - | - | - | Zero |
+| `pezzothash` | SimHash | Yes (built-in) | No | Unbounded |
+| `fts5` | Trigram | Partial | Not yet | Bounded |
+| `fts5-levenshtein` | Trigram + Levenshtein | Yes | Not yet | Bounded |
+| `noop` | - | - | - | Zero |
+
+### Files Created
+- `src/search/fts5_search.rs` - FTS5 implementation
+- `src/search/fts5_levenshtein_search.rs` - FTS5 + Levenshtein typo correction
+- `src/search/levenshtein.rs` - Levenshtein distance algorithm and Vocabulary
+- `src/search/factory.rs` - Search vault factory function
 
 ## Future Extensions
 
