@@ -522,9 +522,10 @@ export const useRemoteStore = defineStore("remote", () => {
     }
   };
 
-  const triggerBackgroundJob = async (jobId) => {
+  const triggerBackgroundJob = async (jobId, params = null) => {
     try {
-      const response = await axios.post(`/v1/admin/jobs/${jobId}/trigger`);
+      const body = params ? { params } : {};
+      const response = await axios.post(`/v1/admin/jobs/${jobId}/trigger`, body);
       return { success: true, data: response.data };
     } catch (error) {
       console.error("Failed to trigger background job:", error);

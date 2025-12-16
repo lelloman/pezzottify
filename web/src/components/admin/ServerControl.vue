@@ -50,6 +50,16 @@
           <span v-else class="jobStatus">Never run</span>
         </div>
       </div>
+      <div v-if="job.id === 'expand_artists_base'" class="jobOptions">
+        <label class="modeToggle">
+          <input
+            type="checkbox"
+            :checked="expandArtistsMode === 'actual'"
+            @change="expandArtistsMode = $event.target.checked ? 'actual' : 'dry_run'"
+          />
+          <span class="modeLabel">{{ expandArtistsMode === 'actual' ? 'Actual (will queue downloads)' : 'Dry-run (preview only)' }}</span>
+        </label>
+      </div>
       <button
         class="triggerButton"
         :disabled="job.is_running || triggeringJobs[job.id]"
@@ -133,6 +143,9 @@ const jobsError = ref(null);
 const triggeringJobs = reactive({});
 const triggerError = ref(null);
 
+// Job-specific options
+const expandArtistsMode = ref("dry_run"); // "dry_run" or "actual"
+
 // Audit log state
 const auditEntries = ref([]);
 const auditLoading = ref(true);
@@ -180,13 +193,21 @@ const triggerJob = async (jobId) => {
   triggeringJobs[jobId] = true;
   triggerError.value = null;
 
-  const result = await remoteStore.triggerBackgroundJob(jobId);
+  // Build job-specific params
+  let params = null;
+  if (jobId === "expand_artists_base") {
+    params = { mode: expandArtistsMode.value };
+  }
+
+  const result = await remoteStore.triggerBackgroundJob(jobId, params);
 
   if (result.error) {
     triggerError.value = `Failed to trigger job: ${result.error}`;
   } else {
     // Refresh job list to show updated status
     await loadJobs();
+    // Refresh audit log to show the new entry
+    await loadAuditLog();
   }
 
   triggeringJobs[jobId] = false;
@@ -227,8 +248,22 @@ const formatDetails = (details) => {
 
   const parts = [];
 
-  // IntegrityWatchdog - completed
-  if (details.is_clean !== undefined) {
+  // ExpandArtistsBase - has 'mode' field to distinguish from IntegrityWatchdog
+  if (details.mode !== undefined) {
+    const modeLabel = details.mode === "actual" ? "Actual" : "Dry-run";
+    if (details.is_clean) {
+      parts.push(`${modeLabel}: ✓ No enrichment needed`);
+    } else {
+      const enrichment = [];
+      if (details.artists_without_related_count > 0) enrichment.push(`${details.artists_without_related_count} without related`);
+      if (details.orphan_related_artist_ids_count > 0) enrichment.push(`${details.orphan_related_artist_ids_count} orphan relations`);
+      parts.push(`${modeLabel}: ${enrichment.join(", ")}`);
+      if (details.items_queued > 0) parts.push(`Queued: ${details.items_queued}`);
+      if (details.items_skipped > 0) parts.push(`Skipped: ${details.items_skipped}`);
+    }
+  }
+  // IntegrityWatchdog (MissingFilesWatchdog) - completed
+  else if (details.is_clean !== undefined) {
     if (details.is_clean) {
       parts.push("✓ Catalog clean");
     } else {
@@ -238,12 +273,6 @@ const formatDetails = (details) => {
         if (details.missing_album_images_count > 0) missing.push(`${details.missing_album_images_count} album images`);
         if (details.missing_artist_images_count > 0) missing.push(`${details.missing_artist_images_count} artist images`);
         parts.push(`Missing: ${missing.join(", ")}`);
-      }
-      if (details.total_artist_enrichment > 0) {
-        const enrichment = [];
-        if (details.artists_without_related_count > 0) enrichment.push(`${details.artists_without_related_count} without related`);
-        if (details.orphan_related_artist_ids_count > 0) enrichment.push(`${details.orphan_related_artist_ids_count} orphan relations`);
-        parts.push(`Artist enrichment: ${enrichment.join(", ")}`);
       }
     }
     if (details.items_queued > 0) parts.push(`Queued: ${details.items_queued}`);
@@ -455,6 +484,29 @@ onMounted(() => {
 
 .triggerError {
   margin-top: var(--spacing-2);
+}
+
+.jobOptions {
+  flex-shrink: 0;
+}
+
+.modeToggle {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-2);
+  cursor: pointer;
+  font-size: var(--text-sm);
+}
+
+.modeToggle input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+}
+
+.modeLabel {
+  color: var(--text-subdued);
+  white-space: nowrap;
 }
 
 .auditTitle {
