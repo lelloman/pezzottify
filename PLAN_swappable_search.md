@@ -13,7 +13,7 @@ Runtime-configurable search mechanism selection via config file/CLI, with abilit
 
 ## Implementation Steps
 
-### 1. Add search engine enum to config
+### 1. Add search engine enum to config ✅ DONE
 
 **File: `catalog-server/src/config/file_config.rs`**
 
@@ -67,7 +67,7 @@ let search_engine = file.search
     .unwrap_or_default();
 ```
 
-### 2. Add CLI argument
+### 2. Add CLI argument ✅ DONE
 
 **File: `catalog-server/src/main.rs`**
 
@@ -82,7 +82,7 @@ Add to `CliConfig`:
 pub search_engine: String,
 ```
 
-### 3. Create FTS5 search implementation
+### 3. Create FTS5 search implementation ✅ DONE
 
 **New file: `catalog-server/src/search/fts5_search.rs`**
 
@@ -164,7 +164,7 @@ impl SearchVault for Fts5SearchVault {
 }
 ```
 
-### 4. Create search vault factory
+### 4. Create search vault factory ✅ DONE
 
 **New file: `catalog-server/src/search/factory.rs`**
 
@@ -195,7 +195,7 @@ pub fn create_search_vault(
 }
 ```
 
-### 5. Update main.rs to use factory
+### 5. Update main.rs to use factory ✅ DONE
 
 **File: `catalog-server/src/main.rs`**
 
@@ -214,7 +214,7 @@ let search_vault = create_search_vault(
 );
 ```
 
-### 6. Update mod.rs exports
+### 6. Update mod.rs exports ✅ DONE
 
 **File: `catalog-server/src/search/mod.rs`**
 

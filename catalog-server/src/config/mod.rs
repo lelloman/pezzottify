@@ -1,11 +1,39 @@
 mod file_config;
 
-pub use file_config::{BackgroundJobsConfig, DownloadManagerConfig, FileConfig};
+pub use file_config::{BackgroundJobsConfig, DownloadManagerConfig, FileConfig, SearchConfig};
 
 use crate::server::RequestsLoggingLevel;
 use anyhow::{bail, Result};
 use clap::ValueEnum;
 use std::path::PathBuf;
+
+/// Search engine implementation to use
+#[derive(Debug, Clone, Default, PartialEq, Eq, ValueEnum)]
+pub enum SearchEngine {
+    /// PezzotHash - SimHash-based fuzzy search (default)
+    #[default]
+    PezzotHash,
+    /// FTS5 - SQLite full-text search with trigram tokenizer
+    Fts5,
+    /// NoOp - Disabled search (returns empty results)
+    NoOp,
+}
+
+impl std::fmt::Display for SearchEngine {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            SearchEngine::PezzotHash => write!(f, "pezzothash"),
+            SearchEngine::Fts5 => write!(f, "fts5"),
+            SearchEngine::NoOp => write!(f, "noop"),
+        }
+    }
+}
+
+/// Settings for the search subsystem
+#[derive(Debug, Clone)]
+pub struct SearchSettings {
+    pub engine: SearchEngine,
+}
 
 /// CLI arguments that can be used for config resolution.
 /// This struct mirrors the CLI arguments that can be overridden by TOML config.
@@ -22,6 +50,7 @@ pub struct CliConfig {
     pub downloader_timeout_sec: u64,
     pub event_retention_days: u64,
     pub prune_interval_hours: u64,
+    pub search_engine: SearchEngine,
 }
 
 #[derive(Debug, Clone)]
@@ -42,6 +71,7 @@ pub struct AppConfig {
     // Feature configs (with defaults)
     pub download_manager: DownloadManagerSettings,
     pub background_jobs: BackgroundJobsSettings,
+    pub search: SearchSettings,
 }
 
 impl AppConfig {
@@ -137,6 +167,21 @@ impl AppConfig {
 
         let background_jobs = BackgroundJobsSettings::default();
 
+        // Search settings - TOML overrides CLI
+        let search_engine = file
+            .search
+            .and_then(|s| s.engine)
+            .map(|e| match e.to_lowercase().as_str() {
+                "fts5" => SearchEngine::Fts5,
+                "noop" | "none" | "disabled" => SearchEngine::NoOp,
+                _ => SearchEngine::PezzotHash, // default for unknown values
+            })
+            .unwrap_or_else(|| cli.search_engine.clone());
+
+        let search = SearchSettings {
+            engine: search_engine,
+        };
+
         Ok(Self {
             db_dir,
             media_path,
@@ -151,6 +196,7 @@ impl AppConfig {
             prune_interval_hours,
             download_manager,
             background_jobs,
+            search,
         })
     }
 
@@ -168,6 +214,10 @@ impl AppConfig {
 
     pub fn download_queue_db_path(&self) -> PathBuf {
         self.db_dir.join("download_queue.db")
+    }
+
+    pub fn search_db_path(&self) -> PathBuf {
+        self.db_dir.join("search.db")
     }
 }
 
@@ -290,6 +340,7 @@ mod tests {
             downloader_timeout_sec: 600,
             event_retention_days: 60,
             prune_interval_hours: 12,
+            search_engine: SearchEngine::PezzotHash,
         };
 
         let config = AppConfig::resolve(&cli, None).unwrap();

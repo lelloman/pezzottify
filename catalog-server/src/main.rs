@@ -21,11 +21,7 @@ use pezzottify_catalog_server::download_manager::{
     QueueProcessor, SqliteDownloadQueueStore,
 };
 use pezzottify_catalog_server::downloader;
-#[cfg(feature = "no_search")]
-use pezzottify_catalog_server::search::NoOpSearchVault;
-#[cfg(not(feature = "no_search"))]
-use pezzottify_catalog_server::search::PezzotHashSearchVault;
-use pezzottify_catalog_server::search::SearchVault;
+use pezzottify_catalog_server::search::create_search_vault;
 use pezzottify_catalog_server::server::{metrics, run_server, RequestsLoggingLevel};
 use pezzottify_catalog_server::server_store::{self, SqliteServerStore};
 use pezzottify_catalog_server::user::{self, SqliteUserStore, UserManager};
@@ -110,6 +106,10 @@ struct CliArgs {
     /// Interval in hours between pruning runs. Only used if event_retention_days > 0.
     #[clap(long, default_value_t = 24)]
     pub prune_interval_hours: u64,
+
+    /// Search engine to use: pezzothash (default), fts5, or noop
+    #[clap(long, value_enum, default_value_t = config::SearchEngine::PezzotHash)]
+    pub search_engine: config::SearchEngine,
 }
 
 /// Convert CLI args to CliConfig for config resolution
@@ -127,6 +127,7 @@ impl From<&CliArgs> for config::CliConfig {
             downloader_timeout_sec: args.downloader_timeout_sec,
             event_retention_days: args.event_retention_days,
             prune_interval_hours: args.prune_interval_hours,
+            search_engine: args.search_engine.clone(),
         }
     }
 }
@@ -284,14 +285,15 @@ async fn main() -> Result<()> {
         });
     }
 
-    info!("Indexing content for search...");
-
-    #[cfg(not(feature = "no_search"))]
-    let search_vault: Box<dyn SearchVault> =
-        Box::new(PezzotHashSearchVault::new(catalog_store.clone()));
-
-    #[cfg(feature = "no_search")]
-    let search_vault: Box<dyn SearchVault> = Box::new(NoOpSearchVault {});
+    info!(
+        "Indexing content for search using {} engine...",
+        app_config.search.engine
+    );
+    let search_vault = create_search_vault(
+        &app_config.search.engine,
+        catalog_store.clone(),
+        &app_config.db_dir,
+    )?;
 
     // Create downloader client if URL is configured
     let downloader: Option<Arc<dyn downloader::Downloader>> =
