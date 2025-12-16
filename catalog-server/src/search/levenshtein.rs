@@ -169,6 +169,7 @@ impl Vocabulary {
     }
 
     /// Check if the vocabulary is empty
+    #[allow(dead_code)]
     pub fn is_empty(&self) -> bool {
         self.words.is_empty()
     }

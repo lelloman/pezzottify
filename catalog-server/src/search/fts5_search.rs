@@ -294,10 +294,7 @@ mod tests {
             fn get_searchable_content(&self) -> anyhow::Result<Vec<SearchableItem>> {
                 Ok(self.items.clone())
             }
-            fn create_artist(
-                &self,
-                _data: serde_json::Value,
-            ) -> anyhow::Result<serde_json::Value> {
+            fn create_artist(&self, _data: serde_json::Value) -> anyhow::Result<serde_json::Value> {
                 Ok(serde_json::json!({}))
             }
             fn update_artist(
