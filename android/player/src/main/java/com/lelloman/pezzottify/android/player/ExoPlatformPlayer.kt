@@ -227,10 +227,13 @@ internal class ExoPlatformPlayer(
 
     override fun togglePlayPause() {
         val controller = mediaController
-        val newState = !isPlaying.value
-        logger.info("togglePlayPause() - newState=$newState, controller=${controller != null}, isConnected=${controller?.isConnected}, playbackState=${controller?.playbackState}")
-        mutableIsPlaying.value = newState
-        controller?.playWhenReady = newState
+        if (controller == null) {
+            logger.warn("togglePlayPause() - mediaController is null, ignoring")
+            return
+        }
+        val newState = !controller.playWhenReady
+        logger.info("togglePlayPause() - newState=$newState, isConnected=${controller.isConnected}, playbackState=${controller.playbackState}")
+        controller.playWhenReady = newState
     }
 
     override fun seekToPercentage(percentage: Float) {
