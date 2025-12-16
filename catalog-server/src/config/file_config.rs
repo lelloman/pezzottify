@@ -21,6 +21,7 @@ pub struct FileConfig {
     // Feature configs
     pub download_manager: Option<DownloadManagerConfig>,
     pub background_jobs: Option<BackgroundJobsConfig>,
+    pub search: Option<SearchConfig>,
 }
 
 #[derive(Debug, Deserialize, Default, Clone)]
@@ -55,6 +56,13 @@ pub struct DownloadManagerConfig {
 pub struct BackgroundJobsConfig {
     // Future: per-job configuration can be added here
     // e.g., pub popular_content_interval_hours: Option<u64>,
+}
+
+#[derive(Debug, Deserialize, Default, Clone)]
+#[serde(default)]
+pub struct SearchConfig {
+    /// Search engine to use: "pezzothash", "fts5", "noop"
+    pub engine: Option<String>,
 }
 
 impl FileConfig {
