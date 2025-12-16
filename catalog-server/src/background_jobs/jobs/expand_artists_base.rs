@@ -195,13 +195,15 @@ impl ExpandArtistsBaseJob {
         Ok((queued, skipped))
     }
 
-    /// Check if an item is already in the download queue.
+    /// Check if an item is already in the active download queue (pending/in-progress).
+    /// Completed items are not considered "in queue" so they can be retried.
     fn is_already_in_queue(
         &self,
         content_type: DownloadContentType,
         content_id: &str,
     ) -> anyhow::Result<bool> {
-        self.queue_store.is_in_queue(content_type, content_id)
+        self.queue_store
+            .is_in_active_queue(content_type, content_id)
     }
 
     /// Create a queue item for expand artists job.
