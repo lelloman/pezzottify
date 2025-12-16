@@ -80,6 +80,15 @@ corruption_cooldown_multiplier = 2.0
 # Successful downloads needed to de-escalate one level
 corruption_successes_to_deescalate = 10
 
+# Search settings
+[search]
+# Search engine to use: "pezzothash" (default), "fts5", "fts5-levenshtein", "noop"
+# - pezzothash: SimHash-based fuzzy search (built-in typo tolerance, unbounded memory)
+# - fts5: SQLite FTS5 with trigram tokenizer (fast, bounded memory)
+# - fts5-levenshtein: FTS5 with Levenshtein-based typo correction (best typo tolerance)
+# - noop: Disabled search (returns empty results, fastest startup)
+engine = "pezzothash"
+
 # Background Jobs settings
 [background_jobs]
 # Future: per-job configuration
