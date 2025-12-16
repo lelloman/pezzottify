@@ -480,7 +480,7 @@ For tests or CLI tools that don't need search:
 let catalog_store: Arc<dyn CatalogStore> = Arc::new(SqliteCatalogStore::new(...));
 ```
 
-### 9. Add FTS5 + Spellfix1 variant (typo tolerance)
+### 9. Add FTS5 + Spellfix1 variant (typo tolerance) ✅ DONE (implemented with Levenshtein instead)
 
 **New file: `catalog-server/src/search/fts5_spellfix_search.rs`**
 
