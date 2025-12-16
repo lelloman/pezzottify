@@ -127,15 +127,23 @@ impl JobScheduler {
     /// Handle a command from the SchedulerHandle.
     async fn handle_command(&mut self, cmd: SchedulerCommand) {
         match cmd {
-            SchedulerCommand::TriggerJob { job_id, response } => {
-                let result = self.trigger_job(&job_id).await;
+            SchedulerCommand::TriggerJob {
+                job_id,
+                params,
+                response,
+            } => {
+                let result = self.trigger_job(&job_id, params).await;
                 let _ = response.send(result);
             }
         }
     }
 
-    /// Manually trigger a job by ID.
-    async fn trigger_job(&mut self, job_id: &str) -> Result<(), JobError> {
+    /// Manually trigger a job by ID with optional parameters.
+    async fn trigger_job(
+        &mut self,
+        job_id: &str,
+        params: Option<serde_json::Value>,
+    ) -> Result<(), JobError> {
         let state = self.shared_state.read().await;
         if !state.jobs.contains_key(job_id) {
             return Err(JobError::NotFound);
@@ -146,7 +154,7 @@ impl JobScheduler {
         }
         drop(state);
 
-        self.spawn_job(job_id, "manual").await;
+        self.spawn_job(job_id, "manual", params).await;
         Ok(())
     }
 
@@ -250,7 +258,7 @@ impl JobScheduler {
         }
 
         for job_id in jobs_to_run {
-            self.spawn_job(&job_id, "schedule").await;
+            self.spawn_job(&job_id, "schedule", None).await;
         }
     }
 
@@ -280,12 +288,20 @@ impl JobScheduler {
 
         for job_id in jobs_to_trigger {
             let trigger = format!("hook:{}", event);
-            self.spawn_job(&job_id, &trigger).await;
+            self.spawn_job(&job_id, &trigger, None).await;
         }
     }
 
     /// Spawn a job execution task.
-    async fn spawn_job(&mut self, job_id: &str, triggered_by: &str) {
+    ///
+    /// The `params` argument is passed to `execute_with_params()` for manual triggers.
+    /// For scheduled and hook-triggered jobs, params should be None.
+    async fn spawn_job(
+        &mut self,
+        job_id: &str,
+        triggered_by: &str,
+        params: Option<serde_json::Value>,
+    ) {
         let job = {
             let state = self.shared_state.read().await;
             match state.jobs.get(job_id) {
@@ -361,7 +377,8 @@ impl JobScheduler {
         // Spawn the job in a blocking task since jobs are synchronous
         let handle = tokio::spawn(async move {
             let start_time = Instant::now();
-            let result = tokio::task::spawn_blocking(move || job.execute(&ctx)).await;
+            let result =
+                tokio::task::spawn_blocking(move || job.execute_with_params(&ctx, params)).await;
             let elapsed = start_time.elapsed();
 
             // Record job completion

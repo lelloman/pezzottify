@@ -1,4 +1,4 @@
-//! Integrity watchdog background job.
+//! Missing files watchdog background job.
 //!
 //! This job periodically scans the catalog for missing media files and
 //! queues download requests to repair them.
@@ -8,37 +8,37 @@ use crate::background_jobs::{
     job::{BackgroundJob, HookEvent, JobError, JobSchedule, ShutdownBehavior},
     JobAuditLogger,
 };
-use crate::download_manager::IntegrityWatchdog;
+use crate::download_manager::MissingFilesWatchdog;
 use std::sync::Arc;
 use std::time::Duration;
 use tracing::info;
 
-/// Background job that runs the integrity watchdog.
+/// Background job that runs the missing files watchdog.
 ///
 /// This job runs on startup and then daily to scan the catalog for
 /// missing audio files and images, queuing download requests to repair them.
-pub struct IntegrityWatchdogJob {
-    watchdog: Arc<IntegrityWatchdog>,
+pub struct MissingFilesWatchdogJob {
+    watchdog: Arc<MissingFilesWatchdog>,
 }
 
-impl IntegrityWatchdogJob {
-    /// Create a new IntegrityWatchdogJob.
-    pub fn new(watchdog: Arc<IntegrityWatchdog>) -> Self {
+impl MissingFilesWatchdogJob {
+    /// Create a new MissingFilesWatchdogJob.
+    pub fn new(watchdog: Arc<MissingFilesWatchdog>) -> Self {
         Self { watchdog }
     }
 }
 
-impl BackgroundJob for IntegrityWatchdogJob {
+impl BackgroundJob for MissingFilesWatchdogJob {
     fn id(&self) -> &'static str {
-        "integrity_watchdog"
+        "missing_files_watchdog"
     }
 
     fn name(&self) -> &'static str {
-        "Integrity Watchdog"
+        "Missing Files Watchdog"
     }
 
     fn description(&self) -> &'static str {
-        "Scan catalog for missing files and queue repairs"
+        "Scan catalog for missing media files and queue repairs"
     }
 
     fn schedule(&self) -> JobSchedule {
@@ -74,12 +74,12 @@ impl BackgroundJob for IntegrityWatchdogJob {
         };
 
         info!(
-            "Watchdog scan complete: queued={}, skipped={}, duration={}ms",
+            "Missing files scan complete: queued={}, skipped={}, duration={}ms",
             report.items_queued, report.items_skipped, report.scan_duration_ms
         );
 
         if report.is_clean() {
-            info!("Catalog integrity check passed - no missing files");
+            info!("Missing files check passed - no missing media files");
         } else {
             info!(
                 "Found {} missing items: {} track audio, {} album images, {} artist images",
@@ -95,10 +95,7 @@ impl BackgroundJob for IntegrityWatchdogJob {
             "missing_track_audio_count": report.missing_track_audio.len(),
             "missing_album_images_count": report.missing_album_images.len(),
             "missing_artist_images_count": report.missing_artist_images.len(),
-            "artists_without_related_count": report.artists_without_related.len(),
-            "orphan_related_artist_ids_count": report.orphan_related_artist_ids.len(),
             "total_missing": report.total_missing(),
-            "total_artist_enrichment": report.total_artist_enrichment(),
             "items_queued": report.items_queued,
             "items_skipped": report.items_skipped,
             "is_clean": report.is_clean(),
@@ -114,12 +111,9 @@ impl BackgroundJob for IntegrityWatchdogJob {
 mod tests {
     use super::*;
 
-    // Note: Full integration tests require a mock IntegrityWatchdog,
+    // Note: Full integration tests require a mock MissingFilesWatchdog,
     // which is tested separately in the watchdog module.
     // These tests verify job metadata only.
-
-    // We can't easily create an IntegrityWatchdogJob without the watchdog,
-    // so we test the trait implementation separately
 
     #[test]
     fn test_job_schedule_is_combined_with_startup() {

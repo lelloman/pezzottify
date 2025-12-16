@@ -10,7 +10,8 @@ use anyhow::Result;
 use crate::server::metrics;
 
 use super::models::{
-    AuditEventType, AuditLogEntry, DownloadError, QueueItem, RequestSource, WatchdogReport,
+    AuditEventType, AuditLogEntry, DownloadError, MissingFilesReport, QueueItem, RequestSource,
+    WatchdogReport,
 };
 use super::queue_store::DownloadQueueStore;
 
@@ -229,7 +230,7 @@ impl AuditLogger {
         self.log_event(entry)
     }
 
-    /// Log a watchdog scan completing.
+    /// Log a watchdog scan completing (deprecated, use log_missing_files_scan_completed).
     pub fn log_watchdog_scan_completed(&self, report: &WatchdogReport) -> Result<()> {
         let entry = AuditLogEntry::new(AuditEventType::WatchdogScanCompleted)
             .with_source(RequestSource::Watchdog)
@@ -241,6 +242,24 @@ impl AuditLogger {
                 "orphan_related_artist_ids_count": report.orphan_related_artist_ids.len(),
                 "total_missing": report.total_missing(),
                 "total_artist_enrichment": report.total_artist_enrichment(),
+                "items_queued": report.items_queued,
+                "items_skipped": report.items_skipped,
+                "scan_duration_ms": report.scan_duration_ms,
+                "is_clean": report.is_clean(),
+            }));
+
+        self.log_event(entry)
+    }
+
+    /// Log a missing files scan completing.
+    pub fn log_missing_files_scan_completed(&self, report: &MissingFilesReport) -> Result<()> {
+        let entry = AuditLogEntry::new(AuditEventType::WatchdogScanCompleted)
+            .with_source(RequestSource::Watchdog)
+            .with_details(serde_json::json!({
+                "missing_track_audio_count": report.missing_track_audio.len(),
+                "missing_album_images_count": report.missing_album_images.len(),
+                "missing_artist_images_count": report.missing_artist_images.len(),
+                "total_missing": report.total_missing(),
                 "items_queued": report.items_queued,
                 "items_skipped": report.items_skipped,
                 "scan_duration_ms": report.scan_duration_ms,

@@ -2038,10 +2038,19 @@ async fn admin_get_job(
     }
 }
 
+/// Request body for triggering a job with optional parameters.
+#[derive(Debug, Deserialize, Default)]
+struct TriggerJobRequest {
+    /// Optional parameters to pass to the job's execute_with_params() method.
+    #[serde(default)]
+    params: Option<serde_json::Value>,
+}
+
 async fn admin_trigger_job(
     session: Session,
     State(scheduler_handle): State<super::state::OptionalSchedulerHandle>,
     Path(job_id): Path<String>,
+    body: Result<Json<TriggerJobRequest>, axum::extract::rejection::JsonRejection>,
 ) -> Response {
     let handle = match scheduler_handle {
         Some(h) => h,
@@ -2054,9 +2063,18 @@ async fn admin_trigger_job(
         }
     };
 
-    info!("User {} triggering job {}", session.user_id, job_id);
+    // Accept either valid JSON body or no body at all (treat as empty params)
+    let params = match body {
+        Ok(Json(req)) => req.params,
+        Err(_) => None, // No body or invalid JSON = no params
+    };
 
-    match handle.trigger_job(&job_id).await {
+    info!(
+        "User {} triggering job {} with params: {:?}",
+        session.user_id, job_id, params
+    );
+
+    match handle.trigger_job(&job_id, params).await {
         Ok(()) => {
             info!(
                 "Job {} triggered successfully by user {}",

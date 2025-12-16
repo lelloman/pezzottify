@@ -92,6 +92,7 @@ impl From<JobRun> for JobRunInfo {
 pub enum SchedulerCommand {
     TriggerJob {
         job_id: String,
+        params: Option<serde_json::Value>,
         response: oneshot::Sender<Result<(), JobError>>,
     },
 }
@@ -186,13 +187,20 @@ impl SchedulerHandle {
         }
     }
 
-    /// Trigger a job manually.
-    pub async fn trigger_job(&self, job_id: &str) -> Result<(), JobError> {
+    /// Trigger a job manually with optional parameters.
+    ///
+    /// Parameters are passed to the job's `execute_with_params()` method.
+    pub async fn trigger_job(
+        &self,
+        job_id: &str,
+        params: Option<serde_json::Value>,
+    ) -> Result<(), JobError> {
         let (response_tx, response_rx) = oneshot::channel();
 
         self.command_tx
             .send(SchedulerCommand::TriggerJob {
                 job_id: job_id.to_string(),
+                params,
                 response: response_tx,
             })
             .await

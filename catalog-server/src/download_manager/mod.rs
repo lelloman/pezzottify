@@ -35,4 +35,4 @@ pub use sync_notifier::DownloadSyncNotifier;
 pub use throttle::{
     DownloadThrottler, NoOpThrottler, SlidingWindowThrottler, ThrottleStats, ThrottlerConfig,
 };
-pub use watchdog::IntegrityWatchdog;
+pub use watchdog::MissingFilesWatchdog;
