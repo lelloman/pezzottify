@@ -6,6 +6,7 @@ import com.lelloman.pezzottify.android.domain.auth.AuthStore
 import com.lelloman.pezzottify.android.domain.lifecycle.AppLifecycleObserver
 import com.lelloman.pezzottify.android.domain.lifecycle.NetworkConnectivityObserver
 import com.lelloman.pezzottify.android.domain.player.PezzottifyPlayer
+import com.lelloman.pezzottify.android.domain.sync.SyncManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -18,18 +19,39 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
-class WebSocketInitializer @Inject constructor(
+class WebSocketInitializer internal constructor(
     private val authStore: AuthStore,
     private val webSocketManager: WebSocketManager,
     private val appLifecycleObserver: AppLifecycleObserver,
     private val networkConnectivityObserver: NetworkConnectivityObserver,
     private val player: PezzottifyPlayer,
+    private val syncManager: SyncManager,
+    private val scope: CoroutineScope,
 ) : AppInitializer {
 
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    @Inject
+    constructor(
+        authStore: AuthStore,
+        webSocketManager: WebSocketManager,
+        appLifecycleObserver: AppLifecycleObserver,
+        networkConnectivityObserver: NetworkConnectivityObserver,
+        player: PezzottifyPlayer,
+        syncManager: SyncManager,
+    ) : this(
+        authStore,
+        webSocketManager,
+        appLifecycleObserver,
+        networkConnectivityObserver,
+        player,
+        syncManager,
+        CoroutineScope(SupervisorJob() + Dispatchers.IO),
+    )
+
     private var debounceJob: Job? = null
+    private var wasDisconnected = false
 
     override fun initialize() {
+        // Observe connection/disconnection decisions
         scope.launch {
             combine(
                 authStore.getAuthState(),
@@ -48,6 +70,28 @@ class WebSocketInitializer @Inject constructor(
                 .collect { decision ->
                     handleConnectionDecision(decision)
                 }
+        }
+
+        // Observe WebSocket connection state to trigger sync catch-up on reconnection
+        scope.launch {
+            webSocketManager.connectionState.collect { state ->
+                when (state) {
+                    is ConnectionState.Connected -> {
+                        if (wasDisconnected) {
+                            // Reconnected after being disconnected - catch up on missed events
+                            syncManager.catchUp()
+                        }
+                        wasDisconnected = false
+                    }
+                    is ConnectionState.Disconnected,
+                    is ConnectionState.Error -> {
+                        wasDisconnected = true
+                    }
+                    is ConnectionState.Connecting -> {
+                        // No state change needed while connecting
+                    }
+                }
+            }
         }
     }
 
