@@ -15,6 +15,8 @@ pub enum SearchEngine {
     PezzotHash,
     /// FTS5 - SQLite full-text search with trigram tokenizer
     Fts5,
+    /// FTS5 with Levenshtein - FTS5 with typo-tolerant query correction
+    Fts5Levenshtein,
     /// NoOp - Disabled search (returns empty results)
     NoOp,
 }
@@ -24,6 +26,7 @@ impl std::fmt::Display for SearchEngine {
         match self {
             SearchEngine::PezzotHash => write!(f, "pezzothash"),
             SearchEngine::Fts5 => write!(f, "fts5"),
+            SearchEngine::Fts5Levenshtein => write!(f, "fts5-levenshtein"),
             SearchEngine::NoOp => write!(f, "noop"),
         }
     }
@@ -171,8 +174,9 @@ impl AppConfig {
         let search_engine = file
             .search
             .and_then(|s| s.engine)
-            .map(|e| match e.to_lowercase().as_str() {
+            .map(|e| match e.to_lowercase().replace('-', "_").as_str() {
                 "fts5" => SearchEngine::Fts5,
+                "fts5_levenshtein" | "fts5levenshtein" => SearchEngine::Fts5Levenshtein,
                 "noop" | "none" | "disabled" => SearchEngine::NoOp,
                 _ => SearchEngine::PezzotHash, // default for unknown values
             })
