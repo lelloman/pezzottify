@@ -365,7 +365,7 @@
     <!-- MY REQUESTS SCREEN -->
     <string name="my_requests_title">My Requests</string>
     <string name="my_requests_tab_queue">Queue (%1$d)</string>
-    <string name="my_requests_tab_completed">Completed (%1$d)</string>
+    <string name="my_requests_tab_completed">Completed</string>
     <string name="my_requests_limit_today">Today</string>
     <string name="my_requests_limit_in_queue">In Queue</string>
     <string name="my_requests_empty_queue">No items in queue</string>
@@ -382,5 +382,6 @@
     <string name="my_requests_time_days_ago">%1$d days ago</string>
     <string name="my_requests_time_months_ago">%1$d months ago</string>
     <string name="my_requests_time_years_ago">%1$d years ago</string>
+    <string name="my_requests_load_more">Load more</string>
     <!-- MY REQUESTS SCREEN -->
 </resources>

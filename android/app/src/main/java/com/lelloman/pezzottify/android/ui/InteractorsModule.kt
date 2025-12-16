@@ -1104,8 +1104,8 @@ class InteractorsModule {
         downloadStatusRepository: com.lelloman.pezzottify.android.domain.download.DownloadStatusRepository,
     ): com.lelloman.pezzottify.android.ui.screen.main.myrequests.MyRequestsScreenViewModel.Interactor =
         object : com.lelloman.pezzottify.android.ui.screen.main.myrequests.MyRequestsScreenViewModel.Interactor {
-            override suspend fun getMyRequests(): Result<List<com.lelloman.pezzottify.android.ui.screen.main.myrequests.UiDownloadRequest>> {
-                val result = getMyDownloadRequestsUseCase()
+            override suspend fun getMyRequests(limit: Int, offset: Int): Result<List<com.lelloman.pezzottify.android.ui.screen.main.myrequests.UiDownloadRequest>> {
+                val result = getMyDownloadRequestsUseCase(limit, offset)
                 return result.map { response ->
                     response.requests.map { request ->
                         com.lelloman.pezzottify.android.ui.screen.main.myrequests.UiDownloadRequest(

@@ -122,19 +122,44 @@ class MyRequestsScreenViewModel(
                 )
             }
 
-            // Load requests
-            val requestsResult = interactor.getMyRequests()
+            // Load requests (first page)
+            val requestsResult = interactor.getMyRequests(PAGE_SIZE, 0)
             mutableState.value = if (requestsResult.isSuccess) {
+                val requests = requestsResult.getOrNull() ?: emptyList()
                 mutableState.value.copy(
                     isLoading = false,
-                    requests = requestsResult.getOrNull(),
+                    requests = requests,
                     errorRes = null,
+                    hasMoreCompleted = requests.count { it.status == RequestStatus.Completed } >= PAGE_SIZE,
                 )
             } else {
                 mutableState.value.copy(
                     isLoading = false,
                     errorRes = R.string.failed_to_load_requests,
                 )
+            }
+        }
+    }
+
+    fun loadMoreCompleted() {
+        val currentRequests = mutableState.value.requests ?: return
+        if (mutableState.value.isLoadingMore || !mutableState.value.hasMoreCompleted) return
+
+        viewModelScope.launch(coroutineContext) {
+            mutableState.value = mutableState.value.copy(isLoadingMore = true)
+
+            val currentOffset = currentRequests.size
+            val requestsResult = interactor.getMyRequests(PAGE_SIZE, currentOffset)
+
+            if (requestsResult.isSuccess) {
+                val newRequests = requestsResult.getOrNull() ?: emptyList()
+                mutableState.value = mutableState.value.copy(
+                    isLoadingMore = false,
+                    requests = currentRequests + newRequests,
+                    hasMoreCompleted = newRequests.count { it.status == RequestStatus.Completed } >= PAGE_SIZE,
+                )
+            } else {
+                mutableState.value = mutableState.value.copy(isLoadingMore = false)
             }
         }
     }
@@ -161,9 +186,13 @@ class MyRequestsScreenViewModel(
     }
 
     interface Interactor {
-        suspend fun getMyRequests(): Result<List<UiDownloadRequest>>
+        suspend fun getMyRequests(limit: Int, offset: Int): Result<List<UiDownloadRequest>>
         suspend fun getDownloadLimits(): Result<DownloadLimitsData>
         fun observeUpdates(): Flow<UiDownloadStatusUpdate>
+    }
+
+    companion object {
+        const val PAGE_SIZE = 50
     }
 
     data class DownloadLimitsData(
