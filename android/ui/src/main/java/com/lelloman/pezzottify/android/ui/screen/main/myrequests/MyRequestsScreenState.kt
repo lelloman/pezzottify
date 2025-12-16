@@ -8,6 +8,8 @@ data class MyRequestsScreenState(
     @StringRes val errorRes: Int? = null,
     val limits: UiRequestLimits? = null,
     val selectedTab: MyRequestsTab = MyRequestsTab.Queue,
+    val hasMoreCompleted: Boolean = true,
+    val isLoadingMore: Boolean = false,
 )
 
 enum class MyRequestsTab {

@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
@@ -26,6 +27,7 @@ import androidx.compose.material.icons.filled.Error
 import androidx.compose.material.icons.filled.HourglassEmpty
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -115,24 +117,19 @@ fun MyRequestsScreen(
                     selectedTabIndex = state.selectedTab.ordinal,
                 ) {
                     MyRequestsTab.entries.forEach { tab ->
-                        val count = when (tab) {
-                            MyRequestsTab.Queue -> state.requests?.count {
-                                it.status == RequestStatus.Pending ||
-                                it.status == RequestStatus.InProgress ||
-                                it.status == RequestStatus.Failed
-                            } ?: 0
-                            MyRequestsTab.Completed -> state.requests?.count {
-                                it.status == RequestStatus.Completed
-                            } ?: 0
-                        }
+                        val queueCount = state.requests?.count {
+                            it.status == RequestStatus.Pending ||
+                            it.status == RequestStatus.InProgress ||
+                            it.status == RequestStatus.Failed
+                        } ?: 0
                         Tab(
                             selected = state.selectedTab == tab,
                             onClick = { viewModel.onTabSelected(tab) },
                             text = {
                                 Text(
                                     text = when (tab) {
-                                        MyRequestsTab.Queue -> stringResource(R.string.my_requests_tab_queue, count)
-                                        MyRequestsTab.Completed -> stringResource(R.string.my_requests_tab_completed, count)
+                                        MyRequestsTab.Queue -> stringResource(R.string.my_requests_tab_queue, queueCount)
+                                        MyRequestsTab.Completed -> stringResource(R.string.my_requests_tab_completed)
                                     }
                                 )
                             }
@@ -172,6 +169,9 @@ fun MyRequestsScreen(
                                 contentResolver = viewModel.contentResolver,
                                 actions = viewModel,
                                 currentTimeMillis = currentTimeMillis.longValue,
+                                hasMore = state.hasMoreCompleted,
+                                isLoadingMore = state.isLoadingMore,
+                                onLoadMore = viewModel::loadMoreCompleted,
                             )
                         }
                     }
@@ -383,6 +383,9 @@ private fun CompletedTabContent(
     contentResolver: ContentResolver,
     actions: MyRequestsScreenActions,
     currentTimeMillis: Long,
+    hasMore: Boolean,
+    isLoadingMore: Boolean,
+    onLoadMore: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val completedRequests = requests.filter {
@@ -413,6 +416,24 @@ private fun CompletedTabContent(
                     onClick = { actions.onRequestClick(request) },
                     currentTimeMillis = currentTimeMillis,
                 )
+            }
+            if (hasMore) {
+                item(span = { GridItemSpan(maxLineSpan) }) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = Spacing.Medium),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        if (isLoadingMore) {
+                            CircularProgressIndicator(modifier = Modifier.size(24.dp))
+                        } else {
+                            Button(onClick = onLoadMore) {
+                                Text(stringResource(R.string.my_requests_load_more))
+                            }
+                        }
+                    }
+                }
             }
         }
     }

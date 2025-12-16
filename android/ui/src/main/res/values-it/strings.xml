@@ -365,7 +365,7 @@
     <!-- MY REQUESTS SCREEN -->
     <string name="my_requests_title">Le mie richieste</string>
     <string name="my_requests_tab_queue">In coda (%1$d)</string>
-    <string name="my_requests_tab_completed">Completate (%1$d)</string>
+    <string name="my_requests_tab_completed">Completate</string>
     <string name="my_requests_limit_today">Oggi</string>
     <string name="my_requests_limit_in_queue">In coda</string>
     <string name="my_requests_empty_queue">Nessun elemento in coda</string>
@@ -382,5 +382,6 @@
     <string name="my_requests_time_days_ago">%1$d giorni fa</string>
     <string name="my_requests_time_months_ago">%1$d mesi fa</string>
     <string name="my_requests_time_years_ago">%1$d anni fa</string>
+    <string name="my_requests_load_more">Carica altri</string>
     <!-- MY REQUESTS SCREEN -->
 </resources>
