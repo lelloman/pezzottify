@@ -153,6 +153,9 @@ pub trait CatalogStore: Send + Sync {
     /// Get closed batches with summaries for the What's New endpoint.
     fn get_whats_new_batches(&self, limit: usize) -> Result<Vec<super::WhatsNewBatch>>;
 
+    /// Get summary of changes in a batch (counts of added/updated/deleted entities).
+    fn get_changelog_batch_summary(&self, batch_id: &str) -> Result<super::BatchChangeSummary>;
+
     /// Get batches that have been open longer than the specified threshold.
     /// Used for stale batch alerting.
     fn get_stale_batches(&self, stale_threshold_hours: u64) -> Result<Vec<super::CatalogBatch>>;

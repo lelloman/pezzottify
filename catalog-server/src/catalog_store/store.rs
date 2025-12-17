@@ -6,8 +6,8 @@
 #![allow(dead_code)]
 
 use super::changelog::{
-    calculate_field_diff, extract_entity_name, generate_display_summary, CatalogBatch,
-    ChangeEntityType, ChangeEntry, ChangeLogStore, ChangeOperation, WhatsNewBatch,
+    calculate_field_diff, extract_entity_name, generate_display_summary, BatchChangeSummary,
+    CatalogBatch, ChangeEntityType, ChangeEntry, ChangeLogStore, ChangeOperation, WhatsNewBatch,
 };
 use super::models::*;
 use super::schema::CATALOG_VERSIONED_SCHEMAS;
@@ -2212,6 +2212,10 @@ impl CatalogStore for SqliteCatalogStore {
 
     fn get_whats_new_batches(&self, limit: usize) -> Result<Vec<WhatsNewBatch>> {
         self.changelog.get_whats_new_batches(limit)
+    }
+
+    fn get_changelog_batch_summary(&self, batch_id: &str) -> Result<BatchChangeSummary> {
+        self.changelog.get_batch_summary(batch_id)
     }
 
     fn get_stale_batches(&self, stale_threshold_hours: u64) -> Result<Vec<CatalogBatch>> {

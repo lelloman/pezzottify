@@ -4,7 +4,9 @@
 //! functionality is not needed (e.g., CLI tools that only manage users).
 #![allow(dead_code)]
 
-use super::changelog::{CatalogBatch, ChangeEntityType, ChangeEntry, WhatsNewBatch};
+use super::changelog::{
+    BatchChangeSummary, CatalogBatch, ChangeEntityType, ChangeEntry, WhatsNewBatch,
+};
 use super::trait_def::{CatalogStore, SearchableItem};
 use anyhow::Result;
 use std::path::PathBuf;
@@ -159,6 +161,10 @@ impl CatalogStore for NullCatalogStore {
 
     fn get_whats_new_batches(&self, _limit: usize) -> Result<Vec<WhatsNewBatch>> {
         Ok(Vec::new())
+    }
+
+    fn get_changelog_batch_summary(&self, _batch_id: &str) -> Result<BatchChangeSummary> {
+        Ok(BatchChangeSummary::default())
     }
 
     fn get_stale_batches(&self, _stale_threshold_hours: u64) -> Result<Vec<CatalogBatch>> {

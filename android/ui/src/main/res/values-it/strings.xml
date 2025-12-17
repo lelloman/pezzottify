@@ -40,6 +40,8 @@
     <string name="popular_albums_header">Album popolari</string>
     <string name="popular_artists_header">Artisti popolari</string>
     <string name="home_empty_state">Inizia a esplorare per vedere qui i contenuti visti di recente!</string>
+    <string name="whats_new_header">Novità</string>
+    <string name="whats_new_see_all">Vedi tutte</string>
     <string name="settings">Impostazioni</string>
     <!-- HOME SCREEN -->
 
@@ -180,6 +182,12 @@
     <string name="direct_downloads">Download diretti</string>
     <string name="direct_downloads_description">Abilita il download di brani per l\'ascolto offline</string>
     <!-- DIRECT DOWNLOADS SECTION -->
+
+    <!-- NOTIFY WHAT'S NEW SECTION -->
+    <string name="notifications_section">Notifiche</string>
+    <string name="notify_whatsnew">Notifiche nuovi contenuti</string>
+    <string name="notify_whatsnew_description">Ricevi notifiche quando viene aggiunta nuova musica al catalogo</string>
+    <!-- NOTIFY WHAT'S NEW SECTION -->
 
     <!-- CREATE PLAYLIST DIALOG -->
     <string name="create_playlist">Crea playlist</string>

@@ -1,3 +1,23 @@
 <resources>
     <string name="app_name">Pezzottify</string>
+
+    <!-- Notification channel -->
+    <string name="notification_channel_whatsnew_name">New Content</string>
+    <string name="notification_channel_whatsnew_description">Notifications when new music is added to the catalog</string>
+
+    <!-- Notification content -->
+    <string name="notification_whatsnew_title">New music available</string>
+
+    <plurals name="notification_albums_added">
+        <item quantity="one">%d album</item>
+        <item quantity="other">%d albums</item>
+    </plurals>
+    <plurals name="notification_artists_added">
+        <item quantity="one">%d artist</item>
+        <item quantity="other">%d artists</item>
+    </plurals>
+    <plurals name="notification_tracks_added">
+        <item quantity="one">%d track</item>
+        <item quantity="other">%d tracks</item>
+    </plurals>
 </resources>

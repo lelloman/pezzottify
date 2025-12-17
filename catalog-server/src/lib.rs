@@ -14,6 +14,7 @@ pub mod server_store;
 pub mod skeleton;
 pub mod sqlite_persistence;
 pub mod user;
+pub mod whatsnew;
 
 // Re-export commonly used types for convenience
 pub use search::{NoOpSearchVault, SearchVault};

@@ -14,6 +14,7 @@ data class SettingsScreenState(
     val storageInfo: StorageInfo? = null,
     val externalSearchEnabled: Boolean = false,
     val hasRequestContentPermission: Boolean = false,
+    val notifyWhatsNewEnabled: Boolean = false,
     val isFileLoggingEnabled: Boolean = false,
     val hasLogFiles: Boolean = false,
     val logFilesSize: String = "",

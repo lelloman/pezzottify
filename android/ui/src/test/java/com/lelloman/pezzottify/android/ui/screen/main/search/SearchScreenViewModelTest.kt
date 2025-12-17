@@ -487,6 +487,9 @@ class SearchScreenViewModelTest {
             lastRequestedAlbum = RequestedAlbum(albumId, albumName, artistName)
             return requestDownloadResult
         }
+
+        override suspend fun getWhatsNew(limit: Int): Result<List<SearchScreenViewModel.WhatsNewBatchData>> =
+            Result.success(emptyList())
     }
 
     private class FakeContentResolver : ContentResolver {

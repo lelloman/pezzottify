@@ -23,4 +23,8 @@ interface SearchScreenActions {
     fun clickOnExternalResult(result: ExternalSearchResultContent)
 
     fun requestAlbumDownload(result: ExternalSearchResultContent.Album)
+
+    fun clickOnWhatsNewAlbum(albumId: String)
+
+    fun clickOnWhatsNewSeeAll()
 }

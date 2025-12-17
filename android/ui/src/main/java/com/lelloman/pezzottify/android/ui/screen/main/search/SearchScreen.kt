@@ -2,11 +2,13 @@ package com.lelloman.pezzottify.android.ui.screen.main.search
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -16,7 +18,12 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AssistChip
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Search
@@ -58,6 +65,7 @@ import com.lelloman.pezzottify.android.ui.theme.CornerRadius
 import com.lelloman.pezzottify.android.ui.theme.Elevation
 import com.lelloman.pezzottify.android.ui.theme.Spacing
 import com.lelloman.pezzottify.android.ui.toAlbum
+import com.lelloman.pezzottify.android.ui.toWhatsNew
 import com.lelloman.pezzottify.android.ui.toArtist
 import com.lelloman.pezzottify.android.ui.toExternalAlbum
 import com.lelloman.pezzottify.android.ui.toTrack
@@ -103,6 +111,7 @@ fun SearchScreenContent(
                 is SearchScreensEvents.ShowRequestError -> snackbarHostState.showSnackbar(context.getString(it.messageRes))
                 is SearchScreensEvents.ShowRequestSuccess -> snackbarHostState.showSnackbar(context.getString(R.string.request_added_to_queue))
                 is SearchScreensEvents.ShowMessage -> snackbarHostState.showSnackbar(context.getString(it.messageRes))
+                is SearchScreensEvents.NavigateToWhatsNewScreen -> navController.toWhatsNew()
             }
         }
     }
@@ -150,18 +159,37 @@ fun SearchScreenContent(
             onFilterToggled = actions::toggleFilter
         )
         if (state.query.isEmpty()) {
-            if (!state.searchHistoryItems.isNullOrEmpty()) {
-                SearchHistorySection(
-                    modifier = Modifier.weight(1f),
-                    searchHistoryItems = state.searchHistoryItems,
-                    actions = actions
-                )
-            } else {
-                RecentlyViewedSection(
-                    modifier = Modifier.weight(1f),
-                    recentlyViewedContent = state.recentlyViewedContent,
-                    actions = actions
-                )
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .verticalScroll(rememberScrollState())
+            ) {
+                // Search history or recently viewed section
+                if (!state.searchHistoryItems.isNullOrEmpty()) {
+                    SearchHistorySection(
+                        modifier = Modifier,
+                        searchHistoryItems = state.searchHistoryItems,
+                        actions = actions
+                    )
+                } else if (!state.recentlyViewedContent.isNullOrEmpty()) {
+                    RecentlyViewedSection(
+                        modifier = Modifier,
+                        recentlyViewedContent = state.recentlyViewedContent,
+                        actions = actions
+                    )
+                }
+
+                // What's New section (shown below recently viewed)
+                state.whatsNewContent?.let { whatsNew ->
+                    if (whatsNew.albums.isNotEmpty()) {
+                        WhatsNewSection(
+                            whatsNewContent = whatsNew,
+                            actions = actions
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(Spacing.Large))
             }
         } else if (state.isExternalMode && state.canUseExternalSearch) {
             // External search results
@@ -682,3 +710,160 @@ private fun ErrorSearchResult() {
 //        )
 //    }
 //}
+
+@Composable
+private fun WhatsNewSection(
+    whatsNewContent: WhatsNewContentState,
+    actions: SearchScreenActions
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = Spacing.Medium)
+            .padding(top = Spacing.Large)
+    ) {
+        // Header row with title and "See all" button
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = stringResource(R.string.whats_new_header),
+                style = MaterialTheme.typography.titleLarge
+            )
+            Text(
+                text = stringResource(R.string.whats_new_see_all),
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier
+                    .clickable { actions.clickOnWhatsNewSeeAll() }
+                    .padding(Spacing.Small)
+            )
+        }
+
+        Spacer(modifier = Modifier.height(Spacing.Medium))
+
+        // Horizontal scroll with albums grouped by batch
+        whatsNewContent.albums.forEach { group ->
+            // Batch header chip
+            AssistChip(
+                onClick = { },
+                label = {
+                    Text(
+                        text = group.batchName,
+                        style = MaterialTheme.typography.labelMedium
+                    )
+                },
+                modifier = Modifier.padding(bottom = Spacing.Small)
+            )
+
+            // Horizontal album row
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(Spacing.Small)
+            ) {
+                group.albums.forEach { albumFlow ->
+                    val albumState = albumFlow.collectAsState(initial = null).value
+                    when (albumState) {
+                        is Content.Resolved -> WhatsNewAlbumCard(
+                            album = albumState.data,
+                            onClick = { actions.clickOnWhatsNewAlbum(albumState.data.id) }
+                        )
+                        is Content.Loading, null -> WhatsNewAlbumCardLoading()
+                        is Content.Error -> WhatsNewAlbumCardError()
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(Spacing.Medium))
+        }
+    }
+}
+
+@Composable
+private fun WhatsNewAlbumCard(
+    album: WhatsNewAlbumItem,
+    onClick: () -> Unit,
+) {
+    Card(
+        modifier = Modifier
+            .width(120.dp)
+            .clickable(onClick = onClick),
+        shape = RoundedCornerShape(CornerRadius.Small),
+        elevation = CardDefaults.cardElevation(defaultElevation = Elevation.Small)
+    ) {
+        Column {
+            NullablePezzottifyImage(
+                url = album.imageUrl,
+                shape = PezzottifyImageShape.FullSize,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .aspectRatio(1f)
+                    .clip(
+                        RoundedCornerShape(
+                            topStart = CornerRadius.Small,
+                            topEnd = CornerRadius.Small,
+                            bottomStart = 0.dp,
+                            bottomEnd = 0.dp
+                        )
+                    )
+            )
+            Column(
+                modifier = Modifier.padding(Spacing.Small)
+            ) {
+                Text(
+                    text = album.name,
+                    style = MaterialTheme.typography.titleSmall,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun WhatsNewAlbumCardLoading() {
+    Card(
+        modifier = Modifier
+            .width(120.dp)
+            .height(160.dp),
+        shape = RoundedCornerShape(CornerRadius.Small),
+        elevation = CardDefaults.cardElevation(defaultElevation = Elevation.Small)
+    ) {
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center
+        ) {
+            CircularProgressIndicator(modifier = Modifier.size(24.dp))
+        }
+    }
+}
+
+@Composable
+private fun WhatsNewAlbumCardError() {
+    Card(
+        modifier = Modifier
+            .width(120.dp)
+            .height(160.dp),
+        shape = RoundedCornerShape(CornerRadius.Small),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.errorContainer
+        )
+    ) {
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = ":(",
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onErrorContainer
+            )
+        }
+    }
+}

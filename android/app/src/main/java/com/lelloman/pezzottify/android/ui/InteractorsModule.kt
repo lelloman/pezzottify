@@ -28,6 +28,7 @@ import com.lelloman.pezzottify.android.domain.usercontent.LikedContent as Domain
 import com.lelloman.pezzottify.android.domain.player.PlaybackPlaylist as DomainPlaybackPlaylist
 import com.lelloman.pezzottify.android.domain.player.PlaybackPlaylistContext as DomainPlaybackPlaylistContext
 import com.lelloman.pezzottify.android.domain.settings.usecase.UpdateExternalSearchSetting
+import com.lelloman.pezzottify.android.domain.settings.usecase.UpdateNotifyWhatsNewSetting
 import com.lelloman.pezzottify.android.ui.theme.AppFontFamily as UiAppFontFamily
 import com.lelloman.pezzottify.android.ui.theme.ColorPalette as UiColorPalette
 import com.lelloman.pezzottify.android.ui.theme.ThemeMode as UiThemeMode
@@ -38,6 +39,7 @@ import com.lelloman.pezzottify.android.ui.model.PlaybackPlaylist as UiPlaybackPl
 import com.lelloman.pezzottify.android.ui.model.PlaybackPlaylistContext as UiPlaybackPlaylistContext
 import com.lelloman.pezzottify.android.domain.remoteapi.RemoteApiClient
 import com.lelloman.pezzottify.android.domain.statics.usecase.GetPopularContent
+import com.lelloman.pezzottify.android.domain.statics.usecase.GetWhatsNew
 import com.lelloman.pezzottify.android.domain.statics.usecase.PerformSearch
 import com.lelloman.pezzottify.android.domain.user.GetRecentlyViewedContentUseCase
 import com.lelloman.pezzottify.android.domain.user.GetSearchHistoryEntriesUseCase
@@ -78,6 +80,7 @@ import com.lelloman.pezzottify.android.ui.screen.main.profile.ProfileScreenViewM
 import com.lelloman.pezzottify.android.ui.screen.main.profile.stylesettings.StyleSettingsViewModel
 import com.lelloman.pezzottify.android.ui.screen.main.search.SearchScreenViewModel
 import com.lelloman.pezzottify.android.ui.screen.main.settings.SettingsScreenViewModel
+import com.lelloman.pezzottify.android.ui.screen.main.whatsnew.WhatsNewScreenViewModel
 import com.lelloman.pezzottify.android.ui.screen.main.notifications.NotificationListScreenViewModel
 import com.lelloman.pezzottify.android.ui.screen.main.notifications.UiNotification
 import com.lelloman.pezzottify.android.ui.screen.main.settings.logviewer.LogViewerScreenViewModel
@@ -213,6 +216,7 @@ class InteractorsModule {
         storageMonitor: com.lelloman.pezzottify.android.domain.storage.StorageMonitor,
         permissionsStore: PermissionsStore,
         updateExternalSearchSetting: UpdateExternalSearchSetting,
+        updateNotifyWhatsNewSetting: UpdateNotifyWhatsNewSetting,
         logFileManager: LogFileManager,
         configStore: ConfigStore,
         catalogSkeletonSyncer: com.lelloman.pezzottify.android.domain.skeleton.CatalogSkeletonSyncer,
@@ -246,6 +250,14 @@ class InteractorsModule {
 
         override fun observeHasRequestContentPermission(): Flow<Boolean> =
             permissionsStore.permissions.map { it.contains(DomainPermission.RequestContent) }
+
+        override fun isNotifyWhatsNewEnabled(): Boolean = userSettingsStore.isNotifyWhatsNewEnabled.value
+
+        override fun observeNotifyWhatsNewEnabled(): Flow<Boolean> = userSettingsStore.isNotifyWhatsNewEnabled
+
+        override suspend fun setNotifyWhatsNewEnabled(enabled: Boolean) {
+            updateNotifyWhatsNewSetting(enabled)
+        }
 
         override suspend fun setThemeMode(themeMode: UiThemeMode) {
             userSettingsStore.setThemeMode(themeMode.toDomain())
@@ -351,6 +363,7 @@ class InteractorsModule {
         performExternalSearchUseCase: com.lelloman.pezzottify.android.domain.download.PerformExternalSearchUseCase,
         getDownloadLimitsUseCase: com.lelloman.pezzottify.android.domain.download.GetDownloadLimitsUseCase,
         requestAlbumDownloadUseCase: com.lelloman.pezzottify.android.domain.download.RequestAlbumDownloadUseCase,
+        getWhatsNew: GetWhatsNew,
     ): SearchScreenViewModel.Interactor =
         object : SearchScreenViewModel.Interactor {
             private val logger = loggerFactory.getLogger("SearchScreenViewModel.Interactor")
@@ -493,6 +506,20 @@ class InteractorsModule {
             ): Result<Unit> {
                 logger.debug("requestAlbumDownload($albumId, $albumName, $artistName)")
                 return requestAlbumDownloadUseCase(albumId, albumName, artistName).map { }
+            }
+
+            override suspend fun getWhatsNew(limit: Int): Result<List<SearchScreenViewModel.WhatsNewBatchData>> {
+                logger.debug("getWhatsNew(limit=$limit)")
+                return getWhatsNew(limit).map { response ->
+                    response.batches.map { batch ->
+                        SearchScreenViewModel.WhatsNewBatchData(
+                            batchId = batch.id,
+                            batchName = batch.name,
+                            closedAt = batch.closedAt,
+                            addedAlbumIds = batch.summary.albums.added.map { it.id },
+                        )
+                    }
+                }
             }
         }
 
@@ -1367,6 +1394,32 @@ class InteractorsModule {
                         val date = java.text.SimpleDateFormat("MMM d", java.util.Locale.getDefault())
                             .format(java.util.Date(timestamp * 1000))
                         date
+                    }
+                }
+            }
+        }
+
+    @Provides
+    fun provideWhatsNewScreenInteractor(
+        getWhatsNew: GetWhatsNew,
+    ): WhatsNewScreenViewModel.Interactor =
+        object : WhatsNewScreenViewModel.Interactor {
+            override suspend fun getWhatsNew(limit: Int): Result<List<WhatsNewScreenViewModel.WhatsNewBatchData>> {
+                return getWhatsNew(limit).map { response ->
+                    response.batches.map { batch ->
+                        WhatsNewScreenViewModel.WhatsNewBatchData(
+                            batchId = batch.id,
+                            batchName = batch.name,
+                            description = batch.description,
+                            closedAt = batch.closedAt,
+                            artistsAdded = batch.summary.artists.added.size,
+                            albumsAdded = batch.summary.albums.added.size,
+                            tracksAdded = batch.summary.tracks.addedCount,
+                            artistsUpdated = batch.summary.artists.updatedCount,
+                            albumsUpdated = batch.summary.albums.updatedCount,
+                            tracksUpdated = batch.summary.tracks.updatedCount,
+                            albumIds = batch.summary.albums.added.map { it.id },
+                        )
                     }
                 }
             }

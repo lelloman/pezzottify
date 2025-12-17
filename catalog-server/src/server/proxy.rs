@@ -947,6 +947,13 @@ mod tests {
         fn get_all_user_settings(&self, _user_id: usize) -> anyhow::Result<Vec<UserSetting>> {
             Ok(vec![])
         }
+        fn get_user_ids_with_setting(
+            &self,
+            _key: &str,
+            _value: &str,
+        ) -> anyhow::Result<Vec<usize>> {
+            Ok(vec![])
+        }
     }
 
     impl crate::user::DeviceStore for TestUserStore {
@@ -1655,6 +1662,13 @@ mod tests {
             Ok(())
         }
         fn get_all_user_settings(&self, _user_id: usize) -> anyhow::Result<Vec<UserSetting>> {
+            Ok(vec![])
+        }
+        fn get_user_ids_with_setting(
+            &self,
+            _key: &str,
+            _value: &str,
+        ) -> anyhow::Result<Vec<usize>> {
             Ok(vec![])
         }
     }

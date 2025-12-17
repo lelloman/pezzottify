@@ -16,6 +16,8 @@ interface SettingsScreenActions {
 
     fun setExternalSearchEnabled(enabled: Boolean)
 
+    fun setNotifyWhatsNewEnabled(enabled: Boolean)
+
     fun setFileLoggingEnabled(enabled: Boolean)
 
     fun shareLogs()

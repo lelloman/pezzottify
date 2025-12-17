@@ -75,6 +75,60 @@ class SearchScreenViewModel(
                 mutableState.value = mutableState.value.copy(isExternalMode = isEnabled)
             }
         }
+        // Load What's New content
+        loadWhatsNew()
+    }
+
+    private fun loadWhatsNew() {
+        viewModelScope.launch(coroutineContext) {
+            mutableState.value = mutableState.value.copy(
+                whatsNewContent = WhatsNewContentState(albums = emptyList(), isLoading = true)
+            )
+
+            val result = interactor.getWhatsNew(MAX_WHATS_NEW_BATCHES)
+            result.getOrNull()?.let { batches ->
+                val albumGroups = batches.mapNotNull { batch ->
+                    // Only include batches with added albums
+                    if (batch.addedAlbumIds.isEmpty()) return@mapNotNull null
+
+                    // Take up to MAX_ALBUMS_PER_BATCH albums per batch
+                    val albumIds = batch.addedAlbumIds.take(MAX_ALBUMS_PER_BATCH)
+                    val albumFlows = albumIds.map { albumId ->
+                        contentResolver.resolveAlbum(albumId).map { contentState ->
+                            when (contentState) {
+                                is Content.Resolved -> Content.Resolved(
+                                    itemId = contentState.data.id,
+                                    data = WhatsNewAlbumItem(
+                                        id = contentState.data.id,
+                                        name = contentState.data.name,
+                                        imageUrl = contentState.data.imageUrl,
+                                        // Artist names are not directly available; would need separate resolution
+                                        artistIds = contentState.data.artistsIds,
+                                    )
+                                )
+                                else -> contentState as Content<WhatsNewAlbumItem>
+                            }
+                        }
+                    }
+
+                    WhatsNewAlbumGroup(
+                        batchId = batch.batchId,
+                        batchName = batch.batchName,
+                        closedAt = batch.closedAt,
+                        albums = albumFlows,
+                    )
+                }
+
+                mutableState.value = mutableState.value.copy(
+                    whatsNewContent = WhatsNewContentState(albums = albumGroups, isLoading = false)
+                )
+            } ?: run {
+                // Error or empty result
+                mutableState.value = mutableState.value.copy(
+                    whatsNewContent = null
+                )
+            }
+        }
     }
 
     override fun updateQuery(query: String) {
@@ -539,7 +593,18 @@ class SearchScreenViewModel(
         suspend fun externalSearch(query: String, type: InteractorExternalSearchType): Result<List<ExternalSearchItem>>
         suspend fun getDownloadLimits(): Result<DownloadLimitsData>
         suspend fun requestAlbumDownload(albumId: String, albumName: String, artistName: String): Result<Unit>
+        suspend fun getWhatsNew(limit: Int = 10): Result<List<WhatsNewBatchData>>
     }
+
+    /**
+     * Data class for a What's New batch from the interactor.
+     */
+    data class WhatsNewBatchData(
+        val batchId: String,
+        val batchName: String,
+        val closedAt: Long,
+        val addedAlbumIds: List<String>,
+    )
 
     data class ExternalSearchItem(
         val id: String,
@@ -587,8 +652,22 @@ class SearchScreenViewModel(
         Artist,
     }
 
+    override fun clickOnWhatsNewAlbum(albumId: String) {
+        viewModelScope.launch {
+            mutableEvents.emit(SearchScreensEvents.NavigateToAlbumScreen(albumId))
+        }
+    }
+
+    override fun clickOnWhatsNewSeeAll() {
+        viewModelScope.launch {
+            mutableEvents.emit(SearchScreensEvents.NavigateToWhatsNewScreen)
+        }
+    }
+
     companion object {
         private const val MAX_RECENTLY_VIEWED_ITEMS = 10
         private const val MAX_SEARCH_HISTORY_ITEMS = 10
+        private const val MAX_WHATS_NEW_BATCHES = 5
+        private const val MAX_ALBUMS_PER_BATCH = 10
     }
 }

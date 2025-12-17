@@ -2690,6 +2690,24 @@ impl UserSettingsStore for SqliteUserStore {
         record_db_query("get_all_user_settings", start.elapsed());
         Ok(settings)
     }
+
+    fn get_user_ids_with_setting(&self, key: &str, value: &str) -> Result<Vec<usize>> {
+        let start = Instant::now();
+        let conn = self.conn.lock().unwrap();
+
+        let mut stmt = conn.prepare(
+            "SELECT user_id FROM user_settings WHERE setting_key = ?1 AND setting_value = ?2",
+        )?;
+        let rows = stmt.query_map(params![key, value], |row| row.get::<usize, usize>(0))?;
+
+        let mut user_ids = Vec::new();
+        for row in rows {
+            user_ids.push(row?);
+        }
+
+        record_db_query("get_user_ids_with_setting", start.elapsed());
+        Ok(user_ids)
+    }
 }
 
 impl user_store::DeviceStore for SqliteUserStore {

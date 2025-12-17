@@ -115,6 +115,9 @@ sealed interface Screen {
 
         @Serializable
         data class ExternalArtist(val artistId: String) : Main
+
+        @Serializable
+        data object WhatsNew : Main
     }
 }
 
@@ -137,3 +140,5 @@ fun NavController.toNotifications() = navigate(Screen.Main.Notifications)
 fun NavController.toExternalAlbum(albumId: String) = navigate(Screen.Main.ExternalAlbum(albumId))
 
 fun NavController.toExternalArtist(artistId: String) = navigate(Screen.Main.ExternalArtist(artistId))
+
+fun NavController.toWhatsNew() = navigate(Screen.Main.WhatsNew)

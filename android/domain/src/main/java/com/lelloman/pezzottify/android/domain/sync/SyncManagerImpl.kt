@@ -2,6 +2,7 @@ package com.lelloman.pezzottify.android.domain.sync
 
 import com.lelloman.pezzottify.android.domain.download.DownloadStatusRepository
 import com.lelloman.pezzottify.android.domain.notifications.NotificationRepository
+import com.lelloman.pezzottify.android.domain.notifications.SystemNotificationHelper
 import com.lelloman.pezzottify.android.domain.remoteapi.RemoteApiClient
 import com.lelloman.pezzottify.android.domain.remoteapi.response.PlaylistState
 import com.lelloman.pezzottify.android.domain.remoteapi.response.RemoteApiResponse
@@ -40,6 +41,7 @@ class SyncManagerImpl internal constructor(
     private val userSettingsStore: UserSettingsStore,
     private val downloadStatusRepository: DownloadStatusRepository,
     private val notificationRepository: NotificationRepository,
+    private val systemNotificationHelper: SystemNotificationHelper,
     private val logger: Logger,
     private val dispatcher: CoroutineDispatcher,
     private val scope: CoroutineScope,
@@ -57,6 +59,7 @@ class SyncManagerImpl internal constructor(
         userSettingsStore: UserSettingsStore,
         downloadStatusRepository: DownloadStatusRepository,
         notificationRepository: NotificationRepository,
+        systemNotificationHelper: SystemNotificationHelper,
         loggerFactory: LoggerFactory,
     ) : this(
         remoteApiClient,
@@ -67,6 +70,7 @@ class SyncManagerImpl internal constructor(
         userSettingsStore,
         downloadStatusRepository,
         notificationRepository,
+        systemNotificationHelper,
         loggerFactory.getLogger(SyncManagerImpl::class),
         Dispatchers.IO,
         CoroutineScope(SupervisorJob() + Dispatchers.IO),
@@ -363,6 +367,23 @@ class SyncManagerImpl internal constructor(
                 notificationRepository.onNotificationRead(event.notificationId, event.readAt)
                 logger.debug("Applied NotificationRead: ${event.notificationId}")
             }
+
+            is SyncEvent.WhatsNewBatchClosed -> {
+                // Check if user has opted in to WhatsNew notifications
+                if (userSettingsStore.isNotifyWhatsNewEnabled.value) {
+                    systemNotificationHelper.showWhatsNewNotification(
+                        batchId = event.batchId,
+                        batchName = event.batchName,
+                        description = event.description,
+                        albumsAdded = event.albumsAdded,
+                        artistsAdded = event.artistsAdded,
+                        tracksAdded = event.tracksAdded,
+                    )
+                    logger.debug("Showed WhatsNew notification: ${event.batchId} ${event.batchName}")
+                } else {
+                    logger.debug("Skipped WhatsNew notification (user opted out): ${event.batchId}")
+                }
+            }
         }
     }
 
@@ -423,6 +444,9 @@ class SyncManagerImpl internal constructor(
         when (setting) {
             is UserSetting.ExternalSearchEnabled -> {
                 userSettingsStore.setExternalSearchEnabled(setting.value)
+            }
+            is UserSetting.NotifyWhatsNew -> {
+                userSettingsStore.setNotifyWhatsNewEnabled(setting.value)
             }
         }
     }

@@ -3158,10 +3158,36 @@ async fn admin_get_changelog_batch(
 async fn admin_close_changelog_batch(
     _session: Session,
     State(catalog_store): State<GuardedCatalogStore>,
+    State(whatsnew_notifier): State<GuardedWhatsNewNotifier>,
     Path(batch_id): Path<String>,
 ) -> Response {
+    // Get the batch info before closing (we need this for the notification)
+    let batch = match catalog_store.get_changelog_batch(&batch_id) {
+        Ok(Some(batch)) => batch,
+        Ok(None) => return StatusCode::NOT_FOUND.into_response(),
+        Err(err) => {
+            error!("Error getting changelog batch: {}", err);
+            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+        }
+    };
+
+    // Get the batch summary (counts of added items)
+    let summary = match catalog_store.get_changelog_batch_summary(&batch_id) {
+        Ok(summary) => summary,
+        Err(err) => {
+            error!("Error getting changelog batch summary: {}", err);
+            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+        }
+    };
+
     match catalog_store.close_changelog_batch(&batch_id) {
-        Ok(()) => StatusCode::OK.into_response(),
+        Ok(()) => {
+            // Notify users who have opted in to WhatsNew notifications
+            whatsnew_notifier
+                .notify_batch_closed(&batch, &summary)
+                .await;
+            StatusCode::OK.into_response()
+        }
         Err(err) => {
             let err_msg = err.to_string();
             if err_msg.contains("not found") {
@@ -4353,16 +4379,25 @@ impl ServerState {
         scheduler_handle: Option<SchedulerHandle>,
         download_manager: Option<Arc<crate::download_manager::DownloadManager>>,
     ) -> ServerState {
+        // Create connection manager first since it's needed by proxy and whatsnew notifier
+        let ws_connection_manager = Arc::new(super::websocket::ConnectionManager::new());
+
         // Create proxy if downloader and media_base_path are available
         let proxy = match (&downloader, media_base_path) {
             (Some(dl), Some(path)) => Some(Arc::new(super::proxy::CatalogProxy::new(
                 dl.clone(),
                 catalog_store.clone(),
-                user_store,
+                user_store.clone(),
                 path,
             ))),
             _ => None,
         };
+
+        // Create WhatsNew notifier
+        let whatsnew_notifier = Arc::new(crate::whatsnew::WhatsNewNotifier::new(
+            user_store,
+            ws_connection_manager.clone(),
+        ));
 
         ServerState {
             config,
@@ -4372,9 +4407,10 @@ impl ServerState {
             user_manager,
             downloader,
             proxy,
-            ws_connection_manager: Arc::new(super::websocket::ConnectionManager::new()),
+            ws_connection_manager,
             scheduler_handle,
             download_manager,
+            whatsnew_notifier,
             hash: "123456".to_owned(),
         }
     }
@@ -5435,6 +5471,10 @@ mod tests {
         }
 
         fn get_all_user_settings(&self, _user_id: usize) -> Result<Vec<crate::user::UserSetting>> {
+            Ok(vec![])
+        }
+
+        fn get_user_ids_with_setting(&self, _key: &str, _value: &str) -> Result<Vec<usize>> {
             Ok(vec![])
         }
     }

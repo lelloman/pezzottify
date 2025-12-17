@@ -279,6 +279,9 @@ pub trait UserSettingsStore: Send + Sync {
     /// Gets all settings for a user.
     /// Unknown keys in the database are skipped (for forward compatibility).
     fn get_all_user_settings(&self, user_id: usize) -> Result<Vec<UserSetting>>;
+
+    /// Gets all user IDs that have a specific setting with a specific value.
+    fn get_user_ids_with_setting(&self, key: &str, value: &str) -> Result<Vec<usize>>;
 }
 
 /// Trait for device storage operations

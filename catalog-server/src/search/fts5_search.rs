@@ -404,6 +404,12 @@ mod tests {
             fn close_stale_batches(&self) -> anyhow::Result<usize> {
                 Ok(0)
             }
+            fn get_changelog_batch_summary(
+                &self,
+                _batch_id: &str,
+            ) -> anyhow::Result<crate::catalog_store::BatchChangeSummary> {
+                Ok(crate::catalog_store::BatchChangeSummary::default())
+            }
             fn list_all_track_ids(&self) -> anyhow::Result<Vec<String>> {
                 Ok(vec![])
             }
