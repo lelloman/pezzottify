@@ -6,11 +6,12 @@ import androidx.security.crypto.EncryptedSharedPreferences
 import com.lelloman.pezzottify.android.domain.auth.AuthState
 import com.lelloman.pezzottify.android.domain.auth.AuthStore
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
@@ -18,6 +19,7 @@ import androidx.core.content.edit
 
 internal class AuthStoreImpl(
     context: Context,
+    private val coroutineScope: CoroutineScope,
     private val dispatcher: CoroutineDispatcher = Dispatchers.IO,
 ) : AuthStore {
 
@@ -64,7 +66,7 @@ internal class AuthStoreImpl(
         }
 
     override fun initialize() {
-        runBlocking {
+        coroutineScope.launch {
             withContext(dispatcher) {
                 if (!initialized) {
                     val state = try {
@@ -77,7 +79,7 @@ internal class AuthStoreImpl(
                             AuthState.LoggedOut
                         }
                     } catch (e: Exception) {
-                        e.printStackTrace()
+                        Log.w("AuthStore", "Error reading auth state, defaulting to LoggedOut", e)
                         AuthState.LoggedOut
                     } finally {
                         initialized = true

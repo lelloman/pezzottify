@@ -25,8 +25,9 @@ class AuthStoreImplTest {
 
     private fun withTested(test: suspend TestScope.(AuthStoreImpl) -> Unit) = runTest {
         val authStore = AuthStoreImpl(
-            context,
-            dispatcher = UnconfinedTestDispatcher(testScheduler)
+            context = context,
+            coroutineScope = this,
+            dispatcher = UnconfinedTestDispatcher(testScheduler),
         )
         test(authStore)
     }

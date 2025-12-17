@@ -12,6 +12,7 @@ import com.lelloman.pezzottify.android.logger.LoggerFactory
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -38,16 +39,15 @@ class InitializeApp @Inject internal constructor(
         }
         logger.info("invoke() app initialization complete")
 
-        // If user is already logged in, initialize sync and WebSocket
-        val isLoggedIn = authStore.getAuthState().value is AuthState.LoggedIn
-        if (isLoggedIn) {
-            logger.info("invoke() user is logged in, initializing sync")
-            scope.launch {
+        // Wait for auth state to resolve, then initialize sync if logged in
+        scope.launch {
+            val authState = authStore.getAuthState().first { it !is AuthState.Loading }
+            if (authState is AuthState.LoggedIn) {
+                logger.info("invoke() user is logged in, initializing sync")
                 webSocketManager.connect()
                 syncManager.initialize()
-            }
-            // Sync catalog skeleton (artist/album/track IDs) in background
-            scope.launch {
+
+                // Sync catalog skeleton (artist/album/track IDs) in background
                 logger.debug("invoke() starting skeleton sync")
                 when (val result = skeletonSyncer.sync()) {
                     is CatalogSkeletonSyncer.SyncResult.Success ->
