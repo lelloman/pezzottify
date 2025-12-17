@@ -761,6 +761,89 @@ export const useRemoteStore = defineStore("remote", () => {
     }
   };
 
+  // =====================================================
+  // Admin API - Changelog Batches (EditCatalog)
+  // =====================================================
+
+  const fetchChangelogBatches = async (isOpen = null) => {
+    try {
+      const params = {};
+      if (isOpen !== null) params.is_open = isOpen;
+      const response = await axios.get("/v1/admin/changelog/batches", { params });
+      return response.data;
+    } catch (error) {
+      console.error("Failed to fetch changelog batches:", error);
+      return null;
+    }
+  };
+
+  const fetchChangelogBatch = async (batchId) => {
+    try {
+      const response = await axios.get(`/v1/admin/changelog/batch/${batchId}`);
+      return response.data;
+    } catch (error) {
+      console.error("Failed to fetch changelog batch:", error);
+      return null;
+    }
+  };
+
+  const createChangelogBatch = async (name, description = null) => {
+    try {
+      const body = { name };
+      if (description) body.description = description;
+      const response = await axios.post("/v1/admin/changelog/batch", body);
+      return { success: true, data: response.data };
+    } catch (error) {
+      console.error("Failed to create changelog batch:", error);
+      if (error.response?.status === 409) {
+        return { error: "A batch is already open. Close it first." };
+      }
+      return { error: "Failed to create batch" };
+    }
+  };
+
+  const closeChangelogBatch = async (batchId) => {
+    try {
+      const response = await axios.post(`/v1/admin/changelog/batch/${batchId}/close`);
+      return { success: true, data: response.data };
+    } catch (error) {
+      console.error("Failed to close changelog batch:", error);
+      if (error.response?.status === 400) {
+        return { error: "Batch is already closed" };
+      }
+      if (error.response?.status === 404) {
+        return { error: "Batch not found" };
+      }
+      return { error: "Failed to close batch" };
+    }
+  };
+
+  const deleteChangelogBatch = async (batchId) => {
+    try {
+      await axios.delete(`/v1/admin/changelog/batch/${batchId}`);
+      return { success: true };
+    } catch (error) {
+      console.error("Failed to delete changelog batch:", error);
+      if (error.response?.status === 400) {
+        return { error: "Cannot delete batch with changes. Only empty batches can be deleted." };
+      }
+      if (error.response?.status === 404) {
+        return { error: "Batch not found" };
+      }
+      return { error: "Failed to delete batch" };
+    }
+  };
+
+  const fetchChangelogBatchChanges = async (batchId) => {
+    try {
+      const response = await axios.get(`/v1/admin/changelog/batch/${batchId}/changes`);
+      return response.data;
+    } catch (error) {
+      console.error("Failed to fetch batch changes:", error);
+      return null;
+    }
+  };
+
   return {
     setBlockHttpCache,
     fetchLikedAlbums,
@@ -825,5 +908,12 @@ export const useRemoteStore = defineStore("remote", () => {
     deleteDownloadRequest,
     requestAlbumDownload,
     requestDiscographyDownload,
+    // Admin API - Changelog Batches
+    fetchChangelogBatches,
+    fetchChangelogBatch,
+    createChangelogBatch,
+    closeChangelogBatch,
+    deleteChangelogBatch,
+    fetchChangelogBatchChanges,
   };
 });
