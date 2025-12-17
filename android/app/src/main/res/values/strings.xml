@@ -1,12 +1,18 @@
 <resources>
     <string name="app_name">Pezzottify</string>
 
-    <!-- Notification channel -->
+    <!-- Notification channels -->
     <string name="notification_channel_whatsnew_name">New Content</string>
     <string name="notification_channel_whatsnew_description">Notifications when new music is added to the catalog</string>
+    <string name="notification_channel_downloads_name">Downloads</string>
+    <string name="notification_channel_downloads_description">Notifications when requested downloads complete</string>
 
-    <!-- Notification content -->
+    <!-- What\'s New notification content -->
     <string name="notification_whatsnew_title">New music available</string>
+
+    <!-- Download completed notification content -->
+    <string name="notification_download_completed_title">Download complete</string>
+    <string name="notification_download_completed_body">%1$s by %2$s is now available</string>
 
     <plurals name="notification_albums_added">
         <item quantity="one">%d album</item>

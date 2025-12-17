@@ -1,5 +1,9 @@
 package com.lelloman.pezzottify.android.ui.screen.login
 
+import android.Manifest
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
@@ -65,10 +69,20 @@ internal fun LoginScreenInternal(
     actions: LoginScreenActions,
     navController: NavController,
 ) {
+    // Permission launcher for POST_NOTIFICATIONS (Android 13+)
+    val notificationPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { /* We don't need to handle the result - user can deny and still use the app */ }
 
     LaunchedEffect(Unit) {
         events.collect {
             when (it) {
+                LoginScreenEvents.RequestNotificationPermission -> {
+                    // Only request on Android 13+ (API 33)
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                        notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                    }
+                }
                 LoginScreenEvents.NavigateToMain -> navController.fromLoginToMain()
             }
         }

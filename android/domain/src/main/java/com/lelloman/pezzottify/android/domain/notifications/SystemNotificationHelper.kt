@@ -24,4 +24,17 @@ interface SystemNotificationHelper {
         artistsAdded: Int,
         tracksAdded: Int,
     )
+
+    /**
+     * Show a notification when a requested album download has completed.
+     *
+     * @param albumId The ID of the downloaded album (for navigation)
+     * @param albumName The name of the album
+     * @param artistName The name of the artist
+     */
+    fun showDownloadCompletedNotification(
+        albumId: String,
+        albumName: String,
+        artistName: String,
+    )
 }

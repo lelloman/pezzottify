@@ -1,5 +1,6 @@
 package com.lelloman.pezzottify.android.ui.screen.login
 
-enum class LoginScreenEvents {
-    NavigateToMain,
+sealed interface LoginScreenEvents {
+    data object NavigateToMain : LoginScreenEvents
+    data object RequestNotificationPermission : LoginScreenEvents
 }

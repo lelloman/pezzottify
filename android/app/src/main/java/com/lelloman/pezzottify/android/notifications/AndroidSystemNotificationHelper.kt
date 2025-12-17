@@ -43,6 +43,15 @@ class AndroidSystemNotificationHelper @Inject constructor(
                 description = context.getString(R.string.notification_channel_whatsnew_description)
             }
             notificationManager.createNotificationChannel(whatsNewChannel)
+
+            val downloadsChannel = NotificationChannel(
+                DOWNLOADS_CHANNEL_ID,
+                context.getString(R.string.notification_channel_downloads_name),
+                NotificationManager.IMPORTANCE_DEFAULT
+            ).apply {
+                description = context.getString(R.string.notification_channel_downloads_description)
+            }
+            notificationManager.createNotificationChannel(downloadsChannel)
         }
     }
 
@@ -129,9 +138,59 @@ class AndroidSystemNotificationHelper @Inject constructor(
         }
     }
 
+    @Suppress("NotificationPermission") // Permission is checked manually before notify()
+    override fun showDownloadCompletedNotification(
+        albumId: String,
+        albumName: String,
+        artistName: String,
+    ) {
+        // Create an intent to open the app and navigate to the album screen
+        val intent = Intent(context, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            putExtra(EXTRA_NAVIGATE_TO, DESTINATION_ALBUM)
+            putExtra(EXTRA_ALBUM_ID, albumId)
+        }
+
+        val pendingIntent = PendingIntent.getActivity(
+            context,
+            albumId.hashCode(),
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        val title = context.getString(R.string.notification_download_completed_title)
+        val contentText = context.getString(R.string.notification_download_completed_body, albumName, artistName)
+
+        val notification = NotificationCompat.Builder(context, DOWNLOADS_CHANNEL_ID)
+            .setSmallIcon(R.drawable.ic_notification)
+            .setContentTitle(title)
+            .setContentText(contentText)
+            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+            .setContentIntent(pendingIntent)
+            .setAutoCancel(true)
+            .build()
+
+        // Check notification permission on Android 13+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (ContextCompat.checkSelfPermission(
+                    context,
+                    Manifest.permission.POST_NOTIFICATIONS
+                ) != PackageManager.PERMISSION_GRANTED
+            ) {
+                // Permission not granted, skip showing notification
+                return
+            }
+        }
+
+        notificationManager.notify(albumId.hashCode(), notification)
+    }
+
     companion object {
         const val WHATSNEW_CHANNEL_ID = "whatsnew"
+        const val DOWNLOADS_CHANNEL_ID = "downloads"
         const val EXTRA_NAVIGATE_TO = "navigate_to"
+        const val EXTRA_ALBUM_ID = "album_id"
         const val DESTINATION_WHATSNEW = "whatsnew"
+        const val DESTINATION_ALBUM = "album"
     }
 }
