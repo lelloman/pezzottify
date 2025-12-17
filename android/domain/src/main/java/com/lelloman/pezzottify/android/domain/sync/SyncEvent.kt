@@ -30,6 +30,10 @@ sealed interface UserSetting {
     @Serializable
     @SerialName("enable_external_search")
     data class ExternalSearchEnabled(val value: Boolean) : UserSetting
+
+    @Serializable
+    @SerialName("notify_whatsnew")
+    data class NotifyWhatsNew(val value: Boolean) : UserSetting
 }
 
 /**
@@ -269,6 +273,28 @@ sealed interface SyncEvent {
         val contentId: String,
     ) : SyncEvent
 
+    // What's New events
+
+    /**
+     * A new content batch was closed.
+     * This is sent to users who have notify_whatsnew enabled.
+     */
+    @Serializable
+    @SerialName("whatsnew_batch_closed")
+    data class WhatsNewBatchClosed(
+        @SerialName("batch_id")
+        val batchId: String,
+        @SerialName("batch_name")
+        val batchName: String,
+        val description: String?,
+        @SerialName("albums_added")
+        val albumsAdded: Int,
+        @SerialName("artists_added")
+        val artistsAdded: Int,
+        @SerialName("tracks_added")
+        val tracksAdded: Int,
+    ) : SyncEvent
+
     // Notification events
 
     /**
@@ -351,6 +377,19 @@ data class SyncEventPayload(
     @SerialName("error_message")
     val errorMessage: String? = null,
     val progress: SyncDownloadProgress? = null,
+
+    // What's New events
+    @SerialName("batch_id")
+    val batchId: String? = null,
+    @SerialName("batch_name")
+    val batchName: String? = null,
+    val description: String? = null,
+    @SerialName("albums_added")
+    val albumsAdded: Int? = null,
+    @SerialName("artists_added")
+    val artistsAdded: Int? = null,
+    @SerialName("tracks_added")
+    val tracksAdded: Int? = null,
 
     // Notification events
     val notification: Notification? = null,
@@ -451,6 +490,18 @@ data class SyncEventPayload(
         "notification_read" -> {
             if (notificationId != null && readAt != null) {
                 SyncEvent.NotificationRead(notificationId, readAt)
+            } else null
+        }
+        "whatsnew_batch_closed" -> {
+            if (batchId != null && batchName != null) {
+                SyncEvent.WhatsNewBatchClosed(
+                    batchId = batchId,
+                    batchName = batchName,
+                    description = description,
+                    albumsAdded = albumsAdded ?: 0,
+                    artistsAdded = artistsAdded ?: 0,
+                    tracksAdded = tracksAdded ?: 0,
+                )
             } else null
         }
         else -> null

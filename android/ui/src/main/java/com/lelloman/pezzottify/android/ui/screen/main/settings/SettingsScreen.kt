@@ -168,6 +168,14 @@ private fun SettingsScreenInternal(
 
             HorizontalDivider(modifier = Modifier.padding(vertical = 24.dp))
 
+            // Notifications Section
+            NotifyWhatsNewSection(
+                isEnabled = currentState.notifyWhatsNewEnabled,
+                onEnabledChanged = actions::setNotifyWhatsNewEnabled
+            )
+
+            HorizontalDivider(modifier = Modifier.padding(vertical = 24.dp))
+
             FileLoggingSection(
                 isEnabled = currentState.isFileLoggingEnabled,
                 hasLogs = currentState.hasLogFiles,
@@ -230,6 +238,7 @@ private fun SettingsScreenPreview() {
                 override fun selectFontFamily(fontFamily: AppFontFamily) {}
                 override fun setCacheEnabled(enabled: Boolean) {}
                 override fun setExternalSearchEnabled(enabled: Boolean) {}
+                override fun setNotifyWhatsNewEnabled(enabled: Boolean) {}
                 override fun setFileLoggingEnabled(enabled: Boolean) {}
                 override fun shareLogs() {}
                 override fun clearLogs() {}
@@ -262,6 +271,7 @@ private fun SettingsScreenPreviewDark() {
                 override fun selectFontFamily(fontFamily: AppFontFamily) {}
                 override fun setCacheEnabled(enabled: Boolean) {}
                 override fun setExternalSearchEnabled(enabled: Boolean) {}
+                override fun setNotifyWhatsNewEnabled(enabled: Boolean) {}
                 override fun setFileLoggingEnabled(enabled: Boolean) {}
                 override fun shareLogs() {}
                 override fun clearLogs() {}

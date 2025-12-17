@@ -22,6 +22,35 @@ data class SearchScreenState(
     @StringRes val externalSearchErrorRes: Int? = null,
     val downloadLimits: UiDownloadLimits? = null,
     val requestingAlbumIds: Set<String> = emptySet(),
+    val whatsNewContent: WhatsNewContentState? = null,
+)
+
+/**
+ * State for the What's New section, showing recently added albums grouped by batch.
+ */
+data class WhatsNewContentState(
+    val albums: List<WhatsNewAlbumGroup>,
+    val isLoading: Boolean = false,
+)
+
+/**
+ * A group of albums from a single batch.
+ */
+data class WhatsNewAlbumGroup(
+    val batchId: String,
+    val batchName: String,
+    val closedAt: Long,
+    val albums: List<Flow<Content<WhatsNewAlbumItem>>>,
+)
+
+/**
+ * A resolved album item for the What's New widget.
+ */
+data class WhatsNewAlbumItem(
+    val id: String,
+    val name: String,
+    val imageUrl: String?,
+    val artistIds: List<String>,
 )
 
 data class SearchHistoryItem(

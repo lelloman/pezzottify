@@ -559,6 +559,13 @@ mod tests {
             unimplemented!()
         }
 
+        fn get_changelog_batch_summary(
+            &self,
+            _batch_id: &str,
+        ) -> Result<crate::catalog_store::BatchChangeSummary> {
+            unimplemented!()
+        }
+
         fn list_all_track_ids(&self) -> Result<Vec<String>> {
             Ok(self.track_ids.clone())
         }

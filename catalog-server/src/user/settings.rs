@@ -14,6 +14,12 @@ pub enum UserSetting {
     /// that can be requested for download.
     #[serde(rename = "enable_external_search")]
     ExternalSearchEnabled(bool),
+
+    /// Whether the user wants to be notified when new catalog batches are closed.
+    /// When enabled, a push notification will be sent to connected clients
+    /// or queued via sync for delivery on next connection.
+    #[serde(rename = "notify_whatsnew")]
+    NotifyWhatsNew(bool),
 }
 
 impl UserSetting {
@@ -21,6 +27,7 @@ impl UserSetting {
     pub fn key(&self) -> &'static str {
         match self {
             Self::ExternalSearchEnabled(_) => "enable_external_search",
+            Self::NotifyWhatsNew(_) => "notify_whatsnew",
         }
     }
 
@@ -28,6 +35,7 @@ impl UserSetting {
     pub fn value_to_string(&self) -> String {
         match self {
             Self::ExternalSearchEnabled(enabled) => enabled.to_string(),
+            Self::NotifyWhatsNew(enabled) => enabled.to_string(),
         }
     }
 
@@ -43,19 +51,26 @@ impl UserSetting {
                     .map_err(|_| format!("Invalid boolean value for {}: {}", key, value))?;
                 Ok(Self::ExternalSearchEnabled(enabled))
             }
+            "notify_whatsnew" => {
+                let enabled = value
+                    .parse::<bool>()
+                    .map_err(|_| format!("Invalid boolean value for {}: {}", key, value))?;
+                Ok(Self::NotifyWhatsNew(enabled))
+            }
             _ => Err(format!("Unknown setting key: {}", key)),
         }
     }
 
     /// Check if a key is a known setting key.
     pub fn is_known_key(key: &str) -> bool {
-        matches!(key, "enable_external_search")
+        matches!(key, "enable_external_search" | "notify_whatsnew")
     }
 
     /// Get the default value for a setting by key.
     pub fn default_for_key(key: &str) -> Option<Self> {
         match key {
             "enable_external_search" => Some(Self::ExternalSearchEnabled(false)),
+            "notify_whatsnew" => Some(Self::NotifyWhatsNew(false)),
             _ => None,
         }
     }

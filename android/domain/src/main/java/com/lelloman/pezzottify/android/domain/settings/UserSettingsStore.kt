@@ -26,6 +26,12 @@ interface UserSettingsStore {
      */
     val isExternalModeEnabled: StateFlow<Boolean>
 
+    /**
+     * Whether to receive notifications when new content batches are closed.
+     * This setting is synced with the server.
+     */
+    val isNotifyWhatsNewEnabled: StateFlow<Boolean>
+
     suspend fun setThemeMode(themeMode: ThemeMode)
     suspend fun setColorPalette(colorPalette: ColorPalette)
     suspend fun setFontFamily(fontFamily: AppFontFamily)
@@ -33,6 +39,7 @@ interface UserSettingsStore {
     suspend fun setFileLoggingEnabled(enabled: Boolean)
     suspend fun setExternalSearchEnabled(enabled: Boolean)
     suspend fun setExternalModeEnabled(enabled: Boolean)
+    suspend fun setNotifyWhatsNewEnabled(enabled: Boolean)
 
     /**
      * Set a synced setting with specified sync status.

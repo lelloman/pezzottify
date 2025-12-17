@@ -22,4 +22,6 @@ sealed interface SearchScreensEvents {
 
     data class ShowMessage(@StringRes val messageRes: Int) : SearchScreensEvents
 
+    data object NavigateToWhatsNewScreen : SearchScreensEvents
+
 }

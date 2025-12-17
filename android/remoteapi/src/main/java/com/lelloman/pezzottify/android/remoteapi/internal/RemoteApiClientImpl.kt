@@ -26,6 +26,7 @@ import com.lelloman.pezzottify.android.domain.remoteapi.response.SkeletonVersion
 import com.lelloman.pezzottify.android.domain.remoteapi.response.SyncEventsResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.SyncStateResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.TrackResponse
+import com.lelloman.pezzottify.android.domain.remoteapi.response.WhatsNewResponse
 import com.lelloman.pezzottify.android.domain.sync.UserSetting
 import com.lelloman.pezzottify.android.remoteapi.internal.requests.ListeningEventRequest
 import com.lelloman.pezzottify.android.remoteapi.internal.requests.LoginRequest
@@ -197,6 +198,13 @@ internal class RemoteApiClientImpl(
             )
             .returnFromRetrofitResponse()
     }
+
+    override suspend fun getWhatsNew(limit: Int): RemoteApiResponse<WhatsNewResponse> =
+        catchingNetworkError {
+            getRetrofit()
+                .getWhatsNew(authToken = authToken, limit = limit)
+                .returnFromRetrofitResponse()
+        }
 
     override suspend fun search(
         query: String,

@@ -19,6 +19,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ExitToApp
 import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.NewReleases
 import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material.icons.outlined.Queue
 import androidx.compose.material3.AlertDialog
@@ -55,6 +56,7 @@ fun ProfileDrawerContent(
     onNavigateToMyRequests: () -> Unit,
     onNavigateToNotifications: () -> Unit,
     onNavigateToListeningHistory: () -> Unit,
+    onNavigateToWhatsNew: () -> Unit,
     onNavigateToAbout: () -> Unit,
     onNavigateToLogin: () -> Unit,
     onCloseDrawer: () -> Unit,
@@ -69,6 +71,7 @@ fun ProfileDrawerContent(
         onNavigateToMyRequests = onNavigateToMyRequests,
         onNavigateToNotifications = onNavigateToNotifications,
         onNavigateToListeningHistory = onNavigateToListeningHistory,
+        onNavigateToWhatsNew = onNavigateToWhatsNew,
         onNavigateToAbout = onNavigateToAbout,
         onNavigateToLogin = onNavigateToLogin,
         onCloseDrawer = onCloseDrawer,
@@ -85,6 +88,7 @@ private fun ProfileDrawerContentInternal(
     onNavigateToMyRequests: () -> Unit,
     onNavigateToNotifications: () -> Unit,
     onNavigateToListeningHistory: () -> Unit,
+    onNavigateToWhatsNew: () -> Unit,
     onNavigateToAbout: () -> Unit,
     onNavigateToLogin: () -> Unit,
     onCloseDrawer: () -> Unit,
@@ -193,6 +197,20 @@ private fun ProfileDrawerContentInternal(
                 onClick = {
                     onCloseDrawer()
                     onNavigateToListeningHistory()
+                }
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+            HorizontalDivider()
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // What's New
+            DrawerMenuItem(
+                icon = Icons.Outlined.NewReleases,
+                label = stringResource(R.string.whats_new_header),
+                onClick = {
+                    onCloseDrawer()
+                    onNavigateToWhatsNew()
                 }
             )
 

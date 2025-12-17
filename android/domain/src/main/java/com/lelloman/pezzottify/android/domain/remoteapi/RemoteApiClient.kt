@@ -23,6 +23,7 @@ import com.lelloman.pezzottify.android.domain.remoteapi.response.SkeletonVersion
 import com.lelloman.pezzottify.android.domain.remoteapi.response.SyncEventsResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.SyncStateResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.TrackResponse
+import com.lelloman.pezzottify.android.domain.remoteapi.response.WhatsNewResponse
 import com.lelloman.pezzottify.android.domain.sync.UserSetting
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.serialization.Serializable
@@ -62,6 +63,12 @@ interface RemoteApiClient {
         albumsLimit: Int = 10,
         artistsLimit: Int = 10,
     ): RemoteApiResponse<PopularContentResponse>
+
+    /**
+     * Get recent catalog updates ("What's New").
+     * Returns closed batches with summaries of added/updated/deleted content.
+     */
+    suspend fun getWhatsNew(limit: Int = 10): RemoteApiResponse<WhatsNewResponse>
 
     suspend fun search(
         query: String,

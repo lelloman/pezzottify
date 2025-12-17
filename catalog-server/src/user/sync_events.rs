@@ -138,6 +138,17 @@ pub enum UserEvent {
         notification_id: String,
         read_at: i64,
     },
+
+    // What's New catalog updates
+    #[serde(rename = "whatsnew_batch_closed")]
+    WhatsNewBatchClosed {
+        batch_id: String,
+        batch_name: String,
+        description: Option<String>,
+        albums_added: i32,
+        artists_added: i32,
+        tracks_added: i32,
+    },
 }
 
 impl UserEvent {
@@ -160,6 +171,7 @@ impl UserEvent {
             UserEvent::DownloadCompleted { .. } => "download_completed",
             UserEvent::NotificationCreated { .. } => "notification_created",
             UserEvent::NotificationRead { .. } => "notification_read",
+            UserEvent::WhatsNewBatchClosed { .. } => "whatsnew_batch_closed",
         }
     }
 }

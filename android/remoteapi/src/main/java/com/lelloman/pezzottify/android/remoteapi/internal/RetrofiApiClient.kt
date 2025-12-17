@@ -26,6 +26,7 @@ import com.lelloman.pezzottify.android.domain.remoteapi.response.FullSkeletonRes
 import com.lelloman.pezzottify.android.domain.remoteapi.response.SyncEventsResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.SyncStateResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.TrackResponse
+import com.lelloman.pezzottify.android.domain.remoteapi.response.WhatsNewResponse
 import okhttp3.ResponseBody
 import retrofit2.Response
 import retrofit2.http.Body
@@ -81,6 +82,12 @@ internal interface RetrofitApiClient {
         @Query("albums_limit") albumsLimit: Int,
         @Query("artists_limit") artistsLimit: Int,
     ): Response<PopularContentResponse>
+
+    @GET("/v1/content/whatsnew")
+    suspend fun getWhatsNew(
+        @Header("Authorization") authToken: String,
+        @Query("limit") limit: Int,
+    ): Response<WhatsNewResponse>
 
     @POST("/v1/content/search")
     suspend fun search(

@@ -172,6 +172,10 @@ private fun MainScreenContent(state: MainScreenState, actions: MainScreenActions
                     shouldRestoreDrawer = true
                     navController.navigate(Screen.Main.ListeningHistory)
                 },
+                onNavigateToWhatsNew = {
+                    shouldRestoreDrawer = true
+                    navController.navigate(Screen.Main.WhatsNew)
+                },
                 onNavigateToAbout = {
                     // Navigate to About screen (root nav) - don't restore drawer
                     rootNavController.navigate(Screen.About)
@@ -287,6 +291,11 @@ private fun MainScreenContent(state: MainScreenState, actions: MainScreenActions
                 composable<Screen.Main.ExternalAlbum> {
                     ExternalAlbumScreen(
                         albumId = it.toRoute<Screen.Main.ExternalAlbum>().albumId,
+                        navController = navController
+                    )
+                }
+                composable<Screen.Main.WhatsNew> {
+                    com.lelloman.pezzottify.android.ui.screen.main.whatsnew.WhatsNewScreen(
                         navController = navController
                     )
                 }

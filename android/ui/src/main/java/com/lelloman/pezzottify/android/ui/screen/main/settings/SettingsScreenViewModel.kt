@@ -40,6 +40,7 @@ class SettingsScreenViewModel @Inject constructor(
                 storageInfo = interactor.getStorageInfo(),
                 externalSearchEnabled = interactor.isExternalSearchEnabled(),
                 hasRequestContentPermission = interactor.hasRequestContentPermission(),
+                notifyWhatsNewEnabled = interactor.isNotifyWhatsNewEnabled(),
                 isFileLoggingEnabled = interactor.isFileLoggingEnabled(),
                 hasLogFiles = interactor.hasLogFiles(),
                 logFilesSize = interactor.getLogFilesSize(),
@@ -81,6 +82,11 @@ class SettingsScreenViewModel @Inject constructor(
             launch {
                 interactor.observeHasRequestContentPermission().collect { hasPermission ->
                     mutableState.update { it.copy(hasRequestContentPermission = hasPermission) }
+                }
+            }
+            launch {
+                interactor.observeNotifyWhatsNewEnabled().collect { enabled ->
+                    mutableState.update { it.copy(notifyWhatsNewEnabled = enabled) }
                 }
             }
             launch {
@@ -127,6 +133,12 @@ class SettingsScreenViewModel @Inject constructor(
     override fun setExternalSearchEnabled(enabled: Boolean) {
         viewModelScope.launch {
             interactor.setExternalSearchEnabled(enabled)
+        }
+    }
+
+    override fun setNotifyWhatsNewEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            interactor.setNotifyWhatsNewEnabled(enabled)
         }
     }
 
@@ -212,6 +224,7 @@ class SettingsScreenViewModel @Inject constructor(
         fun getStorageInfo(): StorageInfo?
         fun isExternalSearchEnabled(): Boolean
         fun hasRequestContentPermission(): Boolean
+        fun isNotifyWhatsNewEnabled(): Boolean
         fun observeThemeMode(): kotlinx.coroutines.flow.Flow<ThemeMode>
         fun observeColorPalette(): kotlinx.coroutines.flow.Flow<ColorPalette>
         fun observeFontFamily(): kotlinx.coroutines.flow.Flow<AppFontFamily>
@@ -219,12 +232,14 @@ class SettingsScreenViewModel @Inject constructor(
         fun observeStorageInfo(): kotlinx.coroutines.flow.Flow<StorageInfo>
         fun observeExternalSearchEnabled(): kotlinx.coroutines.flow.Flow<Boolean>
         fun observeHasRequestContentPermission(): kotlinx.coroutines.flow.Flow<Boolean>
+        fun observeNotifyWhatsNewEnabled(): kotlinx.coroutines.flow.Flow<Boolean>
         fun observeFileLoggingEnabled(): kotlinx.coroutines.flow.Flow<Boolean>
         suspend fun setThemeMode(themeMode: ThemeMode)
         suspend fun setColorPalette(colorPalette: ColorPalette)
         suspend fun setFontFamily(fontFamily: AppFontFamily)
         suspend fun setCacheEnabled(enabled: Boolean)
         suspend fun setExternalSearchEnabled(enabled: Boolean)
+        suspend fun setNotifyWhatsNewEnabled(enabled: Boolean)
         suspend fun setFileLoggingEnabled(enabled: Boolean)
         fun isFileLoggingEnabled(): Boolean
         fun hasLogFiles(): Boolean

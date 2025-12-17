@@ -7,6 +7,7 @@ import com.lelloman.pezzottify.android.domain.cache.StaticsCache
 import com.lelloman.pezzottify.android.domain.memory.MemoryInfo
 import com.lelloman.pezzottify.android.domain.memory.MemoryPressureLevel
 import com.lelloman.pezzottify.android.domain.memory.MemoryPressureMonitor
+import com.lelloman.pezzottify.android.domain.notifications.SystemNotificationHelper
 import com.lelloman.pezzottify.android.domain.statics.StaticsStore
 import fi.iki.elonen.NanoHTTPD
 import kotlinx.coroutines.runBlocking
@@ -18,7 +19,8 @@ class DebugHttpServer @Inject constructor(
     private val memoryPressureMonitor: MemoryPressureMonitor,
     private val staticsCache: StaticsCache,
     private val cacheMetricsCollector: CacheMetricsCollector,
-    private val staticsStore: StaticsStore
+    private val staticsStore: StaticsStore,
+    private val systemNotificationHelper: SystemNotificationHelper,
 ) : NanoHTTPD(DEFAULT_PORT) {
 
     companion object {
@@ -32,6 +34,7 @@ class DebugHttpServer @Inject constructor(
             session.method == Method.POST && session.uri == "/action/clear-statics-db" -> handleClearStaticsDb()
             session.method == Method.POST && session.uri == "/action/reset-metrics" -> handleResetMetrics()
             session.method == Method.POST && session.uri == "/action/refresh-memory" -> handleRefreshMemory()
+            session.method == Method.POST && session.uri == "/action/test-whatsnew-notification" -> handleTestWhatsNewNotification()
             else -> newFixedLengthResponse(Response.Status.NOT_FOUND, MIME_PLAINTEXT, "Not Found")
         }
     }
@@ -63,6 +66,18 @@ class DebugHttpServer @Inject constructor(
 
     private fun handleRefreshMemory(): Response {
         memoryPressureMonitor.refresh()
+        return redirectToDashboard()
+    }
+
+    private fun handleTestWhatsNewNotification(): Response {
+        systemNotificationHelper.showWhatsNewNotification(
+            batchId = "test-batch-${System.currentTimeMillis()}",
+            batchName = "Test Batch",
+            description = "This is a test notification from the debug dashboard",
+            albumsAdded = 5,
+            artistsAdded = 2,
+            tracksAdded = 42,
+        )
         return redirectToDashboard()
     }
 
@@ -224,6 +239,9 @@ class DebugHttpServer @Inject constructor(
             </form>
             <form method="POST" action="/action/reset-metrics" style="margin: 0;">
                 <button type="submit" class="btn-secondary">Reset Metrics</button>
+            </form>
+            <form method="POST" action="/action/test-whatsnew-notification" style="margin: 0;">
+                <button type="submit" class="btn-primary">Test WhatsNew Notification</button>
             </form>
             <form method="GET" action="/" style="margin: 0;">
                 <button type="submit" class="btn-primary">Refresh Dashboard</button>
