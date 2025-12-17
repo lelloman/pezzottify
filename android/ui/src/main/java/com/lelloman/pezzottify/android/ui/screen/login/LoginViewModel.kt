@@ -59,6 +59,7 @@ class LoginViewModel @Inject constructor(
                 )
                 when (loginResult) {
                     is Interactor.LoginResult.Success -> {
+                        mutableEvents.emit(LoginScreenEvents.RequestNotificationPermission)
                         mutableEvents.emit(LoginScreenEvents.NavigateToMain)
                     }
                     is Interactor.LoginResult.Failure.InvalidCredentials -> {

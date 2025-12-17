@@ -141,7 +141,7 @@ class LoginViewModelTest {
     }
 
     @Test
-    fun `clickOnLoginButton success emits NavigateToMain event`() = runTest {
+    fun `clickOnLoginButton success emits RequestNotificationPermission and NavigateToMain events`() = runTest {
         fakeInteractor.loginResult = LoginViewModel.Interactor.LoginResult.Success
         viewModel.updateHost("https://host.com")
         viewModel.updateEmail("user@test.com")
@@ -155,7 +155,10 @@ class LoginViewModelTest {
         viewModel.clockOnLoginButton()
         advanceUntilIdle()
 
-        assertThat(events).containsExactly(LoginScreenEvents.NavigateToMain)
+        assertThat(events).containsExactly(
+            LoginScreenEvents.RequestNotificationPermission,
+            LoginScreenEvents.NavigateToMain
+        ).inOrder()
         assertThat(viewModel.state.value.isLoading).isFalse()
 
         job.cancel()

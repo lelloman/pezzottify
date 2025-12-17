@@ -1,7 +1,9 @@
 package com.lelloman.pezzottify.android.domain.sync
 
 import com.lelloman.pezzottify.android.domain.download.DownloadStatusRepository
+import com.lelloman.pezzottify.android.domain.notifications.DownloadCompletedData
 import com.lelloman.pezzottify.android.domain.notifications.NotificationRepository
+import com.lelloman.pezzottify.android.domain.notifications.NotificationType
 import com.lelloman.pezzottify.android.domain.notifications.SystemNotificationHelper
 import com.lelloman.pezzottify.android.domain.remoteapi.RemoteApiClient
 import com.lelloman.pezzottify.android.domain.remoteapi.response.PlaylistState
@@ -360,6 +362,23 @@ class SyncManagerImpl internal constructor(
 
             is SyncEvent.NotificationCreated -> {
                 notificationRepository.onNotificationCreated(event.notification)
+                // Show system notification for download completed
+                if (event.notification.notificationType == NotificationType.DownloadCompleted) {
+                    try {
+                        val data = kotlinx.serialization.json.Json.decodeFromJsonElement(
+                            DownloadCompletedData.serializer(),
+                            event.notification.data
+                        )
+                        systemNotificationHelper.showDownloadCompletedNotification(
+                            albumId = data.albumId,
+                            albumName = data.albumName,
+                            artistName = data.artistName,
+                        )
+                        logger.debug("Showed download completed notification: ${data.albumId} ${data.albumName}")
+                    } catch (e: Exception) {
+                        logger.error("Failed to parse download completed notification data", e)
+                    }
+                }
                 logger.debug("Applied NotificationCreated: ${event.notification.id} ${event.notification.title}")
             }
 
