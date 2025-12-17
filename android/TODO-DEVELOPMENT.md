@@ -182,13 +182,26 @@ This document tracks development-related improvements for correctness, reliabili
 
 ---
 
+### 12. Fix Home Screen Flash of Empty State
+
+**Problem:** When opening the app, the home screen briefly shows the "empty" state (e.g., "Start exploring...") for a fraction of a second before content loads.
+
+**Cause:** Likely a race condition where the UI renders before data is fetched, or the initial state defaults to empty instead of loading.
+
+**Solution:**
+- [ ] Investigate HomeScreenViewModel initial state
+- [ ] Ensure initial state is "Loading" rather than "Empty"
+- [ ] Consider showing a loading indicator or skeleton UI until data is ready
+
+---
+
 ## Summary
 
 | Priority | Count | Items |
 |----------|-------|-------|
-| Critical | 2 | GlobalScope, runBlocking |
+| Critical | 1 | GlobalScope |
 | Medium | 4 | JVM targets, R8, !!, logging |
-| Low | 5 | Tests, TODOs, exceptions, duplication, KSP |
+| Low | 6 | Tests, TODOs, exceptions, duplication, KSP, home screen flash |
 
 ---
 
