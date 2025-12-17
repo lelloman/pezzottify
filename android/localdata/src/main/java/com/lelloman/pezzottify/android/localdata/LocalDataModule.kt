@@ -39,6 +39,7 @@ import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
+import kotlinx.coroutines.CoroutineScope
 import javax.inject.Singleton
 
 @InstallIn(SingletonComponent::class)
@@ -47,7 +48,10 @@ class LocalDataModule {
 
     @Provides
     @Singleton
-    fun provideAuthStore(@ApplicationContext context: Context): AuthStore = AuthStoreImpl(context)
+    fun provideAuthStore(
+        @ApplicationContext context: Context,
+        coroutineScope: CoroutineScope,
+    ): AuthStore = AuthStoreImpl(context, coroutineScope)
 
     @Provides
     @Singleton
