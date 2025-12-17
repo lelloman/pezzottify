@@ -36,6 +36,7 @@ import UserManagement from "@/components/admin/UserManagement.vue";
 import AnalyticsDashboard from "@/components/admin/AnalyticsDashboard.vue";
 import ServerControl from "@/components/admin/ServerControl.vue";
 import DownloadManager from "@/components/admin/DownloadManager.vue";
+import BatchManager from "@/components/admin/BatchManager.vue";
 import { wsConnectionStatus, wsServerVersion } from "@/services/websocket";
 
 const route = useRoute();
@@ -95,6 +96,13 @@ const allSections = [
     permission: "DownloadManagerAdmin",
     component: DownloadManager,
     route: "/admin/downloads",
+  },
+  {
+    id: "batches",
+    label: "Batches",
+    permission: "EditCatalog",
+    component: BatchManager,
+    route: "/admin/batches",
   },
 ];
 

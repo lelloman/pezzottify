@@ -89,6 +89,11 @@ const router = createRouter({
           name: "admin-downloads",
           meta: { requiresAuth: true, section: "downloads" },
         },
+        {
+          path: "batches",
+          name: "admin-batches",
+          meta: { requiresAuth: true, section: "batches" },
+        },
       ],
     },
 
