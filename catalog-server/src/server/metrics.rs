@@ -6,10 +6,15 @@ use prometheus::{
     Counter, CounterVec, Encoder, Gauge, GaugeVec, Histogram, HistogramOpts, HistogramVec, Opts,
     Registry, TextEncoder,
 };
+use std::path::Path;
 use std::time::Duration;
+use walkdir::WalkDir;
 
 /// Metric name prefix for all Pezzottify metrics
 const PREFIX: &str = "pezzottify";
+
+/// Service name for homelab storage metrics
+const SERVICE_NAME: &str = "pezzottify";
 
 lazy_static! {
     // Global Prometheus registry
@@ -252,6 +257,12 @@ lazy_static! {
         Opts::new(format!("{PREFIX}_background_job_running"), "Whether a background job is currently running"),
         &["job_id"]
     ).expect("Failed to create background_job_running metric");
+
+    // Homelab Storage Metrics (standardized format for monitoring)
+    pub static ref HOMELAB_STORAGE_BYTES: GaugeVec = GaugeVec::new(
+        Opts::new("homelab_storage_bytes", "Storage usage in bytes"),
+        &["service", "path"]
+    ).expect("Failed to create homelab_storage_bytes metric");
 }
 
 /// Initialize all metrics and register them with the Prometheus registry
@@ -297,6 +308,7 @@ pub fn init_metrics() {
     let _ = REGISTRY.register(Box::new(BACKGROUND_JOB_EXECUTIONS_TOTAL.clone()));
     let _ = REGISTRY.register(Box::new(BACKGROUND_JOB_DURATION_SECONDS.clone()));
     let _ = REGISTRY.register(Box::new(BACKGROUND_JOB_RUNNING.clone()));
+    let _ = REGISTRY.register(Box::new(HOMELAB_STORAGE_BYTES.clone()));
 
     tracing::info!("Metrics system initialized successfully");
 }
@@ -606,6 +618,132 @@ pub async fn metrics_handler() -> impl IntoResponse {
     }
 }
 
+// =============================================================================
+// Storage Metrics (Homelab Standard)
+// =============================================================================
+
+/// Storage metrics breakdown for the service
+#[derive(Debug, Default)]
+pub struct StorageMetrics {
+    /// Total storage for the service (root "/")
+    pub total: u64,
+    /// Database storage breakdown
+    pub db_total: u64,
+    pub db_catalog: u64,
+    pub db_user: u64,
+    pub db_server: u64,
+    pub db_download_queue: u64,
+    pub db_search: u64,
+    /// Catalog/media storage breakdown
+    pub catalog_total: u64,
+    pub catalog_audio: u64,
+    pub catalog_images: u64,
+}
+
+/// Calculate the total size of a directory recursively
+fn calculate_dir_size(path: &Path) -> u64 {
+    if !path.exists() {
+        return 0;
+    }
+
+    WalkDir::new(path)
+        .into_iter()
+        .filter_map(|entry| entry.ok())
+        .filter(|entry| entry.file_type().is_file())
+        .filter_map(|entry| entry.metadata().ok())
+        .map(|metadata| metadata.len())
+        .sum()
+}
+
+/// Get the size of a single file
+fn get_file_size(path: &Path) -> u64 {
+    path.metadata().map(|m| m.len()).unwrap_or(0)
+}
+
+/// Calculate storage metrics for the service
+///
+/// # Arguments
+/// * `db_dir` - Path to the database directory containing SQLite files
+/// * `media_path` - Path to the media directory containing audio and images
+pub fn calculate_storage_metrics(db_dir: &Path, media_path: &Path) -> StorageMetrics {
+    // Database files
+    let db_catalog = get_file_size(&db_dir.join("catalog.db"));
+    let db_user = get_file_size(&db_dir.join("user.db"));
+    let db_server = get_file_size(&db_dir.join("server.db"));
+    let db_download_queue = get_file_size(&db_dir.join("download_queue.db"));
+    let db_search = get_file_size(&db_dir.join("search.db"));
+    let db_total = db_catalog + db_user + db_server + db_download_queue + db_search;
+
+    // Catalog/media directories
+    let catalog_audio = calculate_dir_size(&media_path.join("audio"));
+    let catalog_images = calculate_dir_size(&media_path.join("images"));
+    let catalog_total = catalog_audio + catalog_images;
+
+    // Total
+    let total = db_total + catalog_total;
+
+    StorageMetrics {
+        total,
+        db_total,
+        db_catalog,
+        db_user,
+        db_server,
+        db_download_queue,
+        db_search,
+        catalog_total,
+        catalog_audio,
+        catalog_images,
+    }
+}
+
+/// Update the homelab storage metrics with current values
+pub fn update_storage_metrics(db_dir: &Path, media_path: &Path) {
+    let metrics = calculate_storage_metrics(db_dir, media_path);
+
+    // Root total
+    HOMELAB_STORAGE_BYTES
+        .with_label_values(&[SERVICE_NAME, "/"])
+        .set(metrics.total as f64);
+
+    // Database breakdown
+    HOMELAB_STORAGE_BYTES
+        .with_label_values(&[SERVICE_NAME, "/db"])
+        .set(metrics.db_total as f64);
+    HOMELAB_STORAGE_BYTES
+        .with_label_values(&[SERVICE_NAME, "/db/catalog"])
+        .set(metrics.db_catalog as f64);
+    HOMELAB_STORAGE_BYTES
+        .with_label_values(&[SERVICE_NAME, "/db/user"])
+        .set(metrics.db_user as f64);
+    HOMELAB_STORAGE_BYTES
+        .with_label_values(&[SERVICE_NAME, "/db/server"])
+        .set(metrics.db_server as f64);
+    HOMELAB_STORAGE_BYTES
+        .with_label_values(&[SERVICE_NAME, "/db/download_queue"])
+        .set(metrics.db_download_queue as f64);
+    HOMELAB_STORAGE_BYTES
+        .with_label_values(&[SERVICE_NAME, "/db/search"])
+        .set(metrics.db_search as f64);
+
+    // Catalog/media breakdown
+    HOMELAB_STORAGE_BYTES
+        .with_label_values(&[SERVICE_NAME, "/catalog"])
+        .set(metrics.catalog_total as f64);
+    HOMELAB_STORAGE_BYTES
+        .with_label_values(&[SERVICE_NAME, "/catalog/audio"])
+        .set(metrics.catalog_audio as f64);
+    HOMELAB_STORAGE_BYTES
+        .with_label_values(&[SERVICE_NAME, "/catalog/images"])
+        .set(metrics.catalog_images as f64);
+
+    tracing::debug!(
+        "Storage metrics updated: total={}, db={}, catalog={}",
+        metrics.total,
+        metrics.db_total,
+        metrics.catalog_total
+    );
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -900,5 +1038,81 @@ mod tests {
             running.is_some(),
             "Background job running metric should exist"
         );
+    }
+
+    #[test]
+    fn test_calculate_storage_metrics() {
+        use std::io::Write;
+        use tempfile::TempDir;
+
+        // Create temp directory structure
+        let temp_dir = TempDir::new().unwrap();
+        let db_dir = temp_dir.path().join("db");
+        let media_path = temp_dir.path().join("media");
+        std::fs::create_dir_all(&db_dir).unwrap();
+        std::fs::create_dir_all(media_path.join("audio")).unwrap();
+        std::fs::create_dir_all(media_path.join("images")).unwrap();
+
+        // Create some test files with known sizes
+        let mut catalog_db = std::fs::File::create(db_dir.join("catalog.db")).unwrap();
+        catalog_db.write_all(&[0u8; 1000]).unwrap(); // 1KB
+
+        let mut user_db = std::fs::File::create(db_dir.join("user.db")).unwrap();
+        user_db.write_all(&[0u8; 500]).unwrap(); // 500 bytes
+
+        let mut audio_file = std::fs::File::create(media_path.join("audio/track1.ogg")).unwrap();
+        audio_file.write_all(&[0u8; 2000]).unwrap(); // 2KB
+
+        let mut image_file = std::fs::File::create(media_path.join("images/cover1.jpg")).unwrap();
+        image_file.write_all(&[0u8; 800]).unwrap(); // 800 bytes
+
+        // Calculate storage metrics
+        let metrics = calculate_storage_metrics(&db_dir, &media_path);
+
+        // Verify database metrics
+        assert_eq!(metrics.db_catalog, 1000);
+        assert_eq!(metrics.db_user, 500);
+        assert_eq!(metrics.db_server, 0); // file doesn't exist
+        assert_eq!(metrics.db_download_queue, 0);
+        assert_eq!(metrics.db_search, 0);
+        assert_eq!(metrics.db_total, 1500);
+
+        // Verify catalog metrics
+        assert_eq!(metrics.catalog_audio, 2000);
+        assert_eq!(metrics.catalog_images, 800);
+        assert_eq!(metrics.catalog_total, 2800);
+
+        // Verify total
+        assert_eq!(metrics.total, 4300);
+    }
+
+    #[test]
+    fn test_update_storage_metrics() {
+        use std::io::Write;
+        use tempfile::TempDir;
+
+        init_metrics();
+
+        // Create temp directory structure
+        let temp_dir = TempDir::new().unwrap();
+        let db_dir = temp_dir.path().join("db");
+        let media_path = temp_dir.path().join("media");
+        std::fs::create_dir_all(&db_dir).unwrap();
+        std::fs::create_dir_all(media_path.join("audio")).unwrap();
+        std::fs::create_dir_all(media_path.join("images")).unwrap();
+
+        // Create a test database file
+        let mut catalog_db = std::fs::File::create(db_dir.join("catalog.db")).unwrap();
+        catalog_db.write_all(&[0u8; 1000]).unwrap();
+
+        // Update storage metrics
+        update_storage_metrics(&db_dir, &media_path);
+
+        // Verify metrics were registered
+        let metrics = REGISTRY.gather();
+        let storage_metrics = metrics
+            .iter()
+            .find(|m| m.get_name() == "homelab_storage_bytes");
+        assert!(storage_metrics.is_some(), "Storage metrics should exist");
     }
 }
