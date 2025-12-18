@@ -302,8 +302,7 @@ impl Fts5LevenshteinSearchVault {
         let conn = self.conn.lock().unwrap();
         let catalog_version = self.catalog_store.get_skeleton_version().unwrap_or(0);
 
-        let vocabulary =
-            Self::rebuild_index_internal(&conn, &self.catalog_store, catalog_version)?;
+        let vocabulary = Self::rebuild_index_internal(&conn, &self.catalog_store, catalog_version)?;
 
         // Update the vocabulary
         let mut vocab_lock = self.vocabulary.write().unwrap();
@@ -485,19 +484,22 @@ impl SearchVault for Fts5LevenshteinSearchVault {
         match results {
             Ok(rows) => rows
                 .filter_map(|r| r.ok())
-                .filter_map(|(item_id, item_type_str, name, text_score, popularity_score)| {
-                    Self::str_to_item_type(&item_type_str).map(|item_type| {
-                        // Compute the combined score (more negative = better)
-                        let combined_score = text_score * (1.0 + popularity_score * POPULARITY_WEIGHT);
-                        SearchResult {
-                            item_id,
-                            item_type,
-                            score: (-text_score * 1000.0) as u32,
-                            adjusted_score: (-combined_score * 1000.0) as i64,
-                            matchable_text: name,
-                        }
-                    })
-                })
+                .filter_map(
+                    |(item_id, item_type_str, name, text_score, popularity_score)| {
+                        Self::str_to_item_type(&item_type_str).map(|item_type| {
+                            // Compute the combined score (more negative = better)
+                            let combined_score =
+                                text_score * (1.0 + popularity_score * POPULARITY_WEIGHT);
+                            SearchResult {
+                                item_id,
+                                item_type,
+                                score: (-text_score * 1000.0) as u32,
+                                adjusted_score: (-combined_score * 1000.0) as i64,
+                                matchable_text: name,
+                            }
+                        })
+                    },
+                )
                 .collect(),
             Err(e) => {
                 warn!("FTS5+Levenshtein search query failed: {}", e);
@@ -780,7 +782,9 @@ mod tests {
                 Ok(None)
             }
             fn get_skeleton_version(&self) -> anyhow::Result<i64> {
-                Ok(self.skeleton_version.load(std::sync::atomic::Ordering::SeqCst))
+                Ok(self
+                    .skeleton_version
+                    .load(std::sync::atomic::Ordering::SeqCst))
             }
             fn get_skeleton_checksum(&self) -> anyhow::Result<String> {
                 Ok(String::new())
@@ -924,7 +928,13 @@ mod tests {
             .unwrap();
         let result: (String, String, i64, f64, i64) = stmt
             .query_row(["test_id"], |row| {
-                Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?))
+                Ok((
+                    row.get(0)?,
+                    row.get(1)?,
+                    row.get(2)?,
+                    row.get(3)?,
+                    row.get(4)?,
+                ))
             })
             .expect("Should be able to query item_popularity");
 
@@ -1024,7 +1034,11 @@ mod tests {
         // Check stored version was updated
         let conn = vault.conn.lock().unwrap();
         let stored_version = Fts5LevenshteinSearchVault::get_stored_catalog_version(&conn);
-        assert_eq!(stored_version, Some(2), "Stored version should be updated after rebuild");
+        assert_eq!(
+            stored_version,
+            Some(2),
+            "Stored version should be updated after rebuild"
+        );
     }
 
     #[test]
@@ -1038,7 +1052,11 @@ mod tests {
         // Verify the metadata table exists and has the catalog version
         let conn = vault.conn.lock().unwrap();
         let stored_version = Fts5LevenshteinSearchVault::get_stored_catalog_version(&conn);
-        assert_eq!(stored_version, Some(42), "Catalog version should be stored in metadata");
+        assert_eq!(
+            stored_version,
+            Some(42),
+            "Catalog version should be stored in metadata"
+        );
     }
 
     #[test]
@@ -1203,7 +1221,11 @@ mod tests {
         assert_eq!(results.len(), 10, "Should respect max_results limit of 10");
 
         let results = vault.search("Song", 100, None);
-        assert_eq!(results.len(), 20, "Should return all 20 when limit exceeds count");
+        assert_eq!(
+            results.len(),
+            20,
+            "Should return all 20 when limit exceeds count"
+        );
     }
 
     #[test]
@@ -1311,7 +1333,11 @@ mod tests {
 
         // Mixed case with typo
         let results = vault.search("Metalica", 10, None);
-        assert_eq!(results.len(), 1, "Typo correction should work with mixed case");
+        assert_eq!(
+            results.len(),
+            1,
+            "Typo correction should work with mixed case"
+        );
     }
 
     #[test]
@@ -1344,60 +1370,254 @@ mod tests {
                 Ok(self.version.load(std::sync::atomic::Ordering::SeqCst))
             }
             // All other methods are stubs
-            fn get_artist_json(&self, _id: &str) -> anyhow::Result<Option<serde_json::Value>> { Ok(None) }
-            fn get_album_json(&self, _id: &str) -> anyhow::Result<Option<serde_json::Value>> { Ok(None) }
-            fn get_track_json(&self, _id: &str) -> anyhow::Result<Option<serde_json::Value>> { Ok(None) }
-            fn get_resolved_artist_json(&self, _id: &str) -> anyhow::Result<Option<serde_json::Value>> { Ok(None) }
-            fn get_resolved_album_json(&self, _id: &str) -> anyhow::Result<Option<serde_json::Value>> { Ok(None) }
-            fn get_resolved_track_json(&self, _id: &str) -> anyhow::Result<Option<serde_json::Value>> { Ok(None) }
-            fn get_artist_discography_json(&self, _id: &str) -> anyhow::Result<Option<serde_json::Value>> { Ok(None) }
-            fn get_image_path(&self, _id: &str) -> std::path::PathBuf { std::path::PathBuf::new() }
-            fn get_track_audio_path(&self, _track_id: &str) -> Option<std::path::PathBuf> { None }
-            fn get_track_album_id(&self, _track_id: &str) -> Option<String> { None }
-            fn get_artists_count(&self) -> usize { 0 }
-            fn get_albums_count(&self) -> usize { 0 }
-            fn get_tracks_count(&self) -> usize { 0 }
-            fn create_artist(&self, _data: serde_json::Value) -> anyhow::Result<serde_json::Value> { Ok(serde_json::json!({})) }
-            fn update_artist(&self, _id: &str, _data: serde_json::Value) -> anyhow::Result<serde_json::Value> { Ok(serde_json::json!({})) }
-            fn delete_artist(&self, _id: &str) -> anyhow::Result<()> { Ok(()) }
-            fn create_album(&self, _data: serde_json::Value) -> anyhow::Result<serde_json::Value> { Ok(serde_json::json!({})) }
-            fn update_album(&self, _id: &str, _data: serde_json::Value) -> anyhow::Result<serde_json::Value> { Ok(serde_json::json!({})) }
-            fn delete_album(&self, _id: &str) -> anyhow::Result<()> { Ok(()) }
-            fn create_track(&self, _data: serde_json::Value) -> anyhow::Result<serde_json::Value> { Ok(serde_json::json!({})) }
-            fn update_track(&self, _id: &str, _data: serde_json::Value) -> anyhow::Result<serde_json::Value> { Ok(serde_json::json!({})) }
-            fn delete_track(&self, _id: &str) -> anyhow::Result<()> { Ok(()) }
-            fn create_image(&self, _data: serde_json::Value) -> anyhow::Result<serde_json::Value> { Ok(serde_json::json!({})) }
-            fn update_image(&self, _id: &str, _data: serde_json::Value) -> anyhow::Result<serde_json::Value> { Ok(serde_json::json!({})) }
-            fn delete_image(&self, _id: &str) -> anyhow::Result<()> { Ok(()) }
-            fn create_changelog_batch(&self, _name: &str, _description: Option<&str>) -> anyhow::Result<crate::catalog_store::CatalogBatch> { unimplemented!() }
-            fn get_changelog_batch(&self, _id: &str) -> anyhow::Result<Option<crate::catalog_store::CatalogBatch>> { Ok(None) }
-            fn get_active_changelog_batch(&self) -> anyhow::Result<Option<crate::catalog_store::CatalogBatch>> { Ok(None) }
-            fn close_changelog_batch(&self, _id: &str) -> anyhow::Result<()> { Ok(()) }
-            fn list_changelog_batches(&self, _is_open: Option<bool>) -> anyhow::Result<Vec<crate::catalog_store::CatalogBatch>> { Ok(vec![]) }
-            fn delete_changelog_batch(&self, _id: &str) -> anyhow::Result<()> { Ok(()) }
-            fn get_changelog_batch_changes(&self, _batch_id: &str) -> anyhow::Result<Vec<crate::catalog_store::ChangeEntry>> { Ok(vec![]) }
-            fn get_changelog_entity_history(&self, _entity_type: crate::catalog_store::ChangeEntityType, _entity_id: &str) -> anyhow::Result<Vec<crate::catalog_store::ChangeEntry>> { Ok(vec![]) }
-            fn get_whats_new_batches(&self, _limit: usize) -> anyhow::Result<Vec<crate::catalog_store::WhatsNewBatch>> { Ok(vec![]) }
-            fn get_stale_batches(&self, _stale_threshold_hours: u64) -> anyhow::Result<Vec<crate::catalog_store::CatalogBatch>> { Ok(vec![]) }
-            fn close_stale_batches(&self) -> anyhow::Result<usize> { Ok(0) }
-            fn get_changelog_batch_summary(&self, _batch_id: &str) -> anyhow::Result<crate::catalog_store::BatchChangeSummary> { Ok(crate::catalog_store::BatchChangeSummary::default()) }
-            fn list_all_track_ids(&self) -> anyhow::Result<Vec<String>> { Ok(vec![]) }
-            fn list_all_album_image_ids(&self) -> anyhow::Result<Vec<String>> { Ok(vec![]) }
-            fn list_all_artist_image_ids(&self) -> anyhow::Result<Vec<String>> { Ok(vec![]) }
-            fn get_artists_without_related(&self) -> anyhow::Result<Vec<String>> { Ok(vec![]) }
-            fn get_orphan_related_artist_ids(&self) -> anyhow::Result<Vec<String>> { Ok(vec![]) }
-            fn add_artist_image(&self, _artist_id: &str, _image_id: &str, _image_type: &crate::catalog_store::ImageType, _position: i32) -> anyhow::Result<()> { Ok(()) }
-            fn add_album_image(&self, _album_id: &str, _image_id: &str, _image_type: &crate::catalog_store::ImageType, _position: i32) -> anyhow::Result<()> { Ok(()) }
-            fn set_artist_display_image(&self, _artist_id: &str, _image_id: &str) -> anyhow::Result<()> { Ok(()) }
-            fn set_album_display_image(&self, _album_id: &str, _image_id: &str) -> anyhow::Result<()> { Ok(()) }
-            fn get_album_display_image_id(&self, _album_id: &str) -> anyhow::Result<Option<String>> { Ok(None) }
-            fn get_skeleton_checksum(&self) -> anyhow::Result<String> { Ok(String::new()) }
-            fn get_skeleton_events_since(&self, _seq: i64) -> anyhow::Result<Vec<crate::skeleton::SkeletonEvent>> { Ok(vec![]) }
-            fn get_skeleton_earliest_seq(&self) -> anyhow::Result<i64> { Ok(0) }
-            fn get_skeleton_latest_seq(&self) -> anyhow::Result<i64> { Ok(0) }
-            fn get_all_artist_ids(&self) -> anyhow::Result<Vec<String>> { Ok(vec![]) }
-            fn get_all_albums_skeleton(&self) -> anyhow::Result<Vec<crate::skeleton::SkeletonAlbumEntry>> { Ok(vec![]) }
-            fn get_all_tracks_skeleton(&self) -> anyhow::Result<Vec<crate::skeleton::SkeletonTrackEntry>> { Ok(vec![]) }
+            fn get_artist_json(&self, _id: &str) -> anyhow::Result<Option<serde_json::Value>> {
+                Ok(None)
+            }
+            fn get_album_json(&self, _id: &str) -> anyhow::Result<Option<serde_json::Value>> {
+                Ok(None)
+            }
+            fn get_track_json(&self, _id: &str) -> anyhow::Result<Option<serde_json::Value>> {
+                Ok(None)
+            }
+            fn get_resolved_artist_json(
+                &self,
+                _id: &str,
+            ) -> anyhow::Result<Option<serde_json::Value>> {
+                Ok(None)
+            }
+            fn get_resolved_album_json(
+                &self,
+                _id: &str,
+            ) -> anyhow::Result<Option<serde_json::Value>> {
+                Ok(None)
+            }
+            fn get_resolved_track_json(
+                &self,
+                _id: &str,
+            ) -> anyhow::Result<Option<serde_json::Value>> {
+                Ok(None)
+            }
+            fn get_artist_discography_json(
+                &self,
+                _id: &str,
+            ) -> anyhow::Result<Option<serde_json::Value>> {
+                Ok(None)
+            }
+            fn get_image_path(&self, _id: &str) -> std::path::PathBuf {
+                std::path::PathBuf::new()
+            }
+            fn get_track_audio_path(&self, _track_id: &str) -> Option<std::path::PathBuf> {
+                None
+            }
+            fn get_track_album_id(&self, _track_id: &str) -> Option<String> {
+                None
+            }
+            fn get_artists_count(&self) -> usize {
+                0
+            }
+            fn get_albums_count(&self) -> usize {
+                0
+            }
+            fn get_tracks_count(&self) -> usize {
+                0
+            }
+            fn create_artist(&self, _data: serde_json::Value) -> anyhow::Result<serde_json::Value> {
+                Ok(serde_json::json!({}))
+            }
+            fn update_artist(
+                &self,
+                _id: &str,
+                _data: serde_json::Value,
+            ) -> anyhow::Result<serde_json::Value> {
+                Ok(serde_json::json!({}))
+            }
+            fn delete_artist(&self, _id: &str) -> anyhow::Result<()> {
+                Ok(())
+            }
+            fn create_album(&self, _data: serde_json::Value) -> anyhow::Result<serde_json::Value> {
+                Ok(serde_json::json!({}))
+            }
+            fn update_album(
+                &self,
+                _id: &str,
+                _data: serde_json::Value,
+            ) -> anyhow::Result<serde_json::Value> {
+                Ok(serde_json::json!({}))
+            }
+            fn delete_album(&self, _id: &str) -> anyhow::Result<()> {
+                Ok(())
+            }
+            fn create_track(&self, _data: serde_json::Value) -> anyhow::Result<serde_json::Value> {
+                Ok(serde_json::json!({}))
+            }
+            fn update_track(
+                &self,
+                _id: &str,
+                _data: serde_json::Value,
+            ) -> anyhow::Result<serde_json::Value> {
+                Ok(serde_json::json!({}))
+            }
+            fn delete_track(&self, _id: &str) -> anyhow::Result<()> {
+                Ok(())
+            }
+            fn create_image(&self, _data: serde_json::Value) -> anyhow::Result<serde_json::Value> {
+                Ok(serde_json::json!({}))
+            }
+            fn update_image(
+                &self,
+                _id: &str,
+                _data: serde_json::Value,
+            ) -> anyhow::Result<serde_json::Value> {
+                Ok(serde_json::json!({}))
+            }
+            fn delete_image(&self, _id: &str) -> anyhow::Result<()> {
+                Ok(())
+            }
+            fn create_changelog_batch(
+                &self,
+                _name: &str,
+                _description: Option<&str>,
+            ) -> anyhow::Result<crate::catalog_store::CatalogBatch> {
+                unimplemented!()
+            }
+            fn get_changelog_batch(
+                &self,
+                _id: &str,
+            ) -> anyhow::Result<Option<crate::catalog_store::CatalogBatch>> {
+                Ok(None)
+            }
+            fn get_active_changelog_batch(
+                &self,
+            ) -> anyhow::Result<Option<crate::catalog_store::CatalogBatch>> {
+                Ok(None)
+            }
+            fn close_changelog_batch(&self, _id: &str) -> anyhow::Result<()> {
+                Ok(())
+            }
+            fn list_changelog_batches(
+                &self,
+                _is_open: Option<bool>,
+            ) -> anyhow::Result<Vec<crate::catalog_store::CatalogBatch>> {
+                Ok(vec![])
+            }
+            fn delete_changelog_batch(&self, _id: &str) -> anyhow::Result<()> {
+                Ok(())
+            }
+            fn get_changelog_batch_changes(
+                &self,
+                _batch_id: &str,
+            ) -> anyhow::Result<Vec<crate::catalog_store::ChangeEntry>> {
+                Ok(vec![])
+            }
+            fn get_changelog_entity_history(
+                &self,
+                _entity_type: crate::catalog_store::ChangeEntityType,
+                _entity_id: &str,
+            ) -> anyhow::Result<Vec<crate::catalog_store::ChangeEntry>> {
+                Ok(vec![])
+            }
+            fn get_whats_new_batches(
+                &self,
+                _limit: usize,
+            ) -> anyhow::Result<Vec<crate::catalog_store::WhatsNewBatch>> {
+                Ok(vec![])
+            }
+            fn get_stale_batches(
+                &self,
+                _stale_threshold_hours: u64,
+            ) -> anyhow::Result<Vec<crate::catalog_store::CatalogBatch>> {
+                Ok(vec![])
+            }
+            fn close_stale_batches(&self) -> anyhow::Result<usize> {
+                Ok(0)
+            }
+            fn get_changelog_batch_summary(
+                &self,
+                _batch_id: &str,
+            ) -> anyhow::Result<crate::catalog_store::BatchChangeSummary> {
+                Ok(crate::catalog_store::BatchChangeSummary::default())
+            }
+            fn list_all_track_ids(&self) -> anyhow::Result<Vec<String>> {
+                Ok(vec![])
+            }
+            fn list_all_album_image_ids(&self) -> anyhow::Result<Vec<String>> {
+                Ok(vec![])
+            }
+            fn list_all_artist_image_ids(&self) -> anyhow::Result<Vec<String>> {
+                Ok(vec![])
+            }
+            fn get_artists_without_related(&self) -> anyhow::Result<Vec<String>> {
+                Ok(vec![])
+            }
+            fn get_orphan_related_artist_ids(&self) -> anyhow::Result<Vec<String>> {
+                Ok(vec![])
+            }
+            fn add_artist_image(
+                &self,
+                _artist_id: &str,
+                _image_id: &str,
+                _image_type: &crate::catalog_store::ImageType,
+                _position: i32,
+            ) -> anyhow::Result<()> {
+                Ok(())
+            }
+            fn add_album_image(
+                &self,
+                _album_id: &str,
+                _image_id: &str,
+                _image_type: &crate::catalog_store::ImageType,
+                _position: i32,
+            ) -> anyhow::Result<()> {
+                Ok(())
+            }
+            fn set_artist_display_image(
+                &self,
+                _artist_id: &str,
+                _image_id: &str,
+            ) -> anyhow::Result<()> {
+                Ok(())
+            }
+            fn set_album_display_image(
+                &self,
+                _album_id: &str,
+                _image_id: &str,
+            ) -> anyhow::Result<()> {
+                Ok(())
+            }
+            fn get_album_display_image_id(
+                &self,
+                _album_id: &str,
+            ) -> anyhow::Result<Option<String>> {
+                Ok(None)
+            }
+            fn get_skeleton_checksum(&self) -> anyhow::Result<String> {
+                Ok(String::new())
+            }
+            fn get_skeleton_events_since(
+                &self,
+                _seq: i64,
+            ) -> anyhow::Result<Vec<crate::skeleton::SkeletonEvent>> {
+                Ok(vec![])
+            }
+            fn get_skeleton_earliest_seq(&self) -> anyhow::Result<i64> {
+                Ok(0)
+            }
+            fn get_skeleton_latest_seq(&self) -> anyhow::Result<i64> {
+                Ok(0)
+            }
+            fn get_all_artist_ids(&self) -> anyhow::Result<Vec<String>> {
+                Ok(vec![])
+            }
+            fn get_all_albums_skeleton(
+                &self,
+            ) -> anyhow::Result<Vec<crate::skeleton::SkeletonAlbumEntry>> {
+                Ok(vec![])
+            }
+            fn get_all_tracks_skeleton(
+                &self,
+            ) -> anyhow::Result<Vec<crate::skeleton::SkeletonTrackEntry>> {
+                Ok(vec![])
+            }
         }
 
         let catalog = Arc::new(DynamicMockCatalogStore {
@@ -1427,14 +1647,22 @@ mod tests {
 
         // Old search still works (index not rebuilt yet)
         let results = vault.search("Original", 10, None);
-        assert_eq!(results.len(), 1, "Should still find original before rebuild");
+        assert_eq!(
+            results.len(),
+            1,
+            "Should still find original before rebuild"
+        );
 
         // Trigger rebuild
         vault.rebuild_index().unwrap();
 
         // Now old item is gone, new item is found
         let results = vault.search("Original", 10, None);
-        assert_eq!(results.len(), 0, "Original should not be found after rebuild");
+        assert_eq!(
+            results.len(),
+            0,
+            "Original should not be found after rebuild"
+        );
 
         let results = vault.search("New Artist", 10, None);
         assert_eq!(results.len(), 1, "New artist should be found after rebuild");
@@ -1590,7 +1818,12 @@ mod tests {
 
         // Set popularity scores: track_popular = 1.0, track_mid = 0.5, track_unpopular = no entry (0.0)
         vault.update_popularity(&[
-            ("track_popular".to_string(), HashedItemType::Track, 1000u64, 1.0),
+            (
+                "track_popular".to_string(),
+                HashedItemType::Track,
+                1000u64,
+                1.0,
+            ),
             ("track_mid".to_string(), HashedItemType::Track, 500u64, 0.5),
         ]);
 
@@ -1641,7 +1874,11 @@ mod tests {
         // Don't add any popularity data - table is empty
         // Search should still work
         let results = vault.search("Test Track", 10, None);
-        assert_eq!(results.len(), 1, "Search should work with empty popularity table");
+        assert_eq!(
+            results.len(),
+            1,
+            "Search should work with empty popularity table"
+        );
         assert_eq!(results[0].item_id, "track1");
     }
 }

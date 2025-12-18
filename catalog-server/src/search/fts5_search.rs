@@ -541,61 +541,257 @@ mod tests {
                 Ok(self.items.read().unwrap().clone())
             }
             // All other methods are no-ops
-            fn get_artist_json(&self, _id: &str) -> anyhow::Result<Option<serde_json::Value>> { Ok(None) }
-            fn get_album_json(&self, _id: &str) -> anyhow::Result<Option<serde_json::Value>> { Ok(None) }
-            fn get_track_json(&self, _id: &str) -> anyhow::Result<Option<serde_json::Value>> { Ok(None) }
-            fn get_resolved_artist_json(&self, _id: &str) -> anyhow::Result<Option<serde_json::Value>> { Ok(None) }
-            fn get_resolved_album_json(&self, _id: &str) -> anyhow::Result<Option<serde_json::Value>> { Ok(None) }
-            fn get_resolved_track_json(&self, _id: &str) -> anyhow::Result<Option<serde_json::Value>> { Ok(None) }
-            fn get_artist_discography_json(&self, _id: &str) -> anyhow::Result<Option<serde_json::Value>> { Ok(None) }
-            fn get_image_path(&self, _id: &str) -> std::path::PathBuf { std::path::PathBuf::new() }
-            fn get_track_audio_path(&self, _track_id: &str) -> Option<std::path::PathBuf> { None }
-            fn get_track_album_id(&self, _track_id: &str) -> Option<String> { None }
-            fn get_artists_count(&self) -> usize { 0 }
-            fn get_albums_count(&self) -> usize { 0 }
-            fn get_tracks_count(&self) -> usize { 0 }
-            fn create_artist(&self, _data: serde_json::Value) -> anyhow::Result<serde_json::Value> { Ok(serde_json::json!({})) }
-            fn update_artist(&self, _id: &str, _data: serde_json::Value) -> anyhow::Result<serde_json::Value> { Ok(serde_json::json!({})) }
-            fn delete_artist(&self, _id: &str) -> anyhow::Result<()> { Ok(()) }
-            fn create_album(&self, _data: serde_json::Value) -> anyhow::Result<serde_json::Value> { Ok(serde_json::json!({})) }
-            fn update_album(&self, _id: &str, _data: serde_json::Value) -> anyhow::Result<serde_json::Value> { Ok(serde_json::json!({})) }
-            fn delete_album(&self, _id: &str) -> anyhow::Result<()> { Ok(()) }
-            fn create_track(&self, _data: serde_json::Value) -> anyhow::Result<serde_json::Value> { Ok(serde_json::json!({})) }
-            fn update_track(&self, _id: &str, _data: serde_json::Value) -> anyhow::Result<serde_json::Value> { Ok(serde_json::json!({})) }
-            fn delete_track(&self, _id: &str) -> anyhow::Result<()> { Ok(()) }
-            fn create_image(&self, _data: serde_json::Value) -> anyhow::Result<serde_json::Value> { Ok(serde_json::json!({})) }
-            fn update_image(&self, _id: &str, _data: serde_json::Value) -> anyhow::Result<serde_json::Value> { Ok(serde_json::json!({})) }
-            fn delete_image(&self, _id: &str) -> anyhow::Result<()> { Ok(()) }
-            fn create_changelog_batch(&self, _name: &str, _description: Option<&str>) -> anyhow::Result<crate::catalog_store::CatalogBatch> { unimplemented!() }
-            fn get_changelog_batch(&self, _id: &str) -> anyhow::Result<Option<crate::catalog_store::CatalogBatch>> { Ok(None) }
-            fn get_active_changelog_batch(&self) -> anyhow::Result<Option<crate::catalog_store::CatalogBatch>> { Ok(None) }
-            fn close_changelog_batch(&self, _id: &str) -> anyhow::Result<()> { Ok(()) }
-            fn list_changelog_batches(&self, _is_open: Option<bool>) -> anyhow::Result<Vec<crate::catalog_store::CatalogBatch>> { Ok(vec![]) }
-            fn delete_changelog_batch(&self, _id: &str) -> anyhow::Result<()> { Ok(()) }
-            fn get_changelog_batch_changes(&self, _batch_id: &str) -> anyhow::Result<Vec<crate::catalog_store::ChangeEntry>> { Ok(vec![]) }
-            fn get_changelog_entity_history(&self, _entity_type: crate::catalog_store::ChangeEntityType, _entity_id: &str) -> anyhow::Result<Vec<crate::catalog_store::ChangeEntry>> { Ok(vec![]) }
-            fn get_whats_new_batches(&self, _limit: usize) -> anyhow::Result<Vec<crate::catalog_store::WhatsNewBatch>> { Ok(vec![]) }
-            fn get_stale_batches(&self, _stale_threshold_hours: u64) -> anyhow::Result<Vec<crate::catalog_store::CatalogBatch>> { Ok(vec![]) }
-            fn close_stale_batches(&self) -> anyhow::Result<usize> { Ok(0) }
-            fn get_changelog_batch_summary(&self, _batch_id: &str) -> anyhow::Result<crate::catalog_store::BatchChangeSummary> { Ok(crate::catalog_store::BatchChangeSummary::default()) }
-            fn list_all_track_ids(&self) -> anyhow::Result<Vec<String>> { Ok(vec![]) }
-            fn list_all_album_image_ids(&self) -> anyhow::Result<Vec<String>> { Ok(vec![]) }
-            fn list_all_artist_image_ids(&self) -> anyhow::Result<Vec<String>> { Ok(vec![]) }
-            fn get_artists_without_related(&self) -> anyhow::Result<Vec<String>> { Ok(vec![]) }
-            fn get_orphan_related_artist_ids(&self) -> anyhow::Result<Vec<String>> { Ok(vec![]) }
-            fn add_artist_image(&self, _artist_id: &str, _image_id: &str, _image_type: &crate::catalog_store::ImageType, _position: i32) -> anyhow::Result<()> { Ok(()) }
-            fn add_album_image(&self, _album_id: &str, _image_id: &str, _image_type: &crate::catalog_store::ImageType, _position: i32) -> anyhow::Result<()> { Ok(()) }
-            fn set_artist_display_image(&self, _artist_id: &str, _image_id: &str) -> anyhow::Result<()> { Ok(()) }
-            fn set_album_display_image(&self, _album_id: &str, _image_id: &str) -> anyhow::Result<()> { Ok(()) }
-            fn get_album_display_image_id(&self, _album_id: &str) -> anyhow::Result<Option<String>> { Ok(None) }
-            fn get_skeleton_version(&self) -> anyhow::Result<i64> { Ok(0) }
-            fn get_skeleton_checksum(&self) -> anyhow::Result<String> { Ok(String::new()) }
-            fn get_skeleton_events_since(&self, _seq: i64) -> anyhow::Result<Vec<crate::skeleton::SkeletonEvent>> { Ok(vec![]) }
-            fn get_skeleton_earliest_seq(&self) -> anyhow::Result<i64> { Ok(0) }
-            fn get_skeleton_latest_seq(&self) -> anyhow::Result<i64> { Ok(0) }
-            fn get_all_artist_ids(&self) -> anyhow::Result<Vec<String>> { Ok(vec![]) }
-            fn get_all_albums_skeleton(&self) -> anyhow::Result<Vec<crate::skeleton::SkeletonAlbumEntry>> { Ok(vec![]) }
-            fn get_all_tracks_skeleton(&self) -> anyhow::Result<Vec<crate::skeleton::SkeletonTrackEntry>> { Ok(vec![]) }
+            fn get_artist_json(&self, _id: &str) -> anyhow::Result<Option<serde_json::Value>> {
+                Ok(None)
+            }
+            fn get_album_json(&self, _id: &str) -> anyhow::Result<Option<serde_json::Value>> {
+                Ok(None)
+            }
+            fn get_track_json(&self, _id: &str) -> anyhow::Result<Option<serde_json::Value>> {
+                Ok(None)
+            }
+            fn get_resolved_artist_json(
+                &self,
+                _id: &str,
+            ) -> anyhow::Result<Option<serde_json::Value>> {
+                Ok(None)
+            }
+            fn get_resolved_album_json(
+                &self,
+                _id: &str,
+            ) -> anyhow::Result<Option<serde_json::Value>> {
+                Ok(None)
+            }
+            fn get_resolved_track_json(
+                &self,
+                _id: &str,
+            ) -> anyhow::Result<Option<serde_json::Value>> {
+                Ok(None)
+            }
+            fn get_artist_discography_json(
+                &self,
+                _id: &str,
+            ) -> anyhow::Result<Option<serde_json::Value>> {
+                Ok(None)
+            }
+            fn get_image_path(&self, _id: &str) -> std::path::PathBuf {
+                std::path::PathBuf::new()
+            }
+            fn get_track_audio_path(&self, _track_id: &str) -> Option<std::path::PathBuf> {
+                None
+            }
+            fn get_track_album_id(&self, _track_id: &str) -> Option<String> {
+                None
+            }
+            fn get_artists_count(&self) -> usize {
+                0
+            }
+            fn get_albums_count(&self) -> usize {
+                0
+            }
+            fn get_tracks_count(&self) -> usize {
+                0
+            }
+            fn create_artist(&self, _data: serde_json::Value) -> anyhow::Result<serde_json::Value> {
+                Ok(serde_json::json!({}))
+            }
+            fn update_artist(
+                &self,
+                _id: &str,
+                _data: serde_json::Value,
+            ) -> anyhow::Result<serde_json::Value> {
+                Ok(serde_json::json!({}))
+            }
+            fn delete_artist(&self, _id: &str) -> anyhow::Result<()> {
+                Ok(())
+            }
+            fn create_album(&self, _data: serde_json::Value) -> anyhow::Result<serde_json::Value> {
+                Ok(serde_json::json!({}))
+            }
+            fn update_album(
+                &self,
+                _id: &str,
+                _data: serde_json::Value,
+            ) -> anyhow::Result<serde_json::Value> {
+                Ok(serde_json::json!({}))
+            }
+            fn delete_album(&self, _id: &str) -> anyhow::Result<()> {
+                Ok(())
+            }
+            fn create_track(&self, _data: serde_json::Value) -> anyhow::Result<serde_json::Value> {
+                Ok(serde_json::json!({}))
+            }
+            fn update_track(
+                &self,
+                _id: &str,
+                _data: serde_json::Value,
+            ) -> anyhow::Result<serde_json::Value> {
+                Ok(serde_json::json!({}))
+            }
+            fn delete_track(&self, _id: &str) -> anyhow::Result<()> {
+                Ok(())
+            }
+            fn create_image(&self, _data: serde_json::Value) -> anyhow::Result<serde_json::Value> {
+                Ok(serde_json::json!({}))
+            }
+            fn update_image(
+                &self,
+                _id: &str,
+                _data: serde_json::Value,
+            ) -> anyhow::Result<serde_json::Value> {
+                Ok(serde_json::json!({}))
+            }
+            fn delete_image(&self, _id: &str) -> anyhow::Result<()> {
+                Ok(())
+            }
+            fn create_changelog_batch(
+                &self,
+                _name: &str,
+                _description: Option<&str>,
+            ) -> anyhow::Result<crate::catalog_store::CatalogBatch> {
+                unimplemented!()
+            }
+            fn get_changelog_batch(
+                &self,
+                _id: &str,
+            ) -> anyhow::Result<Option<crate::catalog_store::CatalogBatch>> {
+                Ok(None)
+            }
+            fn get_active_changelog_batch(
+                &self,
+            ) -> anyhow::Result<Option<crate::catalog_store::CatalogBatch>> {
+                Ok(None)
+            }
+            fn close_changelog_batch(&self, _id: &str) -> anyhow::Result<()> {
+                Ok(())
+            }
+            fn list_changelog_batches(
+                &self,
+                _is_open: Option<bool>,
+            ) -> anyhow::Result<Vec<crate::catalog_store::CatalogBatch>> {
+                Ok(vec![])
+            }
+            fn delete_changelog_batch(&self, _id: &str) -> anyhow::Result<()> {
+                Ok(())
+            }
+            fn get_changelog_batch_changes(
+                &self,
+                _batch_id: &str,
+            ) -> anyhow::Result<Vec<crate::catalog_store::ChangeEntry>> {
+                Ok(vec![])
+            }
+            fn get_changelog_entity_history(
+                &self,
+                _entity_type: crate::catalog_store::ChangeEntityType,
+                _entity_id: &str,
+            ) -> anyhow::Result<Vec<crate::catalog_store::ChangeEntry>> {
+                Ok(vec![])
+            }
+            fn get_whats_new_batches(
+                &self,
+                _limit: usize,
+            ) -> anyhow::Result<Vec<crate::catalog_store::WhatsNewBatch>> {
+                Ok(vec![])
+            }
+            fn get_stale_batches(
+                &self,
+                _stale_threshold_hours: u64,
+            ) -> anyhow::Result<Vec<crate::catalog_store::CatalogBatch>> {
+                Ok(vec![])
+            }
+            fn close_stale_batches(&self) -> anyhow::Result<usize> {
+                Ok(0)
+            }
+            fn get_changelog_batch_summary(
+                &self,
+                _batch_id: &str,
+            ) -> anyhow::Result<crate::catalog_store::BatchChangeSummary> {
+                Ok(crate::catalog_store::BatchChangeSummary::default())
+            }
+            fn list_all_track_ids(&self) -> anyhow::Result<Vec<String>> {
+                Ok(vec![])
+            }
+            fn list_all_album_image_ids(&self) -> anyhow::Result<Vec<String>> {
+                Ok(vec![])
+            }
+            fn list_all_artist_image_ids(&self) -> anyhow::Result<Vec<String>> {
+                Ok(vec![])
+            }
+            fn get_artists_without_related(&self) -> anyhow::Result<Vec<String>> {
+                Ok(vec![])
+            }
+            fn get_orphan_related_artist_ids(&self) -> anyhow::Result<Vec<String>> {
+                Ok(vec![])
+            }
+            fn add_artist_image(
+                &self,
+                _artist_id: &str,
+                _image_id: &str,
+                _image_type: &crate::catalog_store::ImageType,
+                _position: i32,
+            ) -> anyhow::Result<()> {
+                Ok(())
+            }
+            fn add_album_image(
+                &self,
+                _album_id: &str,
+                _image_id: &str,
+                _image_type: &crate::catalog_store::ImageType,
+                _position: i32,
+            ) -> anyhow::Result<()> {
+                Ok(())
+            }
+            fn set_artist_display_image(
+                &self,
+                _artist_id: &str,
+                _image_id: &str,
+            ) -> anyhow::Result<()> {
+                Ok(())
+            }
+            fn set_album_display_image(
+                &self,
+                _album_id: &str,
+                _image_id: &str,
+            ) -> anyhow::Result<()> {
+                Ok(())
+            }
+            fn get_album_display_image_id(
+                &self,
+                _album_id: &str,
+            ) -> anyhow::Result<Option<String>> {
+                Ok(None)
+            }
+            fn get_skeleton_version(&self) -> anyhow::Result<i64> {
+                Ok(0)
+            }
+            fn get_skeleton_checksum(&self) -> anyhow::Result<String> {
+                Ok(String::new())
+            }
+            fn get_skeleton_events_since(
+                &self,
+                _seq: i64,
+            ) -> anyhow::Result<Vec<crate::skeleton::SkeletonEvent>> {
+                Ok(vec![])
+            }
+            fn get_skeleton_earliest_seq(&self) -> anyhow::Result<i64> {
+                Ok(0)
+            }
+            fn get_skeleton_latest_seq(&self) -> anyhow::Result<i64> {
+                Ok(0)
+            }
+            fn get_all_artist_ids(&self) -> anyhow::Result<Vec<String>> {
+                Ok(vec![])
+            }
+            fn get_all_albums_skeleton(
+                &self,
+            ) -> anyhow::Result<Vec<crate::skeleton::SkeletonAlbumEntry>> {
+                Ok(vec![])
+            }
+            fn get_all_tracks_skeleton(
+                &self,
+            ) -> anyhow::Result<Vec<crate::skeleton::SkeletonTrackEntry>> {
+                Ok(vec![])
+            }
         }
 
         let catalog = Arc::new(DynamicMockCatalogStore {

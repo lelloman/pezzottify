@@ -4756,11 +4756,10 @@ pub async fn make_app(
     // Search admin routes (requires ServerAdmin permission)
     let admin_search_routes: Router = if let Some(routes) = make_search_admin_routes(state.clone())
     {
-        routes
-            .route_layer(middleware::from_fn_with_state(
-                state.clone(),
-                require_server_admin,
-            ))
+        routes.route_layer(middleware::from_fn_with_state(
+            state.clone(),
+            require_server_admin,
+        ))
     } else {
         Router::new()
     };

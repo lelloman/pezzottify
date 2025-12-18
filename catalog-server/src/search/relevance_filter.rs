@@ -104,12 +104,8 @@ impl RelevanceFilterConfig {
 
         match self {
             Self::None => results,
-            Self::PercentageOfBest { threshold } => {
-                filter_percentage_of_best(results, *threshold)
-            }
-            Self::GapDetection { drop_threshold } => {
-                filter_gap_detection(results, *drop_threshold)
-            }
+            Self::PercentageOfBest { threshold } => filter_percentage_of_best(results, *threshold),
+            Self::GapDetection { drop_threshold } => filter_gap_detection(results, *drop_threshold),
             Self::StandardDeviation { num_std_devs } => {
                 filter_std_deviation(results, *num_std_devs)
             }

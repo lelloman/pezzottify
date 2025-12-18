@@ -11,7 +11,9 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilte
 use pezzottify_catalog_server::background_jobs::jobs::{
     AuditLogCleanupJob, ExpandArtistsBaseJob, MissingFilesWatchdogJob, PopularContentJob,
 };
-use pezzottify_catalog_server::background_jobs::{create_scheduler, GuardedSearchVault, JobContext};
+use pezzottify_catalog_server::background_jobs::{
+    create_scheduler, GuardedSearchVault, JobContext,
+};
 use pezzottify_catalog_server::catalog_store::{
     CatalogStore, SqliteCatalogStore, WritableCatalogStore,
 };
