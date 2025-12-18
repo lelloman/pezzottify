@@ -215,10 +215,8 @@ impl Fts5LevenshteinSearchVault {
             Ok(name)
         })?;
 
-        for name_result in rows {
-            if let Ok(name) = name_result {
-                vocabulary.add_text(&name);
-            }
+        for name in rows.flatten() {
+            vocabulary.add_text(&name);
         }
 
         debug!(
