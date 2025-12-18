@@ -16,8 +16,10 @@
 | NoOp | `noop` | Disabled (fastest startup) |
 
 ### Not Yet Implemented
-- **Step 9b**: Popularity weighting - requires `item_popularity` table populated by background job
 - **Step 10**: Parallel category search (optional, for 100k+ item catalogs)
+
+### Next Up: Step 9b - Popularity Weighting (FTS5-Levenshtein only)
+See detailed implementation plan below.
 
 ---
 
@@ -588,54 +590,147 @@ pub enum SearchEngine {
 }
 ```
 
-### 9. Add popularity and category weighting
+### 9b. Add popularity weighting (FTS5-Levenshtein only)
 
-**Modify `SearchVault` trait to support weighted search:**
+Add popularity weighting to search results in `Fts5LevenshteinSearchVault`. Popular items (based on listening history) will be boosted in search rankings.
+
+**Architecture:**
+```
+┌─────────────────────┐     writes to      ┌─────────────────────┐
+│ PopularContentJob   │ ──────────────────→│ item_popularity     │
+│ (extended)          │                    │ table (search.db)   │
+└─────────────────────┘                    └─────────────────────┘
+                                                    │
+                                                    │ LEFT JOIN
+                                                    ▼
+┌─────────────────────┐     queries        ┌─────────────────────┐
+│ Fts5Levenshtein     │ ←─────────────────│ search_index FTS5   │
+│ SearchVault         │                    │ + item_popularity   │
+└─────────────────────┘                    └─────────────────────┘
+```
+
+#### 9b.1: Create `item_popularity` table in search database
+
+**File:** `src/search/fts5_levenshtein_search.rs`
+
+Add table creation in `new()` method after FTS5 table creation:
+
+```sql
+CREATE TABLE IF NOT EXISTS item_popularity (
+    item_id TEXT NOT NULL,
+    item_type TEXT NOT NULL,  -- 'track', 'album', 'artist'
+    play_count INTEGER NOT NULL DEFAULT 0,
+    score REAL NOT NULL DEFAULT 0.0,  -- normalized 0.0-1.0
+    updated_at INTEGER NOT NULL,
+    PRIMARY KEY (item_id, item_type)
+);
+CREATE INDEX IF NOT EXISTS idx_popularity_type ON item_popularity(item_type);
+```
+
+#### 9b.2: Add method to update popularity data
+
+**File:** `src/search/fts5_levenshtein_search.rs`
+
+Add new method to `Fts5LevenshteinSearchVault`:
 
 ```rust
-pub struct SearchOptions {
-    pub max_results: usize,
-    pub filter: Option<Vec<HashedItemType>>,
-    pub category_weights: Option<CategoryWeights>,
-    pub use_popularity: bool,
-}
+/// Update popularity scores for items.
+/// Scores should be normalized 0.0-1.0 within each type.
+pub fn update_popularity(&self, items: &[(String, HashedItemType, u64, f64)]) {
+    let conn = self.conn.lock().unwrap();
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs() as i64;
 
-pub struct CategoryWeights {
-    pub artist: f64,  // e.g., 2.0
-    pub album: f64,   // e.g., 1.5
-    pub track: f64,   // e.g., 1.0
-}
+    let mut stmt = conn.prepare(
+        "INSERT OR REPLACE INTO item_popularity (item_id, item_type, play_count, score, updated_at)
+         VALUES (?, ?, ?, ?, ?)"
+    ).unwrap();
 
-pub trait SearchVault {
-    fn search(&self, query: &str, options: SearchOptions) -> Vec<SearchResult>;
+    for (id, item_type, play_count, score) in items {
+        stmt.execute(params![id, item_type_to_str(item_type), play_count, score, now]).ok();
+    }
 }
 ```
 
-**For FTS5 variants, apply in SQL:**
+#### 9b.3: Modify search query to include popularity
+
+**File:** `src/search/fts5_levenshtein_search.rs`
+
+Update the SQL query in `search()` to LEFT JOIN with popularity and combine scores:
 
 ```sql
 SELECT
-    item_id,
-    item_type,
-    name,
-    bm25(search_index)
-        * CASE item_type
-            WHEN 'artist' THEN :artist_weight
-            WHEN 'album' THEN :album_weight
-            ELSE :track_weight
-          END
-        * COALESCE(popularity_score, 1.0) as final_score
-FROM search_index
-LEFT JOIN item_popularity ON search_index.item_id = item_popularity.id
-WHERE search_index MATCH :query
-ORDER BY final_score DESC
-LIMIT :max_results
+    s.item_id,
+    s.item_type,
+    s.name,
+    bm25(search_index) as text_score,
+    COALESCE(p.score, 0.0) as popularity_score
+FROM search_index s
+LEFT JOIN item_popularity p
+    ON s.item_id = p.item_id AND s.item_type = p.item_type
+WHERE search_index MATCH ?
+AND s.item_type IN (?)
+ORDER BY (bm25(search_index) * (1.0 + COALESCE(p.score, 0.0) * 0.5))
+LIMIT ?
 ```
 
-**Popularity source:** Could come from:
-- Play counts (already tracked in user listening history)
-- A background job that computes popularity scores periodically
-- External data (e.g., Spotify popularity)
+Scoring formula: `bm25_score * (1.0 + popularity * weight)`
+- BM25 scores are negative (more negative = better match)
+- Multiplying by `(1 + popularity * 0.5)` boosts popular items
+- Weight of 0.5 means max 50% boost for most popular items
+
+#### 9b.4: Expose popularity updater via SearchVault trait
+
+**File:** `src/search/search_vault.rs`
+
+Add optional method to trait with default no-op implementation:
+
+```rust
+pub trait SearchVault: Send + Sync {
+    // ... existing methods ...
+
+    /// Update popularity scores. Default implementation is no-op.
+    fn update_popularity(&self, _items: &[(String, HashedItemType, u64, f64)]) {}
+}
+```
+
+#### 9b.5: Extend PopularContentJob to write popularity data
+
+**File:** `src/background_jobs/jobs/popular_content.rs`
+
+After computing popular content, also write to search vault. Normalize scores within each content type (tracks, albums, artists).
+
+#### 9b.6: Add search_vault to JobContext
+
+**File:** `src/background_jobs/context.rs`
+
+Add optional search vault reference:
+
+```rust
+pub struct JobContext {
+    // ... existing fields ...
+    pub search_vault: Option<Arc<Mutex<Box<dyn SearchVault>>>>,
+}
+```
+
+**File:** `src/main.rs` - Pass search_vault when creating JobContext.
+
+#### Files to Modify for Step 9b
+
+| File | Changes |
+|------|---------|
+| `src/search/search_vault.rs` | Add `update_popularity()` to trait |
+| `src/search/fts5_levenshtein_search.rs` | Create table, implement update, modify query |
+| `src/background_jobs/context.rs` | Add `search_vault` field |
+| `src/background_jobs/jobs/popular_content.rs` | Write popularity after computing |
+| `src/main.rs` | Pass search_vault to JobContext |
+
+#### Notes
+- Items not in `item_popularity` table get `score = 0.0` (no boost)
+- Popularity scores are relative within each run (max = 1.0)
+- The 0.5 weight factor can be tuned later based on user feedback
 
 ### 10. Parallel category search (optional optimization)
 
@@ -671,8 +766,8 @@ This is probably overkill for most catalogs but could help with 100k+ items.
 | Engine | Fuzzy | Typo Tolerance | Popularity | Memory |
 |--------|-------|----------------|------------|--------|
 | `pezzothash` | SimHash | Yes (built-in) | No | Unbounded |
-| `fts5` | Trigram | Partial | Not yet | Bounded |
-| `fts5-levenshtein` | Trigram + Levenshtein | Yes | Not yet | Bounded |
+| `fts5` | Trigram | Partial | No | Bounded |
+| `fts5-levenshtein` | Trigram + Levenshtein | Yes | Planned (Step 9b) | Bounded |
 | `noop` | - | - | - | Zero |
 
 ### Files Created
