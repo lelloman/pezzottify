@@ -299,6 +299,61 @@ impl VersionedSchema {
                     );
                 }
             }
+
+            // Validate unique constraints exist
+            // SQLite stores unique constraints as indices with unique=1 in PRAGMA index_list
+            if !table.unique_constraints.is_empty() {
+                // Get all unique indices for this table (query once, use for all constraints)
+                let mut stmt = conn.prepare(&format!(
+                    "PRAGMA index_list({})",
+                    table.name
+                ))?;
+                let unique_indices: Vec<String> = stmt
+                    .query_map([], |row| {
+                        let name: String = row.get(1)?;
+                        let is_unique: i32 = row.get(2)?;
+                        Ok((name, is_unique))
+                    })?
+                    .filter_map(|r| r.ok())
+                    .filter(|(_, is_unique)| *is_unique == 1)
+                    .map(|(name, _)| name)
+                    .collect();
+
+                // Build a list of all unique index column sets for comparison
+                let mut unique_index_columns: Vec<Vec<String>> = Vec::new();
+                for index_name in &unique_indices {
+                    let mut idx_stmt = conn.prepare(&format!(
+                        "PRAGMA index_info({})",
+                        index_name
+                    ))?;
+                    let mut cols: Vec<String> = idx_stmt
+                        .query_map([], |row| row.get::<_, String>(2))?
+                        .filter_map(|r| r.ok())
+                        .collect();
+                    cols.sort();
+                    unique_index_columns.push(cols);
+                }
+
+                for expected_columns in table.unique_constraints {
+                    let expected_cols_sorted: Vec<&str> = {
+                        let mut cols: Vec<&str> = expected_columns.iter().copied().collect();
+                        cols.sort();
+                        cols
+                    };
+
+                    let found = unique_index_columns.iter().any(|actual_cols| {
+                        actual_cols.iter().map(|s| s.as_str()).collect::<Vec<_>>() == expected_cols_sorted
+                    });
+
+                    if !found {
+                        bail!(
+                            "Table {} is missing unique constraint on columns ({})",
+                            table.name,
+                            expected_columns.join(", ")
+                        );
+                    }
+                }
+            }
         }
         Ok(())
     }
@@ -414,5 +469,148 @@ mod tests {
         assert!(result.is_err());
         let err_msg = result.unwrap_err().to_string();
         assert!(err_msg.contains("missing index"));
+    }
+
+    const TEST_TABLE_WITH_UNIQUE: Table = Table {
+        name: "test_unique_table",
+        columns: &[
+            Column {
+                name: "id",
+                sql_type: &SqlType::Integer,
+                is_primary_key: true,
+                non_null: false,
+                is_unique: false,
+                default_value: None,
+                foreign_key: None,
+            },
+            Column {
+                name: "email",
+                sql_type: &SqlType::Text,
+                is_primary_key: false,
+                non_null: true,
+                is_unique: false,
+                default_value: None,
+                foreign_key: None,
+            },
+            Column {
+                name: "username",
+                sql_type: &SqlType::Text,
+                is_primary_key: false,
+                non_null: true,
+                is_unique: false,
+                default_value: None,
+                foreign_key: None,
+            },
+        ],
+        indices: &[],
+        unique_constraints: &[&["email", "username"]],
+    };
+
+    #[test]
+    fn test_validate_detects_missing_unique_constraint() {
+        let conn = Connection::open_in_memory().unwrap();
+
+        // Create table WITHOUT the unique constraint
+        conn.execute(
+            "CREATE TABLE test_unique_table (
+                id INTEGER PRIMARY KEY,
+                email TEXT NOT NULL,
+                username TEXT NOT NULL
+            )",
+            [],
+        )
+        .unwrap();
+
+        let schema = VersionedSchema {
+            version: 1,
+            tables: &[TEST_TABLE_WITH_UNIQUE],
+            migration: None,
+        };
+
+        // Validation should fail because unique constraint is missing
+        let result = schema.validate(&conn);
+        assert!(result.is_err());
+        let err_msg = result.unwrap_err().to_string();
+        assert!(err_msg.contains("missing unique constraint"));
+        assert!(err_msg.contains("email"));
+        assert!(err_msg.contains("username"));
+    }
+
+    #[test]
+    fn test_validate_passes_with_unique_constraint_present() {
+        let conn = Connection::open_in_memory().unwrap();
+
+        // Create table WITH the unique constraint
+        conn.execute(
+            "CREATE TABLE test_unique_table (
+                id INTEGER PRIMARY KEY,
+                email TEXT NOT NULL,
+                username TEXT NOT NULL,
+                UNIQUE (email, username)
+            )",
+            [],
+        )
+        .unwrap();
+
+        let schema = VersionedSchema {
+            version: 1,
+            tables: &[TEST_TABLE_WITH_UNIQUE],
+            migration: None,
+        };
+
+        // Validation should pass
+        schema.validate(&conn).unwrap();
+    }
+
+    #[test]
+    fn test_validate_unique_constraint_column_order_independent() {
+        let conn = Connection::open_in_memory().unwrap();
+
+        // Create table with unique constraint in DIFFERENT column order
+        conn.execute(
+            "CREATE TABLE test_unique_table (
+                id INTEGER PRIMARY KEY,
+                email TEXT NOT NULL,
+                username TEXT NOT NULL,
+                UNIQUE (username, email)
+            )",
+            [],
+        )
+        .unwrap();
+
+        let schema = VersionedSchema {
+            version: 1,
+            tables: &[TEST_TABLE_WITH_UNIQUE],
+            migration: None,
+        };
+
+        // Validation should pass (order doesn't matter for unique constraint semantics)
+        schema.validate(&conn).unwrap();
+    }
+
+    #[test]
+    fn test_validate_detects_partial_unique_constraint() {
+        let conn = Connection::open_in_memory().unwrap();
+
+        // Create table with unique constraint on only ONE of the expected columns
+        conn.execute(
+            "CREATE TABLE test_unique_table (
+                id INTEGER PRIMARY KEY,
+                email TEXT NOT NULL UNIQUE,
+                username TEXT NOT NULL
+            )",
+            [],
+        )
+        .unwrap();
+
+        let schema = VersionedSchema {
+            version: 1,
+            tables: &[TEST_TABLE_WITH_UNIQUE],
+            migration: None,
+        };
+
+        // Validation should fail - we have UNIQUE(email) but not UNIQUE(email, username)
+        let result = schema.validate(&conn);
+        assert!(result.is_err());
     }
 }
