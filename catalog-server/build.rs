@@ -17,6 +17,11 @@ fn main() {
 
     // Rerun if VERSION file changes
     println!("cargo:rerun-if-changed=../VERSION");
+
+    // Rerun if version-related env vars change (important for Docker builds)
+    println!("cargo:rerun-if-env-changed=GIT_HASH");
+    println!("cargo:rerun-if-env-changed=GIT_DIRTY");
+    println!("cargo:rerun-if-env-changed=COMMIT_COUNT");
 }
 
 fn get_base_version() -> Option<String> {
