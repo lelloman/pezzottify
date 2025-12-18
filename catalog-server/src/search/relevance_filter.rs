@@ -48,7 +48,6 @@ pub enum RelevanceFilterConfig {
     },
 }
 
-
 impl RelevanceFilterConfig {
     /// Parse configuration from a JSON string.
     pub fn from_json(json: &str) -> Result<Self, serde_json::Error> {
