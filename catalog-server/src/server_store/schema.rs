@@ -145,7 +145,11 @@ pub const SERVER_VERSIONED_SCHEMAS: &[VersionedSchema] = &[
     },
     VersionedSchema {
         version: 2,
-        tables: &[JOB_RUNS_TABLE_V1, JOB_SCHEDULES_TABLE_V1, SERVER_STATE_TABLE_V2],
+        tables: &[
+            JOB_RUNS_TABLE_V1,
+            JOB_SCHEDULES_TABLE_V1,
+            SERVER_STATE_TABLE_V2,
+        ],
         migration: Some(migrate_v1_to_v2),
     },
     VersionedSchema {
