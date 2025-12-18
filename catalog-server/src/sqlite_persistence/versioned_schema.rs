@@ -292,11 +292,7 @@ impl VersionedSchema {
                     .unwrap_or(false);
 
                 if !index_exists {
-                    bail!(
-                        "Table {} is missing index '{}'",
-                        table.name,
-                        index_name
-                    );
+                    bail!("Table {} is missing index '{}'", table.name, index_name);
                 }
             }
 
@@ -304,10 +300,7 @@ impl VersionedSchema {
             // SQLite stores unique constraints as indices with unique=1 in PRAGMA index_list
             if !table.unique_constraints.is_empty() {
                 // Get all unique indices for this table (query once, use for all constraints)
-                let mut stmt = conn.prepare(&format!(
-                    "PRAGMA index_list({})",
-                    table.name
-                ))?;
+                let mut stmt = conn.prepare(&format!("PRAGMA index_list({})", table.name))?;
                 let unique_indices: Vec<String> = stmt
                     .query_map([], |row| {
                         let name: String = row.get(1)?;
@@ -322,10 +315,8 @@ impl VersionedSchema {
                 // Build a list of all unique index column sets for comparison
                 let mut unique_index_columns: Vec<Vec<String>> = Vec::new();
                 for index_name in &unique_indices {
-                    let mut idx_stmt = conn.prepare(&format!(
-                        "PRAGMA index_info({})",
-                        index_name
-                    ))?;
+                    let mut idx_stmt =
+                        conn.prepare(&format!("PRAGMA index_info({})", index_name))?;
                     let mut cols: Vec<String> = idx_stmt
                         .query_map([], |row| row.get::<_, String>(2))?
                         .filter_map(|r| r.ok())
@@ -336,13 +327,14 @@ impl VersionedSchema {
 
                 for expected_columns in table.unique_constraints {
                     let expected_cols_sorted: Vec<&str> = {
-                        let mut cols: Vec<&str> = expected_columns.iter().copied().collect();
+                        let mut cols: Vec<&str> = expected_columns.to_vec();
                         cols.sort();
                         cols
                     };
 
                     let found = unique_index_columns.iter().any(|actual_cols| {
-                        actual_cols.iter().map(|s| s.as_str()).collect::<Vec<_>>() == expected_cols_sorted
+                        actual_cols.iter().map(|s| s.as_str()).collect::<Vec<_>>()
+                            == expected_cols_sorted
                     });
 
                     if !found {
@@ -357,10 +349,7 @@ impl VersionedSchema {
 
             // Validate foreign keys exist and match expected configuration
             // PRAGMA foreign_key_list returns: id, seq, table, from, to, on_update, on_delete, match
-            let mut fk_stmt = conn.prepare(&format!(
-                "PRAGMA foreign_key_list({})",
-                table.name
-            ))?;
+            let mut fk_stmt = conn.prepare(&format!("PRAGMA foreign_key_list({})", table.name))?;
 
             struct ActualFk {
                 from_column: String,
@@ -400,9 +389,9 @@ impl VersionedSchema {
 
                     if !found {
                         // Check if FK exists but with wrong configuration
-                        let partial_match = actual_fks.iter().find(|actual| {
-                            actual.from_column == column.name
-                        });
+                        let partial_match = actual_fks
+                            .iter()
+                            .find(|actual| actual.from_column == column.name);
 
                         if let Some(actual) = partial_match {
                             bail!(
