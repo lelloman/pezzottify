@@ -5,6 +5,7 @@ use crate::catalog_store::CatalogStore;
 use crate::download_manager::DownloadManager;
 use crate::downloader::Downloader;
 use crate::search::SearchVault;
+use crate::server_store::ServerStore;
 use crate::user::UserManager;
 use crate::whatsnew::WhatsNewNotifier;
 use std::sync::{Arc, Mutex};
@@ -23,6 +24,7 @@ pub type GuardedConnectionManager = Arc<ConnectionManager>;
 pub type OptionalSchedulerHandle = Option<SchedulerHandle>;
 pub type OptionalDownloadManager = Option<Arc<DownloadManager>>;
 pub type GuardedWhatsNewNotifier = Arc<WhatsNewNotifier>;
+pub type GuardedServerStore = Arc<dyn ServerStore>;
 
 #[derive(Clone)]
 pub struct ServerState {
@@ -37,6 +39,7 @@ pub struct ServerState {
     pub scheduler_handle: OptionalSchedulerHandle,
     pub download_manager: OptionalDownloadManager,
     pub whatsnew_notifier: GuardedWhatsNewNotifier,
+    pub server_store: GuardedServerStore,
     pub hash: String,
 }
 
@@ -100,5 +103,11 @@ impl FromRef<ServerState> for OptionalDownloadManager {
 impl FromRef<ServerState> for GuardedWhatsNewNotifier {
     fn from_ref(input: &ServerState) -> Self {
         input.whatsnew_notifier.clone()
+    }
+}
+
+impl FromRef<ServerState> for GuardedServerStore {
+    fn from_ref(input: &ServerState) -> Self {
+        input.server_store.clone()
     }
 }

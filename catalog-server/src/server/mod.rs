@@ -13,6 +13,6 @@ pub mod websocket;
 
 pub use config::ServerConfig;
 pub use http_layers::*;
-use search::make_search_routes;
+use search::{make_search_admin_routes, make_search_routes};
 #[allow(unused_imports)] // Used by main.rs
 pub use server::run_server;

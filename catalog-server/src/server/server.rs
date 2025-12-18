@@ -42,10 +42,10 @@ use tower_governor::GovernorLayer;
 #[cfg(feature = "slowdown")]
 use super::slowdown_request;
 use super::{
-    extract_user_id_for_rate_limit, http_cache, log_requests, make_search_routes, metrics,
-    state::*, IpKeyExtractor, RequestsLoggingLevel, ServerConfig, UserOrIpKeyExtractor,
-    CONTENT_READ_PER_MINUTE, GLOBAL_PER_MINUTE, LOGIN_PER_MINUTE, SEARCH_PER_MINUTE,
-    STREAM_PER_MINUTE, WRITE_PER_MINUTE,
+    extract_user_id_for_rate_limit, http_cache, log_requests, make_search_admin_routes,
+    make_search_routes, metrics, state::*, IpKeyExtractor, RequestsLoggingLevel, ServerConfig,
+    UserOrIpKeyExtractor, CONTENT_READ_PER_MINUTE, GLOBAL_PER_MINUTE, LOGIN_PER_MINUTE,
+    SEARCH_PER_MINUTE, STREAM_PER_MINUTE, WRITE_PER_MINUTE,
 };
 use crate::server::session::Session;
 use crate::user::auth::AuthTokenValue;
@@ -4300,6 +4300,7 @@ impl ServerState {
         media_base_path: Option<std::path::PathBuf>,
         scheduler_handle: Option<SchedulerHandle>,
         download_manager: Option<Arc<crate::download_manager::DownloadManager>>,
+        server_store: Arc<dyn crate::server_store::ServerStore>,
     ) -> ServerState {
         // Create connection manager first since it's needed by proxy and whatsnew notifier
         let ws_connection_manager = Arc::new(super::websocket::ConnectionManager::new());
@@ -4333,6 +4334,7 @@ impl ServerState {
             scheduler_handle,
             download_manager,
             whatsnew_notifier,
+            server_store,
             hash: "123456".to_owned(),
         }
     }
@@ -4349,6 +4351,7 @@ pub async fn make_app(
     media_base_path: Option<std::path::PathBuf>,
     scheduler_handle: Option<SchedulerHandle>,
     download_manager: Option<Arc<crate::download_manager::DownloadManager>>,
+    server_store: Arc<dyn crate::server_store::ServerStore>,
 ) -> Result<Router> {
     let state = ServerState::new_with_guarded_search_vault(
         config.clone(),
@@ -4360,6 +4363,7 @@ pub async fn make_app(
         media_base_path,
         scheduler_handle,
         download_manager.clone(),
+        server_store,
     );
 
     // Set up sync notifier and notification service for download manager if enabled
@@ -4749,10 +4753,23 @@ pub async fn make_app(
         ))
         .with_state(state.clone());
 
+    // Search admin routes (requires ServerAdmin permission)
+    let admin_search_routes: Router = if let Some(routes) = make_search_admin_routes(state.clone())
+    {
+        routes
+            .route_layer(middleware::from_fn_with_state(
+                state.clone(),
+                require_server_admin,
+            ))
+    } else {
+        Router::new()
+    };
+
     let admin_routes = admin_server_routes
         .merge(admin_user_routes)
         .merge(admin_listening_routes)
-        .merge(admin_changelog_routes);
+        .merge(admin_changelog_routes)
+        .merge(admin_search_routes);
 
     // Download manager user routes (requires RequestContent permission)
     let download_user_routes: Router = Router::new()
@@ -4901,6 +4918,7 @@ pub async fn run_server(
     media_base_path: Option<std::path::PathBuf>,
     scheduler_handle: Option<SchedulerHandle>,
     download_manager: Option<Arc<crate::download_manager::DownloadManager>>,
+    server_store: Arc<dyn crate::server_store::ServerStore>,
 ) -> Result<()> {
     let config = ServerConfig {
         port,
@@ -4919,6 +4937,7 @@ pub async fn run_server(
         media_base_path,
         scheduler_handle,
         download_manager,
+        server_store,
     )
     .await?;
 
@@ -4999,6 +5018,9 @@ mod tests {
     use super::*;
     use crate::catalog_store::NullCatalogStore;
     use crate::search::NoOpSearchVault;
+    use crate::server_store::{
+        JobAuditEntry, JobAuditEventType, JobRun, JobRunStatus, JobScheduleState, ServerStore,
+    };
     use crate::user::auth::UserAuthCredentials;
     use crate::user::auth::{AuthToken, AuthTokenValue};
     use crate::user::user_models::{BandwidthSummary, BandwidthUsage, LikedContentType};
@@ -5007,7 +5029,92 @@ mod tests {
     };
     use axum::extract::ConnectInfo;
     use axum::{body::Body, http::Request};
+    use std::collections::HashMap;
+    use std::sync::RwLock;
     use tower::ServiceExt; // for `call`, `oneshot`, and `ready
+
+    /// A minimal in-memory ServerStore for testing
+    #[derive(Default)]
+    struct MockServerStore {
+        state: RwLock<HashMap<String, String>>,
+    }
+
+    impl ServerStore for MockServerStore {
+        fn record_job_start(&self, _job_id: &str, _triggered_by: &str) -> anyhow::Result<i64> {
+            Ok(1)
+        }
+        fn record_job_finish(
+            &self,
+            _run_id: i64,
+            _status: JobRunStatus,
+            _error_message: Option<String>,
+        ) -> anyhow::Result<()> {
+            Ok(())
+        }
+        fn get_running_jobs(&self) -> anyhow::Result<Vec<JobRun>> {
+            Ok(vec![])
+        }
+        fn get_job_history(&self, _job_id: &str, _limit: usize) -> anyhow::Result<Vec<JobRun>> {
+            Ok(vec![])
+        }
+        fn get_last_run(&self, _job_id: &str) -> anyhow::Result<Option<JobRun>> {
+            Ok(None)
+        }
+        fn mark_stale_jobs_failed(&self) -> anyhow::Result<usize> {
+            Ok(0)
+        }
+        fn get_schedule_state(&self, _job_id: &str) -> anyhow::Result<Option<JobScheduleState>> {
+            Ok(None)
+        }
+        fn update_schedule_state(&self, _state: &JobScheduleState) -> anyhow::Result<()> {
+            Ok(())
+        }
+        fn get_all_schedule_states(&self) -> anyhow::Result<Vec<JobScheduleState>> {
+            Ok(vec![])
+        }
+        fn get_state(&self, key: &str) -> anyhow::Result<Option<String>> {
+            Ok(self.state.read().unwrap().get(key).cloned())
+        }
+        fn set_state(&self, key: &str, value: &str) -> anyhow::Result<()> {
+            self.state
+                .write()
+                .unwrap()
+                .insert(key.to_string(), value.to_string());
+            Ok(())
+        }
+        fn delete_state(&self, key: &str) -> anyhow::Result<()> {
+            self.state.write().unwrap().remove(key);
+            Ok(())
+        }
+        fn log_job_audit(
+            &self,
+            _job_id: &str,
+            _event_type: JobAuditEventType,
+            _duration_ms: Option<i64>,
+            _details: Option<&serde_json::Value>,
+            _error: Option<&str>,
+        ) -> anyhow::Result<i64> {
+            Ok(1)
+        }
+        fn get_job_audit_log(
+            &self,
+            _limit: usize,
+            _offset: usize,
+        ) -> anyhow::Result<Vec<JobAuditEntry>> {
+            Ok(vec![])
+        }
+        fn get_job_audit_log_by_job(
+            &self,
+            _job_id: &str,
+            _limit: usize,
+            _offset: usize,
+        ) -> anyhow::Result<Vec<JobAuditEntry>> {
+            Ok(vec![])
+        }
+        fn cleanup_old_job_audit_entries(&self, _before_timestamp: i64) -> anyhow::Result<usize> {
+            Ok(0)
+        }
+    }
 
     #[tokio::test]
     async fn responds_forbidden_on_protected_routes() {
@@ -5019,6 +5126,7 @@ mod tests {
         )));
         let guarded_search_vault: crate::server::state::GuardedSearchVault =
             Arc::new(std::sync::Mutex::new(Box::new(NoOpSearchVault {})));
+        let server_store: Arc<dyn ServerStore> = Arc::new(MockServerStore::default());
         let app = &mut make_app(
             ServerConfig::default(),
             catalog_store,
@@ -5029,6 +5137,7 @@ mod tests {
             None, // no media_base_path
             None, // no scheduler_handle
             None, // no download_manager
+            server_store,
         )
         .await
         .unwrap();

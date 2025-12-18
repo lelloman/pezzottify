@@ -910,6 +910,35 @@ impl TestClient {
     }
 
     // ========================================================================
+    // Search Admin Endpoints
+    // ========================================================================
+
+    /// GET /v1/admin/search/relevance-filter
+    pub async fn admin_get_relevance_filter(&self) -> Response {
+        self.client
+            .get(format!(
+                "{}/v1/admin/search/relevance-filter",
+                self.base_url
+            ))
+            .send()
+            .await
+            .expect("Get relevance filter request failed")
+    }
+
+    /// PUT /v1/admin/search/relevance-filter
+    pub async fn admin_set_relevance_filter(&self, config: serde_json::Value) -> Response {
+        self.client
+            .put(format!(
+                "{}/v1/admin/search/relevance-filter",
+                self.base_url
+            ))
+            .json(&config)
+            .send()
+            .await
+            .expect("Set relevance filter request failed")
+    }
+
+    // ========================================================================
     // Download Manager Endpoints
     // ========================================================================
 

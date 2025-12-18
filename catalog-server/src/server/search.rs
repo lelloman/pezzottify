@@ -7,8 +7,8 @@
 use crate::catalog_store::CatalogStore;
 #[cfg(not(feature = "no_search"))]
 use crate::search::{
-    HashedItemType, ResolvedSearchResult, SearchResult, SearchedAlbum, SearchedArtist,
-    SearchedTrack,
+    HashedItemType, RelevanceFilterConfig, ResolvedSearchResult, SearchResult, SearchedAlbum,
+    SearchedArtist, SearchedTrack,
 };
 
 #[cfg(feature = "no_search")]
@@ -25,6 +25,10 @@ use super::session::Session;
 use super::state::ServerState;
 #[cfg(not(feature = "no_search"))]
 use serde::Deserialize;
+
+/// Key for storing relevance filter configuration in server_store
+#[cfg(not(feature = "no_search"))]
+pub const RELEVANCE_FILTER_CONFIG_KEY: &str = "search.relevance_filter";
 
 #[cfg(not(feature = "no_search"))]
 #[derive(Deserialize)]
@@ -244,6 +248,17 @@ impl IntoResponse for SearchResponse {
 }
 
 #[cfg(not(feature = "no_search"))]
+fn get_relevance_filter(server_state: &ServerState) -> RelevanceFilterConfig {
+    server_state
+        .server_store
+        .get_state(RELEVANCE_FILTER_CONFIG_KEY)
+        .ok()
+        .flatten()
+        .and_then(|json| RelevanceFilterConfig::from_json(&json).ok())
+        .unwrap_or_default()
+}
+
+#[cfg(not(feature = "no_search"))]
 async fn search(
     _session: Session,
     State(server_state): State<ServerState>,
@@ -264,13 +279,18 @@ async fn search(
             .lock()
             .unwrap()
             .search(payload.query.as_str(), 30, filters);
+
+    // Apply relevance filtering as post-processing step
+    let relevance_filter = get_relevance_filter(&server_state);
+    let filtered_results = relevance_filter.filter(search_results);
+
     if payload.resolve {
         SearchResponse::Resolved(Json(resolve_search_results(
             &server_state.catalog_store,
-            search_results,
+            filtered_results,
         )))
     } else {
-        SearchResponse::Raw(Json(search_results))
+        SearchResponse::Raw(Json(filtered_results))
     }
 }
 
@@ -285,5 +305,79 @@ pub fn make_search_routes(state: ServerState) -> Option<Router> {
 
 #[cfg(feature = "no_search")]
 pub fn make_search_routes(_state: ServerState) -> Option<Router> {
+    None
+}
+
+// =============================================================================
+// Admin endpoints for relevance filter configuration
+// =============================================================================
+
+#[cfg(not(feature = "no_search"))]
+use axum::routing::get;
+#[cfg(not(feature = "no_search"))]
+use axum::http::StatusCode;
+#[cfg(not(feature = "no_search"))]
+use serde::Serialize;
+
+#[cfg(not(feature = "no_search"))]
+#[derive(Serialize)]
+struct RelevanceFilterResponse {
+    config: RelevanceFilterConfig,
+    config_json: String,
+}
+
+/// GET /admin/search/relevance-filter - Get current relevance filter configuration
+#[cfg(not(feature = "no_search"))]
+async fn admin_get_relevance_filter(
+    _session: Session,
+    State(server_state): State<ServerState>,
+) -> impl IntoResponse {
+    let config = get_relevance_filter(&server_state);
+    let config_json = config.to_json();
+    Json(RelevanceFilterResponse { config, config_json })
+}
+
+/// PUT /admin/search/relevance-filter - Update relevance filter configuration
+#[cfg(not(feature = "no_search"))]
+async fn admin_set_relevance_filter(
+    _session: Session,
+    State(server_state): State<ServerState>,
+    Json(new_config): Json<RelevanceFilterConfig>,
+) -> impl IntoResponse {
+    let json = new_config.to_json();
+    match server_state
+        .server_store
+        .set_state(RELEVANCE_FILTER_CONFIG_KEY, &json)
+    {
+        Ok(()) => (
+            StatusCode::OK,
+            Json(RelevanceFilterResponse {
+                config: new_config,
+                config_json: json,
+            }),
+        )
+            .into_response(),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({"error": format!("Failed to save config: {}", e)})),
+        )
+            .into_response(),
+    }
+}
+
+/// Creates admin routes for search configuration (requires ServerAdmin permission)
+#[cfg(not(feature = "no_search"))]
+pub fn make_search_admin_routes(state: ServerState) -> Option<Router> {
+    use axum::routing::put;
+    Some(
+        Router::new()
+            .route("/search/relevance-filter", get(admin_get_relevance_filter))
+            .route("/search/relevance-filter", put(admin_set_relevance_filter))
+            .with_state(state),
+    )
+}
+
+#[cfg(feature = "no_search")]
+pub fn make_search_admin_routes(_state: ServerState) -> Option<Router> {
     None
 }
