@@ -313,9 +313,9 @@ pub fn make_search_routes(_state: ServerState) -> Option<Router> {
 // =============================================================================
 
 #[cfg(not(feature = "no_search"))]
-use axum::routing::get;
-#[cfg(not(feature = "no_search"))]
 use axum::http::StatusCode;
+#[cfg(not(feature = "no_search"))]
+use axum::routing::get;
 #[cfg(not(feature = "no_search"))]
 use serde::Serialize;
 
@@ -334,7 +334,10 @@ async fn admin_get_relevance_filter(
 ) -> impl IntoResponse {
     let config = get_relevance_filter(&server_state);
     let config_json = config.to_json();
-    Json(RelevanceFilterResponse { config, config_json })
+    Json(RelevanceFilterResponse {
+        config,
+        config_json,
+    })
 }
 
 /// PUT /admin/search/relevance-filter - Update relevance filter configuration
