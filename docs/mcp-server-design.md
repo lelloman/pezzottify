@@ -9,7 +9,13 @@ Add an MCP (Model Context Protocol) server to catalog-server for LLM-based admin
 1. **Real-time introspection** - Access to live server state, not just database
 2. **Admin operations** - User management, catalog editing, job control
 3. **Debugging** - Inspect caches, sessions, search index, request flow
-4. **Future: Catalog agent** - Automated catalog expansion via LLM agent
+4. **Catalog agent** - Automated catalog management via LLM agent:
+   - Music discovery and recommendations
+   - Playlist generation
+   - Catalog expansion (finding missing albums, related artists)
+   - Gap filling (detecting incomplete discographies)
+   - Metadata enrichment
+   - Information retrieval for users
 
 ## Non-Goals (for now)
 
@@ -77,6 +83,22 @@ services:
 6. All subsequent tool calls are executed with that user's permissions
 
 Alternative: Support the existing challenge-response auth flow used by the Android app.
+
+### Session Lifecycle
+
+MCP sessions are tied to the SSE connection. When the connection closes, the session ends. No idle timeout needed.
+
+### Rate Limiting
+
+Per-user rate limits to prevent abuse (buggy LLM loops, malicious users):
+
+| Category | Limit | Window |
+|----------|-------|--------|
+| Read operations | 120 requests | per minute |
+| Write operations | 30 requests | per minute |
+| `query_sql` | 10 requests | per minute |
+
+Rate limit responses return standard MCP error with retry-after hint. Limits apply per authenticated user, not per connection (so multiple MCP clients from same user share the limit).
 
 ## Configuration
 
@@ -201,10 +223,14 @@ This means:
 
 | Tool | Description | Parameters | Returns |
 |------|-------------|------------|---------|
-| `query_sql` | Execute read-only SQL | `db: string`, `query: string` | Row[] |
+| `query_sql` | Execute read-only SQL (uses read-only DB connection) | `db: string`, `query: string` | Row[] |
 | `inspect_search_index` | Debug search ranking | `query: string` | SearchDebug |
 | `get_recent_errors` | Recent error logs | `limit?: number` | ErrorLog[] |
 | `check_integrity` | Verify catalog/file consistency | `fix?: bool` | IntegrityReport |
+
+**Note on `query_sql`**:
+- Uses a dedicated read-only SQLite connection (`SQLITE_OPEN_READONLY` flag) to guarantee no writes can occur
+- Results capped at 100 rows - use `LIMIT`/`OFFSET` in your SQL for larger datasets
 
 ### Server Control
 
@@ -263,17 +289,16 @@ Resources provide read access to data that changes over time:
 3. Add rate limiting / quotas for automated access
 4. Audit logging for agent actions
 
-## Open Questions
+## Design Decisions
 
-1. **Tool confirmation** - Should destructive operations (delete user, delete album) require explicit confirmation through MCP? Or trust that the LLM client handles this?
+1. **Tool confirmation** - No server-level confirmation for destructive operations. MCP is a protocol, not a UI. The LLM client (Claude, etc.) is responsible for confirmation UX.
 
-2. **Streaming responses** - For large results (e.g., `query_sql` returning many rows), should we support streaming or just paginate?
+2. **Notifications** - Start without push notifications. Keep it purely request/response. Polling via tools is simpler. Can add `subscribe_to_events` later if needed.
 
-3. **Notifications** - Should the MCP server push notifications for events (new content added, job completed, errors)? Or keep it purely request/response?
-
-4. **Session management** - Should MCP sessions have a timeout? Should we allow multiple concurrent MCP sessions per user?
-
-5. **Audit logging** - Should MCP tool calls be logged separately from HTTP API calls? (Useful for tracking what the future catalog agent does)
+3. **Audit logging** - Yes, comprehensive audit logging for all MCP interactions:
+   - Stored in a separate database file (`mcp_audit.db`) to avoid bloating `server.db`
+   - Logs full request/response including LLM prompts, responses, and reasoning
+   - Critical for debugging catalog agent behavior and tracking automated changes
 
 ## References
 
