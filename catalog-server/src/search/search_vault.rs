@@ -178,14 +178,11 @@ pub trait SearchVault: Send + Sync {
         filter: Option<Vec<HashedItemType>>,
     ) -> Vec<SearchResult>;
 
-    /// Add a new item to the search index
-    fn add_item(&self, id: &str, item_type: HashedItemType, name: &str);
-
-    /// Update an existing item in the search index
-    fn update_item(&self, id: &str, item_type: HashedItemType, name: &str);
-
-    /// Remove an item from the search index
-    fn remove_item(&self, id: &str, item_type: HashedItemType);
+    /// Rebuild the entire search index from the catalog.
+    ///
+    /// This should be called when the catalog changes (e.g., when a batch is closed).
+    /// Returns an error if the rebuild fails.
+    fn rebuild_index(&self) -> anyhow::Result<()>;
 }
 
 pub struct NoOpSearchVault {}
@@ -200,23 +197,29 @@ impl SearchVault for NoOpSearchVault {
         Vec::new()
     }
 
-    fn add_item(&self, _id: &str, _item_type: HashedItemType, _name: &str) {}
-
-    fn update_item(&self, _id: &str, _item_type: HashedItemType, _name: &str) {}
-
-    fn remove_item(&self, _id: &str, _item_type: HashedItemType) {}
+    fn rebuild_index(&self) -> anyhow::Result<()> {
+        Ok(())
+    }
 }
 
 pub struct PezzotHashSearchVault {
     items: RwLock<Vec<HashedItem>>,
+    catalog_store: Arc<dyn CatalogStore>,
 }
 
 impl PezzotHashSearchVault {
     pub fn new(catalog_store: Arc<dyn CatalogStore>) -> PezzotHashSearchVault {
-        let mut items: Vec<HashedItem> = vec![];
+        let items = Self::build_items_from_catalog(&catalog_store);
 
-        // Get searchable content from the catalog store
+        PezzotHashSearchVault {
+            items: RwLock::new(items),
+            catalog_store,
+        }
+    }
+
+    fn build_items_from_catalog(catalog_store: &Arc<dyn CatalogStore>) -> Vec<HashedItem> {
         let searchable_items = catalog_store.get_searchable_content().unwrap_or_default();
+        let mut items: Vec<HashedItem> = vec![];
 
         for searchable_item in searchable_items {
             let item_type = match searchable_item.content_type {
@@ -232,9 +235,7 @@ impl PezzotHashSearchVault {
             items.push(item);
         }
 
-        PezzotHashSearchVault {
-            items: RwLock::new(items),
-        }
+        items
     }
 }
 
@@ -269,29 +270,11 @@ impl SearchVault for PezzotHashSearchVault {
         results.consume()
     }
 
-    fn add_item(&self, id: &str, item_type: HashedItemType, name: &str) {
-        let item = HashedItem {
-            item_type,
-            item_id: id.to_string(),
-            hash: PezzottHash::calc(name),
-        };
+    fn rebuild_index(&self) -> anyhow::Result<()> {
+        let new_items = Self::build_items_from_catalog(&self.catalog_store);
         let mut items = self.items.write().unwrap();
-        items.push(item);
-    }
-
-    fn update_item(&self, id: &str, item_type: HashedItemType, name: &str) {
-        let mut items = self.items.write().unwrap();
-        if let Some(item) = items
-            .iter_mut()
-            .find(|i| i.item_id == id && i.item_type == item_type)
-        {
-            item.hash = PezzottHash::calc(name);
-        }
-    }
-
-    fn remove_item(&self, id: &str, item_type: HashedItemType) {
-        let mut items = self.items.write().unwrap();
-        items.retain(|i| !(i.item_id == id && i.item_type == item_type));
+        *items = new_items;
+        Ok(())
     }
 }
 

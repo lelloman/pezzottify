@@ -6,7 +6,8 @@
 use super::constants::*;
 use super::fixtures::{create_test_catalog, create_test_db_with_users};
 use pezzottify_catalog_server::catalog_store::{CatalogStore, SqliteCatalogStore};
-use pezzottify_catalog_server::search::{NoOpSearchVault, SearchVault};
+use pezzottify_catalog_server::search::NoOpSearchVault;
+use pezzottify_catalog_server::server::state::GuardedSearchVault;
 use pezzottify_catalog_server::server::{server::make_app, RequestsLoggingLevel, ServerConfig};
 use pezzottify_catalog_server::user::{FullUserStore, SqliteUserStore, UserManager, UserStore};
 use std::net::SocketAddr;
@@ -71,7 +72,7 @@ impl TestServer {
         let user_store_for_test = user_store.clone();
 
         // Create search vault (use NoOp for speed in tests)
-        let search_vault: Box<dyn SearchVault> = Box::new(NoOpSearchVault {});
+        let search_vault: GuardedSearchVault = Arc::new(Mutex::new(Box::new(NoOpSearchVault {})));
 
         // Bind to random port
         let listener = TcpListener::bind("127.0.0.1:0")
