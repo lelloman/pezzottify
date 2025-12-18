@@ -1,7 +1,7 @@
 use super::models::{JobRun, JobRunStatus, JobScheduleState};
 use super::schema::SERVER_VERSIONED_SCHEMAS;
 use super::ServerStore;
-use crate::sqlite_persistence::versioned_schema::BASE_DB_VERSION;
+use crate::sqlite_persistence::BASE_DB_VERSION;
 use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
 use rusqlite::{params, Connection, OptionalExtension};
@@ -16,19 +16,18 @@ pub struct SqliteServerStore {
 impl SqliteServerStore {
     pub fn new<P: AsRef<Path>>(db_path: P) -> Result<Self> {
         let path = db_path.as_ref();
-        let conn = Connection::open(path).context("Failed to open server database")?;
+        let is_new_db = !path.exists();
 
+        let mut conn = Connection::open(path).context("Failed to open server database")?;
         conn.execute("PRAGMA foreign_keys = ON;", [])?;
 
-        // Check user_version to determine if this is a fresh database
-        let raw_version: i64 = conn.query_row("PRAGMA user_version;", [], |row| row.get(0))?;
-
-        if raw_version == 0 {
-            // Fresh database - initialize schema
+        if is_new_db {
+            // Fresh database - create with latest schema
             info!("Creating new server database at {:?}", path);
-            Self::initialize_schema(&conn)?;
+            SERVER_VERSIONED_SCHEMAS.last().unwrap().create(&conn)?;
         } else {
             // Existing database - check version and migrate if needed
+            let raw_version: i64 = conn.query_row("PRAGMA user_version;", [], |row| row.get(0))?;
             let db_version = raw_version - BASE_DB_VERSION as i64;
 
             if db_version < 1 {
@@ -39,12 +38,27 @@ impl SqliteServerStore {
             }
 
             let current_schema_version = SERVER_VERSIONED_SCHEMAS.last().unwrap().version as i64;
+
+            // Validate schema matches expected structure
+            let version_index = SERVER_VERSIONED_SCHEMAS
+                .iter()
+                .position(|s| s.version == db_version as usize)
+                .with_context(|| format!("Unknown server database version {}", db_version))?;
+            SERVER_VERSIONED_SCHEMAS[version_index]
+                .validate(&conn)
+                .with_context(|| {
+                    format!(
+                        "Server database schema validation failed for version {}",
+                        db_version
+                    )
+                })?;
+
             if db_version < current_schema_version {
                 info!(
                     "Migrating server database from version {} to {}",
                     db_version, current_schema_version
                 );
-                Self::run_migrations(&conn, db_version as usize)?;
+                Self::migrate_if_needed(&mut conn, db_version as usize)?;
             }
         }
 
@@ -53,39 +67,28 @@ impl SqliteServerStore {
         })
     }
 
-    fn initialize_schema(conn: &Connection) -> Result<()> {
-        // Run all schemas in order for a fresh database
-        for schema in SERVER_VERSIONED_SCHEMAS.iter() {
-            conn.execute_batch(schema.up)
-                .with_context(|| format!("Failed to run schema version {}", schema.version))?;
-        }
-        let last_version = SERVER_VERSIONED_SCHEMAS
-            .last()
-            .expect("No schemas defined")
-            .version;
-        conn.execute(
-            &format!("PRAGMA user_version = {}", BASE_DB_VERSION + last_version),
-            [],
-        )?;
-        Ok(())
-    }
-
-    fn run_migrations(conn: &Connection, from_version: usize) -> Result<()> {
-        for schema in SERVER_VERSIONED_SCHEMAS.iter() {
+    fn migrate_if_needed(conn: &mut Connection, from_version: usize) -> Result<()> {
+        let tx = conn.transaction()?;
+        let mut latest_from = from_version;
+        for schema in SERVER_VERSIONED_SCHEMAS.iter().skip(from_version) {
             if schema.version > from_version {
                 info!(
-                    "Running server database migration to version {}",
-                    schema.version
+                    "Running server database migration from version {} to {}",
+                    latest_from, schema.version
                 );
-                conn.execute_batch(schema.up).with_context(|| {
-                    format!("Failed to run migration to version {}", schema.version)
-                })?;
-                conn.execute(
-                    &format!("PRAGMA user_version = {}", BASE_DB_VERSION + schema.version),
-                    [],
-                )?;
+                if let Some(migration_fn) = schema.migration {
+                    migration_fn(&tx).with_context(|| {
+                        format!("Failed to run migration to version {}", schema.version)
+                    })?;
+                }
+                latest_from = schema.version;
             }
         }
+        tx.execute(
+            &format!("PRAGMA user_version = {}", BASE_DB_VERSION + latest_from),
+            [],
+        )?;
+        tx.commit()?;
         Ok(())
     }
 

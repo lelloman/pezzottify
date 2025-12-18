@@ -3,7 +3,7 @@ mod schema;
 mod sqlite_server_store;
 
 pub use models::*;
-pub use schema::{ServerSchema, SERVER_VERSIONED_SCHEMAS};
+pub use schema::SERVER_VERSIONED_SCHEMAS;
 pub use sqlite_server_store::SqliteServerStore;
 
 use anyhow::Result;
