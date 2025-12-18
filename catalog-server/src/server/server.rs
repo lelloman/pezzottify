@@ -17,7 +17,7 @@ use tracing::{debug, error, info, warn};
 use crate::background_jobs::{JobError, JobInfo, SchedulerHandle};
 use crate::catalog_store::CatalogStore;
 use crate::notifications::NotificationService;
-use crate::search::{HashedItemType, SearchVault};
+use crate::search::SearchVault;
 use crate::{
     server::stream_track::stream_track,
     user::{
@@ -780,22 +780,10 @@ async fn get_image(
 async fn create_artist(
     _session: Session,
     State(catalog_store): State<GuardedCatalogStore>,
-    State(search_vault): State<super::state::GuardedSearchVault>,
     Json(data): Json<serde_json::Value>,
 ) -> Response {
     match catalog_store.create_artist(data) {
-        Ok(artist) => {
-            if let (Some(id), Some(name)) = (
-                artist.get("id").and_then(|v| v.as_str()),
-                artist.get("name").and_then(|v| v.as_str()),
-            ) {
-                search_vault
-                    .lock()
-                    .unwrap()
-                    .add_item(id, HashedItemType::Artist, name);
-            }
-            (StatusCode::CREATED, Json(artist)).into_response()
-        }
+        Ok(artist) => (StatusCode::CREATED, Json(artist)).into_response(),
         Err(err) => (StatusCode::BAD_REQUEST, format!("{}", err)).into_response(),
     }
 }
@@ -803,20 +791,11 @@ async fn create_artist(
 async fn update_artist(
     _session: Session,
     State(catalog_store): State<GuardedCatalogStore>,
-    State(search_vault): State<super::state::GuardedSearchVault>,
     Path(id): Path<String>,
     Json(data): Json<serde_json::Value>,
 ) -> Response {
     match catalog_store.update_artist(&id, data) {
-        Ok(artist) => {
-            if let Some(name) = artist.get("name").and_then(|v| v.as_str()) {
-                search_vault
-                    .lock()
-                    .unwrap()
-                    .update_item(&id, HashedItemType::Artist, name);
-            }
-            Json(artist).into_response()
-        }
+        Ok(artist) => Json(artist).into_response(),
         Err(err) => {
             if err.to_string().contains("not found") {
                 StatusCode::NOT_FOUND.into_response()
@@ -830,17 +809,10 @@ async fn update_artist(
 async fn delete_artist(
     _session: Session,
     State(catalog_store): State<GuardedCatalogStore>,
-    State(search_vault): State<super::state::GuardedSearchVault>,
     Path(id): Path<String>,
 ) -> Response {
     match catalog_store.delete_artist(&id) {
-        Ok(()) => {
-            search_vault
-                .lock()
-                .unwrap()
-                .remove_item(&id, HashedItemType::Artist);
-            StatusCode::NO_CONTENT.into_response()
-        }
+        Ok(()) => StatusCode::NO_CONTENT.into_response(),
         Err(err) => {
             if err.to_string().contains("not found") {
                 StatusCode::NOT_FOUND.into_response()
@@ -854,22 +826,10 @@ async fn delete_artist(
 async fn create_album(
     _session: Session,
     State(catalog_store): State<GuardedCatalogStore>,
-    State(search_vault): State<super::state::GuardedSearchVault>,
     Json(data): Json<serde_json::Value>,
 ) -> Response {
     match catalog_store.create_album(data) {
-        Ok(album) => {
-            if let (Some(id), Some(name)) = (
-                album.get("id").and_then(|v| v.as_str()),
-                album.get("name").and_then(|v| v.as_str()),
-            ) {
-                search_vault
-                    .lock()
-                    .unwrap()
-                    .add_item(id, HashedItemType::Album, name);
-            }
-            (StatusCode::CREATED, Json(album)).into_response()
-        }
+        Ok(album) => (StatusCode::CREATED, Json(album)).into_response(),
         Err(err) => (StatusCode::BAD_REQUEST, format!("{}", err)).into_response(),
     }
 }
@@ -877,20 +837,11 @@ async fn create_album(
 async fn update_album(
     _session: Session,
     State(catalog_store): State<GuardedCatalogStore>,
-    State(search_vault): State<super::state::GuardedSearchVault>,
     Path(id): Path<String>,
     Json(data): Json<serde_json::Value>,
 ) -> Response {
     match catalog_store.update_album(&id, data) {
-        Ok(album) => {
-            if let Some(name) = album.get("name").and_then(|v| v.as_str()) {
-                search_vault
-                    .lock()
-                    .unwrap()
-                    .update_item(&id, HashedItemType::Album, name);
-            }
-            Json(album).into_response()
-        }
+        Ok(album) => Json(album).into_response(),
         Err(err) => {
             if err.to_string().contains("not found") {
                 StatusCode::NOT_FOUND.into_response()
@@ -904,17 +855,10 @@ async fn update_album(
 async fn delete_album(
     _session: Session,
     State(catalog_store): State<GuardedCatalogStore>,
-    State(search_vault): State<super::state::GuardedSearchVault>,
     Path(id): Path<String>,
 ) -> Response {
     match catalog_store.delete_album(&id) {
-        Ok(()) => {
-            search_vault
-                .lock()
-                .unwrap()
-                .remove_item(&id, HashedItemType::Album);
-            StatusCode::NO_CONTENT.into_response()
-        }
+        Ok(()) => StatusCode::NO_CONTENT.into_response(),
         Err(err) => {
             if err.to_string().contains("not found") {
                 StatusCode::NOT_FOUND.into_response()
@@ -928,22 +872,10 @@ async fn delete_album(
 async fn create_track(
     _session: Session,
     State(catalog_store): State<GuardedCatalogStore>,
-    State(search_vault): State<super::state::GuardedSearchVault>,
     Json(data): Json<serde_json::Value>,
 ) -> Response {
     match catalog_store.create_track(data) {
-        Ok(track) => {
-            if let (Some(id), Some(name)) = (
-                track.get("id").and_then(|v| v.as_str()),
-                track.get("name").and_then(|v| v.as_str()),
-            ) {
-                search_vault
-                    .lock()
-                    .unwrap()
-                    .add_item(id, HashedItemType::Track, name);
-            }
-            (StatusCode::CREATED, Json(track)).into_response()
-        }
+        Ok(track) => (StatusCode::CREATED, Json(track)).into_response(),
         Err(err) => (StatusCode::BAD_REQUEST, format!("{}", err)).into_response(),
     }
 }
@@ -951,20 +883,11 @@ async fn create_track(
 async fn update_track(
     _session: Session,
     State(catalog_store): State<GuardedCatalogStore>,
-    State(search_vault): State<super::state::GuardedSearchVault>,
     Path(id): Path<String>,
     Json(data): Json<serde_json::Value>,
 ) -> Response {
     match catalog_store.update_track(&id, data) {
-        Ok(track) => {
-            if let Some(name) = track.get("name").and_then(|v| v.as_str()) {
-                search_vault
-                    .lock()
-                    .unwrap()
-                    .update_item(&id, HashedItemType::Track, name);
-            }
-            Json(track).into_response()
-        }
+        Ok(track) => Json(track).into_response(),
         Err(err) => {
             if err.to_string().contains("not found") {
                 StatusCode::NOT_FOUND.into_response()
@@ -978,17 +901,10 @@ async fn update_track(
 async fn delete_track(
     _session: Session,
     State(catalog_store): State<GuardedCatalogStore>,
-    State(search_vault): State<super::state::GuardedSearchVault>,
     Path(id): Path<String>,
 ) -> Response {
     match catalog_store.delete_track(&id) {
-        Ok(()) => {
-            search_vault
-                .lock()
-                .unwrap()
-                .remove_item(&id, HashedItemType::Track);
-            StatusCode::NO_CONTENT.into_response()
-        }
+        Ok(()) => StatusCode::NO_CONTENT.into_response(),
         Err(err) => {
             if err.to_string().contains("not found") {
                 StatusCode::NOT_FOUND.into_response()
@@ -3158,6 +3074,7 @@ async fn admin_get_changelog_batch(
 async fn admin_close_changelog_batch(
     _session: Session,
     State(catalog_store): State<GuardedCatalogStore>,
+    State(search_vault): State<super::state::GuardedSearchVault>,
     State(whatsnew_notifier): State<GuardedWhatsNewNotifier>,
     Path(batch_id): Path<String>,
 ) -> Response {
@@ -3182,6 +3099,12 @@ async fn admin_close_changelog_batch(
 
     match catalog_store.close_changelog_batch(&batch_id) {
         Ok(()) => {
+            // Rebuild search index after batch close
+            if let Err(err) = search_vault.lock().unwrap().rebuild_index() {
+                error!("Failed to rebuild search index after batch close: {}", err);
+                // Don't fail the request - batch is already closed
+            }
+
             // Notify users who have opted in to WhatsNew notifications
             whatsnew_notifier
                 .notify_batch_closed(&batch, &summary)
@@ -4365,13 +4288,13 @@ async fn admin_reset_throttle(
 }
 
 impl ServerState {
-    /// Create a new ServerState with an existing GuardedUserManager.
-    /// This allows sharing the UserManager with the job scheduler.
+    /// Create a new ServerState with an already-guarded search vault.
+    /// This allows sharing the search vault with background tasks.
     #[allow(clippy::arc_with_non_send_sync, clippy::too_many_arguments)]
-    fn new_with_user_manager(
+    fn new_with_guarded_search_vault(
         config: ServerConfig,
         catalog_store: Arc<dyn CatalogStore>,
-        search_vault: Box<dyn SearchVault>,
+        search_vault: super::state::GuardedSearchVault,
         user_manager: GuardedUserManager,
         user_store: Arc<dyn FullUserStore>,
         downloader: Option<Arc<dyn crate::downloader::Downloader>>,
@@ -4403,7 +4326,7 @@ impl ServerState {
             config,
             start_time: Instant::now(),
             catalog_store,
-            search_vault: Arc::new(Mutex::new(search_vault)),
+            search_vault,
             user_manager,
             downloader,
             proxy,
@@ -4420,7 +4343,7 @@ impl ServerState {
 pub async fn make_app(
     config: ServerConfig,
     catalog_store: Arc<dyn CatalogStore>,
-    search_vault: Box<dyn SearchVault>,
+    search_vault: super::state::GuardedSearchVault,
     user_store: Arc<dyn FullUserStore>,
     user_manager: GuardedUserManager,
     downloader: Option<Arc<dyn crate::downloader::Downloader>>,
@@ -4428,7 +4351,7 @@ pub async fn make_app(
     scheduler_handle: Option<SchedulerHandle>,
     download_manager: Option<Arc<crate::download_manager::DownloadManager>>,
 ) -> Result<Router> {
-    let state = ServerState::new_with_user_manager(
+    let state = ServerState::new_with_guarded_search_vault(
         config.clone(),
         catalog_store,
         search_vault,
@@ -4986,10 +4909,15 @@ pub async fn run_server(
         content_cache_age_sec,
         frontend_dir_path,
     };
+
+    // Wrap search vault early so it can be shared with background tasks
+    let guarded_search_vault: super::state::GuardedSearchVault =
+        Arc::new(Mutex::new(search_vault));
+
     let app = make_app(
         config,
         catalog_store.clone(),
-        search_vault,
+        guarded_search_vault.clone(),
         user_store,
         user_manager,
         downloader,
@@ -5007,13 +4935,14 @@ pub async fn run_server(
 
     // Spawn the stale batch auto-close background task
     let catalog_store_for_bg = catalog_store.clone();
+    let search_vault_for_bg = guarded_search_vault.clone();
     tokio::spawn(async move {
         let mut interval = tokio::time::interval(std::time::Duration::from_secs(
             STALE_BATCH_CHECK_INTERVAL_SECS,
         ));
         loop {
             interval.tick().await;
-            check_and_close_stale_batches(&catalog_store_for_bg);
+            check_and_close_stale_batches(&catalog_store_for_bg, &search_vault_for_bg);
         }
     });
 
@@ -5037,8 +4966,11 @@ pub async fn run_server(
     Ok(())
 }
 
-/// Close stale changelog batches automatically.
-fn check_and_close_stale_batches(catalog_store: &Arc<dyn CatalogStore>) {
+/// Close stale changelog batches automatically and rebuild search index if any were closed.
+fn check_and_close_stale_batches(
+    catalog_store: &Arc<dyn CatalogStore>,
+    search_vault: &super::state::GuardedSearchVault,
+) {
     super::metrics::CHANGELOG_STALE_BATCH_CHECKS_TOTAL.inc();
 
     match catalog_store.close_stale_batches() {
@@ -5048,6 +4980,14 @@ fn check_and_close_stale_batches(catalog_store: &Arc<dyn CatalogStore>) {
                     "Background task closed {} stale changelog batch(es)",
                     closed_count
                 );
+
+                // Rebuild search index after closing stale batches
+                if let Err(err) = search_vault.lock().unwrap().rebuild_index() {
+                    error!(
+                        "Failed to rebuild search index after closing stale batches: {}",
+                        err
+                    );
+                }
             } else {
                 debug!("No stale changelog batches to close");
             }
@@ -5082,10 +5022,12 @@ mod tests {
             catalog_store.clone(),
             user_store.clone(),
         )));
+        let guarded_search_vault: crate::server::state::GuardedSearchVault =
+            Arc::new(Mutex::new(Box::new(NoOpSearchVault {})));
         let app = &mut make_app(
             ServerConfig::default(),
             catalog_store,
-            Box::new(NoOpSearchVault {}),
+            guarded_search_vault,
             user_store,
             user_manager,
             None, // no downloader

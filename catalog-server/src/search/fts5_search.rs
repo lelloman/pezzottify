@@ -11,6 +11,7 @@ use tracing::{debug, warn};
 /// FTS5 search vault using SQLite's full-text search with trigram tokenizer
 pub struct Fts5SearchVault {
     conn: Mutex<Connection>,
+    catalog_store: Arc<dyn CatalogStore>,
 }
 
 impl Fts5SearchVault {
@@ -37,6 +38,19 @@ impl Fts5SearchVault {
         "#,
         )?;
 
+        // Build initial index
+        Self::rebuild_index_internal(&conn, &catalog_store)?;
+
+        Ok(Self {
+            conn: Mutex::new(conn),
+            catalog_store,
+        })
+    }
+
+    fn rebuild_index_internal(
+        conn: &Connection,
+        catalog_store: &Arc<dyn CatalogStore>,
+    ) -> Result<()> {
         // Clear existing data and reindex
         conn.execute("DELETE FROM search_index", [])?;
 
@@ -56,13 +70,10 @@ impl Fts5SearchVault {
                 };
                 stmt.execute([&item.id, type_str, &item.name])?;
             }
-        } // stmt is dropped here, releasing the borrow on conn
+        }
 
         debug!("FTS5 search index built with {} items", count);
-
-        Ok(Self {
-            conn: Mutex::new(conn),
-        })
+        Ok(())
     }
 
     fn item_type_to_str(item_type: &HashedItemType) -> &'static str {
@@ -180,43 +191,9 @@ impl SearchVault for Fts5SearchVault {
         }
     }
 
-    fn add_item(&self, id: &str, item_type: HashedItemType, name: &str) {
+    fn rebuild_index(&self) -> anyhow::Result<()> {
         let conn = self.conn.lock().unwrap();
-        if let Err(e) = conn.execute(
-            "INSERT INTO search_index (item_id, item_type, name) VALUES (?, ?, ?)",
-            [id, Self::item_type_to_str(&item_type), name],
-        ) {
-            warn!("FTS5 add_item failed: {}", e);
-        }
-    }
-
-    fn update_item(&self, id: &str, item_type: HashedItemType, name: &str) {
-        let conn = self.conn.lock().unwrap();
-        // FTS5 doesn't support direct updates, so delete and re-insert
-        let type_str = Self::item_type_to_str(&item_type);
-        if let Err(e) = conn.execute(
-            "DELETE FROM search_index WHERE item_id = ? AND item_type = ?",
-            [id, type_str],
-        ) {
-            warn!("FTS5 update_item delete failed: {}", e);
-            return;
-        }
-        if let Err(e) = conn.execute(
-            "INSERT INTO search_index (item_id, item_type, name) VALUES (?, ?, ?)",
-            [id, type_str, name],
-        ) {
-            warn!("FTS5 update_item insert failed: {}", e);
-        }
-    }
-
-    fn remove_item(&self, id: &str, item_type: HashedItemType) {
-        let conn = self.conn.lock().unwrap();
-        if let Err(e) = conn.execute(
-            "DELETE FROM search_index WHERE item_id = ? AND item_type = ?",
-            [id, Self::item_type_to_str(&item_type)],
-        ) {
-            warn!("FTS5 remove_item failed: {}", e);
-        }
+        Self::rebuild_index_internal(&conn, &self.catalog_store)
     }
 }
 
@@ -542,29 +519,111 @@ mod tests {
     }
 
     #[test]
-    fn test_add_update_remove() {
+    fn test_rebuild_index() {
+        use std::sync::RwLock;
+
         let temp_dir = TempDir::new().unwrap();
         let db_path = temp_dir.path().join("search.db");
 
-        let catalog = Arc::new(MockCatalogStore { items: vec![] });
+        // Create a mock that can have items added dynamically
+        struct DynamicMockCatalogStore {
+            items: RwLock<Vec<SearchableItem>>,
+        }
 
-        let vault = Fts5SearchVault::new(catalog, &db_path).unwrap();
+        impl DynamicMockCatalogStore {
+            fn add_item(&self, item: SearchableItem) {
+                self.items.write().unwrap().push(item);
+            }
+        }
 
-        // Add item
-        vault.add_item("new1", HashedItemType::Artist, "New Artist");
-        let results = vault.search("New Artist", 10, None);
-        assert_eq!(results.len(), 1);
+        impl CatalogStore for DynamicMockCatalogStore {
+            fn get_searchable_content(&self) -> anyhow::Result<Vec<SearchableItem>> {
+                Ok(self.items.read().unwrap().clone())
+            }
+            // All other methods are no-ops
+            fn get_artist_json(&self, _id: &str) -> anyhow::Result<Option<serde_json::Value>> { Ok(None) }
+            fn get_album_json(&self, _id: &str) -> anyhow::Result<Option<serde_json::Value>> { Ok(None) }
+            fn get_track_json(&self, _id: &str) -> anyhow::Result<Option<serde_json::Value>> { Ok(None) }
+            fn get_resolved_artist_json(&self, _id: &str) -> anyhow::Result<Option<serde_json::Value>> { Ok(None) }
+            fn get_resolved_album_json(&self, _id: &str) -> anyhow::Result<Option<serde_json::Value>> { Ok(None) }
+            fn get_resolved_track_json(&self, _id: &str) -> anyhow::Result<Option<serde_json::Value>> { Ok(None) }
+            fn get_artist_discography_json(&self, _id: &str) -> anyhow::Result<Option<serde_json::Value>> { Ok(None) }
+            fn get_image_path(&self, _id: &str) -> std::path::PathBuf { std::path::PathBuf::new() }
+            fn get_track_audio_path(&self, _track_id: &str) -> Option<std::path::PathBuf> { None }
+            fn get_track_album_id(&self, _track_id: &str) -> Option<String> { None }
+            fn get_artists_count(&self) -> usize { 0 }
+            fn get_albums_count(&self) -> usize { 0 }
+            fn get_tracks_count(&self) -> usize { 0 }
+            fn create_artist(&self, _data: serde_json::Value) -> anyhow::Result<serde_json::Value> { Ok(serde_json::json!({})) }
+            fn update_artist(&self, _id: &str, _data: serde_json::Value) -> anyhow::Result<serde_json::Value> { Ok(serde_json::json!({})) }
+            fn delete_artist(&self, _id: &str) -> anyhow::Result<()> { Ok(()) }
+            fn create_album(&self, _data: serde_json::Value) -> anyhow::Result<serde_json::Value> { Ok(serde_json::json!({})) }
+            fn update_album(&self, _id: &str, _data: serde_json::Value) -> anyhow::Result<serde_json::Value> { Ok(serde_json::json!({})) }
+            fn delete_album(&self, _id: &str) -> anyhow::Result<()> { Ok(()) }
+            fn create_track(&self, _data: serde_json::Value) -> anyhow::Result<serde_json::Value> { Ok(serde_json::json!({})) }
+            fn update_track(&self, _id: &str, _data: serde_json::Value) -> anyhow::Result<serde_json::Value> { Ok(serde_json::json!({})) }
+            fn delete_track(&self, _id: &str) -> anyhow::Result<()> { Ok(()) }
+            fn create_image(&self, _data: serde_json::Value) -> anyhow::Result<serde_json::Value> { Ok(serde_json::json!({})) }
+            fn update_image(&self, _id: &str, _data: serde_json::Value) -> anyhow::Result<serde_json::Value> { Ok(serde_json::json!({})) }
+            fn delete_image(&self, _id: &str) -> anyhow::Result<()> { Ok(()) }
+            fn create_changelog_batch(&self, _name: &str, _description: Option<&str>) -> anyhow::Result<crate::catalog_store::CatalogBatch> { unimplemented!() }
+            fn get_changelog_batch(&self, _id: &str) -> anyhow::Result<Option<crate::catalog_store::CatalogBatch>> { Ok(None) }
+            fn get_active_changelog_batch(&self) -> anyhow::Result<Option<crate::catalog_store::CatalogBatch>> { Ok(None) }
+            fn close_changelog_batch(&self, _id: &str) -> anyhow::Result<()> { Ok(()) }
+            fn list_changelog_batches(&self, _is_open: Option<bool>) -> anyhow::Result<Vec<crate::catalog_store::CatalogBatch>> { Ok(vec![]) }
+            fn delete_changelog_batch(&self, _id: &str) -> anyhow::Result<()> { Ok(()) }
+            fn get_changelog_batch_changes(&self, _batch_id: &str) -> anyhow::Result<Vec<crate::catalog_store::ChangeEntry>> { Ok(vec![]) }
+            fn get_changelog_entity_history(&self, _entity_type: crate::catalog_store::ChangeEntityType, _entity_id: &str) -> anyhow::Result<Vec<crate::catalog_store::ChangeEntry>> { Ok(vec![]) }
+            fn get_whats_new_batches(&self, _limit: usize) -> anyhow::Result<Vec<crate::catalog_store::WhatsNewBatch>> { Ok(vec![]) }
+            fn get_stale_batches(&self, _stale_threshold_hours: u64) -> anyhow::Result<Vec<crate::catalog_store::CatalogBatch>> { Ok(vec![]) }
+            fn close_stale_batches(&self) -> anyhow::Result<usize> { Ok(0) }
+            fn get_changelog_batch_summary(&self, _batch_id: &str) -> anyhow::Result<crate::catalog_store::BatchChangeSummary> { Ok(crate::catalog_store::BatchChangeSummary::default()) }
+            fn list_all_track_ids(&self) -> anyhow::Result<Vec<String>> { Ok(vec![]) }
+            fn list_all_album_image_ids(&self) -> anyhow::Result<Vec<String>> { Ok(vec![]) }
+            fn list_all_artist_image_ids(&self) -> anyhow::Result<Vec<String>> { Ok(vec![]) }
+            fn get_artists_without_related(&self) -> anyhow::Result<Vec<String>> { Ok(vec![]) }
+            fn get_orphan_related_artist_ids(&self) -> anyhow::Result<Vec<String>> { Ok(vec![]) }
+            fn add_artist_image(&self, _artist_id: &str, _image_id: &str, _image_type: &crate::catalog_store::ImageType, _position: i32) -> anyhow::Result<()> { Ok(()) }
+            fn add_album_image(&self, _album_id: &str, _image_id: &str, _image_type: &crate::catalog_store::ImageType, _position: i32) -> anyhow::Result<()> { Ok(()) }
+            fn set_artist_display_image(&self, _artist_id: &str, _image_id: &str) -> anyhow::Result<()> { Ok(()) }
+            fn set_album_display_image(&self, _album_id: &str, _image_id: &str) -> anyhow::Result<()> { Ok(()) }
+            fn get_album_display_image_id(&self, _album_id: &str) -> anyhow::Result<Option<String>> { Ok(None) }
+            fn get_skeleton_version(&self) -> anyhow::Result<i64> { Ok(0) }
+            fn get_skeleton_checksum(&self) -> anyhow::Result<String> { Ok(String::new()) }
+            fn get_skeleton_events_since(&self, _seq: i64) -> anyhow::Result<Vec<crate::skeleton::SkeletonEvent>> { Ok(vec![]) }
+            fn get_skeleton_earliest_seq(&self) -> anyhow::Result<i64> { Ok(0) }
+            fn get_skeleton_latest_seq(&self) -> anyhow::Result<i64> { Ok(0) }
+            fn get_all_artist_ids(&self) -> anyhow::Result<Vec<String>> { Ok(vec![]) }
+            fn get_all_albums_skeleton(&self) -> anyhow::Result<Vec<crate::skeleton::SkeletonAlbumEntry>> { Ok(vec![]) }
+            fn get_all_tracks_skeleton(&self) -> anyhow::Result<Vec<crate::skeleton::SkeletonTrackEntry>> { Ok(vec![]) }
+        }
 
-        // Update item
-        vault.update_item("new1", HashedItemType::Artist, "Updated Artist");
+        let catalog = Arc::new(DynamicMockCatalogStore {
+            items: RwLock::new(vec![]),
+        });
+
+        let vault = Fts5SearchVault::new(catalog.clone(), &db_path).unwrap();
+
+        // Initially empty
         let results = vault.search("New Artist", 10, None);
         assert_eq!(results.len(), 0);
-        let results = vault.search("Updated Artist", 10, None);
-        assert_eq!(results.len(), 1);
 
-        // Remove item
-        vault.remove_item("new1", HashedItemType::Artist);
-        let results = vault.search("Updated Artist", 10, None);
+        // Add item to catalog
+        catalog.add_item(SearchableItem {
+            id: "new1".to_string(),
+            name: "New Artist".to_string(),
+            content_type: SearchableContentType::Artist,
+            additional_text: vec![],
+        });
+
+        // Still empty until rebuild
+        let results = vault.search("New Artist", 10, None);
         assert_eq!(results.len(), 0);
+
+        // After rebuild, item is searchable
+        vault.rebuild_index().unwrap();
+        let results = vault.search("New Artist", 10, None);
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].item_id, "new1");
     }
 }
