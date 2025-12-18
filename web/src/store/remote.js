@@ -563,6 +563,26 @@ export const useRemoteStore = defineStore("remote", () => {
     }
   };
 
+  const fetchRelevanceFilter = async () => {
+    try {
+      const response = await axios.get("/v1/admin/search/relevance-filter");
+      return response.data;
+    } catch (error) {
+      console.error("Failed to fetch relevance filter:", error);
+      return null;
+    }
+  };
+
+  const updateRelevanceFilter = async (config) => {
+    try {
+      await axios.put("/v1/admin/search/relevance-filter", config);
+      return { success: true };
+    } catch (error) {
+      console.error("Failed to update relevance filter:", error);
+      return { error: error.response?.data?.error || "Failed to update filter" };
+    }
+  };
+
   // =====================================================
   // Admin API - Download Manager (DownloadManagerAdmin)
   // =====================================================
@@ -893,6 +913,8 @@ export const useRemoteStore = defineStore("remote", () => {
     triggerBackgroundJob,
     fetchJobAuditLog,
     fetchJobAuditLogByJob,
+    fetchRelevanceFilter,
+    updateRelevanceFilter,
     // Admin API - Download Manager
     fetchDownloadStats,
     fetchDownloadQueue,

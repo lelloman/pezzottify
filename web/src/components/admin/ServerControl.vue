@@ -23,6 +23,106 @@
       {{ rebootError }}
     </div>
 
+    <h2 class="sectionTitle searchTitle">Search Settings</h2>
+
+    <div class="controlCard searchSettings">
+      <div class="controlInfo">
+        <h3 class="controlTitle">Relevance Filter</h3>
+        <p class="controlDescription">
+          Filter search results to remove low-quality matches. Choose a filtering
+          method and configure its parameters.
+        </p>
+      </div>
+
+      <div v-if="filterLoading" class="loadingMessage">Loading...</div>
+      <div v-else-if="filterError" class="errorMessage">{{ filterError }}</div>
+      <div v-else class="filterConfig">
+        <div class="filterRow">
+          <label class="filterLabel">Method</label>
+          <select v-model="filterMethod" class="filterSelect" @change="onFilterMethodChange">
+            <option value="none">None (return all results)</option>
+            <option value="percentage_of_best">Percentage of Best</option>
+            <option value="gap_detection">Gap Detection</option>
+            <option value="standard_deviation">Standard Deviation</option>
+            <option value="percentage_with_minimum">Percentage with Minimum</option>
+          </select>
+        </div>
+
+        <div v-if="filterMethod === 'percentage_of_best'" class="filterRow">
+          <label class="filterLabel">Threshold (0-1)</label>
+          <input
+            v-model.number="filterParams.threshold"
+            type="number"
+            step="0.1"
+            min="0"
+            max="1"
+            class="filterInput"
+          />
+          <span class="filterHint">Keep results with score >= {{ (filterParams.threshold * 100).toFixed(0) }}% of best</span>
+        </div>
+
+        <div v-if="filterMethod === 'gap_detection'" class="filterRow">
+          <label class="filterLabel">Drop Threshold (0-1)</label>
+          <input
+            v-model.number="filterParams.drop_threshold"
+            type="number"
+            step="0.1"
+            min="0"
+            max="1"
+            class="filterInput"
+          />
+          <span class="filterHint">Cut when next score drops below {{ (filterParams.drop_threshold * 100).toFixed(0) }}% of previous</span>
+        </div>
+
+        <div v-if="filterMethod === 'standard_deviation'" class="filterRow">
+          <label class="filterLabel">Std Deviations</label>
+          <input
+            v-model.number="filterParams.num_std_devs"
+            type="number"
+            step="0.5"
+            min="0"
+            class="filterInput"
+          />
+          <span class="filterHint">Keep results within {{ filterParams.num_std_devs }} std devs of mean</span>
+        </div>
+
+        <div v-if="filterMethod === 'percentage_with_minimum'" class="filterRow">
+          <label class="filterLabel">Threshold (0-1)</label>
+          <input
+            v-model.number="filterParams.threshold"
+            type="number"
+            step="0.1"
+            min="0"
+            max="1"
+            class="filterInput"
+          />
+        </div>
+        <div v-if="filterMethod === 'percentage_with_minimum'" class="filterRow">
+          <label class="filterLabel">Min Best Score</label>
+          <input
+            v-model.number="filterParams.min_best_score"
+            type="number"
+            step="1000"
+            min="0"
+            class="filterInput"
+          />
+          <span class="filterHint">Only filter if best score exceeds this value</span>
+        </div>
+
+        <div class="filterActions">
+          <button
+            class="saveButton"
+            :disabled="filterSaving"
+            @click="saveFilter"
+          >
+            {{ filterSaving ? "Saving..." : "Save" }}
+          </button>
+          <span v-if="filterSaveSuccess" class="saveSuccess">Saved!</span>
+          <span v-if="filterSaveError" class="saveError">{{ filterSaveError }}</span>
+        </div>
+      </div>
+    </div>
+
     <h2 class="sectionTitle jobsTitle">Background Jobs</h2>
 
     <div v-if="jobsLoading" class="loadingMessage">Loading jobs...</div>
@@ -136,6 +236,20 @@ const showConfirmDialog = ref(false);
 const isRebooting = ref(false);
 const rebootError = ref(null);
 
+// Relevance filter state
+const filterLoading = ref(true);
+const filterError = ref(null);
+const filterMethod = ref("none");
+const filterParams = reactive({
+  threshold: 0.4,
+  drop_threshold: 0.5,
+  num_std_devs: 1.5,
+  min_best_score: 5000,
+});
+const filterSaving = ref(false);
+const filterSaveSuccess = ref(false);
+const filterSaveError = ref(null);
+
 // Background jobs state
 const jobs = ref([]);
 const jobsLoading = ref(true);
@@ -175,6 +289,59 @@ const handleReboot = async () => {
   }
   // If successful, the server will restart and we'll lose connection
   // The button stays in "Rebooting..." state
+};
+
+const loadRelevanceFilter = async () => {
+  filterLoading.value = true;
+  filterError.value = null;
+  const data = await remoteStore.fetchRelevanceFilter();
+  if (data === null) {
+    filterError.value = "Failed to load relevance filter";
+  } else {
+    filterMethod.value = data.config.method;
+    if (data.config.threshold !== undefined) filterParams.threshold = data.config.threshold;
+    if (data.config.drop_threshold !== undefined) filterParams.drop_threshold = data.config.drop_threshold;
+    if (data.config.num_std_devs !== undefined) filterParams.num_std_devs = data.config.num_std_devs;
+    if (data.config.min_best_score !== undefined) filterParams.min_best_score = data.config.min_best_score;
+  }
+  filterLoading.value = false;
+};
+
+const onFilterMethodChange = () => {
+  filterSaveSuccess.value = false;
+  filterSaveError.value = null;
+};
+
+const saveFilter = async () => {
+  filterSaving.value = true;
+  filterSaveSuccess.value = false;
+  filterSaveError.value = null;
+
+  let config = { method: filterMethod.value };
+  switch (filterMethod.value) {
+    case "percentage_of_best":
+      config.threshold = filterParams.threshold;
+      break;
+    case "gap_detection":
+      config.drop_threshold = filterParams.drop_threshold;
+      break;
+    case "standard_deviation":
+      config.num_std_devs = filterParams.num_std_devs;
+      break;
+    case "percentage_with_minimum":
+      config.threshold = filterParams.threshold;
+      config.min_best_score = filterParams.min_best_score;
+      break;
+  }
+
+  const result = await remoteStore.updateRelevanceFilter(config);
+  if (result.success) {
+    filterSaveSuccess.value = true;
+    setTimeout(() => { filterSaveSuccess.value = false; }, 2000);
+  } else {
+    filterSaveError.value = result.error;
+  }
+  filterSaving.value = false;
 };
 
 const loadJobs = async () => {
@@ -317,6 +484,7 @@ const formatDetails = (details) => {
 };
 
 onMounted(() => {
+  loadRelevanceFilter();
   loadJobs();
   loadAuditLog();
 });
@@ -611,5 +779,94 @@ onMounted(() => {
 
 .refreshButton:hover {
   background-color: var(--bg-elevated-base);
+}
+
+.searchTitle {
+  margin-top: var(--spacing-8);
+}
+
+.searchSettings {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.filterConfig {
+  width: 100%;
+  margin-top: var(--spacing-4);
+}
+
+.filterRow {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-3);
+  margin-bottom: var(--spacing-3);
+  flex-wrap: wrap;
+}
+
+.filterLabel {
+  min-width: 140px;
+  font-size: var(--text-sm);
+  color: var(--text-subdued);
+}
+
+.filterSelect,
+.filterInput {
+  padding: var(--spacing-2) var(--spacing-3);
+  background-color: var(--bg-base);
+  color: var(--text-base);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm);
+}
+
+.filterSelect {
+  min-width: 200px;
+}
+
+.filterInput {
+  width: 100px;
+}
+
+.filterHint {
+  font-size: var(--text-xs);
+  color: var(--text-subdued);
+}
+
+.filterActions {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-3);
+  margin-top: var(--spacing-4);
+}
+
+.saveButton {
+  padding: var(--spacing-2) var(--spacing-4);
+  background-color: var(--highlight);
+  color: var(--text-base);
+  border: none;
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm);
+  font-weight: var(--font-medium);
+  cursor: pointer;
+  transition: opacity var(--transition-fast);
+}
+
+.saveButton:hover:not(:disabled) {
+  filter: brightness(1.1);
+}
+
+.saveButton:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.saveSuccess {
+  font-size: var(--text-sm);
+  color: #22c55e;
+}
+
+.saveError {
+  font-size: var(--text-sm);
+  color: #dc2626;
 }
 </style>
