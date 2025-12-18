@@ -272,3 +272,220 @@ async fn test_search_case_insensitive() {
         );
     }
 }
+
+// =============================================================================
+// Relevance Filter Admin Tests
+// =============================================================================
+
+#[tokio::test]
+async fn test_relevance_filter_get_requires_admin() {
+    let server = TestServer::spawn().await;
+    let client = TestClient::authenticated(server.base_url.clone()).await;
+
+    // Regular user should not be able to access admin endpoint
+    let response = client.admin_get_relevance_filter().await;
+
+    // Should be forbidden (not admin)
+    assert_eq!(
+        response.status(),
+        StatusCode::FORBIDDEN,
+        "Regular user should not access admin relevance filter endpoint"
+    );
+}
+
+#[tokio::test]
+async fn test_relevance_filter_get_default_is_none() {
+    let server = TestServer::spawn().await;
+    let client = TestClient::authenticated_admin(server.base_url.clone()).await;
+
+    let response = client.admin_get_relevance_filter().await;
+
+    // Skip if search is disabled
+    if response.status() == StatusCode::NOT_FOUND {
+        eprintln!("Search admin endpoint not available (no_search feature enabled)");
+        return;
+    }
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let body: serde_json::Value = response.json().await.unwrap();
+
+    // Default should be None filter
+    assert_eq!(
+        body.get("config")
+            .and_then(|c| c.get("method"))
+            .and_then(|m| m.as_str()),
+        Some("none"),
+        "Default relevance filter should be 'none'"
+    );
+}
+
+#[tokio::test]
+async fn test_relevance_filter_set_and_get() {
+    let server = TestServer::spawn().await;
+    let client = TestClient::authenticated_admin(server.base_url.clone()).await;
+
+    // Set a percentage_of_best filter
+    let config = serde_json::json!({
+        "method": "percentage_of_best",
+        "threshold": 0.4
+    });
+
+    let response = client.admin_set_relevance_filter(config.clone()).await;
+
+    // Skip if search is disabled
+    if response.status() == StatusCode::NOT_FOUND {
+        eprintln!("Search admin endpoint not available (no_search feature enabled)");
+        return;
+    }
+
+    assert_eq!(response.status(), StatusCode::OK);
+
+    // Verify the config was saved
+    let get_response = client.admin_get_relevance_filter().await;
+    assert_eq!(get_response.status(), StatusCode::OK);
+
+    let body: serde_json::Value = get_response.json().await.unwrap();
+    assert_eq!(
+        body.get("config")
+            .and_then(|c| c.get("method"))
+            .and_then(|m| m.as_str()),
+        Some("percentage_of_best"),
+        "Saved config should be percentage_of_best"
+    );
+    assert_eq!(
+        body.get("config")
+            .and_then(|c| c.get("threshold"))
+            .and_then(|t| t.as_f64()),
+        Some(0.4),
+        "Saved threshold should be 0.4"
+    );
+}
+
+#[tokio::test]
+async fn test_relevance_filter_set_gap_detection() {
+    let server = TestServer::spawn().await;
+    let client = TestClient::authenticated_admin(server.base_url.clone()).await;
+
+    // Set a gap_detection filter
+    let config = serde_json::json!({
+        "method": "gap_detection",
+        "drop_threshold": 0.5
+    });
+
+    let response = client.admin_set_relevance_filter(config).await;
+
+    // Skip if search is disabled
+    if response.status() == StatusCode::NOT_FOUND {
+        eprintln!("Search admin endpoint not available (no_search feature enabled)");
+        return;
+    }
+
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let body: serde_json::Value = response.json().await.unwrap();
+    assert_eq!(
+        body.get("config")
+            .and_then(|c| c.get("method"))
+            .and_then(|m| m.as_str()),
+        Some("gap_detection")
+    );
+}
+
+#[tokio::test]
+async fn test_relevance_filter_set_standard_deviation() {
+    let server = TestServer::spawn().await;
+    let client = TestClient::authenticated_admin(server.base_url.clone()).await;
+
+    // Set a standard_deviation filter
+    let config = serde_json::json!({
+        "method": "standard_deviation",
+        "num_std_devs": 2.0
+    });
+
+    let response = client.admin_set_relevance_filter(config).await;
+
+    // Skip if search is disabled
+    if response.status() == StatusCode::NOT_FOUND {
+        eprintln!("Search admin endpoint not available (no_search feature enabled)");
+        return;
+    }
+
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let body: serde_json::Value = response.json().await.unwrap();
+    assert_eq!(
+        body.get("config")
+            .and_then(|c| c.get("method"))
+            .and_then(|m| m.as_str()),
+        Some("standard_deviation")
+    );
+}
+
+#[tokio::test]
+async fn test_relevance_filter_set_percentage_with_minimum() {
+    let server = TestServer::spawn().await;
+    let client = TestClient::authenticated_admin(server.base_url.clone()).await;
+
+    // Set a percentage_with_minimum filter
+    let config = serde_json::json!({
+        "method": "percentage_with_minimum",
+        "threshold": 0.4,
+        "min_best_score": 100
+    });
+
+    let response = client.admin_set_relevance_filter(config).await;
+
+    // Skip if search is disabled
+    if response.status() == StatusCode::NOT_FOUND {
+        eprintln!("Search admin endpoint not available (no_search feature enabled)");
+        return;
+    }
+
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let body: serde_json::Value = response.json().await.unwrap();
+    assert_eq!(
+        body.get("config")
+            .and_then(|c| c.get("method"))
+            .and_then(|m| m.as_str()),
+        Some("percentage_with_minimum")
+    );
+}
+
+#[tokio::test]
+async fn test_relevance_filter_reset_to_none() {
+    let server = TestServer::spawn().await;
+    let client = TestClient::authenticated_admin(server.base_url.clone()).await;
+
+    // First set a filter
+    let config = serde_json::json!({
+        "method": "percentage_of_best",
+        "threshold": 0.5
+    });
+    let response = client.admin_set_relevance_filter(config).await;
+
+    // Skip if search is disabled
+    if response.status() == StatusCode::NOT_FOUND {
+        eprintln!("Search admin endpoint not available (no_search feature enabled)");
+        return;
+    }
+    assert_eq!(response.status(), StatusCode::OK);
+
+    // Now reset to none
+    let config = serde_json::json!({
+        "method": "none"
+    });
+    let response = client.admin_set_relevance_filter(config).await;
+    assert_eq!(response.status(), StatusCode::OK);
+
+    // Verify it's none
+    let get_response = client.admin_get_relevance_filter().await;
+    let body: serde_json::Value = get_response.json().await.unwrap();
+    assert_eq!(
+        body.get("config")
+            .and_then(|c| c.get("method"))
+            .and_then(|m| m.as_str()),
+        Some("none"),
+        "Config should be reset to none"
+    );
+}

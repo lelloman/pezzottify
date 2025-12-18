@@ -9,6 +9,7 @@ use pezzottify_catalog_server::catalog_store::{CatalogStore, SqliteCatalogStore}
 use pezzottify_catalog_server::search::NoOpSearchVault;
 use pezzottify_catalog_server::server::state::GuardedSearchVault;
 use pezzottify_catalog_server::server::{server::make_app, RequestsLoggingLevel, ServerConfig};
+use pezzottify_catalog_server::server_store::SqliteServerStore;
 use pezzottify_catalog_server::user::{FullUserStore, SqliteUserStore, UserManager, UserStore};
 use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
@@ -103,6 +104,12 @@ impl TestServer {
             user_store.clone(),
         )));
 
+        // Create server store for testing
+        let server_db_path = temp_db_dir.path().join("server.db");
+        let server_store = Arc::new(
+            SqliteServerStore::new(&server_db_path).expect("Failed to create server store"),
+        );
+
         let app = make_app(
             config,
             catalog_store,
@@ -113,6 +120,7 @@ impl TestServer {
             None,
             None,
             None, // no download_manager
+            server_store,
         )
         .await
         .expect("Failed to build app");

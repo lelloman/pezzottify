@@ -440,6 +440,7 @@ async fn main() -> Result<()> {
             media_base_path_for_proxy,
             Some(scheduler_handle),
             download_manager,
+            server_store,
         ) => {
             info!("HTTP server stopped: {:?}", result);
             shutdown_token.cancel();
