@@ -11,7 +11,7 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilte
 use pezzottify_catalog_server::background_jobs::jobs::{
     AuditLogCleanupJob, ExpandArtistsBaseJob, MissingFilesWatchdogJob, PopularContentJob,
 };
-use pezzottify_catalog_server::background_jobs::{create_scheduler, JobContext};
+use pezzottify_catalog_server::background_jobs::{create_scheduler, GuardedSearchVault, JobContext};
 use pezzottify_catalog_server::catalog_store::{
     CatalogStore, SqliteCatalogStore, WritableCatalogStore,
 };
@@ -212,16 +212,30 @@ async fn main() -> Result<()> {
         user_store.clone() as Arc<dyn user::FullUserStore>,
     )));
 
+    // Create search vault early so it can be shared with job scheduler
+    info!(
+        "Indexing content for search using {} engine...",
+        app_config.search.engine
+    );
+    let search_vault = create_search_vault(
+        &app_config.search.engine,
+        catalog_store.clone(),
+        &app_config.db_dir,
+    )?;
+    let guarded_search_vault: GuardedSearchVault =
+        std::sync::Arc::new(std::sync::Mutex::new(search_vault));
+
     // Set up background job scheduler
     let shutdown_token = CancellationToken::new();
     let (hook_sender, hook_receiver) = tokio::sync::mpsc::channel(100);
 
-    let job_context = JobContext::new(
+    let job_context = JobContext::with_search_vault(
         shutdown_token.child_token(),
         catalog_store.clone() as Arc<dyn CatalogStore>,
         user_store.clone() as Arc<dyn user::FullUserStore>,
         server_store.clone() as Arc<dyn server_store::ServerStore>,
         user_manager.clone(),
+        guarded_search_vault.clone(),
     );
 
     let (mut scheduler, scheduler_handle) = create_scheduler(
@@ -284,16 +298,6 @@ async fn main() -> Result<()> {
             }
         });
     }
-
-    info!(
-        "Indexing content for search using {} engine...",
-        app_config.search.engine
-    );
-    let search_vault = create_search_vault(
-        &app_config.search.engine,
-        catalog_store.clone(),
-        &app_config.db_dir,
-    )?;
 
     // Create downloader client if URL is configured
     let downloader: Option<Arc<dyn downloader::Downloader>> =
@@ -424,7 +428,7 @@ async fn main() -> Result<()> {
     tokio::select! {
         result = run_server(
             catalog_store,
-            search_vault,
+            guarded_search_vault,
             user_store,
             user_manager,
             app_config.logging_level.clone(),

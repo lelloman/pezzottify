@@ -11,7 +11,7 @@ pub mod jobs;
 mod scheduler;
 
 pub use audit_logger::JobAuditLogger;
-pub use context::JobContext;
+pub use context::{GuardedSearchVault, JobContext};
 pub use handle::{JobInfo, SchedulerHandle};
 pub use job::{BackgroundJob, HookEvent, JobError, JobSchedule, ShutdownBehavior};
 pub use scheduler::{create_scheduler, JobScheduler};

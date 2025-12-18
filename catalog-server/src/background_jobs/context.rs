@@ -1,4 +1,5 @@
 use crate::catalog_store::CatalogStore;
+use crate::search::SearchVault;
 use crate::server_store::ServerStore;
 use crate::user::{FullUserStore, UserManager};
 use std::sync::{Arc, Mutex};
@@ -6,6 +7,9 @@ use tokio_util::sync::CancellationToken;
 
 /// Type alias for thread-safe UserManager access.
 pub type GuardedUserManager = Arc<Mutex<UserManager>>;
+
+/// Type alias for thread-safe SearchVault access.
+pub type GuardedSearchVault = Arc<Mutex<Box<dyn SearchVault>>>;
 
 /// Context provided to jobs during execution.
 ///
@@ -27,6 +31,9 @@ pub struct JobContext {
 
     /// Access to user manager (for caching, etc.).
     pub user_manager: GuardedUserManager,
+
+    /// Access to search vault for updating popularity scores.
+    pub search_vault: Option<GuardedSearchVault>,
 }
 
 impl JobContext {
@@ -44,6 +51,26 @@ impl JobContext {
             user_store,
             server_store,
             user_manager,
+            search_vault: None,
+        }
+    }
+
+    /// Create a new job context with search vault.
+    pub fn with_search_vault(
+        cancellation_token: CancellationToken,
+        catalog_store: Arc<dyn CatalogStore>,
+        user_store: Arc<dyn FullUserStore>,
+        server_store: Arc<dyn ServerStore>,
+        user_manager: GuardedUserManager,
+        search_vault: GuardedSearchVault,
+    ) -> Self {
+        Self {
+            cancellation_token,
+            catalog_store,
+            user_store,
+            server_store,
+            user_manager,
+            search_vault: Some(search_vault),
         }
     }
 

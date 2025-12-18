@@ -8,7 +8,7 @@ use std::{
     fs::File,
     io::Read,
     net::SocketAddr,
-    sync::{Arc, Mutex},
+    sync::Arc,
     time::{Duration, Instant},
 };
 
@@ -17,7 +17,6 @@ use tracing::{debug, error, info, warn};
 use crate::background_jobs::{JobError, JobInfo, SchedulerHandle};
 use crate::catalog_store::CatalogStore;
 use crate::notifications::NotificationService;
-use crate::search::SearchVault;
 use crate::{
     server::stream_track::stream_track,
     user::{
@@ -4890,7 +4889,7 @@ const STALE_BATCH_CHECK_INTERVAL_SECS: u64 = 600;
 #[allow(clippy::too_many_arguments)]
 pub async fn run_server(
     catalog_store: Arc<dyn CatalogStore>,
-    search_vault: Box<dyn SearchVault>,
+    guarded_search_vault: super::state::GuardedSearchVault,
     user_store: Arc<dyn FullUserStore>,
     user_manager: GuardedUserManager,
     requests_logging_level: RequestsLoggingLevel,
@@ -4909,10 +4908,6 @@ pub async fn run_server(
         content_cache_age_sec,
         frontend_dir_path,
     };
-
-    // Wrap search vault early so it can be shared with background tasks
-    let guarded_search_vault: super::state::GuardedSearchVault =
-        Arc::new(Mutex::new(search_vault));
 
     let app = make_app(
         config,
@@ -5023,7 +5018,7 @@ mod tests {
             user_store.clone(),
         )));
         let guarded_search_vault: crate::server::state::GuardedSearchVault =
-            Arc::new(Mutex::new(Box::new(NoOpSearchVault {})));
+            Arc::new(std::sync::Mutex::new(Box::new(NoOpSearchVault {})));
         let app = &mut make_app(
             ServerConfig::default(),
             catalog_store,

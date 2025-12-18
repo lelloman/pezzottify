@@ -8,6 +8,7 @@ use crate::background_jobs::{
     job::{BackgroundJob, HookEvent, JobError, JobSchedule, ShutdownBehavior},
     JobAuditLogger,
 };
+use crate::search::HashedItemType;
 use crate::user::user_models::{PopularAlbum, PopularArtist, PopularContent};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -322,6 +323,63 @@ impl BackgroundJob for PopularContentJob {
             popular_albums.len(),
             popular_artists.len()
         );
+
+        // =====================================================================
+        // Update search vault with popularity scores for ranking boost
+        // =====================================================================
+        if let Some(search_vault) = &ctx.search_vault {
+            let mut popularity_items = Vec::new();
+
+            // Normalize and add tracks
+            // Note: top_tracks is already sorted by play_count descending
+            let max_track_plays = top_tracks.first().map(|t| t.play_count).unwrap_or(1);
+            for track in &top_tracks {
+                let score = track.play_count as f64 / max_track_plays as f64;
+                popularity_items.push((
+                    track.track_id.clone(),
+                    HashedItemType::Track,
+                    track.play_count,
+                    score,
+                ));
+            }
+
+            // Normalize and add albums
+            let max_album_plays = top_album_ids.first().map(|(_, c)| *c).unwrap_or(1);
+            for (album_id, play_count) in &top_album_ids {
+                let score = *play_count as f64 / max_album_plays as f64;
+                popularity_items.push((
+                    album_id.clone(),
+                    HashedItemType::Album,
+                    *play_count,
+                    score,
+                ));
+            }
+
+            // Normalize and add artists
+            let max_artist_plays = top_artist_ids.first().map(|(_, c)| *c).unwrap_or(1);
+            for (artist_id, play_count) in &top_artist_ids {
+                let score = *play_count as f64 / max_artist_plays as f64;
+                popularity_items.push((
+                    artist_id.clone(),
+                    HashedItemType::Artist,
+                    *play_count,
+                    score,
+                ));
+            }
+
+            search_vault
+                .lock()
+                .unwrap()
+                .update_popularity(&popularity_items);
+
+            debug!(
+                "Updated search popularity for {} items ({} tracks, {} albums, {} artists)",
+                popularity_items.len(),
+                top_tracks.len(),
+                top_album_ids.len(),
+                top_artist_ids.len()
+            );
+        }
 
         audit.log_completed(Some(serde_json::json!({
             "albums_count": popular_albums.len(),
