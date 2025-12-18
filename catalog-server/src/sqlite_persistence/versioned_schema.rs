@@ -354,6 +354,81 @@ impl VersionedSchema {
                     }
                 }
             }
+
+            // Validate foreign keys exist and match expected configuration
+            // PRAGMA foreign_key_list returns: id, seq, table, from, to, on_update, on_delete, match
+            let mut fk_stmt = conn.prepare(&format!(
+                "PRAGMA foreign_key_list({})",
+                table.name
+            ))?;
+
+            struct ActualFk {
+                from_column: String,
+                to_table: String,
+                to_column: String,
+                on_delete: String,
+            }
+
+            let actual_fks: Vec<ActualFk> = fk_stmt
+                .query_map([], |row| {
+                    Ok(ActualFk {
+                        from_column: row.get(3)?,
+                        to_table: row.get(2)?,
+                        to_column: row.get(4)?,
+                        on_delete: row.get(6)?,
+                    })
+                })?
+                .filter_map(|r| r.ok())
+                .collect();
+
+            for column in table.columns {
+                if let Some(expected_fk) = column.foreign_key {
+                    let expected_on_delete = match expected_fk.on_delete {
+                        ForeignKeyOnChange::NoAction => "NO ACTION",
+                        ForeignKeyOnChange::Restrict => "RESTRICT",
+                        ForeignKeyOnChange::SetNull => "SET NULL",
+                        ForeignKeyOnChange::SetDefault => "SET DEFAULT",
+                        ForeignKeyOnChange::Cascade => "CASCADE",
+                    };
+
+                    let found = actual_fks.iter().any(|actual| {
+                        actual.from_column == column.name
+                            && actual.to_table == expected_fk.foreign_table
+                            && actual.to_column == expected_fk.foreign_column
+                            && actual.on_delete == expected_on_delete
+                    });
+
+                    if !found {
+                        // Check if FK exists but with wrong configuration
+                        let partial_match = actual_fks.iter().find(|actual| {
+                            actual.from_column == column.name
+                        });
+
+                        if let Some(actual) = partial_match {
+                            bail!(
+                                "Table {} column {} has foreign key mismatch: expected REFERENCES {}({}) ON DELETE {}, got REFERENCES {}({}) ON DELETE {}",
+                                table.name,
+                                column.name,
+                                expected_fk.foreign_table,
+                                expected_fk.foreign_column,
+                                expected_on_delete,
+                                actual.to_table,
+                                actual.to_column,
+                                actual.on_delete
+                            );
+                        } else {
+                            bail!(
+                                "Table {} column {} is missing foreign key: expected REFERENCES {}({}) ON DELETE {}",
+                                table.name,
+                                column.name,
+                                expected_fk.foreign_table,
+                                expected_fk.foreign_column,
+                                expected_on_delete
+                            );
+                        }
+                    }
+                }
+            }
         }
         Ok(())
     }
@@ -612,5 +687,163 @@ mod tests {
         // Validation should fail - we have UNIQUE(email) but not UNIQUE(email, username)
         let result = schema.validate(&conn);
         assert!(result.is_err());
+    }
+
+    const PARENT_FK: ForeignKey = ForeignKey {
+        foreign_table: "parent",
+        foreign_column: "id",
+        on_delete: ForeignKeyOnChange::Cascade,
+    };
+
+    const TEST_TABLE_WITH_FK: Table = Table {
+        name: "child",
+        columns: &[
+            Column {
+                name: "id",
+                sql_type: &SqlType::Integer,
+                is_primary_key: true,
+                non_null: false,
+                is_unique: false,
+                default_value: None,
+                foreign_key: None,
+            },
+            Column {
+                name: "parent_id",
+                sql_type: &SqlType::Integer,
+                is_primary_key: false,
+                non_null: true,
+                is_unique: false,
+                default_value: None,
+                foreign_key: Some(&PARENT_FK),
+            },
+        ],
+        indices: &[],
+        unique_constraints: &[],
+    };
+
+    #[test]
+    fn test_validate_detects_missing_foreign_key() {
+        let conn = Connection::open_in_memory().unwrap();
+
+        // Create parent table
+        conn.execute("CREATE TABLE parent (id INTEGER PRIMARY KEY)", [])
+            .unwrap();
+
+        // Create child table WITHOUT foreign key
+        conn.execute(
+            "CREATE TABLE child (
+                id INTEGER PRIMARY KEY,
+                parent_id INTEGER NOT NULL
+            )",
+            [],
+        )
+        .unwrap();
+
+        let schema = VersionedSchema {
+            version: 1,
+            tables: &[TEST_TABLE_WITH_FK],
+            migration: None,
+        };
+
+        // Validation should fail because FK is missing
+        let result = schema.validate(&conn);
+        assert!(result.is_err());
+        let err_msg = result.unwrap_err().to_string();
+        assert!(err_msg.contains("missing foreign key"));
+        assert!(err_msg.contains("parent_id"));
+    }
+
+    #[test]
+    fn test_validate_passes_with_foreign_key_present() {
+        let conn = Connection::open_in_memory().unwrap();
+
+        // Create parent table
+        conn.execute("CREATE TABLE parent (id INTEGER PRIMARY KEY)", [])
+            .unwrap();
+
+        // Create child table WITH foreign key
+        conn.execute(
+            "CREATE TABLE child (
+                id INTEGER PRIMARY KEY,
+                parent_id INTEGER NOT NULL REFERENCES parent(id) ON DELETE CASCADE
+            )",
+            [],
+        )
+        .unwrap();
+
+        let schema = VersionedSchema {
+            version: 1,
+            tables: &[TEST_TABLE_WITH_FK],
+            migration: None,
+        };
+
+        // Validation should pass
+        schema.validate(&conn).unwrap();
+    }
+
+    #[test]
+    fn test_validate_detects_wrong_on_delete_action() {
+        let conn = Connection::open_in_memory().unwrap();
+
+        // Create parent table
+        conn.execute("CREATE TABLE parent (id INTEGER PRIMARY KEY)", [])
+            .unwrap();
+
+        // Create child table with FK but wrong ON DELETE action
+        conn.execute(
+            "CREATE TABLE child (
+                id INTEGER PRIMARY KEY,
+                parent_id INTEGER NOT NULL REFERENCES parent(id) ON DELETE SET NULL
+            )",
+            [],
+        )
+        .unwrap();
+
+        let schema = VersionedSchema {
+            version: 1,
+            tables: &[TEST_TABLE_WITH_FK],
+            migration: None,
+        };
+
+        // Validation should fail because ON DELETE action doesn't match
+        let result = schema.validate(&conn);
+        assert!(result.is_err());
+        let err_msg = result.unwrap_err().to_string();
+        assert!(err_msg.contains("foreign key mismatch"));
+        assert!(err_msg.contains("CASCADE"));
+        assert!(err_msg.contains("SET NULL"));
+    }
+
+    #[test]
+    fn test_validate_detects_wrong_referenced_table() {
+        let conn = Connection::open_in_memory().unwrap();
+
+        // Create two tables
+        conn.execute("CREATE TABLE parent (id INTEGER PRIMARY KEY)", [])
+            .unwrap();
+        conn.execute("CREATE TABLE other (id INTEGER PRIMARY KEY)", [])
+            .unwrap();
+
+        // Create child table with FK to WRONG table
+        conn.execute(
+            "CREATE TABLE child (
+                id INTEGER PRIMARY KEY,
+                parent_id INTEGER NOT NULL REFERENCES other(id) ON DELETE CASCADE
+            )",
+            [],
+        )
+        .unwrap();
+
+        let schema = VersionedSchema {
+            version: 1,
+            tables: &[TEST_TABLE_WITH_FK],
+            migration: None,
+        };
+
+        // Validation should fail because FK references wrong table
+        let result = schema.validate(&conn);
+        assert!(result.is_err());
+        let err_msg = result.unwrap_err().to_string();
+        assert!(err_msg.contains("foreign key mismatch"));
     }
 }
