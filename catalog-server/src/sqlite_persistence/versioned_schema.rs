@@ -280,8 +280,139 @@ impl VersionedSchema {
                     );
                 }
             }
+
+            // Validate indices exist
+            for (index_name, _columns) in table.indices {
+                let index_exists: bool = conn
+                    .query_row(
+                        "SELECT 1 FROM sqlite_master WHERE type='index' AND name=?1 AND tbl_name=?2",
+                        params![index_name, table.name],
+                        |_| Ok(true),
+                    )
+                    .unwrap_or(false);
+
+                if !index_exists {
+                    bail!(
+                        "Table {} is missing index '{}'",
+                        table.name,
+                        index_name
+                    );
+                }
+            }
         }
         Ok(())
     }
 }
 pub const BASE_DB_VERSION: usize = 99999;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const TEST_TABLE_WITH_INDEX: Table = Table {
+        name: "test_table",
+        columns: &[
+            Column {
+                name: "id",
+                sql_type: &SqlType::Integer,
+                is_primary_key: true,
+                non_null: false,
+                is_unique: false,
+                default_value: None,
+                foreign_key: None,
+            },
+            Column {
+                name: "name",
+                sql_type: &SqlType::Text,
+                is_primary_key: false,
+                non_null: true,
+                is_unique: false,
+                default_value: None,
+                foreign_key: None,
+            },
+        ],
+        indices: &[("idx_test_name", "name")],
+        unique_constraints: &[],
+    };
+
+    #[test]
+    fn test_validate_detects_missing_index() {
+        let conn = Connection::open_in_memory().unwrap();
+
+        // Create table WITHOUT the index
+        conn.execute(
+            "CREATE TABLE test_table (id INTEGER PRIMARY KEY, name TEXT NOT NULL)",
+            [],
+        )
+        .unwrap();
+
+        let schema = VersionedSchema {
+            version: 1,
+            tables: &[TEST_TABLE_WITH_INDEX],
+            migration: None,
+        };
+
+        // Validation should fail because index is missing
+        let result = schema.validate(&conn);
+        assert!(result.is_err());
+        let err_msg = result.unwrap_err().to_string();
+        assert!(err_msg.contains("missing index"));
+        assert!(err_msg.contains("idx_test_name"));
+    }
+
+    #[test]
+    fn test_validate_passes_with_index_present() {
+        let conn = Connection::open_in_memory().unwrap();
+
+        // Create table WITH the index
+        conn.execute(
+            "CREATE TABLE test_table (id INTEGER PRIMARY KEY, name TEXT NOT NULL)",
+            [],
+        )
+        .unwrap();
+        conn.execute("CREATE INDEX idx_test_name ON test_table(name)", [])
+            .unwrap();
+
+        let schema = VersionedSchema {
+            version: 1,
+            tables: &[TEST_TABLE_WITH_INDEX],
+            migration: None,
+        };
+
+        // Validation should pass
+        schema.validate(&conn).unwrap();
+    }
+
+    #[test]
+    fn test_validate_detects_index_on_wrong_table() {
+        let conn = Connection::open_in_memory().unwrap();
+
+        // Create test_table and another_table
+        conn.execute(
+            "CREATE TABLE test_table (id INTEGER PRIMARY KEY, name TEXT NOT NULL)",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "CREATE TABLE another_table (id INTEGER PRIMARY KEY, name TEXT NOT NULL)",
+            [],
+        )
+        .unwrap();
+
+        // Create the index on the WRONG table
+        conn.execute("CREATE INDEX idx_test_name ON another_table(name)", [])
+            .unwrap();
+
+        let schema = VersionedSchema {
+            version: 1,
+            tables: &[TEST_TABLE_WITH_INDEX],
+            migration: None,
+        };
+
+        // Validation should fail because index is on wrong table
+        let result = schema.validate(&conn);
+        assert!(result.is_err());
+        let err_msg = result.unwrap_err().to_string();
+        assert!(err_msg.contains("missing index"));
+    }
+}
