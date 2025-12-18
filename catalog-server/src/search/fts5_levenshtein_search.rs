@@ -312,6 +312,47 @@ impl Fts5LevenshteinSearchVault {
         Ok(())
     }
 
+    /// Update popularity scores for items.
+    ///
+    /// This method updates the `item_popularity` table with normalized scores
+    /// for items based on their play counts. Scores should be normalized 0.0-1.0
+    /// within each item type.
+    ///
+    /// # Arguments
+    /// * `items` - Slice of (item_id, item_type, play_count, normalized_score) tuples
+    pub fn update_popularity(&self, items: &[(String, HashedItemType, u64, f64)]) {
+        let conn = self.conn.lock().unwrap();
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs() as i64;
+
+        let mut stmt = match conn.prepare(
+            "INSERT OR REPLACE INTO item_popularity (item_id, item_type, play_count, score, updated_at)
+             VALUES (?, ?, ?, ?, ?)",
+        ) {
+            Ok(s) => s,
+            Err(e) => {
+                warn!("Failed to prepare popularity update statement: {}", e);
+                return;
+            }
+        };
+
+        for (id, item_type, play_count, score) in items {
+            if let Err(e) = stmt.execute(rusqlite::params![
+                id,
+                Self::item_type_to_str(item_type),
+                *play_count as i64,
+                score,
+                now
+            ]) {
+                warn!("Failed to update popularity for {}: {}", id, e);
+            }
+        }
+
+        debug!("Updated popularity scores for {} items", items.len());
+    }
+
     fn item_type_to_str(item_type: &HashedItemType) -> &'static str {
         match item_type {
             HashedItemType::Artist => "artist",
@@ -336,6 +377,9 @@ impl Fts5LevenshteinSearchVault {
     }
 }
 
+/// Weight factor for popularity boost (0.5 = max 50% boost for most popular items)
+const POPULARITY_WEIGHT: f64 = 0.5;
+
 impl SearchVault for Fts5LevenshteinSearchVault {
     fn search(
         &self,
@@ -356,6 +400,10 @@ impl SearchVault for Fts5LevenshteinSearchVault {
         let escaped_query = corrected_query.replace('"', "\"\"");
 
         // Build query with optional type filter
+        // Uses LEFT JOIN with item_popularity to boost popular items in ranking
+        // Formula: bm25_score * (1.0 + popularity * weight)
+        // BM25 scores are negative (more negative = better match), so multiplying
+        // by (1 + popularity * weight) makes popular items more negative (ranked higher)
         let (sql, params): (String, Vec<Box<dyn rusqlite::ToSql>>) = if let Some(types) = &filter {
             let type_placeholders: Vec<&str> = types.iter().map(Self::item_type_to_str).collect();
             let placeholders = type_placeholders
@@ -365,11 +413,18 @@ impl SearchVault for Fts5LevenshteinSearchVault {
                 .join(",");
 
             let sql = format!(
-                r#"SELECT item_id, item_type, name, bm25(search_index) as score
-                   FROM search_index
+                r#"SELECT
+                       s.item_id,
+                       s.item_type,
+                       s.name,
+                       bm25(search_index) as text_score,
+                       COALESCE(p.score, 0.0) as popularity_score
+                   FROM search_index s
+                   LEFT JOIN item_popularity p
+                       ON s.item_id = p.item_id AND s.item_type = p.item_type
                    WHERE search_index MATCH ?
-                   AND item_type IN ({})
-                   ORDER BY score
+                   AND s.item_type IN ({})
+                   ORDER BY (bm25(search_index) * (1.0 + COALESCE(p.score, 0.0) * ?))
                    LIMIT ?"#,
                 placeholders
             );
@@ -379,19 +434,28 @@ impl SearchVault for Fts5LevenshteinSearchVault {
             for t in type_placeholders {
                 params.push(Box::new(t.to_string()));
             }
+            params.push(Box::new(POPULARITY_WEIGHT));
             params.push(Box::new(max_results as i64));
 
             (sql, params)
         } else {
-            let sql = r#"SELECT item_id, item_type, name, bm25(search_index) as score
-                         FROM search_index
+            let sql = r#"SELECT
+                             s.item_id,
+                             s.item_type,
+                             s.name,
+                             bm25(search_index) as text_score,
+                             COALESCE(p.score, 0.0) as popularity_score
+                         FROM search_index s
+                         LEFT JOIN item_popularity p
+                             ON s.item_id = p.item_id AND s.item_type = p.item_type
                          WHERE search_index MATCH ?
-                         ORDER BY score
+                         ORDER BY (bm25(search_index) * (1.0 + COALESCE(p.score, 0.0) * ?))
                          LIMIT ?"#
                 .to_string();
 
             let params: Vec<Box<dyn rusqlite::ToSql>> = vec![
                 Box::new(format!("\"{}\"", escaped_query)),
+                Box::new(POPULARITY_WEIGHT),
                 Box::new(max_results as i64),
             ];
 
@@ -412,21 +476,26 @@ impl SearchVault for Fts5LevenshteinSearchVault {
             let item_id: String = row.get(0)?;
             let item_type_str: String = row.get(1)?;
             let name: String = row.get(2)?;
-            let score: f64 = row.get(3)?;
+            let text_score: f64 = row.get(3)?;
+            let popularity_score: f64 = row.get(4)?;
 
-            Ok((item_id, item_type_str, name, score))
+            Ok((item_id, item_type_str, name, text_score, popularity_score))
         });
 
         match results {
             Ok(rows) => rows
                 .filter_map(|r| r.ok())
-                .filter_map(|(item_id, item_type_str, name, score)| {
-                    Self::str_to_item_type(&item_type_str).map(|item_type| SearchResult {
-                        item_id,
-                        item_type,
-                        score: (-score * 1000.0) as u32,
-                        adjusted_score: (-score * 1000.0) as i64,
-                        matchable_text: name,
+                .filter_map(|(item_id, item_type_str, name, text_score, popularity_score)| {
+                    Self::str_to_item_type(&item_type_str).map(|item_type| {
+                        // Compute the combined score (more negative = better)
+                        let combined_score = text_score * (1.0 + popularity_score * POPULARITY_WEIGHT);
+                        SearchResult {
+                            item_id,
+                            item_type,
+                            score: (-text_score * 1000.0) as u32,
+                            adjusted_score: (-combined_score * 1000.0) as i64,
+                            matchable_text: name,
+                        }
                     })
                 })
                 .collect(),
@@ -440,6 +509,11 @@ impl SearchVault for Fts5LevenshteinSearchVault {
     fn rebuild_index(&self) -> anyhow::Result<()> {
         // Call the public rebuild_index method on self
         Fts5LevenshteinSearchVault::rebuild_index(self)
+    }
+
+    fn update_popularity(&self, items: &[(String, HashedItemType, u64, f64)]) {
+        // Call the public update_popularity method on self
+        Fts5LevenshteinSearchVault::update_popularity(self, items)
     }
 }
 
@@ -1364,5 +1438,210 @@ mod tests {
 
         let results = vault.search("New Artist", 10, None);
         assert_eq!(results.len(), 1, "New artist should be found after rebuild");
+    }
+
+    #[test]
+    fn test_update_popularity() {
+        let temp_dir = TempDir::new().unwrap();
+        let db_path = temp_dir.path().join("search.db");
+
+        let items = vec![
+            SearchableItem {
+                id: "track1".to_string(),
+                name: "Popular Song".to_string(),
+                content_type: SearchableContentType::Track,
+                additional_text: vec![],
+            },
+            SearchableItem {
+                id: "track2".to_string(),
+                name: "Less Popular Song".to_string(),
+                content_type: SearchableContentType::Track,
+                additional_text: vec![],
+            },
+            SearchableItem {
+                id: "album1".to_string(),
+                name: "Hit Album".to_string(),
+                content_type: SearchableContentType::Album,
+                additional_text: vec![],
+            },
+        ];
+
+        let catalog = Arc::new(MockCatalogStore::with_version(items, 1));
+        let vault = Fts5LevenshteinSearchVault::new(catalog, &db_path).unwrap();
+
+        // Update popularity scores
+        let popularity_data = vec![
+            ("track1".to_string(), HashedItemType::Track, 1000u64, 1.0),
+            ("track2".to_string(), HashedItemType::Track, 500u64, 0.5),
+            ("album1".to_string(), HashedItemType::Album, 750u64, 0.75),
+        ];
+
+        vault.update_popularity(&popularity_data);
+
+        // Verify the data was written correctly
+        let conn = vault.conn.lock().unwrap();
+
+        // Check track1
+        let (play_count, score): (i64, f64) = conn
+            .query_row(
+                "SELECT play_count, score FROM item_popularity WHERE item_id = ? AND item_type = ?",
+                ["track1", "track"],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .expect("track1 should exist in item_popularity");
+        assert_eq!(play_count, 1000);
+        assert!((score - 1.0).abs() < 0.001);
+
+        // Check track2
+        let (play_count, score): (i64, f64) = conn
+            .query_row(
+                "SELECT play_count, score FROM item_popularity WHERE item_id = ? AND item_type = ?",
+                ["track2", "track"],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .expect("track2 should exist in item_popularity");
+        assert_eq!(play_count, 500);
+        assert!((score - 0.5).abs() < 0.001);
+
+        // Check album1
+        let (play_count, score): (i64, f64) = conn
+            .query_row(
+                "SELECT play_count, score FROM item_popularity WHERE item_id = ? AND item_type = ?",
+                ["album1", "album"],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .expect("album1 should exist in item_popularity");
+        assert_eq!(play_count, 750);
+        assert!((score - 0.75).abs() < 0.001);
+
+        // Verify updated_at was set
+        let updated_at: i64 = conn
+            .query_row(
+                "SELECT updated_at FROM item_popularity WHERE item_id = ?",
+                ["track1"],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert!(updated_at > 0);
+    }
+
+    #[test]
+    fn test_update_popularity_replaces_existing() {
+        let temp_dir = TempDir::new().unwrap();
+        let db_path = temp_dir.path().join("search.db");
+
+        let catalog = Arc::new(MockCatalogStore::with_version(vec![], 1));
+        let vault = Fts5LevenshteinSearchVault::new(catalog, &db_path).unwrap();
+
+        // Initial popularity
+        vault.update_popularity(&[("track1".to_string(), HashedItemType::Track, 100u64, 0.5)]);
+
+        // Update with new values
+        vault.update_popularity(&[("track1".to_string(), HashedItemType::Track, 200u64, 1.0)]);
+
+        // Verify the data was replaced
+        let conn = vault.conn.lock().unwrap();
+        let (play_count, score): (i64, f64) = conn
+            .query_row(
+                "SELECT play_count, score FROM item_popularity WHERE item_id = ? AND item_type = ?",
+                ["track1", "track"],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .expect("track1 should exist");
+        assert_eq!(play_count, 200);
+        assert!((score - 1.0).abs() < 0.001);
+
+        // Should only have one row
+        let count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM item_popularity", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(count, 1);
+    }
+
+    #[test]
+    fn test_popular_items_boosted_in_search() {
+        let temp_dir = TempDir::new().unwrap();
+        let db_path = temp_dir.path().join("search.db");
+
+        // Create three tracks with similar names
+        let items = vec![
+            SearchableItem {
+                id: "track_unpopular".to_string(),
+                name: "Song About Love".to_string(),
+                content_type: SearchableContentType::Track,
+                additional_text: vec![],
+            },
+            SearchableItem {
+                id: "track_popular".to_string(),
+                name: "Song About Love".to_string(), // Same name as above
+                content_type: SearchableContentType::Track,
+                additional_text: vec![],
+            },
+            SearchableItem {
+                id: "track_mid".to_string(),
+                name: "Song About Love".to_string(), // Same name as above
+                content_type: SearchableContentType::Track,
+                additional_text: vec![],
+            },
+        ];
+
+        let catalog = Arc::new(MockCatalogStore::with_version(items, 1));
+        let vault = Fts5LevenshteinSearchVault::new(catalog, &db_path).unwrap();
+
+        // Set popularity scores: track_popular = 1.0, track_mid = 0.5, track_unpopular = no entry (0.0)
+        vault.update_popularity(&[
+            ("track_popular".to_string(), HashedItemType::Track, 1000u64, 1.0),
+            ("track_mid".to_string(), HashedItemType::Track, 500u64, 0.5),
+        ]);
+
+        // Search for "Song About Love"
+        let results = vault.search("Song About Love", 10, None);
+
+        // All three tracks should be returned
+        assert_eq!(results.len(), 3, "Should find all 3 tracks");
+
+        // The popular track should be first (boosted by popularity in SQL ORDER BY)
+        assert_eq!(
+            results[0].item_id, "track_popular",
+            "Most popular track should be ranked first"
+        );
+
+        // The mid-popularity track should be second
+        assert_eq!(
+            results[1].item_id, "track_mid",
+            "Mid-popularity track should be ranked second"
+        );
+
+        // The unpopular track (no popularity entry) should be last
+        assert_eq!(
+            results[2].item_id, "track_unpopular",
+            "Unpopular track should be ranked last"
+        );
+
+        // Note: adjusted_score may be the same due to integer rounding when BM25 scores
+        // are very small (e.g., -0.000001). The ordering is still correct because SQL
+        // uses floating-point precision in ORDER BY.
+    }
+
+    #[test]
+    fn test_search_works_with_empty_popularity_table() {
+        let temp_dir = TempDir::new().unwrap();
+        let db_path = temp_dir.path().join("search.db");
+
+        let items = vec![SearchableItem {
+            id: "track1".to_string(),
+            name: "Test Track".to_string(),
+            content_type: SearchableContentType::Track,
+            additional_text: vec![],
+        }];
+
+        let catalog = Arc::new(MockCatalogStore::with_version(items, 1));
+        let vault = Fts5LevenshteinSearchVault::new(catalog, &db_path).unwrap();
+
+        // Don't add any popularity data - table is empty
+        // Search should still work
+        let results = vault.search("Test Track", 10, None);
+        assert_eq!(results.len(), 1, "Search should work with empty popularity table");
+        assert_eq!(results[0].item_id, "track1");
     }
 }

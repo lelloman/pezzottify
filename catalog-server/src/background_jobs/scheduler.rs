@@ -362,13 +362,24 @@ impl JobScheduler {
             .insert(job_id.to_string(), cancel_token.clone());
 
         // Create job context with the specific cancellation token
-        let ctx = JobContext::new(
-            cancel_token,
-            Arc::clone(&self.job_context.catalog_store),
-            Arc::clone(&self.job_context.user_store),
-            Arc::clone(&self.job_context.server_store),
-            Arc::clone(&self.job_context.user_manager),
-        );
+        let ctx = if let Some(search_vault) = &self.job_context.search_vault {
+            JobContext::with_search_vault(
+                cancel_token,
+                Arc::clone(&self.job_context.catalog_store),
+                Arc::clone(&self.job_context.user_store),
+                Arc::clone(&self.job_context.server_store),
+                Arc::clone(&self.job_context.user_manager),
+                Arc::clone(search_vault),
+            )
+        } else {
+            JobContext::new(
+                cancel_token,
+                Arc::clone(&self.job_context.catalog_store),
+                Arc::clone(&self.job_context.user_store),
+                Arc::clone(&self.job_context.server_store),
+                Arc::clone(&self.job_context.user_manager),
+            )
+        };
 
         let server_store = Arc::clone(&self.server_store);
         let job_id_owned = job_id.to_string();

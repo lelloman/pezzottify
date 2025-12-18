@@ -183,6 +183,23 @@ pub trait SearchVault: Send + Sync {
     /// This should be called when the catalog changes (e.g., when a batch is closed).
     /// Returns an error if the rebuild fails.
     fn rebuild_index(&self) -> anyhow::Result<()>;
+
+    /// Update popularity scores for items.
+    ///
+    /// This allows search results to be boosted based on listening history.
+    /// Items with higher popularity scores will rank higher in search results.
+    ///
+    /// # Arguments
+    /// * `items` - Slice of (item_id, item_type, play_count, normalized_score) tuples
+    ///   - `item_id`: The unique identifier of the item
+    ///   - `item_type`: The type of item (Track, Album, Artist)
+    ///   - `play_count`: Raw play count for analytics
+    ///   - `normalized_score`: Score normalized 0.0-1.0 within each item type
+    ///
+    /// Default implementation is a no-op for search vaults that don't support popularity.
+    fn update_popularity(&self, _items: &[(String, HashedItemType, u64, f64)]) {
+        // Default no-op implementation
+    }
 }
 
 pub struct NoOpSearchVault {}
