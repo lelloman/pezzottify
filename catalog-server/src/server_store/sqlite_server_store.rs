@@ -1,14 +1,13 @@
 use super::models::{JobRun, JobRunStatus, JobScheduleState};
 use super::schema::SERVER_VERSIONED_SCHEMAS;
 use super::ServerStore;
+use crate::sqlite_persistence::versioned_schema::BASE_DB_VERSION;
 use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
 use rusqlite::{params, Connection, OptionalExtension};
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 use tracing::info;
-
-const BASE_DB_VERSION: usize = 99999;
 
 pub struct SqliteServerStore {
     conn: Arc<Mutex<Connection>>,
