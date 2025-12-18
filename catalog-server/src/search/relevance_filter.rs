@@ -8,10 +8,11 @@ use super::SearchResult;
 use serde::{Deserialize, Serialize};
 
 /// Configuration for relevance filtering.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 #[serde(tag = "method", rename_all = "snake_case")]
 pub enum RelevanceFilterConfig {
     /// No filtering - return all results (default)
+    #[default]
     None,
 
     /// Keep results scoring at least `threshold` (0.0-1.0) of the best result's score.
@@ -47,11 +48,6 @@ pub enum RelevanceFilterConfig {
     },
 }
 
-impl Default for RelevanceFilterConfig {
-    fn default() -> Self {
-        Self::None
-    }
-}
 
 impl RelevanceFilterConfig {
     /// Parse configuration from a JSON string.
