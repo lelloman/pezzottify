@@ -1833,6 +1833,185 @@ async fn logout(State(user_manager): State<GuardedUserManager>, session: Session
     }
 }
 
+// ============================================================================
+// OIDC Authentication Handlers
+// ============================================================================
+
+/// OIDC login initiation - redirects to the OIDC provider
+async fn oidc_login(
+    State(oidc_client): State<OptionalOidcClient>,
+    State(auth_state_store): State<GuardedAuthStateStore>,
+) -> Response {
+    let oidc_client = match oidc_client {
+        Some(client) => client,
+        None => {
+            error!("OIDC login attempted but OIDC is not configured");
+            return (StatusCode::SERVICE_UNAVAILABLE, "OIDC is not configured").into_response();
+        }
+    };
+
+    match oidc_client.authorize_url() {
+        Ok((auth_url, state)) => {
+            // Store the state for validation in callback
+            auth_state_store.store(state.clone()).await;
+            debug!(
+                "Initiating OIDC login, redirecting to provider with state={}",
+                state.csrf_token
+            );
+
+            // Return redirect response
+            response::Builder::new()
+                .status(StatusCode::FOUND)
+                .header(header::LOCATION, auth_url)
+                .body(Body::empty())
+                .unwrap()
+        }
+        Err(e) => {
+            error!("Failed to generate OIDC authorization URL: {}", e);
+            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+        }
+    }
+}
+
+/// Query parameters for OIDC callback
+#[derive(Deserialize, Debug)]
+struct OidcCallbackQuery {
+    code: String,
+    state: String,
+}
+
+/// OIDC callback - exchanges authorization code for tokens
+async fn oidc_callback(
+    Query(params): Query<OidcCallbackQuery>,
+    State(oidc_client): State<OptionalOidcClient>,
+    State(auth_state_store): State<GuardedAuthStateStore>,
+    State(user_manager): State<GuardedUserManager>,
+) -> Response {
+    let start = Instant::now();
+    debug!("OIDC callback received with state={}", params.state);
+
+    let oidc_client = match oidc_client {
+        Some(client) => client,
+        None => {
+            error!("OIDC callback received but OIDC is not configured");
+            super::metrics::record_login_attempt("error", start.elapsed());
+            return (StatusCode::SERVICE_UNAVAILABLE, "OIDC is not configured").into_response();
+        }
+    };
+
+    // Retrieve and validate stored state
+    let stored_state = match auth_state_store.take(&params.state).await {
+        Some(state) => state,
+        None => {
+            warn!("OIDC callback with unknown or expired state");
+            super::metrics::record_login_attempt("failure", start.elapsed());
+            return (StatusCode::BAD_REQUEST, "Invalid or expired state").into_response();
+        }
+    };
+
+    // Exchange code for tokens and validate
+    let auth_result = match oidc_client
+        .exchange_code(&params.code, &params.state, &stored_state)
+        .await
+    {
+        Ok(result) => result,
+        Err(e) => {
+            error!("OIDC token exchange failed: {}", e);
+            super::metrics::record_login_attempt("failure", start.elapsed());
+            return (StatusCode::UNAUTHORIZED, "Authentication failed").into_response();
+        }
+    };
+
+    debug!(
+        "OIDC authentication successful for subject={}",
+        auth_result.subject
+    );
+
+    // Look up local user by OIDC subject
+    let (user_id, permissions) = {
+        let locked_manager = user_manager.lock().unwrap();
+
+        let user_id = match locked_manager.get_user_id_by_oidc_subject(&auth_result.subject) {
+            Ok(Some(id)) => id,
+            Ok(None) => {
+                warn!(
+                    "No local user found for OIDC subject={} (email={:?})",
+                    auth_result.subject, auth_result.email
+                );
+                super::metrics::record_login_attempt("failure", start.elapsed());
+                return (
+                    StatusCode::FORBIDDEN,
+                    "User not registered. Contact administrator.",
+                )
+                    .into_response();
+            }
+            Err(e) => {
+                error!("Failed to look up user by OIDC subject: {}", e);
+                super::metrics::record_login_attempt("error", start.elapsed());
+                return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+            }
+        };
+
+        let permissions = match locked_manager.get_user_permissions(user_id) {
+            Ok(perms) => perms,
+            Err(e) => {
+                error!("Failed to get permissions for user_id={}: {}", user_id, e);
+                super::metrics::record_login_attempt("error", start.elapsed());
+                return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+            }
+        };
+
+        (user_id, permissions)
+    };
+
+    // Get user handle for response
+    let user_handle = {
+        let locked_manager = user_manager.lock().unwrap();
+        match locked_manager.get_user_handle(user_id) {
+            Ok(Some(handle)) => handle,
+            Ok(None) => {
+                error!("User handle not found for user_id={}", user_id);
+                super::metrics::record_login_attempt("error", start.elapsed());
+                return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+            }
+            Err(e) => {
+                error!("Failed to get user handle: {}", e);
+                super::metrics::record_login_attempt("error", start.elapsed());
+                return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+            }
+        }
+    };
+
+    super::metrics::record_login_attempt("success", start.elapsed());
+    info!(
+        "OIDC login successful for user_handle={}, user_id={}",
+        user_handle, user_id
+    );
+
+    // Return the access token to the client
+    // The client should store this and use it for subsequent requests
+    let response_body = LoginSuccessResponse {
+        token: auth_result.access_token.clone(),
+        user_handle,
+        permissions,
+    };
+    let response_body = serde_json::to_string(&response_body).unwrap();
+
+    // Set the access token as a cookie for web clients
+    let cookie_value = HeaderValue::from_str(&format!(
+        "session_token={}; Path=/; HttpOnly",
+        auth_result.access_token
+    ))
+    .unwrap();
+
+    response::Builder::new()
+        .status(StatusCode::OK)
+        .header(axum::http::header::SET_COOKIE, cookie_value)
+        .header(axum::http::header::CONTENT_TYPE, "application/json")
+        .body(Body::from(response_body))
+        .unwrap()
+}
+
 async fn get_session(State(user_manager): State<GuardedUserManager>, session: Session) -> Response {
     let locked_manager = user_manager.lock().unwrap();
 
@@ -4322,6 +4501,9 @@ impl ServerState {
             ws_connection_manager.clone(),
         ));
 
+        // Create auth state store for OIDC flow (always created, even if OIDC is disabled)
+        let auth_state_store = Arc::new(crate::oidc::AuthStateStore::new());
+
         ServerState {
             config,
             start_time: Instant::now(),
@@ -4336,6 +4518,8 @@ impl ServerState {
             whatsnew_notifier,
             server_store,
             hash: "123456".to_owned(),
+            oidc_client: None, // Will be set by make_app if OIDC is configured
+            auth_state_store,
         }
     }
 }
@@ -4395,8 +4579,16 @@ pub async fn make_app(
             .unwrap(),
     );
 
-    let login_routes: Router = Router::new()
+    // Password-based login (legacy, will be removed after OIDC migration)
+    let password_login_routes: Router = Router::new()
         .route("/login", post(login))
+        .layer(GovernorLayer::new(login_rate_limit.clone()))
+        .with_state(state.clone());
+
+    // OIDC login routes (also rate-limited)
+    let oidc_login_routes: Router = Router::new()
+        .route("/oidc/login", get(oidc_login))
+        .route("/oidc/callback", get(oidc_callback))
         .layer(GovernorLayer::new(login_rate_limit))
         .with_state(state.clone());
 
@@ -4408,7 +4600,9 @@ pub async fn make_app(
         .route("/challenge", post(post_challenge))
         .with_state(state.clone());
 
-    let auth_routes = login_routes.merge(other_auth_routes);
+    let auth_routes = password_login_routes
+        .merge(oidc_login_routes)
+        .merge(other_auth_routes);
 
     // Separate stream routes for different rate limiting
     let stream_rate_limit = Arc::new(
@@ -5201,6 +5395,14 @@ mod tests {
 
         fn get_user_id(&self, _user_handle: &str) -> Result<Option<usize>> {
             todo!()
+        }
+
+        fn get_user_id_by_oidc_subject(&self, _oidc_subject: &str) -> Result<Option<usize>> {
+            Ok(None)
+        }
+
+        fn set_user_oidc_subject(&self, _user_id: usize, _oidc_subject: &str) -> Result<()> {
+            Ok(())
         }
 
         fn get_user_playlists(&self, _user_id: usize) -> Result<Vec<String>> {

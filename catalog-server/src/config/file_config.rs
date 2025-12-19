@@ -22,6 +22,7 @@ pub struct FileConfig {
     pub download_manager: Option<DownloadManagerConfig>,
     pub background_jobs: Option<BackgroundJobsConfig>,
     pub search: Option<SearchConfig>,
+    pub oidc: Option<OidcConfig>,
 }
 
 #[derive(Debug, Deserialize, Default, Clone)]
@@ -63,6 +64,29 @@ pub struct BackgroundJobsConfig {
 pub struct SearchConfig {
     /// Search engine to use: "pezzothash", "fts5", "noop"
     pub engine: Option<String>,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+pub struct OidcConfig {
+    /// OIDC provider URL (issuer), e.g., "https://auth.lelloman.com"
+    pub provider_url: String,
+    /// OAuth2 client ID
+    pub client_id: String,
+    /// OAuth2 client secret
+    pub client_secret: String,
+    /// Redirect URI for the callback, e.g., "https://pezzottify.lelloman.com/v1/auth/callback"
+    pub redirect_uri: String,
+    /// OAuth2 scopes to request (defaults to ["openid", "profile", "email"])
+    #[serde(default = "default_scopes")]
+    pub scopes: Vec<String>,
+}
+
+fn default_scopes() -> Vec<String> {
+    vec![
+        "openid".to_string(),
+        "profile".to_string(),
+        "email".to_string(),
+    ]
 }
 
 impl FileConfig {

@@ -1,6 +1,6 @@
 mod file_config;
 
-pub use file_config::{BackgroundJobsConfig, DownloadManagerConfig, FileConfig, SearchConfig};
+pub use file_config::{BackgroundJobsConfig, DownloadManagerConfig, FileConfig, OidcConfig, SearchConfig};
 
 use crate::server::RequestsLoggingLevel;
 use anyhow::{bail, Result};
