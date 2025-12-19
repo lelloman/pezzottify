@@ -158,6 +158,9 @@ async fn main() -> Result<()> {
         None => None,
     };
 
+    // Extract OIDC config before consuming file_config
+    let oidc_config = file_config.as_ref().and_then(|f| f.oidc.clone());
+
     // Resolve final configuration (TOML overrides CLI)
     let cli_config: config::CliConfig = (&cli_args).into();
     let app_config = config::AppConfig::resolve(&cli_config, file_config)?;
@@ -443,6 +446,7 @@ async fn main() -> Result<()> {
             Some(scheduler_handle),
             download_manager,
             server_store,
+            oidc_config,
         ) => {
             info!("HTTP server stopped: {:?}", result);
             shutdown_token.cancel();

@@ -1988,19 +1988,20 @@ async fn oidc_callback(
         user_handle, user_id
     );
 
-    // Return the access token to the client
+    // Return the ID token to the client
+    // The ID token is a JWT that can be validated locally using JWKS
     // The client should store this and use it for subsequent requests
     let response_body = LoginSuccessResponse {
-        token: auth_result.access_token.clone(),
+        token: auth_result.id_token.clone(),
         user_handle,
         permissions,
     };
     let response_body = serde_json::to_string(&response_body).unwrap();
 
-    // Set the access token as a cookie for web clients
+    // Set the ID token as a cookie for web clients
     let cookie_value = HeaderValue::from_str(&format!(
         "session_token={}; Path=/; HttpOnly",
-        auth_result.access_token
+        auth_result.id_token
     ))
     .unwrap();
 
@@ -4536,8 +4537,30 @@ pub async fn make_app(
     scheduler_handle: Option<SchedulerHandle>,
     download_manager: Option<Arc<crate::download_manager::DownloadManager>>,
     server_store: Arc<dyn crate::server_store::ServerStore>,
+    oidc_config: Option<crate::config::OidcConfig>,
 ) -> Result<Router> {
-    let state = ServerState::new_with_guarded_search_vault(
+    // Initialize OIDC client if configured
+    let oidc_client = match oidc_config {
+        Some(cfg) => {
+            info!("Initializing OIDC client for provider: {}", cfg.provider_url);
+            match crate::oidc::OidcClient::new(cfg).await {
+                Ok(client) => {
+                    info!("OIDC client initialized successfully");
+                    Some(Arc::new(client))
+                }
+                Err(e) => {
+                    error!("Failed to initialize OIDC client: {}. OIDC login will be disabled.", e);
+                    None
+                }
+            }
+        }
+        None => {
+            info!("OIDC not configured, password-based login only");
+            None
+        }
+    };
+
+    let mut state = ServerState::new_with_guarded_search_vault(
         config.clone(),
         catalog_store,
         search_vault,
@@ -4549,6 +4572,7 @@ pub async fn make_app(
         download_manager.clone(),
         server_store,
     );
+    state.oidc_client = oidc_client;
 
     // Set up sync notifier and notification service for download manager if enabled
     if let Some(ref dm) = download_manager {
@@ -5112,6 +5136,7 @@ pub async fn run_server(
     scheduler_handle: Option<SchedulerHandle>,
     download_manager: Option<Arc<crate::download_manager::DownloadManager>>,
     server_store: Arc<dyn crate::server_store::ServerStore>,
+    oidc_config: Option<crate::config::OidcConfig>,
 ) -> Result<()> {
     let config = ServerConfig {
         port,
@@ -5131,6 +5156,7 @@ pub async fn run_server(
         scheduler_handle,
         download_manager,
         server_store,
+        oidc_config,
     )
     .await?;
 
@@ -5331,6 +5357,7 @@ mod tests {
             None, // no scheduler_handle
             None, // no download_manager
             server_store,
+            None, // no oidc_config
         )
         .await
         .unwrap();

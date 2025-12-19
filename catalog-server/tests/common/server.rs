@@ -121,6 +121,7 @@ impl TestServer {
             None,
             None, // no download_manager
             server_store,
+            None, // no oidc_config
         )
         .await
         .expect("Failed to build app");
