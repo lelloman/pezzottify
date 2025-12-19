@@ -13,6 +13,7 @@ use openidconnect::{
     OAuth2TokenResponse, PkceCodeChallenge, PkceCodeVerifier, RedirectUrl, Scope, TokenResponse,
 };
 use serde::{Deserialize, Serialize};
+use std::str::FromStr;
 use tokio::sync::RwLock;
 use tracing::{debug, info};
 
@@ -228,6 +229,72 @@ impl OidcClient {
         // For now, return None - can be implemented if the provider supports it
         None
     }
+
+    /// Validate an ID token and extract the subject claim
+    ///
+    /// This is used for session validation - validates the JWT signature
+    /// using the provider's JWKS and extracts the user identifier.
+    ///
+    /// Note: This skips nonce validation since we're validating a stored session token,
+    /// not a fresh token from the auth callback.
+    pub fn validate_id_token(&self, id_token_str: &str) -> Result<IdTokenClaims> {
+        use openidconnect::core::{CoreClient, CoreIdToken};
+
+        // Parse the ID token
+        let id_token: CoreIdToken = CoreIdToken::from_str(id_token_str)
+            .map_err(|e| anyhow!("Failed to parse ID token: {}", e))?;
+
+        // Create client for verification
+        let client = CoreClient::from_provider_metadata(
+            self.provider_metadata.clone(),
+            self.client_id.clone(),
+            self.client_secret.clone(),
+        );
+
+        // Get the verifier (skips nonce validation for session tokens)
+        let verifier = client.id_token_verifier();
+
+        // Verify the token signature and claims (without nonce)
+        // We use an empty nonce which causes nonce validation to be skipped
+        let claims = id_token
+            .claims(&verifier, |_: Option<&Nonce>| Ok(()))
+            .map_err(|e| anyhow!("Failed to verify ID token: {}", e))?;
+
+        let subject = claims.subject().to_string();
+        let email = claims.email().map(|e| e.to_string());
+        let preferred_username = claims
+            .preferred_username()
+            .map(|u| u.as_str().to_string());
+        let expiration = claims.expiration().timestamp();
+
+        // Check if token is expired
+        let now = chrono::Utc::now().timestamp();
+        if now > expiration {
+            return Err(anyhow!("ID token has expired"));
+        }
+
+        debug!("Validated ID token for subject: {}", subject);
+
+        Ok(IdTokenClaims {
+            subject,
+            email,
+            preferred_username,
+            expiration,
+        })
+    }
+}
+
+/// Claims extracted from a validated ID token
+#[derive(Debug, Clone)]
+pub struct IdTokenClaims {
+    /// The OIDC subject claim (user identifier from the IdP)
+    pub subject: String,
+    /// User's email (if available)
+    pub email: Option<String>,
+    /// User's preferred username (if available)
+    pub preferred_username: Option<String>,
+    /// Token expiration timestamp (Unix seconds)
+    pub expiration: i64,
 }
 
 /// Thread-safe storage for auth states (in-memory for simplicity)

@@ -9,7 +9,7 @@ use axum::{
     response::IntoResponse,
 };
 use axum_extra::extract::cookie::{Cookie, CookieJar};
-use tracing::debug;
+use tracing::{debug, warn};
 
 #[derive(Debug)]
 pub struct Session {
@@ -65,28 +65,77 @@ fn extract_session_token_from_headers(parts: &mut Parts) -> Option<String> {
         .map(|b| String::from_utf8_lossy(&b).into_owned())
 }
 
-async fn extract_session_from_request_parts(
-    parts: &mut Parts,
-    ctx: &ServerState,
-) -> Option<Session> {
-    debug!("exctracting session from request parts...");
-    let token = match extract_session_token_from_cookies(parts, ctx)
-        .await
-        .or_else(|| extract_session_token_from_headers(parts))
-    {
-        None => {
-            debug!("No token in cookies nor headers.");
+/// Try to validate the token as an OIDC JWT and create a session
+async fn try_oidc_session(token: &str, ctx: &ServerState) -> Option<Session> {
+    // Check if OIDC is configured
+    let oidc_client = ctx.oidc_client.as_ref()?;
+
+    // Try to validate as OIDC ID token
+    let claims = match oidc_client.validate_id_token(token) {
+        Ok(claims) => {
+            debug!("Validated OIDC ID token for subject={}", claims.subject);
+            claims
+        }
+        Err(e) => {
+            // Not a valid OIDC token - this is expected for legacy sessions
+            debug!("Token is not a valid OIDC ID token: {}", e);
             return None;
         }
-        Some(x) => x,
     };
 
-    debug!("Got session token {}", token);
+    // Look up local user by OIDC subject
     let user_manager = ctx.user_manager.lock().unwrap();
-    let auth_token_value = AuthTokenValue(token.clone());
+    let user_id = match user_manager.get_user_id_by_oidc_subject(&claims.subject) {
+        Ok(Some(id)) => id,
+        Ok(None) => {
+            warn!(
+                "No local user found for OIDC subject={} during session validation",
+                claims.subject
+            );
+            return None;
+        }
+        Err(e) => {
+            warn!("Failed to look up user by OIDC subject: {}", e);
+            return None;
+        }
+    };
+
+    // Get user permissions
+    let permissions = match user_manager.get_user_permissions(user_id) {
+        Ok(perms) => {
+            debug!(
+                "Resolved OIDC session permissions for user_id={}: {:?}",
+                user_id, perms
+            );
+            perms
+        }
+        Err(e) => {
+            warn!(
+                "Failed to resolve permissions for OIDC user_id={}: {}",
+                user_id, e
+            );
+            return None;
+        }
+    };
+
+    // OIDC sessions don't have device info from the token
+    // (device tracking could be added via a separate mechanism if needed)
+    Some(Session {
+        user_id,
+        token: token.to_string(),
+        permissions,
+        device_id: None,
+        device_type: None,
+    })
+}
+
+/// Try to validate the token as a legacy database auth token
+async fn try_legacy_session(token: &str, ctx: &ServerState) -> Option<Session> {
+    let user_manager = ctx.user_manager.lock().unwrap();
+    let auth_token_value = AuthTokenValue(token.to_string());
     let auth_token = match user_manager.get_auth_token(&auth_token_value) {
         Ok(Some(token)) => {
-            debug!("Found auth token for user_id={}", token.user_id);
+            debug!("Found legacy auth token for user_id={}", token.user_id);
 
             // Update last_used timestamp
             if let Err(e) = user_manager.update_auth_token_last_used(&auth_token_value) {
@@ -159,6 +208,43 @@ async fn extract_session_from_request_parts(
         device_id,
         device_type,
     })
+}
+
+async fn extract_session_from_request_parts(
+    parts: &mut Parts,
+    ctx: &ServerState,
+) -> Option<Session> {
+    debug!("extracting session from request parts...");
+    let token = match extract_session_token_from_cookies(parts, ctx)
+        .await
+        .or_else(|| extract_session_token_from_headers(parts))
+    {
+        None => {
+            debug!("No token in cookies nor headers.");
+            return None;
+        }
+        Some(x) => x,
+    };
+
+    debug!("Got session token (length={})", token.len());
+
+    // Try OIDC JWT validation first (if OIDC is configured)
+    if let Some(session) = try_oidc_session(&token, ctx).await {
+        debug!("Session validated via OIDC for user_id={}", session.user_id);
+        return Some(session);
+    }
+
+    // Fall back to legacy database token lookup
+    if let Some(session) = try_legacy_session(&token, ctx).await {
+        debug!(
+            "Session validated via legacy auth for user_id={}",
+            session.user_id
+        );
+        return Some(session);
+    }
+
+    debug!("Token validation failed for both OIDC and legacy auth");
+    None
 }
 
 impl FromRequestParts<ServerState> for Session {
