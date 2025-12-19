@@ -4,6 +4,7 @@ use crate::background_jobs::SchedulerHandle;
 use crate::catalog_store::CatalogStore;
 use crate::download_manager::DownloadManager;
 use crate::downloader::Downloader;
+use crate::oidc::{AuthStateStore, OidcClient};
 use crate::search::SearchVault;
 use crate::server_store::ServerStore;
 use crate::user::UserManager;
@@ -25,6 +26,8 @@ pub type OptionalSchedulerHandle = Option<SchedulerHandle>;
 pub type OptionalDownloadManager = Option<Arc<DownloadManager>>;
 pub type GuardedWhatsNewNotifier = Arc<WhatsNewNotifier>;
 pub type GuardedServerStore = Arc<dyn ServerStore>;
+pub type OptionalOidcClient = Option<Arc<OidcClient>>;
+pub type GuardedAuthStateStore = Arc<AuthStateStore>;
 
 #[derive(Clone)]
 pub struct ServerState {
@@ -41,6 +44,8 @@ pub struct ServerState {
     pub whatsnew_notifier: GuardedWhatsNewNotifier,
     pub server_store: GuardedServerStore,
     pub hash: String,
+    pub oidc_client: OptionalOidcClient,
+    pub auth_state_store: GuardedAuthStateStore,
 }
 
 unsafe impl Send for ServerState {}
@@ -109,5 +114,17 @@ impl FromRef<ServerState> for GuardedWhatsNewNotifier {
 impl FromRef<ServerState> for GuardedServerStore {
     fn from_ref(input: &ServerState) -> Self {
         input.server_store.clone()
+    }
+}
+
+impl FromRef<ServerState> for OptionalOidcClient {
+    fn from_ref(input: &ServerState) -> Self {
+        input.oidc_client.clone()
+    }
+}
+
+impl FromRef<ServerState> for GuardedAuthStateStore {
+    fn from_ref(input: &ServerState) -> Self {
+        input.auth_state_store.clone()
     }
 }

@@ -223,6 +223,10 @@ impl UserManager {
         self.user_store.get_user_id(user_handle)
     }
 
+    pub fn get_user_id_by_oidc_subject(&self, oidc_subject: &str) -> Result<Option<usize>> {
+        self.user_store.get_user_id_by_oidc_subject(oidc_subject)
+    }
+
     pub fn get_user_handle(&self, user_id: usize) -> Result<Option<String>> {
         self.user_store.get_user_handle(user_id)
     }

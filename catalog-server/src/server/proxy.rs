@@ -699,6 +699,12 @@ mod tests {
         fn get_user_id(&self, _user_handle: &str) -> anyhow::Result<Option<usize>> {
             Ok(Some(1))
         }
+        fn get_user_id_by_oidc_subject(&self, _oidc_subject: &str) -> anyhow::Result<Option<usize>> {
+            Ok(None)
+        }
+        fn set_user_oidc_subject(&self, _user_id: usize, _oidc_subject: &str) -> anyhow::Result<()> {
+            Ok(())
+        }
         fn get_all_user_handles(&self) -> anyhow::Result<Vec<String>> {
             Ok(vec!["testuser".to_string()])
         }
@@ -1413,6 +1419,12 @@ mod tests {
         }
         fn get_user_id(&self, _user_handle: &str) -> anyhow::Result<Option<usize>> {
             Ok(Some(1))
+        }
+        fn get_user_id_by_oidc_subject(&self, _oidc_subject: &str) -> anyhow::Result<Option<usize>> {
+            Ok(None)
+        }
+        fn set_user_oidc_subject(&self, _user_id: usize, _oidc_subject: &str) -> anyhow::Result<()> {
+            Ok(())
         }
         fn get_all_user_handles(&self) -> anyhow::Result<Vec<String>> {
             Ok(vec!["testuser".to_string()])

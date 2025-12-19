@@ -48,6 +48,32 @@ const USER_TABLE_V_0: Table = Table {
     unique_constraints: &[],
     indices: &[("idx_user_handle", "handle")],
 };
+
+/// V 12 - Adds oidc_subject column for OIDC authentication
+const USER_TABLE_V_12: Table = Table {
+    name: "user",
+    columns: &[
+        sqlite_column!(
+            "id",
+            &SqlType::Integer,
+            is_primary_key = true,
+            is_unique = true
+        ),
+        sqlite_column!("handle", &SqlType::Text, non_null = true, is_unique = true),
+        sqlite_column!(
+            "created",
+            &SqlType::Integer,
+            default_value = Some(DEFAULT_TIMESTAMP)
+        ),
+        sqlite_column!("oidc_subject", &SqlType::Text, is_unique = true),
+    ],
+    unique_constraints: &[],
+    indices: &[
+        ("idx_user_handle", "handle"),
+        ("idx_user_oidc_subject", "oidc_subject"),
+    ],
+};
+
 const LIKED_CONTENT_TABLE_V_0: Table = Table {
     name: "liked_content",
     columns: &[
@@ -886,6 +912,36 @@ pub const VERSIONED_SCHEMAS: &[VersionedSchema] = &[
             Ok(())
         }),
     },
+    // V12: Add oidc_subject column to user table for OIDC authentication
+    VersionedSchema {
+        version: 12,
+        tables: &[
+            USER_TABLE_V_12,
+            LIKED_CONTENT_TABLE_V_2,
+            AUTH_TOKEN_TABLE_V_8,
+            USER_PASSWORD_CREDENTIALS_V_0,
+            USER_PLAYLIST_TABLE_V_3,
+            USER_PLAYLIST_TRACKS_TABLE_V_3,
+            USER_ROLE_TABLE_V_4,
+            USER_EXTRA_PERMISSION_TABLE_V_4,
+            BANDWIDTH_USAGE_TABLE_V_5,
+            LISTENING_EVENTS_TABLE_V_6,
+            USER_SETTINGS_TABLE_V_7,
+            DEVICE_TABLE_V_8,
+            USER_EVENTS_TABLE_V_9,
+            USER_NOTIFICATIONS_TABLE_V_11,
+        ],
+        migration: Some(|conn: &Connection| {
+            // SQLite doesn't support adding UNIQUE constraint in ALTER TABLE,
+            // so we add the column first, then create a unique index
+            conn.execute("ALTER TABLE user ADD COLUMN oidc_subject TEXT", [])?;
+            conn.execute(
+                "CREATE UNIQUE INDEX IF NOT EXISTS idx_user_oidc_subject ON user(oidc_subject)",
+                [],
+            )?;
+            Ok(())
+        }),
+    },
 ];
 
 /// A random A-z0-9 string
@@ -1202,6 +1258,34 @@ impl UserStore for SqliteUserStore {
             Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
             Err(e) => Err(e.into()),
         }
+    }
+
+    fn get_user_id_by_oidc_subject(&self, oidc_subject: &str) -> Result<Option<usize>> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare(&format!(
+            "SELECT id FROM {} WHERE oidc_subject = ?1",
+            USER_TABLE_V_12.name
+        ))?;
+        match stmt.query_row(params![oidc_subject], |row| row.get(0)) {
+            Ok(id) => {
+                let id: i32 = id;
+                Ok(Some(id as usize))
+            }
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+            Err(e) => Err(e.into()),
+        }
+    }
+
+    fn set_user_oidc_subject(&self, user_id: usize, oidc_subject: &str) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            &format!(
+                "UPDATE {} SET oidc_subject = ?1 WHERE id = ?2",
+                USER_TABLE_V_12.name
+            ),
+            params![oidc_subject, user_id],
+        )?;
+        Ok(())
     }
 
     fn is_user_liked_content(&self, user_id: usize, content_id: &str) -> Result<Option<bool>> {
@@ -3281,7 +3365,7 @@ mod tests {
             let db_version: i64 = conn
                 .query_row("PRAGMA user_version;", [], |row| row.get(0))
                 .unwrap();
-            assert_eq!(db_version, BASE_DB_VERSION as i64 + 11);
+            assert_eq!(db_version, BASE_DB_VERSION as i64 + 12);
 
             // Verify new tables exist
             let user_role_table_exists: i64 = conn
@@ -3429,7 +3513,7 @@ mod tests {
             let db_version: i64 = conn
                 .query_row("PRAGMA user_version;", [], |row| row.get(0))
                 .unwrap();
-            assert_eq!(db_version, BASE_DB_VERSION as i64 + 11);
+            assert_eq!(db_version, BASE_DB_VERSION as i64 + 12);
 
             // Verify device table exists
             let device_table_exists: i64 = conn

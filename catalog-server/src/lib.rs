@@ -8,6 +8,7 @@ pub mod config;
 pub mod download_manager;
 pub mod downloader;
 pub mod notifications;
+pub mod oidc;
 pub mod search;
 pub mod server;
 pub mod server_store;
