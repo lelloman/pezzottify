@@ -141,14 +141,22 @@ internal class AuthStoreImpl(
                 Log.e("AuthStore", "Failed to delete keystore entry", e)
             }
 
-            try {
-                val prefsFile = File(context.filesDir.parent, "shared_prefs/$SHARED_PREF_FILE_NAME.xml")
-                if (prefsFile.exists()) {
-                    prefsFile.delete()
-                    Log.i("AuthStore", "Deleted corrupted shared prefs file")
+            val sharedPrefsDir = File(context.filesDir.parent, "shared_prefs")
+            val filesToDelete = listOf(
+                "$SHARED_PREF_FILE_NAME.xml",
+                "__androidx_security_crypto_encrypted_prefs__.xml"
+            )
+
+            for (fileName in filesToDelete) {
+                try {
+                    val file = File(sharedPrefsDir, fileName)
+                    if (file.exists()) {
+                        file.delete()
+                        Log.i("AuthStore", "Deleted corrupted file: $fileName")
+                    }
+                } catch (e: Exception) {
+                    Log.e("AuthStore", "Failed to delete file: $fileName", e)
                 }
-            } catch (e: Exception) {
-                Log.e("AuthStore", "Failed to delete prefs file", e)
             }
         }
     }
