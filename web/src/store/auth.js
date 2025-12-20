@@ -26,11 +26,11 @@ function getDeviceName() {
   let browser = "Browser";
   let os = "Unknown";
 
-  // Detect browser
-  if (userAgent.includes("Firefox")) browser = "Firefox";
+  // Detect browser (order matters: Edge UA contains "Chrome", Chrome UA contains "Safari")
+  if (userAgent.includes("Edg/")) browser = "Edge";
+  else if (userAgent.includes("Firefox")) browser = "Firefox";
   else if (userAgent.includes("Chrome")) browser = "Chrome";
   else if (userAgent.includes("Safari")) browser = "Safari";
-  else if (userAgent.includes("Edge")) browser = "Edge";
 
   // Detect OS
   if (userAgent.includes("Windows")) os = "Windows";
