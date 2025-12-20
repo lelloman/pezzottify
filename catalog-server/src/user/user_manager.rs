@@ -227,6 +227,32 @@ impl UserManager {
         self.user_store.get_user_id_by_oidc_subject(oidc_subject)
     }
 
+    /// Provisions a new user from OIDC authentication.
+    /// Creates the user, sets the OIDC subject, and assigns the Regular role.
+    /// Returns the new user_id.
+    pub fn provision_oidc_user(
+        &self,
+        oidc_subject: &str,
+        preferred_username: Option<&str>,
+        email: Option<&str>,
+    ) -> Result<usize> {
+        // Use preferred_username, then email, then subject as the handle
+        let user_handle = preferred_username
+            .or(email)
+            .unwrap_or(oidc_subject);
+
+        // Create the user
+        let user_id = self.user_store.create_user(user_handle)?;
+
+        // Set the OIDC subject
+        self.user_store.set_user_oidc_subject(user_id, oidc_subject)?;
+
+        // Assign Regular role
+        self.user_store.add_user_role(user_id, UserRole::Regular)?;
+
+        Ok(user_id)
+    }
+
     pub fn get_user_handle(&self, user_id: usize) -> Result<Option<String>> {
         self.user_store.get_user_handle(user_id)
     }

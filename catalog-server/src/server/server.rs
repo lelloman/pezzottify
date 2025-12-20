@@ -1953,23 +1953,36 @@ async fn oidc_callback(
         auth_result.subject
     );
 
-    // Look up local user by OIDC subject to verify they exist
+    // Look up or provision local user by OIDC subject
     let user_id = {
         let locked_manager = user_manager.lock().unwrap();
 
         match locked_manager.get_user_id_by_oidc_subject(&auth_result.subject) {
-            Ok(Some(id)) => id,
+            Ok(Some(id)) => {
+                debug!("Found existing user for OIDC subject={}", auth_result.subject);
+                id
+            }
             Ok(None) => {
-                warn!(
-                    "No local user found for OIDC subject={} (email={:?})",
-                    auth_result.subject, auth_result.email
+                // Auto-provision new user
+                info!(
+                    "Provisioning new user for OIDC subject={} (email={:?}, username={:?})",
+                    auth_result.subject, auth_result.email, auth_result.preferred_username
                 );
-                super::metrics::record_login_attempt("failure", start.elapsed());
-                return (
-                    StatusCode::FORBIDDEN,
-                    "User not registered. Contact administrator.",
-                )
-                    .into_response();
+                match locked_manager.provision_oidc_user(
+                    &auth_result.subject,
+                    auth_result.preferred_username.as_deref(),
+                    auth_result.email.as_deref(),
+                ) {
+                    Ok(id) => {
+                        info!("Successfully provisioned new user_id={} for OIDC subject={}", id, auth_result.subject);
+                        id
+                    }
+                    Err(e) => {
+                        error!("Failed to provision OIDC user: {}", e);
+                        super::metrics::record_login_attempt("error", start.elapsed());
+                        return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+                    }
+                }
             }
             Err(e) => {
                 error!("Failed to look up user by OIDC subject: {}", e);
