@@ -33,6 +33,9 @@ fun AppUi(
         fontFamily = fontFamily,
     ) {
         Box(modifier = Modifier.fillMaxSize()) {
+            // Handle session expiration globally
+            SessionExpiredEffect(navController)
+
             NavHost(
                 modifier = Modifier.fillMaxSize(),
                 navController = navController,

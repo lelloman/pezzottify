@@ -4,6 +4,7 @@ import android.content.Intent
 import com.lelloman.pezzottify.android.domain.auth.AuthState
 import com.lelloman.pezzottify.android.domain.auth.AuthStore
 import com.lelloman.pezzottify.android.domain.auth.oidc.OidcAuthManager
+import com.lelloman.pezzottify.android.domain.auth.usecase.HandleSessionExpired
 import com.lelloman.pezzottify.android.domain.auth.usecase.IsLoggedIn
 import com.lelloman.pezzottify.android.domain.auth.usecase.PerformLogin
 import com.lelloman.pezzottify.android.domain.auth.usecase.PerformLogout
@@ -115,6 +116,18 @@ class InteractorsModule {
     fun provideSplashInteractor(isLoggedIn: IsLoggedIn): SplashViewModel.Interactor =
         object : SplashViewModel.Interactor {
             override suspend fun isLoggedIn() = isLoggedIn()
+        }
+
+    @Provides
+    fun provideSessionExpiredInteractor(
+        handleSessionExpired: HandleSessionExpired,
+    ): SessionExpiredViewModel.Interactor =
+        object : SessionExpiredViewModel.Interactor {
+            override fun sessionExpiredEvents(): Flow<Unit> = handleSessionExpired.events
+
+            override suspend fun handleSessionExpired() {
+                handleSessionExpired()
+            }
         }
 
     @Provides
