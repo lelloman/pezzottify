@@ -3,6 +3,7 @@ package com.lelloman.pezzottify.android.remoteapi
 import com.lelloman.pezzottify.android.domain.auth.AuthState
 import com.lelloman.pezzottify.android.domain.auth.AuthStore
 import com.lelloman.pezzottify.android.domain.auth.SessionExpiredHandler
+import com.lelloman.pezzottify.android.domain.auth.TokenRefresher
 import com.lelloman.pezzottify.android.domain.config.ConfigStore
 import com.lelloman.pezzottify.android.domain.remoteapi.RemoteApiClient
 import com.lelloman.pezzottify.android.domain.remoteapi.RemoteApiCredentialsProvider
@@ -61,6 +62,7 @@ class RemoteApiModule {
         configStore: ConfigStore,
         okHttpClientFactory: OkHttpClientFactory,
         sessionExpiredHandler: SessionExpiredHandler,
+        tokenRefresher: TokenRefresher,
         loggerFactory: LoggerFactory,
     ): RemoteApiClient {
         val httpLogger = loggerFactory.getLogger("HTTP")
@@ -77,7 +79,7 @@ class RemoteApiModule {
                     get() = (authStore.getAuthState().value as? AuthState.LoggedIn)?.authToken ?: ""
             },
             interceptors = listOf(
-                SessionExpiredInterceptor(sessionExpiredHandler, sessionLogger),
+                SessionExpiredInterceptor(sessionExpiredHandler, tokenRefresher, sessionLogger),
                 HttpLoggingInterceptor(httpLogger),
             ),
         )

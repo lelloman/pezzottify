@@ -17,7 +17,9 @@ import net.openid.appauth.AuthorizationRequest
 import net.openid.appauth.AuthorizationResponse
 import net.openid.appauth.AuthorizationService
 import net.openid.appauth.AuthorizationServiceConfiguration
+import net.openid.appauth.GrantTypeValues
 import net.openid.appauth.ResponseTypeValues
+import net.openid.appauth.TokenRequest
 import org.json.JSONObject
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -217,11 +219,13 @@ class AppAuthOidcManager @Inject constructor(
 
                         // Extract user info from ID token
                         val userHandle = extractUserHandle(idToken)
-                        logger.info("[OIDC_DBG] exchangeCodeForTokens() success, user: $userHandle")
+                        val refreshToken = tokenResponse.refreshToken
+                        logger.info("[OIDC_DBG] exchangeCodeForTokens() success, user: $userHandle, hasRefreshToken: ${refreshToken != null}")
 
                         continuation.resume(
                             OidcAuthManager.AuthorizationResult.Success(
                                 idToken = idToken,
+                                refreshToken = refreshToken,
                                 userHandle = userHandle,
                             )
                         )
@@ -237,6 +241,57 @@ class AppAuthOidcManager @Inject constructor(
             }
         }
     }
+
+    override suspend fun refreshTokens(refreshToken: String): OidcAuthManager.RefreshResult =
+        withContext(Dispatchers.IO) {
+            logger.debug("[OIDC_DBG] refreshTokens() starting")
+
+            val config = getServiceConfiguration()
+            if (config == null) {
+                logger.error("[OIDC_DBG] refreshTokens() config is null")
+                return@withContext OidcAuthManager.RefreshResult.Failed("OIDC not configured")
+            }
+
+            val tokenRequest = TokenRequest.Builder(config, oidcConfig.clientId)
+                .setGrantType(GrantTypeValues.REFRESH_TOKEN)
+                .setRefreshToken(refreshToken)
+                .build()
+
+            suspendCancellableCoroutine<OidcAuthManager.RefreshResult> { continuation ->
+                authService.performTokenRequest(tokenRequest) { tokenResponse, exception ->
+                    logger.debug("[OIDC_DBG] refreshTokens() callback received")
+                    val result: OidcAuthManager.RefreshResult = when {
+                        exception != null -> {
+                            logger.error("[OIDC_DBG] refreshTokens() error: ${exception.errorDescription}", exception)
+                            OidcAuthManager.RefreshResult.Failed(
+                                exception.errorDescription ?: "Token refresh failed"
+                            )
+                        }
+
+                        tokenResponse != null -> {
+                            val idToken = tokenResponse.idToken
+                            if (idToken == null) {
+                                logger.error("[OIDC_DBG] refreshTokens() no ID token in response")
+                                OidcAuthManager.RefreshResult.Failed("No ID token received")
+                            } else {
+                                val newRefreshToken = tokenResponse.refreshToken
+                                logger.info("[OIDC_DBG] refreshTokens() success, hasNewRefreshToken: ${newRefreshToken != null}")
+                                OidcAuthManager.RefreshResult.Success(
+                                    idToken = idToken,
+                                    refreshToken = newRefreshToken ?: refreshToken,
+                                )
+                            }
+                        }
+
+                        else -> {
+                            logger.error("[OIDC_DBG] refreshTokens() no response")
+                            OidcAuthManager.RefreshResult.Failed("No token response")
+                        }
+                    }
+                    continuation.resume(result)
+                }
+            }
+        }
 
     private suspend fun getServiceConfiguration(): AuthorizationServiceConfiguration? {
         serviceConfig?.let {

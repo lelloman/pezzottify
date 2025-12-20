@@ -12,6 +12,7 @@ sealed interface AuthState {
     data class LoggedIn(
         val userHandle: String,
         val authToken: String,
+        val refreshToken: String? = null,
         val remoteUrl: String,
     ) : AuthState
 }

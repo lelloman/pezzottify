@@ -1,19 +1,19 @@
 package com.lelloman.pezzottify.android.remoteapi.internal
 
 import com.lelloman.pezzottify.android.domain.auth.SessionExpiredHandler
+import com.lelloman.pezzottify.android.domain.auth.TokenRefresher
 import com.lelloman.pezzottify.android.logger.Logger
+import kotlinx.coroutines.runBlocking
 import okhttp3.Interceptor
 import okhttp3.Response
 
 /**
- * OkHttp interceptor that detects session expiration (401/403 responses)
- * and triggers the session expired handler.
- *
- * Note: The handler implementation checks auth state before emitting events,
- * so multiple concurrent 401/403 responses will only trigger one logout.
+ * OkHttp interceptor that handles session expiration (401/403 responses)
+ * by attempting to refresh the token before triggering logout.
  */
 internal class SessionExpiredInterceptor(
     private val sessionExpiredHandler: SessionExpiredHandler,
+    private val tokenRefresher: TokenRefresher,
     private val logger: Logger,
 ) : Interceptor {
 
@@ -29,8 +29,34 @@ internal class SessionExpiredInterceptor(
 
         // Check for unauthorized responses
         if (response.code == 401 || response.code == 403) {
-            logger.warn("Session expired detected (${response.code}) for ${request.url}")
-            sessionExpiredHandler.onSessionExpired()
+            logger.warn("Unauthorized response (${response.code}) for ${request.url}, attempting token refresh")
+
+            // Attempt to refresh the token
+            val refreshResult = runBlocking { tokenRefresher.refreshTokens() }
+
+            when (refreshResult) {
+                is TokenRefresher.RefreshResult.Success -> {
+                    logger.info("Token refresh successful, retrying request")
+                    // Close the old response before retrying
+                    response.close()
+
+                    // Retry the request with the new token
+                    val newRequest = request.newBuilder()
+                        .header("Authorization", refreshResult.newAuthToken)
+                        .build()
+                    return chain.proceed(newRequest)
+                }
+
+                is TokenRefresher.RefreshResult.Failed -> {
+                    logger.warn("Token refresh failed: ${refreshResult.reason}, triggering logout")
+                    sessionExpiredHandler.onSessionExpired()
+                }
+
+                is TokenRefresher.RefreshResult.NotAvailable -> {
+                    logger.warn("No refresh token available, triggering logout")
+                    sessionExpiredHandler.onSessionExpired()
+                }
+            }
         }
 
         return response
