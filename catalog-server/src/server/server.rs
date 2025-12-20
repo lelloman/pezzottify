@@ -4512,7 +4512,7 @@ pub async fn make_app(
                 }
                 Err(e) => {
                     error!(
-                        "Failed to initialize OIDC client: {}. OIDC login will be disabled.",
+                        "Failed to initialize OIDC client: {:?}. OIDC login will be disabled.",
                         e
                     );
                     None
