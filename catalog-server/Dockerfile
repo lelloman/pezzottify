@@ -51,7 +51,8 @@ FROM debian:stable-slim
 # Install runtime dependencies:
 # - libsqlite3-dev: SQLite dynamic loading
 # - ffmpeg: ffprobe for content validation
-RUN apt-get update && apt-get install -y libsqlite3-dev ffmpeg && rm -rf /var/lib/apt/lists/*
+# - ca-certificates: TLS certificate validation for HTTPS (OIDC, etc.)
+RUN apt-get update && apt-get install -y libsqlite3-dev ffmpeg ca-certificates && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
