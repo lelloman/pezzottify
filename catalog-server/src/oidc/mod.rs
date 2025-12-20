@@ -38,6 +38,20 @@ pub struct AuthState {
     pub pkce_verifier: String,
     /// Timestamp when this state was created (for expiration)
     pub created_at: i64,
+    /// Device ID for multi-device tracking (passed to the OIDC provider)
+    pub device_id: Option<String>,
+    /// Device type (web, android, ios, desktop)
+    pub device_type: Option<String>,
+    /// Human-readable device name
+    pub device_name: Option<String>,
+}
+
+/// Device info passed to OIDC authorization
+#[derive(Debug, Clone, Default)]
+pub struct DeviceInfo {
+    pub device_id: Option<String>,
+    pub device_type: Option<String>,
+    pub device_name: Option<String>,
 }
 
 /// Result of a successful token exchange
@@ -102,7 +116,7 @@ impl OidcClient {
     ///
     /// Returns the URL to redirect the user to, along with the state that must
     /// be stored server-side and validated in the callback.
-    pub fn authorize_url(&self) -> Result<(String, AuthState)> {
+    pub fn authorize_url(&self, device_info: Option<&DeviceInfo>) -> Result<(String, AuthState)> {
         use openidconnect::core::CoreClient;
 
         let client = CoreClient::from_provider_metadata(
@@ -131,19 +145,36 @@ impl OidcClient {
 
         let (auth_url, csrf_token, nonce) = auth_request.url();
 
+        // Add device info to URL if provided
+        let mut final_url = auth_url.to_string();
+        if let Some(device) = device_info {
+            if let Some(id) = &device.device_id {
+                final_url.push_str(&format!("&device_id={}", urlencoding::encode(id)));
+            }
+            if let Some(dtype) = &device.device_type {
+                final_url.push_str(&format!("&device_type={}", urlencoding::encode(dtype)));
+            }
+            if let Some(name) = &device.device_name {
+                final_url.push_str(&format!("&device_name={}", urlencoding::encode(name)));
+            }
+        }
+
         let state = AuthState {
             csrf_token: csrf_token.secret().clone(),
             nonce: nonce.secret().clone(),
             pkce_verifier: pkce_verifier.secret().clone(),
             created_at: chrono::Utc::now().timestamp(),
+            device_id: device_info.and_then(|d| d.device_id.clone()),
+            device_type: device_info.and_then(|d| d.device_type.clone()),
+            device_name: device_info.and_then(|d| d.device_name.clone()),
         };
 
         debug!(
-            "Generated authorization URL with state: {}",
-            state.csrf_token
+            "Generated authorization URL with state: {}, device_id: {:?}",
+            state.csrf_token, state.device_id
         );
 
-        Ok((auth_url.to_string(), state))
+        Ok((final_url, state))
     }
 
     /// Exchange an authorization code for tokens
@@ -269,14 +300,70 @@ impl OidcClient {
             return Err(anyhow!("ID token has expired"));
         }
 
-        debug!("Validated ID token for subject: {}", subject);
+        // Extract custom device claims from the JWT payload
+        // JWT format: header.payload.signature
+        let device_claims = extract_device_claims(id_token_str);
+
+        debug!(
+            "Validated ID token for subject: {}, device_id: {:?}, device_type: {:?}",
+            subject, device_claims.device_id, device_claims.device_type
+        );
 
         Ok(IdTokenClaims {
             subject,
             email,
             preferred_username,
             expiration,
+            device_id: device_claims.device_id,
+            device_type: device_claims.device_type,
+            device_name: device_claims.device_name,
         })
+    }
+}
+
+/// Device claims extracted from the JWT payload.
+#[derive(Debug, Clone, Default)]
+pub struct JwtDeviceClaims {
+    pub device_id: Option<String>,
+    pub device_type: Option<String>,
+    pub device_name: Option<String>,
+}
+
+/// Extract device claims from a JWT payload.
+/// Returns default (all None) if the JWT is malformed or claims are missing.
+fn extract_device_claims(jwt: &str) -> JwtDeviceClaims {
+    use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
+
+    // JWT format: header.payload.signature
+    let parts: Vec<&str> = jwt.split('.').collect();
+    if parts.len() != 3 {
+        return JwtDeviceClaims::default();
+    }
+
+    // Decode the payload (second part)
+    let payload_bytes = match URL_SAFE_NO_PAD.decode(parts[1]) {
+        Ok(bytes) => bytes,
+        Err(_) => return JwtDeviceClaims::default(),
+    };
+
+    let payload: serde_json::Value = match serde_json::from_slice(&payload_bytes) {
+        Ok(v) => v,
+        Err(_) => return JwtDeviceClaims::default(),
+    };
+
+    JwtDeviceClaims {
+        device_id: payload
+            .get("device_id")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string()),
+        device_type: payload
+            .get("device_type")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string()),
+        device_name: payload
+            .get("device_name")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string()),
     }
 }
 
@@ -291,6 +378,12 @@ pub struct IdTokenClaims {
     pub preferred_username: Option<String>,
     /// Token expiration timestamp (Unix seconds)
     pub expiration: i64,
+    /// Device ID (custom claim from LelloAuth for multi-device tracking)
+    pub device_id: Option<String>,
+    /// Device type (web, android, ios, desktop)
+    pub device_type: Option<String>,
+    /// Human-readable device name
+    pub device_name: Option<String>,
 }
 
 /// Thread-safe storage for auth states (in-memory for simplicity)
@@ -348,6 +441,9 @@ mod tests {
                 nonce: "test-nonce".to_string(),
                 pkce_verifier: "test-verifier".to_string(),
                 created_at: chrono::Utc::now().timestamp(),
+                device_id: None,
+                device_type: None,
+                device_name: None,
             };
 
             store.store(state.clone()).await;
@@ -375,6 +471,9 @@ mod tests {
                 nonce: "test-nonce".to_string(),
                 pkce_verifier: "test-verifier".to_string(),
                 created_at: chrono::Utc::now().timestamp() - 400, // 6+ minutes ago
+                device_id: None,
+                device_type: None,
+                device_name: None,
             };
 
             store.store(state).await;
@@ -384,5 +483,63 @@ mod tests {
             let retrieved = store.take("expired-csrf").await;
             assert!(retrieved.is_none());
         });
+    }
+
+    #[test]
+    fn test_extract_device_claims_full() {
+        use base64::Engine;
+
+        // A fake JWT with all device claims in payload
+        let payload = r#"{"sub":"user123","device_id":"test-device-abc","device_type":"android","device_name":"My Phone"}"#;
+        let payload_b64 = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(payload);
+        let fake_jwt = format!("header.{}.signature", payload_b64);
+
+        let result = extract_device_claims(&fake_jwt);
+        assert_eq!(result.device_id, Some("test-device-abc".to_string()));
+        assert_eq!(result.device_type, Some("android".to_string()));
+        assert_eq!(result.device_name, Some("My Phone".to_string()));
+    }
+
+    #[test]
+    fn test_extract_device_claims_partial() {
+        use base64::Engine;
+
+        // Only device_id, no type or name
+        let payload = r#"{"sub":"user123","device_id":"test-device-abc"}"#;
+        let payload_b64 = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(payload);
+        let fake_jwt = format!("header.{}.signature", payload_b64);
+
+        let result = extract_device_claims(&fake_jwt);
+        assert_eq!(result.device_id, Some("test-device-abc".to_string()));
+        assert_eq!(result.device_type, None);
+        assert_eq!(result.device_name, None);
+    }
+
+    #[test]
+    fn test_extract_device_claims_none() {
+        use base64::Engine;
+
+        // No device claims at all
+        let payload = r#"{"sub":"user123"}"#;
+        let payload_b64 = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(payload);
+        let fake_jwt = format!("header.{}.signature", payload_b64);
+
+        let result = extract_device_claims(&fake_jwt);
+        assert_eq!(result.device_id, None);
+        assert_eq!(result.device_type, None);
+        assert_eq!(result.device_name, None);
+    }
+
+    #[test]
+    fn test_extract_device_claims_invalid_jwt() {
+        // Invalid JWT format
+        let result = extract_device_claims("not-a-jwt");
+        assert_eq!(result.device_id, None);
+        assert_eq!(result.device_type, None);
+        assert_eq!(result.device_name, None);
+
+        // Invalid base64
+        let result = extract_device_claims("header.!!!invalid!!!.signature");
+        assert_eq!(result.device_id, None);
     }
 }

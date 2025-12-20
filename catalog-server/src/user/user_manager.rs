@@ -399,6 +399,10 @@ impl UserManager {
         self.user_store.get_device(device_id)
     }
 
+    pub fn get_device_by_uuid(&self, device_uuid: &str) -> Result<Option<Device>> {
+        self.user_store.get_device_by_uuid(device_uuid)
+    }
+
     pub fn get_user_devices(&self, user_id: usize) -> Result<Vec<Device>> {
         self.user_store.get_user_devices(user_id)
     }

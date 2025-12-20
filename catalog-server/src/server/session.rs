@@ -1,6 +1,6 @@
 use super::state::ServerState;
 use crate::user::auth::AuthTokenValue;
-use crate::user::device::DeviceType;
+use crate::user::device::{DeviceRegistration, DeviceType};
 use crate::user::Permission;
 
 use axum::{
@@ -118,14 +118,77 @@ async fn try_oidc_session(token: &str, ctx: &ServerState) -> Option<Session> {
         }
     };
 
-    // OIDC sessions don't have device info from the token
-    // (device tracking could be added via a separate mechanism if needed)
+    // Extract device info from the ID token claims and look up/register the device
+    let (device_id, device_type) = if let Some(device_uuid) = &claims.device_id {
+        // Get device_type from JWT claims, defaulting to "web" if not provided
+        let jwt_device_type = claims.device_type.as_deref().unwrap_or("web");
+
+        // First try to find existing device by UUID
+        match user_manager.get_device_by_uuid(device_uuid) {
+            Ok(Some(device)) => {
+                debug!(
+                    "Found existing device for OIDC session: device_id={}, uuid={}",
+                    device.id, device_uuid
+                );
+                (Some(device.id), Some(device.device_type))
+            }
+            Ok(None) => {
+                // Device doesn't exist, register it with info from JWT
+                match DeviceRegistration::validate_and_sanitize(
+                    device_uuid,
+                    jwt_device_type,
+                    Some(device_uuid),
+                    claims.device_name.as_deref(),
+                ) {
+                    Ok(registration) => {
+                        let registered_device_type = registration.device_type.clone();
+                        match user_manager.register_or_update_device(&registration) {
+                            Ok(device_id) => {
+                                // Associate with user
+                                if let Err(e) =
+                                    user_manager.associate_device_with_user(device_id, user_id)
+                                {
+                                    debug!(
+                                        "Failed to associate device {} with user {}: {}",
+                                        device_id, user_id, e
+                                    );
+                                }
+                                debug!(
+                                    "Registered new device for OIDC session: device_id={}, uuid={}, type={:?}",
+                                    device_id, device_uuid, registered_device_type
+                                );
+                                (Some(device_id), Some(registered_device_type))
+                            }
+                            Err(e) => {
+                                debug!("Failed to register device UUID={}: {}", device_uuid, e);
+                                (None, None)
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        debug!(
+                            "Invalid device registration for UUID={}: {}",
+                            device_uuid, e
+                        );
+                        (None, None)
+                    }
+                }
+            }
+            Err(e) => {
+                debug!("Failed to look up device by UUID={}: {}", device_uuid, e);
+                (None, None)
+            }
+        }
+    } else {
+        (None, None)
+    };
+
     Some(Session {
         user_id,
         token: token.to_string(),
         permissions,
-        device_id: None,
-        device_type: None,
+        device_id,
+        device_type,
     })
 }
 

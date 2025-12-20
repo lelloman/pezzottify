@@ -1837,8 +1837,20 @@ async fn logout(State(user_manager): State<GuardedUserManager>, session: Session
 // OIDC Authentication Handlers
 // ============================================================================
 
+/// Query parameters for OIDC login initiation
+#[derive(Deserialize, Debug, Default)]
+struct OidcLoginQuery {
+    /// Device ID for multi-device tracking
+    device_id: Option<String>,
+    /// Device type (web, android, ios, desktop)
+    device_type: Option<String>,
+    /// Human-readable device name
+    device_name: Option<String>,
+}
+
 /// OIDC login initiation - redirects to the OIDC provider
 async fn oidc_login(
+    Query(params): Query<OidcLoginQuery>,
     State(oidc_client): State<OptionalOidcClient>,
     State(auth_state_store): State<GuardedAuthStateStore>,
 ) -> Response {
@@ -1850,13 +1862,27 @@ async fn oidc_login(
         }
     };
 
-    match oidc_client.authorize_url() {
+    // Build device info from query params
+    let device_info = if params.device_id.is_some()
+        || params.device_type.is_some()
+        || params.device_name.is_some()
+    {
+        Some(crate::oidc::DeviceInfo {
+            device_id: params.device_id,
+            device_type: params.device_type,
+            device_name: params.device_name,
+        })
+    } else {
+        None
+    };
+
+    match oidc_client.authorize_url(device_info.as_ref()) {
         Ok((auth_url, state)) => {
             // Store the state for validation in callback
             auth_state_store.store(state.clone()).await;
             debug!(
-                "Initiating OIDC login, redirecting to provider with state={}",
-                state.csrf_token
+                "Initiating OIDC login, redirecting to provider with state={}, device_id={:?}",
+                state.csrf_token, state.device_id
             );
 
             // Return redirect response
