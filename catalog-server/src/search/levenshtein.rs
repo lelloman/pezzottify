@@ -120,19 +120,27 @@ impl Vocabulary {
         }
 
         // Find the best match among candidates
-        let mut best_match: Option<(usize, usize)> = None; // (index, distance)
+        // Track (index, distance, length_diff) for tie-breaking
+        let mut best_match: Option<(usize, usize, usize)> = None;
 
         for &idx in &candidates {
             let word = &self.words[idx];
             let distance = levenshtein_distance(&query, word);
 
             if distance <= max_distance {
+                let length_diff = (word.len() as isize - query_len as isize).unsigned_abs();
+
                 match best_match {
-                    None => best_match = Some((idx, distance)),
-                    Some((_, best_dist)) if distance < best_dist => {
-                        best_match = Some((idx, distance));
+                    None => best_match = Some((idx, distance, length_diff)),
+                    Some((_, best_dist, best_len_diff)) => {
+                        // Prefer lower distance, or same distance but closer length
+                        // (substitutions are better than insertions/deletions)
+                        if distance < best_dist
+                            || (distance == best_dist && length_diff < best_len_diff)
+                        {
+                            best_match = Some((idx, distance, length_diff));
+                        }
                     }
-                    _ => {}
                 }
             }
 
@@ -142,7 +150,7 @@ impl Vocabulary {
             }
         }
 
-        best_match.map(|(idx, _)| self.words[idx].as_str())
+        best_match.map(|(idx, _, _)| self.words[idx].as_str())
     }
 
     /// Correct a query by replacing each word with its best vocabulary match.
@@ -291,5 +299,18 @@ mod tests {
         // Full query correction
         let corrected = vocab.correct_query("fucio palla", 2);
         assert_eq!(corrected, "lucio dalla");
+    }
+
+    #[test]
+    fn test_tie_breaking_prefers_same_length() {
+        let mut vocab = Vocabulary::new();
+        // Add both "alla" (length 4) and "dalla" (length 5)
+        vocab.add_word("alla");
+        vocab.add_word("dalla");
+
+        // "palla" (length 5) should match "dalla" (length 5), not "alla" (length 4)
+        // Both have edit distance 1, but "dalla" has same length (substitution)
+        // while "alla" requires a deletion
+        assert_eq!(vocab.find_best_match("palla", 2), Some("dalla"));
     }
 }
