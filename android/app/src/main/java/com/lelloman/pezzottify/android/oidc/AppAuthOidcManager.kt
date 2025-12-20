@@ -19,7 +19,6 @@ import net.openid.appauth.AuthorizationService
 import net.openid.appauth.AuthorizationServiceConfiguration
 import net.openid.appauth.ResponseTypeValues
 import org.json.JSONObject
-import java.util.Base64
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.coroutines.resume
@@ -171,7 +170,9 @@ class AppAuthOidcManager @Inject constructor(
             val parts = idToken.split(".")
             if (parts.size != 3) return "user"
 
-            val payload = String(Base64.getUrlDecoder().decode(parts[1]))
+            val payload = String(
+                android.util.Base64.decode(parts[1], android.util.Base64.URL_SAFE)
+            )
             val json = JSONObject(payload)
 
             json.optString("preferred_username").takeIf { it.isNotBlank() }
