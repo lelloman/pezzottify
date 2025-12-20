@@ -1,10 +1,13 @@
 package com.lelloman.pezzottify.android.remoteapi.internal
 
+import com.lelloman.pezzottify.android.remoteapi.internal.requests.CreatePlaylistRequest
+import com.lelloman.pezzottify.android.remoteapi.internal.requests.CreatePlaylistResponse
 import com.lelloman.pezzottify.android.remoteapi.internal.requests.ListeningEventRequest
 import com.lelloman.pezzottify.android.remoteapi.internal.requests.ListeningEventResponse
 import com.lelloman.pezzottify.android.remoteapi.internal.requests.LoginRequest
 import com.lelloman.pezzottify.android.remoteapi.internal.requests.RequestAlbumDownloadBody
 import com.lelloman.pezzottify.android.remoteapi.internal.requests.SearchRequest
+import com.lelloman.pezzottify.android.remoteapi.internal.requests.UpdatePlaylistRequest
 import com.lelloman.pezzottify.android.remoteapi.internal.requests.UpdateUserSettingsRequest
 import com.lelloman.pezzottify.android.domain.remoteapi.response.AlbumResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.DownloadLimitsResponse
@@ -209,4 +212,25 @@ internal interface RetrofitApiClient {
         @Header("Authorization") authToken: String,
         @Query("since") sinceVersion: Long,
     ): Response<SkeletonDeltaResponse>
+
+    // Playlist endpoints
+
+    @POST("/v1/user/playlist")
+    suspend fun createPlaylist(
+        @Header("Authorization") authToken: String,
+        @Body request: CreatePlaylistRequest,
+    ): Response<CreatePlaylistResponse>
+
+    @PUT("/v1/user/playlist/{playlistId}")
+    suspend fun updatePlaylist(
+        @Header("Authorization") authToken: String,
+        @Path("playlistId") playlistId: String,
+        @Body request: UpdatePlaylistRequest,
+    ): Response<Unit>
+
+    @DELETE("/v1/user/playlist/{playlistId}")
+    suspend fun deletePlaylist(
+        @Header("Authorization") authToken: String,
+        @Path("playlistId") playlistId: String,
+    ): Response<Unit>
 }

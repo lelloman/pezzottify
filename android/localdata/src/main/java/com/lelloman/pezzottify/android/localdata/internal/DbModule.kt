@@ -38,6 +38,7 @@ internal class DbModule {
             UserContentDb.MIGRATION_1_2,
             UserContentDb.MIGRATION_2_3,
             UserContentDb.MIGRATION_3_4,
+            UserContentDb.MIGRATION_4_5,
         )
         .build()
 }

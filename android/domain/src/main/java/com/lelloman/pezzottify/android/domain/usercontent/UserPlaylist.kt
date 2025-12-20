@@ -4,4 +4,5 @@ interface UserPlaylist {
     val id: String
     val name: String
     val trackIds: List<String>
+    val syncStatus: PlaylistSyncStatus
 }

@@ -8,6 +8,7 @@ import com.lelloman.pezzottify.android.domain.settings.UserSettingsSynchronizer
 import com.lelloman.pezzottify.android.domain.sync.CatalogWebSocketHandler
 import com.lelloman.pezzottify.android.domain.sync.StaticsSynchronizer
 import com.lelloman.pezzottify.android.domain.sync.SyncWebSocketHandler
+import com.lelloman.pezzottify.android.domain.usercontent.PlaylistSynchronizer
 import com.lelloman.pezzottify.android.domain.usercontent.UserContentSynchronizer
 import com.lelloman.pezzottify.android.domain.websocket.WebSocketInitializer
 import dagger.Binds
@@ -35,6 +36,10 @@ abstract class AppInitializersModule {
     @Binds
     @IntoSet
     internal abstract fun bindsUserContentSynchronizer(synchronizer: UserContentSynchronizer): AppInitializer
+
+    @Binds
+    @IntoSet
+    internal abstract fun bindsPlaylistSynchronizer(synchronizer: PlaylistSynchronizer): AppInitializer
 
     @Binds
     @IntoSet

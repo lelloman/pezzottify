@@ -28,10 +28,12 @@ import com.lelloman.pezzottify.android.domain.remoteapi.response.SyncStateRespon
 import com.lelloman.pezzottify.android.domain.remoteapi.response.TrackResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.WhatsNewResponse
 import com.lelloman.pezzottify.android.domain.sync.UserSetting
+import com.lelloman.pezzottify.android.remoteapi.internal.requests.CreatePlaylistRequest
 import com.lelloman.pezzottify.android.remoteapi.internal.requests.ListeningEventRequest
 import com.lelloman.pezzottify.android.remoteapi.internal.requests.LoginRequest
 import com.lelloman.pezzottify.android.remoteapi.internal.requests.RequestAlbumDownloadBody
 import com.lelloman.pezzottify.android.remoteapi.internal.requests.SearchRequest
+import com.lelloman.pezzottify.android.remoteapi.internal.requests.UpdatePlaylistRequest
 import com.lelloman.pezzottify.android.remoteapi.internal.requests.UpdateUserSettingsRequest
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.GlobalScope
@@ -408,6 +410,43 @@ internal class RemoteApiClientImpl(
         catchingNetworkError {
             getRetrofit()
                 .markNotificationRead(authToken = authToken, notificationId = notificationId)
+                .returnFromRetrofitResponse()
+        }
+
+    // Playlist endpoints
+
+    override suspend fun createPlaylist(
+        name: String,
+        trackIds: List<String>,
+    ): RemoteApiResponse<String> = catchingNetworkError {
+        val response = getRetrofit().createPlaylist(
+            authToken = authToken,
+            request = CreatePlaylistRequest(name = name, trackIds = trackIds)
+        )
+        response.commonError?.let { return@catchingNetworkError it }
+        val body = response.body()
+            ?: return@catchingNetworkError RemoteApiResponse.Error.Unknown("No body")
+        RemoteApiResponse.Success(body.id)
+    }
+
+    override suspend fun updatePlaylist(
+        playlistId: String,
+        name: String?,
+        trackIds: List<String>?,
+    ): RemoteApiResponse<Unit> = catchingNetworkError {
+        getRetrofit()
+            .updatePlaylist(
+                authToken = authToken,
+                playlistId = playlistId,
+                request = UpdatePlaylistRequest(name = name, trackIds = trackIds)
+            )
+            .returnFromRetrofitResponse()
+    }
+
+    override suspend fun deletePlaylist(playlistId: String): RemoteApiResponse<Unit> =
+        catchingNetworkError {
+            getRetrofit()
+                .deletePlaylist(authToken = authToken, playlistId = playlistId)
                 .returnFromRetrofitResponse()
         }
 

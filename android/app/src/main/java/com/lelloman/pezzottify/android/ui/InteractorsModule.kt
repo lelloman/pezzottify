@@ -49,6 +49,8 @@ import com.lelloman.pezzottify.android.domain.user.SearchHistoryEntry
 import com.lelloman.pezzottify.android.domain.user.ViewedContent
 import com.lelloman.pezzottify.android.domain.statics.StaticsStore
 import com.lelloman.pezzottify.android.domain.usercontent.GetLikedStateUseCase
+import com.lelloman.pezzottify.android.domain.usercontent.PlaylistSyncStatus
+import com.lelloman.pezzottify.android.domain.usercontent.PlaylistSynchronizer
 import com.lelloman.pezzottify.android.domain.usercontent.ToggleLikeUseCase
 import com.lelloman.pezzottify.android.domain.usercontent.UserContentStore
 import com.lelloman.pezzottify.android.domain.usercontent.UserPlaylistStore
@@ -531,6 +533,7 @@ class InteractorsModule {
         toggleLikeUseCase: ToggleLikeUseCase,
         userPlaylistStore: UserPlaylistStore,
         staticsStore: StaticsStore,
+        playlistSynchronizer: PlaylistSynchronizer,
     ): AlbumScreenViewModel.Interactor = object : AlbumScreenViewModel.Interactor {
         override fun playAlbum(albumId: String) {
             player.loadAlbum(albumId)
@@ -589,6 +592,7 @@ class InteractorsModule {
 
         override suspend fun addTrackToPlaylist(trackId: String, playlistId: String) {
             userPlaylistStore.addTrackToPlaylist(playlistId, trackId)
+            playlistSynchronizer.wakeUp()
         }
 
         override suspend fun addAlbumToPlaylist(albumId: String, playlistId: String) {
@@ -596,12 +600,14 @@ class InteractorsModule {
             if (album != null) {
                 val trackIds = album.discs.flatMap { it.tracksIds }
                 userPlaylistStore.addTracksToPlaylist(playlistId, trackIds)
+                playlistSynchronizer.wakeUp()
             }
         }
 
         override suspend fun createPlaylist(name: String) {
             val id = UUID.randomUUID().toString()
-            userPlaylistStore.createOrUpdatePlaylist(id, name, emptyList())
+            userPlaylistStore.createOrUpdatePlaylist(id, name, emptyList(), PlaylistSyncStatus.PendingCreate)
+            playlistSynchronizer.wakeUp()
         }
     }
 
@@ -922,6 +928,7 @@ class InteractorsModule {
         userPlaylistStore: UserPlaylistStore,
         getLikedStateUseCase: GetLikedStateUseCase,
         toggleLikeUseCase: ToggleLikeUseCase,
+        playlistSynchronizer: PlaylistSynchronizer,
     ): QueueScreenViewModel.Interactor =
         object : QueueScreenViewModel.Interactor {
             override fun getQueueState(): Flow<QueueScreenViewModel.Interactor.QueueState?> =
@@ -983,16 +990,14 @@ class InteractorsModule {
             override fun addTrackToQueue(trackId: String) = player.addTracksToPlaylist(listOf(trackId))
 
             override suspend fun addTrackToPlaylist(trackId: String, playlistId: String) {
-                val playlist = userPlaylistStore.getPlaylist(playlistId).first()
-                if (playlist != null) {
-                    val updatedTrackIds = playlist.trackIds + trackId
-                    userPlaylistStore.createOrUpdatePlaylist(playlistId, playlist.name, updatedTrackIds)
-                }
+                userPlaylistStore.addTrackToPlaylist(playlistId, trackId)
+                playlistSynchronizer.wakeUp()
             }
 
             override suspend fun createPlaylist(name: String) {
                 val id = UUID.randomUUID().toString()
-                userPlaylistStore.createOrUpdatePlaylist(id, name, emptyList())
+                userPlaylistStore.createOrUpdatePlaylist(id, name, emptyList(), PlaylistSyncStatus.PendingCreate)
+                playlistSynchronizer.wakeUp()
             }
 
             override fun toggleLike(trackId: String, currentlyLiked: Boolean) {
@@ -1017,6 +1022,7 @@ class InteractorsModule {
     fun provideLibraryScreenInteractor(
         userContentStore: UserContentStore,
         userPlaylistStore: UserPlaylistStore,
+        playlistSynchronizer: PlaylistSynchronizer,
     ): LibraryScreenViewModel.Interactor =
         object : LibraryScreenViewModel.Interactor {
             override fun getLikedContent(): Flow<List<UiLikedContent>> =
@@ -1034,7 +1040,8 @@ class InteractorsModule {
 
             override suspend fun createPlaylist(name: String) {
                 val id = UUID.randomUUID().toString()
-                userPlaylistStore.createOrUpdatePlaylist(id, name, emptyList())
+                userPlaylistStore.createOrUpdatePlaylist(id, name, emptyList(), PlaylistSyncStatus.PendingCreate)
+                playlistSynchronizer.wakeUp()
             }
         }
 
@@ -1045,6 +1052,7 @@ class InteractorsModule {
         logViewedContentUseCase: LogViewedContentUseCase,
         getLikedStateUseCase: GetLikedStateUseCase,
         toggleLikeUseCase: ToggleLikeUseCase,
+        playlistSynchronizer: PlaylistSynchronizer,
     ): UserPlaylistScreenViewModel.Interactor =
         object : UserPlaylistScreenViewModel.Interactor {
             override fun getPlaylist(playlistId: String): Flow<UiUserPlaylistDetails?> =
@@ -1105,15 +1113,18 @@ class InteractorsModule {
 
             override suspend fun addTrackToPlaylist(trackId: String, playlistId: String) {
                 userPlaylistStore.addTrackToPlaylist(playlistId, trackId)
+                playlistSynchronizer.wakeUp()
             }
 
             override suspend fun removeTrackFromPlaylist(playlistId: String, trackId: String) {
                 userPlaylistStore.removeTrackFromPlaylist(playlistId, trackId)
+                playlistSynchronizer.wakeUp()
             }
 
             override suspend fun createPlaylist(name: String) {
                 val id = UUID.randomUUID().toString()
-                userPlaylistStore.createOrUpdatePlaylist(id, name, emptyList())
+                userPlaylistStore.createOrUpdatePlaylist(id, name, emptyList(), PlaylistSyncStatus.PendingCreate)
+                playlistSynchronizer.wakeUp()
             }
 
             override fun isLiked(contentId: String): Flow<Boolean> =
