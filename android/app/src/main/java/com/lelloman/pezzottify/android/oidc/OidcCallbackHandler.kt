@@ -17,11 +17,38 @@ class OidcCallbackHandler @Inject constructor() {
     private val _callbacks = MutableSharedFlow<Intent>(replay = 1)
     val callbacks: SharedFlow<Intent> = _callbacks.asSharedFlow()
 
+    // Track the last processed callback URI to prevent duplicate processing
+    private var lastProcessedCallbackUri: String? = null
+
     /**
      * Called by MainActivity when an OIDC callback intent is received.
      */
     fun handleCallback(intent: Intent) {
         _callbacks.tryEmit(intent)
+    }
+
+    /**
+     * Check if a callback has already been processed.
+     * Call this before processing to avoid duplicates.
+     */
+    fun isAlreadyProcessed(intent: Intent): Boolean {
+        val uri = intent.data?.toString() ?: return false
+        return uri == lastProcessedCallbackUri
+    }
+
+    /**
+     * Mark a callback as processed.
+     * Call this after successfully starting to process a callback.
+     */
+    fun markAsProcessed(intent: Intent) {
+        lastProcessedCallbackUri = intent.data?.toString()
+    }
+
+    /**
+     * Clear the processed state (e.g., when starting a new auth flow).
+     */
+    fun clearProcessedState() {
+        lastProcessedCallbackUri = null
     }
 
     /**

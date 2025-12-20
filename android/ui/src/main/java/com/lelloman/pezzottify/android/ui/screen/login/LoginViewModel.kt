@@ -27,12 +27,22 @@ class LoginViewModel @Inject constructor(
         )
     val state = mutableState.asStateFlow()
 
-    // replay=1 ensures NavigateToMain isn't lost if emitted before LaunchedEffect starts collecting
-    private val mutableEvents = MutableSharedFlow<LoginScreenEvents>(replay = 1)
+    private val mutableEvents = MutableSharedFlow<LoginScreenEvents>()
     val events = mutableEvents.asSharedFlow()
 
     init {
-        // Collect OIDC callback intents
+        // Observe auth state - navigate when logged in
+        // This is the source of truth, regardless of how login happened
+        viewModelScope.launch {
+            interactor.isLoggedIn.collect { isLoggedIn ->
+                if (isLoggedIn) {
+                    mutableEvents.emit(LoginScreenEvents.RequestNotificationPermission)
+                    mutableEvents.emit(LoginScreenEvents.NavigateToMain)
+                }
+            }
+        }
+
+        // Collect OIDC callback intents for error handling
         viewModelScope.launch {
             interactor.oidcCallbacks().collect { callbackIntent ->
                 handleOidcCallback(callbackIntent)
@@ -71,21 +81,22 @@ class LoginViewModel @Inject constructor(
                 )
                 when (loginResult) {
                     is Interactor.LoginResult.Success -> {
-                        mutableEvents.emit(LoginScreenEvents.RequestNotificationPermission)
-                        mutableEvents.emit(LoginScreenEvents.NavigateToMain)
+                        // Navigation handled by auth state observer
                     }
                     is Interactor.LoginResult.Failure.InvalidCredentials -> {
                         mutableState.value = mutableState.value.copy(
+                            isLoading = false,
                             errorRes = R.string.invalid_credentials,
                         )
                     }
                     is Interactor.LoginResult.Failure.Unknown -> {
                         mutableState.value = mutableState.value.copy(
+                            isLoading = false,
                             errorRes = R.string.unknown_error,
                         )
                     }
                 }
-                mutableState.value = mutableState.value.copy(isLoading = false)
+                // Don't set isLoading=false on success - let navigation happen first
             }
         }
     }
@@ -117,14 +128,11 @@ class LoginViewModel @Inject constructor(
     }
 
     private suspend fun handleOidcCallback(callbackIntent: Intent) {
-        // Always process callbacks - the OIDC manager validates if there's a pending request.
-        // We can't rely on isLoading because the ViewModel may be recreated after returning
-        // from the browser (e.g., due to process death).
+        // Process callbacks for error handling only
+        // Navigation is handled by auth state observer
         when (val result = interactor.handleOidcCallback(callbackIntent)) {
             is Interactor.OidcLoginResult.Success -> {
-                mutableState.value = mutableState.value.copy(isLoading = false)
-                mutableEvents.emit(LoginScreenEvents.RequestNotificationPermission)
-                mutableEvents.emit(LoginScreenEvents.NavigateToMain)
+                // Navigation handled by auth state observer
             }
             is Interactor.OidcLoginResult.Cancelled -> {
                 mutableState.value = mutableState.value.copy(isLoading = false)
@@ -141,6 +149,8 @@ class LoginViewModel @Inject constructor(
         fun getInitialHost(): String
 
         fun getInitialEmail(): String
+
+        val isLoggedIn: kotlinx.coroutines.flow.Flow<Boolean>
 
         suspend fun setHost(host: String): SetHostResult
 

@@ -102,7 +102,9 @@ class AppAuthOidcManager @Inject constructor(
         additionalParams["device_type"] = deviceInfo.deviceType
         deviceInfo.deviceName?.let { additionalParams["device_name"] = it }
 
-        authRequestBuilder.setAdditionalParameters(additionalParams)
+        authRequestBuilder
+            .setPrompt("login")
+            .setAdditionalParameters(additionalParams)
 
         val authRequest = authRequestBuilder.build()
         logger.debug("[OIDC_DBG] createAuthorizationIntent() built request, state=${authRequest.state}, saving...")
@@ -149,13 +151,16 @@ class AppAuthOidcManager @Inject constructor(
                     }
                     hasCode && request == null -> {
                         logger.warn("[OIDC_DBG] handleResponse() has code but no pending request!")
+                        return OidcAuthManager.AuthorizationResult.Error("No pending auth request - please try again")
                     }
                     else -> {
                         logger.warn("[OIDC_DBG] handleResponse() URI has neither code nor error")
+                        return OidcAuthManager.AuthorizationResult.Error("Invalid callback - no code or error in response")
                     }
                 }
             } else {
                 logger.warn("[OIDC_DBG] handleResponse() no URI in intent")
+                return OidcAuthManager.AuthorizationResult.Error("No callback URI in intent")
             }
         }
 
@@ -182,9 +187,9 @@ class AppAuthOidcManager @Inject constructor(
             }
 
             else -> {
-                // Don't clear request - might be a spurious callback, let the real one come through
-                logger.error("[OIDC_DBG] handleResponse() no response or exception, keeping pending request")
-                OidcAuthManager.AuthorizationResult.Error("No authorization response")
+                // This shouldn't happen - we handle all cases above
+                logger.error("[OIDC_DBG] handleResponse() unexpected state: no response or exception")
+                OidcAuthManager.AuthorizationResult.Error("Unexpected authorization state")
             }
         }
     }

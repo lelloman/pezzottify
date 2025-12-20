@@ -6,6 +6,7 @@ import com.lelloman.pezzottify.android.ui.R
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
@@ -144,7 +145,7 @@ class LoginViewModelTest {
     }
 
     @Test
-    fun `clickOnLoginButton success emits RequestNotificationPermission and NavigateToMain events`() = runTest {
+    fun `clickOnLoginButton success emits RequestNotificationPermission and NavigateToMain events when auth state changes`() = runTest {
         fakeInteractor.loginResult = LoginViewModel.Interactor.LoginResult.Success
         viewModel.updateHost("https://host.com")
         viewModel.updateEmail("user@test.com")
@@ -158,11 +159,14 @@ class LoginViewModelTest {
         viewModel.clockOnLoginButton()
         advanceUntilIdle()
 
+        // Navigation events are triggered by auth state changing to logged in
+        fakeInteractor.setLoggedIn(true)
+        advanceUntilIdle()
+
         assertThat(events).containsExactly(
             LoginScreenEvents.RequestNotificationPermission,
             LoginScreenEvents.NavigateToMain
         ).inOrder()
-        assertThat(viewModel.state.value.isLoading).isFalse()
 
         job.cancel()
     }
@@ -182,7 +186,7 @@ class LoginViewModelTest {
     }
 
     @Test
-    fun `loading state is true during login`() = runTest {
+    fun `loading state is true during login and stays true on success until navigation`() = runTest {
         fakeInteractor.loginDelay = true
         viewModel.updateHost("https://host.com")
         viewModel.updateEmail("user@test.com")
@@ -198,7 +202,8 @@ class LoginViewModelTest {
         fakeInteractor.completeLogin()
         advanceUntilIdle()
 
-        assertThat(viewModel.state.value.isLoading).isFalse()
+        // On success, isLoading stays true until navigation happens (driven by auth state)
+        assertThat(viewModel.state.value.isLoading).isTrue()
     }
 
     private class FakeInteractor : LoginViewModel.Interactor {
@@ -224,6 +229,11 @@ class LoginViewModelTest {
         override fun getInitialHost(): String = _initialHost
 
         override fun getInitialEmail(): String = _initialEmail
+
+        private val _isLoggedIn = MutableStateFlow(false)
+        override val isLoggedIn: kotlinx.coroutines.flow.Flow<Boolean> = _isLoggedIn
+
+        fun setLoggedIn(value: Boolean) { _isLoggedIn.value = value }
 
         override suspend fun setHost(host: String): LoginViewModel.Interactor.SetHostResult {
             lastSetHost = host
