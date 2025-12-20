@@ -145,6 +145,9 @@ class InteractorsModule {
         override fun getInitialEmail(): String =
             authStore.getLastUsedHandle() ?: ""
 
+        override val isLoggedIn: kotlinx.coroutines.flow.Flow<Boolean> =
+            authStore.getAuthState().map { it is AuthState.LoggedIn }
+
         override suspend fun setHost(host: String): LoginViewModel.Interactor.SetHostResult =
             when (configStore.setBaseUrl(host)) {
                 ConfigStore.SetBaseUrlResult.Success -> LoginViewModel.Interactor.SetHostResult.Success
@@ -164,6 +167,8 @@ class InteractorsModule {
         override fun oidcCallbacks(): SharedFlow<Intent> = oidcCallbackHandler.callbacks
 
         override suspend fun createOidcAuthIntent(): LoginViewModel.Interactor.OidcIntentResult {
+            // Clear processed state when starting a new auth flow
+            oidcCallbackHandler.clearProcessedState()
             val deviceInfo = deviceInfoProvider.getDeviceInfo()
             val intent = oidcAuthManager.createAuthorizationIntent(deviceInfo)
             return if (intent != null) {
@@ -174,6 +179,12 @@ class InteractorsModule {
         }
 
         override suspend fun handleOidcCallback(intent: Intent): LoginViewModel.Interactor.OidcLoginResult {
+            // Prevent duplicate processing of the same callback
+            if (oidcCallbackHandler.isAlreadyProcessed(intent)) {
+                return LoginViewModel.Interactor.OidcLoginResult.Cancelled
+            }
+            oidcCallbackHandler.markAsProcessed(intent)
+
             val authResult = oidcAuthManager.handleAuthorizationResponse(intent)
             return when (val loginResult = performOidcLogin(authResult)) {
                 is PerformOidcLogin.LoginResult.Success ->
