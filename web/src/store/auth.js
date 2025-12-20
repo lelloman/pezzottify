@@ -3,6 +3,46 @@ import axios from "axios";
 import * as ws from "../services/websocket";
 import { useSyncStore } from "./sync";
 
+const DEVICE_ID_KEY = "pezzottify_device_id";
+
+/**
+ * Get or generate a persistent device ID.
+ * Stored in localStorage to persist across sessions.
+ */
+function getDeviceId() {
+  let deviceId = localStorage.getItem(DEVICE_ID_KEY);
+  if (!deviceId) {
+    deviceId = crypto.randomUUID();
+    localStorage.setItem(DEVICE_ID_KEY, deviceId);
+  }
+  return deviceId;
+}
+
+/**
+ * Get a human-readable device name based on browser/platform info.
+ */
+function getDeviceName() {
+  const userAgent = navigator.userAgent;
+  let browser = "Browser";
+  let os = "Unknown";
+
+  // Detect browser
+  if (userAgent.includes("Firefox")) browser = "Firefox";
+  else if (userAgent.includes("Chrome")) browser = "Chrome";
+  else if (userAgent.includes("Safari")) browser = "Safari";
+  else if (userAgent.includes("Edge")) browser = "Edge";
+
+  // Detect OS
+  if (userAgent.includes("Windows")) os = "Windows";
+  else if (userAgent.includes("Mac")) os = "macOS";
+  else if (userAgent.includes("Linux")) os = "Linux";
+  else if (userAgent.includes("Android")) os = "Android";
+  else if (userAgent.includes("iPhone") || userAgent.includes("iPad"))
+    os = "iOS";
+
+  return `${browser} on ${os}`;
+}
+
 export const useAuthStore = defineStore("auth", {
   state: () => ({
     user: null,
@@ -14,10 +54,20 @@ export const useAuthStore = defineStore("auth", {
   actions: {
     /**
      * Initiate OIDC login flow.
-     * Redirects the browser to the OIDC login endpoint.
+     * Redirects the browser to the OIDC login endpoint with device info.
      */
     loginWithOidc() {
-      window.location.href = "/v1/auth/oidc/login";
+      const deviceId = getDeviceId();
+      const deviceType = "web";
+      const deviceName = getDeviceName();
+
+      const params = new URLSearchParams({
+        device_id: deviceId,
+        device_type: deviceType,
+        device_name: deviceName,
+      });
+
+      window.location.href = `/v1/auth/oidc/login?${params.toString()}`;
     },
 
     /**
