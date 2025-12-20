@@ -55,8 +55,8 @@ abstract class DomainModule {
         @Provides
         @Singleton
         fun provideOidcConfig(): OidcConfig = OidcConfig(
-            issuerUrl = "https://auth.lelloman.com",
-            clientId = "pezzottify-android",
+            issuerUrl = BuildConfig.OIDC_ISSUER_URL,
+            clientId = BuildConfig.OIDC_CLIENT_ID,
             redirectUri = "com.lelloman.pezzottify.android://oauth/callback",
         )
     }
