@@ -18,7 +18,8 @@ window.config = useDebugStore();
 const remoteStore = useRemoteStore();
 const authStore = useAuthStore();
 
-// Initialize auth store (connects to WebSocket if already authenticated)
+// Initialize auth store (checks session via cookie)
+// This is async but we don't need to wait - the router guard will handle it
 authStore.initialize();
 
 app.mount("#app");

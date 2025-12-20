@@ -3,86 +3,50 @@ import axios from "axios";
 import * as ws from "../services/websocket";
 import { useSyncStore } from "./sync";
 
-const DEVICE_UUID_KEY = "pezzottify_device_uuid";
-
-function generateUuid() {
-  // Use crypto.randomUUID if available (secure contexts only)
-  if (typeof crypto !== "undefined" && crypto.randomUUID) {
-    return crypto.randomUUID();
-  }
-  // Fallback for non-secure contexts (HTTP)
-  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
-    const r = (Math.random() * 16) | 0;
-    const v = c === "x" ? r : (r & 0x3) | 0x8;
-    return v.toString(16);
-  });
-}
-
-function getOrCreateDeviceUuid() {
-  let deviceUuid = localStorage.getItem(DEVICE_UUID_KEY);
-  if (!deviceUuid) {
-    deviceUuid = "web-" + generateUuid();
-    localStorage.setItem(DEVICE_UUID_KEY, deviceUuid);
-  }
-  return deviceUuid;
-}
-
-function getDeviceName() {
-  // Try to get a meaningful device name from the browser
-  const ua = navigator.userAgent;
-  if (ua.includes("Chrome")) return "Chrome Browser";
-  if (ua.includes("Firefox")) return "Firefox Browser";
-  if (ua.includes("Safari")) return "Safari Browser";
-  if (ua.includes("Edge")) return "Edge Browser";
-  return "Web Browser";
-}
-
-function getOsInfo() {
-  const ua = navigator.userAgent;
-  if (ua.includes("Windows")) return "Windows";
-  if (ua.includes("Mac OS")) return "macOS";
-  if (ua.includes("Linux")) return "Linux";
-  if (ua.includes("Android")) return "Android";
-  if (ua.includes("iOS")) return "iOS";
-  return navigator.platform || "Unknown";
-}
-
 export const useAuthStore = defineStore("auth", {
   state: () => ({
     user: null,
-    token: localStorage.getItem("token") || null,
+    sessionChecked: false,
   }),
   getters: {
-    isAuthenticated: (state) => !!state.token,
+    isAuthenticated: (state) => !!state.user,
   },
   actions: {
-    async login(credentials) {
+    /**
+     * Initiate OIDC login flow.
+     * Redirects the browser to the OIDC login endpoint.
+     */
+    loginWithOidc() {
+      window.location.href = "/v1/auth/oidc/login";
+    },
+
+    /**
+     * Check if the user has a valid session.
+     * Called on app startup and after OIDC callback redirect.
+     */
+    async checkSession() {
       try {
-        const response = await axios.post("/v1/auth/login", {
-          user_handle: credentials.username,
-          password: credentials.password,
-          device_uuid: getOrCreateDeviceUuid(),
-          device_type: "web",
-          device_name: getDeviceName(),
-          os_info: getOsInfo(),
-        });
+        const response = await axios.get("/v1/auth/session");
+        this.user = {
+          handle: response.data.user_handle,
+          permissions: response.data.permissions,
+        };
+        this.sessionChecked = true;
 
-        // Assuming the response contains the token in response.data.token
-        this.token = response.data.token;
-        localStorage.setItem("token", this.token);
-
-        // Optionally fetch and store user info
-        this.user = response.data.user || null;
-
-        // Connect to WebSocket after successful login
+        // Connect to WebSocket after confirming session
         const syncStore = useSyncStore();
         ws.registerHandler("sync", syncStore.handleSyncMessage);
         ws.connect();
-      } catch (error) {
-        console.error("Login failed", error);
-        throw new Error(error.response?.data?.message || "Login failed");
+
+        return true;
+      } catch {
+        // 401/403 means no valid session
+        this.user = null;
+        this.sessionChecked = true;
+        return false;
       }
     },
+
     async logout() {
       // Unregister sync handler and disconnect WebSocket before clearing auth
       ws.unregisterHandler("sync");
@@ -101,20 +65,16 @@ export const useAuthStore = defineStore("auth", {
         console.error("Failed to cleanup stores:", error);
       }
 
-      this.token = null;
       this.user = null;
-      localStorage.removeItem("token");
+      this.sessionChecked = false;
     },
+
     /**
      * Initialize the auth store on app startup.
-     * Connects to WebSocket if already authenticated.
+     * Checks for existing session via cookie.
      */
-    initialize() {
-      if (this.isAuthenticated) {
-        const syncStore = useSyncStore();
-        ws.registerHandler("sync", syncStore.handleSyncMessage);
-        ws.connect();
-      }
+    async initialize() {
+      await this.checkSession();
     },
   },
 });
