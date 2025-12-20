@@ -272,4 +272,24 @@ mod tests {
         assert_eq!(vocab.find_best_match("BEATLES", 0), Some("beatles"));
         assert_eq!(vocab.find_best_match("metallica", 0), Some("metallica"));
     }
+
+    #[test]
+    fn test_lucio_dalla_typo_correction() {
+        let mut vocab = Vocabulary::new();
+        vocab.add_text("Lucio Dalla");
+
+        // Verify words are in vocabulary
+        assert_eq!(vocab.find_best_match("lucio", 0), Some("lucio"));
+        assert_eq!(vocab.find_best_match("dalla", 0), Some("dalla"));
+
+        // Verify typo correction works
+        // "fucio" -> "lucio" (distance 1: f->l)
+        assert_eq!(vocab.find_best_match("fucio", 2), Some("lucio"));
+        // "palla" -> "dalla" (distance 1: p->d)
+        assert_eq!(vocab.find_best_match("palla", 2), Some("dalla"));
+
+        // Full query correction
+        let corrected = vocab.correct_query("fucio palla", 2);
+        assert_eq!(corrected, "lucio dalla");
+    }
 }

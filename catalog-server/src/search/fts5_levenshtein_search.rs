@@ -370,7 +370,22 @@ impl Fts5LevenshteinSearchVault {
     /// Correct a query using the vocabulary
     fn correct_query(&self, query: &str) -> String {
         let vocabulary = self.vocabulary.read().unwrap();
-        vocabulary.correct_query(query, self.max_edit_distance)
+        let corrected = vocabulary.correct_query(query, self.max_edit_distance);
+        if corrected != query {
+            info!(
+                "Query corrected: '{}' -> '{}' (vocabulary size: {})",
+                query,
+                corrected,
+                vocabulary.len()
+            );
+        } else {
+            info!(
+                "Query NOT corrected: '{}' (vocabulary size: {})",
+                query,
+                vocabulary.len()
+            );
+        }
+        corrected
     }
 }
 
@@ -864,6 +879,35 @@ mod tests {
         let results = vault.search("Abby Road", 10, None);
         assert_eq!(results.len(), 1);
         assert_eq!(results[0].item_id, "a3");
+    }
+
+    #[test]
+    fn test_lucio_dalla_multi_word_typo() {
+        let temp_dir = TempDir::new().unwrap();
+        let db_path = temp_dir.path().join("search.db");
+
+        let catalog = Arc::new(MockCatalogStore::new(vec![SearchableItem {
+            id: "lucio_dalla".to_string(),
+            name: "Lucio Dalla".to_string(),
+            content_type: SearchableContentType::Artist,
+            additional_text: vec![],
+        }]));
+
+        let vault = Fts5LevenshteinSearchVault::new(catalog, &db_path).unwrap();
+
+        // Exact search should work
+        let results = vault.search("Lucio Dalla", 10, None);
+        assert_eq!(results.len(), 1, "Exact search should find Lucio Dalla");
+        assert_eq!(results[0].item_id, "lucio_dalla");
+
+        // Typo in both words: "fucio palla" -> "lucio dalla"
+        let results = vault.search("fucio palla", 10, None);
+        assert_eq!(
+            results.len(),
+            1,
+            "Search for 'fucio palla' should find 'Lucio Dalla'"
+        );
+        assert_eq!(results[0].item_id, "lucio_dalla");
     }
 
     #[test]

@@ -6,20 +6,18 @@
 - **Step 1-6**: Runtime-configurable search engine via CLI (`--search-engine`) and config (`[search] engine`)
 - **Step 8**: Live index sync (add/update/remove items without restart)
 - **Step 9a**: Typo-tolerant search via FTS5 + Levenshtein (implemented as `fts5-levenshtein` engine)
+- **Step 9b**: Popularity weighting in FTS5-Levenshtein (integrated with PopularContentJob)
 
 ### Available Search Engines
 | Engine | CLI Value | Description |
 |--------|-----------|-------------|
 | PezzotHash | `pezzothash` | SimHash-based fuzzy search (default) |
 | FTS5 | `fts5` | SQLite FTS5 with trigram tokenizer |
-| FTS5+Levenshtein | `fts5-levenshtein` | FTS5 with typo correction |
+| FTS5+Levenshtein | `fts5-levenshtein` | FTS5 with typo correction + popularity boost |
 | NoOp | `noop` | Disabled (fastest startup) |
 
 ### Not Yet Implemented
 - **Step 10**: Parallel category search (optional, for 100k+ item catalogs)
-
-### Next Up: Step 9b - Popularity Weighting (FTS5-Levenshtein only)
-See detailed implementation plan below.
 
 ---
 
@@ -590,7 +588,7 @@ pub enum SearchEngine {
 }
 ```
 
-### 9b. Add popularity weighting (FTS5-Levenshtein only)
+### 9b. Add popularity weighting (FTS5-Levenshtein only) ✅ DONE
 
 Add popularity weighting to search results in `Fts5LevenshteinSearchVault`. Popular items (based on listening history) will be boosted in search rankings.
 
@@ -767,7 +765,7 @@ This is probably overkill for most catalogs but could help with 100k+ items.
 |--------|-------|----------------|------------|--------|
 | `pezzothash` | SimHash | Yes (built-in) | No | Unbounded |
 | `fts5` | Trigram | Partial | No | Bounded |
-| `fts5-levenshtein` | Trigram + Levenshtein | Yes | Planned (Step 9b) | Bounded |
+| `fts5-levenshtein` | Trigram + Levenshtein | Yes | Yes ✅ | Bounded |
 | `noop` | - | - | - | Zero |
 
 ### Files Created
