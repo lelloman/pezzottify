@@ -229,6 +229,7 @@ impl UserManager {
 
     /// Provisions a new user from OIDC authentication.
     /// Creates the user, sets the OIDC subject, and assigns the Regular role.
+    /// If the handle already exists, appends a numeric suffix (e.g., foo.1, foo.2).
     /// Returns the new user_id.
     pub fn provision_oidc_user(
         &self,
@@ -236,13 +237,16 @@ impl UserManager {
         preferred_username: Option<&str>,
         email: Option<&str>,
     ) -> Result<usize> {
-        // Use preferred_username, then email, then subject as the handle
-        let user_handle = preferred_username
+        // Use preferred_username, then email, then subject as the base handle
+        let base_handle = preferred_username
             .or(email)
             .unwrap_or(oidc_subject);
 
+        // Find an available handle (append .1, .2, etc. if base handle is taken)
+        let user_handle = self.find_available_handle(base_handle)?;
+
         // Create the user
-        let user_id = self.user_store.create_user(user_handle)?;
+        let user_id = self.user_store.create_user(&user_handle)?;
 
         // Set the OIDC subject
         self.user_store.set_user_oidc_subject(user_id, oidc_subject)?;
@@ -251,6 +255,29 @@ impl UserManager {
         self.user_store.add_user_role(user_id, UserRole::Regular)?;
 
         Ok(user_id)
+    }
+
+    /// Finds an available user handle by checking for collisions.
+    /// If the base handle is taken, tries base.1, base.2, etc.
+    fn find_available_handle(&self, base_handle: &str) -> Result<String> {
+        // First, try the base handle
+        if self.user_store.get_user_id(base_handle)?.is_none() {
+            return Ok(base_handle.to_string());
+        }
+
+        // Base handle is taken, try numbered suffixes
+        for suffix in 1..=1000 {
+            let candidate = format!("{}.{}", base_handle, suffix);
+            if self.user_store.get_user_id(&candidate)?.is_none() {
+                return Ok(candidate);
+            }
+        }
+
+        // Extremely unlikely, but handle it gracefully
+        anyhow::bail!(
+            "Could not find available handle for base '{}' after 1000 attempts",
+            base_handle
+        )
     }
 
     pub fn get_user_handle(&self, user_id: usize) -> Result<Option<String>> {
