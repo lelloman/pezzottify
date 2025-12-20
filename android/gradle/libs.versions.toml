@@ -33,6 +33,7 @@ robolectric = "4.14.1"
 mockk = "1.13.13"
 nanohttpd = "2.3.1"
 androidoscopy = "master-SNAPSHOT"
+appauth = "0.11.1"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -89,6 +90,7 @@ androidx-test-core = { group = "androidx.test", name = "core", version = "1.6.1"
 mockk = { group = "io.mockk", name = "mockk", version.ref = "mockk" }
 nanohttpd = { group = "org.nanohttpd", name = "nanohttpd", version.ref = "nanohttpd" }
 androidoscopy-sdk = { group = "com.github.lelloman", name = "androidoscopy", version.ref = "androidoscopy" }
+appauth = { group = "net.openid", name = "appauth", version.ref = "appauth" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

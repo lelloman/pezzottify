@@ -1,5 +1,6 @@
 package com.lelloman.pezzottify.android
 
+import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -10,6 +11,7 @@ import androidx.compose.runtime.getValue
 import coil3.ImageLoader
 import coil3.compose.setSingletonImageLoaderFactory
 import com.lelloman.pezzottify.android.domain.settings.UserSettingsStore
+import com.lelloman.pezzottify.android.oidc.OidcCallbackHandler
 import com.lelloman.pezzottify.android.ui.AppUi
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
@@ -30,9 +32,16 @@ class MainActivity : ComponentActivity() {
     @Inject
     lateinit var userSettingsStore: UserSettingsStore
 
+    @Inject
+    lateinit var oidcCallbackHandler: OidcCallbackHandler
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+
+        // Check for OIDC callback in initial intent
+        handleOidcCallback(intent)
+
         setContent {
             setSingletonImageLoaderFactory { imageLoader }
             val themeMode by userSettingsStore.themeMode.collectAsState()
@@ -47,6 +56,16 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        handleOidcCallback(intent)
+    }
+
+    private fun handleOidcCallback(intent: Intent) {
+        if (oidcCallbackHandler.isOidcCallback(intent)) {
+            oidcCallbackHandler.handleCallback(intent)
+        }
+    }
 }
 
 private fun DomainThemeMode.toUi(): UiThemeMode = when (this) {

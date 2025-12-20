@@ -57,6 +57,7 @@
     <string name="server_url_placeholder">http://example.com:3001</string>
     <string name="email">Email</string>
     <string name="password">Password</string>
+    <string name="login_with_sso">Sign in with SSO</string>
     <!-- LOGIN SCREEN -->
 
     <!-- PROFILE SCREEN -->
