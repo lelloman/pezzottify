@@ -1,5 +1,6 @@
 package com.lelloman.pezzottify.android.debuginterface
 
+import com.lelloman.pezzottify.android.domain.auth.TokenRefresher
 import com.lelloman.pezzottify.android.domain.cache.CacheMetrics
 import com.lelloman.pezzottify.android.domain.cache.CacheMetricsCollector
 import com.lelloman.pezzottify.android.domain.cache.CachePerformanceReport
@@ -21,6 +22,7 @@ class DebugHttpServer @Inject constructor(
     private val cacheMetricsCollector: CacheMetricsCollector,
     private val staticsStore: StaticsStore,
     private val systemNotificationHelper: SystemNotificationHelper,
+    private val tokenRefresher: TokenRefresher,
 ) : NanoHTTPD(DEFAULT_PORT) {
 
     companion object {
@@ -35,6 +37,7 @@ class DebugHttpServer @Inject constructor(
             session.method == Method.POST && session.uri == "/action/reset-metrics" -> handleResetMetrics()
             session.method == Method.POST && session.uri == "/action/refresh-memory" -> handleRefreshMemory()
             session.method == Method.POST && session.uri == "/action/test-whatsnew-notification" -> handleTestWhatsNewNotification()
+            session.method == Method.POST && session.uri == "/action/force-token-refresh" -> handleForceTokenRefresh()
             else -> newFixedLengthResponse(Response.Status.NOT_FOUND, MIME_PLAINTEXT, "Not Found")
         }
     }
@@ -79,6 +82,26 @@ class DebugHttpServer @Inject constructor(
             tracksAdded = 42,
         )
         return redirectToDashboard()
+    }
+
+    private fun handleForceTokenRefresh(): Response {
+        val result = runBlocking { tokenRefresher.refreshTokens() }
+        val message = when (result) {
+            is TokenRefresher.RefreshResult.Success -> "Token refreshed successfully"
+            is TokenRefresher.RefreshResult.Failed -> "Refresh failed: ${result.reason}"
+            TokenRefresher.RefreshResult.NotAvailable -> "No refresh token available"
+        }
+        return newFixedLengthResponse(Response.Status.OK, "text/html", """
+            <!DOCTYPE html>
+            <html>
+            <head><meta http-equiv="refresh" content="2;url=/"></head>
+            <body style="background:#1a1a2e;color:#eaeaea;font-family:sans-serif;padding:20px;">
+                <h2>Token Refresh Result</h2>
+                <p>$message</p>
+                <p><a href="/" style="color:#00d4ff;">Back to dashboard</a></p>
+            </body>
+            </html>
+        """.trimIndent())
     }
 
     private fun redirectToDashboard(): Response {
@@ -242,6 +265,9 @@ class DebugHttpServer @Inject constructor(
             </form>
             <form method="POST" action="/action/test-whatsnew-notification" style="margin: 0;">
                 <button type="submit" class="btn-primary">Test WhatsNew Notification</button>
+            </form>
+            <form method="POST" action="/action/force-token-refresh" style="margin: 0;">
+                <button type="submit" class="btn-primary">Force Token Refresh</button>
             </form>
             <form method="GET" action="/" style="margin: 0;">
                 <button type="submit" class="btn-primary">Refresh Dashboard</button>
