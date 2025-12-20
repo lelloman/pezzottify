@@ -2,11 +2,15 @@ package com.lelloman.pezzottify.android.localdata.internal.usercontent.model
 
 import androidx.room.ColumnInfo
 import androidx.room.Entity
+import androidx.room.Index
 import androidx.room.PrimaryKey
 import com.lelloman.pezzottify.android.domain.usercontent.PlaylistSyncStatus
 import com.lelloman.pezzottify.android.domain.usercontent.UserPlaylist
 
-@Entity(tableName = PlaylistEntity.TABLE_NAME)
+@Entity(
+    tableName = PlaylistEntity.TABLE_NAME,
+    indices = [Index(value = [PlaylistEntity.COLUMN_SYNC_STATUS])]
+)
 internal data class PlaylistEntity(
     @PrimaryKey
     @ColumnInfo(name = COLUMN_ID)
