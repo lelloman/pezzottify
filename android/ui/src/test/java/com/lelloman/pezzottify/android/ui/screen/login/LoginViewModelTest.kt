@@ -1,9 +1,12 @@
 package com.lelloman.pezzottify.android.ui.screen.login
 
+import android.content.Intent
 import com.google.common.truth.Truth.assertThat
 import com.lelloman.pezzottify.android.ui.R
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
@@ -246,6 +249,19 @@ class LoginViewModelTest {
 
         fun completeLogin() {
             loginContinuation?.invoke()
+        }
+
+        // OIDC stub implementations
+        private val _oidcCallbacks = MutableSharedFlow<Intent>(extraBufferCapacity = 1)
+
+        override fun oidcCallbacks(): SharedFlow<Intent> = _oidcCallbacks
+
+        override suspend fun createOidcAuthIntent(): LoginViewModel.Interactor.OidcIntentResult {
+            return LoginViewModel.Interactor.OidcIntentResult.Error("Not implemented in test")
+        }
+
+        override suspend fun handleOidcCallback(intent: Intent): LoginViewModel.Interactor.OidcLoginResult {
+            return LoginViewModel.Interactor.OidcLoginResult.Error("Not implemented in test")
         }
     }
 }

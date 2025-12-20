@@ -2,8 +2,17 @@ package com.lelloman.pezzottify.android.ui.screen.login
 
 import android.Manifest
 import android.os.Build
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.width
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
@@ -69,10 +78,17 @@ internal fun LoginScreenInternal(
     actions: LoginScreenActions,
     navController: NavController,
 ) {
+    val context = LocalContext.current
+
     // Permission launcher for POST_NOTIFICATIONS (Android 13+)
     val notificationPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
     ) { /* We don't need to handle the result - user can deny and still use the app */ }
+
+    // OIDC auth launcher
+    val oidcLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { /* Callback is handled via deep link in MainActivity */ }
 
     LaunchedEffect(Unit) {
         events.collect {
@@ -84,6 +100,12 @@ internal fun LoginScreenInternal(
                     }
                 }
                 LoginScreenEvents.NavigateToMain -> navController.fromLoginToMain()
+                is LoginScreenEvents.LaunchOidcIntent -> {
+                    oidcLauncher.launch(it.intent)
+                }
+                is LoginScreenEvents.OidcError -> {
+                    Toast.makeText(context, it.message, Toast.LENGTH_LONG).show()
+                }
             }
         }
     }
@@ -176,6 +198,28 @@ internal fun LoginScreenInternal(
                     Text(stringResource(R.string.login))
                 }
             }
+
+            HorizontalDivider(
+                modifier = Modifier.padding(vertical = 16.dp),
+                color = MaterialTheme.colorScheme.outlineVariant,
+            )
+
+            OutlinedButton(
+                onClick = {
+                    if (!state.isLoading) {
+                        actions.clickOnOidcLogin()
+                    }
+                },
+                enabled = !state.isLoading,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Lock,
+                    contentDescription = null,
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(stringResource(R.string.login_with_sso))
+            }
         }
     }
 }
@@ -218,6 +262,16 @@ private fun LoginPreview() {
                 }
 
                 override fun clockOnLoginButton() {
+                    if (!mutableState.isLoading) {
+                        mutableState = mutableState.copy(isLoading = true)
+                        coroutineScope.launch(Dispatchers.IO) {
+                            delay(2000)
+                            mutableState = mutableState.copy(isLoading = false)
+                        }
+                    }
+                }
+
+                override fun clickOnOidcLogin() {
                     if (!mutableState.isLoading) {
                         mutableState = mutableState.copy(isLoading = true)
                         coroutineScope.launch(Dispatchers.IO) {

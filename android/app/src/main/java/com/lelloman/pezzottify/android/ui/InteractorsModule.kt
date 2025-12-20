@@ -1,10 +1,14 @@
 package com.lelloman.pezzottify.android.ui
 
+import android.content.Intent
 import com.lelloman.pezzottify.android.domain.auth.AuthState
 import com.lelloman.pezzottify.android.domain.auth.AuthStore
+import com.lelloman.pezzottify.android.domain.auth.oidc.OidcAuthManager
 import com.lelloman.pezzottify.android.domain.auth.usecase.IsLoggedIn
 import com.lelloman.pezzottify.android.domain.auth.usecase.PerformLogin
 import com.lelloman.pezzottify.android.domain.auth.usecase.PerformLogout
+import com.lelloman.pezzottify.android.domain.auth.usecase.PerformOidcLogin
+import com.lelloman.pezzottify.android.domain.device.DeviceInfoProvider
 import com.lelloman.pezzottify.android.domain.config.BuildInfo
 import com.lelloman.pezzottify.android.domain.config.ConfigStore
 import com.lelloman.pezzottify.android.domain.notifications.NotificationRepository
@@ -89,12 +93,14 @@ import com.lelloman.pezzottify.android.ui.screen.main.settings.logviewer.LogView
 import com.lelloman.pezzottify.android.ui.screen.player.PlayerScreenViewModel
 import com.lelloman.pezzottify.android.ui.screen.queue.QueueScreenViewModel
 import com.lelloman.pezzottify.android.ui.screen.splash.SplashViewModel
+import com.lelloman.pezzottify.android.oidc.OidcCallbackHandler
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.android.components.ViewModelComponent
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
@@ -114,6 +120,10 @@ class InteractorsModule {
     @Provides
     fun provideLoginInteractor(
         performLogin: PerformLogin,
+        performOidcLogin: PerformOidcLogin,
+        oidcAuthManager: OidcAuthManager,
+        oidcCallbackHandler: OidcCallbackHandler,
+        deviceInfoProvider: DeviceInfoProvider,
         configStore: ConfigStore,
         authStore: AuthStore,
     ): LoginViewModel.Interactor = object : LoginViewModel.Interactor {
@@ -137,6 +147,30 @@ class InteractorsModule {
                 PerformLogin.LoginResult.WrongCredentials -> LoginViewModel.Interactor.LoginResult.Failure.InvalidCredentials
                 PerformLogin.LoginResult.Error -> LoginViewModel.Interactor.LoginResult.Failure.Unknown
             }
+
+        override fun oidcCallbacks(): SharedFlow<Intent> = oidcCallbackHandler.callbacks
+
+        override suspend fun createOidcAuthIntent(): LoginViewModel.Interactor.OidcIntentResult {
+            val deviceInfo = deviceInfoProvider.getDeviceInfo()
+            val intent = oidcAuthManager.createAuthorizationIntent(deviceInfo)
+            return if (intent != null) {
+                LoginViewModel.Interactor.OidcIntentResult.Success(intent)
+            } else {
+                LoginViewModel.Interactor.OidcIntentResult.Error("OIDC not configured")
+            }
+        }
+
+        override suspend fun handleOidcCallback(intent: Intent): LoginViewModel.Interactor.OidcLoginResult {
+            val authResult = oidcAuthManager.handleAuthorizationResponse(intent)
+            return when (val loginResult = performOidcLogin(authResult)) {
+                is PerformOidcLogin.LoginResult.Success ->
+                    LoginViewModel.Interactor.OidcLoginResult.Success
+                is PerformOidcLogin.LoginResult.Cancelled ->
+                    LoginViewModel.Interactor.OidcLoginResult.Cancelled
+                is PerformOidcLogin.LoginResult.Error ->
+                    LoginViewModel.Interactor.OidcLoginResult.Error(loginResult.message)
+            }
+        }
     }
 
     @Provides

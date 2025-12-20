@@ -40,6 +40,9 @@ android {
         versionName = appVersion
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        // AppAuth redirect scheme for OIDC callback
+        manifestPlaceholders["appAuthRedirectScheme"] = "com.lelloman.pezzottify.android"
     }
 
     signingConfigs {
@@ -115,6 +118,7 @@ dependencies {
     implementation(libs.coil.network)
     implementation(platform(libs.okhttp.bom))
     implementation(libs.okhttp)
+    implementation(libs.appauth)
 
     implementation(project(":ui"))
     implementation(project(":domain"))
