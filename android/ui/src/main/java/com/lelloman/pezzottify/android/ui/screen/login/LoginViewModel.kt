@@ -116,6 +116,11 @@ class LoginViewModel @Inject constructor(
     }
 
     private suspend fun handleOidcCallback(callbackIntent: Intent) {
+        // Only process callbacks if we're still waiting for OIDC result
+        if (!mutableState.value.isLoading) {
+            return
+        }
+
         when (val result = interactor.handleOidcCallback(callbackIntent)) {
             is Interactor.OidcLoginResult.Success -> {
                 mutableState.value = mutableState.value.copy(isLoading = false)
