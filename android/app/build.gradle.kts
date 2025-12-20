@@ -1,9 +1,19 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.hilt)
     alias(libs.plugins.kotlin.kapt)
+}
+
+// Load local.properties for OIDC config
+val localProperties = Properties().apply {
+    val localPropsFile = rootProject.file("local.properties")
+    if (localPropsFile.exists()) {
+        localPropsFile.inputStream().use { load(it) }
+    }
 }
 
 // Compute full version: MAJOR.MINOR.COMMIT-COUNT
@@ -98,6 +108,12 @@ fun getGitCommit(): String {
 
 android.defaultConfig {
     buildConfigField("String", "GIT_COMMIT", "\"${getGitCommit()}\"")
+
+    // OIDC config from local.properties
+    val oidcIssuerUrl = localProperties.getProperty("oidc.issuerUrl", "")
+    val oidcClientId = localProperties.getProperty("oidc.clientId", "")
+    buildConfigField("String", "OIDC_ISSUER_URL", "\"$oidcIssuerUrl\"")
+    buildConfigField("String", "OIDC_CLIENT_ID", "\"$oidcClientId\"")
 }
 
 dependencies {

@@ -32,9 +32,21 @@ class AppAuthOidcManager @Inject constructor(
 
     private val logger: Logger by loggerFactory
     private val authService: AuthorizationService by lazy { AuthorizationService(context) }
+    private val prefs by lazy { context.getSharedPreferences("oidc_auth", Context.MODE_PRIVATE) }
 
     private var serviceConfig: AuthorizationServiceConfiguration? = null
-    private var pendingAuthRequest: AuthorizationRequest? = null
+
+    private var pendingAuthRequest: AuthorizationRequest?
+        get() = prefs.getString(KEY_PENDING_REQUEST, null)?.let {
+            try { AuthorizationRequest.jsonDeserialize(it) } catch (e: Exception) { null }
+        }
+        set(value) {
+            if (value != null) {
+                prefs.edit().putString(KEY_PENDING_REQUEST, value.jsonSerializeString()).apply()
+            } else {
+                prefs.edit().remove(KEY_PENDING_REQUEST).apply()
+            }
+        }
 
     override suspend fun createAuthorizationIntent(deviceInfo: DeviceInfo): Intent? {
         logger.debug("createAuthorizationIntent() starting OIDC flow")
@@ -76,10 +88,11 @@ class AppAuthOidcManager @Inject constructor(
             val request = pendingAuthRequest
 
             if (uri != null) {
-                logger.debug("handleAuthorizationResponse() building response from URI: $uri")
+                logger.debug("handleAuthorizationResponse() URI: $uri, hasRequest=${request != null}")
 
                 // Check for error in URI first (works even without request)
                 exception = AuthorizationException.fromOAuthRedirect(uri)
+                logger.debug("handleAuthorizationResponse() fromOAuthRedirect returned: ${exception?.code}")
 
                 if (exception == null && request != null) {
                     // Build response from URI (requires the original request)
@@ -87,6 +100,7 @@ class AppAuthOidcManager @Inject constructor(
                         AuthorizationResponse.Builder(request)
                             .fromUri(uri)
                             .build()
+                            .also { logger.debug("handleAuthorizationResponse() built response, code=${it.authorizationCode}") }
                     } catch (e: Exception) {
                         logger.error("handleAuthorizationResponse() failed to parse URI: ${e.message}")
                         null
@@ -218,5 +232,9 @@ class AppAuthOidcManager @Inject constructor(
             logger.warn("extractUserHandle() failed to parse ID token: ${e.message}")
             "user"
         }
+    }
+
+    companion object {
+        private const val KEY_PENDING_REQUEST = "pending_auth_request"
     }
 }
