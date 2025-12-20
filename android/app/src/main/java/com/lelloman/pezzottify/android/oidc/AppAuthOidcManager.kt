@@ -255,6 +255,7 @@ class AppAuthOidcManager @Inject constructor(
             val tokenRequest = TokenRequest.Builder(config, oidcConfig.clientId)
                 .setGrantType(GrantTypeValues.REFRESH_TOKEN)
                 .setRefreshToken(refreshToken)
+                .setScopes(oidcConfig.scopes.toSet())
                 .build()
 
             suspendCancellableCoroutine<OidcAuthManager.RefreshResult> { continuation ->
