@@ -83,16 +83,33 @@ async fn try_oidc_session(token: &str, ctx: &ServerState) -> Option<Session> {
         }
     };
 
-    // Look up local user by OIDC subject
+    // Look up or provision local user by OIDC subject
     let user_manager = ctx.user_manager.lock().unwrap();
     let user_id = match user_manager.get_user_id_by_oidc_subject(&claims.subject) {
-        Ok(Some(id)) => id,
+        Ok(Some(id)) => {
+            debug!("Found existing user for OIDC subject={}", claims.subject);
+            id
+        }
         Ok(None) => {
-            warn!(
-                "No local user found for OIDC subject={} during session validation",
-                claims.subject
+            // Auto-provision new user from ID token claims
+            debug!(
+                "Provisioning new user for OIDC subject={} (email={:?}, username={:?})",
+                claims.subject, claims.email, claims.preferred_username
             );
-            return None;
+            match user_manager.provision_oidc_user(
+                &claims.subject,
+                claims.preferred_username.as_deref(),
+                claims.email.as_deref(),
+            ) {
+                Ok(id) => {
+                    debug!("Successfully provisioned new user_id={} for OIDC subject={}", id, claims.subject);
+                    id
+                }
+                Err(e) => {
+                    warn!("Failed to provision OIDC user: {}", e);
+                    return None;
+                }
+            }
         }
         Err(e) => {
             warn!("Failed to look up user by OIDC subject: {}", e);
