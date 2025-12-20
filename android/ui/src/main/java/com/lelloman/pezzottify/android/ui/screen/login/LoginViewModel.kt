@@ -27,7 +27,8 @@ class LoginViewModel @Inject constructor(
         )
     val state = mutableState.asStateFlow()
 
-    private val mutableEvents = MutableSharedFlow<LoginScreenEvents>()
+    // replay=1 ensures NavigateToMain isn't lost if emitted before LaunchedEffect starts collecting
+    private val mutableEvents = MutableSharedFlow<LoginScreenEvents>(replay = 1)
     val events = mutableEvents.asSharedFlow()
 
     init {
@@ -116,11 +117,9 @@ class LoginViewModel @Inject constructor(
     }
 
     private suspend fun handleOidcCallback(callbackIntent: Intent) {
-        // Only process callbacks if we're still waiting for OIDC result
-        if (!mutableState.value.isLoading) {
-            return
-        }
-
+        // Always process callbacks - the OIDC manager validates if there's a pending request.
+        // We can't rely on isLoading because the ViewModel may be recreated after returning
+        // from the browser (e.g., due to process death).
         when (val result = interactor.handleOidcCallback(callbackIntent)) {
             is Interactor.OidcLoginResult.Success -> {
                 mutableState.value = mutableState.value.copy(isLoading = false)
