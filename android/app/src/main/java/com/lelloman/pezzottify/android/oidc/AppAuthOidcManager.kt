@@ -34,6 +34,7 @@ class AppAuthOidcManager @Inject constructor(
     private val authService: AuthorizationService by lazy { AuthorizationService(context) }
 
     private var serviceConfig: AuthorizationServiceConfiguration? = null
+    private var pendingAuthRequest: AuthorizationRequest? = null
 
     override suspend fun createAuthorizationIntent(deviceInfo: DeviceInfo): Intent? {
         logger.debug("createAuthorizationIntent() starting OIDC flow")
@@ -57,15 +58,49 @@ class AppAuthOidcManager @Inject constructor(
         authRequestBuilder.setAdditionalParameters(additionalParams)
 
         val authRequest = authRequestBuilder.build()
+        pendingAuthRequest = authRequest
 
-        logger.debug("createAuthorizationIntent() built auth request with device_id=${deviceInfo.deviceUuid}")
+        logger.debug("createAuthorizationIntent() built auth request with device_id=${deviceInfo.deviceUuid}, state=${authRequest.state}")
 
         return authService.getAuthorizationRequestIntent(authRequest)
     }
 
     override suspend fun handleAuthorizationResponse(intent: Intent): OidcAuthManager.AuthorizationResult {
-        val response = AuthorizationResponse.fromIntent(intent)
-        val exception = AuthorizationException.fromIntent(intent)
+        // First try to get response from AppAuth-formatted intent (has extras)
+        var response = AuthorizationResponse.fromIntent(intent)
+        var exception = AuthorizationException.fromIntent(intent)
+
+        // If no response/exception from extras, try to build from URI (deep link callback)
+        if (response == null && exception == null) {
+            val uri = intent.data
+            val request = pendingAuthRequest
+
+            if (uri != null) {
+                logger.debug("handleAuthorizationResponse() building response from URI: $uri")
+
+                // Check for error in URI first (works even without request)
+                exception = AuthorizationException.fromOAuthRedirect(uri)
+
+                if (exception == null && request != null) {
+                    // Build response from URI (requires the original request)
+                    response = try {
+                        AuthorizationResponse.Builder(request)
+                            .fromUri(uri)
+                            .build()
+                    } catch (e: Exception) {
+                        logger.error("handleAuthorizationResponse() failed to parse URI: ${e.message}")
+                        null
+                    }
+                } else if (exception == null && request == null) {
+                    logger.warn("handleAuthorizationResponse() got success URI but no pending request (process was killed?)")
+                }
+            } else {
+                logger.warn("handleAuthorizationResponse() no URI in intent")
+            }
+        }
+
+        // Clear pending request after handling
+        pendingAuthRequest = null
 
         return when {
             exception != null -> {

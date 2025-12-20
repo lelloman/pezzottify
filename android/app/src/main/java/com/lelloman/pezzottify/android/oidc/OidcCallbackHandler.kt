@@ -14,7 +14,7 @@ import javax.inject.Singleton
 @Singleton
 class OidcCallbackHandler @Inject constructor() {
 
-    private val _callbacks = MutableSharedFlow<Intent>(extraBufferCapacity = 1)
+    private val _callbacks = MutableSharedFlow<Intent>(replay = 1)
     val callbacks: SharedFlow<Intent> = _callbacks.asSharedFlow()
 
     /**
