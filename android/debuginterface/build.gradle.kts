@@ -51,9 +51,6 @@ dependencies {
     implementation(libs.androidx.ui.tooling.preview)
     implementation(libs.androidx.material3)
 
-    // HTTP server for debug dashboard
-    implementation(libs.nanohttpd)
-
     // Androidoscopy SDK for real-time debugging
     implementation(libs.androidoscopy.sdk)
 
