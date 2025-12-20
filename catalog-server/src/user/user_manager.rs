@@ -238,9 +238,7 @@ impl UserManager {
         email: Option<&str>,
     ) -> Result<usize> {
         // Use preferred_username, then email, then subject as the base handle
-        let base_handle = preferred_username
-            .or(email)
-            .unwrap_or(oidc_subject);
+        let base_handle = preferred_username.or(email).unwrap_or(oidc_subject);
 
         // Find an available handle (append .1, .2, etc. if base handle is taken)
         let user_handle = self.find_available_handle(base_handle)?;
@@ -249,7 +247,8 @@ impl UserManager {
         let user_id = self.user_store.create_user(&user_handle)?;
 
         // Set the OIDC subject
-        self.user_store.set_user_oidc_subject(user_id, oidc_subject)?;
+        self.user_store
+            .set_user_oidc_subject(user_id, oidc_subject)?;
 
         // Assign Regular role
         self.user_store.add_user_role(user_id, UserRole::Regular)?;

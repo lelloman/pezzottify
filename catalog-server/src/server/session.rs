@@ -102,7 +102,10 @@ async fn try_oidc_session(token: &str, ctx: &ServerState) -> Option<Session> {
                 claims.email.as_deref(),
             ) {
                 Ok(id) => {
-                    debug!("Successfully provisioned new user_id={} for OIDC subject={}", id, claims.subject);
+                    debug!(
+                        "Successfully provisioned new user_id={} for OIDC subject={}",
+                        id, claims.subject
+                    );
                     id
                 }
                 Err(e) => {
