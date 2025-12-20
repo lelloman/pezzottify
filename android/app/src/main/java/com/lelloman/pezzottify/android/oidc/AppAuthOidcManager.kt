@@ -275,22 +275,14 @@ class AppAuthOidcManager @Inject constructor(
                         }
 
                         tokenResponse != null -> {
-                            // Prefer ID token, but fall back to access token if not available
-                            // Many OIDC providers don't return ID token on refresh, but the
-                            // access token is often a JWT that can be validated the same way
-                            val token = tokenResponse.idToken ?: tokenResponse.accessToken
-                            if (token == null) {
-                                logger.error("[OIDC_DBG] refreshTokens() no token in response")
-                                OidcAuthManager.RefreshResult.Failed("No token received")
-                            } else {
-                                val newRefreshToken = tokenResponse.refreshToken
-                                val tokenType = if (tokenResponse.idToken != null) "ID token" else "access token"
-                                logger.info("[OIDC_DBG] refreshTokens() success using $tokenType, hasNewRefreshToken: ${newRefreshToken != null}")
-                                OidcAuthManager.RefreshResult.Success(
-                                    idToken = token,
-                                    refreshToken = newRefreshToken ?: refreshToken,
-                                )
-                            }
+                            // Return ID token if available, null otherwise
+                            // The caller should keep the old ID token if we don't get a new one
+                            val newRefreshToken = tokenResponse.refreshToken
+                            logger.info("[OIDC_DBG] refreshTokens() success, hasIdToken: ${tokenResponse.idToken != null}, hasNewRefreshToken: ${newRefreshToken != null}")
+                            OidcAuthManager.RefreshResult.Success(
+                                idToken = tokenResponse.idToken,
+                                refreshToken = newRefreshToken ?: refreshToken,
+                            )
                         }
 
                         else -> {

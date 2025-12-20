@@ -70,11 +70,11 @@ interface OidcAuthManager {
     sealed interface RefreshResult {
         /**
          * Token refresh successful.
-         * @param idToken The new ID token (JWT)
+         * @param idToken The new ID token (JWT), or null if provider didn't return one
          * @param refreshToken The new refresh token (may be same as before or rotated)
          */
         data class Success(
-            val idToken: String,
+            val idToken: String?,
             val refreshToken: String?,
         ) : RefreshResult
 

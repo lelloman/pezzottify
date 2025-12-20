@@ -41,13 +41,16 @@ class OidcTokenRefresher @Inject constructor(
             logger.debug("refreshTokens() attempting OIDC token refresh")
             when (val result = oidcAuthManager.refreshTokens(refreshToken)) {
                 is OidcAuthManager.RefreshResult.Success -> {
-                    logger.info("refreshTokens() success, updating auth state")
+                    // Use new ID token if available, otherwise keep the old one
+                    // (some OIDC providers don't return ID token on refresh)
+                    val newAuthToken = result.idToken ?: currentState.authToken
+                    logger.info("refreshTokens() success, hasNewIdToken=${result.idToken != null}")
                     val newState = currentState.copy(
-                        authToken = result.idToken,
+                        authToken = newAuthToken,
                         refreshToken = result.refreshToken,
                     )
                     authStore.storeAuthState(newState)
-                    TokenRefresher.RefreshResult.Success(result.idToken)
+                    TokenRefresher.RefreshResult.Success(newAuthToken)
                 }
 
                 is OidcAuthManager.RefreshResult.Failed -> {
