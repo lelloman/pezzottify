@@ -2,6 +2,7 @@ package com.lelloman.pezzottify.android.remoteapi
 
 import com.lelloman.pezzottify.android.domain.auth.AuthState
 import com.lelloman.pezzottify.android.domain.auth.AuthStore
+import com.lelloman.pezzottify.android.domain.auth.SessionExpiredHandler
 import com.lelloman.pezzottify.android.domain.config.ConfigStore
 import com.lelloman.pezzottify.android.domain.remoteapi.RemoteApiClient
 import com.lelloman.pezzottify.android.domain.remoteapi.RemoteApiCredentialsProvider
@@ -10,6 +11,7 @@ import com.lelloman.pezzottify.android.logger.LoggerFactory
 import com.lelloman.pezzottify.android.remoteapi.internal.HttpLoggingInterceptor
 import com.lelloman.pezzottify.android.remoteapi.internal.OkHttpClientFactory
 import com.lelloman.pezzottify.android.remoteapi.internal.RemoteApiClientImpl
+import com.lelloman.pezzottify.android.remoteapi.internal.SessionExpiredInterceptor
 import com.lelloman.pezzottify.android.remoteapi.internal.websocket.WebSocketManagerImpl
 import dagger.Module
 import dagger.Provides
@@ -58,9 +60,11 @@ class RemoteApiModule {
         authStore: AuthStore,
         configStore: ConfigStore,
         okHttpClientFactory: OkHttpClientFactory,
+        sessionExpiredHandler: SessionExpiredHandler,
         loggerFactory: LoggerFactory,
     ): RemoteApiClient {
         val httpLogger = loggerFactory.getLogger("HTTP")
+        val sessionLogger = loggerFactory.getLogger("SessionExpired")
         return RemoteApiClientImpl(
             okHttpClientFactory = okHttpClientFactory,
             hostUrlProvider = object : RemoteApiClient.HostUrlProvider {
@@ -72,7 +76,10 @@ class RemoteApiModule {
                 override val authToken: String
                     get() = (authStore.getAuthState().value as? AuthState.LoggedIn)?.authToken ?: ""
             },
-            interceptors = listOf(HttpLoggingInterceptor(httpLogger)),
+            interceptors = listOf(
+                SessionExpiredInterceptor(sessionExpiredHandler, sessionLogger),
+                HttpLoggingInterceptor(httpLogger),
+            ),
         )
     }
 }

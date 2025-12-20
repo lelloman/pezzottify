@@ -1,6 +1,8 @@
 package com.lelloman.pezzottify.android
 
+import com.lelloman.pezzottify.android.auth.SessionExpiredHandlerImpl
 import com.lelloman.pezzottify.android.device.AndroidDeviceInfoProvider
+import com.lelloman.pezzottify.android.domain.auth.SessionExpiredHandler
 import com.lelloman.pezzottify.android.domain.auth.oidc.OidcAuthManager
 import com.lelloman.pezzottify.android.domain.auth.oidc.OidcConfig
 import com.lelloman.pezzottify.android.domain.device.DeviceInfoProvider
@@ -40,6 +42,10 @@ abstract class DomainModule {
     @Binds
     @Singleton
     abstract fun bindOidcAuthManager(impl: AppAuthOidcManager): OidcAuthManager
+
+    @Binds
+    @Singleton
+    abstract fun bindSessionExpiredHandler(impl: SessionExpiredHandlerImpl): SessionExpiredHandler
 
     companion object {
         @Provides
