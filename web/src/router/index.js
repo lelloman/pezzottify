@@ -124,19 +124,19 @@ const router = createRouter({
   ],
 });
 
-router.beforeEach((to, from, next) => {
+router.beforeEach(async (to, from, next) => {
   const authStore = useAuthStore();
 
-  console.log(
-    "beforeEach to: " +
-      to +
-      " from: " +
-      from +
-      " is authenticaed: " +
-      authStore.isAuthenticated,
-  );
+  // Wait for initial session check if not done yet
+  if (!authStore.sessionChecked) {
+    await authStore.checkSession();
+  }
+
   if (to.meta.requiresAuth && !authStore.isAuthenticated) {
     next("/login");
+  } else if (to.path === "/login" && authStore.isAuthenticated) {
+    // Already authenticated, redirect to home
+    next("/");
   } else {
     next();
   }

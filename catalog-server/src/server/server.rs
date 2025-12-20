@@ -1814,23 +1814,23 @@ async fn login(
 }
 
 async fn logout(State(user_manager): State<GuardedUserManager>, session: Session) -> Response {
+    // Try to delete auth token from database (for legacy sessions)
+    // For OIDC sessions, this will fail since JWT isn't stored in DB - that's OK
     let mut locked_manager = user_manager.lock().unwrap();
-    match locked_manager.delete_auth_token(&session.user_id, &AuthTokenValue(session.token)) {
-        Ok(()) => {
-            let cookie_value = Cookie::build(Cookie::new("session_token", ""))
-                .path("/")
-                .expires(time::OffsetDateTime::now_utc() - time::Duration::days(1)) // Expire it in the past
-                .same_site(SameSite::Lax)
-                .build();
+    let _ = locked_manager.delete_auth_token(&session.user_id, &AuthTokenValue(session.token));
 
-            response::Builder::new()
-                .status(StatusCode::OK)
-                .header(axum::http::header::SET_COOKIE, cookie_value.to_string())
-                .body(Body::empty())
-                .unwrap()
-        }
-        Err(_) => StatusCode::BAD_REQUEST.into_response(),
-    }
+    // Always clear the session cookie
+    let cookie_value = Cookie::build(Cookie::new("session_token", ""))
+        .path("/")
+        .expires(time::OffsetDateTime::now_utc() - time::Duration::days(1)) // Expire it in the past
+        .same_site(SameSite::Lax)
+        .build();
+
+    response::Builder::new()
+        .status(StatusCode::OK)
+        .header(axum::http::header::SET_COOKIE, cookie_value.to_string())
+        .body(Body::empty())
+        .unwrap()
 }
 
 // ============================================================================
@@ -1927,11 +1927,11 @@ async fn oidc_callback(
         auth_result.subject
     );
 
-    // Look up local user by OIDC subject
-    let (user_id, permissions) = {
+    // Look up local user by OIDC subject to verify they exist
+    let user_id = {
         let locked_manager = user_manager.lock().unwrap();
 
-        let user_id = match locked_manager.get_user_id_by_oidc_subject(&auth_result.subject) {
+        match locked_manager.get_user_id_by_oidc_subject(&auth_result.subject) {
             Ok(Some(id)) => id,
             Ok(None) => {
                 warn!(
@@ -1950,66 +1950,25 @@ async fn oidc_callback(
                 super::metrics::record_login_attempt("error", start.elapsed());
                 return StatusCode::INTERNAL_SERVER_ERROR.into_response();
             }
-        };
-
-        let permissions = match locked_manager.get_user_permissions(user_id) {
-            Ok(perms) => perms,
-            Err(e) => {
-                error!("Failed to get permissions for user_id={}: {}", user_id, e);
-                super::metrics::record_login_attempt("error", start.elapsed());
-                return StatusCode::INTERNAL_SERVER_ERROR.into_response();
-            }
-        };
-
-        (user_id, permissions)
-    };
-
-    // Get user handle for response
-    let user_handle = {
-        let locked_manager = user_manager.lock().unwrap();
-        match locked_manager.get_user_handle(user_id) {
-            Ok(Some(handle)) => handle,
-            Ok(None) => {
-                error!("User handle not found for user_id={}", user_id);
-                super::metrics::record_login_attempt("error", start.elapsed());
-                return StatusCode::INTERNAL_SERVER_ERROR.into_response();
-            }
-            Err(e) => {
-                error!("Failed to get user handle: {}", e);
-                super::metrics::record_login_attempt("error", start.elapsed());
-                return StatusCode::INTERNAL_SERVER_ERROR.into_response();
-            }
         }
     };
 
     super::metrics::record_login_attempt("success", start.elapsed());
-    info!(
-        "OIDC login successful for user_handle={}, user_id={}",
-        user_handle, user_id
-    );
-
-    // Return the ID token to the client
-    // The ID token is a JWT that can be validated locally using JWKS
-    // The client should store this and use it for subsequent requests
-    let response_body = LoginSuccessResponse {
-        token: auth_result.id_token.clone(),
-        user_handle,
-        permissions,
-    };
-    let response_body = serde_json::to_string(&response_body).unwrap();
+    info!("OIDC login successful for user_id={}", user_id);
 
     // Set the ID token as a cookie for web clients
     let cookie_value = HeaderValue::from_str(&format!(
-        "session_token={}; Path=/; HttpOnly",
+        "session_token={}; Path=/; HttpOnly; SameSite=Lax",
         auth_result.id_token
     ))
     .unwrap();
 
+    // Redirect to the app after successful authentication
     response::Builder::new()
-        .status(StatusCode::OK)
+        .status(StatusCode::FOUND)
         .header(axum::http::header::SET_COOKIE, cookie_value)
-        .header(axum::http::header::CONTENT_TYPE, "application/json")
-        .body(Body::from(response_body))
+        .header(axum::http::header::LOCATION, "/")
+        .body(Body::empty())
         .unwrap()
 }
 

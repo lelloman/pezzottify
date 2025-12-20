@@ -1,35 +1,13 @@
 <script setup>
 import { ref } from "vue";
 import { useAuthStore } from "@/store/auth.js";
-import { useRouter } from "vue-router";
 
 const authStore = useAuthStore();
-const router = useRouter();
-const username = ref("");
-const password = ref("");
-const error = ref("");
 const isLoading = ref(false);
 
-async function handleLogin() {
-  if (!username.value || !password.value) {
-    error.value = "Please enter both username and password";
-    return;
-  }
-
+function handleLogin() {
   isLoading.value = true;
-  error.value = "";
-
-  try {
-    await authStore.login({
-      username: username.value,
-      password: password.value,
-    });
-    router.push("/");
-  } catch {
-    error.value = "Invalid username or password";
-  } finally {
-    isLoading.value = false;
-  }
+  authStore.loginWithOidc();
 }
 </script>
 
@@ -41,38 +19,17 @@ async function handleLogin() {
         <p class="login-subtitle">Sign in to continue</p>
       </div>
 
-      <form @submit.prevent="handleLogin" class="login-form">
-        <div class="form-group">
-          <input
-            id="username"
-            v-model="username"
-            type="text"
-            placeholder="Enter your username"
-            :disabled="isLoading"
-            autocomplete="username"
-          />
-        </div>
-
-        <div class="form-group">
-          <input
-            id="password"
-            type="password"
-            v-model="password"
-            placeholder="Enter your password"
-            :disabled="isLoading"
-            autocomplete="current-password"
-          />
-        </div>
-
-        <div v-if="error" class="error-message">
-          {{ error }}
-        </div>
-
-        <button type="submit" class="login-button" :disabled="isLoading">
-          <span v-if="!isLoading">Sign In</span>
-          <span v-else>Signing in...</span>
+      <div class="login-form">
+        <button
+          type="button"
+          class="login-button"
+          :disabled="isLoading"
+          @click="handleLogin"
+        >
+          <span v-if="!isLoading">Sign in with LelloAuth</span>
+          <span v-else>Redirecting...</span>
         </button>
-      </form>
+      </div>
     </div>
   </div>
 </template>
@@ -121,47 +78,6 @@ async function handleLogin() {
   display: flex;
   flex-direction: column;
   gap: 20px;
-}
-
-.form-group {
-  display: flex;
-  flex-direction: column;
-}
-
-.form-group input {
-  padding: 12px 16px;
-  font-size: 14px;
-  background: var(--background);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 6px;
-  color: var(--vt-c-white);
-  transition: all 0.2s ease;
-  outline: none;
-  font-family: inherit;
-}
-
-.form-group input::placeholder {
-  color: var(--text-subdued);
-}
-
-.form-group input:focus {
-  border-color: var(--accent-color);
-  background: var(--highlighted-panel-color);
-}
-
-.form-group input:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.error-message {
-  padding: 12px 16px;
-  background: rgba(244, 67, 54, 0.1);
-  border: 1px solid rgba(244, 67, 54, 0.3);
-  border-radius: 6px;
-  color: #ff6b6b;
-  font-size: 13px;
-  text-align: center;
 }
 
 .login-button {
