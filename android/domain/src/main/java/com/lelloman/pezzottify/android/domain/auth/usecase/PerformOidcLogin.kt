@@ -36,8 +36,9 @@ class PerformOidcLogin @Inject constructor(
                 authStore.storeAuthState(
                     AuthState.LoggedIn(
                         userHandle = result.userHandle,
-                        remoteUrl = configStore.baseUrl.value,
                         authToken = result.idToken,
+                        refreshToken = result.refreshToken,
+                        remoteUrl = configStore.baseUrl.value,
                     )
                 )
                 logger.debug("invoke() connecting WebSocket")

@@ -30,16 +30,26 @@ interface OidcAuthManager {
     suspend fun handleAuthorizationResponse(intent: Intent): AuthorizationResult
 
     /**
+     * Refreshes the tokens using a refresh token.
+     *
+     * @param refreshToken The refresh token to use
+     * @return The result of the refresh operation
+     */
+    suspend fun refreshTokens(refreshToken: String): RefreshResult
+
+    /**
      * Result of the OIDC authorization flow.
      */
     sealed interface AuthorizationResult {
         /**
          * Authorization successful.
          * @param idToken The ID token (JWT) to use as session token
+         * @param refreshToken The refresh token for obtaining new tokens
          * @param userHandle The user's identifier (email or preferred_username)
          */
         data class Success(
             val idToken: String,
+            val refreshToken: String?,
             val userHandle: String,
         ) : AuthorizationResult
 
@@ -52,5 +62,25 @@ interface OidcAuthManager {
          * Authorization failed with an error.
          */
         data class Error(val message: String) : AuthorizationResult
+    }
+
+    /**
+     * Result of a token refresh operation.
+     */
+    sealed interface RefreshResult {
+        /**
+         * Token refresh successful.
+         * @param idToken The new ID token (JWT)
+         * @param refreshToken The new refresh token (may be same as before or rotated)
+         */
+        data class Success(
+            val idToken: String,
+            val refreshToken: String?,
+        ) : RefreshResult
+
+        /**
+         * Token refresh failed - user needs to re-authenticate.
+         */
+        data class Failed(val message: String) : RefreshResult
     }
 }
