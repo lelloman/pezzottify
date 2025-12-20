@@ -9,8 +9,8 @@
 use anyhow::{anyhow, Context, Result};
 use openidconnect::core::{CoreAuthenticationFlow, CoreIdTokenClaims, CoreProviderMetadata};
 use openidconnect::{
-    AuthorizationCode, ClientId, ClientSecret, CsrfToken, IssuerUrl, Nonce,
-    OAuth2TokenResponse, PkceCodeChallenge, PkceCodeVerifier, RedirectUrl, Scope, TokenResponse,
+    AuthorizationCode, ClientId, ClientSecret, CsrfToken, IssuerUrl, Nonce, OAuth2TokenResponse,
+    PkceCodeChallenge, PkceCodeVerifier, RedirectUrl, Scope, TokenResponse,
 };
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
@@ -203,9 +203,7 @@ impl OidcClient {
         // Extract user information from claims
         let subject = claims.subject().to_string();
         let email = claims.email().map(|e| e.to_string());
-        let preferred_username = claims
-            .preferred_username()
-            .map(|u| u.as_str().to_string());
+        let preferred_username = claims.preferred_username().map(|u| u.as_str().to_string());
 
         debug!("Successfully authenticated user with subject: {}", subject);
 
@@ -262,9 +260,7 @@ impl OidcClient {
 
         let subject = claims.subject().to_string();
         let email = claims.email().map(|e| e.to_string());
-        let preferred_username = claims
-            .preferred_username()
-            .map(|u| u.as_str().to_string());
+        let preferred_username = claims.preferred_username().map(|u| u.as_str().to_string());
         let expiration = claims.expiration().timestamp();
 
         // Check if token is expired

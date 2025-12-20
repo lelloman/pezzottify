@@ -4501,14 +4501,20 @@ pub async fn make_app(
     // Initialize OIDC client if configured
     let oidc_client = match oidc_config {
         Some(cfg) => {
-            info!("Initializing OIDC client for provider: {}", cfg.provider_url);
+            info!(
+                "Initializing OIDC client for provider: {}",
+                cfg.provider_url
+            );
             match crate::oidc::OidcClient::new(cfg).await {
                 Ok(client) => {
                     info!("OIDC client initialized successfully");
                     Some(Arc::new(client))
                 }
                 Err(e) => {
-                    error!("Failed to initialize OIDC client: {}. OIDC login will be disabled.", e);
+                    error!(
+                        "Failed to initialize OIDC client: {}. OIDC login will be disabled.",
+                        e
+                    );
                     None
                 }
             }
