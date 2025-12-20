@@ -183,6 +183,29 @@ interface RemoteApiClient {
      */
     suspend fun markNotificationRead(notificationId: String): RemoteApiResponse<Unit>
 
+    // Playlist endpoints
+
+    /**
+     * Create a new playlist on the server.
+     * Returns the server-assigned playlist ID.
+     */
+    suspend fun createPlaylist(name: String, trackIds: List<String>): RemoteApiResponse<String>
+
+    /**
+     * Update a playlist on the server.
+     * Can update name, track list, or both.
+     */
+    suspend fun updatePlaylist(
+        playlistId: String,
+        name: String?,
+        trackIds: List<String>?,
+    ): RemoteApiResponse<Unit>
+
+    /**
+     * Delete a playlist from the server.
+     */
+    suspend fun deletePlaylist(playlistId: String): RemoteApiResponse<Unit>
+
     @Serializable
     enum class SearchFilter {
         Album,

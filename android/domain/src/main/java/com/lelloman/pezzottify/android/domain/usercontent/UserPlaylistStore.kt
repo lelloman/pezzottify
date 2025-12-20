@@ -8,11 +8,20 @@ interface UserPlaylistStore {
 
     fun getPlaylist(playlistId: String): Flow<UserPlaylist?>
 
+    fun getPendingSyncPlaylists(): Flow<List<UserPlaylist>>
+
     suspend fun replaceAllPlaylists(playlists: List<UserPlaylist>)
 
-    suspend fun createOrUpdatePlaylist(id: String, name: String, trackIds: List<String>)
+    suspend fun createOrUpdatePlaylist(
+        id: String,
+        name: String,
+        trackIds: List<String>,
+        syncStatus: PlaylistSyncStatus = PlaylistSyncStatus.Synced,
+    )
 
     suspend fun deletePlaylist(playlistId: String)
+
+    suspend fun markPlaylistForDeletion(playlistId: String)
 
     suspend fun updatePlaylistName(playlistId: String, name: String)
 
@@ -23,6 +32,8 @@ interface UserPlaylistStore {
     suspend fun addTracksToPlaylist(playlistId: String, trackIds: List<String>)
 
     suspend fun removeTrackFromPlaylist(playlistId: String, trackId: String)
+
+    suspend fun updateSyncStatus(playlistId: String, syncStatus: PlaylistSyncStatus)
 
     suspend fun deleteAll()
 }

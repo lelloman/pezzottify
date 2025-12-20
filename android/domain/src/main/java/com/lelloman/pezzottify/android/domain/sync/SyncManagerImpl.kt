@@ -453,6 +453,7 @@ class SyncManagerImpl internal constructor(
                 override val id = playlist.id
                 override val name = playlist.name
                 override val trackIds = playlist.tracks
+                override val syncStatus = com.lelloman.pezzottify.android.domain.usercontent.PlaylistSyncStatus.Synced
             }
         }
         userPlaylistStore.replaceAllPlaylists(domainPlaylists)

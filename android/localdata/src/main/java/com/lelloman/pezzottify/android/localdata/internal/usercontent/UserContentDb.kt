@@ -22,6 +22,7 @@ import com.lelloman.pezzottify.android.localdata.internal.usercontent.model.Play
         PendingNotificationReadEntity::class,
     ],
     version = UserContentDb.VERSION,
+    exportSchema = false,
 )
 @TypeConverters(UserContentTypeConverters::class)
 internal abstract class UserContentDb : RoomDatabase() {
@@ -35,7 +36,7 @@ internal abstract class UserContentDb : RoomDatabase() {
     abstract fun notificationDao(): NotificationDao
 
     companion object {
-        const val VERSION = 4
+        const val VERSION = 5
         const val NAME = "user_content"
 
         val MIGRATION_1_2 = object : Migration(1, 2) {
@@ -106,6 +107,18 @@ internal abstract class UserContentDb : RoomDatabase() {
                     )
                     """.trimIndent()
                 )
+            }
+        }
+
+        val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                // Add sync_status column to playlist table with default 'Synced'
+                db.execSQL(
+                    """
+                    ALTER TABLE playlist ADD COLUMN sync_status TEXT NOT NULL DEFAULT 'Synced'
+                    """.trimIndent()
+                )
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_playlist_sync_status ON playlist (sync_status)")
             }
         }
     }
