@@ -1959,7 +1959,10 @@ async fn oidc_callback(
 
         match locked_manager.get_user_id_by_oidc_subject(&auth_result.subject) {
             Ok(Some(id)) => {
-                debug!("Found existing user for OIDC subject={}", auth_result.subject);
+                debug!(
+                    "Found existing user for OIDC subject={}",
+                    auth_result.subject
+                );
                 id
             }
             Ok(None) => {
@@ -1974,7 +1977,10 @@ async fn oidc_callback(
                     auth_result.email.as_deref(),
                 ) {
                     Ok(id) => {
-                        info!("Successfully provisioned new user_id={} for OIDC subject={}", id, auth_result.subject);
+                        info!(
+                            "Successfully provisioned new user_id={} for OIDC subject={}",
+                            id, auth_result.subject
+                        );
                         id
                     }
                     Err(e) => {
