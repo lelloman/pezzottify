@@ -38,6 +38,11 @@
             </intent-filter>
         </activity>
 
+        <!-- Disable AppAuth's RedirectUriReceiverActivity since we handle callbacks in MainActivity -->
+        <activity
+            android:name="net.openid.appauth.RedirectUriReceiverActivity"
+            tools:node="remove" />
+
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"

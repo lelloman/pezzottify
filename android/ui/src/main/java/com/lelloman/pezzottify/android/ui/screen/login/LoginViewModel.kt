@@ -18,15 +18,6 @@ class LoginViewModel @Inject constructor(
     private val interactor: Interactor,
 ) : ViewModel(), LoginScreenActions {
 
-    init {
-        // Collect OIDC callback intents
-        viewModelScope.launch {
-            interactor.oidcCallbacks().collect { callbackIntent ->
-                handleOidcCallback(callbackIntent)
-            }
-        }
-    }
-
     private val mutableState: MutableStateFlow<LoginScreenState> =
         MutableStateFlow(
             LoginScreenState(
@@ -38,6 +29,15 @@ class LoginViewModel @Inject constructor(
 
     private val mutableEvents = MutableSharedFlow<LoginScreenEvents>()
     val events = mutableEvents.asSharedFlow()
+
+    init {
+        // Collect OIDC callback intents
+        viewModelScope.launch {
+            interactor.oidcCallbacks().collect { callbackIntent ->
+                handleOidcCallback(callbackIntent)
+            }
+        }
+    }
 
     override fun updateHost(host: String) {
         mutableState.value = mutableState.value.copy(host = host, hostErrorRes = null)
