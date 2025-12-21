@@ -45,12 +45,16 @@ class RemoteApiModule {
         authStore: AuthStore,
         configStore: ConfigStore,
         okHttpClientFactory: OkHttpClientFactory,
+        tokenRefresher: TokenRefresher,
+        sessionExpiredHandler: SessionExpiredHandler,
         @WebSocketScope coroutineScope: CoroutineScope,
         loggerFactory: LoggerFactory,
     ): WebSocketManager = WebSocketManagerImpl(
         authStore = authStore,
         configStore = configStore,
         okHttpClientFactory = okHttpClientFactory,
+        tokenRefresher = tokenRefresher,
+        sessionExpiredHandler = sessionExpiredHandler,
         coroutineScope = coroutineScope,
         loggerFactory = loggerFactory,
     )
