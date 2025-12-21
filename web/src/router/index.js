@@ -2,8 +2,8 @@ import { createRouter, createWebHistory } from "vue-router";
 import HomeView from "../views/HomeView.vue";
 import LoginView from "../views/LoginView.vue";
 import AdminView from "../views/AdminView.vue";
+import AuthCallbackView from "../views/AuthCallbackView.vue";
 import { useAuthStore } from "../store/auth.js";
-import axios from "axios";
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -103,21 +103,20 @@ const router = createRouter({
       component: LoginView,
     },
     {
+      path: "/auth/callback",
+      name: "auth-callback",
+      component: AuthCallbackView,
+    },
+    {
       path: "/logout",
       name: "logout",
       beforeEnter: async (to, from, next) => {
         try {
-          await axios.get("/v1/auth/logout");
-          useAuthStore().logout();
+          await useAuthStore().logout();
           next("/login");
         } catch (error) {
           console.error("Logout failed", error);
-          if (error.response.status == 403) {
-            useAuthStore().logout();
-            next("/login");
-          } else {
-            next("/");
-          }
+          next("/login");
         }
       },
     },
@@ -126,6 +125,12 @@ const router = createRouter({
 
 router.beforeEach(async (to, from, next) => {
   const authStore = useAuthStore();
+
+  // Skip auth check for callback route (it handles its own auth)
+  if (to.path === "/auth/callback") {
+    next();
+    return;
+  }
 
   // Wait for initial session check if not done yet
   if (!authStore.sessionChecked) {

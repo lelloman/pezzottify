@@ -1,47 +1,8 @@
 import { defineStore } from "pinia";
 import axios from "axios";
 import * as ws from "../services/websocket";
+import * as oidc from "../services/oidc";
 import { useSyncStore } from "./sync";
-
-const DEVICE_ID_KEY = "pezzottify_device_id";
-
-/**
- * Get or generate a persistent device ID.
- * Stored in localStorage to persist across sessions.
- */
-function getDeviceId() {
-  let deviceId = localStorage.getItem(DEVICE_ID_KEY);
-  if (!deviceId) {
-    deviceId = crypto.randomUUID();
-    localStorage.setItem(DEVICE_ID_KEY, deviceId);
-  }
-  return deviceId;
-}
-
-/**
- * Get a human-readable device name based on browser/platform info.
- */
-function getDeviceName() {
-  const userAgent = navigator.userAgent;
-  let browser = "Browser";
-  let os = "Unknown";
-
-  // Detect browser (order matters: Edge UA contains "Chrome", Chrome UA contains "Safari")
-  if (userAgent.includes("Edg/")) browser = "Edge";
-  else if (userAgent.includes("Firefox")) browser = "Firefox";
-  else if (userAgent.includes("Chrome")) browser = "Chrome";
-  else if (userAgent.includes("Safari")) browser = "Safari";
-
-  // Detect OS
-  if (userAgent.includes("Windows")) os = "Windows";
-  else if (userAgent.includes("Mac")) os = "macOS";
-  else if (userAgent.includes("Linux")) os = "Linux";
-  else if (userAgent.includes("Android")) os = "Android";
-  else if (userAgent.includes("iPhone") || userAgent.includes("iPad"))
-    os = "iOS";
-
-  return `${browser} on ${os}`;
-}
 
 export const useAuthStore = defineStore("auth", {
   state: () => ({
@@ -54,28 +15,45 @@ export const useAuthStore = defineStore("auth", {
   actions: {
     /**
      * Initiate OIDC login flow.
-     * Redirects the browser to the OIDC login endpoint with device info.
+     * Redirects the browser to the OIDC provider.
      */
-    loginWithOidc() {
-      const deviceId = getDeviceId();
-      const deviceType = "web";
-      const deviceName = getDeviceName();
+    async loginWithOidc() {
+      await oidc.login();
+    },
 
-      const params = new URLSearchParams({
-        device_id: deviceId,
-        device_type: deviceType,
-        device_name: deviceName,
-      });
-
-      window.location.href = `/v1/auth/oidc/login?${params.toString()}`;
+    /**
+     * Handle OIDC callback after redirect from provider.
+     * Called from the callback route.
+     */
+    async handleOidcCallback() {
+      try {
+        const user = await oidc.handleCallback();
+        if (user) {
+          // Verify the session with the backend
+          return await this.checkSession();
+        }
+        return false;
+      } catch (error) {
+        console.error("OIDC callback failed:", error);
+        return false;
+      }
     },
 
     /**
      * Check if the user has a valid session.
-     * Called on app startup and after OIDC callback redirect.
+     * Uses the ID token from OIDC to authenticate with the backend.
      */
     async checkSession() {
       try {
+        // First check if we have OIDC tokens
+        const idToken = await oidc.getIdToken();
+        if (!idToken) {
+          this.user = null;
+          this.sessionChecked = true;
+          return false;
+        }
+
+        // Verify with backend using the ID token
         const response = await axios.get("/v1/auth/session");
         this.user = {
           handle: response.data.user_handle,
@@ -89,10 +67,29 @@ export const useAuthStore = defineStore("auth", {
         ws.connect();
 
         return true;
-      } catch {
+      } catch (error) {
         // 401/403 means no valid session
+        console.debug("Session check failed:", error?.response?.status);
         this.user = null;
         this.sessionChecked = true;
+        return false;
+      }
+    },
+
+    /**
+     * Attempt to refresh tokens.
+     * Returns true if refresh was successful.
+     */
+    async refreshTokens() {
+      try {
+        const newUser = await oidc.refreshTokens();
+        if (newUser) {
+          // Verify the new session with the backend
+          return await this.checkSession();
+        }
+        return false;
+      } catch (error) {
+        console.error("Token refresh failed:", error);
         return false;
       }
     },
@@ -115,13 +112,16 @@ export const useAuthStore = defineStore("auth", {
         console.error("Failed to cleanup stores:", error);
       }
 
+      // Clear OIDC tokens
+      await oidc.logout(false);
+
       this.user = null;
       this.sessionChecked = false;
     },
 
     /**
      * Initialize the auth store on app startup.
-     * Checks for existing session via cookie.
+     * Checks for existing OIDC session.
      */
     async initialize() {
       await this.checkSession();
