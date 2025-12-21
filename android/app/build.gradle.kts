@@ -16,6 +16,14 @@ val localProperties = Properties().apply {
     }
 }
 
+// Load signing.properties for release signing config
+val signingProperties = Properties().apply {
+    val signingPropsFile = rootProject.file("signing.properties")
+    if (signingPropsFile.exists()) {
+        signingPropsFile.inputStream().use { load(it) }
+    }
+}
+
 // Compute full version: MAJOR.MINOR.COMMIT-COUNT
 val baseVersion: String by lazy {
     try {
@@ -59,6 +67,14 @@ android {
         getByName("debug") {
             // Uses default debug keystore
         }
+        if (signingProperties.containsKey("storeFile")) {
+            create("release") {
+                storeFile = file(signingProperties.getProperty("storeFile"))
+                storePassword = signingProperties.getProperty("storePassword")
+                keyAlias = signingProperties.getProperty("keyAlias")
+                keyPassword = signingProperties.getProperty("keyPassword")
+            }
+        }
     }
 
     buildTypes {
@@ -68,6 +84,9 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            if (signingConfigs.findByName("release") != null) {
+                signingConfig = signingConfigs.getByName("release")
+            }
         }
         create("releaseDebugSigned") {
             initWith(getByName("release"))
