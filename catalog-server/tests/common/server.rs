@@ -96,6 +96,7 @@ impl TestServer {
             requests_logging_level: RequestsLoggingLevel::None,
             content_cache_age_sec: 0, // Disable caching in tests
             frontend_dir_path: None,
+            disable_password_auth: false,
         };
 
         // Create user manager

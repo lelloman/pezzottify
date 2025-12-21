@@ -1288,6 +1288,31 @@ impl UserStore for SqliteUserStore {
         Ok(())
     }
 
+    fn get_user_oidc_subject(&self, user_id: usize) -> Result<Option<String>> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare(&format!(
+            "SELECT oidc_subject FROM {} WHERE id = ?1",
+            USER_TABLE_V_12.name
+        ))?;
+        match stmt.query_row(params![user_id], |row| row.get::<_, Option<String>>(0)) {
+            Ok(subject) => Ok(subject),
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+            Err(e) => Err(e.into()),
+        }
+    }
+
+    fn clear_user_oidc_subject(&self, user_id: usize) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            &format!(
+                "UPDATE {} SET oidc_subject = NULL WHERE id = ?1",
+                USER_TABLE_V_12.name
+            ),
+            params![user_id],
+        )?;
+        Ok(())
+    }
+
     fn is_user_liked_content(&self, user_id: usize, content_id: &str) -> Result<Option<bool>> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(&format!(

@@ -110,6 +110,17 @@ enum InnerCommand {
     /// Removes a role from a user.
     RemoveRole { user_handle: String, role: String },
 
+    /// Links an OIDC subject to an existing user.
+    /// This allows the user to authenticate via OIDC.
+    LinkOidc {
+        user_handle: String,
+        oidc_subject: String,
+    },
+
+    /// Unlinks the OIDC subject from a user.
+    /// This prevents the user from authenticating via OIDC.
+    UnlinkOidc { user_handle: String },
+
     /// Shows the path of the current auth db.
     Where,
 
@@ -177,6 +188,16 @@ fn get_commands_help() -> Vec<CommandHelp> {
             name: "list-roles",
             args: "",
             description: "Show available roles",
+        },
+        CommandHelp {
+            name: "link-oidc",
+            args: "<handle> <subject>",
+            description: "Link OIDC identity",
+        },
+        CommandHelp {
+            name: "unlink-oidc",
+            args: "<handle>",
+            description: "Unlink OIDC identity",
         },
         CommandHelp {
             name: "where",
@@ -296,6 +317,25 @@ fn execute_command(
                         print_section_header(&format!("User: {}", user_handle));
                         println!();
                         print_key_value_highlight("User ID", &user_id.to_string());
+
+                        // OIDC Section
+                        println!();
+                        println!(
+                            "  {} {}",
+                            box_chars::DIAMOND.with(colors::BLUE),
+                            "OIDC Identity".with(colors::BLUE).bold()
+                        );
+                        match user_manager.get_user_oidc_subject(user_id) {
+                            Ok(Some(subject)) => {
+                                print_key_value("  Subject", &subject);
+                            }
+                            Ok(None) => {
+                                print_empty_list("Not linked to OIDC");
+                            }
+                            Err(err) => {
+                                print_error(&format!("Failed to get OIDC subject: {}", err));
+                            }
+                        }
 
                         // Credentials Section
                         println!();
@@ -560,6 +600,98 @@ fn execute_command(
                         role.with(colors::CYAN).bold(),
                         user_handle.with(colors::GREEN).bold()
                     ));
+                }
+                InnerCommand::LinkOidc {
+                    user_handle,
+                    oidc_subject,
+                } => {
+                    // Get user credentials to verify user exists and get user_id
+                    let user_id = match user_manager.get_user_credentials(&user_handle) {
+                        Ok(Some(creds)) => creds.user_id,
+                        Ok(None) => {
+                            return CommandExecutionResult::Error(format!(
+                                "User '{}' not found",
+                                user_handle
+                            ));
+                        }
+                        Err(err) => {
+                            return CommandExecutionResult::Error(format!(
+                                "Failed to get user credentials: {}",
+                                err
+                            ));
+                        }
+                    };
+
+                    // Check if another user already has this OIDC subject
+                    match user_manager.get_user_id_by_oidc_subject(&oidc_subject) {
+                        Ok(Some(existing_user_id)) if existing_user_id != user_id => {
+                            return CommandExecutionResult::Error(format!(
+                                "OIDC subject '{}' is already linked to another user (id={})",
+                                oidc_subject, existing_user_id
+                            ));
+                        }
+                        Err(err) => {
+                            return CommandExecutionResult::Error(format!(
+                                "Failed to check existing OIDC subject: {}",
+                                err
+                            ));
+                        }
+                        _ => {}
+                    }
+
+                    if let Err(err) = user_manager.set_user_oidc_subject(user_id, &oidc_subject) {
+                        return CommandExecutionResult::Error(format!("{}", err));
+                    }
+
+                    print_success(&format!(
+                        "OIDC subject '{}' linked to user '{}'",
+                        oidc_subject.with(colors::CYAN).bold(),
+                        user_handle.with(colors::GREEN).bold()
+                    ));
+                }
+                InnerCommand::UnlinkOidc { user_handle } => {
+                    // Get user credentials to verify user exists and get user_id
+                    let user_id = match user_manager.get_user_credentials(&user_handle) {
+                        Ok(Some(creds)) => creds.user_id,
+                        Ok(None) => {
+                            return CommandExecutionResult::Error(format!(
+                                "User '{}' not found",
+                                user_handle
+                            ));
+                        }
+                        Err(err) => {
+                            return CommandExecutionResult::Error(format!(
+                                "Failed to get user credentials: {}",
+                                err
+                            ));
+                        }
+                    };
+
+                    // Check if user has an OIDC subject to unlink
+                    match user_manager.get_user_oidc_subject(user_id) {
+                        Ok(Some(subject)) => {
+                            if let Err(err) = user_manager.clear_user_oidc_subject(user_id) {
+                                return CommandExecutionResult::Error(format!("{}", err));
+                            }
+                            print_success(&format!(
+                                "OIDC subject '{}' unlinked from user '{}'",
+                                subject.with(colors::CYAN).bold(),
+                                user_handle.with(colors::GREEN).bold()
+                            ));
+                        }
+                        Ok(None) => {
+                            print_warning(&format!(
+                                "User '{}' has no OIDC subject linked",
+                                user_handle
+                            ));
+                        }
+                        Err(err) => {
+                            return CommandExecutionResult::Error(format!(
+                                "Failed to get OIDC subject: {}",
+                                err
+                            ));
+                        }
+                    }
                 }
                 InnerCommand::Where => {
                     print_section_header("Database Location");

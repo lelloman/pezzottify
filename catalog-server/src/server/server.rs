@@ -1703,11 +1703,23 @@ async fn update_user_settings(
 }
 
 async fn login(
+    State(config): State<ServerConfig>,
     State(user_manager): State<GuardedUserManager>,
     Json(body): Json<LoginBody>,
 ) -> Response {
     let start = Instant::now();
     debug!("login() called with {:?}", body);
+
+    // Check if password auth is disabled
+    if config.disable_password_auth {
+        warn!("Password authentication is disabled");
+        super::metrics::record_login_attempt("disabled", start.elapsed());
+        return (
+            StatusCode::FORBIDDEN,
+            "Password authentication is disabled. Please use OIDC authentication.",
+        )
+            .into_response();
+    }
 
     // 1. Validate device info first (fail fast)
     let device_registration = match DeviceRegistration::validate_and_sanitize(
@@ -5148,11 +5160,17 @@ pub async fn run_server(
     server_store: Arc<dyn crate::server_store::ServerStore>,
     oidc_config: Option<crate::config::OidcConfig>,
 ) -> Result<()> {
+    let disable_password_auth = oidc_config
+        .as_ref()
+        .map(|c| c.disable_password_auth)
+        .unwrap_or(false);
+
     let config = ServerConfig {
         port,
         requests_logging_level,
         content_cache_age_sec,
         frontend_dir_path,
+        disable_password_auth,
     };
 
     let app = make_app(
@@ -5439,6 +5457,14 @@ mod tests {
         }
 
         fn set_user_oidc_subject(&self, _user_id: usize, _oidc_subject: &str) -> Result<()> {
+            Ok(())
+        }
+
+        fn get_user_oidc_subject(&self, _user_id: usize) -> Result<Option<String>> {
+            Ok(None)
+        }
+
+        fn clear_user_oidc_subject(&self, _user_id: usize) -> Result<()> {
             Ok(())
         }
 

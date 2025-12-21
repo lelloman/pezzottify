@@ -712,6 +712,12 @@ mod tests {
         ) -> anyhow::Result<()> {
             Ok(())
         }
+        fn get_user_oidc_subject(&self, _user_id: usize) -> anyhow::Result<Option<String>> {
+            Ok(None)
+        }
+        fn clear_user_oidc_subject(&self, _user_id: usize) -> anyhow::Result<()> {
+            Ok(())
+        }
         fn get_all_user_handles(&self) -> anyhow::Result<Vec<String>> {
             Ok(vec!["testuser".to_string()])
         }
@@ -1438,6 +1444,12 @@ mod tests {
             _user_id: usize,
             _oidc_subject: &str,
         ) -> anyhow::Result<()> {
+            Ok(())
+        }
+        fn get_user_oidc_subject(&self, _user_id: usize) -> anyhow::Result<Option<String>> {
+            Ok(None)
+        }
+        fn clear_user_oidc_subject(&self, _user_id: usize) -> anyhow::Result<()> {
             Ok(())
         }
         fn get_all_user_handles(&self) -> anyhow::Result<Vec<String>> {
