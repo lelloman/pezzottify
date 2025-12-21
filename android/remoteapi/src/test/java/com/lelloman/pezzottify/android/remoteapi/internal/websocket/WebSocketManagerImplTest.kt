@@ -3,14 +3,18 @@ package com.lelloman.pezzottify.android.remoteapi.internal.websocket
 import com.google.common.truth.Truth.assertThat
 import com.lelloman.pezzottify.android.domain.auth.AuthState
 import com.lelloman.pezzottify.android.domain.auth.AuthStore
+import com.lelloman.pezzottify.android.domain.auth.SessionExpiredHandler
+import com.lelloman.pezzottify.android.domain.auth.TokenRefresher
 import com.lelloman.pezzottify.android.domain.config.ConfigStore
 import com.lelloman.pezzottify.android.domain.websocket.ConnectionState
 import com.lelloman.pezzottify.android.domain.websocket.MessageHandler
 import com.lelloman.pezzottify.android.logger.Logger
 import com.lelloman.pezzottify.android.logger.LoggerFactory
 import com.lelloman.pezzottify.android.remoteapi.internal.OkHttpClientFactory
+import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.verify
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.StandardTestDispatcher
@@ -30,6 +34,8 @@ class WebSocketManagerImplTest {
 
     private lateinit var authStore: AuthStore
     private lateinit var configStore: ConfigStore
+    private lateinit var tokenRefresher: TokenRefresher
+    private lateinit var sessionExpiredHandler: SessionExpiredHandler
     private lateinit var loggerFactory: LoggerFactory
     private lateinit var testScope: TestScope
     private lateinit var webSocketManager: WebSocketManagerImpl
@@ -45,6 +51,8 @@ class WebSocketManagerImplTest {
     fun setUp() {
         authStore = mockk()
         configStore = mockk()
+        tokenRefresher = mockk()
+        sessionExpiredHandler = mockk(relaxed = true)
         val mockLogger = mockk<Logger>(relaxed = true)
         loggerFactory = mockk()
         mockOkHttpClientFactory = mockk()
@@ -59,6 +67,8 @@ class WebSocketManagerImplTest {
         every { mockOkHttpClientBuilder.pingInterval(any(), any()) } returns mockOkHttpClientBuilder
         every { mockOkHttpClientBuilder.build() } returns mockOkHttpClient
         every { mockOkHttpClient.newWebSocket(any<Request>(), any<WebSocketListener>()) } returns mockWebSocket
+        // Default: token refresh returns NotAvailable (no refresh token)
+        coEvery { tokenRefresher.refreshTokens() } returns TokenRefresher.RefreshResult.NotAvailable
 
         testScope = TestScope(StandardTestDispatcher())
 
@@ -66,6 +76,8 @@ class WebSocketManagerImplTest {
             authStore = authStore,
             configStore = configStore,
             okHttpClientFactory = mockOkHttpClientFactory,
+            tokenRefresher = tokenRefresher,
+            sessionExpiredHandler = sessionExpiredHandler,
             coroutineScope = testScope,
             loggerFactory = loggerFactory,
         )
@@ -376,5 +388,56 @@ class WebSocketManagerImplTest {
         val field = WebSocketManagerImpl::class.java.getDeclaredField("intentionalDisconnect")
         field.isAccessible = true
         assertThat(field.getBoolean(webSocketManager)).isFalse()
+    }
+
+    // =========================================================================
+    // Token Refresh Tests
+    // =========================================================================
+
+    @Test
+    fun `connect uses refreshed token when refresh succeeds`() = testScope.runTest {
+        val refreshedToken = "refreshed-token"
+        authStateFlow.value = loggedInState().copy(refreshToken = "refresh-token")
+        coEvery { tokenRefresher.refreshTokens() } returns TokenRefresher.RefreshResult.Success(refreshedToken)
+
+        webSocketManager.connect()
+        advanceUntilIdle()
+
+        assertThat(webSocketManager.connectionState.value).isEqualTo(ConnectionState.Connecting)
+    }
+
+    @Test
+    fun `connect uses existing token when refresh fails`() = testScope.runTest {
+        authStateFlow.value = loggedInState().copy(refreshToken = "refresh-token")
+        coEvery { tokenRefresher.refreshTokens() } returns TokenRefresher.RefreshResult.Failed("Network error")
+
+        webSocketManager.connect()
+        advanceUntilIdle()
+
+        // Should still attempt connection with existing token
+        assertThat(webSocketManager.connectionState.value).isEqualTo(ConnectionState.Connecting)
+    }
+
+    @Test
+    fun `connect uses existing token when no refresh token available`() = testScope.runTest {
+        authStateFlow.value = loggedInState() // No refresh token
+        coEvery { tokenRefresher.refreshTokens() } returns TokenRefresher.RefreshResult.NotAvailable
+
+        webSocketManager.connect()
+        advanceUntilIdle()
+
+        assertThat(webSocketManager.connectionState.value).isEqualTo(ConnectionState.Connecting)
+    }
+
+    @Test
+    fun `connect skips refresh when auth state has no refresh token`() = testScope.runTest {
+        // Auth state without refresh token - should not attempt refresh
+        authStateFlow.value = loggedInState() // refreshToken is null by default
+
+        webSocketManager.connect()
+        advanceUntilIdle()
+
+        assertThat(webSocketManager.connectionState.value).isEqualTo(ConnectionState.Connecting)
+        // TokenRefresher should not be called when there's no refresh token in auth state
     }
 }

@@ -2,6 +2,8 @@ package com.lelloman.pezzottify.android.remoteapi.internal.websocket
 
 import com.lelloman.pezzottify.android.domain.auth.AuthState
 import com.lelloman.pezzottify.android.domain.auth.AuthStore
+import com.lelloman.pezzottify.android.domain.auth.SessionExpiredHandler
+import com.lelloman.pezzottify.android.domain.auth.TokenRefresher
 import com.lelloman.pezzottify.android.domain.config.ConfigStore
 import com.lelloman.pezzottify.android.domain.websocket.ClientMessage
 import com.lelloman.pezzottify.android.domain.websocket.ConnectedPayload
@@ -36,6 +38,8 @@ internal class WebSocketManagerImpl(
     private val authStore: AuthStore,
     private val configStore: ConfigStore,
     private val okHttpClientFactory: OkHttpClientFactory,
+    private val tokenRefresher: TokenRefresher,
+    private val sessionExpiredHandler: SessionExpiredHandler,
     private val coroutineScope: CoroutineScope,
     loggerFactory: LoggerFactory,
 ) : WebSocketManager {
@@ -59,6 +63,7 @@ internal class WebSocketManagerImpl(
     private var heartbeatJob: Job? = null
     private var reconnectAttempt = 0
     private var intentionalDisconnect = false
+    private var hasAttemptedTokenRefresh = false
 
     override suspend fun connect() {
         if (_connectionState.value is ConnectionState.Connecting ||
@@ -75,8 +80,20 @@ internal class WebSocketManagerImpl(
             return
         }
 
+        // Reset token refresh flag on new connection attempt
+        hasAttemptedTokenRefresh = false
+
         intentionalDisconnect = false
         _connectionState.value = ConnectionState.Connecting
+
+        // Ensure we have a fresh token before connecting
+        val authToken = ensureFreshToken(authState)
+        if (authToken == null) {
+            logger.warn("Cannot connect WebSocket: failed to get valid token")
+            _connectionState.value = ConnectionState.Error("Authentication failed")
+            sessionExpiredHandler.onSessionExpired()
+            return
+        }
 
         val baseUrl = configStore.baseUrl.value
         val wsUrl = buildWebSocketUrl(baseUrl)
@@ -90,10 +107,38 @@ internal class WebSocketManagerImpl(
 
         val request = Request.Builder()
             .url(wsUrl)
-            .header("Authorization", authState.authToken)
+            .header("Authorization", authToken)
             .build()
 
         webSocket = client.newWebSocket(request, createWebSocketListener())
+    }
+
+    /**
+     * Ensures we have a fresh auth token before connecting.
+     * If a refresh token is available, proactively refreshes to avoid connection failures.
+     */
+    private suspend fun ensureFreshToken(authState: AuthState.LoggedIn): String? {
+        // If we have a refresh token, proactively refresh to ensure fresh tokens
+        if (authState.refreshToken != null) {
+            logger.debug("Proactively refreshing token before WebSocket connect")
+            when (val result = tokenRefresher.refreshTokens()) {
+                is TokenRefresher.RefreshResult.Success -> {
+                    logger.info("Token refresh successful, using new token for WebSocket")
+                    return result.newAuthToken
+                }
+                is TokenRefresher.RefreshResult.Failed -> {
+                    logger.warn("Token refresh failed: ${result.reason}, trying with existing token")
+                    // Fall through to use existing token
+                }
+                is TokenRefresher.RefreshResult.NotAvailable -> {
+                    logger.debug("No refresh available, using existing token")
+                    // Fall through to use existing token
+                }
+            }
+        }
+
+        // Use existing token (may work if not expired)
+        return authState.authToken
     }
 
     override suspend fun disconnect() {
@@ -187,10 +232,53 @@ internal class WebSocketManagerImpl(
                 logger.debug("WebSocket closed during intentional disconnect: ${t.message}")
                 _connectionState.value = ConnectionState.Disconnected
             } else {
-                // Unexpected failure - log error, set Error state, and attempt reconnection
-                logger.error("WebSocket failure: ${t.message}", t)
-                _connectionState.value = ConnectionState.Error(t.message ?: "Connection failed")
-                scheduleReconnect()
+                // Check if this is an auth failure (401/403)
+                val responseCode = response?.code
+                if (responseCode == 401 || responseCode == 403) {
+                    logger.warn("WebSocket auth failure (HTTP $responseCode), attempting token refresh")
+                    handleAuthFailure()
+                } else {
+                    // Unexpected failure - log error, set Error state, and attempt reconnection
+                    logger.error("WebSocket failure: ${t.message}", t)
+                    _connectionState.value = ConnectionState.Error(t.message ?: "Connection failed")
+                    scheduleReconnect()
+                }
+            }
+        }
+    }
+
+    /**
+     * Handles WebSocket authentication failures by attempting token refresh and retry.
+     */
+    private fun handleAuthFailure() {
+        if (hasAttemptedTokenRefresh) {
+            // Already tried refreshing, give up and trigger logout
+            logger.warn("Token refresh already attempted, triggering session expired")
+            _connectionState.value = ConnectionState.Error("Authentication failed")
+            sessionExpiredHandler.onSessionExpired()
+            return
+        }
+
+        hasAttemptedTokenRefresh = true
+        coroutineScope.launch {
+            logger.info("Attempting token refresh after WebSocket auth failure")
+            when (val result = tokenRefresher.refreshTokens()) {
+                is TokenRefresher.RefreshResult.Success -> {
+                    logger.info("Token refresh successful, retrying WebSocket connection")
+                    // Reset state and reconnect
+                    _connectionState.value = ConnectionState.Disconnected
+                    connect()
+                }
+                is TokenRefresher.RefreshResult.Failed -> {
+                    logger.warn("Token refresh failed: ${result.reason}, triggering session expired")
+                    _connectionState.value = ConnectionState.Error("Authentication failed")
+                    sessionExpiredHandler.onSessionExpired()
+                }
+                is TokenRefresher.RefreshResult.NotAvailable -> {
+                    logger.warn("No refresh token available, triggering session expired")
+                    _connectionState.value = ConnectionState.Error("Authentication failed")
+                    sessionExpiredHandler.onSessionExpired()
+                }
             }
         }
     }
