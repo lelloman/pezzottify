@@ -227,6 +227,22 @@ impl UserManager {
         self.user_store.get_user_id_by_oidc_subject(oidc_subject)
     }
 
+    pub fn get_user_oidc_subject(&self, user_id: usize) -> Result<Option<String>> {
+        self.user_store.get_user_oidc_subject(user_id)
+    }
+
+    /// Links an existing user to an OIDC subject.
+    /// Returns Err if the user doesn't exist or there's a database error.
+    pub fn set_user_oidc_subject(&self, user_id: usize, oidc_subject: &str) -> Result<()> {
+        self.user_store.set_user_oidc_subject(user_id, oidc_subject)
+    }
+
+    /// Unlinks a user from their OIDC subject.
+    /// Returns Err if there's a database error.
+    pub fn clear_user_oidc_subject(&self, user_id: usize) -> Result<()> {
+        self.user_store.clear_user_oidc_subject(user_id)
+    }
+
     /// Provisions a new user from OIDC authentication.
     /// Creates the user, sets the OIDC subject, and assigns the Regular role.
     /// If the handle already exists, appends a numeric suffix (e.g., foo.1, foo.2).

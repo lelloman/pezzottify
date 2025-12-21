@@ -78,6 +78,15 @@ pub trait UserStore: UserAuthTokenStore + UserAuthCredentialsStore + Send + Sync
     /// Returns Err if there is a database error.
     fn set_user_oidc_subject(&self, user_id: usize, oidc_subject: &str) -> Result<()>;
 
+    /// Returns a user's OIDC subject given the user id.
+    /// Returns Ok(None) if the user has no OIDC subject set.
+    /// Returns Err if there is a database error.
+    fn get_user_oidc_subject(&self, user_id: usize) -> Result<Option<String>>;
+
+    /// Clears the OIDC subject for a user.
+    /// Returns Err if there is a database error.
+    fn clear_user_oidc_subject(&self, user_id: usize) -> Result<()>;
+
     /// Returns if the user liked the content with the given id,
     /// Returns Ok(None) if the user does not exist.
     /// Returns Err if there is a database error.

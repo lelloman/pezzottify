@@ -79,6 +79,10 @@ pub struct OidcConfig {
     /// OAuth2 scopes to request (defaults to ["openid", "profile", "email"])
     #[serde(default = "default_scopes")]
     pub scopes: Vec<String>,
+    /// If true, disables the password authentication endpoint when OIDC is configured.
+    /// Users must authenticate via OIDC only. Default: false
+    #[serde(default)]
+    pub disable_password_auth: bool,
 }
 
 fn default_scopes() -> Vec<String> {
