@@ -202,12 +202,15 @@ The Android project uses a multi-module Gradle setup with modules: `app`, `ui`, 
     - `GET /admin/audit/user/{user_id}`: Audit for user
 - `/v1/ws`: WebSocket for real-time updates
 
-**Authentication flow:**
-1. User logs in with credentials (POST `/v1/auth/login`)
-2. Server validates with Argon2, returns signed auth token
-3. Token stored in HTTP-only cookie
-4. Session middleware validates token on each request
-5. Permission middleware checks required permissions
+**Authentication flow (OIDC):**
+Both web and Android use client-side OIDC authentication:
+1. Client initiates OIDC flow with authorization code + PKCE
+2. User authenticates with OIDC provider (e.g., LelloAuth)
+3. Client receives authorization code, exchanges for tokens (ID token + refresh token)
+4. Client stores tokens locally (localStorage for web, encrypted prefs for Android)
+5. Client sends ID token in `Authorization` header (or cookie for WebSocket)
+6. Server validates ID token against OIDC provider's JWKS
+7. On 401 response, client refreshes tokens using refresh token and retries
 
 ### Web Frontend Architecture
 
@@ -218,15 +221,28 @@ The Android project uses a multi-module Gradle setup with modules: `app`, `ui`, 
 - Axios for HTTP requests
 - Howler.js for audio playback
 - Vite build tool
+- oidc-client-ts for OIDC authentication
+
+**Configuration:**
+Copy `.env.example` to `.env.local` and configure:
+- `VITE_OIDC_AUTHORITY`: OIDC provider URL (required)
+- `VITE_OIDC_CLIENT_ID`: Client ID registered with provider (required)
+- `VITE_OIDC_REDIRECT_URI`: Callback URL (defaults to `{origin}/auth/callback`)
+- `VITE_OIDC_SCOPE`: OAuth scopes (defaults to `openid profile email offline_access`)
 
 **Store modules (Pinia):** Located in `web/src/store/`
-- `auth.js`: Authentication state
+- `auth.js`: Authentication state and OIDC integration
 - `player.js`: Audio playback state
 - `remote.js`: API communication
 - `user.js`: User data (playlists, liked content)
 - `statics.js`: Static data caching
 - `debug.js`: Debug configuration
 - `sync.js`: Multi-device sync state management (WebSocket connection, sync events)
+
+**Services:** Located in `web/src/services/`
+- `oidc.js`: Client-side OIDC authentication (login, callback, token refresh)
+- `api.js`: Axios interceptors for auth headers and automatic token refresh on 401
+- `websocket.js`: WebSocket connection for real-time updates
 
 **Routing:**
 All content routes nest under HomeView with `meta: { requiresAuth: true }`:
@@ -238,10 +254,11 @@ All content routes nest under HomeView with `meta: { requiresAuth: true }`:
 - `/settings`: User settings page
 - `/admin/*`: Admin panel (users, analytics, server)
 - `/login`: Login page
+- `/auth/callback`: OIDC callback handler
 - `/logout`: Logout handler
 
 **Component structure:**
-- `views/`: Page components (HomeView, LoginView)
+- `views/`: Page components (HomeView, LoginView, AuthCallbackView, AdminView)
 - `components/content/`: Content display components
 - `components/common/`: Reusable UI components
 - `components/common/contextmenu/`: Right-click context menus

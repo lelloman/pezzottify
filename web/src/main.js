@@ -7,6 +7,10 @@ import { createPinia } from "pinia";
 import { useDebugStore } from "./store/debug";
 import { useRemoteStore } from "./store/remote";
 import { useAuthStore } from "./store/auth";
+import { setupAxiosInterceptors } from "./services/api";
+
+// Setup axios interceptors for auth token handling BEFORE creating stores
+setupAxiosInterceptors();
 
 const pinia = createPinia();
 const app = createApp(App);
@@ -18,7 +22,7 @@ window.config = useDebugStore();
 const remoteStore = useRemoteStore();
 const authStore = useAuthStore();
 
-// Initialize auth store (checks session via cookie)
+// Initialize auth store (checks for existing OIDC session)
 // This is async but we don't need to wait - the router guard will handle it
 authStore.initialize();
 
