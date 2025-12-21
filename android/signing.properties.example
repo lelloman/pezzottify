@@ -1,0 +1,16 @@
+# Release signing configuration
+# Copy this file to signing.properties and fill in your keystore details
+# IMPORTANT: Never commit signing.properties to version control
+
+# Path to your keystore file
+# Use an absolute path (recommended) or relative to android/app/ directory
+storeFile=/path/to/your/release.keystore
+
+# Keystore password
+storePassword=your_keystore_password
+
+# Key alias within the keystore
+keyAlias=release
+
+# Key password (often same as storePassword)
+keyPassword=your_key_password
