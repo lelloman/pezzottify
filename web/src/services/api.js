@@ -33,15 +33,14 @@ function shouldSkipAuthHeader(url) {
 
 /**
  * Check if the request URL is an auth endpoint that should skip token refresh on 401.
- * This includes /auth/session because if session validation fails, we don't want to
- * create a refresh loop.
+ * Note: /auth/session is NOT excluded here because we want to refresh expired tokens
+ * when checking the session on page load. The _retry flag prevents infinite loops.
  */
 function shouldSkipRefresh(url) {
   if (!url) return true;
   return (
     url.includes("/auth/login") ||
     url.includes("/auth/logout") ||
-    url.includes("/auth/session") ||
     url.includes("/auth/callback") ||
     url.includes("/auth/oidc")
   );
