@@ -150,7 +150,7 @@ internal interface RetrofitApiClient {
         @Body request: UpdateUserSettingsRequest,
     ): Response<Unit>
 
-    @PUT("/v1/user/notifications/{notificationId}/read")
+    @POST("/v1/user/notifications/{notificationId}/read")
     suspend fun markNotificationRead(
         @Header("Authorization") authToken: String,
         @Path("notificationId") notificationId: String,
