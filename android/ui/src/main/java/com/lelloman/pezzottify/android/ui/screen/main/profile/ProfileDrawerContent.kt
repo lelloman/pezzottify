@@ -43,6 +43,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.lelloman.pezzottify.android.ui.R
+import com.lelloman.pezzottify.android.ui.component.SmallNotificationBadge
 import com.lelloman.pezzottify.android.ui.model.Permission
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
@@ -355,23 +356,10 @@ private fun DrawerMenuItemWithBadge(
                     imageVector = icon,
                     contentDescription = null
                 )
-                if (badgeCount > 0) {
-                    Surface(
-                        modifier = Modifier
-                            .size(16.dp)
-                            .align(Alignment.TopEnd),
-                        shape = CircleShape,
-                        color = MaterialTheme.colorScheme.error
-                    ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Text(
-                                text = if (badgeCount > 9) "9+" else badgeCount.toString(),
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onError
-                            )
-                        }
-                    }
-                }
+                SmallNotificationBadge(
+                    count = badgeCount,
+                    modifier = Modifier.align(Alignment.TopEnd)
+                )
             }
         },
         label = { Text(label) },

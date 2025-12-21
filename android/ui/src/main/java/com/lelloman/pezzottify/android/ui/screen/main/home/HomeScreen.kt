@@ -24,8 +24,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material3.Badge
-import androidx.compose.material3.BadgedBox
+import com.lelloman.pezzottify.android.ui.component.NotificationBadgedBox
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -131,17 +130,7 @@ private fun HomeScreenContent(
                             .padding(end = 8.dp)
                             .clickable { coroutineScope.launch { actions.clickOnProfile() } }
                     ) {
-                        BadgedBox(
-                            badge = {
-                                if (notificationUnreadCount > 0) {
-                                    Badge {
-                                        Text(
-                                            text = if (notificationUnreadCount > 99) "99+" else notificationUnreadCount.toString()
-                                        )
-                                    }
-                                }
-                            }
-                        ) {
+                        NotificationBadgedBox(count = notificationUnreadCount) {
                             UserInitialsIcon(userName = state.userName)
                         }
                     }
