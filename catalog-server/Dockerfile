@@ -3,10 +3,19 @@
 # ------------------------------------------
 FROM node:20-alpine AS web-builder
 
+# OIDC configuration (required for SSO login)
+ARG VITE_OIDC_AUTHORITY
+ARG VITE_OIDC_CLIENT_ID
+
 WORKDIR /web
 COPY web/package*.json ./
 RUN npm ci
 COPY web/ .
+
+# Pass build args as environment variables for Vite build
+ENV VITE_OIDC_AUTHORITY=${VITE_OIDC_AUTHORITY}
+ENV VITE_OIDC_CLIENT_ID=${VITE_OIDC_CLIENT_ID}
+
 RUN npm run build
 
 
