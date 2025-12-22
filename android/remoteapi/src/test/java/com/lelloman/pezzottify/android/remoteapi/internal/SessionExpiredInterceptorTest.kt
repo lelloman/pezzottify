@@ -209,6 +209,127 @@ class SessionExpiredInterceptorTest {
         verify { logger.warn(match { it.contains("Unauthorized") && it.contains("401") }) }
     }
 
+    // --- 429 (Rate Limiting) Tests ---
+
+    @Test
+    fun `handles 429 response from server and sets backoff`() {
+        val chain = createChainWithHeaders(
+            requestUrl = "http://localhost/v1/content/album/123",
+            responseCode = 429,
+            headers = mapOf("Retry-After" to "30")
+        )
+
+        val result = interceptor.intercept(chain)
+
+        assertThat(result.code).isEqualTo(429)
+        coVerify(exactly = 0) { tokenRefresher.refreshTokens() }
+        verify(exactly = 0) { sessionExpiredHandler.onSessionExpired() }
+    }
+
+    @Test
+    fun `blocks subsequent requests during rate limit backoff period`() {
+        // First request gets 429
+        val chain429 = createChainWithHeaders(
+            requestUrl = "http://localhost/v1/content/album/123",
+            responseCode = 429,
+            headers = mapOf("Retry-After" to "60") // 60 seconds
+        )
+        interceptor.intercept(chain429)
+
+        // Second request should be blocked client-side
+        var proceedCalled = false
+        val chainBlocked = createChainWithCallback(
+            requestUrl = "http://localhost/v1/content/album/456",
+            responseCode = 200
+        ) { proceedCalled = true }
+
+        val result = interceptor.intercept(chainBlocked)
+
+        assertThat(proceedCalled).isFalse()
+        assertThat(result.code).isEqualTo(429)
+        assertThat(result.message).contains("client-side backoff")
+    }
+
+    @Test
+    fun `does not trigger logout on rate limited token refresh`() {
+        coEvery { tokenRefresher.refreshTokens() } returns TokenRefresher.RefreshResult.RateLimited(60_000L)
+        val chain = createChain(
+            requestUrl = "http://localhost/v1/content/album/123",
+            responseCode = 401
+        )
+
+        val result = interceptor.intercept(chain)
+
+        coVerify(exactly = 1) { tokenRefresher.refreshTokens() }
+        verify(exactly = 0) { sessionExpiredHandler.onSessionExpired() }
+        assertThat(result.code).isEqualTo(401) // Returns original response
+    }
+
+    @Test
+    fun `blocks subsequent requests after rate limited token refresh`() {
+        // First request triggers rate limited refresh
+        coEvery { tokenRefresher.refreshTokens() } returns TokenRefresher.RefreshResult.RateLimited(60_000L)
+        val chain401 = createChain(
+            requestUrl = "http://localhost/v1/content/album/123",
+            responseCode = 401
+        )
+        interceptor.intercept(chain401)
+
+        // Second request should be blocked client-side
+        var proceedCalled = false
+        val chainBlocked = createChainWithCallback(
+            requestUrl = "http://localhost/v1/content/album/456",
+            responseCode = 200
+        ) { proceedCalled = true }
+
+        val result = interceptor.intercept(chainBlocked)
+
+        assertThat(proceedCalled).isFalse()
+        assertThat(result.code).isEqualTo(429)
+    }
+
+    @Test
+    fun `parses Retry-After header in seconds`() {
+        val chain = createChainWithHeaders(
+            requestUrl = "http://localhost/v1/content/album/123",
+            responseCode = 429,
+            headers = mapOf("Retry-After" to "120") // 120 seconds = 2 minutes
+        )
+        interceptor.intercept(chain)
+
+        // Immediately check if blocked (should be blocked for ~2 minutes)
+        var proceedCalled = false
+        val chainBlocked = createChainWithCallback(
+            requestUrl = "http://localhost/v1/content/album/456",
+            responseCode = 200
+        ) { proceedCalled = true }
+
+        interceptor.intercept(chainBlocked)
+
+        assertThat(proceedCalled).isFalse()
+    }
+
+    @Test
+    fun `uses default backoff when Retry-After header is missing`() {
+        val chain = createChainWithHeaders(
+            requestUrl = "http://localhost/v1/content/album/123",
+            responseCode = 429,
+            headers = emptyMap()
+        )
+        interceptor.intercept(chain)
+
+        // Should still be blocked (default is 60 seconds)
+        var proceedCalled = false
+        val chainBlocked = createChainWithCallback(
+            requestUrl = "http://localhost/v1/content/album/456",
+            responseCode = 200
+        ) { proceedCalled = true }
+
+        interceptor.intercept(chainBlocked)
+
+        assertThat(proceedCalled).isFalse()
+    }
+
     private fun createChain(requestUrl: String, responseCode: Int): Interceptor.Chain {
         val request = Request.Builder()
             .url(requestUrl)
@@ -264,13 +385,69 @@ class SessionExpiredInterceptorTest {
         }
     }
 
-    private fun buildResponse(request: Request, code: Int): Response {
-        return Response.Builder()
+    private fun createChainWithHeaders(
+        requestUrl: String,
+        responseCode: Int,
+        headers: Map<String, String>
+    ): Interceptor.Chain {
+        val request = Request.Builder()
+            .url(requestUrl)
+            .build()
+
+        return object : Interceptor.Chain {
+            override fun request(): Request = request
+            override fun proceed(request: Request): Response = buildResponse(request, responseCode, headers)
+            override fun connection() = null
+            override fun call() = throw UnsupportedOperationException()
+            override fun connectTimeoutMillis() = 0
+            override fun withConnectTimeout(timeout: Int, unit: java.util.concurrent.TimeUnit) =
+                throw UnsupportedOperationException()
+            override fun readTimeoutMillis() = 0
+            override fun withReadTimeout(timeout: Int, unit: java.util.concurrent.TimeUnit) =
+                throw UnsupportedOperationException()
+            override fun writeTimeoutMillis() = 0
+            override fun withWriteTimeout(timeout: Int, unit: java.util.concurrent.TimeUnit) =
+                throw UnsupportedOperationException()
+        }
+    }
+
+    private fun createChainWithCallback(
+        requestUrl: String,
+        responseCode: Int,
+        onProceed: () -> Unit
+    ): Interceptor.Chain {
+        val request = Request.Builder()
+            .url(requestUrl)
+            .build()
+
+        return object : Interceptor.Chain {
+            override fun request(): Request = request
+            override fun proceed(request: Request): Response {
+                onProceed()
+                return buildResponse(request, responseCode)
+            }
+            override fun connection() = null
+            override fun call() = throw UnsupportedOperationException()
+            override fun connectTimeoutMillis() = 0
+            override fun withConnectTimeout(timeout: Int, unit: java.util.concurrent.TimeUnit) =
+                throw UnsupportedOperationException()
+            override fun readTimeoutMillis() = 0
+            override fun withReadTimeout(timeout: Int, unit: java.util.concurrent.TimeUnit) =
+                throw UnsupportedOperationException()
+            override fun writeTimeoutMillis() = 0
+            override fun withWriteTimeout(timeout: Int, unit: java.util.concurrent.TimeUnit) =
+                throw UnsupportedOperationException()
+        }
+    }
+
+    private fun buildResponse(request: Request, code: Int, headers: Map<String, String> = emptyMap()): Response {
+        val builder = Response.Builder()
             .request(request)
             .protocol(Protocol.HTTP_1_1)
             .code(code)
             .message("Test")
             .body("".toResponseBody("text/plain".toMediaType()))
-            .build()
+        headers.forEach { (name, value) -> builder.header(name, value) }
+        return builder.build()
     }
 }

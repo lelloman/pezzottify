@@ -99,6 +99,8 @@ class AndroidoscopyInitializer @Inject constructor(
                             ActionResult.success("Refresh failed: ${result.reason}")
                         TokenRefresher.RefreshResult.NotAvailable ->
                             ActionResult.success("No refresh token available")
+                        is TokenRefresher.RefreshResult.RateLimited ->
+                            ActionResult.success("Rate limited, retry after ${result.retryAfterMs}ms")
                     }
                 }
             }
