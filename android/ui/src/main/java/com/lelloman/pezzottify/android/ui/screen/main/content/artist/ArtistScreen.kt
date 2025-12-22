@@ -252,7 +252,7 @@ fun ArtistLoadedScreen(
             } else if (externalAlbums.isNotEmpty()) {
                 item {
                     Text(
-                        text = stringResource(R.string.not_in_library),
+                        text = stringResource(R.string.not_in_catalog),
                         style = MaterialTheme.typography.headlineSmall,
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
                     )

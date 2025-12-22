@@ -1,5 +1,6 @@
 package com.lelloman.pezzottify.android.ui.screen.main.library
 
+import androidx.annotation.StringRes
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -57,11 +58,11 @@ import com.lelloman.pezzottify.android.ui.toArtist
 import com.lelloman.pezzottify.android.ui.toTrack
 import com.lelloman.pezzottify.android.ui.toUserPlaylist
 
-private enum class LibraryTab {
-    Albums,
-    Artists,
-    Tracks,
-    Playlists,
+private enum class LibraryTab(@StringRes val labelRes: Int) {
+    Albums(R.string.albums),
+    Artists(R.string.artists),
+    Tracks(R.string.tracks),
+    Playlists(R.string.playlists),
 }
 
 @Composable
@@ -114,7 +115,7 @@ private fun LibraryScreenContent(
                             onClick = { selectedTab = tab },
                             selected = selectedTab == tab
                         ) {
-                            AutoShrinkText(text = tab.name)
+                            AutoShrinkText(text = stringResource(tab.labelRes))
                         }
                     }
                 }

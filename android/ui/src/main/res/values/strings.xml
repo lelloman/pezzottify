@@ -277,7 +277,7 @@
     <string name="related_artists">Related Artists</string>
     <string name="albums">Albums</string>
     <string name="features">Features</string>
-    <string name="not_in_library">Not in Library</string>
+    <string name="not_in_catalog">Not in Catalog</string>
     <string name="external_albums_error">Could not load external albums</string>
     <string name="no_external_albums_found">No external albums found</string>
     <string name="could_not_load_artist">Could not load artist</string>
@@ -285,6 +285,7 @@
 
     <!-- LIBRARY SCREEN -->
     <string name="your_library">Your Library</string>
+    <string name="playlists">Playlists</string>
     <string name="no_liked_albums_yet">No liked albums yet</string>
     <string name="albums_you_like_will_appear_here">Albums you like will appear here</string>
     <string name="no_liked_artists_yet">No liked artists yet</string>

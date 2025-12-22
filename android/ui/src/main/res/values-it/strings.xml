@@ -277,7 +277,7 @@
     <string name="related_artists">Artisti correlati</string>
     <string name="albums">Album</string>
     <string name="features">Collaborazioni</string>
-    <string name="not_in_library">Non nella libreria</string>
+    <string name="not_in_catalog">Non in Catalogo</string>
     <string name="external_albums_error">Impossibile caricare album esterni</string>
     <string name="no_external_albums_found">Nessun album esterno trovato</string>
     <string name="could_not_load_artist">Impossibile caricare artista</string>
@@ -285,6 +285,7 @@
 
     <!-- LIBRARY SCREEN -->
     <string name="your_library">La tua libreria</string>
+    <string name="playlists">Playlist</string>
     <string name="no_liked_albums_yet">Ancora nessun album preferito</string>
     <string name="albums_you_like_will_appear_here">Gli album che ti piacciono appariranno qui</string>
     <string name="no_liked_artists_yet">Ancora nessun artista preferito</string>
