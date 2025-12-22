@@ -180,12 +180,28 @@ export async function getUser() {
 }
 
 /**
- * Get the current ID token.
- * Returns null if not logged in.
+ * Get the current ID token, refreshing if expired.
+ * Returns null if not logged in or refresh fails.
  */
 export async function getIdToken() {
-  const user = await getUser();
-  return user?.id_token || null;
+  const manager = getUserManager();
+  let user = await manager.getUser();
+
+  if (!user) {
+    return null;
+  }
+
+  // If token is expired or about to expire (within 30 seconds), refresh it
+  if (user.expired || (user.expires_at && user.expires_at - Date.now() / 1000 < 30)) {
+    console.debug("[OIDC] Token expired or expiring soon, refreshing...");
+    user = await refreshTokens();
+    if (!user) {
+      console.debug("[OIDC] Token refresh failed, returning null");
+      return null;
+    }
+  }
+
+  return user.id_token || null;
 }
 
 /**

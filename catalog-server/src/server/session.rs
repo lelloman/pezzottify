@@ -37,7 +37,7 @@ pub enum SessionExtractionError {
 impl IntoResponse for SessionExtractionError {
     fn into_response(self) -> axum::response::Response {
         match self {
-            SessionExtractionError::AccessDenied => StatusCode::FORBIDDEN.into_response(),
+            SessionExtractionError::AccessDenied => StatusCode::UNAUTHORIZED.into_response(),
             SessionExtractionError::InternalError => {
                 StatusCode::INTERNAL_SERVER_ERROR.into_response()
             }
@@ -78,7 +78,7 @@ async fn try_oidc_session(token: &str, ctx: &ServerState) -> Option<Session> {
         }
         Err(e) => {
             // Not a valid OIDC token - this is expected for legacy sessions
-            debug!("Token is not a valid OIDC ID token: {}", e);
+            warn!("Token is not a valid OIDC ID token: {}", e);
             return None;
         }
     };
@@ -326,7 +326,7 @@ async fn extract_session_from_request_parts(
         return Some(session);
     }
 
-    debug!("Token validation failed for both OIDC and legacy auth");
+    warn!("Token validation failed for both OIDC and legacy auth");
     None
 }
 
