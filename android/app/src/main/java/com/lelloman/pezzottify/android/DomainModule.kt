@@ -56,7 +56,7 @@ abstract class DomainModule {
     companion object {
         @Provides
         @DefaultHostUrl
-        fun provideDefaultHostUrl() = "http://10.0.2.2:3001"
+        fun provideDefaultHostUrl() = BuildConfig.DEFAULT_BASE_URL
 
         @Provides
         @Singleton
