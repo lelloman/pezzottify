@@ -31,5 +31,15 @@ interface TokenRefresher {
          * No refresh token available (legacy auth or not logged in).
          */
         data object NotAvailable : RefreshResult
+
+        /**
+         * Token refresh was rate limited by the OIDC provider.
+         * Caller should implement backoff before retrying.
+         *
+         * @param retryAfterMs Suggested delay before retrying, in milliseconds.
+         *                     If the server provided a Retry-After header, this reflects that value.
+         *                     Otherwise, it's a default backoff suggestion.
+         */
+        data class RateLimited(val retryAfterMs: Long) : RefreshResult
     }
 }

@@ -268,10 +268,23 @@ class AppAuthOidcManager @Inject constructor(
                     logger.debug("[OIDC_DBG] refreshTokens() callback received")
                     val result: OidcAuthManager.RefreshResult = when {
                         exception != null -> {
-                            logger.error("[OIDC_DBG] refreshTokens() error: ${exception.errorDescription}", exception)
-                            OidcAuthManager.RefreshResult.Failed(
-                                exception.errorDescription ?: "Token refresh failed"
-                            )
+                            logger.error("[OIDC_DBG] refreshTokens() error: code=${exception.code}, type=${exception.type}, description=${exception.errorDescription}", exception)
+
+                            // Check for rate limiting (HTTP 429)
+                            // AppAuth returns SERVER_ERROR for HTTP errors, check the description
+                            val isRateLimited = exception.type == AuthorizationException.TYPE_OAUTH_TOKEN_ERROR &&
+                                (exception.errorDescription?.contains("429", ignoreCase = true) == true ||
+                                    exception.errorDescription?.contains("too many", ignoreCase = true) == true ||
+                                    exception.errorDescription?.contains("rate limit", ignoreCase = true) == true)
+
+                            if (isRateLimited) {
+                                logger.warn("[OIDC_DBG] refreshTokens() rate limited by OIDC provider")
+                                OidcAuthManager.RefreshResult.RateLimited(retryAfterMs = DEFAULT_RATE_LIMIT_BACKOFF_MS)
+                            } else {
+                                OidcAuthManager.RefreshResult.Failed(
+                                    exception.errorDescription ?: "Token refresh failed"
+                                )
+                            }
                         }
 
                         tokenResponse != null -> {
@@ -346,5 +359,6 @@ class AppAuthOidcManager @Inject constructor(
 
     companion object {
         private const val KEY_PENDING_REQUEST = "pending_auth_request"
+        private const val DEFAULT_RATE_LIMIT_BACKOFF_MS = 60_000L // 1 minute default backoff
     }
 }

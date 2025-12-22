@@ -134,6 +134,10 @@ internal class WebSocketManagerImpl(
                     logger.debug("No refresh available, using existing token")
                     // Fall through to use existing token
                 }
+                is TokenRefresher.RefreshResult.RateLimited -> {
+                    logger.warn("Token refresh rate limited, trying with existing token")
+                    // Fall through to use existing token - will retry on next reconnect
+                }
             }
         }
 
@@ -278,6 +282,11 @@ internal class WebSocketManagerImpl(
                     logger.warn("No refresh token available, triggering session expired")
                     _connectionState.value = ConnectionState.Error("Authentication failed")
                     sessionExpiredHandler.onSessionExpired()
+                }
+                is TokenRefresher.RefreshResult.RateLimited -> {
+                    logger.warn("Token refresh rate limited for ${result.retryAfterMs}ms, will retry on next reconnect")
+                    _connectionState.value = ConnectionState.Error("Rate limited - please wait")
+                    // Don't trigger session expired - this is temporary, reconnect will retry
                 }
             }
         }

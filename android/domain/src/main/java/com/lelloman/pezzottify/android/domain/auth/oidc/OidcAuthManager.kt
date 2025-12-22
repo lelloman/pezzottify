@@ -82,5 +82,11 @@ interface OidcAuthManager {
          * Token refresh failed - user needs to re-authenticate.
          */
         data class Failed(val message: String) : RefreshResult
+
+        /**
+         * Token refresh was rate limited by the OIDC provider.
+         * @param retryAfterMs Suggested delay before retrying, in milliseconds.
+         */
+        data class RateLimited(val retryAfterMs: Long) : RefreshResult
     }
 }
