@@ -211,7 +211,7 @@ fun SearchScreenContent(
                 ) {
                     if (state.externalSearchLoading) {
                         item {
-                            LoadingSearchResult()
+                            SearchLoadingIndicator()
                         }
                     } else if (state.externalSearchErrorRes != null) {
                         item {
@@ -246,20 +246,26 @@ fun SearchScreenContent(
                     .weight(1f)
                     .fillMaxWidth()
             ) {
-                state.searchResults?.let { searchResults ->
-                    items(searchResults) { searchResult ->
-                        when (val result = searchResult.collectAsState(initial = null).value) {
-                            is Content.Resolved -> when (result.data) {
-                                is SearchResultContent.Album -> AlbumSearchResult(result.data, actions)
-                                is SearchResultContent.Track -> TrackSearchResult(result.data, actions)
-                                is SearchResultContent.Artist -> ArtistSearchResult(
-                                    result.data,
-                                    actions
-                                )
-                            }
+                if (state.isLoading && state.searchResults == null) {
+                    item {
+                        SearchLoadingIndicator()
+                    }
+                } else {
+                    state.searchResults?.let { searchResults ->
+                        items(searchResults) { searchResult ->
+                            when (val result = searchResult.collectAsState(initial = null).value) {
+                                is Content.Resolved -> when (result.data) {
+                                    is SearchResultContent.Album -> AlbumSearchResult(result.data, actions)
+                                    is SearchResultContent.Track -> TrackSearchResult(result.data, actions)
+                                    is SearchResultContent.Artist -> ArtistSearchResult(
+                                        result.data,
+                                        actions
+                                    )
+                                }
 
-                            null, is Content.Loading -> LoadingSearchResult()
-                            is Content.Error -> ErrorSearchResult()
+                                null, is Content.Loading -> LoadingSearchResult()
+                                is Content.Error -> ErrorSearchResult()
+                            }
                         }
                     }
                 }
@@ -652,6 +658,18 @@ private fun LoadingSearchResult() {
             .fillMaxWidth()
             .padding(8.dp)
             .height(PezzottifyImageShape.SmallSquare.size)
+    ) {
+        CircularProgressIndicator()
+    }
+}
+
+@Composable
+private fun SearchLoadingIndicator() {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = Spacing.ExtraLarge),
+        contentAlignment = Alignment.Center
     ) {
         CircularProgressIndicator()
     }
