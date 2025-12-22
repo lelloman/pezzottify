@@ -55,8 +55,6 @@ import com.lelloman.pezzottify.android.ui.component.BackOnlineBanner
 import com.lelloman.pezzottify.android.ui.component.NullablePezzottifyImage
 import com.lelloman.pezzottify.android.ui.component.OfflineIndicator
 import com.lelloman.pezzottify.android.ui.component.PezzottifyImageShape
-import com.lelloman.pezzottify.android.ui.component.ScrollingArtistsRow
-import com.lelloman.pezzottify.android.ui.content.ArtistInfo
 import com.lelloman.pezzottify.android.ui.content.Content
 import com.lelloman.pezzottify.android.ui.theme.ComponentSize
 import com.lelloman.pezzottify.android.ui.theme.CornerRadius
@@ -332,9 +330,12 @@ private fun RecentlyViewedItem(
                             color = MaterialTheme.colorScheme.onSurface,
                         )
                         if (item.data.artists.isNotEmpty()) {
-                            ScrollingArtistsRow(
-                                artists = item.data.artists.map { ArtistInfo(it.id, it.name) },
-                                textStyle = MaterialTheme.typography.bodySmall,
+                            Text(
+                                text = item.data.artists.joinToString(", ") { it.name },
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
                             )
                         }
                         item.data.year?.let { year ->
