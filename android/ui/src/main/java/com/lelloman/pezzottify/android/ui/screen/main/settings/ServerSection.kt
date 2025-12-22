@@ -9,7 +9,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
-import androidx.compose.material3.CircularProgressIndicator
+import com.lelloman.pezzottify.android.ui.component.LoaderSize
+import com.lelloman.pezzottify.android.ui.component.PezzottifyLoader
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -86,9 +87,8 @@ fun ServerSection(
             modifier = Modifier.fillMaxWidth()
         ) {
             if (isSaving) {
-                CircularProgressIndicator(
-                    modifier = Modifier.height(16.dp),
-                    strokeWidth = 2.dp,
+                PezzottifyLoader(
+                    size = LoaderSize.Button,
                     color = MaterialTheme.colorScheme.onPrimary
                 )
             } else {

@@ -28,7 +28,8 @@ import androidx.compose.material.icons.filled.HourglassEmpty
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material3.Button
-import androidx.compose.material3.CircularProgressIndicator
+import com.lelloman.pezzottify.android.ui.component.LoaderSize
+import com.lelloman.pezzottify.android.ui.component.PezzottifyLoader
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -151,12 +152,7 @@ fun MyRequestsScreen(
                         }
                     }
                     state.requests == null && state.isLoading -> {
-                        Box(
-                            modifier = Modifier.fillMaxSize(),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            CircularProgressIndicator()
-                        }
+                        PezzottifyLoader(size = LoaderSize.FullScreen)
                     }
                     else -> {
                         when (state.selectedTab) {
@@ -426,7 +422,7 @@ private fun CompletedTabContent(
                         contentAlignment = Alignment.Center,
                     ) {
                         if (isLoadingMore) {
-                            CircularProgressIndicator(modifier = Modifier.size(24.dp))
+                            PezzottifyLoader(size = LoaderSize.Small)
                         } else {
                             Button(onClick = onLoadMore) {
                                 Text(stringResource(R.string.my_requests_load_more))

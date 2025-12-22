@@ -25,7 +25,8 @@ import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CircularProgressIndicator
+import com.lelloman.pezzottify.android.ui.component.LoaderSize
+import com.lelloman.pezzottify.android.ui.component.PezzottifyLoader
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -108,12 +109,7 @@ private fun WhatsNewScreenContent(
         ) {
             when {
                 state.isLoading -> {
-                    Box(
-                        modifier = Modifier.fillMaxSize(),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        CircularProgressIndicator()
-                    }
+                    PezzottifyLoader(size = LoaderSize.FullScreen)
                 }
                 state.error != null -> {
                     Box(
@@ -334,7 +330,7 @@ private fun AlbumCardLoading() {
             modifier = Modifier.fillMaxSize(),
             contentAlignment = Alignment.Center
         ) {
-            CircularProgressIndicator(modifier = Modifier.size(20.dp))
+            PezzottifyLoader(size = LoaderSize.Small)
         }
     }
 }

@@ -15,7 +15,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.material3.CircularProgressIndicator
+import com.lelloman.pezzottify.android.ui.component.LoaderSize
+import com.lelloman.pezzottify.android.ui.component.PezzottifyLoader
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -464,14 +465,7 @@ private fun ExternalAlbumsErrorSection(
 
 @Composable
 private fun ExternalAlbumsLoadingSection() {
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 32.dp),
-        contentAlignment = Alignment.Center
-    ) {
-        CircularProgressIndicator()
-    }
+    PezzottifyLoader(size = LoaderSize.Section)
 }
 
 @Composable

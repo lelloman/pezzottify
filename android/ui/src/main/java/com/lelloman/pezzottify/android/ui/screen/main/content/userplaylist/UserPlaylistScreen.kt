@@ -16,7 +16,8 @@ import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.CircularProgressIndicator
+import com.lelloman.pezzottify.android.ui.component.LoaderSize
+import com.lelloman.pezzottify.android.ui.component.PezzottifyLoader
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -431,7 +432,7 @@ private fun LoadingTrackItem() {
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        CircularProgressIndicator(modifier = Modifier.size(24.dp))
+        PezzottifyLoader(size = LoaderSize.Small)
     }
 }
 

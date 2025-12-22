@@ -29,7 +29,8 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CircularProgressIndicator
+import com.lelloman.pezzottify.android.ui.component.LoaderSize
+import com.lelloman.pezzottify.android.ui.component.PezzottifyLoader
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -372,14 +373,10 @@ private fun SearchHistoryItemCard(
         }
 
         is Content.Loading -> {
-            Box(
-                modifier = modifier
-                    .fillMaxWidth()
-                    .height(ComponentSize.ImageThumbSmall),
-                contentAlignment = Alignment.Center
-            ) {
-                CircularProgressIndicator()
-            }
+            PezzottifyLoader(
+                height = ComponentSize.ImageThumbSmall,
+                modifier = modifier,
+            )
         }
 
         is Content.Error -> {
@@ -514,14 +511,10 @@ private fun RecentlyViewedItem(
         }
 
         is Content.Loading -> {
-            Box(
-                modifier = modifier
-                    .fillMaxWidth()
-                    .height(ComponentSize.ImageThumbSmall),
-                contentAlignment = Alignment.Center
-            ) {
-                CircularProgressIndicator()
-            }
+            PezzottifyLoader(
+                height = ComponentSize.ImageThumbSmall,
+                modifier = modifier,
+            )
         }
 
         is Content.Error -> {
@@ -653,26 +646,15 @@ private fun ArtistSearchResult(
 
 @Composable
 private fun LoadingSearchResult() {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(8.dp)
-            .height(PezzottifyImageShape.SmallSquare.size)
-    ) {
-        CircularProgressIndicator()
-    }
+    PezzottifyLoader(
+        height = PezzottifyImageShape.SmallSquare.size,
+        modifier = Modifier.padding(8.dp),
+    )
 }
 
 @Composable
 private fun SearchLoadingIndicator() {
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = Spacing.ExtraLarge),
-        contentAlignment = Alignment.Center
-    ) {
-        CircularProgressIndicator()
-    }
+    PezzottifyLoader(size = LoaderSize.Section)
 }
 
 @Composable
@@ -857,7 +839,7 @@ private fun WhatsNewAlbumCardLoading() {
             modifier = Modifier.fillMaxSize(),
             contentAlignment = Alignment.Center
         ) {
-            CircularProgressIndicator(modifier = Modifier.size(24.dp))
+            PezzottifyLoader(size = LoaderSize.Small)
         }
     }
 }

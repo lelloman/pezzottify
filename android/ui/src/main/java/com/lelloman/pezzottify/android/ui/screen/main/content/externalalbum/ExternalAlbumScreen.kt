@@ -25,7 +25,8 @@ import androidx.compose.material.icons.outlined.Album
 import androidx.compose.material.icons.outlined.ErrorOutline
 import androidx.compose.material.icons.outlined.HourglassEmpty
 import androidx.compose.material3.Button
-import androidx.compose.material3.CircularProgressIndicator
+import com.lelloman.pezzottify.android.ui.component.LoaderSize
+import com.lelloman.pezzottify.android.ui.component.PezzottifyLoader
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -340,7 +341,7 @@ private fun StatusSection(
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     } else {
-                        CircularProgressIndicator(modifier = Modifier.size(48.dp))
+                        PezzottifyLoader(size = LoaderSize.Medium)
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
                             text = stringResource(R.string.downloading),
@@ -412,7 +413,7 @@ private fun StatusSection(
                 // No status - show request button
                 else -> {
                     if (isRequesting) {
-                        CircularProgressIndicator(modifier = Modifier.size(48.dp))
+                        PezzottifyLoader(size = LoaderSize.Medium)
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
                             text = stringResource(R.string.requesting_download),
