@@ -220,20 +220,26 @@ fun SearchScreenContent(
                         }
                     } else {
                         state.externalResults?.let { results ->
-                            items(results, key = { "${it::class.simpleName}_${it.id}" }) { result ->
-                                when (result) {
-                                    is ExternalSearchResultContent.Album -> ExternalAlbumSearchResult(
-                                        result = result,
-                                        onClick = { actions.clickOnExternalResult(result) },
-                                    )
-                                    is ExternalSearchResultContent.Artist -> ExternalArtistSearchResult(
-                                        result = result,
-                                        onClick = { actions.clickOnExternalResult(result) },
-                                    )
-                                    is ExternalSearchResultContent.Track -> ExternalTrackSearchResult(
-                                        result = result,
-                                        onClick = { actions.clickOnExternalResult(result) },
-                                    )
+                            if (results.isEmpty()) {
+                                item {
+                                    EmptySearchResults(query = state.query)
+                                }
+                            } else {
+                                items(results, key = { "${it::class.simpleName}_${it.id}" }) { result ->
+                                    when (result) {
+                                        is ExternalSearchResultContent.Album -> ExternalAlbumSearchResult(
+                                            result = result,
+                                            onClick = { actions.clickOnExternalResult(result) },
+                                        )
+                                        is ExternalSearchResultContent.Artist -> ExternalArtistSearchResult(
+                                            result = result,
+                                            onClick = { actions.clickOnExternalResult(result) },
+                                        )
+                                        is ExternalSearchResultContent.Track -> ExternalTrackSearchResult(
+                                            result = result,
+                                            onClick = { actions.clickOnExternalResult(result) },
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -253,19 +259,25 @@ fun SearchScreenContent(
                     }
                 } else {
                     state.searchResults?.let { searchResults ->
-                        items(searchResults) { searchResult ->
-                            when (val result = searchResult.collectAsState(initial = null).value) {
-                                is Content.Resolved -> when (result.data) {
-                                    is SearchResultContent.Album -> AlbumSearchResult(result.data, actions)
-                                    is SearchResultContent.Track -> TrackSearchResult(result.data, actions)
-                                    is SearchResultContent.Artist -> ArtistSearchResult(
-                                        result.data,
-                                        actions
-                                    )
-                                }
+                        if (searchResults.isEmpty()) {
+                            item {
+                                EmptySearchResults(query = state.query)
+                            }
+                        } else {
+                            items(searchResults) { searchResult ->
+                                when (val result = searchResult.collectAsState(initial = null).value) {
+                                    is Content.Resolved -> when (result.data) {
+                                        is SearchResultContent.Album -> AlbumSearchResult(result.data, actions)
+                                        is SearchResultContent.Track -> TrackSearchResult(result.data, actions)
+                                        is SearchResultContent.Artist -> ArtistSearchResult(
+                                            result.data,
+                                            actions
+                                        )
+                                    }
 
-                                null, is Content.Loading -> LoadingSearchResult()
-                                is Content.Error -> ErrorSearchResult()
+                                    null, is Content.Loading -> LoadingSearchResult()
+                                    is Content.Error -> ErrorSearchResult()
+                                }
                             }
                         }
                     }
@@ -666,6 +678,22 @@ private fun ErrorSearchResult() {
             .height(PezzottifyImageShape.SmallSquare.size)
     ) {
         Text("Error")
+    }
+}
+
+@Composable
+private fun EmptySearchResults(query: String) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = Spacing.ExtraExtraLarge),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = stringResource(R.string.no_results_for_query, query),
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 }
 //

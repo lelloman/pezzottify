@@ -256,6 +256,7 @@
     <string name="request_added_to_queue">Request added to queue</string>
     <string name="external_artist_not_available">External artist view not available yet</string>
     <string name="external_track_not_available">External track view not available yet</string>
+    <string name="no_results_for_query">No results for \"%1$s\"</string>
     <!-- SEARCH SCREEN -->
 
     <!-- ALBUM SCREEN -->
