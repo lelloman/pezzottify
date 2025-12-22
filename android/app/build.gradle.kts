@@ -133,6 +133,10 @@ android.defaultConfig {
     val oidcClientId = localProperties.getProperty("oidc.clientId", "")
     buildConfigField("String", "OIDC_ISSUER_URL", "\"$oidcIssuerUrl\"")
     buildConfigField("String", "OIDC_CLIENT_ID", "\"$oidcClientId\"")
+
+    // Server config from local.properties
+    val defaultBaseUrl = localProperties.getProperty("server.baseUrl", "http://10.0.2.2:3001")
+    buildConfigField("String", "DEFAULT_BASE_URL", "\"$defaultBaseUrl\"")
 }
 
 dependencies {

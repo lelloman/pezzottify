@@ -4,3 +4,7 @@
 # OIDC Configuration (required for SSO login)
 oidc.issuerUrl=https://your-oidc-provider.com
 oidc.clientId=your-client-id
+
+# Server Configuration
+# Default base URL for the catalog server (defaults to http://10.0.2.2:3001 for emulator)
+# server.baseUrl=http://10.0.2.2:3001
