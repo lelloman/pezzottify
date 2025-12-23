@@ -161,6 +161,7 @@ impl JobScheduler {
     /// Calculate time until the next scheduled job should run.
     async fn time_until_next_scheduled_job(&self) -> Duration {
         let mut min_duration = Duration::from_secs(60); // Default check interval
+        let now = chrono::Utc::now();
 
         let state = self.shared_state.read().await;
         for (job_id, job) in &state.jobs {
@@ -168,16 +169,16 @@ impl JobScheduler {
                 continue; // Skip already running jobs
             }
 
-            if let Some(next_run) = self.get_next_run_time(job_id, job.schedule()) {
-                let now = chrono::Utc::now();
+            if let Some(next_run) = self.get_next_run_time(job_id, job.schedule(), now) {
                 if next_run > now {
                     let duration = (next_run - now).to_std().unwrap_or(Duration::from_secs(1));
                     if duration < min_duration {
                         min_duration = duration;
                     }
                 } else {
-                    // Job is due now
-                    return Duration::from_secs(0);
+                    // Job is due now - use small delay to prevent tight loops
+                    // if job spawning fails or is blocked
+                    return Duration::from_millis(100);
                 }
             }
         }
@@ -186,10 +187,13 @@ impl JobScheduler {
     }
 
     /// Get the next scheduled run time for a job.
+    ///
+    /// `now` is passed in to ensure consistent time comparisons across callers.
     fn get_next_run_time(
         &self,
         job_id: &str,
         schedule: JobSchedule,
+        now: chrono::DateTime<chrono::Utc>,
     ) -> Option<chrono::DateTime<chrono::Utc>> {
         match schedule {
             JobSchedule::Interval(_interval) => {
@@ -198,7 +202,7 @@ impl JobScheduler {
                     Some(state.next_run_at)
                 } else {
                     // No schedule state - run immediately on first interval
-                    Some(chrono::Utc::now())
+                    Some(now)
                 }
             }
             JobSchedule::Cron(ref cron_expr) => {
@@ -220,7 +224,8 @@ impl JobScheduler {
                     if let Ok(Some(state)) = self.server_store.get_schedule_state(job_id) {
                         state.next_run_at
                     } else {
-                        chrono::Utc::now()
+                        // No schedule state - run immediately on first interval
+                        now
                     }
                 });
 
@@ -249,7 +254,7 @@ impl JobScheduler {
                     continue;
                 }
 
-                if let Some(next_run) = self.get_next_run_time(job_id, job.schedule()) {
+                if let Some(next_run) = self.get_next_run_time(job_id, job.schedule(), now) {
                     if next_run <= now {
                         jobs_to_run.push(job_id.clone());
                     }
