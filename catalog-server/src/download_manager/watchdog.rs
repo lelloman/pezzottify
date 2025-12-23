@@ -14,7 +14,8 @@ use crate::catalog_store::CatalogStore;
 
 use super::audit_logger::AuditLogger;
 use super::models::{
-    DownloadContentType, MissingFilesReport, QueueItem, QueuePriority, QueueStatus, RequestSource,
+    DownloadContentType, MissingFilesMode, MissingFilesReport, MissingImageInfo, MissingTrackInfo,
+    QueueItem, QueuePriority, QueueStatus, RequestSource,
 };
 use super::queue_store::DownloadQueueStore;
 
@@ -53,18 +54,35 @@ impl MissingFilesWatchdog {
     /// Run a full scan and queue repairs for missing media files.
     ///
     /// Returns a report detailing what was found and what was queued.
-    pub fn run_scan(&self) -> Result<MissingFilesReport> {
+    ///
+    /// # Arguments
+    /// * `mode` - The execution mode (DryRun or Actual)
+    pub fn run_scan(&self, mode: MissingFilesMode) -> Result<MissingFilesReport> {
         let start = Instant::now();
+
+        info!("Starting missing files scan in {:?} mode", mode);
 
         // Log scan start
         if let Err(e) = self.audit_logger.log_watchdog_scan_started() {
             warn!("Failed to log watchdog scan start: {}", e);
         }
 
-        // Scan for missing content
-        let missing_track_audio = self.scan_missing_track_audio()?;
-        let missing_album_images = self.scan_missing_album_images()?;
-        let missing_artist_images = self.scan_missing_artist_images()?;
+        // Get totals for the scan summary
+        let all_track_ids = self.catalog_store.list_all_track_ids()?;
+        let all_album_image_ids = self.catalog_store.list_all_album_image_ids()?;
+        let all_artist_image_ids = self.catalog_store.list_all_artist_image_ids()?;
+
+        let total_tracks_scanned = all_track_ids.len();
+        let total_album_images_scanned = all_album_image_ids.len();
+        let total_artist_images_scanned = all_artist_image_ids.len();
+
+        // Scan for missing content with detailed info
+        let (missing_track_audio, missing_track_details) =
+            self.scan_missing_track_audio_detailed(&all_track_ids)?;
+        let (missing_album_images, missing_album_image_details) =
+            self.scan_missing_album_images_detailed(&all_album_image_ids)?;
+        let (missing_artist_images, missing_artist_image_details) =
+            self.scan_missing_artist_images_detailed(&all_artist_image_ids)?;
 
         info!(
             "Missing files scan found {} missing track audio, {} missing album images, {} missing artist images",
@@ -73,19 +91,37 @@ impl MissingFilesWatchdog {
             missing_artist_images.len()
         );
 
-        // Queue repairs for missing content
-        let (items_queued, items_skipped) = self.queue_repairs(
-            &missing_track_audio,
-            &missing_album_images,
-            &missing_artist_images,
-        )?;
+        // Queue repairs for missing content only if in Actual mode
+        let (items_queued, items_skipped) = match mode {
+            MissingFilesMode::DryRun => {
+                info!(
+                    "Dry-run mode: would queue {} items",
+                    missing_track_audio.len()
+                        + missing_album_images.len()
+                        + missing_artist_images.len()
+                );
+                (0, 0)
+            }
+            MissingFilesMode::Actual => self.queue_repairs(
+                &missing_track_audio,
+                &missing_album_images,
+                &missing_artist_images,
+            )?,
+        };
 
         let scan_duration_ms = start.elapsed().as_millis() as i64;
 
         let report = MissingFilesReport {
+            mode,
+            total_tracks_scanned,
+            total_album_images_scanned,
+            total_artist_images_scanned,
             missing_track_audio,
+            missing_track_details,
             missing_album_images,
+            missing_album_image_details,
             missing_artist_images,
+            missing_artist_image_details,
             items_queued,
             items_skipped,
             scan_duration_ms,
@@ -99,72 +135,171 @@ impl MissingFilesWatchdog {
         Ok(report)
     }
 
-    /// Scan for tracks missing audio files.
+    /// Scan for tracks missing audio files with detailed information.
     ///
-    /// Returns a list of track IDs that don't have corresponding audio files.
-    fn scan_missing_track_audio(&self) -> Result<Vec<String>> {
-        let track_ids = self.catalog_store.list_all_track_ids()?;
-        let mut missing = Vec::new();
+    /// Returns a tuple of (track IDs, detailed track info) for tracks missing audio files.
+    fn scan_missing_track_audio_detailed(
+        &self,
+        track_ids: &[String],
+    ) -> Result<(Vec<String>, Vec<MissingTrackInfo>)> {
+        let mut missing_ids = Vec::new();
+        let mut missing_details = Vec::new();
 
         for track_id in track_ids {
-            if let Some(audio_path) = self.catalog_store.get_track_audio_path(&track_id) {
+            let is_missing = if let Some(audio_path) =
+                self.catalog_store.get_track_audio_path(track_id)
+            {
                 if !audio_path.exists() {
                     debug!(
                         "Missing audio file for track {}: {:?}",
                         track_id, audio_path
                     );
-                    missing.push(track_id);
+                    true
+                } else {
+                    false
                 }
             } else {
                 // Track has no audio_uri set - this is also considered missing
                 debug!("Track {} has no audio_uri set", track_id);
-                missing.push(track_id);
+                true
+            };
+
+            if is_missing {
+                missing_ids.push(track_id.clone());
+
+                // Gather detailed info from resolved track JSON
+                let detail = self.get_track_detail(track_id);
+                missing_details.push(detail);
             }
         }
 
-        Ok(missing)
+        Ok((missing_ids, missing_details))
     }
 
-    /// Scan for album images missing files.
+    /// Get detailed information about a track for the report.
+    fn get_track_detail(&self, track_id: &str) -> MissingTrackInfo {
+        let mut track_name = String::from("Unknown");
+        let mut album_id = None;
+        let mut album_name = None;
+        let mut artist_names = Vec::new();
+
+        if let Ok(Some(track_json)) = self.catalog_store.get_resolved_track_json(track_id) {
+            // Extract track name from resolved track JSON
+            // ResolvedTrack has: track: Track, album: Album, artists: Vec<TrackArtist>
+            if let Some(track) = track_json.get("track") {
+                if let Some(name) = track.get("name").and_then(|n| n.as_str()) {
+                    track_name = name.to_string();
+                }
+            }
+
+            if let Some(album) = track_json.get("album") {
+                if let Some(id) = album.get("id").and_then(|i| i.as_str()) {
+                    album_id = Some(id.to_string());
+                }
+                if let Some(name) = album.get("name").and_then(|n| n.as_str()) {
+                    album_name = Some(name.to_string());
+                }
+            }
+
+            // ResolvedTrack.artists is Vec<TrackArtist> with { artist: Artist, role: ... }
+            if let Some(artists) = track_json.get("artists").and_then(|a| a.as_array()) {
+                for track_artist in artists {
+                    if let Some(artist) = track_artist.get("artist") {
+                        if let Some(name) = artist.get("name").and_then(|n| n.as_str()) {
+                            artist_names.push(name.to_string());
+                        }
+                    }
+                }
+            }
+        }
+
+        MissingTrackInfo {
+            track_id: track_id.to_string(),
+            track_name,
+            album_id,
+            album_name,
+            artist_names,
+        }
+    }
+
+    /// Scan for album images missing files with detailed information.
     ///
-    /// Returns a list of image IDs (hex) that don't have corresponding files.
-    fn scan_missing_album_images(&self) -> Result<Vec<String>> {
-        let image_ids = self.catalog_store.list_all_album_image_ids()?;
-        let mut missing = Vec::new();
+    /// Returns a tuple of (image IDs, detailed image info) for missing album images.
+    fn scan_missing_album_images_detailed(
+        &self,
+        image_ids: &[String],
+    ) -> Result<(Vec<String>, Vec<MissingImageInfo>)> {
+        let mut missing_ids = Vec::new();
+        let mut missing_details = Vec::new();
 
         for image_id in image_ids {
-            let image_path = self.catalog_store.get_image_path(&image_id);
+            let image_path = self.catalog_store.get_image_path(image_id);
             if !image_path.exists() {
                 debug!(
                     "Missing album image file for {}: {:?}",
                     image_id, image_path
                 );
-                missing.push(image_id);
+                missing_ids.push(image_id.clone());
+
+                // Try to find which album uses this image
+                let detail = self.get_album_image_detail(image_id);
+                missing_details.push(detail);
             }
         }
 
-        Ok(missing)
+        Ok((missing_ids, missing_details))
     }
 
-    /// Scan for artist images missing files.
+    /// Get detailed information about an album image for the report.
+    fn get_album_image_detail(&self, image_id: &str) -> MissingImageInfo {
+        // We don't have a direct query for "which album uses this image"
+        // For now, we'll just report the image ID. In a future enhancement,
+        // we could add a reverse lookup.
+        MissingImageInfo {
+            image_id: image_id.to_string(),
+            entity_id: String::new(),
+            entity_name: String::from("(album lookup not implemented)"),
+        }
+    }
+
+    /// Scan for artist images missing files with detailed information.
     ///
-    /// Returns a list of image IDs (hex) that don't have corresponding files.
-    fn scan_missing_artist_images(&self) -> Result<Vec<String>> {
-        let image_ids = self.catalog_store.list_all_artist_image_ids()?;
-        let mut missing = Vec::new();
+    /// Returns a tuple of (image IDs, detailed image info) for missing artist images.
+    fn scan_missing_artist_images_detailed(
+        &self,
+        image_ids: &[String],
+    ) -> Result<(Vec<String>, Vec<MissingImageInfo>)> {
+        let mut missing_ids = Vec::new();
+        let mut missing_details = Vec::new();
 
         for image_id in image_ids {
-            let image_path = self.catalog_store.get_image_path(&image_id);
+            let image_path = self.catalog_store.get_image_path(image_id);
             if !image_path.exists() {
                 debug!(
                     "Missing artist image file for {}: {:?}",
                     image_id, image_path
                 );
-                missing.push(image_id);
+                missing_ids.push(image_id.clone());
+
+                // Try to find which artist uses this image
+                let detail = self.get_artist_image_detail(image_id);
+                missing_details.push(detail);
             }
         }
 
-        Ok(missing)
+        Ok((missing_ids, missing_details))
+    }
+
+    /// Get detailed information about an artist image for the report.
+    fn get_artist_image_detail(&self, image_id: &str) -> MissingImageInfo {
+        // We don't have a direct query for "which artist uses this image"
+        // For now, we'll just report the image ID. In a future enhancement,
+        // we could add a reverse lookup.
+        MissingImageInfo {
+            image_id: image_id.to_string(),
+            entity_id: String::new(),
+            entity_name: String::from("(artist lookup not implemented)"),
+        }
     }
 
     /// Queue repairs for missing content.
@@ -673,7 +808,7 @@ mod tests {
         let catalog = Arc::new(MockCatalogStore::new(media_path));
         let (watchdog, _) = create_test_watchdog(catalog);
 
-        let report = watchdog.run_scan().unwrap();
+        let report = watchdog.run_scan(MissingFilesMode::Actual).unwrap();
 
         assert!(report.missing_track_audio.is_empty());
         assert!(report.missing_album_images.is_empty());
@@ -696,7 +831,7 @@ mod tests {
 
         let (watchdog, queue_store) = create_test_watchdog(catalog);
 
-        let report = watchdog.run_scan().unwrap();
+        let report = watchdog.run_scan(MissingFilesMode::Actual).unwrap();
 
         assert_eq!(report.missing_track_audio.len(), 3);
         assert!(report.missing_track_audio.contains(&"track1".to_string()));
@@ -710,6 +845,34 @@ mod tests {
         // Verify queue contains the items
         let status = queue_store.get_queue_stats().unwrap();
         assert_eq!(status.pending, 3);
+    }
+
+    #[test]
+    fn test_scan_dry_run_does_not_queue() {
+        let temp_dir = TempDir::new().unwrap();
+        let media_path = temp_dir.path().to_path_buf();
+
+        // Create catalog with tracks but no audio files
+        let catalog = Arc::new(
+            MockCatalogStore::new(media_path.clone())
+                .with_tracks(vec!["track1", "track2", "track3"]),
+        );
+
+        let (watchdog, queue_store) = create_test_watchdog(catalog);
+
+        // Run in dry-run mode
+        let report = watchdog.run_scan(MissingFilesMode::DryRun).unwrap();
+
+        assert_eq!(report.missing_track_audio.len(), 3);
+        assert_eq!(report.mode, MissingFilesMode::DryRun);
+
+        // Should NOT have queued any items in dry-run mode
+        assert_eq!(report.items_queued, 0);
+        assert_eq!(report.items_skipped, 0);
+
+        // Verify queue is empty
+        let status = queue_store.get_queue_stats().unwrap();
+        assert_eq!(status.pending, 0);
     }
 
     #[test]
@@ -730,7 +893,7 @@ mod tests {
 
         let (watchdog, _) = create_test_watchdog(catalog);
 
-        let report = watchdog.run_scan().unwrap();
+        let report = watchdog.run_scan(MissingFilesMode::Actual).unwrap();
 
         // img1 exists, img2 and img3 are missing
         assert_eq!(report.missing_album_images.len(), 2);
@@ -753,7 +916,7 @@ mod tests {
 
         let (watchdog, _) = create_test_watchdog(catalog);
 
-        let report = watchdog.run_scan().unwrap();
+        let report = watchdog.run_scan(MissingFilesMode::Actual).unwrap();
 
         assert_eq!(report.missing_artist_images.len(), 2);
         assert_eq!(report.items_queued, 2);
@@ -771,12 +934,12 @@ mod tests {
         let (watchdog, queue_store) = create_test_watchdog(catalog);
 
         // First scan - should queue both
-        let report1 = watchdog.run_scan().unwrap();
+        let report1 = watchdog.run_scan(MissingFilesMode::Actual).unwrap();
         assert_eq!(report1.items_queued, 2);
         assert_eq!(report1.items_skipped, 0);
 
         // Second scan - should skip both since they're already in queue
-        let report2 = watchdog.run_scan().unwrap();
+        let report2 = watchdog.run_scan(MissingFilesMode::Actual).unwrap();
         assert_eq!(report2.items_queued, 0);
         assert_eq!(report2.items_skipped, 2);
 
@@ -795,7 +958,7 @@ mod tests {
 
         let (watchdog, queue_store) = create_test_watchdog(catalog);
 
-        watchdog.run_scan().unwrap();
+        watchdog.run_scan(MissingFilesMode::Actual).unwrap();
 
         // Check that the queued item has Watchdog priority
         let pending = queue_store
@@ -814,7 +977,7 @@ mod tests {
         let catalog = Arc::new(MockCatalogStore::new(media_path.clone()));
         let (watchdog, _) = create_test_watchdog(catalog);
 
-        let report = watchdog.run_scan().unwrap();
+        let report = watchdog.run_scan(MissingFilesMode::Actual).unwrap();
 
         // Duration should be recorded (might be 0 for very fast scans)
         assert!(report.scan_duration_ms >= 0);
@@ -834,9 +997,31 @@ mod tests {
 
         let (watchdog, _) = create_test_watchdog(catalog);
 
-        let report = watchdog.run_scan().unwrap();
+        let report = watchdog.run_scan(MissingFilesMode::Actual).unwrap();
 
         assert_eq!(report.total_missing(), 6); // 2 + 1 + 3
         assert!(!report.is_clean());
+    }
+
+    #[test]
+    fn test_report_includes_scan_totals() {
+        let temp_dir = TempDir::new().unwrap();
+        let media_path = temp_dir.path().to_path_buf();
+
+        let catalog = Arc::new(
+            MockCatalogStore::new(media_path.clone())
+                .with_tracks(vec!["t1", "t2", "t3"])
+                .with_album_images(vec!["a1", "a2"])
+                .with_artist_images(vec!["ar1"]),
+        );
+
+        let (watchdog, _) = create_test_watchdog(catalog);
+
+        let report = watchdog.run_scan(MissingFilesMode::DryRun).unwrap();
+
+        // Report should include totals scanned
+        assert_eq!(report.total_tracks_scanned, 3);
+        assert_eq!(report.total_album_images_scanned, 2);
+        assert_eq!(report.total_artist_images_scanned, 1);
     }
 }
