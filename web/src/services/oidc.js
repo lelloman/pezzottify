@@ -1,5 +1,11 @@
 import { UserManager, WebStorageStateStore } from "oidc-client-ts";
 
+// Track in-flight refresh to coalesce concurrent requests
+let inFlightRefresh = null;
+
+// Track rate limiting backoff
+let rateLimitedUntil = 0;
+
 // Validate required OIDC configuration
 const authority = import.meta.env.VITE_OIDC_AUTHORITY;
 const clientId = import.meta.env.VITE_OIDC_CLIENT_ID;
@@ -224,8 +230,43 @@ export async function isLoggedIn() {
 /**
  * Refresh tokens using the refresh token.
  * Returns the new user object if successful, null if refresh fails.
+ *
+ * This function coalesces concurrent refresh requests - multiple callers
+ * will share the same OIDC refresh call to prevent rate limiting.
  */
 export async function refreshTokens() {
+  // Check if we're currently rate limited
+  const now = Date.now();
+  if (rateLimitedUntil > now) {
+    const remainingMs = rateLimitedUntil - now;
+    console.debug(`[OIDC] Rate limited, ${remainingMs}ms remaining`);
+    return null;
+  }
+
+  // If there's already an in-flight refresh, join it
+  if (inFlightRefresh) {
+    console.debug("[OIDC] Joining existing in-flight refresh");
+    return inFlightRefresh;
+  }
+
+  // We're the first - create a new refresh promise
+  console.debug("[OIDC] Starting new token refresh");
+  inFlightRefresh = performRefresh();
+
+  try {
+    const result = await inFlightRefresh;
+    return result;
+  } finally {
+    // Clear in-flight refresh so subsequent calls start fresh
+    inFlightRefresh = null;
+  }
+}
+
+/**
+ * Actually perform the token refresh (internal function).
+ * This is called only once even when multiple concurrent requests need refresh.
+ */
+async function performRefresh() {
   const manager = getUserManager();
   const user = await manager.getUser();
 
@@ -235,7 +276,7 @@ export async function refreshTokens() {
   }
 
   try {
-    console.debug("[OIDC] Attempting token refresh");
+    console.debug("[OIDC] Attempting OIDC token refresh");
     const newUser = await manager.signinSilent();
     console.debug("[OIDC] Token refresh successful");
     // Update cookie with new token for WebSocket
@@ -244,9 +285,54 @@ export async function refreshTokens() {
     }
     return newUser;
   } catch (error) {
-    console.error("[OIDC] Token refresh failed:", error);
+    // Check for rate limiting
+    if (isRateLimitError(error)) {
+      const backoffMs = parseRetryAfter(error) || 60000; // Default 1 minute
+      rateLimitedUntil = Date.now() + backoffMs;
+      console.warn(`[OIDC] Rate limited by provider, backing off for ${backoffMs}ms`);
+    } else {
+      console.error("[OIDC] Token refresh failed:", error);
+    }
     return null;
   }
+}
+
+/**
+ * Check if an error indicates rate limiting.
+ */
+function isRateLimitError(error) {
+  // oidc-client-ts wraps fetch errors, check for common rate limit indicators
+  if (error?.status === 429) return true;
+  if (error?.statusCode === 429) return true;
+  if (error?.response?.status === 429) return true;
+  // Some providers return 400 with specific error codes
+  const errorMessage = error?.message?.toLowerCase() || "";
+  const errorBody = error?.body?.toLowerCase() || "";
+  return (
+    errorMessage.includes("rate") ||
+    errorMessage.includes("too many") ||
+    errorBody.includes("rate") ||
+    errorBody.includes("too many")
+  );
+}
+
+/**
+ * Parse Retry-After value from error response.
+ */
+function parseRetryAfter(error) {
+  // Try to get Retry-After header from various error formats
+  const retryAfter =
+    error?.headers?.get?.("retry-after") ||
+    error?.response?.headers?.get?.("retry-after") ||
+    error?.retryAfter;
+
+  if (retryAfter) {
+    const seconds = parseInt(retryAfter, 10);
+    if (!isNaN(seconds)) {
+      return seconds * 1000;
+    }
+  }
+  return null;
 }
 
 /**
@@ -257,6 +343,9 @@ export async function logout(redirectToProvider = false) {
 
   // Clear the session cookie
   clearSessionCookie();
+
+  // Clear rate limit state so user can log in immediately
+  rateLimitedUntil = 0;
 
   if (redirectToProvider) {
     await manager.signoutRedirect();
