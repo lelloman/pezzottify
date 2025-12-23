@@ -105,7 +105,8 @@ async fn test_liked_content_requires_authentication() {
 
     // Try to like content without authentication
     let response = client.add_liked_content("track", TRACK_1_ID).await;
-    assert_eq!(response.status(), StatusCode::FORBIDDEN);
+    // 401 Unauthorized - not authenticated
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 }
 
 // =============================================================================
@@ -301,7 +302,8 @@ async fn test_playlist_requires_authentication() {
 
     // Try to create playlist without authentication
     let response = client.create_playlist("Test", vec![TRACK_1_ID]).await;
-    assert_eq!(response.status(), StatusCode::FORBIDDEN);
+    // 401 Unauthorized - not authenticated
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 }
 
 #[tokio::test]

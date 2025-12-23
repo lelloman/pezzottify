@@ -25,8 +25,8 @@ async fn test_list_jobs_rejects_unauthenticated() {
     let client = TestClient::new(server.base_url.clone());
 
     let response = client.admin_list_jobs().await;
-    // 403 is returned for unauthenticated requests to admin endpoints
-    assert_eq!(response.status(), 403);
+    // 401 Unauthorized is returned for unauthenticated requests
+    assert_eq!(response.status(), 401);
 }
 
 #[tokio::test]
@@ -44,7 +44,8 @@ async fn test_get_job_rejects_unauthenticated() {
     let client = TestClient::new(server.base_url.clone());
 
     let response = client.admin_get_job("test_job").await;
-    assert_eq!(response.status(), 403);
+    // 401 Unauthorized is returned for unauthenticated requests
+    assert_eq!(response.status(), 401);
 }
 
 #[tokio::test]
@@ -62,7 +63,8 @@ async fn test_trigger_job_rejects_unauthenticated() {
     let client = TestClient::new(server.base_url.clone());
 
     let response = client.admin_trigger_job("test_job").await;
-    assert_eq!(response.status(), 403);
+    // 401 Unauthorized is returned for unauthenticated requests
+    assert_eq!(response.status(), 401);
 }
 
 #[tokio::test]
@@ -80,7 +82,8 @@ async fn test_get_job_history_rejects_unauthenticated() {
     let client = TestClient::new(server.base_url.clone());
 
     let response = client.admin_get_job_history("test_job", 10).await;
-    assert_eq!(response.status(), 403);
+    // 401 Unauthorized is returned for unauthenticated requests
+    assert_eq!(response.status(), 401);
 }
 
 #[tokio::test]

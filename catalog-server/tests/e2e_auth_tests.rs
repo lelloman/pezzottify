@@ -59,7 +59,8 @@ async fn test_logout_clears_session() {
 
     // Verify we can no longer access protected endpoint
     let response = client.get_artist(ARTIST_1_ID).await;
-    assert_eq!(response.status(), StatusCode::FORBIDDEN);
+    // 401 Unauthorized - session was cleared by logout
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 }
 
 #[tokio::test]
@@ -70,7 +71,8 @@ async fn test_protected_endpoint_requires_authentication() {
     // Try to access protected endpoint without logging in
     let response = client.get_artist(ARTIST_1_ID).await;
 
-    assert_eq!(response.status(), StatusCode::FORBIDDEN);
+    // 401 Unauthorized - not authenticated
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 }
 
 #[tokio::test]
@@ -183,7 +185,8 @@ async fn test_device_persists_across_logout_login() {
 
     // Verify session is cleared
     let response = client.get_artist(ARTIST_1_ID).await;
-    assert_eq!(response.status(), StatusCode::FORBIDDEN);
+    // 401 Unauthorized - session was cleared by logout
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 
     // Login again with same device
     let response = client
@@ -225,7 +228,8 @@ async fn test_different_devices_for_same_user() {
     client1.logout().await;
 
     let response = client1.get_artist(ARTIST_1_ID).await;
-    assert_eq!(response.status(), StatusCode::FORBIDDEN);
+    // 401 Unauthorized - session was cleared by logout
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 
     let response = client2.get_artist(ARTIST_1_ID).await;
     assert_eq!(response.status(), StatusCode::OK);

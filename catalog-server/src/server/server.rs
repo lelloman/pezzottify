@@ -5414,7 +5414,8 @@ mod tests {
             // Add ConnectInfo extension for rate limiting
             request.extensions_mut().insert(ConnectInfo(test_addr));
             let response = app.oneshot(request).await.unwrap();
-            assert_eq!(response.status(), StatusCode::FORBIDDEN);
+            // 401 Unauthorized - not authenticated
+            assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
         }
 
         // Only test search route if search feature is enabled
@@ -5428,7 +5429,8 @@ mod tests {
             // Add ConnectInfo extension for rate limiting
             request.extensions_mut().insert(ConnectInfo(test_addr));
             let response = app.oneshot(request).await.unwrap();
-            assert_eq!(response.status(), StatusCode::FORBIDDEN);
+            // 401 Unauthorized - not authenticated
+            assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
         }
     }
 
