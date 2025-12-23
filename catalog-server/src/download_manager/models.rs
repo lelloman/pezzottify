@@ -1144,16 +1144,67 @@ pub struct DiscographyRequestResult {
     pub status: QueueStatus,
 }
 
+/// Execution mode for the missing files watchdog.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum MissingFilesMode {
+    /// Report what would be done without making changes.
+    #[default]
+    DryRun,
+    /// Actually queue download requests.
+    Actual,
+}
+
+/// Detailed information about a missing track audio file.
+#[derive(Debug, Clone, Serialize)]
+pub struct MissingTrackInfo {
+    /// Track ID (base62)
+    pub track_id: String,
+    /// Track name
+    pub track_name: String,
+    /// Album ID the track belongs to
+    pub album_id: Option<String>,
+    /// Album name
+    pub album_name: Option<String>,
+    /// Artist names (primary artists)
+    pub artist_names: Vec<String>,
+}
+
+/// Detailed information about a missing image file.
+#[derive(Debug, Clone, Serialize)]
+pub struct MissingImageInfo {
+    /// Image ID (hex)
+    pub image_id: String,
+    /// Associated entity ID (album or artist ID)
+    pub entity_id: String,
+    /// Associated entity name (album or artist name)
+    pub entity_name: String,
+}
+
 /// Report from the missing files watchdog scan showing missing media files and actions taken.
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, Serialize)]
 pub struct MissingFilesReport {
+    /// The mode that was used for this run.
+    pub mode: MissingFilesMode,
+    /// Total tracks scanned in the catalog
+    pub total_tracks_scanned: usize,
+    /// Total album images scanned in the catalog
+    pub total_album_images_scanned: usize,
+    /// Total artist images scanned in the catalog
+    pub total_artist_images_scanned: usize,
     /// Track IDs (base62) for tracks missing audio files
     pub missing_track_audio: Vec<String>,
+    /// Detailed info for tracks missing audio files
+    pub missing_track_details: Vec<MissingTrackInfo>,
     /// Image IDs (hex) for missing album cover images
     pub missing_album_images: Vec<String>,
+    /// Detailed info for missing album images
+    pub missing_album_image_details: Vec<MissingImageInfo>,
     /// Image IDs (hex) for missing artist portrait images
     pub missing_artist_images: Vec<String>,
-    /// Number of items queued for download
+    /// Detailed info for missing artist images
+    pub missing_artist_image_details: Vec<MissingImageInfo>,
+    /// Number of items queued for download (0 in dry-run mode)
     pub items_queued: usize,
     /// Number of items skipped (already in queue)
     pub items_skipped: usize,

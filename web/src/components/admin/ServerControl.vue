@@ -160,6 +160,16 @@
           <span class="modeLabel">{{ expandArtistsMode === 'actual' ? 'Actual (will queue downloads)' : 'Dry-run (preview only)' }}</span>
         </label>
       </div>
+      <div v-if="job.id === 'missing_files_watchdog'" class="jobOptions">
+        <label class="modeToggle">
+          <input
+            type="checkbox"
+            :checked="missingFilesMode === 'actual'"
+            @change="missingFilesMode = $event.target.checked ? 'actual' : 'dry_run'"
+          />
+          <span class="modeLabel">{{ missingFilesMode === 'actual' ? 'Actual (will queue downloads)' : 'Dry-run (preview only)' }}</span>
+        </label>
+      </div>
       <button
         class="triggerButton"
         :disabled="job.is_running || triggeringJobs[job.id]"
@@ -259,6 +269,7 @@ const triggerError = ref(null);
 
 // Job-specific options
 const expandArtistsMode = ref("dry_run"); // "dry_run" or "actual"
+const missingFilesMode = ref("dry_run"); // "dry_run" or "actual"
 
 // Audit log state
 const auditEntries = ref([]);
@@ -364,6 +375,8 @@ const triggerJob = async (jobId) => {
   let params = null;
   if (jobId === "expand_artists_base") {
     params = { mode: expandArtistsMode.value };
+  } else if (jobId === "missing_files_watchdog") {
+    params = { mode: missingFilesMode.value };
   }
 
   const result = await remoteStore.triggerBackgroundJob(jobId, params);
@@ -415,8 +428,26 @@ const formatDetails = (details) => {
 
   const parts = [];
 
-  // ExpandArtistsBase - has 'mode' field to distinguish from IntegrityWatchdog
-  if (details.mode !== undefined) {
+  // MissingFilesWatchdog - has 'mode' and 'total_tracks_scanned' fields
+  if (details.mode !== undefined && details.total_tracks_scanned !== undefined) {
+    const modeLabel = details.mode === "actual" ? "Actual" : "Dry-run";
+    const scanned = `Scanned: ${details.total_tracks_scanned} tracks, ${details.total_album_images_scanned} album imgs, ${details.total_artist_images_scanned} artist imgs`;
+    if (details.is_clean) {
+      parts.push(`${modeLabel}: ✓ No missing files`);
+      parts.push(scanned);
+    } else {
+      const missing = [];
+      if (details.missing_track_audio_count > 0) missing.push(`${details.missing_track_audio_count} tracks`);
+      if (details.missing_album_images_count > 0) missing.push(`${details.missing_album_images_count} album images`);
+      if (details.missing_artist_images_count > 0) missing.push(`${details.missing_artist_images_count} artist images`);
+      parts.push(`${modeLabel}: Missing ${missing.join(", ")}`);
+      parts.push(scanned);
+      if (details.items_queued > 0) parts.push(`Queued: ${details.items_queued}`);
+      if (details.items_skipped > 0) parts.push(`Skipped: ${details.items_skipped}`);
+    }
+  }
+  // ExpandArtistsBase - has 'mode' and 'artists_without_related_count' fields
+  else if (details.mode !== undefined && details.artists_without_related_count !== undefined) {
     const modeLabel = details.mode === "actual" ? "Actual" : "Dry-run";
     if (details.is_clean) {
       parts.push(`${modeLabel}: ✓ No enrichment needed`);
@@ -429,8 +460,8 @@ const formatDetails = (details) => {
       if (details.items_skipped > 0) parts.push(`Skipped: ${details.items_skipped}`);
     }
   }
-  // IntegrityWatchdog (MissingFilesWatchdog) - completed
-  else if (details.is_clean !== undefined) {
+  // Legacy IntegrityWatchdog (no mode field) - for backward compatibility
+  else if (details.is_clean !== undefined && details.mode === undefined) {
     if (details.is_clean) {
       parts.push("✓ Catalog clean");
     } else {
