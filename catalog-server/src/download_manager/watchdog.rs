@@ -146,23 +146,22 @@ impl MissingFilesWatchdog {
         let mut missing_details = Vec::new();
 
         for track_id in track_ids {
-            let is_missing = if let Some(audio_path) =
-                self.catalog_store.get_track_audio_path(track_id)
-            {
-                if !audio_path.exists() {
-                    debug!(
-                        "Missing audio file for track {}: {:?}",
-                        track_id, audio_path
-                    );
-                    true
+            let is_missing =
+                if let Some(audio_path) = self.catalog_store.get_track_audio_path(track_id) {
+                    if !audio_path.exists() {
+                        debug!(
+                            "Missing audio file for track {}: {:?}",
+                            track_id, audio_path
+                        );
+                        true
+                    } else {
+                        false
+                    }
                 } else {
-                    false
-                }
-            } else {
-                // Track has no audio_uri set - this is also considered missing
-                debug!("Track {} has no audio_uri set", track_id);
-                true
-            };
+                    // Track has no audio_uri set - this is also considered missing
+                    debug!("Track {} has no audio_uri set", track_id);
+                    true
+                };
 
             if is_missing {
                 missing_ids.push(track_id.clone());

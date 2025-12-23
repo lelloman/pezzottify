@@ -161,7 +161,8 @@ async fn test_mark_notification_read_requires_authentication() {
     let client = TestClient::new(server.base_url.clone());
 
     let response = client.mark_notification_read("some-id").await;
-    assert_eq!(response.status(), StatusCode::FORBIDDEN);
+    // 401 Unauthorized - not authenticated
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 }
 
 #[tokio::test]

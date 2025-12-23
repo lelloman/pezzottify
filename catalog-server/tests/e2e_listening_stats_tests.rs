@@ -126,7 +126,8 @@ async fn test_record_listening_event_requires_auth() {
     let client = TestClient::new(server.base_url.clone());
 
     let response = client.post_listening_event(TRACK_1_ID, 180, 200).await;
-    assert_eq!(response.status(), StatusCode::FORBIDDEN);
+    // 401 Unauthorized - not authenticated
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 }
 
 // =============================================================================
@@ -177,7 +178,8 @@ async fn test_get_listening_summary_requires_auth() {
     let client = TestClient::new(server.base_url.clone());
 
     let response = client.get_listening_summary(None, None).await;
-    assert_eq!(response.status(), StatusCode::FORBIDDEN);
+    // 401 Unauthorized - not authenticated
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 }
 
 // =============================================================================
@@ -312,15 +314,15 @@ async fn test_get_listening_events_pagination() {
 async fn test_admin_daily_stats_requires_admin() {
     let server = TestServer::spawn().await;
 
-    // Regular user should be forbidden
+    // Regular user should be forbidden (authenticated but lacking permission)
     let client = TestClient::authenticated(server.base_url.clone()).await;
     let response = client.admin_get_daily_listening_stats(None, None).await;
     assert_eq!(response.status(), StatusCode::FORBIDDEN);
 
-    // Unauthenticated should be forbidden
+    // Unauthenticated should be unauthorized
     let client = TestClient::new(server.base_url.clone());
     let response = client.admin_get_daily_listening_stats(None, None).await;
-    assert_eq!(response.status(), StatusCode::FORBIDDEN);
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 }
 
 #[tokio::test]

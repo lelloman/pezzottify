@@ -23,12 +23,13 @@ async fn test_changelog_requires_admin() {
 }
 
 #[tokio::test]
-async fn test_changelog_unauthenticated_forbidden() {
+async fn test_changelog_unauthenticated_unauthorized() {
     let server = TestServer::spawn().await;
     let client = TestClient::new(server.base_url.clone());
 
     let response = client.admin_list_changelog_batches(None).await;
-    assert_eq!(response.status(), StatusCode::FORBIDDEN);
+    // 401 Unauthorized - not authenticated
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 }
 
 // =============================================================================
@@ -407,7 +408,8 @@ async fn test_whats_new_requires_authentication() {
     let client = TestClient::new(server.base_url.clone());
 
     let response = client.get_whats_new(None).await;
-    assert_eq!(response.status(), StatusCode::FORBIDDEN);
+    // 401 Unauthorized - not authenticated
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 }
 
 #[tokio::test]

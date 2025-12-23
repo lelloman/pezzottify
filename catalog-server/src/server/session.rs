@@ -485,7 +485,8 @@ mod tests {
     fn session_extraction_error_access_denied_status_code() {
         let error = SessionExtractionError::AccessDenied;
         let response = error.into_response();
-        assert_eq!(response.status(), StatusCode::FORBIDDEN);
+        // 401 Unauthorized - not authenticated
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
     }
 
     #[test]

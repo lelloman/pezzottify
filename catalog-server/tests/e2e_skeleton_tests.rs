@@ -18,7 +18,8 @@ async fn test_get_skeleton_requires_authentication() {
     let client = TestClient::new(server.base_url.clone());
 
     let response = client.get_skeleton().await;
-    assert_eq!(response.status(), StatusCode::FORBIDDEN);
+    // 401 Unauthorized - not authenticated
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 }
 
 #[tokio::test]
@@ -27,7 +28,8 @@ async fn test_get_skeleton_version_requires_authentication() {
     let client = TestClient::new(server.base_url.clone());
 
     let response = client.get_skeleton_version().await;
-    assert_eq!(response.status(), StatusCode::FORBIDDEN);
+    // 401 Unauthorized - not authenticated
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 }
 
 #[tokio::test]
@@ -36,7 +38,8 @@ async fn test_get_skeleton_delta_requires_authentication() {
     let client = TestClient::new(server.base_url.clone());
 
     let response = client.get_skeleton_delta(0).await;
-    assert_eq!(response.status(), StatusCode::FORBIDDEN);
+    // 401 Unauthorized - not authenticated
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 }
 
 #[tokio::test]

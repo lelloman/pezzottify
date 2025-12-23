@@ -56,8 +56,8 @@ async fn test_stream_track_requires_authentication() {
     let client = TestClient::new(server.base_url.clone());
 
     let response = client.stream_track(TRACK_1_ID).await;
-
-    assert_eq!(response.status(), StatusCode::FORBIDDEN);
+    // 401 Unauthorized - not authenticated
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 }
 
 #[tokio::test]

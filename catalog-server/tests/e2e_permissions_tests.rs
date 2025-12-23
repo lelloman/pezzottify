@@ -18,7 +18,8 @@ async fn test_unauthenticated_cannot_access_catalog() {
     let client = TestClient::new(server.base_url.clone());
 
     let response = client.get_artist(ARTIST_1_ID).await;
-    assert_eq!(response.status(), StatusCode::FORBIDDEN);
+    // 401 Unauthorized - not authenticated
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 }
 
 #[tokio::test]
@@ -27,7 +28,8 @@ async fn test_unauthenticated_cannot_stream() {
     let client = TestClient::new(server.base_url.clone());
 
     let response = client.stream_track(TRACK_1_ID).await;
-    assert_eq!(response.status(), StatusCode::FORBIDDEN);
+    // 401 Unauthorized - not authenticated
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 }
 
 #[tokio::test]
@@ -36,7 +38,8 @@ async fn test_unauthenticated_cannot_like_content() {
     let client = TestClient::new(server.base_url.clone());
 
     let response = client.add_liked_content("track", TRACK_1_ID).await;
-    assert_eq!(response.status(), StatusCode::FORBIDDEN);
+    // 401 Unauthorized - not authenticated
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 }
 
 #[tokio::test]
@@ -45,7 +48,8 @@ async fn test_unauthenticated_cannot_create_playlist() {
     let client = TestClient::new(server.base_url.clone());
 
     let response = client.create_playlist("Test", vec![TRACK_1_ID]).await;
-    assert_eq!(response.status(), StatusCode::FORBIDDEN);
+    // 401 Unauthorized - not authenticated
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 }
 
 #[tokio::test]
@@ -312,7 +316,8 @@ async fn test_logout_revokes_access() {
 
     // Verify access is revoked
     let response = client.get_artist(ARTIST_1_ID).await;
-    assert_eq!(response.status(), StatusCode::FORBIDDEN);
+    // 401 Unauthorized - session was cleared by logout
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 }
 
 #[tokio::test]

@@ -15,7 +15,8 @@ async fn test_get_sync_state_requires_authentication() {
     let client = TestClient::new(server.base_url.clone());
 
     let response = client.get_sync_state().await;
-    assert_eq!(response.status(), StatusCode::FORBIDDEN);
+    // 401 Unauthorized - not authenticated
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 }
 
 #[tokio::test]
@@ -136,7 +137,8 @@ async fn test_get_sync_events_requires_authentication() {
     let client = TestClient::new(server.base_url.clone());
 
     let response = client.get_sync_events(0).await;
-    assert_eq!(response.status(), StatusCode::FORBIDDEN);
+    // 401 Unauthorized - not authenticated
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 }
 
 #[tokio::test]
