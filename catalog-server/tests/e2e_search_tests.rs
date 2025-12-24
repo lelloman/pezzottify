@@ -78,10 +78,13 @@ async fn test_search_requires_authentication() {
     // Try to search without authentication
     let response = client.search("Test").await;
 
-    // Should be forbidden (or not found if search disabled)
+    // Should be unauthorized/forbidden (or not found if search disabled)
     assert!(
-        response.status() == StatusCode::FORBIDDEN || response.status() == StatusCode::NOT_FOUND,
-        "Search should require authentication or be disabled"
+        response.status() == StatusCode::UNAUTHORIZED
+            || response.status() == StatusCode::FORBIDDEN
+            || response.status() == StatusCode::NOT_FOUND,
+        "Search should require authentication or be disabled, got: {}",
+        response.status()
     );
 }
 
