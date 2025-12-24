@@ -272,13 +272,26 @@ async function performRefresh() {
 
   if (!user?.refresh_token) {
     console.debug("[OIDC] No refresh token available");
+    persistLog("OIDC_REFRESH", { error: "No refresh token available" });
     return null;
   }
 
+  const debugInfo = {
+    refreshTokenLength: user.refresh_token.length,
+    expired: user.expired,
+    expiresAt: user.expires_at,
+    now: Date.now() / 1000,
+  };
+  console.debug("[OIDC] Refresh token available, length:", user.refresh_token.length);
+  console.debug("[OIDC] Current user expired:", user.expired);
+  console.debug("[OIDC] Current user expires_at:", user.expires_at, "now:", Date.now() / 1000);
+
   try {
-    console.debug("[OIDC] Attempting OIDC token refresh");
+    console.debug("[OIDC] Attempting OIDC token refresh via signinSilent");
     const newUser = await manager.signinSilent();
     console.debug("[OIDC] Token refresh successful");
+    console.debug("[OIDC] New user expires_at:", newUser?.expires_at);
+    persistLog("OIDC_REFRESH", { ...debugInfo, success: true, newExpiresAt: newUser?.expires_at });
     // Update cookie with new token for WebSocket
     if (newUser?.id_token) {
       setSessionCookie(newUser.id_token);
@@ -290,10 +303,39 @@ async function performRefresh() {
       const backoffMs = parseRetryAfter(error) || 60000; // Default 1 minute
       rateLimitedUntil = Date.now() + backoffMs;
       console.warn(`[OIDC] Rate limited by provider, backing off for ${backoffMs}ms`);
+      persistLog("OIDC_REFRESH", { ...debugInfo, error: "Rate limited", backoffMs });
     } else {
       console.error("[OIDC] Token refresh failed:", error);
+      console.error("[OIDC] Error name:", error?.name);
+      console.error("[OIDC] Error message:", error?.message);
+      persistLog("OIDC_REFRESH", {
+        ...debugInfo,
+        error: error?.message || "Unknown error",
+        errorName: error?.name,
+        errorDetails: String(error),
+      });
     }
     return null;
+  }
+}
+
+/**
+ * Persist log to localStorage so it survives page navigation/reload.
+ * Can be retrieved later with: JSON.parse(localStorage.getItem('oidc_debug_logs'))
+ */
+function persistLog(event, data) {
+  try {
+    const logs = JSON.parse(localStorage.getItem("oidc_debug_logs") || "[]");
+    logs.push({
+      timestamp: new Date().toISOString(),
+      event,
+      ...data,
+    });
+    // Keep only last 50 entries
+    while (logs.length > 50) logs.shift();
+    localStorage.setItem("oidc_debug_logs", JSON.stringify(logs));
+  } catch (e) {
+    // Ignore storage errors
   }
 }
 
