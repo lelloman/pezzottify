@@ -3,6 +3,10 @@ import { UserManager, WebStorageStateStore } from "oidc-client-ts";
 // Track in-flight refresh to coalesce concurrent requests
 let inFlightRefresh = null;
 
+// Track when the last successful refresh completed (to debounce rapid refreshes)
+let lastRefreshTime = 0;
+const REFRESH_DEBOUNCE_MS = 5000; // Don't refresh again within 5 seconds of a successful refresh
+
 // Track rate limiting backoff
 let rateLimitedUntil = 0;
 
@@ -235,12 +239,26 @@ export async function isLoggedIn() {
  * will share the same OIDC refresh call to prevent rate limiting.
  */
 export async function refreshTokens() {
-  // Check if we're currently rate limited
   const now = Date.now();
+
+  // Check if we're currently rate limited
   if (rateLimitedUntil > now) {
     const remainingMs = rateLimitedUntil - now;
     console.debug(`[OIDC] Rate limited, ${remainingMs}ms remaining`);
     return null;
+  }
+
+  // If we just refreshed successfully, return current user instead of refreshing again
+  // This prevents rapid successive refreshes when multiple 401s arrive simultaneously
+  if (lastRefreshTime > 0 && now - lastRefreshTime < REFRESH_DEBOUNCE_MS) {
+    console.debug("[OIDC] Recently refreshed, returning current user");
+    const manager = getUserManager();
+    const user = await manager.getUser();
+    if (user && !user.expired) {
+      persistLog("OIDC_REFRESH", { debounced: true, msSinceLastRefresh: now - lastRefreshTime });
+      return user;
+    }
+    // If user is still expired/invalid, fall through to refresh
   }
 
   // If there's already an in-flight refresh, join it
@@ -255,6 +273,9 @@ export async function refreshTokens() {
 
   try {
     const result = await inFlightRefresh;
+    if (result) {
+      lastRefreshTime = Date.now();
+    }
     return result;
   } finally {
     // Clear in-flight refresh so subsequent calls start fresh
@@ -291,7 +312,17 @@ async function performRefresh() {
     const newUser = await manager.signinSilent();
     console.debug("[OIDC] Token refresh successful");
     console.debug("[OIDC] New user expires_at:", newUser?.expires_at);
-    persistLog("OIDC_REFRESH", { ...debugInfo, success: true, newExpiresAt: newUser?.expires_at });
+    // Log whether new user has refresh token (critical for diagnosing rotation issues)
+    const hasNewRefreshToken = !!newUser?.refresh_token;
+    const newRefreshTokenLength = newUser?.refresh_token?.length || 0;
+    console.debug("[OIDC] New user has refresh token:", hasNewRefreshToken, "length:", newRefreshTokenLength);
+    persistLog("OIDC_REFRESH", {
+      ...debugInfo,
+      success: true,
+      newExpiresAt: newUser?.expires_at,
+      hasNewRefreshToken,
+      newRefreshTokenLength,
+    });
     // Update cookie with new token for WebSocket
     if (newUser?.id_token) {
       setSessionCookie(newUser.id_token);
@@ -334,7 +365,7 @@ function persistLog(event, data) {
     // Keep only last 50 entries
     while (logs.length > 50) logs.shift();
     localStorage.setItem("oidc_debug_logs", JSON.stringify(logs));
-  } catch (e) {
+  } catch {
     // Ignore storage errors
   }
 }
@@ -386,8 +417,9 @@ export async function logout(redirectToProvider = false) {
   // Clear the session cookie
   clearSessionCookie();
 
-  // Clear rate limit state so user can log in immediately
+  // Clear rate limit and debounce state so user can log in immediately
   rateLimitedUntil = 0;
+  lastRefreshTime = 0;
 
   if (redirectToProvider) {
     await manager.signoutRedirect();
@@ -404,6 +436,9 @@ export async function clearStorage() {
   const manager = getUserManager();
   await manager.clearStaleState();
   await manager.removeUser();
+  // Reset state
+  rateLimitedUntil = 0;
+  lastRefreshTime = 0;
 }
 
 export default {
