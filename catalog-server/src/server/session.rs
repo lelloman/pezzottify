@@ -298,12 +298,15 @@ async fn extract_session_from_request_parts(
     ctx: &ServerState,
 ) -> Option<Session> {
     debug!("extracting session from request parts...");
-    let token = match extract_session_token_from_cookies(parts, ctx)
-        .await
-        .or_else(|| extract_session_token_from_headers(parts))
-    {
+    // Prefer Authorization header over cookies - the header is set fresh on each
+    // request by the client, while cookies may contain stale tokens from before
+    // a token refresh. Cookies are only used as fallback for WebSocket connections
+    // which cannot send custom headers.
+    let token = match extract_session_token_from_headers(parts).or(
+        extract_session_token_from_cookies(parts, ctx).await,
+    ) {
         None => {
-            debug!("No token in cookies nor headers.");
+            debug!("No token in headers nor cookies.");
             return None;
         }
         Some(x) => x,
