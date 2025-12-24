@@ -12,7 +12,7 @@ use tokio::sync::RwLock;
 use tracing::{debug, info, warn};
 use uuid::Uuid;
 
-use crate::catalog_store::{CatalogStore, WritableCatalogStore};
+use crate::catalog_store::{CatalogStore, TrackAvailability, WritableCatalogStore};
 use crate::config::DownloadManagerSettings;
 use crate::notifications::{NotificationService, NotificationType};
 
@@ -700,6 +700,19 @@ impl DownloadManager {
                     // Mark as permanently failed
                     self.queue_store.mark_failed(&item.id, &error)?;
 
+                    // If this was a track download, mark it as FetchError in the catalog
+                    if item.content_type == DownloadContentType::TrackAudio {
+                        if let Err(e) = self.catalog_store.set_track_availability(
+                            &item.content_id,
+                            &TrackAvailability::FetchError,
+                        ) {
+                            warn!(
+                                "Failed to set track {} availability to FetchError: {}",
+                                item.content_id, e
+                            );
+                        }
+                    }
+
                     // Decrement user's queue count
                     if let Some(user_id) = &item.requested_by_user_id {
                         self.queue_store.decrement_user_queue(user_id)?;
@@ -980,6 +993,19 @@ impl DownloadManager {
                     DownloadErrorType::Storage,
                     format!(
                         "Failed to update track audio path (track {} not in catalog): {}",
+                        item.content_id, e
+                    ),
+                )
+            })?;
+
+        // 6. Mark track as available now that audio is ready
+        self.catalog_store
+            .set_track_availability(&item.content_id, &TrackAvailability::Available)
+            .map_err(|e| {
+                DownloadError::new(
+                    DownloadErrorType::Storage,
+                    format!(
+                        "Failed to set track availability (track {}): {}",
                         item.content_id, e
                     ),
                 )

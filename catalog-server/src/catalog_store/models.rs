@@ -223,6 +223,39 @@ impl ImageType {
     }
 }
 
+/// Track availability state
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, Default)]
+pub enum TrackAvailability {
+    #[default]
+    Available,
+    Unavailable,
+    Fetching,
+    FetchError,
+}
+
+impl TrackAvailability {
+    /// Convert from database string representation
+    pub fn from_db_str(s: &str) -> Self {
+        match s {
+            "available" => TrackAvailability::Available,
+            "unavailable" => TrackAvailability::Unavailable,
+            "fetching" => TrackAvailability::Fetching,
+            "fetch_error" => TrackAvailability::FetchError,
+            _ => TrackAvailability::Available,
+        }
+    }
+
+    /// Convert to database string representation
+    pub fn to_db_str(&self) -> &'static str {
+        match self {
+            TrackAvailability::Available => "available",
+            TrackAvailability::Unavailable => "unavailable",
+            TrackAvailability::Fetching => "fetching",
+            TrackAvailability::FetchError => "fetch_error",
+        }
+    }
+}
+
 // =============================================================================
 // Core Entities
 // =============================================================================
@@ -278,6 +311,8 @@ pub struct Track {
     pub languages: Vec<String>,
     pub original_title: Option<String>,
     pub version_title: Option<String>,
+    #[serde(default)]
+    pub availability: TrackAvailability,
 }
 
 // =============================================================================
@@ -443,5 +478,62 @@ mod tests {
         let json = serde_json::to_string(&decade).unwrap();
         let parsed: ActivityPeriod = serde_json::from_str(&json).unwrap();
         assert_eq!(decade, parsed);
+    }
+
+    #[test]
+    fn test_track_availability_roundtrip() {
+        let states = vec![
+            TrackAvailability::Available,
+            TrackAvailability::Unavailable,
+            TrackAvailability::Fetching,
+            TrackAvailability::FetchError,
+        ];
+        for state in states {
+            let db_str = state.to_db_str();
+            let parsed = TrackAvailability::from_db_str(db_str);
+            assert_eq!(state, parsed);
+        }
+    }
+
+    #[test]
+    fn test_track_availability_default() {
+        assert_eq!(TrackAvailability::default(), TrackAvailability::Available);
+    }
+
+    #[test]
+    fn test_track_availability_json_roundtrip() {
+        let states = vec![
+            (TrackAvailability::Available, "\"Available\""),
+            (TrackAvailability::Unavailable, "\"Unavailable\""),
+            (TrackAvailability::Fetching, "\"Fetching\""),
+            (TrackAvailability::FetchError, "\"FetchError\""),
+        ];
+        for (state, expected_json) in states {
+            let json = serde_json::to_string(&state).unwrap();
+            assert_eq!(json, expected_json);
+            let parsed: TrackAvailability = serde_json::from_str(&json).unwrap();
+            assert_eq!(state, parsed);
+        }
+    }
+
+    #[test]
+    fn test_track_with_default_availability() {
+        // Test that Track can be deserialized without availability field
+        let json = r#"{
+            "id": "track1",
+            "name": "Test Track",
+            "album_id": "album1",
+            "disc_number": 1,
+            "track_number": 1,
+            "duration_secs": 180,
+            "is_explicit": false,
+            "audio_uri": "audio/track1.mp3",
+            "format": "Mp3_320",
+            "tags": [],
+            "has_lyrics": false,
+            "languages": []
+        }"#;
+        let track: Track = serde_json::from_str(json).unwrap();
+        assert_eq!(track.availability, TrackAvailability::Available);
     }
 }

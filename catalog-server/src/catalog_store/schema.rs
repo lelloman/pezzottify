@@ -390,6 +390,79 @@ const CATALOG_CHANGE_LOG_TABLE_V2: Table = Table {
     unique_constraints: &[],
 };
 
+/// Tracks table with availability - Version 3
+const TRACKS_TABLE_V3: Table = Table {
+    name: "tracks",
+    columns: &[
+        sqlite_column!("id", &SqlType::Text, is_primary_key = true),
+        sqlite_column!("name", &SqlType::Text, non_null = true),
+        sqlite_column!(
+            "album_id",
+            &SqlType::Text,
+            non_null = true,
+            foreign_key = Some(&ForeignKey {
+                foreign_table: "albums",
+                foreign_column: "id",
+                on_delete: ForeignKeyOnChange::Cascade,
+            })
+        ),
+        sqlite_column!(
+            "disc_number",
+            &SqlType::Integer,
+            non_null = true,
+            default_value = Some("1")
+        ),
+        sqlite_column!("track_number", &SqlType::Integer, non_null = true),
+        sqlite_column!("duration_secs", &SqlType::Integer),
+        sqlite_column!(
+            "is_explicit",
+            &SqlType::Integer,
+            non_null = true,
+            default_value = Some("0")
+        ),
+        sqlite_column!("audio_uri", &SqlType::Text, non_null = true), // Relative path
+        sqlite_column!("format", &SqlType::Text, non_null = true),    // 'MP3_320', 'FLAC', etc.
+        sqlite_column!("tags", &SqlType::Text),                       // JSON array
+        sqlite_column!(
+            "has_lyrics",
+            &SqlType::Integer,
+            non_null = true,
+            default_value = Some("0")
+        ),
+        sqlite_column!("languages", &SqlType::Text), // JSON array
+        sqlite_column!("original_title", &SqlType::Text),
+        sqlite_column!("version_title", &SqlType::Text),
+        sqlite_column!(
+            "availability",
+            &SqlType::Text,
+            non_null = true,
+            default_value = Some("'available'")
+        ), // 'available', 'unavailable', 'fetching', 'fetch_error'
+    ],
+    indices: &[
+        ("idx_tracks_album", "album_id"),
+        (
+            "idx_tracks_disc_track",
+            "album_id, disc_number, track_number",
+        ),
+        ("idx_tracks_availability", "availability"),
+    ],
+    unique_constraints: &[],
+};
+
+/// Migration from version 2 to version 3: add availability column to tracks
+fn migrate_v2_to_v3(conn: &rusqlite::Connection) -> anyhow::Result<()> {
+    conn.execute(
+        "ALTER TABLE tracks ADD COLUMN availability TEXT NOT NULL DEFAULT 'available'",
+        [],
+    )?;
+    conn.execute(
+        "CREATE INDEX idx_tracks_availability ON tracks(availability)",
+        [],
+    )?;
+    Ok(())
+}
+
 /// Migration from version 1 to version 2: add changelog tables
 fn migrate_v1_to_v2(conn: &rusqlite::Connection) -> anyhow::Result<()> {
     // Create catalog_batches table
@@ -455,6 +528,7 @@ fn migrate_v1_to_v2(conn: &rusqlite::Connection) -> anyhow::Result<()> {
 /// Initial version (0) contains all core tables and relationship tables.
 /// Version 1 adds display_image_id to artists and albums.
 /// Version 2 adds catalog changelog tables (catalog_batches, catalog_change_log).
+/// Version 3 adds availability column to tracks for Quentin Torrentino integration.
 pub const CATALOG_VERSIONED_SCHEMAS: &[VersionedSchema] = &[
     VersionedSchema {
         version: 0,
@@ -509,6 +583,26 @@ pub const CATALOG_VERSIONED_SCHEMAS: &[VersionedSchema] = &[
             CATALOG_CHANGE_LOG_TABLE_V2,
         ],
         migration: Some(migrate_v1_to_v2),
+    },
+    VersionedSchema {
+        version: 3,
+        tables: &[
+            // Core tables first (order matters for foreign keys)
+            ARTISTS_TABLE_V1,
+            ALBUMS_TABLE_V1,
+            IMAGES_TABLE_V0,
+            TRACKS_TABLE_V3,
+            // Relationship tables
+            ALBUM_ARTISTS_TABLE_V0,
+            TRACK_ARTISTS_TABLE_V0,
+            RELATED_ARTISTS_TABLE_V0,
+            ARTIST_IMAGES_TABLE_V0,
+            ALBUM_IMAGES_TABLE_V0,
+            // Changelog tables
+            CATALOG_BATCHES_TABLE_V2,
+            CATALOG_CHANGE_LOG_TABLE_V2,
+        ],
+        migration: Some(migrate_v2_to_v3),
     },
 ];
 

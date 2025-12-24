@@ -7,7 +7,7 @@ use anyhow::Result;
 
 use crate::catalog_store::{
     Album, AlbumType, Artist, ArtistRole, Format, Image, ImageSize, ImageType, Track,
-    WritableCatalogStore,
+    TrackAvailability, WritableCatalogStore,
 };
 
 use super::downloader_types::{ExternalAlbum, ExternalArtist, ExternalImage, ExternalTrack};
@@ -272,6 +272,7 @@ fn convert_track(external: &ExternalTrack) -> Track {
         } else {
             Some(external.version_title.clone())
         },
+        availability: TrackAvailability::Fetching, // Track is being downloaded
     }
 }
 
