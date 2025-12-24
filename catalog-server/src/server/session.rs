@@ -302,9 +302,9 @@ async fn extract_session_from_request_parts(
     // request by the client, while cookies may contain stale tokens from before
     // a token refresh. Cookies are only used as fallback for WebSocket connections
     // which cannot send custom headers.
-    let token = match extract_session_token_from_headers(parts).or(
-        extract_session_token_from_cookies(parts, ctx).await,
-    ) {
+    let token = match extract_session_token_from_headers(parts)
+        .or(extract_session_token_from_cookies(parts, ctx).await)
+    {
         None => {
             debug!("No token in headers nor cookies.");
             return None;
