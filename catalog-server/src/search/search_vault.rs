@@ -56,6 +56,7 @@ pub struct SearchedTrack {
     pub artists_ids_names: Vec<(String, String)>,
     pub image_id: Option<String>,
     pub album_id: String,
+    pub availability: String,
 }
 
 #[derive(Debug, Serialize)]

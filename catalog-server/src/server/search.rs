@@ -204,6 +204,13 @@ fn resolve_track(
             })
         });
 
+    // Get availability (defaults to "Available" if not present)
+    let availability = track_json
+        .get("availability")
+        .and_then(|a| a.as_str())
+        .unwrap_or("Available")
+        .to_string();
+
     let resolved_track = SearchedTrack {
         id,
         name,
@@ -211,6 +218,7 @@ fn resolve_track(
         image_id,
         artists_ids_names,
         album_id,
+        availability,
     };
 
     Some(ResolvedSearchResult::Track(resolved_track))

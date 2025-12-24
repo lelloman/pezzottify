@@ -92,6 +92,8 @@ export const useStaticsStore = defineStore("statics", () => {
       duration: resolvedTrack.track.duration_secs
         ? resolvedTrack.track.duration_secs * 1000
         : null,
+      // Include availability state (defaults to Available if not present)
+      availability: resolvedTrack.track.availability || "Available",
     };
 
     return track;

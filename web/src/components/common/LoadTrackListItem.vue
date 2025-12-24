@@ -28,6 +28,7 @@
             :artistsIds="track.artists_ids"
           />
         </div>
+        <div v-if="isTrackFetchError" class="track-fetch-error-icon" title="Download failed">⚠</div>
         <div class="track-duration">{{ formatDuration(track.duration) }}</div>
       </div>
     </div>
@@ -97,16 +98,31 @@ const loadTrackData = async () => {
   );
 };
 
+const isTrackAvailable = computed(() => {
+  if (!track.value) return true;
+  return !track.value.availability || track.value.availability === "Available";
+});
+
+const isTrackFetching = computed(() => {
+  return track.value?.availability === "Fetching";
+});
+
+const isTrackFetchError = computed(() => {
+  return track.value?.availability === "FetchError";
+});
+
 const computeTrackRowClasses = computed(() => {
   return {
     trackRow: true,
     nonPlayingTrack: !props.isCurrentlyPlaying,
     playingTrack: props.isCurrentlyPlaying,
+    trackUnavailable: !isTrackAvailable.value && !isTrackFetching.value,
+    trackFetching: isTrackFetching.value,
   };
 });
 
 const handleTrackClick = () => {
-  if (track.value) {
+  if (track.value && isTrackAvailable.value) {
     emit("track-clicked", track.value);
   }
 };
@@ -203,6 +219,36 @@ defineExpose({
 .trackImage {
   width: 40px;
   height: 40px;
+  margin-right: 8px;
+}
+
+/* Track availability states */
+.trackUnavailable {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.trackUnavailable:hover {
+  background-color: transparent;
+  cursor: not-allowed;
+}
+
+.trackFetching {
+  animation: trackFetchingPulse 1.5s ease-in-out infinite;
+}
+
+@keyframes trackFetchingPulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
+}
+
+.track-fetch-error-icon {
+  color: var(--warning);
+  font-size: 16px;
   margin-right: 8px;
 }
 </style>

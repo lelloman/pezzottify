@@ -1,6 +1,6 @@
 <template>
   <div
-    class="searchResultRow"
+    :class="computeRowClasses"
     :data-id="result"
     @click.stop="handleTrackClick(result)"
     @contextmenu.prevent="openContextMenu($event, result.id)"
@@ -15,8 +15,10 @@
       <TrackName :track="result" class="trackName" :hoverAnimation="true" />
       <ClickableArtistsNames :artistsIdsNames="result.artists_ids_names" />
     </div>
+    <div v-if="isTrackFetchError" class="track-fetch-error-icon" title="Download failed">⚠</div>
     <h3 class="duration">{{ duration }}</h3>
     <PlayIcon
+      v-if="isTrackAvailable"
       class="searchResultPlayIcon scaleClickFeedback bigIcon"
       :data-id="result"
       @click.stop="handlePlayClick(result)"
@@ -27,7 +29,7 @@
 
 <script setup>
 import "@/assets/search.css";
-import { ref } from "vue";
+import { ref, computed } from "vue";
 import { computedImageUrl, formatDuration } from "@/utils";
 import { usePlayerStore } from "@/store/player";
 import { useRouter } from "vue-router";
@@ -47,6 +49,26 @@ const imageUrl = computedImageUrl(props.result.image_id);
 
 const duration = formatDuration(props.result.duration);
 
+const isTrackAvailable = computed(() => {
+  return !props.result.availability || props.result.availability === "Available";
+});
+
+const isTrackFetching = computed(() => {
+  return props.result.availability === "Fetching";
+});
+
+const isTrackFetchError = computed(() => {
+  return props.result.availability === "FetchError";
+});
+
+const computeRowClasses = computed(() => {
+  return {
+    searchResultRow: true,
+    trackUnavailable: !isTrackAvailable.value && !isTrackFetching.value,
+    trackFetching: isTrackFetching.value,
+  };
+});
+
 const playerStore = usePlayerStore();
 const router = useRouter();
 
@@ -62,6 +84,9 @@ const handleTrackClick = (event) => {
 };
 
 const handlePlayClick = (event) => {
+  if (!isTrackAvailable.value) {
+    return;
+  }
   console.log("play click");
   console.log(event);
   playerStore.setTrack(event);
@@ -103,5 +128,34 @@ const handleImageClick = () => {
 .trackName {
   flex: 1;
   width: 100%;
+}
+
+/* Track availability states */
+.trackUnavailable {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.trackUnavailable:hover {
+  background-color: transparent;
+}
+
+.trackFetching {
+  animation: trackFetchingPulse 1.5s ease-in-out infinite;
+}
+
+@keyframes trackFetchingPulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
+}
+
+.track-fetch-error-icon {
+  color: var(--warning);
+  font-size: 16px;
+  margin-right: 8px;
 }
 </style>
