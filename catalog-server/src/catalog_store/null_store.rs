@@ -27,6 +27,10 @@ impl CatalogStore for NullCatalogStore {
         Ok(None)
     }
 
+    fn get_track(&self, _id: &str) -> Result<Option<super::Track>> {
+        Ok(None)
+    }
+
     fn get_resolved_artist_json(&self, _id: &str) -> Result<Option<serde_json::Value>> {
         Ok(None)
     }

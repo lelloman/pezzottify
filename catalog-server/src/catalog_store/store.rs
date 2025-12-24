@@ -217,7 +217,8 @@ impl SqliteCatalogStore {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
             "SELECT id, name, album_id, disc_number, track_number, duration_secs, is_explicit,
-                    audio_uri, format, tags, has_lyrics, languages, original_title, version_title
+                    audio_uri, format, tags, has_lyrics, languages, original_title, version_title,
+                    availability
              FROM tracks WHERE id = ?1",
         )?;
 
@@ -227,6 +228,7 @@ impl SqliteCatalogStore {
             let languages_json: Option<String> = row.get(11)?;
             let is_explicit: i32 = row.get(6)?;
             let has_lyrics: i32 = row.get(10)?;
+            let availability_str: String = row.get(14)?;
 
             Ok(Track {
                 id: row.get(0)?,
@@ -247,6 +249,7 @@ impl SqliteCatalogStore {
                     .unwrap_or_default(),
                 original_title: row.get(12)?,
                 version_title: row.get(13)?,
+                availability: TrackAvailability::from_db_str(&availability_str),
             })
         }) {
             Ok(track) => Ok(Some(track)),
@@ -599,7 +602,8 @@ impl SqliteCatalogStore {
     ) -> Result<Vec<Disc>> {
         let mut stmt = conn.prepare(
             "SELECT id, name, album_id, disc_number, track_number, duration_secs, is_explicit,
-                    audio_uri, format, tags, has_lyrics, languages, original_title, version_title
+                    audio_uri, format, tags, has_lyrics, languages, original_title, version_title,
+                    availability
              FROM tracks
              WHERE album_id = ?1
              ORDER BY disc_number, track_number",
@@ -612,6 +616,7 @@ impl SqliteCatalogStore {
                 let languages_json: Option<String> = row.get(11)?;
                 let is_explicit: i32 = row.get(6)?;
                 let has_lyrics: i32 = row.get(10)?;
+                let availability_str: String = row.get(14)?;
 
                 Ok(Track {
                     id: row.get(0)?,
@@ -632,6 +637,7 @@ impl SqliteCatalogStore {
                         .unwrap_or_default(),
                     original_title: row.get(12)?,
                     version_title: row.get(13)?,
+                    availability: TrackAvailability::from_db_str(&availability_str),
                 })
             })?
             .collect::<Result<Vec<_>, _>>()?;
@@ -933,8 +939,8 @@ impl SqliteCatalogStore {
 
         conn.execute(
             "INSERT INTO tracks (id, name, album_id, disc_number, track_number, duration_secs,
-                    is_explicit, audio_uri, format, tags, has_lyrics, languages, original_title, version_title)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
+                    is_explicit, audio_uri, format, tags, has_lyrics, languages, original_title, version_title, availability)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
             params![
                 track.id,
                 track.name,
@@ -950,6 +956,7 @@ impl SqliteCatalogStore {
                 languages_json,
                 track.original_title,
                 track.version_title,
+                track.availability.to_db_str(),
             ],
         )?;
 
@@ -1129,6 +1136,23 @@ impl SqliteCatalogStore {
         let rows = conn.execute(
             "UPDATE tracks SET audio_uri = ?2, format = ?3 WHERE id = ?1",
             params![track_id, audio_uri, format.to_db_str()],
+        )?;
+        if rows == 0 {
+            anyhow::bail!("Track not found: {}", track_id);
+        }
+        Ok(())
+    }
+
+    /// Update a track's availability status.
+    pub fn set_track_availability(
+        &self,
+        track_id: &str,
+        availability: &TrackAvailability,
+    ) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        let rows = conn.execute(
+            "UPDATE tracks SET availability = ?2 WHERE id = ?1",
+            params![track_id, availability.to_db_str()],
         )?;
         if rows == 0 {
             anyhow::bail!("Track not found: {}", track_id);
@@ -1756,6 +1780,10 @@ impl CatalogStore for SqliteCatalogStore {
         }
     }
 
+    fn get_track(&self, id: &str) -> Result<Option<Track>> {
+        SqliteCatalogStore::get_track(self, id)
+    }
+
     fn get_resolved_artist_json(&self, id: &str) -> Result<Option<serde_json::Value>> {
         match self.get_resolved_artist(id)? {
             Some(artist) => Ok(Some(serde_json::to_value(artist)?)),
@@ -2037,8 +2065,8 @@ impl CatalogStore for SqliteCatalogStore {
         let languages_json = serde_json::to_string(&track.languages)?;
         conn.execute(
             "INSERT INTO tracks (id, name, album_id, disc_number, track_number, duration_secs,
-                    is_explicit, audio_uri, format, tags, has_lyrics, languages, original_title, version_title)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
+                    is_explicit, audio_uri, format, tags, has_lyrics, languages, original_title, version_title, availability)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
             params![
                 track.id,
                 track.name,
@@ -2054,6 +2082,7 @@ impl CatalogStore for SqliteCatalogStore {
                 languages_json,
                 track.original_title,
                 track.version_title,
+                track.availability.to_db_str(),
             ],
         )?;
         conn.execute("COMMIT", [])?;
@@ -2088,7 +2117,8 @@ impl CatalogStore for SqliteCatalogStore {
         let rows = conn.execute(
             "UPDATE tracks SET name = ?2, album_id = ?3, disc_number = ?4, track_number = ?5,
              duration_secs = ?6, is_explicit = ?7, audio_uri = ?8, format = ?9, tags = ?10,
-             has_lyrics = ?11, languages = ?12, original_title = ?13, version_title = ?14 WHERE id = ?1",
+             has_lyrics = ?11, languages = ?12, original_title = ?13, version_title = ?14,
+             availability = ?15 WHERE id = ?1",
             params![
                 track.id,
                 track.name,
@@ -2104,6 +2134,7 @@ impl CatalogStore for SqliteCatalogStore {
                 languages_json,
                 track.original_title,
                 track.version_title,
+                track.availability.to_db_str(),
             ],
         )?;
         if rows == 0 {
@@ -2431,6 +2462,14 @@ impl WritableCatalogStore for SqliteCatalogStore {
         SqliteCatalogStore::update_track_audio(self, track_id, audio_uri, format)
     }
 
+    fn set_track_availability(
+        &self,
+        track_id: &str,
+        availability: &TrackAvailability,
+    ) -> Result<()> {
+        SqliteCatalogStore::set_track_availability(self, track_id, availability)
+    }
+
     fn emit_album_skeleton_event(&self, album_id: &str, artist_ids: &[String]) -> Result<()> {
         SqliteCatalogStore::emit_album_skeleton_event(self, album_id, artist_ids)
     }
@@ -2718,6 +2757,7 @@ mod tests {
             languages: vec![],
             original_title: None,
             version_title: None,
+            availability: TrackAvailability::Available,
         };
 
         let resolved = store.resolve_audio_uri(&track);

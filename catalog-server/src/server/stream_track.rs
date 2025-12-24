@@ -5,6 +5,7 @@ use super::{
     session::Session,
     state::{GuardedCatalogStore, ServerState},
 };
+use crate::catalog_store::TrackAvailability;
 use axum::{
     body::Body,
     extract::{FromRequestParts, Path, State},
@@ -84,18 +85,23 @@ pub async fn stream_track(
     State(catalog_store): State<GuardedCatalogStore>,
     Path(id): Path<String>,
 ) -> Response {
-    // Get track name for logging (we just need to check it exists)
-    let track_json = catalog_store.get_track_json(&id);
-    let track_name = match track_json {
-        Ok(Some(track)) => track
-            .get("name")
-            .and_then(|n| n.as_str())
-            .unwrap_or("Unknown")
-            .to_string(),
+    // Get track and check availability
+    let track = match catalog_store.get_track(&id) {
+        Ok(Some(track)) => track,
         Ok(None) => return StatusCode::NOT_FOUND.into_response(),
         Err(_) => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
     };
-    debug!("Streaming track: {}", track_name);
+
+    // Return 404 if track is not available for streaming
+    if track.availability != TrackAvailability::Available {
+        debug!(
+            "Track {} not available for streaming (status: {:?})",
+            track.name, track.availability
+        );
+        return StatusCode::NOT_FOUND.into_response();
+    }
+
+    debug!("Streaming track: {}", track.name);
 
     let path = match catalog_store.get_track_audio_path(&id) {
         None => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),

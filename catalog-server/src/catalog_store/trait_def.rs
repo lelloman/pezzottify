@@ -24,6 +24,9 @@ pub trait CatalogStore: Send + Sync {
     /// Get a track by ID, returning the serialized JSON representation.
     fn get_track_json(&self, id: &str) -> Result<Option<serde_json::Value>>;
 
+    /// Get a track by ID, returning the typed Track struct.
+    fn get_track(&self, id: &str) -> Result<Option<super::Track>>;
+
     // =========================================================================
     // Resolved Entity Retrieval
     // =========================================================================
@@ -330,6 +333,13 @@ pub trait WritableCatalogStore: CatalogStore {
         track_id: &str,
         audio_uri: &str,
         format: &super::Format,
+    ) -> Result<()>;
+
+    /// Update a track's availability status.
+    fn set_track_availability(
+        &self,
+        track_id: &str,
+        availability: &super::TrackAvailability,
     ) -> Result<()>;
 
     /// Emit the skeleton event for an album with its artist IDs.

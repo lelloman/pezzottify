@@ -25,7 +25,7 @@ pub struct DownloaderStatus {
 
 use crate::catalog_store::{
     ActivityPeriod, Album, AlbumType, Artist, ArtistRole, Format, Image, ImageSize, ImageType,
-    Track,
+    Track, TrackAvailability,
 };
 
 // =============================================================================
@@ -282,6 +282,7 @@ impl DownloaderTrack {
             } else {
                 Some(self.version_title.clone())
             },
+            availability: TrackAvailability::Available,
         }
     }
 

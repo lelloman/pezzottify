@@ -4,7 +4,7 @@
 //! inserting or updating entities in the catalog store.
 #![allow(dead_code)]
 
-use super::models::{Album, Artist, Image, Track};
+use super::models::{Album, Artist, Image, Track, TrackAvailability};
 use std::fmt;
 
 /// Validation error types
@@ -183,6 +183,7 @@ mod tests {
             languages: vec![],
             original_title: None,
             version_title: None,
+            availability: TrackAvailability::Available,
         }
     }
 

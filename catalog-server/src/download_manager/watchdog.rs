@@ -521,6 +521,10 @@ mod tests {
             Ok(None)
         }
 
+        fn get_track(&self, _id: &str) -> Result<Option<crate::catalog_store::Track>> {
+            Ok(None)
+        }
+
         fn get_resolved_artist_json(&self, _id: &str) -> Result<Option<serde_json::Value>> {
             Ok(None)
         }

@@ -7,6 +7,7 @@ use super::constants::*;
 use anyhow::Result;
 use pezzottify_catalog_server::catalog_store::{
     Album, AlbumType, Artist, ArtistRole, Format, ImageSize, SqliteCatalogStore, Track,
+    TrackAvailability,
 };
 use pezzottify_catalog_server::user::auth::PezzottifyHasher;
 use pezzottify_catalog_server::user::{
@@ -124,6 +125,7 @@ pub fn create_test_catalog() -> Result<(TempDir, PathBuf, PathBuf)> {
             languages: vec![],
             original_title: None,
             version_title: None,
+            availability: TrackAvailability::Available,
         };
         store.insert_track(&track)?;
         store.add_track_artist(id, ARTIST_1_ID, &ArtistRole::MainArtist, 0)?;
@@ -150,6 +152,7 @@ pub fn create_test_catalog() -> Result<(TempDir, PathBuf, PathBuf)> {
             languages: vec![],
             original_title: None,
             version_title: None,
+            availability: TrackAvailability::Available,
         };
         store.insert_track(&track)?;
         store.add_track_artist(id, ARTIST_2_ID, &ArtistRole::MainArtist, 0)?;
