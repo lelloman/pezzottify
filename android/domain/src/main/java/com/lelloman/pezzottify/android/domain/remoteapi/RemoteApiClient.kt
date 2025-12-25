@@ -5,9 +5,6 @@ import com.lelloman.pezzottify.android.domain.remoteapi.response.AlbumResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.ArtistDiscographyResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.ArtistResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.DownloadLimitsResponse
-import com.lelloman.pezzottify.android.domain.remoteapi.response.ExternalAlbumDetailsResponse
-import com.lelloman.pezzottify.android.domain.remoteapi.response.ExternalDiscographyResponse
-import com.lelloman.pezzottify.android.domain.remoteapi.response.ExternalSearchResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.FullSkeletonResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.ImageResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.ListeningEventItem
@@ -114,14 +111,6 @@ interface RemoteApiClient {
     // Download manager endpoints
 
     /**
-     * Search for content in the external downloader service.
-     */
-    suspend fun externalSearch(
-        query: String,
-        type: ExternalSearchType
-    ): RemoteApiResponse<ExternalSearchResponse>
-
-    /**
      * Get user's rate limit status for download requests.
      */
     suspend fun getDownloadLimits(): RemoteApiResponse<DownloadLimitsResponse>
@@ -142,22 +131,6 @@ interface RemoteApiClient {
         limit: Int? = null,
         offset: Int? = null
     ): RemoteApiResponse<MyDownloadRequestsResponse>
-
-    /**
-     * Get detailed information about an external album.
-     * Includes track listing, cover image URL, and download request status.
-     */
-    suspend fun getExternalAlbumDetails(
-        albumId: String
-    ): RemoteApiResponse<ExternalAlbumDetailsResponse>
-
-    /**
-     * Get an external artist's discography with download status.
-     * Returns album list with in_catalog, in_queue, and request_status fields.
-     */
-    suspend fun getExternalDiscography(
-        artistId: String
-    ): RemoteApiResponse<ExternalDiscographyResponse>
 
     // Skeleton sync endpoints
 
@@ -208,13 +181,6 @@ interface RemoteApiClient {
 
     @Serializable
     enum class SearchFilter {
-        Album,
-        Artist,
-        Track,
-    }
-
-    @Serializable
-    enum class ExternalSearchType {
         Album,
         Artist,
         Track,

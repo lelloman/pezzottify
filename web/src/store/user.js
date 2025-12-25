@@ -2,9 +2,6 @@ import { defineStore } from "pinia";
 import { ref, computed } from "vue";
 import { useRemoteStore } from "./remote";
 
-// Settings key constants
-export const SETTING_ENABLE_EXTERNAL_SEARCH = "enable_external_search";
-
 // Admin permissions that grant access to admin panel
 const ADMIN_PERMISSIONS = [
   "ManagePermissions",
@@ -283,22 +280,6 @@ export const useUserStore = defineStore("user", () => {
     }
   };
 
-  // Convenience computed for external search setting
-  const isExternalSearchEnabled = computed(() => {
-    return settings.value[SETTING_ENABLE_EXTERNAL_SEARCH] === "true";
-  });
-
-  const isExternalSearchPending = computed(() => {
-    return isSettingPending(SETTING_ENABLE_EXTERNAL_SEARCH);
-  });
-
-  const setExternalSearchEnabled = async (enabled) => {
-    return await setSetting(
-      SETTING_ENABLE_EXTERNAL_SEARCH,
-      enabled ? "true" : "false",
-    );
-  };
-
   // =====================================================
   // Sync Event Apply Methods
   // These methods apply incoming sync events to local state
@@ -365,15 +346,6 @@ export const useUserStore = defineStore("user", () => {
               : "false"
             : setting.value;
         settings.value = { ...settings.value, [setting.key]: value };
-      }
-      // Handle legacy format: { ExternalSearchEnabled: true }
-      else if ("ExternalSearchEnabled" in setting) {
-        settings.value = {
-          ...settings.value,
-          [SETTING_ENABLE_EXTERNAL_SEARCH]: setting.ExternalSearchEnabled
-            ? "true"
-            : "false",
-        };
       } else {
         // Handle direct key-value pairs
         settings.value = { ...settings.value, ...setting };
@@ -541,9 +513,6 @@ export const useUserStore = defineStore("user", () => {
     isSettingPending,
     hasPendingSettings,
     retryPendingSettings,
-    isExternalSearchEnabled,
-    isExternalSearchPending,
-    setExternalSearchEnabled,
 
     // Sync event apply methods
     applyContentLiked,

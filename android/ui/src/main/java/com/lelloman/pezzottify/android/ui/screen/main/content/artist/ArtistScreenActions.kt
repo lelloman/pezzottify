@@ -5,8 +5,4 @@ interface ArtistScreenActions {
     fun clickOnLike()
 
     fun clickOnArtistImage(imageUrl: String?)
-
-    fun clickOnExternalAlbum(albumId: String)
-
-    fun retryExternalAlbums()
 }

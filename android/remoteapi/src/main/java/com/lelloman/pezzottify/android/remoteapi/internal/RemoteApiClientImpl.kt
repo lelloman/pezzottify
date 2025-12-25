@@ -8,9 +8,6 @@ import com.lelloman.pezzottify.android.domain.remoteapi.response.AlbumResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.ArtistDiscographyResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.ArtistResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.DownloadLimitsResponse
-import com.lelloman.pezzottify.android.domain.remoteapi.response.ExternalAlbumDetailsResponse
-import com.lelloman.pezzottify.android.domain.remoteapi.response.ExternalDiscographyResponse
-import com.lelloman.pezzottify.android.domain.remoteapi.response.ExternalSearchResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.FullSkeletonResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.ImageResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.ListeningEventItem
@@ -308,19 +305,6 @@ internal class RemoteApiClientImpl(
 
     // Download manager endpoints
 
-    override suspend fun externalSearch(
-        query: String,
-        type: RemoteApiClient.ExternalSearchType
-    ): RemoteApiResponse<ExternalSearchResponse> = catchingNetworkError {
-        getRetrofit()
-            .externalSearch(
-                authToken = authToken,
-                query = query,
-                type = type.name.lowercase()
-            )
-            .returnFromRetrofitResponse()
-    }
-
     override suspend fun getDownloadLimits(): RemoteApiResponse<DownloadLimitsResponse> =
         catchingNetworkError {
             getRetrofit()
@@ -354,28 +338,6 @@ internal class RemoteApiClientImpl(
                 authToken = authToken,
                 limit = limit,
                 offset = offset
-            )
-            .returnFromRetrofitResponse()
-    }
-
-    override suspend fun getExternalAlbumDetails(
-        albumId: String
-    ): RemoteApiResponse<ExternalAlbumDetailsResponse> = catchingNetworkError {
-        getRetrofit()
-            .getExternalAlbumDetails(
-                authToken = authToken,
-                albumId = albumId
-            )
-            .returnFromRetrofitResponse()
-    }
-
-    override suspend fun getExternalDiscography(
-        artistId: String
-    ): RemoteApiResponse<ExternalDiscographyResponse> = catchingNetworkError {
-        getRetrofit()
-            .getExternalDiscography(
-                authToken = authToken,
-                artistId = artistId
             )
             .returnFromRetrofitResponse()
     }

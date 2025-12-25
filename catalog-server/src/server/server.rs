@@ -3402,115 +3402,6 @@ async fn admin_get_changelog_entity_history(
 // Download Manager Endpoints
 // ============================================================================
 
-/// Query parameters for download search.
-#[derive(Deserialize)]
-struct DownloadSearchParams {
-    /// Search query string
-    q: String,
-    /// Content type to search for: "album" (default) or "artist"
-    #[serde(rename = "type")]
-    content_type: Option<String>,
-}
-
-/// GET /v1/download/search - Search for downloadable content
-async fn search_download_content(
-    _session: Session,
-    State(download_manager): State<super::state::OptionalDownloadManager>,
-    Query(params): Query<DownloadSearchParams>,
-) -> Response {
-    let dm = match download_manager {
-        Some(dm) => dm,
-        None => {
-            return (
-                StatusCode::SERVICE_UNAVAILABLE,
-                "Download manager not enabled",
-            )
-                .into_response()
-        }
-    };
-
-    let search_type = match params.content_type.as_deref() {
-        Some("artist") => crate::download_manager::SearchType::Artist,
-        _ => crate::download_manager::SearchType::Album,
-    };
-
-    match dm.search(&params.q, search_type).await {
-        Ok(results) => Json(results).into_response(),
-        Err(err) => {
-            error!("Error searching download content: {}", err);
-            StatusCode::INTERNAL_SERVER_ERROR.into_response()
-        }
-    }
-}
-
-/// GET /v1/download/search/discography/:artist_id - Get artist discography
-async fn search_download_discography(
-    _session: Session,
-    State(download_manager): State<super::state::OptionalDownloadManager>,
-    Path(artist_id): Path<String>,
-) -> Response {
-    let dm = match download_manager {
-        Some(dm) => dm,
-        None => {
-            return (
-                StatusCode::SERVICE_UNAVAILABLE,
-                "Download manager not enabled",
-            )
-                .into_response()
-        }
-    };
-
-    match dm.search_discography(&artist_id).await {
-        Ok(result) => Json(result).into_response(),
-        Err(err) => {
-            let err_msg = err.to_string();
-            error!(
-                "Error fetching discography for artist {}: {}",
-                artist_id, err_msg
-            );
-            if err_msg.contains("404") || err_msg.contains("not found") {
-                (StatusCode::NOT_FOUND, "Artist not found").into_response()
-            } else {
-                (StatusCode::INTERNAL_SERVER_ERROR, err_msg).into_response()
-            }
-        }
-    }
-}
-
-/// GET /v1/download/album/:album_id - Get detailed external album information
-///
-/// Fetches album metadata and tracks from the external downloader service,
-/// enriched with catalog status and request status if in download queue.
-async fn get_external_album_details(
-    _session: Session,
-    State(download_manager): State<super::state::OptionalDownloadManager>,
-    Path(album_id): Path<String>,
-) -> Response {
-    let dm = match download_manager {
-        Some(dm) => dm,
-        None => {
-            return (
-                StatusCode::SERVICE_UNAVAILABLE,
-                "Download manager not enabled",
-            )
-                .into_response()
-        }
-    };
-
-    match dm.get_external_album_details(&album_id).await {
-        Ok(result) => Json(result).into_response(),
-        Err(err) => {
-            let err_msg = err.to_string();
-            if err_msg.contains("404") || err_msg.contains("not found") {
-                (StatusCode::NOT_FOUND, "Album not found").into_response()
-            } else {
-                error!("Error fetching external album details: {}", err);
-                StatusCode::INTERNAL_SERVER_ERROR.into_response()
-            }
-        }
-    }
-}
-
 /// POST /v1/download/request/album - Request download of an album
 async fn request_album_download(
     session: Session,
@@ -5012,12 +4903,6 @@ pub async fn make_app(
 
     // Download manager user routes (requires RequestContent permission)
     let download_user_routes: Router = Router::new()
-        .route("/search", get(search_download_content))
-        .route(
-            "/search/discography/{artist_id}",
-            get(search_download_discography),
-        )
-        .route("/album/{album_id}", get(get_external_album_details))
         .route("/request/album", post(request_album_download))
         .route("/request/discography", post(request_discography_download))
         .route("/my-requests", get(get_my_download_requests))

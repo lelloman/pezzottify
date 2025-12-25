@@ -942,16 +942,6 @@ impl TestClient {
     // Download Manager Endpoints
     // ========================================================================
 
-    /// GET /v1/download/search?q={query}
-    pub async fn download_search(&self, query: &str) -> Response {
-        self.client
-            .get(format!("{}/v1/download/search", self.base_url))
-            .query(&[("q", query)])
-            .send()
-            .await
-            .expect("Download search request failed")
-    }
-
     /// GET /v1/download/limits
     pub async fn download_limits(&self) -> Response {
         self.client

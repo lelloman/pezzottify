@@ -462,9 +462,6 @@ class SyncManagerImpl internal constructor(
 
     private suspend fun applySetting(setting: UserSetting) {
         when (setting) {
-            is UserSetting.ExternalSearchEnabled -> {
-                userSettingsStore.setExternalSearchEnabled(setting.value)
-            }
             is UserSetting.NotifyWhatsNew -> {
                 userSettingsStore.setNotifyWhatsNewEnabled(setting.value)
             }

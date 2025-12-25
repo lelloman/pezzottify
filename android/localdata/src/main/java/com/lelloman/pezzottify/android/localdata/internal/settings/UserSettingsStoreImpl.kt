@@ -75,18 +75,6 @@ internal class UserSettingsStoreImpl(
     }
     override val isFileLoggingEnabled: StateFlow<Boolean> = mutableFileLoggingEnabled.asStateFlow()
 
-    private val mutableExternalSearchEnabled by lazy {
-        val enabled = prefs.getBoolean(KEY_EXTERNAL_SEARCH_ENABLED, DEFAULT_EXTERNAL_SEARCH_ENABLED)
-        MutableStateFlow(enabled)
-    }
-    override val isExternalSearchEnabled: StateFlow<Boolean> = mutableExternalSearchEnabled.asStateFlow()
-
-    private val mutableExternalModeEnabled by lazy {
-        val enabled = prefs.getBoolean(KEY_EXTERNAL_MODE_ENABLED, DEFAULT_EXTERNAL_MODE_ENABLED)
-        MutableStateFlow(enabled)
-    }
-    override val isExternalModeEnabled: StateFlow<Boolean> = mutableExternalModeEnabled.asStateFlow()
-
     private val mutableNotifyWhatsNewEnabled by lazy {
         val enabled = prefs.getBoolean(KEY_NOTIFY_WHATSNEW_ENABLED, DEFAULT_NOTIFY_WHATSNEW_ENABLED)
         MutableStateFlow(enabled)
@@ -97,17 +85,6 @@ internal class UserSettingsStoreImpl(
     private val mutableSyncedSettings by lazy {
         val settings = mutableMapOf<String, SyncedUserSetting>()
         // Load existing synced settings with their sync status
-        val externalSearchStatus = prefs.getString(KEY_EXTERNAL_SEARCH_SYNC_STATUS, null)
-            ?.let { parseSyncStatus(it) }
-        if (externalSearchStatus != null && externalSearchStatus != SyncStatus.Synced) {
-            val enabled = prefs.getBoolean(KEY_EXTERNAL_SEARCH_ENABLED, DEFAULT_EXTERNAL_SEARCH_ENABLED)
-            val modifiedAt = prefs.getLong(KEY_EXTERNAL_SEARCH_MODIFIED_AT, System.currentTimeMillis())
-            settings[KEY_SETTING_EXTERNAL_SEARCH] = SyncedUserSetting(
-                setting = UserSetting.ExternalSearchEnabled(enabled),
-                modifiedAt = modifiedAt,
-                syncStatus = externalSearchStatus,
-            )
-        }
         val notifyWhatsNewStatus = prefs.getString(KEY_NOTIFY_WHATSNEW_SYNC_STATUS, null)
             ?.let { parseSyncStatus(it) }
         if (notifyWhatsNewStatus != null && notifyWhatsNewStatus != SyncStatus.Synced) {
@@ -157,28 +134,6 @@ internal class UserSettingsStoreImpl(
         }
     }
 
-    override suspend fun setExternalSearchEnabled(enabled: Boolean) {
-        withContext(dispatcher) {
-            mutableExternalSearchEnabled.value = enabled
-            prefs.edit()
-                .putBoolean(KEY_EXTERNAL_SEARCH_ENABLED, enabled)
-                .putString(KEY_EXTERNAL_SEARCH_SYNC_STATUS, SyncStatus.Synced.name)
-                .remove(KEY_EXTERNAL_SEARCH_MODIFIED_AT)
-                .commit()
-            // Remove from pending sync since it came from server
-            val updatedSettings = mutableSyncedSettings.value.toMutableMap()
-            updatedSettings.remove(KEY_SETTING_EXTERNAL_SEARCH)
-            mutableSyncedSettings.value = updatedSettings
-        }
-    }
-
-    override suspend fun setExternalModeEnabled(enabled: Boolean) {
-        withContext(dispatcher) {
-            mutableExternalModeEnabled.value = enabled
-            prefs.edit().putBoolean(KEY_EXTERNAL_MODE_ENABLED, enabled).commit()
-        }
-    }
-
     override suspend fun setNotifyWhatsNewEnabled(enabled: Boolean) {
         withContext(dispatcher) {
             mutableNotifyWhatsNewEnabled.value = enabled
@@ -197,28 +152,6 @@ internal class UserSettingsStoreImpl(
     override suspend fun setSyncedSetting(setting: UserSetting, syncStatus: SyncStatus) {
         withContext(dispatcher) {
             when (setting) {
-                is UserSetting.ExternalSearchEnabled -> {
-                    val enabled = setting.value
-                    val modifiedAt = System.currentTimeMillis()
-                    mutableExternalSearchEnabled.value = enabled
-                    prefs.edit()
-                        .putBoolean(KEY_EXTERNAL_SEARCH_ENABLED, enabled)
-                        .putString(KEY_EXTERNAL_SEARCH_SYNC_STATUS, syncStatus.name)
-                        .putLong(KEY_EXTERNAL_SEARCH_MODIFIED_AT, modifiedAt)
-                        .commit()
-
-                    val updatedSettings = mutableSyncedSettings.value.toMutableMap()
-                    if (syncStatus == SyncStatus.Synced) {
-                        updatedSettings.remove(KEY_SETTING_EXTERNAL_SEARCH)
-                    } else {
-                        updatedSettings[KEY_SETTING_EXTERNAL_SEARCH] = SyncedUserSetting(
-                            setting = setting,
-                            modifiedAt = modifiedAt,
-                            syncStatus = syncStatus,
-                        )
-                    }
-                    mutableSyncedSettings.value = updatedSettings
-                }
                 is UserSetting.NotifyWhatsNew -> {
                     val enabled = setting.value
                     val modifiedAt = System.currentTimeMillis()
@@ -254,22 +187,6 @@ internal class UserSettingsStoreImpl(
     override suspend fun updateSyncStatus(settingKey: String, status: SyncStatus) {
         withContext(dispatcher) {
             when (settingKey) {
-                KEY_SETTING_EXTERNAL_SEARCH -> {
-                    prefs.edit()
-                        .putString(KEY_EXTERNAL_SEARCH_SYNC_STATUS, status.name)
-                        .commit()
-
-                    val updatedSettings = mutableSyncedSettings.value.toMutableMap()
-                    val existing = updatedSettings[settingKey]
-                    if (existing != null) {
-                        if (status == SyncStatus.Synced) {
-                            updatedSettings.remove(settingKey)
-                        } else {
-                            updatedSettings[settingKey] = existing.copy(syncStatus = status)
-                        }
-                        mutableSyncedSettings.value = updatedSettings
-                    }
-                }
                 KEY_SETTING_NOTIFY_WHATSNEW -> {
                     prefs.edit()
                         .putString(KEY_NOTIFY_WHATSNEW_SYNC_STATUS, status.name)
@@ -292,12 +209,8 @@ internal class UserSettingsStoreImpl(
 
     override suspend fun clearSyncedSettings() {
         withContext(dispatcher) {
-            mutableExternalSearchEnabled.value = DEFAULT_EXTERNAL_SEARCH_ENABLED
             mutableNotifyWhatsNewEnabled.value = DEFAULT_NOTIFY_WHATSNEW_ENABLED
             prefs.edit()
-                .remove(KEY_EXTERNAL_SEARCH_ENABLED)
-                .remove(KEY_EXTERNAL_SEARCH_SYNC_STATUS)
-                .remove(KEY_EXTERNAL_SEARCH_MODIFIED_AT)
                 .remove(KEY_NOTIFY_WHATSNEW_ENABLED)
                 .remove(KEY_NOTIFY_WHATSNEW_SYNC_STATUS)
                 .remove(KEY_NOTIFY_WHATSNEW_MODIFIED_AT)
@@ -339,19 +252,12 @@ internal class UserSettingsStoreImpl(
         const val DEFAULT_IN_MEMORY_CACHE_ENABLED = true
         const val KEY_FILE_LOGGING_ENABLED = "FileLoggingEnabled"
         const val DEFAULT_FILE_LOGGING_ENABLED = false
-        const val KEY_EXTERNAL_SEARCH_ENABLED = "ExternalSearchEnabled"
-        const val KEY_EXTERNAL_SEARCH_SYNC_STATUS = "ExternalSearchSyncStatus"
-        const val KEY_EXTERNAL_SEARCH_MODIFIED_AT = "ExternalSearchModifiedAt"
-        const val DEFAULT_EXTERNAL_SEARCH_ENABLED = false
-        const val KEY_EXTERNAL_MODE_ENABLED = "ExternalModeEnabled"
-        const val DEFAULT_EXTERNAL_MODE_ENABLED = false
         // Notify What's New setting
         const val KEY_NOTIFY_WHATSNEW_ENABLED = "NotifyWhatsNewEnabled"
         const val KEY_NOTIFY_WHATSNEW_SYNC_STATUS = "NotifyWhatsNewSyncStatus"
         const val KEY_NOTIFY_WHATSNEW_MODIFIED_AT = "NotifyWhatsNewModifiedAt"
         const val DEFAULT_NOTIFY_WHATSNEW_ENABLED = false
         // Setting keys for synced settings map
-        const val KEY_SETTING_EXTERNAL_SEARCH = "enable_external_search"
         const val KEY_SETTING_NOTIFY_WHATSNEW = "notify_whatsnew"
         // Legacy value for migration - AmoledBlack was removed and converted to Amoled theme mode
         const val LEGACY_AMOLED_BLACK_PALETTE = "AmoledBlack"

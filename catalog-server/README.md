@@ -102,7 +102,7 @@ The catalog server is the backend component of Pezzottify that provides:
   - `IssueContentDownload`: Issue download tokens
   - `ServerAdmin`: Server administration (reboot, etc.)
   - `ViewAnalytics`: View listening analytics and statistics
-  - `RequestContent`: Search external music provider and request content downloads
+  - `RequestContent`: Request content downloads from external provider
 - **`UserRole`**: Admin or Regular with different permission sets
 
 ## Prerequisites
@@ -545,7 +545,6 @@ The download manager enables users to request content from external music provid
 
 ### Overview
 
-- **Search Proxy**: Search external providers without downloading
 - **Queue-based Downloads**: Album and discography requests are queued for background processing
 - **Rate Limiting**: Per-user hourly/daily limits prevent abuse
 - **Retry Logic**: Failed downloads are automatically retried with exponential backoff
@@ -605,35 +604,10 @@ Require `RequestContent` permission.
 
 | Method | Endpoint | Description |
 | ------ | -------- | ----------- |
-| GET | `/search?q={query}&type={album\|artist}` | Search external provider |
 | GET | `/limits` | Get user's rate limit status |
 | GET | `/my-requests` | Get user's queued/recent requests |
 | POST | `/request/album` | Request an album download |
 | POST | `/request/discography` | Request an artist's discography |
-
-#### Search Request
-
-```bash
-GET /v1/download/search?q=pink+floyd&type=album
-```
-
-Response:
-```json
-{
-  "results": [
-    {
-      "id": "external-album-id",
-      "type": "album",
-      "name": "The Dark Side of the Moon",
-      "artist_name": "Pink Floyd",
-      "image_url": "https://...",
-      "release_year": 1973,
-      "in_catalog": false,
-      "in_queue": false
-    }
-  ]
-}
-```
 
 #### Album Request
 

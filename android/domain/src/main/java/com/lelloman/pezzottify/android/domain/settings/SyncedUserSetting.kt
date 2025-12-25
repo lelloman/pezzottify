@@ -17,7 +17,6 @@ data class SyncedUserSetting(
      */
     val key: String
         get() = when (setting) {
-            is UserSetting.ExternalSearchEnabled -> "enable_external_search"
             is UserSetting.NotifyWhatsNew -> "notify_whatsnew"
         }
 }

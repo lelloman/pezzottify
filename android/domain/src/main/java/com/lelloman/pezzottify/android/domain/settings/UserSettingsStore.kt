@@ -14,19 +14,6 @@ interface UserSettingsStore {
     val isFileLoggingEnabled: StateFlow<Boolean>
 
     /**
-     * Whether external search is enabled.
-     * This setting is synced with the server.
-     * Only meaningful for users with RequestContent permission.
-     */
-    val isExternalSearchEnabled: StateFlow<Boolean>
-
-    /**
-     * Whether external search mode is currently active in the search screen.
-     * This is a local-only setting that persists the toggle state.
-     */
-    val isExternalModeEnabled: StateFlow<Boolean>
-
-    /**
      * Whether to receive notifications when new content batches are closed.
      * This setting is synced with the server.
      */
@@ -37,8 +24,6 @@ interface UserSettingsStore {
     suspend fun setFontFamily(fontFamily: AppFontFamily)
     suspend fun setInMemoryCacheEnabled(enabled: Boolean)
     suspend fun setFileLoggingEnabled(enabled: Boolean)
-    suspend fun setExternalSearchEnabled(enabled: Boolean)
-    suspend fun setExternalModeEnabled(enabled: Boolean)
     suspend fun setNotifyWhatsNewEnabled(enabled: Boolean)
 
     /**

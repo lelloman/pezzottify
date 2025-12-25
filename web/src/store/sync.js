@@ -140,17 +140,10 @@ export const useSyncStore = defineStore("sync", () => {
                     : "false"
                   : String(setting.value);
               settingsObj[setting.key] = value;
-            }
-            // Format 2: Legacy enum format { ExternalSearchEnabled: true }
-            else {
+            } else {
+              // Handle direct key-value pairs
               const key = Object.keys(setting)[0];
-              if (key === "ExternalSearchEnabled") {
-                settingsObj["enable_external_search"] = setting[key]
-                  ? "true"
-                  : "false";
-              } else {
-                settingsObj[key] = setting[key];
-              }
+              settingsObj[key] = setting[key];
             }
           }
         });
