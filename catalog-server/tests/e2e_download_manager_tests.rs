@@ -15,16 +15,6 @@ use common::{TestClient, TestServer};
 // ============================================================================
 
 #[tokio::test]
-async fn test_download_search_rejects_unauthenticated() {
-    let server = TestServer::spawn().await;
-    let client = TestClient::new(server.base_url.clone());
-
-    let response = client.download_search("test").await;
-    // 401 Unauthorized - not authenticated
-    assert_eq!(response.status(), 401);
-}
-
-#[tokio::test]
 async fn test_download_limits_rejects_unauthenticated() {
     let server = TestServer::spawn().await;
     let client = TestClient::new(server.base_url.clone());
@@ -220,16 +210,6 @@ async fn test_download_admin_audit_user_rejects_non_admin() {
 // Admin users have RequestContent permission implicitly.
 
 #[tokio::test]
-async fn test_download_search_rejects_user_without_request_content_permission() {
-    let server = TestServer::spawn().await;
-    let client = TestClient::authenticated(server.base_url.clone()).await;
-
-    // Regular users don't have RequestContent permission
-    let response = client.download_search("test").await;
-    assert_eq!(response.status(), 403);
-}
-
-#[tokio::test]
 async fn test_download_limits_rejects_user_without_request_content_permission() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated(server.base_url.clone()).await;
@@ -261,16 +241,6 @@ async fn test_download_request_album_rejects_user_without_request_content_permis
 // ============================================================================
 // No Download Manager Configured Tests (Admin has RequestContent permission)
 // ============================================================================
-
-#[tokio::test]
-async fn test_download_search_returns_503_when_not_configured() {
-    let server = TestServer::spawn().await;
-    // Admin users have RequestContent permission
-    let client = TestClient::authenticated_admin(server.base_url.clone()).await;
-
-    let response = client.download_search("test").await;
-    assert_eq!(response.status(), 503);
-}
 
 #[tokio::test]
 async fn test_download_limits_returns_503_when_not_configured() {

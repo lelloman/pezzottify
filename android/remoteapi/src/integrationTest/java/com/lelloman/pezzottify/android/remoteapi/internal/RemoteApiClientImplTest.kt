@@ -358,7 +358,7 @@ class RemoteApiClientImplTest {
 
         // Update a setting
         val settingsResponse = client.updateUserSettings(
-            listOf(UserSetting.ExternalSearchEnabled(value = true))
+            listOf(UserSetting.NotifyWhatsNew(value = true))
         )
         assertThat(settingsResponse).isInstanceOf(RemoteApiResponse.Success::class.java)
 
@@ -370,7 +370,7 @@ class RemoteApiClientImplTest {
         assertThat(events.events).isNotEmpty()
 
         // Reset the setting
-        client.updateUserSettings(listOf(UserSetting.ExternalSearchEnabled(value = false)))
+        client.updateUserSettings(listOf(UserSetting.NotifyWhatsNew(value = false)))
     }
 
     @Test
@@ -725,56 +725,6 @@ class RemoteApiClientImplTest {
     }
 
     @Test
-    fun `download manager - external search for albums`() = runTest {
-        val credentialsProvider = object : RemoteApiCredentialsProvider {
-            override var authToken: String = ""
-        }
-        val client = createClient(credentialsProvider, this.backgroundScope)
-
-        testScheduler.advanceUntilIdle()
-        testScheduler.runCurrent()
-
-        // Login
-        val loginResponse = client.login(USER_HANDLE, PASSWORD, createDeviceInfo("-dm-search"))
-        assertThat(loginResponse).isInstanceOf(RemoteApiResponse.Success::class.java)
-        credentialsProvider.authToken = (loginResponse as RemoteApiResponse.Success).data.token
-
-        // Search for "prince" - mock downloader should return results
-        val searchResponse = client.externalSearch("prince", RemoteApiClient.ExternalSearchType.Album)
-        assertThat(searchResponse).isInstanceOf(RemoteApiResponse.Success::class.java)
-        val searchResults = (searchResponse as RemoteApiResponse.Success).data
-
-        assertThat(searchResults.results).isNotEmpty()
-        // Verify result structure
-        val firstResult = searchResults.results.first()
-        assertThat(firstResult.id).isNotEmpty()
-        assertThat(firstResult.name).isNotEmpty()
-    }
-
-    @Test
-    fun `download manager - external search for artists`() = runTest {
-        val credentialsProvider = object : RemoteApiCredentialsProvider {
-            override var authToken: String = ""
-        }
-        val client = createClient(credentialsProvider, this.backgroundScope)
-
-        testScheduler.advanceUntilIdle()
-        testScheduler.runCurrent()
-
-        // Login
-        val loginResponse = client.login(USER_HANDLE, PASSWORD, createDeviceInfo("-dm-search-artist"))
-        assertThat(loginResponse).isInstanceOf(RemoteApiResponse.Success::class.java)
-        credentialsProvider.authToken = (loginResponse as RemoteApiResponse.Success).data.token
-
-        // Search for artists
-        val searchResponse = client.externalSearch("prince", RemoteApiClient.ExternalSearchType.Artist)
-        assertThat(searchResponse).isInstanceOf(RemoteApiResponse.Success::class.java)
-        val searchResults = (searchResponse as RemoteApiResponse.Success).data
-
-        assertThat(searchResults.results).isNotEmpty()
-    }
-
-    @Test
     fun `download manager - get my requests (initially empty)`() = runTest {
         val credentialsProvider = object : RemoteApiCredentialsProvider {
             override var authToken: String = ""
@@ -799,113 +749,4 @@ class RemoteApiClientImplTest {
         assertThat(requests.stats).isNotNull()
     }
 
-    @Test
-    fun `download manager - request album download`() = runTest {
-        val credentialsProvider = object : RemoteApiCredentialsProvider {
-            override var authToken: String = ""
-        }
-        val client = createClient(credentialsProvider, this.backgroundScope)
-
-        testScheduler.advanceUntilIdle()
-        testScheduler.runCurrent()
-
-        // Login
-        val loginResponse = client.login(USER_HANDLE, PASSWORD, createDeviceInfo("-dm-request"))
-        assertThat(loginResponse).isInstanceOf(RemoteApiResponse.Success::class.java)
-        credentialsProvider.authToken = (loginResponse as RemoteApiResponse.Success).data.token
-
-        // First search to get an album ID
-        val searchResponse = client.externalSearch("purple", RemoteApiClient.ExternalSearchType.Album)
-        assertThat(searchResponse).isInstanceOf(RemoteApiResponse.Success::class.java)
-        val searchResults = (searchResponse as RemoteApiResponse.Success).data
-        assertThat(searchResults.results).isNotEmpty()
-
-        val album = searchResults.results.first()
-
-        // Request album download
-        val requestResponse = client.requestAlbumDownload(
-            albumId = album.id,
-            albumName = album.name,
-            artistName = album.artistName ?: "Unknown Artist"
-        )
-        assertThat(requestResponse).isInstanceOf(RemoteApiResponse.Success::class.java)
-
-        // Verify it appears in my requests
-        val myRequestsResponse = client.getMyDownloadRequests()
-        assertThat(myRequestsResponse).isInstanceOf(RemoteApiResponse.Success::class.java)
-        val myRequests = (myRequestsResponse as RemoteApiResponse.Success).data
-        assertThat(myRequests.requests).isNotEmpty()
-
-        // Find the request we just made
-        val ourRequest = myRequests.requests.find { it.contentId == album.id }
-        assertThat(ourRequest).isNotNull()
-    }
-
-    @Test
-    fun `download manager - get external album details`() = runTest {
-        val credentialsProvider = object : RemoteApiCredentialsProvider {
-            override var authToken: String = ""
-        }
-        val client = createClient(credentialsProvider, this.backgroundScope)
-
-        testScheduler.advanceUntilIdle()
-        testScheduler.runCurrent()
-
-        // Login
-        val loginResponse = client.login(USER_HANDLE, PASSWORD, createDeviceInfo("-dm-album-details"))
-        assertThat(loginResponse).isInstanceOf(RemoteApiResponse.Success::class.java)
-        credentialsProvider.authToken = (loginResponse as RemoteApiResponse.Success).data.token
-
-        // First search to get an album ID
-        val searchResponse = client.externalSearch("purple", RemoteApiClient.ExternalSearchType.Album)
-        assertThat(searchResponse).isInstanceOf(RemoteApiResponse.Success::class.java)
-        val searchResults = (searchResponse as RemoteApiResponse.Success).data
-        assertThat(searchResults.results).isNotEmpty()
-
-        val album = searchResults.results.first()
-
-        // Get album details
-        val detailsResponse = client.getExternalAlbumDetails(album.id)
-        assertThat(detailsResponse).isInstanceOf(RemoteApiResponse.Success::class.java)
-        val details = (detailsResponse as RemoteApiResponse.Success).data
-
-        // Verify response structure
-        assertThat(details.id).isEqualTo(album.id)
-        assertThat(details.name).isNotEmpty()
-        assertThat(details.artistName).isNotEmpty()
-        assertThat(details.tracks).isNotEmpty()
-    }
-
-    @Test
-    fun `download manager - get external discography`() = runTest {
-        val credentialsProvider = object : RemoteApiCredentialsProvider {
-            override var authToken: String = ""
-        }
-        val client = createClient(credentialsProvider, this.backgroundScope)
-
-        testScheduler.advanceUntilIdle()
-        testScheduler.runCurrent()
-
-        // Login
-        val loginResponse = client.login(USER_HANDLE, PASSWORD, createDeviceInfo("-dm-discography"))
-        assertThat(loginResponse).isInstanceOf(RemoteApiResponse.Success::class.java)
-        credentialsProvider.authToken = (loginResponse as RemoteApiResponse.Success).data.token
-
-        // First search to get an artist ID
-        val searchResponse = client.externalSearch("prince", RemoteApiClient.ExternalSearchType.Artist)
-        assertThat(searchResponse).isInstanceOf(RemoteApiResponse.Success::class.java)
-        val searchResults = (searchResponse as RemoteApiResponse.Success).data
-        assertThat(searchResults.results).isNotEmpty()
-
-        val artist = searchResults.results.first()
-
-        // Get discography
-        val discographyResponse = client.getExternalDiscography(artist.id)
-        assertThat(discographyResponse).isInstanceOf(RemoteApiResponse.Success::class.java)
-        val discography = (discographyResponse as RemoteApiResponse.Success).data
-
-        // Verify response structure
-        assertThat(discography.artist.id).isEqualTo(artist.id)
-        assertThat(discography.albums).isNotEmpty()
-    }
 }

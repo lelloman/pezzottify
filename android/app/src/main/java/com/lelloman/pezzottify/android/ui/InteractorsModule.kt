@@ -32,7 +32,6 @@ import com.lelloman.pezzottify.android.domain.storage.StoragePressureLevel as Do
 import com.lelloman.pezzottify.android.domain.usercontent.LikedContent as DomainLikedContent
 import com.lelloman.pezzottify.android.domain.player.PlaybackPlaylist as DomainPlaybackPlaylist
 import com.lelloman.pezzottify.android.domain.player.PlaybackPlaylistContext as DomainPlaybackPlaylistContext
-import com.lelloman.pezzottify.android.domain.settings.usecase.UpdateExternalSearchSetting
 import com.lelloman.pezzottify.android.domain.settings.usecase.UpdateNotifyWhatsNewSetting
 import com.lelloman.pezzottify.android.ui.theme.AppFontFamily as UiAppFontFamily
 import com.lelloman.pezzottify.android.ui.theme.ColorPalette as UiColorPalette
@@ -274,8 +273,6 @@ class InteractorsModule {
     fun provideSettingsScreenInteractor(
         userSettingsStore: UserSettingsStore,
         storageMonitor: com.lelloman.pezzottify.android.domain.storage.StorageMonitor,
-        permissionsStore: PermissionsStore,
-        updateExternalSearchSetting: UpdateExternalSearchSetting,
         updateNotifyWhatsNewSetting: UpdateNotifyWhatsNewSetting,
         logFileManager: LogFileManager,
         configStore: ConfigStore,
@@ -291,11 +288,6 @@ class InteractorsModule {
 
         override fun getStorageInfo(): UiStorageInfo = storageMonitor.storageInfo.value.toUi()
 
-        override fun isExternalSearchEnabled(): Boolean = userSettingsStore.isExternalSearchEnabled.value
-
-        override fun hasRequestContentPermission(): Boolean =
-            permissionsStore.permissions.value.contains(DomainPermission.RequestContent)
-
         override fun observeThemeMode(): Flow<UiThemeMode> = userSettingsStore.themeMode.map { it.toUi()}
 
         override fun observeColorPalette(): Flow<UiColorPalette>  = userSettingsStore.colorPalette.map { it.toUi() }
@@ -305,11 +297,6 @@ class InteractorsModule {
         override fun observeCacheEnabled() = userSettingsStore.isInMemoryCacheEnabled
 
         override fun observeStorageInfo(): Flow<UiStorageInfo> = storageMonitor.storageInfo.map { it.toUi() }
-
-        override fun observeExternalSearchEnabled(): Flow<Boolean> = userSettingsStore.isExternalSearchEnabled
-
-        override fun observeHasRequestContentPermission(): Flow<Boolean> =
-            permissionsStore.permissions.map { it.contains(DomainPermission.RequestContent) }
 
         override fun isNotifyWhatsNewEnabled(): Boolean = userSettingsStore.isNotifyWhatsNewEnabled.value
 
@@ -333,10 +320,6 @@ class InteractorsModule {
 
         override suspend fun setCacheEnabled(enabled: Boolean) {
             userSettingsStore.setInMemoryCacheEnabled(enabled)
-        }
-
-        override suspend fun setExternalSearchEnabled(enabled: Boolean) {
-            updateExternalSearchSetting(enabled)
         }
 
         override fun observeFileLoggingEnabled(): Flow<Boolean> = userSettingsStore.isFileLoggingEnabled
@@ -418,11 +401,6 @@ class InteractorsModule {
         getRecentlyViewedContent: GetRecentlyViewedContentUseCase,
         getSearchHistoryEntries: GetSearchHistoryEntriesUseCase,
         logSearchHistoryEntry: LogSearchHistoryEntryUseCase,
-        userSettingsStore: UserSettingsStore,
-        permissionsStore: PermissionsStore,
-        performExternalSearchUseCase: com.lelloman.pezzottify.android.domain.download.PerformExternalSearchUseCase,
-        getDownloadLimitsUseCase: com.lelloman.pezzottify.android.domain.download.GetDownloadLimitsUseCase,
-        requestAlbumDownloadUseCase: com.lelloman.pezzottify.android.domain.download.RequestAlbumDownloadUseCase,
         getWhatsNew: GetWhatsNew,
     ): SearchScreenViewModel.Interactor =
         object : SearchScreenViewModel.Interactor {
@@ -496,76 +474,6 @@ class InteractorsModule {
                     SearchScreenViewModel.SearchHistoryEntryType.Track -> SearchHistoryEntry.Type.Track
                 }
                 logSearchHistoryEntry(query, domainType, contentId)
-            }
-
-            override fun canUseExternalSearch(): Flow<Boolean> =
-                userSettingsStore.isExternalSearchEnabled.combine(
-                    permissionsStore.permissions
-                ) { isEnabled, permissions ->
-                    isEnabled && permissions.contains(DomainPermission.RequestContent)
-                }
-
-            override fun isExternalModeEnabled(): Flow<Boolean> =
-                userSettingsStore.isExternalModeEnabled
-
-            override suspend fun setExternalModeEnabled(enabled: Boolean) {
-                userSettingsStore.setExternalModeEnabled(enabled)
-            }
-
-            override suspend fun externalSearch(
-                query: String,
-                type: SearchScreenViewModel.InteractorExternalSearchType
-            ): Result<List<SearchScreenViewModel.ExternalSearchItem>> {
-                logger.debug("externalSearch($query, type=$type)")
-                val domainType = when (type) {
-                    SearchScreenViewModel.InteractorExternalSearchType.Album ->
-                        RemoteApiClient.ExternalSearchType.Album
-                    SearchScreenViewModel.InteractorExternalSearchType.Artist ->
-                        RemoteApiClient.ExternalSearchType.Artist
-                    SearchScreenViewModel.InteractorExternalSearchType.Track ->
-                        RemoteApiClient.ExternalSearchType.Track
-                }
-                val result = performExternalSearchUseCase(query, domainType)
-                return result.map { items ->
-                    items.map { item ->
-                        SearchScreenViewModel.ExternalSearchItem(
-                            id = item.id,
-                            name = item.name,
-                            artistName = item.artistName,
-                            albumName = item.albumName,
-                            year = item.year,
-                            duration = item.durationMs,
-                            imageUrl = item.imageUrl,
-                            inCatalog = item.inCatalog,
-                            inQueue = item.inQueue,
-                            catalogId = null, // Server doesn't return catalog ID yet
-                            score = item.score,
-                        )
-                    }
-                }
-            }
-
-            override suspend fun getDownloadLimits(): Result<SearchScreenViewModel.DownloadLimitsData> {
-                logger.debug("getDownloadLimits()")
-                val result = getDownloadLimitsUseCase()
-                return result.map { limits ->
-                    SearchScreenViewModel.DownloadLimitsData(
-                        requestsToday = limits.requestsToday,
-                        maxPerDay = limits.maxPerDay,
-                        canRequest = limits.canRequest,
-                        inQueue = limits.inQueue,
-                        maxQueue = limits.maxQueue,
-                    )
-                }
-            }
-
-            override suspend fun requestAlbumDownload(
-                albumId: String,
-                albumName: String,
-                artistName: String
-            ): Result<Unit> {
-                logger.debug("requestAlbumDownload($albumId, $albumName, $artistName)")
-                return requestAlbumDownloadUseCase(albumId, albumName, artistName).map { }
             }
 
             override suspend fun getWhatsNew(limit: Int): Result<List<SearchScreenViewModel.WhatsNewBatchData>> {
@@ -674,9 +582,6 @@ class InteractorsModule {
         logViewedContentUseCase: LogViewedContentUseCase,
         getLikedStateUseCase: GetLikedStateUseCase,
         toggleLikeUseCase: ToggleLikeUseCase,
-        userSettingsStore: UserSettingsStore,
-        permissionsStore: PermissionsStore,
-        getExternalArtistDiscographyUseCase: com.lelloman.pezzottify.android.domain.download.GetExternalArtistDiscographyUseCase,
     ): ArtistScreenViewModel.Interactor = object : ArtistScreenViewModel.Interactor {
         override fun logViewedArtist(artistId: String) {
             logViewedContentUseCase(artistId, ViewedContent.Type.Artist)
@@ -687,30 +592,6 @@ class InteractorsModule {
 
         override fun toggleLike(contentId: String, currentlyLiked: Boolean) {
             toggleLikeUseCase(contentId, DomainLikedContent.ContentType.Artist, currentlyLiked)
-        }
-
-        override suspend fun canShowExternalAlbums(): Boolean {
-            val hasPermission = permissionsStore.permissions.value.contains(DomainPermission.RequestContent)
-            val isEnabled = userSettingsStore.isExternalSearchEnabled.value
-            return hasPermission && isEnabled
-        }
-
-        override suspend fun getExternalDiscography(artistId: String): Result<List<com.lelloman.pezzottify.android.ui.screen.main.content.artist.UiExternalAlbumItem>> {
-            val result = getExternalArtistDiscographyUseCase(artistId)
-            return result.map { discography ->
-                // Filter to only show albums not in catalog
-                discography.albums
-                    .filter { !it.inCatalog }
-                    .map { album ->
-                        com.lelloman.pezzottify.android.ui.screen.main.content.artist.UiExternalAlbumItem(
-                            id = album.id,
-                            name = album.name,
-                            imageUrl = album.imageUrl,
-                            year = album.year,
-                            inQueue = album.inQueue,
-                        )
-                    }
-            }
         }
     }
 
@@ -1290,90 +1171,6 @@ class InteractorsModule {
                     }
                 }
             }
-        }
-
-    @Provides
-    fun provideExternalAlbumScreenInteractor(
-        getExternalAlbumDetailsUseCase: com.lelloman.pezzottify.android.domain.download.GetExternalAlbumDetailsUseCase,
-        requestAlbumDownloadUseCase: com.lelloman.pezzottify.android.domain.download.RequestAlbumDownloadUseCase,
-        downloadStatusRepository: com.lelloman.pezzottify.android.domain.download.DownloadStatusRepository,
-    ): com.lelloman.pezzottify.android.ui.screen.main.content.externalalbum.ExternalAlbumScreenViewModel.Interactor =
-        object : com.lelloman.pezzottify.android.ui.screen.main.content.externalalbum.ExternalAlbumScreenViewModel.Interactor {
-            override suspend fun getExternalAlbumDetails(albumId: String): Result<com.lelloman.pezzottify.android.ui.screen.main.content.externalalbum.UiExternalAlbumWithStatus> {
-                val result = getExternalAlbumDetailsUseCase(albumId)
-                return result.map { album ->
-                    com.lelloman.pezzottify.android.ui.screen.main.content.externalalbum.UiExternalAlbumWithStatus(
-                        id = album.id,
-                        name = album.name,
-                        artistId = album.artistId,
-                        artistName = album.artistName,
-                        imageUrl = album.imageUrl,
-                        year = album.year,
-                        albumType = album.albumType,
-                        totalTracks = album.totalTracks,
-                        tracks = album.tracks.map { track ->
-                            com.lelloman.pezzottify.android.ui.screen.main.content.externalalbum.UiExternalTrack(
-                                id = track.id,
-                                name = track.name,
-                                trackNumber = track.trackNumber,
-                                durationMs = track.durationMs,
-                            )
-                        },
-                        inCatalog = album.inCatalog,
-                        requestStatus = album.requestStatus?.toUi(),
-                    )
-                }
-            }
-
-            override suspend fun requestAlbumDownload(
-                albumId: String,
-                albumName: String,
-                artistName: String,
-            ): Result<com.lelloman.pezzottify.android.ui.screen.main.content.externalalbum.UiRequestStatus> {
-                val result = requestAlbumDownloadUseCase(albumId, albumName, artistName)
-                return result.map { response ->
-                    com.lelloman.pezzottify.android.ui.screen.main.content.externalalbum.UiRequestStatus(
-                        requestId = response.requestId,
-                        status = com.lelloman.pezzottify.android.ui.screen.main.content.externalalbum.UiDownloadStatus.Pending,
-                        queuePosition = response.queuePosition,
-                        progress = null,
-                        errorMessage = null,
-                    )
-                }
-            }
-
-            override fun observeDownloadStatus(albumId: String): Flow<com.lelloman.pezzottify.android.ui.screen.main.content.externalalbum.UiRequestStatus?> =
-                downloadStatusRepository.observeStatus(albumId).map { status ->
-                    status?.toUi()
-                }
-
-            private fun com.lelloman.pezzottify.android.domain.remoteapi.response.RequestStatusInfo.toUi(): com.lelloman.pezzottify.android.ui.screen.main.content.externalalbum.UiRequestStatus =
-                com.lelloman.pezzottify.android.ui.screen.main.content.externalalbum.UiRequestStatus(
-                    requestId = requestId,
-                    status = status.toUi(),
-                    queuePosition = queuePosition,
-                    progress = progress?.let { p ->
-                        com.lelloman.pezzottify.android.ui.screen.main.content.externalalbum.UiDownloadProgress(
-                            completed = p.completed,
-                            total = p.totalChildren,
-                        )
-                    },
-                    errorMessage = errorMessage,
-                )
-
-            private fun com.lelloman.pezzottify.android.domain.remoteapi.response.DownloadQueueStatus.toUi(): com.lelloman.pezzottify.android.ui.screen.main.content.externalalbum.UiDownloadStatus =
-                when (this) {
-                    com.lelloman.pezzottify.android.domain.remoteapi.response.DownloadQueueStatus.Pending ->
-                        com.lelloman.pezzottify.android.ui.screen.main.content.externalalbum.UiDownloadStatus.Pending
-                    com.lelloman.pezzottify.android.domain.remoteapi.response.DownloadQueueStatus.InProgress ->
-                        com.lelloman.pezzottify.android.ui.screen.main.content.externalalbum.UiDownloadStatus.InProgress
-                    com.lelloman.pezzottify.android.domain.remoteapi.response.DownloadQueueStatus.RetryWaiting ->
-                        com.lelloman.pezzottify.android.ui.screen.main.content.externalalbum.UiDownloadStatus.RetryWaiting
-                    com.lelloman.pezzottify.android.domain.remoteapi.response.DownloadQueueStatus.Completed ->
-                        com.lelloman.pezzottify.android.ui.screen.main.content.externalalbum.UiDownloadStatus.Completed
-                    com.lelloman.pezzottify.android.domain.remoteapi.response.DownloadQueueStatus.Failed ->
-                        com.lelloman.pezzottify.android.ui.screen.main.content.externalalbum.UiDownloadStatus.Failed
-                }
         }
 
     @Provides

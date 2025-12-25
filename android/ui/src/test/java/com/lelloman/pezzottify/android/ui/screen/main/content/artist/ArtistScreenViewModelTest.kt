@@ -1,6 +1,5 @@
 package com.lelloman.pezzottify.android.ui.screen.main.content.artist
 
-import android.util.Log
 import androidx.navigation.NavController
 import com.google.common.truth.Truth.assertThat
 import com.lelloman.pezzottify.android.ui.content.Album
@@ -11,10 +10,7 @@ import com.lelloman.pezzottify.android.ui.content.ContentResolver
 import com.lelloman.pezzottify.android.ui.content.SearchResultContent
 import com.lelloman.pezzottify.android.ui.content.Track
 import com.lelloman.pezzottify.android.ui.screen.main.search.SearchScreenViewModel
-import io.mockk.every
 import io.mockk.mockk
-import io.mockk.mockkStatic
-import io.mockk.unmockkStatic
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
@@ -45,15 +41,11 @@ class ArtistScreenViewModelTest {
         fakeInteractor = FakeInteractor()
         fakeContentResolver = FakeContentResolver()
         navController = mockk(relaxed = true)
-        mockkStatic(Log::class)
-        every { Log.d(any(), any()) } returns 0
-        every { Log.e(any(), any(), any()) } returns 0
     }
 
     @After
     fun tearDown() {
         Dispatchers.resetMain()
-        unmockkStatic(Log::class)
     }
 
     private fun createViewModel(artistId: String = "artist-1") {
@@ -173,108 +165,12 @@ class ArtistScreenViewModelTest {
         assertThat(fakeInteractor.loggedViewedArtistId).isNull()
     }
 
-    @Test
-    fun `loads external albums when enabled`() = runTest {
-        val artist = Artist("artist-1", "Artist", null, emptyList())
-        fakeContentResolver.artistResults["artist-1"] = flowOf(Content.Resolved("artist-1", artist))
-        fakeContentResolver.discographyResults["artist-1"] = flowOf(Content.Loading("artist-1"))
-        fakeInteractor.canShowExternalAlbumsResult = true
-        fakeInteractor.externalDiscographyResult = Result.success(
-            listOf(
-                UiExternalAlbumItem("ext-1", "External Album 1", null, 2023, false),
-                UiExternalAlbumItem("ext-2", "External Album 2", null, 2022, false),
-            )
-        )
-
-        createViewModel("artist-1")
-        advanceUntilIdle()
-
-        assertThat(viewModel.state.value.externalAlbums).hasSize(2)
-        assertThat(viewModel.state.value.externalAlbums[0].name).isEqualTo("External Album 1")
-    }
-
-    @Test
-    fun `does not load external albums when disabled`() = runTest {
-        val artist = Artist("artist-1", "Artist", null, emptyList())
-        fakeContentResolver.artistResults["artist-1"] = flowOf(Content.Resolved("artist-1", artist))
-        fakeContentResolver.discographyResults["artist-1"] = flowOf(Content.Loading("artist-1"))
-        fakeInteractor.canShowExternalAlbumsResult = false
-
-        createViewModel("artist-1")
-        advanceUntilIdle()
-
-        assertThat(viewModel.state.value.externalAlbums).isEmpty()
-        assertThat(viewModel.state.value.isExternalAlbumsError).isFalse()
-    }
-
-    @Test
-    fun `handles external album load failure gracefully`() = runTest {
-        val artist = Artist("artist-1", "Artist", null, emptyList())
-        fakeContentResolver.artistResults["artist-1"] = flowOf(Content.Resolved("artist-1", artist))
-        fakeContentResolver.discographyResults["artist-1"] = flowOf(Content.Loading("artist-1"))
-        fakeInteractor.canShowExternalAlbumsResult = true
-        fakeInteractor.externalDiscographyResult = Result.failure(RuntimeException("Network error"))
-
-        createViewModel("artist-1")
-        advanceUntilIdle()
-
-        assertThat(viewModel.state.value.externalAlbums).isEmpty()
-        assertThat(viewModel.state.value.isExternalAlbumsError).isTrue()
-    }
-
-    @Test
-    fun `hasLoadedExternalAlbums is true after successful load`() = runTest {
-        val artist = Artist("artist-1", "Artist", null, emptyList())
-        fakeContentResolver.artistResults["artist-1"] = flowOf(Content.Resolved("artist-1", artist))
-        fakeContentResolver.discographyResults["artist-1"] = flowOf(Content.Loading("artist-1"))
-        fakeInteractor.canShowExternalAlbumsResult = true
-        fakeInteractor.externalDiscographyResult = Result.success(
-            listOf(UiExternalAlbumItem("ext-1", "Album", null, 2023, false))
-        )
-
-        createViewModel("artist-1")
-        advanceUntilIdle()
-
-        assertThat(viewModel.state.value.hasLoadedExternalAlbums).isTrue()
-    }
-
-    @Test
-    fun `hasLoadedExternalAlbums is true even with empty result`() = runTest {
-        val artist = Artist("artist-1", "Artist", null, emptyList())
-        fakeContentResolver.artistResults["artist-1"] = flowOf(Content.Resolved("artist-1", artist))
-        fakeContentResolver.discographyResults["artist-1"] = flowOf(Content.Loading("artist-1"))
-        fakeInteractor.canShowExternalAlbumsResult = true
-        fakeInteractor.externalDiscographyResult = Result.success(emptyList())
-
-        createViewModel("artist-1")
-        advanceUntilIdle()
-
-        assertThat(viewModel.state.value.hasLoadedExternalAlbums).isTrue()
-        assertThat(viewModel.state.value.externalAlbums).isEmpty()
-        assertThat(viewModel.state.value.isExternalAlbumsError).isFalse()
-    }
-
-    @Test
-    fun `hasLoadedExternalAlbums is false when external albums disabled`() = runTest {
-        val artist = Artist("artist-1", "Artist", null, emptyList())
-        fakeContentResolver.artistResults["artist-1"] = flowOf(Content.Resolved("artist-1", artist))
-        fakeContentResolver.discographyResults["artist-1"] = flowOf(Content.Loading("artist-1"))
-        fakeInteractor.canShowExternalAlbumsResult = false
-
-        createViewModel("artist-1")
-        advanceUntilIdle()
-
-        assertThat(viewModel.state.value.hasLoadedExternalAlbums).isFalse()
-    }
-
     private class FakeInteractor : ArtistScreenViewModel.Interactor {
         val likedContentIds = mutableSetOf<String>()
 
         var loggedViewedArtistId: String? = null
         var lastToggleLikeContentId: String? = null
         var lastToggleLikeCurrentlyLiked: Boolean? = null
-        var canShowExternalAlbumsResult = false
-        var externalDiscographyResult: Result<List<UiExternalAlbumItem>> = Result.success(emptyList())
 
         override fun logViewedArtist(artistId: String) {
             loggedViewedArtistId = artistId
@@ -287,11 +183,6 @@ class ArtistScreenViewModelTest {
             lastToggleLikeContentId = contentId
             lastToggleLikeCurrentlyLiked = currentlyLiked
         }
-
-        override suspend fun canShowExternalAlbums(): Boolean = canShowExternalAlbumsResult
-
-        override suspend fun getExternalDiscography(artistId: String): Result<List<UiExternalAlbumItem>> =
-            externalDiscographyResult
     }
 
     private class FakeContentResolver : ContentResolver {

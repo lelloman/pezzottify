@@ -38,8 +38,6 @@ class SettingsScreenViewModel @Inject constructor(
                 fontFamily = interactor.getFontFamily(),
                 isCacheEnabled = interactor.isCacheEnabled(),
                 storageInfo = interactor.getStorageInfo(),
-                externalSearchEnabled = interactor.isExternalSearchEnabled(),
-                hasRequestContentPermission = interactor.hasRequestContentPermission(),
                 notifyWhatsNewEnabled = interactor.isNotifyWhatsNewEnabled(),
                 isFileLoggingEnabled = interactor.isFileLoggingEnabled(),
                 hasLogFiles = interactor.hasLogFiles(),
@@ -72,16 +70,6 @@ class SettingsScreenViewModel @Inject constructor(
             launch {
                 interactor.observeStorageInfo().collect { storageInfo ->
                     mutableState.update { it.copy(storageInfo = storageInfo) }
-                }
-            }
-            launch {
-                interactor.observeExternalSearchEnabled().collect { enabled ->
-                    mutableState.update { it.copy(externalSearchEnabled = enabled) }
-                }
-            }
-            launch {
-                interactor.observeHasRequestContentPermission().collect { hasPermission ->
-                    mutableState.update { it.copy(hasRequestContentPermission = hasPermission) }
                 }
             }
             launch {
@@ -127,12 +115,6 @@ class SettingsScreenViewModel @Inject constructor(
     override fun setCacheEnabled(enabled: Boolean) {
         viewModelScope.launch {
             interactor.setCacheEnabled(enabled)
-        }
-    }
-
-    override fun setExternalSearchEnabled(enabled: Boolean) {
-        viewModelScope.launch {
-            interactor.setExternalSearchEnabled(enabled)
         }
     }
 
@@ -222,23 +204,18 @@ class SettingsScreenViewModel @Inject constructor(
         fun getFontFamily(): AppFontFamily
         fun isCacheEnabled(): Boolean
         fun getStorageInfo(): StorageInfo?
-        fun isExternalSearchEnabled(): Boolean
-        fun hasRequestContentPermission(): Boolean
         fun isNotifyWhatsNewEnabled(): Boolean
         fun observeThemeMode(): kotlinx.coroutines.flow.Flow<ThemeMode>
         fun observeColorPalette(): kotlinx.coroutines.flow.Flow<ColorPalette>
         fun observeFontFamily(): kotlinx.coroutines.flow.Flow<AppFontFamily>
         fun observeCacheEnabled(): kotlinx.coroutines.flow.Flow<Boolean>
         fun observeStorageInfo(): kotlinx.coroutines.flow.Flow<StorageInfo>
-        fun observeExternalSearchEnabled(): kotlinx.coroutines.flow.Flow<Boolean>
-        fun observeHasRequestContentPermission(): kotlinx.coroutines.flow.Flow<Boolean>
         fun observeNotifyWhatsNewEnabled(): kotlinx.coroutines.flow.Flow<Boolean>
         fun observeFileLoggingEnabled(): kotlinx.coroutines.flow.Flow<Boolean>
         suspend fun setThemeMode(themeMode: ThemeMode)
         suspend fun setColorPalette(colorPalette: ColorPalette)
         suspend fun setFontFamily(fontFamily: AppFontFamily)
         suspend fun setCacheEnabled(enabled: Boolean)
-        suspend fun setExternalSearchEnabled(enabled: Boolean)
         suspend fun setNotifyWhatsNewEnabled(enabled: Boolean)
         suspend fun setFileLoggingEnabled(enabled: Boolean)
         fun isFileLoggingEnabled(): Boolean

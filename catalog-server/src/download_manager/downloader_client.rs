@@ -1,6 +1,6 @@
 //! HTTP client for communicating with the external downloader service.
 //!
-//! Provides methods for search, metadata retrieval, and binary downloads.
+//! Provides methods for metadata retrieval and binary downloads.
 
 use std::time::Duration;
 
@@ -8,12 +8,10 @@ use anyhow::{anyhow, Result};
 use reqwest::Client;
 
 use super::downloader_types::*;
-use super::models::SearchType;
 
 /// Client for communicating with the external downloader service.
 ///
 /// Handles HTTP requests to the downloader service for:
-/// - Searching for albums and tracks
 /// - Fetching artist discographies
 /// - Downloading album/track data and media files
 #[derive(Clone)]
@@ -89,49 +87,8 @@ impl DownloaderClient {
     }
 
     // =========================================================================
-    // Search Endpoints
+    // Metadata Endpoints
     // =========================================================================
-
-    /// Search for content via the downloader service.
-    ///
-    /// # Arguments
-    /// * `query` - Search query string
-    /// * `search_type` - Type of content to search for
-    pub async fn search(
-        &self,
-        query: &str,
-        search_type: SearchType,
-    ) -> Result<Vec<ExternalSearchResult>> {
-        let type_param = match search_type {
-            SearchType::Album => "album",
-            SearchType::Artist => "artist",
-        };
-
-        let url = format!("{}/search", self.base_url);
-        let response = self
-            .client
-            .get(&url)
-            .query(&[("q", query), ("type", type_param)])
-            .send()
-            .await?;
-
-        if !response.status().is_success() {
-            return Err(anyhow!(
-                "Search request failed with status: {}",
-                response.status()
-            ));
-        }
-
-        let text = response.text().await?;
-        let search_response: SearchResponse = serde_json::from_str(&text).map_err(|e| {
-            anyhow!(
-                "Failed to parse search response: {}. Response body: {}",
-                e,
-                &text[..text.len().min(500)]
-            )
-        })?;
-        Ok(search_response.into_results())
-    }
 
     /// Get an artist's discography (album IDs) from the downloader service.
     ///
@@ -167,10 +124,6 @@ impl DownloaderClient {
             }
         }
     }
-
-    // =========================================================================
-    // Metadata Endpoints
-    // =========================================================================
 
     /// Get album metadata from the downloader service.
     ///

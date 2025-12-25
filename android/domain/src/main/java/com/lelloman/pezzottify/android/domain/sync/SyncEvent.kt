@@ -28,10 +28,6 @@ enum class LikedContentType {
 @Serializable
 sealed interface UserSetting {
     @Serializable
-    @SerialName("enable_external_search")
-    data class ExternalSearchEnabled(val value: Boolean) : UserSetting
-
-    @Serializable
     @SerialName("notify_whatsnew")
     data class NotifyWhatsNew(val value: Boolean) : UserSetting
 }

@@ -12,7 +12,7 @@ use tokio::sync::RwLock;
 use tracing::{debug, info, warn};
 use uuid::Uuid;
 
-use crate::catalog_store::{CatalogStore, TrackAvailability, WritableCatalogStore};
+use crate::catalog_store::{TrackAvailability, WritableCatalogStore};
 use crate::config::DownloadManagerSettings;
 use crate::notifications::{NotificationService, NotificationType};
 
@@ -22,14 +22,12 @@ use super::downloader_client::DownloaderClient;
 use super::models::*;
 use super::queue_store::DownloadQueueStore;
 use super::retry_policy::RetryPolicy;
-use super::search_proxy::SearchProxy;
 use super::sync_notifier::DownloadSyncNotifier;
 use super::throttle::{DownloadThrottler, SlidingWindowThrottler, ThrottlerConfig};
 
 /// Main download manager that orchestrates all download operations.
 ///
 /// Provides a unified interface for:
-/// - Search proxy (forwarding searches to external downloader service)
 /// - User request management (queuing album/discography downloads)
 /// - Rate limiting (per-user and global capacity checks)
 /// - Queue processing (executing downloads from the queue)
@@ -51,8 +49,6 @@ pub struct DownloadManager {
     retry_policy: RetryPolicy,
     /// Audit logger for tracking operations.
     audit_logger: AuditLogger,
-    /// Search proxy for querying the downloader service.
-    search_proxy: SearchProxy,
     /// Bandwidth throttler for rate limiting downloads.
     throttler: Arc<SlidingWindowThrottler>,
     /// Corruption handler for detecting file corruption and managing restarts.
@@ -81,11 +77,6 @@ impl DownloadManager {
     ) -> Self {
         let retry_policy = RetryPolicy::new(&config);
         let audit_logger = AuditLogger::new(queue_store.clone());
-        let search_proxy = SearchProxy::new(
-            downloader_client.clone(),
-            catalog_store.clone() as Arc<dyn CatalogStore>,
-            queue_store.clone(),
-        );
 
         // Initialize throttler from config
         let throttler_config = ThrottlerConfig {
@@ -114,7 +105,6 @@ impl DownloadManager {
             config,
             retry_policy,
             audit_logger,
-            search_proxy,
             throttler,
             corruption_handler,
             sync_notifier: RwLock::new(None),
@@ -205,33 +195,6 @@ impl DownloadManager {
     /// Get items stuck in IN_PROGRESS state longer than the threshold.
     pub fn get_stale_in_progress(&self, threshold_secs: i64) -> Result<Vec<QueueItem>> {
         self.queue_store.get_stale_in_progress(threshold_secs)
-    }
-
-    // =========================================================================
-    // Search Proxy Methods (async - calls external downloader service)
-    // =========================================================================
-
-    /// Search for content via the external downloader service.
-    ///
-    /// Forwards the search request to the downloader and returns results
-    /// enriched with `in_catalog` and `in_queue` flags.
-    pub async fn search(&self, query: &str, search_type: SearchType) -> Result<SearchResults> {
-        self.search_proxy.search(query, search_type).await
-    }
-
-    /// Search for an artist's discography via the external downloader service.
-    ///
-    /// Returns the artist's albums enriched with `in_catalog` and `in_queue` flags.
-    pub async fn search_discography(&self, artist_id: &str) -> Result<DiscographyResult> {
-        self.search_proxy.search_discography(artist_id).await
-    }
-
-    /// Get detailed information about an external album.
-    ///
-    /// Fetches album metadata and tracks from the downloader service,
-    /// then enriches with catalog and queue status.
-    pub async fn get_external_album_details(&self, album_id: &str) -> Result<ExternalAlbumDetails> {
-        self.search_proxy.get_album_details(album_id).await
     }
 
     // =========================================================================

@@ -153,17 +153,6 @@ class SettingsScreenViewModelTest {
     }
 
     @Test
-    fun `setExternalSearchEnabled calls interactor`() = runTest {
-        createViewModel()
-        advanceUntilIdle()
-
-        viewModel.setExternalSearchEnabled(true)
-        advanceUntilIdle()
-
-        assertThat(fakeInteractor.lastSetExternalSearchEnabled).isTrue()
-    }
-
-    @Test
     fun `setFileLoggingEnabled calls interactor and refreshes log state`() = runTest {
         fakeInteractor.configureHasLogFiles(true)
         fakeInteractor.configureLogFilesSize("1.5 MB")
@@ -265,25 +254,12 @@ class SettingsScreenViewModelTest {
         assertThat(viewModel.state.value.storageInfo).isEqualTo(storageInfo)
     }
 
-    @Test
-    fun `state updates when request content permission changes`() = runTest {
-        createViewModel()
-        advanceUntilIdle()
-
-        fakeInteractor.hasRequestContentPermissionFlow.value = true
-        advanceUntilIdle()
-
-        assertThat(viewModel.state.value.hasRequestContentPermission).isTrue()
-    }
-
     private class FakeInteractor : SettingsScreenViewModel.Interactor {
         private var _themeMode = ThemeMode.Default
         private var _colorPalette = ColorPalette.Default
         private var _fontFamily = AppFontFamily.Default
         private var _cacheEnabled = true
         private var _storageInfo: StorageInfo? = null
-        private var _externalSearchEnabled = false
-        private var _hasRequestContentPermission = false
         private var _fileLoggingEnabled = false
         private var _hasLogFiles = false
         private var _logFilesSize = ""
@@ -294,15 +270,12 @@ class SettingsScreenViewModelTest {
         val fontFamilyFlow = MutableStateFlow(AppFontFamily.Default)
         val cacheEnabledFlow = MutableStateFlow(true)
         val storageInfoFlow = MutableStateFlow(StorageInfo(0L, 0L, 0L, StoragePressureLevel.LOW))
-        val externalSearchEnabledFlow = MutableStateFlow(false)
-        val hasRequestContentPermissionFlow = MutableStateFlow(false)
         val fileLoggingEnabledFlow = MutableStateFlow(false)
 
         var lastSetThemeMode: ThemeMode? = null
         var lastSetColorPalette: ColorPalette? = null
         var lastSetFontFamily: AppFontFamily? = null
         var lastSetCacheEnabled: Boolean? = null
-        var lastSetExternalSearchEnabled: Boolean? = null
         var lastSetFileLoggingEnabled: Boolean? = null
         var clearLogsCalled = false
         var setBaseUrlCallCount = 0
@@ -345,8 +318,6 @@ class SettingsScreenViewModelTest {
         override fun getFontFamily(): AppFontFamily = _fontFamily
         override fun isCacheEnabled(): Boolean = _cacheEnabled
         override fun getStorageInfo(): StorageInfo? = _storageInfo
-        override fun isExternalSearchEnabled(): Boolean = _externalSearchEnabled
-        override fun hasRequestContentPermission(): Boolean = _hasRequestContentPermission
         override fun isFileLoggingEnabled(): Boolean = _fileLoggingEnabled
         override fun hasLogFiles(): Boolean = _hasLogFiles
         override fun getLogFilesSize(): String = _logFilesSize
@@ -358,8 +329,6 @@ class SettingsScreenViewModelTest {
         override fun observeFontFamily(): Flow<AppFontFamily> = fontFamilyFlow
         override fun observeCacheEnabled(): Flow<Boolean> = cacheEnabledFlow
         override fun observeStorageInfo(): Flow<StorageInfo> = storageInfoFlow
-        override fun observeExternalSearchEnabled(): Flow<Boolean> = externalSearchEnabledFlow
-        override fun observeHasRequestContentPermission(): Flow<Boolean> = hasRequestContentPermissionFlow
         override fun observeFileLoggingEnabled(): Flow<Boolean> = fileLoggingEnabledFlow
         override fun observeNotifyWhatsNewEnabled(): Flow<Boolean> = MutableStateFlow(false)
 
@@ -377,10 +346,6 @@ class SettingsScreenViewModelTest {
 
         override suspend fun setCacheEnabled(enabled: Boolean) {
             lastSetCacheEnabled = enabled
-        }
-
-        override suspend fun setExternalSearchEnabled(enabled: Boolean) {
-            lastSetExternalSearchEnabled = enabled
         }
 
         override suspend fun setNotifyWhatsNewEnabled(enabled: Boolean) {

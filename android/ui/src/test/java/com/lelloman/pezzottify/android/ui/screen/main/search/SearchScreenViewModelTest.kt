@@ -128,30 +128,6 @@ class SearchScreenViewModelTest {
     }
 
     @Test
-    fun `toggleExternalMode switches mode and clears results`() = runTest {
-        fakeInteractor.canUseExternalSearchFlow.value = true
-        fakeInteractor.searchResults = Result.success(
-            listOf("album-1" to SearchScreenViewModel.SearchedItemType.Album)
-        )
-
-        createViewModel()
-        advanceUntilIdle()
-
-        viewModel.updateQuery("test")
-        advanceTimeBy(500)
-        advanceUntilIdle()
-
-        assertThat(viewModel.state.value.searchResults).isNotNull()
-
-        viewModel.toggleExternalMode()
-        advanceUntilIdle()
-
-        assertThat(viewModel.state.value.isExternalMode).isTrue()
-        assertThat(viewModel.state.value.searchResults).isNull()
-        assertThat(viewModel.state.value.selectedFilters).isEmpty()
-    }
-
-    @Test
     fun `clickOnArtistSearchResult emits navigation event and logs history`() = runTest {
         createViewModel()
         advanceUntilIdle()
@@ -260,187 +236,16 @@ class SearchScreenViewModelTest {
         assertThat(viewModel.state.value.isLoading).isFalse()
     }
 
-    @Test
-    fun `canUseExternalSearch updates from interactor flow`() = runTest {
-        createViewModel()
-        advanceUntilIdle()
-
-        assertThat(viewModel.state.value.canUseExternalSearch).isFalse()
-
-        fakeInteractor.canUseExternalSearchFlow.value = true
-        advanceUntilIdle()
-
-        assertThat(viewModel.state.value.canUseExternalSearch).isTrue()
-    }
-
-    @Test
-    fun `isExternalMode updates from interactor flow`() = runTest {
-        createViewModel()
-        advanceUntilIdle()
-
-        assertThat(viewModel.state.value.isExternalMode).isFalse()
-
-        fakeInteractor.isExternalModeEnabledFlow.value = true
-        advanceUntilIdle()
-
-        assertThat(viewModel.state.value.isExternalMode).isTrue()
-    }
-
-    @Test
-    fun `external search loads results when enabled`() = runTest {
-        fakeInteractor.canUseExternalSearchFlow.value = true
-        fakeInteractor.isExternalModeEnabledFlow.value = true
-        fakeInteractor.externalSearchResults = Result.success(
-            listOf(
-                SearchScreenViewModel.ExternalSearchItem(
-                    id = "ext-album-1",
-                    name = "External Album",
-                    artistName = "Artist",
-                    albumName = null,
-                    year = 2023,
-                    duration = null,
-                    imageUrl = null,
-                    inCatalog = false,
-                    inQueue = false,
-                    catalogId = null,
-                    score = 0.9f,
-                )
-            )
-        )
-        fakeInteractor.downloadLimits = Result.success(
-            SearchScreenViewModel.DownloadLimitsData(
-                requestsToday = 2,
-                maxPerDay = 5,
-                canRequest = true,
-                inQueue = 1,
-                maxQueue = 10,
-            )
-        )
-
-        createViewModel()
-        advanceUntilIdle()
-
-        viewModel.updateQuery("external")
-        advanceTimeBy(500)
-        advanceUntilIdle()
-
-        // External search queries all types (Album, Artist, Track) and combines results
-        // Since our fake returns the same item for each type, we get 3 results
-        assertThat(viewModel.state.value.externalResults).isNotNull()
-        assertThat(viewModel.state.value.externalResults).isNotEmpty()
-        assertThat(viewModel.state.value.downloadLimits).isNotNull()
-        assertThat(viewModel.state.value.downloadLimits?.canRequest).isTrue()
-    }
-
-    @Test
-    fun `requestAlbumDownload calls interactor and updates state`() = runTest {
-        fakeInteractor.canUseExternalSearchFlow.value = true
-        fakeInteractor.isExternalModeEnabledFlow.value = true
-        fakeInteractor.requestDownloadResult = Result.success(Unit)
-        fakeInteractor.downloadLimits = Result.success(
-            SearchScreenViewModel.DownloadLimitsData(1, 5, true, 0, 10)
-        )
-        fakeInteractor.externalSearchResults = Result.success(
-            listOf(
-                SearchScreenViewModel.ExternalSearchItem(
-                    id = "ext-album-1", name = "Album", artistName = "Artist", albumName = null,
-                    year = 2023, duration = null, imageUrl = null, inCatalog = false,
-                    inQueue = false, catalogId = null, score = 0.9f,
-                )
-            )
-        )
-
-        createViewModel()
-        advanceUntilIdle()
-
-        viewModel.updateQuery("test")
-        advanceTimeBy(500)
-        advanceUntilIdle()
-
-        val events = mutableListOf<SearchScreensEvents>()
-        val job = launch(UnconfinedTestDispatcher(testScheduler)) {
-            viewModel.events.collect { events.add(it) }
-        }
-
-        val album = ExternalSearchResultContent.Album(
-            id = "ext-album-1", name = "Album", artistName = "Artist", year = 2023,
-            imageUrl = null, inCatalog = false, inQueue = false, catalogId = null, score = 0.9f,
-        )
-
-        viewModel.requestAlbumDownload(album)
-        advanceUntilIdle()
-
-        assertThat(fakeInteractor.lastRequestedAlbum?.albumId).isEqualTo("ext-album-1")
-        assertThat(events).contains(SearchScreensEvents.ShowRequestSuccess)
-
-        job.cancel()
-    }
-
-    @Test
-    fun `clickOnExternalResult navigates to catalog when inCatalog is true`() = runTest {
-        createViewModel()
-        advanceUntilIdle()
-
-        val events = mutableListOf<SearchScreensEvents>()
-        val job = launch(UnconfinedTestDispatcher(testScheduler)) {
-            viewModel.events.collect { events.add(it) }
-        }
-
-        val album = ExternalSearchResultContent.Album(
-            id = "ext-album-1", name = "Album", artistName = "Artist", year = 2023,
-            imageUrl = null, inCatalog = true, inQueue = false, catalogId = "catalog-album-1", score = 0.9f,
-        )
-
-        viewModel.clickOnExternalResult(album)
-        advanceUntilIdle()
-
-        assertThat(events).contains(SearchScreensEvents.NavigateToAlbumScreen("catalog-album-1"))
-
-        job.cancel()
-    }
-
-    @Test
-    fun `clickOnExternalResult navigates to external screen when not in catalog`() = runTest {
-        createViewModel()
-        advanceUntilIdle()
-
-        val events = mutableListOf<SearchScreensEvents>()
-        val job = launch(UnconfinedTestDispatcher(testScheduler)) {
-            viewModel.events.collect { events.add(it) }
-        }
-
-        val album = ExternalSearchResultContent.Album(
-            id = "ext-album-1", name = "Album", artistName = "Artist", year = 2023,
-            imageUrl = null, inCatalog = false, inQueue = false, catalogId = null, score = 0.9f,
-        )
-
-        viewModel.clickOnExternalResult(album)
-        advanceUntilIdle()
-
-        assertThat(events).contains(SearchScreensEvents.NavigateToExternalAlbumScreen("ext-album-1"))
-
-        job.cancel()
-    }
-
     private class FakeInteractor : SearchScreenViewModel.Interactor {
-        val canUseExternalSearchFlow = MutableStateFlow(false)
-        val isExternalModeEnabledFlow = MutableStateFlow(false)
         val recentlyViewedFlow = MutableStateFlow<List<SearchScreenViewModel.RecentlyViewedContent>>(emptyList())
         val searchHistoryFlow = MutableStateFlow<List<SearchScreenViewModel.SearchHistoryEntry>>(emptyList())
 
         var searchResults: Result<List<Pair<String, SearchScreenViewModel.SearchedItemType>>> = Result.success(emptyList())
-        var externalSearchResults: Result<List<SearchScreenViewModel.ExternalSearchItem>> = Result.success(emptyList())
-        var downloadLimits: Result<SearchScreenViewModel.DownloadLimitsData> = Result.success(
-            SearchScreenViewModel.DownloadLimitsData(0, 5, true, 0, 10)
-        )
-        var requestDownloadResult: Result<Unit> = Result.success(Unit)
 
         var searchCallCount = 0
         var lastLoggedSearchEntry: LoggedEntry? = null
-        var lastRequestedAlbum: RequestedAlbum? = null
 
         data class LoggedEntry(val query: String, val contentType: SearchScreenViewModel.SearchHistoryEntryType, val contentId: String)
-        data class RequestedAlbum(val albumId: String, val albumName: String, val artistName: String)
 
         override suspend fun search(
             query: String,
@@ -462,30 +267,6 @@ class SearchScreenViewModelTest {
             contentId: String
         ) {
             lastLoggedSearchEntry = LoggedEntry(query, contentType, contentId)
-        }
-
-        override fun canUseExternalSearch(): Flow<Boolean> = canUseExternalSearchFlow
-
-        override fun isExternalModeEnabled(): Flow<Boolean> = isExternalModeEnabledFlow
-
-        override suspend fun setExternalModeEnabled(enabled: Boolean) {
-            isExternalModeEnabledFlow.value = enabled
-        }
-
-        override suspend fun externalSearch(
-            query: String,
-            type: SearchScreenViewModel.InteractorExternalSearchType
-        ): Result<List<SearchScreenViewModel.ExternalSearchItem>> = externalSearchResults
-
-        override suspend fun getDownloadLimits(): Result<SearchScreenViewModel.DownloadLimitsData> = downloadLimits
-
-        override suspend fun requestAlbumDownload(
-            albumId: String,
-            albumName: String,
-            artistName: String
-        ): Result<Unit> {
-            lastRequestedAlbum = RequestedAlbum(albumId, albumName, artistName)
-            return requestDownloadResult
         }
 
         override suspend fun getWhatsNew(limit: Int): Result<List<SearchScreenViewModel.WhatsNewBatchData>> =

@@ -35,13 +35,10 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SearchBar
-import androidx.compose.material3.Snackbar
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
-import androidx.compose.foundation.layout.Row
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -68,7 +65,6 @@ import com.lelloman.pezzottify.android.ui.theme.Spacing
 import com.lelloman.pezzottify.android.ui.toAlbum
 import com.lelloman.pezzottify.android.ui.toWhatsNew
 import com.lelloman.pezzottify.android.ui.toArtist
-import com.lelloman.pezzottify.android.ui.toExternalAlbum
 import com.lelloman.pezzottify.android.ui.toTrack
 import kotlinx.coroutines.flow.Flow
 
@@ -100,17 +96,6 @@ fun SearchScreenContent(
                 is SearchScreensEvents.NavigateToArtistScreen -> navController.toArtist(it.artistId)
                 is SearchScreensEvents.NavigateToAlbumScreen -> navController.toAlbum(it.albumId)
                 is SearchScreensEvents.NavigateToTrackScreen -> navController.toTrack(it.trackId)
-                is SearchScreensEvents.NavigateToExternalAlbumScreen -> navController.toExternalAlbum(it.albumId)
-                is SearchScreensEvents.NavigateToExternalArtistScreen -> {
-                    // Navigate to regular ArtistScreen - server proxy will fetch metadata if needed
-                    navController.toArtist(it.artistId)
-                }
-                is SearchScreensEvents.NavigateToExternalTrackScreen -> {
-                    // Navigate to regular TrackScreen - server proxy will fetch metadata if needed
-                    navController.toTrack(it.trackId)
-                }
-                is SearchScreensEvents.ShowRequestError -> snackbarHostState.showSnackbar(context.getString(it.messageRes))
-                is SearchScreensEvents.ShowRequestSuccess -> snackbarHostState.showSnackbar(context.getString(R.string.request_added_to_queue))
                 is SearchScreensEvents.ShowMessage -> snackbarHostState.showSnackbar(context.getString(it.messageRes))
                 is SearchScreensEvents.NavigateToWhatsNewScreen -> navController.toWhatsNew()
             }
@@ -133,17 +118,9 @@ fun SearchScreenContent(
                 Icon(Icons.Default.Search, contentDescription = null)
             },
             trailingIcon = {
-                Row {
-                    if (state.query.isNotEmpty()) {
-                        IconButton(onClick = { actions.updateQuery("") }) {
-                            Icon(Icons.Default.Close, contentDescription = stringResource(R.string.clear_search))
-                        }
-                    }
-                    if (state.canUseExternalSearch) {
-                        ExternalSearchToggle(
-                            isExternalMode = state.isExternalMode,
-                            onToggle = actions::toggleExternalMode
-                        )
+                if (state.query.isNotEmpty()) {
+                    IconButton(onClick = { actions.updateQuery("") }) {
+                        Icon(Icons.Default.Close, contentDescription = stringResource(R.string.clear_search))
                     }
                 }
             },
@@ -155,7 +132,7 @@ fun SearchScreenContent(
 
         }
         SearchFilterChips(
-            availableFilters = if (state.isExternalMode && state.canUseExternalSearch) SearchFilter.externalFilters else SearchFilter.catalogFilters,
+            availableFilters = SearchFilter.catalogFilters,
             selectedFilters = state.selectedFilters,
             onFilterToggled = actions::toggleFilter
         )
@@ -191,60 +168,6 @@ fun SearchScreenContent(
                 }
 
                 Spacer(modifier = Modifier.height(Spacing.Large))
-            }
-        } else if (state.isExternalMode && state.canUseExternalSearch) {
-            // External search results
-            Column(
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxWidth()
-            ) {
-                // Download limits bar
-                state.downloadLimits?.let { limits ->
-                    DownloadLimitsBar(limits = limits)
-                }
-
-                // External results list
-                LazyColumn(
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxWidth()
-                ) {
-                    if (state.externalSearchLoading) {
-                        item {
-                            SearchLoadingIndicator()
-                        }
-                    } else if (state.externalSearchErrorRes != null) {
-                        item {
-                            ErrorSearchResult()
-                        }
-                    } else {
-                        state.externalResults?.let { results ->
-                            if (results.isEmpty()) {
-                                item {
-                                    EmptySearchResults(query = state.query)
-                                }
-                            } else {
-                                items(results, key = { "${it::class.simpleName}_${it.id}" }) { result ->
-                                    when (result) {
-                                        is ExternalSearchResultContent.Album -> ExternalAlbumSearchResult(
-                                            result = result,
-                                            onClick = { actions.clickOnExternalResult(result) },
-                                        )
-                                        is ExternalSearchResultContent.Artist -> ExternalArtistSearchResult(
-                                            result = result,
-                                            onClick = { actions.clickOnExternalResult(result) },
-                                        )
-                                        is ExternalSearchResultContent.Track -> ExternalTrackSearchResult(
-                                            result = result,
-                                            onClick = { actions.clickOnExternalResult(result) },
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
             }
         } else {
             // Catalog search results
@@ -696,48 +619,6 @@ private fun EmptySearchResults(query: String) {
         )
     }
 }
-//
-//@Composable
-//@Preview
-//private fun SearchScreenPreview() {
-//    val state = remember {
-//        mutableStateOf(
-//            SearchScreenState(
-//                searchResults = listOf(
-//                    SearchScreenState.SearchResult.Album(
-//                        id = "1",
-//                        name = "Album 1",
-//                        artistsWithIds = listOf("Artist 1" to "1"),
-//                        imageUrl = "",
-//                    ),
-//                    SearchScreenState.SearchResult.Track(
-//                        id = "2",
-//                        name = "The Track",
-//                        artistsWithIds = listOf("Artist 2" to "2"),
-//                        imageUrl = "",
-//                        durationSeconds = 120,
-//                    ),
-//                    SearchScreenState.SearchResult.Artist(
-//                        id = "3",
-//                        name = "Artist 3",
-//                        imageUrl = "",
-//                    )
-//                )
-//            )
-//        )
-//    }
-//
-//    PezzottifyTheme {
-//        SearchScreenContent(
-//            state = state.value,
-//            actions = object : SearchScreenActions {
-//                override fun updateQuery(query: String) {
-//                    state.value = state.value.copy(query = query)
-//                }
-//            }
-//        )
-//    }
-//}
 
 @Composable
 private fun WhatsNewSection(

@@ -15,13 +15,6 @@ data class SearchScreenState(
     val recentlyViewedContent: List<Flow<Content<ResolvedRecentlyViewedContent>>>? = null,
     val searchHistoryItems: List<Flow<Content<SearchHistoryItem>>>? = null,
     val selectedFilters: Set<SearchFilter> = emptySet(),
-    val canUseExternalSearch: Boolean = false,
-    val isExternalMode: Boolean = false,
-    val externalResults: List<ExternalSearchResultContent>? = null,
-    val externalSearchLoading: Boolean = false,
-    @StringRes val externalSearchErrorRes: Int? = null,
-    val downloadLimits: UiDownloadLimits? = null,
-    val requestingAlbumIds: Set<String> = emptySet(),
     val whatsNewContent: WhatsNewContentState? = null,
 )
 

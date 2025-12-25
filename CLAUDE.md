@@ -186,7 +186,6 @@ The Android project uses a multi-module Gradle setup with modules: `app`, `ui`, 
   - `GET /state`, `GET /events`
 - `/v1/download/*`: Download manager (requires RequestContent permission)
   - User endpoints:
-    - `GET /search?q={query}&type={album|artist}`: Search external provider
     - `GET /limits`: Get user's rate limit status
     - `GET /my-requests`: Get user's queued requests
     - `POST /request/album`: Request album download

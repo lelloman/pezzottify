@@ -14,7 +14,6 @@ mod models;
 mod queue_store;
 mod retry_policy;
 mod schema;
-mod search_proxy;
 mod sync_notifier;
 mod throttle;
 mod watchdog;

@@ -8,8 +8,6 @@ interface SearchScreenActions {
 
     fun toggleFilter(filter: SearchFilter)
 
-    fun toggleExternalMode()
-
     fun clickOnArtistSearchResult(artistId: String)
 
     fun clickOnAlbumSearchResult(albumId: String)
@@ -19,10 +17,6 @@ interface SearchScreenActions {
     fun clickOnRecentlyViewedItem(itemId: String, itemType: ViewedContentType)
 
     fun clickOnSearchHistoryItem(itemId: String, itemType: ViewedContentType)
-
-    fun clickOnExternalResult(result: ExternalSearchResultContent)
-
-    fun requestAlbumDownload(result: ExternalSearchResultContent.Album)
 
     fun clickOnWhatsNewAlbum(albumId: String)
 

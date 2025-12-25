@@ -65,16 +65,6 @@ class SearchScreenViewModel(
                     mutableState.value = mutableState.value.copy(searchHistoryItems = it)
                 }
         }
-        viewModelScope.launch(coroutineContext) {
-            interactor.canUseExternalSearch().collect { canUse ->
-                mutableState.value = mutableState.value.copy(canUseExternalSearch = canUse)
-            }
-        }
-        viewModelScope.launch(coroutineContext) {
-            interactor.isExternalModeEnabled().collect { isEnabled ->
-                mutableState.value = mutableState.value.copy(isExternalMode = isEnabled)
-            }
-        }
         // Load What's New content
         loadWhatsNew()
     }
@@ -154,114 +144,6 @@ class SearchScreenViewModel(
         }
     }
 
-    override fun toggleExternalMode() {
-        val newMode = !mutableState.value.isExternalMode
-        viewModelScope.launch(coroutineContext) {
-            interactor.setExternalModeEnabled(newMode)
-        }
-        // Clear current results when switching modes
-        mutableState.value = mutableState.value.copy(
-            isExternalMode = newMode,
-            searchResults = null,
-            searchErrorRes = null,
-            externalResults = null,
-            externalSearchErrorRes = null,
-            selectedFilters = emptySet(),
-        )
-        // Re-run search if there's a query
-        if (currentQuery.isNotEmpty()) {
-            performSearch()
-        }
-    }
-
-    override fun clickOnExternalResult(result: ExternalSearchResultContent) {
-        viewModelScope.launch {
-            // If the item is in catalog, navigate to catalog screen
-            val catalogId = result.catalogId
-            if (result.inCatalog && catalogId != null) {
-                when (result) {
-                    is ExternalSearchResultContent.Album ->
-                        mutableEvents.emit(SearchScreensEvents.NavigateToAlbumScreen(catalogId))
-                    is ExternalSearchResultContent.Artist ->
-                        mutableEvents.emit(SearchScreensEvents.NavigateToArtistScreen(catalogId))
-                    is ExternalSearchResultContent.Track ->
-                        mutableEvents.emit(SearchScreensEvents.NavigateToTrackScreen(catalogId))
-                }
-            } else {
-                // Navigate to external content screen
-                when (result) {
-                    is ExternalSearchResultContent.Album ->
-                        mutableEvents.emit(SearchScreensEvents.NavigateToExternalAlbumScreen(result.id))
-                    is ExternalSearchResultContent.Artist -> {
-                        // Navigate to regular artist screen - server will create artist from external ID if needed
-                        mutableEvents.emit(SearchScreensEvents.NavigateToArtistScreen(result.id))
-                    }
-                    is ExternalSearchResultContent.Track -> {
-                        // TODO: Implement ExternalTrackScreen or play preview
-                        mutableEvents.emit(SearchScreensEvents.ShowMessage(R.string.external_track_not_available))
-                    }
-                }
-            }
-        }
-    }
-
-    override fun requestAlbumDownload(result: ExternalSearchResultContent.Album) {
-        viewModelScope.launch(coroutineContext) {
-            // Add to requesting set (shows loading state)
-            mutableState.value = mutableState.value.copy(
-                requestingAlbumIds = mutableState.value.requestingAlbumIds + result.id
-            )
-
-            val requestResult = interactor.requestAlbumDownload(
-                albumId = result.id,
-                albumName = result.name,
-                artistName = result.artistName,
-            )
-
-            // Remove from requesting set
-            mutableState.value = mutableState.value.copy(
-                requestingAlbumIds = mutableState.value.requestingAlbumIds - result.id
-            )
-
-            if (requestResult.isSuccess) {
-                // Update the result to show it's now in queue
-                val currentExternalResults = mutableState.value.externalResults
-                val updatedResults = currentExternalResults?.map { existing ->
-                    if (existing is ExternalSearchResultContent.Album && existing.id == result.id) {
-                        existing.copy(inQueue = true)
-                    } else {
-                        existing
-                    }
-                }
-                mutableState.value = mutableState.value.copy(externalResults = updatedResults)
-                // Refresh limits
-                refreshLimits()
-                // Show success feedback
-                mutableEvents.emit(SearchScreensEvents.ShowRequestSuccess)
-            } else {
-                // Show error feedback
-                mutableEvents.emit(SearchScreensEvents.ShowRequestError(R.string.failed_to_request_download))
-            }
-        }
-    }
-
-    private fun refreshLimits() {
-        viewModelScope.launch(coroutineContext) {
-            val limitsResult = interactor.getDownloadLimits()
-            limitsResult.getOrNull()?.let { limits ->
-                mutableState.value = mutableState.value.copy(
-                    downloadLimits = UiDownloadLimits(
-                        requestsToday = limits.requestsToday,
-                        maxPerDay = limits.maxPerDay,
-                        canRequest = limits.canRequest,
-                        inQueue = limits.inQueue,
-                        maxQueue = limits.maxQueue,
-                    )
-                )
-            }
-        }
-    }
-
     private fun performSearch() {
         previousSearchJob?.cancel()
         if (currentQuery.isNotEmpty()) {
@@ -271,20 +153,13 @@ class SearchScreenViewModel(
                     return@launch
                 }
 
-                // Only do external search if both external mode is enabled AND user can use it
-                if (mutableState.value.isExternalMode && mutableState.value.canUseExternalSearch) {
-                    performExternalSearch()
-                } else {
-                    performCatalogSearch()
-                }
+                performCatalogSearch()
             }
         } else {
             mutableState.value = mutableState.value.copy(
                 isLoading = false,
                 searchResults = null,
                 searchErrorRes = null,
-                externalResults = null,
-                externalSearchErrorRes = null,
             )
         }
     }
@@ -303,108 +178,10 @@ class SearchScreenViewModel(
         )
     }
 
-    private suspend fun performExternalSearch() {
-        mutableState.value = mutableState.value.copy(
-            externalSearchLoading = true,
-            isLoading = true,
-        )
-
-        // Fetch limits in parallel with search
-        val limitsDeferred = viewModelScope.launch(coroutineContext) {
-            val limitsResult = interactor.getDownloadLimits()
-            limitsResult.getOrNull()?.let { limits ->
-                mutableState.value = mutableState.value.copy(
-                    downloadLimits = UiDownloadLimits(
-                        requestsToday = limits.requestsToday,
-                        maxPerDay = limits.maxPerDay,
-                        canRequest = limits.canRequest,
-                        inQueue = limits.inQueue,
-                        maxQueue = limits.maxQueue,
-                    )
-                )
-            }
-        }
-
-        // Determine which types to search based on selected filters (all if none selected)
-        val selectedFilters = mutableState.value.selectedFilters
-        val searchTypes = if (selectedFilters.isEmpty()) {
-            listOf(InteractorExternalSearchType.Album, InteractorExternalSearchType.Artist, InteractorExternalSearchType.Track)
-        } else {
-            selectedFilters.map { it.toExternalSearchType() }
-        }
-
-        // Perform searches for each type and merge results
-        val allResults = mutableListOf<ExternalSearchResultContent>()
-        var hasError = false
-
-        for (searchType in searchTypes) {
-            val searchResult = interactor.externalSearch(currentQuery, searchType)
-            if (searchResult.isSuccess) {
-                searchResult.getOrNull()?.forEach { result ->
-                    val content = when (searchType) {
-                        InteractorExternalSearchType.Album -> ExternalSearchResultContent.Album(
-                            id = result.id,
-                            name = result.name,
-                            artistName = result.artistName ?: "",
-                            year = result.year,
-                            imageUrl = result.imageUrl,
-                            inCatalog = result.inCatalog,
-                            inQueue = result.inQueue,
-                            catalogId = result.catalogId,
-                            score = result.score,
-                        )
-                        InteractorExternalSearchType.Artist -> ExternalSearchResultContent.Artist(
-                            id = result.id,
-                            name = result.name,
-                            imageUrl = result.imageUrl,
-                            inCatalog = result.inCatalog,
-                            inQueue = result.inQueue,
-                            catalogId = result.catalogId,
-                            score = result.score,
-                        )
-                        InteractorExternalSearchType.Track -> ExternalSearchResultContent.Track(
-                            id = result.id,
-                            name = result.name,
-                            artistName = result.artistName ?: "",
-                            albumName = result.albumName,
-                            duration = result.duration,
-                            imageUrl = result.imageUrl,
-                            inCatalog = result.inCatalog,
-                            inQueue = result.inQueue,
-                            catalogId = result.catalogId,
-                            score = result.score,
-                        )
-                    }
-                    allResults.add(content)
-                }
-            } else {
-                hasError = true
-            }
-        }
-
-        // Sort combined results by score (descending) for relevance ordering
-        val sortedResults = allResults.sortedByDescending { it.score }
-
-        limitsDeferred.join()
-
-        mutableState.value = mutableState.value.copy(
-            isLoading = false,
-            externalSearchLoading = false,
-            externalResults = sortedResults.ifEmpty { null },
-            externalSearchErrorRes = if (hasError && sortedResults.isEmpty()) R.string.search_failed else null,
-        )
-    }
-
     private fun SearchFilter.toInteractorFilter(): InteractorSearchFilter = when (this) {
         SearchFilter.Album -> InteractorSearchFilter.Album
         SearchFilter.Artist -> InteractorSearchFilter.Artist
         SearchFilter.Track -> InteractorSearchFilter.Track
-    }
-
-    private fun SearchFilter.toExternalSearchType(): InteractorExternalSearchType = when (this) {
-        SearchFilter.Album -> InteractorExternalSearchType.Album
-        SearchFilter.Artist -> InteractorExternalSearchType.Artist
-        SearchFilter.Track -> InteractorExternalSearchType.Track
     }
 
     override fun clickOnArtistSearchResult(artistId: String) {
@@ -587,12 +364,6 @@ class SearchScreenViewModel(
         suspend fun getRecentlyViewedContent(maxCount: Int): Flow<List<RecentlyViewedContent>>
         fun getSearchHistoryEntries(maxCount: Int): Flow<List<SearchHistoryEntry>>
         fun logSearchHistoryEntry(query: String, contentType: SearchHistoryEntryType, contentId: String)
-        fun canUseExternalSearch(): Flow<Boolean>
-        fun isExternalModeEnabled(): Flow<Boolean>
-        suspend fun setExternalModeEnabled(enabled: Boolean)
-        suspend fun externalSearch(query: String, type: InteractorExternalSearchType): Result<List<ExternalSearchItem>>
-        suspend fun getDownloadLimits(): Result<DownloadLimitsData>
-        suspend fun requestAlbumDownload(albumId: String, albumName: String, artistName: String): Result<Unit>
         suspend fun getWhatsNew(limit: Int = 10): Result<List<WhatsNewBatchData>>
     }
 
@@ -605,34 +376,6 @@ class SearchScreenViewModel(
         val closedAt: Long,
         val addedAlbumIds: List<String>,
     )
-
-    data class ExternalSearchItem(
-        val id: String,
-        val name: String,
-        val artistName: String?,
-        val albumName: String?,
-        val year: Int?,
-        val duration: Int?,
-        val imageUrl: String?,
-        val inCatalog: Boolean,
-        val inQueue: Boolean,
-        val catalogId: String?,
-        val score: Float,
-    )
-
-    data class DownloadLimitsData(
-        val requestsToday: Int,
-        val maxPerDay: Int,
-        val canRequest: Boolean,
-        val inQueue: Int,
-        val maxQueue: Int,
-    )
-
-    enum class InteractorExternalSearchType {
-        Album,
-        Artist,
-        Track,
-    }
 
     enum class InteractorSearchFilter {
         Album,

@@ -170,13 +170,10 @@ class MyRequestsScreenViewModel(
 
     override fun onRequestClick(request: UiDownloadRequest) {
         val albumId = request.catalogId ?: return
-        viewModelScope.launch {
-            if (request.status == RequestStatus.Completed) {
-                // Completed - navigate to catalog album
+        // Only navigate to album if completed (exists in catalog)
+        if (request.status == RequestStatus.Completed) {
+            viewModelScope.launch {
                 mutableEvents.emit(MyRequestsScreenEvent.NavigateToAlbum(albumId))
-            } else {
-                // Not completed - navigate to external album screen to see status
-                mutableEvents.emit(MyRequestsScreenEvent.NavigateToExternalAlbum(albumId))
             }
         }
     }
@@ -205,5 +202,4 @@ class MyRequestsScreenViewModel(
 
 sealed class MyRequestsScreenEvent {
     data class NavigateToAlbum(val albumId: String) : MyRequestsScreenEvent()
-    data class NavigateToExternalAlbum(val albumId: String) : MyRequestsScreenEvent()
 }

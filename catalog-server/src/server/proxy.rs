@@ -13,12 +13,13 @@ use crate::downloader::models::{
     DownloaderAlbum, DownloaderArtist, DownloaderImage, DownloaderTrack,
 };
 use crate::downloader::Downloader;
-use crate::user::{settings::UserSetting, FullUserStore, Permission};
+use crate::user::{FullUserStore, Permission};
 
 /// Proxy for fetching and storing content from the downloader service.
 pub struct CatalogProxy {
     downloader: Arc<dyn Downloader>,
     catalog_store: Arc<dyn CatalogStore>,
+    #[allow(dead_code)]
     user_store: Arc<dyn FullUserStore>,
     media_base_path: PathBuf,
 }
@@ -39,30 +40,12 @@ impl CatalogProxy {
         }
     }
 
-    /// Check if a user can trigger downloads based on permission and preference.
+    /// Check if a user can trigger downloads based on permission.
     ///
-    /// Returns true if user has RequestContent permission AND enabled "enable_external_search".
-    /// This is for metadata-only fetching when viewing external search results.
-    fn can_user_trigger_download(&self, user_id: usize, permissions: &[Permission]) -> bool {
-        let has_request_content = permissions.contains(&Permission::RequestContent);
-        if has_request_content {
-            let setting = self
-                .user_store
-                .get_user_setting(user_id, "enable_external_search");
-            debug!(
-                "can_user_trigger_download: user_id={}, RequestContent=true, enable_external_search={:?}",
-                user_id, setting
-            );
-            if let Ok(Some(UserSetting::ExternalSearchEnabled(true))) = setting {
-                return true;
-            }
-        }
-
-        debug!(
-            "can_user_trigger_download: user_id={}, DENIED - RequestContent={}",
-            user_id, has_request_content
-        );
-        false
+    /// Returns true if user has RequestContent permission.
+    /// This is for metadata-only fetching when viewing content.
+    fn can_user_trigger_download(&self, _user_id: usize, permissions: &[Permission]) -> bool {
+        permissions.contains(&Permission::RequestContent)
     }
 
     /// Ensure an artist has complete data, fetching from downloader if needed.
@@ -523,6 +506,7 @@ mod tests {
         DownloaderActivityPeriod, DownloaderAlbum, DownloaderArtist, DownloaderArtistWithRole,
         DownloaderDisc, DownloaderTrack,
     };
+    use crate::user::settings::UserSetting;
 
     /// Mock downloader for testing proxy logic.
     pub struct MockDownloader {
@@ -954,8 +938,8 @@ mod tests {
             _user_id: usize,
             key: &str,
         ) -> anyhow::Result<Option<UserSetting>> {
-            if key == "enable_external_search" && self.downloads_enabled {
-                Ok(Some(UserSetting::ExternalSearchEnabled(true)))
+            if key == "notify_whatsnew" && self.downloads_enabled {
+                Ok(Some(UserSetting::NotifyWhatsNew(true)))
             } else {
                 Ok(None)
             }
@@ -1357,18 +1341,14 @@ mod tests {
 
     // ==================== can_user_trigger_download Tests ====================
 
-    /// Test user store with configurable settings for testing can_user_trigger_download
+    /// Test user store with configurable permissions for testing can_user_trigger_download
     struct ConfigurableTestUserStore {
-        external_search_enabled: Option<bool>,
         permissions: Vec<Permission>,
     }
 
     impl ConfigurableTestUserStore {
-        fn new(external_search_enabled: Option<bool>, permissions: Vec<Permission>) -> Self {
-            Self {
-                external_search_enabled,
-                permissions,
-            }
+        fn new(permissions: Vec<Permission>) -> Self {
+            Self { permissions }
         }
     }
 
@@ -1688,13 +1668,9 @@ mod tests {
             _user_id: usize,
             key: &str,
         ) -> anyhow::Result<Option<UserSetting>> {
-            if key == "enable_external_search" {
-                Ok(self
-                    .external_search_enabled
-                    .map(UserSetting::ExternalSearchEnabled))
-            } else {
-                Ok(None)
-            }
+            // Since external search setting was removed, we just return None
+            let _ = key;
+            Ok(None)
         }
         fn set_user_setting(&self, _user_id: usize, _setting: UserSetting) -> anyhow::Result<()> {
             Ok(())
@@ -1844,9 +1820,8 @@ mod tests {
     async fn test_can_user_trigger_download_no_permission() {
         let (temp_dir, catalog_store) = setup_test_env();
         let mock_downloader = Arc::new(MockDownloader::new());
-        // User has setting enabled but NO permission
+        // User has NO permission
         let user_store: Arc<dyn FullUserStore> = Arc::new(ConfigurableTestUserStore::new(
-            Some(true),
             vec![Permission::AccessCatalog], // Not RequestContent
         ));
 
@@ -1871,74 +1846,13 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_can_user_trigger_download_no_setting() {
+    async fn test_can_user_trigger_download_with_permission() {
         let (temp_dir, catalog_store) = setup_test_env();
         let mock_downloader = Arc::new(MockDownloader::new());
-        // User has permission but setting is NOT set (default disabled)
-        let user_store: Arc<dyn FullUserStore> = Arc::new(ConfigurableTestUserStore::new(
-            None, // Setting not set
-            vec![Permission::RequestContent],
-        ));
-
-        mock_downloader.add_artist(create_test_artist("artist1", "Test Artist"));
-
-        let proxy = CatalogProxy::new(
-            mock_downloader.clone(),
-            catalog_store,
-            user_store,
-            temp_dir.path().to_path_buf(),
-        );
-
-        // Should skip download due to setting not enabled
-        let permissions = vec![Permission::RequestContent];
-        let result = proxy
-            .ensure_artist_complete("artist1", 1, &permissions)
-            .await;
-        assert!(result.is_ok());
-
-        // Downloader should NOT have been called
-        assert_eq!(mock_downloader.get_call_count("get_artist"), 0);
-    }
-
-    #[tokio::test]
-    async fn test_can_user_trigger_download_setting_false() {
-        let (temp_dir, catalog_store) = setup_test_env();
-        let mock_downloader = Arc::new(MockDownloader::new());
-        // User has permission but setting is explicitly false
-        let user_store: Arc<dyn FullUserStore> = Arc::new(ConfigurableTestUserStore::new(
-            Some(false),
-            vec![Permission::RequestContent],
-        ));
-
-        mock_downloader.add_artist(create_test_artist("artist1", "Test Artist"));
-
-        let proxy = CatalogProxy::new(
-            mock_downloader.clone(),
-            catalog_store,
-            user_store,
-            temp_dir.path().to_path_buf(),
-        );
-
-        // Should skip download due to setting being "false"
-        let permissions = vec![Permission::RequestContent];
-        let result = proxy
-            .ensure_artist_complete("artist1", 1, &permissions)
-            .await;
-        assert!(result.is_ok());
-
-        // Downloader should NOT have been called
-        assert_eq!(mock_downloader.get_call_count("get_artist"), 0);
-    }
-
-    #[tokio::test]
-    async fn test_can_user_trigger_download_permission_and_setting_enabled() {
-        let (temp_dir, catalog_store) = setup_test_env();
-        let mock_downloader = Arc::new(MockDownloader::new());
-        // User has both permission AND setting enabled
-        let user_store: Arc<dyn FullUserStore> = Arc::new(ConfigurableTestUserStore::new(
-            Some(true),
-            vec![Permission::RequestContent],
-        ));
+        // User has RequestContent permission
+        let user_store: Arc<dyn FullUserStore> = Arc::new(ConfigurableTestUserStore::new(vec![
+            Permission::RequestContent,
+        ]));
 
         mock_downloader.add_artist(create_test_artist("artist1", "Test Artist"));
 
@@ -1949,7 +1863,7 @@ mod tests {
             temp_dir.path().to_path_buf(),
         );
 
-        // Should trigger download since user has permission and setting
+        // Should trigger download since user has permission
         let permissions = vec![Permission::RequestContent];
         let result = proxy
             .ensure_artist_complete("artist1", 1, &permissions)
@@ -1970,7 +1884,6 @@ mod tests {
         let mock_downloader = Arc::new(MockDownloader::new());
         // User has NO permission
         let user_store: Arc<dyn FullUserStore> = Arc::new(ConfigurableTestUserStore::new(
-            Some(true),
             vec![Permission::AccessCatalog], // Not RequestContent
         ));
 

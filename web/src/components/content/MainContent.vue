@@ -1,13 +1,7 @@
 <template>
   <main class="mainContent">
     <div v-if="searchQuery">
-      <SearchResults
-        :results="results"
-        :externalResults="externalResults"
-        :externalLimits="externalLimits"
-        :showExternalSearch="showExternalSearch"
-        @request-album="handleRequestAlbum"
-      />
+      <SearchResults :results="results" />
     </div>
     <Track v-else-if="trackId" :trackId="trackId" />
     <Album v-else-if="albumId" :albumId="albumId" />
@@ -30,13 +24,8 @@ import UserRequests from "@/components/content/UserRequests.vue";
 import HomePage from "@/components/content/HomePage.vue";
 import { useRoute } from "vue-router";
 import SearchResults from "./SearchResults.vue";
-import { useUserStore } from "@/store/user";
-
-const userStore = useUserStore();
 
 const results = ref(null);
-const externalResults = ref(null);
-const externalLimits = ref(null);
 
 const route = useRoute();
 const searchQuery = ref(route.params.query || "");
@@ -46,30 +35,6 @@ const albumId = ref(route.params.albumId || "");
 const playlistId = ref(route.params.playlistId || "");
 const isSettingsRoute = computed(() => route.name === "settings");
 const isRequestsRoute = computed(() => route.name === "requests");
-
-// Check if external search should be shown
-const showExternalSearch = computed(() => {
-  return userStore.canRequestContent && userStore.isExternalSearchEnabled;
-});
-
-// Determine external search types based on selected filters
-const getExternalSearchTypes = (filters) => {
-  if (!filters || filters.length === 0) {
-    // All selected - search both albums and artists
-    return ["album", "artist"];
-  }
-
-  const types = [];
-  if (filters.includes("album") || filters.includes("track")) {
-    types.push("album");
-  }
-  if (filters.includes("artist")) {
-    types.push("artist");
-  }
-
-  // Default to album if nothing else matches
-  return types.length > 0 ? types : ["album"];
-};
 
 const fetchCatalogResults = async (query, filters) => {
   const requestBody = { query, resolve: true };
@@ -89,108 +54,15 @@ const fetchCatalogResults = async (query, filters) => {
   }
 };
 
-const fetchExternalResults = async (query, type) => {
-  try {
-    const response = await fetch(
-      `/v1/download/search?q=${encodeURIComponent(query)}&type=${type}`,
-    );
-    if (!response.ok) {
-      console.error("External search error:", response.status);
-      return null;
-    }
-    return await response.json();
-  } catch (error) {
-    console.error("External search error:", error);
-    return null;
-  }
-};
-
-const fetchExternalLimits = async () => {
-  try {
-    const response = await fetch("/v1/download/limits");
-    if (!response.ok) {
-      return null;
-    }
-    return await response.json();
-  } catch (error) {
-    console.error("Error fetching limits:", error);
-    return null;
-  }
-};
-
 const fetchResults = async (newQuery, queryParams) => {
   if (newQuery) {
     results.value = [];
-    externalResults.value = null;
-    externalLimits.value = null;
 
     const filters = queryParams.type ? queryParams.type.split(",") : null;
 
-    // Fetch both searches in parallel
-    const catalogPromise = fetchCatalogResults(newQuery, filters);
-
-    if (showExternalSearch.value) {
-      const externalTypes = getExternalSearchTypes(filters);
-      // Fetch all external search types in parallel
-      const externalPromises = externalTypes.map((type) =>
-        fetchExternalResults(newQuery, type),
-      );
-      const limitsPromise = fetchExternalLimits();
-
-      // Run all in parallel
-      const [catalogData, limits, ...extResultsArray] = await Promise.all([
-        catalogPromise,
-        limitsPromise,
-        ...externalPromises,
-      ]);
-
-      // Combine external results and sort by relevance score (highest first)
-      const combinedResults = extResultsArray
-        .filter((r) => r && r.results)
-        .flatMap((r) => r.results)
-        .sort((a, b) => (b.score || 0) - (a.score || 0));
-
-      results.value = catalogData;
-      externalResults.value = { results: combinedResults };
-      externalLimits.value = limits;
-    } else {
-      results.value = await catalogPromise;
-    }
+    results.value = await fetchCatalogResults(newQuery, filters);
   } else {
     results.value = [];
-    externalResults.value = null;
-    externalLimits.value = null;
-  }
-};
-
-const handleRequestAlbum = async (album) => {
-  try {
-    const response = await fetch("/v1/download/request/album", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        album_id: album.id,
-        album_name: album.name,
-        artist_name: album.artist_name,
-      }),
-    });
-    if (response.ok) {
-      // Refresh limits and mark item as in_queue
-      externalLimits.value = await fetchExternalLimits();
-      // Update the result to show it's now in queue
-      if (externalResults.value && externalResults.value.results) {
-        externalResults.value = {
-          ...externalResults.value,
-          results: externalResults.value.results.map((r) =>
-            r.id === album.id ? { ...r, in_queue: true } : r,
-          ),
-        };
-      }
-    } else {
-      console.error("Failed to request album:", response.status);
-    }
-  } catch (error) {
-    console.error("Error requesting album:", error);
   }
 };
 watch(

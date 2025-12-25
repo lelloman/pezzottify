@@ -2,7 +2,6 @@ package com.lelloman.pezzottify.android.domain.download
 
 import com.lelloman.pezzottify.android.domain.remoteapi.response.DownloadProgress
 import com.lelloman.pezzottify.android.domain.remoteapi.response.DownloadQueueStatus
-import com.lelloman.pezzottify.android.domain.remoteapi.response.RequestStatusInfo
 import com.lelloman.pezzottify.android.domain.sync.SyncDownloadProgress
 import com.lelloman.pezzottify.android.domain.sync.SyncQueueStatus
 import com.lelloman.pezzottify.android.logger.Logger

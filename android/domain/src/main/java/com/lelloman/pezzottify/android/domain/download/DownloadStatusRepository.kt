@@ -2,10 +2,22 @@ package com.lelloman.pezzottify.android.domain.download
 
 import com.lelloman.pezzottify.android.domain.remoteapi.response.DownloadProgress
 import com.lelloman.pezzottify.android.domain.remoteapi.response.DownloadQueueStatus
-import com.lelloman.pezzottify.android.domain.remoteapi.response.RequestStatusInfo
 import com.lelloman.pezzottify.android.domain.sync.SyncDownloadProgress
 import com.lelloman.pezzottify.android.domain.sync.SyncQueueStatus
 import kotlinx.coroutines.flow.Flow
+
+/**
+ * Download request status information tracked via sync events.
+ * Used for updating UI with real-time download status.
+ */
+data class RequestStatusInfo(
+    val requestId: String,
+    val status: DownloadQueueStatus,
+    val queuePosition: Int?,
+    val progress: DownloadProgress?,
+    val errorMessage: String?,
+    val createdAt: Long,
+)
 
 /**
  * Repository that exposes download status updates from sync events.

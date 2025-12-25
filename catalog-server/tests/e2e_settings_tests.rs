@@ -33,14 +33,14 @@ async fn test_get_settings_requires_authentication() {
 }
 
 #[tokio::test]
-async fn test_update_enable_external_search_true() {
+async fn test_update_notify_whatsnew_true() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated(server.base_url.clone()).await;
 
-    // Set enable_external_search to true using typed setting
+    // Set notify_whatsnew to true using typed setting
     let body = json!({
         "settings": [
-            { "key": "enable_external_search", "value": true }
+            { "key": "notify_whatsnew", "value": true }
         ]
     });
     let response = client.update_user_settings_json(body).await;
@@ -53,19 +53,19 @@ async fn test_update_enable_external_search_true() {
     let body: serde_json::Value = response.json().await.unwrap();
     let settings = body.get("settings").unwrap().as_array().unwrap();
     assert_eq!(settings.len(), 1);
-    assert_eq!(settings[0]["key"], "enable_external_search");
+    assert_eq!(settings[0]["key"], "notify_whatsnew");
     assert_eq!(settings[0]["value"], true);
 }
 
 #[tokio::test]
-async fn test_update_enable_external_search_false() {
+async fn test_update_notify_whatsnew_false() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated(server.base_url.clone()).await;
 
-    // Set enable_external_search to true first
+    // Set notify_whatsnew to true first
     let body = json!({
         "settings": [
-            { "key": "enable_external_search", "value": true }
+            { "key": "notify_whatsnew", "value": true }
         ]
     });
     client.update_user_settings_json(body).await;
@@ -73,7 +73,7 @@ async fn test_update_enable_external_search_false() {
     // Now set it to false
     let body = json!({
         "settings": [
-            { "key": "enable_external_search", "value": false }
+            { "key": "notify_whatsnew", "value": false }
         ]
     });
     let response = client.update_user_settings_json(body).await;
@@ -84,7 +84,7 @@ async fn test_update_enable_external_search_false() {
     let body: serde_json::Value = response.json().await.unwrap();
     let settings = body.get("settings").unwrap().as_array().unwrap();
     assert_eq!(settings.len(), 1);
-    assert_eq!(settings[0]["key"], "enable_external_search");
+    assert_eq!(settings[0]["key"], "notify_whatsnew");
     assert_eq!(settings[0]["value"], false);
 }
 
@@ -108,10 +108,10 @@ async fn test_update_invalid_value_type_returns_error() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated(server.base_url.clone()).await;
 
-    // Try to set enable_external_search with a string instead of bool
+    // Try to set notify_whatsnew with a string instead of bool
     let body = json!({
         "settings": [
-            { "key": "enable_external_search", "value": "yes" }
+            { "key": "notify_whatsnew", "value": "yes" }
         ]
     });
     let response = client.update_user_settings_json(body).await;
@@ -126,7 +126,7 @@ async fn test_settings_persist_across_sessions() {
     let client = TestClient::authenticated(server.base_url.clone()).await;
     let body = json!({
         "settings": [
-            { "key": "enable_external_search", "value": true }
+            { "key": "notify_whatsnew", "value": true }
         ]
     });
     client.update_user_settings_json(body).await;
@@ -142,7 +142,7 @@ async fn test_settings_persist_across_sessions() {
     let body: serde_json::Value = response.json().await.unwrap();
     let settings = body.get("settings").unwrap().as_array().unwrap();
     assert_eq!(settings.len(), 1);
-    assert_eq!(settings[0]["key"], "enable_external_search");
+    assert_eq!(settings[0]["key"], "notify_whatsnew");
     assert_eq!(settings[0]["value"], true);
 }
 
@@ -153,7 +153,7 @@ async fn test_update_settings_requires_authentication() {
 
     let body = json!({
         "settings": [
-            { "key": "enable_external_search", "value": true }
+            { "key": "notify_whatsnew", "value": true }
         ]
     });
     let response = client.update_user_settings_json(body).await;

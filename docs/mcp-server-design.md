@@ -129,7 +129,7 @@ MCP tools are gated by the same permissions as the HTTP API. The `McpAccess` per
 | `EditCatalog` | `create_artist`, `update_artist`, `delete_artist`, `create_album`, `update_album`, `delete_album`, `create_track`, `update_track`, `delete_track`, `check_integrity` |
 | `ManagePermissions` | `list_users`, `get_user`, `create_user`, `delete_user`, `set_user_role`, `grant_permission`, `revoke_permission` |
 | `ViewAnalytics` | `get_listening_stats`, `get_bandwidth_stats`, `get_popular_content`, `get_download_stats`, `get_download_queue` |
-| `RequestContent` | `search_external`, `request_download` |
+| `RequestContent` | `request_download` |
 | `IssueContentDownload` | `retry_failed`, `cancel_download` |
 | `ServerAdmin` | `get_server_info`, `get_memory_stats`, `list_active_sessions`, `get_recent_requests`, `list_jobs`, `get_job_history`, `trigger_job`, `enable_job`, `disable_job`, `reload_search_index`, `clear_cache`, `get_config`, `query_sql`, `inspect_search_index`, `get_recent_errors` |
 
@@ -206,7 +206,6 @@ This means:
 |------|-------------|------------|---------|
 | `get_download_queue` | Pending downloads | | QueueItem[] |
 | `get_download_stats` | Success/failure rates, recent activity | | DownloadStats |
-| `search_external` | Search external provider | `query: string`, `type: string` | ExternalResult[] |
 | `request_download` | Queue album/discography | `type: string`, `external_id: string` | |
 | `retry_failed` | Retry a failed download | `item_id: string` | |
 | `cancel_download` | Remove from queue | `item_id: string` | |

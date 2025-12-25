@@ -4948,9 +4948,7 @@ mod tests {
         let (store, _temp_dir) = create_tmp_store();
         let user_id = store.create_user("test_user").unwrap();
 
-        let result = store
-            .get_user_setting(user_id, "enable_external_search")
-            .unwrap();
+        let result = store.get_user_setting(user_id, "notify_whatsnew").unwrap();
         assert!(result.is_none());
     }
 
@@ -4969,13 +4967,11 @@ mod tests {
         let user_id = store.create_user("test_user").unwrap();
 
         store
-            .set_user_setting(user_id, UserSetting::ExternalSearchEnabled(true))
+            .set_user_setting(user_id, UserSetting::NotifyWhatsNew(true))
             .unwrap();
 
-        let result = store
-            .get_user_setting(user_id, "enable_external_search")
-            .unwrap();
-        assert_eq!(result, Some(UserSetting::ExternalSearchEnabled(true)));
+        let result = store.get_user_setting(user_id, "notify_whatsnew").unwrap();
+        assert_eq!(result, Some(UserSetting::NotifyWhatsNew(true)));
     }
 
     #[test]
@@ -4984,16 +4980,14 @@ mod tests {
         let user_id = store.create_user("test_user").unwrap();
 
         store
-            .set_user_setting(user_id, UserSetting::ExternalSearchEnabled(false))
+            .set_user_setting(user_id, UserSetting::NotifyWhatsNew(false))
             .unwrap();
         store
-            .set_user_setting(user_id, UserSetting::ExternalSearchEnabled(true))
+            .set_user_setting(user_id, UserSetting::NotifyWhatsNew(true))
             .unwrap();
 
-        let result = store
-            .get_user_setting(user_id, "enable_external_search")
-            .unwrap();
-        assert_eq!(result, Some(UserSetting::ExternalSearchEnabled(true)));
+        let result = store.get_user_setting(user_id, "notify_whatsnew").unwrap();
+        assert_eq!(result, Some(UserSetting::NotifyWhatsNew(true)));
     }
 
     #[test]
@@ -5011,12 +5005,12 @@ mod tests {
         let user_id = store.create_user("test_user").unwrap();
 
         store
-            .set_user_setting(user_id, UserSetting::ExternalSearchEnabled(true))
+            .set_user_setting(user_id, UserSetting::NotifyWhatsNew(true))
             .unwrap();
 
         let settings = store.get_all_user_settings(user_id).unwrap();
         assert_eq!(settings.len(), 1);
-        assert!(settings.contains(&UserSetting::ExternalSearchEnabled(true)));
+        assert!(settings.contains(&UserSetting::NotifyWhatsNew(true)));
     }
 
     #[test]
@@ -5026,7 +5020,7 @@ mod tests {
 
         // Set a known setting
         store
-            .set_user_setting(user_id, UserSetting::ExternalSearchEnabled(true))
+            .set_user_setting(user_id, UserSetting::NotifyWhatsNew(true))
             .unwrap();
 
         // Manually insert an unknown setting directly into the database
@@ -5043,7 +5037,7 @@ mod tests {
         // get_all_user_settings should skip the unknown key
         let settings = store.get_all_user_settings(user_id).unwrap();
         assert_eq!(settings.len(), 1);
-        assert!(settings.contains(&UserSetting::ExternalSearchEnabled(true)));
+        assert!(settings.contains(&UserSetting::NotifyWhatsNew(true)));
     }
 
     #[test]
@@ -5053,21 +5047,17 @@ mod tests {
         let user2_id = store.create_user("user2").unwrap();
 
         store
-            .set_user_setting(user1_id, UserSetting::ExternalSearchEnabled(true))
+            .set_user_setting(user1_id, UserSetting::NotifyWhatsNew(true))
             .unwrap();
         store
-            .set_user_setting(user2_id, UserSetting::ExternalSearchEnabled(false))
+            .set_user_setting(user2_id, UserSetting::NotifyWhatsNew(false))
             .unwrap();
 
-        let user1_value = store
-            .get_user_setting(user1_id, "enable_external_search")
-            .unwrap();
-        let user2_value = store
-            .get_user_setting(user2_id, "enable_external_search")
-            .unwrap();
+        let user1_value = store.get_user_setting(user1_id, "notify_whatsnew").unwrap();
+        let user2_value = store.get_user_setting(user2_id, "notify_whatsnew").unwrap();
 
-        assert_eq!(user1_value, Some(UserSetting::ExternalSearchEnabled(true)));
-        assert_eq!(user2_value, Some(UserSetting::ExternalSearchEnabled(false)));
+        assert_eq!(user1_value, Some(UserSetting::NotifyWhatsNew(true)));
+        assert_eq!(user2_value, Some(UserSetting::NotifyWhatsNew(false)));
     }
 
     #[test]
@@ -5076,7 +5066,7 @@ mod tests {
         let user_id = store.create_user("test_user").unwrap();
 
         store
-            .set_user_setting(user_id, UserSetting::ExternalSearchEnabled(true))
+            .set_user_setting(user_id, UserSetting::NotifyWhatsNew(true))
             .unwrap();
 
         // Delete the user via direct SQL (CASCADE should delete settings)
@@ -5101,33 +5091,27 @@ mod tests {
     }
 
     #[test]
-    fn test_enable_external_search_setting_lifecycle() {
+    fn test_notify_whatsnew_setting_lifecycle() {
         let (store, _temp_dir) = create_tmp_store();
         let user_id = store.create_user("test_user").unwrap();
 
         // Default should be None (not set)
-        let result = store
-            .get_user_setting(user_id, "enable_external_search")
-            .unwrap();
+        let result = store.get_user_setting(user_id, "notify_whatsnew").unwrap();
         assert!(result.is_none());
 
         // Set to true
         store
-            .set_user_setting(user_id, UserSetting::ExternalSearchEnabled(true))
+            .set_user_setting(user_id, UserSetting::NotifyWhatsNew(true))
             .unwrap();
-        let result = store
-            .get_user_setting(user_id, "enable_external_search")
-            .unwrap();
-        assert_eq!(result, Some(UserSetting::ExternalSearchEnabled(true)));
+        let result = store.get_user_setting(user_id, "notify_whatsnew").unwrap();
+        assert_eq!(result, Some(UserSetting::NotifyWhatsNew(true)));
 
         // Set to false
         store
-            .set_user_setting(user_id, UserSetting::ExternalSearchEnabled(false))
+            .set_user_setting(user_id, UserSetting::NotifyWhatsNew(false))
             .unwrap();
-        let result = store
-            .get_user_setting(user_id, "enable_external_search")
-            .unwrap();
-        assert_eq!(result, Some(UserSetting::ExternalSearchEnabled(false)));
+        let result = store.get_user_setting(user_id, "notify_whatsnew").unwrap();
+        assert_eq!(result, Some(UserSetting::NotifyWhatsNew(false)));
     }
 
     // ========================================================================
@@ -5315,7 +5299,7 @@ mod tests {
                 content_id: "track_456".to_string(),
             },
             UserEvent::SettingChanged {
-                setting: UserSetting::ExternalSearchEnabled(true),
+                setting: UserSetting::NotifyWhatsNew(true),
             },
             UserEvent::PlaylistCreated {
                 playlist_id: "pl_abc".to_string(),

@@ -2,7 +2,6 @@ package com.lelloman.pezzottify.android.ui.screen.main.content.artist
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -15,12 +14,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
-import com.lelloman.pezzottify.android.ui.component.LoaderSize
-import com.lelloman.pezzottify.android.ui.component.PezzottifyLoader
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -94,10 +90,6 @@ private fun ArtistScreenContent(
             albums = state.albums,
             features = state.features,
             relatedArtists = state.relatedArtists,
-            externalAlbums = state.externalAlbums,
-            isExternalAlbumsLoading = state.isExternalAlbumsLoading,
-            hasLoadedExternalAlbums = state.hasLoadedExternalAlbums,
-            isExternalAlbumsError = state.isExternalAlbumsError,
             isLiked = state.isLiked,
             contentResolver = contentResolver,
             navController = navController,
@@ -123,10 +115,6 @@ fun ArtistLoadedScreen(
     albums: List<String>,
     features: List<String>,
     relatedArtists: List<String>,
-    externalAlbums: List<UiExternalAlbumItem>,
-    isExternalAlbumsLoading: Boolean,
-    hasLoadedExternalAlbums: Boolean,
-    isExternalAlbumsError: Boolean,
     isLiked: Boolean,
     contentResolver: ContentResolver,
     navController: NavController,
@@ -241,37 +229,6 @@ fun ArtistLoadedScreen(
                         contentResolver = contentResolver,
                         navController = navController
                     )
-                }
-            }
-
-            // External albums (not in library)
-            if (isExternalAlbumsLoading) {
-                item {
-                    ExternalAlbumsLoadingSection()
-                }
-            } else if (externalAlbums.isNotEmpty()) {
-                item {
-                    Text(
-                        text = stringResource(R.string.not_in_catalog),
-                        style = MaterialTheme.typography.headlineSmall,
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-                    )
-                }
-                item {
-                    ExternalAlbumGrid(
-                        albums = externalAlbums,
-                        onAlbumClick = { actions.clickOnExternalAlbum(it) }
-                    )
-                }
-            } else if (isExternalAlbumsError) {
-                item {
-                    ExternalAlbumsErrorSection(
-                        onRetry = { actions.retryExternalAlbums() }
-                    )
-                }
-            } else if (hasLoadedExternalAlbums) {
-                item {
-                    ExternalAlbumsEmptySection()
                 }
             }
         }
@@ -410,81 +367,6 @@ private fun AlbumGrid(
             }
         }
     }
-}
-
-@Composable
-private fun ExternalAlbumGrid(
-    albums: List<UiExternalAlbumItem>,
-    onAlbumClick: (String) -> Unit
-) {
-    Column(modifier = Modifier.padding(horizontal = 12.dp)) {
-        val maxGroupSize = 2
-        albums.forEachGroup(maxGroupSize) { items ->
-            Row(modifier = Modifier.fillMaxWidth()) {
-                for (i in 0 until maxGroupSize) {
-                    val album = items.getOrNull(i)
-                    if (album != null) {
-                        AlbumGridItem(
-                            modifier = Modifier.weight(1f),
-                            albumName = album.name,
-                            albumDate = album.year?.toYearTimestamp() ?: 0L,
-                            albumCoverUrl = album.imageUrl,
-                            onClick = { onAlbumClick(album.id) }
-                        )
-                    } else {
-                        Spacer(modifier = Modifier.weight(1f))
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun ExternalAlbumsErrorSection(
-    onRetry: () -> Unit
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 16.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        Text(
-            text = stringResource(R.string.external_albums_error),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            textAlign = TextAlign.Center
-        )
-        OutlinedButton(onClick = onRetry) {
-            Text(text = stringResource(R.string.retry))
-        }
-    }
-}
-
-@Composable
-private fun ExternalAlbumsLoadingSection() {
-    PezzottifyLoader(size = LoaderSize.Section)
-}
-
-@Composable
-private fun ExternalAlbumsEmptySection() {
-    Text(
-        text = stringResource(R.string.no_external_albums_found),
-        style = MaterialTheme.typography.headlineSmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-    )
-}
-
-/**
- * Convert a year integer to a Unix timestamp (January 1st of that year).
- */
-private fun Int.toYearTimestamp(): Long {
-    val calendar = java.util.Calendar.getInstance()
-    calendar.set(this, 0, 1, 0, 0, 0)
-    return calendar.timeInMillis / 1000
 }
 
 @Composable
