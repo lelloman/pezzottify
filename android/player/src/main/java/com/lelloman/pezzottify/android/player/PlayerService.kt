@@ -89,6 +89,9 @@ class PlaybackService : MediaSessionService() {
 
     private var player: ExoPlayer? = null
 
+    // Track whether we have content loaded - used to keep foreground service alive
+    private var hasContent = false
+
     private val becomingNoisyReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
             if (intent.action == AudioManager.ACTION_AUDIO_BECOMING_NOISY) {
@@ -255,4 +258,29 @@ class PlaybackService : MediaSessionService() {
 
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession? =
         mediaSession
+
+    /**
+     * Override notification handling to keep the foreground service alive when paused.
+     *
+     * By default, MediaSessionService stops the foreground service when playback pauses,
+     * which can lead to the service being killed by the system. This override ensures
+     * the service stays in the foreground as long as there's content loaded.
+     */
+    @OptIn(UnstableApi::class)
+    override fun onUpdateNotification(session: MediaSession, startInForegroundRequired: Boolean) {
+        val exoPlayer = player ?: return
+
+        // Update hasContent based on whether there are media items loaded
+        hasContent = exoPlayer.mediaItemCount > 0
+
+        if (!hasContent) {
+            // No content - let Media3 handle default behavior (will stop foreground)
+            super.onUpdateNotification(session, startInForegroundRequired)
+            return
+        }
+
+        // We have content - always keep the service in foreground
+        // This prevents Android from killing the service while paused
+        super.onUpdateNotification(session, true)
+    }
 }

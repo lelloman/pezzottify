@@ -24,12 +24,14 @@ class PlayerModule {
         platformPlayer: PlatformPlayer,
         configStore: ConfigStore,
         userPlaylistStore: UserPlaylistStore,
+        playbackStateStore: PlaybackStateStore,
     ): PezzottifyPlayer = PlayerImpl(
         staticsProvider = staticsProvider,
         loggerFactory = loggerFactory,
         platformPlayer = platformPlayer,
         configStore = configStore,
         userPlaylistStore = userPlaylistStore,
+        playbackStateStore = playbackStateStore,
     )
 
     @Provides
