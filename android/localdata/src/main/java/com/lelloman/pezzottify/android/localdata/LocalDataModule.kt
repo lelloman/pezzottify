@@ -11,6 +11,7 @@ import com.lelloman.pezzottify.android.domain.statics.StaticsStore
 import com.lelloman.pezzottify.android.domain.statics.fetchstate.StaticItemFetchStateStore
 import com.lelloman.pezzottify.android.domain.listening.ListeningEventStore
 import com.lelloman.pezzottify.android.domain.notifications.NotificationLocalStore
+import com.lelloman.pezzottify.android.domain.player.PlaybackStateStore
 import com.lelloman.pezzottify.android.domain.user.UserDataStore
 import com.lelloman.pezzottify.android.domain.user.PermissionsStore
 import com.lelloman.pezzottify.android.domain.usercontent.UserContentStore
@@ -20,6 +21,7 @@ import com.lelloman.pezzottify.android.localdata.internal.listening.ListeningEve
 import com.lelloman.pezzottify.android.localdata.internal.listening.ListeningEventStoreImpl
 import com.lelloman.pezzottify.android.localdata.internal.notifications.NotificationDao
 import com.lelloman.pezzottify.android.localdata.internal.notifications.NotificationLocalStoreImpl
+import com.lelloman.pezzottify.android.localdata.internal.player.PlaybackStateStoreImpl
 import com.lelloman.pezzottify.android.localdata.internal.config.ConfigStoreImpl
 import com.lelloman.pezzottify.android.localdata.internal.settings.UserSettingsStoreImpl
 import com.lelloman.pezzottify.android.localdata.internal.skeleton.SkeletonStoreImpl
@@ -148,4 +150,10 @@ class LocalDataModule {
     internal fun provideNotificationLocalStore(
         notificationDao: NotificationDao
     ): NotificationLocalStore = NotificationLocalStoreImpl(notificationDao)
+
+    @Provides
+    @Singleton
+    fun providePlaybackStateStore(
+        @ApplicationContext context: Context
+    ): PlaybackStateStore = PlaybackStateStoreImpl(context)
 }

@@ -28,4 +28,13 @@ interface PezzottifyPlayer : ControlsAndStatePlayer, AppInitializer{
      */
     fun clearSession()
 
+    /**
+     * Attempts to restore a previously saved playback state.
+     * Called when the player service was killed by the system while paused.
+     *
+     * @return true if restoration was attempted, false if no saved state exists
+     */
+    suspend fun tryRestoreState(): Boolean
+
 }
+

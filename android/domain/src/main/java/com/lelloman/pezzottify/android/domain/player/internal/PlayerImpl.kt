@@ -6,6 +6,7 @@ import com.lelloman.pezzottify.android.domain.player.PezzottifyPlayer
 import com.lelloman.pezzottify.android.domain.player.PlatformPlayer
 import com.lelloman.pezzottify.android.domain.player.PlaybackPlaylist
 import com.lelloman.pezzottify.android.domain.player.PlaybackPlaylistContext
+import com.lelloman.pezzottify.android.domain.player.PlaybackStateStore
 import com.lelloman.pezzottify.android.domain.statics.Album
 import com.lelloman.pezzottify.android.domain.statics.StaticsItem
 import com.lelloman.pezzottify.android.domain.statics.StaticsProvider
@@ -19,6 +20,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.filterIsInstance
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -32,12 +34,15 @@ internal class PlayerImpl(
     private val platformPlayer: PlatformPlayer,
     private val configStore: ConfigStore,
     private val userPlaylistStore: UserPlaylistStore,
+    private val playbackStateStore: PlaybackStateStore,
     private val coroutineScope: CoroutineScope = GlobalScope,
 ) : PezzottifyPlayer, ControlsAndStatePlayer by platformPlayer {
 
     private val logger by loggerFactory
 
     private var loadNexPlaylistJob: Job? = null
+    private var statePersistenceJob: Job? = null
+    private var restorationAttempted = false
 
     private val mutablePlaybackPlaylist = MutableStateFlow<PlaybackPlaylist?>(null)
     override val playbackPlaylist = mutablePlaybackPlaylist.asStateFlow()
@@ -54,13 +59,114 @@ internal class PlayerImpl(
         }
 
     override fun initialize() {
-
         runOnPlayerThread {
             platformPlayer.isActive.collect { isActive ->
                 if (!isActive) {
                     mutablePlaybackPlaylist.value = null
                 }
             }
+        }
+
+        // Persist state periodically and when playback state changes
+        statePersistenceJob?.cancel()
+        statePersistenceJob = coroutineScope.launch(Dispatchers.Main) {
+            combine(
+                playbackPlaylist,
+                platformPlayer.isPlaying,
+                platformPlayer.currentTrackIndex,
+                platformPlayer.currentTrackProgressSec,
+            ) { playlist, isPlaying, trackIndex, progressSec ->
+                SaveStateData(playlist, isPlaying, trackIndex, progressSec)
+            }.collect { data ->
+                val playlist = data.playlist ?: return@collect
+                val trackIndex = data.trackIndex ?: return@collect
+                val progressSec = data.progressSec ?: 0
+
+                // Save state when we have valid playback info
+                playbackStateStore.saveState(
+                    playlist = playlist,
+                    currentTrackIndex = trackIndex,
+                    positionMs = progressSec * 1000L,
+                    isPlaying = data.isPlaying,
+                )
+            }
+        }
+    }
+
+    private data class SaveStateData(
+        val playlist: PlaybackPlaylist?,
+        val isPlaying: Boolean,
+        val trackIndex: Int?,
+        val progressSec: Int?,
+    )
+
+    /**
+     * Attempts to restore a previously saved playback state.
+     * Called automatically when the user tries to play but the service is not active.
+     *
+     * @return true if restoration was attempted, false if no saved state exists
+     */
+    override suspend fun tryRestoreState(): Boolean {
+        if (restorationAttempted) return false
+
+        val savedState = playbackStateStore.loadState() ?: return false
+        restorationAttempted = true
+
+        logger.info("Restoring saved playback state: ${savedState.playlist.tracksIds.size} tracks, index=${savedState.currentTrackIndex}")
+
+        // Restore the playlist
+        mutablePlaybackPlaylist.value = savedState.playlist
+
+        // Load tracks into player
+        val baseUrl = configStore.baseUrl.value
+        val urls = savedState.playlist.tracksIds.map { "$baseUrl/v1/content/stream/$it" }
+        platformPlayer.loadPlaylist(urls)
+
+        // Seek to saved position
+        platformPlayer.loadTrackIndex(savedState.currentTrackIndex)
+
+        // Clear saved state after successful restoration
+        playbackStateStore.clearState()
+
+        return true
+    }
+
+    /**
+     * Override togglePlayPause to attempt state restoration if player is inactive.
+     */
+    override fun togglePlayPause() {
+        if (!platformPlayer.isActive.value) {
+            // Player is not active - try to restore saved state
+            runOnPlayerThread {
+                val restored = tryRestoreState()
+                if (!restored) {
+                    // No saved state to restore, just forward to platform player
+                    // (will likely do nothing, but that's expected)
+                    platformPlayer.togglePlayPause()
+                }
+                // If restored, playback starts automatically via loadPlaylist
+            }
+        } else {
+            platformPlayer.togglePlayPause()
+        }
+    }
+
+    /**
+     * Override setIsPlaying to attempt state restoration if player is inactive.
+     */
+    override fun setIsPlaying(isPlaying: Boolean) {
+        if (isPlaying && !platformPlayer.isActive.value) {
+            // Trying to play but player is not active - try to restore saved state
+            runOnPlayerThread {
+                val restored = tryRestoreState()
+                if (!restored) {
+                    // No saved state to restore, just forward to platform player
+                    platformPlayer.setIsPlaying(isPlaying)
+                }
+                // If restored, playback starts automatically via loadPlaylist
+            }
+        } else {
+            platformPlayer.setIsPlaying(isPlaying)
         }
     }
 
@@ -293,6 +399,11 @@ internal class PlayerImpl(
         loadNexPlaylistJob = null
         mutablePlaybackPlaylist.value = null
         platformPlayer.clearSession()
+        // Clear persisted state on logout so we don't restore stale session
+        coroutineScope.launch {
+            playbackStateStore.clearState()
+        }
+        restorationAttempted = false
         logger.info("Cleared player session")
     }
 
