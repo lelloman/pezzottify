@@ -251,12 +251,12 @@ internal class UserSettingsStoreImpl(
         const val KEY_IN_MEMORY_CACHE_ENABLED = "InMemoryCacheEnabled"
         const val DEFAULT_IN_MEMORY_CACHE_ENABLED = true
         const val KEY_FILE_LOGGING_ENABLED = "FileLoggingEnabled"
-        const val DEFAULT_FILE_LOGGING_ENABLED = false
+        const val DEFAULT_FILE_LOGGING_ENABLED = true
         // Notify What's New setting
         const val KEY_NOTIFY_WHATSNEW_ENABLED = "NotifyWhatsNewEnabled"
         const val KEY_NOTIFY_WHATSNEW_SYNC_STATUS = "NotifyWhatsNewSyncStatus"
         const val KEY_NOTIFY_WHATSNEW_MODIFIED_AT = "NotifyWhatsNewModifiedAt"
-        const val DEFAULT_NOTIFY_WHATSNEW_ENABLED = false
+        const val DEFAULT_NOTIFY_WHATSNEW_ENABLED = true
         // Setting keys for synced settings map
         const val KEY_SETTING_NOTIFY_WHATSNEW = "notify_whatsnew"
         // Legacy value for migration - AmoledBlack was removed and converted to Amoled theme mode
