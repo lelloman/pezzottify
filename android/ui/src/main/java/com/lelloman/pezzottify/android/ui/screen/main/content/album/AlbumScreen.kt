@@ -162,6 +162,9 @@ private fun AlbumScreenContent(
             sheetState = trackSheetState,
             onDismiss = { selectedTrack = null },
             onPlay = {
+                actions.clickOnTrack(track.id)
+            },
+            onPlaySingle = {
                 actions.playTrackDirectly(track.id)
             },
             onAddToQueue = {

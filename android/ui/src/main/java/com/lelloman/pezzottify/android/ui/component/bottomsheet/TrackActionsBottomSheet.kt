@@ -21,7 +21,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.lelloman.pezzottify.android.ui.R
 import com.lelloman.pezzottify.android.ui.content.Track
@@ -35,6 +34,7 @@ fun TrackActionsBottomSheet(
     onAddToQueue: () -> Unit,
     onAddToPlaylist: () -> Unit,
     onPlay: (() -> Unit)? = null,
+    onPlaySingle: (() -> Unit)? = null,
     onRemoveFromPlaylist: (() -> Unit)? = null,
     onViewTrack: (() -> Unit)? = null,
     onViewAlbum: (() -> Unit)? = null,
@@ -65,6 +65,17 @@ fun TrackActionsBottomSheet(
                     label = stringResource(R.string.play),
                     onClick = {
                         playAction()
+                        onDismiss()
+                    }
+                )
+            }
+
+            onPlaySingle?.let { playSingleAction ->
+                ActionItem(
+                    iconRes = R.drawable.baseline_music_note_24,
+                    label = stringResource(R.string.play_single_track),
+                    onClick = {
+                        playSingleAction()
                         onDismiss()
                     }
                 )
@@ -145,16 +156,12 @@ private fun TrackInfoHeader(track: Track) {
             text = track.name,
             style = MaterialTheme.typography.titleMedium,
             color = MaterialTheme.colorScheme.onSurface,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis
         )
         Spacer(modifier = Modifier.height(4.dp))
         Text(
             text = track.artists.joinToString(", ") { it.name },
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
         )
     }
 }
