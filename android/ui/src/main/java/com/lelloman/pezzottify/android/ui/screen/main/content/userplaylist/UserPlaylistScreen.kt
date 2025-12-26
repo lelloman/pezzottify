@@ -48,7 +48,6 @@ import androidx.navigation.NavController
 import com.lelloman.pezzottify.android.ui.R
 import com.lelloman.pezzottify.android.ui.component.DurationText
 import com.lelloman.pezzottify.android.ui.component.LoadingScreen
-import com.lelloman.pezzottify.android.ui.component.ScrollingArtistsRow
 import com.lelloman.pezzottify.android.ui.component.bottomsheet.PlaylistPickerBottomSheet
 import com.lelloman.pezzottify.android.ui.component.bottomsheet.TrackActionsBottomSheet
 import com.lelloman.pezzottify.android.ui.component.dialog.CreatePlaylistDialog
@@ -140,6 +139,9 @@ private fun UserPlaylistScreenContent(
             sheetState = trackSheetState,
             onDismiss = { selectedTrack = null },
             onPlay = {
+                actions.clickOnTrack(track.id)
+            },
+            onPlaySingle = {
                 actions.playTrackDirectly(track.id)
             },
             onAddToQueue = {
@@ -243,8 +245,7 @@ private fun UserPlaylistLoadedScreen(
             TrackList(
                 trackFlows = trackFlows,
                 currentPlayingTrackId = state.currentPlayingTrackId,
-                onTrackClick = { trackId -> actions.clickOnTrack(trackId) },
-                onTrackMoreClick = onTrackMoreClick,
+                onTrackClick = onTrackMoreClick,
             )
         }
     }
@@ -352,8 +353,7 @@ private fun PlaylistHeader(
 private fun TrackList(
     trackFlows: List<Flow<Content<Track>>>,
     currentPlayingTrackId: String?,
-    onTrackClick: (String) -> Unit,
-    onTrackMoreClick: (Track) -> Unit,
+    onTrackClick: (Track) -> Unit,
 ) {
     LazyColumn(modifier = Modifier.fillMaxSize()) {
         items(trackFlows) { trackFlow ->
@@ -361,8 +361,7 @@ private fun TrackList(
                 is Content.Resolved -> TrackItem(
                     track = track.data,
                     isPlaying = track.data.id == currentPlayingTrackId,
-                    onClick = { onTrackClick(track.data.id) },
-                    onMoreClick = { onTrackMoreClick(track.data) },
+                    onClick = { onTrackClick(track.data) },
                 )
                 null, is Content.Loading -> LoadingTrackItem()
                 is Content.Error -> ErrorTrackItem()
@@ -376,7 +375,6 @@ private fun TrackItem(
     track: Track,
     isPlaying: Boolean,
     onClick: () -> Unit,
-    onMoreClick: () -> Unit,
 ) {
     val backgroundColor = if (isPlaying) {
         MaterialTheme.colorScheme.primaryContainer
@@ -394,7 +392,7 @@ private fun TrackItem(
             .fillMaxWidth()
             .background(backgroundColor)
             .clickable(onClick = onClick)
-            .padding(start = 16.dp, top = 8.dp, bottom = 8.dp, end = 4.dp),
+            .padding(start = 16.dp, top = 8.dp, bottom = 8.dp, end = 16.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Column(modifier = Modifier.weight(1f)) {
@@ -405,22 +403,18 @@ private fun TrackItem(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
-            ScrollingArtistsRow(artists = track.artists)
+            Text(
+                text = track.artists.joinToString(", ") { it.name },
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
         }
         DurationText(
             durationSeconds = track.durationSeconds,
             modifier = Modifier.padding(start = 8.dp)
         )
-        IconButton(
-            onClick = onMoreClick,
-            modifier = Modifier.size(40.dp)
-        ) {
-            Icon(
-                painter = painterResource(R.drawable.baseline_more_vert_24),
-                contentDescription = stringResource(R.string.more_options),
-                tint = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
     }
 }
 
