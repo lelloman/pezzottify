@@ -253,11 +253,14 @@ private fun HomeScreenContent(
                     }
                 }
 
-                // Show empty state message if no content
+                // Show empty state message only if content has loaded and is empty
+                val isRecentlyViewedLoaded = state.recentlyViewedContent != null
+                val isPopularLoaded = state.popularContent != null
                 val hasRecentlyViewed = state.recentlyViewedContent?.isNotEmpty() == true
                 val hasPopularAlbums = state.popularContent?.albums?.isNotEmpty() == true
                 val hasPopularArtists = state.popularContent?.artists?.isNotEmpty() == true
-                if (!hasRecentlyViewed && !hasPopularAlbums && !hasPopularArtists) {
+                if (isRecentlyViewedLoaded && isPopularLoaded &&
+                    !hasRecentlyViewed && !hasPopularAlbums && !hasPopularArtists) {
                     Spacer(modifier = Modifier.height(Spacing.ExtraLarge))
                     Text(
                         text = stringResource(R.string.home_empty_state),
