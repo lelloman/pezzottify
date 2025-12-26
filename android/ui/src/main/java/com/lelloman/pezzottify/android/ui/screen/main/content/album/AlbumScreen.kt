@@ -62,8 +62,6 @@ import com.lelloman.pezzottify.android.ui.component.LoadingScreen
 import com.lelloman.pezzottify.android.ui.component.NullablePezzottifyImage
 import com.lelloman.pezzottify.android.ui.component.PezzottifyImagePlaceholder
 import com.lelloman.pezzottify.android.ui.component.PezzottifyImageShape
-import com.lelloman.pezzottify.android.ui.component.ScrollingArtistsRow
-import com.lelloman.pezzottify.android.ui.component.ScrollingTextRow
 import com.lelloman.pezzottify.android.ui.component.bottomsheet.AlbumActionsBottomSheet
 import com.lelloman.pezzottify.android.ui.component.bottomsheet.PlaylistPickerBottomSheet
 import com.lelloman.pezzottify.android.ui.component.bottomsheet.TrackActionsBottomSheet
@@ -347,8 +345,7 @@ fun AlbumLoadedScreen(
                         is Content.Resolved -> TrackItem(
                             track = track.data,
                             isPlaying = track.data.id == currentPlayingTrackId,
-                            onClick = { actions.clickOnTrack(track.data.id) },
-                            onMoreClick = { onTrackMoreClick(track.data) },
+                            onClick = { onTrackMoreClick(track.data) },
                         )
                         null, is Content.Loading -> LoadingTrackItem()
                         is Content.Error -> ErrorTrackItem()
@@ -519,7 +516,6 @@ private fun TrackItem(
     track: Track,
     isPlaying: Boolean,
     onClick: () -> Unit,
-    onMoreClick: () -> Unit,
 ) {
     val backgroundColor = if (isPlaying) {
         MaterialTheme.colorScheme.primaryContainer
@@ -537,35 +533,31 @@ private fun TrackItem(
             .fillMaxWidth()
             .background(backgroundColor)
             .clickable(onClick = onClick)
-            .padding(start = 16.dp, top = 8.dp, bottom = 8.dp, end = 4.dp),
+            .padding(start = 16.dp, top = 8.dp, bottom = 8.dp, end = 16.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Column(
             modifier = Modifier.weight(1f)
         ) {
-            ScrollingTextRow(
+            Text(
                 text = track.name,
-                textStyle = MaterialTheme.typography.bodyLarge,
-                textColor = textColor,
+                style = MaterialTheme.typography.bodyLarge,
+                color = textColor,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
             )
-            ScrollingArtistsRow(
-                artists = track.artists
+            Text(
+                text = track.artists.joinToString(", ") { it.name },
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
             )
         }
         DurationText(
             durationSeconds = track.durationSeconds,
             modifier = Modifier.padding(start = 8.dp)
         )
-        IconButton(
-            onClick = onMoreClick,
-            modifier = Modifier.size(40.dp)
-        ) {
-            Icon(
-                painter = painterResource(R.drawable.baseline_more_vert_24),
-                contentDescription = stringResource(R.string.more_options),
-                tint = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
     }
 }
 
