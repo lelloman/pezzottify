@@ -129,6 +129,72 @@ fn migrate_v2_to_v3(conn: &rusqlite::Connection) -> anyhow::Result<()> {
 }
 
 // =============================================================================
+// Version 4 - Bug reports
+// =============================================================================
+
+/// Bug reports table - stores user-submitted bug reports
+///
+/// Size limits (enforced at ingestion):
+/// - description: max 100KB
+/// - logs: max 6MB
+/// - attachments: max 5 images, 25MB each (JSON array of base64 strings)
+const BUG_REPORTS_TABLE_V4: Table = Table {
+    name: "bug_reports",
+    columns: &[
+        sqlite_column!("id", &SqlType::Text, is_primary_key = true), // UUID
+        sqlite_column!("user_id", &SqlType::Integer, non_null = true),
+        sqlite_column!("user_handle", &SqlType::Text, non_null = true),
+        sqlite_column!("title", &SqlType::Text, non_null = true),
+        sqlite_column!("description", &SqlType::Text, non_null = true),
+        sqlite_column!("client_type", &SqlType::Text, non_null = true), // 'web' or 'android'
+        sqlite_column!("client_version", &SqlType::Text),
+        sqlite_column!("device_info", &SqlType::Text), // JSON
+        sqlite_column!("logs", &SqlType::Text),
+        sqlite_column!("attachments", &SqlType::Text), // JSON array of base64 images
+        sqlite_column!("created_at", &SqlType::Text, non_null = true), // ISO 8601
+    ],
+    indices: &[
+        ("idx_bug_reports_user_id", "user_id"),
+        ("idx_bug_reports_client_type", "client_type"),
+        ("idx_bug_reports_created_at", "created_at DESC"),
+    ],
+    unique_constraints: &[],
+};
+
+/// Migration from version 3 to version 4: add bug_reports table
+fn migrate_v3_to_v4(conn: &rusqlite::Connection) -> anyhow::Result<()> {
+    conn.execute(
+        "CREATE TABLE bug_reports (
+            id TEXT PRIMARY KEY,
+            user_id INTEGER NOT NULL,
+            user_handle TEXT NOT NULL,
+            title TEXT NOT NULL,
+            description TEXT NOT NULL,
+            client_type TEXT NOT NULL,
+            client_version TEXT,
+            device_info TEXT,
+            logs TEXT,
+            attachments TEXT,
+            created_at TEXT NOT NULL
+        )",
+        [],
+    )?;
+    conn.execute(
+        "CREATE INDEX idx_bug_reports_user_id ON bug_reports(user_id)",
+        [],
+    )?;
+    conn.execute(
+        "CREATE INDEX idx_bug_reports_client_type ON bug_reports(client_type)",
+        [],
+    )?;
+    conn.execute(
+        "CREATE INDEX idx_bug_reports_created_at ON bug_reports(created_at DESC)",
+        [],
+    )?;
+    Ok(())
+}
+
+// =============================================================================
 // Versioned Schema Definition
 // =============================================================================
 
@@ -137,6 +203,7 @@ fn migrate_v2_to_v3(conn: &rusqlite::Connection) -> anyhow::Result<()> {
 /// Version 1: Job runs and schedules tables
 /// Version 2: Server state key-value store
 /// Version 3: Job audit log table
+/// Version 4: Bug reports table
 pub const SERVER_VERSIONED_SCHEMAS: &[VersionedSchema] = &[
     VersionedSchema {
         version: 1,
@@ -161,6 +228,17 @@ pub const SERVER_VERSIONED_SCHEMAS: &[VersionedSchema] = &[
             JOB_AUDIT_LOG_TABLE_V3,
         ],
         migration: Some(migrate_v2_to_v3),
+    },
+    VersionedSchema {
+        version: 4,
+        tables: &[
+            JOB_RUNS_TABLE_V1,
+            JOB_SCHEDULES_TABLE_V1,
+            SERVER_STATE_TABLE_V2,
+            JOB_AUDIT_LOG_TABLE_V3,
+            BUG_REPORTS_TABLE_V4,
+        ],
+        migration: Some(migrate_v3_to_v4),
     },
 ];
 
@@ -292,5 +370,131 @@ mod tests {
         // Verify V3 schema validates
         let v3_schema = &SERVER_VERSIONED_SCHEMAS[2];
         v3_schema.validate(&conn).unwrap();
+    }
+
+    #[test]
+    fn test_v4_schema_creates_successfully() {
+        let conn = Connection::open_in_memory().unwrap();
+        let schema = &SERVER_VERSIONED_SCHEMAS[3];
+        schema.create(&conn).unwrap();
+        schema.validate(&conn).unwrap();
+    }
+
+    #[test]
+    fn test_v4_bug_reports_indices_created() {
+        let conn = Connection::open_in_memory().unwrap();
+        let schema = &SERVER_VERSIONED_SCHEMAS[3];
+        schema.create(&conn).unwrap();
+
+        // Verify bug reports indices exist
+        let idx_user_id: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND name='idx_bug_reports_user_id'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(idx_user_id, 1);
+
+        let idx_client_type: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND name='idx_bug_reports_client_type'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(idx_client_type, 1);
+
+        let idx_created_at: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND name='idx_bug_reports_created_at'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(idx_created_at, 1);
+    }
+
+    #[test]
+    fn test_migration_v3_to_v4() {
+        let conn = Connection::open_in_memory().unwrap();
+
+        // Create V3 schema
+        let v3_schema = &SERVER_VERSIONED_SCHEMAS[2];
+        v3_schema.create(&conn).unwrap();
+
+        // Run migration to V4
+        if let Some(migrate_fn) = SERVER_VERSIONED_SCHEMAS[3].migration {
+            migrate_fn(&conn).unwrap();
+        }
+
+        // Verify bug_reports table exists
+        let bug_reports_exists: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='bug_reports'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(bug_reports_exists, 1);
+
+        // Verify V4 schema validates
+        let v4_schema = &SERVER_VERSIONED_SCHEMAS[3];
+        v4_schema.validate(&conn).unwrap();
+    }
+
+    #[test]
+    fn test_bug_reports_table_columns() {
+        let conn = Connection::open_in_memory().unwrap();
+        let schema = &SERVER_VERSIONED_SCHEMAS[3];
+        schema.create(&conn).unwrap();
+
+        // Insert a test bug report to verify schema
+        conn.execute(
+            "INSERT INTO bug_reports (id, user_id, user_handle, title, description, client_type, created_at)
+             VALUES ('test-id', 1, 'testuser', 'Test Title', 'Test Description', 'web', '2024-01-15T10:30:00Z')",
+            [],
+        )
+        .unwrap();
+
+        // Verify we can read it back
+        let (id, user_id, client_type, created_at): (String, i64, String, String) = conn
+            .query_row(
+                "SELECT id, user_id, client_type, created_at FROM bug_reports WHERE id = 'test-id'",
+                [],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
+            )
+            .unwrap();
+        assert_eq!(id, "test-id");
+        assert_eq!(user_id, 1);
+        assert_eq!(client_type, "web");
+        assert_eq!(created_at, "2024-01-15T10:30:00Z");
+    }
+
+    #[test]
+    fn test_bug_reports_optional_columns() {
+        let conn = Connection::open_in_memory().unwrap();
+        let schema = &SERVER_VERSIONED_SCHEMAS[3];
+        schema.create(&conn).unwrap();
+
+        // Insert with optional fields
+        conn.execute(
+            "INSERT INTO bug_reports (id, user_id, user_handle, title, description, client_type, client_version, device_info, logs, attachments, created_at)
+             VALUES ('test-id', 1, 'testuser', 'Title', 'Desc', 'android', '1.2.3', '{\"model\":\"Pixel\"}', 'some logs', '[\"base64img\"]', '2024-01-15T10:30:00Z')",
+            [],
+        )
+        .unwrap();
+
+        let (client_version, device_info, logs, attachments): (String, String, String, String) = conn
+            .query_row(
+                "SELECT client_version, device_info, logs, attachments FROM bug_reports WHERE id = 'test-id'",
+                [],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
+            )
+            .unwrap();
+        assert_eq!(client_version, "1.2.3");
+        assert_eq!(device_info, "{\"model\":\"Pixel\"}");
+        assert_eq!(logs, "some logs");
+        assert_eq!(attachments, "[\"base64img\"]");
     }
 }
