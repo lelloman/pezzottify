@@ -12,6 +12,7 @@ pub enum Permission {
     ViewAnalytics,
     RequestContent,
     DownloadManagerAdmin,
+    ReportBug,
 }
 
 impl Permission {
@@ -26,6 +27,7 @@ impl Permission {
             Permission::ViewAnalytics => 8,
             Permission::RequestContent => 9,
             Permission::DownloadManagerAdmin => 10,
+            Permission::ReportBug => 11,
         }
     }
 
@@ -40,6 +42,7 @@ impl Permission {
             8 => Some(Permission::ViewAnalytics),
             9 => Some(Permission::RequestContent),
             10 => Some(Permission::DownloadManagerAdmin),
+            11 => Some(Permission::ReportBug),
             _ => None,
         }
     }
@@ -58,6 +61,7 @@ const REGULAR_PERMISSIONS: &[Permission] = &[
     Permission::AccessCatalog,
     Permission::LikeContent,
     Permission::OwnPlaylists,
+    Permission::ReportBug,
 ];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -117,6 +121,7 @@ mod tests {
         assert_eq!(Permission::ViewAnalytics.as_int(), 8);
         assert_eq!(Permission::RequestContent.as_int(), 9);
         assert_eq!(Permission::DownloadManagerAdmin.as_int(), 10);
+        assert_eq!(Permission::ReportBug.as_int(), 11);
     }
 
     #[test]
@@ -134,12 +139,13 @@ mod tests {
             Permission::from_int(10),
             Some(Permission::DownloadManagerAdmin)
         );
+        assert_eq!(Permission::from_int(11), Some(Permission::ReportBug));
     }
 
     #[test]
     fn permission_from_int_invalid_values() {
         assert_eq!(Permission::from_int(0), None);
-        assert_eq!(Permission::from_int(11), None);
+        assert_eq!(Permission::from_int(12), None);
         assert_eq!(Permission::from_int(-1), None);
         assert_eq!(Permission::from_int(100), None);
         assert_eq!(Permission::from_int(i32::MAX), None);
@@ -158,6 +164,7 @@ mod tests {
             Permission::ViewAnalytics,
             Permission::RequestContent,
             Permission::DownloadManagerAdmin,
+            Permission::ReportBug,
         ];
 
         for permission in &permissions {
@@ -182,16 +189,18 @@ mod tests {
 
         assert!(!admin_perms.contains(&Permission::LikeContent));
         assert!(!admin_perms.contains(&Permission::OwnPlaylists));
+        assert!(!admin_perms.contains(&Permission::ReportBug));
     }
 
     #[test]
     fn user_role_regular_permissions() {
         let regular_perms = UserRole::Regular.permissions();
 
-        assert_eq!(regular_perms.len(), 3);
+        assert_eq!(regular_perms.len(), 4);
         assert!(regular_perms.contains(&Permission::AccessCatalog));
         assert!(regular_perms.contains(&Permission::LikeContent));
         assert!(regular_perms.contains(&Permission::OwnPlaylists));
+        assert!(regular_perms.contains(&Permission::ReportBug));
 
         assert!(!regular_perms.contains(&Permission::EditCatalog));
         assert!(!regular_perms.contains(&Permission::ManagePermissions));
