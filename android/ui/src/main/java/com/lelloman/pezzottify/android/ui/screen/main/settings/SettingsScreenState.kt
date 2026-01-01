@@ -22,6 +22,7 @@ data class SettingsScreenState(
     val isBaseUrlSaving: Boolean = false,
     val isSkeletonResyncing: Boolean = false,
     val skeletonResyncResult: SkeletonResyncResult? = null,
+    val canReportBug: Boolean = false,
 )
 
 sealed interface SkeletonResyncResult {

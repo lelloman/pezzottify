@@ -370,5 +370,9 @@ class SettingsScreenViewModelTest {
         override suspend fun forceSkeletonResync(): SkeletonResyncResult {
             return SkeletonResyncResult.Success
         }
+
+        override fun observeCanReportBug(): kotlinx.coroutines.flow.Flow<Boolean> {
+            return kotlinx.coroutines.flow.flowOf(false)
+        }
     }
 }

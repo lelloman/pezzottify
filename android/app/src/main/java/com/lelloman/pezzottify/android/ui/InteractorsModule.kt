@@ -86,6 +86,9 @@ import com.lelloman.pezzottify.android.ui.screen.main.profile.ProfileScreenViewM
 import com.lelloman.pezzottify.android.ui.screen.main.profile.stylesettings.StyleSettingsViewModel
 import com.lelloman.pezzottify.android.ui.screen.main.search.SearchScreenViewModel
 import com.lelloman.pezzottify.android.ui.screen.main.settings.SettingsScreenViewModel
+import com.lelloman.pezzottify.android.ui.screen.main.settings.bugreport.BugReportScreenViewModel
+import com.lelloman.pezzottify.android.ui.screen.main.settings.bugreport.SubmitResult
+import com.lelloman.pezzottify.android.domain.remoteapi.response.RemoteApiResponse
 import com.lelloman.pezzottify.android.ui.screen.main.whatsnew.WhatsNewScreenViewModel
 import com.lelloman.pezzottify.android.ui.screen.main.notifications.NotificationListScreenViewModel
 import com.lelloman.pezzottify.android.ui.screen.main.notifications.UiNotification
@@ -277,6 +280,7 @@ class InteractorsModule {
         logFileManager: LogFileManager,
         configStore: ConfigStore,
         catalogSkeletonSyncer: com.lelloman.pezzottify.android.domain.skeleton.CatalogSkeletonSyncer,
+        permissionsStore: PermissionsStore,
     ): SettingsScreenViewModel.Interactor = object : SettingsScreenViewModel.Interactor {
         override fun getThemeMode(): UiThemeMode = userSettingsStore.themeMode.value.toUi()
 
@@ -356,6 +360,11 @@ class InteractorsModule {
                     com.lelloman.pezzottify.android.ui.screen.main.settings.SkeletonResyncResult.Failed(result.error)
             }
         }
+
+        override fun observeCanReportBug(): Flow<Boolean> =
+            permissionsStore.permissions.map { permissions ->
+                permissions.contains(DomainPermission.ReportBug)
+            }
     }
 
     @Provides
@@ -392,6 +401,36 @@ class InteractorsModule {
         logFileManager: LogFileManager,
     ): LogViewerScreenViewModel.Interactor = object : LogViewerScreenViewModel.Interactor {
         override fun getLogContent(): String = logFileManager.getLogContent()
+    }
+
+    @Provides
+    fun provideBugReportScreenInteractor(
+        logFileManager: LogFileManager,
+        remoteApiClient: RemoteApiClient,
+        buildInfo: BuildInfo,
+        deviceInfoProvider: DeviceInfoProvider,
+    ): BugReportScreenViewModel.Interactor = object : BugReportScreenViewModel.Interactor {
+        override fun getLogs(): String? = logFileManager.getLogContent().takeIf { it.isNotBlank() }
+
+        override suspend fun submitBugReport(
+            title: String?,
+            description: String,
+            logs: String?,
+        ): SubmitResult {
+            val info = deviceInfoProvider.getDeviceInfo()
+            val deviceInfo = "${info.deviceName ?: info.deviceType} (${info.osInfo ?: "Unknown"})"
+            return when (val result = remoteApiClient.submitBugReport(
+                title = title,
+                description = description,
+                clientVersion = buildInfo.versionName,
+                deviceInfo = deviceInfo,
+                logs = logs,
+                attachments = null,
+            )) {
+                is RemoteApiResponse.Success -> SubmitResult.Success
+                is RemoteApiResponse.Error -> SubmitResult.Error(result.toString())
+            }
+        }
     }
 
     @Provides
@@ -1397,4 +1436,5 @@ private fun DomainPermission.toUi(): UiPermission? = when (this) {
     DomainPermission.ViewAnalytics -> UiPermission.ViewAnalytics
     DomainPermission.RequestContent -> UiPermission.RequestContent
     DomainPermission.DownloadManagerAdmin -> UiPermission.DownloadManagerAdmin
+    DomainPermission.ReportBug -> UiPermission.ReportBug
 }

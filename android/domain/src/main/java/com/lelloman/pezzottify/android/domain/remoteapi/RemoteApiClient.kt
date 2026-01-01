@@ -179,6 +179,19 @@ interface RemoteApiClient {
      */
     suspend fun deletePlaylist(playlistId: String): RemoteApiResponse<Unit>
 
+    /**
+     * Submit a bug report.
+     * Returns the report ID on success.
+     */
+    suspend fun submitBugReport(
+        title: String?,
+        description: String,
+        clientVersion: String?,
+        deviceInfo: String?,
+        logs: String?,
+        attachments: List<String>? = null,
+    ): RemoteApiResponse<SubmitBugReportResponse>
+
     @Serializable
     enum class SearchFilter {
         Album,

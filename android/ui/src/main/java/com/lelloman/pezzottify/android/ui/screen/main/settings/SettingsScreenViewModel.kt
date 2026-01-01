@@ -82,6 +82,11 @@ class SettingsScreenViewModel @Inject constructor(
                     mutableState.update { it.copy(isFileLoggingEnabled = enabled) }
                 }
             }
+            launch {
+                interactor.observeCanReportBug().collect { canReportBug ->
+                    mutableState.update { it.copy(canReportBug = canReportBug) }
+                }
+            }
         }
     }
 
@@ -226,5 +231,6 @@ class SettingsScreenViewModel @Inject constructor(
         fun getBaseUrl(): String
         suspend fun setBaseUrl(url: String): SetBaseUrlResult
         suspend fun forceSkeletonResync(): SkeletonResyncResult
+        fun observeCanReportBug(): kotlinx.coroutines.flow.Flow<Boolean>
     }
 }

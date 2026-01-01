@@ -18,5 +18,6 @@ enum class Permission(
     ServerAdmin(R.string.permission_server_admin, R.string.permission_server_admin_desc),
     ViewAnalytics(R.string.permission_view_analytics, R.string.permission_view_analytics_desc),
     RequestContent(R.string.permission_request_content, R.string.permission_request_content_desc),
-    DownloadManagerAdmin(R.string.permission_download_manager_admin, R.string.permission_download_manager_admin_desc);
+    DownloadManagerAdmin(R.string.permission_download_manager_admin, R.string.permission_download_manager_admin_desc),
+    ReportBug(R.string.permission_report_bug, R.string.permission_report_bug_desc);
 }

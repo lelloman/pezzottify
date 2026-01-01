@@ -55,7 +55,8 @@ enum class Permission {
     ServerAdmin,
     ViewAnalytics,
     RequestContent,
-    DownloadManagerAdmin;
+    DownloadManagerAdmin,
+    ReportBug;
 
     companion object {
         /**
