@@ -296,6 +296,29 @@ async fn require_download_manager_admin(
     next.run(request).await
 }
 
+async fn require_report_bug(
+    session: Session,
+    request: Request<Body>,
+    next: Next,
+) -> impl IntoResponse {
+    debug!(
+        "require_report_bug: user_id={} permissions={:?}",
+        session.user_id, session.permissions
+    );
+    if !session.has_permission(Permission::ReportBug) {
+        debug!(
+            "require_report_bug: FORBIDDEN - user_id={} lacks ReportBug permission",
+            session.user_id
+        );
+        return StatusCode::FORBIDDEN.into_response();
+    }
+    debug!(
+        "require_report_bug: ALLOWED - user_id={}",
+        session.user_id
+    );
+    next.run(request).await
+}
+
 #[derive(Deserialize, Debug)]
 struct LoginBody {
     pub user_handle: String,
@@ -378,6 +401,39 @@ struct SyncEventsResponse {
 #[derive(Deserialize)]
 struct SyncEventsQuery {
     since: i64,
+}
+
+// ========================================================================
+// Bug Report API Types
+// ========================================================================
+
+#[derive(Deserialize, Debug)]
+struct SubmitBugReportBody {
+    pub title: Option<String>,
+    pub description: String,
+    pub client_type: String,
+    pub client_version: Option<String>,
+    pub device_info: Option<String>,
+    pub logs: Option<String>,
+    /// JSON array of base64-encoded images
+    pub attachments: Option<Vec<String>>,
+}
+
+#[derive(Serialize)]
+struct SubmitBugReportResponse {
+    id: String,
+}
+
+#[derive(Deserialize)]
+struct ListBugReportsQuery {
+    #[serde(default = "default_bug_report_limit")]
+    limit: usize,
+    #[serde(default)]
+    offset: usize,
+}
+
+fn default_bug_report_limit() -> usize {
+    50
 }
 
 // ========================================================================
@@ -547,6 +603,197 @@ async fn get_sync_events(
         current_seq,
     })
     .into_response()
+}
+
+// ========================================================================
+// Bug Report API Handlers
+// ========================================================================
+
+use crate::server_store::{
+    BugReport, BUG_REPORT_ATTACHMENT_MAX_SIZE, BUG_REPORT_DESCRIPTION_MAX_SIZE,
+    BUG_REPORT_LOGS_MAX_SIZE, BUG_REPORT_MAX_ATTACHMENTS, BUG_REPORT_TITLE_MAX_LEN,
+    BUG_REPORT_TOTAL_MAX_SIZE,
+};
+
+/// POST /v1/user/bug-report - Submit a bug report
+async fn submit_bug_report(
+    session: Session,
+    State(server_store): State<GuardedServerStore>,
+    State(user_manager): State<GuardedUserManager>,
+    Json(body): Json<SubmitBugReportBody>,
+) -> Response {
+    // Validate title length
+    if let Some(ref title) = body.title {
+        if title.len() > BUG_REPORT_TITLE_MAX_LEN {
+            return (
+                StatusCode::BAD_REQUEST,
+                format!("Title exceeds maximum length of {} characters", BUG_REPORT_TITLE_MAX_LEN),
+            )
+                .into_response();
+        }
+    }
+
+    // Validate description is not empty and within size limit
+    if body.description.is_empty() {
+        return (StatusCode::BAD_REQUEST, "Description cannot be empty").into_response();
+    }
+    if body.description.len() > BUG_REPORT_DESCRIPTION_MAX_SIZE {
+        return (
+            StatusCode::BAD_REQUEST,
+            format!(
+                "Description exceeds maximum size of {} bytes",
+                BUG_REPORT_DESCRIPTION_MAX_SIZE
+            ),
+        )
+            .into_response();
+    }
+
+    // Validate logs size
+    if let Some(ref logs) = body.logs {
+        if logs.len() > BUG_REPORT_LOGS_MAX_SIZE {
+            return (
+                StatusCode::BAD_REQUEST,
+                format!("Logs exceed maximum size of {} bytes", BUG_REPORT_LOGS_MAX_SIZE),
+            )
+                .into_response();
+        }
+    }
+
+    // Validate attachments
+    let attachments_json = if let Some(ref attachments) = body.attachments {
+        if attachments.len() > BUG_REPORT_MAX_ATTACHMENTS {
+            return (
+                StatusCode::BAD_REQUEST,
+                format!(
+                    "Too many attachments. Maximum is {} images",
+                    BUG_REPORT_MAX_ATTACHMENTS
+                ),
+            )
+                .into_response();
+        }
+
+        for (i, attachment) in attachments.iter().enumerate() {
+            if attachment.len() > BUG_REPORT_ATTACHMENT_MAX_SIZE {
+                return (
+                    StatusCode::BAD_REQUEST,
+                    format!(
+                        "Attachment {} exceeds maximum size of {} bytes",
+                        i + 1,
+                        BUG_REPORT_ATTACHMENT_MAX_SIZE
+                    ),
+                )
+                    .into_response();
+            }
+        }
+
+        // Convert to JSON string for storage
+        match serde_json::to_string(attachments) {
+            Ok(json) => Some(json),
+            Err(err) => {
+                error!("Failed to serialize attachments: {}", err);
+                return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+            }
+        }
+    } else {
+        None
+    };
+
+    // Get user handle
+    let user_handle = {
+        let um = user_manager.lock().unwrap();
+        match um.get_user_handle(session.user_id) {
+            Ok(Some(handle)) => handle,
+            Ok(None) => {
+                error!("User {} not found", session.user_id);
+                return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+            }
+            Err(err) => {
+                error!("Error getting user handle: {}", err);
+                return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+            }
+        }
+    };
+
+    // Generate a unique ID
+    let id = uuid::Uuid::new_v4().to_string();
+
+    let report = BugReport {
+        id: id.clone(),
+        user_id: session.user_id,
+        user_handle,
+        title: body.title,
+        description: body.description,
+        client_type: body.client_type,
+        client_version: body.client_version,
+        device_info: body.device_info,
+        logs: body.logs,
+        attachments: attachments_json,
+        created_at: chrono::Utc::now(),
+    };
+
+    // Insert the bug report
+    if let Err(err) = server_store.insert_bug_report(&report) {
+        error!("Failed to insert bug report: {}", err);
+        return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+    }
+
+    // Cleanup old reports if total size exceeds limit
+    match server_store.cleanup_bug_reports_to_size(BUG_REPORT_TOTAL_MAX_SIZE) {
+        Ok(deleted) if deleted > 0 => {
+            info!("Cleaned up {} old bug reports to stay under size limit", deleted);
+        }
+        Err(err) => {
+            warn!("Failed to cleanup old bug reports: {}", err);
+            // Don't fail the request, cleanup is best-effort
+        }
+        _ => {}
+    }
+
+    Json(SubmitBugReportResponse { id }).into_response()
+}
+
+/// GET /v1/admin/bug-reports - List all bug reports (admin only)
+async fn admin_list_bug_reports(
+    State(server_store): State<GuardedServerStore>,
+    Query(query): Query<ListBugReportsQuery>,
+) -> Response {
+    match server_store.list_bug_reports(query.limit, query.offset) {
+        Ok(reports) => Json(reports).into_response(),
+        Err(err) => {
+            error!("Failed to list bug reports: {}", err);
+            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+        }
+    }
+}
+
+/// GET /v1/admin/bug-report/{id} - Get a specific bug report (admin only)
+async fn admin_get_bug_report(
+    State(server_store): State<GuardedServerStore>,
+    Path(id): Path<String>,
+) -> Response {
+    match server_store.get_bug_report(&id) {
+        Ok(Some(report)) => Json(report).into_response(),
+        Ok(None) => StatusCode::NOT_FOUND.into_response(),
+        Err(err) => {
+            error!("Failed to get bug report: {}", err);
+            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+        }
+    }
+}
+
+/// DELETE /v1/admin/bug-report/{id} - Delete a bug report (admin only)
+async fn admin_delete_bug_report(
+    State(server_store): State<GuardedServerStore>,
+    Path(id): Path<String>,
+) -> Response {
+    match server_store.delete_bug_report(&id) {
+        Ok(true) => StatusCode::NO_CONTENT.into_response(),
+        Ok(false) => StatusCode::NOT_FOUND.into_response(),
+        Err(err) => {
+            error!("Failed to delete bug report: {}", err);
+            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+        }
+    }
 }
 
 /// POST /v1/user/notifications/{id}/read - Mark notification as read
@@ -4718,11 +4965,22 @@ pub async fn make_app(
         ))
         .with_state(state.clone());
 
+    // Bug report route (requires ReportBug permission)
+    let bug_report_routes: Router = Router::new()
+        .route("/bug-report", post(submit_bug_report))
+        .layer(GovernorLayer::new(write_rate_limit.clone()))
+        .route_layer(middleware::from_fn_with_state(
+            state.clone(),
+            require_report_bug,
+        ))
+        .with_state(state.clone());
+
     let user_routes = liked_content_routes
         .merge(playlist_routes)
         .merge(listening_stats_routes)
         .merge(settings_routes)
-        .merge(notifications_routes);
+        .merge(notifications_routes)
+        .merge(bug_report_routes);
 
     // Sync routes (requires AccessCatalog permission)
     // Rate limiting: uses content read limit since these are read operations
@@ -4773,6 +5031,9 @@ pub async fn make_app(
         .route("/jobs/{job_id}/trigger", post(admin_trigger_job))
         .route("/jobs/{job_id}/history", get(admin_get_job_history))
         .route("/jobs/{job_id}/audit", get(admin_get_job_audit_log_by_job))
+        .route("/bug-reports", get(admin_list_bug_reports))
+        .route("/bug-report/{id}", get(admin_get_bug_report))
+        .route("/bug-report/{id}", delete(admin_delete_bug_report))
         .layer(GovernorLayer::new(write_rate_limit.clone()))
         .route_layer(middleware::from_fn_with_state(
             state.clone(),
@@ -5244,6 +5505,34 @@ mod tests {
             Ok(vec![])
         }
         fn cleanup_old_job_audit_entries(&self, _before_timestamp: i64) -> anyhow::Result<usize> {
+            Ok(0)
+        }
+        fn insert_bug_report(
+            &self,
+            _report: &crate::server_store::BugReport,
+        ) -> anyhow::Result<()> {
+            Ok(())
+        }
+        fn get_bug_report(
+            &self,
+            _id: &str,
+        ) -> anyhow::Result<Option<crate::server_store::BugReport>> {
+            Ok(None)
+        }
+        fn list_bug_reports(
+            &self,
+            _limit: usize,
+            _offset: usize,
+        ) -> anyhow::Result<Vec<crate::server_store::BugReportSummary>> {
+            Ok(vec![])
+        }
+        fn delete_bug_report(&self, _id: &str) -> anyhow::Result<bool> {
+            Ok(false)
+        }
+        fn get_bug_reports_total_size(&self) -> anyhow::Result<usize> {
+            Ok(0)
+        }
+        fn cleanup_bug_reports_to_size(&self, _max_size: usize) -> anyhow::Result<usize> {
             Ok(0)
         }
     }
