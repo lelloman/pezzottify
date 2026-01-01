@@ -864,6 +864,45 @@ export const useRemoteStore = defineStore("remote", () => {
     }
   };
 
+  // =====================================================
+  // Admin API - Bug Reports (ServerAdmin)
+  // =====================================================
+
+  const fetchBugReports = async (limit = 50, offset = 0) => {
+    try {
+      const response = await axios.get("/v1/admin/bug-reports", {
+        params: { limit, offset },
+      });
+      return response.data;
+    } catch (error) {
+      console.error("Failed to fetch bug reports:", error);
+      return null;
+    }
+  };
+
+  const getBugReport = async (id) => {
+    try {
+      const response = await axios.get(`/v1/admin/bug-report/${id}`);
+      return response.data;
+    } catch (error) {
+      console.error("Failed to get bug report:", error);
+      return null;
+    }
+  };
+
+  const deleteBugReport = async (id) => {
+    try {
+      await axios.delete(`/v1/admin/bug-report/${id}`);
+      return { success: true };
+    } catch (error) {
+      console.error("Failed to delete bug report:", error);
+      if (error.response?.status === 404) {
+        return { error: "Bug report not found" };
+      }
+      return { error: "Failed to delete bug report" };
+    }
+  };
+
   return {
     setBlockHttpCache,
     fetchLikedAlbums,
@@ -937,5 +976,9 @@ export const useRemoteStore = defineStore("remote", () => {
     closeChangelogBatch,
     deleteChangelogBatch,
     fetchChangelogBatchChanges,
+    // Admin API - Bug Reports
+    fetchBugReports,
+    getBugReport,
+    deleteBugReport,
   };
 });

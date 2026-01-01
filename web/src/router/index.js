@@ -94,6 +94,11 @@ const router = createRouter({
           name: "admin-batches",
           meta: { requiresAuth: true, section: "batches" },
         },
+        {
+          path: "bug-reports",
+          name: "admin-bug-reports",
+          meta: { requiresAuth: true, section: "bug-reports" },
+        },
       ],
     },
 
