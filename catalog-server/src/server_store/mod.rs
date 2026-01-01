@@ -48,4 +48,15 @@ pub trait ServerStore: Send + Sync {
         offset: usize,
     ) -> Result<Vec<JobAuditEntry>>;
     fn cleanup_old_job_audit_entries(&self, before_timestamp: i64) -> Result<usize>;
+
+    // Bug reports
+    fn insert_bug_report(&self, report: &BugReport) -> Result<()>;
+    fn get_bug_report(&self, id: &str) -> Result<Option<BugReport>>;
+    fn list_bug_reports(&self, limit: usize, offset: usize) -> Result<Vec<BugReportSummary>>;
+    fn delete_bug_report(&self, id: &str) -> Result<bool>;
+    /// Returns total size in bytes of all bug reports (description + logs + attachments)
+    fn get_bug_reports_total_size(&self) -> Result<usize>;
+    /// Deletes oldest bug reports until total size is under the given limit.
+    /// Returns the number of reports deleted.
+    fn cleanup_bug_reports_to_size(&self, max_size: usize) -> Result<usize>;
 }

@@ -160,6 +160,49 @@ impl SqliteServerStore {
             error: row.get("error")?,
         })
     }
+
+    fn row_to_bug_report(row: &rusqlite::Row) -> rusqlite::Result<super::BugReport> {
+        let created_at_str: String = row.get("created_at")?;
+        let created_at = DateTime::parse_from_rfc3339(&created_at_str)
+            .map(|dt| dt.with_timezone(&Utc))
+            .unwrap_or_else(|_| Utc::now());
+
+        let user_id: i64 = row.get("user_id")?;
+
+        Ok(super::BugReport {
+            id: row.get("id")?,
+            user_id: user_id as usize,
+            user_handle: row.get("user_handle")?,
+            title: row.get("title")?,
+            description: row.get("description")?,
+            client_type: row.get("client_type")?,
+            client_version: row.get("client_version")?,
+            device_info: row.get("device_info")?,
+            logs: row.get("logs")?,
+            attachments: row.get("attachments")?,
+            created_at,
+        })
+    }
+
+    fn row_to_bug_report_summary(row: &rusqlite::Row) -> rusqlite::Result<super::BugReportSummary> {
+        let created_at_str: String = row.get("created_at")?;
+        let created_at = DateTime::parse_from_rfc3339(&created_at_str)
+            .map(|dt| dt.with_timezone(&Utc))
+            .unwrap_or_else(|_| Utc::now());
+
+        let user_id: i64 = row.get("user_id")?;
+        let size_bytes: i64 = row.get("size_bytes")?;
+
+        Ok(super::BugReportSummary {
+            id: row.get("id")?,
+            user_id: user_id as usize,
+            user_handle: row.get("user_handle")?,
+            title: row.get("title")?,
+            client_type: row.get("client_type")?,
+            created_at,
+            size_bytes: size_bytes as usize,
+        })
+    }
 }
 
 impl ServerStore for SqliteServerStore {
@@ -412,11 +455,120 @@ impl ServerStore for SqliteServerStore {
 
         Ok(deleted)
     }
+
+    fn insert_bug_report(&self, report: &super::BugReport) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        let created_at = Self::format_datetime(&report.created_at);
+
+        conn.execute(
+            "INSERT INTO bug_reports (id, user_id, user_handle, title, description, client_type, client_version, device_info, logs, attachments, created_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+            params![
+                report.id,
+                report.user_id as i64,
+                report.user_handle,
+                report.title,
+                report.description,
+                report.client_type,
+                report.client_version,
+                report.device_info,
+                report.logs,
+                report.attachments,
+                created_at,
+            ],
+        )?;
+
+        Ok(())
+    }
+
+    fn get_bug_report(&self, id: &str) -> Result<Option<super::BugReport>> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare(
+            "SELECT id, user_id, user_handle, title, description, client_type, client_version, device_info, logs, attachments, created_at
+             FROM bug_reports WHERE id = ?1",
+        )?;
+
+        let report = stmt
+            .query_row(params![id], Self::row_to_bug_report)
+            .optional()?;
+
+        Ok(report)
+    }
+
+    fn list_bug_reports(&self, limit: usize, offset: usize) -> Result<Vec<super::BugReportSummary>> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare(
+            "SELECT id, user_id, user_handle, title, client_type, created_at,
+                    LENGTH(COALESCE(description, '')) + LENGTH(COALESCE(logs, '')) + LENGTH(COALESCE(attachments, '')) as size_bytes
+             FROM bug_reports
+             ORDER BY created_at DESC
+             LIMIT ?1 OFFSET ?2",
+        )?;
+
+        let summaries = stmt
+            .query_map(params![limit as i64, offset as i64], Self::row_to_bug_report_summary)?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+
+        Ok(summaries)
+    }
+
+    fn delete_bug_report(&self, id: &str) -> Result<bool> {
+        let conn = self.conn.lock().unwrap();
+        let deleted = conn.execute("DELETE FROM bug_reports WHERE id = ?1", params![id])?;
+        Ok(deleted > 0)
+    }
+
+    fn get_bug_reports_total_size(&self) -> Result<usize> {
+        let conn = self.conn.lock().unwrap();
+        let size: i64 = conn.query_row(
+            "SELECT COALESCE(SUM(LENGTH(COALESCE(description, '')) + LENGTH(COALESCE(logs, '')) + LENGTH(COALESCE(attachments, ''))), 0)
+             FROM bug_reports",
+            [],
+            |row| row.get(0),
+        )?;
+        Ok(size as usize)
+    }
+
+    fn cleanup_bug_reports_to_size(&self, max_size: usize) -> Result<usize> {
+        let conn = self.conn.lock().unwrap();
+        let mut deleted_count = 0;
+
+        loop {
+            // Check current total size
+            let current_size: i64 = conn.query_row(
+                "SELECT COALESCE(SUM(LENGTH(COALESCE(description, '')) + LENGTH(COALESCE(logs, '')) + LENGTH(COALESCE(attachments, ''))), 0)
+                 FROM bug_reports",
+                [],
+                |row| row.get(0),
+            )?;
+
+            if (current_size as usize) <= max_size {
+                break;
+            }
+
+            // Delete the oldest report
+            let deleted = conn.execute(
+                "DELETE FROM bug_reports WHERE id = (
+                    SELECT id FROM bug_reports ORDER BY created_at ASC LIMIT 1
+                )",
+                [],
+            )?;
+
+            if deleted == 0 {
+                break; // No more reports to delete
+            }
+
+            deleted_count += deleted;
+        }
+
+        Ok(deleted_count)
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::server_store::BugReport;
     use tempfile::TempDir;
 
     struct TestStore {
@@ -642,5 +794,152 @@ mod tests {
 
         let value = store.get_state("corruption_handler").unwrap();
         assert_eq!(value, Some(json.to_string()));
+    }
+
+    // Bug report tests
+
+    fn create_test_bug_report(id: &str, user_id: usize) -> BugReport {
+        BugReport {
+            id: id.to_string(),
+            user_id,
+            user_handle: format!("user_{}", user_id),
+            title: Some("Test Bug".to_string()),
+            description: "This is a test bug report".to_string(),
+            client_type: "android".to_string(),
+            client_version: Some("1.0.0".to_string()),
+            device_info: Some("Pixel 6".to_string()),
+            logs: Some("Some log data".to_string()),
+            attachments: Some(r#"["base64data1","base64data2"]"#.to_string()),
+            created_at: Utc::now(),
+        }
+    }
+
+    #[test]
+    fn test_bug_report_insert_and_get() {
+        let test = create_test_store();
+        let store = &test.store;
+
+        let report = create_test_bug_report("bug-1", 1);
+        store.insert_bug_report(&report).unwrap();
+
+        let retrieved = store.get_bug_report("bug-1").unwrap().unwrap();
+        assert_eq!(retrieved.id, "bug-1");
+        assert_eq!(retrieved.user_id, 1);
+        assert_eq!(retrieved.user_handle, "user_1");
+        assert_eq!(retrieved.title, Some("Test Bug".to_string()));
+        assert_eq!(retrieved.description, "This is a test bug report");
+        assert_eq!(retrieved.client_type, "android");
+        assert_eq!(retrieved.client_version, Some("1.0.0".to_string()));
+        assert_eq!(retrieved.logs, Some("Some log data".to_string()));
+    }
+
+    #[test]
+    fn test_bug_report_get_nonexistent() {
+        let test = create_test_store();
+        let store = &test.store;
+
+        let result = store.get_bug_report("nonexistent").unwrap();
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_bug_report_list() {
+        let test = create_test_store();
+        let store = &test.store;
+
+        // Insert multiple reports
+        for i in 0..5 {
+            let report = create_test_bug_report(&format!("bug-{}", i), i);
+            store.insert_bug_report(&report).unwrap();
+        }
+
+        // List with limit
+        let list = store.list_bug_reports(3, 0).unwrap();
+        assert_eq!(list.len(), 3);
+
+        // Verify summaries have size_bytes
+        for summary in &list {
+            assert!(summary.size_bytes > 0);
+        }
+
+        // List with offset
+        let list = store.list_bug_reports(10, 3).unwrap();
+        assert_eq!(list.len(), 2);
+    }
+
+    #[test]
+    fn test_bug_report_delete() {
+        let test = create_test_store();
+        let store = &test.store;
+
+        let report = create_test_bug_report("bug-delete", 1);
+        store.insert_bug_report(&report).unwrap();
+
+        // Verify it exists
+        assert!(store.get_bug_report("bug-delete").unwrap().is_some());
+
+        // Delete it
+        let deleted = store.delete_bug_report("bug-delete").unwrap();
+        assert!(deleted);
+
+        // Verify it's gone
+        assert!(store.get_bug_report("bug-delete").unwrap().is_none());
+
+        // Deleting again should return false
+        let deleted_again = store.delete_bug_report("bug-delete").unwrap();
+        assert!(!deleted_again);
+    }
+
+    #[test]
+    fn test_bug_report_total_size() {
+        let test = create_test_store();
+        let store = &test.store;
+
+        // Initially empty
+        assert_eq!(store.get_bug_reports_total_size().unwrap(), 0);
+
+        // Insert a report
+        let report = create_test_bug_report("bug-size", 1);
+        store.insert_bug_report(&report).unwrap();
+
+        // Size should be positive
+        let size = store.get_bug_reports_total_size().unwrap();
+        assert!(size > 0);
+    }
+
+    #[test]
+    fn test_bug_report_cleanup_to_size() {
+        let test = create_test_store();
+        let store = &test.store;
+
+        // Insert reports with known sizes
+        for i in 0..5 {
+            let mut report = create_test_bug_report(&format!("bug-cleanup-{}", i), i);
+            report.description = "x".repeat(1000); // 1KB each roughly
+            store.insert_bug_report(&report).unwrap();
+        }
+
+        let initial_size = store.get_bug_reports_total_size().unwrap();
+        assert!(initial_size > 4000);
+
+        // Cleanup to a small size - should delete some reports
+        let deleted = store.cleanup_bug_reports_to_size(2000).unwrap();
+        assert!(deleted > 0);
+
+        let final_size = store.get_bug_reports_total_size().unwrap();
+        assert!(final_size <= 2000);
+    }
+
+    #[test]
+    fn test_bug_report_cleanup_already_under_limit() {
+        let test = create_test_store();
+        let store = &test.store;
+
+        let report = create_test_bug_report("bug-small", 1);
+        store.insert_bug_report(&report).unwrap();
+
+        // Cleanup with a large limit - should delete nothing
+        let deleted = store.cleanup_bug_reports_to_size(1_000_000).unwrap();
+        assert_eq!(deleted, 0);
     }
 }

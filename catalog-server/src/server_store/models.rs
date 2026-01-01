@@ -1,6 +1,44 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
+/// Size limits for bug report fields (in bytes)
+pub const BUG_REPORT_TITLE_MAX_LEN: usize = 200;
+pub const BUG_REPORT_DESCRIPTION_MAX_SIZE: usize = 100 * 1024; // 100KB
+pub const BUG_REPORT_LOGS_MAX_SIZE: usize = 6 * 1024 * 1024; // 6MB
+pub const BUG_REPORT_ATTACHMENT_MAX_SIZE: usize = 25 * 1024 * 1024; // 25MB per image
+pub const BUG_REPORT_MAX_ATTACHMENTS: usize = 5;
+pub const BUG_REPORT_TOTAL_MAX_SIZE: usize = 500 * 1024 * 1024; // 500MB total storage
+
+/// A bug report submitted by a user.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BugReport {
+    pub id: String,
+    pub user_id: usize,
+    pub user_handle: String,
+    pub title: Option<String>,
+    pub description: String,
+    pub client_type: String,
+    pub client_version: Option<String>,
+    pub device_info: Option<String>,
+    pub logs: Option<String>,
+    /// JSON array of base64-encoded images
+    pub attachments: Option<String>,
+    pub created_at: DateTime<Utc>,
+}
+
+/// Summary of a bug report for listing.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BugReportSummary {
+    pub id: String,
+    pub user_id: usize,
+    pub user_handle: String,
+    pub title: Option<String>,
+    pub client_type: String,
+    pub created_at: DateTime<Utc>,
+    /// Approximate size in bytes (description + logs + attachments)
+    pub size_bytes: usize,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum JobRunStatus {
     Running,
