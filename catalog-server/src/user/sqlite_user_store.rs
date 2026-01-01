@@ -3303,7 +3303,7 @@ mod tests {
         // First create a user
         let (store, _temp_dir) = create_tmp_store();
         let user_handle = "test_handle";
-        let test_user_id = store.create_user(&user_handle).unwrap();
+        let test_user_id = store.create_user(user_handle).unwrap();
 
         // Create a playlist
         let plyalist_id = store

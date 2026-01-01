@@ -181,22 +181,20 @@ mod tests {
 
     #[test]
     fn makes_sim_hashes() {
-        let names = vec![
-            "ma che c'entra sta stringa qui?",
+        let names = ["ma che c'entra sta stringa qui?",
             "the rich fat cat",
             "a cat",
             "a rich black cat",
             "a black cat",
             "the rich cat fat",
-            "a rich fat black cat",
-        ];
-        let hashes: Vec<SimHash> = names.iter().map(|s| make_sim_hash(s)).collect();
+            "a rich fat black cat"];
+        let hashes: Vec<SimHash> = names.iter().map(make_sim_hash).collect();
         for h in hashes.iter() {
             println!("{:}", h);
         }
 
         let target = "a rich fat black cat";
-        let target_hash = make_sim_hash(&target);
+        let target_hash = make_sim_hash(target);
 
         let distances: Vec<u32> = hashes.iter().map(|h| h - &target_hash).collect();
 

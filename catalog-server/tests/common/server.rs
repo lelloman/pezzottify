@@ -10,7 +10,7 @@ use pezzottify_catalog_server::search::NoOpSearchVault;
 use pezzottify_catalog_server::server::state::GuardedSearchVault;
 use pezzottify_catalog_server::server::{server::make_app, RequestsLoggingLevel, ServerConfig};
 use pezzottify_catalog_server::server_store::SqliteServerStore;
-use pezzottify_catalog_server::user::{FullUserStore, SqliteUserStore, UserManager, UserStore};
+use pezzottify_catalog_server::user::{FullUserStore, SqliteUserStore, UserManager};
 use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
