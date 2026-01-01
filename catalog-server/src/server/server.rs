@@ -312,10 +312,7 @@ async fn require_report_bug(
         );
         return StatusCode::FORBIDDEN.into_response();
     }
-    debug!(
-        "require_report_bug: ALLOWED - user_id={}",
-        session.user_id
-    );
+    debug!("require_report_bug: ALLOWED - user_id={}", session.user_id);
     next.run(request).await
 }
 
@@ -627,7 +624,10 @@ async fn submit_bug_report(
         if title.len() > BUG_REPORT_TITLE_MAX_LEN {
             return (
                 StatusCode::BAD_REQUEST,
-                format!("Title exceeds maximum length of {} characters", BUG_REPORT_TITLE_MAX_LEN),
+                format!(
+                    "Title exceeds maximum length of {} characters",
+                    BUG_REPORT_TITLE_MAX_LEN
+                ),
             )
                 .into_response();
         }
@@ -653,7 +653,10 @@ async fn submit_bug_report(
         if logs.len() > BUG_REPORT_LOGS_MAX_SIZE {
             return (
                 StatusCode::BAD_REQUEST,
-                format!("Logs exceed maximum size of {} bytes", BUG_REPORT_LOGS_MAX_SIZE),
+                format!(
+                    "Logs exceed maximum size of {} bytes",
+                    BUG_REPORT_LOGS_MAX_SIZE
+                ),
             )
                 .into_response();
         }
@@ -740,7 +743,10 @@ async fn submit_bug_report(
     // Cleanup old reports if total size exceeds limit
     match server_store.cleanup_bug_reports_to_size(BUG_REPORT_TOTAL_MAX_SIZE) {
         Ok(deleted) if deleted > 0 => {
-            info!("Cleaned up {} old bug reports to stay under size limit", deleted);
+            info!(
+                "Cleaned up {} old bug reports to stay under size limit",
+                deleted
+            );
         }
         Err(err) => {
             warn!("Failed to cleanup old bug reports: {}", err);
