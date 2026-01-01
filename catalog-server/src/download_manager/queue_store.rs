@@ -3377,15 +3377,15 @@ mod tests {
 
         // Year should be reasonable (2020-2100)
         let year: i32 = date[0..4].parse().unwrap();
-        assert!(year >= 2020 && year <= 2100);
+        assert!((2020..=2100).contains(&year));
 
         // Month should be 01-12
         let month: i32 = date[5..7].parse().unwrap();
-        assert!(month >= 1 && month <= 12);
+        assert!((1..=12).contains(&month));
 
         // Day should be 01-31
         let day: i32 = date[8..10].parse().unwrap();
-        assert!(day >= 1 && day <= 31);
+        assert!((1..=31).contains(&day));
     }
 
     #[test]

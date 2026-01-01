@@ -451,7 +451,7 @@ mod tests {
         assert!(end >= start);
 
         // Dates should be in YYYYMMDD format (8 digits)
-        assert!(start >= 10000000 && start <= 99999999);
-        assert!(end >= 10000000 && end <= 99999999);
+        assert!((10000000..=99999999).contains(&start));
+        assert!((10000000..=99999999).contains(&end));
     }
 }
