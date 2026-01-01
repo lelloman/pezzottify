@@ -495,7 +495,11 @@ impl ServerStore for SqliteServerStore {
         Ok(report)
     }
 
-    fn list_bug_reports(&self, limit: usize, offset: usize) -> Result<Vec<super::BugReportSummary>> {
+    fn list_bug_reports(
+        &self,
+        limit: usize,
+        offset: usize,
+    ) -> Result<Vec<super::BugReportSummary>> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
             "SELECT id, user_id, user_handle, title, client_type, created_at,
@@ -506,7 +510,10 @@ impl ServerStore for SqliteServerStore {
         )?;
 
         let summaries = stmt
-            .query_map(params![limit as i64, offset as i64], Self::row_to_bug_report_summary)?
+            .query_map(
+                params![limit as i64, offset as i64],
+                Self::row_to_bug_report_summary,
+            )?
             .collect::<rusqlite::Result<Vec<_>>>()?;
 
         Ok(summaries)
