@@ -181,13 +181,15 @@ mod tests {
 
     #[test]
     fn makes_sim_hashes() {
-        let names = ["ma che c'entra sta stringa qui?",
+        let names = [
+            "ma che c'entra sta stringa qui?",
             "the rich fat cat",
             "a cat",
             "a rich black cat",
             "a black cat",
             "the rich cat fat",
-            "a rich fat black cat"];
+            "a rich fat black cat",
+        ];
         let hashes: Vec<SimHash> = names.iter().map(make_sim_hash).collect();
         for h in hashes.iter() {
             println!("{:}", h);

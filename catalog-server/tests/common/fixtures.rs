@@ -6,8 +6,7 @@
 use super::constants::*;
 use anyhow::Result;
 use pezzottify_catalog_server::catalog_store::{
-    Album, AlbumType, Artist, ArtistRole, Format, SqliteCatalogStore, Track,
-    TrackAvailability,
+    Album, AlbumType, Artist, ArtistRole, Format, SqliteCatalogStore, Track, TrackAvailability,
 };
 use pezzottify_catalog_server::user::auth::PezzottifyHasher;
 use pezzottify_catalog_server::user::{
