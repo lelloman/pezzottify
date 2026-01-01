@@ -41,6 +41,7 @@ import com.lelloman.pezzottify.android.ui.theme.AppFontFamily
 import com.lelloman.pezzottify.android.ui.theme.ColorPalette
 import com.lelloman.pezzottify.android.ui.theme.PezzottifyTheme
 import com.lelloman.pezzottify.android.ui.theme.ThemeMode
+import com.lelloman.pezzottify.android.ui.toBugReport
 import com.lelloman.pezzottify.android.ui.toLogViewer
 import com.lelloman.pezzottify.android.ui.toStyleSettings
 import kotlinx.coroutines.flow.Flow
@@ -174,6 +175,15 @@ private fun SettingsScreenInternal(
                 onShareLogs = actions::shareLogs,
                 onClearLogs = actions::clearLogs,
             )
+
+            // Bug Report Section - only shown if user has ReportBug permission
+            if (currentState.canReportBug) {
+                HorizontalDivider(modifier = Modifier.padding(vertical = 24.dp))
+
+                BugReportSection(
+                    onReportBug = { navController.toBugReport() }
+                )
+            }
 
             HorizontalDivider(modifier = Modifier.padding(vertical = 24.dp))
 

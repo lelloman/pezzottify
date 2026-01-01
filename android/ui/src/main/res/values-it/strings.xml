@@ -173,6 +173,20 @@
     <string name="scroll_to_bottom">Scorri in basso</string>
     <!-- LOG VIEWER SCREEN -->
 
+    <!-- BUG REPORT -->
+    <string name="report_bug">Segnala bug</string>
+    <string name="report_bug_description">Invia una segnalazione di bug con log e info dispositivo</string>
+    <string name="bug_report_title">Titolo (opzionale)</string>
+    <string name="bug_report_description">Descrizione</string>
+    <string name="bug_report_description_hint">Descrivi il problema riscontrato…</string>
+    <string name="bug_report_include_logs">Includi log</string>
+    <string name="bug_report_include_logs_description">Allega i log dell\'app per aiutare a diagnosticare il problema</string>
+    <string name="bug_report_submit">Invia segnalazione</string>
+    <string name="bug_report_description_required">La descrizione è obbligatoria</string>
+    <string name="bug_report_success">Segnalazione inviata con successo</string>
+    <string name="bug_report_error">Invio segnalazione fallito</string>
+    <!-- BUG REPORT -->
+
     <!-- EXTERNAL SEARCH SECTION -->
     <string name="external_search">Ricerca esterna</string>
     <string name="enable_external_search">Abilita ricerca esterna</string>
@@ -333,6 +347,7 @@
     <string name="permission_view_analytics">Visualizza statistiche</string>
     <string name="permission_request_content">Richiedi contenuti</string>
     <string name="permission_download_manager_admin">Amministratore download</string>
+    <string name="permission_report_bug">Segnala bug</string>
     <string name="permission_access_catalog_desc">Sfoglia e riproduci musica dal catalogo.</string>
     <string name="permission_like_content_desc">Metti mi piace ad album, artisti e brani, crea la tua libreria personale.</string>
     <string name="permission_own_playlists_desc">Crea e gestisci playlist personali.</string>
@@ -342,6 +357,7 @@
     <string name="permission_view_analytics_desc">Visualizza statistiche di ascolto e analytics.</string>
     <string name="permission_request_content_desc">Cerca su provider musicali esterni e richiedi download di contenuti.</string>
     <string name="permission_download_manager_admin_desc">Gestisci la coda download, visualizza log di audit e riprova download falliti.</string>
+    <string name="permission_report_bug_desc">Invia segnalazioni di bug con log e screenshot.</string>
     <!-- PERMISSIONS -->
 
     <!-- SEARCH FILTERS -->

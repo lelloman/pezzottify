@@ -81,6 +81,7 @@ import com.lelloman.pezzottify.android.ui.screen.main.profile.ProfileScreen
 import com.lelloman.pezzottify.android.ui.screen.main.profile.stylesettings.StyleSettingsScreen
 import com.lelloman.pezzottify.android.ui.screen.main.search.SearchScreen
 import com.lelloman.pezzottify.android.ui.screen.main.settings.SettingsScreen
+import com.lelloman.pezzottify.android.ui.screen.main.settings.bugreport.BugReportScreen
 import com.lelloman.pezzottify.android.ui.screen.main.settings.logviewer.LogViewerScreen
 
 enum class BottomNavigationRoute(
@@ -254,6 +255,9 @@ private fun MainScreenContent(state: MainScreenState, actions: MainScreenActions
                 }
                 composable<Screen.Main.Home.LogViewer> {
                     LogViewerScreen(navController)
+                }
+                composable<Screen.Main.Home.BugReport> {
+                    BugReportScreen(navController)
                 }
                 composable<Screen.Main.Artist> {
                     ArtistScreen(it.toRoute<Screen.Main.Artist>().artistId, navController)

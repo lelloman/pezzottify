@@ -174,6 +174,20 @@
     <string name="scroll_to_bottom">Scroll to bottom</string>
     <!-- LOG VIEWER SCREEN -->
 
+    <!-- BUG REPORT -->
+    <string name="report_bug">Report Bug</string>
+    <string name="report_bug_description">Submit a bug report with logs and device info</string>
+    <string name="bug_report_title">Title (optional)</string>
+    <string name="bug_report_description">Description</string>
+    <string name="bug_report_description_hint">Describe the issue you encountered…</string>
+    <string name="bug_report_include_logs">Include logs</string>
+    <string name="bug_report_include_logs_description">Attach app logs to help diagnose the issue</string>
+    <string name="bug_report_submit">Submit Report</string>
+    <string name="bug_report_description_required">Description is required</string>
+    <string name="bug_report_success">Bug report submitted successfully</string>
+    <string name="bug_report_error">Failed to submit bug report</string>
+    <!-- BUG REPORT -->
+
     <!-- EXTERNAL SEARCH SECTION -->
     <string name="external_search">External Search</string>
     <string name="enable_external_search">Enable external search</string>
@@ -333,6 +347,7 @@
     <string name="permission_view_analytics">View Analytics</string>
     <string name="permission_request_content">Request Content</string>
     <string name="permission_download_manager_admin">Download Manager Admin</string>
+    <string name="permission_report_bug">Report Bug</string>
     <string name="permission_access_catalog_desc">Browse and play music from the catalog.</string>
     <string name="permission_like_content_desc">Like albums, artists, and tracks, make your personal library.</string>
     <string name="permission_own_playlists_desc">Create and manage personal playlists.</string>
@@ -342,6 +357,7 @@
     <string name="permission_view_analytics_desc">View listening statistics and analytics.</string>
     <string name="permission_request_content_desc">Search external music provider and request content downloads.</string>
     <string name="permission_download_manager_admin_desc">Manage download queue, view audit logs, and retry failed downloads.</string>
+    <string name="permission_report_bug_desc">Submit bug reports with logs and screenshots.</string>
     <!-- PERMISSIONS -->
 
     <!-- SEARCH FILTERS -->

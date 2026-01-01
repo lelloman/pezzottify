@@ -25,11 +25,13 @@ import com.lelloman.pezzottify.android.domain.remoteapi.response.SyncStateRespon
 import com.lelloman.pezzottify.android.domain.remoteapi.response.TrackResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.WhatsNewResponse
 import com.lelloman.pezzottify.android.domain.sync.UserSetting
+import com.lelloman.pezzottify.android.domain.remoteapi.SubmitBugReportResponse
 import com.lelloman.pezzottify.android.remoteapi.internal.requests.CreatePlaylistRequest
 import com.lelloman.pezzottify.android.remoteapi.internal.requests.ListeningEventRequest
 import com.lelloman.pezzottify.android.remoteapi.internal.requests.LoginRequest
 import com.lelloman.pezzottify.android.remoteapi.internal.requests.RequestAlbumDownloadBody
 import com.lelloman.pezzottify.android.remoteapi.internal.requests.SearchRequest
+import com.lelloman.pezzottify.android.remoteapi.internal.requests.SubmitBugReportRequest
 import com.lelloman.pezzottify.android.remoteapi.internal.requests.UpdatePlaylistRequest
 import com.lelloman.pezzottify.android.remoteapi.internal.requests.UpdateUserSettingsRequest
 import kotlinx.coroutines.CoroutineScope
@@ -411,6 +413,30 @@ internal class RemoteApiClientImpl(
                 .deletePlaylist(authToken = authToken, playlistId = playlistId)
                 .returnFromRetrofitResponse()
         }
+
+    override suspend fun submitBugReport(
+        title: String?,
+        description: String,
+        clientVersion: String?,
+        deviceInfo: String?,
+        logs: String?,
+        attachments: List<String>?,
+    ): RemoteApiResponse<SubmitBugReportResponse> = catchingNetworkError {
+        getRetrofit()
+            .submitBugReport(
+                authToken = authToken,
+                request = SubmitBugReportRequest(
+                    title = title,
+                    description = description,
+                    clientType = "android",
+                    clientVersion = clientVersion,
+                    deviceInfo = deviceInfo,
+                    logs = logs,
+                    attachments = attachments,
+                )
+            )
+            .returnFromRetrofitResponse()
+    }
 
     private suspend fun <T> catchingNetworkError(block: suspend () -> RemoteApiResponse<T>): RemoteApiResponse<T> =
         try {

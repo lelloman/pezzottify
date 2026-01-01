@@ -7,8 +7,10 @@ import com.lelloman.pezzottify.android.remoteapi.internal.requests.ListeningEven
 import com.lelloman.pezzottify.android.remoteapi.internal.requests.LoginRequest
 import com.lelloman.pezzottify.android.remoteapi.internal.requests.RequestAlbumDownloadBody
 import com.lelloman.pezzottify.android.remoteapi.internal.requests.SearchRequest
+import com.lelloman.pezzottify.android.remoteapi.internal.requests.SubmitBugReportRequest
 import com.lelloman.pezzottify.android.remoteapi.internal.requests.UpdatePlaylistRequest
 import com.lelloman.pezzottify.android.remoteapi.internal.requests.UpdateUserSettingsRequest
+import com.lelloman.pezzottify.android.domain.remoteapi.SubmitBugReportResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.AlbumResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.DownloadLimitsResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.ListeningEventItem
@@ -211,4 +213,12 @@ internal interface RetrofitApiClient {
         @Header("Authorization") authToken: String,
         @Path("playlistId") playlistId: String,
     ): Response<Unit>
+
+    // Bug report endpoint
+
+    @POST("/v1/user/bug-report")
+    suspend fun submitBugReport(
+        @Header("Authorization") authToken: String,
+        @Body request: SubmitBugReportRequest,
+    ): Response<SubmitBugReportResponse>
 }
