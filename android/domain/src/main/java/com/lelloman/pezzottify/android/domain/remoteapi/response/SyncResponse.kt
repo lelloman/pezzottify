@@ -2,6 +2,7 @@ package com.lelloman.pezzottify.android.domain.remoteapi.response
 
 import com.lelloman.pezzottify.android.domain.notifications.Notification
 import com.lelloman.pezzottify.android.domain.sync.Permission
+import com.lelloman.pezzottify.android.domain.sync.PermissionListSerializer
 import com.lelloman.pezzottify.android.domain.sync.StoredEvent
 import com.lelloman.pezzottify.android.domain.sync.UserSetting
 import kotlinx.serialization.SerialName
@@ -17,6 +18,7 @@ data class SyncStateResponse(
     val likes: LikesState,
     val settings: List<UserSetting>,
     val playlists: List<PlaylistState>,
+    @Serializable(with = PermissionListSerializer::class)
     val permissions: List<Permission>,
     val notifications: List<Notification> = emptyList(),
 )

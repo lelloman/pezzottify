@@ -1,6 +1,7 @@
 package com.lelloman.pezzottify.android.domain.sync
 
 import com.google.common.truth.Truth.assertThat
+import com.lelloman.pezzottify.android.domain.remoteapi.response.SyncStateResponse
 import kotlinx.serialization.json.Json
 import org.junit.Test
 
@@ -311,6 +312,126 @@ class SyncEventTest {
         assertThat(deserialized.serverTimestamp).isEqualTo(original.serverTimestamp)
         assertThat(deserialized.payload.contentType).isEqualTo(original.payload.contentType)
         assertThat(deserialized.payload.contentId).isEqualTo(original.payload.contentId)
+    }
+
+    // endregion
+
+    // region Unknown permission handling (forward compatibility)
+
+    @Test
+    fun `permission_granted with unknown permission returns null event`() {
+        val jsonString = """
+            {
+                "seq": 100,
+                "type": "permission_granted",
+                "payload": {
+                    "permission": "FuturePermission"
+                },
+                "server_timestamp": 1701700100
+            }
+        """.trimIndent()
+
+        val storedEvent = json.decodeFromString<StoredEvent>(jsonString)
+
+        // The permission field should be null for unknown permission
+        assertThat(storedEvent.payload.permission).isNull()
+        // Therefore toSyncEvent should return null (no permission to grant)
+        assertThat(storedEvent.toSyncEvent()).isNull()
+    }
+
+    @Test
+    fun `permission_revoked with unknown permission returns null event`() {
+        val jsonString = """
+            {
+                "seq": 101,
+                "type": "permission_revoked",
+                "payload": {
+                    "permission": "NonExistentPermission"
+                },
+                "server_timestamp": 1701700101
+            }
+        """.trimIndent()
+
+        val storedEvent = json.decodeFromString<StoredEvent>(jsonString)
+
+        assertThat(storedEvent.payload.permission).isNull()
+        assertThat(storedEvent.toSyncEvent()).isNull()
+    }
+
+    @Test
+    fun `permissions_reset filters out unknown permissions`() {
+        val jsonString = """
+            {
+                "seq": 102,
+                "type": "permissions_reset",
+                "payload": {
+                    "permissions": ["AccessCatalog", "FuturePermission", "LikeContent", "AnotherUnknown"]
+                },
+                "server_timestamp": 1701700102
+            }
+        """.trimIndent()
+
+        val storedEvent = json.decodeFromString<StoredEvent>(jsonString)
+        val event = storedEvent.toSyncEvent()
+
+        assertThat(event).isInstanceOf(SyncEvent.PermissionsReset::class.java)
+        val permissionsReset = event as SyncEvent.PermissionsReset
+        // Only known permissions should be included
+        assertThat(permissionsReset.permissions).containsExactly(
+            Permission.AccessCatalog,
+            Permission.LikeContent,
+        )
+    }
+
+    @Test
+    fun `permissions_reset with all unknown permissions returns empty list`() {
+        val jsonString = """
+            {
+                "seq": 103,
+                "type": "permissions_reset",
+                "payload": {
+                    "permissions": ["Unknown1", "Unknown2"]
+                },
+                "server_timestamp": 1701700103
+            }
+        """.trimIndent()
+
+        val storedEvent = json.decodeFromString<StoredEvent>(jsonString)
+        val event = storedEvent.toSyncEvent()
+
+        assertThat(event).isInstanceOf(SyncEvent.PermissionsReset::class.java)
+        val permissionsReset = event as SyncEvent.PermissionsReset
+        assertThat(permissionsReset.permissions).isEmpty()
+    }
+
+    @Test
+    fun `Permission fromNameOrNull returns null for unknown permission`() {
+        assertThat(Permission.fromNameOrNull("AccessCatalog")).isEqualTo(Permission.AccessCatalog)
+        assertThat(Permission.fromNameOrNull("UnknownPermission")).isNull()
+        assertThat(Permission.fromNameOrNull("")).isNull()
+        assertThat(Permission.fromNameOrNull("accesscatalog")).isNull() // case sensitive
+    }
+
+    @Test
+    fun `SyncStateResponse filters out unknown permissions`() {
+        val jsonString = """
+            {
+                "seq": 1,
+                "likes": {"albums": [], "artists": [], "tracks": []},
+                "settings": [],
+                "playlists": [],
+                "permissions": ["AccessCatalog", "FuturePermission", "ServerAdmin", "AnotherUnknown"],
+                "notifications": []
+            }
+        """.trimIndent()
+
+        val response = json.decodeFromString<SyncStateResponse>(jsonString)
+
+        // Only known permissions should be included
+        assertThat(response.permissions).containsExactly(
+            Permission.AccessCatalog,
+            Permission.ServerAdmin,
+        )
     }
 
     // endregion

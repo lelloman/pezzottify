@@ -2,8 +2,14 @@ package com.lelloman.pezzottify.android.domain.sync
 
 import com.lelloman.pezzottify.android.domain.notifications.Notification
 import kotlinx.serialization.ExperimentalSerializationApi
+import kotlinx.serialization.KSerializer
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.descriptors.PrimitiveKind
+import kotlinx.serialization.descriptors.PrimitiveSerialDescriptor
+import kotlinx.serialization.descriptors.SerialDescriptor
+import kotlinx.serialization.encoding.Decoder
+import kotlinx.serialization.encoding.Encoder
 import kotlinx.serialization.json.JsonClassDiscriminator
 
 /**
@@ -34,8 +40,12 @@ sealed interface UserSetting {
 
 /**
  * User permissions that can be granted/revoked.
+ *
+ * This enum is NOT directly serializable. Use [NullablePermissionSerializer] or
+ * [PermissionListSerializer] for fields that need to handle unknown permissions
+ * gracefully. This ensures forward compatibility when new permissions are added
+ * server-side before the Android app is updated.
  */
-@Serializable
 enum class Permission {
     AccessCatalog,
     LikeContent,
@@ -45,7 +55,84 @@ enum class Permission {
     ServerAdmin,
     ViewAnalytics,
     RequestContent,
-    DownloadManagerAdmin,
+    DownloadManagerAdmin;
+
+    companion object {
+        /**
+         * Safely parse a permission name, returning null for unknown values.
+         */
+        fun fromNameOrNull(name: String): Permission? = try {
+            valueOf(name)
+        } catch (e: IllegalArgumentException) {
+            null
+        }
+    }
+}
+
+/**
+ * Custom serializer for nullable [Permission] that gracefully handles unknown values.
+ * Unknown permission names are deserialized as null instead of throwing.
+ */
+object NullablePermissionSerializer : KSerializer<Permission?> {
+    override val descriptor: SerialDescriptor =
+        PrimitiveSerialDescriptor("Permission", PrimitiveKind.STRING)
+
+    override fun serialize(encoder: Encoder, value: Permission?) {
+        if (value != null) {
+            encoder.encodeString(value.name)
+        }
+    }
+
+    override fun deserialize(decoder: Decoder): Permission? {
+        val name = decoder.decodeString()
+        return Permission.fromNameOrNull(name)
+    }
+}
+
+/**
+ * Custom serializer for List<Permission> that filters out unknown permissions
+ * instead of failing. This ensures forward compatibility when new permissions
+ * are added server-side before the Android app is updated.
+ */
+object PermissionListSerializer : KSerializer<List<Permission>> {
+    private val stringListSerializer = kotlinx.serialization.builtins.ListSerializer(
+        kotlinx.serialization.serializer<String>()
+    )
+
+    override val descriptor: SerialDescriptor = stringListSerializer.descriptor
+
+    override fun serialize(encoder: Encoder, value: List<Permission>) {
+        val strings = value.map { it.name }
+        stringListSerializer.serialize(encoder, strings)
+    }
+
+    override fun deserialize(decoder: Decoder): List<Permission> {
+        val strings = stringListSerializer.deserialize(decoder)
+        return strings.mapNotNull { Permission.fromNameOrNull(it) }
+    }
+}
+
+/**
+ * Custom serializer for nullable List<Permission> that filters out unknown permissions.
+ */
+object NullablePermissionListSerializer : KSerializer<List<Permission>?> {
+    private val stringListSerializer = kotlinx.serialization.builtins.ListSerializer(
+        kotlinx.serialization.serializer<String>()
+    )
+
+    override val descriptor: SerialDescriptor = stringListSerializer.descriptor
+
+    override fun serialize(encoder: Encoder, value: List<Permission>?) {
+        if (value != null) {
+            val strings = value.map { it.name }
+            stringListSerializer.serialize(encoder, strings)
+        }
+    }
+
+    override fun deserialize(decoder: Decoder): List<Permission> {
+        val strings = stringListSerializer.deserialize(decoder)
+        return strings.mapNotNull { Permission.fromNameOrNull(it) }
+    }
 }
 
 // =============================================================================
@@ -202,6 +289,7 @@ sealed interface SyncEvent {
     @Serializable
     @SerialName("permissions_reset")
     data class PermissionsReset(
+        @Serializable(with = PermissionListSerializer::class)
         val permissions: List<Permission>,
     ) : SyncEvent
 
@@ -353,8 +441,10 @@ data class SyncEventPayload(
     @SerialName("track_ids")
     val trackIds: List<String>? = null,
 
-    // Permission events
+    // Permission events - use custom serializers for forward compatibility
+    @Serializable(with = NullablePermissionSerializer::class)
     val permission: Permission? = null,
+    @Serializable(with = NullablePermissionListSerializer::class)
     val permissions: List<Permission>? = null,
 
     // Download events
