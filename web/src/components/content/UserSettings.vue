@@ -6,14 +6,14 @@
       <h2 class="section-title">Search</h2>
       <div class="setting-row">
         <div class="setting-info">
-          <span class="setting-label">Smart Search</span>
+          <span class="setting-label">Organic Search</span>
           <span class="setting-description">
-            Use streaming search with intelligent result grouping and enrichment.
-            When disabled, uses classic organic search.
+            Use classic flat search results. When disabled, uses smart search
+            with intelligent result grouping and enrichment.
           </span>
         </div>
         <label class="toggle">
-          <input type="checkbox" v-model="useStreamingSearch" />
+          <input type="checkbox" v-model="useOrganicSearch" />
           <span class="toggle-slider"></span>
         </label>
       </div>
@@ -42,7 +42,7 @@ import { useDebugStore } from "@/store/debug";
 import { storeToRefs } from "pinia";
 
 const debugStore = useDebugStore();
-const { useStreamingSearch, imagesEnabled } = storeToRefs(debugStore);
+const { useOrganicSearch, imagesEnabled } = storeToRefs(debugStore);
 </script>
 
 <style scoped>

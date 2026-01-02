@@ -1,12 +1,12 @@
 <template>
   <main class="mainContent">
     <div v-if="searchQuery">
+      <SearchResults v-if="useOrganicSearch" :results="results" />
       <StreamingSearchResults
-        v-if="useStreamingSearch"
+        v-else
         :sections="streamingSections"
         :isLoading="isStreamingLoading"
       />
-      <SearchResults v-else :results="results" />
     </div>
     <Track v-else-if="trackId" :trackId="trackId" />
     <Album v-else-if="albumId" :albumId="albumId" />
@@ -35,7 +35,7 @@ import StreamingSearchResults from "./StreamingSearchResults.vue";
 import { streamingSearch } from "@/services/streamingSearch";
 
 const debugStore = useDebugStore();
-const { useStreamingSearch } = storeToRefs(debugStore);
+const { useOrganicSearch } = storeToRefs(debugStore);
 
 const results = ref(null);
 const streamingSections = ref([]);
@@ -95,12 +95,12 @@ const fetchStreamingResults = (query) => {
 
 const fetchResults = async (newQuery, queryParams) => {
   if (newQuery) {
-    if (useStreamingSearch.value) {
-      fetchStreamingResults(newQuery);
-    } else {
+    if (useOrganicSearch.value) {
       results.value = [];
       const filters = queryParams.type ? queryParams.type.split(",") : null;
       results.value = await fetchCatalogResults(newQuery, filters);
+    } else {
+      fetchStreamingResults(newQuery);
     }
   } else {
     results.value = [];

@@ -22,7 +22,7 @@
 
     <!-- Top Results Section (when no primary match) -->
     <div v-if="topResults && topResults.items.length > 0" class="section">
-      <h2 class="sectionTitle">Top Results</h2>
+      <h2 v-if="otherResults && otherResults.items.length > 0" class="sectionTitle">Top Results</h2>
       <div class="resultsGrid">
         <div v-for="(result, index) in topResults.items" :key="'top-' + index" class="resultItem">
           <AlbumResult v-if="result.type === 'Album'" :result="result" />

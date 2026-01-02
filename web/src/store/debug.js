@@ -12,15 +12,15 @@ export const useDebugStore = defineStore("debug", () => {
 
   const blockHttpCache = ref(localStorage.getItem("blockHttpCache") === "true");
 
-  // Streaming search is enabled by default, can switch to organic search
-  const useStreamingSearchValue =
-    localStorage.getItem("useStreamingSearch") === "false" ? false : true;
-  const useStreamingSearch = ref(useStreamingSearchValue);
+  // Organic search is disabled by default (smart/streaming search is the default)
+  const useOrganicSearchValue =
+    localStorage.getItem("useOrganicSearch") === "true" ? true : false;
+  const useOrganicSearch = ref(useOrganicSearchValue);
 
   watch(imagesEnabled, (v) => localStorage.setItem("imagesEnabled", v));
   watch(blockHttpCache, (v) => localStorage.setItem("blockHttpCache", v));
   watch(blockRightClick, (v) => localStorage.setItem("blockRightClick", v));
-  watch(useStreamingSearch, (v) => localStorage.setItem("useStreamingSearch", v));
+  watch(useOrganicSearch, (v) => localStorage.setItem("useOrganicSearch", v));
 
   const clearLocalStorageStatics = () => {
     // Removes all items that start with "statics_" from localStorage
@@ -37,7 +37,7 @@ export const useDebugStore = defineStore("debug", () => {
     imagesEnabled,
     blockHttpCache,
     blockRightClick,
-    useStreamingSearch,
+    useOrganicSearch,
     clearLocalStorageStatics,
   };
 });
