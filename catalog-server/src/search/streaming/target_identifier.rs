@@ -95,10 +95,11 @@ impl ScoreGapStrategy {
     }
 
     /// Normalize a raw score to 0.0-1.0 range.
-    /// Raw scores are distances (lower is better), so we invert them.
+    /// For FTS5 BM25: scores are (-bm25 * 1000), so higher raw score = better match.
+    /// We normalize to higher = better (1.0 = best match).
     fn normalize_score(&self, raw_score: u32) -> f64 {
         let clamped = raw_score.min(self.config.max_raw_score);
-        1.0 - (clamped as f64 / self.config.max_raw_score as f64)
+        clamped as f64 / self.config.max_raw_score as f64
     }
 
     /// Check if the query is an exact match for the result's matchable text.
@@ -252,15 +253,15 @@ mod tests {
     #[test]
     fn test_single_result_is_target() {
         let strategy = ScoreGapStrategy::default();
-        // Score 500 out of 10000 = 0.95 normalized, well above threshold
-        let results = vec![make_result(HashedItemType::Artist, "1", 500, "Prince")];
+        // Score 9500 out of 10000 = 0.95 normalized, well above threshold
+        let results = vec![make_result(HashedItemType::Artist, "1", 9500, "Prince")];
 
         let target = strategy.identify_target("Prince", &results);
         assert!(target.is_some());
 
         let target = target.unwrap();
         assert_eq!(target.result.item_id, "1");
-        assert!(target.confidence > 0.9); // Low score (500) = high normalized score
+        assert!(target.confidence > 0.9); // High score (9500) = high normalized score
         assert_eq!(target.match_type, MatchType::Artist);
     }
 
@@ -276,8 +277,8 @@ mod tests {
     #[test]
     fn test_low_score_not_target() {
         let strategy = ScoreGapStrategy::default();
-        // Score 8000 out of 10000 = 0.20 normalized, below 0.3 threshold
-        let results = vec![make_result(HashedItemType::Artist, "1", 8000, "Something")];
+        // Score 2000 out of 10000 = 0.20 normalized, below 0.3 threshold
+        let results = vec![make_result(HashedItemType::Artist, "1", 2000, "Something")];
 
         let target = strategy.identify_target("Prince", &results);
         assert!(target.is_none());
@@ -286,11 +287,11 @@ mod tests {
     #[test]
     fn test_insufficient_gap_not_target() {
         let strategy = ScoreGapStrategy::default();
-        // Two results with very similar scores (1000 and 1050)
+        // Two results with very similar scores (9000 and 8950)
         // Gap ratio = (0.90 - 0.895) / 0.90 = ~0.005, below 0.10 threshold
         let results = vec![
-            make_result(HashedItemType::Artist, "1", 1000, "Prince"),
-            make_result(HashedItemType::Artist, "2", 1050, "The Prince"),
+            make_result(HashedItemType::Artist, "1", 9000, "Prince"),
+            make_result(HashedItemType::Artist, "2", 8950, "The Prince"),
         ];
 
         let target = strategy.identify_target("Prince", &results);
@@ -300,11 +301,11 @@ mod tests {
     #[test]
     fn test_sufficient_gap_is_target() {
         let strategy = ScoreGapStrategy::default();
-        // First result much better than second (500 vs 3000)
+        // First result much better than second (9500 vs 7000)
         // Gap ratio = (0.95 - 0.70) / 0.95 = ~0.26, above 0.10 threshold
         let results = vec![
-            make_result(HashedItemType::Artist, "1", 500, "Prince"),
-            make_result(HashedItemType::Artist, "2", 3000, "Prince of Persia"),
+            make_result(HashedItemType::Artist, "1", 9500, "Prince"),
+            make_result(HashedItemType::Artist, "2", 7000, "Prince of Persia"),
         ];
 
         let target = strategy.identify_target("Prince", &results);
@@ -315,28 +316,28 @@ mod tests {
     #[test]
     fn test_exact_match_boost() {
         let strategy = ScoreGapStrategy::default();
-        // Score 1000 out of 10000 = 0.90 normalized
-        let results = vec![make_result(HashedItemType::Artist, "1", 1000, "Prince")];
+        // Score 7000 out of 10000 = 0.70 normalized
+        let results = vec![make_result(HashedItemType::Artist, "1", 7000, "Prince")];
 
         let target = strategy.identify_target("Prince", &results);
         assert!(target.is_some());
 
         let target = target.unwrap();
         // With exact match boost, confidence should be higher
-        let base_score: f64 = 1.0 - (1000.0 / 10000.0); // 0.90
-        let boosted = (base_score + 0.2).min(1.0); // 1.0
+        let base_score: f64 = 7000.0 / 10000.0; // 0.70
+        let boosted = (base_score + 0.2).min(1.0); // 0.90
         assert!((target.confidence - boosted).abs() < 0.01);
     }
 
     #[test]
     fn test_exact_match_case_insensitive() {
         let strategy = ScoreGapStrategy::default();
-        // Score 500 out of 10000 = 0.95 normalized
-        let results = vec![make_result(HashedItemType::Artist, "1", 500, "PRINCE")];
+        // Score 8000 out of 10000 = 0.80 normalized
+        let results = vec![make_result(HashedItemType::Artist, "1", 8000, "PRINCE")];
 
         let target = strategy.identify_target("prince", &results);
         assert!(target.is_some());
-        // Should get exact match boost despite case difference (0.95 + 0.2 = 1.0 clamped)
+        // Should get exact match boost despite case difference (0.80 + 0.2 = 1.0)
         assert!(target.unwrap().confidence > 0.95);
     }
 
@@ -344,18 +345,18 @@ mod tests {
     fn test_match_type_conversion() {
         let strategy = ScoreGapStrategy::default();
 
-        // Test artist - score 500 = 0.95 normalized
-        let results = vec![make_result(HashedItemType::Artist, "1", 500, "Prince")];
+        // Test artist - score 9500 = 0.95 normalized
+        let results = vec![make_result(HashedItemType::Artist, "1", 9500, "Prince")];
         let target = strategy.identify_target("Prince", &results).unwrap();
         assert_eq!(target.match_type, MatchType::Artist);
 
         // Test album
-        let results = vec![make_result(HashedItemType::Album, "1", 500, "Purple Rain")];
+        let results = vec![make_result(HashedItemType::Album, "1", 9500, "Purple Rain")];
         let target = strategy.identify_target("Purple Rain", &results).unwrap();
         assert_eq!(target.match_type, MatchType::Album);
 
         // Test track
-        let results = vec![make_result(HashedItemType::Track, "1", 500, "Kiss")];
+        let results = vec![make_result(HashedItemType::Track, "1", 9500, "Kiss")];
         let target = strategy.identify_target("Kiss", &results).unwrap();
         assert_eq!(target.match_type, MatchType::Track);
     }
@@ -370,13 +371,13 @@ mod tests {
         };
         let strategy = ScoreGapStrategy::new(config);
 
-        // Score 20 = 0.84 normalized, just above 0.8 threshold
-        let results = vec![make_result(HashedItemType::Artist, "1", 20, "Prince")];
+        // Score 108 out of 128 = 0.84 normalized, just above 0.8 threshold
+        let results = vec![make_result(HashedItemType::Artist, "1", 108, "Prince")];
         let target = strategy.identify_target("Prince", &results);
         assert!(target.is_some());
 
-        // Score 30 = 0.77 normalized, below 0.8 threshold
-        let results = vec![make_result(HashedItemType::Artist, "1", 30, "Prince")];
+        // Score 98 out of 128 = 0.77 normalized, below 0.8 threshold
+        let results = vec![make_result(HashedItemType::Artist, "1", 98, "Prince")];
         let target = strategy.identify_target("Prince", &results);
         assert!(target.is_none());
     }
@@ -385,17 +386,17 @@ mod tests {
     fn test_normalize_score() {
         let strategy = ScoreGapStrategy::default();
 
-        // Score 0 = perfect match = 1.0
-        assert!((strategy.normalize_score(0) - 1.0).abs() < 0.001);
+        // Score 0 = worst match = 0.0
+        assert!((strategy.normalize_score(0) - 0.0).abs() < 0.001);
 
-        // Score 10000 (max_raw_score) = worst match = 0.0
-        assert!((strategy.normalize_score(10000) - 0.0).abs() < 0.001);
+        // Score 10000 (max_raw_score) = perfect match = 1.0
+        assert!((strategy.normalize_score(10000) - 1.0).abs() < 0.001);
 
         // Score 5000 = middle = 0.5
         assert!((strategy.normalize_score(5000) - 0.5).abs() < 0.001);
 
-        // Scores above max are clamped
-        assert!((strategy.normalize_score(15000) - 0.0).abs() < 0.001);
+        // Scores above max are clamped to 1.0
+        assert!((strategy.normalize_score(15000) - 1.0).abs() < 0.001);
     }
 
     #[test]
@@ -403,14 +404,14 @@ mod tests {
         let strategy = ScoreGapStrategy::default();
 
         // Mixed results with clear winners in each category
-        // First result in each type has score 500 (0.95 normalized)
-        // Second result has score 4000 (0.60 normalized) - big gap
+        // First result in each type has score 9500 (0.95 normalized)
+        // Second result has score 6000 (0.60 normalized) - big gap
         let results = vec![
-            make_result(HashedItemType::Artist, "artist1", 500, "Prince"),
-            make_result(HashedItemType::Album, "album1", 500, "Purple Rain"),
-            make_result(HashedItemType::Track, "track1", 500, "Kiss"),
-            make_result(HashedItemType::Artist, "artist2", 4000, "The Prince"),
-            make_result(HashedItemType::Album, "album2", 4000, "Purple Rain Deluxe"),
+            make_result(HashedItemType::Artist, "artist1", 9500, "Prince"),
+            make_result(HashedItemType::Album, "album1", 9500, "Purple Rain"),
+            make_result(HashedItemType::Track, "track1", 9500, "Kiss"),
+            make_result(HashedItemType::Artist, "artist2", 6000, "The Prince"),
+            make_result(HashedItemType::Album, "album2", 6000, "Purple Rain Deluxe"),
         ];
 
         let targets = strategy.identify_targets_by_type("Prince", &results);
@@ -429,9 +430,9 @@ mod tests {
     fn test_identify_targets_by_type_partial() {
         let strategy = ScoreGapStrategy::default();
 
-        // Only artist results - score 500 (0.95 normalized)
+        // Only artist results - score 9500 (0.95 normalized)
         let results = vec![
-            make_result(HashedItemType::Artist, "artist1", 500, "Prince"),
+            make_result(HashedItemType::Artist, "artist1", 9500, "Prince"),
         ];
 
         let targets = strategy.identify_targets_by_type("Prince", &results);
@@ -446,10 +447,10 @@ mod tests {
         let strategy = ScoreGapStrategy::default();
 
         // Two artists with similar scores - no clear winner
-        // 1000 vs 1050 = gap ratio ~0.005, below 0.10 threshold
+        // 9000 vs 8950 = gap ratio ~0.005, below 0.10 threshold
         let results = vec![
-            make_result(HashedItemType::Artist, "artist1", 1000, "Prince"),
-            make_result(HashedItemType::Artist, "artist2", 1050, "The Prince"),
+            make_result(HashedItemType::Artist, "artist1", 9000, "Prince"),
+            make_result(HashedItemType::Artist, "artist2", 8950, "The Prince"),
         ];
 
         let targets = strategy.identify_targets_by_type("Prince", &results);

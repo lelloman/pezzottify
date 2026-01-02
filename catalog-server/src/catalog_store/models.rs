@@ -504,10 +504,10 @@ mod tests {
     #[test]
     fn test_track_availability_json_roundtrip() {
         let states = vec![
-            (TrackAvailability::Available, "\"Available\""),
-            (TrackAvailability::Unavailable, "\"Unavailable\""),
-            (TrackAvailability::Fetching, "\"Fetching\""),
-            (TrackAvailability::FetchError, "\"FetchError\""),
+            (TrackAvailability::Available, "\"available\""),
+            (TrackAvailability::Unavailable, "\"unavailable\""),
+            (TrackAvailability::Fetching, "\"fetching\""),
+            (TrackAvailability::FetchError, "\"fetch_error\""),
         ];
         for (state, expected_json) in states {
             let json = serde_json::to_string(&state).unwrap();
