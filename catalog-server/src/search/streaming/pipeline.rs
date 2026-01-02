@@ -17,7 +17,9 @@ use crate::user::UserManager;
 
 use super::enrichment::track_summary_with_image;
 use super::sections::{AlbumSummary, ArtistSummary, MatchType, SearchSection, TrackSummary};
-use super::target_identifier::{IdentifiedTarget, ScoreGapConfig, ScoreGapStrategy, TargetIdentifier};
+use super::target_identifier::{
+    IdentifiedTarget, ScoreGapConfig, ScoreGapStrategy, TargetIdentifier,
+};
 
 /// Streaming search pipeline that generates sections progressively.
 pub struct StreamingSearchPipeline<'a> {
@@ -71,9 +73,8 @@ impl<'a> StreamingSearchPipeline<'a> {
             .target_identifier
             .identify_targets_by_type(query, &search_results);
 
-        let has_any_primary = targets.artist.is_some()
-            || targets.album.is_some()
-            || targets.track.is_some();
+        let has_any_primary =
+            targets.artist.is_some() || targets.album.is_some() || targets.track.is_some();
 
         // Build sections
         let mut sections: Vec<SearchSection> = Vec::new();
@@ -83,7 +84,11 @@ impl<'a> StreamingSearchPipeline<'a> {
             if let Some(section) = self.build_primary_artist(artist_target, &mut emitted_ids) {
                 sections.push(section);
             }
-            self.add_artist_enrichment(&artist_target.result.item_id, &mut sections, &mut emitted_ids);
+            self.add_artist_enrichment(
+                &artist_target.result.item_id,
+                &mut sections,
+                &mut emitted_ids,
+            );
         }
 
         // Emit primary album with enrichment
@@ -91,7 +96,11 @@ impl<'a> StreamingSearchPipeline<'a> {
             if let Some(section) = self.build_primary_album(album_target, &mut emitted_ids) {
                 sections.push(section);
             }
-            self.add_album_enrichment(&album_target.result.item_id, &mut sections, &mut emitted_ids);
+            self.add_album_enrichment(
+                &album_target.result.item_id,
+                &mut sections,
+                &mut emitted_ids,
+            );
         }
 
         // Emit primary track (no enrichment for tracks - sibling tracks would be redundant)
