@@ -35,12 +35,14 @@ impl<'a> StreamingSearchPipeline<'a> {
         config: StreamingSearchSettings,
     ) -> Self {
         // Create target identifier based on config strategy
+        // Note: max_raw_score needs to accommodate different search engines.
+        // SimHash uses 0-128, but FTS5 BM25 scores can be in thousands.
         let target_identifier: Box<dyn TargetIdentifier> =
             Box::new(ScoreGapStrategy::new(ScoreGapConfig {
                 min_absolute_score: config.min_absolute_score,
                 min_score_gap_ratio: config.min_score_gap_ratio,
                 exact_match_boost: config.exact_match_boost,
-                max_raw_score: 128, // SimHash default
+                max_raw_score: 10000,
             }));
 
         Self {

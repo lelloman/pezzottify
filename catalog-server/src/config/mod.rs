@@ -73,8 +73,8 @@ impl Default for StreamingSearchSettings {
     fn default() -> Self {
         Self {
             strategy: TargetIdentifierStrategy::ScoreGap,
-            min_absolute_score: 0.5,
-            min_score_gap_ratio: 0.15,
+            min_absolute_score: 0.3,
+            min_score_gap_ratio: 0.10,
             exact_match_boost: 0.2,
             popular_tracks_limit: 5,
             albums_limit: 5,
