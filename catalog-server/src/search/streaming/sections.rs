@@ -22,15 +22,23 @@ pub enum MatchType {
 #[derive(Debug, Clone, Serialize)]
 #[serde(tag = "section", rename_all = "snake_case")]
 pub enum SearchSection {
-    /// High-confidence single match - "This is what you wanted"
-    PrimaryMatch {
-        match_type: MatchType,
+    /// High-confidence artist match with enrichment
+    PrimaryArtist {
         item: ResolvedSearchResult,
         confidence: f64,
     },
 
-    /// No clear winner - here are the top candidates
-    TopResults { items: Vec<ResolvedSearchResult> },
+    /// High-confidence album match with enrichment
+    PrimaryAlbum {
+        item: ResolvedSearchResult,
+        confidence: f64,
+    },
+
+    /// High-confidence track match
+    PrimaryTrack {
+        item: ResolvedSearchResult,
+        confidence: f64,
+    },
 
     /// Popular tracks by the target artist
     PopularBy {
@@ -57,8 +65,11 @@ pub enum SearchSection {
         items: Vec<ArtistSummary>,
     },
 
-    /// Lower-relevance matches
-    OtherResults { items: Vec<ResolvedSearchResult> },
+    /// Remaining results (shown when there's at least one primary match)
+    MoreResults { items: Vec<ResolvedSearchResult> },
+
+    /// All results (shown when there are no primary matches)
+    Results { items: Vec<ResolvedSearchResult> },
 
     /// Stream complete
     Done { total_time_ms: u64 },
@@ -118,9 +129,8 @@ mod tests {
     }
 
     #[test]
-    fn test_primary_match_serialization() {
-        let section = SearchSection::PrimaryMatch {
-            match_type: MatchType::Artist,
+    fn test_primary_artist_serialization() {
+        let section = SearchSection::PrimaryArtist {
             item: ResolvedSearchResult::Artist(SearchedArtist {
                 id: "artist_123".to_string(),
                 name: "Prince".to_string(),
@@ -130,18 +140,26 @@ mod tests {
         };
 
         let json = serde_json::to_string(&section).unwrap();
-        assert!(json.contains("\"section\":\"primary_match\""));
-        assert!(json.contains("\"match_type\":\"artist\""));
+        assert!(json.contains("\"section\":\"primary_artist\""));
         assert!(json.contains("\"confidence\":0.95"));
         assert!(json.contains("\"name\":\"Prince\""));
     }
 
     #[test]
-    fn test_top_results_serialization() {
-        let section = SearchSection::TopResults { items: vec![] };
+    fn test_more_results_serialization() {
+        let section = SearchSection::MoreResults { items: vec![] };
 
         let json = serde_json::to_string(&section).unwrap();
-        assert!(json.contains("\"section\":\"top_results\""));
+        assert!(json.contains("\"section\":\"more_results\""));
+        assert!(json.contains("\"items\":[]"));
+    }
+
+    #[test]
+    fn test_results_serialization() {
+        let section = SearchSection::Results { items: vec![] };
+
+        let json = serde_json::to_string(&section).unwrap();
+        assert!(json.contains("\"section\":\"results\""));
         assert!(json.contains("\"items\":[]"));
     }
 

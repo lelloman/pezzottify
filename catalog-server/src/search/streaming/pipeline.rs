@@ -2,11 +2,10 @@
 //!
 //! The pipeline orchestrates the streaming search process:
 //! 1. Run organic search
-//! 2. Identify target (if any)
-//! 3. Emit primary match or top results
-//! 4. Enrich based on target type
-//! 5. Emit other results
-//! 6. Emit done
+//! 2. Identify best match per content type (artist, album, track)
+//! 3. Emit primary matches with enrichment for each type found
+//! 4. Emit remaining results (MoreResults if primaries exist, Results if not)
+//! 5. Emit done
 
 use std::collections::HashSet;
 use std::time::Instant;
@@ -18,9 +17,7 @@ use crate::user::UserManager;
 
 use super::enrichment::track_summary_with_image;
 use super::sections::{AlbumSummary, ArtistSummary, MatchType, SearchSection, TrackSummary};
-use super::target_identifier::{
-    IdentifiedTarget, ScoreGapConfig, ScoreGapStrategy, TargetIdentifier,
-};
+use super::target_identifier::{IdentifiedTarget, ScoreGapConfig, ScoreGapStrategy, TargetIdentifier};
 
 /// Streaming search pipeline that generates sections progressively.
 pub struct StreamingSearchPipeline<'a> {
@@ -67,35 +64,51 @@ impl<'a> StreamingSearchPipeline<'a> {
         // Track IDs that have been emitted to avoid duplicates
         let mut emitted_ids: HashSet<String> = HashSet::new();
 
-        // Try to identify a target
-        let target = self
+        // Identify best match for each content type
+        let targets = self
             .target_identifier
-            .identify_target(query, &search_results);
+            .identify_targets_by_type(query, &search_results);
+
+        let has_any_primary = targets.artist.is_some()
+            || targets.album.is_some()
+            || targets.track.is_some();
 
         // Build sections
         let mut sections: Vec<SearchSection> = Vec::new();
 
-        match target {
-            Some(target) => {
-                // Emit primary match
-                if let Some(section) = self.build_primary_match(&target, &mut emitted_ids) {
-                    sections.push(section);
-                }
-
-                // Emit enrichment sections based on target type
-                self.add_enrichment_sections(&target, &mut sections, &mut emitted_ids);
+        // Emit primary artist with enrichment
+        if let Some(ref artist_target) = targets.artist {
+            if let Some(section) = self.build_primary_artist(artist_target, &mut emitted_ids) {
+                sections.push(section);
             }
-            None => {
-                // No clear target - emit top results
-                let section = self.build_top_results(&search_results, &mut emitted_ids);
+            self.add_artist_enrichment(&artist_target.result.item_id, &mut sections, &mut emitted_ids);
+        }
+
+        // Emit primary album with enrichment
+        if let Some(ref album_target) = targets.album {
+            if let Some(section) = self.build_primary_album(album_target, &mut emitted_ids) {
+                sections.push(section);
+            }
+            self.add_album_enrichment(&album_target.result.item_id, &mut sections, &mut emitted_ids);
+        }
+
+        // Emit primary track (no enrichment for tracks - sibling tracks would be redundant)
+        if let Some(ref track_target) = targets.track {
+            if let Some(section) = self.build_primary_track(track_target, &mut emitted_ids) {
                 sections.push(section);
             }
         }
 
-        // Emit other results (remaining matches not yet shown)
-        let other_section = self.build_other_results(&search_results, &emitted_ids);
-        if let Some(section) = other_section {
-            sections.push(section);
+        // Emit remaining results
+        let remaining = self.build_remaining_results(&search_results, &emitted_ids);
+        if let Some(items) = remaining {
+            if has_any_primary {
+                // Show as "More Results" when we have primary matches
+                sections.push(SearchSection::MoreResults { items });
+            } else {
+                // Show as plain "Results" when no primary matches were found
+                sections.push(SearchSection::Results { items });
+            }
         }
 
         // Emit done
@@ -107,8 +120,8 @@ impl<'a> StreamingSearchPipeline<'a> {
         sections
     }
 
-    /// Build the primary match section for an identified target.
-    fn build_primary_match(
+    /// Build the primary artist section.
+    fn build_primary_artist(
         &self,
         target: &IdentifiedTarget,
         emitted_ids: &mut HashSet<String>,
@@ -116,49 +129,40 @@ impl<'a> StreamingSearchPipeline<'a> {
         let item = self.resolve_search_result(&target.result.item_id, target.result.item_type)?;
         emitted_ids.insert(target.result.item_id.clone());
 
-        Some(SearchSection::PrimaryMatch {
-            match_type: target.match_type,
+        Some(SearchSection::PrimaryArtist {
             item,
             confidence: target.confidence,
         })
     }
 
-    /// Build the top results section when no clear target is identified.
-    fn build_top_results(
-        &self,
-        search_results: &[crate::search::SearchResult],
-        emitted_ids: &mut HashSet<String>,
-    ) -> SearchSection {
-        let mut items = Vec::new();
-
-        for result in search_results.iter().take(self.config.top_results_limit) {
-            if let Some(resolved) = self.resolve_search_result(&result.item_id, result.item_type) {
-                emitted_ids.insert(result.item_id.clone());
-                items.push(resolved);
-            }
-        }
-
-        SearchSection::TopResults { items }
-    }
-
-    /// Add enrichment sections based on the target type.
-    fn add_enrichment_sections(
+    /// Build the primary album section.
+    fn build_primary_album(
         &self,
         target: &IdentifiedTarget,
-        sections: &mut Vec<SearchSection>,
         emitted_ids: &mut HashSet<String>,
-    ) {
-        match target.match_type {
-            MatchType::Artist => {
-                self.add_artist_enrichment(&target.result.item_id, sections, emitted_ids);
-            }
-            MatchType::Album => {
-                self.add_album_enrichment(&target.result.item_id, sections, emitted_ids);
-            }
-            MatchType::Track => {
-                self.add_track_enrichment(&target.result.item_id, sections, emitted_ids);
-            }
-        }
+    ) -> Option<SearchSection> {
+        let item = self.resolve_search_result(&target.result.item_id, target.result.item_type)?;
+        emitted_ids.insert(target.result.item_id.clone());
+
+        Some(SearchSection::PrimaryAlbum {
+            item,
+            confidence: target.confidence,
+        })
+    }
+
+    /// Build the primary track section.
+    fn build_primary_track(
+        &self,
+        target: &IdentifiedTarget,
+        emitted_ids: &mut HashSet<String>,
+    ) -> Option<SearchSection> {
+        let item = self.resolve_search_result(&target.result.item_id, target.result.item_type)?;
+        emitted_ids.insert(target.result.item_id.clone());
+
+        Some(SearchSection::PrimaryTrack {
+            item,
+            confidence: target.confidence,
+        })
     }
 
     /// Add enrichment sections for an artist target.
@@ -302,53 +306,12 @@ impl<'a> StreamingSearchPipeline<'a> {
         }
     }
 
-    /// Add enrichment sections for a track target.
-    fn add_track_enrichment(
-        &self,
-        track_id: &str,
-        sections: &mut Vec<SearchSection>,
-        emitted_ids: &mut HashSet<String>,
-    ) {
-        // Get the track's album and show sibling tracks
-        if let Ok(Some(resolved_track)) = self.catalog_store.get_resolved_track(track_id) {
-            let album_id = &resolved_track.album.id;
-
-            if let Ok(Some(resolved_album)) = self.catalog_store.get_resolved_album(album_id) {
-                let mut tracks: Vec<TrackSummary> = Vec::new();
-
-                for disc in &resolved_album.discs {
-                    for track in &disc.tracks {
-                        // Skip the original track
-                        if track.id == track_id {
-                            continue;
-                        }
-                        if let Ok(Some(sibling)) = self.catalog_store.get_resolved_track(&track.id)
-                        {
-                            tracks.push(track_summary_with_image(
-                                &sibling,
-                                resolved_album.display_image.as_ref(),
-                            ));
-                            emitted_ids.insert(track.id.clone());
-                        }
-                    }
-                }
-
-                if !tracks.is_empty() {
-                    sections.push(SearchSection::TracksFrom {
-                        target_id: album_id.clone(),
-                        items: tracks,
-                    });
-                }
-            }
-        }
-    }
-
-    /// Build the "other results" section with remaining matches.
-    fn build_other_results(
+    /// Build the remaining results (items not already emitted as primary matches).
+    fn build_remaining_results(
         &self,
         search_results: &[crate::search::SearchResult],
         emitted_ids: &HashSet<String>,
-    ) -> Option<SearchSection> {
+    ) -> Option<Vec<ResolvedSearchResult>> {
         let mut items = Vec::new();
 
         for result in search_results {
@@ -366,7 +329,7 @@ impl<'a> StreamingSearchPipeline<'a> {
         if items.is_empty() {
             None
         } else {
-            Some(SearchSection::OtherResults { items })
+            Some(items)
         }
     }
 

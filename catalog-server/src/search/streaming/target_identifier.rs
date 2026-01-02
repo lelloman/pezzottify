@@ -21,6 +21,14 @@ pub struct IdentifiedTarget {
     pub match_type: MatchType,
 }
 
+/// Targets identified per content type.
+#[derive(Debug, Clone, Default)]
+pub struct PerTypeTargets {
+    pub artist: Option<IdentifiedTarget>,
+    pub album: Option<IdentifiedTarget>,
+    pub track: Option<IdentifiedTarget>,
+}
+
 /// Trait for target identification strategies.
 ///
 /// Implementations decide if search results have a clear "winner" that should
@@ -33,6 +41,11 @@ pub trait TargetIdentifier: Send + Sync {
     /// Returns `Some(IdentifiedTarget)` if there's a high-confidence match,
     /// or `None` if no clear winner was found.
     fn identify_target(&self, query: &str, results: &[SearchResult]) -> Option<IdentifiedTarget>;
+
+    /// Identify the best target for each content type separately.
+    ///
+    /// Splits results by type and finds the best match within each category.
+    fn identify_targets_by_type(&self, query: &str, results: &[SearchResult]) -> PerTypeTargets;
 }
 
 /// Configuration for the ScoreGapStrategy.
@@ -182,6 +195,40 @@ impl TargetIdentifier for ScoreGapStrategy {
             confidence,
             match_type,
         })
+    }
+
+    fn identify_targets_by_type(&self, query: &str, results: &[SearchResult]) -> PerTypeTargets {
+        // Split results by type
+        let artists: Vec<_> = results
+            .iter()
+            .filter(|r| r.item_type == HashedItemType::Artist)
+            .cloned()
+            .collect();
+        let albums: Vec<_> = results
+            .iter()
+            .filter(|r| r.item_type == HashedItemType::Album)
+            .cloned()
+            .collect();
+        let tracks: Vec<_> = results
+            .iter()
+            .filter(|r| r.item_type == HashedItemType::Track)
+            .cloned()
+            .collect();
+
+        debug!(
+            query = %query,
+            artist_count = artists.len(),
+            album_count = albums.len(),
+            track_count = tracks.len(),
+            "Identifying targets by type"
+        );
+
+        // Find best target in each category
+        PerTypeTargets {
+            artist: self.identify_target(query, &artists),
+            album: self.identify_target(query, &albums),
+            track: self.identify_target(query, &tracks),
+        }
     }
 }
 
@@ -342,5 +389,76 @@ mod tests {
 
         // Scores above max are clamped
         assert!((strategy.normalize_score(200) - 0.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_identify_targets_by_type_all_types() {
+        let strategy = ScoreGapStrategy::default();
+
+        // Mixed results with clear winners in each category
+        let results = vec![
+            make_result(HashedItemType::Artist, "artist1", 5, "Prince"),
+            make_result(HashedItemType::Album, "album1", 5, "Purple Rain"),
+            make_result(HashedItemType::Track, "track1", 5, "Kiss"),
+            make_result(HashedItemType::Artist, "artist2", 60, "The Prince"),
+            make_result(HashedItemType::Album, "album2", 60, "Purple Rain Deluxe"),
+        ];
+
+        let targets = strategy.identify_targets_by_type("Prince", &results);
+
+        assert!(targets.artist.is_some());
+        assert_eq!(targets.artist.unwrap().result.item_id, "artist1");
+
+        assert!(targets.album.is_some());
+        assert_eq!(targets.album.unwrap().result.item_id, "album1");
+
+        assert!(targets.track.is_some());
+        assert_eq!(targets.track.unwrap().result.item_id, "track1");
+    }
+
+    #[test]
+    fn test_identify_targets_by_type_partial() {
+        let strategy = ScoreGapStrategy::default();
+
+        // Only artist results
+        let results = vec![
+            make_result(HashedItemType::Artist, "artist1", 5, "Prince"),
+        ];
+
+        let targets = strategy.identify_targets_by_type("Prince", &results);
+
+        assert!(targets.artist.is_some());
+        assert!(targets.album.is_none());
+        assert!(targets.track.is_none());
+    }
+
+    #[test]
+    fn test_identify_targets_by_type_no_clear_winner() {
+        let strategy = ScoreGapStrategy::default();
+
+        // Two artists with similar scores - no clear winner
+        let results = vec![
+            make_result(HashedItemType::Artist, "artist1", 10, "Prince"),
+            make_result(HashedItemType::Artist, "artist2", 12, "The Prince"),
+        ];
+
+        let targets = strategy.identify_targets_by_type("Prince", &results);
+
+        // No artist target because gap is insufficient
+        assert!(targets.artist.is_none());
+        assert!(targets.album.is_none());
+        assert!(targets.track.is_none());
+    }
+
+    #[test]
+    fn test_identify_targets_by_type_empty_results() {
+        let strategy = ScoreGapStrategy::default();
+        let results: Vec<SearchResult> = vec![];
+
+        let targets = strategy.identify_targets_by_type("Prince", &results);
+
+        assert!(targets.artist.is_none());
+        assert!(targets.album.is_none());
+        assert!(targets.track.is_none());
     }
 }

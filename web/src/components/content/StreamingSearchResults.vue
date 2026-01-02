@@ -5,34 +5,15 @@
       <span class="loadingText">Searching...</span>
     </div>
 
-    <!-- Primary Match Section -->
-    <div v-if="primaryMatch" class="section primaryMatchSection">
-      <h2 class="sectionTitle">Best Match</h2>
-      <div class="primaryMatchContainer">
-        <div class="primaryMatchItem">
-          <AlbumResult v-if="primaryMatch.item.type === 'Album'" :result="primaryMatch.item" />
-          <ArtistResult v-else-if="primaryMatch.item.type === 'Artist'" :result="primaryMatch.item" />
-          <TrackResult v-else-if="primaryMatch.item.type === 'Track'" :result="primaryMatch.item" />
-        </div>
-        <div class="confidenceBadge" :class="confidenceClass">
-          {{ confidenceLabel }}
-        </div>
+    <!-- Primary Artist Section -->
+    <div v-if="primaryArtist" class="section primarySection">
+      <h2 class="sectionTitle">Artist</h2>
+      <div class="primaryContainer">
+        <ArtistResult :result="primaryArtist.item" />
       </div>
     </div>
 
-    <!-- Top Results Section (when no primary match) -->
-    <div v-if="topResults && topResults.items.length > 0" class="section">
-      <h2 v-if="otherResults && otherResults.items.length > 0" class="sectionTitle">Top Results</h2>
-      <div class="resultsGrid">
-        <div v-for="(result, index) in topResults.items" :key="'top-' + index" class="resultItem">
-          <AlbumResult v-if="result.type === 'Album'" :result="result" />
-          <ArtistResult v-else-if="result.type === 'Artist'" :result="result" />
-          <TrackResult v-else-if="result.type === 'Track'" :result="result" />
-        </div>
-      </div>
-    </div>
-
-    <!-- Popular Tracks Section -->
+    <!-- Artist Enrichment: Popular Tracks -->
     <div v-if="popularBy && popularBy.items.length > 0" class="section">
       <h2 class="sectionTitle">Popular Tracks</h2>
       <div class="tracksList">
@@ -44,7 +25,7 @@
       </div>
     </div>
 
-    <!-- Albums Section -->
+    <!-- Artist Enrichment: Albums -->
     <div v-if="albumsBy && albumsBy.items.length > 0" class="section">
       <h2 class="sectionTitle">Albums</h2>
       <div class="albumsGrid">
@@ -56,19 +37,7 @@
       </div>
     </div>
 
-    <!-- Tracks From Album Section -->
-    <div v-if="tracksFrom && tracksFrom.items.length > 0" class="section">
-      <h2 class="sectionTitle">Tracks from Album</h2>
-      <div class="tracksList">
-        <TrackSummaryRow
-          v-for="(track, index) in tracksFrom.items"
-          :key="'track-' + index"
-          :track="track"
-        />
-      </div>
-    </div>
-
-    <!-- Related Artists Section -->
+    <!-- Artist Enrichment: Related Artists -->
     <div v-if="relatedArtists && relatedArtists.items.length > 0" class="section">
       <h2 class="sectionTitle">Related Artists</h2>
       <div class="artistsGrid">
@@ -80,11 +49,50 @@
       </div>
     </div>
 
-    <!-- Other Results Section -->
-    <div v-if="otherResults && otherResults.items.length > 0" class="section">
-      <h2 class="sectionTitle">Other Results</h2>
+    <!-- Primary Album Section -->
+    <div v-if="primaryAlbum" class="section primarySection">
+      <h2 class="sectionTitle">Album</h2>
+      <div class="primaryContainer">
+        <AlbumResult :result="primaryAlbum.item" />
+      </div>
+    </div>
+
+    <!-- Album Enrichment: Tracks From -->
+    <div v-if="tracksFrom && tracksFrom.items.length > 0" class="section">
+      <h2 class="sectionTitle">Tracks</h2>
+      <div class="tracksList">
+        <TrackSummaryRow
+          v-for="(track, index) in tracksFrom.items"
+          :key="'track-' + index"
+          :track="track"
+        />
+      </div>
+    </div>
+
+    <!-- Primary Track Section -->
+    <div v-if="primaryTrack" class="section primarySection">
+      <h2 class="sectionTitle">Track</h2>
+      <div class="primaryContainer">
+        <TrackResult :result="primaryTrack.item" />
+      </div>
+    </div>
+
+    <!-- More Results Section (when there are primary matches) -->
+    <div v-if="moreResults && moreResults.items.length > 0" class="section">
+      <h2 class="sectionTitle">More Results</h2>
       <div class="resultsGrid">
-        <div v-for="(result, index) in otherResults.items" :key="'other-' + index" class="resultItem">
+        <div v-for="(result, index) in moreResults.items" :key="'more-' + index" class="resultItem">
+          <AlbumResult v-if="result.type === 'Album'" :result="result" />
+          <ArtistResult v-else-if="result.type === 'Artist'" :result="result" />
+          <TrackResult v-else-if="result.type === 'Track'" :result="result" />
+        </div>
+      </div>
+    </div>
+
+    <!-- Results Section (when there are no primary matches) -->
+    <div v-if="results && results.items.length > 0" class="section">
+      <div class="resultsGrid">
+        <div v-for="(result, index) in results.items" :key="'result-' + index" class="resultItem">
           <AlbumResult v-if="result.type === 'Album'" :result="result" />
           <ArtistResult v-else-if="result.type === 'Artist'" :result="result" />
           <TrackResult v-else-if="result.type === 'Track'" :result="result" />
@@ -126,12 +134,16 @@ const props = defineProps({
 });
 
 // Extract sections by type
-const primaryMatch = computed(() => {
-  return props.sections.find((s) => s.section === SectionType.PRIMARY_MATCH);
+const primaryArtist = computed(() => {
+  return props.sections.find((s) => s.section === SectionType.PRIMARY_ARTIST);
 });
 
-const topResults = computed(() => {
-  return props.sections.find((s) => s.section === SectionType.TOP_RESULTS);
+const primaryAlbum = computed(() => {
+  return props.sections.find((s) => s.section === SectionType.PRIMARY_ALBUM);
+});
+
+const primaryTrack = computed(() => {
+  return props.sections.find((s) => s.section === SectionType.PRIMARY_TRACK);
 });
 
 const popularBy = computed(() => {
@@ -150,8 +162,12 @@ const relatedArtists = computed(() => {
   return props.sections.find((s) => s.section === SectionType.RELATED_ARTISTS);
 });
 
-const otherResults = computed(() => {
-  return props.sections.find((s) => s.section === SectionType.OTHER_RESULTS);
+const moreResults = computed(() => {
+  return props.sections.find((s) => s.section === SectionType.MORE_RESULTS);
+});
+
+const results = computed(() => {
+  return props.sections.find((s) => s.section === SectionType.RESULTS);
 });
 
 const doneSection = computed(() => {
@@ -164,24 +180,12 @@ const isDone = computed(() => {
 
 const hasAnyResults = computed(() => {
   return (
-    primaryMatch.value ||
-    (topResults.value && topResults.value.items.length > 0) ||
-    (otherResults.value && otherResults.value.items.length > 0)
+    primaryArtist.value ||
+    primaryAlbum.value ||
+    primaryTrack.value ||
+    (moreResults.value && moreResults.value.items.length > 0) ||
+    (results.value && results.value.items.length > 0)
   );
-});
-
-const confidenceClass = computed(() => {
-  if (!primaryMatch.value) return "";
-  const confidence = primaryMatch.value.confidence;
-  if (confidence >= 0.9) return "confidenceHigh";
-  if (confidence >= 0.7) return "confidenceMedium";
-  return "confidenceLow";
-});
-
-const confidenceLabel = computed(() => {
-  if (!primaryMatch.value) return "";
-  const matchType = primaryMatch.value.match_type;
-  return matchType.charAt(0).toUpperCase() + matchType.slice(1);
 });
 </script>
 
@@ -217,44 +221,17 @@ const confidenceLabel = computed(() => {
   margin: 0;
 }
 
-/* Primary Match */
-.primaryMatchSection {
+/* Primary sections */
+.primarySection {
   background-color: var(--bg-elevated-base);
   border-radius: var(--radius-lg);
   padding: 16px;
 }
 
-.primaryMatchContainer {
+.primaryContainer {
   display: flex;
   align-items: center;
   gap: 16px;
-}
-
-.primaryMatchItem {
-  flex: 1;
-}
-
-.confidenceBadge {
-  padding: 4px 12px;
-  border-radius: 12px;
-  font-size: var(--text-sm);
-  font-weight: var(--font-medium);
-  white-space: nowrap;
-}
-
-.confidenceHigh {
-  background-color: var(--accent-color);
-  color: white;
-}
-
-.confidenceMedium {
-  background-color: var(--bg-elevated-highlight);
-  color: var(--text-base);
-}
-
-.confidenceLow {
-  background-color: var(--bg-elevated-base);
-  color: var(--text-subdued);
 }
 
 /* Results Grid */
