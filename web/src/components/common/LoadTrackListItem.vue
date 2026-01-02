@@ -100,15 +100,15 @@ const loadTrackData = async () => {
 
 const isTrackAvailable = computed(() => {
   if (!track.value) return true;
-  return !track.value.availability || track.value.availability === "Available";
+  return !track.value.availability || track.value.availability === "available";
 });
 
 const isTrackFetching = computed(() => {
-  return track.value?.availability === "Fetching";
+  return track.value?.availability === "fetching";
 });
 
 const isTrackFetchError = computed(() => {
-  return track.value?.availability === "FetchError";
+  return track.value?.availability === "fetch_error";
 });
 
 const computeTrackRowClasses = computed(() => {

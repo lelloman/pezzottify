@@ -50,15 +50,15 @@ const imageUrl = computedImageUrl(props.result.image_id);
 const duration = formatDuration(props.result.duration);
 
 const isTrackAvailable = computed(() => {
-  return !props.result.availability || props.result.availability === "Available";
+  return !props.result.availability || props.result.availability === "available";
 });
 
 const isTrackFetching = computed(() => {
-  return props.result.availability === "Fetching";
+  return props.result.availability === "fetching";
 });
 
 const isTrackFetchError = computed(() => {
-  return props.result.availability === "FetchError";
+  return props.result.availability === "fetch_error";
 });
 
 const computeRowClasses = computed(() => {
