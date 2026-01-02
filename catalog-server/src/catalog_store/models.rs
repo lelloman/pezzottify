@@ -225,6 +225,7 @@ impl ImageType {
 
 /// Track availability state
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "snake_case")]
 pub enum TrackAvailability {
     #[default]
     Available,
