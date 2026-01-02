@@ -1,7 +1,12 @@
 <template>
   <main class="mainContent">
     <div v-if="searchQuery">
-      <SearchResults :results="results" />
+      <StreamingSearchResults
+        v-if="useStreamingSearch"
+        :sections="streamingSections"
+        :isLoading="isStreamingLoading"
+      />
+      <SearchResults v-else :results="results" />
     </div>
     <Track v-else-if="trackId" :trackId="trackId" />
     <Album v-else-if="albumId" :albumId="albumId" />
@@ -14,7 +19,7 @@
 </template>
 
 <script setup>
-import { ref, watch, computed } from "vue";
+import { ref, watch, computed, onUnmounted } from "vue";
 import Track from "@/components/content/Track.vue";
 import Album from "@/components/content/Album.vue";
 import Artist from "@/components/content/Artist.vue";
@@ -23,9 +28,19 @@ import UserSettings from "@/components/content/UserSettings.vue";
 import UserRequests from "@/components/content/UserRequests.vue";
 import HomePage from "@/components/content/HomePage.vue";
 import { useRoute } from "vue-router";
+import { useDebugStore } from "@/store/debug";
+import { storeToRefs } from "pinia";
 import SearchResults from "./SearchResults.vue";
+import StreamingSearchResults from "./StreamingSearchResults.vue";
+import { streamingSearch } from "@/services/streamingSearch";
+
+const debugStore = useDebugStore();
+const { useStreamingSearch } = storeToRefs(debugStore);
 
 const results = ref(null);
+const streamingSections = ref([]);
+const isStreamingLoading = ref(false);
+let abortStreamingSearch = null;
 
 const route = useRoute();
 const searchQuery = ref(route.params.query || "");
@@ -54,17 +69,45 @@ const fetchCatalogResults = async (query, filters) => {
   }
 };
 
+const fetchStreamingResults = (query) => {
+  // Abort any existing streaming search
+  if (abortStreamingSearch) {
+    abortStreamingSearch();
+  }
+
+  streamingSections.value = [];
+  isStreamingLoading.value = true;
+
+  abortStreamingSearch = streamingSearch(
+    query,
+    (section) => {
+      streamingSections.value = [...streamingSections.value, section];
+    },
+    (error) => {
+      console.error("Streaming search error:", error);
+      isStreamingLoading.value = false;
+    },
+    () => {
+      isStreamingLoading.value = false;
+    },
+  );
+};
+
 const fetchResults = async (newQuery, queryParams) => {
   if (newQuery) {
-    results.value = [];
-
-    const filters = queryParams.type ? queryParams.type.split(",") : null;
-
-    results.value = await fetchCatalogResults(newQuery, filters);
+    if (useStreamingSearch.value) {
+      fetchStreamingResults(newQuery);
+    } else {
+      results.value = [];
+      const filters = queryParams.type ? queryParams.type.split(",") : null;
+      results.value = await fetchCatalogResults(newQuery, filters);
+    }
   } else {
     results.value = [];
+    streamingSections.value = [];
   }
 };
+
 watch(
   [() => route.params.query, () => route.query],
   ([newQuery, newQueryParams]) => {
@@ -75,6 +118,13 @@ watch(
   },
   { immediate: true },
 );
+
+// Cleanup on unmount
+onUnmounted(() => {
+  if (abortStreamingSearch) {
+    abortStreamingSearch();
+  }
+});
 watch(
   () => route.params.trackId,
   (newTrackId) => {
