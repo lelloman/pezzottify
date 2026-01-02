@@ -431,9 +431,12 @@ mod tests {
         let strategy = ScoreGapStrategy::default();
 
         // Only artist results - score 9500 (0.95 normalized)
-        let results = vec![
-            make_result(HashedItemType::Artist, "artist1", 9500, "Prince"),
-        ];
+        let results = vec![make_result(
+            HashedItemType::Artist,
+            "artist1",
+            9500,
+            "Prince",
+        )];
 
         let targets = strategy.identify_targets_by_type("Prince", &results);
 
