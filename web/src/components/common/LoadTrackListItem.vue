@@ -7,7 +7,22 @@
       @click="handleTrackClick"
       :class="computeTrackRowClasses"
     >
-      <div class="track-item-content">
+      <!-- Minimal mode: vertical layout for sidebar/queue -->
+      <div v-if="minimal" class="track-item-minimal">
+        <TrackName
+          :track="track"
+          class="minimal-track-name"
+          :hoverAnimation="false"
+        />
+        <div class="minimal-artist">
+          <LoadClickableArtistsNames
+            v-if="track.artists_ids"
+            :artistsIds="track.artists_ids"
+          />
+        </div>
+      </div>
+      <!-- Standard mode: horizontal layout -->
+      <div v-else class="track-item-content">
         <div class="trackIndexSpan">
           <p>{{ trackNumber }}</p>
         </div>
@@ -59,6 +74,10 @@ const props = defineProps({
     default: 0,
   },
   isCurrentlyPlaying: {
+    type: Boolean,
+    default: false,
+  },
+  minimal: {
     type: Boolean,
     default: false,
   },
@@ -248,5 +267,41 @@ defineExpose({
   color: var(--warning);
   font-size: 16px;
   margin-right: 8px;
+}
+
+/* Minimal mode styles (for sidebar/queue) */
+.track-item-minimal {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  padding: 4px 0;
+}
+
+.minimal-track-name {
+  font-size: 14px;
+  color: var(--text-base);
+  line-height: 1.3;
+}
+
+.playingTrack .minimal-track-name {
+  color: var(--accent-color);
+}
+
+.minimal-artist {
+  font-size: 12px;
+  color: var(--text-subdued);
+  line-height: 1.3;
+}
+
+.minimal-artist :deep(a),
+.minimal-artist :deep(span) {
+  color: var(--text-subdued);
+  font-size: 12px;
+}
+
+.minimal-artist :deep(a:hover) {
+  color: var(--text-base);
+  text-decoration: underline;
 }
 </style>

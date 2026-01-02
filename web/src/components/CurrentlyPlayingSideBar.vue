@@ -36,9 +36,9 @@
           >
             <LoadTrackListItem
               :trackId="record.id"
-              :trackNumber="index + 1"
               @track-clicked="handleClick(index)"
               :isCurrentlyPlaying="index == currentIndex"
+              :minimal="true"
             />
           </div>
         </template>
@@ -232,21 +232,28 @@ watch(
 .trackList {
   flex: 1;
   overflow-y: auto;
-  padding: var(--spacing-2) 0;
+  padding: var(--spacing-1) 0;
 }
 
 .trackItem {
   display: flex;
   align-items: center;
-  padding: var(--spacing-1) var(--spacing-3);
+  padding: 8px 12px;
   cursor: pointer;
-  border-radius: var(--radius-md);
-  margin: 0 var(--spacing-2);
-  width: calc(100% - var(--spacing-4));
+  border-radius: var(--radius-sm);
+  margin: 0 8px;
   transition: background-color var(--transition-fast);
 }
 
 .trackItem:hover {
-  background-color: var(--bg-highlight);
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+.trackItem.isPlaying {
+  background-color: rgba(255, 255, 255, 0.05);
+}
+
+.trackItem.isPlaying:hover {
+  background-color: rgba(255, 255, 255, 0.1);
 }
 </style>
