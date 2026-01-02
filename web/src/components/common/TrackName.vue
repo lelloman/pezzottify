@@ -5,7 +5,7 @@
     :data-id="track.id"
     @click="handleClick"
   >
-    <span class="track-name">{{ sanitizedTrackName }}</span>
+    <span class="track-name" :style="colorStyle">{{ sanitizedTrackName }}</span>
   </SlidingText>
 </template>
 
@@ -27,6 +27,10 @@ const props = defineProps({
     type: Boolean,
     default: false,
   },
+  color: {
+    type: String,
+    default: null,
+  },
 });
 
 const router = useRouter();
@@ -40,6 +44,10 @@ const sanitizedTrackName = computed(() => {
   } else {
     return "";
   }
+});
+
+const colorStyle = computed(() => {
+  return props.color ? { color: props.color } : {};
 });
 
 const handleClick = () => {

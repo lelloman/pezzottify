@@ -9,17 +9,21 @@
     >
       <!-- Minimal mode: vertical layout for sidebar/queue -->
       <div v-if="minimal" class="track-item-minimal">
-        <TrackName
-          :track="track"
-          class="minimal-track-name"
-          :hoverAnimation="false"
-        />
-        <div class="minimal-artist">
-          <LoadClickableArtistsNames
-            v-if="track.artists_ids"
-            :artistsIds="track.artists_ids"
+        <div class="minimal-info">
+          <TrackName
+            :track="track"
+            class="minimal-track-name"
+            :hoverAnimation="false"
+            :color="isCurrentlyPlaying ? 'var(--accent-color)' : null"
           />
+          <div class="minimal-artist">
+            <LoadClickableArtistsNames
+              v-if="track.artists_ids"
+              :artistsIds="track.artists_ids"
+            />
+          </div>
         </div>
+        <div class="minimal-duration">{{ formatDuration(track.duration) }}</div>
       </div>
       <!-- Standard mode: horizontal layout -->
       <div v-else class="track-item-content">
@@ -272,20 +276,28 @@ defineExpose({
 /* Minimal mode styles (for sidebar/queue) */
 .track-item-minimal {
   display: flex;
-  flex-direction: column;
-  gap: 2px;
+  flex-direction: row;
+  align-items: center;
   width: 100%;
   padding: 4px 0;
+  gap: 8px;
+}
+
+.minimal-info {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  gap: 2px;
 }
 
 .minimal-track-name {
-  font-size: 14px;
-  color: var(--text-base);
   line-height: 1.3;
 }
 
-.playingTrack .minimal-track-name {
-  color: var(--accent-color);
+.track-item-minimal :deep(.track-name) {
+  font-size: 14px;
+  font-weight: normal;
 }
 
 .minimal-artist {
@@ -303,5 +315,11 @@ defineExpose({
 .minimal-artist :deep(a:hover) {
   color: var(--text-base);
   text-decoration: underline;
+}
+
+.minimal-duration {
+  font-size: 12px;
+  color: var(--text-subdued);
+  flex-shrink: 0;
 }
 </style>
