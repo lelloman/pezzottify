@@ -2,6 +2,7 @@ mod file_config;
 
 pub use file_config::{
     BackgroundJobsConfig, DownloadManagerConfig, FileConfig, OidcConfig, SearchConfig,
+    StreamingSearchConfig as StreamingSearchFileConfig,
 };
 
 use crate::server::RequestsLoggingLevel;
@@ -38,6 +39,57 @@ impl std::fmt::Display for SearchEngine {
 #[derive(Debug, Clone)]
 pub struct SearchSettings {
     pub engine: SearchEngine,
+    pub streaming: StreamingSearchSettings,
+}
+
+/// Settings for streaming structured search
+#[derive(Debug, Clone)]
+pub struct StreamingSearchSettings {
+    /// Target identification strategy
+    pub strategy: TargetIdentifierStrategy,
+
+    // ScoreGap strategy settings
+    /// Minimum normalized score for top result (0.0 - 1.0)
+    pub min_absolute_score: f64,
+    /// Minimum gap between #1 and #2 as ratio of #1's score
+    pub min_score_gap_ratio: f64,
+    /// Additional confidence boost for exact name matches
+    pub exact_match_boost: f64,
+
+    // Enrichment limits
+    /// Maximum number of popular tracks to include
+    pub popular_tracks_limit: usize,
+    /// Maximum number of albums to include
+    pub albums_limit: usize,
+    /// Maximum number of related artists to include
+    pub related_artists_limit: usize,
+    /// Maximum number of other results to include
+    pub other_results_limit: usize,
+    /// Maximum number of top results when no target is identified
+    pub top_results_limit: usize,
+}
+
+impl Default for StreamingSearchSettings {
+    fn default() -> Self {
+        Self {
+            strategy: TargetIdentifierStrategy::ScoreGap,
+            min_absolute_score: 0.5,
+            min_score_gap_ratio: 0.15,
+            exact_match_boost: 0.2,
+            popular_tracks_limit: 5,
+            albums_limit: 5,
+            related_artists_limit: 5,
+            other_results_limit: 20,
+            top_results_limit: 10,
+        }
+    }
+}
+
+/// Target identification strategy for streaming search
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub enum TargetIdentifierStrategy {
+    #[default]
+    ScoreGap,
 }
 
 /// CLI arguments that can be used for config resolution.
@@ -173,9 +225,10 @@ impl AppConfig {
         let background_jobs = BackgroundJobsSettings::default();
 
         // Search settings - TOML overrides CLI
-        let search_engine = file
-            .search
-            .and_then(|s| s.engine)
+        let search_config = file.search.clone();
+        let search_engine = search_config
+            .as_ref()
+            .and_then(|s| s.engine.clone())
             .map(|e| match e.to_lowercase().replace('-', "_").as_str() {
                 "fts5" => SearchEngine::Fts5,
                 "fts5_levenshtein" | "fts5levenshtein" => SearchEngine::Fts5Levenshtein,
@@ -184,8 +237,46 @@ impl AppConfig {
             })
             .unwrap_or_else(|| cli.search_engine.clone());
 
+        // Streaming search settings from file config
+        let streaming_defaults = StreamingSearchSettings::default();
+        let streaming_file = search_config.and_then(|s| s.streaming).unwrap_or_default();
+        let streaming = StreamingSearchSettings {
+            strategy: streaming_file
+                .strategy
+                .map(|s| match s.to_lowercase().as_str() {
+                    "score_gap" | "scoregap" => TargetIdentifierStrategy::ScoreGap,
+                    _ => TargetIdentifierStrategy::ScoreGap, // default for unknown
+                })
+                .unwrap_or(streaming_defaults.strategy),
+            min_absolute_score: streaming_file
+                .min_absolute_score
+                .unwrap_or(streaming_defaults.min_absolute_score),
+            min_score_gap_ratio: streaming_file
+                .min_score_gap_ratio
+                .unwrap_or(streaming_defaults.min_score_gap_ratio),
+            exact_match_boost: streaming_file
+                .exact_match_boost
+                .unwrap_or(streaming_defaults.exact_match_boost),
+            popular_tracks_limit: streaming_file
+                .popular_tracks_limit
+                .unwrap_or(streaming_defaults.popular_tracks_limit),
+            albums_limit: streaming_file
+                .albums_limit
+                .unwrap_or(streaming_defaults.albums_limit),
+            related_artists_limit: streaming_file
+                .related_artists_limit
+                .unwrap_or(streaming_defaults.related_artists_limit),
+            other_results_limit: streaming_file
+                .other_results_limit
+                .unwrap_or(streaming_defaults.other_results_limit),
+            top_results_limit: streaming_file
+                .top_results_limit
+                .unwrap_or(streaming_defaults.top_results_limit),
+        };
+
         let search = SearchSettings {
             engine: search_engine,
+            streaming,
         };
 
         Ok(Self {

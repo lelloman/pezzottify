@@ -97,6 +97,7 @@ impl TestServer {
             content_cache_age_sec: 0, // Disable caching in tests
             frontend_dir_path: None,
             disable_password_auth: false,
+            streaming_search: pezzottify_catalog_server::config::StreamingSearchSettings::default(),
         };
 
         // Create user manager

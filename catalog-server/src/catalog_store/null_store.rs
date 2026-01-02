@@ -47,6 +47,26 @@ impl CatalogStore for NullCatalogStore {
         Ok(None)
     }
 
+    fn get_resolved_artist(&self, _id: &str) -> Result<Option<super::ResolvedArtist>> {
+        Ok(None)
+    }
+
+    fn get_resolved_album(&self, _id: &str) -> Result<Option<super::ResolvedAlbum>> {
+        Ok(None)
+    }
+
+    fn get_resolved_track(&self, _id: &str) -> Result<Option<super::ResolvedTrack>> {
+        Ok(None)
+    }
+
+    fn get_discography(&self, _id: &str) -> Result<Option<super::ArtistDiscography>> {
+        Ok(None)
+    }
+
+    fn get_album_display_image(&self, _album_id: &str) -> Result<Option<super::Image>> {
+        Ok(None)
+    }
+
     fn get_image_path(&self, _id: &str) -> PathBuf {
         PathBuf::new()
     }

@@ -64,6 +64,36 @@ pub struct BackgroundJobsConfig {
 pub struct SearchConfig {
     /// Search engine to use: "pezzothash", "fts5", "noop"
     pub engine: Option<String>,
+    /// Streaming search configuration
+    pub streaming: Option<StreamingSearchConfig>,
+}
+
+/// Configuration for streaming structured search
+#[derive(Debug, Deserialize, Default, Clone)]
+#[serde(default)]
+pub struct StreamingSearchConfig {
+    /// Target identification strategy: "score_gap" (default)
+    pub strategy: Option<String>,
+
+    // ScoreGap strategy settings
+    /// Minimum normalized score for top result (0.0 - 1.0)
+    pub min_absolute_score: Option<f64>,
+    /// Minimum gap between #1 and #2 as ratio of #1's score
+    pub min_score_gap_ratio: Option<f64>,
+    /// Additional confidence boost for exact name matches
+    pub exact_match_boost: Option<f64>,
+
+    // Enrichment limits
+    /// Maximum number of popular tracks to include
+    pub popular_tracks_limit: Option<usize>,
+    /// Maximum number of albums to include
+    pub albums_limit: Option<usize>,
+    /// Maximum number of related artists to include
+    pub related_artists_limit: Option<usize>,
+    /// Maximum number of other results to include
+    pub other_results_limit: Option<usize>,
+    /// Maximum number of top results when no target is identified
+    pub top_results_limit: Option<usize>,
 }
 
 #[derive(Debug, Deserialize, Clone)]

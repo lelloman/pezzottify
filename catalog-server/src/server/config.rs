@@ -1,3 +1,5 @@
+use crate::config::StreamingSearchSettings;
+
 use super::RequestsLoggingLevel;
 
 #[derive(Clone)]
@@ -9,6 +11,8 @@ pub struct ServerConfig {
     /// If true, disables the password authentication endpoint.
     /// Users must authenticate via OIDC only.
     pub disable_password_auth: bool,
+    /// Configuration for the streaming search pipeline.
+    pub streaming_search: StreamingSearchSettings,
 }
 
 impl Default for ServerConfig {
@@ -19,6 +23,7 @@ impl Default for ServerConfig {
             content_cache_age_sec: 3600,
             frontend_dir_path: None,
             disable_password_auth: false,
+            streaming_search: StreamingSearchSettings::default(),
         }
     }
 }

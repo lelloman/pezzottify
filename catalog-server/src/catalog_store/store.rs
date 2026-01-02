@@ -1812,6 +1812,30 @@ impl CatalogStore for SqliteCatalogStore {
         }
     }
 
+    fn get_resolved_artist(&self, id: &str) -> Result<Option<ResolvedArtist>> {
+        SqliteCatalogStore::get_resolved_artist(self, id)
+    }
+
+    fn get_resolved_album(&self, id: &str) -> Result<Option<ResolvedAlbum>> {
+        SqliteCatalogStore::get_resolved_album(self, id)
+    }
+
+    fn get_resolved_track(&self, id: &str) -> Result<Option<ResolvedTrack>> {
+        SqliteCatalogStore::get_resolved_track(self, id)
+    }
+
+    fn get_discography(&self, id: &str) -> Result<Option<ArtistDiscography>> {
+        SqliteCatalogStore::get_artist_discography(self, id)
+    }
+
+    fn get_album_display_image(&self, album_id: &str) -> Result<Option<Image>> {
+        let image_id = self.get_album_display_image_id(album_id)?;
+        match image_id {
+            Some(id) => self.get_image(&id),
+            None => Ok(None),
+        }
+    }
+
     fn get_image_path(&self, id: &str) -> PathBuf {
         // For SQLite store, we need to look up the image URI and resolve it
         match self.get_image(id) {

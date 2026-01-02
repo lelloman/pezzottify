@@ -418,6 +418,22 @@ impl TestClient {
             .expect("Search with filters request failed")
     }
 
+    /// GET /v1/content/search/stream?q={query}
+    ///
+    /// Returns an SSE stream of search sections. The response is streamed
+    /// and should be processed as Server-Sent Events.
+    pub async fn search_stream(&self, query: &str) -> Response {
+        self.client
+            .get(format!(
+                "{}/v1/content/search/stream?q={}",
+                self.base_url,
+                urlencoding::encode(query)
+            ))
+            .send()
+            .await
+            .expect("Streaming search request failed")
+    }
+
     // ========================================================================
     // Listening Stats Endpoints
     // ========================================================================

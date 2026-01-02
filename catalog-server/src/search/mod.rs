@@ -5,6 +5,7 @@ mod levenshtein;
 mod pezzott_hash;
 mod relevance_filter;
 mod search_vault;
+pub mod streaming;
 
 pub use factory::create_search_vault;
 pub use fts5_levenshtein_search::Fts5LevenshteinSearchVault;

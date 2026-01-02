@@ -40,8 +40,23 @@ pub trait CatalogStore: Send + Sync {
     /// Get a resolved track with all related data.
     fn get_resolved_track_json(&self, id: &str) -> Result<Option<serde_json::Value>>;
 
+    /// Get a resolved artist with all related data (typed version).
+    fn get_resolved_artist(&self, id: &str) -> Result<Option<super::ResolvedArtist>>;
+
+    /// Get a resolved album with all related data (typed version).
+    fn get_resolved_album(&self, id: &str) -> Result<Option<super::ResolvedAlbum>>;
+
+    /// Get a resolved track with all related data (typed version).
+    fn get_resolved_track(&self, id: &str) -> Result<Option<super::ResolvedTrack>>;
+
     /// Get an artist's discography.
     fn get_artist_discography_json(&self, id: &str) -> Result<Option<serde_json::Value>>;
+
+    /// Get an artist's discography (typed version).
+    fn get_discography(&self, id: &str) -> Result<Option<super::ArtistDiscography>>;
+
+    /// Get the display image for an album.
+    fn get_album_display_image(&self, album_id: &str) -> Result<Option<super::Image>>;
 
     // =========================================================================
     // File Path Resolution
