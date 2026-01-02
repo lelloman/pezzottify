@@ -220,11 +220,11 @@ fn resolve_track(
             })
         });
 
-    // Get availability (defaults to "Available" if not present)
+    // Get availability (defaults to "available" if not present)
     let availability = track_json
         .get("availability")
         .and_then(|a| a.as_str())
-        .unwrap_or("Available")
+        .unwrap_or("available")
         .to_string();
 
     let resolved_track = SearchedTrack {

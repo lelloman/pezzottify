@@ -1,21 +1,29 @@
 <template>
-  <div v-if="panelVisible" class="panel containero">
+  <div v-if="panelVisible" class="sidebarContainer">
     <div class="header">
-      <ChevronLeft
+      <button
         :class="computePreviousPlaylistButtonClasses"
         @click.stop="seekPlaybackHistory(-1)"
-      />
-      <div class="currentlyPlaylistHeader">
-        <SlidingText class="currePlaylistHeader" :hoverAnimation="true">
-          <span class="currentlyPlayingText"> {{ playingContext.text }}</span>
+        :disabled="!player.canGoToPreviousPlaylist"
+        aria-label="Previous playlist"
+      >
+        <ChevronLeft class="navIcon" />
+      </button>
+      <div class="headerTitle">
+        <SlidingText :hoverAnimation="true">
+          <span class="playlistName">{{ playingContext.text }}</span>
         </SlidingText>
       </div>
-      <ChevronRight
+      <button
         :class="computeNextPlaylistButtonClasses"
         @click.stop="seekPlaybackHistory(1)"
-      />
+        :disabled="!player.canGoToNextPlaylist"
+        aria-label="Next playlist"
+      >
+        <ChevronRight class="navIcon" />
+      </button>
     </div>
-    <div class="trackRowsContainer">
+    <div class="trackList">
       <VirtualList
         v-model="tracksVModel"
         data-key="listItemId"
@@ -23,10 +31,7 @@
       >
         <template v-slot:item="{ record, index }">
           <div
-            :class="{
-              currentlyPlayingRow: index == currentIndex,
-              trackRow: true,
-            }"
+            :class="['trackItem', { isPlaying: index == currentIndex }]"
             @contextmenu.prevent="openContextMenu($event, record.id, index)"
           >
             <LoadTrackListItem
@@ -91,17 +96,17 @@ const handleDrop = (event) => {
 
 const computeNextPlaylistButtonClasses = computed(() => {
   return {
-    playbackHistoryIcon: true,
-    scaleClickFeedback: player.canGoToNextPlaylist,
-    disabledPlaybackHistoryButton: !player.canGoToNextPlaylist,
+    navButton: true,
+    navButtonEnabled: player.canGoToNextPlaylist,
+    navButtonDisabled: !player.canGoToNextPlaylist,
   };
 });
 
 const computePreviousPlaylistButtonClasses = computed(() => {
   return {
-    playbackHistoryIcon: true,
-    scaleClickFeedback: player.canGoToPreviousPlaylist,
-    disabledPlaybackHistoryButton: !player.canGoToPreviousPlaylist,
+    navButton: true,
+    navButtonEnabled: player.canGoToPreviousPlaylist,
+    navButtonDisabled: !player.canGoToPreviousPlaylist,
   };
 });
 
@@ -149,76 +154,105 @@ watch(
 </script>
 
 <style scoped>
-.containero {
+.sidebarContainer {
   display: flex;
   flex-direction: column;
+  height: 100%;
+  background: linear-gradient(180deg, var(--bg-highlight) 0%, var(--bg-elevated) 100px);
+  border-radius: var(--radius-lg);
 }
 
+/* Header */
 .header {
-  padding: 8px 16px;
   display: flex;
-  flex-direction: row;
+  align-items: center;
+  gap: var(--spacing-2);
+  padding: var(--spacing-4);
+  border-bottom: 1px solid var(--border-subtle);
 }
 
-.currentlyPlaylistHeader {
-  width: 0;
+.headerTitle {
   flex: 1;
-  overflow: hidden;
+  min-width: 0;
   text-align: center;
 }
 
-.currentlyPlayingText {
-  font-size: 24px;
+.playlistName {
+  font-size: var(--text-lg);
+  font-weight: var(--font-semibold);
+  color: var(--text-base);
   white-space: nowrap;
-  justify-content: space-around;
 }
 
-.trackRowsContainer {
+/* Navigation Buttons */
+.navButton {
   display: flex;
-  width: 100%;
-  flex-direction: column;
-  overflow-y: auto;
-  flex: 1;
-}
-
-.playbackHistoryIcon {
-  fill: white;
-  height: 32px;
-  width: 32px;
-}
-
-.disabledPlaybackHistoryButton {
-  opacity: 0.5;
-}
-
-.trackRow {
-  display: flex;
-  width: 100%;
-  flex-direction: row;
-  cursor: pointer;
-  padding: 8px 16px;
   align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-full);
+  background: transparent;
+  cursor: pointer;
+  transition: all var(--transition-fast);
 }
 
-.trackRow:hover {
-  background-color: var(--highlighted-panel-color);
+.navButton:focus-visible {
+  outline: 2px solid var(--spotify-green);
+  outline-offset: 2px;
 }
 
-.trackImage {
-  width: 40px;
-  height: 40px;
+.navButtonEnabled {
+  color: var(--text-base);
 }
 
-.namesColumn {
+.navButtonEnabled:hover {
+  background: var(--bg-press);
+  transform: scale(1.1);
+}
+
+.navButtonEnabled:active {
+  transform: scale(0.95);
+}
+
+.navButtonDisabled {
+  color: var(--text-subtle);
+  cursor: not-allowed;
+}
+
+.navIcon {
+  width: 20px;
+  height: 20px;
+  fill: currentColor;
+}
+
+/* Track List */
+.trackList {
   flex: 1;
-  width: 0;
-  display: flex;
-  flex-direction: column;
-  padding: 0 8px;
+  overflow-y: auto;
+  padding: var(--spacing-2) 0;
 }
 
-.currentlyPlayingRow {
-  color: var(--accent-color);
-  text-decoration: bold;
+.trackItem {
+  display: flex;
+  align-items: center;
+  padding: var(--spacing-1) var(--spacing-3);
+  cursor: pointer;
+  border-radius: var(--radius-md);
+  margin: 0 var(--spacing-2);
+  width: calc(100% - var(--spacing-4));
+  transition: background-color var(--transition-fast);
+}
+
+.trackItem:hover {
+  background-color: var(--bg-highlight);
+}
+
+.trackItem.isPlaying {
+  background: linear-gradient(90deg, rgba(29, 185, 84, 0.15) 0%, transparent 100%);
+  border-left: 3px solid var(--spotify-green);
+  margin-left: calc(var(--spacing-2) - 3px);
 }
 </style>
