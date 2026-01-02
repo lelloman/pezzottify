@@ -4,6 +4,8 @@
 //! the single item the user most likely wanted. This enables rich enrichment
 //! (popular tracks, albums, related artists) for high-confidence matches.
 
+use tracing::debug;
+
 use crate::search::{HashedItemType, SearchResult};
 
 use super::MatchType;
@@ -104,8 +106,22 @@ impl TargetIdentifier for ScoreGapStrategy {
         // Normalize the score
         let first_score = self.normalize_score(first.score);
 
+        debug!(
+            query = %query,
+            first_raw_score = first.score,
+            first_normalized = first_score,
+            first_text = %first.matchable_text,
+            min_absolute = self.config.min_absolute_score,
+            "Target identification: checking first result"
+        );
+
         // Check absolute threshold
         if first_score < self.config.min_absolute_score {
+            debug!(
+                first_score = first_score,
+                threshold = self.config.min_absolute_score,
+                "Target rejected: below absolute score threshold"
+            );
             return None;
         }
 
@@ -113,9 +129,25 @@ impl TargetIdentifier for ScoreGapStrategy {
         if let Some(second) = results.get(1) {
             let second_score = self.normalize_score(second.score);
             let gap = first_score - second_score;
+            let gap_ratio = gap / first_score;
+
+            debug!(
+                second_raw_score = second.score,
+                second_normalized = second_score,
+                second_text = %second.matchable_text,
+                gap = gap,
+                gap_ratio = gap_ratio,
+                min_gap_ratio = self.config.min_score_gap_ratio,
+                "Target identification: checking gap to second result"
+            );
 
             // Gap must be at least min_score_gap_ratio of the first score
-            if gap / first_score < self.config.min_score_gap_ratio {
+            if gap_ratio < self.config.min_score_gap_ratio {
+                debug!(
+                    gap_ratio = gap_ratio,
+                    required = self.config.min_score_gap_ratio,
+                    "Target rejected: insufficient gap between first and second result"
+                );
                 return None;
             }
         }
@@ -135,6 +167,15 @@ impl TargetIdentifier for ScoreGapStrategy {
             HashedItemType::Album => MatchType::Album,
             HashedItemType::Track => MatchType::Track,
         };
+
+        debug!(
+            target_id = %first.item_id,
+            target_text = %first.matchable_text,
+            confidence = confidence,
+            is_exact = is_exact,
+            match_type = ?match_type,
+            "Target identified successfully"
+        );
 
         Some(IdentifiedTarget {
             result: first.clone(),
