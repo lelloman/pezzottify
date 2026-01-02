@@ -158,7 +158,7 @@ watch(
   display: flex;
   flex-direction: column;
   height: 100%;
-  background: linear-gradient(180deg, var(--bg-highlight) 0%, var(--bg-elevated) 100px);
+  background-color: var(--bg-elevated);
   border-radius: var(--radius-lg);
 }
 
@@ -248,11 +248,5 @@ watch(
 
 .trackItem:hover {
   background-color: var(--bg-highlight);
-}
-
-.trackItem.isPlaying {
-  background: linear-gradient(90deg, rgba(29, 185, 84, 0.15) 0%, transparent 100%);
-  border-left: 3px solid var(--spotify-green);
-  margin-left: calc(var(--spacing-2) - 3px);
 }
 </style>
