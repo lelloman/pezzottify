@@ -239,15 +239,23 @@ impl<'a> StreamingSearchPipeline<'a> {
 
         // Related artists
         if let Ok(Some(resolved)) = self.catalog_store.get_resolved_artist(artist_id) {
-            let related: Vec<ArtistSummary> = resolved
+            let mut related: Vec<ArtistSummary> = Vec::new();
+            for artist in resolved
                 .related_artists
                 .iter()
                 .take(self.config.related_artists_limit)
-                .map(|a| {
-                    emitted_ids.insert(a.id.clone());
-                    ArtistSummary::from(a)
-                })
-                .collect();
+            {
+                emitted_ids.insert(artist.id.clone());
+                // Fetch resolved artist to get display image
+                let summary = if let Ok(Some(resolved_related)) =
+                    self.catalog_store.get_resolved_artist(&artist.id)
+                {
+                    ArtistSummary::from(&resolved_related)
+                } else {
+                    ArtistSummary::from(artist)
+                };
+                related.push(summary);
+            }
 
             if !related.is_empty() {
                 sections.push(SearchSection::RelatedArtists {
