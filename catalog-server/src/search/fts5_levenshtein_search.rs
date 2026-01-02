@@ -607,6 +607,36 @@ mod tests {
             ) -> anyhow::Result<Option<serde_json::Value>> {
                 Ok(None)
             }
+            fn get_resolved_artist(
+                &self,
+                _id: &str,
+            ) -> anyhow::Result<Option<crate::catalog_store::ResolvedArtist>> {
+                Ok(None)
+            }
+            fn get_resolved_album(
+                &self,
+                _id: &str,
+            ) -> anyhow::Result<Option<crate::catalog_store::ResolvedAlbum>> {
+                Ok(None)
+            }
+            fn get_resolved_track(
+                &self,
+                _id: &str,
+            ) -> anyhow::Result<Option<crate::catalog_store::ResolvedTrack>> {
+                Ok(None)
+            }
+            fn get_discography(
+                &self,
+                _id: &str,
+            ) -> anyhow::Result<Option<crate::catalog_store::ArtistDiscography>> {
+                Ok(None)
+            }
+            fn get_album_display_image(
+                &self,
+                _album_id: &str,
+            ) -> anyhow::Result<Option<crate::catalog_store::Image>> {
+                Ok(None)
+            }
             fn get_image_path(&self, _id: &str) -> PathBuf {
                 PathBuf::new()
             }
@@ -1449,6 +1479,36 @@ mod tests {
                 &self,
                 _id: &str,
             ) -> anyhow::Result<Option<serde_json::Value>> {
+                Ok(None)
+            }
+            fn get_resolved_artist(
+                &self,
+                _id: &str,
+            ) -> anyhow::Result<Option<crate::catalog_store::ResolvedArtist>> {
+                Ok(None)
+            }
+            fn get_resolved_album(
+                &self,
+                _id: &str,
+            ) -> anyhow::Result<Option<crate::catalog_store::ResolvedAlbum>> {
+                Ok(None)
+            }
+            fn get_resolved_track(
+                &self,
+                _id: &str,
+            ) -> anyhow::Result<Option<crate::catalog_store::ResolvedTrack>> {
+                Ok(None)
+            }
+            fn get_discography(
+                &self,
+                _id: &str,
+            ) -> anyhow::Result<Option<crate::catalog_store::ArtistDiscography>> {
+                Ok(None)
+            }
+            fn get_album_display_image(
+                &self,
+                _album_id: &str,
+            ) -> anyhow::Result<Option<crate::catalog_store::Image>> {
                 Ok(None)
             }
             fn get_image_path(&self, _id: &str) -> std::path::PathBuf {

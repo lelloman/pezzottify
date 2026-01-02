@@ -5311,6 +5311,7 @@ pub async fn run_server(
     download_manager: Option<Arc<crate::download_manager::DownloadManager>>,
     server_store: Arc<dyn crate::server_store::ServerStore>,
     oidc_config: Option<crate::config::OidcConfig>,
+    streaming_search: crate::config::StreamingSearchSettings,
 ) -> Result<()> {
     let disable_password_auth = oidc_config
         .as_ref()
@@ -5323,6 +5324,7 @@ pub async fn run_server(
         content_cache_age_sec,
         frontend_dir_path,
         disable_password_auth,
+        streaming_search,
     };
 
     let app = make_app(

@@ -609,6 +609,70 @@ impl UserManager {
         self.user_store.get_top_tracks(start_date, end_date, limit)
     }
 
+    /// Get popular tracks for a specific artist.
+    ///
+    /// Returns track IDs sorted by play count descending, filtered to only include
+    /// tracks where the given artist is credited (any role).
+    ///
+    /// Uses a 30-day lookback window for popularity calculation.
+    pub fn get_popular_tracks_by_artist(
+        &self,
+        artist_id: &str,
+        limit: usize,
+    ) -> Result<Vec<String>> {
+        // Calculate date range: last 30 days
+        let now = chrono::Utc::now();
+        let thirty_days_ago = now - chrono::Duration::days(30);
+        let start_date: u32 = thirty_days_ago.format("%Y%m%d").to_string().parse()?;
+        let end_date: u32 = now.format("%Y%m%d").to_string().parse()?;
+
+        // Get all track play counts (we need all to filter by artist)
+        let all_track_counts = self
+            .user_store
+            .get_all_track_play_counts(start_date, end_date)?;
+
+        if all_track_counts.is_empty() {
+            return Ok(vec![]);
+        }
+
+        // Filter to tracks by this artist and collect with play counts
+        let mut artist_tracks: Vec<(String, u64)> = Vec::new();
+
+        for track_count in &all_track_counts {
+            // Get track's artists from catalog
+            if let Ok(Some(track_json)) = self
+                .catalog_store
+                .get_resolved_track_json(&track_count.track_id)
+            {
+                // Check if this artist is on the track
+                if let Some(artists) = track_json.get("artists").and_then(|a| a.as_array()) {
+                    let has_artist = artists.iter().any(|track_artist| {
+                        track_artist
+                            .get("artist")
+                            .and_then(|a| a.get("id"))
+                            .and_then(|id| id.as_str())
+                            .map(|id| id == artist_id)
+                            .unwrap_or(false)
+                    });
+
+                    if has_artist {
+                        artist_tracks.push((track_count.track_id.clone(), track_count.play_count));
+                    }
+                }
+            }
+        }
+
+        // Sort by play count descending and take top N
+        artist_tracks.sort_by(|a, b| b.1.cmp(&a.1));
+        let top_track_ids: Vec<String> = artist_tracks
+            .into_iter()
+            .take(limit)
+            .map(|(id, _)| id)
+            .collect();
+
+        Ok(top_track_ids)
+    }
+
     pub fn prune_listening_events(&self, older_than_days: u32) -> Result<usize> {
         self.user_store.prune_listening_events(older_than_days)
     }

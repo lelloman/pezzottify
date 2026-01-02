@@ -22,8 +22,7 @@ struct HashedItem {
     pub hash: PezzottHash,
 }
 
-#[cfg_attr(test, derive(Clone))]
-#[derive(Debug, Eq, Serialize)]
+#[derive(Debug, Clone, Eq, Serialize)]
 pub struct SearchResult {
     pub item_type: HashedItemType,
     pub item_id: String,
@@ -32,7 +31,7 @@ pub struct SearchResult {
     pub matchable_text: String,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 pub struct SearchedAlbum {
     pub id: String,
     pub name: String,
@@ -41,14 +40,14 @@ pub struct SearchedAlbum {
     pub year: Option<i64>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 pub struct SearchedArtist {
     pub id: String,
     pub name: String,
     pub image_id: Option<String>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 pub struct SearchedTrack {
     pub id: String,
     pub name: String,
@@ -59,7 +58,7 @@ pub struct SearchedTrack {
     pub availability: String,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 #[serde(tag = "type")]
 pub enum ResolvedSearchResult {
     Track(SearchedTrack),

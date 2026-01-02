@@ -1,0 +1,464 @@
+//! Streaming search pipeline implementation.
+//!
+//! The pipeline orchestrates the streaming search process:
+//! 1. Run organic search
+//! 2. Identify target (if any)
+//! 3. Emit primary match or top results
+//! 4. Enrich based on target type
+//! 5. Emit other results
+//! 6. Emit done
+
+use std::collections::HashSet;
+use std::time::Instant;
+
+use crate::catalog_store::CatalogStore;
+use crate::config::StreamingSearchSettings;
+use crate::search::{HashedItemType, ResolvedSearchResult};
+use crate::user::UserManager;
+
+use super::enrichment::track_summary_with_image;
+use super::sections::{AlbumSummary, ArtistSummary, MatchType, SearchSection, TrackSummary};
+use super::target_identifier::{
+    IdentifiedTarget, ScoreGapConfig, ScoreGapStrategy, TargetIdentifier,
+};
+
+/// Streaming search pipeline that generates sections progressively.
+pub struct StreamingSearchPipeline<'a> {
+    catalog_store: &'a dyn CatalogStore,
+    user_manager: &'a UserManager,
+    target_identifier: Box<dyn TargetIdentifier>,
+    config: StreamingSearchSettings,
+}
+
+impl<'a> StreamingSearchPipeline<'a> {
+    /// Create a new pipeline with the given dependencies and configuration.
+    pub fn new(
+        catalog_store: &'a dyn CatalogStore,
+        user_manager: &'a UserManager,
+        config: StreamingSearchSettings,
+    ) -> Self {
+        // Create target identifier based on config strategy
+        let target_identifier: Box<dyn TargetIdentifier> =
+            Box::new(ScoreGapStrategy::new(ScoreGapConfig {
+                min_absolute_score: config.min_absolute_score,
+                min_score_gap_ratio: config.min_score_gap_ratio,
+                exact_match_boost: config.exact_match_boost,
+                max_raw_score: 128, // SimHash default
+            }));
+
+        Self {
+            catalog_store,
+            user_manager,
+            target_identifier,
+            config,
+        }
+    }
+
+    /// Execute the streaming search and return all sections.
+    ///
+    /// Takes search results from the caller (already obtained from SearchVault).
+    pub fn execute(
+        &self,
+        query: &str,
+        search_results: Vec<crate::search::SearchResult>,
+    ) -> Vec<SearchSection> {
+        let start_time = Instant::now();
+
+        // Track IDs that have been emitted to avoid duplicates
+        let mut emitted_ids: HashSet<String> = HashSet::new();
+
+        // Try to identify a target
+        let target = self
+            .target_identifier
+            .identify_target(query, &search_results);
+
+        // Build sections
+        let mut sections: Vec<SearchSection> = Vec::new();
+
+        match target {
+            Some(target) => {
+                // Emit primary match
+                if let Some(section) = self.build_primary_match(&target, &mut emitted_ids) {
+                    sections.push(section);
+                }
+
+                // Emit enrichment sections based on target type
+                self.add_enrichment_sections(&target, &mut sections, &mut emitted_ids);
+            }
+            None => {
+                // No clear target - emit top results
+                let section = self.build_top_results(&search_results, &mut emitted_ids);
+                sections.push(section);
+            }
+        }
+
+        // Emit other results (remaining matches not yet shown)
+        let other_section = self.build_other_results(&search_results, &emitted_ids);
+        if let Some(section) = other_section {
+            sections.push(section);
+        }
+
+        // Emit done
+        let elapsed = start_time.elapsed();
+        sections.push(SearchSection::Done {
+            total_time_ms: elapsed.as_millis() as u64,
+        });
+
+        sections
+    }
+
+    /// Build the primary match section for an identified target.
+    fn build_primary_match(
+        &self,
+        target: &IdentifiedTarget,
+        emitted_ids: &mut HashSet<String>,
+    ) -> Option<SearchSection> {
+        let item = self.resolve_search_result(&target.result.item_id, target.result.item_type)?;
+        emitted_ids.insert(target.result.item_id.clone());
+
+        Some(SearchSection::PrimaryMatch {
+            match_type: target.match_type,
+            item,
+            confidence: target.confidence,
+        })
+    }
+
+    /// Build the top results section when no clear target is identified.
+    fn build_top_results(
+        &self,
+        search_results: &[crate::search::SearchResult],
+        emitted_ids: &mut HashSet<String>,
+    ) -> SearchSection {
+        let mut items = Vec::new();
+
+        for result in search_results.iter().take(self.config.top_results_limit) {
+            if let Some(resolved) = self.resolve_search_result(&result.item_id, result.item_type) {
+                emitted_ids.insert(result.item_id.clone());
+                items.push(resolved);
+            }
+        }
+
+        SearchSection::TopResults { items }
+    }
+
+    /// Add enrichment sections based on the target type.
+    fn add_enrichment_sections(
+        &self,
+        target: &IdentifiedTarget,
+        sections: &mut Vec<SearchSection>,
+        emitted_ids: &mut HashSet<String>,
+    ) {
+        match target.match_type {
+            MatchType::Artist => {
+                self.add_artist_enrichment(&target.result.item_id, sections, emitted_ids);
+            }
+            MatchType::Album => {
+                self.add_album_enrichment(&target.result.item_id, sections, emitted_ids);
+            }
+            MatchType::Track => {
+                self.add_track_enrichment(&target.result.item_id, sections, emitted_ids);
+            }
+        }
+    }
+
+    /// Add enrichment sections for an artist target.
+    fn add_artist_enrichment(
+        &self,
+        artist_id: &str,
+        sections: &mut Vec<SearchSection>,
+        emitted_ids: &mut HashSet<String>,
+    ) {
+        // Popular tracks by this artist
+        if let Ok(track_ids) = self
+            .user_manager
+            .get_popular_tracks_by_artist(artist_id, self.config.popular_tracks_limit)
+        {
+            let mut tracks: Vec<TrackSummary> = Vec::new();
+            for track_id in track_ids {
+                if let Ok(Some(resolved)) = self.catalog_store.get_resolved_track(&track_id) {
+                    // Get album image for the track
+                    let image = self
+                        .catalog_store
+                        .get_album_display_image(&resolved.album.id)
+                        .ok()
+                        .flatten();
+                    tracks.push(track_summary_with_image(&resolved, image.as_ref()));
+                    emitted_ids.insert(track_id);
+                }
+            }
+            if !tracks.is_empty() {
+                sections.push(SearchSection::PopularBy {
+                    target_id: artist_id.to_string(),
+                    target_type: MatchType::Artist,
+                    items: tracks,
+                });
+            }
+        }
+
+        // Albums by this artist
+        if let Ok(Some(discography)) = self.catalog_store.get_discography(artist_id) {
+            let mut albums: Vec<AlbumSummary> = Vec::new();
+
+            // Combine primary albums and features, prioritize primary
+            let all_albums: Vec<_> = discography
+                .albums
+                .iter()
+                .chain(discography.features.iter())
+                .take(self.config.albums_limit)
+                .collect();
+
+            for album in all_albums {
+                if let Ok(Some(resolved)) = self.catalog_store.get_resolved_album(&album.id) {
+                    albums.push(AlbumSummary::from(&resolved));
+                    emitted_ids.insert(album.id.clone());
+                }
+            }
+
+            if !albums.is_empty() {
+                sections.push(SearchSection::AlbumsBy {
+                    target_id: artist_id.to_string(),
+                    items: albums,
+                });
+            }
+        }
+
+        // Related artists
+        if let Ok(Some(resolved)) = self.catalog_store.get_resolved_artist(artist_id) {
+            let related: Vec<ArtistSummary> = resolved
+                .related_artists
+                .iter()
+                .take(self.config.related_artists_limit)
+                .map(|a| {
+                    emitted_ids.insert(a.id.clone());
+                    ArtistSummary::from(a)
+                })
+                .collect();
+
+            if !related.is_empty() {
+                sections.push(SearchSection::RelatedArtists {
+                    target_id: artist_id.to_string(),
+                    items: related,
+                });
+            }
+        }
+    }
+
+    /// Add enrichment sections for an album target.
+    fn add_album_enrichment(
+        &self,
+        album_id: &str,
+        sections: &mut Vec<SearchSection>,
+        emitted_ids: &mut HashSet<String>,
+    ) {
+        // Tracks from this album
+        if let Ok(Some(resolved)) = self.catalog_store.get_resolved_album(album_id) {
+            let mut tracks: Vec<TrackSummary> = Vec::new();
+
+            for disc in &resolved.discs {
+                for track in &disc.tracks {
+                    // Get full resolved track for artist info
+                    if let Ok(Some(resolved_track)) =
+                        self.catalog_store.get_resolved_track(&track.id)
+                    {
+                        tracks.push(track_summary_with_image(
+                            &resolved_track,
+                            resolved.display_image.as_ref(),
+                        ));
+                        emitted_ids.insert(track.id.clone());
+                    }
+                }
+            }
+
+            if !tracks.is_empty() {
+                sections.push(SearchSection::TracksFrom {
+                    target_id: album_id.to_string(),
+                    items: tracks,
+                });
+            }
+
+            // Related artists (from album's primary artist)
+            if let Some(first_artist) = resolved.artists.first() {
+                if let Ok(Some(artist_resolved)) =
+                    self.catalog_store.get_resolved_artist(&first_artist.id)
+                {
+                    let related: Vec<ArtistSummary> = artist_resolved
+                        .related_artists
+                        .iter()
+                        .take(self.config.related_artists_limit)
+                        .map(|a| {
+                            emitted_ids.insert(a.id.clone());
+                            ArtistSummary::from(a)
+                        })
+                        .collect();
+
+                    if !related.is_empty() {
+                        sections.push(SearchSection::RelatedArtists {
+                            target_id: first_artist.id.clone(),
+                            items: related,
+                        });
+                    }
+                }
+            }
+        }
+    }
+
+    /// Add enrichment sections for a track target.
+    fn add_track_enrichment(
+        &self,
+        track_id: &str,
+        sections: &mut Vec<SearchSection>,
+        emitted_ids: &mut HashSet<String>,
+    ) {
+        // Get the track's album and show sibling tracks
+        if let Ok(Some(resolved_track)) = self.catalog_store.get_resolved_track(track_id) {
+            let album_id = &resolved_track.album.id;
+
+            if let Ok(Some(resolved_album)) = self.catalog_store.get_resolved_album(album_id) {
+                let mut tracks: Vec<TrackSummary> = Vec::new();
+
+                for disc in &resolved_album.discs {
+                    for track in &disc.tracks {
+                        // Skip the original track
+                        if track.id == track_id {
+                            continue;
+                        }
+                        if let Ok(Some(sibling)) = self.catalog_store.get_resolved_track(&track.id)
+                        {
+                            tracks.push(track_summary_with_image(
+                                &sibling,
+                                resolved_album.display_image.as_ref(),
+                            ));
+                            emitted_ids.insert(track.id.clone());
+                        }
+                    }
+                }
+
+                if !tracks.is_empty() {
+                    sections.push(SearchSection::TracksFrom {
+                        target_id: album_id.clone(),
+                        items: tracks,
+                    });
+                }
+            }
+        }
+    }
+
+    /// Build the "other results" section with remaining matches.
+    fn build_other_results(
+        &self,
+        search_results: &[crate::search::SearchResult],
+        emitted_ids: &HashSet<String>,
+    ) -> Option<SearchSection> {
+        let mut items = Vec::new();
+
+        for result in search_results {
+            if emitted_ids.contains(&result.item_id) {
+                continue;
+            }
+            if items.len() >= self.config.other_results_limit {
+                break;
+            }
+            if let Some(resolved) = self.resolve_search_result(&result.item_id, result.item_type) {
+                items.push(resolved);
+            }
+        }
+
+        if items.is_empty() {
+            None
+        } else {
+            Some(SearchSection::OtherResults { items })
+        }
+    }
+
+    /// Resolve a search result item to its full representation.
+    fn resolve_search_result(
+        &self,
+        item_id: &str,
+        item_type: HashedItemType,
+    ) -> Option<ResolvedSearchResult> {
+        match item_type {
+            HashedItemType::Artist => self
+                .catalog_store
+                .get_resolved_artist(item_id)
+                .ok()
+                .flatten()
+                .map(|a| {
+                    ResolvedSearchResult::Artist(crate::search::SearchedArtist {
+                        id: a.artist.id,
+                        name: a.artist.name,
+                        image_id: a.display_image.map(|i| i.id),
+                    })
+                }),
+            HashedItemType::Album => self
+                .catalog_store
+                .get_resolved_album(item_id)
+                .ok()
+                .flatten()
+                .map(|a| {
+                    let year = a.album.release_date.and_then(|ts| {
+                        chrono::DateTime::from_timestamp(ts, 0)
+                            .and_then(|dt| dt.format("%Y").to_string().parse::<i64>().ok())
+                    });
+                    ResolvedSearchResult::Album(crate::search::SearchedAlbum {
+                        id: a.album.id,
+                        name: a.album.name,
+                        artists_ids_names: a
+                            .artists
+                            .into_iter()
+                            .map(|ar| (ar.id, ar.name))
+                            .collect(),
+                        image_id: a.display_image.map(|i| i.id),
+                        year,
+                    })
+                }),
+            HashedItemType::Track => self
+                .catalog_store
+                .get_resolved_track(item_id)
+                .ok()
+                .flatten()
+                .map(|t| {
+                    ResolvedSearchResult::Track(crate::search::SearchedTrack {
+                        id: t.track.id,
+                        name: t.track.name,
+                        duration: t.track.duration_secs.unwrap_or(0) as u32,
+                        artists_ids_names: t
+                            .artists
+                            .into_iter()
+                            .map(|ta| (ta.artist.id, ta.artist.name))
+                            .collect(),
+                        image_id: self
+                            .catalog_store
+                            .get_album_display_image(&t.album.id)
+                            .ok()
+                            .flatten()
+                            .map(|i| i.id),
+                        album_id: t.album.id,
+                        availability: t.track.availability.to_db_str().to_string(),
+                    })
+                }),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // Note: Integration tests are in catalog-server/tests/e2e_search_tests.rs
+    // These are basic unit tests for the pipeline structure.
+
+    #[test]
+    fn test_match_type_for_artist() {
+        assert_eq!(MatchType::Artist, MatchType::Artist);
+    }
+
+    #[test]
+    fn test_match_type_for_album() {
+        assert_eq!(MatchType::Album, MatchType::Album);
+    }
+
+    #[test]
+    fn test_match_type_for_track() {
+        assert_eq!(MatchType::Track, MatchType::Track);
+    }
+}

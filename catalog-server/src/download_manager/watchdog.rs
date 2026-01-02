@@ -541,6 +541,41 @@ mod tests {
             Ok(None)
         }
 
+        fn get_resolved_artist(
+            &self,
+            _id: &str,
+        ) -> Result<Option<crate::catalog_store::ResolvedArtist>> {
+            Ok(None)
+        }
+
+        fn get_resolved_album(
+            &self,
+            _id: &str,
+        ) -> Result<Option<crate::catalog_store::ResolvedAlbum>> {
+            Ok(None)
+        }
+
+        fn get_resolved_track(
+            &self,
+            _id: &str,
+        ) -> Result<Option<crate::catalog_store::ResolvedTrack>> {
+            Ok(None)
+        }
+
+        fn get_discography(
+            &self,
+            _id: &str,
+        ) -> Result<Option<crate::catalog_store::ArtistDiscography>> {
+            Ok(None)
+        }
+
+        fn get_album_display_image(
+            &self,
+            _album_id: &str,
+        ) -> Result<Option<crate::catalog_store::Image>> {
+            Ok(None)
+        }
+
         fn get_image_path(&self, id: &str) -> PathBuf {
             self.media_path.join("images").join(format!("{}.jpg", id))
         }

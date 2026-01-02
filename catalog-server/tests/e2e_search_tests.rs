@@ -498,3 +498,224 @@ async fn test_relevance_filter_reset_to_none() {
         "Config should be reset to none"
     );
 }
+
+// =============================================================================
+// Streaming Search Tests (SSE)
+// =============================================================================
+
+/// Helper to parse SSE events from response text
+fn parse_sse_events(text: &str) -> Vec<serde_json::Value> {
+    text.lines()
+        .filter(|line| line.starts_with("data:"))
+        .filter_map(|line| {
+            let json_str = line.strip_prefix("data:").unwrap().trim();
+            serde_json::from_str(json_str).ok()
+        })
+        .collect()
+}
+
+#[tokio::test]
+async fn test_streaming_search_returns_sse_response() {
+    let server = TestServer::spawn().await;
+    let client = TestClient::authenticated(server.base_url.clone()).await;
+
+    let response = client.search_stream("Test").await;
+
+    // Skip if search is disabled
+    if response.status() == StatusCode::NOT_FOUND {
+        eprintln!("Streaming search endpoint not available (no_search feature enabled)");
+        return;
+    }
+
+    assert_eq!(response.status(), StatusCode::OK);
+
+    // Check content type is SSE
+    let content_type = response
+        .headers()
+        .get("content-type")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("");
+    assert!(
+        content_type.contains("text/event-stream"),
+        "Response should be SSE, got: {}",
+        content_type
+    );
+}
+
+#[tokio::test]
+async fn test_streaming_search_requires_authentication() {
+    let server = TestServer::spawn().await;
+    let client = TestClient::new(server.base_url.clone());
+
+    let response = client.search_stream("Test").await;
+
+    // Should be unauthorized/forbidden (or not found if search disabled)
+    assert!(
+        response.status() == StatusCode::UNAUTHORIZED
+            || response.status() == StatusCode::FORBIDDEN
+            || response.status() == StatusCode::NOT_FOUND,
+        "Streaming search should require authentication or be disabled, got: {}",
+        response.status()
+    );
+}
+
+#[tokio::test]
+async fn test_streaming_search_returns_done_section() {
+    let server = TestServer::spawn().await;
+    let client = TestClient::authenticated(server.base_url.clone()).await;
+
+    let response = client.search_stream("Test").await;
+
+    // Skip if search is disabled
+    if response.status() == StatusCode::NOT_FOUND {
+        eprintln!("Streaming search endpoint not available (no_search feature enabled)");
+        return;
+    }
+
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let text = response.text().await.unwrap();
+    let events = parse_sse_events(&text);
+
+    // Should have at least one event (Done)
+    assert!(
+        !events.is_empty(),
+        "Streaming search should return at least one SSE event"
+    );
+
+    // Last event should be Done with total_time_ms
+    // Format is {"section": "done", "total_time_ms": N}
+    let last_event = events.last().unwrap();
+    assert_eq!(
+        last_event.get("section").and_then(|s| s.as_str()),
+        Some("done"),
+        "Last event should be 'done' section, got: {:?}",
+        last_event
+    );
+    assert!(
+        last_event.get("total_time_ms").is_some(),
+        "Done section should have total_time_ms"
+    );
+}
+
+#[tokio::test]
+async fn test_streaming_search_with_no_results() {
+    let server = TestServer::spawn().await;
+    let client = TestClient::authenticated(server.base_url.clone()).await;
+
+    let response = client.search_stream("xyznonexistent123456").await;
+
+    // Skip if search is disabled
+    if response.status() == StatusCode::NOT_FOUND {
+        eprintln!("Streaming search endpoint not available (no_search feature enabled)");
+        return;
+    }
+
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let text = response.text().await.unwrap();
+    let events = parse_sse_events(&text);
+
+    // Should have TopResults (possibly empty) and Done
+    assert!(
+        events.len() >= 1,
+        "Should have at least Done event, got: {:?}",
+        events
+    );
+
+    // Verify Done is present (format: {"section": "done", ...})
+    let has_done = events
+        .iter()
+        .any(|e| e.get("section").and_then(|s| s.as_str()) == Some("done"));
+    assert!(has_done, "Should have Done section");
+}
+
+#[tokio::test]
+async fn test_streaming_search_returns_valid_sections() {
+    let server = TestServer::spawn().await;
+    let client = TestClient::authenticated(server.base_url.clone()).await;
+
+    // Search for something that might exist in test data
+    let response = client.search_stream(ARTIST_1_NAME).await;
+
+    // Skip if search is disabled
+    if response.status() == StatusCode::NOT_FOUND {
+        eprintln!("Streaming search endpoint not available (no_search feature enabled)");
+        return;
+    }
+
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let text = response.text().await.unwrap();
+    let events = parse_sse_events(&text);
+
+    // Validate all events have known section types
+    // Format uses {"section": "snake_case_name", ...}
+    let valid_section_types = [
+        "primary_match",
+        "top_results",
+        "popular_by",
+        "albums_by",
+        "tracks_from",
+        "related_artists",
+        "other_results",
+        "done",
+    ];
+
+    for event in &events {
+        let section_type = event.get("section").and_then(|s| s.as_str());
+        assert!(
+            section_type.is_some() && valid_section_types.contains(&section_type.unwrap()),
+            "Event should have a valid section type, got: {:?}",
+            event
+        );
+    }
+}
+
+#[tokio::test]
+async fn test_streaming_search_special_characters() {
+    let server = TestServer::spawn().await;
+    let client = TestClient::authenticated(server.base_url.clone()).await;
+
+    // Search with special characters that need URL encoding
+    let response = client.search_stream("Test & Band").await;
+
+    // Skip if search is disabled
+    if response.status() == StatusCode::NOT_FOUND {
+        eprintln!("Streaming search endpoint not available (no_search feature enabled)");
+        return;
+    }
+
+    // Should handle gracefully (OK or BAD_REQUEST, not 500)
+    assert!(
+        response.status() == StatusCode::OK || response.status() == StatusCode::BAD_REQUEST,
+        "Streaming search should handle special characters gracefully, got: {}",
+        response.status()
+    );
+}
+
+#[tokio::test]
+async fn test_streaming_search_empty_query() {
+    let server = TestServer::spawn().await;
+    let client = TestClient::authenticated(server.base_url.clone()).await;
+
+    let response = client.search_stream("").await;
+
+    // Skip if search is disabled
+    if response.status() == StatusCode::NOT_FOUND {
+        eprintln!("Streaming search endpoint not available (no_search feature enabled)");
+        return;
+    }
+
+    // Empty query should return OK with results (TopResults + Done)
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let text = response.text().await.unwrap();
+    let events = parse_sse_events(&text);
+
+    // Should have at least Done (format: {"section": "done", ...})
+    let has_done = events
+        .iter()
+        .any(|e| e.get("section").and_then(|s| s.as_str()) == Some("done"));
+    assert!(has_done, "Empty query should still return Done section");
+}

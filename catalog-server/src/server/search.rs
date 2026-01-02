@@ -6,6 +6,8 @@
 #[cfg(not(feature = "no_search"))]
 use crate::catalog_store::CatalogStore;
 #[cfg(not(feature = "no_search"))]
+use crate::search::streaming::StreamingSearchPipeline;
+#[cfg(not(feature = "no_search"))]
 use crate::search::{
     HashedItemType, RelevanceFilterConfig, ResolvedSearchResult, SearchResult, SearchedAlbum,
     SearchedArtist, SearchedTrack,
@@ -14,11 +16,25 @@ use crate::search::{
 #[cfg(feature = "no_search")]
 use axum::Router;
 #[cfg(not(feature = "no_search"))]
-use axum::{extract::State, response::IntoResponse, routing::post, Json, Router};
+use axum::{
+    extract::{Query, State},
+    response::{
+        sse::{Event, KeepAlive, Sse},
+        IntoResponse,
+    },
+    routing::{get, post},
+    Json, Router,
+};
 #[cfg(not(feature = "no_search"))]
 use chrono::Datelike;
 #[cfg(not(feature = "no_search"))]
+use futures::stream::{self, Stream};
+#[cfg(not(feature = "no_search"))]
+use std::convert::Infallible;
+#[cfg(not(feature = "no_search"))]
 use std::sync::Arc;
+#[cfg(not(feature = "no_search"))]
+use std::time::Duration;
 
 #[cfg(not(feature = "no_search"))]
 use super::session::Session;
@@ -302,11 +318,69 @@ async fn search(
     }
 }
 
+// =============================================================================
+// Streaming Search (SSE)
+// =============================================================================
+
+#[cfg(not(feature = "no_search"))]
+#[derive(Deserialize)]
+struct StreamingSearchQuery {
+    /// The search query string
+    q: String,
+}
+
+#[cfg(not(feature = "no_search"))]
+async fn streaming_search(
+    _session: Session,
+    State(server_state): State<ServerState>,
+    Query(params): Query<StreamingSearchQuery>,
+) -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
+    // Run organic search first
+    let max_results = server_state.config.streaming_search.top_results_limit
+        + server_state.config.streaming_search.other_results_limit
+        + 50;
+    let search_results =
+        server_state
+            .search_vault
+            .lock()
+            .unwrap()
+            .search(&params.q, max_results, None);
+
+    // Get the user_manager from state
+    let user_manager = server_state.user_manager.lock().unwrap();
+
+    // Build the pipeline with config from server state
+    let pipeline = StreamingSearchPipeline::new(
+        server_state.catalog_store.as_ref(),
+        &user_manager,
+        server_state.config.streaming_search.clone(),
+    );
+
+    // Execute the pipeline with search results
+    let sections = pipeline.execute(&params.q, search_results);
+    drop(user_manager);
+
+    // Convert sections to SSE events
+    let events: Vec<_> = sections
+        .into_iter()
+        .map(|section| {
+            let json = serde_json::to_string(&section).unwrap_or_else(|_| "{}".to_string());
+            Event::default().data(json)
+        })
+        .collect();
+
+    // Create a stream from the collected events
+    let stream = stream::iter(events.into_iter().map(Ok));
+
+    Sse::new(stream).keep_alive(KeepAlive::new().interval(Duration::from_secs(15)))
+}
+
 #[cfg(not(feature = "no_search"))]
 pub fn make_search_routes(state: ServerState) -> Option<Router> {
     Some(
         Router::new()
             .route("/search", post(search))
+            .route("/search/stream", get(streaming_search))
             .with_state(state),
     )
 }
@@ -322,8 +396,6 @@ pub fn make_search_routes(_state: ServerState) -> Option<Router> {
 
 #[cfg(not(feature = "no_search"))]
 use axum::http::StatusCode;
-#[cfg(not(feature = "no_search"))]
-use axum::routing::get;
 #[cfg(not(feature = "no_search"))]
 use serde::Serialize;
 
