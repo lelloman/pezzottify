@@ -652,13 +652,15 @@ async fn test_streaming_search_returns_valid_sections() {
     // Validate all events have known section types
     // Format uses {"section": "snake_case_name", ...}
     let valid_section_types = [
-        "primary_match",
-        "top_results",
+        "primary_artist",
+        "primary_album",
+        "primary_track",
         "popular_by",
         "albums_by",
         "tracks_from",
         "related_artists",
-        "other_results",
+        "more_results",
+        "results",
         "done",
     ];
 

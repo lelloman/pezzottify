@@ -9,13 +9,15 @@
  * Each section is tagged with a "section" field in snake_case.
  */
 export const SectionType = {
-  PRIMARY_MATCH: "primary_match",
-  TOP_RESULTS: "top_results",
+  PRIMARY_ARTIST: "primary_artist",
+  PRIMARY_ALBUM: "primary_album",
+  PRIMARY_TRACK: "primary_track",
   POPULAR_BY: "popular_by",
   ALBUMS_BY: "albums_by",
   TRACKS_FROM: "tracks_from",
   RELATED_ARTISTS: "related_artists",
-  OTHER_RESULTS: "other_results",
+  MORE_RESULTS: "more_results",
+  RESULTS: "results",
   DONE: "done",
 };
 
@@ -108,14 +110,16 @@ export function sectionsToResults(sections) {
     let items = [];
 
     switch (section.section) {
-      case SectionType.PRIMARY_MATCH:
+      case SectionType.PRIMARY_ARTIST:
+      case SectionType.PRIMARY_ALBUM:
+      case SectionType.PRIMARY_TRACK:
         if (section.item) {
           items = [section.item];
         }
         break;
 
-      case SectionType.TOP_RESULTS:
-      case SectionType.OTHER_RESULTS:
+      case SectionType.MORE_RESULTS:
+      case SectionType.RESULTS:
         items = section.items || [];
         break;
 
