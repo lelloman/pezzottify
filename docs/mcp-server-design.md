@@ -407,6 +407,28 @@ sql_per_minute = 10
 
 ---
 
+## Web Client Integration
+
+The web frontend includes an AI chat assistant that uses both MCP tools and local UI tools:
+
+**Location:** `web/src/components/chat/`, `web/src/services/llm/`, `web/src/services/mcp.js`, `web/src/services/uiTools.js`
+
+**Architecture:**
+- LLM calls are made directly from the browser (no backend proxy)
+- Supports multiple providers: Anthropic, OpenAI, Google, Ollama, OpenRouter
+- MCP client connects via WebSocket to `/v1/mcp` for catalog operations
+- UI tools execute locally for playback, navigation, likes, playlists
+
+**Tool Sources:**
+1. **MCP tools** (from server): `catalog.search`, `catalog.get`, etc.
+2. **UI tools** (local): `ui.play`, `ui.pause`, `ui.navigate`, `ui.likeAlbum`, etc.
+
+**Configuration:**
+- Provider settings stored in localStorage (`ai_chat_config`)
+- For Ollama, users must set `OLLAMA_ORIGINS` to allow cross-origin requests
+
+---
+
 ## References
 
 - [MCP Specification](https://modelcontextprotocol.io/specification)
