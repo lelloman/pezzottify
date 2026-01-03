@@ -362,7 +362,8 @@ const tools = [
   // ============================================================================
   {
     name: 'ui.getPlaylists',
-    description: 'Get the list of user playlists.',
+    description:
+      'Get the list of user playlists. Each playlist has an "id" (UUID) and "name". Use the "id" field for ui.addToPlaylist, NOT the name.',
     inputSchema: {
       type: 'object',
       properties: {},
@@ -372,13 +373,18 @@ const tools = [
       const playlists = userStore.playlistsData?.list || [];
       return {
         success: true,
-        playlists: playlists.map(p => ({ id: p.id, name: p.name })),
+        playlists: playlists.map((p) => ({
+          id: p.id,
+          name: p.name,
+          _note: 'Use "id" for ui.addToPlaylist',
+        })),
       };
     },
   },
   {
     name: 'ui.createPlaylist',
-    description: 'Create a new playlist.',
+    description:
+      'Create a new playlist. Returns the playlist ID (a UUID like "NCAOCh3llHRlVRb4") which MUST be used for subsequent operations like ui.addToPlaylist. Do NOT use the playlist name as an ID.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -392,12 +398,20 @@ const tools = [
       const userStore = useUserStore();
       return new Promise((resolve) => {
         userStore.createPlaylist(async (newPlaylist) => {
-          if (newPlaylist && args.name) {
-            await userStore.updatePlaylistName(newPlaylist.id, args.name, () => {});
+          if (!newPlaylist) {
+            resolve({ success: false, error: 'Failed to create playlist' });
+            return;
+          }
+          if (args.name) {
+            await new Promise((nameResolve) => {
+              userStore.updatePlaylistName(newPlaylist.id, args.name, nameResolve);
+            });
           }
           resolve({
-            success: !!newPlaylist,
-            playlist: newPlaylist ? { id: newPlaylist.id, name: args.name || newPlaylist.name } : null,
+            success: true,
+            playlistId: newPlaylist.id,
+            name: args.name || newPlaylist.name,
+            message: `Created playlist with ID "${newPlaylist.id}". Use this ID for ui.addToPlaylist.`,
           });
         });
       });
@@ -405,29 +419,48 @@ const tools = [
   },
   {
     name: 'ui.addToPlaylist',
-    description: 'Add tracks to a playlist.',
+    description:
+      'Add tracks to a playlist. IMPORTANT: playlistId must be the UUID returned by ui.createPlaylist or ui.getPlaylists (e.g. "NCAOCh3llHRlVRb4"), NOT the playlist name. trackIds must be track IDs from catalog.search results (from the "tracks" array), NOT album or artist IDs.',
     inputSchema: {
       type: 'object',
       properties: {
         playlistId: {
           type: 'string',
-          description: 'The playlist ID.',
+          description:
+            'The playlist UUID (e.g. "NCAOCh3llHRlVRb4"). Must be an ID from ui.createPlaylist or ui.getPlaylists, NOT a playlist name.',
         },
         trackIds: {
           type: 'array',
           items: { type: 'string' },
-          description: 'Track IDs to add.',
+          description:
+            'Track IDs to add. Must be IDs from the "tracks" array of catalog.search, NOT album or artist IDs.',
         },
       },
       required: ['playlistId', 'trackIds'],
     },
     execute: async (args) => {
       const userStore = useUserStore();
+
+      // Validate playlistId doesn't look like a name
+      if (!args.playlistId || args.playlistId.includes(' ') || args.playlistId === 'undefined') {
+        return {
+          success: false,
+          error: `Invalid playlistId "${args.playlistId}". Use the UUID from ui.createPlaylist or ui.getPlaylists, not the playlist name.`,
+        };
+      }
+
+      // Validate trackIds
+      if (!args.trackIds || args.trackIds.length === 0) {
+        return { success: false, error: 'No track IDs provided' };
+      }
+
       return new Promise((resolve) => {
         userStore.addTracksToPlaylist(args.playlistId, args.trackIds, (success) => {
           resolve({
             success,
-            message: success ? `Added ${args.trackIds.length} track(s) to playlist` : 'Failed to add tracks',
+            message: success
+              ? `Added ${args.trackIds.length} track(s) to playlist`
+              : 'Failed to add tracks. Verify: 1) playlistId is a valid UUID from ui.createPlaylist, 2) trackIds are from the "tracks" array of catalog.search (not albums or artists)',
           });
         });
       });
