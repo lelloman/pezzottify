@@ -103,8 +103,8 @@ fn analytics_query_tool() -> super::super::registry::RegisteredTool {
 }
 
 async fn analytics_query_handler(ctx: ToolContext, params: Value) -> ToolResult {
-    let params: AnalyticsQueryParams = serde_json::from_value(params)
-        .map_err(|e| McpError::InvalidParams(e.to_string()))?;
+    let params: AnalyticsQueryParams =
+        serde_json::from_value(params).map_err(|e| McpError::InvalidParams(e.to_string()))?;
 
     // Default date range: last 30 days
     let (start_date, end_date) = get_date_range(params.start_date, params.end_date);

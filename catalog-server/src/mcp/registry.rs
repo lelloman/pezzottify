@@ -112,21 +112,16 @@ impl McpRegistry {
 
     /// Get a tool by name, checking permissions
     pub fn get_tool(&self, name: &str, permissions: &[Permission]) -> Option<&RegisteredTool> {
-        self.tools.get(name).filter(|tool| {
-            tool.permissions.iter().all(|p| permissions.contains(p))
-        })
+        self.tools
+            .get(name)
+            .filter(|tool| tool.permissions.iter().all(|p| permissions.contains(p)))
     }
 
     /// Get resources available to a user based on their permissions
     pub fn get_available_resources(&self, permissions: &[Permission]) -> Vec<ResourceDefinition> {
         self.resources
             .iter()
-            .filter(|resource| {
-                resource
-                    .permissions
-                    .iter()
-                    .all(|p| permissions.contains(p))
-            })
+            .filter(|resource| resource.permissions.iter().all(|p| permissions.contains(p)))
             .map(|resource| ResourceDefinition {
                 uri: resource.uri_pattern.clone(),
                 name: resource.name.clone(),
@@ -144,11 +139,7 @@ impl McpRegistry {
     ) -> Option<&RegisteredResource> {
         self.resources.iter().find(|resource| {
             // Check permissions first
-            if !resource
-                .permissions
-                .iter()
-                .all(|p| permissions.contains(p))
-            {
+            if !resource.permissions.iter().all(|p| permissions.contains(p)) {
                 return false;
             }
 

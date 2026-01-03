@@ -26,13 +26,13 @@ fn job_output_resource() -> super::super::registry::RegisteredResource {
 
 async fn job_output_handler(ctx: ToolContext, uri: String) -> ResourceResult {
     // Parse job_id from URI: jobs://{job_id}/output
-    let job_id = extract_job_id(&uri).ok_or_else(|| {
-        McpError::InvalidParams(format!("Invalid job URI format: {}", uri))
-    })?;
+    let job_id = extract_job_id(&uri)
+        .ok_or_else(|| McpError::InvalidParams(format!("Invalid job URI format: {}", uri)))?;
 
-    let scheduler = ctx.scheduler_handle.as_ref().ok_or_else(|| {
-        McpError::ToolExecutionFailed("Job scheduler not available".to_string())
-    })?;
+    let scheduler = ctx
+        .scheduler_handle
+        .as_ref()
+        .ok_or_else(|| McpError::ToolExecutionFailed("Job scheduler not available".to_string()))?;
 
     // Get job info to verify it exists
     let job = scheduler

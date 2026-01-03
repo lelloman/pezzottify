@@ -112,8 +112,8 @@ fn jobs_query_tool() -> super::super::registry::RegisteredTool {
 }
 
 async fn jobs_query_handler(ctx: ToolContext, params: Value) -> ToolResult {
-    let params: JobsQueryParams = serde_json::from_value(params)
-        .map_err(|e| McpError::InvalidParams(e.to_string()))?;
+    let params: JobsQueryParams =
+        serde_json::from_value(params).map_err(|e| McpError::InvalidParams(e.to_string()))?;
 
     match params.query_type {
         JobsQueryType::List => list_jobs(&ctx).await,
@@ -136,9 +136,10 @@ async fn jobs_query_handler(ctx: ToolContext, params: Value) -> ToolResult {
 }
 
 async fn list_jobs(ctx: &ToolContext) -> ToolResult {
-    let scheduler = ctx.scheduler_handle.as_ref().ok_or_else(|| {
-        McpError::ToolExecutionFailed("Job scheduler not available".to_string())
-    })?;
+    let scheduler = ctx
+        .scheduler_handle
+        .as_ref()
+        .ok_or_else(|| McpError::ToolExecutionFailed("Job scheduler not available".to_string()))?;
 
     let jobs = scheduler
         .list_jobs()
@@ -168,9 +169,10 @@ async fn list_jobs(ctx: &ToolContext) -> ToolResult {
 }
 
 async fn get_job(ctx: &ToolContext, job_id: &str) -> ToolResult {
-    let scheduler = ctx.scheduler_handle.as_ref().ok_or_else(|| {
-        McpError::ToolExecutionFailed("Job scheduler not available".to_string())
-    })?;
+    let scheduler = ctx
+        .scheduler_handle
+        .as_ref()
+        .ok_or_else(|| McpError::ToolExecutionFailed("Job scheduler not available".to_string()))?;
 
     let job = scheduler
         .get_job(job_id)
@@ -182,9 +184,10 @@ async fn get_job(ctx: &ToolContext, job_id: &str) -> ToolResult {
 }
 
 async fn get_job_history(ctx: &ToolContext, job_id: &str, limit: usize) -> ToolResult {
-    let scheduler = ctx.scheduler_handle.as_ref().ok_or_else(|| {
-        McpError::ToolExecutionFailed("Job scheduler not available".to_string())
-    })?;
+    let scheduler = ctx
+        .scheduler_handle
+        .as_ref()
+        .ok_or_else(|| McpError::ToolExecutionFailed("Job scheduler not available".to_string()))?;
 
     let history = scheduler
         .get_job_history(job_id, limit.min(100))
@@ -217,9 +220,10 @@ async fn get_job_audit_log(
     limit: usize,
     offset: usize,
 ) -> ToolResult {
-    let scheduler = ctx.scheduler_handle.as_ref().ok_or_else(|| {
-        McpError::ToolExecutionFailed("Job scheduler not available".to_string())
-    })?;
+    let scheduler = ctx
+        .scheduler_handle
+        .as_ref()
+        .ok_or_else(|| McpError::ToolExecutionFailed("Job scheduler not available".to_string()))?;
 
     let entries = if let Some(job_id) = job_id {
         scheduler
@@ -280,8 +284,8 @@ fn jobs_action_tool() -> super::super::registry::RegisteredTool {
 }
 
 async fn jobs_action_handler(ctx: ToolContext, params: Value) -> ToolResult {
-    let params: JobsActionParams = serde_json::from_value(params)
-        .map_err(|e| McpError::InvalidParams(e.to_string()))?;
+    let params: JobsActionParams =
+        serde_json::from_value(params).map_err(|e| McpError::InvalidParams(e.to_string()))?;
 
     match params.action {
         JobActionType::Trigger => trigger_job(&ctx, &params.job_id).await,
@@ -289,9 +293,10 @@ async fn jobs_action_handler(ctx: ToolContext, params: Value) -> ToolResult {
 }
 
 async fn trigger_job(ctx: &ToolContext, job_id: &str) -> ToolResult {
-    let scheduler = ctx.scheduler_handle.as_ref().ok_or_else(|| {
-        McpError::ToolExecutionFailed("Job scheduler not available".to_string())
-    })?;
+    let scheduler = ctx
+        .scheduler_handle
+        .as_ref()
+        .ok_or_else(|| McpError::ToolExecutionFailed("Job scheduler not available".to_string()))?;
 
     // Verify job exists
     let job = scheduler

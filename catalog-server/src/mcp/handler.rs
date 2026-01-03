@@ -17,9 +17,9 @@ use tracing::{debug, error, info};
 use super::context::ToolContext;
 use super::protocol::{
     methods, InitializeParams, InitializeResult, McpError, McpRequest, McpResponse, PingResult,
-    ResourcesListResult, ResourcesReadParams, ResourcesReadResult, ServerCapabilities,
-    ServerInfo, ToolsCapability, ToolsCallParams, ToolsListResult, MCP_PROTOCOL_VERSION,
-    ResourcesCapability,
+    ResourcesCapability, ResourcesListResult, ResourcesReadParams, ResourcesReadResult,
+    ServerCapabilities, ServerInfo, ToolsCallParams, ToolsCapability, ToolsListResult,
+    MCP_PROTOCOL_VERSION,
 };
 use super::rate_limit::McpRateLimiter;
 use super::registry::McpRegistry;
@@ -66,14 +66,9 @@ async fn handle_mcp_socket(
     while let Some(result) = ws_stream.next().await {
         match result {
             Ok(Message::Text(text)) => {
-                let response = handle_message(
-                    &text,
-                    &session,
-                    &server_state,
-                    &mcp_state,
-                    &mut initialized,
-                )
-                .await;
+                let response =
+                    handle_message(&text, &session, &server_state, &mcp_state, &mut initialized)
+                        .await;
 
                 if let Some(response) = response {
                     match serde_json::to_string(&response) {
@@ -226,9 +221,7 @@ async fn handle_tools_list(
     session: &Session,
     mcp_state: &McpState,
 ) -> Result<serde_json::Value, McpError> {
-    let tools = mcp_state
-        .registry
-        .get_available_tools(&session.permissions);
+    let tools = mcp_state.registry.get_available_tools(&session.permissions);
 
     let result = ToolsListResult { tools };
 

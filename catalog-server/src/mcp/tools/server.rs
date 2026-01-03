@@ -78,8 +78,8 @@ fn server_query_tool() -> super::super::registry::RegisteredTool {
 }
 
 async fn server_query_handler(ctx: ToolContext, params: Value) -> ToolResult {
-    let params: ServerQueryParams = serde_json::from_value(params)
-        .map_err(|e| McpError::InvalidParams(e.to_string()))?;
+    let params: ServerQueryParams =
+        serde_json::from_value(params).map_err(|e| McpError::InvalidParams(e.to_string()))?;
 
     match params.query_type {
         ServerQueryType::Info => get_server_info(&ctx).await,

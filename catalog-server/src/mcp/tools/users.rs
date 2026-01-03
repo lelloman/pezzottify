@@ -58,8 +58,8 @@ fn users_query_tool() -> super::super::registry::RegisteredTool {
 }
 
 async fn users_query_handler(ctx: ToolContext, params: Value) -> ToolResult {
-    let params: UsersQueryParams = serde_json::from_value(params)
-        .map_err(|e| McpError::InvalidParams(e.to_string()))?;
+    let params: UsersQueryParams =
+        serde_json::from_value(params).map_err(|e| McpError::InvalidParams(e.to_string()))?;
 
     match params.query_type {
         UsersQueryType::List => list_users(&ctx).await,
@@ -127,9 +127,7 @@ async fn get_user(ctx: &ToolContext, handle: &str) -> ToolResult {
         .map(|p| format!("{:?}", p))
         .collect();
 
-    let devices = user_manager
-        .get_user_devices(user_id)
-        .unwrap_or_default();
+    let devices = user_manager.get_user_devices(user_id).unwrap_or_default();
 
     let result = serde_json::json!({
         "user": {
@@ -202,8 +200,8 @@ fn users_mutate_tool() -> super::super::registry::RegisteredTool {
 }
 
 async fn users_mutate_handler(ctx: ToolContext, params: Value) -> ToolResult {
-    let params: UsersMutateParams = serde_json::from_value(params)
-        .map_err(|e| McpError::InvalidParams(e.to_string()))?;
+    let params: UsersMutateParams =
+        serde_json::from_value(params).map_err(|e| McpError::InvalidParams(e.to_string()))?;
 
     match params.action {
         UsersMutateAction::Create => create_user(&ctx, &params.user_handle).await,
@@ -231,7 +229,10 @@ fn parse_role(role: &Option<String>) -> Result<UserRole, McpError> {
     match role_str.as_str() {
         "Admin" => Ok(UserRole::Admin),
         "Regular" => Ok(UserRole::Regular),
-        _ => Err(McpError::InvalidParams(format!("Invalid role: {}", role_str))),
+        _ => Err(McpError::InvalidParams(format!(
+            "Invalid role: {}",
+            role_str
+        ))),
     }
 }
 
@@ -251,7 +252,10 @@ fn parse_permission(permission: &Option<String>) -> Result<Permission, McpError>
         "RequestContent" => Ok(Permission::RequestContent),
         "DownloadManagerAdmin" => Ok(Permission::DownloadManagerAdmin),
         "ReportBug" => Ok(Permission::ReportBug),
-        _ => Err(McpError::InvalidParams(format!("Invalid permission: {}", perm_str))),
+        _ => Err(McpError::InvalidParams(format!(
+            "Invalid permission: {}",
+            perm_str
+        ))),
     }
 }
 
