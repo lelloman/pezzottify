@@ -21,11 +21,16 @@ watch(() => chatStore.config, (newConfig) => {
 
 // Load models when provider changes
 watch(() => localConfig.value.provider, async (newProvider) => {
+  await refreshModels(newProvider);
+}, { immediate: true });
+
+// Refresh available models from provider
+async function refreshModels(provider = localConfig.value.provider) {
   loadingModels.value = true;
   testResult.value = null;
   try {
-    availableModels.value = await getModels(newProvider, localConfig.value);
-    // Set default model if not set
+    availableModels.value = await getModels(provider, localConfig.value);
+    // Set default model if not set and we have models
     if (!localConfig.value.model && availableModels.value.length > 0) {
       localConfig.value.model = availableModels.value[0].id;
     }
@@ -34,7 +39,7 @@ watch(() => localConfig.value.provider, async (newProvider) => {
     availableModels.value = [];
   }
   loadingModels.value = false;
-}, { immediate: true });
+}
 
 // Get provider info based on the LOCAL config (not saved config)
 const currentProviderInfo = computed(() => getProvider(localConfig.value.provider));
@@ -135,12 +140,40 @@ function handleCancel() {
       <!-- Model Selection -->
       <div class="settings__field">
         <label class="settings__label">Model</label>
-        <select
-          v-model="localConfig.model"
-          class="settings__select"
-          :disabled="loadingModels"
-        >
-          <option v-if="loadingModels" value="">Loading models...</option>
+        <div class="settings__model-row">
+          <input
+            v-model="localConfig.model"
+            type="text"
+            class="settings__input"
+            :placeholder="loadingModels ? 'Loading...' : 'Enter or select model'"
+            list="model-suggestions"
+            :disabled="loadingModels"
+          />
+          <button
+            type="button"
+            class="settings__refresh-btn"
+            :disabled="loadingModels"
+            @click="refreshModels()"
+            title="Refresh model list"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              :class="{ 'is-loading': loadingModels }"
+            >
+              <path d="M21 2v6h-6" />
+              <path d="M3 12a9 9 0 0 1 15-6.7L21 8" />
+              <path d="M3 22v-6h6" />
+              <path d="M21 12a9 9 0 0 1-15 6.7L3 16" />
+            </svg>
+          </button>
+        </div>
+        <datalist id="model-suggestions">
           <option
             v-for="m in availableModels"
             :key="m.id"
@@ -148,7 +181,10 @@ function handleCancel() {
           >
             {{ m.name }}
           </option>
-        </select>
+        </datalist>
+        <p class="settings__hint">
+          Type a model name or select from suggestions.
+        </p>
       </div>
 
       <!-- Test Connection -->
@@ -259,6 +295,47 @@ function handleCancel() {
   font-size: var(--text-xs);
   color: var(--text-subdued);
   margin-top: var(--spacing-1);
+}
+
+.settings__model-row {
+  display: flex;
+  gap: var(--spacing-2);
+}
+
+.settings__model-row .settings__input {
+  flex: 1;
+}
+
+.settings__refresh-btn {
+  padding: var(--spacing-2);
+  background: var(--bg-highlight);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  color: var(--text-subdued);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all var(--transition-fast);
+}
+
+.settings__refresh-btn:hover:not(:disabled) {
+  background: var(--bg-press);
+  color: var(--text-base);
+}
+
+.settings__refresh-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.settings__refresh-btn svg.is-loading {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 }
 
 .settings__test-btn {
