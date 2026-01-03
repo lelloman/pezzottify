@@ -62,8 +62,6 @@ pub struct BackgroundJobsConfig {
 #[derive(Debug, Deserialize, Default, Clone)]
 #[serde(default)]
 pub struct SearchConfig {
-    /// Search engine to use: "pezzothash", "fts5", "noop"
-    pub engine: Option<String>,
     /// Streaming search configuration
     pub streaming: Option<StreamingSearchConfig>,
 }

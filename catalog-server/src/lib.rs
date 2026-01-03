@@ -18,14 +18,7 @@ pub mod user;
 pub mod whatsnew;
 
 // Re-export commonly used types for convenience
-pub use search::{NoOpSearchVault, SearchVault};
+pub use search::{Fts5LevenshteinSearchVault, SearchVault};
 pub use server::{run_server, RequestsLoggingLevel};
 pub use server_store::{ServerStore, SqliteServerStore};
 pub use user::{SqliteUserStore, UserRole, UserStore};
-
-// Re-export for testing
-#[cfg(feature = "no_search")]
-pub use search::NoOpSearchVault as DefaultSearchVault;
-
-#[cfg(not(feature = "no_search"))]
-pub use search::PezzotHashSearchVault as DefaultSearchVault;

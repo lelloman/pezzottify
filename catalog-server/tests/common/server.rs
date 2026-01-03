@@ -6,7 +6,7 @@
 use super::constants::*;
 use super::fixtures::{create_test_catalog, create_test_db_with_users};
 use pezzottify_catalog_server::catalog_store::{CatalogStore, SqliteCatalogStore};
-use pezzottify_catalog_server::search::NoOpSearchVault;
+use pezzottify_catalog_server::search::{HashedItemType, SearchResult, SearchVault};
 use pezzottify_catalog_server::server::state::GuardedSearchVault;
 use pezzottify_catalog_server::server::{server::make_app, RequestsLoggingLevel, ServerConfig};
 use pezzottify_catalog_server::server_store::SqliteServerStore;
@@ -16,6 +16,26 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tempfile::TempDir;
 use tokio::net::TcpListener;
+
+/// Mock search vault for testing - returns empty results
+struct MockSearchVault;
+
+impl SearchVault for MockSearchVault {
+    fn search(
+        &self,
+        _query: &str,
+        _max_results: usize,
+        _filter: Option<Vec<HashedItemType>>,
+    ) -> Vec<SearchResult> {
+        Vec::new()
+    }
+
+    fn rebuild_index(&self) -> anyhow::Result<()> {
+        Ok(())
+    }
+
+    fn update_popularity(&self, _items: &[(String, HashedItemType, u64, f64)]) {}
+}
 
 /// Test server instance with isolated catalog and database
 ///
@@ -72,8 +92,8 @@ impl TestServer {
             Arc::new(SqliteUserStore::new(&db_path).expect("Failed to open user store"));
         let user_store_for_test = user_store.clone();
 
-        // Create search vault (use NoOp for speed in tests)
-        let search_vault: GuardedSearchVault = Arc::new(Mutex::new(Box::new(NoOpSearchVault {})));
+        // Create search vault (use mock for speed in tests)
+        let search_vault: GuardedSearchVault = Arc::new(Mutex::new(Box::new(MockSearchVault)));
 
         // Bind to random port
         let listener = TcpListener::bind("127.0.0.1:0")
