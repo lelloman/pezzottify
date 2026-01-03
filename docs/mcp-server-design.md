@@ -22,284 +22,392 @@ Add an MCP (Model Context Protocol) server to catalog-server for LLM-based admin
 - Public API exposure (MCP is admin/dev only)
 - Multi-tenant access control within MCP
 - High-performance streaming (this is for occasional admin use)
+- Hosting an LLM - clients bring their own
+
+---
 
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│                    catalog-server                        │
-│                                                          │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────────┐  │
-│  │  HTTP API   │  │  MCP Server │  │  Background     │  │
-│  │  :3001      │  │  :3002      │  │  Jobs           │  │
-│  └──────┬──────┘  └──────┬──────┘  └────────┬────────┘  │
-│         │                │                   │           │
-│         └────────────────┼───────────────────┘           │
-│                          ▼                               │
-│  ┌───────────────────────────────────────────────────┐  │
-│  │              Shared AppState                       │  │
-│  │  - CatalogStore      - SearchVault                 │  │
-│  │  - UserStore         - SessionManager              │  │
-│  │  - ServerStore       - JobScheduler                │  │
-│  │  - DownloadManager   - Config                      │  │
-│  └───────────────────────────────────────────────────┘  │
-└─────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────────┐
+│                         LLM Client                                        │
+│  (Claude Desktop, custom app with Anthropic API, etc.)                   │
+│                                                                           │
+│  ┌──────────┐    ┌──────────────┐    ┌────────────────────────────────┐ │
+│  │   User   │───►│     LLM      │───►│  MCP Client (WebSocket)        │ │
+│  │  Prompt  │    │ (Claude API) │    │                                │ │
+│  └──────────┘    └──────────────┘    └───────────────┬────────────────┘ │
+└──────────────────────────────────────────────────────┼──────────────────┘
+                                                       │
+                                              WebSocket│ /v1/mcp
+                                                       ▼
+┌──────────────────────────────────────────────────────────────────────────┐
+│                          catalog-server                                   │
+│                                                                           │
+│  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────────────┐  │
+│  │    HTTP API     │  │   MCP Server    │  │    Background Jobs      │  │
+│  │  /v1/*          │  │   /v1/mcp (WS)  │  │                         │  │
+│  └────────┬────────┘  └────────┬────────┘  └────────────┬────────────┘  │
+│           │                    │                        │                │
+│           └────────────────────┼────────────────────────┘                │
+│                                ▼                                          │
+│  ┌────────────────────────────────────────────────────────────────────┐  │
+│  │                       Shared AppState                               │  │
+│  │  - CatalogStore      - SearchVault        - JobScheduler           │  │
+│  │  - UserStore         - SessionManager     - DownloadManager        │  │
+│  │  - ServerStore       - Config                                      │  │
+│  └────────────────────────────────────────────────────────────────────┘  │
+└──────────────────────────────────────────────────────────────────────────┘
 ```
 
-The MCP server runs in the same process as the main HTTP server, sharing `AppState`.
+**Key points:**
+- MCP server runs **in-process** with the main HTTP server, sharing `AppState`
+- No separate port - MCP is a WebSocket endpoint on the main server
+- No LLM on the server - we provide tools only, clients bring their own LLM
+
+---
 
 ## Transport
 
-**HTTP/SSE** on a separate port (default: 3002)
+**WebSocket** at `/v1/mcp` on the main server port (3001).
 
-- `GET /sse` - Server-sent events stream for responses/notifications
-- `POST /message` - Client sends tool calls and requests
+### Why WebSocket over HTTP/SSE?
 
-### Docker Compose exposure
+SSE (Server-Sent Events) requires two channels:
+- `GET /sse` for server → client
+- `POST /message` for client → server
 
-```yaml
-services:
-  catalog-server:
-    ports:
-      - "3001:3001"              # Main API (public)
-      - "127.0.0.1:3002:3002"    # MCP (localhost only)
-```
+This is essentially "WebSocket with extra steps." Since we already have WebSocket infrastructure, a single bidirectional WS connection is simpler.
 
-### Security
+### Why `/v1/mcp` instead of extending `/v1/ws`?
 
-- Bind to localhost only by default
-- **Authentication required** - MCP clients must authenticate as a Pezzottify user
-- **New permission: `McpAccess`** - Required to connect to MCP at all
-- **Existing permissions apply** - Tools are gated by the same permissions as HTTP API
-- MCP session = regular user session with same permission checks
+The existing `/v1/ws` serves user sync (likes, settings, playlists, permissions). Mixing MCP traffic with user sync would:
+- Complicate message routing
+- Mix different audiences (end-users vs LLM agents)
+- Create protocol mismatches (sync is push-based, MCP is request/response)
 
-### Authentication Flow
+A dedicated endpoint keeps concerns separated while still reusing existing auth infrastructure.
 
-1. MCP client connects to SSE endpoint
-2. Server sends `auth_required` event with challenge
-3. Client responds with credentials (username + password, or existing session token)
-4. Server validates credentials, checks `McpAccess` permission
-5. On success, server sends `authenticated` event, MCP session begins
-6. All subsequent tool calls are executed with that user's permissions
+---
 
-Alternative: Support the existing challenge-response auth flow used by the Android app.
+## Authentication & Permissions
 
-### Session Lifecycle
+### Same Auth as HTTP API
 
-MCP sessions are tied to the SSE connection. When the connection closes, the session ends. No idle timeout needed.
+MCP uses the **same authentication** as the HTTP API:
+- Existing user accounts
+- Same session/token mechanism
+- No new `McpAccess` permission needed
 
-### Rate Limiting
+### Permission-Based Tool Filtering
 
-Per-user rate limits to prevent abuse (buggy LLM loops, malicious users):
+Tools are **gated by existing permissions**. When a user connects via MCP, they only see tools they have permission to use.
+
+| Permission | Tools Available |
+|------------|-----------------|
+| `AccessCatalog` | `catalog.search`, `catalog.get` |
+| `EditCatalog` | `catalog.mutate` |
+| `ManagePermissions` | `users.query`, `users.mutate` |
+| `ViewAnalytics` | `analytics.query`, `downloads.query` |
+| `RequestContent` | `downloads.action` |
+| `ServerAdmin` | `server.query`, `jobs.query`, `jobs.action`, `debug.sql`, `debug.inspect` |
+
+**Examples:**
+- A regular user with just `AccessCatalog` sees **2 tools**
+- An admin with all permissions sees **13 tools**
+
+---
+
+## Rate Limiting
+
+Per-user limits to prevent abuse (buggy LLM loops, malicious clients):
 
 | Category | Limit | Window |
 |----------|-------|--------|
 | Read operations | 120 requests | per minute |
 | Write operations | 30 requests | per minute |
-| `query_sql` | 10 requests | per minute |
+| `debug.sql` | 10 requests | per minute |
 
-Rate limit responses return standard MCP error with retry-after hint. Limits apply per authenticated user, not per connection (so multiple MCP clients from same user share the limit).
+Limits apply per authenticated user, not per connection (multiple MCP clients from same user share the limit).
+
+---
+
+## MCP Features
+
+### v1 Scope
+
+| Feature | Supported | Notes |
+|---------|-----------|-------|
+| **Tools** | Yes | Core feature - functions the LLM can call |
+| **Resources** | Yes | Read-only data access (logs, job output, config) |
+| **Prompts** | No | Not needed for our use case |
+| **Sampling** | No | Server doesn't call the LLM |
+| **Roots** | No | Not applicable |
+
+---
+
+## Tools (Consolidated)
+
+To avoid context bloat, tools are **consolidated** into ~13 tools instead of 40+ granular ones. This keeps the LLM context under control (target: 32K baseline).
+
+### Tool List
+
+| Tool | Permission | Description |
+|------|------------|-------------|
+| `catalog.search` | AccessCatalog | Search artists, albums, tracks |
+| `catalog.get` | AccessCatalog | Get artist/album/track details, recent additions, stats |
+| `catalog.mutate` | EditCatalog | Create/update/delete artists, albums, tracks |
+| `users.query` | ManagePermissions | List users, get user details |
+| `users.mutate` | ManagePermissions | Create/delete users, set role, grant/revoke permissions |
+| `analytics.query` | ViewAnalytics | Listening stats, bandwidth stats, popular content |
+| `downloads.query` | ViewAnalytics | Download queue stats, queue state |
+| `downloads.action` | RequestContent | Request download, retry failed, cancel pending |
+| `server.query` | ServerAdmin | Server info, memory stats, active sessions, config |
+| `jobs.query` | ServerAdmin | List jobs, job history |
+| `jobs.action` | ServerAdmin | Trigger job, enable/disable job |
+| `debug.sql` | ServerAdmin | Execute read-only SQL queries |
+| `debug.inspect` | ServerAdmin | Search index inspection, recent errors, integrity check |
+
+### Tool Design Principles
+
+1. **Consolidate related operations** - One tool with parameters vs many similar tools
+2. **Paginate by default** - Return limited results with `total` and `has_more`
+3. **Keep responses concise** - Summarize where possible, let LLM ask for details
+4. **Use enums for actions** - `catalog.mutate(action: "create" | "update" | "delete", ...)`
+
+### Example: `catalog.get`
+
+Instead of separate `get_artist`, `get_album`, `get_track`, `get_recent`, `get_stats` tools:
+
+```json
+{
+  "name": "catalog.get",
+  "description": "Get catalog content by type and ID, or get aggregate data",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "query_type": {
+        "type": "string",
+        "enum": ["artist", "album", "track", "recent", "stats"]
+      },
+      "id": {
+        "type": "string",
+        "description": "Required for artist/album/track queries"
+      },
+      "limit": {
+        "type": "integer",
+        "description": "For 'recent' query, default 20"
+      }
+    },
+    "required": ["query_type"]
+  }
+}
+```
+
+---
+
+## Resources
+
+Resources provide read-only access to data that changes over time. Unlike tools, resources are accessed on-demand and don't clutter the tool list.
+
+| URI Pattern | Permission | Description |
+|-------------|------------|-------------|
+| `logs://recent` | ServerAdmin | Recent server log entries |
+| `logs://errors` | ServerAdmin | Recent error logs |
+| `jobs://{job_id}/output` | ServerAdmin | Latest job run output |
+| `config://server` | ServerAdmin | Full server configuration |
+| `changelog://recent` | EditCatalog | Recent catalog changes |
+
+---
+
+## Implementation
+
+### Library Choice: Roll Our Own
+
+We evaluated existing Rust MCP libraries:
+- **[rmcp](https://github.com/modelcontextprotocol/rust-sdk)** - Official SDK, but focused on stdio transport
+- Various community crates - varying quality and transport support
+
+**Decision:** Roll our own implementation because:
+- MCP is essentially JSON-RPC with specific message types (not complex)
+- We need WebSocket transport (not stdio)
+- Tight integration with our existing Axum auth is cleaner
+- No external dependencies to manage
+
+### Tool Definition Architecture
+
+**Function-based with explicit registration:**
+
+```rust
+// Tools are async functions
+async fn catalog_search(
+    ctx: &ToolContext,
+    query: String,
+    limit: Option<u32>,
+) -> Result<SearchResults, ToolError> {
+    let results = ctx.search_vault.search(&query, limit.unwrap_or(20)).await?;
+    Ok(results)
+}
+
+// Registered with metadata
+registry.register(ToolDef {
+    name: "catalog.search",
+    description: "Search the music catalog for artists, albums, and tracks",
+    permissions: &[Permission::AccessCatalog],
+    parameters: serde_json::json!({
+        "type": "object",
+        "properties": {
+            "query": { "type": "string", "description": "Search query" },
+            "limit": { "type": "integer", "description": "Max results (default 20)" }
+        },
+        "required": ["query"]
+    }),
+    handler: catalog_search,
+});
+```
+
+**Why this approach:**
+- No macro magic - easy to understand and debug
+- Explicit registration makes the tool list discoverable
+- Parameters are strongly typed in the handler
+- Permissions are declared alongside the tool
+
+### Module Structure
+
+```
+catalog-server/src/
+├── mcp/
+│   ├── mod.rs              # Public API, McpServer struct
+│   ├── protocol.rs         # MCP message types (JSON-RPC based)
+│   ├── transport.rs        # WebSocket handling
+│   ├── registry.rs         # Tool/resource registration
+│   ├── context.rs          # ToolContext with shared state
+│   ├── rate_limit.rs       # Per-user rate limiting
+│   ├── tools/
+│   │   ├── mod.rs
+│   │   ├── catalog.rs      # catalog.search, catalog.get, catalog.mutate
+│   │   ├── users.rs        # users.query, users.mutate
+│   │   ├── analytics.rs    # analytics.query
+│   │   ├── downloads.rs    # downloads.query, downloads.action
+│   │   ├── server.rs       # server.query
+│   │   ├── jobs.rs         # jobs.query, jobs.action
+│   │   └── debug.rs        # debug.sql, debug.inspect
+│   └── resources/
+│       ├── mod.rs
+│       ├── logs.rs         # logs://recent, logs://errors
+│       ├── jobs.rs         # jobs://{id}/output
+│       └── config.rs       # config://server
+```
+
+---
+
+## Implementation Phases
+
+### Phase 1: Foundation
+
+1. Create `mcp/` module structure
+2. Define MCP protocol message types
+3. Implement WebSocket transport at `/v1/mcp`
+4. Add authentication (reuse existing session middleware)
+5. Implement tool/resource registry
+6. Add rate limiting
+
+### Phase 2: Read-only Tools
+
+1. `catalog.search` - Search catalog
+2. `catalog.get` - Get content by type/ID
+3. `server.query` - Server info, memory, sessions
+4. `jobs.query` - Job list and history
+5. `analytics.query` - Listening/bandwidth stats
+
+### Phase 3: Resources
+
+1. `logs://recent` and `logs://errors`
+2. `jobs://{job_id}/output`
+3. `config://server`
+4. `changelog://recent`
+
+### Phase 4: Write Tools
+
+1. `catalog.mutate` - CRUD for catalog content
+2. `users.query` and `users.mutate` - User management
+3. `jobs.action` - Trigger/enable/disable jobs
+4. `downloads.query` and `downloads.action` - Download management
+
+### Phase 5: Debug Tools
+
+1. `debug.sql` - Read-only SQL queries
+2. `debug.inspect` - Search index, errors, integrity
+
+### Phase 6: Future - Catalog Agent
+
+1. Define agent role/permissions
+2. Add rate limiting / quotas for automated access
+3. Audit logging for agent actions
+4. Agent-specific tools if needed
+
+---
+
+## Design Decisions
+
+### No Separate Port
+
+Originally planned for port 3002, but `/v1/mcp` on the main port is simpler:
+- One port to manage/expose
+- Reuses existing TLS/proxy configuration
+- Auth middleware is already there
+
+### No `McpAccess` Permission
+
+Originally planned a separate permission to connect to MCP. Removed because:
+- Existing permissions already gate all tools
+- A user with no permissions sees no tools anyway
+- Simpler permission model
+
+### Tool Confirmation
+
+No server-level confirmation for destructive operations. MCP is a protocol, not a UI. The LLM client (Claude, etc.) is responsible for confirmation UX.
+
+### Audit Logging
+
+Comprehensive audit logging for all MCP interactions:
+- Stored in `server.db` (or separate `mcp_audit.db` if volume is high)
+- Logs tool calls, parameters, results
+- Critical for debugging catalog agent behavior
+
+### Context Budget
+
+Tools designed for **32K context baseline**:
+- Consolidated tools (~13 instead of 40+)
+- Paginated responses by default
+- Concise result formats
+- Clients with larger context can request more detail
+
+---
 
 ## Configuration
 
-### CLI arguments
+### CLI Arguments
 
 ```
---mcp-port <PORT>        MCP server port (default: 3002, 0 to disable)
+--mcp-enabled            Enable MCP server (default: true if feature enabled)
 ```
 
-### Config file (config.toml)
+### Config File (config.toml)
 
 ```toml
 [mcp]
 enabled = true
-port = 3002
+
+[mcp.rate_limit]
+read_per_minute = 120
+write_per_minute = 30
+sql_per_minute = 10
 ```
 
-## Permission Model
-
-MCP tools are gated by the same permissions as the HTTP API. The `McpAccess` permission is required to connect at all, then each tool requires additional permissions.
-
-### Permission → Tool Mapping
-
-| Permission | Tools Available |
-|------------|-----------------|
-| `McpAccess` | (required to connect) |
-| `AccessCatalog` | `search_catalog`, `get_artist`, `get_album`, `get_track`, `list_recent_additions`, `get_catalog_stats` |
-| `EditCatalog` | `create_artist`, `update_artist`, `delete_artist`, `create_album`, `update_album`, `delete_album`, `create_track`, `update_track`, `delete_track`, `check_integrity` |
-| `ManagePermissions` | `list_users`, `get_user`, `create_user`, `delete_user`, `set_user_role`, `grant_permission`, `revoke_permission` |
-| `ViewAnalytics` | `get_listening_stats`, `get_bandwidth_stats`, `get_popular_content`, `get_download_stats`, `get_download_queue` |
-| `RequestContent` | `request_download` |
-| `IssueContentDownload` | `retry_failed`, `cancel_download` |
-| `ServerAdmin` | `get_server_info`, `get_memory_stats`, `list_active_sessions`, `get_recent_requests`, `list_jobs`, `get_job_history`, `trigger_job`, `enable_job`, `disable_job`, `reload_search_index`, `clear_cache`, `get_config`, `query_sql`, `inspect_search_index`, `get_recent_errors` |
-
-### Tool Availability
-
-When a user connects via MCP, they only see tools they have permission to use. The MCP `tools/list` response is dynamically filtered based on the authenticated user's permissions.
-
-This means:
-- A regular user with just `AccessCatalog` + `McpAccess` sees only catalog read tools
-- An admin sees everything
-- Tools can require multiple permissions (e.g., `check_integrity` needs both `EditCatalog` and `ServerAdmin`)
-
-## MCP Tools
-
-### Server Introspection
-
-| Tool | Description | Returns |
-|------|-------------|---------|
-| `get_server_info` | Server version, uptime, config summary | ServerInfo |
-| `get_memory_stats` | Cache sizes, search index stats, connection counts | MemoryStats |
-| `list_active_sessions` | Currently authenticated sessions | Session[] |
-| `get_recent_requests` | Recent HTTP requests (if logging enabled) | RequestLog[] |
-
-### Catalog (Read)
-
-| Tool | Description | Parameters | Returns |
-|------|-------------|------------|---------|
-| `search_catalog` | Search using live search index | `query: string`, `limit?: number` | SearchResult[] |
-| `get_artist` | Artist details with albums | `id: string` | Artist |
-| `get_album` | Album details with tracks | `id: string` | Album |
-| `get_track` | Track details | `id: string` | Track |
-| `list_recent_additions` | Recently added content | `days?: number`, `limit?: number` | CatalogItem[] |
-| `get_catalog_stats` | Total counts, storage size | | CatalogStats |
-
-### Catalog (Write)
-
-| Tool | Description | Parameters |
-|------|-------------|------------|
-| `create_artist` | Add new artist | `name: string`, `image_id?: string` |
-| `update_artist` | Modify artist | `id: string`, `name?: string`, ... |
-| `delete_artist` | Remove artist | `id: string` |
-| `create_album` | Add new album | `title: string`, `artist_id: string`, ... |
-| `update_album` | Modify album | `id: string`, ... |
-| `delete_album` | Remove album | `id: string` |
-| `create_track` | Add new track | `title: string`, `album_id: string`, ... |
-| `update_track` | Modify track | `id: string`, ... |
-| `delete_track` | Remove track | `id: string` |
-
-### Users
-
-| Tool | Description | Parameters | Returns |
-|------|-------------|------------|---------|
-| `list_users` | All users with basic info | `include_activity?: bool` | User[] |
-| `get_user` | User details, permissions, activity | `handle: string` | UserDetails |
-| `create_user` | Create new user | `handle: string`, `password: string`, `role: string` | User |
-| `delete_user` | Remove user | `handle: string` | |
-| `set_user_role` | Change user role | `handle: string`, `role: string` | |
-| `grant_permission` | Add permission to user | `handle: string`, `permission: string`, `count?: number` | |
-| `revoke_permission` | Remove permission | `handle: string`, `permission: string` | |
-
-### Background Jobs
-
-| Tool | Description | Parameters | Returns |
-|------|-------------|------------|---------|
-| `list_jobs` | All background jobs with status | | Job[] |
-| `get_job_history` | Execution history for job | `job_id: string`, `limit?: number` | JobRun[] |
-| `trigger_job` | Run a job immediately | `job_id: string` | |
-| `enable_job` | Enable a disabled job | `job_id: string` | |
-| `disable_job` | Disable a job | `job_id: string` | |
-
-### Download Manager
-
-| Tool | Description | Parameters | Returns |
-|------|-------------|------------|---------|
-| `get_download_queue` | Pending downloads | | QueueItem[] |
-| `get_download_stats` | Success/failure rates, recent activity | | DownloadStats |
-| `request_download` | Queue album/discography | `type: string`, `external_id: string` | |
-| `retry_failed` | Retry a failed download | `item_id: string` | |
-| `cancel_download` | Remove from queue | `item_id: string` | |
-
-### Analytics
-
-| Tool | Description | Parameters | Returns |
-|------|-------------|------------|---------|
-| `get_listening_stats` | Listening history aggregates | `period?: string`, `user?: string` | ListeningStats |
-| `get_bandwidth_stats` | Streaming bandwidth usage | `period?: string` | BandwidthStats |
-| `get_popular_content` | Most played content | `type: string`, `limit?: number` | PopularItem[] |
-
-### Debug
-
-| Tool | Description | Parameters | Returns |
-|------|-------------|------------|---------|
-| `query_sql` | Execute read-only SQL (uses read-only DB connection) | `db: string`, `query: string` | Row[] |
-| `inspect_search_index` | Debug search ranking | `query: string` | SearchDebug |
-| `get_recent_errors` | Recent error logs | `limit?: number` | ErrorLog[] |
-| `check_integrity` | Verify catalog/file consistency | `fix?: bool` | IntegrityReport |
-
-**Note on `query_sql`**:
-- Uses a dedicated read-only SQLite connection (`SQLITE_OPEN_READONLY` flag) to guarantee no writes can occur
-- Results capped at 100 rows - use `LIMIT`/`OFFSET` in your SQL for larger datasets
-
-### Server Control
-
-| Tool | Description | Parameters |
-|------|-------------|------------|
-| `reload_search_index` | Rebuild search index from DB | |
-| `clear_cache` | Invalidate specified caches | `cache: string` |
-| `get_config` | Current server configuration | |
-
-## MCP Resources
-
-Resources provide read access to data that changes over time:
-
-| Resource | URI Pattern | Description |
-|----------|-------------|-------------|
-| Server logs | `logs://recent` | Recent log entries |
-| Job output | `jobs://{job_id}/output` | Latest job run output |
-| Catalog changelog | `changelog://recent` | Recent catalog changes |
-
-## Implementation Plan
-
-### Phase 1: Foundation
-
-1. Add `rmcp` crate dependency
-2. Create `mcp/` module structure
-3. Implement HTTP/SSE transport
-4. Add config options (`--mcp-port`, etc.)
-5. Wire up to AppState
-
-### Phase 2: Read-only tools
-
-1. Server introspection tools
-2. Catalog read tools
-3. User list/get tools
-4. Job status tools
-5. Analytics tools
-
-### Phase 3: Debug tools
-
-1. SQL query tool (read-only)
-2. Search index inspection
-3. Error log access
-4. Integrity checking
-
-### Phase 4: Write tools
-
-1. Catalog CRUD
-2. User management
-3. Job control
-4. Download manager operations
-
-### Phase 5: Future - Catalog Agent
-
-1. Define agent role/permissions
-2. Implement agent-specific tools (or reuse existing)
-3. Add rate limiting / quotas for automated access
-4. Audit logging for agent actions
-
-## Design Decisions
-
-1. **Tool confirmation** - No server-level confirmation for destructive operations. MCP is a protocol, not a UI. The LLM client (Claude, etc.) is responsible for confirmation UX.
-
-2. **Notifications** - Start without push notifications. Keep it purely request/response. Polling via tools is simpler. Can add `subscribe_to_events` later if needed.
-
-3. **Audit logging** - Yes, comprehensive audit logging for all MCP interactions:
-   - Stored in a separate database file (`mcp_audit.db`) to avoid bloating `server.db`
-   - Logs full request/response including LLM prompts, responses, and reasoning
-   - Critical for debugging catalog agent behavior and tracking automated changes
+---
 
 ## References
 
 - [MCP Specification](https://modelcontextprotocol.io/specification)
-- [rmcp crate](https://crates.io/crates/rmcp) (Rust MCP implementation)
+- [Official Rust SDK (rmcp)](https://github.com/modelcontextprotocol/rust-sdk) - Reference only, we roll our own
