@@ -195,6 +195,44 @@ const tools = [
       return { success: true, message: 'Album playback started' };
     },
   },
+  {
+    name: 'ui.playPlaylist',
+    description:
+      'Play a user playlist from the beginning. Use the playlist ID (UUID) from ui.createPlaylist or ui.getPlaylists.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        playlistId: {
+          type: 'string',
+          description: 'The playlist UUID to play.',
+        },
+      },
+      required: ['playlistId'],
+    },
+    execute: async (args) => {
+      const userStore = useUserStore();
+      const playerStore = usePlayerStore();
+
+      // Get playlist data from user store
+      const playlist = userStore.playlistsData?.by_id?.[args.playlistId];
+      if (!playlist) {
+        return {
+          success: false,
+          error: `Playlist not found. Make sure to use a valid playlist ID from ui.createPlaylist or ui.getPlaylists.`,
+        };
+      }
+
+      if (!playlist.tracks || playlist.tracks.length === 0) {
+        return { success: false, error: 'Playlist is empty' };
+      }
+
+      await playerStore.setUserPlaylist(playlist);
+      return {
+        success: true,
+        message: `Now playing playlist "${playlist.name}" with ${playlist.tracks.length} track(s)`,
+      };
+    },
+  },
 
   // ============================================================================
   // NAVIGATION TOOLS
