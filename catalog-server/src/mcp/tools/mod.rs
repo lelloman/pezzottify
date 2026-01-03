@@ -6,6 +6,7 @@ pub mod analytics;
 pub mod catalog;
 pub mod jobs;
 pub mod server;
+pub mod users;
 
 use super::registry::McpRegistry;
 
@@ -15,7 +16,7 @@ pub fn register_all_tools(registry: &mut McpRegistry) {
     server::register_tools(registry);
     jobs::register_tools(registry);
     analytics::register_tools(registry);
-    // Future: users::register_tools(registry);
+    users::register_tools(registry);
     // Future: downloads::register_tools(registry);
     // Future: debug::register_tools(registry);
 }

@@ -15,6 +15,7 @@ use crate::user::Permission;
 pub fn register_tools(registry: &mut McpRegistry) {
     registry.register_tool(catalog_search_tool());
     registry.register_tool(catalog_get_tool());
+    registry.register_tool(catalog_mutate_tool());
 }
 
 // ============================================================================
@@ -311,6 +312,256 @@ async fn get_stats(ctx: &ToolContext) -> ToolResult {
             "albums": album_count,
             "tracks": track_count,
         }
+    });
+
+    ToolsCallResult::json(&result).map_err(|e| McpError::InternalError(e.to_string()))
+}
+
+// ============================================================================
+// catalog.mutate
+// ============================================================================
+
+#[derive(Debug, Deserialize)]
+struct CatalogMutateParams {
+    action: CatalogMutateAction,
+    entity_type: CatalogEntityType,
+    #[serde(default)]
+    id: Option<String>,
+    #[serde(default)]
+    data: Option<Value>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "snake_case")]
+enum CatalogMutateAction {
+    Create,
+    Update,
+    Delete,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "snake_case")]
+enum CatalogEntityType {
+    Artist,
+    Album,
+    Track,
+    Image,
+}
+
+fn catalog_mutate_tool() -> super::super::registry::RegisteredTool {
+    ToolBuilder::new("catalog.mutate")
+        .description("Create, update, or delete catalog content. CONFIRMATION REQUIRED before executing.")
+        .input_schema(serde_json::json!({
+            "type": "object",
+            "properties": {
+                "action": {
+                    "type": "string",
+                    "enum": ["create", "update", "delete"],
+                    "description": "Action to perform"
+                },
+                "entity_type": {
+                    "type": "string",
+                    "enum": ["artist", "album", "track", "image"],
+                    "description": "Type of entity to mutate"
+                },
+                "id": {
+                    "type": "string",
+                    "description": "Entity ID (required for update/delete)"
+                },
+                "data": {
+                    "type": "object",
+                    "description": "Entity data (required for create/update). Structure depends on entity_type."
+                }
+            },
+            "required": ["action", "entity_type"]
+        }))
+        .permission(Permission::EditCatalog)
+        .category(ToolCategory::Write)
+        .build(catalog_mutate_handler)
+}
+
+async fn catalog_mutate_handler(ctx: ToolContext, params: Value) -> ToolResult {
+    let params: CatalogMutateParams = serde_json::from_value(params)
+        .map_err(|e| McpError::InvalidParams(e.to_string()))?;
+
+    match params.action {
+        CatalogMutateAction::Create => {
+            let data = params.data.ok_or_else(|| {
+                McpError::InvalidParams("data is required for create action".into())
+            })?;
+            create_entity(&ctx, params.entity_type, data).await
+        }
+        CatalogMutateAction::Update => {
+            let id = params.id.ok_or_else(|| {
+                McpError::InvalidParams("id is required for update action".into())
+            })?;
+            let data = params.data.ok_or_else(|| {
+                McpError::InvalidParams("data is required for update action".into())
+            })?;
+            update_entity(&ctx, params.entity_type, &id, data).await
+        }
+        CatalogMutateAction::Delete => {
+            let id = params.id.ok_or_else(|| {
+                McpError::InvalidParams("id is required for delete action".into())
+            })?;
+            delete_entity(&ctx, params.entity_type, &id).await
+        }
+    }
+}
+
+async fn create_entity(ctx: &ToolContext, entity_type: CatalogEntityType, data: Value) -> ToolResult {
+    let result = match entity_type {
+        CatalogEntityType::Artist => {
+            let created = ctx
+                .catalog_store
+                .create_artist(data)
+                .map_err(|e| McpError::ToolExecutionFailed(e.to_string()))?;
+            serde_json::json!({
+                "success": true,
+                "action": "create",
+                "entity_type": "artist",
+                "entity": created,
+            })
+        }
+        CatalogEntityType::Album => {
+            let created = ctx
+                .catalog_store
+                .create_album(data)
+                .map_err(|e| McpError::ToolExecutionFailed(e.to_string()))?;
+            serde_json::json!({
+                "success": true,
+                "action": "create",
+                "entity_type": "album",
+                "entity": created,
+            })
+        }
+        CatalogEntityType::Track => {
+            let created = ctx
+                .catalog_store
+                .create_track(data)
+                .map_err(|e| McpError::ToolExecutionFailed(e.to_string()))?;
+            serde_json::json!({
+                "success": true,
+                "action": "create",
+                "entity_type": "track",
+                "entity": created,
+            })
+        }
+        CatalogEntityType::Image => {
+            let created = ctx
+                .catalog_store
+                .create_image(data)
+                .map_err(|e| McpError::ToolExecutionFailed(e.to_string()))?;
+            serde_json::json!({
+                "success": true,
+                "action": "create",
+                "entity_type": "image",
+                "entity": created,
+            })
+        }
+    };
+
+    ToolsCallResult::json(&result).map_err(|e| McpError::InternalError(e.to_string()))
+}
+
+async fn update_entity(
+    ctx: &ToolContext,
+    entity_type: CatalogEntityType,
+    id: &str,
+    data: Value,
+) -> ToolResult {
+    let result = match entity_type {
+        CatalogEntityType::Artist => {
+            let updated = ctx
+                .catalog_store
+                .update_artist(id, data)
+                .map_err(|e| McpError::ToolExecutionFailed(e.to_string()))?;
+            serde_json::json!({
+                "success": true,
+                "action": "update",
+                "entity_type": "artist",
+                "id": id,
+                "entity": updated,
+            })
+        }
+        CatalogEntityType::Album => {
+            let updated = ctx
+                .catalog_store
+                .update_album(id, data)
+                .map_err(|e| McpError::ToolExecutionFailed(e.to_string()))?;
+            serde_json::json!({
+                "success": true,
+                "action": "update",
+                "entity_type": "album",
+                "id": id,
+                "entity": updated,
+            })
+        }
+        CatalogEntityType::Track => {
+            let updated = ctx
+                .catalog_store
+                .update_track(id, data)
+                .map_err(|e| McpError::ToolExecutionFailed(e.to_string()))?;
+            serde_json::json!({
+                "success": true,
+                "action": "update",
+                "entity_type": "track",
+                "id": id,
+                "entity": updated,
+            })
+        }
+        CatalogEntityType::Image => {
+            let updated = ctx
+                .catalog_store
+                .update_image(id, data)
+                .map_err(|e| McpError::ToolExecutionFailed(e.to_string()))?;
+            serde_json::json!({
+                "success": true,
+                "action": "update",
+                "entity_type": "image",
+                "id": id,
+                "entity": updated,
+            })
+        }
+    };
+
+    ToolsCallResult::json(&result).map_err(|e| McpError::InternalError(e.to_string()))
+}
+
+async fn delete_entity(ctx: &ToolContext, entity_type: CatalogEntityType, id: &str) -> ToolResult {
+    let entity_name = match entity_type {
+        CatalogEntityType::Artist => {
+            ctx.catalog_store
+                .delete_artist(id)
+                .map_err(|e| McpError::ToolExecutionFailed(e.to_string()))?;
+            "artist"
+        }
+        CatalogEntityType::Album => {
+            ctx.catalog_store
+                .delete_album(id)
+                .map_err(|e| McpError::ToolExecutionFailed(e.to_string()))?;
+            "album"
+        }
+        CatalogEntityType::Track => {
+            ctx.catalog_store
+                .delete_track(id)
+                .map_err(|e| McpError::ToolExecutionFailed(e.to_string()))?;
+            "track"
+        }
+        CatalogEntityType::Image => {
+            ctx.catalog_store
+                .delete_image(id)
+                .map_err(|e| McpError::ToolExecutionFailed(e.to_string()))?;
+            "image"
+        }
+    };
+
+    let result = serde_json::json!({
+        "success": true,
+        "action": "delete",
+        "entity_type": entity_name,
+        "id": id,
+        "message": format!("{} '{}' deleted", entity_name, id),
     });
 
     ToolsCallResult::json(&result).map_err(|e| McpError::InternalError(e.to_string()))

@@ -13,6 +13,7 @@ use crate::user::Permission;
 /// Register jobs tools with the registry
 pub fn register_tools(registry: &mut McpRegistry) {
     registry.register_tool(jobs_query_tool());
+    registry.register_tool(jobs_action_tool());
 }
 
 // ============================================================================
@@ -234,6 +235,83 @@ async fn get_job_audit_log(
         "entries": entries,
         "count": entries.len(),
         "offset": offset,
+    });
+
+    ToolsCallResult::json(&result).map_err(|e| McpError::InternalError(e.to_string()))
+}
+
+// ============================================================================
+// jobs.action
+// ============================================================================
+
+#[derive(Debug, Deserialize)]
+struct JobsActionParams {
+    action: JobActionType,
+    job_id: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "snake_case")]
+enum JobActionType {
+    Trigger,
+}
+
+fn jobs_action_tool() -> super::super::registry::RegisteredTool {
+    ToolBuilder::new("jobs.action")
+        .description("Perform actions on background jobs. CONFIRMATION REQUIRED before executing.")
+        .input_schema(serde_json::json!({
+            "type": "object",
+            "properties": {
+                "action": {
+                    "type": "string",
+                    "enum": ["trigger"],
+                    "description": "Action to perform: 'trigger' to manually run a job"
+                },
+                "job_id": {
+                    "type": "string",
+                    "description": "Job ID to act on"
+                }
+            },
+            "required": ["action", "job_id"]
+        }))
+        .permission(Permission::ServerAdmin)
+        .category(ToolCategory::Write)
+        .build(jobs_action_handler)
+}
+
+async fn jobs_action_handler(ctx: ToolContext, params: Value) -> ToolResult {
+    let params: JobsActionParams = serde_json::from_value(params)
+        .map_err(|e| McpError::InvalidParams(e.to_string()))?;
+
+    match params.action {
+        JobActionType::Trigger => trigger_job(&ctx, &params.job_id).await,
+    }
+}
+
+async fn trigger_job(ctx: &ToolContext, job_id: &str) -> ToolResult {
+    let scheduler = ctx.scheduler_handle.as_ref().ok_or_else(|| {
+        McpError::ToolExecutionFailed("Job scheduler not available".to_string())
+    })?;
+
+    // Verify job exists
+    let job = scheduler
+        .get_job(job_id)
+        .await
+        .map_err(|e| McpError::ToolExecutionFailed(e.to_string()))?
+        .ok_or_else(|| McpError::ResourceNotFound(format!("Job not found: {}", job_id)))?;
+
+    // Trigger the job
+    scheduler
+        .trigger_job(job_id, Some(serde_json::json!({"source": "mcp"})))
+        .await
+        .map_err(|e| McpError::ToolExecutionFailed(e.to_string()))?;
+
+    let result = serde_json::json!({
+        "success": true,
+        "action": "trigger",
+        "job_id": job_id,
+        "job_name": job.name,
+        "message": format!("Job '{}' triggered manually via MCP", job.name),
     });
 
     ToolsCallResult::json(&result).map_err(|e| McpError::InternalError(e.to_string()))
