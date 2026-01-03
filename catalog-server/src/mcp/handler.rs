@@ -287,6 +287,7 @@ async fn handle_tools_call(
         server_store: server_state.server_store.clone(),
         scheduler_handle: server_state.scheduler_handle.clone(),
         download_manager: server_state.download_manager.clone(),
+        config: server_state.config.clone(),
         server_version: format!("{}-{}", env!("APP_VERSION"), env!("GIT_HASH")),
         start_time: server_state.start_time,
     };
@@ -356,6 +357,7 @@ async fn handle_resources_read(
         server_store: server_state.server_store.clone(),
         scheduler_handle: server_state.scheduler_handle.clone(),
         download_manager: server_state.download_manager.clone(),
+        config: server_state.config.clone(),
         server_version: format!("{}-{}", env!("APP_VERSION"), env!("GIT_HASH")),
         start_time: server_state.start_time,
     };

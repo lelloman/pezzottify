@@ -9,6 +9,7 @@ use crate::catalog_store::CatalogStore;
 use crate::download_manager::DownloadManager;
 use crate::search::SearchVault;
 use crate::server::session::Session;
+use crate::server::ServerConfig;
 use crate::server_store::ServerStore;
 use crate::user::Permission;
 use crate::user::UserManager;
@@ -37,6 +38,9 @@ pub struct ToolContext {
 
     /// Access to download manager
     pub download_manager: Option<Arc<DownloadManager>>,
+
+    /// Server configuration
+    pub config: ServerConfig,
 
     /// Server version info
     pub server_version: String,
