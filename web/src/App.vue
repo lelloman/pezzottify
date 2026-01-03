@@ -1,9 +1,16 @@
 <script setup>
 import { RouterView } from "vue-router";
 import { usePlayerStore } from "./store/player";
-import { onMounted, onUnmounted } from "vue";
+import { useAuthStore } from "./store/auth";
+import { onMounted, onUnmounted, computed } from "vue";
+import ChatButton from "./components/chat/ChatButton.vue";
+import ChatPanel from "./components/chat/ChatPanel.vue";
 
 const player = usePlayerStore();
+const authStore = useAuthStore();
+
+// Only show chat when authenticated
+const showChat = computed(() => authStore.sessionChecked && authStore.user);
 
 function handleKeyDown(event) {
   const isEditable =
@@ -24,6 +31,10 @@ onUnmounted(() => {
 
 <template>
   <RouterView id="el_routo" />
+  <template v-if="showChat">
+    <ChatButton />
+    <ChatPanel />
+  </template>
 </template>
 
 <style scoped>
