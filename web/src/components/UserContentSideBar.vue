@@ -53,8 +53,8 @@
         </div>
       </div>
       <div class="playlistsContainer" v-if="playlistsData">
-        <div v-for="playlistId in playlists" :key="playlistId">
-          <LoadPlaylistListItem :playlistId="playlistId" />
+        <div v-for="playlist in playlists" :key="playlist.id">
+          <LoadPlaylistListItem :playlistId="playlist.id" />
         </div>
       </div>
     </div>
