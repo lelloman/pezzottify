@@ -29,7 +29,9 @@ async function refreshModels(provider = localConfig.value.provider) {
   loadingModels.value = true;
   testResult.value = null;
   try {
-    availableModels.value = await getModels(provider, localConfig.value);
+    const models = await getModels(provider, localConfig.value);
+    console.log('Fetched models:', models);
+    availableModels.value = models;
     // Set default model if not set and we have models
     if (!localConfig.value.model && availableModels.value.length > 0) {
       localConfig.value.model = availableModels.value[0].id;
@@ -184,6 +186,9 @@ function handleCancel() {
         </datalist>
         <p class="settings__hint">
           Type a model name or select from suggestions.
+          <span v-if="availableModels.length > 0" class="settings__model-count">
+            ({{ availableModels.length }} models available)
+          </span>
         </p>
       </div>
 
@@ -295,6 +300,10 @@ function handleCancel() {
   font-size: var(--text-xs);
   color: var(--text-subdued);
   margin-top: var(--spacing-1);
+}
+
+.settings__model-count {
+  color: var(--spotify-green);
 }
 
 .settings__model-row {
