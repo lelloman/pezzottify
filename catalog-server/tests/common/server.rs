@@ -35,6 +35,13 @@ impl SearchVault for MockSearchVault {
     }
 
     fn update_popularity(&self, _items: &[(String, HashedItemType, u64, f64)]) {}
+
+    fn get_stats(&self) -> pezzottify_catalog_server::search::SearchVaultStats {
+        pezzottify_catalog_server::search::SearchVaultStats {
+            indexed_items: 0,
+            index_type: "Mock".to_string(),
+        }
+    }
 }
 
 /// Test server instance with isolated catalog and database

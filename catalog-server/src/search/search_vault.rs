@@ -1,6 +1,6 @@
 //! Search vault trait and result types
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize)]
 pub enum HashedItemType {
@@ -97,4 +97,16 @@ pub trait SearchVault: Send + Sync {
     ///   - `play_count`: Raw play count for analytics
     ///   - `normalized_score`: Score normalized 0.0-1.0 within each item type
     fn update_popularity(&self, items: &[(String, HashedItemType, u64, f64)]);
+
+    /// Get statistics about the search index.
+    fn get_stats(&self) -> SearchVaultStats;
+}
+
+/// Statistics about the search vault.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SearchVaultStats {
+    /// Number of items in the search index
+    pub indexed_items: usize,
+    /// Type of search index (e.g., "FTS5+Levenshtein")
+    pub index_type: String,
 }

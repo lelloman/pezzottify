@@ -530,6 +530,18 @@ impl SearchVault for Fts5LevenshteinSearchVault {
         // Call the public update_popularity method on self
         Fts5LevenshteinSearchVault::update_popularity(self, items)
     }
+
+    fn get_stats(&self) -> super::SearchVaultStats {
+        let conn = self.conn.lock().unwrap();
+        let count: usize = conn
+            .query_row("SELECT COUNT(*) FROM search_index", [], |row| row.get(0))
+            .unwrap_or(0);
+
+        super::SearchVaultStats {
+            indexed_items: count,
+            index_type: "FTS5+Levenshtein".to_string(),
+        }
+    }
 }
 
 #[cfg(test)]
