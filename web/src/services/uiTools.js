@@ -398,20 +398,27 @@ const tools = [
       const userStore = useUserStore();
       return new Promise((resolve) => {
         userStore.createPlaylist(async (newPlaylist) => {
-          if (!newPlaylist) {
+          // Note: newPlaylist can be either:
+          // - A string (the playlist ID) when freshly created from server
+          // - An object { id, name, ... } when fetched from playlist list
+          const playlistId = typeof newPlaylist === 'string' ? newPlaylist : newPlaylist?.id;
+
+          if (!playlistId) {
             resolve({ success: false, error: 'Failed to create playlist' });
             return;
           }
+
+          const playlistName = args.name || 'New Playlist';
           if (args.name) {
             await new Promise((nameResolve) => {
-              userStore.updatePlaylistName(newPlaylist.id, args.name, nameResolve);
+              userStore.updatePlaylistName(playlistId, args.name, nameResolve);
             });
           }
           resolve({
             success: true,
-            playlistId: newPlaylist.id,
-            name: args.name || newPlaylist.name,
-            message: `Created playlist with ID "${newPlaylist.id}". Use this ID for ui.addToPlaylist.`,
+            playlistId: playlistId,
+            name: playlistName,
+            message: `Created playlist with ID "${playlistId}". Use this ID for ui.addToPlaylist.`,
           });
         });
       });

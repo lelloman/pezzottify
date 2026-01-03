@@ -125,14 +125,21 @@ export const useUserStore = defineStore("user", () => {
   };
 
   const createPlaylist = async (callback) => {
-    const newPlaylist = await remoteStore.createNewPlaylist();
-    if (newPlaylist && playlistsData.value) {
-      console.log("Creating new playlist");
-      console.log(newPlaylist);
-      playlistsData.value.list = [newPlaylist, ...playlistsData.value.list];
-      playlistsData.value.by_id[newPlaylist.id] = newPlaylist;
+    // Server returns just the playlist ID (string), not a full playlist object
+    const newPlaylistId = await remoteStore.createNewPlaylist();
+    if (newPlaylistId && playlistsData.value) {
+      console.log("Creating new playlist with ID:", newPlaylistId);
+      // Fetch the full playlist data
+      const playlistData = await remoteStore.fetchPlaylistData(newPlaylistId);
+      if (playlistData) {
+        playlistsData.value.list = [playlistData, ...playlistsData.value.list];
+        playlistsData.value.by_id[newPlaylistId] = playlistData;
+        callback(playlistData);
+        return;
+      }
     }
-    callback(newPlaylist);
+    // Fallback: return the ID if we couldn't fetch the full data
+    callback(newPlaylistId);
   };
 
   const deletePlaylist = async (playlistId, callback) => {
