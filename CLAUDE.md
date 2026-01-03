@@ -196,6 +196,10 @@ The Android project uses a multi-module Gradle setup with modules: `app`, `ui`, 
     - `GET /admin/audit/item/{id}`: Audit for queue item
     - `GET /admin/audit/user/{user_id}`: Audit for user
 - `/v1/ws`: WebSocket for real-time updates
+- `/v1/mcp`: WebSocket for MCP (Model Context Protocol) - LLM tool access
+  - Tools: `catalog.search`, `catalog.get`, `catalog.mutate`, `users.query`, `users.mutate`, `analytics.query`, `downloads.query`, `downloads.action`, `server.query`, `jobs.query`, `jobs.action`, `debug.sql`, `debug.inspect`
+  - Resources: `logs://`, `jobs://`, `config://`, `changelog://`
+  - See `docs/mcp-server-design.md` for full documentation
 
 **Authentication flow (OIDC):**
 Both web and Android use client-side OIDC authentication:
@@ -233,11 +237,15 @@ Copy `.env.example` to `.env.local` and configure:
 - `statics.js`: Static data caching
 - `debug.js`: Debug configuration
 - `sync.js`: Multi-device sync state management (WebSocket connection, sync events)
+- `chat.js`: AI chat state, LLM config, tool execution
 
 **Services:** Located in `web/src/services/`
 - `oidc.js`: Client-side OIDC authentication (login, callback, token refresh)
 - `api.js`: Axios interceptors for auth headers and automatic token refresh on 401
 - `websocket.js`: WebSocket connection for real-time updates
+- `llm/`: Multi-provider LLM adapters (Anthropic, OpenAI, Google, Ollama, OpenRouter)
+- `mcp.js`: WebSocket client for MCP server (catalog queries via tools)
+- `uiTools.js`: Local UI control tools (playback, navigation, likes, playlists)
 
 **Routing:**
 All content routes nest under HomeView with `meta: { requiresAuth: true }`:
@@ -259,12 +267,14 @@ All content routes nest under HomeView with `meta: { requiresAuth: true }`:
 - `components/common/contextmenu/`: Right-click context menus
 - `components/search/`: Search-related components
 - `components/icons/`: Icon components
+- `components/chat/`: AI chat interface (ChatButton, ChatPanel, ChatMessage, ChatSettings)
 
 **Key features:**
 - Authentication guard on router (redirects to `/login` if not authenticated)
 - Global debug config accessible via `window.config`
 - HTTP cache blocking for development
 - Right-click context menu system
+- AI chat assistant with multi-provider LLM support
 
 ### Android Architecture
 
