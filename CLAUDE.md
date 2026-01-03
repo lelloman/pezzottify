@@ -31,8 +31,7 @@ cargo run -- --db-dir ../../pezzottify-catalog --media-path=../../pezzottify-cat
 ```
 
 **Build features:**
-- `--features no_search`: Faster builds without search index
-- `--features fast`: Alias for no_search (fastest for development)
+- `--features fast`: Faster builds (skips expensive integrity checks)
 - `--features slowdown`: Adds slowdown layer for testing
 
 **CLI arguments:**
@@ -48,7 +47,6 @@ cargo run -- --db-dir ../../pezzottify-catalog --media-path=../../pezzottify-cat
 - `--downloader-timeout-sec <SECONDS>`: Timeout for downloader requests (default: 300)
 - `--event-retention-days <DAYS>`: Days to retain sync events before pruning (default: 30, 0 to disable)
 - `--prune-interval-hours <HOURS>`: Interval between pruning runs (default: 24)
-- `--search-engine <ENGINE>`: Search engine to use (default: pezzothash). Options: pezzothash, fts5, fts5-levenshtein, noop
 
 **Running tests:**
 ```bash
@@ -125,11 +123,9 @@ The Android project uses a multi-module Gradle setup with modules: `app`, `ui`, 
   - `search.rs`: Search API routes
   - `websocket/`: WebSocket support for real-time updates
   - `http_layers/`: Middleware for logging, caching, slowdown
-- `search/`: Search functionality (runtime-configurable via `--search-engine`)
-  - `PezzotHashSearchVault`: SimHash-based fuzzy search (default)
-  - `Fts5SearchVault`: SQLite FTS5 with trigram tokenizer
-  - `Fts5LevenshteinSearchVault`: FTS5 with Levenshtein typo correction
-  - `NoOpSearchVault`: Disabled search (for `no_search` feature or `noop` engine)
+- `search/`: Search functionality
+  - `Fts5LevenshteinSearchVault`: SQLite FTS5 with trigram tokenizer and Levenshtein typo correction
+  - `streaming/`: Streaming search pipeline with target identification and enrichment
 - `sqlite_persistence/`: Database schema management
   - `versioned_schema.rs`: Schema migrations with version tracking
 - `config/`: Configuration management
@@ -302,14 +298,8 @@ Multi-module Gradle project with clean architecture layers:
 - Single operations rely on SQLite's default atomicity
 
 **Search indexing:**
-- Built at startup from catalog database
-- Runtime-configurable via `--search-engine` or `[search] engine` in config
-- Available engines:
-  - `pezzothash`: SimHash-based fuzzy search (default, built-in typo tolerance)
-  - `fts5`: SQLite FTS5 with trigram tokenizer (fast, bounded memory)
-  - `fts5-levenshtein`: FTS5 with Levenshtein typo correction (best typo tolerance)
-  - `noop`: Disabled search (fastest startup, for development)
-- Can also be disabled at compile-time with `no_search` feature for faster dev builds
+- Built at startup from catalog database using FTS5 with Levenshtein typo correction
+- Supports organic search and streaming search with target identification/enrichment
 
 **Catalog storage:**
 - SQLite database stores all catalog metadata (artists, albums, tracks, images)

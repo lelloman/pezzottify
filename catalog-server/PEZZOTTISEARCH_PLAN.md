@@ -1,72 +1,52 @@
 # Pezzottisearch - Search Engine Design
 
-## Implementation Status
+## Implementation Status (Updated January 2026)
 
 | Stage | Status | Location | Notes |
 |-------|--------|----------|-------|
-| **Stage 1**: SimHash | ✅ Done | `search/pezzott_hash.rs`, `search/search_vault.rs` | `PezzotHashSearchVault` |
-| **Stage 1**: Popularity | ⚠️ Partial | `search/fts5_levenshtein_search.rs` | Only in FTS5+Levenshtein, not in PezzotHash |
-| **Stage 2**: Trigram Boost | ⚠️ Partial | `search/search_vault.rs` | Trigram **similarity** exists, not **containment** boost |
-| **Stage 3**: Levenshtein | ✅ Done | `search/fts5_levenshtein_search.rs` | Only in FTS5+Levenshtein engine |
+| **Stage 1-3**: Organic Search | ✅ Done | `search/fts5_levenshtein_search.rs` | FTS5 + Levenshtein + Popularity |
 | **Stage 4**: Target ID | ✅ Done | `search/streaming/target_identifier.rs` | `ScoreGapStrategy` implementation |
 | **Stage 4**: Enrichment | ✅ Done | `search/streaming/pipeline.rs` | Popular tracks, albums, related artists |
 
 ### Current Architecture
 
-The planned unified 4-stage pipeline was **not** implemented as a single engine. Instead:
+The search engine was simplified to use **only** `Fts5LevenshteinSearchVault` with the streaming search pipeline on top:
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
-│  Available Search Engines (choose ONE via config)                   │
+│  Fts5LevenshteinSearchVault (src/search/fts5_levenshtein_search.rs) │
 │                                                                     │
-│  ┌─────────────────────┐  ┌─────────────────────────────────────┐  │
-│  │ PezzotHashSearchVault│  │ Fts5LevenshteinSearchVault          │  │
-│  │                     │  │                                     │  │
-│  │ - SimHash matching  │  │ - FTS5 trigram search               │  │
-│  │ - Trigram re-sort   │  │ - Levenshtein typo correction       │  │
-│  │ - NO popularity     │  │ - Popularity scoring ✅              │  │
-│  └──────────┬──────────┘  └──────────────────┬──────────────────┘  │
-│             │                                │                      │
-│             └────────────────┬───────────────┘                      │
-│                              ▼                                      │
-└─────────────────────────────────────────────────────────────────────┘
-                               │
-                               ▼
+│  - FTS5 trigram-based full text search                              │
+│  - Levenshtein typo correction for fuzzy matching                   │
+│  - Popularity scoring for ranking                                   │
+└────────────────────────────────────┬────────────────────────────────┘
+                                     │
+                                     ▼
 ┌─────────────────────────────────────────────────────────────────────┐
 │  Streaming Search Pipeline (Stage 4)                                │
 │  Location: src/search/streaming/                                    │
 │                                                                     │
-│  1. Takes results from whichever engine is configured               │
+│  1. Takes results from FTS5+Levenshtein engine                      │
 │  2. Identifies targets per content type (artist, album, track)      │
 │  3. Enriches with related content                                   │
 │  4. Returns structured SSE response                                 │
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
-### Streaming Search Endpoint
+### Search Endpoints
 
-`GET /v1/content/search/stream?q=<query>` (see `server/search.rs:333-376`)
+- **Organic search**: `POST /v1/content/search` - returns raw or resolved results
+- **Streaming search**: `GET /v1/content/search/stream?q=<query>` - SSE with enriched sections
 
-1. Calls `search_vault.search()` using configured engine
-2. Passes results to `StreamingSearchPipeline.execute()`
-3. Returns SSE events with structured sections
+### Cleanup (January 2026)
 
-### What's Missing for Full Pezzottisearch
-
-To implement the original unified Stages 1-3 pipeline:
-
-1. **Add popularity to `PezzotHashSearchVault`**
-   - `update_popularity()` is currently a no-op (line 200 of `search_vault.rs`)
-   - Need to store and apply popularity scores in search ranking
-
-2. **Stage 2: Trigram Containment Boost** (not implemented)
-   - Current `CharsTrigrams::similarity()` checks overlap ratio
-   - Need: containment check for prefix matching ("ABC" → "ABCDEFG")
-   - Should activate for short queries (≤10 chars)
-
-3. **Add Levenshtein to SimHash pipeline**
-   - Currently Levenshtein only exists in `Fts5LevenshteinSearchVault`
-   - For unified pipeline: add as re-ranking step after SimHash + Trigram
+The following were removed to simplify the codebase:
+- `PezzotHashSearchVault` (SimHash-based search)
+- `Fts5SearchVault` (FTS5 without Levenshtein)
+- `NoOpSearchVault` (disabled search)
+- `search/factory.rs` (engine selection)
+- `no_search` feature flag
+- `--search-engine` CLI argument
 
 ---
 
@@ -224,42 +204,24 @@ trigram_boost_factor = 2.0
 levenshtein_candidates = 200
 ```
 
-### Existing Code Reference
+### Current Code Reference
 
 | File | What It Does |
 |------|--------------|
-| `search/pezzott_hash.rs` | SimHash calculation (Stage 1 core) |
-| `search/search_vault.rs` | `PezzotHashSearchVault` - SimHash + trigram similarity |
-| `search/fts5_search.rs` | `Fts5SearchVault` - FTS5 trigram search |
 | `search/fts5_levenshtein_search.rs` | `Fts5LevenshteinSearchVault` - FTS5 + Levenshtein + popularity |
 | `search/levenshtein.rs` | Levenshtein distance + vocabulary |
+| `search/search_vault.rs` | `SearchVault` trait definition |
 | `search/streaming/pipeline.rs` | Stage 4: orchestrates target ID + enrichment |
 | `search/streaming/target_identifier.rs` | Stage 4: `ScoreGapStrategy` implementation |
 | `search/streaming/enrichment.rs` | Stage 4: helper functions for enrichment |
 | `search/streaming/sections.rs` | Stage 4: response section types |
-| `search/factory.rs` | Creates search vault based on config |
 | `search/relevance_filter.rs` | Post-processing relevance filtering |
 | `background_jobs/jobs/popular_content.rs` | Computes popularity, calls `update_popularity()` |
 
-### Remaining Implementation Tasks
+### Resolved Questions
 
-If building the unified Pezzottisearch engine:
-
-1. [ ] Add popularity storage to `PezzotHashSearchVault`
-2. [ ] Implement `update_popularity()` in `PezzotHashSearchVault`
-3. [ ] Apply popularity weighting in SimHash search
-4. [ ] Add trigram containment check (not just similarity)
-5. [ ] Add short query detection for Stage 2 activation
-6. [ ] Add Levenshtein re-ranking step to SimHash pipeline
-7. [ ] Create unified `PezzottisearchVault` or extend `PezzotHashSearchVault`
-8. [ ] Add `pezzottisearch` engine option to factory
-9. [ ] Add TOML configuration options
-10. [ ] Tests
-
-### Open Questions
-
-1. Should trigram index be in-memory or SQLite?
-   → Start with in-memory, optimize later if needed
+1. ~~Should trigram index be in-memory or SQLite?~~
+   → **Resolved**: SQLite FTS5 handles trigram indexing
 
 2. ~~How to define "confidence" for target identification?~~
    → **Resolved**: Score gap strategy implemented in `ScoreGapStrategy`
@@ -267,6 +229,5 @@ If building the unified Pezzottisearch engine:
 3. ~~Should enrichment (related items) be optional/configurable?~~
    → **Resolved**: Yes, configurable via `StreamingSearchSettings`
 
-4. Should we build unified Pezzottisearch or keep separate engines?
-   → Current approach: separate engines + streaming pipeline on top
-   → Trade-off: less optimal but more flexible/maintainable
+4. ~~Should we build unified Pezzottisearch or keep separate engines?~~
+   → **Resolved (January 2026)**: Simplified to single FTS5+Levenshtein engine + streaming pipeline

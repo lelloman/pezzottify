@@ -66,8 +66,8 @@ The catalog server is the backend component of Pezzottify that provides:
 
 - **`search/`**: Search functionality
 
-  - `PezzotHashSearchVault`: Custom full-text search implementation
-  - `NoOpSearchVault`: Disabled search stub (for `no_search` feature)
+  - `Fts5LevenshteinSearchVault`: SQLite FTS5 with trigram tokenizer and Levenshtein typo correction
+  - `streaming/`: Streaming search pipeline with target identification and enrichment
 
 - **`download_manager/`**: Content acquisition from external providers
 
@@ -155,13 +155,10 @@ cargo build --release
 For faster development iteration, use feature flags to skip expensive operations:
 
 ```bash
-# Skip search index building (faster startup)
-cargo build --features no_search
-
 # Skip catalog integrity checks (faster startup)
 cargo build --features no_checks
 
-# Skip both (fastest for development)
+# Fastest for development (skips integrity checks)
 cargo build --features fast
 
 # Add artificial slowdown for testing (useful for frontend development)
@@ -307,12 +304,11 @@ max_albums_per_day = 60
 
 Configure build-time behavior with Cargo features:
 
-| Feature     | Description                                                            |
-| ----------- | ---------------------------------------------------------------------- |
-| `no_search` | Disable search index building (faster builds, no search functionality) |
-| `no_checks` | Skip expensive catalog integrity checks during load                    |
-| `fast`      | Combines `no_search` and `no_checks` for fastest development builds    |
-| `slowdown`  | Adds artificial request delay for frontend development testing         |
+| Feature     | Description                                                        |
+| ----------- | ------------------------------------------------------------------ |
+| `no_checks` | Skip expensive catalog integrity checks during load                |
+| `fast`      | Alias for `no_checks` (fastest for development builds)             |
+| `slowdown`  | Adds artificial request delay for frontend development testing     |
 
 ## Configuration
 
@@ -919,7 +915,8 @@ catalog-server/
 │   ├── search/              # Search functionality
 │   │   ├── mod.rs
 │   │   ├── search_vault.rs
-│   │   └── pezzott_hash.rs
+│   │   ├── fts5_levenshtein_search.rs
+│   │   └── streaming/       # Streaming search pipeline
 │   └── sqlite_persistence/  # Database schema
 │       ├── mod.rs
 │       └── versioned_schema.rs

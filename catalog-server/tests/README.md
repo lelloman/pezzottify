@@ -398,9 +398,8 @@ ffmpeg -f lavfi -i color=c=gray:s=32x32:d=1 -frames:v 1 test-image.jpg -y
 - **Full suite**: ~5-30s (depends on test count)
 
 To optimize:
-- Use `#[cfg(feature = "no_search")]` to skip search indexing
 - Use `#[cfg(feature = "no_checks")]` to skip catalog validation
-- Use `#[cfg(feature = "fast")]` for both
+- Use `#[cfg(feature = "fast")]` for faster builds
 - Run in parallel: `cargo test -- --test-threads=8`
 
 ## Contributing
