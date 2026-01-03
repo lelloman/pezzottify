@@ -10,35 +10,9 @@ use anyhow::{bail, Result};
 use clap::ValueEnum;
 use std::path::PathBuf;
 
-/// Search engine implementation to use
-#[derive(Debug, Clone, Default, PartialEq, Eq, ValueEnum)]
-pub enum SearchEngine {
-    /// PezzotHash - SimHash-based fuzzy search (default)
-    #[default]
-    PezzotHash,
-    /// FTS5 - SQLite full-text search with trigram tokenizer
-    Fts5,
-    /// FTS5 with Levenshtein - FTS5 with typo-tolerant query correction
-    Fts5Levenshtein,
-    /// NoOp - Disabled search (returns empty results)
-    NoOp,
-}
-
-impl std::fmt::Display for SearchEngine {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            SearchEngine::PezzotHash => write!(f, "pezzothash"),
-            SearchEngine::Fts5 => write!(f, "fts5"),
-            SearchEngine::Fts5Levenshtein => write!(f, "fts5-levenshtein"),
-            SearchEngine::NoOp => write!(f, "noop"),
-        }
-    }
-}
-
 /// Settings for the search subsystem
 #[derive(Debug, Clone)]
 pub struct SearchSettings {
-    pub engine: SearchEngine,
     pub streaming: StreamingSearchSettings,
 }
 
@@ -107,7 +81,6 @@ pub struct CliConfig {
     pub downloader_timeout_sec: u64,
     pub event_retention_days: u64,
     pub prune_interval_hours: u64,
-    pub search_engine: SearchEngine,
 }
 
 #[derive(Debug, Clone)]
@@ -224,22 +197,12 @@ impl AppConfig {
 
         let background_jobs = BackgroundJobsSettings::default();
 
-        // Search settings - TOML overrides CLI
-        let search_config = file.search.clone();
-        let search_engine = search_config
-            .as_ref()
-            .and_then(|s| s.engine.clone())
-            .map(|e| match e.to_lowercase().replace('-', "_").as_str() {
-                "fts5" => SearchEngine::Fts5,
-                "fts5_levenshtein" | "fts5levenshtein" => SearchEngine::Fts5Levenshtein,
-                "noop" | "none" | "disabled" => SearchEngine::NoOp,
-                _ => SearchEngine::PezzotHash, // default for unknown values
-            })
-            .unwrap_or_else(|| cli.search_engine.clone());
-
         // Streaming search settings from file config
         let streaming_defaults = StreamingSearchSettings::default();
-        let streaming_file = search_config.and_then(|s| s.streaming).unwrap_or_default();
+        let streaming_file = file
+            .search
+            .and_then(|s| s.streaming)
+            .unwrap_or_default();
         let streaming = StreamingSearchSettings {
             strategy: streaming_file
                 .strategy
@@ -274,10 +237,7 @@ impl AppConfig {
                 .unwrap_or(streaming_defaults.top_results_limit),
         };
 
-        let search = SearchSettings {
-            engine: search_engine,
-            streaming,
-        };
+        let search = SearchSettings { streaming };
 
         Ok(Self {
             db_dir,
@@ -437,7 +397,6 @@ mod tests {
             downloader_timeout_sec: 600,
             event_retention_days: 60,
             prune_interval_hours: 12,
-            search_engine: SearchEngine::PezzotHash,
         };
 
         let config = AppConfig::resolve(&cli, None).unwrap();

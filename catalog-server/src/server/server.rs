@@ -4922,20 +4922,19 @@ pub async fn make_app(
 
     let playlist_routes = playlist_read_routes.merge(playlist_write_routes);
 
-    // Apply search rate limiting to search routes if they exist
-    if let Some(search_routes) = make_search_routes(state.clone()) {
-        let search_rate_limit = Arc::new(
-            GovernorConfigBuilder::default()
-                .per_second(std::cmp::max(1, (SEARCH_PER_MINUTE / 60) as u64))
-                .burst_size(SEARCH_PER_MINUTE)
-                .key_extractor(UserOrIpKeyExtractor)
-                .finish()
-                .unwrap(),
-        );
+    // Apply search rate limiting to search routes
+    let search_routes = make_search_routes(state.clone());
+    let search_rate_limit = Arc::new(
+        GovernorConfigBuilder::default()
+            .per_second(std::cmp::max(1, (SEARCH_PER_MINUTE / 60) as u64))
+            .burst_size(SEARCH_PER_MINUTE)
+            .key_extractor(UserOrIpKeyExtractor)
+            .finish()
+            .unwrap(),
+    );
 
-        let rate_limited_search_routes = search_routes.layer(GovernorLayer::new(search_rate_limit));
-        content_routes = content_routes.merge(rate_limited_search_routes);
-    }
+    let rate_limited_search_routes = search_routes.layer(GovernorLayer::new(search_rate_limit));
+    content_routes = content_routes.merge(rate_limited_search_routes);
 
     // Listening stats routes (requires AccessCatalog permission)
     let listening_stats_routes: Router = Router::new()
@@ -5152,15 +5151,9 @@ pub async fn make_app(
         .with_state(state.clone());
 
     // Search admin routes (requires ServerAdmin permission)
-    let admin_search_routes: Router = if let Some(routes) = make_search_admin_routes(state.clone())
-    {
-        routes.route_layer(middleware::from_fn_with_state(
-            state.clone(),
-            require_server_admin,
-        ))
-    } else {
-        Router::new()
-    };
+    let admin_search_routes: Router = make_search_admin_routes(state.clone()).route_layer(
+        middleware::from_fn_with_state(state.clone(), require_server_admin),
+    );
 
     let admin_routes = admin_server_routes
         .merge(admin_user_routes)
@@ -5418,7 +5411,7 @@ fn check_and_close_stale_batches(
 mod tests {
     use super::*;
     use crate::catalog_store::NullCatalogStore;
-    use crate::search::NoOpSearchVault;
+    use crate::search::{HashedItemType, SearchResult, SearchVault};
     use crate::server_store::{
         JobAuditEntry, JobAuditEventType, JobRun, JobRunStatus, JobScheduleState, ServerStore,
     };
@@ -5433,6 +5426,26 @@ mod tests {
     use std::collections::HashMap;
     use std::sync::RwLock;
     use tower::ServiceExt; // for `call`, `oneshot`, and `ready
+
+    /// Mock search vault for testing - returns empty results
+    struct MockSearchVault;
+
+    impl SearchVault for MockSearchVault {
+        fn search(
+            &self,
+            _query: &str,
+            _max_results: usize,
+            _filter: Option<Vec<HashedItemType>>,
+        ) -> Vec<SearchResult> {
+            Vec::new()
+        }
+
+        fn rebuild_index(&self) -> anyhow::Result<()> {
+            Ok(())
+        }
+
+        fn update_popularity(&self, _items: &[(String, HashedItemType, u64, f64)]) {}
+    }
 
     /// A minimal in-memory ServerStore for testing
     #[derive(Default)]
@@ -5554,7 +5567,7 @@ mod tests {
             user_store.clone(),
         )));
         let guarded_search_vault: crate::server::state::GuardedSearchVault =
-            Arc::new(std::sync::Mutex::new(Box::new(NoOpSearchVault {})));
+            Arc::new(std::sync::Mutex::new(Box::new(MockSearchVault)));
         let server_store: Arc<dyn ServerStore> = Arc::new(MockServerStore::default());
         let app = &mut make_app(
             ServerConfig::default(),
@@ -5600,20 +5613,17 @@ mod tests {
             assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
         }
 
-        // Only test search route if search feature is enabled
-        #[cfg(not(feature = "no_search"))]
-        {
-            let mut request = Request::builder()
-                .method("POST")
-                .uri("/v1/content/search")
-                .body(Body::empty())
-                .unwrap();
-            // Add ConnectInfo extension for rate limiting
-            request.extensions_mut().insert(ConnectInfo(test_addr));
-            let response = app.oneshot(request).await.unwrap();
-            // 401 Unauthorized - not authenticated
-            assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
-        }
+        // Test search route
+        let mut request = Request::builder()
+            .method("POST")
+            .uri("/v1/content/search")
+            .body(Body::empty())
+            .unwrap();
+        // Add ConnectInfo extension for rate limiting
+        request.extensions_mut().insert(ConnectInfo(test_addr));
+        let response = app.oneshot(request).await.unwrap();
+        // 401 Unauthorized - not authenticated
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
     }
 
     #[derive(Default)]

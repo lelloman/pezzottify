@@ -23,7 +23,7 @@ use pezzottify_catalog_server::download_manager::{
     QueueProcessor, SqliteDownloadQueueStore,
 };
 use pezzottify_catalog_server::downloader;
-use pezzottify_catalog_server::search::create_search_vault;
+use pezzottify_catalog_server::search::Fts5LevenshteinSearchVault;
 use pezzottify_catalog_server::server::{metrics, run_server, RequestsLoggingLevel};
 use pezzottify_catalog_server::server_store::{self, SqliteServerStore};
 use pezzottify_catalog_server::user::{self, SqliteUserStore, UserManager};
@@ -109,9 +109,6 @@ struct CliArgs {
     #[clap(long, default_value_t = 24)]
     pub prune_interval_hours: u64,
 
-    /// Search engine to use: pezzothash (default), fts5, or noop
-    #[clap(long, value_enum, default_value_t = config::SearchEngine::PezzotHash)]
-    pub search_engine: config::SearchEngine,
 }
 
 /// Convert CLI args to CliConfig for config resolution
@@ -129,7 +126,6 @@ impl From<&CliArgs> for config::CliConfig {
             downloader_timeout_sec: args.downloader_timeout_sec,
             event_retention_days: args.event_retention_days,
             prune_interval_hours: args.prune_interval_hours,
-            search_engine: args.search_engine.clone(),
         }
     }
 }
@@ -218,15 +214,12 @@ async fn main() -> Result<()> {
     )));
 
     // Create search vault early so it can be shared with job scheduler
-    info!(
-        "Indexing content for search using {} engine...",
-        app_config.search.engine
-    );
-    let search_vault = create_search_vault(
-        &app_config.search.engine,
-        catalog_store.clone(),
-        &app_config.db_dir,
-    )?;
+    info!("Indexing content for search...");
+    let search_vault: Box<dyn pezzottify_catalog_server::search::SearchVault> =
+        Box::new(Fts5LevenshteinSearchVault::new(
+            catalog_store.clone(),
+            &app_config.search_db_path(),
+        )?);
     let guarded_search_vault: GuardedSearchVault =
         std::sync::Arc::new(std::sync::Mutex::new(search_vault));
 
