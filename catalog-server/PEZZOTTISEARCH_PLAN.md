@@ -1,10 +1,82 @@
-# Pezzottisearch - New Search Engine Design
+# Pezzottisearch - Search Engine Design
 
-## Overview
+## Implementation Status
 
-A new search engine combining multiple techniques for optimal typo tolerance, prefix matching, and structured results.
+| Stage | Status | Location | Notes |
+|-------|--------|----------|-------|
+| **Stage 1**: SimHash | ✅ Done | `search/pezzott_hash.rs`, `search/search_vault.rs` | `PezzotHashSearchVault` |
+| **Stage 1**: Popularity | ⚠️ Partial | `search/fts5_levenshtein_search.rs` | Only in FTS5+Levenshtein, not in PezzotHash |
+| **Stage 2**: Trigram Boost | ⚠️ Partial | `search/search_vault.rs` | Trigram **similarity** exists, not **containment** boost |
+| **Stage 3**: Levenshtein | ✅ Done | `search/fts5_levenshtein_search.rs` | Only in FTS5+Levenshtein engine |
+| **Stage 4**: Target ID | ✅ Done | `search/streaming/target_identifier.rs` | `ScoreGapStrategy` implementation |
+| **Stage 4**: Enrichment | ✅ Done | `search/streaming/pipeline.rs` | Popular tracks, albums, related artists |
 
-## Architecture
+### Current Architecture
+
+The planned unified 4-stage pipeline was **not** implemented as a single engine. Instead:
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│  Available Search Engines (choose ONE via config)                   │
+│                                                                     │
+│  ┌─────────────────────┐  ┌─────────────────────────────────────┐  │
+│  │ PezzotHashSearchVault│  │ Fts5LevenshteinSearchVault          │  │
+│  │                     │  │                                     │  │
+│  │ - SimHash matching  │  │ - FTS5 trigram search               │  │
+│  │ - Trigram re-sort   │  │ - Levenshtein typo correction       │  │
+│  │ - NO popularity     │  │ - Popularity scoring ✅              │  │
+│  └──────────┬──────────┘  └──────────────────┬──────────────────┘  │
+│             │                                │                      │
+│             └────────────────┬───────────────┘                      │
+│                              ▼                                      │
+└─────────────────────────────────────────────────────────────────────┘
+                               │
+                               ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│  Streaming Search Pipeline (Stage 4)                                │
+│  Location: src/search/streaming/                                    │
+│                                                                     │
+│  1. Takes results from whichever engine is configured               │
+│  2. Identifies targets per content type (artist, album, track)      │
+│  3. Enriches with related content                                   │
+│  4. Returns structured SSE response                                 │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+### Streaming Search Endpoint
+
+`GET /v1/content/search/stream?q=<query>` (see `server/search.rs:333-376`)
+
+1. Calls `search_vault.search()` using configured engine
+2. Passes results to `StreamingSearchPipeline.execute()`
+3. Returns SSE events with structured sections
+
+### What's Missing for Full Pezzottisearch
+
+To implement the original unified Stages 1-3 pipeline:
+
+1. **Add popularity to `PezzotHashSearchVault`**
+   - `update_popularity()` is currently a no-op (line 200 of `search_vault.rs`)
+   - Need to store and apply popularity scores in search ranking
+
+2. **Stage 2: Trigram Containment Boost** (not implemented)
+   - Current `CharsTrigrams::similarity()` checks overlap ratio
+   - Need: containment check for prefix matching ("ABC" → "ABCDEFG")
+   - Should activate for short queries (≤10 chars)
+
+3. **Add Levenshtein to SimHash pipeline**
+   - Currently Levenshtein only exists in `Fts5LevenshteinSearchVault`
+   - For unified pipeline: add as re-ranking step after SimHash + Trigram
+
+---
+
+## Original Plan
+
+### Overview
+
+A search engine combining multiple techniques for optimal typo tolerance, prefix matching, and structured results.
+
+### Planned Architecture
 
 ```
 ┌─────────────────────────────────────────────────────────┐
@@ -44,9 +116,9 @@ A new search engine combining multiple techniques for optimal typo tolerance, pr
 └─────────────────────────────────────────────────────────┘
 ```
 
-## Stage Details
+### Stage Details
 
-### Stage 1: SimHash + Popularity
+#### Stage 1: SimHash + Popularity
 
 Reuse existing SimHash implementation from `pezzott_hash.rs`:
 - Compute SimHash of query
@@ -65,7 +137,7 @@ struct IndexedItem {
 }
 ```
 
-### Stage 2: Trigram Containment Boost
+#### Stage 2: Trigram Containment Boost
 
 For queries ≤ X characters (configurable, default 10):
 - Extract trigrams from query
@@ -80,7 +152,7 @@ This fixes the prefix matching problem:
 1. Store trigrams per item (HashSet)
 2. Build inverted index (trigram → item_ids) for faster lookup
 
-### Stage 3: Precise Re-rank (Levenshtein)
+#### Stage 3: Precise Re-rank (Levenshtein)
 
 On the ~200 remaining candidates:
 - Compute Levenshtein distance between query and item name
@@ -89,34 +161,53 @@ On the ~200 remaining candidates:
 
 This handles cases where SimHash/trigrams aren't precise enough.
 
-### Stage 4: Target Identification & Enrichment
+#### Stage 4: Target Identification & Enrichment ✅ IMPLEMENTED
 
-**Target identification:**
-- Look at top result after re-ranking
-- If confidence is high (score significantly better than #2), mark as "target"
-- Target types: Artist, Album, Track
+**Location:** `src/search/streaming/`
 
-**Enrichment based on target type:**
-- Artist target → include top N popular albums by this artist
-- Album target → include tracks from this album
-- Track target → include other tracks from same album
+**Target identification** (`target_identifier.rs`):
+- `ScoreGapStrategy` looks at score gap between #1 and #2
+- Configurable thresholds: `min_absolute_score`, `min_score_gap_ratio`, `exact_match_boost`
+- Identifies best target per content type (artist, album, track)
 
-**Response structure:**
+**Enrichment** (`pipeline.rs`):
+- Artist target → popular tracks by artist, albums, related artists
+- Album target → tracks from album, related artists
+- Track target → (no additional enrichment currently)
+
+**Response structure** (`sections.rs`):
 ```rust
-struct SearchResponse {
-    target: Option<TargetResult>,
-    other_matches: Vec<SearchResult>,
-}
-
-struct TargetResult {
-    item: SearchResult,
-    confidence: f64,
-    related: Vec<SearchResult>,  // Albums by artist, tracks from album, etc.
+enum SearchSection {
+    PrimaryArtist { item, confidence },
+    PrimaryAlbum { item, confidence },
+    PrimaryTrack { item, confidence },
+    PopularBy { target_id, target_type, items },
+    AlbumsBy { target_id, items },
+    RelatedArtists { target_id, items },
+    TracksFrom { target_id, items },
+    MoreResults { items },
+    Results { items },
+    Done { total_time_ms },
 }
 ```
 
-## Configuration
+### Configuration
 
+Current streaming search config (`config/mod.rs`):
+```rust
+pub struct StreamingSearchSettings {
+    pub min_absolute_score: f64,      // Target ID threshold
+    pub min_score_gap_ratio: f64,     // Gap between #1 and #2
+    pub exact_match_boost: f64,       // Boost for exact name matches
+    pub popular_tracks_limit: usize,  // Enrichment limits
+    pub albums_limit: usize,
+    pub related_artists_limit: usize,
+    pub top_results_limit: usize,
+    pub other_results_limit: usize,
+}
+```
+
+Planned (not yet implemented):
 ```toml
 [search]
 engine = "pezzottisearch"
@@ -131,66 +222,51 @@ trigram_boost_factor = 2.0
 
 # Stage 3
 levenshtein_candidates = 200
-
-# Stage 4
-target_confidence_threshold = 0.8
-related_items_count = 5
 ```
 
-## Index Structure
+### Existing Code Reference
 
-```rust
-pub struct PezzottisearchVault {
-    /// All indexed items with their SimHashes
-    items: Vec<IndexedItem>,
+| File | What It Does |
+|------|--------------|
+| `search/pezzott_hash.rs` | SimHash calculation (Stage 1 core) |
+| `search/search_vault.rs` | `PezzotHashSearchVault` - SimHash + trigram similarity |
+| `search/fts5_search.rs` | `Fts5SearchVault` - FTS5 trigram search |
+| `search/fts5_levenshtein_search.rs` | `Fts5LevenshteinSearchVault` - FTS5 + Levenshtein + popularity |
+| `search/levenshtein.rs` | Levenshtein distance + vocabulary |
+| `search/streaming/pipeline.rs` | Stage 4: orchestrates target ID + enrichment |
+| `search/streaming/target_identifier.rs` | Stage 4: `ScoreGapStrategy` implementation |
+| `search/streaming/enrichment.rs` | Stage 4: helper functions for enrichment |
+| `search/streaming/sections.rs` | Stage 4: response section types |
+| `search/factory.rs` | Creates search vault based on config |
+| `search/relevance_filter.rs` | Post-processing relevance filtering |
+| `background_jobs/jobs/popular_content.rs` | Computes popularity, calls `update_popularity()` |
 
-    /// Inverted index: trigram → item indices (for stage 2)
-    trigram_index: HashMap<String, Vec<usize>>,
+### Remaining Implementation Tasks
 
-    /// Popularity scores (updated by background job)
-    popularity: HashMap<(String, HashedItemType), f64>,
+If building the unified Pezzottisearch engine:
 
-    /// Reference to catalog store (for enrichment in stage 4)
-    catalog_store: Arc<dyn CatalogStore>,
-}
-```
-
-## Files to Create
-
-| File | Purpose |
-|------|---------|
-| `src/search/pezzottisearch.rs` | Main implementation |
-| `src/search/trigram.rs` | Trigram extraction and indexing |
-
-## Files to Modify
-
-| File | Changes |
-|------|---------|
-| `src/search/mod.rs` | Export new module |
-| `src/search/factory.rs` | Add `pezzottisearch` engine option |
-| `src/config/mod.rs` | Add config options |
-| `src/config/file_config.rs` | Add TOML parsing |
-
-## Implementation Order
-
-1. [ ] Create basic `PezzottisearchVault` struct with SimHash indexing
-2. [ ] Implement Stage 1: SimHash search + popularity
-3. [ ] Add trigram extraction and indexing
-4. [ ] Implement Stage 2: Trigram boost for short queries
-5. [ ] Implement Stage 3: Levenshtein re-ranking
-6. [ ] Implement Stage 4: Target identification
-7. [ ] Implement Stage 4: Related items enrichment
-8. [ ] Add configuration options
-9. [ ] Add to factory and CLI
+1. [ ] Add popularity storage to `PezzotHashSearchVault`
+2. [ ] Implement `update_popularity()` in `PezzotHashSearchVault`
+3. [ ] Apply popularity weighting in SimHash search
+4. [ ] Add trigram containment check (not just similarity)
+5. [ ] Add short query detection for Stage 2 activation
+6. [ ] Add Levenshtein re-ranking step to SimHash pipeline
+7. [ ] Create unified `PezzottisearchVault` or extend `PezzotHashSearchVault`
+8. [ ] Add `pezzottisearch` engine option to factory
+9. [ ] Add TOML configuration options
 10. [ ] Tests
 
-## Open Questions
+### Open Questions
 
 1. Should trigram index be in-memory or SQLite?
    → Start with in-memory, optimize later if needed
 
-2. How to define "confidence" for target identification?
-   → Score gap between #1 and #2? Absolute score threshold?
+2. ~~How to define "confidence" for target identification?~~
+   → **Resolved**: Score gap strategy implemented in `ScoreGapStrategy`
 
-3. Should enrichment (related items) be optional/configurable?
-   → Yes, some clients might want flat results only
+3. ~~Should enrichment (related items) be optional/configurable?~~
+   → **Resolved**: Yes, configurable via `StreamingSearchSettings`
+
+4. Should we build unified Pezzottisearch or keep separate engines?
+   → Current approach: separate engines + streaming pipeline on top
+   → Trade-off: less optimal but more flexible/maintainable
