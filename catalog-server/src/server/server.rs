@@ -5455,6 +5455,13 @@ mod tests {
         }
 
         fn update_popularity(&self, _items: &[(String, HashedItemType, u64, f64)]) {}
+
+        fn get_stats(&self) -> crate::search::SearchVaultStats {
+            crate::search::SearchVaultStats {
+                indexed_items: 0,
+                index_type: "Mock".to_string(),
+            }
+        }
     }
 
     /// A minimal in-memory ServerStore for testing

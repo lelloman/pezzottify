@@ -4,6 +4,7 @@
 
 pub mod analytics;
 pub mod catalog;
+pub mod debug;
 pub mod jobs;
 pub mod server;
 pub mod users;
@@ -17,6 +18,5 @@ pub fn register_all_tools(registry: &mut McpRegistry) {
     jobs::register_tools(registry);
     analytics::register_tools(registry);
     users::register_tools(registry);
-    // Future: downloads::register_tools(registry);
-    // Future: debug::register_tools(registry);
+    debug::register_tools(registry);
 }
