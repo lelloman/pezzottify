@@ -199,10 +199,7 @@ impl AppConfig {
 
         // Streaming search settings from file config
         let streaming_defaults = StreamingSearchSettings::default();
-        let streaming_file = file
-            .search
-            .and_then(|s| s.streaming)
-            .unwrap_or_default();
+        let streaming_file = file.search.and_then(|s| s.streaming).unwrap_or_default();
         let streaming = StreamingSearchSettings {
             strategy: streaming_file
                 .strategy

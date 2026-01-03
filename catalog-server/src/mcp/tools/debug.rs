@@ -59,8 +59,8 @@ fn debug_inspect_tool() -> super::super::registry::RegisteredTool {
 }
 
 async fn debug_inspect_handler(ctx: ToolContext, params: Value) -> ToolResult {
-    let params: DebugInspectParams = serde_json::from_value(params)
-        .map_err(|e| McpError::InvalidParams(e.to_string()))?;
+    let params: DebugInspectParams =
+        serde_json::from_value(params).map_err(|e| McpError::InvalidParams(e.to_string()))?;
 
     match params.target {
         InspectTarget::Overview => inspect_overview(&ctx).await,

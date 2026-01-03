@@ -72,8 +72,8 @@ fn catalog_search_tool() -> super::super::registry::RegisteredTool {
 }
 
 async fn catalog_search_handler(ctx: ToolContext, params: Value) -> ToolResult {
-    let params: CatalogSearchParams = serde_json::from_value(params)
-        .map_err(|e| McpError::InvalidParams(e.to_string()))?;
+    let params: CatalogSearchParams =
+        serde_json::from_value(params).map_err(|e| McpError::InvalidParams(e.to_string()))?;
 
     let limit = params.limit.min(100);
 
@@ -168,8 +168,8 @@ fn catalog_get_tool() -> super::super::registry::RegisteredTool {
 }
 
 async fn catalog_get_handler(ctx: ToolContext, params: Value) -> ToolResult {
-    let params: CatalogGetParams = serde_json::from_value(params)
-        .map_err(|e| McpError::InvalidParams(e.to_string()))?;
+    let params: CatalogGetParams =
+        serde_json::from_value(params).map_err(|e| McpError::InvalidParams(e.to_string()))?;
 
     match params.query_type {
         CatalogQueryType::Artist => {
@@ -381,8 +381,8 @@ fn catalog_mutate_tool() -> super::super::registry::RegisteredTool {
 }
 
 async fn catalog_mutate_handler(ctx: ToolContext, params: Value) -> ToolResult {
-    let params: CatalogMutateParams = serde_json::from_value(params)
-        .map_err(|e| McpError::InvalidParams(e.to_string()))?;
+    let params: CatalogMutateParams =
+        serde_json::from_value(params).map_err(|e| McpError::InvalidParams(e.to_string()))?;
 
     match params.action {
         CatalogMutateAction::Create => {
@@ -409,7 +409,11 @@ async fn catalog_mutate_handler(ctx: ToolContext, params: Value) -> ToolResult {
     }
 }
 
-async fn create_entity(ctx: &ToolContext, entity_type: CatalogEntityType, data: Value) -> ToolResult {
+async fn create_entity(
+    ctx: &ToolContext,
+    entity_type: CatalogEntityType,
+    data: Value,
+) -> ToolResult {
     let result = match entity_type {
         CatalogEntityType::Artist => {
             let created = ctx

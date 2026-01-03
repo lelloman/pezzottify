@@ -18,7 +18,9 @@ pub fn register_resources(registry: &mut McpRegistry) {
 
 fn changelog_recent_resource() -> super::super::registry::RegisteredResource {
     ResourceBuilder::new("changelog://recent", "Recent Catalog Changes")
-        .description("Recent catalog change batches showing what content was added, updated, or removed")
+        .description(
+            "Recent catalog change batches showing what content was added, updated, or removed",
+        )
         .mime_type("application/json")
         .permission(Permission::EditCatalog)
         .build(changelog_recent_handler)

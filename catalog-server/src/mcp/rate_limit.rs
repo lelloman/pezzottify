@@ -71,11 +71,7 @@ impl McpRateLimiter {
 
     /// Check if a request is allowed and record it if so
     /// Returns Ok(()) if allowed, Err(retry_after_secs) if rate limited
-    pub fn check_and_record(
-        &self,
-        user_id: usize,
-        category: ToolCategory,
-    ) -> Result<(), u32> {
+    pub fn check_and_record(&self, user_id: usize, category: ToolCategory) -> Result<(), u32> {
         let mut states = self.states.lock().unwrap();
         let state = states
             .entry(user_id)

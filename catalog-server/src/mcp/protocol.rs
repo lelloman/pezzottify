@@ -123,7 +123,10 @@ impl McpError {
             McpError::Unauthorized => "Authentication required".to_string(),
             McpError::PermissionDenied(perm) => format!("Permission denied: {}", perm),
             McpError::RateLimited { retry_after_secs } => {
-                format!("Rate limit exceeded, retry after {} seconds", retry_after_secs)
+                format!(
+                    "Rate limit exceeded, retry after {} seconds",
+                    retry_after_secs
+                )
             }
             McpError::ResourceNotFound(uri) => format!("Resource not found: {}", uri),
             McpError::ToolExecutionFailed(msg) => format!("Tool execution failed: {}", msg),

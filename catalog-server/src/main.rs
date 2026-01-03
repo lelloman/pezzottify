@@ -108,7 +108,6 @@ struct CliArgs {
     /// Interval in hours between pruning runs. Only used if event_retention_days > 0.
     #[clap(long, default_value_t = 24)]
     pub prune_interval_hours: u64,
-
 }
 
 /// Convert CLI args to CliConfig for config resolution
@@ -215,11 +214,9 @@ async fn main() -> Result<()> {
 
     // Create search vault early so it can be shared with job scheduler
     info!("Indexing content for search...");
-    let search_vault: Box<dyn pezzottify_catalog_server::search::SearchVault> =
-        Box::new(Fts5LevenshteinSearchVault::new(
-            catalog_store.clone(),
-            &app_config.search_db_path(),
-        )?);
+    let search_vault: Box<dyn pezzottify_catalog_server::search::SearchVault> = Box::new(
+        Fts5LevenshteinSearchVault::new(catalog_store.clone(), &app_config.search_db_path())?,
+    );
     let guarded_search_vault: GuardedSearchVault =
         std::sync::Arc::new(std::sync::Mutex::new(search_vault));
 
