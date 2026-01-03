@@ -11,7 +11,7 @@ use axum::{
 use axum_extra::extract::cookie::{Cookie, CookieJar};
 use tracing::{debug, warn};
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Session {
     pub user_id: usize,
     pub token: String,

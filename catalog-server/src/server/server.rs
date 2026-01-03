@@ -4665,6 +4665,9 @@ impl ServerState {
         // Create auth state store for OIDC flow (always created, even if OIDC is disabled)
         let auth_state_store = Arc::new(crate::oidc::AuthStateStore::new());
 
+        // Create MCP state
+        let mcp_state = Arc::new(crate::mcp::handler::create_mcp_state());
+
         ServerState {
             config,
             start_time: Instant::now(),
@@ -4681,6 +4684,7 @@ impl ServerState {
             hash: "123456".to_owned(),
             oidc_client: None, // Will be set by make_app if OIDC is configured
             auth_state_store,
+            mcp_state,
         }
     }
 }
@@ -5245,6 +5249,11 @@ pub async fn make_app(
         .route("/ws", get(super::websocket::ws_handler))
         .with_state(state.clone());
 
+    // MCP WebSocket route - requires authentication (Session extractor will validate)
+    let mcp_routes: Router = Router::new()
+        .route("/mcp", get(crate::mcp::handler::mcp_handler))
+        .with_state(state.clone());
+
     let mut app: Router = home_router
         .nest("/v1/auth", auth_routes)
         .nest("/v1/content", content_routes)
@@ -5253,7 +5262,8 @@ pub async fn make_app(
         .nest("/v1/sync", sync_routes)
         .nest("/v1/download", download_routes)
         .nest("/v1/catalog/skeleton", skeleton_routes)
-        .nest("/v1", ws_routes);
+        .nest("/v1", ws_routes)
+        .nest("/v1", mcp_routes);
 
     #[cfg(feature = "slowdown")]
     {

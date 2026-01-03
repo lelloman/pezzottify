@@ -5,7 +5,7 @@ pub mod proxy;
 mod search;
 #[allow(clippy::module_inception)]
 pub mod server;
-mod session;
+pub mod session;
 mod skeleton;
 pub mod state;
 mod stream_track;

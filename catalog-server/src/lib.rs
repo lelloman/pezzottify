@@ -7,6 +7,7 @@ pub mod catalog_store;
 pub mod config;
 pub mod download_manager;
 pub mod downloader;
+pub mod mcp;
 pub mod notifications;
 pub mod oidc;
 pub mod search;
