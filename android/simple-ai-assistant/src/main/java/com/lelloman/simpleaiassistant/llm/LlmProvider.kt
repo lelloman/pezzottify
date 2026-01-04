@@ -18,4 +18,13 @@ interface LlmProvider {
     suspend fun testConnection(): Result<Unit>
 
     suspend fun listModels(): Result<List<String>>
+
+    /**
+     * Detect the language of the given text.
+     * Returns ISO 639-1 language code (e.g., "en", "es", "ja") or null if detection not supported.
+     *
+     * Default implementation returns null, meaning the caller should fall back to
+     * asking the main LLM for detection.
+     */
+    suspend fun detectLanguage(text: String): String? = null
 }
