@@ -10,12 +10,18 @@
 
 import { defineStore } from 'pinia';
 import { ref, computed, watch } from 'vue';
-import { streamChat, getProvider, getProviderIds } from '../services/llm';
+import { streamChat, quickPrompt, getProvider, getProviderIds } from '../services/llm';
 import { mcpClient } from '../services/mcp';
 import { uiTools } from '../services/uiTools';
+import { LANGUAGES, getLanguage, buildDetectionPrompt } from '../services/languages';
 
 const CONFIG_KEY = 'ai_chat_config';
-const SYSTEM_PROMPT = `You are a helpful AI assistant integrated into Pezzottify, a music streaming application.
+
+/**
+ * Build the system prompt, optionally including language instruction
+ */
+function buildSystemPrompt(languageCode) {
+  const basePrompt = `You are a helpful AI assistant integrated into Pezzottify, a music streaming application.
 
 You have access to tools that let you:
 - Search and browse the music catalog (via MCP tools like catalog.search, catalog.get)
@@ -33,9 +39,19 @@ IMPORTANT - ID handling rules:
 
 When the user asks about music or wants to play something, use the appropriate tools.
 When showing search results or content, be concise but informative.
-Always prefer using tools over asking the user to do things manually.
+Always prefer using tools over asking the user to do things manually.`;
 
-Always respond in the same language the user writes in.`;
+  if (languageCode) {
+    const lang = getLanguage(languageCode);
+    if (lang) {
+      return `${basePrompt}
+
+IMPORTANT: You MUST respond in ${lang.name} (${lang.nativeName}). All your responses should be written in ${lang.name}.`;
+    }
+  }
+
+  return basePrompt;
+}
 
 export const useChatStore = defineStore('chat', () => {
   // ============================================================================
@@ -63,7 +79,11 @@ export const useChatStore = defineStore('chat', () => {
     apiKey: '',
     model: '',
     baseUrl: '', // For Ollama
+    language: null, // null = not set (will auto-detect), string = ISO 639-1 code
   });
+
+  // Whether we're currently detecting language
+  const isDetectingLanguage = ref(false);
 
   // ============================================================================
   // COMPUTED
@@ -87,6 +107,15 @@ export const useChatStore = defineStore('chat', () => {
       ...getProvider(id),
     }));
   });
+
+  // Current language info (null if not set)
+  const currentLanguage = computed(() => {
+    if (!config.value.language) return null;
+    return getLanguage(config.value.language);
+  });
+
+  // List of all available languages
+  const availableLanguages = computed(() => LANGUAGES);
 
   // ============================================================================
   // PERSISTENCE
@@ -144,6 +173,36 @@ export const useChatStore = defineStore('chat', () => {
   // ============================================================================
 
   /**
+   * Detect language from a user message
+   */
+  async function detectLanguage(userMessage) {
+    if (!isConfigured.value) return null;
+
+    isDetectingLanguage.value = true;
+    try {
+      const prompt = buildDetectionPrompt(userMessage);
+      const response = await quickPrompt(config.value.provider, config.value, prompt);
+
+      // Extract just the language code (first 2-3 chars, lowercase)
+      const code = response.toLowerCase().trim().slice(0, 2);
+
+      // Validate it's a known language
+      const lang = getLanguage(code);
+      if (lang) {
+        return code;
+      }
+
+      // Fallback to English
+      return 'en';
+    } catch (e) {
+      console.warn('Language detection failed:', e);
+      return 'en';
+    } finally {
+      isDetectingLanguage.value = false;
+    }
+  }
+
+  /**
    * Send a message and get a response
    */
   async function sendMessage(userMessage) {
@@ -152,11 +211,20 @@ export const useChatStore = defineStore('chat', () => {
     error.value = null;
     streamingText.value = '';
 
+    // Detect language on first message if not set
+    const trimmedMessage = userMessage.trim();
+    if (config.value.language === null && messages.value.length === 0) {
+      const detectedLang = await detectLanguage(trimmedMessage);
+      if (detectedLang) {
+        config.value.language = detectedLang;
+      }
+    }
+
     // Add user message
     const userMsg = {
       id: `msg_${Date.now()}_user`,
       role: 'user',
-      content: userMessage.trim(),
+      content: trimmedMessage,
     };
     messages.value.push(userMsg);
 
@@ -176,9 +244,10 @@ export const useChatStore = defineStore('chat', () => {
       // Get all available tools
       const tools = getAllTools();
 
-      // Build messages for LLM (add system prompt)
+      // Build messages for LLM (add system prompt with language)
+      const systemPrompt = buildSystemPrompt(config.value.language);
       const llmMessages = [
-        { role: 'user', content: SYSTEM_PROMPT },
+        { role: 'user', content: systemPrompt },
         { role: 'assistant', content: 'I understand. I\'m ready to help you with music playback, searching, and managing your library. What would you like to do?' },
         ...messages.value,
       ];
@@ -252,8 +321,9 @@ export const useChatStore = defineStore('chat', () => {
 
     try {
       const tools = getAllTools();
+      const systemPrompt = buildSystemPrompt(config.value.language);
       const llmMessages = [
-        { role: 'user', content: SYSTEM_PROMPT },
+        { role: 'user', content: systemPrompt },
         { role: 'assistant', content: 'I understand. I\'m ready to help you with music playback, searching, and managing your library. What would you like to do?' },
         ...messages.value,
       ];
@@ -337,6 +407,20 @@ export const useChatStore = defineStore('chat', () => {
     isOpen.value = false;
   }
 
+  /**
+   * Set response language
+   */
+  function setLanguage(code) {
+    config.value.language = code;
+  }
+
+  /**
+   * Reset language (clear preference, will auto-detect on next first message)
+   */
+  function resetLanguage() {
+    config.value.language = null;
+  }
+
   // ============================================================================
   // RETURN
   // ============================================================================
@@ -349,11 +433,14 @@ export const useChatStore = defineStore('chat', () => {
     streamingText,
     error,
     config,
+    isDetectingLanguage,
 
     // Computed
     isConfigured,
     currentProvider,
     availableProviders,
+    currentLanguage,
+    availableLanguages,
 
     // Methods
     sendMessage,
@@ -362,5 +449,7 @@ export const useChatStore = defineStore('chat', () => {
     toggle,
     open,
     close,
+    setLanguage,
+    resetLanguage,
   };
 });

@@ -3,6 +3,7 @@ import { ref, watch, nextTick, onMounted, onUnmounted } from 'vue';
 import { useChatStore } from '../../store/chat';
 import ChatMessage from './ChatMessage.vue';
 import ChatSettings from './ChatSettings.vue';
+import LanguagePicker from './LanguagePicker.vue';
 
 const chatStore = useChatStore();
 
@@ -252,6 +253,7 @@ function getPanelStyle() {
         <div class="chat-panel__header" @mousedown="startDrag">
           <h3>AI Assistant</h3>
           <div class="chat-panel__actions">
+            <LanguagePicker />
             <button
               v-if="panelStyle.x !== null"
               class="chat-panel__action"
