@@ -52,7 +52,6 @@ import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -118,16 +117,6 @@ fun ChatScreen(
             },
             onDismiss = { showLanguagePicker = false }
         )
-    }
-
-    // Auto-scroll to bottom when new messages arrive
-    LaunchedEffect(state.messages.size, state.streamingText) {
-        if (state.messages.isNotEmpty() || state.streamingText.isNotEmpty()) {
-            val targetIndex = state.messages.size + (if (state.streamingText.isNotEmpty()) 1 else 0) - 1
-            if (targetIndex >= 0) {
-                listState.animateScrollToItem(targetIndex)
-            }
-        }
     }
 
     Column(
@@ -207,14 +196,14 @@ fun ChatScreen(
                         state = listState,
                         modifier = Modifier.fillMaxSize(),
                         contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                        verticalArrangement = Arrangement.spacedBy(12.dp, Alignment.Bottom),
+                        reverseLayout = true
                     ) {
-                        items(state.messages, key = { it.id }) { message ->
-                            ChatMessageItem(
-                                message = message,
-                                debugMode = state.debugMode,
-                                onRestartFromHere = onRestartFromMessage
-                            )
+                        // Loading indicator when waiting for response (shown first in reverse)
+                        if (state.isStreaming && state.streamingText.isEmpty()) {
+                            item(key = "loading") {
+                                LoadingIndicator()
+                            }
                         }
 
                         // Streaming message
@@ -224,11 +213,12 @@ fun ChatScreen(
                             }
                         }
 
-                        // Loading indicator when waiting for response
-                        if (state.isStreaming && state.streamingText.isEmpty()) {
-                            item(key = "loading") {
-                                LoadingIndicator()
-                            }
+                        items(state.messages.reversed(), key = { it.id }) { message ->
+                            ChatMessageItem(
+                                message = message,
+                                debugMode = state.debugMode,
+                                onRestartFromHere = onRestartFromMessage
+                            )
                         }
                     }
                 }

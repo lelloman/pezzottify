@@ -33,6 +33,7 @@
     <string name="home_navigation_item_description">Home</string>
     <string name="search_navigation_item_description">Cerca</string>
     <string name="library_navigation_item_description">Libreria</string>
+    <string name="assistant_navigation_item_description">AI</string>
     <!-- MAIN SCREEN -->
 
     <!-- HOME SCREEN -->
