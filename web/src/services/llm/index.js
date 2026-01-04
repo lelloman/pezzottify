@@ -115,3 +115,27 @@ export async function getModels(providerId, config) {
   // Fall back to static model list
   return provider.models;
 }
+
+/**
+ * Quick prompt - get a simple text response without streaming
+ * Used for one-off tasks like language detection
+ *
+ * @param {string} providerId - Provider ID
+ * @param {Object} config - Provider config
+ * @param {string} prompt - The prompt to send
+ * @returns {Promise<string>} The response text
+ */
+export async function quickPrompt(providerId, config, prompt) {
+  const messages = [{ role: 'user', content: prompt }];
+  let result = '';
+
+  for await (const event of streamChat(providerId, config, messages, [])) {
+    if (event.type === 'text') {
+      result += event.content;
+    } else if (event.type === 'error') {
+      throw new Error(event.message);
+    }
+  }
+
+  return result.trim();
+}
