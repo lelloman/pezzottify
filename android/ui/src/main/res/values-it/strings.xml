@@ -286,6 +286,9 @@
     <!-- TRACK SCREEN -->
     <string name="album">Album</string>
     <string name="go_to_album">Vai all\'album</string>
+    <string name="track_unavailable">Brano non disponibile</string>
+    <string name="track_fetching">Recupero brano in corso…</string>
+    <string name="track_fetch_error">Download fallito</string>
     <!-- TRACK SCREEN -->
 
     <!-- ARTIST SCREEN -->

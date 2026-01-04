@@ -1,5 +1,10 @@
 package com.lelloman.pezzottify.android.ui.screen.main.content.userplaylist
 
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -36,6 +41,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
@@ -381,20 +387,49 @@ private fun TrackItem(
     } else {
         Color.Transparent
     }
-    val textColor = if (isPlaying) {
-        MaterialTheme.colorScheme.primary
-    } else {
-        MaterialTheme.colorScheme.onSurface
+    val textColor = when {
+        track.isUnavailable -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
+        isPlaying -> MaterialTheme.colorScheme.primary
+        else -> MaterialTheme.colorScheme.onSurface
     }
+    val secondaryTextColor = if (track.isUnavailable) {
+        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
+    } else {
+        MaterialTheme.colorScheme.onSurfaceVariant
+    }
+
+    // Pulsing animation for fetching state
+    val fetchingAlpha by animateFloatAsState(
+        targetValue = if (track.isFetching) 0.4f else 1f,
+        animationSpec = if (track.isFetching) {
+            infiniteRepeatable(
+                animation = tween(durationMillis = 750, easing = LinearEasing),
+                repeatMode = RepeatMode.Reverse
+            )
+        } else {
+            tween(durationMillis = 0)
+        },
+        label = "fetchingAlpha"
+    )
 
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .background(backgroundColor)
-            .clickable(onClick = onClick)
+            .alpha(if (track.isFetching) fetchingAlpha else 1f)
+            .clickable(enabled = track.isPlayable, onClick = onClick)
             .padding(start = 16.dp, top = 8.dp, bottom = 8.dp, end = 16.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
+        // Warning icon for fetch error
+        if (track.isFetchError) {
+            Text(
+                text = "⚠",
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.error,
+                modifier = Modifier.padding(end = 8.dp)
+            )
+        }
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = track.name,
@@ -406,7 +441,7 @@ private fun TrackItem(
             Text(
                 text = track.artists.joinToString(", ") { it.name },
                 style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = secondaryTextColor,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )

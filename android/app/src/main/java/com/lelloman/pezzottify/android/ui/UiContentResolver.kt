@@ -3,6 +3,7 @@ package com.lelloman.pezzottify.android.ui
 import com.lelloman.pezzottify.android.domain.config.ConfigStore
 import com.lelloman.pezzottify.android.domain.statics.StaticsItem
 import com.lelloman.pezzottify.android.domain.statics.StaticsProvider
+import com.lelloman.pezzottify.android.domain.statics.TrackAvailability as DomainTrackAvailability
 import com.lelloman.pezzottify.android.ui.content.Album
 import com.lelloman.pezzottify.android.ui.content.Artist
 import com.lelloman.pezzottify.android.ui.content.ArtistDiscography
@@ -10,6 +11,7 @@ import com.lelloman.pezzottify.android.ui.content.Content
 import com.lelloman.pezzottify.android.ui.content.ContentResolver
 import com.lelloman.pezzottify.android.ui.content.SearchResultContent
 import com.lelloman.pezzottify.android.ui.content.Track
+import com.lelloman.pezzottify.android.ui.content.TrackAvailability
 import com.lelloman.pezzottify.android.ui.content.ArtistInfo
 import com.lelloman.pezzottify.android.ui.screen.main.search.SearchScreenViewModel
 import kotlinx.coroutines.flow.Flow
@@ -17,6 +19,14 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
+
+/** Maps domain TrackAvailability to UI TrackAvailability */
+private fun DomainTrackAvailability.toUi(): TrackAvailability = when (this) {
+    DomainTrackAvailability.Available -> TrackAvailability.Available
+    DomainTrackAvailability.Unavailable -> TrackAvailability.Unavailable
+    DomainTrackAvailability.Fetching -> TrackAvailability.Fetching
+    DomainTrackAvailability.FetchError -> TrackAvailability.FetchError
+}
 
 class UiContentResolver(
     private val staticsProvider: StaticsProvider,
@@ -91,6 +101,7 @@ class UiContentResolver(
                                     albumId = trackItem.data.albumId,
                                     artists = emptyList(),
                                     durationSeconds = trackItem.data.durationSeconds,
+                                    availability = trackItem.data.availability.toUi(),
                                 )
                             )
                         )
@@ -103,6 +114,7 @@ class UiContentResolver(
                                     albumId = trackItem.data.albumId,
                                     artists = artists.toList(),
                                     durationSeconds = trackItem.data.durationSeconds,
+                                    availability = trackItem.data.availability.toUi(),
                                 )
                             )
                         }
@@ -198,6 +210,7 @@ class UiContentResolver(
                                     durationSeconds = trackItem.data.durationSeconds,
                                     albumId = trackItem.data.albumId,
                                     albumImageUrl = albumImageUrl,
+                                    availability = trackItem.data.availability.toUi(),
                                 )
                             )
                         }

@@ -1,6 +1,7 @@
 package com.lelloman.pezzottify.android.domain.remoteapi.response
 
 import com.lelloman.pezzottify.android.domain.statics.Track
+import com.lelloman.pezzottify.android.domain.statics.TrackAvailability
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
@@ -46,4 +47,6 @@ fun TrackResponse.toDomain() = object : Track {
         get() = this@toDomain.artists.map { it.artist.id }
     override val durationSeconds: Int
         get() = this@toDomain.track.durationSecs ?: 0
+    override val availability: TrackAvailability
+        get() = TrackAvailability.fromServerString(this@toDomain.track.availability)
 }

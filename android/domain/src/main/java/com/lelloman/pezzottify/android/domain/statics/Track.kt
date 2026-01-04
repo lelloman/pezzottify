@@ -6,4 +6,5 @@ interface Track : StaticItem {
     val albumId: String
     val artistsIds: List<String>
     val durationSeconds: Int
+    val availability: TrackAvailability
 }

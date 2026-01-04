@@ -42,6 +42,8 @@ data class TrackData(
     val originalTitle: String?,
     @SerialName("version_title")
     val versionTitle: String?,
+    /** Track availability state (available, unavailable, fetching, fetch_error). Defaults to "available". */
+    val availability: String? = "available",
 )
 
 @Serializable

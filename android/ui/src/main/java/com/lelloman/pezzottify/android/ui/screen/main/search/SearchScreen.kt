@@ -1,6 +1,11 @@
 package com.lelloman.pezzottify.android.ui.screen.main.search
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -43,8 +48,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -517,14 +524,56 @@ private fun TrackSearchResult(
     searchResult: SearchResultContent.Track,
     actions: SearchScreenActions
 ) {
+    val textColor = if (searchResult.isUnavailable) {
+        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
+    } else {
+        MaterialTheme.colorScheme.onSurface
+    }
+    val secondaryTextColor = if (searchResult.isUnavailable) {
+        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
+    } else {
+        MaterialTheme.colorScheme.onSurfaceVariant
+    }
+
+    // Pulsing animation for fetching state
+    val fetchingAlpha by animateFloatAsState(
+        targetValue = if (searchResult.isFetching) 0.4f else 1f,
+        animationSpec = if (searchResult.isFetching) {
+            infiniteRepeatable(
+                animation = tween(durationMillis = 750, easing = LinearEasing),
+                repeatMode = RepeatMode.Reverse
+            )
+        } else {
+            tween(durationMillis = 0)
+        },
+        label = "fetchingAlpha"
+    )
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .padding(8.dp)
             .height(PezzottifyImageShape.SmallSquare.size)
-            .clickable { actions.clickOnTrackSearchResult(searchResult.id) }
+            .alpha(if (searchResult.isFetching) fetchingAlpha else 1f)
+            .clickable(enabled = searchResult.isPlayable) {
+                actions.clickOnTrackSearchResult(searchResult.id)
+            }
     ) {
-        NullablePezzottifyImage(url = searchResult.albumImageUrl)
+        // Warning icon for fetch error, otherwise album image
+        if (searchResult.isFetchError) {
+            Box(
+                modifier = Modifier.size(PezzottifyImageShape.SmallSquare.size),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = "⚠",
+                    style = MaterialTheme.typography.headlineMedium,
+                    color = MaterialTheme.colorScheme.error
+                )
+            }
+        } else {
+            NullablePezzottifyImage(url = searchResult.albumImageUrl)
+        }
         Spacer(modifier = Modifier.width(Spacing.Medium))
         Column(
             modifier = Modifier
@@ -536,13 +585,13 @@ private fun TrackSearchResult(
                 text = searchResult.name,
                 style = MaterialTheme.typography.titleMedium,
                 maxLines = 1,
-                color = MaterialTheme.colorScheme.onSurface
+                color = textColor
             )
             Text(
                 text = searchResult.artistNames.joinToString(", "),
                 style = MaterialTheme.typography.bodySmall,
                 maxLines = 1,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                color = secondaryTextColor
             )
         }
         DurationText(

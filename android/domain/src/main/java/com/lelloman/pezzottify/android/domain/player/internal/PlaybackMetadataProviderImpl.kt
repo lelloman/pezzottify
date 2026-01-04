@@ -151,6 +151,7 @@ internal class PlaybackMetadataProviderImpl(
                 albumName = album?.name ?: "",
                 artworkUrl = artworkUrl,
                 durationSeconds = track.durationSeconds,
+                availability = track.availability,
             )
         }
 

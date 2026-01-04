@@ -1,6 +1,7 @@
 package com.lelloman.pezzottify.android.ui.screen.queue
 
 import com.lelloman.pezzottify.android.ui.content.ArtistInfo
+import com.lelloman.pezzottify.android.ui.content.TrackAvailability
 
 data class QueueTrackItem(
     val trackId: String,
@@ -8,7 +9,20 @@ data class QueueTrackItem(
     val albumId: String,
     val artists: List<ArtistInfo>,
     val durationSeconds: Int,
-)
+    val availability: TrackAvailability = TrackAvailability.Available,
+) {
+    val isPlayable: Boolean
+        get() = availability.isPlayable
+
+    val isFetching: Boolean
+        get() = availability == TrackAvailability.Fetching
+
+    val isFetchError: Boolean
+        get() = availability == TrackAvailability.FetchError
+
+    val isUnavailable: Boolean
+        get() = !isPlayable
+}
 
 data class QueueScreenState(
     val isLoading: Boolean = true,

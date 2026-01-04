@@ -1,5 +1,7 @@
 package com.lelloman.pezzottify.android.domain.player
 
+import com.lelloman.pezzottify.android.domain.statics.TrackAvailability
+
 data class TrackMetadata(
     val trackId: String,
     val trackName: String,
@@ -8,6 +10,7 @@ data class TrackMetadata(
     val albumName: String,
     val artworkUrl: String?,
     val durationSeconds: Int,
+    val availability: TrackAvailability = TrackAvailability.Available,
 )
 
 data class PlaybackQueueState(
