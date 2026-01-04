@@ -8,6 +8,8 @@ import com.lelloman.simpleaiassistant.model.Language
 import com.lelloman.simpleaiassistant.model.MessageRole
 import com.lelloman.simpleaiassistant.model.StreamEvent
 import com.lelloman.simpleaiassistant.tool.ToolRegistry
+import com.lelloman.simpleaiassistant.util.AssistantLogger
+import com.lelloman.simpleaiassistant.util.NoOpAssistantLogger
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -19,8 +21,14 @@ class ChatRepositoryImpl(
     private val chatMessageDao: ChatMessageDao,
     private val llmProvider: LlmProvider,
     private val toolRegistry: ToolRegistry,
-    private val systemPromptBuilder: SystemPromptBuilder
+    private val systemPromptBuilder: SystemPromptBuilder,
+    private val logger: AssistantLogger = NoOpAssistantLogger
 ) : ChatRepository {
+
+    companion object {
+        private const val TAG = "ChatRepository"
+        private const val MAX_TOOL_ITERATIONS = 10
+    }
 
     private val _streamingText = MutableStateFlow("")
     override val streamingText: StateFlow<String> = _streamingText.asStateFlow()
@@ -35,6 +43,8 @@ class ChatRepositoryImpl(
         .map { entities -> entities.map { it.toDomain() } }
 
     override suspend fun sendMessage(text: String) {
+        logger.info(TAG, "sendMessage: \"${text.take(100)}${if (text.length > 100) "..." else ""}\"")
+
         // 1. Save user message
         val userMessage = ChatMessage(
             id = generateId(),
@@ -45,7 +55,9 @@ class ChatRepositoryImpl(
 
         // 2. Detect language if not set
         if (_language.value == null) {
+            logger.debug(TAG, "Language not set, detecting...")
             detectAndSetLanguage(text)
+            logger.debug(TAG, "Detected language: ${_language.value}")
         }
 
         // 3. Get response from LLM
@@ -53,23 +65,53 @@ class ChatRepositoryImpl(
         _streamingText.value = ""
 
         try {
-            processLlmResponse()
+            processLlmResponse(iteration = 0)
+        } catch (e: Exception) {
+            logger.error(TAG, "Error processing LLM response", e)
+            throw e
         } finally {
             _isStreaming.value = false
             _streamingText.value = ""
         }
     }
 
-    private suspend fun processLlmResponse() {
+    private suspend fun processLlmResponse(iteration: Int) {
+        if (iteration >= MAX_TOOL_ITERATIONS) {
+            logger.warn(TAG, "Max tool iterations ($MAX_TOOL_ITERATIONS) reached, stopping")
+            val errorMessage = ChatMessage(
+                id = generateId(),
+                role = MessageRole.ASSISTANT,
+                content = "I've made too many attempts to complete this task. Please try rephrasing your request or breaking it into smaller steps."
+            )
+            saveMessage(errorMessage)
+            return
+        }
         val currentMessages = chatMessageDao.getAll().map { it.toDomain() }
         val systemPrompt = systemPromptBuilder.build(_language.value, toolRegistry)
+        val toolSpecs = toolRegistry.getRootSpecs()
+
+        // Log full conversation being sent to LLM
+        logger.info(TAG, "=== SENDING TO LLM ===")
+        logger.info(TAG, "System prompt (${systemPrompt.length} chars):\n$systemPrompt")
+        logger.info(TAG, "Tools available: ${toolSpecs.map { it.name }}")
+        logger.info(TAG, "Messages (${currentMessages.size}):")
+        currentMessages.forEach { msg ->
+            val content = msg.content.take(500) + if (msg.content.length > 500) "..." else ""
+            val toolInfo = when {
+                msg.toolCalls != null -> " [tool_calls: ${msg.toolCalls.map { "${it.name}(${it.input})" }}]"
+                msg.toolName != null -> " [tool_response for: ${msg.toolName}]"
+                else -> ""
+            }
+            logger.info(TAG, "  [${msg.role}]$toolInfo: $content")
+        }
+        logger.info(TAG, "=== END SENDING ===")
 
         var assistantContent = StringBuilder()
         val toolCalls = mutableListOf<com.lelloman.simpleaiassistant.model.ToolCall>()
 
         llmProvider.streamChat(
             messages = currentMessages,
-            tools = toolRegistry.getRootSpecs(),
+            tools = toolSpecs,
             systemPrompt = systemPrompt
         ).collect { event ->
             when (event) {
@@ -78,6 +120,8 @@ class ChatRepositoryImpl(
                     _streamingText.value = assistantContent.toString()
                 }
                 is StreamEvent.ToolUse -> {
+                    logger.info(TAG, "<<< LLM TOOL CALL: ${event.name}")
+                    logger.info(TAG, "    Input: ${event.input}")
                     toolCalls.add(
                         com.lelloman.simpleaiassistant.model.ToolCall(
                             id = event.id,
@@ -87,6 +131,7 @@ class ChatRepositoryImpl(
                     )
                 }
                 is StreamEvent.Error -> {
+                    logger.error(TAG, "<<< LLM ERROR: ${event.message}")
                     // Save error as assistant message
                     val errorMessage = ChatMessage(
                         id = generateId(),
@@ -96,9 +141,22 @@ class ChatRepositoryImpl(
                     saveMessage(errorMessage)
                     return@collect
                 }
-                is StreamEvent.Done -> { /* handled below */ }
+                is StreamEvent.Done -> {
+                    logger.debug(TAG, "<<< LLM STREAM DONE")
+                }
             }
         }
+
+        // Log full assistant response
+        logger.info(TAG, "=== LLM RESPONSE ===")
+        logger.info(TAG, "Text (${assistantContent.length} chars): $assistantContent")
+        if (toolCalls.isNotEmpty()) {
+            logger.info(TAG, "Tool calls (${toolCalls.size}):")
+            toolCalls.forEach { tc ->
+                logger.info(TAG, "  - ${tc.name}: ${tc.input}")
+            }
+        }
+        logger.info(TAG, "=== END RESPONSE ===")
 
         // 4. Save assistant message
         val assistantMessage = ChatMessage(
@@ -112,12 +170,25 @@ class ChatRepositoryImpl(
         // 5. Execute tool calls if any
         if (toolCalls.isNotEmpty()) {
             for (toolCall in toolCalls) {
+                logger.info(TAG, ">>> EXECUTING TOOL: ${toolCall.name}")
+                logger.info(TAG, "    Input: ${toolCall.input}")
+
                 val tool = toolRegistry.findById(toolCall.name)
+                if (tool == null) {
+                    logger.error(TAG, "    ERROR: Tool not found!")
+                }
                 val result = tool?.execute(toolCall.input)
                     ?: com.lelloman.simpleaiassistant.tool.ToolResult(
                         success = false,
                         error = "Tool not found: ${toolCall.name}"
                     )
+
+                logger.info(TAG, "<<< TOOL RESULT: ${toolCall.name}")
+                logger.info(TAG, "    Success: ${result.success}")
+                logger.info(TAG, "    Data: ${result.data}")
+                if (result.error != null) {
+                    logger.info(TAG, "    Error: ${result.error}")
+                }
 
                 // Save tool result message
                 val toolResultMessage = ChatMessage(
@@ -131,7 +202,8 @@ class ChatRepositoryImpl(
             }
 
             // 6. Get follow-up response after tool execution
-            processLlmResponse()
+            logger.info(TAG, "--- Continuing conversation after tool execution (iteration ${iteration + 1}) ---")
+            processLlmResponse(iteration + 1)
         }
     }
 
@@ -155,7 +227,24 @@ class ChatRepositoryImpl(
     }
 
     override suspend fun clearHistory() {
+        logger.info(TAG, "Clearing chat history")
         chatMessageDao.deleteAll()
+    }
+
+    override suspend fun restartFromMessage(messageId: String) {
+        logger.info(TAG, "Restarting from message: $messageId")
+
+        val message = chatMessageDao.getById(messageId)
+        if (message == null) {
+            logger.error(TAG, "Message not found: $messageId")
+            return
+        }
+
+        // Delete all messages after this one (including this one, we'll re-add it)
+        chatMessageDao.deleteAfterTimestamp(message.timestamp - 1)
+
+        // Re-send the message to get a new response
+        sendMessage(message.content)
     }
 
     private suspend fun saveMessage(message: ChatMessage) {

@@ -16,6 +16,7 @@ fun AssistantScreen(
         state = state,
         onSendMessage = viewModel::sendMessage,
         onClearHistory = viewModel::clearHistory,
-        onOpenSettings = { /* TODO: Open settings dialog */ }
+        onOpenSettings = { /* TODO: Open settings dialog */ },
+        onRestartFromMessage = viewModel::restartFromMessage
     )
 }

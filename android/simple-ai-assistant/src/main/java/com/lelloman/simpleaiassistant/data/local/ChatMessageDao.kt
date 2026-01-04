@@ -24,6 +24,12 @@ interface ChatMessageDao {
     @Query("DELETE FROM chat_messages")
     suspend fun deleteAll()
 
+    @Query("DELETE FROM chat_messages WHERE timestamp > :timestamp")
+    suspend fun deleteAfterTimestamp(timestamp: Long)
+
+    @Query("SELECT * FROM chat_messages WHERE id = :id")
+    suspend fun getById(id: String): ChatMessageEntity?
+
     @Query("SELECT COUNT(*) FROM chat_messages")
     suspend fun count(): Int
 }

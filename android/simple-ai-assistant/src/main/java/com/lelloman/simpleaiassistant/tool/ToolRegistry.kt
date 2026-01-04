@@ -64,4 +64,14 @@ class ToolRegistry(
      * Find a tool by ID.
      */
     fun findById(toolId: String): Tool? = tools[toolId]
+
+    /**
+     * Get ALL tools (both root-level and those inside groups).
+     */
+    fun getAllTools(): List<Tool> = tools.values.toList()
+
+    /**
+     * Get specs for ALL tools.
+     */
+    fun getAllSpecs(): List<ToolSpec> = getAllTools().map { it.spec }
 }
