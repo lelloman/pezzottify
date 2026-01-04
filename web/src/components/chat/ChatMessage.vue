@@ -1,5 +1,7 @@
 <script setup>
 import { ref, computed } from 'vue';
+import { useChatStore } from '../../store/chat';
+import { getToolDescription, getToolResultDescription } from '../../services/toolDescriptions';
 
 const props = defineProps({
   message: {
@@ -8,6 +10,7 @@ const props = defineProps({
   },
 });
 
+const chatStore = useChatStore();
 const showToolDetails = ref(false);
 
 const isUser = computed(() => props.message.role === 'user');
@@ -26,6 +29,17 @@ const toolResultParsed = computed(() => {
   } catch {
     return props.message.content;
   }
+});
+
+// Get friendly description for a tool call
+function getFriendlyToolDescription(tc) {
+  return getToolDescription(tc.name, tc.input);
+}
+
+// Get friendly result description
+const friendlyToolResult = computed(() => {
+  if (!isTool.value) return null;
+  return getToolResultDescription(props.message.toolName, props.message.content);
 });
 </script>
 
@@ -51,57 +65,85 @@ const toolResultParsed = computed(() => {
 
       <!-- Tool calls indicator -->
       <div v-if="hasToolCalls" class="message__tools">
-        <button
-          class="message__tools-toggle"
-          @click="showToolDetails = !showToolDetails"
-        >
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            width="14"
-            height="14"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
+        <!-- Debug mode: expandable technical details -->
+        <template v-if="chatStore.debugMode">
+          <button
+            class="message__tools-toggle"
+            @click="showToolDetails = !showToolDetails"
           >
-            <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" />
-          </svg>
-          {{ message.toolCalls.length }} tool{{ message.toolCalls.length > 1 ? 's' : '' }} used
-          <svg
-            class="message__tools-chevron"
-            :class="{ 'is-open': showToolDetails }"
-            xmlns="http://www.w3.org/2000/svg"
-            width="14"
-            height="14"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-          >
-            <polyline points="6 9 12 15 18 9" />
-          </svg>
-        </button>
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+            >
+              <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" />
+            </svg>
+            {{ message.toolCalls.length }} tool{{ message.toolCalls.length > 1 ? 's' : '' }} used
+            <svg
+              class="message__tools-chevron"
+              :class="{ 'is-open': showToolDetails }"
+              xmlns="http://www.w3.org/2000/svg"
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+            >
+              <polyline points="6 9 12 15 18 9" />
+            </svg>
+          </button>
 
-        <div v-if="showToolDetails" class="message__tools-list">
-          <div
-            v-for="tc in message.toolCalls"
-            :key="tc.id"
-            class="message__tool-call"
-          >
-            <div class="message__tool-name">{{ tc.name }}</div>
-            <pre class="message__tool-input">{{ JSON.stringify(tc.input, null, 2) }}</pre>
+          <div v-if="showToolDetails" class="message__tools-list">
+            <div
+              v-for="tc in message.toolCalls"
+              :key="tc.id"
+              class="message__tool-call"
+            >
+              <div class="message__tool-name">{{ tc.name }}</div>
+              <pre class="message__tool-input">{{ JSON.stringify(tc.input, null, 2) }}</pre>
+            </div>
           </div>
-        </div>
+        </template>
+
+        <!-- Regular mode: friendly descriptions -->
+        <template v-else>
+          <div class="message__tools-friendly">
+            <span
+              v-for="tc in message.toolCalls"
+              :key="tc.id"
+              class="message__tool-friendly"
+            >
+              {{ getFriendlyToolDescription(tc) }}
+            </span>
+          </div>
+        </template>
       </div>
     </div>
 
-    <!-- Tool result (collapsed by default, rarely shown) -->
+    <!-- Tool result -->
     <div v-else-if="isTool" class="message__content message__content--tool">
-      <div class="message__tool-result">
-        <span class="message__tool-label">{{ message.toolName }}</span>
-        <span v-if="toolResultParsed?.success" class="message__tool-success">success</span>
-        <span v-else-if="toolResultParsed?.error" class="message__tool-error">error</span>
-      </div>
+      <!-- Debug mode: technical details -->
+      <template v-if="chatStore.debugMode">
+        <div class="message__tool-result">
+          <span class="message__tool-label">{{ message.toolName }}</span>
+          <span v-if="toolResultParsed?.success" class="message__tool-success">success</span>
+          <span v-else-if="toolResultParsed?.error" class="message__tool-error">error</span>
+        </div>
+      </template>
+
+      <!-- Regular mode: friendly result -->
+      <template v-else>
+        <div class="message__tool-result message__tool-result--friendly">
+          <span :class="toolResultParsed?.error ? 'message__tool-error' : 'message__tool-success'">
+            {{ friendlyToolResult }}
+          </span>
+        </div>
+      </template>
     </div>
   </div>
 </template>
@@ -228,5 +270,22 @@ const toolResultParsed = computed(() => {
 
 .message__tool-error {
   color: var(--error);
+}
+
+/* Friendly mode styles */
+.message__tools-friendly {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-1);
+}
+
+.message__tool-friendly {
+  font-size: var(--text-xs);
+  color: var(--text-subdued);
+  font-style: italic;
+}
+
+.message__tool-result--friendly {
+  font-style: italic;
 }
 </style>
