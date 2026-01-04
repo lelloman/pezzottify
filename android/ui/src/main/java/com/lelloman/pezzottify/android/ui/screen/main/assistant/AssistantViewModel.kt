@@ -95,4 +95,15 @@ class AssistantViewModel @Inject constructor(
     fun clearError() {
         _error.value = null
     }
+
+    fun restartFromMessage(messageId: String) {
+        viewModelScope.launch {
+            _error.value = null
+            try {
+                chatRepository.restartFromMessage(messageId)
+            } catch (e: Exception) {
+                _error.value = e.message ?: "Unknown error"
+            }
+        }
+    }
 }

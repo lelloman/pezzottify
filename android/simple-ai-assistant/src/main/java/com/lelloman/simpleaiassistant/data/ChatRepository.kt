@@ -50,4 +50,12 @@ interface ChatRepository {
      * Clear all messages.
      */
     suspend fun clearHistory()
+
+    /**
+     * Restart the conversation from a specific message.
+     * Deletes all messages after the given message and re-sends it to get a new response.
+     *
+     * @param messageId The ID of the user message to restart from
+     */
+    suspend fun restartFromMessage(messageId: String)
 }

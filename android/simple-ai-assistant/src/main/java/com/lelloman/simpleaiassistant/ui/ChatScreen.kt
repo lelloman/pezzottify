@@ -30,6 +30,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
@@ -71,6 +72,7 @@ fun ChatScreen(
     onSendMessage: (String) -> Unit,
     onClearHistory: () -> Unit,
     onOpenSettings: () -> Unit,
+    onRestartFromMessage: (String) -> Unit,
     modifier: Modifier = Modifier,
     showTopBar: Boolean = true
 ) {
@@ -178,7 +180,8 @@ fun ChatScreen(
                     items(state.messages, key = { it.id }) { message ->
                         ChatMessageItem(
                             message = message,
-                            debugMode = state.debugMode
+                            debugMode = state.debugMode,
+                            onRestartFromHere = onRestartFromMessage
                         )
                     }
 
@@ -358,29 +361,61 @@ private fun ChatInputArea(
                 .padding(horizontal = 12.dp, vertical = 8.dp),
             verticalAlignment = Alignment.Bottom
         ) {
-            TextField(
+            val interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+            BasicTextField(
                 value = inputText,
                 onValueChange = onInputChange,
-                modifier = Modifier.weight(1f),
-                placeholder = {
-                    Text(
-                        "Message...",
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                },
-                enabled = !isStreaming,
-                maxLines = 4,
-                shape = RoundedCornerShape(24.dp),
-                colors = TextFieldDefaults.colors(
-                    focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                    unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                    disabledContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.5f),
-                    focusedIndicatorColor = Color.Transparent,
-                    unfocusedIndicatorColor = Color.Transparent,
-                    disabledIndicatorColor = Color.Transparent
+                modifier = Modifier
+                    .weight(1f)
+                    .height(40.dp),
+                textStyle = MaterialTheme.typography.bodySmall.copy(
+                    color = MaterialTheme.colorScheme.onSurface
                 ),
+                enabled = !isStreaming,
+                singleLine = true,
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
-                keyboardActions = KeyboardActions(onSend = { onSend() })
+                keyboardActions = KeyboardActions(onSend = { onSend() }),
+                interactionSource = interactionSource,
+                decorationBox = { innerTextField ->
+                    TextFieldDefaults.DecorationBox(
+                        value = inputText,
+                        innerTextField = innerTextField,
+                        enabled = !isStreaming,
+                        singleLine = true,
+                        visualTransformation = androidx.compose.ui.text.input.VisualTransformation.None,
+                        interactionSource = interactionSource,
+                        placeholder = {
+                            Text(
+                                "Message...",
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        },
+                        colors = TextFieldDefaults.colors(
+                            focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                            unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                            disabledContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.5f),
+                            focusedIndicatorColor = Color.Transparent,
+                            unfocusedIndicatorColor = Color.Transparent,
+                            disabledIndicatorColor = Color.Transparent
+                        ),
+                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                        container = {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .background(
+                                        color = if (!isStreaming) {
+                                            MaterialTheme.colorScheme.surfaceContainerHigh
+                                        } else {
+                                            MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.5f)
+                                        },
+                                        shape = RoundedCornerShape(20.dp)
+                                    )
+                            )
+                        }
+                    )
+                }
             )
 
             Spacer(modifier = Modifier.width(8.dp))
@@ -405,12 +440,12 @@ private fun ChatInputArea(
                             MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
                         }
                     ),
-                    modifier = Modifier.size(48.dp)
+                    modifier = Modifier.size(40.dp)
                 ) {
                     Icon(
                         Icons.AutoMirrored.Filled.Send,
                         contentDescription = "Send",
-                        modifier = Modifier.size(20.dp)
+                        modifier = Modifier.size(18.dp)
                     )
                 }
             }
@@ -421,7 +456,7 @@ private fun ChatInputArea(
                 exit = fadeOut()
             ) {
                 Box(
-                    modifier = Modifier.size(48.dp),
+                    modifier = Modifier.size(40.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     LoadingIndicatorSmall()

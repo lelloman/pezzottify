@@ -1,6 +1,8 @@
 package com.lelloman.simpleaiassistant.ui
 
 import androidx.compose.animation.animateContentSize
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -14,11 +16,18 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Build
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -28,14 +37,17 @@ import androidx.compose.ui.unit.dp
 import com.lelloman.simpleaiassistant.model.ChatMessage
 import com.lelloman.simpleaiassistant.model.MessageRole
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun ChatMessageItem(
     message: ChatMessage,
     debugMode: Boolean,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onRestartFromHere: ((String) -> Unit)? = null
 ) {
     val isUser = message.role == MessageRole.USER
     val isTool = message.role == MessageRole.TOOL
+    var showContextMenu by remember { mutableStateOf(false) }
 
     Row(
         modifier = modifier
@@ -43,11 +55,23 @@ fun ChatMessageItem(
             .padding(horizontal = 4.dp),
         horizontalArrangement = if (isUser) Arrangement.End else Arrangement.Start
     ) {
-        MessageBubble(
-            isUser = isUser,
-            isTool = isTool,
-            modifier = Modifier.widthIn(max = 300.dp)
-        ) {
+        Box {
+            MessageBubble(
+                isUser = isUser,
+                isTool = isTool,
+                modifier = Modifier
+                    .widthIn(max = 300.dp)
+                    .then(
+                        if (isUser && onRestartFromHere != null) {
+                            Modifier.combinedClickable(
+                                onClick = {},
+                                onLongClick = { showContextMenu = true }
+                            )
+                        } else {
+                            Modifier
+                        }
+                    )
+            ) {
             Column(
                 modifier = Modifier.animateContentSize()
             ) {
@@ -129,6 +153,29 @@ fun ChatMessageItem(
                             )
                         }
                     }
+                }
+            }
+        }
+
+            // Context menu for user messages
+            if (isUser && onRestartFromHere != null) {
+                DropdownMenu(
+                    expanded = showContextMenu,
+                    onDismissRequest = { showContextMenu = false }
+                ) {
+                    DropdownMenuItem(
+                        text = { Text("Restart from here") },
+                        onClick = {
+                            showContextMenu = false
+                            onRestartFromHere(message.id)
+                        },
+                        leadingIcon = {
+                            Icon(
+                                Icons.Default.Refresh,
+                                contentDescription = null
+                            )
+                        }
+                    )
                 }
             }
         }
