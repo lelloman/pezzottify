@@ -159,6 +159,14 @@ const detailedDocs = {
         notes:
           'CRITICAL: playlistId must be a UUID, NOT the playlist name. trackIds must be from the "tracks" array of catalog.search, NOT album or artist IDs.',
       },
+      'ui.deletePlaylist': {
+        description: 'Delete a playlist permanently.',
+        params: {
+          playlistId: 'The playlist UUID from ui.getPlaylists.',
+        },
+        example: '{ "playlistId": "NCAOCh3llHRlVRb4" }',
+        notes: 'This action cannot be undone.',
+      },
     },
   },
   settings: {
@@ -598,6 +606,41 @@ const tools = [
             message: success
               ? `Added ${args.trackIds.length} track(s) to playlist`
               : 'Failed to add tracks. Use ui.help({ category: "playlists" }) for correct usage.',
+          });
+        });
+      });
+    },
+  },
+  {
+    name: 'ui.deletePlaylist',
+    description: 'Delete a playlist. Requires playlistId (UUID).',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        playlistId: { type: 'string' },
+      },
+      required: ['playlistId'],
+    },
+    execute: async (args) => {
+      const userStore = useUserStore();
+
+      if (!args.playlistId || args.playlistId.includes(' ') || args.playlistId === 'undefined') {
+        return {
+          success: false,
+          error: `Invalid playlistId. Use ui.getPlaylists to get valid playlist IDs.`,
+        };
+      }
+
+      const playlist = userStore.playlistsData?.by_id?.[args.playlistId];
+      const playlistName = playlist?.name || args.playlistId;
+
+      return new Promise((resolve) => {
+        userStore.deletePlaylist(args.playlistId, (success) => {
+          resolve({
+            success,
+            message: success
+              ? `Deleted playlist "${playlistName}"`
+              : 'Failed to delete playlist. Make sure the playlist ID is correct.',
           });
         });
       });
