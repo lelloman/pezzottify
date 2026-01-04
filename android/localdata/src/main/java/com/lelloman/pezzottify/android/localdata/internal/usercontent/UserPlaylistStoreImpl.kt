@@ -49,20 +49,20 @@ internal class UserPlaylistStoreImpl(
         playlistDao.updateSyncStatus(playlistId, PlaylistSyncStatus.PendingDelete)
     }
 
-    override suspend fun updatePlaylistName(playlistId: String, name: String) {
+    override suspend fun updatePlaylistName(playlistId: String, name: String, fromServer: Boolean) {
         val playlist = playlistDao.getByIdOnce(playlistId) ?: return
         playlistDao.updateName(playlistId, name)
-        // If already synced, mark as needing update
-        if (playlist.syncStatus == PlaylistSyncStatus.Synced) {
+        // If already synced and this is a local change, mark as needing update
+        if (!fromServer && playlist.syncStatus == PlaylistSyncStatus.Synced) {
             playlistDao.updateSyncStatus(playlistId, PlaylistSyncStatus.PendingUpdate)
         }
     }
 
-    override suspend fun updatePlaylistTracks(playlistId: String, trackIds: List<String>) {
+    override suspend fun updatePlaylistTracks(playlistId: String, trackIds: List<String>, fromServer: Boolean) {
         val playlist = playlistDao.getByIdOnce(playlistId) ?: return
         playlistDao.updateTrackIds(playlistId, trackIds)
-        // If already synced, mark as needing update
-        if (playlist.syncStatus == PlaylistSyncStatus.Synced) {
+        // If already synced and this is a local change, mark as needing update
+        if (!fromServer && playlist.syncStatus == PlaylistSyncStatus.Synced) {
             playlistDao.updateSyncStatus(playlistId, PlaylistSyncStatus.PendingUpdate)
         }
     }

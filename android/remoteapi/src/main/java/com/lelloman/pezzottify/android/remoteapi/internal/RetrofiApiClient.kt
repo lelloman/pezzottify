@@ -1,8 +1,10 @@
 package com.lelloman.pezzottify.android.remoteapi.internal
 
+import com.lelloman.pezzottify.android.remoteapi.internal.requests.AddTracksToPlaylistRequest
 import com.lelloman.pezzottify.android.remoteapi.internal.requests.CreatePlaylistRequest
 import com.lelloman.pezzottify.android.remoteapi.internal.requests.CreatePlaylistResponse
 import com.lelloman.pezzottify.android.remoteapi.internal.requests.ListeningEventRequest
+import com.lelloman.pezzottify.android.remoteapi.internal.requests.RemoveTracksFromPlaylistRequest
 import com.lelloman.pezzottify.android.remoteapi.internal.requests.ListeningEventResponse
 import com.lelloman.pezzottify.android.remoteapi.internal.requests.LoginRequest
 import com.lelloman.pezzottify.android.remoteapi.internal.requests.RequestAlbumDownloadBody
@@ -212,6 +214,20 @@ internal interface RetrofitApiClient {
     suspend fun deletePlaylist(
         @Header("Authorization") authToken: String,
         @Path("playlistId") playlistId: String,
+    ): Response<Unit>
+
+    @PUT("/v1/user/playlist/{playlistId}/add")
+    suspend fun addTracksToPlaylist(
+        @Header("Authorization") authToken: String,
+        @Path("playlistId") playlistId: String,
+        @Body request: AddTracksToPlaylistRequest,
+    ): Response<Unit>
+
+    @PUT("/v1/user/playlist/{playlistId}/remove")
+    suspend fun removeTracksFromPlaylist(
+        @Header("Authorization") authToken: String,
+        @Path("playlistId") playlistId: String,
+        @Body request: RemoveTracksFromPlaylistRequest,
     ): Response<Unit>
 
     // Bug report endpoint

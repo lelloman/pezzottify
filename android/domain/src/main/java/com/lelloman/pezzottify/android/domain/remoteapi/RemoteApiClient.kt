@@ -189,6 +189,16 @@ interface RemoteApiClient {
     suspend fun deletePlaylist(playlistId: String): RemoteApiResponse<Unit>
 
     /**
+     * Add tracks to an existing playlist.
+     */
+    suspend fun addTracksToPlaylist(playlistId: String, trackIds: List<String>): RemoteApiResponse<Unit>
+
+    /**
+     * Remove tracks from an existing playlist by their positions (0-indexed).
+     */
+    suspend fun removeTracksFromPlaylist(playlistId: String, positions: List<Int>): RemoteApiResponse<Unit>
+
+    /**
      * Submit a bug report.
      * Returns the report ID on success.
      */

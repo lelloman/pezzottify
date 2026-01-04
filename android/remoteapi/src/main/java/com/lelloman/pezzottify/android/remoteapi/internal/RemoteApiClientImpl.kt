@@ -27,7 +27,9 @@ import com.lelloman.pezzottify.android.domain.remoteapi.response.TrackResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.WhatsNewResponse
 import com.lelloman.pezzottify.android.domain.sync.UserSetting
 import com.lelloman.pezzottify.android.domain.remoteapi.SubmitBugReportResponse
+import com.lelloman.pezzottify.android.remoteapi.internal.requests.AddTracksToPlaylistRequest
 import com.lelloman.pezzottify.android.remoteapi.internal.requests.CreatePlaylistRequest
+import com.lelloman.pezzottify.android.remoteapi.internal.requests.RemoveTracksFromPlaylistRequest
 import com.lelloman.pezzottify.android.remoteapi.internal.requests.ListeningEventRequest
 import com.lelloman.pezzottify.android.remoteapi.internal.requests.LoginRequest
 import com.lelloman.pezzottify.android.remoteapi.internal.requests.RequestAlbumDownloadBody
@@ -428,6 +430,32 @@ internal class RemoteApiClientImpl(
                 .deletePlaylist(authToken = authToken, playlistId = playlistId)
                 .returnFromRetrofitResponse()
         }
+
+    override suspend fun addTracksToPlaylist(
+        playlistId: String,
+        trackIds: List<String>,
+    ): RemoteApiResponse<Unit> = catchingNetworkError {
+        getRetrofit()
+            .addTracksToPlaylist(
+                authToken = authToken,
+                playlistId = playlistId,
+                request = AddTracksToPlaylistRequest(tracksIds = trackIds)
+            )
+            .returnFromRetrofitResponse()
+    }
+
+    override suspend fun removeTracksFromPlaylist(
+        playlistId: String,
+        positions: List<Int>,
+    ): RemoteApiResponse<Unit> = catchingNetworkError {
+        getRetrofit()
+            .removeTracksFromPlaylist(
+                authToken = authToken,
+                playlistId = playlistId,
+                request = RemoveTracksFromPlaylistRequest(tracksPositions = positions)
+            )
+            .returnFromRetrofitResponse()
+    }
 
     override suspend fun submitBugReport(
         title: String?,

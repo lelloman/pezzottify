@@ -23,9 +23,9 @@ interface UserPlaylistStore {
 
     suspend fun markPlaylistForDeletion(playlistId: String)
 
-    suspend fun updatePlaylistName(playlistId: String, name: String)
+    suspend fun updatePlaylistName(playlistId: String, name: String, fromServer: Boolean = false)
 
-    suspend fun updatePlaylistTracks(playlistId: String, trackIds: List<String>)
+    suspend fun updatePlaylistTracks(playlistId: String, trackIds: List<String>, fromServer: Boolean = false)
 
     suspend fun addTrackToPlaylist(playlistId: String, trackId: String)
 
