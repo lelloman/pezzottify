@@ -91,16 +91,18 @@ See component-specific READMEs:
 
 ### Permissions
 
-| Permission           | Admin | Regular | Description                            |
-| -------------------- | :---: | :-----: | -------------------------------------- |
-| AccessCatalog        |   ✓   |    ✓    | Browse and stream music                |
-| LikeContent          |       |    ✓    | Like artists, albums, and tracks       |
-| OwnPlaylists         |       |    ✓    | Create and manage playlists            |
-| EditCatalog          |   ✓   |         | Add, update, delete catalog entries    |
-| ManagePermissions    |   ✓   |         | Manage user roles and permissions      |
-| IssueContentDownload |   ✓   |         | Generate download tokens               |
-| RebootServer         |   ✓   |         | Restart the server remotely            |
-| ViewAnalytics        |   ✓   |         | View listening and bandwidth analytics |
+| Permission           | Admin | Regular | Description                              |
+| -------------------- | :---: | :-----: | ---------------------------------------- |
+| AccessCatalog        |   ✓   |    ✓    | Browse and stream music                  |
+| LikeContent          |       |    ✓    | Like artists, albums, and tracks         |
+| OwnPlaylists         |       |    ✓    | Create and manage playlists              |
+| ReportBug            |       |    ✓    | Submit bug reports                       |
+| EditCatalog          |   ✓   |         | Add, update, delete catalog entries      |
+| ManagePermissions    |   ✓   |         | Manage user roles and permissions        |
+| ServerAdmin          |   ✓   |         | Server administration (reboot, etc.)     |
+| ViewAnalytics        |   ✓   |         | View listening and bandwidth analytics   |
+| RequestContent       |   ✓   |         | Request content downloads                |
+| DownloadManagerAdmin |   ✓   |         | Manage download queue and retry failures |
 
 ### Devices
 
@@ -230,14 +232,16 @@ The server exposes a REST API over HTTP with WebSocket support for real-time syn
 
 ### Endpoint Groups
 
-| Path            | Description                                                                    |
-| --------------- | ------------------------------------------------------------------------------ |
-| `/v1/auth/*`    | Authentication (login, logout, session)                                        |
-| `/v1/content/*` | Catalog content (artists, albums, tracks, images, streaming, search, popular)  |
-| `/v1/user/*`    | User content (playlists, liked content, settings, listening stats)             |
-| `/v1/admin/*`   | Admin operations (user management, analytics, changelog, server control)       |
-| `/v1/sync/*`    | Event log and state for multi-device sync                                      |
-| `/v1/ws`        | WebSocket connection for real-time updates                                     |
+| Path             | Description                                                                   |
+| ---------------- | ----------------------------------------------------------------------------- |
+| `/v1/auth/*`     | Authentication (login, logout, session)                                       |
+| `/v1/content/*`  | Catalog content (artists, albums, tracks, images, streaming, search, popular) |
+| `/v1/user/*`     | User content (playlists, liked content, settings, listening stats)            |
+| `/v1/admin/*`    | Admin operations (user management, analytics, changelog, server control)      |
+| `/v1/sync/*`     | Event log and state for multi-device sync                                     |
+| `/v1/download/*` | Download manager (request content, queue status, admin controls)              |
+| `/v1/ws`         | WebSocket connection for real-time updates                                    |
+| `/v1/mcp`        | WebSocket for MCP (Model Context Protocol) - LLM tool access                  |
 
 ### Key Features
 
