@@ -86,6 +86,9 @@ sealed interface Screen {
         data object Library : Main
 
         @Serializable
+        data object Assistant : Main
+
+        @Serializable
         data class Artist(val artistId: String) : Main
 
         @Serializable
