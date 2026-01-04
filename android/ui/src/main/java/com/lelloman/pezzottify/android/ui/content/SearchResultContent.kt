@@ -20,5 +20,18 @@ sealed class SearchResultContent {
         val durationSeconds: Int,
         val albumId: String,
         val albumImageUrl: String?,
-    ) : SearchResultContent()
+        val availability: TrackAvailability = TrackAvailability.Available,
+    ) : SearchResultContent() {
+        val isPlayable: Boolean
+            get() = availability.isPlayable
+
+        val isFetching: Boolean
+            get() = availability == TrackAvailability.Fetching
+
+        val isFetchError: Boolean
+            get() = availability == TrackAvailability.FetchError
+
+        val isUnavailable: Boolean
+            get() = !isPlayable
+    }
 }

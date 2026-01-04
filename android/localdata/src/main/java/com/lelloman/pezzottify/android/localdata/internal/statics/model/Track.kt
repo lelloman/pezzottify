@@ -3,6 +3,7 @@ package com.lelloman.pezzottify.android.localdata.internal.statics.model
 import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.PrimaryKey
+import com.lelloman.pezzottify.android.domain.statics.TrackAvailability
 
 @Entity(tableName = Track.TABLE_NAME)
 internal data class Track(
@@ -18,11 +19,19 @@ internal data class Track(
     override val artistsIds: List<String>,
 
     override val durationSeconds: Int,
+
+    @ColumnInfo(name = COLUMN_AVAILABILITY, defaultValue = "available")
+    val availabilityString: String = "available",
 ) : com.lelloman.pezzottify.android.domain.statics.Track {
+
+    override val availability: TrackAvailability
+        get() = TrackAvailability.fromServerString(availabilityString)
+
     companion object {
         const val TABLE_NAME = "Track"
 
         const val COLUMN_ID = "id"
+        const val COLUMN_AVAILABILITY = "availability"
     }
 }
 
@@ -32,4 +41,5 @@ internal fun com.lelloman.pezzottify.android.domain.statics.Track.quack(): Track
     albumId = albumId,
     artistsIds = artistsIds,
     durationSeconds = durationSeconds,
+    availabilityString = availability.name.lowercase(),
 )

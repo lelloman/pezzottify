@@ -27,6 +27,7 @@ class QueueScreenViewModel @Inject constructor(
                         albumId = track.albumId,
                         artists = track.artists,
                         durationSeconds = track.durationSeconds,
+                        availability = track.availability,
                     )
                 }
                 QueueScreenState(
@@ -120,6 +121,8 @@ class QueueScreenViewModel @Inject constructor(
             val albumId: String,
             val artists: List<ArtistInfo>,
             val durationSeconds: Int,
+            val availability: com.lelloman.pezzottify.android.ui.content.TrackAvailability =
+                com.lelloman.pezzottify.android.ui.content.TrackAvailability.Available,
         )
     }
 }

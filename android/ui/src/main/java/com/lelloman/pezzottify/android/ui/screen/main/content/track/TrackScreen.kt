@@ -179,6 +179,39 @@ private fun TrackLoadedScreen(
                 }
             }
 
+            // Availability status (only show if not available)
+            if (track.isUnavailable) {
+                item {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = when {
+                                track.isFetching -> "⏳"
+                                track.isFetchError -> "⚠"
+                                else -> "⊘"
+                            },
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = if (track.isFetchError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = when {
+                                track.isFetching -> stringResource(R.string.track_fetching)
+                                track.isFetchError -> stringResource(R.string.track_fetch_error)
+                                else -> stringResource(R.string.track_unavailable)
+                            },
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = if (track.isFetchError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+
             // Artists section
             if (track.artists.isNotEmpty()) {
                 item {
@@ -314,6 +347,7 @@ private fun TrackLoadedScreen(
         // Floating play button
         IconButton(
             onClick = { actions.clickOnPlayTrack() },
+            enabled = track.isPlayable,
             modifier = Modifier
                 .align(Alignment.TopEnd)
                 .offset(y = headerHeight - playButtonSize / 2)
@@ -325,13 +359,21 @@ private fun TrackLoadedScreen(
                     modifier = Modifier.size(playButtonSize),
                     painter = painterResource(R.drawable.baseline_circle_24),
                     contentDescription = null,
-                    tint = if (isPlaying) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.primary,
+                    tint = if (track.isPlayable) {
+                        MaterialTheme.colorScheme.primary
+                    } else {
+                        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+                    },
                 )
                 Icon(
                     modifier = Modifier.size(28.dp),
                     painter = painterResource(R.drawable.baseline_play_arrow_24),
                     contentDescription = stringResource(R.string.play),
-                    tint = MaterialTheme.colorScheme.onPrimary,
+                    tint = if (track.isPlayable) {
+                        MaterialTheme.colorScheme.onPrimary
+                    } else {
+                        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+                    },
                 )
             }
         }

@@ -32,6 +32,8 @@ import com.lelloman.pezzottify.android.domain.storage.StoragePressureLevel as Do
 import com.lelloman.pezzottify.android.domain.usercontent.LikedContent as DomainLikedContent
 import com.lelloman.pezzottify.android.domain.player.PlaybackPlaylist as DomainPlaybackPlaylist
 import com.lelloman.pezzottify.android.domain.player.PlaybackPlaylistContext as DomainPlaybackPlaylistContext
+import com.lelloman.pezzottify.android.domain.statics.TrackAvailability as DomainTrackAvailability
+import com.lelloman.pezzottify.android.ui.content.TrackAvailability as UiTrackAvailability
 import com.lelloman.pezzottify.android.domain.settings.usecase.UpdateNotifyWhatsNewSetting
 import com.lelloman.pezzottify.android.ui.theme.AppFontFamily as UiAppFontFamily
 import com.lelloman.pezzottify.android.ui.theme.ColorPalette as UiColorPalette
@@ -944,6 +946,7 @@ class InteractorsModule {
                                             )
                                         },
                                         durationSeconds = track.durationSeconds,
+                                        availability = track.availability.toUi(),
                                     )
                                 },
                                 currentIndex = queueState.currentIndex,
@@ -1424,6 +1427,13 @@ private fun DomainConnectionState.toUi(): UiConnectionState = when (this) {
     DomainConnectionState.Connecting -> UiConnectionState.Connecting
     DomainConnectionState.Disconnected -> UiConnectionState.Disconnected
     is DomainConnectionState.Error -> UiConnectionState.Error(message)
+}
+
+private fun DomainTrackAvailability.toUi(): UiTrackAvailability = when (this) {
+    DomainTrackAvailability.Available -> UiTrackAvailability.Available
+    DomainTrackAvailability.Unavailable -> UiTrackAvailability.Unavailable
+    DomainTrackAvailability.Fetching -> UiTrackAvailability.Fetching
+    DomainTrackAvailability.FetchError -> UiTrackAvailability.FetchError
 }
 
 private fun DomainPermission.toUi(): UiPermission? = when (this) {

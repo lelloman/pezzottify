@@ -1,7 +1,12 @@
 package com.lelloman.pezzottify.android.ui.screen.queue
 
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
@@ -49,6 +54,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
@@ -438,28 +444,58 @@ private fun QueueTrackItemRow(
         MaterialTheme.colorScheme.surface
     }
 
-    val textColor = if (isCurrentTrack) {
-        MaterialTheme.colorScheme.primary
-    } else {
-        MaterialTheme.colorScheme.onSurface
+    val textColor = when {
+        trackItem.isUnavailable -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
+        isCurrentTrack -> MaterialTheme.colorScheme.primary
+        else -> MaterialTheme.colorScheme.onSurface
     }
+
+    val secondaryTextColor = if (trackItem.isUnavailable) {
+        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
+    } else {
+        MaterialTheme.colorScheme.onSurfaceVariant
+    }
+
+    // Pulsing animation for fetching state
+    val fetchingAlpha by animateFloatAsState(
+        targetValue = if (trackItem.isFetching) 0.4f else 1f,
+        animationSpec = if (trackItem.isFetching) {
+            infiniteRepeatable(
+                animation = tween(durationMillis = 750, easing = LinearEasing),
+                repeatMode = RepeatMode.Reverse
+            )
+        } else {
+            tween(durationMillis = 0)
+        },
+        label = "fetchingAlpha"
+    )
 
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .shadow(elevation)
             .background(backgroundColor)
-            .clickable(onClick = onClick)
+            .alpha(if (trackItem.isFetching) fetchingAlpha else 1f)
+            .clickable(enabled = trackItem.isPlayable, onClick = onClick)
             .padding(start = 16.dp, top = 12.dp, bottom = 12.dp, end = 16.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        // Track number
-        Text(
-            text = "${index + 1}",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.width(32.dp),
-        )
+        // Track number or warning icon
+        if (trackItem.isFetchError) {
+            Text(
+                text = "⚠",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.error,
+                modifier = Modifier.width(32.dp),
+            )
+        } else {
+            Text(
+                text = "${index + 1}",
+                style = MaterialTheme.typography.bodyMedium,
+                color = secondaryTextColor,
+                modifier = Modifier.width(32.dp),
+            )
+        }
 
         // Track info
         Column(
@@ -475,7 +511,7 @@ private fun QueueTrackItemRow(
             Text(
                 text = trackItem.artists.joinToString(", ") { it.name },
                 style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = secondaryTextColor,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
