@@ -138,11 +138,14 @@ fun SearchScreenContent(
         ) {
 
         }
-        SearchFilterChips(
-            availableFilters = SearchFilter.catalogFilters,
-            selectedFilters = state.selectedFilters,
-            onFilterToggled = actions::toggleFilter
-        )
+        // Only show filter chips for classic search (not streaming search)
+        if (!state.isStreamingSearchEnabled) {
+            SearchFilterChips(
+                availableFilters = SearchFilter.catalogFilters,
+                selectedFilters = state.selectedFilters,
+                onFilterToggled = actions::toggleFilter
+            )
+        }
         if (state.query.isEmpty()) {
             Column(
                 modifier = Modifier

@@ -89,6 +89,7 @@ internal class RemoteApiClientImpl(
     private val jsonConverter = Json {
         ignoreUnknownKeys = true
         namingStrategy = JsonNamingStrategy.SnakeCase
+        classDiscriminator = "section"
     }
 
     private val retrofitFlow = hostUrlProvider.hostUrl
