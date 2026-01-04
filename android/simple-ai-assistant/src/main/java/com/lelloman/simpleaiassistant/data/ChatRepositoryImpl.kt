@@ -10,6 +10,7 @@ import com.lelloman.simpleaiassistant.model.StreamEvent
 import com.lelloman.simpleaiassistant.tool.ToolRegistry
 import com.lelloman.simpleaiassistant.R
 import com.lelloman.simpleaiassistant.util.AssistantLogger
+import com.lelloman.simpleaiassistant.util.LanguagePreferences
 import com.lelloman.simpleaiassistant.util.NoOpAssistantLogger
 import com.lelloman.simpleaiassistant.util.StringProvider
 import kotlinx.coroutines.flow.Flow
@@ -25,6 +26,7 @@ class ChatRepositoryImpl(
     private val toolRegistry: ToolRegistry,
     private val systemPromptBuilder: SystemPromptBuilder,
     private val stringProvider: StringProvider,
+    private val languagePreferences: LanguagePreferences,
     private val logger: AssistantLogger = NoOpAssistantLogger
 ) : ChatRepository {
 
@@ -39,7 +41,7 @@ class ChatRepositoryImpl(
     private val _isStreaming = MutableStateFlow(false)
     override val isStreaming: StateFlow<Boolean> = _isStreaming.asStateFlow()
 
-    private val _language = MutableStateFlow<Language?>(null)
+    private val _language = MutableStateFlow(languagePreferences.getLanguage())
     override val language: StateFlow<Language?> = _language.asStateFlow()
 
     private val _isDetectingLanguage = MutableStateFlow(false)
@@ -226,7 +228,9 @@ class ChatRepositoryImpl(
         try {
             val detectedCode = llmProvider.detectLanguage(text)
             if (detectedCode != null) {
-                _language.value = Language.fromCode(detectedCode)
+                val language = Language.fromCode(detectedCode)
+                _language.value = language
+                languagePreferences.setLanguage(language)
             }
         } finally {
             _isDetectingLanguage.value = false
@@ -235,6 +239,7 @@ class ChatRepositoryImpl(
 
     override suspend fun setLanguage(language: Language?) {
         _language.value = language
+        languagePreferences.setLanguage(language)
     }
 
     override suspend fun clearHistory() {
