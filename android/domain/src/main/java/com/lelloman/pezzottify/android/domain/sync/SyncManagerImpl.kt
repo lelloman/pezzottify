@@ -291,7 +291,7 @@ class SyncManagerImpl internal constructor(
             }
 
             is SyncEvent.PlaylistRenamed -> {
-                userPlaylistStore.updatePlaylistName(event.playlistId, event.name)
+                userPlaylistStore.updatePlaylistName(event.playlistId, event.name, fromServer = true)
                 logger.debug("Applied PlaylistRenamed: ${event.playlistId} ${event.name}")
             }
 
@@ -301,7 +301,7 @@ class SyncManagerImpl internal constructor(
             }
 
             is SyncEvent.PlaylistTracksUpdated -> {
-                userPlaylistStore.updatePlaylistTracks(event.playlistId, event.trackIds)
+                userPlaylistStore.updatePlaylistTracks(event.playlistId, event.trackIds, fromServer = true)
                 logger.debug("Applied PlaylistTracksUpdated: ${event.playlistId}")
             }
 
