@@ -38,6 +38,7 @@ import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -61,6 +62,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -73,11 +75,13 @@ fun ChatScreen(
     onClearHistory: () -> Unit,
     onOpenSettings: () -> Unit,
     onRestartFromMessage: (String) -> Unit,
+    onLanguageSelected: (com.lelloman.simpleaiassistant.model.Language?) -> Unit,
     modifier: Modifier = Modifier,
     showTopBar: Boolean = true
 ) {
     var inputText by remember { mutableStateOf("") }
     var showClearConfirmation by remember { mutableStateOf(false) }
+    var showLanguagePicker by remember { mutableStateOf(false) }
     val listState = rememberLazyListState()
 
     // Clear confirmation dialog
@@ -104,6 +108,18 @@ fun ChatScreen(
         )
     }
 
+    // Language picker dialog
+    if (showLanguagePicker) {
+        LanguagePickerDialog(
+            selectedLanguage = state.language,
+            onLanguageSelected = { language ->
+                onLanguageSelected(language)
+                showLanguagePicker = false
+            },
+            onDismiss = { showLanguagePicker = false }
+        )
+    }
+
     // Auto-scroll to bottom when new messages arrive
     LaunchedEffect(state.messages.size, state.streamingText) {
         if (state.messages.isNotEmpty() || state.streamingText.isNotEmpty()) {
@@ -118,6 +134,7 @@ fun ChatScreen(
         modifier = modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
+            .imePadding()
     ) {
         // Optional top bar
         if (showTopBar) {
@@ -132,6 +149,21 @@ fun ChatScreen(
                     containerColor = MaterialTheme.colorScheme.surface
                 ),
                 actions = {
+                    // Language selector button
+                    TextButton(onClick = { showLanguagePicker = true }) {
+                        if (state.isDetectingLanguage) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(18.dp),
+                                strokeWidth = 2.dp,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        } else {
+                            Text(
+                                text = state.language?.flag ?: "?",
+                                style = MaterialTheme.typography.titleMedium
+                            )
+                        }
+                    }
                     IconButton(onClick = onOpenSettings) {
                         Icon(
                             Icons.Default.Settings,
@@ -362,6 +394,7 @@ private fun ChatInputArea(
             verticalAlignment = Alignment.Bottom
         ) {
             val interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+            val cursorColor = MaterialTheme.colorScheme.primary
             BasicTextField(
                 value = inputText,
                 onValueChange = onInputChange,
@@ -376,6 +409,7 @@ private fun ChatInputArea(
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
                 keyboardActions = KeyboardActions(onSend = { onSend() }),
                 interactionSource = interactionSource,
+                cursorBrush = SolidColor(cursorColor),
                 decorationBox = { innerTextField ->
                     TextFieldDefaults.DecorationBox(
                         value = inputText,

@@ -29,9 +29,10 @@ class ChatViewModel(
                 chatRepository.messages,
                 chatRepository.streamingText,
                 chatRepository.isStreaming,
-                chatRepository.language
-            ) { messages: List<ChatMessage>, streamingText: String, isStreaming: Boolean, language: Language? ->
-                RepoState(messages, streamingText, isStreaming, language)
+                chatRepository.language,
+                chatRepository.isDetectingLanguage
+            ) { messages: List<ChatMessage>, streamingText: String, isStreaming: Boolean, language: Language?, isDetectingLanguage: Boolean ->
+                RepoState(messages, streamingText, isStreaming, language, isDetectingLanguage)
             }
 
             // Combine with local state
@@ -45,6 +46,7 @@ class ChatViewModel(
                     streamingText = repoState.streamingText,
                     isStreaming = repoState.isStreaming,
                     language = repoState.language,
+                    isDetectingLanguage = repoState.isDetectingLanguage,
                     debugMode = debugMode,
                     error = error
                 )
@@ -58,7 +60,8 @@ class ChatViewModel(
         val messages: List<ChatMessage>,
         val streamingText: String,
         val isStreaming: Boolean,
-        val language: Language?
+        val language: Language?,
+        val isDetectingLanguage: Boolean
     )
 
     fun sendMessage(text: String) {

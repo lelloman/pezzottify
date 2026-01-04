@@ -31,16 +31,18 @@ class AssistantViewModel @Inject constructor(
                 val messages: List<com.lelloman.simpleaiassistant.model.ChatMessage>,
                 val streamingText: String,
                 val isStreaming: Boolean,
-                val language: Language?
+                val language: Language?,
+                val isDetectingLanguage: Boolean
             )
 
             val repoFlow = combine(
                 chatRepository.messages,
                 chatRepository.streamingText,
                 chatRepository.isStreaming,
-                chatRepository.language
-            ) { messages, streamingText, isStreaming, language ->
-                RepoState(messages, streamingText, isStreaming, language)
+                chatRepository.language,
+                chatRepository.isDetectingLanguage
+            ) { messages, streamingText, isStreaming, language, isDetectingLanguage ->
+                RepoState(messages, streamingText, isStreaming, language, isDetectingLanguage)
             }
 
             // Combine with local state
@@ -54,6 +56,7 @@ class AssistantViewModel @Inject constructor(
                     streamingText = repoState.streamingText,
                     isStreaming = repoState.isStreaming,
                     language = repoState.language,
+                    isDetectingLanguage = repoState.isDetectingLanguage,
                     debugMode = debugMode,
                     error = error
                 )

@@ -19,6 +19,7 @@ import com.lelloman.pezzottify.android.domain.statics.usecase.GetWhatsNew
 import com.lelloman.pezzottify.android.domain.statics.usecase.PerformSearch
 import com.lelloman.pezzottify.android.logger.LoggerFactory
 import com.lelloman.simpleaiassistant.util.AssistantLogger
+import com.lelloman.simpleaiassistant.util.StringProvider
 import com.lelloman.simpleaiassistant.data.ChatRepository
 import com.lelloman.simpleaiassistant.data.ChatRepositoryImpl
 import com.lelloman.simpleaiassistant.data.DefaultSystemPromptBuilder
@@ -179,11 +180,20 @@ object AssistantModule {
 
     @Provides
     @Singleton
+    fun provideStringProvider(@ApplicationContext context: Context): StringProvider {
+        return object : StringProvider {
+            override fun getString(resId: Int): String = context.getString(resId)
+        }
+    }
+
+    @Provides
+    @Singleton
     fun provideChatRepository(
         chatMessageDao: ChatMessageDao,
         llmProvider: LlmProvider,
         toolRegistry: ToolRegistry,
         systemPromptBuilder: SystemPromptBuilder,
+        stringProvider: StringProvider,
         logger: AssistantLogger
     ): ChatRepository {
         return ChatRepositoryImpl(
@@ -191,6 +201,7 @@ object AssistantModule {
             llmProvider = llmProvider,
             toolRegistry = toolRegistry,
             systemPromptBuilder = systemPromptBuilder,
+            stringProvider = stringProvider,
             logger = logger
         )
     }

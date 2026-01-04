@@ -32,6 +32,11 @@ interface ChatRepository {
     val language: StateFlow<Language?>
 
     /**
+     * Whether the language is currently being auto-detected.
+     */
+    val isDetectingLanguage: StateFlow<Boolean>
+
+    /**
      * Send a message and get a response from the assistant.
      * This will:
      * 1. Save the user message

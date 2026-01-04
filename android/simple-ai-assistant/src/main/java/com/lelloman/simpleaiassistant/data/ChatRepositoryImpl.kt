@@ -8,8 +8,10 @@ import com.lelloman.simpleaiassistant.model.Language
 import com.lelloman.simpleaiassistant.model.MessageRole
 import com.lelloman.simpleaiassistant.model.StreamEvent
 import com.lelloman.simpleaiassistant.tool.ToolRegistry
+import com.lelloman.simpleaiassistant.R
 import com.lelloman.simpleaiassistant.util.AssistantLogger
 import com.lelloman.simpleaiassistant.util.NoOpAssistantLogger
+import com.lelloman.simpleaiassistant.util.StringProvider
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -22,6 +24,7 @@ class ChatRepositoryImpl(
     private val llmProvider: LlmProvider,
     private val toolRegistry: ToolRegistry,
     private val systemPromptBuilder: SystemPromptBuilder,
+    private val stringProvider: StringProvider,
     private val logger: AssistantLogger = NoOpAssistantLogger
 ) : ChatRepository {
 
@@ -38,6 +41,9 @@ class ChatRepositoryImpl(
 
     private val _language = MutableStateFlow<Language?>(null)
     override val language: StateFlow<Language?> = _language.asStateFlow()
+
+    private val _isDetectingLanguage = MutableStateFlow(false)
+    override val isDetectingLanguage: StateFlow<Boolean> = _isDetectingLanguage.asStateFlow()
 
     override val messages: Flow<List<ChatMessage>> = chatMessageDao.observeAll()
         .map { entities -> entities.map { it.toDomain() } }
@@ -81,7 +87,7 @@ class ChatRepositoryImpl(
             val errorMessage = ChatMessage(
                 id = generateId(),
                 role = MessageRole.ASSISTANT,
-                content = "I've made too many attempts to complete this task. Please try rephrasing your request or breaking it into smaller steps."
+                content = stringProvider.getString(R.string.error_max_tool_iterations)
             )
             saveMessage(errorMessage)
             return
@@ -216,9 +222,14 @@ class ChatRepositoryImpl(
     }
 
     private suspend fun detectAndSetLanguage(text: String) {
-        val detectedCode = llmProvider.detectLanguage(text)
-        if (detectedCode != null) {
-            _language.value = Language.fromCode(detectedCode)
+        _isDetectingLanguage.value = true
+        try {
+            val detectedCode = llmProvider.detectLanguage(text)
+            if (detectedCode != null) {
+                _language.value = Language.fromCode(detectedCode)
+            }
+        } finally {
+            _isDetectingLanguage.value = false
         }
     }
 
