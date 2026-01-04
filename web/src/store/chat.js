@@ -173,6 +173,7 @@ export const useChatStore = defineStore('chat', () => {
     model: '',
     baseUrl: '', // For Ollama
     language: null, // null = not set (will auto-detect), string = ISO 639-1 code
+    debugMode: false, // Show technical tool details vs friendly descriptions
   });
 
   // Whether we're currently detecting language
@@ -215,6 +216,9 @@ export const useChatStore = defineStore('chat', () => {
 
   // List of all available languages
   const availableLanguages = computed(() => LANGUAGES);
+
+  // Debug mode state
+  const debugMode = computed(() => config.value.debugMode);
 
   // ============================================================================
   // PERSISTENCE
@@ -635,6 +639,13 @@ export const useChatStore = defineStore('chat', () => {
     config.value.language = null;
   }
 
+  /**
+   * Toggle debug mode
+   */
+  function toggleDebugMode() {
+    config.value.debugMode = !config.value.debugMode;
+  }
+
   // ============================================================================
   // RETURN
   // ============================================================================
@@ -657,6 +668,7 @@ export const useChatStore = defineStore('chat', () => {
     availableProviders,
     currentLanguage,
     availableLanguages,
+    debugMode,
 
     // Methods
     sendMessage,
@@ -667,5 +679,6 @@ export const useChatStore = defineStore('chat', () => {
     close,
     setLanguage,
     resetLanguage,
+    toggleDebugMode,
   };
 });
