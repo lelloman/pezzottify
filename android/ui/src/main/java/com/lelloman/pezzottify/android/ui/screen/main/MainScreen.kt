@@ -49,7 +49,10 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.ime
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -234,7 +237,11 @@ private fun MainScreenContent(state: MainScreenState, actions: MainScreenActions
             }
         }
     ) { innerPadding ->
-        Column(modifier = Modifier.padding(bottom = if (isOverlayScreen) 0.dp else innerPadding.calculateBottomPadding())) {
+        val density = LocalDensity.current
+        val imeBottom = WindowInsets.ime.getBottom(density)
+        val isKeyboardVisible = imeBottom > 0
+
+        Column(modifier = Modifier.padding(bottom = if (isOverlayScreen || isKeyboardVisible) 0.dp else innerPadding.calculateBottomPadding())) {
 
             NavHost(
                 modifier = Modifier.weight(1f),
