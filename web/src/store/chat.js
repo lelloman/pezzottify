@@ -33,7 +33,9 @@ IMPORTANT - ID handling rules:
 
 When the user asks about music or wants to play something, use the appropriate tools.
 When showing search results or content, be concise but informative.
-Always prefer using tools over asking the user to do things manually.`;
+Always prefer using tools over asking the user to do things manually.
+
+Always respond in the same language the user writes in.`;
 
 export const useChatStore = defineStore('chat', () => {
   // ============================================================================
