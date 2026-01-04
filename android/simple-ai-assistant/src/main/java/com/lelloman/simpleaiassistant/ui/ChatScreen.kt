@@ -195,44 +195,44 @@ fun ChatScreen(
                 .weight(1f)
                 .fillMaxWidth()
         ) {
-            if (state.messages.isEmpty() && state.streamingText.isEmpty() && !state.isStreaming) {
-                // Empty state with suggestions
-                EmptyState(
-                    onSuggestionClick = { suggestion ->
-                        onSendMessage(suggestion)
-                    }
-                )
-            } else {
-                LazyColumn(
-                    state = listState,
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    items(state.messages, key = { it.id }) { message ->
-                        ChatMessageItem(
-                            message = message,
-                            debugMode = state.debugMode,
-                            onRestartFromHere = onRestartFromMessage
-                        )
-                    }
-
-                    // Streaming message
-                    if (state.streamingText.isNotEmpty()) {
-                        item(key = "streaming") {
-                            StreamingMessageItem(text = state.streamingText)
+                if (state.messages.isEmpty() && state.streamingText.isEmpty() && !state.isStreaming) {
+                    // Empty state with suggestions
+                    EmptyState(
+                        onSuggestionClick = { suggestion ->
+                            onSendMessage(suggestion)
                         }
-                    }
+                    )
+                } else {
+                    LazyColumn(
+                        state = listState,
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        items(state.messages, key = { it.id }) { message ->
+                            ChatMessageItem(
+                                message = message,
+                                debugMode = state.debugMode,
+                                onRestartFromHere = onRestartFromMessage
+                            )
+                        }
 
-                    // Loading indicator when waiting for response
-                    if (state.isStreaming && state.streamingText.isEmpty()) {
-                        item(key = "loading") {
-                            LoadingIndicator()
+                        // Streaming message
+                        if (state.streamingText.isNotEmpty()) {
+                            item(key = "streaming") {
+                                StreamingMessageItem(text = state.streamingText)
+                            }
+                        }
+
+                        // Loading indicator when waiting for response
+                        if (state.isStreaming && state.streamingText.isEmpty()) {
+                            item(key = "loading") {
+                                LoadingIndicator()
+                            }
                         }
                     }
                 }
             }
-        }
 
         // Input area
         ChatInputArea(
