@@ -19,6 +19,8 @@ import com.lelloman.pezzottify.android.domain.statics.usecase.GetWhatsNew
 import com.lelloman.pezzottify.android.domain.statics.usecase.PerformSearch
 import com.lelloman.pezzottify.android.logger.LoggerFactory
 import com.lelloman.simpleaiassistant.util.AssistantLogger
+import com.lelloman.simpleaiassistant.model.Language
+import com.lelloman.simpleaiassistant.util.LanguagePreferences
 import com.lelloman.simpleaiassistant.util.StringProvider
 import com.lelloman.simpleaiassistant.data.ChatRepository
 import com.lelloman.simpleaiassistant.data.ChatRepositoryImpl
@@ -188,12 +190,36 @@ object AssistantModule {
 
     @Provides
     @Singleton
+    fun provideLanguagePreferences(@ApplicationContext context: Context): LanguagePreferences {
+        val prefs = context.getSharedPreferences("assistant_prefs", Context.MODE_PRIVATE)
+        return object : LanguagePreferences {
+            override fun getLanguage(): Language? {
+                val code = prefs.getString("language_code", null)
+                return code?.let { Language.fromCode(it) }
+            }
+
+            override fun setLanguage(language: Language?) {
+                prefs.edit().apply {
+                    if (language != null) {
+                        putString("language_code", language.code)
+                    } else {
+                        remove("language_code")
+                    }
+                    apply()
+                }
+            }
+        }
+    }
+
+    @Provides
+    @Singleton
     fun provideChatRepository(
         chatMessageDao: ChatMessageDao,
         llmProvider: LlmProvider,
         toolRegistry: ToolRegistry,
         systemPromptBuilder: SystemPromptBuilder,
         stringProvider: StringProvider,
+        languagePreferences: LanguagePreferences,
         logger: AssistantLogger
     ): ChatRepository {
         return ChatRepositoryImpl(
@@ -202,6 +228,7 @@ object AssistantModule {
             toolRegistry = toolRegistry,
             systemPromptBuilder = systemPromptBuilder,
             stringProvider = stringProvider,
+            languagePreferences = languagePreferences,
             logger = logger
         )
     }
