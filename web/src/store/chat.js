@@ -17,6 +17,99 @@ import { LANGUAGES, getLanguage, buildDetectionPrompt } from '../services/langua
 
 const CONFIG_KEY = 'ai_chat_config';
 
+// Compaction thresholds (in estimated tokens)
+const HOT_ZONE_TOKENS = 4000; // Always keep last ~4K tokens verbatim
+const STAGING_THRESHOLD = 4000; // Compact when staging area exceeds this
+
+/**
+ * Estimate token count for a message
+ * Rough heuristic: ~4 chars per token for English, ~2-3 for other languages
+ * We use 3.5 as a middle ground
+ */
+function estimateTokens(text) {
+  if (!text) return 0;
+  return Math.ceil(text.length / 3.5);
+}
+
+/**
+ * Estimate tokens for a single message object
+ */
+function estimateMessageTokens(msg) {
+  let tokens = 0;
+
+  // Content
+  tokens += estimateTokens(msg.content);
+
+  // Tool calls (if any)
+  if (msg.toolCalls) {
+    for (const tc of msg.toolCalls) {
+      tokens += estimateTokens(tc.name);
+      tokens += estimateTokens(JSON.stringify(tc.input));
+    }
+  }
+
+  // Role overhead
+  tokens += 4; // role markers
+
+  return tokens;
+}
+
+/**
+ * Build the compaction prompt
+ */
+function buildCompactionPrompt(existingSummary, messagesToCompact, languageCode) {
+  const lang = languageCode ? getLanguage(languageCode) : null;
+  const langInstruction = lang
+    ? `Write the summary in ${lang.name}.`
+    : 'Write the summary in English.';
+
+  const messagesText = messagesToCompact.map(msg => {
+    let text = `[${msg.role}]: ${msg.content || ''}`;
+    if (msg.toolCalls) {
+      text += ` (used tools: ${msg.toolCalls.map(tc => tc.name).join(', ')})`;
+    }
+    if (msg.toolName) {
+      text += ` (tool result for: ${msg.toolName})`;
+    }
+    return text;
+  }).join('\n');
+
+  if (existingSummary) {
+    return `You are summarizing a conversation for context preservation.
+
+EXISTING SUMMARY:
+${existingSummary}
+
+NEW MESSAGES TO ADD TO SUMMARY:
+${messagesText}
+
+Update the summary to include the key information from these new messages. Focus on:
+- What tasks were completed (playlists created, tracks played, searches done)
+- Any IDs that might be referenced later (playlist IDs, album IDs)
+- User preferences or patterns learned
+- Important decisions or choices made
+
+Keep the summary concise (2-4 sentences max). ${langInstruction}
+
+UPDATED SUMMARY:`;
+  } else {
+    return `You are summarizing a conversation for context preservation.
+
+MESSAGES TO SUMMARIZE:
+${messagesText}
+
+Create a brief summary focusing on:
+- What tasks were completed (playlists created, tracks played, searches done)
+- Any IDs that might be referenced later (playlist IDs, album IDs)
+- User preferences or patterns learned
+- Important decisions or choices made
+
+Keep the summary concise (2-4 sentences max). ${langInstruction}
+
+SUMMARY:`;
+  }
+}
+
 /**
  * Build the system prompt, optionally including language instruction
  */
@@ -85,6 +178,12 @@ export const useChatStore = defineStore('chat', () => {
   // Whether we're currently detecting language
   const isDetectingLanguage = ref(false);
 
+  // Context summary from compacted messages
+  const contextSummary = ref(null);
+
+  // Whether compaction is in progress
+  const isCompacting = ref(false);
+
   // ============================================================================
   // COMPUTED
   // ============================================================================
@@ -151,6 +250,34 @@ export const useChatStore = defineStore('chat', () => {
   }
 
   /**
+   * Build the full message list for LLM including system prompt and context
+   */
+  function buildLlmMessages() {
+    const systemPrompt = buildSystemPrompt(config.value.language);
+    const llmMessages = [
+      { role: 'user', content: systemPrompt },
+      { role: 'assistant', content: 'I understand. I\'m ready to help you with music playback, searching, and managing your library. What would you like to do?' },
+    ];
+
+    // Add context summary if we have one
+    if (contextSummary.value) {
+      llmMessages.push({
+        role: 'user',
+        content: `[Previous conversation context: ${contextSummary.value}]`,
+      });
+      llmMessages.push({
+        role: 'assistant',
+        content: 'I understand the context. How can I help you now?',
+      });
+    }
+
+    // Add current messages
+    llmMessages.push(...messages.value);
+
+    return llmMessages;
+  }
+
+  /**
    * Execute a tool call
    */
   async function executeTool(name, args) {
@@ -203,10 +330,103 @@ export const useChatStore = defineStore('chat', () => {
   }
 
   /**
+   * Calculate token distribution across messages
+   * Returns: { total, hotZone: { start, end, tokens }, staging: { start, end, tokens } }
+   */
+  function analyzeTokenDistribution() {
+    const msgList = messages.value;
+    if (msgList.length === 0) {
+      return { total: 0, hotZone: null, staging: null };
+    }
+
+    // Calculate tokens from the end (most recent first)
+    let total = 0;
+    const tokenCounts = msgList.map(msg => estimateMessageTokens(msg));
+    total = tokenCounts.reduce((a, b) => a + b, 0);
+
+    // Find hot zone boundary (last HOT_ZONE_TOKENS)
+    let hotZoneTokens = 0;
+    let hotZoneStart = msgList.length;
+    for (let i = msgList.length - 1; i >= 0; i--) {
+      if (hotZoneTokens + tokenCounts[i] > HOT_ZONE_TOKENS) {
+        break;
+      }
+      hotZoneTokens += tokenCounts[i];
+      hotZoneStart = i;
+    }
+
+    // Staging area is everything before hot zone
+    let stagingTokens = 0;
+    for (let i = 0; i < hotZoneStart; i++) {
+      stagingTokens += tokenCounts[i];
+    }
+
+    return {
+      total,
+      hotZone: {
+        start: hotZoneStart,
+        end: msgList.length,
+        tokens: hotZoneTokens,
+      },
+      staging: {
+        start: 0,
+        end: hotZoneStart,
+        tokens: stagingTokens,
+      },
+    };
+  }
+
+  /**
+   * Check if compaction is needed and run it asynchronously
+   */
+  async function maybeCompact() {
+    if (isCompacting.value || !isConfigured.value) return;
+
+    const dist = analyzeTokenDistribution();
+
+    // Only compact if staging area exceeds threshold
+    if (!dist.staging || dist.staging.tokens < STAGING_THRESHOLD) {
+      return;
+    }
+
+    console.log(`[Chat] Compaction triggered: staging=${dist.staging.tokens} tokens, hot=${dist.hotZone.tokens} tokens`);
+
+    const messagesToCompact = messages.value.slice(dist.staging.start, dist.staging.end);
+    if (messagesToCompact.length === 0) return;
+
+    isCompacting.value = true;
+    try {
+
+      // Build compaction prompt
+      const prompt = buildCompactionPrompt(
+        contextSummary.value,
+        messagesToCompact,
+        config.value.language
+      );
+
+      // Get summary from LLM
+      const summary = await quickPrompt(config.value.provider, config.value, prompt);
+
+      // Update state
+      contextSummary.value = summary.trim();
+
+      // Remove compacted messages
+      messages.value = messages.value.slice(dist.staging.end);
+
+      console.log(`[Chat] Compacted ${messagesToCompact.length} messages. New summary: "${contextSummary.value.slice(0, 100)}..."`);
+    } catch (e) {
+      console.error('[Chat] Compaction failed:', e);
+      // Non-fatal - we just keep the messages as-is
+    } finally {
+      isCompacting.value = false;
+    }
+  }
+
+  /**
    * Send a message and get a response
    */
   async function sendMessage(userMessage) {
-    if (!userMessage.trim() || isLoading.value) return;
+    if (!userMessage.trim() || isLoading.value || isCompacting.value) return;
 
     error.value = null;
     streamingText.value = '';
@@ -244,13 +464,8 @@ export const useChatStore = defineStore('chat', () => {
       // Get all available tools
       const tools = getAllTools();
 
-      // Build messages for LLM (add system prompt with language)
-      const systemPrompt = buildSystemPrompt(config.value.language);
-      const llmMessages = [
-        { role: 'user', content: systemPrompt },
-        { role: 'assistant', content: 'I understand. I\'m ready to help you with music playback, searching, and managing your library. What would you like to do?' },
-        ...messages.value,
-      ];
+      // Build messages for LLM
+      const llmMessages = buildLlmMessages();
 
       // Stream the response
       let assistantContent = '';
@@ -292,6 +507,9 @@ export const useChatStore = defineStore('chat', () => {
       streamingText.value = '';
     } finally {
       isLoading.value = false;
+
+      // Trigger async compaction after response (fire and forget)
+      maybeCompact();
     }
   }
 
@@ -321,12 +539,7 @@ export const useChatStore = defineStore('chat', () => {
 
     try {
       const tools = getAllTools();
-      const systemPrompt = buildSystemPrompt(config.value.language);
-      const llmMessages = [
-        { role: 'user', content: systemPrompt },
-        { role: 'assistant', content: 'I understand. I\'m ready to help you with music playback, searching, and managing your library. What would you like to do?' },
-        ...messages.value,
-      ];
+      const llmMessages = buildLlmMessages();
 
       let assistantContent = '';
       let newToolCalls = [];
@@ -375,6 +588,7 @@ export const useChatStore = defineStore('chat', () => {
    */
   function clearHistory() {
     messages.value = [];
+    contextSummary.value = null;
     error.value = null;
     streamingText.value = '';
   }
@@ -434,6 +648,8 @@ export const useChatStore = defineStore('chat', () => {
     error,
     config,
     isDetectingLanguage,
+    isCompacting,
+    contextSummary,
 
     // Computed
     isConfigured,
