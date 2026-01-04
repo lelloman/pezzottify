@@ -1,5 +1,5 @@
 <script setup>
-import { ref, watch, nextTick } from 'vue';
+import { ref, watch, nextTick, onMounted, onUnmounted } from 'vue';
 import { useChatStore } from '../../store/chat';
 import ChatMessage from './ChatMessage.vue';
 import ChatSettings from './ChatSettings.vue';
@@ -8,7 +8,174 @@ const chatStore = useChatStore();
 
 const inputText = ref('');
 const messagesContainer = ref(null);
+const panelRef = ref(null);
 const showSettings = ref(false);
+
+// Panel position and size
+const STORAGE_KEY = 'ai_chat_panel_geometry';
+const MIN_WIDTH = 320;
+const MIN_HEIGHT = 300;
+const DEFAULT_WIDTH = 420;
+const DEFAULT_HEIGHT = 550;
+
+const panelStyle = ref({
+  width: DEFAULT_WIDTH,
+  height: DEFAULT_HEIGHT,
+  x: null, // null means use default CSS position
+  y: null,
+});
+
+// Load saved geometry
+onMounted(() => {
+  const saved = localStorage.getItem(STORAGE_KEY);
+  if (saved) {
+    try {
+      const parsed = JSON.parse(saved);
+      panelStyle.value = { ...panelStyle.value, ...parsed };
+    } catch {
+      // ignore
+    }
+  }
+});
+
+// Save geometry on change
+function saveGeometry() {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(panelStyle.value));
+}
+
+// Dragging state
+const isDragging = ref(false);
+const dragOffset = ref({ x: 0, y: 0 });
+
+function startDrag(e) {
+  if (e.target.closest('button') || e.target.closest('input') || e.target.closest('textarea')) {
+    return;
+  }
+
+  isDragging.value = true;
+  const rect = panelRef.value.getBoundingClientRect();
+
+  // Initialize position if not set
+  if (panelStyle.value.x === null) {
+    panelStyle.value.x = rect.left;
+    panelStyle.value.y = rect.top;
+  }
+
+  dragOffset.value = {
+    x: e.clientX - panelStyle.value.x,
+    y: e.clientY - panelStyle.value.y,
+  };
+
+  document.addEventListener('mousemove', onDrag);
+  document.addEventListener('mouseup', stopDrag);
+  e.preventDefault();
+}
+
+function onDrag(e) {
+  if (!isDragging.value) return;
+
+  const newX = e.clientX - dragOffset.value.x;
+  const newY = e.clientY - dragOffset.value.y;
+
+  // Constrain to viewport
+  const maxX = window.innerWidth - panelStyle.value.width;
+  const maxY = window.innerHeight - panelStyle.value.height;
+
+  panelStyle.value.x = Math.max(0, Math.min(newX, maxX));
+  panelStyle.value.y = Math.max(0, Math.min(newY, maxY));
+}
+
+function stopDrag() {
+  isDragging.value = false;
+  document.removeEventListener('mousemove', onDrag);
+  document.removeEventListener('mouseup', stopDrag);
+  saveGeometry();
+}
+
+// Resizing state
+const isResizing = ref(false);
+const resizeDirection = ref('');
+
+function startResize(e, direction) {
+  isResizing.value = true;
+  resizeDirection.value = direction;
+
+  const rect = panelRef.value.getBoundingClientRect();
+
+  // Initialize position if not set
+  if (panelStyle.value.x === null) {
+    panelStyle.value.x = rect.left;
+    panelStyle.value.y = rect.top;
+  }
+
+  document.addEventListener('mousemove', onResize);
+  document.addEventListener('mouseup', stopResize);
+  e.preventDefault();
+  e.stopPropagation();
+}
+
+function onResize(e) {
+  if (!isResizing.value) return;
+
+  const dir = resizeDirection.value;
+  let { x, y, width, height } = panelStyle.value;
+
+  if (dir.includes('e')) {
+    width = Math.max(MIN_WIDTH, e.clientX - x);
+  }
+  if (dir.includes('w')) {
+    const newWidth = Math.max(MIN_WIDTH, (x + width) - e.clientX);
+    const newX = x + width - newWidth;
+    if (newX >= 0) {
+      width = newWidth;
+      x = newX;
+    }
+  }
+  if (dir.includes('s')) {
+    height = Math.max(MIN_HEIGHT, e.clientY - y);
+  }
+  if (dir.includes('n')) {
+    const newHeight = Math.max(MIN_HEIGHT, (y + height) - e.clientY);
+    const newY = y + height - newHeight;
+    if (newY >= 0) {
+      height = newHeight;
+      y = newY;
+    }
+  }
+
+  // Constrain to viewport
+  width = Math.min(width, window.innerWidth - x);
+  height = Math.min(height, window.innerHeight - y);
+
+  panelStyle.value = { x, y, width, height };
+}
+
+function stopResize() {
+  isResizing.value = false;
+  resizeDirection.value = '';
+  document.removeEventListener('mousemove', onResize);
+  document.removeEventListener('mouseup', stopResize);
+  saveGeometry();
+}
+
+// Reset to default position
+function resetPosition() {
+  panelStyle.value = {
+    width: DEFAULT_WIDTH,
+    height: DEFAULT_HEIGHT,
+    x: null,
+    y: null,
+  };
+  localStorage.removeItem(STORAGE_KEY);
+}
+
+// Cleanup
+onUnmounted(() => {
+  document.removeEventListener('mousemove', onDrag);
+  document.removeEventListener('mouseup', stopDrag);
+  document.removeEventListener('mousemove', onResize);
+  document.removeEventListener('mouseup', stopResize);
+});
 
 // Auto-scroll to bottom when new messages arrive
 watch(
@@ -35,11 +202,44 @@ function handleKeydown(e) {
     handleSubmit();
   }
 }
+
+// Computed style for the panel
+function getPanelStyle() {
+  const style = {
+    width: `${panelStyle.value.width}px`,
+    height: `${panelStyle.value.height}px`,
+  };
+
+  if (panelStyle.value.x !== null) {
+    style.left = `${panelStyle.value.x}px`;
+    style.top = `${panelStyle.value.y}px`;
+    style.right = 'auto';
+    style.bottom = 'auto';
+  }
+
+  return style;
+}
 </script>
 
 <template>
   <Transition name="slide">
-    <div v-if="chatStore.isOpen" class="chat-panel">
+    <div
+      v-if="chatStore.isOpen"
+      ref="panelRef"
+      class="chat-panel"
+      :class="{ 'chat-panel--dragging': isDragging, 'chat-panel--resizing': isResizing }"
+      :style="getPanelStyle()"
+    >
+      <!-- Resize handles -->
+      <div class="resize-handle resize-handle--n" @mousedown="startResize($event, 'n')"></div>
+      <div class="resize-handle resize-handle--s" @mousedown="startResize($event, 's')"></div>
+      <div class="resize-handle resize-handle--e" @mousedown="startResize($event, 'e')"></div>
+      <div class="resize-handle resize-handle--w" @mousedown="startResize($event, 'w')"></div>
+      <div class="resize-handle resize-handle--ne" @mousedown="startResize($event, 'ne')"></div>
+      <div class="resize-handle resize-handle--nw" @mousedown="startResize($event, 'nw')"></div>
+      <div class="resize-handle resize-handle--se" @mousedown="startResize($event, 'se')"></div>
+      <div class="resize-handle resize-handle--sw" @mousedown="startResize($event, 'sw')"></div>
+
       <!-- Settings View -->
       <ChatSettings
         v-if="showSettings"
@@ -48,10 +248,29 @@ function handleKeydown(e) {
 
       <!-- Chat View -->
       <template v-else>
-        <!-- Header -->
-        <div class="chat-panel__header">
+        <!-- Header (draggable) -->
+        <div class="chat-panel__header" @mousedown="startDrag">
           <h3>AI Assistant</h3>
           <div class="chat-panel__actions">
+            <button
+              v-if="panelStyle.x !== null"
+              class="chat-panel__action"
+              title="Reset position"
+              @click="resetPosition"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="18"
+                height="18"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+              >
+                <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+                <path d="M3 3v5h5" />
+              </svg>
+            </button>
             <button
               class="chat-panel__action"
               title="Settings"
@@ -207,9 +426,8 @@ function handleKeydown(e) {
   position: fixed;
   bottom: calc(var(--player-height-desktop) + 90px);
   right: 20px;
-  width: 380px;
-  height: 500px;
-  max-height: calc(100vh - var(--player-height-desktop) - 120px);
+  width: 420px;
+  height: 550px;
   background: var(--bg-elevated);
   border-radius: var(--radius-xl);
   box-shadow: var(--shadow-xl);
@@ -219,6 +437,56 @@ function handleKeydown(e) {
   overflow: hidden;
 }
 
+.chat-panel--dragging,
+.chat-panel--resizing {
+  user-select: none;
+}
+
+.chat-panel--dragging {
+  cursor: grabbing;
+}
+
+/* Resize handles */
+.resize-handle {
+  position: absolute;
+  z-index: 10;
+}
+
+.resize-handle--n,
+.resize-handle--s {
+  left: 10px;
+  right: 10px;
+  height: 6px;
+  cursor: ns-resize;
+}
+
+.resize-handle--n { top: 0; }
+.resize-handle--s { bottom: 0; }
+
+.resize-handle--e,
+.resize-handle--w {
+  top: 10px;
+  bottom: 10px;
+  width: 6px;
+  cursor: ew-resize;
+}
+
+.resize-handle--e { right: 0; }
+.resize-handle--w { left: 0; }
+
+.resize-handle--ne,
+.resize-handle--nw,
+.resize-handle--se,
+.resize-handle--sw {
+  width: 12px;
+  height: 12px;
+}
+
+.resize-handle--ne { top: 0; right: 0; cursor: nesw-resize; }
+.resize-handle--nw { top: 0; left: 0; cursor: nwse-resize; }
+.resize-handle--se { bottom: 0; right: 0; cursor: nwse-resize; }
+.resize-handle--sw { bottom: 0; left: 0; cursor: nesw-resize; }
+
 .chat-panel__header {
   display: flex;
   align-items: center;
@@ -226,6 +494,11 @@ function handleKeydown(e) {
   padding: var(--spacing-3) var(--spacing-4);
   border-bottom: 1px solid var(--border-default);
   flex-shrink: 0;
+  cursor: grab;
+}
+
+.chat-panel--dragging .chat-panel__header {
+  cursor: grabbing;
 }
 
 .chat-panel__header h3 {
@@ -468,12 +741,22 @@ function handleKeydown(e) {
 
 @media (max-width: 768px) {
   .chat-panel {
-    bottom: calc(var(--player-height-mobile) + var(--mobile-nav-height) + 80px);
-    right: 16px;
-    left: 16px;
-    width: auto;
-    height: 60vh;
+    /* On mobile, use fixed positioning and ignore saved geometry */
+    bottom: calc(var(--player-height-mobile) + var(--mobile-nav-height) + 80px) !important;
+    right: 16px !important;
+    left: 16px !important;
+    top: auto !important;
+    width: auto !important;
+    height: 60vh !important;
     max-height: calc(100vh - var(--player-height-mobile) - var(--mobile-nav-height) - 100px);
+  }
+
+  .chat-panel__header {
+    cursor: default;
+  }
+
+  .resize-handle {
+    display: none;
   }
 }
 </style>
