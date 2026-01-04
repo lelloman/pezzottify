@@ -249,4 +249,7 @@ class UiContentResolver(
                 )
             }
         }
+
+    override fun buildImageUrl(displayImageId: String): String =
+        ImageUrlProvider.buildImageUrl(configStore.baseUrl.value, displayImageId)!!
 }

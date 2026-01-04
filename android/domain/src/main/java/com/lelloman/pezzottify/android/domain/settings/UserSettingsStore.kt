@@ -19,12 +19,19 @@ interface UserSettingsStore {
      */
     val isNotifyWhatsNewEnabled: StateFlow<Boolean>
 
+    /**
+     * Whether to use smart (streaming) search instead of classic flat search.
+     * This is a local-only setting.
+     */
+    val isSmartSearchEnabled: StateFlow<Boolean>
+
     suspend fun setThemeMode(themeMode: ThemeMode)
     suspend fun setColorPalette(colorPalette: ColorPalette)
     suspend fun setFontFamily(fontFamily: AppFontFamily)
     suspend fun setInMemoryCacheEnabled(enabled: Boolean)
     suspend fun setFileLoggingEnabled(enabled: Boolean)
     suspend fun setNotifyWhatsNewEnabled(enabled: Boolean)
+    fun setSmartSearchEnabled(enabled: Boolean)
 
     /**
      * Set a synced setting with specified sync status.

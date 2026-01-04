@@ -44,9 +44,18 @@ import com.lelloman.pezzottify.android.ui.model.LikedContent as UiLikedContent
 import com.lelloman.pezzottify.android.ui.model.PlaybackPlaylist as UiPlaybackPlaylist
 import com.lelloman.pezzottify.android.ui.model.PlaybackPlaylistContext as UiPlaybackPlaylistContext
 import com.lelloman.pezzottify.android.domain.remoteapi.RemoteApiClient
+import com.lelloman.pezzottify.android.domain.remoteapi.response.ResolvedSearchResult
+import com.lelloman.pezzottify.android.domain.remoteapi.response.SearchSection
+import com.lelloman.pezzottify.android.ui.screen.main.search.PrimaryMatchType
+import com.lelloman.pezzottify.android.ui.screen.main.search.StreamingAlbumSummary
+import com.lelloman.pezzottify.android.ui.screen.main.search.StreamingArtistSummary
+import com.lelloman.pezzottify.android.ui.screen.main.search.StreamingSearchResult
+import com.lelloman.pezzottify.android.ui.screen.main.search.StreamingSearchSection
+import com.lelloman.pezzottify.android.ui.screen.main.search.StreamingTrackSummary
 import com.lelloman.pezzottify.android.domain.statics.usecase.GetPopularContent
 import com.lelloman.pezzottify.android.domain.statics.usecase.GetWhatsNew
 import com.lelloman.pezzottify.android.domain.statics.usecase.PerformSearch
+import com.lelloman.pezzottify.android.domain.statics.usecase.PerformStreamingSearch
 import com.lelloman.pezzottify.android.domain.user.GetRecentlyViewedContentUseCase
 import com.lelloman.pezzottify.android.domain.user.GetSearchHistoryEntriesUseCase
 import com.lelloman.pezzottify.android.domain.user.LogSearchHistoryEntryUseCase
@@ -109,6 +118,7 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 
@@ -306,10 +316,18 @@ class InteractorsModule {
 
         override fun isNotifyWhatsNewEnabled(): Boolean = userSettingsStore.isNotifyWhatsNewEnabled.value
 
+        override fun isSmartSearchEnabled(): Boolean = userSettingsStore.isSmartSearchEnabled.value
+
         override fun observeNotifyWhatsNewEnabled(): Flow<Boolean> = userSettingsStore.isNotifyWhatsNewEnabled
+
+        override fun observeSmartSearchEnabled(): Flow<Boolean> = userSettingsStore.isSmartSearchEnabled
 
         override suspend fun setNotifyWhatsNewEnabled(enabled: Boolean) {
             updateNotifyWhatsNewSetting(enabled)
+        }
+
+        override fun setSmartSearchEnabled(enabled: Boolean) {
+            userSettingsStore.setSmartSearchEnabled(enabled)
         }
 
         override suspend fun setThemeMode(themeMode: UiThemeMode) {
@@ -438,11 +456,14 @@ class InteractorsModule {
     @Provides
     fun provideSearchScreenInteractor(
         performSearch: PerformSearch,
+        performStreamingSearch: PerformStreamingSearch,
         loggerFactory: LoggerFactory,
         getRecentlyViewedContent: GetRecentlyViewedContentUseCase,
         getSearchHistoryEntries: GetSearchHistoryEntriesUseCase,
         logSearchHistoryEntry: LogSearchHistoryEntryUseCase,
         getWhatsNew: GetWhatsNew,
+        userSettingsStore: UserSettingsStore,
+        configStore: ConfigStore,
     ): SearchScreenViewModel.Interactor =
         object : SearchScreenViewModel.Interactor {
             private val logger = loggerFactory.getLogger("SearchScreenViewModel.Interactor")
@@ -477,6 +498,168 @@ class InteractorsModule {
                 }
                 logger.debug("search($query) returning $mappedResult")
                 return Result.success(mappedResult)
+            }
+
+            override fun streamingSearch(query: String): Flow<StreamingSearchSection> {
+                logger.debug("streamingSearch($query)")
+                val baseUrl = configStore.baseUrl.value
+                return performStreamingSearch(query).map { section ->
+                    mapToUiSection(section, baseUrl)
+                }.filterNotNull()
+            }
+
+            private fun mapToUiSection(section: SearchSection, baseUrl: String): StreamingSearchSection? {
+                return when (section) {
+                    is SearchSection.PrimaryArtist -> {
+                        val artist = section.item as? ResolvedSearchResult.Artist ?: return null
+                        StreamingSearchSection.PrimaryMatch(
+                            id = artist.id,
+                            name = artist.name,
+                            type = PrimaryMatchType.Artist,
+                            imageUrl = ImageUrlProvider.buildImageUrl(baseUrl, artist.imageId),
+                            confidence = section.confidence,
+                        )
+                    }
+                    is SearchSection.PrimaryAlbum -> {
+                        val album = section.item as? ResolvedSearchResult.Album ?: return null
+                        StreamingSearchSection.PrimaryMatch(
+                            id = album.id,
+                            name = album.name,
+                            type = PrimaryMatchType.Album,
+                            imageUrl = ImageUrlProvider.buildImageUrl(baseUrl, album.imageId),
+                            confidence = section.confidence,
+                            artistNames = album.artistsIdsNames.map { it[1] },
+                            year = album.year?.toInt(),
+                        )
+                    }
+                    is SearchSection.PrimaryTrack -> {
+                        val track = section.item as? ResolvedSearchResult.Track ?: return null
+                        StreamingSearchSection.PrimaryMatch(
+                            id = track.id,
+                            name = track.name,
+                            type = PrimaryMatchType.Track,
+                            imageUrl = ImageUrlProvider.buildImageUrl(baseUrl, track.imageId),
+                            confidence = section.confidence,
+                            artistNames = track.artistsIdsNames.map { it[1] },
+                            durationMs = track.duration.toLong() * 1000,
+                        )
+                    }
+                    is SearchSection.PopularBy -> {
+                        StreamingSearchSection.PopularTracks(
+                            targetId = section.targetId,
+                            tracks = section.items.map { track ->
+                                StreamingTrackSummary(
+                                    id = track.id,
+                                    name = track.name,
+                                    durationMs = track.durationMs,
+                                    trackNumber = track.trackNumber,
+                                    albumId = track.albumId,
+                                    albumName = track.albumName,
+                                    artistNames = track.artistNames,
+                                    imageUrl = ImageUrlProvider.buildImageUrl(baseUrl, track.imageId),
+                                )
+                            }
+                        )
+                    }
+                    is SearchSection.AlbumsBy -> {
+                        StreamingSearchSection.ArtistAlbums(
+                            targetId = section.targetId,
+                            albums = section.items.map { album ->
+                                StreamingAlbumSummary(
+                                    id = album.id,
+                                    name = album.name,
+                                    releaseYear = album.releaseYear,
+                                    trackCount = album.trackCount,
+                                    imageUrl = ImageUrlProvider.buildImageUrl(baseUrl, album.imageId),
+                                    artistNames = album.artistNames,
+                                )
+                            }
+                        )
+                    }
+                    is SearchSection.TracksFrom -> {
+                        StreamingSearchSection.AlbumTracks(
+                            targetId = section.targetId,
+                            tracks = section.items.map { track ->
+                                StreamingTrackSummary(
+                                    id = track.id,
+                                    name = track.name,
+                                    durationMs = track.durationMs,
+                                    trackNumber = track.trackNumber,
+                                    albumId = track.albumId,
+                                    albumName = track.albumName,
+                                    artistNames = track.artistNames,
+                                    imageUrl = ImageUrlProvider.buildImageUrl(baseUrl, track.imageId),
+                                )
+                            }
+                        )
+                    }
+                    is SearchSection.RelatedArtists -> {
+                        StreamingSearchSection.RelatedArtists(
+                            targetId = section.targetId,
+                            artists = section.items.map { artist ->
+                                StreamingArtistSummary(
+                                    id = artist.id,
+                                    name = artist.name,
+                                    imageUrl = ImageUrlProvider.buildImageUrl(baseUrl, artist.imageId),
+                                )
+                            }
+                        )
+                    }
+                    is SearchSection.MoreResults -> {
+                        StreamingSearchSection.MoreResults(
+                            results = section.items.map { mapSearchResult(it, baseUrl) }
+                        )
+                    }
+                    is SearchSection.Results -> {
+                        StreamingSearchSection.AllResults(
+                            results = section.items.map { mapSearchResult(it, baseUrl) }
+                        )
+                    }
+                    is SearchSection.Done -> {
+                        StreamingSearchSection.Done(totalTimeMs = section.totalTimeMs)
+                    }
+                }
+            }
+
+            private fun mapSearchResult(result: ResolvedSearchResult, baseUrl: String): StreamingSearchResult {
+                return when (result) {
+                    is ResolvedSearchResult.Artist -> {
+                        StreamingSearchResult.Artist(
+                            id = result.id,
+                            name = result.name,
+                            imageUrl = ImageUrlProvider.buildImageUrl(baseUrl, result.imageId),
+                        )
+                    }
+                    is ResolvedSearchResult.Album -> {
+                        StreamingSearchResult.Album(
+                            id = result.id,
+                            name = result.name,
+                            artistNames = result.artistsIdsNames.map { it[1] },
+                            imageUrl = ImageUrlProvider.buildImageUrl(baseUrl, result.imageId),
+                            year = result.year?.toInt(),
+                        )
+                    }
+                    is ResolvedSearchResult.Track -> {
+                        StreamingSearchResult.Track(
+                            id = result.id,
+                            name = result.name,
+                            artistNames = result.artistsIdsNames.map { it[1] },
+                            imageUrl = ImageUrlProvider.buildImageUrl(baseUrl, result.imageId),
+                            albumId = result.albumId,
+                            durationMs = result.duration.toLong() * 1000,
+                        )
+                    }
+                }
+            }
+
+            override fun isStreamingSearchEnabled(): Boolean =
+                userSettingsStore.isSmartSearchEnabled.value
+
+            override fun observeStreamingSearchEnabled(): Flow<Boolean> =
+                userSettingsStore.isSmartSearchEnabled
+
+            override fun setStreamingSearchEnabled(enabled: Boolean) {
+                userSettingsStore.setSmartSearchEnabled(enabled)
             }
 
             override suspend fun getRecentlyViewedContent(maxCount: Int): Flow<List<SearchScreenViewModel.RecentlyViewedContent>> =

@@ -236,13 +236,160 @@ class SearchScreenViewModelTest {
         assertThat(viewModel.state.value.isLoading).isFalse()
     }
 
+    @Test
+    fun `initial state reflects streaming search preference`() = runTest {
+        fakeInteractor.streamingSearchEnabledFlow.value = true
+        createViewModel()
+        advanceUntilIdle()
+
+        assertThat(viewModel.state.value.isStreamingSearchEnabled).isTrue()
+    }
+
+    @Test
+    fun `streaming search enabled state updates when preference changes`() = runTest {
+        fakeInteractor.streamingSearchEnabledFlow.value = false
+        createViewModel()
+        advanceUntilIdle()
+
+        assertThat(viewModel.state.value.isStreamingSearchEnabled).isFalse()
+
+        fakeInteractor.streamingSearchEnabledFlow.value = true
+        advanceUntilIdle()
+
+        assertThat(viewModel.state.value.isStreamingSearchEnabled).isTrue()
+    }
+
+    @Test
+    fun `uses streaming search when enabled`() = runTest {
+        fakeInteractor.streamingSearchEnabledFlow.value = true
+        fakeInteractor.streamingSearchSections = flowOf(
+            StreamingSearchSection.PrimaryMatch(
+                id = "artist-1",
+                name = "Test Artist",
+                type = PrimaryMatchType.Artist,
+                imageUrl = null,
+                confidence = 0.95
+            ),
+            StreamingSearchSection.Done(totalTimeMs = 100)
+        )
+
+        createViewModel()
+        advanceUntilIdle()
+
+        viewModel.updateQuery("test")
+        advanceTimeBy(500)
+        advanceUntilIdle()
+
+        assertThat(fakeInteractor.streamingSearchCallCount).isEqualTo(1)
+        assertThat(fakeInteractor.searchCallCount).isEqualTo(0)
+        assertThat(viewModel.state.value.streamingSections).isNotEmpty()
+    }
+
+    @Test
+    fun `uses classic search when streaming is disabled`() = runTest {
+        fakeInteractor.streamingSearchEnabledFlow.value = false
+        fakeInteractor.searchResults = Result.success(
+            listOf("album-1" to SearchScreenViewModel.SearchedItemType.Album)
+        )
+
+        createViewModel()
+        advanceUntilIdle()
+
+        viewModel.updateQuery("test")
+        advanceTimeBy(500)
+        advanceUntilIdle()
+
+        assertThat(fakeInteractor.searchCallCount).isEqualTo(1)
+        assertThat(fakeInteractor.streamingSearchCallCount).isEqualTo(0)
+    }
+
+    @Test
+    fun `streaming search populates sections progressively`() = runTest {
+        fakeInteractor.streamingSearchEnabledFlow.value = true
+        fakeInteractor.streamingSearchSections = flowOf(
+            StreamingSearchSection.PrimaryMatch(
+                id = "artist-1",
+                name = "Test Artist",
+                type = PrimaryMatchType.Artist,
+                imageUrl = "http://example.com/img.jpg",
+                confidence = 0.95
+            ),
+            StreamingSearchSection.PopularTracks(
+                targetId = "artist-1",
+                tracks = listOf(
+                    StreamingTrackSummary(
+                        id = "track-1",
+                        name = "Popular Track",
+                        durationMs = 180000,
+                        trackNumber = 1,
+                        albumId = "album-1",
+                        albumName = "Album One",
+                        artistNames = listOf("Test Artist"),
+                        imageUrl = null
+                    )
+                )
+            ),
+            StreamingSearchSection.Done(totalTimeMs = 150)
+        )
+
+        createViewModel()
+        advanceUntilIdle()
+
+        viewModel.updateQuery("test artist")
+        advanceTimeBy(500)
+        advanceUntilIdle()
+
+        val sections = viewModel.state.value.streamingSections
+        assertThat(sections).hasSize(3)
+        assertThat(sections[0]).isInstanceOf(StreamingSearchSection.PrimaryMatch::class.java)
+        assertThat(sections[1]).isInstanceOf(StreamingSearchSection.PopularTracks::class.java)
+        assertThat(sections[2]).isInstanceOf(StreamingSearchSection.Done::class.java)
+
+        val primaryMatch = sections[0] as StreamingSearchSection.PrimaryMatch
+        assertThat(primaryMatch.name).isEqualTo("Test Artist")
+        assertThat(primaryMatch.type).isEqualTo(PrimaryMatchType.Artist)
+    }
+
+    @Test
+    fun `empty query clears streaming sections`() = runTest {
+        fakeInteractor.streamingSearchEnabledFlow.value = true
+        fakeInteractor.streamingSearchSections = flowOf(
+            StreamingSearchSection.PrimaryMatch(
+                id = "artist-1",
+                name = "Test Artist",
+                type = PrimaryMatchType.Artist,
+                imageUrl = null,
+                confidence = 0.95
+            ),
+            StreamingSearchSection.Done(totalTimeMs = 100)
+        )
+
+        createViewModel()
+        advanceUntilIdle()
+
+        viewModel.updateQuery("test")
+        advanceTimeBy(500)
+        advanceUntilIdle()
+
+        assertThat(viewModel.state.value.streamingSections).isNotEmpty()
+
+        viewModel.updateQuery("")
+        advanceUntilIdle()
+
+        assertThat(viewModel.state.value.streamingSections).isEmpty()
+        assertThat(viewModel.state.value.isLoading).isFalse()
+    }
+
     private class FakeInteractor : SearchScreenViewModel.Interactor {
         val recentlyViewedFlow = MutableStateFlow<List<SearchScreenViewModel.RecentlyViewedContent>>(emptyList())
         val searchHistoryFlow = MutableStateFlow<List<SearchScreenViewModel.SearchHistoryEntry>>(emptyList())
+        val streamingSearchEnabledFlow = MutableStateFlow(false)
 
         var searchResults: Result<List<Pair<String, SearchScreenViewModel.SearchedItemType>>> = Result.success(emptyList())
+        var streamingSearchSections: Flow<StreamingSearchSection> = flowOf()
 
         var searchCallCount = 0
+        var streamingSearchCallCount = 0
         var lastLoggedSearchEntry: LoggedEntry? = null
 
         data class LoggedEntry(val query: String, val contentType: SearchScreenViewModel.SearchHistoryEntryType, val contentId: String)
@@ -253,6 +400,19 @@ class SearchScreenViewModelTest {
         ): Result<List<Pair<String, SearchScreenViewModel.SearchedItemType>>> {
             searchCallCount++
             return searchResults
+        }
+
+        override fun streamingSearch(query: String): Flow<StreamingSearchSection> {
+            streamingSearchCallCount++
+            return streamingSearchSections
+        }
+
+        override fun isStreamingSearchEnabled(): Boolean = streamingSearchEnabledFlow.value
+
+        override fun observeStreamingSearchEnabled(): Flow<Boolean> = streamingSearchEnabledFlow
+
+        override fun setStreamingSearchEnabled(enabled: Boolean) {
+            streamingSearchEnabledFlow.value = enabled
         }
 
         override suspend fun getRecentlyViewedContent(maxCount: Int): Flow<List<SearchScreenViewModel.RecentlyViewedContent>> =
@@ -290,5 +450,8 @@ class SearchScreenViewModelTest {
 
         override fun resolveArtistDiscography(artistId: String): Flow<Content<ArtistDiscography>> =
             flowOf(Content.Loading(artistId))
+
+        override fun buildImageUrl(displayImageId: String): String =
+            "http://example.com/image/$displayImageId"
     }
 }

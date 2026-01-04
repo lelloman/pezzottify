@@ -22,4 +22,9 @@ interface ContentResolver {
     fun resolveTrack(trackId: String): Flow<Content<Track>>
 
     fun resolveArtistDiscography(artistId: String): Flow<Content<ArtistDiscography>>
+
+    /**
+     * Build an image URL from a display image ID.
+     */
+    fun buildImageUrl(displayImageId: String): String
 }
