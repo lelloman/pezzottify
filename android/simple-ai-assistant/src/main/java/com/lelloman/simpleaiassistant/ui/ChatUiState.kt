@@ -8,6 +8,7 @@ data class ChatUiState(
     val streamingText: String = "",
     val isStreaming: Boolean = false,
     val language: Language? = null,
+    val isDetectingLanguage: Boolean = false,
     val debugMode: Boolean = false,
     val error: String? = null
 )

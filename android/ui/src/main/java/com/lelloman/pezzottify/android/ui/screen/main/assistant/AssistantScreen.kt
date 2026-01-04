@@ -17,6 +17,7 @@ fun AssistantScreen(
         onSendMessage = viewModel::sendMessage,
         onClearHistory = viewModel::clearHistory,
         onOpenSettings = { /* TODO: Open settings dialog */ },
-        onRestartFromMessage = viewModel::restartFromMessage
+        onRestartFromMessage = viewModel::restartFromMessage,
+        onLanguageSelected = viewModel::setLanguage
     )
 }

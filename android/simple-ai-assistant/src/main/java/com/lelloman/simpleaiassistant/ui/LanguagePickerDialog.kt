@@ -38,6 +38,7 @@ fun LanguagePickerDialog(
                 // Auto-detect option
                 item {
                     LanguageOption(
+                        flag = "?",
                         displayText = "Auto-detect",
                         subText = "Let the assistant detect your language",
                         isSelected = selectedLanguage == null,
@@ -47,6 +48,7 @@ fun LanguagePickerDialog(
 
                 items(Language.entries) { language ->
                     LanguageOption(
+                        flag = language.flag,
                         displayText = language.nativeName,
                         subText = language.displayName,
                         isSelected = selectedLanguage == language,
@@ -66,6 +68,7 @@ fun LanguagePickerDialog(
 
 @Composable
 private fun LanguageOption(
+    flag: String,
     displayText: String,
     subText: String,
     isSelected: Boolean,
@@ -83,7 +86,12 @@ private fun LanguageOption(
             selected = isSelected,
             onClick = onClick
         )
-        Spacer(modifier = Modifier.width(8.dp))
+        Spacer(modifier = Modifier.width(4.dp))
+        Text(
+            text = flag,
+            style = MaterialTheme.typography.titleLarge
+        )
+        Spacer(modifier = Modifier.width(12.dp))
         Column {
             Text(
                 text = displayText,
