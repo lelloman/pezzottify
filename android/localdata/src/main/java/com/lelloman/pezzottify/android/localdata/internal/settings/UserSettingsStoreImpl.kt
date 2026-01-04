@@ -81,6 +81,13 @@ internal class UserSettingsStoreImpl(
     }
     override val isNotifyWhatsNewEnabled: StateFlow<Boolean> = mutableNotifyWhatsNewEnabled.asStateFlow()
 
+    private val mutableSmartSearchEnabled by lazy {
+        // Default to true (smart search enabled by default)
+        val enabled = prefs.getBoolean(KEY_SMART_SEARCH_ENABLED, DEFAULT_SMART_SEARCH_ENABLED)
+        MutableStateFlow(enabled)
+    }
+    override val isSmartSearchEnabled: StateFlow<Boolean> = mutableSmartSearchEnabled.asStateFlow()
+
     // Track sync status for synced settings (key -> SyncedUserSetting)
     private val mutableSyncedSettings by lazy {
         val settings = mutableMapOf<String, SyncedUserSetting>()
@@ -147,6 +154,11 @@ internal class UserSettingsStoreImpl(
             updatedSettings.remove(KEY_SETTING_NOTIFY_WHATSNEW)
             mutableSyncedSettings.value = updatedSettings
         }
+    }
+
+    override fun setSmartSearchEnabled(enabled: Boolean) {
+        mutableSmartSearchEnabled.value = enabled
+        prefs.edit().putBoolean(KEY_SMART_SEARCH_ENABLED, enabled).apply()
     }
 
     override suspend fun setSyncedSetting(setting: UserSetting, syncStatus: SyncStatus) {
@@ -261,5 +273,8 @@ internal class UserSettingsStoreImpl(
         const val KEY_SETTING_NOTIFY_WHATSNEW = "notify_whatsnew"
         // Legacy value for migration - AmoledBlack was removed and converted to Amoled theme mode
         const val LEGACY_AMOLED_BLACK_PALETTE = "AmoledBlack"
+        // Smart search setting (local only)
+        const val KEY_SMART_SEARCH_ENABLED = "SmartSearchEnabled"
+        const val DEFAULT_SMART_SEARCH_ENABLED = true
     }
 }

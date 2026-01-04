@@ -71,6 +71,7 @@ class RemoteApiModule {
     ): RemoteApiClient {
         val httpLogger = loggerFactory.getLogger("HTTP")
         val sessionLogger = loggerFactory.getLogger("SessionExpired")
+        val apiLogger = loggerFactory.getLogger("RemoteApiClient")
         return RemoteApiClientImpl(
             okHttpClientFactory = okHttpClientFactory,
             hostUrlProvider = object : RemoteApiClient.HostUrlProvider {
@@ -86,6 +87,7 @@ class RemoteApiModule {
                 SessionExpiredInterceptor(sessionExpiredHandler, tokenRefresher, sessionLogger),
                 HttpLoggingInterceptor(httpLogger),
             ),
+            logger = apiLogger,
         )
     }
 }

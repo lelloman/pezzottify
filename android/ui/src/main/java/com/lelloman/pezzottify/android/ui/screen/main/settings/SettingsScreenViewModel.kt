@@ -39,6 +39,7 @@ class SettingsScreenViewModel @Inject constructor(
                 isCacheEnabled = interactor.isCacheEnabled(),
                 storageInfo = interactor.getStorageInfo(),
                 notifyWhatsNewEnabled = interactor.isNotifyWhatsNewEnabled(),
+                smartSearchEnabled = interactor.isSmartSearchEnabled(),
                 isFileLoggingEnabled = interactor.isFileLoggingEnabled(),
                 hasLogFiles = interactor.hasLogFiles(),
                 logFilesSize = interactor.getLogFilesSize(),
@@ -75,6 +76,11 @@ class SettingsScreenViewModel @Inject constructor(
             launch {
                 interactor.observeNotifyWhatsNewEnabled().collect { enabled ->
                     mutableState.update { it.copy(notifyWhatsNewEnabled = enabled) }
+                }
+            }
+            launch {
+                interactor.observeSmartSearchEnabled().collect { enabled ->
+                    mutableState.update { it.copy(smartSearchEnabled = enabled) }
                 }
             }
             launch {
@@ -127,6 +133,10 @@ class SettingsScreenViewModel @Inject constructor(
         viewModelScope.launch {
             interactor.setNotifyWhatsNewEnabled(enabled)
         }
+    }
+
+    override fun setSmartSearchEnabled(enabled: Boolean) {
+        interactor.setSmartSearchEnabled(enabled)
     }
 
     override fun setFileLoggingEnabled(enabled: Boolean) {
@@ -210,18 +220,21 @@ class SettingsScreenViewModel @Inject constructor(
         fun isCacheEnabled(): Boolean
         fun getStorageInfo(): StorageInfo?
         fun isNotifyWhatsNewEnabled(): Boolean
+        fun isSmartSearchEnabled(): Boolean
         fun observeThemeMode(): kotlinx.coroutines.flow.Flow<ThemeMode>
         fun observeColorPalette(): kotlinx.coroutines.flow.Flow<ColorPalette>
         fun observeFontFamily(): kotlinx.coroutines.flow.Flow<AppFontFamily>
         fun observeCacheEnabled(): kotlinx.coroutines.flow.Flow<Boolean>
         fun observeStorageInfo(): kotlinx.coroutines.flow.Flow<StorageInfo>
         fun observeNotifyWhatsNewEnabled(): kotlinx.coroutines.flow.Flow<Boolean>
+        fun observeSmartSearchEnabled(): kotlinx.coroutines.flow.Flow<Boolean>
         fun observeFileLoggingEnabled(): kotlinx.coroutines.flow.Flow<Boolean>
         suspend fun setThemeMode(themeMode: ThemeMode)
         suspend fun setColorPalette(colorPalette: ColorPalette)
         suspend fun setFontFamily(fontFamily: AppFontFamily)
         suspend fun setCacheEnabled(enabled: Boolean)
         suspend fun setNotifyWhatsNewEnabled(enabled: Boolean)
+        fun setSmartSearchEnabled(enabled: Boolean)
         suspend fun setFileLoggingEnabled(enabled: Boolean)
         fun isFileLoggingEnabled(): Boolean
         fun hasLogFiles(): Boolean

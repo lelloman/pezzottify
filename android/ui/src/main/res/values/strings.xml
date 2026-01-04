@@ -206,6 +206,12 @@
     <string name="notify_whatsnew_description">Receive notifications when new music is added to the catalog</string>
     <!-- NOTIFY WHAT'S NEW SECTION -->
 
+    <!-- SMART SEARCH SECTION -->
+    <string name="search_section">Search</string>
+    <string name="smart_search">Smart search</string>
+    <string name="smart_search_description">Use intelligent result grouping and enrichment. When disabled, uses classic flat search results.</string>
+    <!-- SMART SEARCH SECTION -->
+
     <!-- CREATE PLAYLIST DIALOG -->
     <string name="create_playlist">Create playlist</string>
     <string name="create_playlist_prompt">Enter a name for your new playlist</string>
@@ -272,6 +278,12 @@
     <string name="external_artist_not_available">External artist view not available yet</string>
     <string name="external_track_not_available">External track view not available yet</string>
     <string name="no_results_for_query">No results for \"%1$s\"</string>
+    <!-- STREAMING SEARCH -->
+    <string name="streaming_search_popular_tracks">Popular Tracks</string>
+    <string name="streaming_search_albums">Albums</string>
+    <string name="streaming_search_album_tracks">Album Tracks</string>
+    <string name="streaming_search_related_artists">Related Artists</string>
+    <string name="streaming_search_more_results">More Results</string>
     <!-- SEARCH SCREEN -->
 
     <!-- ALBUM SCREEN -->

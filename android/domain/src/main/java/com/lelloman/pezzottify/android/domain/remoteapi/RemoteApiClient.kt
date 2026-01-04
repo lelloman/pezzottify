@@ -15,6 +15,7 @@ import com.lelloman.pezzottify.android.domain.remoteapi.response.PopularContentR
 import com.lelloman.pezzottify.android.domain.remoteapi.response.RemoteApiResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.RequestAlbumResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.SearchResponse
+import com.lelloman.pezzottify.android.domain.remoteapi.response.SearchSection
 import com.lelloman.pezzottify.android.domain.remoteapi.response.SkeletonDeltaResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.SkeletonVersionResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.SyncEventsResponse
@@ -22,6 +23,7 @@ import com.lelloman.pezzottify.android.domain.remoteapi.response.SyncStateRespon
 import com.lelloman.pezzottify.android.domain.remoteapi.response.TrackResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.WhatsNewResponse
 import com.lelloman.pezzottify.android.domain.sync.UserSetting
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.serialization.Serializable
 
@@ -71,6 +73,13 @@ interface RemoteApiClient {
         query: String,
         filters: List<SearchFilter>? = null
     ): RemoteApiResponse<SearchResponse>
+
+    /**
+     * Perform streaming search with SSE.
+     * Returns a Flow that emits SearchSection objects as they arrive.
+     * The stream completes when a Done section is received.
+     */
+    fun streamingSearch(query: String): Flow<SearchSection>
 
     suspend fun getLikedContent(contentType: String): RemoteApiResponse<List<String>>
 

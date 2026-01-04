@@ -16,8 +16,10 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onCompletion
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -51,6 +53,16 @@ class SearchScreenViewModel(
     private var currentQuery: String = ""
 
     init {
+        // Initialize and observe streaming search state from settings
+        mutableState.value = mutableState.value.copy(
+            isStreamingSearchEnabled = interactor.isStreamingSearchEnabled()
+        )
+        viewModelScope.launch(coroutineContext) {
+            interactor.observeStreamingSearchEnabled().collect { enabled ->
+                mutableState.value = mutableState.value.copy(isStreamingSearchEnabled = enabled)
+            }
+        }
+
         viewModelScope.launch(coroutineContext) {
             interactor.getRecentlyViewedContent(MAX_RECENTLY_VIEWED_ITEMS)
                 .map { it.map(::resolveRecentlyViewedContent) }
@@ -153,13 +165,18 @@ class SearchScreenViewModel(
                     return@launch
                 }
 
-                performCatalogSearch()
+                if (interactor.isStreamingSearchEnabled()) {
+                    performStreamingSearch()
+                } else {
+                    performCatalogSearch()
+                }
             }
         } else {
             mutableState.value = mutableState.value.copy(
                 isLoading = false,
                 searchResults = null,
                 searchErrorRes = null,
+                streamingSections = emptyList(),
             )
         }
     }
@@ -176,6 +193,31 @@ class SearchScreenViewModel(
                 ?.map { contentResolver.resolveSearchResult(it.first, it.second) },
             searchErrorRes = searchResultsResult.exceptionOrNull()?.let { R.string.error }
         )
+    }
+
+    private suspend fun performStreamingSearch() {
+        // Clear previous results and start streaming
+        mutableState.value = mutableState.value.copy(
+            streamingSections = emptyList(),
+            searchResults = null,
+            searchErrorRes = null,
+        )
+
+        interactor.streamingSearch(currentQuery)
+            .catch { e ->
+                mutableState.value = mutableState.value.copy(
+                    isLoading = false,
+                    searchErrorRes = R.string.error,
+                )
+            }
+            .onCompletion {
+                mutableState.value = mutableState.value.copy(isLoading = false)
+            }
+            .collect { section ->
+                mutableState.value = mutableState.value.copy(
+                    streamingSections = mutableState.value.streamingSections + section
+                )
+            }
     }
 
     private fun SearchFilter.toInteractorFilter(): InteractorSearchFilter = when (this) {
@@ -361,6 +403,28 @@ class SearchScreenViewModel(
             query: String,
             filters: List<InteractorSearchFilter>? = null
         ): Result<List<Pair<String, SearchedItemType>>>
+
+        /**
+         * Perform streaming search with SSE.
+         * Returns a Flow of StreamingSearchSection objects as they arrive from the server.
+         */
+        fun streamingSearch(query: String): Flow<StreamingSearchSection>
+
+        /**
+         * Check if streaming search is enabled (user preference).
+         */
+        fun isStreamingSearchEnabled(): Boolean
+
+        /**
+         * Observe streaming search enabled preference changes.
+         */
+        fun observeStreamingSearchEnabled(): Flow<Boolean>
+
+        /**
+         * Set streaming search enabled preference.
+         */
+        fun setStreamingSearchEnabled(enabled: Boolean)
+
         suspend fun getRecentlyViewedContent(maxCount: Int): Flow<List<RecentlyViewedContent>>
         fun getSearchHistoryEntries(maxCount: Int): Flow<List<SearchHistoryEntry>>
         fun logSearchHistoryEntry(query: String, contentType: SearchHistoryEntryType, contentId: String)

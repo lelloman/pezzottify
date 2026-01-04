@@ -205,5 +205,8 @@ class ArtistScreenViewModelTest {
 
         override fun resolveArtistDiscography(artistId: String): Flow<Content<ArtistDiscography>> =
             discographyResults[artistId] ?: flowOf(Content.Loading(artistId))
+
+        override fun buildImageUrl(displayImageId: String): String =
+            "http://example.com/image/$displayImageId"
     }
 }

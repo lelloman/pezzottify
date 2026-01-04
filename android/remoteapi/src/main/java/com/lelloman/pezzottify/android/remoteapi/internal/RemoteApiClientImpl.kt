@@ -18,6 +18,7 @@ import com.lelloman.pezzottify.android.domain.remoteapi.response.PopularContentR
 import com.lelloman.pezzottify.android.domain.remoteapi.response.RemoteApiResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.RequestAlbumResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.SearchResponse
+import com.lelloman.pezzottify.android.domain.remoteapi.response.SearchSection
 import com.lelloman.pezzottify.android.domain.remoteapi.response.SkeletonDeltaResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.SkeletonVersionResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.SyncEventsResponse
@@ -34,13 +35,25 @@ import com.lelloman.pezzottify.android.remoteapi.internal.requests.SearchRequest
 import com.lelloman.pezzottify.android.remoteapi.internal.requests.SubmitBugReportRequest
 import com.lelloman.pezzottify.android.remoteapi.internal.requests.UpdatePlaylistRequest
 import com.lelloman.pezzottify.android.remoteapi.internal.requests.UpdateUserSettingsRequest
+import com.lelloman.pezzottify.android.logger.Logger
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.withContext
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import java.io.BufferedReader
+import java.io.InputStreamReader
+import java.net.URLEncoder
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonNamingStrategy
@@ -52,11 +65,12 @@ import retrofit2.Retrofit
 import retrofit2.converter.kotlinx.serialization.asConverterFactory
 
 internal class RemoteApiClientImpl(
-    hostUrlProvider: RemoteApiClient.HostUrlProvider,
+    private val hostUrlProvider: RemoteApiClient.HostUrlProvider,
     private val okHttpClientFactory: OkHttpClientFactory,
     private val credentialsProvider: RemoteApiCredentialsProvider,
     coroutineScope: CoroutineScope = GlobalScope,
     private val interceptors: List<Interceptor> = emptyList(),
+    private val logger: Logger? = null,
 ) : RemoteApiClient {
 
     private val authToken get() = credentialsProvider.authToken
@@ -437,6 +451,60 @@ internal class RemoteApiClientImpl(
             )
             .returnFromRetrofitResponse()
     }
+
+    // Streaming search (SSE)
+
+    override fun streamingSearch(query: String): Flow<SearchSection> = flow {
+        val baseUrl = hostUrlProvider.hostUrl.first { isValidHttpUrl(it) }
+        val encodedQuery = URLEncoder.encode(query, "UTF-8")
+        val url = "$baseUrl/v1/content/search/stream?q=$encodedQuery"
+
+        val request = Request.Builder()
+            .url(url)
+            .header("Authorization", authToken)
+            .header("Accept", "text/event-stream")
+            .get()
+            .build()
+
+        val client = okHttpClientFactory.createBuilder(baseUrl).build()
+        val response = client.newCall(request).execute()
+
+        if (!response.isSuccessful) {
+            throw Exception("SSE request failed: ${response.code}")
+        }
+
+        val body = response.body ?: throw Exception("No response body")
+        val reader = BufferedReader(InputStreamReader(body.byteStream()))
+
+        try {
+            var line: String?
+            while (reader.readLine().also { line = it } != null) {
+                val currentLine = line ?: continue
+
+                // SSE format: "data: {json}\n\n"
+                if (currentLine.startsWith("data: ")) {
+                    val jsonData = currentLine.removePrefix("data: ").trim()
+                    if (jsonData.isNotEmpty()) {
+                        try {
+                            val section = jsonConverter.decodeFromString<SearchSection>(jsonData)
+                            emit(section)
+
+                            // Stop reading when done
+                            if (section is SearchSection.Done) {
+                                break
+                            }
+                        } catch (e: Exception) {
+                            logger?.warn("SSE parsing error for data: $jsonData", e)
+                        }
+                    }
+                }
+                // Ignore other lines (empty lines, comments, etc.)
+            }
+        } finally {
+            reader.close()
+            body.close()
+        }
+    }.flowOn(Dispatchers.IO)
 
     private suspend fun <T> catchingNetworkError(block: suspend () -> RemoteApiResponse<T>): RemoteApiResponse<T> =
         try {

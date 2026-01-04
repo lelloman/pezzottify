@@ -177,36 +177,48 @@ fun SearchScreenContent(
                 Spacer(modifier = Modifier.height(Spacing.Large))
             }
         } else {
-            // Catalog search results
-            LazyColumn(
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxWidth()
-            ) {
-                if (state.isLoading && state.searchResults == null) {
-                    item {
-                        SearchLoadingIndicator()
-                    }
-                } else {
-                    state.searchResults?.let { searchResults ->
-                        if (searchResults.isEmpty()) {
-                            item {
-                                EmptySearchResults(query = state.query)
-                            }
-                        } else {
-                            items(searchResults) { searchResult ->
-                                when (val result = searchResult.collectAsState(initial = null).value) {
-                                    is Content.Resolved -> when (result.data) {
-                                        is SearchResultContent.Album -> AlbumSearchResult(result.data, actions)
-                                        is SearchResultContent.Track -> TrackSearchResult(result.data, actions)
-                                        is SearchResultContent.Artist -> ArtistSearchResult(
-                                            result.data,
-                                            actions
-                                        )
-                                    }
+            // Catalog search results - use streaming or classic based on setting
+            if (state.isStreamingSearchEnabled) {
+                StreamingSearchResults(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth(),
+                    sections = state.streamingSections,
+                    isLoading = state.isLoading,
+                    query = state.query,
+                    actions = actions,
+                )
+            } else {
+                LazyColumn(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth()
+                ) {
+                    if (state.isLoading && state.searchResults == null) {
+                        item {
+                            SearchLoadingIndicator()
+                        }
+                    } else {
+                        state.searchResults?.let { searchResults ->
+                            if (searchResults.isEmpty()) {
+                                item {
+                                    EmptySearchResults(query = state.query)
+                                }
+                            } else {
+                                items(searchResults) { searchResult ->
+                                    when (val result = searchResult.collectAsState(initial = null).value) {
+                                        is Content.Resolved -> when (result.data) {
+                                            is SearchResultContent.Album -> AlbumSearchResult(result.data, actions)
+                                            is SearchResultContent.Track -> TrackSearchResult(result.data, actions)
+                                            is SearchResultContent.Artist -> ArtistSearchResult(
+                                                result.data,
+                                                actions
+                                            )
+                                        }
 
-                                    null, is Content.Loading -> LoadingSearchResult()
-                                    is Content.Error -> ErrorSearchResult()
+                                        null, is Content.Loading -> LoadingSearchResult()
+                                        is Content.Error -> ErrorSearchResult()
+                                    }
                                 }
                             }
                         }
@@ -822,6 +834,467 @@ private fun WhatsNewAlbumCardError() {
                 style = MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.onErrorContainer
             )
+        }
+    }
+}
+
+// ========== Streaming Search Results Components ==========
+
+@Composable
+private fun StreamingSearchResults(
+    modifier: Modifier = Modifier,
+    sections: List<StreamingSearchSection>,
+    isLoading: Boolean,
+    query: String,
+    actions: SearchScreenActions,
+) {
+    LazyColumn(modifier = modifier) {
+        // Show loading if no sections yet
+        if (isLoading && sections.isEmpty()) {
+            item {
+                SearchLoadingIndicator()
+            }
+        }
+
+        // Check for empty results (Done section received but no content)
+        val hasDone = sections.any { it is StreamingSearchSection.Done }
+        val hasContent = sections.any { section ->
+            section is StreamingSearchSection.PrimaryMatch ||
+            section is StreamingSearchSection.MoreResults ||
+            section is StreamingSearchSection.AllResults
+        }
+
+        if (hasDone && !hasContent) {
+            item {
+                EmptySearchResults(query = query)
+            }
+        }
+
+        // Render each section
+        sections.forEach { section ->
+            when (section) {
+                is StreamingSearchSection.PrimaryMatch -> {
+                    item(key = "primary_${section.type}_${section.id}") {
+                        PrimaryMatchCard(section, actions)
+                    }
+                }
+                is StreamingSearchSection.PopularTracks -> {
+                    item(key = "popular_${section.targetId}") {
+                        SectionHeader(text = stringResource(R.string.streaming_search_popular_tracks))
+                    }
+                    items(
+                        items = section.tracks,
+                        key = { "popular_track_${it.id}" }
+                    ) { track ->
+                        StreamingTrackRow(track, actions)
+                    }
+                }
+                is StreamingSearchSection.ArtistAlbums -> {
+                    item(key = "albums_${section.targetId}") {
+                        SectionHeader(text = stringResource(R.string.streaming_search_albums))
+                    }
+                    item(key = "albums_row_${section.targetId}") {
+                        AlbumsHorizontalRow(section.albums, actions)
+                    }
+                }
+                is StreamingSearchSection.AlbumTracks -> {
+                    item(key = "album_tracks_${section.targetId}") {
+                        SectionHeader(text = stringResource(R.string.streaming_search_album_tracks))
+                    }
+                    items(
+                        items = section.tracks,
+                        key = { "album_track_${it.id}" }
+                    ) { track ->
+                        StreamingTrackRow(track, actions)
+                    }
+                }
+                is StreamingSearchSection.RelatedArtists -> {
+                    item(key = "related_${section.targetId}") {
+                        SectionHeader(text = stringResource(R.string.streaming_search_related_artists))
+                    }
+                    item(key = "related_row_${section.targetId}") {
+                        ArtistsHorizontalRow(section.artists, actions)
+                    }
+                }
+                is StreamingSearchSection.MoreResults -> {
+                    item(key = "more_results_header") {
+                        SectionHeader(text = stringResource(R.string.streaming_search_more_results))
+                    }
+                    items(
+                        items = section.results,
+                        key = { "more_result_${getResultId(it)}" }
+                    ) { result ->
+                        StreamingSearchResultRow(result, actions)
+                    }
+                }
+                is StreamingSearchSection.AllResults -> {
+                    items(
+                        items = section.results,
+                        key = { "result_${getResultId(it)}" }
+                    ) { result ->
+                        StreamingSearchResultRow(result, actions)
+                    }
+                }
+                is StreamingSearchSection.Done -> {
+                    // Could show timing info if desired
+                }
+            }
+        }
+
+        // Show loading indicator at bottom if still streaming
+        if (isLoading && sections.isNotEmpty()) {
+            item(key = "loading_more") {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(Spacing.Medium),
+                    contentAlignment = Alignment.Center
+                ) {
+                    PezzottifyLoader(size = LoaderSize.Small)
+                }
+            }
+        }
+    }
+}
+
+private fun getResultId(result: StreamingSearchResult): String = when (result) {
+    is StreamingSearchResult.Artist -> "artist_${result.id}"
+    is StreamingSearchResult.Album -> "album_${result.id}"
+    is StreamingSearchResult.Track -> "track_${result.id}"
+}
+
+@Composable
+private fun SectionHeader(text: String) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.titleMedium,
+        color = MaterialTheme.colorScheme.onSurface,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = Spacing.Medium)
+            .padding(top = Spacing.Large, bottom = Spacing.Small)
+    )
+}
+
+@Composable
+private fun PrimaryMatchCard(
+    match: StreamingSearchSection.PrimaryMatch,
+    actions: SearchScreenActions
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = Spacing.Medium, vertical = Spacing.Small)
+            .clickable {
+                when (match.type) {
+                    PrimaryMatchType.Artist -> actions.clickOnArtistSearchResult(match.id)
+                    PrimaryMatchType.Album -> actions.clickOnAlbumSearchResult(match.id)
+                    PrimaryMatchType.Track -> actions.clickOnTrackSearchResult(match.id)
+                }
+            },
+        elevation = CardDefaults.cardElevation(defaultElevation = Elevation.Medium),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.primaryContainer
+        ),
+        shape = RoundedCornerShape(CornerRadius.Medium)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(Spacing.Medium),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            val imageShape = when (match.type) {
+                PrimaryMatchType.Artist -> PezzottifyImageShape.FillWidthCircle
+                else -> PezzottifyImageShape.FillWidthSquare
+            }
+            NullablePezzottifyImage(
+                url = match.imageUrl,
+                shape = imageShape,
+                modifier = Modifier.size(ComponentSize.ImageThumbMedium),
+                placeholder = if (match.type == PrimaryMatchType.Artist) PezzottifyImagePlaceholder.Head else PezzottifyImagePlaceholder.GenericImage
+            )
+            Spacer(modifier = Modifier.width(Spacing.Medium))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = match.name,
+                    style = MaterialTheme.typography.titleLarge,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+                if (!match.artistNames.isNullOrEmpty()) {
+                    Text(
+                        text = match.artistNames.joinToString(", "),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+                match.year?.let {
+                    Text(
+                        text = it.toString(),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.5f)
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun StreamingTrackRow(
+    track: StreamingTrackSummary,
+    actions: SearchScreenActions
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { actions.clickOnTrackSearchResult(track.id) }
+            .padding(horizontal = Spacing.Medium, vertical = Spacing.Small),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        NullablePezzottifyImage(
+            url = track.imageUrl,
+            shape = PezzottifyImageShape.SmallSquare,
+            modifier = Modifier.size(ComponentSize.ImageThumbSmall)
+        )
+        Spacer(modifier = Modifier.width(Spacing.Medium))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = track.name,
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                text = track.artistNames.joinToString(", "),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+        DurationText(
+            durationSeconds = (track.durationMs / 1000).toInt(),
+            modifier = Modifier.padding(start = Spacing.Small)
+        )
+    }
+}
+
+@Composable
+private fun AlbumsHorizontalRow(
+    albums: List<StreamingAlbumSummary>,
+    actions: SearchScreenActions
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState())
+            .padding(horizontal = Spacing.Medium),
+        horizontalArrangement = Arrangement.spacedBy(Spacing.Small)
+    ) {
+        albums.forEach { album ->
+            StreamingAlbumCard(album, actions)
+        }
+    }
+}
+
+@Composable
+private fun StreamingAlbumCard(
+    album: StreamingAlbumSummary,
+    actions: SearchScreenActions
+) {
+    Card(
+        modifier = Modifier
+            .width(120.dp)
+            .clickable { actions.clickOnAlbumSearchResult(album.id) },
+        shape = RoundedCornerShape(CornerRadius.Small),
+        elevation = CardDefaults.cardElevation(defaultElevation = Elevation.Small)
+    ) {
+        Column {
+            NullablePezzottifyImage(
+                url = album.imageUrl,
+                shape = PezzottifyImageShape.FullSize,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .aspectRatio(1f)
+                    .clip(
+                        RoundedCornerShape(
+                            topStart = CornerRadius.Small,
+                            topEnd = CornerRadius.Small,
+                            bottomStart = 0.dp,
+                            bottomEnd = 0.dp
+                        )
+                    )
+            )
+            Column(modifier = Modifier.padding(Spacing.Small)) {
+                Text(
+                    text = album.name,
+                    style = MaterialTheme.typography.titleSmall,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                album.releaseYear?.let {
+                    Text(
+                        text = it.toString(),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ArtistsHorizontalRow(
+    artists: List<StreamingArtistSummary>,
+    actions: SearchScreenActions
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState())
+            .padding(horizontal = Spacing.Medium),
+        horizontalArrangement = Arrangement.spacedBy(Spacing.Small)
+    ) {
+        artists.forEach { artist ->
+            StreamingArtistCard(artist, actions)
+        }
+    }
+}
+
+@Composable
+private fun StreamingArtistCard(
+    artist: StreamingArtistSummary,
+    actions: SearchScreenActions
+) {
+    Column(
+        modifier = Modifier
+            .width(100.dp)
+            .clickable { actions.clickOnArtistSearchResult(artist.id) },
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        NullablePezzottifyImage(
+            url = artist.imageUrl,
+            shape = PezzottifyImageShape.FillWidthCircle,
+            placeholder = PezzottifyImagePlaceholder.Head,
+            modifier = Modifier.size(80.dp)
+        )
+        Spacer(modifier = Modifier.height(Spacing.Small))
+        Text(
+            text = artist.name,
+            style = MaterialTheme.typography.bodySmall,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+            color = MaterialTheme.colorScheme.onSurface
+        )
+    }
+}
+
+@Composable
+private fun StreamingSearchResultRow(
+    result: StreamingSearchResult,
+    actions: SearchScreenActions
+) {
+    when (result) {
+        is StreamingSearchResult.Artist -> {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { actions.clickOnArtistSearchResult(result.id) }
+                    .padding(horizontal = Spacing.Medium, vertical = Spacing.Small),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                NullablePezzottifyImage(
+                    url = result.imageUrl,
+                    shape = PezzottifyImageShape.SmallCircle,
+                    placeholder = PezzottifyImagePlaceholder.Head,
+                    modifier = Modifier.size(ComponentSize.ImageThumbSmall)
+                )
+                Spacer(modifier = Modifier.width(Spacing.Medium))
+                Text(
+                    text = result.name,
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+        }
+        is StreamingSearchResult.Album -> {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { actions.clickOnAlbumSearchResult(result.id) }
+                    .padding(horizontal = Spacing.Medium, vertical = Spacing.Small),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                NullablePezzottifyImage(
+                    url = result.imageUrl,
+                    shape = PezzottifyImageShape.SmallSquare,
+                    modifier = Modifier.size(ComponentSize.ImageThumbSmall)
+                )
+                Spacer(modifier = Modifier.width(Spacing.Medium))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = result.name,
+                        style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Text(
+                        text = result.artistNames.joinToString(", "),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
+        }
+        is StreamingSearchResult.Track -> {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { actions.clickOnTrackSearchResult(result.id) }
+                    .padding(horizontal = Spacing.Medium, vertical = Spacing.Small),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                NullablePezzottifyImage(
+                    url = result.imageUrl,
+                    shape = PezzottifyImageShape.SmallSquare,
+                    modifier = Modifier.size(ComponentSize.ImageThumbSmall)
+                )
+                Spacer(modifier = Modifier.width(Spacing.Medium))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = result.name,
+                        style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Text(
+                        text = result.artistNames.joinToString(", "),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+                DurationText(
+                    durationSeconds = (result.durationMs / 1000).toInt(),
+                    modifier = Modifier.padding(start = Spacing.Small)
+                )
+            }
         }
     }
 }

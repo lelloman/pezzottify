@@ -323,6 +323,7 @@ class SettingsScreenViewModelTest {
         override fun getLogFilesSize(): String = _logFilesSize
         override fun getBaseUrl(): String = _baseUrl
         override fun isNotifyWhatsNewEnabled(): Boolean = false
+        override fun isSmartSearchEnabled(): Boolean = false
 
         override fun observeThemeMode(): Flow<ThemeMode> = themeModeFlow
         override fun observeColorPalette(): Flow<ColorPalette> = colorPaletteFlow
@@ -331,6 +332,7 @@ class SettingsScreenViewModelTest {
         override fun observeStorageInfo(): Flow<StorageInfo> = storageInfoFlow
         override fun observeFileLoggingEnabled(): Flow<Boolean> = fileLoggingEnabledFlow
         override fun observeNotifyWhatsNewEnabled(): Flow<Boolean> = MutableStateFlow(false)
+        override fun observeSmartSearchEnabled(): Flow<Boolean> = MutableStateFlow(false)
 
         override suspend fun setThemeMode(themeMode: ThemeMode) {
             lastSetThemeMode = themeMode
@@ -349,6 +351,10 @@ class SettingsScreenViewModelTest {
         }
 
         override suspend fun setNotifyWhatsNewEnabled(enabled: Boolean) {
+            // no-op for tests
+        }
+
+        override fun setSmartSearchEnabled(enabled: Boolean) {
             // no-op for tests
         }
 
