@@ -34,6 +34,7 @@
     <string name="home_navigation_item_description">Home</string>
     <string name="search_navigation_item_description">Search</string>
     <string name="library_navigation_item_description">Library</string>
+    <string name="assistant_navigation_item_description">AI</string>
     <!-- MAIN SCREEN -->
 
     <!-- HOME SCREEN -->

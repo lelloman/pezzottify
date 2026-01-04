@@ -158,6 +158,7 @@ dependencies {
     implementation(platform(libs.okhttp.bom))
     implementation(libs.okhttp)
     implementation(libs.appauth)
+    implementation(libs.room.runtime)
 
     implementation(project(":ui"))
     implementation(project(":domain"))
@@ -165,6 +166,8 @@ dependencies {
     implementation(project(":localdata"))
     implementation(project(":player"))
     implementation(project(":logger"))
+    implementation(project(":simple-ai-assistant"))
+    implementation(project(":simple-ai-provider-ollama"))
     debugImplementation(project(":debuginterface"))
 
     testImplementation(libs.junit)

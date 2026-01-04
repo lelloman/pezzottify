@@ -16,6 +16,7 @@ import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Search
@@ -79,6 +80,7 @@ import com.lelloman.pezzottify.android.ui.screen.main.library.LibraryScreen
 import com.lelloman.pezzottify.android.ui.screen.main.profile.ProfileDrawerContent
 import com.lelloman.pezzottify.android.ui.screen.main.profile.ProfileScreen
 import com.lelloman.pezzottify.android.ui.screen.main.profile.stylesettings.StyleSettingsScreen
+import com.lelloman.pezzottify.android.ui.screen.main.assistant.AssistantScreen
 import com.lelloman.pezzottify.android.ui.screen.main.search.SearchScreen
 import com.lelloman.pezzottify.android.ui.screen.main.settings.SettingsScreen
 import com.lelloman.pezzottify.android.ui.screen.main.settings.bugreport.BugReportScreen
@@ -103,6 +105,11 @@ enum class BottomNavigationRoute(
         route = Screen.Main.Library,
         icon = Icons.Filled.Menu,
         description = R.string.library_navigation_item_description,
+    ),
+    Assistant(
+        route = Screen.Main.Assistant,
+        icon = Icons.Filled.AutoAwesome,
+        description = R.string.assistant_navigation_item_description,
     );
 
     val routeString: String = route::class.qualifiedName.orEmpty()
@@ -243,6 +250,7 @@ private fun MainScreenContent(state: MainScreenState, actions: MainScreenActions
                 }
                 composable<Screen.Main.Search> { SearchScreen(navController) }
                 composable<Screen.Main.Library> { LibraryScreen(navController) }
+                composable<Screen.Main.Assistant> { AssistantScreen() }
 
                 composable<Screen.Main.Home.Profile> {
                     ProfileScreen(navController, rootNavController)
