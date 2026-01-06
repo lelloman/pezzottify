@@ -45,6 +45,9 @@ struct SearchBody {
     #[serde(default)]
     pub resolve: bool,
 
+    /// Maximum number of results to return (default: 30)
+    pub limit: Option<usize>,
+
     pub filters: Option<Vec<SearchFilter>>,
 }
 
@@ -262,6 +265,7 @@ async fn search(
     State(server_state): State<ServerState>,
     Json(payload): Json<SearchBody>,
 ) -> impl IntoResponse {
+    let limit = payload.limit.unwrap_or(30).min(100); // Cap at 100 max
     let filters = payload.filters.map(|v| {
         v.iter()
             .map(|i| match i {
@@ -276,7 +280,7 @@ async fn search(
             .search_vault
             .lock()
             .unwrap()
-            .search(payload.query.as_str(), 30, filters);
+            .search(payload.query.as_str(), limit, filters);
 
     // Apply relevance filtering as post-processing step
     let relevance_filter = get_relevance_filter(&server_state);

@@ -52,7 +52,7 @@ const isSettingsRoute = computed(() => route.name === "settings");
 const isRequestsRoute = computed(() => route.name === "requests");
 
 const fetchCatalogResults = async (query, filters) => {
-  const requestBody = { query, resolve: true };
+  const requestBody = { query, resolve: true, limit: 15 };
   if (filters) {
     requestBody.filters = filters;
   }
