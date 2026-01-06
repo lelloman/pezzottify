@@ -869,34 +869,11 @@ async fn home(session: Option<Session>, State(state): State<ServerState>) -> imp
 }
 
 async fn get_artist(
-    session: Session,
+    _session: Session,
     State(catalog_store): State<GuardedCatalogStore>,
-    State(proxy): State<super::state::OptionalProxy>,
     Path(id): Path<String>,
 ) -> Response {
-    debug!(
-        "get_artist: id={}, user_id={}, proxy_available={}",
-        id,
-        session.user_id,
-        proxy.is_some()
-    );
-
-    // If proxy is available, ensure artist has complete data
-    if let Some(ref proxy) = proxy {
-        debug!(
-            "get_artist: calling proxy.ensure_artist_complete for {}",
-            id
-        );
-        if let Err(e) = proxy
-            .ensure_artist_complete(&id, session.user_id, &session.permissions)
-            .await
-        {
-            warn!("Proxy fetch failed for artist {}: {}", id, e);
-            // Continue serving what we have
-        }
-    } else {
-        debug!("get_artist: proxy not available for {}", id);
-    }
+    debug!("get_artist: id={}", id);
 
     match catalog_store.get_artist_json(&id) {
         Ok(Some(artist)) => Json(artist).into_response(),
@@ -906,22 +883,10 @@ async fn get_artist(
 }
 
 async fn get_album(
-    session: Session,
+    _session: Session,
     State(catalog_store): State<GuardedCatalogStore>,
-    State(proxy): State<super::state::OptionalProxy>,
     Path(id): Path<String>,
 ) -> Response {
-    // If proxy is available, ensure album has complete data
-    if let Some(ref proxy) = proxy {
-        if let Err(e) = proxy
-            .ensure_album_complete(&id, session.user_id, &session.permissions)
-            .await
-        {
-            warn!("Proxy fetch failed for album {}: {}", id, e);
-            // Continue serving what we have
-        }
-    }
-
     match catalog_store.get_album_json(&id) {
         Ok(Some(album)) => Json(album).into_response(),
         Ok(None) => StatusCode::NOT_FOUND.into_response(),
@@ -930,21 +895,10 @@ async fn get_album(
 }
 
 async fn get_resolved_album(
-    session: Session,
+    _session: Session,
     State(catalog_store): State<GuardedCatalogStore>,
-    State(proxy): State<super::state::OptionalProxy>,
     Path(id): Path<String>,
 ) -> Response {
-    // If proxy is available, ensure album has complete data
-    if let Some(ref proxy) = proxy {
-        if let Err(e) = proxy
-            .ensure_album_complete(&id, session.user_id, &session.permissions)
-            .await
-        {
-            warn!("Proxy fetch failed for album {}: {}", id, e);
-        }
-    }
-
     match catalog_store.get_resolved_album_json(&id) {
         Ok(Some(album)) => Json(album).into_response(),
         Ok(None) => StatusCode::NOT_FOUND.into_response(),
@@ -953,21 +907,10 @@ async fn get_resolved_album(
 }
 
 async fn get_artist_discography(
-    session: Session,
+    _session: Session,
     State(catalog_store): State<GuardedCatalogStore>,
-    State(proxy): State<super::state::OptionalProxy>,
     Path(id): Path<String>,
 ) -> Response {
-    // If proxy is available, ensure artist has complete data
-    if let Some(ref proxy) = proxy {
-        if let Err(e) = proxy
-            .ensure_artist_complete(&id, session.user_id, &session.permissions)
-            .await
-        {
-            warn!("Proxy fetch failed for artist discography {}: {}", id, e);
-        }
-    }
-
     match catalog_store.get_artist_discography_json(&id) {
         Ok(None) => StatusCode::NOT_FOUND.into_response(),
         Ok(Some(discography)) => Json(discography).into_response(),
@@ -1027,190 +970,107 @@ async fn get_image(
 
 // =============================================================================
 // Catalog Editing Handlers
+// NOTE: Disabled for Spotify schema - catalog is read-only
 // =============================================================================
 
 async fn create_artist(
     _session: Session,
-    State(catalog_store): State<GuardedCatalogStore>,
-    Json(data): Json<serde_json::Value>,
+    State(_catalog_store): State<GuardedCatalogStore>,
+    Json(_data): Json<serde_json::Value>,
 ) -> Response {
-    match catalog_store.create_artist(data) {
-        Ok(artist) => (StatusCode::CREATED, Json(artist)).into_response(),
-        Err(err) => (StatusCode::BAD_REQUEST, format!("{}", err)).into_response(),
-    }
+    (StatusCode::NOT_IMPLEMENTED, "Catalog editing not available - Spotify catalog is read-only").into_response()
 }
 
 async fn update_artist(
     _session: Session,
-    State(catalog_store): State<GuardedCatalogStore>,
-    Path(id): Path<String>,
-    Json(data): Json<serde_json::Value>,
+    State(_catalog_store): State<GuardedCatalogStore>,
+    Path(_id): Path<String>,
+    Json(_data): Json<serde_json::Value>,
 ) -> Response {
-    match catalog_store.update_artist(&id, data) {
-        Ok(artist) => Json(artist).into_response(),
-        Err(err) => {
-            if err.to_string().contains("not found") {
-                StatusCode::NOT_FOUND.into_response()
-            } else {
-                (StatusCode::BAD_REQUEST, format!("{}", err)).into_response()
-            }
-        }
-    }
+    (StatusCode::NOT_IMPLEMENTED, "Catalog editing not available - Spotify catalog is read-only").into_response()
 }
 
 async fn delete_artist(
     _session: Session,
-    State(catalog_store): State<GuardedCatalogStore>,
-    Path(id): Path<String>,
+    State(_catalog_store): State<GuardedCatalogStore>,
+    Path(_id): Path<String>,
 ) -> Response {
-    match catalog_store.delete_artist(&id) {
-        Ok(()) => StatusCode::NO_CONTENT.into_response(),
-        Err(err) => {
-            if err.to_string().contains("not found") {
-                StatusCode::NOT_FOUND.into_response()
-            } else {
-                (StatusCode::INTERNAL_SERVER_ERROR, format!("{}", err)).into_response()
-            }
-        }
-    }
+    (StatusCode::NOT_IMPLEMENTED, "Catalog editing not available - Spotify catalog is read-only").into_response()
 }
 
 async fn create_album(
     _session: Session,
-    State(catalog_store): State<GuardedCatalogStore>,
-    Json(data): Json<serde_json::Value>,
+    State(_catalog_store): State<GuardedCatalogStore>,
+    Json(_data): Json<serde_json::Value>,
 ) -> Response {
-    match catalog_store.create_album(data) {
-        Ok(album) => (StatusCode::CREATED, Json(album)).into_response(),
-        Err(err) => (StatusCode::BAD_REQUEST, format!("{}", err)).into_response(),
-    }
+    (StatusCode::NOT_IMPLEMENTED, "Catalog editing not available - Spotify catalog is read-only").into_response()
 }
 
 async fn update_album(
     _session: Session,
-    State(catalog_store): State<GuardedCatalogStore>,
-    Path(id): Path<String>,
-    Json(data): Json<serde_json::Value>,
+    State(_catalog_store): State<GuardedCatalogStore>,
+    Path(_id): Path<String>,
+    Json(_data): Json<serde_json::Value>,
 ) -> Response {
-    match catalog_store.update_album(&id, data) {
-        Ok(album) => Json(album).into_response(),
-        Err(err) => {
-            if err.to_string().contains("not found") {
-                StatusCode::NOT_FOUND.into_response()
-            } else {
-                (StatusCode::BAD_REQUEST, format!("{}", err)).into_response()
-            }
-        }
-    }
+    (StatusCode::NOT_IMPLEMENTED, "Catalog editing not available - Spotify catalog is read-only").into_response()
 }
 
 async fn delete_album(
     _session: Session,
-    State(catalog_store): State<GuardedCatalogStore>,
-    Path(id): Path<String>,
+    State(_catalog_store): State<GuardedCatalogStore>,
+    Path(_id): Path<String>,
 ) -> Response {
-    match catalog_store.delete_album(&id) {
-        Ok(()) => StatusCode::NO_CONTENT.into_response(),
-        Err(err) => {
-            if err.to_string().contains("not found") {
-                StatusCode::NOT_FOUND.into_response()
-            } else {
-                (StatusCode::INTERNAL_SERVER_ERROR, format!("{}", err)).into_response()
-            }
-        }
-    }
+    (StatusCode::NOT_IMPLEMENTED, "Catalog editing not available - Spotify catalog is read-only").into_response()
 }
 
 async fn create_track(
     _session: Session,
-    State(catalog_store): State<GuardedCatalogStore>,
-    Json(data): Json<serde_json::Value>,
+    State(_catalog_store): State<GuardedCatalogStore>,
+    Json(_data): Json<serde_json::Value>,
 ) -> Response {
-    match catalog_store.create_track(data) {
-        Ok(track) => (StatusCode::CREATED, Json(track)).into_response(),
-        Err(err) => (StatusCode::BAD_REQUEST, format!("{}", err)).into_response(),
-    }
+    (StatusCode::NOT_IMPLEMENTED, "Catalog editing not available - Spotify catalog is read-only").into_response()
 }
 
 async fn update_track(
     _session: Session,
-    State(catalog_store): State<GuardedCatalogStore>,
-    Path(id): Path<String>,
-    Json(data): Json<serde_json::Value>,
+    State(_catalog_store): State<GuardedCatalogStore>,
+    Path(_id): Path<String>,
+    Json(_data): Json<serde_json::Value>,
 ) -> Response {
-    match catalog_store.update_track(&id, data) {
-        Ok(track) => Json(track).into_response(),
-        Err(err) => {
-            if err.to_string().contains("not found") {
-                StatusCode::NOT_FOUND.into_response()
-            } else {
-                (StatusCode::BAD_REQUEST, format!("{}", err)).into_response()
-            }
-        }
-    }
+    (StatusCode::NOT_IMPLEMENTED, "Catalog editing not available - Spotify catalog is read-only").into_response()
 }
 
 async fn delete_track(
     _session: Session,
-    State(catalog_store): State<GuardedCatalogStore>,
-    Path(id): Path<String>,
+    State(_catalog_store): State<GuardedCatalogStore>,
+    Path(_id): Path<String>,
 ) -> Response {
-    match catalog_store.delete_track(&id) {
-        Ok(()) => StatusCode::NO_CONTENT.into_response(),
-        Err(err) => {
-            if err.to_string().contains("not found") {
-                StatusCode::NOT_FOUND.into_response()
-            } else {
-                (StatusCode::INTERNAL_SERVER_ERROR, format!("{}", err)).into_response()
-            }
-        }
-    }
+    (StatusCode::NOT_IMPLEMENTED, "Catalog editing not available - Spotify catalog is read-only").into_response()
 }
 
 async fn create_image(
     _session: Session,
-    State(catalog_store): State<GuardedCatalogStore>,
-    Json(data): Json<serde_json::Value>,
+    State(_catalog_store): State<GuardedCatalogStore>,
+    Json(_data): Json<serde_json::Value>,
 ) -> Response {
-    match catalog_store.create_image(data) {
-        Ok(image) => (StatusCode::CREATED, Json(image)).into_response(),
-        Err(err) => (StatusCode::BAD_REQUEST, format!("{}", err)).into_response(),
-    }
+    (StatusCode::NOT_IMPLEMENTED, "Catalog editing not available - Spotify catalog is read-only").into_response()
 }
 
 async fn update_image(
     _session: Session,
-    State(catalog_store): State<GuardedCatalogStore>,
-    Path(id): Path<String>,
-    Json(data): Json<serde_json::Value>,
+    State(_catalog_store): State<GuardedCatalogStore>,
+    Path(_id): Path<String>,
+    Json(_data): Json<serde_json::Value>,
 ) -> Response {
-    match catalog_store.update_image(&id, data) {
-        Ok(image) => Json(image).into_response(),
-        Err(err) => {
-            if err.to_string().contains("not found") {
-                StatusCode::NOT_FOUND.into_response()
-            } else {
-                (StatusCode::BAD_REQUEST, format!("{}", err)).into_response()
-            }
-        }
-    }
+    (StatusCode::NOT_IMPLEMENTED, "Catalog editing not available - Spotify catalog is read-only").into_response()
 }
 
 async fn delete_image(
     _session: Session,
-    State(catalog_store): State<GuardedCatalogStore>,
-    Path(id): Path<String>,
+    State(_catalog_store): State<GuardedCatalogStore>,
+    Path(_id): Path<String>,
 ) -> Response {
-    match catalog_store.delete_image(&id) {
-        Ok(()) => StatusCode::NO_CONTENT.into_response(),
-        Err(err) => {
-            if err.to_string().contains("not found") {
-                StatusCode::NOT_FOUND.into_response()
-            } else {
-                (StatusCode::INTERNAL_SERVER_ERROR, format!("{}", err)).into_response()
-            }
-        }
-    }
+    (StatusCode::NOT_IMPLEMENTED, "Catalog editing not available - Spotify catalog is read-only").into_response()
 }
 
 // ============================================================================
@@ -1228,21 +1088,14 @@ fn default_whats_new_limit() -> usize {
 }
 
 /// GET /v1/content/whatsnew - List recent catalog updates
+/// TODO: Re-enable after implementing whatsnew for Spotify schema
 async fn get_whats_new(
     _session: Session,
-    State(catalog_store): State<GuardedCatalogStore>,
-    Query(query): Query<WhatsNewQuery>,
+    State(_catalog_store): State<GuardedCatalogStore>,
+    Query(_query): Query<WhatsNewQuery>,
 ) -> Response {
-    // Cap limit at 50 for performance
-    let limit = query.limit.min(50);
-
-    match catalog_store.get_whats_new_batches(limit) {
-        Ok(batches) => Json(serde_json::json!({ "batches": batches })).into_response(),
-        Err(err) => {
-            error!("Error getting what's new batches: {}", err);
-            StatusCode::INTERNAL_SERVER_ERROR.into_response()
-        }
-    }
+    // What's New functionality disabled - Spotify schema is read-only
+    (StatusCode::NOT_IMPLEMENTED, "What's New not available for Spotify catalog").into_response()
 }
 
 /// Get popular albums and artists based on listening data from the last 365 days.
@@ -3468,1199 +3321,101 @@ struct ListBatchesQuery {
 }
 
 /// Create a new changelog batch
+/// TODO: Re-enable after implementing changelog for Spotify schema
 async fn admin_create_changelog_batch(
     _session: Session,
-    State(catalog_store): State<GuardedCatalogStore>,
-    Json(body): Json<CreateBatchBody>,
+    State(_catalog_store): State<GuardedCatalogStore>,
+    Json(_body): Json<CreateBatchBody>,
 ) -> Response {
-    match catalog_store.create_changelog_batch(&body.name, body.description.as_deref()) {
-        Ok(batch) => (StatusCode::CREATED, Json(batch)).into_response(),
-        Err(err) => {
-            let err_msg = err.to_string();
-            if err_msg.contains("already active") || err_msg.contains("already open") {
-                (StatusCode::CONFLICT, err_msg).into_response()
-            } else {
-                error!("Error creating changelog batch: {}", err);
-                StatusCode::INTERNAL_SERVER_ERROR.into_response()
-            }
-        }
-    }
+    // Changelog functionality disabled - Spotify schema is read-only
+    (StatusCode::NOT_IMPLEMENTED, "Changelog not available for Spotify catalog").into_response()
 }
 
 /// List changelog batches with optional filter
+/// TODO: Re-enable after implementing changelog for Spotify schema
 async fn admin_list_changelog_batches(
     _session: Session,
-    State(catalog_store): State<GuardedCatalogStore>,
-    Query(query): Query<ListBatchesQuery>,
+    State(_catalog_store): State<GuardedCatalogStore>,
+    Query(_query): Query<ListBatchesQuery>,
 ) -> Response {
-    match catalog_store.list_changelog_batches(query.is_open) {
-        Ok(batches) => Json(batches).into_response(),
-        Err(err) => {
-            error!("Error listing changelog batches: {}", err);
-            StatusCode::INTERNAL_SERVER_ERROR.into_response()
-        }
-    }
+    // Changelog functionality disabled - Spotify schema is read-only
+    (StatusCode::NOT_IMPLEMENTED, "Changelog not available for Spotify catalog").into_response()
 }
 
 /// Get a specific changelog batch by ID
+/// TODO: Re-enable after implementing changelog for Spotify schema
 async fn admin_get_changelog_batch(
     _session: Session,
-    State(catalog_store): State<GuardedCatalogStore>,
-    Path(batch_id): Path<String>,
+    State(_catalog_store): State<GuardedCatalogStore>,
+    Path(_batch_id): Path<String>,
 ) -> Response {
-    match catalog_store.get_changelog_batch(&batch_id) {
-        Ok(Some(batch)) => Json(batch).into_response(),
-        Ok(None) => StatusCode::NOT_FOUND.into_response(),
-        Err(err) => {
-            error!("Error getting changelog batch: {}", err);
-            StatusCode::INTERNAL_SERVER_ERROR.into_response()
-        }
-    }
+    // Changelog functionality disabled - Spotify schema is read-only
+    (StatusCode::NOT_IMPLEMENTED, "Changelog not available for Spotify catalog").into_response()
 }
 
 /// Close a changelog batch
+/// TODO: Re-enable after implementing changelog for Spotify schema
 async fn admin_close_changelog_batch(
     _session: Session,
-    State(catalog_store): State<GuardedCatalogStore>,
-    State(search_vault): State<super::state::GuardedSearchVault>,
-    State(whatsnew_notifier): State<GuardedWhatsNewNotifier>,
-    Path(batch_id): Path<String>,
+    State(_catalog_store): State<GuardedCatalogStore>,
+    Path(_batch_id): Path<String>,
 ) -> Response {
-    // Get the batch info before closing (we need this for the notification)
-    let batch = match catalog_store.get_changelog_batch(&batch_id) {
-        Ok(Some(batch)) => batch,
-        Ok(None) => return StatusCode::NOT_FOUND.into_response(),
-        Err(err) => {
-            error!("Error getting changelog batch: {}", err);
-            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
-        }
-    };
-
-    // Get the batch summary (counts of added items)
-    let summary = match catalog_store.get_changelog_batch_summary(&batch_id) {
-        Ok(summary) => summary,
-        Err(err) => {
-            error!("Error getting changelog batch summary: {}", err);
-            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
-        }
-    };
-
-    match catalog_store.close_changelog_batch(&batch_id) {
-        Ok(()) => {
-            // Rebuild search index after batch close
-            if let Err(err) = search_vault.lock().unwrap().rebuild_index() {
-                error!("Failed to rebuild search index after batch close: {}", err);
-                // Don't fail the request - batch is already closed
-            }
-
-            // Notify users who have opted in to WhatsNew notifications
-            whatsnew_notifier
-                .notify_batch_closed(&batch, &summary)
-                .await;
-            StatusCode::OK.into_response()
-        }
-        Err(err) => {
-            let err_msg = err.to_string();
-            if err_msg.contains("not found") {
-                StatusCode::NOT_FOUND.into_response()
-            } else if err_msg.contains("already closed") {
-                (StatusCode::CONFLICT, err_msg).into_response()
-            } else {
-                error!("Error closing changelog batch: {}", err);
-                StatusCode::INTERNAL_SERVER_ERROR.into_response()
-            }
-        }
-    }
+    // Changelog functionality disabled - Spotify schema is read-only
+    (StatusCode::NOT_IMPLEMENTED, "Changelog not available for Spotify catalog").into_response()
 }
 
 /// Delete a changelog batch (only if empty)
+/// TODO: Re-enable after implementing changelog for Spotify schema
 async fn admin_delete_changelog_batch(
     _session: Session,
-    State(catalog_store): State<GuardedCatalogStore>,
-    Path(batch_id): Path<String>,
+    State(_catalog_store): State<GuardedCatalogStore>,
+    Path(_batch_id): Path<String>,
 ) -> Response {
-    match catalog_store.delete_changelog_batch(&batch_id) {
-        Ok(()) => StatusCode::NO_CONTENT.into_response(),
-        Err(err) => {
-            let err_msg = err.to_string();
-            if err_msg.contains("not found") {
-                StatusCode::NOT_FOUND.into_response()
-            } else if err_msg.contains("recorded changes") || err_msg.contains("closed") {
-                (StatusCode::BAD_REQUEST, err_msg).into_response()
-            } else {
-                error!("Error deleting changelog batch: {}", err);
-                StatusCode::INTERNAL_SERVER_ERROR.into_response()
-            }
-        }
-    }
+    // Changelog functionality disabled - Spotify schema is read-only
+    (StatusCode::NOT_IMPLEMENTED, "Changelog not available for Spotify catalog").into_response()
 }
 
 /// Get all changes in a changelog batch
+/// TODO: Re-enable after implementing changelog for Spotify schema
 async fn admin_get_changelog_batch_changes(
     _session: Session,
-    State(catalog_store): State<GuardedCatalogStore>,
-    Path(batch_id): Path<String>,
+    State(_catalog_store): State<GuardedCatalogStore>,
+    Path(_batch_id): Path<String>,
 ) -> Response {
-    // First check if batch exists
-    match catalog_store.get_changelog_batch(&batch_id) {
-        Ok(None) => return StatusCode::NOT_FOUND.into_response(),
-        Err(err) => {
-            error!("Error checking changelog batch: {}", err);
-            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
-        }
-        Ok(Some(_)) => {}
-    }
-
-    match catalog_store.get_changelog_batch_changes(&batch_id) {
-        Ok(changes) => Json(changes).into_response(),
-        Err(err) => {
-            error!("Error getting changelog batch changes: {}", err);
-            StatusCode::INTERNAL_SERVER_ERROR.into_response()
-        }
-    }
+    // Changelog functionality disabled - Spotify schema is read-only
+    (StatusCode::NOT_IMPLEMENTED, "Changelog not available for Spotify catalog").into_response()
 }
 
 /// Get change history for a specific entity
+/// TODO: Re-enable after implementing changelog for Spotify schema
 async fn admin_get_changelog_entity_history(
     _session: Session,
-    State(catalog_store): State<GuardedCatalogStore>,
-    Path((entity_type, entity_id)): Path<(String, String)>,
+    State(_catalog_store): State<GuardedCatalogStore>,
+    Path((_entity_type, _entity_id)): Path<(String, String)>,
 ) -> Response {
-    use crate::catalog_store::ChangeEntityType;
-
-    let entity_type = match entity_type.to_lowercase().as_str() {
-        "artist" => ChangeEntityType::Artist,
-        "album" => ChangeEntityType::Album,
-        "track" => ChangeEntityType::Track,
-        "image" => ChangeEntityType::Image,
-        _ => {
-            return (
-                StatusCode::BAD_REQUEST,
-                "Invalid entity type. Must be one of: artist, album, track, image",
-            )
-                .into_response()
-        }
-    };
-
-    match catalog_store.get_changelog_entity_history(entity_type, &entity_id) {
-        Ok(changes) => Json(changes).into_response(),
-        Err(err) => {
-            error!("Error getting changelog entity history: {}", err);
-            StatusCode::INTERNAL_SERVER_ERROR.into_response()
-        }
-    }
+    // Changelog functionality disabled - Spotify schema is read-only
+    (StatusCode::NOT_IMPLEMENTED, "Changelog not available for Spotify catalog").into_response()
 }
 
-// ============================================================================
-// Download Manager Endpoints
-// ============================================================================
 
-/// POST /v1/download/request/album - Request download of an album
-async fn request_album_download(
-    session: Session,
-    State(download_manager): State<super::state::OptionalDownloadManager>,
-    Json(request): Json<crate::download_manager::AlbumRequest>,
-) -> Response {
-    let dm = match download_manager {
-        Some(dm) => dm,
-        None => {
-            return (
-                StatusCode::SERVICE_UNAVAILABLE,
-                "Download manager not enabled",
-            )
-                .into_response()
-        }
-    };
-
-    let user_id = session.user_id.to_string();
-    match dm.request_album(&user_id, request).await {
-        Ok(result) => {
-            metrics::record_download_user_request("album");
-            Json(result).into_response()
-        }
-        Err(err) => {
-            let err_msg = err.to_string();
-            if err_msg.contains("Rate limit exceeded") {
-                (StatusCode::TOO_MANY_REQUESTS, err_msg).into_response()
-            } else if err_msg.contains("already in queue") {
-                (StatusCode::CONFLICT, err_msg).into_response()
-            } else {
-                error!("Error requesting album download: {}", err);
-                StatusCode::INTERNAL_SERVER_ERROR.into_response()
-            }
-        }
-    }
-}
-
-/// POST /v1/download/request/discography - Request download of artist discography
-async fn request_discography_download(
-    session: Session,
-    State(download_manager): State<super::state::OptionalDownloadManager>,
-    Json(request): Json<crate::download_manager::DiscographyRequest>,
-) -> Response {
-    let dm = match download_manager {
-        Some(dm) => dm,
-        None => {
-            return (
-                StatusCode::SERVICE_UNAVAILABLE,
-                "Download manager not enabled",
-            )
-                .into_response()
-        }
-    };
-
-    let user_id = session.user_id.to_string();
-    match dm.request_discography(&user_id, request) {
-        Ok(result) => {
-            metrics::record_download_user_request("discography");
-            Json(result).into_response()
-        }
-        Err(err) => {
-            let err_msg = err.to_string();
-            if err_msg.contains("Rate limit exceeded") {
-                (StatusCode::TOO_MANY_REQUESTS, err_msg).into_response()
-            } else if err_msg.contains("not yet implemented") {
-                (StatusCode::NOT_IMPLEMENTED, err_msg).into_response()
-            } else {
-                error!("Error requesting discography download: {}", err);
-                StatusCode::INTERNAL_SERVER_ERROR.into_response()
-            }
-        }
-    }
-}
-
-/// Query parameters for my-requests endpoint
-#[derive(Deserialize)]
-struct MyRequestsParams {
-    #[serde(default = "default_my_requests_limit")]
-    limit: usize,
-    #[serde(default)]
-    offset: usize,
-}
-
-fn default_my_requests_limit() -> usize {
-    50
-}
-
-/// GET /v1/download/my-requests - Get user's download requests
-async fn get_my_download_requests(
-    session: Session,
-    State(download_manager): State<super::state::OptionalDownloadManager>,
-    Query(params): Query<MyRequestsParams>,
-) -> Response {
-    let dm = match download_manager {
-        Some(dm) => dm,
-        None => {
-            return (
-                StatusCode::SERVICE_UNAVAILABLE,
-                "Download manager not enabled",
-            )
-                .into_response()
-        }
-    };
-
-    let user_id = session.user_id.to_string();
-    match dm.get_user_requests_with_progress(&user_id, params.limit, params.offset) {
-        Ok(requests) => {
-            let limits = dm.check_user_limits(&user_id).unwrap_or_else(|_| {
-                crate::download_manager::UserLimitStatus::available(0, 0, 0, 0)
-            });
-            Json(serde_json::json!({
-                "requests": requests,
-                "stats": limits
-            }))
-            .into_response()
-        }
-        Err(err) => {
-            error!("Error getting user requests: {}", err);
-            StatusCode::INTERNAL_SERVER_ERROR.into_response()
-        }
-    }
-}
-
-/// GET /v1/download/request/:id - Get status of a specific request
-async fn get_download_request_status(
-    session: Session,
-    State(download_manager): State<super::state::OptionalDownloadManager>,
-    Path(request_id): Path<String>,
-) -> Response {
-    let dm = match download_manager {
-        Some(dm) => dm,
-        None => {
-            return (
-                StatusCode::SERVICE_UNAVAILABLE,
-                "Download manager not enabled",
-            )
-                .into_response()
-        }
-    };
-
-    let user_id = session.user_id.to_string();
-    match dm.get_request_status(&user_id, &request_id) {
-        Ok(Some(item)) => Json(item).into_response(),
-        Ok(None) => StatusCode::NOT_FOUND.into_response(),
-        Err(err) => {
-            error!("Error getting request status: {}", err);
-            StatusCode::INTERNAL_SERVER_ERROR.into_response()
-        }
-    }
-}
-
-/// GET /v1/download/limits - Get user's rate limit status
-async fn get_download_limits(
-    session: Session,
-    State(download_manager): State<super::state::OptionalDownloadManager>,
-) -> Response {
-    let dm = match download_manager {
-        Some(dm) => dm,
-        None => {
-            return (
-                StatusCode::SERVICE_UNAVAILABLE,
-                "Download manager not enabled",
-            )
-                .into_response()
-        }
-    };
-
-    let user_id = session.user_id.to_string();
-    match dm.check_user_limits(&user_id) {
-        Ok(limits) => Json(limits).into_response(),
-        Err(err) => {
-            error!("Error checking user limits: {}", err);
-            StatusCode::INTERNAL_SERVER_ERROR.into_response()
-        }
-    }
-}
-
-// ============================================================================
-// Download Admin Handlers
-// ============================================================================
-
-/// Response for download queue statistics
-#[derive(serde::Serialize)]
-struct DownloadStatsResponse {
-    downloader: DownloaderStatusResponse,
-    queue: QueueStatsResponse,
-    capacity: CapacityStatsResponse,
-}
-
-#[derive(serde::Serialize)]
-struct DownloaderStatusResponse {
-    online: bool,
-    state: Option<String>,
-    uptime_secs: Option<u64>,
-    last_error: Option<String>,
-}
-
-#[derive(serde::Serialize)]
-struct QueueStatsResponse {
-    pending: i64,
-    in_progress: i64,
-    retry_waiting: i64,
-    completed_today: i64,
-    failed_today: i64,
-}
-
-#[derive(serde::Serialize)]
-struct CapacityStatsResponse {
-    albums_this_hour: i32,
-    max_per_hour: i32,
-    albums_today: i32,
-    max_per_day: i32,
-}
-
-/// GET /v1/download/admin/stats - Get download queue statistics
-async fn admin_get_download_stats(
-    _session: Session,
-    State(download_manager): State<super::state::OptionalDownloadManager>,
-) -> Response {
-    let dm = match download_manager {
-        Some(dm) => dm,
-        None => {
-            return (
-                StatusCode::SERVICE_UNAVAILABLE,
-                "Download manager not enabled",
-            )
-                .into_response()
-        }
-    };
-
-    let queue_stats = match dm.get_queue_stats() {
-        Ok(stats) => stats,
-        Err(err) => {
-            error!("Error getting queue stats: {}", err);
-            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
-        }
-    };
-
-    let capacity = match dm.check_global_capacity() {
-        Ok(cap) => cap,
-        Err(err) => {
-            error!("Error getting capacity: {}", err);
-            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
-        }
-    };
-
-    // Get downloader service status
-    let downloader_status = dm.get_downloader_status().await;
-    let downloader = match downloader_status {
-        Some(status) => DownloaderStatusResponse {
-            online: status.state == "Healthy",
-            state: Some(status.state),
-            uptime_secs: Some(status.uptime_secs),
-            last_error: status.last_error,
-        },
-        None => DownloaderStatusResponse {
-            online: false,
-            state: None,
-            uptime_secs: None,
-            last_error: Some("Unable to connect to downloader service".to_string()),
-        },
-    };
-
-    let response = DownloadStatsResponse {
-        downloader,
-        queue: QueueStatsResponse {
-            pending: queue_stats.pending,
-            in_progress: queue_stats.in_progress,
-            retry_waiting: queue_stats.retry_waiting,
-            completed_today: queue_stats.completed_today,
-            failed_today: queue_stats.failed_today,
-        },
-        capacity: CapacityStatsResponse {
-            albums_this_hour: capacity.albums_this_hour,
-            max_per_hour: capacity.max_per_hour,
-            albums_today: capacity.albums_today,
-            max_per_day: capacity.max_per_day,
-        },
-    };
-
-    Json(response).into_response()
-}
-
-/// Query parameters for failed items endpoint
-#[derive(serde::Deserialize)]
-struct FailedItemsQuery {
-    limit: Option<usize>,
-    offset: Option<usize>,
-}
-
-/// GET /v1/download/admin/failed - Get failed download items
-async fn admin_get_download_failed(
-    _session: Session,
-    State(download_manager): State<super::state::OptionalDownloadManager>,
-    Query(query): Query<FailedItemsQuery>,
-) -> Response {
-    let dm = match download_manager {
-        Some(dm) => dm,
-        None => {
-            return (
-                StatusCode::SERVICE_UNAVAILABLE,
-                "Download manager not enabled",
-            )
-                .into_response()
-        }
-    };
-
-    let limit = query.limit.unwrap_or(50).min(200);
-    let offset = query.offset.unwrap_or(0);
-
-    match dm.get_failed_items(limit, offset) {
-        Ok(items) => Json(items).into_response(),
-        Err(err) => {
-            error!("Error getting failed items: {}", err);
-            StatusCode::INTERNAL_SERVER_ERROR.into_response()
-        }
-    }
-}
-
-/// Query parameters for retry endpoint
-#[derive(serde::Deserialize)]
-struct RetryQuery {
-    force: Option<bool>,
-}
-
-/// POST /v1/download/admin/retry/:id - Retry a failed download
-async fn admin_retry_download(
-    session: Session,
-    State(download_manager): State<super::state::OptionalDownloadManager>,
-    Path(request_id): Path<String>,
-    Query(query): Query<RetryQuery>,
-) -> Response {
-    let dm = match download_manager {
-        Some(dm) => dm,
-        None => {
-            return (
-                StatusCode::SERVICE_UNAVAILABLE,
-                "Download manager not enabled",
-            )
-                .into_response()
-        }
-    };
-
-    let force = query.force.unwrap_or(false);
-    let user_id = session.user_id.to_string();
-    match dm.retry_failed(&user_id, &request_id, force) {
-        Ok(()) => StatusCode::OK.into_response(),
-        Err(err) => {
-            error!("Error retrying download {}: {}", request_id, err);
-            (StatusCode::BAD_REQUEST, err.to_string()).into_response()
-        }
-    }
-}
-
-/// DELETE /v1/download/admin/request/:id - Delete a download request
-async fn admin_delete_download(
-    session: Session,
-    State(download_manager): State<super::state::OptionalDownloadManager>,
-    Path(request_id): Path<String>,
-) -> Response {
-    let dm = match download_manager {
-        Some(dm) => dm,
-        None => {
-            return (
-                StatusCode::SERVICE_UNAVAILABLE,
-                "Download manager not enabled",
-            )
-                .into_response()
-        }
-    };
-
-    let user_id = session.user_id.to_string();
-    match dm.delete_request(&user_id, &request_id) {
-        Ok(()) => StatusCode::OK.into_response(),
-        Err(err) => {
-            error!("Error deleting download {}: {}", request_id, err);
-            (StatusCode::BAD_REQUEST, err.to_string()).into_response()
-        }
-    }
-}
-
-/// Query parameters for activity endpoint
-#[derive(serde::Deserialize)]
-struct ActivityQuery {
-    hours: Option<usize>,
-}
-
-/// Response for activity endpoint
-#[derive(serde::Serialize)]
-struct ActivityResponse {
-    hourly: Vec<HourlyActivity>,
-    totals: ActivityTotals,
-}
-
-#[derive(serde::Serialize)]
-struct HourlyActivity {
-    hour: String,
-    albums: i64,
-    tracks: i64,
-    bytes: i64,
-}
-
-#[derive(serde::Serialize)]
-struct ActivityTotals {
-    albums: i64,
-    tracks: i64,
-    bytes: i64,
-}
-
-/// GET /v1/download/admin/activity - Get download activity
-async fn admin_get_download_activity(
-    _session: Session,
-    State(download_manager): State<super::state::OptionalDownloadManager>,
-    Query(query): Query<ActivityQuery>,
-) -> Response {
-    let dm = match download_manager {
-        Some(dm) => dm,
-        None => {
-            return (
-                StatusCode::SERVICE_UNAVAILABLE,
-                "Download manager not enabled",
-            )
-                .into_response()
-        }
-    };
-
-    let hours = query.hours.unwrap_or(24).min(168); // Max 7 days
-
-    match dm.get_activity(hours) {
-        Ok(entries) => {
-            let mut total_albums = 0i64;
-            let mut total_tracks = 0i64;
-            let mut total_bytes = 0i64;
-
-            let hourly: Vec<HourlyActivity> = entries
-                .iter()
-                .map(|e| {
-                    total_albums += e.albums_downloaded;
-                    total_tracks += e.tracks_downloaded;
-                    total_bytes += e.bytes_downloaded;
-
-                    HourlyActivity {
-                        hour: chrono::DateTime::from_timestamp(e.hour_bucket, 0)
-                            .map(|dt| dt.to_rfc3339())
-                            .unwrap_or_default(),
-                        albums: e.albums_downloaded,
-                        tracks: e.tracks_downloaded,
-                        bytes: e.bytes_downloaded,
-                    }
-                })
-                .collect();
-
-            let response = ActivityResponse {
-                hourly,
-                totals: ActivityTotals {
-                    albums: total_albums,
-                    tracks: total_tracks,
-                    bytes: total_bytes,
-                },
-            };
-
-            Json(response).into_response()
-        }
-        Err(err) => {
-            error!("Error getting download activity: {}", err);
-            StatusCode::INTERNAL_SERVER_ERROR.into_response()
-        }
-    }
-}
-
-/// Query parameters for stats history endpoint
-#[derive(serde::Deserialize)]
-struct StatsHistoryQuery {
-    /// Period: "hourly" (48h), "daily" (30d), or "weekly" (12w). Default: daily
-    /// Used for aggregation granularity
-    period: Option<String>,
-    /// Custom start time (unix timestamp). If provided, overrides period default.
-    since: Option<i64>,
-    /// Custom end time (unix timestamp). If provided, limits results to before this time.
-    until: Option<i64>,
-}
-
-/// GET /v1/download/admin/stats/history - Get aggregated download statistics over time
-///
-/// Query params:
-/// - `period`: "hourly", "daily", or "weekly" (default: daily) - sets aggregation granularity
-/// - `since`: Unix timestamp for custom start time (optional)
-/// - `until`: Unix timestamp for custom end time (optional)
-async fn admin_get_stats_history(
-    _session: Session,
-    State(download_manager): State<super::state::OptionalDownloadManager>,
-    Query(query): Query<StatsHistoryQuery>,
-) -> Response {
-    let dm = match download_manager {
-        Some(dm) => dm,
-        None => {
-            return (
-                StatusCode::SERVICE_UNAVAILABLE,
-                "Download manager not enabled",
-            )
-                .into_response()
-        }
-    };
-
-    let period = query
-        .period
-        .as_deref()
-        .and_then(crate::download_manager::StatsPeriod::from_str)
-        .unwrap_or(crate::download_manager::StatsPeriod::Daily);
-
-    match dm.get_stats_history(period, query.since, query.until) {
-        Ok(history) => Json(history).into_response(),
-        Err(err) => {
-            error!("Error getting stats history: {}", err);
-            StatusCode::INTERNAL_SERVER_ERROR.into_response()
-        }
-    }
-}
-
-/// Query parameters for requests endpoint
-#[derive(serde::Deserialize)]
-struct RequestsQuery {
-    status: Option<String>,
-    user_id: Option<String>,
-    limit: Option<usize>,
-    offset: Option<usize>,
-    exclude_completed: Option<bool>,
-    top_level_only: Option<bool>,
-}
-
-/// Response for requests endpoint
-#[derive(serde::Serialize)]
-struct DownloadRequestsResponse {
-    items: Vec<crate::download_manager::QueueItem>,
-}
-
-/// A request item with optional progress info (for top-level requests with children)
-#[derive(serde::Serialize)]
-struct RequestWithProgress {
-    #[serde(flatten)]
-    item: crate::download_manager::QueueItem,
-    progress: Option<crate::download_manager::DownloadProgress>,
-}
-
-/// Response for requests endpoint with progress info
-#[derive(serde::Serialize)]
-struct RequestsWithProgressResponse {
-    items: Vec<RequestWithProgress>,
-}
-
-/// GET /v1/download/admin/requests - Get all download requests
-async fn admin_get_download_requests(
-    _session: Session,
-    State(download_manager): State<super::state::OptionalDownloadManager>,
-    Query(query): Query<RequestsQuery>,
-) -> Response {
-    let dm = match download_manager {
-        Some(dm) => dm,
-        None => {
-            return (
-                StatusCode::SERVICE_UNAVAILABLE,
-                "Download manager not enabled",
-            )
-                .into_response()
-        }
-    };
-
-    let limit = query.limit.unwrap_or(50).min(200);
-    let offset = query.offset.unwrap_or(0);
-    let exclude_completed = query.exclude_completed.unwrap_or(false);
-    let top_level_only = query.top_level_only.unwrap_or(false);
-
-    let status = query
-        .status
-        .as_deref()
-        .and_then(|s| match s.to_lowercase().as_str() {
-            "pending" => Some(crate::download_manager::QueueStatus::Pending),
-            "in_progress" => Some(crate::download_manager::QueueStatus::InProgress),
-            "retry_waiting" => Some(crate::download_manager::QueueStatus::RetryWaiting),
-            "completed" => Some(crate::download_manager::QueueStatus::Completed),
-            "failed" => Some(crate::download_manager::QueueStatus::Failed),
-            _ => None,
-        });
-
-    match dm.get_all_requests(
-        status,
-        exclude_completed,
-        top_level_only,
-        query.user_id.as_deref(),
-        limit,
-        offset,
-    ) {
-        Ok(items) => {
-            // If top_level_only, enrich with progress info
-            if top_level_only {
-                let items_with_progress: Vec<_> = items
-                    .into_iter()
-                    .map(|item| {
-                        let progress = dm.get_request_progress(&item.id).ok().flatten();
-                        RequestWithProgress { item, progress }
-                    })
-                    .collect();
-                Json(RequestsWithProgressResponse {
-                    items: items_with_progress,
-                })
-                .into_response()
-            } else {
-                Json(DownloadRequestsResponse { items }).into_response()
-            }
-        }
-        Err(err) => {
-            error!("Error getting download requests: {}", err);
-            StatusCode::INTERNAL_SERVER_ERROR.into_response()
-        }
-    }
-}
-
-/// Query parameters for audit log endpoint
-#[derive(serde::Deserialize)]
-struct AuditLogQuery {
-    queue_item_id: Option<String>,
-    user_id: Option<String>,
-    event_type: Option<String>,
-    content_type: Option<String>,
-    content_id: Option<String>,
-    since: Option<i64>,
-    until: Option<i64>,
-    limit: Option<usize>,
-    offset: Option<usize>,
-}
-
-/// Response for audit log endpoint
-#[derive(serde::Serialize)]
-struct AuditLogResponse {
-    entries: Vec<crate::download_manager::AuditLogEntry>,
-    total_count: usize,
-    has_more: bool,
-}
-
-/// GET /v1/download/admin/audit - Get audit log entries
-async fn admin_get_audit_log(
-    _session: Session,
-    State(download_manager): State<super::state::OptionalDownloadManager>,
-    Query(query): Query<AuditLogQuery>,
-) -> Response {
-    let dm = match download_manager {
-        Some(dm) => dm,
-        None => {
-            return (
-                StatusCode::SERVICE_UNAVAILABLE,
-                "Download manager not enabled",
-            )
-                .into_response()
-        }
-    };
-
-    let limit = query.limit.unwrap_or(100).min(500);
-    let offset = query.offset.unwrap_or(0);
-
-    // Build filter from query params
-    let mut filter = crate::download_manager::AuditLogFilter::new().paginate(limit, offset);
-
-    if let Some(queue_item_id) = query.queue_item_id {
-        filter = filter.for_queue_item(queue_item_id);
-    }
-
-    if let Some(user_id) = query.user_id {
-        filter = filter.for_user(user_id);
-    }
-
-    if let Some(event_type_str) = query.event_type {
-        if let Some(event_type) = crate::download_manager::AuditEventType::from_str(&event_type_str)
-        {
-            filter = filter.with_event_types(vec![event_type]);
-        }
-    }
-
-    if let Some(content_type_str) = query.content_type {
-        if let Some(content_type) =
-            crate::download_manager::DownloadContentType::from_str(&content_type_str)
-        {
-            filter = filter.for_content_type(content_type);
-        }
-    }
-
-    if let Some(content_id) = query.content_id {
-        filter = filter.for_content_id(content_id);
-    }
-
-    // Apply time range filters
-    let since = query.since.or(filter.since);
-    let until = query.until.or(filter.until);
-    if since.is_some() || until.is_some() {
-        filter = filter.in_range(since, until);
-    }
-
-    match dm.get_audit_log(filter) {
-        Ok((entries, total_count)) => {
-            let has_more = offset + entries.len() < total_count;
-            let response = AuditLogResponse {
-                entries,
-                total_count,
-                has_more,
-            };
-            Json(response).into_response()
-        }
-        Err(err) => {
-            error!("Error getting audit log: {}", err);
-            StatusCode::INTERNAL_SERVER_ERROR.into_response()
-        }
-    }
-}
-
-/// Response for audit item endpoint
-#[derive(serde::Serialize)]
-struct AuditItemResponse {
-    queue_item: crate::download_manager::QueueItem,
-    events: Vec<crate::download_manager::AuditLogEntry>,
-}
-
-/// GET /v1/download/admin/audit/item/:id - Get audit history for a specific queue item
-async fn admin_get_audit_for_item(
-    _session: Session,
-    State(download_manager): State<super::state::OptionalDownloadManager>,
-    Path(queue_item_id): Path<String>,
-) -> Response {
-    let dm = match download_manager {
-        Some(dm) => dm,
-        None => {
-            return (
-                StatusCode::SERVICE_UNAVAILABLE,
-                "Download manager not enabled",
-            )
-                .into_response()
-        }
-    };
-
-    match dm.get_audit_for_item(&queue_item_id) {
-        Ok(Some((queue_item, events))) => {
-            let response = AuditItemResponse { queue_item, events };
-            Json(response).into_response()
-        }
-        Ok(None) => StatusCode::NOT_FOUND.into_response(),
-        Err(err) => {
-            error!("Error getting audit for item: {}", err);
-            StatusCode::INTERNAL_SERVER_ERROR.into_response()
-        }
-    }
-}
-
-/// Query parameters for user audit endpoint
-#[derive(serde::Deserialize)]
-struct UserAuditQuery {
-    limit: Option<usize>,
-    offset: Option<usize>,
-}
-
-/// Response for user audit endpoint
-#[derive(serde::Serialize)]
-struct UserAuditResponse {
-    entries: Vec<crate::download_manager::AuditLogEntry>,
-    total_count: usize,
-    has_more: bool,
-}
-
-/// GET /v1/download/admin/audit/user/:id - Get audit history for a specific user
-async fn admin_get_audit_for_user(
-    _session: Session,
-    State(download_manager): State<super::state::OptionalDownloadManager>,
-    Path(user_id): Path<String>,
-    Query(query): Query<UserAuditQuery>,
-) -> Response {
-    let dm = match download_manager {
-        Some(dm) => dm,
-        None => {
-            return (
-                StatusCode::SERVICE_UNAVAILABLE,
-                "Download manager not enabled",
-            )
-                .into_response()
-        }
-    };
-
-    let limit = query.limit.unwrap_or(100).min(500);
-    let offset = query.offset.unwrap_or(0);
-
-    match dm.get_audit_for_user(&user_id, limit, offset) {
-        Ok((entries, total_count)) => {
-            let has_more = offset + entries.len() < total_count;
-            let response = UserAuditResponse {
-                entries,
-                total_count,
-                has_more,
-            };
-            Json(response).into_response()
-        }
-        Err(err) => {
-            error!("Error getting audit for user: {}", err);
-            StatusCode::INTERNAL_SERVER_ERROR.into_response()
-        }
-    }
-}
-
-// =============================================================================
-// Download Admin - Throttle & Corruption Handler
-// =============================================================================
-
-/// Response for GET /admin/throttle
-#[derive(Debug, Serialize)]
-struct ThrottleStateResponse {
-    enabled: bool,
-    max_mb_per_minute: f64,
-    max_mb_per_hour: f64,
-    current_mb_last_minute: f64,
-    current_mb_last_hour: f64,
-    is_throttled: bool,
-}
-
-/// Get current throttle state
-async fn admin_get_throttle_state(
-    _session: Session,
-    State(download_manager): State<super::state::OptionalDownloadManager>,
-) -> Response {
-    let dm = match download_manager {
-        Some(dm) => dm,
-        None => {
-            return (
-                StatusCode::SERVICE_UNAVAILABLE,
-                "Download manager not enabled",
-            )
-                .into_response()
-        }
-    };
-
-    let stats = dm.get_throttle_stats().await;
-    let response = ThrottleStateResponse {
-        enabled: dm.config().throttle_enabled,
-        max_mb_per_minute: stats.max_bytes_per_minute as f64 / (1024.0 * 1024.0),
-        max_mb_per_hour: stats.max_bytes_per_hour as f64 / (1024.0 * 1024.0),
-        current_mb_last_minute: stats.bytes_last_minute as f64 / (1024.0 * 1024.0),
-        current_mb_last_hour: stats.bytes_last_hour as f64 / (1024.0 * 1024.0),
-        is_throttled: stats.is_throttled,
-    };
-
-    Json(response).into_response()
-}
-
-/// Response for GET /admin/corruption-handler
-#[derive(Debug, Serialize)]
-struct CorruptionHandlerStateResponse {
-    current_level: u32,
-    successes_since_last_level_change: u32,
-    successes_to_deescalate: u32,
-    in_cooldown: bool,
-    cooldown_remaining_secs: Option<u64>,
-    current_cooldown_duration_secs: u64,
-    recent_results: Vec<bool>,
-    window_size: usize,
-    failure_threshold: usize,
-}
-
-/// Get current corruption handler state
-async fn admin_get_corruption_handler_state(
-    _session: Session,
-    State(download_manager): State<super::state::OptionalDownloadManager>,
-) -> Response {
-    let dm = match download_manager {
-        Some(dm) => dm,
-        None => {
-            return (
-                StatusCode::SERVICE_UNAVAILABLE,
-                "Download manager not enabled",
-            )
-                .into_response()
-        }
-    };
-
-    let state = dm.get_corruption_handler_state().await;
-    let config = dm.config();
-
-    let response = CorruptionHandlerStateResponse {
-        current_level: state.current_level,
-        successes_since_last_level_change: state.successes_since_last_level_change,
-        successes_to_deescalate: config.corruption_successes_to_deescalate,
-        in_cooldown: state.in_cooldown,
-        cooldown_remaining_secs: state.cooldown_remaining_secs,
-        current_cooldown_duration_secs: state.current_cooldown_duration_secs,
-        recent_results: state.recent_results,
-        window_size: config.corruption_window_size,
-        failure_threshold: config.corruption_failure_threshold,
-    };
-
-    Json(response).into_response()
-}
-
-/// Reset corruption handler state (admin action)
-async fn admin_reset_corruption_handler(
-    session: Session,
-    State(download_manager): State<super::state::OptionalDownloadManager>,
-) -> Response {
-    let dm = match download_manager {
-        Some(dm) => dm,
-        None => {
-            return (
-                StatusCode::SERVICE_UNAVAILABLE,
-                "Download manager not enabled",
-            )
-                .into_response()
-        }
-    };
-
-    info!(
-        "Admin {:?} resetting corruption handler state",
-        session.user_id
-    );
-
-    dm.reset_corruption_handler().await;
-
-    // Return updated state
-    let state = dm.get_corruption_handler_state().await;
-    let config = dm.config();
-
-    let response = CorruptionHandlerStateResponse {
-        current_level: state.current_level,
-        successes_since_last_level_change: state.successes_since_last_level_change,
-        successes_to_deescalate: config.corruption_successes_to_deescalate,
-        in_cooldown: state.in_cooldown,
-        cooldown_remaining_secs: state.cooldown_remaining_secs,
-        current_cooldown_duration_secs: state.current_cooldown_duration_secs,
-        recent_results: state.recent_results,
-        window_size: config.corruption_window_size,
-        failure_threshold: config.corruption_failure_threshold,
-    };
-
-    Json(response).into_response()
-}
-
-/// Reset throttle state (admin action)
-async fn admin_reset_throttle(
-    session: Session,
-    State(download_manager): State<super::state::OptionalDownloadManager>,
-) -> Response {
-    let dm = match download_manager {
-        Some(dm) => dm,
-        None => {
-            return (
-                StatusCode::SERVICE_UNAVAILABLE,
-                "Download manager not enabled",
-            )
-                .into_response()
-        }
-    };
-
-    info!("Admin {:?} resetting throttle state", session.user_id);
-
-    dm.reset_throttle().await;
-
-    // Return updated stats
-    let stats = dm.get_throttle_stats().await;
-    let response = ThrottleStateResponse {
-        enabled: dm.config().throttle_enabled,
-        max_mb_per_minute: stats.max_bytes_per_minute as f64 / (1024.0 * 1024.0),
-        max_mb_per_hour: stats.max_bytes_per_hour as f64 / (1024.0 * 1024.0),
-        current_mb_last_minute: stats.bytes_last_minute as f64 / (1024.0 * 1024.0),
-        current_mb_last_hour: stats.bytes_last_hour as f64 / (1024.0 * 1024.0),
-        is_throttled: stats.is_throttled,
-    };
-
-    Json(response).into_response()
-}
+// NOTE: Download Manager Endpoints removed - depends on download_manager module
+// These will be re-added when download_manager is updated for Spotify schema
 
 impl ServerState {
     /// Create a new ServerState with an already-guarded search vault.
     /// This allows sharing the search vault with background tasks.
-    #[allow(clippy::arc_with_non_send_sync, clippy::too_many_arguments)]
+    #[allow(clippy::arc_with_non_send_sync)]
     fn new_with_guarded_search_vault(
         config: ServerConfig,
         catalog_store: Arc<dyn CatalogStore>,
         search_vault: super::state::GuardedSearchVault,
         user_manager: GuardedUserManager,
-        user_store: Arc<dyn FullUserStore>,
-        downloader: Option<Arc<dyn crate::downloader::Downloader>>,
-        media_base_path: Option<std::path::PathBuf>,
+        _user_store: Arc<dyn FullUserStore>,
         scheduler_handle: Option<SchedulerHandle>,
-        download_manager: Option<Arc<crate::download_manager::DownloadManager>>,
         server_store: Arc<dyn crate::server_store::ServerStore>,
     ) -> ServerState {
-        // Create connection manager first since it's needed by proxy and whatsnew notifier
+        // Create connection manager
         let ws_connection_manager = Arc::new(super::websocket::ConnectionManager::new());
-
-        // Create proxy if downloader and media_base_path are available
-        let proxy = match (&downloader, media_base_path) {
-            (Some(dl), Some(path)) => Some(Arc::new(super::proxy::CatalogProxy::new(
-                dl.clone(),
-                catalog_store.clone(),
-                user_store.clone(),
-                path,
-            ))),
-            _ => None,
-        };
-
-        // Create WhatsNew notifier
-        let whatsnew_notifier = Arc::new(crate::whatsnew::WhatsNewNotifier::new(
-            user_store,
-            ws_connection_manager.clone(),
-        ));
 
         // Create auth state store for OIDC flow (always created, even if OIDC is disabled)
         let auth_state_store = Arc::new(crate::oidc::AuthStateStore::new());
@@ -4674,12 +3429,8 @@ impl ServerState {
             catalog_store,
             search_vault,
             user_manager,
-            downloader,
-            proxy,
             ws_connection_manager,
             scheduler_handle,
-            download_manager,
-            whatsnew_notifier,
             server_store,
             hash: "123456".to_owned(),
             oidc_client: None, // Will be set by make_app if OIDC is configured
@@ -4696,10 +3447,7 @@ pub async fn make_app(
     search_vault: super::state::GuardedSearchVault,
     user_store: Arc<dyn FullUserStore>,
     user_manager: GuardedUserManager,
-    downloader: Option<Arc<dyn crate::downloader::Downloader>>,
-    media_base_path: Option<std::path::PathBuf>,
     scheduler_handle: Option<SchedulerHandle>,
-    download_manager: Option<Arc<crate::download_manager::DownloadManager>>,
     server_store: Arc<dyn crate::server_store::ServerStore>,
     oidc_config: Option<crate::config::OidcConfig>,
 ) -> Result<Router> {
@@ -4736,31 +3484,10 @@ pub async fn make_app(
         search_vault,
         user_manager,
         user_store.clone(),
-        downloader,
-        media_base_path,
         scheduler_handle,
-        download_manager.clone(),
         server_store,
     );
     state.oidc_client = oidc_client;
-
-    // Set up sync notifier and notification service for download manager if enabled
-    if let Some(ref dm) = download_manager {
-        let sync_notifier = Arc::new(crate::download_manager::DownloadSyncNotifier::new(
-            user_store.clone(),
-            state.ws_connection_manager.clone(),
-        ));
-        dm.set_sync_notifier(sync_notifier).await;
-        tracing::info!("Download sync notifier initialized");
-
-        // Set up notification service for user notifications on download completion
-        let notification_service = Arc::new(NotificationService::new(
-            user_store,
-            state.ws_connection_manager.clone(),
-        ));
-        dm.set_notification_service(notification_service).await;
-        tracing::info!("Notification service initialized for download manager");
-    }
 
     // Login route with strict IP-based rate limiting
     // For rates < 60/min, we use per_second(1) and rely on burst_size to enforce the limit
@@ -5165,71 +3892,9 @@ pub async fn make_app(
         .merge(admin_changelog_routes)
         .merge(admin_search_routes);
 
-    // Download manager user routes (requires RequestContent permission)
-    let download_user_routes: Router = Router::new()
-        .route("/request/album", post(request_album_download))
-        .route("/request/discography", post(request_discography_download))
-        .route("/my-requests", get(get_my_download_requests))
-        .route("/request/{id}", get(get_download_request_status))
-        .route("/limits", get(get_download_limits))
-        .route_layer(middleware::from_fn_with_state(
-            state.clone(),
-            require_request_content,
-        ))
-        .with_state(state.clone());
-
-    // Download manager admin read routes (requires DownloadManagerAdmin permission)
-    let download_admin_read_routes: Router = Router::new()
-        .route("/admin/stats", get(admin_get_download_stats))
-        .route("/admin/stats/history", get(admin_get_stats_history))
-        .route("/admin/failed", get(admin_get_download_failed))
-        .route("/admin/activity", get(admin_get_download_activity))
-        .route("/admin/requests", get(admin_get_download_requests))
-        .route("/admin/audit", get(admin_get_audit_log))
-        .route("/admin/audit/item/{id}", get(admin_get_audit_for_item))
-        .route("/admin/audit/user/{id}", get(admin_get_audit_for_user))
-        .route("/admin/throttle", get(admin_get_throttle_state))
-        .route(
-            "/admin/corruption-handler",
-            get(admin_get_corruption_handler_state),
-        )
-        .route_layer(middleware::from_fn_with_state(
-            state.clone(),
-            require_download_manager_admin,
-        ))
-        .with_state(state.clone());
-
-    // Download manager admin write routes (requires DownloadManagerAdmin permission)
-    let download_admin_write_routes: Router = Router::new()
-        .route("/admin/retry/{id}", post(admin_retry_download))
-        .route("/admin/request/{id}", delete(admin_delete_download))
-        .route("/admin/throttle/reset", post(admin_reset_throttle))
-        .route(
-            "/admin/corruption-handler/reset",
-            post(admin_reset_corruption_handler),
-        )
-        .route_layer(middleware::from_fn_with_state(
-            state.clone(),
-            require_download_manager_admin,
-        ))
-        .with_state(state.clone());
-
-    // Combine all download routes
-    let download_routes: Router = download_user_routes
-        .merge(download_admin_read_routes)
-        .merge(download_admin_write_routes);
-
-    // Skeleton sync routes (requires AccessCatalog permission)
-    let skeleton_routes: Router = Router::new()
-        .route("/", get(super::skeleton::get_full_skeleton))
-        .route("/version", get(super::skeleton::get_skeleton_version))
-        .route("/delta", get(super::skeleton::get_skeleton_delta))
-        .layer(GovernorLayer::new(content_read_rate_limit.clone()))
-        .route_layer(middleware::from_fn_with_state(
-            state.clone(),
-            require_access_catalog,
-        ))
-        .with_state(state.clone());
+    // TODO: Re-enable download and skeleton routes after updating for Spotify schema
+    // Download manager routes disabled - depends on download_manager module
+    // Skeleton routes disabled - depends on skeleton module
 
     let home_router: Router = match config.frontend_dir_path {
         Some(ref frontend_path) => {
@@ -5260,8 +3925,9 @@ pub async fn make_app(
         .nest("/v1/user", user_routes)
         .nest("/v1/admin", admin_routes)
         .nest("/v1/sync", sync_routes)
-        .nest("/v1/download", download_routes)
-        .nest("/v1/catalog/skeleton", skeleton_routes)
+        // TODO: Re-enable after updating for Spotify schema
+        // .nest("/v1/download", download_routes)
+        // .nest("/v1/catalog/skeleton", skeleton_routes)
         .nest("/v1", ws_routes)
         .nest("/v1", mcp_routes);
 
@@ -5308,10 +3974,7 @@ pub async fn run_server(
     metrics_port: u16,
     content_cache_age_sec: usize,
     frontend_dir_path: Option<String>,
-    downloader: Option<Arc<dyn crate::downloader::Downloader>>,
-    media_base_path: Option<std::path::PathBuf>,
     scheduler_handle: Option<SchedulerHandle>,
-    download_manager: Option<Arc<crate::download_manager::DownloadManager>>,
     server_store: Arc<dyn crate::server_store::ServerStore>,
     oidc_config: Option<crate::config::OidcConfig>,
     streaming_search: crate::config::StreamingSearchSettings,
@@ -5336,10 +3999,7 @@ pub async fn run_server(
         guarded_search_vault.clone(),
         user_store,
         user_manager,
-        downloader,
-        media_base_path,
         scheduler_handle,
-        download_manager,
         server_store,
         oidc_config,
     )
@@ -5385,36 +4045,13 @@ pub async fn run_server(
 }
 
 /// Close stale changelog batches automatically and rebuild search index if any were closed.
+/// NOTE: Disabled for Spotify schema - catalog is read-only, no changelog batches.
 fn check_and_close_stale_batches(
-    catalog_store: &Arc<dyn CatalogStore>,
-    search_vault: &super::state::GuardedSearchVault,
+    _catalog_store: &Arc<dyn CatalogStore>,
+    _search_vault: &super::state::GuardedSearchVault,
 ) {
-    super::metrics::CHANGELOG_STALE_BATCH_CHECKS_TOTAL.inc();
-
-    match catalog_store.close_stale_batches() {
-        Ok(closed_count) => {
-            if closed_count > 0 {
-                info!(
-                    "Background task closed {} stale changelog batch(es)",
-                    closed_count
-                );
-
-                // Rebuild search index after closing stale batches
-                if let Err(err) = search_vault.lock().unwrap().rebuild_index() {
-                    error!(
-                        "Failed to rebuild search index after closing stale batches: {}",
-                        err
-                    );
-                }
-            } else {
-                debug!("No stale changelog batches to close");
-            }
-            super::metrics::CHANGELOG_STALE_BATCHES.set(0.0);
-        }
-        Err(e) => {
-            error!("Failed to close stale batches: {}", e);
-        }
-    }
+    // Changelog functionality disabled - Spotify schema is read-only
+    // No stale batches to close
 }
 
 #[cfg(test)]
@@ -5456,10 +4093,19 @@ mod tests {
 
         fn update_popularity(&self, _items: &[(String, HashedItemType, u64, f64)]) {}
 
+        fn upsert_items(&self, _items: &[crate::search::SearchIndexItem]) -> anyhow::Result<()> {
+            Ok(())
+        }
+
+        fn remove_items(&self, _items: &[(String, HashedItemType)]) -> anyhow::Result<()> {
+            Ok(())
+        }
+
         fn get_stats(&self) -> crate::search::SearchVaultStats {
             crate::search::SearchVaultStats {
                 indexed_items: 0,
                 index_type: "Mock".to_string(),
+                state: crate::search::IndexState::Ready,
             }
         }
     }
@@ -5592,10 +4238,7 @@ mod tests {
             guarded_search_vault,
             user_store,
             user_manager,
-            None, // no downloader
-            None, // no media_base_path
             None, // no scheduler_handle
-            None, // no download_manager
             server_store,
             None, // no oidc_config
         )

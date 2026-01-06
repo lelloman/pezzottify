@@ -41,19 +41,12 @@ export const useAuthStore = defineStore("auth", {
 
     /**
      * Check if the user has a valid session.
-     * Uses the ID token from OIDC to authenticate with the backend.
+     * Supports both OIDC tokens and password-based cookie sessions.
      */
     async checkSession() {
       try {
-        // First check if we have OIDC tokens
-        const idToken = await oidc.getIdToken();
-        if (!idToken) {
-          this.user = null;
-          this.sessionChecked = true;
-          return false;
-        }
-
-        // Verify with backend using the ID token
+        // If user is already set (e.g., from password login), just verify with backend
+        // Also try session endpoint even without OIDC tokens (cookie-based auth)
         const response = await axios.get("/v1/auth/session");
         this.user = {
           handle: response.data.user_handle,

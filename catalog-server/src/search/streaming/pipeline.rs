@@ -191,13 +191,8 @@ impl<'a> StreamingSearchPipeline<'a> {
             let mut tracks: Vec<TrackSummary> = Vec::new();
             for track_id in track_ids {
                 if let Ok(Some(resolved)) = self.catalog_store.get_resolved_track(&track_id) {
-                    // Get album image for the track
-                    let image = self
-                        .catalog_store
-                        .get_album_display_image(&resolved.album.id)
-                        .ok()
-                        .flatten();
-                    tracks.push(track_summary_with_image(&resolved, image.as_ref()));
+                    // Use album ID as image reference (images resolved via image endpoint)
+                    tracks.push(track_summary_with_image(&resolved, Some(&resolved.album.id)));
                     emitted_ids.insert(track_id);
                 }
             }
@@ -283,9 +278,10 @@ impl<'a> StreamingSearchPipeline<'a> {
                     if let Ok(Some(resolved_track)) =
                         self.catalog_store.get_resolved_track(&track.id)
                     {
+                        // Use album ID as image reference (images resolved via image endpoint)
                         tracks.push(track_summary_with_image(
                             &resolved_track,
-                            resolved.display_image.as_ref(),
+                            Some(&resolved.album.id),
                         ));
                         emitted_ids.insert(track.id.clone());
                     }
@@ -366,9 +362,9 @@ impl<'a> StreamingSearchPipeline<'a> {
                 .flatten()
                 .map(|a| {
                     ResolvedSearchResult::Artist(crate::search::SearchedArtist {
-                        id: a.artist.id,
+                        id: a.artist.id.clone(),
                         name: a.artist.name,
-                        image_id: a.display_image.map(|i| i.id),
+                        image_id: Some(a.artist.id), // Use artist ID as image reference
                     })
                 }),
             HashedItemType::Album => self
@@ -377,19 +373,19 @@ impl<'a> StreamingSearchPipeline<'a> {
                 .ok()
                 .flatten()
                 .map(|a| {
-                    let year = a.album.release_date.and_then(|ts| {
-                        chrono::DateTime::from_timestamp(ts, 0)
-                            .and_then(|dt| dt.format("%Y").to_string().parse::<i64>().ok())
+                    // Extract year from string date (e.g., "2023-05-15", "2023-05", "2023")
+                    let year = a.album.release_date.as_ref().and_then(|date| {
+                        date.split('-').next().and_then(|y| y.parse::<i64>().ok())
                     });
                     ResolvedSearchResult::Album(crate::search::SearchedAlbum {
-                        id: a.album.id,
+                        id: a.album.id.clone(),
                         name: a.album.name,
                         artists_ids_names: a
                             .artists
                             .into_iter()
                             .map(|ar| (ar.id, ar.name))
                             .collect(),
-                        image_id: a.display_image.map(|i| i.id),
+                        image_id: Some(a.album.id), // Use album ID as image reference
                         year,
                     })
                 }),
@@ -402,20 +398,16 @@ impl<'a> StreamingSearchPipeline<'a> {
                     ResolvedSearchResult::Track(crate::search::SearchedTrack {
                         id: t.track.id,
                         name: t.track.name,
-                        duration: t.track.duration_secs.unwrap_or(0) as u32,
+                        // Convert from ms to seconds for display
+                        duration: (t.track.duration_ms / 1000) as u32,
                         artists_ids_names: t
                             .artists
                             .into_iter()
                             .map(|ta| (ta.artist.id, ta.artist.name))
                             .collect(),
-                        image_id: self
-                            .catalog_store
-                            .get_album_display_image(&t.album.id)
-                            .ok()
-                            .flatten()
-                            .map(|i| i.id),
+                        image_id: Some(t.album.id.clone()), // Use album ID as image reference
                         album_id: t.album.id,
-                        availability: t.track.availability.to_db_str().to_string(),
+                        availability: "available".to_string(), // Spotify tracks are all available
                     })
                 }),
         }

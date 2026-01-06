@@ -1,13 +1,70 @@
 <script setup>
 import { ref } from "vue";
 import { useAuthStore } from "@/store/auth.js";
+import { useRemoteStore } from "@/store/remote.js";
+import { useRouter } from "vue-router";
 
 const authStore = useAuthStore();
-const isLoading = ref(false);
+const remoteStore = useRemoteStore();
+const router = useRouter();
 
-function handleLogin() {
+const isLoading = ref(false);
+const username = ref("");
+const password = ref("");
+const error = ref("");
+const showPasswordForm = ref(true);
+
+function handleOidcLogin() {
   isLoading.value = true;
   authStore.loginWithOidc();
+}
+
+async function handlePasswordLogin() {
+  if (!username.value || !password.value) {
+    error.value = "Please enter username and password";
+    return;
+  }
+
+  isLoading.value = true;
+  error.value = "";
+
+  try {
+    const response = await fetch("/v1/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({
+        user_handle: username.value,
+        password: password.value,
+        device_uuid: crypto.randomUUID(),
+        device_type: "web",
+        device_name: navigator.userAgent.substring(0, 50),
+      }),
+    });
+
+    if (response.ok || response.status === 201) {
+      const data = await response.json();
+      // Store token if needed
+      if (data.token) {
+        localStorage.setItem("auth_token", data.token);
+      }
+      // Set user from response
+      authStore.user = {
+        handle: data.user_handle,
+        permissions: data.permissions || [],
+      };
+      authStore.sessionChecked = true;
+      router.push("/");
+    } else {
+      const data = await response.json().catch(() => ({}));
+      error.value = data.error || "Login failed";
+    }
+  } catch (e) {
+    console.error("Login error:", e);
+    error.value = "Connection error: " + e.message;
+  } finally {
+    isLoading.value = false;
+  }
 }
 </script>
 
@@ -20,11 +77,46 @@ function handleLogin() {
       </div>
 
       <div class="login-form">
+        <!-- Password Login -->
+        <div v-if="showPasswordForm" class="password-form">
+          <input
+            v-model="username"
+            type="text"
+            placeholder="Username"
+            class="input-field"
+            :disabled="isLoading"
+            @keyup.enter="handlePasswordLogin"
+          />
+          <input
+            v-model="password"
+            type="password"
+            placeholder="Password"
+            class="input-field"
+            :disabled="isLoading"
+            @keyup.enter="handlePasswordLogin"
+          />
+          <p v-if="error" class="error-message">{{ error }}</p>
+          <button
+            type="button"
+            class="login-button"
+            :disabled="isLoading"
+            @click="handlePasswordLogin"
+          >
+            <span v-if="!isLoading">Sign in</span>
+            <span v-else>Signing in...</span>
+          </button>
+        </div>
+
+        <div class="divider">
+          <span>or</span>
+        </div>
+
+        <!-- OIDC Login -->
         <button
           type="button"
-          class="login-button"
+          class="login-button oidc-button"
           :disabled="isLoading"
-          @click="handleLogin"
+          @click="handleOidcLogin"
         >
           <span v-if="!isLoading">Sign in with LelloAuth</span>
           <span v-else>Redirecting...</span>
@@ -77,7 +169,66 @@ function handleLogin() {
 .login-form {
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 16px;
+}
+
+.password-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.input-field {
+  padding: 12px 16px;
+  font-size: 15px;
+  color: var(--color-text);
+  background: var(--background);
+  border: 1px solid var(--border-color, #333);
+  border-radius: 6px;
+  font-family: inherit;
+  transition: border-color 0.2s ease;
+}
+
+.input-field:focus {
+  outline: none;
+  border-color: var(--accent-color);
+}
+
+.input-field::placeholder {
+  color: var(--color-text);
+  opacity: 0.5;
+}
+
+.error-message {
+  color: #ff6b6b;
+  font-size: 13px;
+  margin: 0;
+  text-align: center;
+}
+
+.divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--color-text);
+  opacity: 0.5;
+  font-size: 13px;
+}
+
+.divider::before,
+.divider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--border-color, #333);
+}
+
+.oidc-button {
+  background: #444;
+}
+
+.oidc-button:hover:not(:disabled) {
+  background: #555;
 }
 
 .login-button {

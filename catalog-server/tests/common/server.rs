@@ -36,10 +36,19 @@ impl SearchVault for MockSearchVault {
 
     fn update_popularity(&self, _items: &[(String, HashedItemType, u64, f64)]) {}
 
+    fn upsert_items(&self, _items: &[pezzottify_catalog_server::search::SearchIndexItem]) -> anyhow::Result<()> {
+        Ok(())
+    }
+
+    fn remove_items(&self, _items: &[(String, HashedItemType)]) -> anyhow::Result<()> {
+        Ok(())
+    }
+
     fn get_stats(&self) -> pezzottify_catalog_server::search::SearchVaultStats {
         pezzottify_catalog_server::search::SearchVaultStats {
             indexed_items: 0,
             index_type: "Mock".to_string(),
+            state: pezzottify_catalog_server::search::IndexState::Ready,
         }
     }
 }
@@ -145,12 +154,9 @@ impl TestServer {
             search_vault,
             user_store,
             user_manager,
-            None,
-            None,
-            None,
-            None, // no download_manager
+            None, // scheduler_handle
             server_store,
-            None, // no oidc_config
+            None, // oidc_config
         )
         .await
         .expect("Failed to build app");

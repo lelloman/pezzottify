@@ -8,22 +8,13 @@ use tracing::{error, info, level_filters::LevelFilter};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
 
 // Import modules from the library crate
-use pezzottify_catalog_server::background_jobs::jobs::{
-    AuditLogCleanupJob, ExpandArtistsBaseJob, MissingFilesWatchdogJob, PopularContentJob,
-};
+use pezzottify_catalog_server::background_jobs::jobs::PopularContentJob;
 use pezzottify_catalog_server::background_jobs::{
     create_scheduler, GuardedSearchVault, JobContext,
 };
-use pezzottify_catalog_server::catalog_store::{
-    CatalogStore, SqliteCatalogStore, WritableCatalogStore,
-};
+use pezzottify_catalog_server::catalog_store::{CatalogStore, SqliteCatalogStore};
 use pezzottify_catalog_server::config;
-use pezzottify_catalog_server::download_manager::{
-    AuditLogger, DownloadManager, DownloadQueueStore, DownloaderClient, MissingFilesWatchdog,
-    QueueProcessor, SqliteDownloadQueueStore,
-};
-use pezzottify_catalog_server::downloader;
-use pezzottify_catalog_server::search::Fts5LevenshteinSearchVault;
+use pezzottify_catalog_server::search::{Fts5LevenshteinSearchVault, NoopSearchVault};
 use pezzottify_catalog_server::server::{metrics, run_server, RequestsLoggingLevel};
 use pezzottify_catalog_server::server_store::{self, SqliteServerStore};
 use pezzottify_catalog_server::user::{self, SqliteUserStore, UserManager};
@@ -164,10 +155,6 @@ async fn main() -> Result<()> {
     info!("  db_dir: {:?}", app_config.db_dir);
     info!("  media_path: {:?}", app_config.media_path);
     info!("  port: {}", app_config.port);
-    info!(
-        "  download_manager.enabled: {}",
-        app_config.download_manager.enabled
-    );
 
     // Create catalog store (will create DB if not exists)
     if !app_config.catalog_db_path().exists() {
@@ -213,10 +200,29 @@ async fn main() -> Result<()> {
     )));
 
     // Create search vault early so it can be shared with job scheduler
-    info!("Indexing content for search...");
-    let search_vault: Box<dyn pezzottify_catalog_server::search::SearchVault> = Box::new(
-        Fts5LevenshteinSearchVault::new(catalog_store.clone(), &app_config.search_db_path())?,
-    );
+    // Use lazy initialization for fast startup, then build index in background
+    let search_vault: Box<dyn pezzottify_catalog_server::search::SearchVault> =
+        match app_config.search.engine.as_str() {
+            "noop" => {
+                info!("Search disabled (noop engine)");
+                Box::new(NoopSearchVault)
+            }
+            _ => {
+                info!("Initializing search vault (engine: {})...", app_config.search.engine);
+                let vault = Arc::new(Fts5LevenshteinSearchVault::new_lazy(
+                    &app_config.search_db_path(),
+                )?);
+
+                // Start background indexing - this returns immediately
+                // Items are indexed by popularity (most popular first)
+                // Search works during indexing with partial results
+                info!("Starting background search index build...");
+                vault.start_background_build(catalog_store.clone());
+
+                // Box the Arc directly - SearchVault is implemented for Arc<T>
+                Box::new(vault)
+            }
+        };
     let guarded_search_vault: GuardedSearchVault =
         std::sync::Arc::new(std::sync::Mutex::new(search_vault));
 
@@ -294,111 +300,7 @@ async fn main() -> Result<()> {
         });
     }
 
-    // Create downloader client if URL is configured
-    let downloader: Option<Arc<dyn downloader::Downloader>> =
-        app_config.downloader_url.clone().map(|url| {
-            info!("Downloader service configured at {}", url);
-            Arc::new(downloader::DownloaderClient::new(
-                url,
-                app_config.downloader_timeout_sec,
-            )) as Arc<dyn downloader::Downloader>
-        });
-
-    // Pass media_base_path for proxy if downloader is configured
-    let media_base_path_for_proxy = if downloader.is_some() {
-        Some(app_config.media_path.clone())
-    } else {
-        None
-    };
-
-    // Initialize download manager if enabled
-    let (download_manager, download_queue_store) = if app_config.download_manager.enabled {
-        let queue_store: Arc<dyn DownloadQueueStore> = Arc::new(SqliteDownloadQueueStore::new(
-            app_config.download_queue_db_path(),
-        )?);
-
-        let dm_downloader_client = DownloaderClient::new(
-            app_config.downloader_url.clone().unwrap(),
-            app_config.downloader_timeout_sec,
-        )?;
-
-        let manager = Arc::new(DownloadManager::new(
-            queue_store.clone(),
-            dm_downloader_client,
-            catalog_store.clone() as Arc<dyn WritableCatalogStore>,
-            app_config.media_path.clone(),
-            app_config.download_manager.clone(),
-        ));
-
-        // Verify ffprobe is available for media validation
-        match DownloadManager::check_ffprobe_available().await {
-            Ok(version) => info!("ffprobe available: {}", version),
-            Err(e) => {
-                error!("{}", e);
-                return Err(anyhow::anyhow!(
-                    "Download manager requires ffprobe for media validation. {}",
-                    e
-                ));
-            }
-        }
-
-        info!(
-            "Download manager initialized (process_interval={}s)",
-            app_config.download_manager.process_interval_secs
-        );
-        (Some(manager), Some(queue_store))
-    } else {
-        info!("Download manager disabled");
-        (None, None)
-    };
-
-    // Spawn queue processor task if download manager is enabled
-    if let Some(ref dm) = download_manager {
-        let processor = QueueProcessor::new(
-            dm.clone(),
-            app_config.download_manager.process_interval_secs,
-        );
-        let shutdown = shutdown_token.child_token();
-        tokio::spawn(async move {
-            processor.run(shutdown).await;
-        });
-        info!("Queue processor started");
-    }
-
-    // Register missing files watchdog job if download manager is enabled
-    if let Some(ref queue_store) = download_queue_store {
-        let audit_logger = AuditLogger::new(queue_store.clone());
-        let watchdog = Arc::new(MissingFilesWatchdog::new(
-            catalog_store.clone() as Arc<dyn CatalogStore>,
-            queue_store.clone(),
-            audit_logger,
-        ));
-        scheduler
-            .register_job(Arc::new(MissingFilesWatchdogJob::new(watchdog)))
-            .await;
-        info!("Missing files watchdog job registered");
-
-        // Register audit log cleanup job
-        scheduler
-            .register_job(Arc::new(AuditLogCleanupJob::new(
-                queue_store.clone(),
-                app_config.download_manager.audit_log_retention_days,
-            )))
-            .await;
-        info!(
-            "Audit log cleanup job registered (retention: {} days)",
-            app_config.download_manager.audit_log_retention_days
-        );
-
-        // Register expand artists base job (manual-only)
-        scheduler
-            .register_job(Arc::new(ExpandArtistsBaseJob::new(
-                catalog_store.clone() as Arc<dyn CatalogStore>,
-                queue_store.clone(),
-            )))
-            .await;
-        info!("Expand artists base job registered (manual trigger only)");
-    }
+    // NOTE: Download manager disabled for Spotify schema (catalog is read-only)
 
     // Spawn background task for storage metrics updates
     let db_dir_for_metrics = app_config.db_dir.clone();
@@ -431,10 +333,7 @@ async fn main() -> Result<()> {
             app_config.metrics_port,
             app_config.content_cache_age_sec,
             app_config.frontend_dir_path.clone(),
-            downloader,
-            media_base_path_for_proxy,
             Some(scheduler_handle),
-            download_manager,
             server_store,
             oidc_config,
             app_config.search.streaming.clone(),
