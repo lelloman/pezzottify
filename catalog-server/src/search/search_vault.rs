@@ -71,6 +71,14 @@ impl PartialOrd for SearchResult {
     }
 }
 
+/// Item to add to the search index.
+#[derive(Debug, Clone)]
+pub struct SearchIndexItem {
+    pub id: String,
+    pub name: String,
+    pub item_type: HashedItemType,
+}
+
 pub trait SearchVault: Send + Sync {
     fn search(
         &self,
@@ -84,6 +92,17 @@ pub trait SearchVault: Send + Sync {
     /// This should be called when the catalog changes (e.g., when a batch is closed).
     /// Returns an error if the rebuild fails.
     fn rebuild_index(&self) -> anyhow::Result<()>;
+
+    /// Add or update items in the search index.
+    ///
+    /// If an item with the same ID already exists, it will be updated.
+    /// This also updates the vocabulary for typo correction.
+    fn upsert_items(&self, items: &[SearchIndexItem]) -> anyhow::Result<()>;
+
+    /// Remove items from the search index.
+    ///
+    /// Items are identified by their ID and type.
+    fn remove_items(&self, items: &[(String, HashedItemType)]) -> anyhow::Result<()>;
 
     /// Update popularity scores for items.
     ///
@@ -109,4 +128,100 @@ pub struct SearchVaultStats {
     pub indexed_items: usize,
     /// Type of search index (e.g., "FTS5+Levenshtein")
     pub index_type: String,
+    /// Current indexing state
+    pub state: IndexState,
+}
+
+/// State of the search index.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(tag = "status")]
+pub enum IndexState {
+    /// Index is empty/not started
+    Empty,
+    /// Index is being built
+    Building {
+        /// Number of items processed so far
+        processed: usize,
+        /// Total items to process (if known)
+        total: Option<usize>,
+    },
+    /// Index is ready for queries
+    Ready,
+    /// Index build failed
+    Failed { error: String },
+}
+
+/// A no-op search vault that returns empty results.
+/// Used for fast startup when search is not needed.
+pub struct NoopSearchVault;
+
+impl SearchVault for NoopSearchVault {
+    fn search(
+        &self,
+        _query: &str,
+        _max_results: usize,
+        _filter: Option<Vec<HashedItemType>>,
+    ) -> Vec<SearchResult> {
+        Vec::new()
+    }
+
+    fn rebuild_index(&self) -> anyhow::Result<()> {
+        Ok(())
+    }
+
+    fn upsert_items(&self, _items: &[SearchIndexItem]) -> anyhow::Result<()> {
+        Ok(())
+    }
+
+    fn remove_items(&self, _items: &[(String, HashedItemType)]) -> anyhow::Result<()> {
+        Ok(())
+    }
+
+    fn update_popularity(&self, _items: &[(String, HashedItemType, u64, f64)]) {}
+
+    fn get_stats(&self) -> SearchVaultStats {
+        SearchVaultStats {
+            indexed_items: 0,
+            index_type: "Noop (disabled)".to_string(),
+            state: IndexState::Ready,
+        }
+    }
+}
+
+impl Default for IndexState {
+    fn default() -> Self {
+        IndexState::Empty
+    }
+}
+
+/// Implement SearchVault for Arc<T> to allow shared ownership with background tasks.
+impl<T: SearchVault + ?Sized> SearchVault for std::sync::Arc<T> {
+    fn search(
+        &self,
+        query: &str,
+        max_results: usize,
+        filter: Option<Vec<HashedItemType>>,
+    ) -> Vec<SearchResult> {
+        (**self).search(query, max_results, filter)
+    }
+
+    fn rebuild_index(&self) -> anyhow::Result<()> {
+        (**self).rebuild_index()
+    }
+
+    fn upsert_items(&self, items: &[SearchIndexItem]) -> anyhow::Result<()> {
+        (**self).upsert_items(items)
+    }
+
+    fn remove_items(&self, items: &[(String, HashedItemType)]) -> anyhow::Result<()> {
+        (**self).remove_items(items)
+    }
+
+    fn update_popularity(&self, items: &[(String, HashedItemType, u64, f64)]) {
+        (**self).update_popularity(items)
+    }
+
+    fn get_stats(&self) -> SearchVaultStats {
+        (**self).get_stats()
+    }
 }

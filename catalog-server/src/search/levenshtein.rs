@@ -45,6 +45,7 @@ pub fn levenshtein_distance(a: &str, b: &str) -> usize {
 
 /// A vocabulary for typo-tolerant word matching.
 /// Stores unique words and provides fuzzy matching capabilities.
+#[derive(Clone)]
 pub struct Vocabulary {
     /// All unique words in lowercase
     words: Vec<String>,
