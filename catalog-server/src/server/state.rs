@@ -4,7 +4,7 @@ use crate::background_jobs::SchedulerHandle;
 use crate::catalog_store::CatalogStore;
 use crate::mcp::handler::McpState;
 use crate::oidc::{AuthStateStore, OidcClient};
-use crate::search::SearchVault;
+use crate::search::{OrganicIndexer, SearchVault};
 use crate::server_store::ServerStore;
 use crate::user::UserManager;
 use std::sync::{Arc, Mutex};
@@ -22,6 +22,7 @@ pub type GuardedServerStore = Arc<dyn ServerStore>;
 pub type OptionalOidcClient = Option<Arc<OidcClient>>;
 pub type GuardedAuthStateStore = Arc<AuthStateStore>;
 pub type GuardedMcpState = Arc<McpState>;
+pub type OptionalOrganicIndexer = Option<Arc<OrganicIndexer>>;
 
 #[derive(Clone)]
 pub struct ServerState {
@@ -37,6 +38,7 @@ pub struct ServerState {
     pub oidc_client: OptionalOidcClient,
     pub auth_state_store: GuardedAuthStateStore,
     pub mcp_state: GuardedMcpState,
+    pub organic_indexer: OptionalOrganicIndexer,
 }
 
 unsafe impl Send for ServerState {}
@@ -99,5 +101,11 @@ impl FromRef<ServerState> for GuardedAuthStateStore {
 impl FromRef<ServerState> for GuardedMcpState {
     fn from_ref(input: &ServerState) -> Self {
         input.mcp_state.clone()
+    }
+}
+
+impl FromRef<ServerState> for OptionalOrganicIndexer {
+    fn from_ref(input: &ServerState) -> Self {
+        input.organic_indexer.clone()
     }
 }
