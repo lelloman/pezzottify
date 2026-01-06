@@ -13,6 +13,8 @@ use std::path::PathBuf;
 /// Settings for the search subsystem
 #[derive(Debug, Clone)]
 pub struct SearchSettings {
+    /// Search engine to use: "fts5-levenshtein" or "noop"
+    pub engine: String,
     pub streaming: StreamingSearchSettings,
 }
 
@@ -197,9 +199,15 @@ impl AppConfig {
 
         let background_jobs = BackgroundJobsSettings::default();
 
+        // Search settings from file config
+        let search_file = file.search.clone().unwrap_or_default();
+        let search_engine = search_file
+            .engine
+            .unwrap_or_else(|| "fts5-levenshtein".to_string());
+
         // Streaming search settings from file config
         let streaming_defaults = StreamingSearchSettings::default();
-        let streaming_file = file.search.and_then(|s| s.streaming).unwrap_or_default();
+        let streaming_file = search_file.streaming.unwrap_or_default();
         let streaming = StreamingSearchSettings {
             strategy: streaming_file
                 .strategy
@@ -234,7 +242,10 @@ impl AppConfig {
                 .unwrap_or(streaming_defaults.top_results_limit),
         };
 
-        let search = SearchSettings { streaming };
+        let search = SearchSettings {
+            engine: search_engine,
+            streaming,
+        };
 
         Ok(Self {
             db_dir,

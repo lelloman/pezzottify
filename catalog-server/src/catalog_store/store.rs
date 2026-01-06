@@ -62,9 +62,11 @@ impl SqliteCatalogStore {
 
     /// Get artist rowid from Spotify ID.
     fn get_artist_rowid(conn: &Connection, id: &str) -> Result<Option<i64>> {
-        match conn.query_row("SELECT rowid FROM artists WHERE id = ?1", params![id], |r| {
-            r.get(0)
-        }) {
+        match conn.query_row(
+            "SELECT rowid FROM artists WHERE id = ?1",
+            params![id],
+            |r| r.get(0),
+        ) {
             Ok(rowid) => Ok(Some(rowid)),
             Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
             Err(e) => Err(e.into()),
@@ -95,9 +97,8 @@ impl SqliteCatalogStore {
 
     /// Get genres for an artist by rowid.
     fn get_artist_genres(conn: &Connection, artist_rowid: i64) -> Result<Vec<String>> {
-        let mut stmt = conn.prepare_cached(
-            "SELECT genre FROM artist_genres WHERE artist_rowid = ?1",
-        )?;
+        let mut stmt =
+            conn.prepare_cached("SELECT genre FROM artist_genres WHERE artist_rowid = ?1")?;
         let genres = stmt
             .query_map(params![artist_rowid], |r| r.get(0))?
             .collect::<Result<Vec<String>, _>>()?;
@@ -105,10 +106,7 @@ impl SqliteCatalogStore {
     }
 
     /// Parse an Artist from a row (id, name, followers_total, popularity).
-    fn parse_artist_row(
-        row: &rusqlite::Row,
-        genres: Vec<String>,
-    ) -> rusqlite::Result<Artist> {
+    fn parse_artist_row(row: &rusqlite::Row, genres: Vec<String>) -> rusqlite::Result<Artist> {
         Ok(Artist {
             id: row.get(0)?,
             name: row.get(1)?,
@@ -172,7 +170,9 @@ impl SqliteCatalogStore {
             "SELECT id, name, followers_total, popularity FROM artists WHERE rowid = ?1",
         )?;
 
-        match stmt.query_row(params![rowid], |row| Self::parse_artist_row(row, genres.clone())) {
+        match stmt.query_row(params![rowid], |row| {
+            Self::parse_artist_row(row, genres.clone())
+        }) {
             Ok(artist) => Ok(Some(artist)),
             Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
             Err(e) => Err(e.into()),
@@ -207,13 +207,32 @@ impl SqliteCatalogStore {
 
         let row_result = stmt.query_row(params![id], |row| {
             let album_rowid: i64 = row.get(2)?;
-            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?, album_rowid,
-                row.get::<_, i32>(3)?, row.get::<_, Option<String>>(4)?,
-                row.get::<_, i32>(5)?, row.get::<_, i32>(6)?, row.get::<_, i64>(7)?,
-                row.get::<_, i32>(8)?, row.get::<_, Option<String>>(9)?))
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                album_rowid,
+                row.get::<_, i32>(3)?,
+                row.get::<_, Option<String>>(4)?,
+                row.get::<_, i32>(5)?,
+                row.get::<_, i32>(6)?,
+                row.get::<_, i64>(7)?,
+                row.get::<_, i32>(8)?,
+                row.get::<_, Option<String>>(9)?,
+            ))
         });
 
-        let (track_id, name, album_rowid, track_number, isrc, popularity, disc_number, duration_ms, explicit, language) = match row_result {
+        let (
+            track_id,
+            name,
+            album_rowid,
+            track_number,
+            isrc,
+            popularity,
+            disc_number,
+            duration_ms,
+            explicit,
+            language,
+        ) = match row_result {
             Ok(data) => data,
             Err(rusqlite::Error::QueryReturnedNoRows) => return Ok(None),
             Err(e) => return Err(e.into()),
@@ -286,13 +305,24 @@ impl SqliteCatalogStore {
         let artists: Vec<Artist> = artists_stmt
             .query_map(params![album_rowid], |row| {
                 let artist_rowid: i64 = row.get(4)?;
-                Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?,
-                    row.get::<_, i64>(2)?, row.get::<_, i32>(3)?, artist_rowid))
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, i64>(2)?,
+                    row.get::<_, i32>(3)?,
+                    artist_rowid,
+                ))
             })?
             .filter_map(|r| r.ok())
             .map(|(id, name, followers, popularity, artist_rowid)| {
                 let genres = Self::get_artist_genres(&conn, artist_rowid).unwrap_or_default();
-                Artist { id, name, genres, followers_total: followers, popularity }
+                Artist {
+                    id,
+                    name,
+                    genres,
+                    followers_total: followers,
+                    popularity,
+                }
             })
             .collect();
 
@@ -361,25 +391,26 @@ impl SqliteCatalogStore {
              WHERE t.rowid = ?1",
         )?;
 
-        let (track, album_id): (Track, String) = track_stmt.query_row(params![track_rowid], |row| {
-            let explicit: i32 = row.get(8)?;
-            let album_id: String = row.get(10)?;
-            Ok((
-                Track {
-                    id: row.get(0)?,
-                    name: row.get(1)?,
-                    album_id: album_id.clone(),
-                    disc_number: row.get(6)?,
-                    track_number: row.get(3)?,
-                    duration_ms: row.get(7)?,
-                    explicit: explicit != 0,
-                    popularity: row.get(5)?,
-                    language: row.get(9)?,
-                    external_id_isrc: row.get(4)?,
-                },
-                album_id,
-            ))
-        })?;
+        let (track, album_id): (Track, String) =
+            track_stmt.query_row(params![track_rowid], |row| {
+                let explicit: i32 = row.get(8)?;
+                let album_id: String = row.get(10)?;
+                Ok((
+                    Track {
+                        id: row.get(0)?,
+                        name: row.get(1)?,
+                        album_id: album_id.clone(),
+                        disc_number: row.get(6)?,
+                        track_number: row.get(3)?,
+                        duration_ms: row.get(7)?,
+                        explicit: explicit != 0,
+                        popularity: row.get(5)?,
+                        language: row.get(9)?,
+                        external_id_isrc: row.get(4)?,
+                    },
+                    album_id,
+                ))
+            })?;
 
         // Get album
         let mut album_stmt = conn.prepare_cached(
@@ -402,15 +433,26 @@ impl SqliteCatalogStore {
             .query_map(params![track_rowid], |row| {
                 let artist_rowid: i64 = row.get(4)?;
                 let role: Option<i32> = row.get(5)?;
-                Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?,
-                    row.get::<_, i64>(2)?, row.get::<_, i32>(3)?, artist_rowid,
-                    role.unwrap_or(0)))
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, i64>(2)?,
+                    row.get::<_, i32>(3)?,
+                    artist_rowid,
+                    role.unwrap_or(0),
+                ))
             })?
             .filter_map(|r| r.ok())
             .map(|(id, name, followers, popularity, artist_rowid, role)| {
                 let genres = Self::get_artist_genres(&conn, artist_rowid).unwrap_or_default();
                 TrackArtist {
-                    artist: Artist { id, name, genres, followers_total: followers, popularity },
+                    artist: Artist {
+                        id,
+                        name,
+                        genres,
+                        followers_total: followers,
+                        popularity,
+                    },
                     role: ArtistRole::from_db_int(role),
                 }
             })
@@ -568,8 +610,7 @@ impl CatalogStore for SqliteCatalogStore {
 
     fn get_track_json(&self, id: &str) -> Result<Option<serde_json::Value>> {
         let conn = self.conn.lock().unwrap();
-        Self::get_track_inner(&conn, id)
-            .map(|opt| opt.map(|t| serde_json::to_value(t).unwrap()))
+        Self::get_track_inner(&conn, id).map(|opt| opt.map(|t| serde_json::to_value(t).unwrap()))
     }
 
     fn get_track(&self, id: &str) -> Result<Option<Track>> {
@@ -623,12 +664,17 @@ impl CatalogStore for SqliteCatalogStore {
 
     fn get_image_path(&self, id: &str) -> PathBuf {
         // Images are stored as {media_base_path}/images/{id}.jpg
-        self.media_base_path.join("images").join(format!("{}.jpg", id))
+        self.media_base_path
+            .join("images")
+            .join(format!("{}.jpg", id))
     }
 
     fn get_track_audio_path(&self, track_id: &str) -> Option<PathBuf> {
         // Audio files are stored as {media_base_path}/audio/{track_id}.ogg
-        let path = self.media_base_path.join("audio").join(format!("{}.ogg", track_id));
+        let path = self
+            .media_base_path
+            .join("audio")
+            .join(format!("{}.ogg", track_id));
         if path.exists() {
             Some(path)
         } else {
@@ -691,9 +737,8 @@ impl CatalogStore for SqliteCatalogStore {
         );
 
         // Artists (skip genres for speed - they can be added later if needed)
-        let mut artist_stmt = conn.prepare(
-            "SELECT id, name FROM artists ORDER BY popularity DESC LIMIT ?",
-        )?;
+        let mut artist_stmt =
+            conn.prepare("SELECT id, name FROM artists ORDER BY popularity DESC LIMIT ?")?;
         let artist_iter = artist_stmt.query_map([artist_limit], |row| {
             Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
         })?;
@@ -709,9 +754,8 @@ impl CatalogStore for SqliteCatalogStore {
         }
 
         // Albums
-        let mut album_stmt = conn.prepare(
-            "SELECT id, name FROM albums ORDER BY popularity DESC LIMIT ?",
-        )?;
+        let mut album_stmt =
+            conn.prepare("SELECT id, name FROM albums ORDER BY popularity DESC LIMIT ?")?;
         let album_iter = album_stmt.query_map([album_limit], |row| {
             Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
         })?;
@@ -727,9 +771,8 @@ impl CatalogStore for SqliteCatalogStore {
         }
 
         // Tracks
-        let mut track_stmt = conn.prepare(
-            "SELECT id, name FROM tracks ORDER BY popularity DESC LIMIT ?",
-        )?;
+        let mut track_stmt =
+            conn.prepare("SELECT id, name FROM tracks ORDER BY popularity DESC LIMIT ?")?;
         let track_iter = track_stmt.query_map([track_limit], |row| {
             Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
         })?;

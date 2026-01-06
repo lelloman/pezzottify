@@ -732,6 +732,13 @@ mod tests {
             unimplemented!()
         }
 
+        fn get_track_audio_features(
+            &self,
+            _track_id: &str,
+        ) -> Result<Option<crate::catalog_store::TrackAudioFeatures>> {
+            Ok(None)
+        }
+
         fn get_changelog_batch_summary(
             &self,
             _batch_id: &str,

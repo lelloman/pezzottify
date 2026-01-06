@@ -89,7 +89,6 @@ async fn inspect_overview(ctx: &ToolContext) -> ToolResult {
         },
         "features": {
             "scheduler_enabled": ctx.scheduler_handle.is_some(),
-            "download_manager_enabled": ctx.download_manager.is_some(),
         },
     });
 
@@ -101,36 +100,13 @@ async fn inspect_catalog(ctx: &ToolContext) -> ToolResult {
     let albums_count = ctx.catalog_store.get_albums_count();
     let tracks_count = ctx.catalog_store.get_tracks_count();
 
-    // Get integrity info if available
-    let artists_without_related = ctx
-        .catalog_store
-        .get_artists_without_related()
-        .unwrap_or_default()
-        .len();
-    let orphan_related = ctx
-        .catalog_store
-        .get_orphan_related_artist_ids()
-        .unwrap_or_default()
-        .len();
-
-    // Get stale batches
-    let stale_batches = ctx
-        .catalog_store
-        .get_stale_batches(24)
-        .unwrap_or_default()
-        .len();
-
     let result = serde_json::json!({
         "counts": {
             "artists": artists_count,
             "albums": albums_count,
             "tracks": tracks_count,
         },
-        "integrity": {
-            "artists_without_related": artists_without_related,
-            "orphan_related_artist_ids": orphan_related,
-            "stale_changelog_batches": stale_batches,
-        },
+        "note": "Spotify catalog is read-only - integrity checks not available",
     });
 
     ToolsCallResult::json(&result).map_err(|e| McpError::InternalError(e.to_string()))
@@ -150,24 +126,12 @@ async fn inspect_search(ctx: &ToolContext) -> ToolResult {
     ToolsCallResult::json(&result).map_err(|e| McpError::InternalError(e.to_string()))
 }
 
-async fn inspect_downloads(ctx: &ToolContext) -> ToolResult {
-    let result = if let Some(dm) = &ctx.download_manager {
-        match dm.get_queue_stats() {
-            Ok(stats) => serde_json::json!({
-                "enabled": true,
-                "stats": stats,
-            }),
-            Err(e) => serde_json::json!({
-                "enabled": true,
-                "error": e.to_string(),
-            }),
-        }
-    } else {
-        serde_json::json!({
-            "enabled": false,
-            "message": "Download manager is not configured",
-        })
-    };
+async fn inspect_downloads(_ctx: &ToolContext) -> ToolResult {
+    // Download manager disabled for Spotify schema
+    let result = serde_json::json!({
+        "enabled": false,
+        "message": "Download manager not available for Spotify catalog",
+    });
 
     ToolsCallResult::json(&result).map_err(|e| McpError::InternalError(e.to_string()))
 }
@@ -181,42 +145,9 @@ async fn inspect_all(ctx: &ToolContext) -> ToolResult {
     let albums_count = ctx.catalog_store.get_albums_count();
     let tracks_count = ctx.catalog_store.get_tracks_count();
 
-    let artists_without_related = ctx
-        .catalog_store
-        .get_artists_without_related()
-        .unwrap_or_default()
-        .len();
-    let orphan_related = ctx
-        .catalog_store
-        .get_orphan_related_artist_ids()
-        .unwrap_or_default()
-        .len();
-    let stale_batches = ctx
-        .catalog_store
-        .get_stale_batches(24)
-        .unwrap_or_default()
-        .len();
-
     let search_vault = ctx.search_vault.lock().unwrap();
     let search_stats = search_vault.get_stats();
     drop(search_vault);
-
-    let downloads = if let Some(dm) = &ctx.download_manager {
-        match dm.get_queue_stats() {
-            Ok(stats) => serde_json::json!({
-                "enabled": true,
-                "stats": stats,
-            }),
-            Err(e) => serde_json::json!({
-                "enabled": true,
-                "error": e.to_string(),
-            }),
-        }
-    } else {
-        serde_json::json!({
-            "enabled": false,
-        })
-    };
 
     let result = serde_json::json!({
         "server": {
@@ -226,7 +157,6 @@ async fn inspect_all(ctx: &ToolContext) -> ToolResult {
         },
         "features": {
             "scheduler_enabled": ctx.scheduler_handle.is_some(),
-            "download_manager_enabled": ctx.download_manager.is_some(),
         },
         "catalog": {
             "counts": {
@@ -234,17 +164,12 @@ async fn inspect_all(ctx: &ToolContext) -> ToolResult {
                 "albums": albums_count,
                 "tracks": tracks_count,
             },
-            "integrity": {
-                "artists_without_related": artists_without_related,
-                "orphan_related_artist_ids": orphan_related,
-                "stale_changelog_batches": stale_batches,
-            },
+            "note": "Spotify catalog is read-only",
         },
         "search": {
             "indexed_items": search_stats.indexed_items,
             "index_type": search_stats.index_type,
         },
-        "downloads": downloads,
     });
 
     ToolsCallResult::json(&result).map_err(|e| McpError::InternalError(e.to_string()))

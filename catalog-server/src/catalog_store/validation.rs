@@ -2,9 +2,8 @@
 //!
 //! Provides validation functions to ensure data integrity before
 //! inserting or updating entities in the catalog store.
-#![allow(dead_code)]
 
-use super::models::{Album, Artist, Image, Track, TrackAvailability};
+use super::models::{Album, Artist, Track};
 use std::fmt;
 
 /// Validation error types
@@ -19,7 +18,7 @@ pub enum ValidationError {
     },
     NegativeValue {
         field: &'static str,
-        value: i32,
+        value: i64,
     },
     ForeignKeyViolation {
         entity_type: &'static str,
@@ -91,9 +90,6 @@ pub fn validate_track(track: &Track) -> ValidationResult<()> {
     if track.album_id.trim().is_empty() {
         return Err(ValidationError::EmptyField { field: "album_id" });
     }
-    if track.audio_uri.trim().is_empty() {
-        return Err(ValidationError::EmptyField { field: "audio_uri" });
-    }
     if track.disc_number < 1 {
         return Err(ValidationError::NonPositiveValue {
             field: "disc_number",
@@ -106,35 +102,10 @@ pub fn validate_track(track: &Track) -> ValidationResult<()> {
             value: track.track_number,
         });
     }
-    if let Some(duration) = track.duration_secs {
-        if duration < 0 {
-            return Err(ValidationError::NegativeValue {
-                field: "duration_secs",
-                value: duration,
-            });
-        }
-    }
-    Ok(())
-}
-
-/// Validate an image entity
-pub fn validate_image(image: &Image) -> ValidationResult<()> {
-    if image.id.trim().is_empty() {
-        return Err(ValidationError::EmptyField { field: "id" });
-    }
-    if image.uri.trim().is_empty() {
-        return Err(ValidationError::EmptyField { field: "uri" });
-    }
-    if image.width == 0 {
-        return Err(ValidationError::NonPositiveValue {
-            field: "width",
-            value: 0,
-        });
-    }
-    if image.height == 0 {
-        return Err(ValidationError::NonPositiveValue {
-            field: "height",
-            value: 0,
+    if track.duration_ms < 0 {
+        return Err(ValidationError::NegativeValue {
+            field: "duration_ms",
+            value: track.duration_ms,
         });
     }
     Ok(())
@@ -143,14 +114,15 @@ pub fn validate_image(image: &Image) -> ValidationResult<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::catalog_store::models::{ActivityPeriod, AlbumType, Format, ImageSize};
+    use crate::catalog_store::models::AlbumType;
 
     fn make_valid_artist() -> Artist {
         Artist {
             id: "artist-1".to_string(),
             name: "Test Artist".to_string(),
             genres: vec!["rock".to_string()],
-            activity_periods: vec![ActivityPeriod::Decade(1990)],
+            followers_total: 1000,
+            popularity: 50,
         }
     }
 
@@ -160,10 +132,10 @@ mod tests {
             name: "Test Album".to_string(),
             album_type: AlbumType::Album,
             label: None,
-            release_date: None,
-            genres: vec![],
-            original_title: None,
-            version_title: None,
+            release_date: Some("2023-01-01".to_string()),
+            release_date_precision: Some("day".to_string()),
+            external_id_upc: None,
+            popularity: 50,
         }
     }
 
@@ -174,26 +146,11 @@ mod tests {
             album_id: "album-1".to_string(),
             disc_number: 1,
             track_number: 1,
-            duration_secs: Some(180),
-            is_explicit: false,
-            audio_uri: "albums/album-1/track-1.mp3".to_string(),
-            format: Format::Mp3_320,
-            tags: vec![],
-            has_lyrics: false,
-            languages: vec![],
-            original_title: None,
-            version_title: None,
-            availability: TrackAvailability::Available,
-        }
-    }
-
-    fn make_valid_image() -> Image {
-        Image {
-            id: "image-1".to_string(),
-            uri: "images/image-1.jpg".to_string(),
-            size: ImageSize::Default,
-            width: 300,
-            height: 300,
+            duration_ms: 180000,
+            explicit: false,
+            popularity: 50,
+            language: None,
+            external_id_isrc: None,
         }
     }
 
@@ -281,43 +238,12 @@ mod tests {
     #[test]
     fn test_validate_track_negative_duration() {
         let mut track = make_valid_track();
-        track.duration_secs = Some(-10);
+        track.duration_ms = -10;
         let err = validate_track(&track).unwrap_err();
         assert!(matches!(
             err,
             ValidationError::NegativeValue {
-                field: "duration_secs",
-                ..
-            }
-        ));
-    }
-
-    #[test]
-    fn test_validate_image_valid() {
-        let image = make_valid_image();
-        assert!(validate_image(&image).is_ok());
-    }
-
-    #[test]
-    fn test_validate_image_zero_width() {
-        let mut image = make_valid_image();
-        image.width = 0;
-        let err = validate_image(&image).unwrap_err();
-        assert!(matches!(
-            err,
-            ValidationError::NonPositiveValue { field: "width", .. }
-        ));
-    }
-
-    #[test]
-    fn test_validate_image_zero_height() {
-        let mut image = make_valid_image();
-        image.height = 0;
-        let err = validate_image(&image).unwrap_err();
-        assert!(matches!(
-            err,
-            ValidationError::NonPositiveValue {
-                field: "height",
+                field: "duration_ms",
                 ..
             }
         ));

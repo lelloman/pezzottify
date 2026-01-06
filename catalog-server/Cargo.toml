@@ -16,6 +16,7 @@ slowdown = [] # dev feature, adds a slowdown layer in front of server routes
 [dependencies]
 anyhow = "1.0.75"
 base64 = "0.22"
+ctrlc = "3.4"
 argon2 = "0.5.3"
 async-trait = "0.1.85"
 axum = { version = "0.8.1", features = ["ws"] }
@@ -60,6 +61,7 @@ walkdir = "2.5"
 reqwest = { version = "0.12", features = ["json", "stream"] }
 openidconnect = "4.0"
 jsonwebtoken = "9"
+indicatif = "0.17"
 
 [dev-dependencies]
 reqwest = { version = "0.12", features = ["json", "cookies"] }
@@ -73,3 +75,8 @@ path = "src/main.rs"
 [[bin]]
 name = "cli-auth"
 path = "src/cli_auth.rs"
+
+# TODO: Create cli-import-spotify binary for importing Spotify metadata
+# [[bin]]
+# name = "cli-import-spotify"
+# path = "src/cli_import_spotify.rs"

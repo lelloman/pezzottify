@@ -208,7 +208,10 @@ async fn main() -> Result<()> {
                 Box::new(NoopSearchVault)
             }
             _ => {
-                info!("Initializing search vault (engine: {})...", app_config.search.engine);
+                info!(
+                    "Initializing search vault (engine: {})...",
+                    app_config.search.engine
+                );
                 let vault = Arc::new(Fts5LevenshteinSearchVault::new_lazy(
                     &app_config.search_db_path(),
                 )?);

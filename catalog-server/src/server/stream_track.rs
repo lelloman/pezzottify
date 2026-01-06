@@ -1,11 +1,9 @@
 //! Audio streaming functionality
-#![allow(dead_code)] // Used as route handler
 
 use super::{
     session::Session,
     state::{GuardedCatalogStore, ServerState},
 };
-use crate::catalog_store::TrackAvailability;
 use axum::{
     body::Body,
     extract::{FromRequestParts, Path, State},
@@ -59,7 +57,7 @@ pub struct ByteRangeExtractionError {}
 
 impl IntoResponse for ByteRangeExtractionError {
     fn into_response(self) -> Response {
-        todo!()
+        StatusCode::BAD_REQUEST.into_response()
     }
 }
 
@@ -85,26 +83,21 @@ pub async fn stream_track(
     State(catalog_store): State<GuardedCatalogStore>,
     Path(id): Path<String>,
 ) -> Response {
-    // Get track and check availability
+    // Get track metadata
     let track = match catalog_store.get_track(&id) {
         Ok(Some(track)) => track,
         Ok(None) => return StatusCode::NOT_FOUND.into_response(),
         Err(_) => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
     };
 
-    // Return 404 if track is not available for streaming
-    if track.availability != TrackAvailability::Available {
-        debug!(
-            "Track {} not available for streaming (status: {:?})",
-            track.name, track.availability
-        );
-        return StatusCode::NOT_FOUND.into_response();
-    }
-
     debug!("Streaming track: {}", track.name);
 
+    // Get audio file path - returns None if audio not available
     let path = match catalog_store.get_track_audio_path(&id) {
-        None => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+        None => {
+            debug!("Track {} audio not available", track.name);
+            return StatusCode::NOT_FOUND.into_response();
+        }
         Some(x) => x,
     };
     debug!("Streaming track from path {}", path.display());

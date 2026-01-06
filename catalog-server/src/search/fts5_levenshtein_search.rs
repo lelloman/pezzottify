@@ -13,7 +13,9 @@
 //! 5. Progress is available via `get_stats()`
 
 use super::levenshtein::Vocabulary;
-use super::{HashedItemType, IndexState, SearchIndexItem, SearchResult, SearchVault, SearchVaultStats};
+use super::{
+    HashedItemType, IndexState, SearchIndexItem, SearchResult, SearchVault, SearchVaultStats,
+};
 use crate::catalog_store::{CatalogStore, SearchableContentType};
 use anyhow::Result;
 use rusqlite::Connection;
@@ -81,10 +83,7 @@ impl Fts5LevenshteinSearchVault {
         // Check if we have an existing valid index
         let index_count = Self::get_index_item_count(&conn).unwrap_or(0);
         let (vocabulary, state) = if index_count > 0 {
-            info!(
-                "Loading existing search index with {} items",
-                index_count
-            );
+            info!("Loading existing search index with {} items", index_count);
             let vocab = Self::load_vocabulary_from_index(&conn)?;
             (vocab, IndexState::Ready)
         } else {
@@ -230,8 +229,9 @@ impl Fts5LevenshteinSearchVault {
                 let conn = self.conn.lock().unwrap();
                 conn.execute("BEGIN IMMEDIATE", [])?;
 
-                let mut stmt = conn
-                    .prepare("INSERT INTO search_index (item_id, item_type, name) VALUES (?, ?, ?)")?;
+                let mut stmt = conn.prepare(
+                    "INSERT INTO search_index (item_id, item_type, name) VALUES (?, ?, ?)",
+                )?;
 
                 for item in batch {
                     let type_str = match item.content_type {
@@ -534,8 +534,8 @@ impl Fts5LevenshteinSearchVault {
             conn.prepare("DELETE FROM search_index WHERE item_id = ? AND item_type = ?")?;
 
         // Insert new entries
-        let mut insert_stmt = conn
-            .prepare("INSERT INTO search_index (item_id, item_type, name) VALUES (?, ?, ?)")?;
+        let mut insert_stmt =
+            conn.prepare("INSERT INTO search_index (item_id, item_type, name) VALUES (?, ?, ?)")?;
 
         conn.execute("BEGIN IMMEDIATE", [])?;
 

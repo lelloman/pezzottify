@@ -212,7 +212,8 @@ async fn get_artist(ctx: &ToolContext, id: &str) -> ToolResult {
             "id": resolved.artist.id,
             "name": resolved.artist.name,
             "genres": resolved.artist.genres,
-            "has_image": resolved.display_image.is_some(),
+            "followers_total": resolved.artist.followers_total,
+            "popularity": resolved.artist.popularity,
         },
         "albums": discography.as_ref().map(|d| d.albums.iter().map(|a| serde_json::json!({
             "id": a.id,
@@ -245,8 +246,7 @@ async fn get_album(ctx: &ToolContext, id: &str) -> ToolResult {
             "album_type": format!("{:?}", resolved.album.album_type),
             "release_date": resolved.album.release_date,
             "label": resolved.album.label,
-            "genres": resolved.album.genres,
-            "has_image": resolved.display_image.is_some(),
+            "popularity": resolved.album.popularity,
         },
         "artists": resolved.artists.iter().map(|a| serde_json::json!({
             "id": a.id,
@@ -254,13 +254,12 @@ async fn get_album(ctx: &ToolContext, id: &str) -> ToolResult {
         })).collect::<Vec<_>>(),
         "discs": resolved.discs.iter().map(|disc| serde_json::json!({
             "number": disc.number,
-            "name": disc.name,
             "tracks": disc.tracks.iter().map(|t| serde_json::json!({
                 "id": t.id,
                 "name": t.name,
                 "track_number": t.track_number,
-                "duration_secs": t.duration_secs,
-                "is_explicit": t.is_explicit,
+                "duration_ms": t.duration_ms,
+                "explicit": t.explicit,
             })).collect::<Vec<_>>(),
         })).collect::<Vec<_>>(),
         "track_count": resolved.discs.iter().map(|d| d.tracks.len()).sum::<usize>(),
@@ -282,10 +281,10 @@ async fn get_track(ctx: &ToolContext, id: &str) -> ToolResult {
             "name": resolved.track.name,
             "disc_number": resolved.track.disc_number,
             "track_number": resolved.track.track_number,
-            "duration_secs": resolved.track.duration_secs,
-            "is_explicit": resolved.track.is_explicit,
-            "has_lyrics": resolved.track.has_lyrics,
-            "availability": format!("{:?}", resolved.track.availability),
+            "duration_ms": resolved.track.duration_ms,
+            "explicit": resolved.track.explicit,
+            "popularity": resolved.track.popularity,
+            "language": resolved.track.language,
         },
         "album": {
             "id": resolved.album.id,
@@ -380,193 +379,11 @@ fn catalog_mutate_tool() -> super::super::registry::RegisteredTool {
         .build(catalog_mutate_handler)
 }
 
-async fn catalog_mutate_handler(ctx: ToolContext, params: Value) -> ToolResult {
-    let params: CatalogMutateParams =
-        serde_json::from_value(params).map_err(|e| McpError::InvalidParams(e.to_string()))?;
-
-    match params.action {
-        CatalogMutateAction::Create => {
-            let data = params.data.ok_or_else(|| {
-                McpError::InvalidParams("data is required for create action".into())
-            })?;
-            create_entity(&ctx, params.entity_type, data).await
-        }
-        CatalogMutateAction::Update => {
-            let id = params.id.ok_or_else(|| {
-                McpError::InvalidParams("id is required for update action".into())
-            })?;
-            let data = params.data.ok_or_else(|| {
-                McpError::InvalidParams("data is required for update action".into())
-            })?;
-            update_entity(&ctx, params.entity_type, &id, data).await
-        }
-        CatalogMutateAction::Delete => {
-            let id = params.id.ok_or_else(|| {
-                McpError::InvalidParams("id is required for delete action".into())
-            })?;
-            delete_entity(&ctx, params.entity_type, &id).await
-        }
-    }
+async fn catalog_mutate_handler(_ctx: ToolContext, _params: Value) -> ToolResult {
+    // Catalog mutations disabled - Spotify schema is read-only
+    Err(McpError::ToolExecutionFailed(
+        "Catalog mutations not available - Spotify catalog is read-only".to_string(),
+    ))
 }
 
-async fn create_entity(
-    ctx: &ToolContext,
-    entity_type: CatalogEntityType,
-    data: Value,
-) -> ToolResult {
-    let result = match entity_type {
-        CatalogEntityType::Artist => {
-            let created = ctx
-                .catalog_store
-                .create_artist(data)
-                .map_err(|e| McpError::ToolExecutionFailed(e.to_string()))?;
-            serde_json::json!({
-                "success": true,
-                "action": "create",
-                "entity_type": "artist",
-                "entity": created,
-            })
-        }
-        CatalogEntityType::Album => {
-            let created = ctx
-                .catalog_store
-                .create_album(data)
-                .map_err(|e| McpError::ToolExecutionFailed(e.to_string()))?;
-            serde_json::json!({
-                "success": true,
-                "action": "create",
-                "entity_type": "album",
-                "entity": created,
-            })
-        }
-        CatalogEntityType::Track => {
-            let created = ctx
-                .catalog_store
-                .create_track(data)
-                .map_err(|e| McpError::ToolExecutionFailed(e.to_string()))?;
-            serde_json::json!({
-                "success": true,
-                "action": "create",
-                "entity_type": "track",
-                "entity": created,
-            })
-        }
-        CatalogEntityType::Image => {
-            let created = ctx
-                .catalog_store
-                .create_image(data)
-                .map_err(|e| McpError::ToolExecutionFailed(e.to_string()))?;
-            serde_json::json!({
-                "success": true,
-                "action": "create",
-                "entity_type": "image",
-                "entity": created,
-            })
-        }
-    };
-
-    ToolsCallResult::json(&result).map_err(|e| McpError::InternalError(e.to_string()))
-}
-
-async fn update_entity(
-    ctx: &ToolContext,
-    entity_type: CatalogEntityType,
-    id: &str,
-    data: Value,
-) -> ToolResult {
-    let result = match entity_type {
-        CatalogEntityType::Artist => {
-            let updated = ctx
-                .catalog_store
-                .update_artist(id, data)
-                .map_err(|e| McpError::ToolExecutionFailed(e.to_string()))?;
-            serde_json::json!({
-                "success": true,
-                "action": "update",
-                "entity_type": "artist",
-                "id": id,
-                "entity": updated,
-            })
-        }
-        CatalogEntityType::Album => {
-            let updated = ctx
-                .catalog_store
-                .update_album(id, data)
-                .map_err(|e| McpError::ToolExecutionFailed(e.to_string()))?;
-            serde_json::json!({
-                "success": true,
-                "action": "update",
-                "entity_type": "album",
-                "id": id,
-                "entity": updated,
-            })
-        }
-        CatalogEntityType::Track => {
-            let updated = ctx
-                .catalog_store
-                .update_track(id, data)
-                .map_err(|e| McpError::ToolExecutionFailed(e.to_string()))?;
-            serde_json::json!({
-                "success": true,
-                "action": "update",
-                "entity_type": "track",
-                "id": id,
-                "entity": updated,
-            })
-        }
-        CatalogEntityType::Image => {
-            let updated = ctx
-                .catalog_store
-                .update_image(id, data)
-                .map_err(|e| McpError::ToolExecutionFailed(e.to_string()))?;
-            serde_json::json!({
-                "success": true,
-                "action": "update",
-                "entity_type": "image",
-                "id": id,
-                "entity": updated,
-            })
-        }
-    };
-
-    ToolsCallResult::json(&result).map_err(|e| McpError::InternalError(e.to_string()))
-}
-
-async fn delete_entity(ctx: &ToolContext, entity_type: CatalogEntityType, id: &str) -> ToolResult {
-    let entity_name = match entity_type {
-        CatalogEntityType::Artist => {
-            ctx.catalog_store
-                .delete_artist(id)
-                .map_err(|e| McpError::ToolExecutionFailed(e.to_string()))?;
-            "artist"
-        }
-        CatalogEntityType::Album => {
-            ctx.catalog_store
-                .delete_album(id)
-                .map_err(|e| McpError::ToolExecutionFailed(e.to_string()))?;
-            "album"
-        }
-        CatalogEntityType::Track => {
-            ctx.catalog_store
-                .delete_track(id)
-                .map_err(|e| McpError::ToolExecutionFailed(e.to_string()))?;
-            "track"
-        }
-        CatalogEntityType::Image => {
-            ctx.catalog_store
-                .delete_image(id)
-                .map_err(|e| McpError::ToolExecutionFailed(e.to_string()))?;
-            "image"
-        }
-    };
-
-    let result = serde_json::json!({
-        "success": true,
-        "action": "delete",
-        "entity_type": entity_name,
-        "id": id,
-        "message": format!("{} '{}' deleted", entity_name, id),
-    });
-
-    ToolsCallResult::json(&result).map_err(|e| McpError::InternalError(e.to_string()))
-}
+// NOTE: create_entity, update_entity, delete_entity removed - Spotify catalog is read-only

@@ -36,7 +36,10 @@ impl SearchVault for MockSearchVault {
 
     fn update_popularity(&self, _items: &[(String, HashedItemType, u64, f64)]) {}
 
-    fn upsert_items(&self, _items: &[pezzottify_catalog_server::search::SearchIndexItem]) -> anyhow::Result<()> {
+    fn upsert_items(
+        &self,
+        _items: &[pezzottify_catalog_server::search::SearchIndexItem],
+    ) -> anyhow::Result<()> {
         Ok(())
     }
 

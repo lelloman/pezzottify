@@ -187,6 +187,8 @@ impl DownloaderAlbum {
             } else {
                 Some(self.version_title.clone())
             },
+            external_id_upc: None,
+            release_date_precision: None,
         }
     }
 
@@ -283,6 +285,7 @@ impl DownloaderTrack {
                 Some(self.version_title.clone())
             },
             availability: TrackAvailability::Available,
+            external_id_isrc: None,
         }
     }
 

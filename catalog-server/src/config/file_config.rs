@@ -62,6 +62,8 @@ pub struct BackgroundJobsConfig {
 #[derive(Debug, Deserialize, Default, Clone)]
 #[serde(default)]
 pub struct SearchConfig {
+    /// Search engine: "fts5-levenshtein" (default), "noop" (disabled)
+    pub engine: Option<String>,
     /// Streaming search configuration
     pub streaming: Option<StreamingSearchConfig>,
 }
