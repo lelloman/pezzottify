@@ -50,33 +50,44 @@ const playerStore = usePlayerStore();
 const props = defineProps({
   albumId: {
     type: String,
-    required: true,
+    required: false,
+  },
+  album: {
+    type: Object,
+    required: false,
   },
   showArtists: {
     type: Boolean,
     required: false,
-    withDefaults: false,
+    default: false,
   },
 });
 
-const album = ref(null);
+const album = ref(props.album || null);
 const artistsRefs = ref(null);
-const loading = ref(true);
+const loading = ref(!props.album);
 const error = ref(null);
 
-watch(
-  staticsStore.getAlbum(props.albumId),
-  (newData) => {
-    loading.value = newData && newData.loading;
-    if (newData && newData.item && typeof newData.item === "object") {
-      artistsRefs.value = newData.item.artists_ids.map((artistId) =>
-        staticsStore.getArtist(artistId),
-      );
-      album.value = newData.item;
-    }
-  },
-  { immediate: true },
-);
+// Only fetch if we don't have album data passed directly
+if (props.albumId && !props.album) {
+  watch(
+    staticsStore.getAlbum(props.albumId),
+    (newData) => {
+      loading.value = newData && newData.loading;
+      if (newData && newData.item && typeof newData.item === "object") {
+        artistsRefs.value = newData.item.artists_ids.map((artistId) =>
+          staticsStore.getArtist(artistId),
+        );
+        album.value = newData.item;
+      }
+    },
+    { immediate: true },
+  );
+} else if (props.album) {
+  // Use provided album data directly
+  album.value = props.album;
+  loading.value = false;
+}
 
 const handlePlayClick = (event) => {
   playerStore.setAlbumId(event);

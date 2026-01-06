@@ -50,6 +50,7 @@ export default defineConfig({
       '/v1': {
         target: 'http://localhost:3001',  // Your backend server
         changeOrigin: true,
+        ws: true,  // Enable WebSocket proxying
         rewrite: (path) => path.replace(/^\/v1/, '/v1')
       }
     }
