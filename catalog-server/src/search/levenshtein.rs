@@ -3,7 +3,7 @@
 //! This module provides edit distance calculation and vocabulary-based
 //! query correction without requiring external SQLite extensions.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 /// Calculate the Levenshtein (edit) distance between two strings.
 /// Returns the minimum number of single-character edits (insertions,
@@ -49,6 +49,8 @@ pub fn levenshtein_distance(a: &str, b: &str) -> usize {
 pub struct Vocabulary {
     /// All unique words in lowercase
     words: Vec<String>,
+    /// Fast lookup for deduplication (O(1) instead of O(n))
+    words_set: HashSet<String>,
     /// Index by first character for faster lookups
     by_first_char: HashMap<char, Vec<usize>>,
     /// Index by word length for faster lookups
@@ -60,6 +62,7 @@ impl Vocabulary {
     pub fn new() -> Self {
         Self {
             words: Vec::new(),
+            words_set: HashSet::new(),
             by_first_char: HashMap::new(),
             by_length: HashMap::new(),
         }
@@ -69,8 +72,8 @@ impl Vocabulary {
     pub fn add_word(&mut self, word: &str) {
         let word = word.to_lowercase();
 
-        // Skip very short words or if already present
-        if word.len() < 2 || self.words.contains(&word) {
+        // Skip very short words or if already present (O(1) lookup with HashSet)
+        if word.len() < 2 || self.words_set.contains(&word) {
             return;
         }
 
@@ -78,6 +81,7 @@ impl Vocabulary {
         let first_char = word.chars().next().unwrap();
         let len = word.len();
 
+        self.words_set.insert(word.clone());
         self.words.push(word);
         self.by_first_char.entry(first_char).or_default().push(idx);
         self.by_length.entry(len).or_default().push(idx);
@@ -102,9 +106,9 @@ impl Vocabulary {
         let query = query.to_lowercase();
         let query_len = query.len();
 
-        // If the exact word exists, return it
-        if self.words.contains(&query) {
-            return Some(&self.words[self.words.iter().position(|w| w == &query).unwrap()]);
+        // If the exact word exists, return it (O(1) lookup)
+        if self.words_set.contains(&query) {
+            return self.words_set.get(&query).map(|s| s.as_str());
         }
 
         // Collect candidate indices - words within length range
