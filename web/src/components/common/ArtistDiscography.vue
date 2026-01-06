@@ -1,21 +1,21 @@
 <template>
-  <div v-if="albumIds && albumIds.length > 0">
+  <div v-if="albums && albums.length > 0">
     <h1>Albums:</h1>
     <div class="albumsContainer">
       <AlbumCard
-        v-for="albumId in albumIds"
-        :key="albumId"
-        :albumId="albumId"
+        v-for="album in albums"
+        :key="album.id"
+        :album="album"
       />
     </div>
   </div>
-  <div v-if="featuresIds && featuresIds.length > 0">
+  <div v-if="features && features.length > 0">
     <h1>Features:</h1>
     <div class="albumsContainer">
       <AlbumCard
-        v-for="albumId in featuresIds"
-        :key="albumId"
-        :albumId="albumId"
+        v-for="album in features"
+        :key="album.id"
+        :album="album"
       />
     </div>
   </div>
@@ -38,23 +38,24 @@ const props = defineProps({
 });
 
 const remoteStore = useRemoteStore();
-const albumIds = ref(null);
-const featuresIds = ref(null);
+const albums = ref(null);
+const features = ref(null);
 const error = ref(null);
 const isLoading = ref(false);
 
-const loadAlbumIds = async (artistId) => {
+// Sort albums by popularity (descending)
+const sortByPopularity = (albumsList) => {
+  return [...albumsList].sort((a, b) => (b.popularity || 0) - (a.popularity || 0));
+};
+
+const loadAlbums = async (artistId) => {
   isLoading.value = true;
   const artistsAlbumsResponse =
     await remoteStore.fetchArtistDiscography(artistId);
   if (artistsAlbumsResponse) {
-    // The API now returns Album objects, not just IDs, so extract the IDs
-    albumIds.value = artistsAlbumsResponse.albums
-      ? artistsAlbumsResponse.albums.map((a) => a.id)
-      : [];
-    featuresIds.value = artistsAlbumsResponse.features
-      ? artistsAlbumsResponse.features.map((a) => a.id)
-      : [];
+    // Use album objects directly - no need to re-fetch, sorted by popularity
+    albums.value = sortByPopularity(artistsAlbumsResponse.albums || []);
+    features.value = sortByPopularity(artistsAlbumsResponse.features || []);
   } else {
     error.value = "Error fetching artist albums";
   }
@@ -65,7 +66,7 @@ onMounted(() => {
   watch(
     () => props.artistId,
     () => {
-      loadAlbumIds(props.artistId);
+      loadAlbums(props.artistId);
     },
     { immediate: true },
   );

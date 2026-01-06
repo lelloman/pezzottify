@@ -105,6 +105,14 @@ export const useAuthStore = defineStore("auth", {
         console.error("Failed to cleanup stores:", error);
       }
 
+      // Call server logout to clear the auth_token cookie (for password login)
+      try {
+        await axios.get("/v1/auth/logout");
+      } catch (error) {
+        // Ignore errors - user might not have a server session
+        console.debug("Server logout:", error?.response?.status || error);
+      }
+
       // Clear OIDC tokens
       await oidc.logout(false);
 
