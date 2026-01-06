@@ -1,12 +1,12 @@
 //! Test fixture creation for catalog and database
 //!
-//! NOTE: This module needs to be rewritten for the Spotify schema.
-//! The Spotify catalog is read-only, so we can't use the old insert methods.
-//! Tests need to use direct SQL inserts or pre-populated test databases.
+//! NOTE: This module uses the Spotify schema with rowid-based foreign keys.
+//! The catalog store opens databases in read-only mode, so we create and
+//! populate the database first, then open it with SqliteCatalogStore.
 
 use super::constants::*;
 use anyhow::Result;
-use pezzottify_catalog_server::catalog_store::SqliteCatalogStore;
+use pezzottify_catalog_server::catalog_store::{SqliteCatalogStore, CATALOG_VERSIONED_SCHEMAS};
 use pezzottify_catalog_server::user::auth::PezzottifyHasher;
 use pezzottify_catalog_server::user::{
     SqliteUserStore, UserAuthCredentials, UserAuthCredentialsStore, UserRole, UserStore,
@@ -27,36 +27,34 @@ const TEST_IMAGE_BYTES: &[u8] = include_bytes!("../fixtures/test-image.jpg");
 /// Creates a temporary test catalog with 2 artists, 2 albums, 5 tracks
 /// Returns (temp_dir, catalog_db_path, media_path)
 ///
-/// NOTE: This uses direct SQL inserts because the Spotify schema is read-only.
+/// NOTE: This creates the schema first, populates data, then the SqliteCatalogStore
+/// can open it in read-only mode.
 pub fn create_test_catalog() -> Result<(TempDir, PathBuf, PathBuf)> {
     let dir = TempDir::new()?;
 
     // Create media directory structure for audio files and images
     let media_path = dir.path().join("media");
-    fs::create_dir_all(media_path.join("albums/A1"))?;
-    fs::create_dir_all(media_path.join("albums/A2"))?;
+    fs::create_dir_all(media_path.join("audio"))?;
     fs::create_dir_all(media_path.join("images"))?;
 
     // Copy images
-    fs::write(media_path.join("images/image-1"), TEST_IMAGE_BYTES)?;
-    fs::write(media_path.join("images/image-2"), TEST_IMAGE_BYTES)?;
-    fs::write(media_path.join("images/image-3"), TEST_IMAGE_BYTES)?;
+    fs::write(media_path.join("images/image-1.jpg"), TEST_IMAGE_BYTES)?;
+    fs::write(media_path.join("images/image-2.jpg"), TEST_IMAGE_BYTES)?;
+    fs::write(media_path.join("images/image-3.jpg"), TEST_IMAGE_BYTES)?;
 
-    // Write audio files
-    fs::write(media_path.join("albums/A1/T1.mp3"), TEST_AUDIO_BYTES)?;
-    fs::write(media_path.join("albums/A1/T2.mp3"), TEST_AUDIO_BYTES)?;
-    fs::write(media_path.join("albums/A1/T3.mp3"), TEST_AUDIO_BYTES)?;
-    fs::write(media_path.join("albums/A2/T4.mp3"), TEST_AUDIO_BYTES)?;
-    fs::write(media_path.join("albums/A2/T5.mp3"), TEST_AUDIO_BYTES)?;
+    // Write audio files (using track IDs)
+    fs::write(media_path.join(format!("audio/{}.ogg", TRACK_1_ID)), TEST_AUDIO_BYTES)?;
+    fs::write(media_path.join(format!("audio/{}.ogg", TRACK_2_ID)), TEST_AUDIO_BYTES)?;
+    fs::write(media_path.join(format!("audio/{}.ogg", TRACK_3_ID)), TEST_AUDIO_BYTES)?;
+    fs::write(media_path.join(format!("audio/{}.ogg", TRACK_4_ID)), TEST_AUDIO_BYTES)?;
+    fs::write(media_path.join(format!("audio/{}.ogg", TRACK_5_ID)), TEST_AUDIO_BYTES)?;
 
-    // Create SQLite catalog database
+    // Create SQLite catalog database with schema
     let catalog_db_path = dir.path().join("catalog.db");
-
-    // Initialize the store (creates schema)
-    let _store = SqliteCatalogStore::new(&catalog_db_path, &media_path)?;
-
-    // Use direct SQL to insert test data since the catalog is read-only through the API
     let conn = Connection::open(&catalog_db_path)?;
+
+    // Create schema
+    CATALOG_VERSIONED_SCHEMAS[0].create(&conn)?;
 
     // Insert artists
     conn.execute(
@@ -68,24 +66,52 @@ pub fn create_test_catalog() -> Result<(TempDir, PathBuf, PathBuf)> {
         [ARTIST_2_ID, ARTIST_2_NAME],
     )?;
 
-    // Insert albums
+    // Get artist rowids
+    let artist1_rowid: i64 = conn.query_row(
+        "SELECT rowid FROM artists WHERE id = ?1",
+        [ARTIST_1_ID],
+        |r| r.get(0),
+    )?;
+    let artist2_rowid: i64 = conn.query_row(
+        "SELECT rowid FROM artists WHERE id = ?1",
+        [ARTIST_2_ID],
+        |r| r.get(0),
+    )?;
+
+    // Insert albums (with all required fields)
     conn.execute(
-        "INSERT INTO albums (id, name, album_type, popularity) VALUES (?1, ?2, 0, 50)",
+        "INSERT INTO albums (id, name, album_type, label, popularity, release_date, release_date_precision)
+         VALUES (?1, ?2, 'album', '', 50, '2023', 'year')",
         [ALBUM_1_ID, ALBUM_1_TITLE],
     )?;
     conn.execute(
-        "INSERT INTO albums (id, name, album_type, popularity) VALUES (?1, ?2, 0, 50)",
+        "INSERT INTO albums (id, name, album_type, label, popularity, release_date, release_date_precision)
+         VALUES (?1, ?2, 'album', '', 50, '2023', 'year')",
         [ALBUM_2_ID, ALBUM_2_TITLE],
     )?;
 
-    // Link artists to albums
+    // Get album rowids
+    let album1_rowid: i64 = conn.query_row(
+        "SELECT rowid FROM albums WHERE id = ?1",
+        [ALBUM_1_ID],
+        |r| r.get(0),
+    )?;
+    let album2_rowid: i64 = conn.query_row(
+        "SELECT rowid FROM albums WHERE id = ?1",
+        [ALBUM_2_ID],
+        |r| r.get(0),
+    )?;
+
+    // Link artists to albums (using rowids)
     conn.execute(
-        "INSERT INTO artist_albums (artist_id, album_id) VALUES (?1, ?2)",
-        [ARTIST_1_ID, ALBUM_1_ID],
+        "INSERT INTO artist_albums (artist_rowid, album_rowid, is_appears_on, is_implicit_appears_on, index_in_album)
+         VALUES (?1, ?2, 0, 0, 0)",
+        [artist1_rowid, album1_rowid],
     )?;
     conn.execute(
-        "INSERT INTO artist_albums (artist_id, album_id) VALUES (?1, ?2)",
-        [ARTIST_2_ID, ALBUM_2_ID],
+        "INSERT INTO artist_albums (artist_rowid, album_rowid, is_appears_on, is_implicit_appears_on, index_in_album)
+         VALUES (?1, ?2, 0, 0, 0)",
+        [artist2_rowid, album2_rowid],
     )?;
 
     // Insert tracks for album 1
@@ -96,14 +122,22 @@ pub fn create_test_catalog() -> Result<(TempDir, PathBuf, PathBuf)> {
     ];
     for (i, (id, name, duration_ms)) in tracks_album1.iter().enumerate() {
         conn.execute(
-            "INSERT INTO tracks (id, name, album_id, disc_number, track_number, duration_ms, explicit, popularity)
+            "INSERT INTO tracks (id, name, album_rowid, disc_number, track_number, duration_ms, explicit, popularity)
              VALUES (?1, ?2, ?3, 1, ?4, ?5, 0, 50)",
-            rusqlite::params![id, name, ALBUM_1_ID, (i + 1) as i32, duration_ms],
+            rusqlite::params![id, name, album1_rowid, (i + 1) as i32, duration_ms],
         )?;
-        // Link track to artist
+
+        // Get track rowid
+        let track_rowid: i64 = conn.query_row(
+            "SELECT rowid FROM tracks WHERE id = ?1",
+            [*id],
+            |r| r.get(0),
+        )?;
+
+        // Link track to artist (using rowids)
         conn.execute(
-            "INSERT INTO track_artists (track_id, artist_id, artist_role) VALUES (?1, ?2, 0)",
-            [*id, ARTIST_1_ID],
+            "INSERT INTO track_artists (track_rowid, artist_rowid, role) VALUES (?1, ?2, 0)",
+            [track_rowid, artist1_rowid],
         )?;
     }
 
@@ -114,26 +148,37 @@ pub fn create_test_catalog() -> Result<(TempDir, PathBuf, PathBuf)> {
     ];
     for (i, (id, name, duration_ms)) in tracks_album2.iter().enumerate() {
         conn.execute(
-            "INSERT INTO tracks (id, name, album_id, disc_number, track_number, duration_ms, explicit, popularity)
+            "INSERT INTO tracks (id, name, album_rowid, disc_number, track_number, duration_ms, explicit, popularity)
              VALUES (?1, ?2, ?3, 1, ?4, ?5, 0, 50)",
-            rusqlite::params![id, name, ALBUM_2_ID, (i + 1) as i32, duration_ms],
+            rusqlite::params![id, name, album2_rowid, (i + 1) as i32, duration_ms],
         )?;
-        // Link track to artist
+
+        // Get track rowid
+        let track_rowid: i64 = conn.query_row(
+            "SELECT rowid FROM tracks WHERE id = ?1",
+            [*id],
+            |r| r.get(0),
+        )?;
+
+        // Link track to artist (using rowids)
         conn.execute(
-            "INSERT INTO track_artists (track_id, artist_id, artist_role) VALUES (?1, ?2, 0)",
-            [*id, ARTIST_2_ID],
+            "INSERT INTO track_artists (track_rowid, artist_rowid, role) VALUES (?1, ?2, 0)",
+            [track_rowid, artist2_rowid],
         )?;
     }
 
-    // Insert album images
+    // Insert album images (using rowids)
     conn.execute(
-        "INSERT INTO album_images (album_id, url, width, height) VALUES (?1, ?2, 300, 300)",
-        [ALBUM_1_ID, "https://example.com/image-1.jpg"],
+        "INSERT INTO album_images (album_rowid, url, width, height) VALUES (?1, ?2, 300, 300)",
+        rusqlite::params![album1_rowid, "https://example.com/image-1.jpg"],
     )?;
     conn.execute(
-        "INSERT INTO album_images (album_id, url, width, height) VALUES (?1, ?2, 300, 300)",
-        [ALBUM_2_ID, "https://example.com/image-2.jpg"],
+        "INSERT INTO album_images (album_rowid, url, width, height) VALUES (?1, ?2, 300, 300)",
+        rusqlite::params![album2_rowid, "https://example.com/image-2.jpg"],
     )?;
+
+    // Close the connection before opening in read-only mode
+    drop(conn);
 
     Ok((dir, catalog_db_path, media_path))
 }

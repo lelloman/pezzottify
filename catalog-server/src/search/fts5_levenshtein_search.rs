@@ -932,6 +932,33 @@ mod tests {
             fn list_all_track_ids(&self) -> anyhow::Result<Vec<String>> {
                 Ok(vec![])
             }
+            fn create_artist(&self, _artist: &crate::catalog_store::Artist) -> anyhow::Result<()> {
+                anyhow::bail!("MockCatalogStore does not support write operations")
+            }
+            fn update_artist(&self, _artist: &crate::catalog_store::Artist) -> anyhow::Result<()> {
+                anyhow::bail!("MockCatalogStore does not support write operations")
+            }
+            fn delete_artist(&self, _id: &str) -> anyhow::Result<bool> {
+                anyhow::bail!("MockCatalogStore does not support write operations")
+            }
+            fn create_album(&self, _album: &crate::catalog_store::Album, _artist_ids: &[String]) -> anyhow::Result<()> {
+                anyhow::bail!("MockCatalogStore does not support write operations")
+            }
+            fn update_album(&self, _album: &crate::catalog_store::Album, _artist_ids: Option<&[String]>) -> anyhow::Result<()> {
+                anyhow::bail!("MockCatalogStore does not support write operations")
+            }
+            fn delete_album(&self, _id: &str) -> anyhow::Result<bool> {
+                anyhow::bail!("MockCatalogStore does not support write operations")
+            }
+            fn create_track(&self, _track: &crate::catalog_store::Track, _artist_ids: &[String]) -> anyhow::Result<()> {
+                anyhow::bail!("MockCatalogStore does not support write operations")
+            }
+            fn update_track(&self, _track: &crate::catalog_store::Track, _artist_ids: Option<&[String]>) -> anyhow::Result<()> {
+                anyhow::bail!("MockCatalogStore does not support write operations")
+            }
+            fn delete_track(&self, _id: &str) -> anyhow::Result<bool> {
+                anyhow::bail!("MockCatalogStore does not support write operations")
+            }
         }
     }
 

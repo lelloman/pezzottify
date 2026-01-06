@@ -94,7 +94,8 @@ async fn test_get_album_returns_correct_data() {
     let album: serde_json::Value = response.json().await.unwrap();
     assert_eq!(album["id"], ALBUM_1_ID);
     assert_eq!(album["name"], ALBUM_1_TITLE);
-    assert_eq!(album["album_type"], "Album");
+    // Spotify schema uses lowercase album_type
+    assert_eq!(album["album_type"], "album");
 }
 
 #[tokio::test]
@@ -159,16 +160,16 @@ async fn test_get_resolved_track() {
     assert!(resolved.get("artists").is_some());
     assert_eq!(resolved["track"]["id"], TRACK_1_ID);
 
-    // Verify duration_secs is present and correct (test fixture sets 120 for TRACK_1)
-    let duration = resolved["track"]["duration_secs"].as_i64();
+    // Verify duration_ms is present and correct (test fixture sets 240000ms for TRACK_1)
+    let duration = resolved["track"]["duration_ms"].as_i64();
     assert!(
         duration.is_some(),
-        "duration_secs should be present in response"
+        "duration_ms should be present in response"
     );
     assert_eq!(
         duration.unwrap(),
-        120,
-        "duration_secs should be 120 seconds"
+        240000,
+        "duration_ms should be 240000ms (4 minutes)"
     );
 }
 
