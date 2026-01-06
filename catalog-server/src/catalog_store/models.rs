@@ -1,8 +1,7 @@
-//! New catalog models for SQLite-backed storage.
+//! Catalog models for Spotify-schema SQLite storage.
 //!
-//! These models are designed to work with the SQLite database schema
-//! and provide cleaner abstractions than the filesystem-based models.
-#![allow(dead_code)]
+//! These models are designed to work with the Spotify database schema
+//! where primary keys are integer rowids with unique text Spotify IDs.
 
 use serde::{Deserialize, Serialize};
 
@@ -10,138 +9,57 @@ use serde::{Deserialize, Serialize};
 // Enumerations
 // =============================================================================
 
-/// Audio format enumeration
-#[derive(Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
-pub enum Format {
-    OggVorbis96,
-    OggVorbis160,
-    OggVorbis320,
-    Mp3_96,
-    Mp3_160,
-    Mp3_256,
-    Mp3_320,
-    Aac24,
-    Aac48,
-    Aac160,
-    Aac320,
-    Flac,
-    Unknown,
-}
-
-impl Format {
-    /// Convert from database string representation
-    pub fn from_db_str(s: &str) -> Self {
-        match s {
-            "OGG_VORBIS_96" => Format::OggVorbis96,
-            "OGG_VORBIS_160" => Format::OggVorbis160,
-            "OGG_VORBIS_320" => Format::OggVorbis320,
-            "MP3_96" => Format::Mp3_96,
-            "MP3_160" => Format::Mp3_160,
-            "MP3_256" => Format::Mp3_256,
-            "MP3_320" => Format::Mp3_320,
-            "AAC_24" => Format::Aac24,
-            "AAC_48" => Format::Aac48,
-            "AAC_160" => Format::Aac160,
-            "AAC_320" => Format::Aac320,
-            "FLAC" => Format::Flac,
-            _ => Format::Unknown,
-        }
-    }
-
-    /// Convert to database string representation
-    pub fn to_db_str(&self) -> &'static str {
-        match self {
-            Format::OggVorbis96 => "OGG_VORBIS_96",
-            Format::OggVorbis160 => "OGG_VORBIS_160",
-            Format::OggVorbis320 => "OGG_VORBIS_320",
-            Format::Mp3_96 => "MP3_96",
-            Format::Mp3_160 => "MP3_160",
-            Format::Mp3_256 => "MP3_256",
-            Format::Mp3_320 => "MP3_320",
-            Format::Aac24 => "AAC_24",
-            Format::Aac48 => "AAC_48",
-            Format::Aac160 => "AAC_160",
-            Format::Aac320 => "AAC_320",
-            Format::Flac => "FLAC",
-            Format::Unknown => "UNKNOWN",
-        }
-    }
-}
-
-/// Artist role on a track
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+/// Artist role on a track (integer-backed for DB storage)
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[repr(i32)]
 pub enum ArtistRole {
-    MainArtist,
-    FeaturedArtist,
-    Remixer,
-    Composer,
-    Conductor,
-    Orchestra,
-    Actor,
-    Unknown,
+    MainArtist = 0,
+    FeaturedArtist = 1,
+    Composer = 2,
+    Remixer = 3,
+    Conductor = 4,
+    Orchestra = 5,
 }
 
 impl ArtistRole {
-    /// Convert from database string representation
-    pub fn from_db_str(s: &str) -> Self {
-        match s {
-            "MAIN_ARTIST" => ArtistRole::MainArtist,
-            "FEATURED_ARTIST" => ArtistRole::FeaturedArtist,
-            "REMIXER" => ArtistRole::Remixer,
-            "COMPOSER" => ArtistRole::Composer,
-            "CONDUCTOR" => ArtistRole::Conductor,
-            "ORCHESTRA" => ArtistRole::Orchestra,
-            "ACTOR" => ArtistRole::Actor,
-            _ => ArtistRole::Unknown,
+    /// Convert from database integer representation
+    pub fn from_db_int(i: i32) -> Self {
+        match i {
+            0 => ArtistRole::MainArtist,
+            1 => ArtistRole::FeaturedArtist,
+            2 => ArtistRole::Composer,
+            3 => ArtistRole::Remixer,
+            4 => ArtistRole::Conductor,
+            5 => ArtistRole::Orchestra,
+            _ => ArtistRole::MainArtist, // Default fallback
         }
     }
 
-    /// Convert to database string representation
-    pub fn to_db_str(&self) -> &'static str {
-        match self {
-            ArtistRole::MainArtist => "MAIN_ARTIST",
-            ArtistRole::FeaturedArtist => "FEATURED_ARTIST",
-            ArtistRole::Remixer => "REMIXER",
-            ArtistRole::Composer => "COMPOSER",
-            ArtistRole::Conductor => "CONDUCTOR",
-            ArtistRole::Orchestra => "ORCHESTRA",
-            ArtistRole::Actor => "ACTOR",
-            ArtistRole::Unknown => "UNKNOWN",
-        }
+    /// Convert to database integer representation
+    pub fn to_db_int(self) -> i32 {
+        self as i32
     }
-}
-
-/// Activity period for an artist
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
-pub enum ActivityPeriod {
-    Timespan {
-        start_year: u16,
-        end_year: Option<u16>,
-    },
-    Decade(u16),
 }
 
 /// Album type classification
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
 pub enum AlbumType {
     Album,
     Single,
-    Ep,
     Compilation,
-    Audiobook,
-    Podcast,
+    #[serde(rename = "appears_on")]
+    AppearsOn,
 }
 
 impl AlbumType {
-    /// Convert from database string representation
+    /// Convert from database string representation (Spotify uses lowercase)
     pub fn from_db_str(s: &str) -> Self {
         match s {
-            "ALBUM" => AlbumType::Album,
-            "SINGLE" => AlbumType::Single,
-            "EP" => AlbumType::Ep,
-            "COMPILATION" => AlbumType::Compilation,
-            "AUDIOBOOK" => AlbumType::Audiobook,
-            "PODCAST" => AlbumType::Podcast,
+            "album" => AlbumType::Album,
+            "single" => AlbumType::Single,
+            "compilation" => AlbumType::Compilation,
+            "appears_on" => AlbumType::AppearsOn,
             _ => AlbumType::Album, // Default fallback
         }
     }
@@ -149,110 +67,10 @@ impl AlbumType {
     /// Convert to database string representation
     pub fn to_db_str(&self) -> &'static str {
         match self {
-            AlbumType::Album => "ALBUM",
-            AlbumType::Single => "SINGLE",
-            AlbumType::Ep => "EP",
-            AlbumType::Compilation => "COMPILATION",
-            AlbumType::Audiobook => "AUDIOBOOK",
-            AlbumType::Podcast => "PODCAST",
-        }
-    }
-}
-
-/// Image size classification
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
-pub enum ImageSize {
-    Small,
-    Default,
-    Large,
-    XLarge,
-}
-
-impl ImageSize {
-    /// Convert from database string representation
-    pub fn from_db_str(s: &str) -> Self {
-        match s {
-            "SMALL" => ImageSize::Small,
-            "DEFAULT" => ImageSize::Default,
-            "LARGE" => ImageSize::Large,
-            "XLARGE" => ImageSize::XLarge,
-            _ => ImageSize::Default,
-        }
-    }
-
-    /// Convert to database string representation
-    pub fn to_db_str(&self) -> &'static str {
-        match self {
-            ImageSize::Small => "SMALL",
-            ImageSize::Default => "DEFAULT",
-            ImageSize::Large => "LARGE",
-            ImageSize::XLarge => "XLARGE",
-        }
-    }
-}
-
-/// Image type for artist/album relationships
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
-pub enum ImageType {
-    Portrait,
-    PortraitGroup,
-    Cover,
-    CoverGroup,
-}
-
-impl ImageType {
-    /// Convert from database string representation
-    pub fn from_db_str(s: &str) -> Self {
-        match s {
-            "portrait" => ImageType::Portrait,
-            "portrait_group" => ImageType::PortraitGroup,
-            "cover" => ImageType::Cover,
-            "cover_group" => ImageType::CoverGroup,
-            _ => ImageType::Portrait,
-        }
-    }
-
-    /// Convert to database string representation
-    pub fn to_db_str(&self) -> &'static str {
-        match self {
-            ImageType::Portrait => "portrait",
-            ImageType::PortraitGroup => "portrait_group",
-            ImageType::Cover => "cover",
-            ImageType::CoverGroup => "cover_group",
-        }
-    }
-}
-
-/// Track availability state
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, Default)]
-#[serde(rename_all = "snake_case")]
-pub enum TrackAvailability {
-    #[default]
-    Available,
-    Unavailable,
-    Fetching,
-    FetchError,
-}
-
-impl TrackAvailability {
-    /// Convert from database string representation
-    pub fn from_db_str(s: &str) -> Self {
-        match s {
-            "available" => TrackAvailability::Available,
-            "unavailable" => TrackAvailability::Unavailable,
-            "fetching" => TrackAvailability::Fetching,
-            "fetch_error" => TrackAvailability::FetchError,
-            _ => TrackAvailability::Available,
-        }
-    }
-
-    /// Convert to database string representation
-    pub fn to_db_str(&self) -> &'static str {
-        match self {
-            TrackAvailability::Available => "available",
-            TrackAvailability::Unavailable => "unavailable",
-            TrackAvailability::Fetching => "fetching",
-            TrackAvailability::FetchError => "fetch_error",
+            AlbumType::Album => "album",
+            AlbumType::Single => "single",
+            AlbumType::Compilation => "compilation",
+            AlbumType::AppearsOn => "appears_on",
         }
     }
 }
@@ -261,23 +79,14 @@ impl TrackAvailability {
 // Core Entities
 // =============================================================================
 
-/// Image metadata
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
-pub struct Image {
-    pub id: String,
-    pub uri: String,
-    pub size: ImageSize,
-    pub width: u16,
-    pub height: u16,
-}
-
 /// Artist entity
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Artist {
     pub id: String,
     pub name: String,
     pub genres: Vec<String>,
-    pub activity_periods: Vec<ActivityPeriod>,
+    pub followers_total: i64,
+    pub popularity: i32,
 }
 
 /// Album entity
@@ -287,12 +96,15 @@ pub struct Album {
     pub name: String,
     pub album_type: AlbumType,
     pub label: Option<String>,
-    /// Release date as Unix timestamp. Serialized as "date" for frontend compatibility.
-    #[serde(rename = "date")]
-    pub release_date: Option<i64>,
-    pub genres: Vec<String>,
-    pub original_title: Option<String>,
-    pub version_title: Option<String>,
+    /// Release date as string: "2023-05-15", "2023-05", or "2023"
+    pub release_date: Option<String>,
+    /// Precision of release_date: "year", "month", or "day"
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub release_date_precision: Option<String>,
+    /// Universal Product Code for cross-referencing
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub external_id_upc: Option<String>,
+    pub popularity: i32,
 }
 
 /// Track entity
@@ -303,17 +115,27 @@ pub struct Track {
     pub album_id: String,
     pub disc_number: i32,
     pub track_number: i32,
-    pub duration_secs: Option<i32>,
-    pub is_explicit: bool,
-    pub audio_uri: String,
-    pub format: Format,
-    pub tags: Vec<String>,
-    pub has_lyrics: bool,
-    pub languages: Vec<String>,
-    pub original_title: Option<String>,
-    pub version_title: Option<String>,
-    #[serde(default)]
-    pub availability: TrackAvailability,
+    pub duration_ms: i64,
+    pub explicit: bool,
+    pub popularity: i32,
+    /// ISO 639-1 language code or "zxx" for instrumental
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub language: Option<String>,
+    /// International Standard Recording Code for cross-referencing
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub external_id_isrc: Option<String>,
+}
+
+// =============================================================================
+// Image Types (for lazy download from Spotify CDN)
+// =============================================================================
+
+/// Image URL from Spotify CDN
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ImageUrl {
+    pub url: String,
+    pub width: i32,
+    pub height: i32,
 }
 
 // =============================================================================
@@ -331,7 +153,6 @@ pub struct TrackArtist {
 #[derive(Clone, Debug, Serialize)]
 pub struct Disc {
     pub number: i32,
-    pub name: Option<String>,
     pub tracks: Vec<Track>,
 }
 
@@ -343,7 +164,6 @@ pub struct Disc {
 #[derive(Clone, Debug, Serialize)]
 pub struct ResolvedArtist {
     pub artist: Artist,
-    pub display_image: Option<Image>,
     pub related_artists: Vec<Artist>,
 }
 
@@ -353,7 +173,6 @@ pub struct ResolvedAlbum {
     pub album: Album,
     pub artists: Vec<Artist>,
     pub discs: Vec<Disc>,
-    pub display_image: Option<Image>,
 }
 
 /// Track with its artists and album info
@@ -368,7 +187,7 @@ pub struct ResolvedTrack {
 #[derive(Clone, Debug, Serialize)]
 pub struct ArtistDiscography {
     pub albums: Vec<Album>,   // Albums where artist is primary
-    pub features: Vec<Album>, // Albums where artist is featured on tracks
+    pub features: Vec<Album>, // Albums where artist appears on
 }
 
 #[cfg(test)]
@@ -376,44 +195,18 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_format_roundtrip() {
-        let formats = vec![
-            Format::OggVorbis96,
-            Format::OggVorbis160,
-            Format::OggVorbis320,
-            Format::Mp3_96,
-            Format::Mp3_160,
-            Format::Mp3_256,
-            Format::Mp3_320,
-            Format::Aac24,
-            Format::Aac48,
-            Format::Aac160,
-            Format::Aac320,
-            Format::Flac,
-            Format::Unknown,
-        ];
-        for format in formats {
-            let db_str = format.to_db_str();
-            let parsed = Format::from_db_str(db_str);
-            assert_eq!(format, parsed);
-        }
-    }
-
-    #[test]
     fn test_artist_role_roundtrip() {
         let roles = vec![
             ArtistRole::MainArtist,
             ArtistRole::FeaturedArtist,
-            ArtistRole::Remixer,
             ArtistRole::Composer,
+            ArtistRole::Remixer,
             ArtistRole::Conductor,
             ArtistRole::Orchestra,
-            ArtistRole::Actor,
-            ArtistRole::Unknown,
         ];
         for role in roles {
-            let db_str = role.to_db_str();
-            let parsed = ArtistRole::from_db_str(db_str);
+            let db_int = role.to_db_int();
+            let parsed = ArtistRole::from_db_int(db_int);
             assert_eq!(role, parsed);
         }
     }
@@ -423,10 +216,8 @@ mod tests {
         let types = vec![
             AlbumType::Album,
             AlbumType::Single,
-            AlbumType::Ep,
             AlbumType::Compilation,
-            AlbumType::Audiobook,
-            AlbumType::Podcast,
+            AlbumType::AppearsOn,
         ];
         for album_type in types {
             let db_str = album_type.to_db_str();
@@ -436,105 +227,27 @@ mod tests {
     }
 
     #[test]
-    fn test_image_size_roundtrip() {
-        let sizes = vec![
-            ImageSize::Small,
-            ImageSize::Default,
-            ImageSize::Large,
-            ImageSize::XLarge,
-        ];
-        for size in sizes {
-            let db_str = size.to_db_str();
-            let parsed = ImageSize::from_db_str(db_str);
-            assert_eq!(size, parsed);
-        }
+    fn test_album_type_json_serialization() {
+        // Verify serde serializes to lowercase
+        let album = AlbumType::Album;
+        let json = serde_json::to_string(&album).unwrap();
+        assert_eq!(json, "\"album\"");
+
+        let single = AlbumType::Single;
+        let json = serde_json::to_string(&single).unwrap();
+        assert_eq!(json, "\"single\"");
+
+        let appears_on = AlbumType::AppearsOn;
+        let json = serde_json::to_string(&appears_on).unwrap();
+        assert_eq!(json, "\"appears_on\"");
     }
 
     #[test]
-    fn test_image_type_roundtrip() {
-        let types = vec![
-            ImageType::Portrait,
-            ImageType::PortraitGroup,
-            ImageType::Cover,
-            ImageType::CoverGroup,
-        ];
-        for image_type in types {
-            let db_str = image_type.to_db_str();
-            let parsed = ImageType::from_db_str(db_str);
-            assert_eq!(image_type, parsed);
-        }
-    }
-
-    #[test]
-    fn test_activity_period_json_serialization() {
-        let timespan = ActivityPeriod::Timespan {
-            start_year: 1990,
-            end_year: Some(2000),
-        };
-        let json = serde_json::to_string(&timespan).unwrap();
-        let parsed: ActivityPeriod = serde_json::from_str(&json).unwrap();
-        assert_eq!(timespan, parsed);
-
-        let decade = ActivityPeriod::Decade(1980);
-        let json = serde_json::to_string(&decade).unwrap();
-        let parsed: ActivityPeriod = serde_json::from_str(&json).unwrap();
-        assert_eq!(decade, parsed);
-    }
-
-    #[test]
-    fn test_track_availability_roundtrip() {
-        let states = vec![
-            TrackAvailability::Available,
-            TrackAvailability::Unavailable,
-            TrackAvailability::Fetching,
-            TrackAvailability::FetchError,
-        ];
-        for state in states {
-            let db_str = state.to_db_str();
-            let parsed = TrackAvailability::from_db_str(db_str);
-            assert_eq!(state, parsed);
-        }
-    }
-
-    #[test]
-    fn test_track_availability_default() {
-        assert_eq!(TrackAvailability::default(), TrackAvailability::Available);
-    }
-
-    #[test]
-    fn test_track_availability_json_roundtrip() {
-        let states = vec![
-            (TrackAvailability::Available, "\"available\""),
-            (TrackAvailability::Unavailable, "\"unavailable\""),
-            (TrackAvailability::Fetching, "\"fetching\""),
-            (TrackAvailability::FetchError, "\"fetch_error\""),
-        ];
-        for (state, expected_json) in states {
-            let json = serde_json::to_string(&state).unwrap();
-            assert_eq!(json, expected_json);
-            let parsed: TrackAvailability = serde_json::from_str(&json).unwrap();
-            assert_eq!(state, parsed);
-        }
-    }
-
-    #[test]
-    fn test_track_with_default_availability() {
-        // Test that Track can be deserialized without availability field
-        let json = r#"{
-            "id": "track1",
-            "name": "Test Track",
-            "album_id": "album1",
-            "disc_number": 1,
-            "track_number": 1,
-            "duration_secs": 180,
-            "is_explicit": false,
-            "audio_uri": "audio/track1.mp3",
-            "format": "Mp3_320",
-            "tags": [],
-            "has_lyrics": false,
-            "languages": []
-        }"#;
-        let track: Track = serde_json::from_str(json).unwrap();
-        assert_eq!(track.availability, TrackAvailability::Available);
+    fn test_artist_role_json_serialization() {
+        // ArtistRole should serialize as string representation
+        let role = ArtistRole::MainArtist;
+        let json = serde_json::to_string(&role).unwrap();
+        // Default derive serialization
+        assert!(json.contains("MainArtist"));
     }
 }

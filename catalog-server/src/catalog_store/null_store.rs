@@ -2,11 +2,7 @@
 //!
 //! A no-op implementation of CatalogStore for use cases where catalog
 //! functionality is not needed (e.g., CLI tools that only manage users).
-#![allow(dead_code)]
 
-use super::changelog::{
-    BatchChangeSummary, CatalogBatch, ChangeEntityType, ChangeEntry, WhatsNewBatch,
-};
 use super::trait_def::{CatalogStore, SearchableItem};
 use anyhow::Result;
 use std::path::PathBuf;
@@ -63,7 +59,11 @@ impl CatalogStore for NullCatalogStore {
         Ok(None)
     }
 
-    fn get_album_display_image(&self, _album_id: &str) -> Result<Option<super::Image>> {
+    fn get_album_image_url(&self, _album_id: &str) -> Result<Option<super::ImageUrl>> {
+        Ok(None)
+    }
+
+    fn get_artist_image_url(&self, _artist_id: &str) -> Result<Option<super::ImageUrl>> {
         Ok(None)
     }
 
@@ -95,191 +95,7 @@ impl CatalogStore for NullCatalogStore {
         Ok(Vec::new())
     }
 
-    fn create_artist(&self, _data: serde_json::Value) -> Result<serde_json::Value> {
-        anyhow::bail!("NullCatalogStore does not support write operations")
-    }
-
-    fn update_artist(&self, _id: &str, _data: serde_json::Value) -> Result<serde_json::Value> {
-        anyhow::bail!("NullCatalogStore does not support write operations")
-    }
-
-    fn delete_artist(&self, _id: &str) -> Result<()> {
-        anyhow::bail!("NullCatalogStore does not support write operations")
-    }
-
-    fn create_album(&self, _data: serde_json::Value) -> Result<serde_json::Value> {
-        anyhow::bail!("NullCatalogStore does not support write operations")
-    }
-
-    fn update_album(&self, _id: &str, _data: serde_json::Value) -> Result<serde_json::Value> {
-        anyhow::bail!("NullCatalogStore does not support write operations")
-    }
-
-    fn delete_album(&self, _id: &str) -> Result<()> {
-        anyhow::bail!("NullCatalogStore does not support write operations")
-    }
-
-    fn create_track(&self, _data: serde_json::Value) -> Result<serde_json::Value> {
-        anyhow::bail!("NullCatalogStore does not support write operations")
-    }
-
-    fn update_track(&self, _id: &str, _data: serde_json::Value) -> Result<serde_json::Value> {
-        anyhow::bail!("NullCatalogStore does not support write operations")
-    }
-
-    fn delete_track(&self, _id: &str) -> Result<()> {
-        anyhow::bail!("NullCatalogStore does not support write operations")
-    }
-
-    fn create_image(&self, _data: serde_json::Value) -> Result<serde_json::Value> {
-        anyhow::bail!("NullCatalogStore does not support write operations")
-    }
-
-    fn update_image(&self, _id: &str, _data: serde_json::Value) -> Result<serde_json::Value> {
-        anyhow::bail!("NullCatalogStore does not support write operations")
-    }
-
-    fn delete_image(&self, _id: &str) -> Result<()> {
-        anyhow::bail!("NullCatalogStore does not support write operations")
-    }
-
-    fn create_changelog_batch(
-        &self,
-        _name: &str,
-        _description: Option<&str>,
-    ) -> Result<CatalogBatch> {
-        anyhow::bail!("NullCatalogStore does not support changelog operations")
-    }
-
-    fn get_changelog_batch(&self, _id: &str) -> Result<Option<CatalogBatch>> {
-        Ok(None)
-    }
-
-    fn get_active_changelog_batch(&self) -> Result<Option<CatalogBatch>> {
-        Ok(None)
-    }
-
-    fn close_changelog_batch(&self, _id: &str) -> Result<()> {
-        anyhow::bail!("NullCatalogStore does not support changelog operations")
-    }
-
-    fn list_changelog_batches(&self, _is_open: Option<bool>) -> Result<Vec<CatalogBatch>> {
-        Ok(Vec::new())
-    }
-
-    fn delete_changelog_batch(&self, _id: &str) -> Result<()> {
-        anyhow::bail!("NullCatalogStore does not support changelog operations")
-    }
-
-    fn get_changelog_batch_changes(&self, _batch_id: &str) -> Result<Vec<ChangeEntry>> {
-        Ok(Vec::new())
-    }
-
-    fn get_changelog_entity_history(
-        &self,
-        _entity_type: ChangeEntityType,
-        _entity_id: &str,
-    ) -> Result<Vec<ChangeEntry>> {
-        Ok(Vec::new())
-    }
-
-    fn get_whats_new_batches(&self, _limit: usize) -> Result<Vec<WhatsNewBatch>> {
-        Ok(Vec::new())
-    }
-
-    fn get_changelog_batch_summary(&self, _batch_id: &str) -> Result<BatchChangeSummary> {
-        Ok(BatchChangeSummary::default())
-    }
-
-    fn get_stale_batches(&self, _stale_threshold_hours: u64) -> Result<Vec<CatalogBatch>> {
-        Ok(Vec::new())
-    }
-
-    fn close_stale_batches(&self) -> Result<usize> {
-        Ok(0)
-    }
-
     fn list_all_track_ids(&self) -> Result<Vec<String>> {
-        Ok(Vec::new())
-    }
-
-    fn list_all_album_image_ids(&self) -> Result<Vec<String>> {
-        Ok(Vec::new())
-    }
-
-    fn list_all_artist_image_ids(&self) -> Result<Vec<String>> {
-        Ok(Vec::new())
-    }
-
-    fn get_artists_without_related(&self) -> Result<Vec<String>> {
-        Ok(Vec::new())
-    }
-
-    fn get_orphan_related_artist_ids(&self) -> Result<Vec<String>> {
-        Ok(Vec::new())
-    }
-
-    fn add_artist_image(
-        &self,
-        _artist_id: &str,
-        _image_id: &str,
-        _image_type: &super::ImageType,
-        _position: i32,
-    ) -> Result<()> {
-        anyhow::bail!("NullCatalogStore does not support write operations")
-    }
-
-    fn add_album_image(
-        &self,
-        _album_id: &str,
-        _image_id: &str,
-        _image_type: &super::ImageType,
-        _position: i32,
-    ) -> Result<()> {
-        anyhow::bail!("NullCatalogStore does not support write operations")
-    }
-
-    fn set_artist_display_image(&self, _artist_id: &str, _image_id: &str) -> Result<()> {
-        anyhow::bail!("NullCatalogStore does not support write operations")
-    }
-
-    fn set_album_display_image(&self, _album_id: &str, _image_id: &str) -> Result<()> {
-        anyhow::bail!("NullCatalogStore does not support write operations")
-    }
-
-    fn get_album_display_image_id(&self, _album_id: &str) -> Result<Option<String>> {
-        Ok(None)
-    }
-
-    fn get_skeleton_version(&self) -> Result<i64> {
-        Ok(0)
-    }
-
-    fn get_skeleton_checksum(&self) -> Result<String> {
-        Ok("sha256:empty".to_string())
-    }
-
-    fn get_skeleton_events_since(&self, _seq: i64) -> Result<Vec<crate::skeleton::SkeletonEvent>> {
-        Ok(Vec::new())
-    }
-
-    fn get_skeleton_earliest_seq(&self) -> Result<i64> {
-        Ok(0)
-    }
-
-    fn get_skeleton_latest_seq(&self) -> Result<i64> {
-        Ok(0)
-    }
-
-    fn get_all_artist_ids(&self) -> Result<Vec<String>> {
-        Ok(Vec::new())
-    }
-
-    fn get_all_albums_skeleton(&self) -> Result<Vec<crate::skeleton::SkeletonAlbumEntry>> {
-        Ok(Vec::new())
-    }
-
-    fn get_all_tracks_skeleton(&self) -> Result<Vec<crate::skeleton::SkeletonTrackEntry>> {
         Ok(Vec::new())
     }
 }

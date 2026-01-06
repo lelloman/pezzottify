@@ -1,12 +1,14 @@
 pub mod config;
 mod http_layers;
 pub mod metrics;
-pub mod proxy;
+// TODO: Re-enable after updating for Spotify schema (depends on downloader)
+// pub mod proxy;
 mod search;
 #[allow(clippy::module_inception)]
 pub mod server;
 pub mod session;
-mod skeleton;
+// TODO: Re-enable after updating for Spotify schema (depends on skeleton module)
+// mod skeleton;
 pub mod state;
 mod stream_track;
 pub mod websocket;

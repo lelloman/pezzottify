@@ -92,7 +92,7 @@ pub fn ingest_album(
     let artist_ids: Vec<String> = artists.iter().map(|a| a.id.clone()).collect();
     for (position, artist) in artists.iter().enumerate() {
         // Link artist to album (ignore error if already linked)
-        let _ = catalog_store.add_album_artist(&album_id, &artist.id, position as i32);
+        let _ = catalog_store.add_album_artist(&album_id, &artist.id, position as i32, false);
     }
 
     // 4. Emit skeleton event for the album with artist IDs
@@ -248,6 +248,8 @@ fn convert_album(external: &ExternalAlbum) -> Album {
         } else {
             Some(external.version_title.clone())
         },
+        external_id_upc: None,
+        release_date_precision: None,
     }
 }
 
@@ -273,6 +275,7 @@ fn convert_track(external: &ExternalTrack) -> Track {
             Some(external.version_title.clone())
         },
         availability: TrackAvailability::Fetching, // Track is being downloaded
+        external_id_isrc: None,
     }
 }
 

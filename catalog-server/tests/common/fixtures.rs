@@ -1,18 +1,18 @@
 //! Test fixture creation for catalog and database
 //!
-//! This module creates temporary test catalogs and databases.
-//! When catalog/database schemas change, update only this file.
+//! NOTE: This module needs to be rewritten for the Spotify schema.
+//! The Spotify catalog is read-only, so we can't use the old insert methods.
+//! Tests need to use direct SQL inserts or pre-populated test databases.
 
 use super::constants::*;
 use anyhow::Result;
-use pezzottify_catalog_server::catalog_store::{
-    Album, AlbumType, Artist, ArtistRole, Format, SqliteCatalogStore, Track, TrackAvailability,
-};
+use pezzottify_catalog_server::catalog_store::SqliteCatalogStore;
 use pezzottify_catalog_server::user::auth::PezzottifyHasher;
 use pezzottify_catalog_server::user::{
     SqliteUserStore, UserAuthCredentials, UserAuthCredentialsStore, UserRole, UserStore,
     UsernamePasswordCredentials,
 };
+use rusqlite::Connection;
 use std::fs;
 use std::path::PathBuf;
 use std::time::SystemTime;
@@ -26,6 +26,8 @@ const TEST_IMAGE_BYTES: &[u8] = include_bytes!("../fixtures/test-image.jpg");
 
 /// Creates a temporary test catalog with 2 artists, 2 albums, 5 tracks
 /// Returns (temp_dir, catalog_db_path, media_path)
+///
+/// NOTE: This uses direct SQL inserts because the Spotify schema is read-only.
 pub fn create_test_catalog() -> Result<(TempDir, PathBuf, PathBuf)> {
     let dir = TempDir::new()?;
 
@@ -49,117 +51,89 @@ pub fn create_test_catalog() -> Result<(TempDir, PathBuf, PathBuf)> {
 
     // Create SQLite catalog database
     let catalog_db_path = dir.path().join("catalog.db");
-    let store = SqliteCatalogStore::new(&catalog_db_path, &media_path)?;
 
-    // Create an active changelog batch for test data insertion
-    store
-        .changelog()
-        .create_batch("Test Data Import", Some("Initial test fixture data"))?;
+    // Initialize the store (creates schema)
+    let _store = SqliteCatalogStore::new(&catalog_db_path, &media_path)?;
 
-    // Insert artists (use IDs from constants: R1, R2)
-    let artist1 = Artist {
-        id: ARTIST_1_ID.to_string(),
-        name: ARTIST_1_NAME.to_string(),
-        genres: vec![],
-        activity_periods: vec![],
-    };
-    let artist2 = Artist {
-        id: ARTIST_2_ID.to_string(),
-        name: ARTIST_2_NAME.to_string(),
-        genres: vec![],
-        activity_periods: vec![],
-    };
-    store.insert_artist(&artist1)?;
-    store.insert_artist(&artist2)?;
+    // Use direct SQL to insert test data since the catalog is read-only through the API
+    let conn = Connection::open(&catalog_db_path)?;
 
-    // Insert albums (use IDs from constants: A1, A2)
-    let album1 = Album {
-        id: ALBUM_1_ID.to_string(),
-        name: ALBUM_1_TITLE.to_string(),
-        album_type: AlbumType::Album,
-        label: None,
-        release_date: None,
-        genres: vec![],
-        original_title: None,
-        version_title: None,
-    };
-    let album2 = Album {
-        id: ALBUM_2_ID.to_string(),
-        name: ALBUM_2_TITLE.to_string(),
-        album_type: AlbumType::Album,
-        label: None,
-        release_date: None,
-        genres: vec![],
-        original_title: None,
-        version_title: None,
-    };
-    store.insert_album(&album1)?;
-    store.insert_album(&album2)?;
+    // Insert artists
+    conn.execute(
+        "INSERT INTO artists (id, name, followers_total, popularity) VALUES (?1, ?2, 0, 50)",
+        [ARTIST_1_ID, ARTIST_1_NAME],
+    )?;
+    conn.execute(
+        "INSERT INTO artists (id, name, followers_total, popularity) VALUES (?1, ?2, 0, 50)",
+        [ARTIST_2_ID, ARTIST_2_NAME],
+    )?;
 
-    // Link albums to artists and emit skeleton events
-    store.add_album_artist(ALBUM_1_ID, ARTIST_1_ID, 0)?;
-    store.emit_album_skeleton_event(ALBUM_1_ID, &[ARTIST_1_ID.to_string()])?;
-    store.add_album_artist(ALBUM_2_ID, ARTIST_2_ID, 0)?;
-    store.emit_album_skeleton_event(ALBUM_2_ID, &[ARTIST_2_ID.to_string()])?;
+    // Insert albums
+    conn.execute(
+        "INSERT INTO albums (id, name, album_type, popularity) VALUES (?1, ?2, 0, 50)",
+        [ALBUM_1_ID, ALBUM_1_TITLE],
+    )?;
+    conn.execute(
+        "INSERT INTO albums (id, name, album_type, popularity) VALUES (?1, ?2, 0, 50)",
+        [ALBUM_2_ID, ALBUM_2_TITLE],
+    )?;
 
-    // Insert tracks for album 1 (use IDs from constants: T1, T2, T3)
+    // Link artists to albums
+    conn.execute(
+        "INSERT INTO artist_albums (artist_id, album_id) VALUES (?1, ?2)",
+        [ARTIST_1_ID, ALBUM_1_ID],
+    )?;
+    conn.execute(
+        "INSERT INTO artist_albums (artist_id, album_id) VALUES (?1, ?2)",
+        [ARTIST_2_ID, ALBUM_2_ID],
+    )?;
+
+    // Insert tracks for album 1
     let tracks_album1 = [
-        (TRACK_1_ID, TRACK_1_TITLE, "albums/A1/T1.mp3", 120),
-        (TRACK_2_ID, TRACK_2_TITLE, "albums/A1/T2.mp3", 180),
-        (TRACK_3_ID, TRACK_3_TITLE, "albums/A1/T3.mp3", 150),
+        (TRACK_1_ID, TRACK_1_TITLE, 240000i64), // duration_ms
+        (TRACK_2_ID, TRACK_2_TITLE, 180000),
+        (TRACK_3_ID, TRACK_3_TITLE, 210000),
     ];
-    for (i, (id, name, audio_uri, duration)) in tracks_album1.iter().enumerate() {
-        let track = Track {
-            id: id.to_string(),
-            name: name.to_string(),
-            album_id: ALBUM_1_ID.to_string(),
-            disc_number: 1,
-            track_number: (i + 1) as i32,
-            duration_secs: Some(*duration),
-            is_explicit: false,
-            audio_uri: audio_uri.to_string(),
-            format: Format::Mp3_320,
-            tags: vec![],
-            has_lyrics: false,
-            languages: vec![],
-            original_title: None,
-            version_title: None,
-            availability: TrackAvailability::Available,
-        };
-        store.insert_track(&track)?;
-        store.add_track_artist(id, ARTIST_1_ID, &ArtistRole::MainArtist, 0)?;
+    for (i, (id, name, duration_ms)) in tracks_album1.iter().enumerate() {
+        conn.execute(
+            "INSERT INTO tracks (id, name, album_id, disc_number, track_number, duration_ms, explicit, popularity)
+             VALUES (?1, ?2, ?3, 1, ?4, ?5, 0, 50)",
+            rusqlite::params![id, name, ALBUM_1_ID, (i + 1) as i32, duration_ms],
+        )?;
+        // Link track to artist
+        conn.execute(
+            "INSERT INTO track_artists (track_id, artist_id, artist_role) VALUES (?1, ?2, 0)",
+            [*id, ARTIST_1_ID],
+        )?;
     }
 
-    // Insert tracks for album 2 (use IDs from constants: T4, T5)
+    // Insert tracks for album 2
     let tracks_album2 = [
-        (TRACK_4_ID, TRACK_4_TITLE, "albums/A2/T4.mp3", 200),
-        (TRACK_5_ID, TRACK_5_TITLE, "albums/A2/T5.mp3", 160),
+        (TRACK_4_ID, TRACK_4_TITLE, 200000i64),
+        (TRACK_5_ID, TRACK_5_TITLE, 160000),
     ];
-    for (i, (id, name, audio_uri, duration)) in tracks_album2.iter().enumerate() {
-        let track = Track {
-            id: id.to_string(),
-            name: name.to_string(),
-            album_id: ALBUM_2_ID.to_string(),
-            disc_number: 1,
-            track_number: (i + 1) as i32,
-            duration_secs: Some(*duration),
-            is_explicit: false,
-            audio_uri: audio_uri.to_string(),
-            format: Format::Mp3_320,
-            tags: vec![],
-            has_lyrics: false,
-            languages: vec![],
-            original_title: None,
-            version_title: None,
-            availability: TrackAvailability::Available,
-        };
-        store.insert_track(&track)?;
-        store.add_track_artist(id, ARTIST_2_ID, &ArtistRole::MainArtist, 0)?;
+    for (i, (id, name, duration_ms)) in tracks_album2.iter().enumerate() {
+        conn.execute(
+            "INSERT INTO tracks (id, name, album_id, disc_number, track_number, duration_ms, explicit, popularity)
+             VALUES (?1, ?2, ?3, 1, ?4, ?5, 0, 50)",
+            rusqlite::params![id, name, ALBUM_2_ID, (i + 1) as i32, duration_ms],
+        )?;
+        // Link track to artist
+        conn.execute(
+            "INSERT INTO track_artists (track_id, artist_id, artist_role) VALUES (?1, ?2, 0)",
+            [*id, ARTIST_2_ID],
+        )?;
     }
 
-    // Note: We intentionally leave the batch open so that E2E tests that modify
-    // the catalog (create/update/delete) can work. Once the batch management API
-    // is implemented (Phase 4), tests should manage their own batches.
+    // Insert album images
+    conn.execute(
+        "INSERT INTO album_images (album_id, url, width, height) VALUES (?1, ?2, 300, 300)",
+        [ALBUM_1_ID, "https://example.com/image-1.jpg"],
+    )?;
+    conn.execute(
+        "INSERT INTO album_images (album_id, url, width, height) VALUES (?1, ?2, 300, 300)",
+        [ALBUM_2_ID, "https://example.com/image-2.jpg"],
+    )?;
 
     Ok((dir, catalog_db_path, media_path))
 }
@@ -182,54 +156,66 @@ pub fn create_test_db_with_users() -> Result<(TempDir, String)> {
         let admin_id =
             create_user_with_password_and_role(&store, ADMIN_USER, ADMIN_PASS, UserRole::Admin)?;
         eprintln!("Created admin user {} with id {}", ADMIN_USER, admin_id);
-
-        // Store is dropped here, ensuring connection is closed
     }
 
-    let db_path_str = db_path.to_string_lossy().to_string();
-    eprintln!("Created test database at: {}", db_path_str);
-
-    Ok((temp_dir, db_path_str))
+    let path_str = db_path.to_string_lossy().into_owned();
+    Ok((temp_dir, path_str))
 }
 
-/// Helper to create a user with password and role
-fn create_user_with_password_and_role(
+/// Creates a user with the given credentials and role
+pub fn create_user_with_password_and_role(
     store: &SqliteUserStore,
-    handle: &str,
+    username: &str,
     password: &str,
     role: UserRole,
 ) -> Result<usize> {
-    // Create the user
-    let user_id = store.create_user(handle)?;
-
-    // Use fast test hasher when available, otherwise fall back to Argon2
-    #[cfg(feature = "test-fast-hasher")]
-    let hasher = PezzottifyHasher::TestFast;
-    #[cfg(not(feature = "test-fast-hasher"))]
-    let hasher = PezzottifyHasher::Argon2;
-    let salt = hasher.generate_b64_salt();
-    let hash = hasher.hash(password.as_bytes(), &salt)?;
-
-    // Create credentials
-    let credentials = UserAuthCredentials {
-        user_id,
-        username_password: Some(UsernamePasswordCredentials {
-            user_id,
-            salt,
-            hash,
-            hasher,
-            created: SystemTime::now(),
-            last_tried: None,
-            last_used: None,
-        }),
-        keys: Vec::new(), // No crypto keys for test users
-    };
-
-    // Update credentials in store
-    store.update_user_auth_credentials(credentials)?;
+    // Create user
+    let user_id = store.create_user(username)?;
 
     // Add role
     store.add_user_role(user_id, role)?;
 
+    // Create password credentials using the hasher
+    let hasher = PezzottifyHasher::Argon2;
+    let salt = hasher.generate_b64_salt();
+    let hash = hasher.hash(password.as_bytes(), &salt)?;
+
+    let password_credentials = UsernamePasswordCredentials {
+        user_id,
+        salt,
+        hash,
+        hasher,
+        created: SystemTime::now(),
+        last_tried: None,
+        last_used: None,
+    };
+
+    let credentials = UserAuthCredentials {
+        user_id,
+        username_password: Some(password_credentials),
+        keys: vec![],
+    };
+
+    // Store credentials
+    store.update_user_auth_credentials(credentials)?;
+
     Ok(user_id)
+}
+
+/// Creates a combined test setup with both catalog and users.
+/// Returns (temp_dir, catalog_db_path, user_db_path, media_path).
+pub fn create_combined_test_setup() -> Result<(TempDir, PathBuf, PathBuf, PathBuf)> {
+    let (temp_dir, catalog_db_path, media_path) = create_test_catalog()?;
+
+    // Create user DB in same temp directory
+    let user_db_path = temp_dir.path().join("users.db");
+    {
+        let store = SqliteUserStore::new(&user_db_path)?;
+
+        // Create test users
+        create_user_with_password_and_role(&store, TEST_USER, TEST_PASS, UserRole::Regular)?;
+        create_user_with_password_and_role(&store, ADMIN_USER, ADMIN_PASS, UserRole::Admin)?;
+    }
+
+    Ok((temp_dir, catalog_db_path, user_db_path, media_path))
 }

@@ -5,18 +5,21 @@
 pub mod background_jobs;
 pub mod catalog_store;
 pub mod config;
-pub mod download_manager;
-pub mod downloader;
+// TODO: Re-enable after updating for Spotify schema
+// pub mod download_manager;
+// pub mod downloader;
 pub mod mcp;
 pub mod notifications;
 pub mod oidc;
 pub mod search;
 pub mod server;
 pub mod server_store;
-pub mod skeleton;
+// TODO: Re-enable after updating for Spotify schema
+// pub mod skeleton;
 pub mod sqlite_persistence;
 pub mod user;
-pub mod whatsnew;
+// TODO: Re-enable after updating for Spotify schema (uses changelog)
+// pub mod whatsnew;
 
 // Re-export commonly used types for convenience
 pub use search::{Fts5LevenshteinSearchVault, SearchVault};

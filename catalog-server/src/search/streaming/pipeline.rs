@@ -192,7 +192,10 @@ impl<'a> StreamingSearchPipeline<'a> {
             for track_id in track_ids {
                 if let Ok(Some(resolved)) = self.catalog_store.get_resolved_track(&track_id) {
                     // Use album ID as image reference (images resolved via image endpoint)
-                    tracks.push(track_summary_with_image(&resolved, Some(&resolved.album.id)));
+                    tracks.push(track_summary_with_image(
+                        &resolved,
+                        Some(&resolved.album.id),
+                    ));
                     emitted_ids.insert(track_id);
                 }
             }

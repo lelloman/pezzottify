@@ -978,7 +978,11 @@ async fn create_artist(
     State(_catalog_store): State<GuardedCatalogStore>,
     Json(_data): Json<serde_json::Value>,
 ) -> Response {
-    (StatusCode::NOT_IMPLEMENTED, "Catalog editing not available - Spotify catalog is read-only").into_response()
+    (
+        StatusCode::NOT_IMPLEMENTED,
+        "Catalog editing not available - Spotify catalog is read-only",
+    )
+        .into_response()
 }
 
 async fn update_artist(
@@ -987,7 +991,11 @@ async fn update_artist(
     Path(_id): Path<String>,
     Json(_data): Json<serde_json::Value>,
 ) -> Response {
-    (StatusCode::NOT_IMPLEMENTED, "Catalog editing not available - Spotify catalog is read-only").into_response()
+    (
+        StatusCode::NOT_IMPLEMENTED,
+        "Catalog editing not available - Spotify catalog is read-only",
+    )
+        .into_response()
 }
 
 async fn delete_artist(
@@ -995,7 +1003,11 @@ async fn delete_artist(
     State(_catalog_store): State<GuardedCatalogStore>,
     Path(_id): Path<String>,
 ) -> Response {
-    (StatusCode::NOT_IMPLEMENTED, "Catalog editing not available - Spotify catalog is read-only").into_response()
+    (
+        StatusCode::NOT_IMPLEMENTED,
+        "Catalog editing not available - Spotify catalog is read-only",
+    )
+        .into_response()
 }
 
 async fn create_album(
@@ -1003,7 +1015,11 @@ async fn create_album(
     State(_catalog_store): State<GuardedCatalogStore>,
     Json(_data): Json<serde_json::Value>,
 ) -> Response {
-    (StatusCode::NOT_IMPLEMENTED, "Catalog editing not available - Spotify catalog is read-only").into_response()
+    (
+        StatusCode::NOT_IMPLEMENTED,
+        "Catalog editing not available - Spotify catalog is read-only",
+    )
+        .into_response()
 }
 
 async fn update_album(
@@ -1012,7 +1028,11 @@ async fn update_album(
     Path(_id): Path<String>,
     Json(_data): Json<serde_json::Value>,
 ) -> Response {
-    (StatusCode::NOT_IMPLEMENTED, "Catalog editing not available - Spotify catalog is read-only").into_response()
+    (
+        StatusCode::NOT_IMPLEMENTED,
+        "Catalog editing not available - Spotify catalog is read-only",
+    )
+        .into_response()
 }
 
 async fn delete_album(
@@ -1020,7 +1040,11 @@ async fn delete_album(
     State(_catalog_store): State<GuardedCatalogStore>,
     Path(_id): Path<String>,
 ) -> Response {
-    (StatusCode::NOT_IMPLEMENTED, "Catalog editing not available - Spotify catalog is read-only").into_response()
+    (
+        StatusCode::NOT_IMPLEMENTED,
+        "Catalog editing not available - Spotify catalog is read-only",
+    )
+        .into_response()
 }
 
 async fn create_track(
@@ -1028,7 +1052,11 @@ async fn create_track(
     State(_catalog_store): State<GuardedCatalogStore>,
     Json(_data): Json<serde_json::Value>,
 ) -> Response {
-    (StatusCode::NOT_IMPLEMENTED, "Catalog editing not available - Spotify catalog is read-only").into_response()
+    (
+        StatusCode::NOT_IMPLEMENTED,
+        "Catalog editing not available - Spotify catalog is read-only",
+    )
+        .into_response()
 }
 
 async fn update_track(
@@ -1037,7 +1065,11 @@ async fn update_track(
     Path(_id): Path<String>,
     Json(_data): Json<serde_json::Value>,
 ) -> Response {
-    (StatusCode::NOT_IMPLEMENTED, "Catalog editing not available - Spotify catalog is read-only").into_response()
+    (
+        StatusCode::NOT_IMPLEMENTED,
+        "Catalog editing not available - Spotify catalog is read-only",
+    )
+        .into_response()
 }
 
 async fn delete_track(
@@ -1045,7 +1077,11 @@ async fn delete_track(
     State(_catalog_store): State<GuardedCatalogStore>,
     Path(_id): Path<String>,
 ) -> Response {
-    (StatusCode::NOT_IMPLEMENTED, "Catalog editing not available - Spotify catalog is read-only").into_response()
+    (
+        StatusCode::NOT_IMPLEMENTED,
+        "Catalog editing not available - Spotify catalog is read-only",
+    )
+        .into_response()
 }
 
 async fn create_image(
@@ -1053,7 +1089,11 @@ async fn create_image(
     State(_catalog_store): State<GuardedCatalogStore>,
     Json(_data): Json<serde_json::Value>,
 ) -> Response {
-    (StatusCode::NOT_IMPLEMENTED, "Catalog editing not available - Spotify catalog is read-only").into_response()
+    (
+        StatusCode::NOT_IMPLEMENTED,
+        "Catalog editing not available - Spotify catalog is read-only",
+    )
+        .into_response()
 }
 
 async fn update_image(
@@ -1062,7 +1102,11 @@ async fn update_image(
     Path(_id): Path<String>,
     Json(_data): Json<serde_json::Value>,
 ) -> Response {
-    (StatusCode::NOT_IMPLEMENTED, "Catalog editing not available - Spotify catalog is read-only").into_response()
+    (
+        StatusCode::NOT_IMPLEMENTED,
+        "Catalog editing not available - Spotify catalog is read-only",
+    )
+        .into_response()
 }
 
 async fn delete_image(
@@ -1070,7 +1114,11 @@ async fn delete_image(
     State(_catalog_store): State<GuardedCatalogStore>,
     Path(_id): Path<String>,
 ) -> Response {
-    (StatusCode::NOT_IMPLEMENTED, "Catalog editing not available - Spotify catalog is read-only").into_response()
+    (
+        StatusCode::NOT_IMPLEMENTED,
+        "Catalog editing not available - Spotify catalog is read-only",
+    )
+        .into_response()
 }
 
 // ============================================================================
@@ -1095,7 +1143,11 @@ async fn get_whats_new(
     Query(_query): Query<WhatsNewQuery>,
 ) -> Response {
     // What's New functionality disabled - Spotify schema is read-only
-    (StatusCode::NOT_IMPLEMENTED, "What's New not available for Spotify catalog").into_response()
+    (
+        StatusCode::NOT_IMPLEMENTED,
+        "What's New not available for Spotify catalog",
+    )
+        .into_response()
 }
 
 /// Get popular albums and artists based on listening data from the last 365 days.
@@ -3328,7 +3380,11 @@ async fn admin_create_changelog_batch(
     Json(_body): Json<CreateBatchBody>,
 ) -> Response {
     // Changelog functionality disabled - Spotify schema is read-only
-    (StatusCode::NOT_IMPLEMENTED, "Changelog not available for Spotify catalog").into_response()
+    (
+        StatusCode::NOT_IMPLEMENTED,
+        "Changelog not available for Spotify catalog",
+    )
+        .into_response()
 }
 
 /// List changelog batches with optional filter
@@ -3339,7 +3395,11 @@ async fn admin_list_changelog_batches(
     Query(_query): Query<ListBatchesQuery>,
 ) -> Response {
     // Changelog functionality disabled - Spotify schema is read-only
-    (StatusCode::NOT_IMPLEMENTED, "Changelog not available for Spotify catalog").into_response()
+    (
+        StatusCode::NOT_IMPLEMENTED,
+        "Changelog not available for Spotify catalog",
+    )
+        .into_response()
 }
 
 /// Get a specific changelog batch by ID
@@ -3350,7 +3410,11 @@ async fn admin_get_changelog_batch(
     Path(_batch_id): Path<String>,
 ) -> Response {
     // Changelog functionality disabled - Spotify schema is read-only
-    (StatusCode::NOT_IMPLEMENTED, "Changelog not available for Spotify catalog").into_response()
+    (
+        StatusCode::NOT_IMPLEMENTED,
+        "Changelog not available for Spotify catalog",
+    )
+        .into_response()
 }
 
 /// Close a changelog batch
@@ -3361,7 +3425,11 @@ async fn admin_close_changelog_batch(
     Path(_batch_id): Path<String>,
 ) -> Response {
     // Changelog functionality disabled - Spotify schema is read-only
-    (StatusCode::NOT_IMPLEMENTED, "Changelog not available for Spotify catalog").into_response()
+    (
+        StatusCode::NOT_IMPLEMENTED,
+        "Changelog not available for Spotify catalog",
+    )
+        .into_response()
 }
 
 /// Delete a changelog batch (only if empty)
@@ -3372,7 +3440,11 @@ async fn admin_delete_changelog_batch(
     Path(_batch_id): Path<String>,
 ) -> Response {
     // Changelog functionality disabled - Spotify schema is read-only
-    (StatusCode::NOT_IMPLEMENTED, "Changelog not available for Spotify catalog").into_response()
+    (
+        StatusCode::NOT_IMPLEMENTED,
+        "Changelog not available for Spotify catalog",
+    )
+        .into_response()
 }
 
 /// Get all changes in a changelog batch
@@ -3383,7 +3455,11 @@ async fn admin_get_changelog_batch_changes(
     Path(_batch_id): Path<String>,
 ) -> Response {
     // Changelog functionality disabled - Spotify schema is read-only
-    (StatusCode::NOT_IMPLEMENTED, "Changelog not available for Spotify catalog").into_response()
+    (
+        StatusCode::NOT_IMPLEMENTED,
+        "Changelog not available for Spotify catalog",
+    )
+        .into_response()
 }
 
 /// Get change history for a specific entity
@@ -3394,9 +3470,12 @@ async fn admin_get_changelog_entity_history(
     Path((_entity_type, _entity_id)): Path<(String, String)>,
 ) -> Response {
     // Changelog functionality disabled - Spotify schema is read-only
-    (StatusCode::NOT_IMPLEMENTED, "Changelog not available for Spotify catalog").into_response()
+    (
+        StatusCode::NOT_IMPLEMENTED,
+        "Changelog not available for Spotify catalog",
+    )
+        .into_response()
 }
-
 
 // NOTE: Download Manager Endpoints removed - depends on download_manager module
 // These will be re-added when download_manager is updated for Spotify schema

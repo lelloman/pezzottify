@@ -6,7 +6,6 @@ use std::sync::Arc;
 
 use crate::background_jobs::SchedulerHandle;
 use crate::catalog_store::CatalogStore;
-use crate::download_manager::DownloadManager;
 use crate::search::SearchVault;
 use crate::server::session::Session;
 use crate::server::ServerConfig;
@@ -35,9 +34,6 @@ pub struct ToolContext {
 
     /// Access to background job scheduler
     pub scheduler_handle: Option<SchedulerHandle>,
-
-    /// Access to download manager
-    pub download_manager: Option<Arc<DownloadManager>>,
 
     /// Server configuration
     pub config: ServerConfig,

@@ -40,9 +40,11 @@ pub fn track_summary_with_image(resolved: &ResolvedTrack, image_id: Option<&str>
 impl From<&ResolvedAlbum> for AlbumSummary {
     fn from(resolved: &ResolvedAlbum) -> Self {
         // Extract release year from string date (e.g., "2023-05-15", "2023-05", "2023")
-        let release_year = resolved.album.release_date.as_ref().and_then(|date| {
-            date.split('-').next().and_then(|y| y.parse::<i32>().ok())
-        });
+        let release_year = resolved
+            .album
+            .release_date
+            .as_ref()
+            .and_then(|date| date.split('-').next().and_then(|y| y.parse::<i32>().ok()));
 
         // Count all tracks across all discs
         let track_count: u32 = resolved.discs.iter().map(|d| d.tracks.len() as u32).sum();
@@ -63,15 +65,16 @@ impl From<&ResolvedAlbum> for AlbumSummary {
 /// Convert an Album to AlbumSummary (without resolved data).
 /// Note: track_count will be 0.
 pub fn album_summary_basic(album: &Album, artist_names: Vec<String>) -> AlbumSummary {
-    let release_year = album.release_date.as_ref().and_then(|date| {
-        date.split('-').next().and_then(|y| y.parse::<i32>().ok())
-    });
+    let release_year = album
+        .release_date
+        .as_ref()
+        .and_then(|date| date.split('-').next().and_then(|y| y.parse::<i32>().ok()));
 
     AlbumSummary {
         id: album.id.clone(),
         name: album.name.clone(),
         release_year,
-        track_count: 0, // Unknown without resolved data
+        track_count: 0,                   // Unknown without resolved data
         image_id: Some(album.id.clone()), // Use album ID as image ID
         artist_names,
     }
