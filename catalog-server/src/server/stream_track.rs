@@ -2,7 +2,7 @@
 
 use super::{
     session::Session,
-    state::{GuardedCatalogStore, ServerState},
+    state::{GuardedCatalogStore, OptionalOrganicIndexer, ServerState},
 };
 use axum::{
     body::Body,
@@ -81,8 +81,14 @@ pub async fn stream_track(
     _session: Session,
     byte_range: Option<ByteRange>,
     State(catalog_store): State<GuardedCatalogStore>,
+    State(organic_indexer): State<OptionalOrganicIndexer>,
     Path(id): Path<String>,
 ) -> Response {
+    // Queue track for organic search index expansion
+    if let Some(indexer) = &organic_indexer {
+        indexer.touch_track(&id);
+    }
+
     // Get track metadata
     let track = match catalog_store.get_track(&id) {
         Ok(Some(track)) => track,

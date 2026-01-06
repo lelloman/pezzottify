@@ -96,6 +96,10 @@ impl Vocabulary {
         }
     }
 
+    /// Maximum number of candidates to check for fuzzy matching.
+    /// This prevents extremely slow searches on large vocabularies.
+    const MAX_CANDIDATES: usize = 5_000;
+
     /// Find the best matching word within the given max edit distance.
     /// Returns None if no match is found within the threshold.
     ///
@@ -115,12 +119,31 @@ impl Vocabulary {
         let mut candidates: Vec<usize> = Vec::new();
 
         // Only consider words with length within max_distance of query length
-        let min_len = query_len.saturating_sub(max_distance);
-        let max_len = query_len + max_distance;
+        // Prioritize exact length first, then nearby lengths
 
-        for len in min_len..=max_len {
-            if let Some(indices) = self.by_length.get(&len) {
-                candidates.extend(indices);
+        // Start with exact length matches (most likely to be good matches)
+        if let Some(indices) = self.by_length.get(&query_len) {
+            candidates.extend(indices.iter().take(Self::MAX_CANDIDATES));
+        }
+
+        // Add nearby lengths if we have room
+        for offset in 1..=max_distance {
+            if candidates.len() >= Self::MAX_CANDIDATES {
+                break;
+            }
+            // Shorter words
+            if query_len >= offset {
+                if let Some(indices) = self.by_length.get(&(query_len - offset)) {
+                    let remaining = Self::MAX_CANDIDATES - candidates.len();
+                    candidates.extend(indices.iter().take(remaining));
+                }
+            }
+            // Longer words
+            if candidates.len() < Self::MAX_CANDIDATES {
+                if let Some(indices) = self.by_length.get(&(query_len + offset)) {
+                    let remaining = Self::MAX_CANDIDATES - candidates.len();
+                    candidates.extend(indices.iter().take(remaining));
+                }
             }
         }
 
@@ -147,11 +170,11 @@ impl Vocabulary {
                         }
                     }
                 }
-            }
 
-            // Early exit if we found an exact match
-            if distance == 0 {
-                break;
+                // Early exit if we found an exact or near-exact match
+                if distance <= 1 {
+                    break;
+                }
             }
         }
 

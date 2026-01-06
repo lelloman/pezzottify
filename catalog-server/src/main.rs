@@ -216,11 +216,9 @@ async fn main() -> Result<()> {
                     &app_config.search_db_path(),
                 )?);
 
-                // Start background indexing - this returns immediately
-                // Items are indexed by popularity (most popular first)
-                // Search works during indexing with partial results
-                info!("Starting background search index build...");
-                vault.start_background_build(catalog_store.clone());
+                // No background build - search index grows organically via OrganicIndexer
+                // when users browse content (artists, albums, tracks)
+                info!("Search vault ready (organic indexing mode - index grows as content is accessed)");
 
                 // Box the Arc directly - SearchVault is implemented for Arc<T>
                 Box::new(vault)

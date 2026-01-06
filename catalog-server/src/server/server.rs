@@ -871,9 +871,15 @@ async fn home(session: Option<Session>, State(state): State<ServerState>) -> imp
 async fn get_artist(
     _session: Session,
     State(catalog_store): State<GuardedCatalogStore>,
+    State(organic_indexer): State<super::state::OptionalOrganicIndexer>,
     Path(id): Path<String>,
 ) -> Response {
     debug!("get_artist: id={}", id);
+
+    // Queue artist for organic search index expansion
+    if let Some(indexer) = &organic_indexer {
+        indexer.touch_artist(&id);
+    }
 
     match catalog_store.get_resolved_artist_json(&id) {
         Ok(Some(artist)) => Json(artist).into_response(),
@@ -885,8 +891,14 @@ async fn get_artist(
 async fn get_album(
     _session: Session,
     State(catalog_store): State<GuardedCatalogStore>,
+    State(organic_indexer): State<super::state::OptionalOrganicIndexer>,
     Path(id): Path<String>,
 ) -> Response {
+    // Queue album for organic search index expansion
+    if let Some(indexer) = &organic_indexer {
+        indexer.touch_album(&id);
+    }
+
     match catalog_store.get_album_json(&id) {
         Ok(Some(album)) => Json(album).into_response(),
         Ok(None) => StatusCode::NOT_FOUND.into_response(),
@@ -897,8 +909,14 @@ async fn get_album(
 async fn get_resolved_album(
     _session: Session,
     State(catalog_store): State<GuardedCatalogStore>,
+    State(organic_indexer): State<super::state::OptionalOrganicIndexer>,
     Path(id): Path<String>,
 ) -> Response {
+    // Queue album for organic search index expansion
+    if let Some(indexer) = &organic_indexer {
+        indexer.touch_album(&id);
+    }
+
     match catalog_store.get_resolved_album_json(&id) {
         Ok(Some(album)) => Json(album).into_response(),
         Ok(None) => StatusCode::NOT_FOUND.into_response(),
@@ -909,8 +927,14 @@ async fn get_resolved_album(
 async fn get_artist_discography(
     _session: Session,
     State(catalog_store): State<GuardedCatalogStore>,
+    State(organic_indexer): State<super::state::OptionalOrganicIndexer>,
     Path(id): Path<String>,
 ) -> Response {
+    // Queue artist for organic search index expansion (discography includes albums)
+    if let Some(indexer) = &organic_indexer {
+        indexer.touch_artist(&id);
+    }
+
     match catalog_store.get_artist_discography_json(&id) {
         Ok(None) => StatusCode::NOT_FOUND.into_response(),
         Ok(Some(discography)) => Json(discography).into_response(),
@@ -921,8 +945,14 @@ async fn get_artist_discography(
 pub async fn get_track(
     _session: Session,
     State(catalog_store): State<GuardedCatalogStore>,
+    State(organic_indexer): State<super::state::OptionalOrganicIndexer>,
     Path(id): Path<String>,
 ) -> Response {
+    // Queue track for organic search index expansion
+    if let Some(indexer) = &organic_indexer {
+        indexer.touch_track(&id);
+    }
+
     match catalog_store.get_track_json(&id) {
         Ok(Some(track)) => Json(track).into_response(),
         Ok(None) => StatusCode::NOT_FOUND.into_response(),
@@ -933,8 +963,14 @@ pub async fn get_track(
 pub async fn get_resolved_track(
     _session: Session,
     State(catalog_store): State<GuardedCatalogStore>,
+    State(organic_indexer): State<super::state::OptionalOrganicIndexer>,
     Path(id): Path<String>,
 ) -> Response {
+    // Queue track for organic search index expansion
+    if let Some(indexer) = &organic_indexer {
+        indexer.touch_track(&id);
+    }
+
     match catalog_store.get_resolved_track_json(&id) {
         Ok(Some(track)) => Json(track).into_response(),
         Ok(None) => StatusCode::NOT_FOUND.into_response(),
@@ -3715,6 +3751,10 @@ impl ServerState {
         // Create MCP state
         let mcp_state = Arc::new(crate::mcp::handler::create_mcp_state());
 
+        // Create organic indexer for on-demand search index growth
+        // Note: This requires a tokio runtime, so we wrap in Option and create later
+        let organic_indexer = None;
+
         ServerState {
             config,
             start_time: Instant::now(),
@@ -3728,6 +3768,7 @@ impl ServerState {
             oidc_client: None, // Will be set by make_app if OIDC is configured
             auth_state_store,
             mcp_state,
+            organic_indexer,
         }
     }
 }
@@ -3772,14 +3813,20 @@ pub async fn make_app(
 
     let mut state = ServerState::new_with_guarded_search_vault(
         config.clone(),
-        catalog_store,
-        search_vault,
+        catalog_store.clone(),
+        search_vault.clone(),
         user_manager,
         user_store.clone(),
         scheduler_handle,
         server_store,
     );
     state.oidc_client = oidc_client;
+
+    // Create organic indexer for on-demand search index growth
+    state.organic_indexer = Some(crate::search::OrganicIndexer::new(
+        search_vault,
+        catalog_store,
+    ));
 
     // Login route with strict IP-based rate limiting
     // For rates < 60/min, we use per_second(1) and rely on burst_size to enforce the limit
