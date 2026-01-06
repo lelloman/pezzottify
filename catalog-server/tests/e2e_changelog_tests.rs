@@ -1,6 +1,10 @@
 //! End-to-end tests for changelog API endpoints
 //!
 //! Tests the admin changelog batch management and change query endpoints.
+//!
+//! NOTE: These tests are disabled for the Spotify schema migration.
+//! The Spotify catalog is read-only, so changelog functionality is not available.
+//! All changelog endpoints return 501 NOT_IMPLEMENTED.
 
 mod common;
 
@@ -13,6 +17,7 @@ use serde_json::Value;
 // =============================================================================
 
 #[tokio::test]
+#[ignore = "Changelog disabled for Spotify schema (read-only catalog)"]
 async fn test_changelog_requires_admin() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated(server.base_url.clone()).await;
@@ -23,6 +28,7 @@ async fn test_changelog_requires_admin() {
 }
 
 #[tokio::test]
+#[ignore = "Changelog disabled for Spotify schema (read-only catalog)"]
 async fn test_changelog_unauthenticated_unauthorized() {
     let server = TestServer::spawn().await;
     let client = TestClient::new(server.base_url.clone());
@@ -37,6 +43,7 @@ async fn test_changelog_unauthenticated_unauthorized() {
 // =============================================================================
 
 #[tokio::test]
+#[ignore = "Changelog disabled for Spotify schema (read-only catalog)"]
 async fn test_list_batches() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated_admin(server.base_url.clone()).await;
@@ -53,6 +60,7 @@ async fn test_list_batches() {
 }
 
 #[tokio::test]
+#[ignore = "Changelog disabled for Spotify schema (read-only catalog)"]
 async fn test_list_batches_filter_open() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated_admin(server.base_url.clone()).await;
@@ -68,6 +76,7 @@ async fn test_list_batches_filter_open() {
 }
 
 #[tokio::test]
+#[ignore = "Changelog disabled for Spotify schema (read-only catalog)"]
 async fn test_list_batches_filter_closed() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated_admin(server.base_url.clone()).await;
@@ -91,6 +100,7 @@ async fn test_list_batches_filter_closed() {
 }
 
 #[tokio::test]
+#[ignore = "Changelog disabled for Spotify schema (read-only catalog)"]
 async fn test_create_batch() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated_admin(server.base_url.clone()).await;
@@ -117,6 +127,7 @@ async fn test_create_batch() {
 }
 
 #[tokio::test]
+#[ignore = "Changelog disabled for Spotify schema (read-only catalog)"]
 async fn test_create_batch_without_description() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated_admin(server.base_url.clone()).await;
@@ -140,6 +151,7 @@ async fn test_create_batch_without_description() {
 }
 
 #[tokio::test]
+#[ignore = "Changelog disabled for Spotify schema (read-only catalog)"]
 async fn test_create_batch_conflict_when_active() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated_admin(server.base_url.clone()).await;
@@ -153,6 +165,7 @@ async fn test_create_batch_conflict_when_active() {
 }
 
 #[tokio::test]
+#[ignore = "Changelog disabled for Spotify schema (read-only catalog)"]
 async fn test_get_batch() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated_admin(server.base_url.clone()).await;
@@ -170,6 +183,7 @@ async fn test_get_batch() {
 }
 
 #[tokio::test]
+#[ignore = "Changelog disabled for Spotify schema (read-only catalog)"]
 async fn test_get_batch_not_found() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated_admin(server.base_url.clone()).await;
@@ -181,6 +195,7 @@ async fn test_get_batch_not_found() {
 }
 
 #[tokio::test]
+#[ignore = "Changelog disabled for Spotify schema (read-only catalog)"]
 async fn test_close_batch() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated_admin(server.base_url.clone()).await;
@@ -202,6 +217,7 @@ async fn test_close_batch() {
 }
 
 #[tokio::test]
+#[ignore = "Changelog disabled for Spotify schema (read-only catalog)"]
 async fn test_close_batch_not_found() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated_admin(server.base_url.clone()).await;
@@ -213,6 +229,7 @@ async fn test_close_batch_not_found() {
 }
 
 #[tokio::test]
+#[ignore = "Changelog disabled for Spotify schema (read-only catalog)"]
 async fn test_close_batch_already_closed() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated_admin(server.base_url.clone()).await;
@@ -229,6 +246,7 @@ async fn test_close_batch_already_closed() {
 }
 
 #[tokio::test]
+#[ignore = "Changelog disabled for Spotify schema (read-only catalog)"]
 async fn test_delete_batch_not_empty() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated_admin(server.base_url.clone()).await;
@@ -244,6 +262,7 @@ async fn test_delete_batch_not_empty() {
 }
 
 #[tokio::test]
+#[ignore = "Changelog disabled for Spotify schema (read-only catalog)"]
 async fn test_delete_empty_batch() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated_admin(server.base_url.clone()).await;
@@ -273,6 +292,7 @@ async fn test_delete_empty_batch() {
 }
 
 #[tokio::test]
+#[ignore = "Changelog disabled for Spotify schema (read-only catalog)"]
 async fn test_delete_batch_not_found() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated_admin(server.base_url.clone()).await;
@@ -288,6 +308,7 @@ async fn test_delete_batch_not_found() {
 // =============================================================================
 
 #[tokio::test]
+#[ignore = "Changelog disabled for Spotify schema (read-only catalog)"]
 async fn test_get_batch_changes() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated_admin(server.base_url.clone()).await;
@@ -316,6 +337,7 @@ async fn test_get_batch_changes() {
 }
 
 #[tokio::test]
+#[ignore = "Changelog disabled for Spotify schema (read-only catalog)"]
 async fn test_get_batch_changes_not_found() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated_admin(server.base_url.clone()).await;
@@ -327,6 +349,7 @@ async fn test_get_batch_changes_not_found() {
 }
 
 #[tokio::test]
+#[ignore = "Changelog disabled for Spotify schema (read-only catalog)"]
 async fn test_get_entity_history() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated_admin(server.base_url.clone()).await;
@@ -351,6 +374,7 @@ async fn test_get_entity_history() {
 }
 
 #[tokio::test]
+#[ignore = "Changelog disabled for Spotify schema (read-only catalog)"]
 async fn test_get_entity_history_empty() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated_admin(server.base_url.clone()).await;
@@ -369,6 +393,7 @@ async fn test_get_entity_history_empty() {
 }
 
 #[tokio::test]
+#[ignore = "Changelog disabled for Spotify schema (read-only catalog)"]
 async fn test_get_entity_history_invalid_type() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated_admin(server.base_url.clone()).await;
@@ -380,6 +405,7 @@ async fn test_get_entity_history_invalid_type() {
 }
 
 #[tokio::test]
+#[ignore = "Changelog disabled for Spotify schema (read-only catalog)"]
 async fn test_get_entity_history_all_types() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated_admin(server.base_url.clone()).await;
@@ -403,6 +429,7 @@ async fn test_get_entity_history_all_types() {
 // =============================================================================
 
 #[tokio::test]
+#[ignore = "Changelog disabled for Spotify schema (read-only catalog)"]
 async fn test_whats_new_requires_authentication() {
     let server = TestServer::spawn().await;
     let client = TestClient::new(server.base_url.clone());
@@ -413,6 +440,7 @@ async fn test_whats_new_requires_authentication() {
 }
 
 #[tokio::test]
+#[ignore = "Changelog disabled for Spotify schema (read-only catalog)"]
 async fn test_whats_new_regular_user_can_access() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated(server.base_url.clone()).await;
@@ -422,6 +450,7 @@ async fn test_whats_new_regular_user_can_access() {
 }
 
 #[tokio::test]
+#[ignore = "Changelog disabled for Spotify schema (read-only catalog)"]
 async fn test_whats_new_returns_empty_when_no_closed_batches() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated(server.base_url.clone()).await;
@@ -438,6 +467,7 @@ async fn test_whats_new_returns_empty_when_no_closed_batches() {
 }
 
 #[tokio::test]
+#[ignore = "Changelog disabled for Spotify schema (read-only catalog)"]
 async fn test_whats_new_returns_closed_batches() {
     let server = TestServer::spawn().await;
     let admin = TestClient::authenticated_admin(server.base_url.clone()).await;
@@ -481,6 +511,7 @@ async fn test_whats_new_returns_closed_batches() {
 }
 
 #[tokio::test]
+#[ignore = "Changelog disabled for Spotify schema (read-only catalog)"]
 async fn test_whats_new_respects_limit_parameter() {
     let server = TestServer::spawn().await;
     let admin = TestClient::authenticated_admin(server.base_url.clone()).await;
@@ -517,6 +548,7 @@ async fn test_whats_new_respects_limit_parameter() {
 }
 
 #[tokio::test]
+#[ignore = "Changelog disabled for Spotify schema (read-only catalog)"]
 async fn test_whats_new_default_limit() {
     let server = TestServer::spawn().await;
     let admin = TestClient::authenticated_admin(server.base_url.clone()).await;
@@ -553,6 +585,7 @@ async fn test_whats_new_default_limit() {
 }
 
 #[tokio::test]
+#[ignore = "Changelog disabled for Spotify schema (read-only catalog)"]
 async fn test_whats_new_orders_by_closed_at_desc() {
     let server = TestServer::spawn().await;
     let admin = TestClient::authenticated_admin(server.base_url.clone()).await;

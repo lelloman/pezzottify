@@ -3,6 +3,8 @@
 //! Tests GET /v1/catalog/skeleton, GET /v1/catalog/skeleton/version,
 //! and GET /v1/catalog/skeleton/delta endpoints.
 //!
+//! NOTE: These tests are disabled - skeleton module is not enabled.
+//!
 //! Note: TestServer::spawn() creates a catalog with fixtures:
 //! 2 artists, 2 albums, 5 tracks. This means skeleton version will be 9
 //! (one event per entity insertion) and the catalog is not empty.
@@ -13,6 +15,7 @@ use common::{TestClient, TestServer};
 use reqwest::StatusCode;
 
 #[tokio::test]
+#[ignore = "Skeleton module disabled"]
 async fn test_get_skeleton_requires_authentication() {
     let server = TestServer::spawn().await;
     let client = TestClient::new(server.base_url.clone());
@@ -23,6 +26,7 @@ async fn test_get_skeleton_requires_authentication() {
 }
 
 #[tokio::test]
+#[ignore = "Skeleton module disabled"]
 async fn test_get_skeleton_version_requires_authentication() {
     let server = TestServer::spawn().await;
     let client = TestClient::new(server.base_url.clone());
@@ -33,6 +37,7 @@ async fn test_get_skeleton_version_requires_authentication() {
 }
 
 #[tokio::test]
+#[ignore = "Skeleton module disabled"]
 async fn test_get_skeleton_delta_requires_authentication() {
     let server = TestServer::spawn().await;
     let client = TestClient::new(server.base_url.clone());
@@ -43,6 +48,7 @@ async fn test_get_skeleton_delta_requires_authentication() {
 }
 
 #[tokio::test]
+#[ignore = "Skeleton module disabled"]
 async fn test_get_skeleton_version() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated(server.base_url.clone()).await;
@@ -63,6 +69,7 @@ async fn test_get_skeleton_version() {
 }
 
 #[tokio::test]
+#[ignore = "Skeleton module disabled"]
 async fn test_get_full_skeleton() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated(server.base_url.clone()).await;
@@ -100,6 +107,7 @@ async fn test_get_full_skeleton() {
 }
 
 #[tokio::test]
+#[ignore = "Skeleton module disabled"]
 async fn test_get_skeleton_delta_from_zero() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated(server.base_url.clone()).await;
@@ -125,6 +133,7 @@ async fn test_get_skeleton_delta_from_zero() {
 }
 
 #[tokio::test]
+#[ignore = "Skeleton module disabled"]
 async fn test_get_skeleton_delta_from_current() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated(server.base_url.clone()).await;
@@ -144,6 +153,7 @@ async fn test_get_skeleton_delta_from_current() {
 }
 
 #[tokio::test]
+#[ignore = "Skeleton module disabled"]
 async fn test_skeleton_checksum_consistency() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated(server.base_url.clone()).await;

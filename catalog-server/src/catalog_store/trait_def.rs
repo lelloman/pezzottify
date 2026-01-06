@@ -102,6 +102,37 @@ pub trait CatalogStore: Send + Sync {
 
     /// List all track IDs in the catalog.
     fn list_all_track_ids(&self) -> Result<Vec<String>>;
+
+    // =========================================================================
+    // CRUD Operations
+    // =========================================================================
+
+    /// Create a new artist. Returns error if ID already exists.
+    fn create_artist(&self, artist: &super::Artist) -> Result<()>;
+
+    /// Update an existing artist. Returns error if not found.
+    fn update_artist(&self, artist: &super::Artist) -> Result<()>;
+
+    /// Delete an artist by ID. Returns true if deleted, false if not found.
+    fn delete_artist(&self, id: &str) -> Result<bool>;
+
+    /// Create a new album. Returns error if ID already exists.
+    fn create_album(&self, album: &super::Album, artist_ids: &[String]) -> Result<()>;
+
+    /// Update an existing album. Returns error if not found.
+    fn update_album(&self, album: &super::Album, artist_ids: Option<&[String]>) -> Result<()>;
+
+    /// Delete an album by ID. Returns true if deleted, false if not found.
+    fn delete_album(&self, id: &str) -> Result<bool>;
+
+    /// Create a new track. Returns error if ID already exists or album doesn't exist.
+    fn create_track(&self, track: &super::Track, artist_ids: &[String]) -> Result<()>;
+
+    /// Update an existing track. Returns error if not found.
+    fn update_track(&self, track: &super::Track, artist_ids: Option<&[String]>) -> Result<()>;
+
+    /// Delete a track by ID. Returns true if deleted, false if not found.
+    fn delete_track(&self, id: &str) -> Result<bool>;
 }
 
 /// A searchable item for the search index.

@@ -28,7 +28,8 @@ impl SqliteCatalogStore {
     pub fn new<P: AsRef<Path>, M: AsRef<Path>>(db_path: P, media_base_path: M) -> Result<Self> {
         let conn = Connection::open_with_flags(
             &db_path,
-            rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY
+            rusqlite::OpenFlags::SQLITE_OPEN_READ_WRITE
+                | rusqlite::OpenFlags::SQLITE_OPEN_CREATE
                 | rusqlite::OpenFlags::SQLITE_OPEN_URI
                 | rusqlite::OpenFlags::SQLITE_OPEN_NO_MUTEX,
         )
@@ -797,6 +798,392 @@ impl CatalogStore for SqliteCatalogStore {
             .query_map([], |r| r.get(0))?
             .collect::<Result<Vec<String>, _>>()?;
         Ok(ids)
+    }
+
+    // =========================================================================
+    // CRUD Operations
+    // =========================================================================
+
+    fn create_artist(&self, artist: &Artist) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+
+        // Check for duplicate
+        let exists: bool = conn.query_row(
+            "SELECT EXISTS(SELECT 1 FROM artists WHERE id = ?1)",
+            params![&artist.id],
+            |r| r.get(0),
+        )?;
+        if exists {
+            anyhow::bail!("Artist with id '{}' already exists", artist.id);
+        }
+
+        conn.execute(
+            "INSERT INTO artists (id, name, followers_total, popularity) VALUES (?1, ?2, ?3, ?4)",
+            params![&artist.id, &artist.name, artist.followers_total, artist.popularity],
+        )?;
+
+        // Get the rowid for genres
+        let artist_rowid: i64 = conn.query_row(
+            "SELECT rowid FROM artists WHERE id = ?1",
+            params![&artist.id],
+            |r| r.get(0),
+        )?;
+
+        // Insert genres
+        for genre in &artist.genres {
+            conn.execute(
+                "INSERT INTO artist_genres (artist_rowid, genre) VALUES (?1, ?2)",
+                params![artist_rowid, genre],
+            )?;
+        }
+
+        Ok(())
+    }
+
+    fn update_artist(&self, artist: &Artist) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+
+        // Get rowid (also verifies existence)
+        let artist_rowid: i64 = match conn.query_row(
+            "SELECT rowid FROM artists WHERE id = ?1",
+            params![&artist.id],
+            |r| r.get(0),
+        ) {
+            Ok(rowid) => rowid,
+            Err(rusqlite::Error::QueryReturnedNoRows) => {
+                anyhow::bail!("Artist with id '{}' not found", artist.id);
+            }
+            Err(e) => return Err(e.into()),
+        };
+
+        conn.execute(
+            "UPDATE artists SET name = ?1, followers_total = ?2, popularity = ?3 WHERE rowid = ?4",
+            params![&artist.name, artist.followers_total, artist.popularity, artist_rowid],
+        )?;
+
+        // Replace genres
+        conn.execute(
+            "DELETE FROM artist_genres WHERE artist_rowid = ?1",
+            params![artist_rowid],
+        )?;
+        for genre in &artist.genres {
+            conn.execute(
+                "INSERT INTO artist_genres (artist_rowid, genre) VALUES (?1, ?2)",
+                params![artist_rowid, genre],
+            )?;
+        }
+
+        Ok(())
+    }
+
+    fn delete_artist(&self, id: &str) -> Result<bool> {
+        let conn = self.conn.lock().unwrap();
+
+        let artist_rowid: Option<i64> = match conn.query_row(
+            "SELECT rowid FROM artists WHERE id = ?1",
+            params![id],
+            |r| r.get(0),
+        ) {
+            Ok(rowid) => Some(rowid),
+            Err(rusqlite::Error::QueryReturnedNoRows) => None,
+            Err(e) => return Err(e.into()),
+        };
+
+        if let Some(rowid) = artist_rowid {
+            // Delete related data first
+            conn.execute("DELETE FROM artist_genres WHERE artist_rowid = ?1", params![rowid])?;
+            conn.execute("DELETE FROM artist_albums WHERE artist_rowid = ?1", params![rowid])?;
+            conn.execute("DELETE FROM track_artists WHERE artist_rowid = ?1", params![rowid])?;
+            conn.execute("DELETE FROM artist_images WHERE artist_rowid = ?1", params![rowid])?;
+            conn.execute("DELETE FROM artists WHERE rowid = ?1", params![rowid])?;
+            Ok(true)
+        } else {
+            Ok(false)
+        }
+    }
+
+    fn create_album(&self, album: &Album, artist_ids: &[String]) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+
+        // Check for duplicate
+        let exists: bool = conn.query_row(
+            "SELECT EXISTS(SELECT 1 FROM albums WHERE id = ?1)",
+            params![&album.id],
+            |r| r.get(0),
+        )?;
+        if exists {
+            anyhow::bail!("Album with id '{}' already exists", album.id);
+        }
+
+        conn.execute(
+            "INSERT INTO albums (id, name, album_type, external_id_upc, label, popularity, release_date, release_date_precision)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+            params![
+                &album.id,
+                &album.name,
+                album.album_type.to_db_str(),
+                &album.external_id_upc,
+                album.label.as_deref().unwrap_or(""),
+                album.popularity,
+                &album.release_date,
+                &album.release_date_precision,
+            ],
+        )?;
+
+        let album_rowid: i64 = conn.query_row(
+            "SELECT rowid FROM albums WHERE id = ?1",
+            params![&album.id],
+            |r| r.get(0),
+        )?;
+
+        // Link artists to album
+        for (idx, artist_id) in artist_ids.iter().enumerate() {
+            let artist_rowid: i64 = conn.query_row(
+                "SELECT rowid FROM artists WHERE id = ?1",
+                params![artist_id],
+                |r| r.get(0),
+            ).context(format!("Artist '{}' not found", artist_id))?;
+
+            conn.execute(
+                "INSERT INTO artist_albums (artist_rowid, album_rowid, is_appears_on, is_implicit_appears_on, index_in_album)
+                 VALUES (?1, ?2, 0, 0, ?3)",
+                params![artist_rowid, album_rowid, idx as i32],
+            )?;
+        }
+
+        Ok(())
+    }
+
+    fn update_album(&self, album: &Album, artist_ids: Option<&[String]>) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+
+        let album_rowid: i64 = match conn.query_row(
+            "SELECT rowid FROM albums WHERE id = ?1",
+            params![&album.id],
+            |r| r.get(0),
+        ) {
+            Ok(rowid) => rowid,
+            Err(rusqlite::Error::QueryReturnedNoRows) => {
+                anyhow::bail!("Album with id '{}' not found", album.id);
+            }
+            Err(e) => return Err(e.into()),
+        };
+
+        conn.execute(
+            "UPDATE albums SET name = ?1, album_type = ?2, external_id_upc = ?3, label = ?4,
+             popularity = ?5, release_date = ?6, release_date_precision = ?7 WHERE rowid = ?8",
+            params![
+                &album.name,
+                album.album_type.to_db_str(),
+                &album.external_id_upc,
+                album.label.as_deref().unwrap_or(""),
+                album.popularity,
+                &album.release_date,
+                &album.release_date_precision,
+                album_rowid,
+            ],
+        )?;
+
+        // Update artists if provided
+        if let Some(artist_ids) = artist_ids {
+            conn.execute(
+                "DELETE FROM artist_albums WHERE album_rowid = ?1 AND is_appears_on = 0",
+                params![album_rowid],
+            )?;
+
+            for (idx, artist_id) in artist_ids.iter().enumerate() {
+                let artist_rowid: i64 = conn.query_row(
+                    "SELECT rowid FROM artists WHERE id = ?1",
+                    params![artist_id],
+                    |r| r.get(0),
+                ).context(format!("Artist '{}' not found", artist_id))?;
+
+                conn.execute(
+                    "INSERT INTO artist_albums (artist_rowid, album_rowid, is_appears_on, is_implicit_appears_on, index_in_album)
+                     VALUES (?1, ?2, 0, 0, ?3)",
+                    params![artist_rowid, album_rowid, idx as i32],
+                )?;
+            }
+        }
+
+        Ok(())
+    }
+
+    fn delete_album(&self, id: &str) -> Result<bool> {
+        let conn = self.conn.lock().unwrap();
+
+        let album_rowid: Option<i64> = match conn.query_row(
+            "SELECT rowid FROM albums WHERE id = ?1",
+            params![id],
+            |r| r.get(0),
+        ) {
+            Ok(rowid) => Some(rowid),
+            Err(rusqlite::Error::QueryReturnedNoRows) => None,
+            Err(e) => return Err(e.into()),
+        };
+
+        if let Some(rowid) = album_rowid {
+            // Delete track-artist relationships first
+            conn.execute(
+                "DELETE FROM track_artists WHERE track_rowid IN (SELECT rowid FROM tracks WHERE album_rowid = ?1)",
+                params![rowid],
+            )?;
+            // Delete tracks
+            conn.execute("DELETE FROM tracks WHERE album_rowid = ?1", params![rowid])?;
+
+            // Delete album relationships and data
+            conn.execute("DELETE FROM artist_albums WHERE album_rowid = ?1", params![rowid])?;
+            conn.execute("DELETE FROM album_images WHERE album_rowid = ?1", params![rowid])?;
+            conn.execute("DELETE FROM albums WHERE rowid = ?1", params![rowid])?;
+            Ok(true)
+        } else {
+            Ok(false)
+        }
+    }
+
+    fn create_track(&self, track: &Track, artist_ids: &[String]) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+
+        // Check for duplicate
+        let exists: bool = conn.query_row(
+            "SELECT EXISTS(SELECT 1 FROM tracks WHERE id = ?1)",
+            params![&track.id],
+            |r| r.get(0),
+        )?;
+        if exists {
+            anyhow::bail!("Track with id '{}' already exists", track.id);
+        }
+
+        // Get album rowid
+        let album_rowid: i64 = conn.query_row(
+            "SELECT rowid FROM albums WHERE id = ?1",
+            params![&track.album_id],
+            |r| r.get(0),
+        ).context(format!("Album '{}' not found", track.album_id))?;
+
+        conn.execute(
+            "INSERT INTO tracks (id, name, album_rowid, track_number, external_id_isrc, popularity,
+             disc_number, duration_ms, explicit, language) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+            params![
+                &track.id,
+                &track.name,
+                album_rowid,
+                track.track_number,
+                &track.external_id_isrc,
+                track.popularity,
+                track.disc_number,
+                track.duration_ms,
+                if track.explicit { 1 } else { 0 },
+                &track.language,
+            ],
+        )?;
+
+        let track_rowid: i64 = conn.query_row(
+            "SELECT rowid FROM tracks WHERE id = ?1",
+            params![&track.id],
+            |r| r.get(0),
+        )?;
+
+        // Link artists to track
+        for artist_id in artist_ids {
+            let artist_rowid: i64 = conn.query_row(
+                "SELECT rowid FROM artists WHERE id = ?1",
+                params![artist_id],
+                |r| r.get(0),
+            ).context(format!("Artist '{}' not found", artist_id))?;
+
+            conn.execute(
+                "INSERT INTO track_artists (track_rowid, artist_rowid, role) VALUES (?1, ?2, 0)",
+                params![track_rowid, artist_rowid],
+            )?;
+        }
+
+        Ok(())
+    }
+
+    fn update_track(&self, track: &Track, artist_ids: Option<&[String]>) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+
+        let track_rowid: i64 = match conn.query_row(
+            "SELECT rowid FROM tracks WHERE id = ?1",
+            params![&track.id],
+            |r| r.get(0),
+        ) {
+            Ok(rowid) => rowid,
+            Err(rusqlite::Error::QueryReturnedNoRows) => {
+                anyhow::bail!("Track with id '{}' not found", track.id);
+            }
+            Err(e) => return Err(e.into()),
+        };
+
+        // Get album rowid
+        let album_rowid: i64 = conn.query_row(
+            "SELECT rowid FROM albums WHERE id = ?1",
+            params![&track.album_id],
+            |r| r.get(0),
+        ).context(format!("Album '{}' not found", track.album_id))?;
+
+        conn.execute(
+            "UPDATE tracks SET name = ?1, album_rowid = ?2, track_number = ?3, external_id_isrc = ?4,
+             popularity = ?5, disc_number = ?6, duration_ms = ?7, explicit = ?8, language = ?9 WHERE rowid = ?10",
+            params![
+                &track.name,
+                album_rowid,
+                track.track_number,
+                &track.external_id_isrc,
+                track.popularity,
+                track.disc_number,
+                track.duration_ms,
+                if track.explicit { 1 } else { 0 },
+                &track.language,
+                track_rowid,
+            ],
+        )?;
+
+        // Update artists if provided
+        if let Some(artist_ids) = artist_ids {
+            conn.execute(
+                "DELETE FROM track_artists WHERE track_rowid = ?1",
+                params![track_rowid],
+            )?;
+
+            for artist_id in artist_ids {
+                let artist_rowid: i64 = conn.query_row(
+                    "SELECT rowid FROM artists WHERE id = ?1",
+                    params![artist_id],
+                    |r| r.get(0),
+                ).context(format!("Artist '{}' not found", artist_id))?;
+
+                conn.execute(
+                    "INSERT INTO track_artists (track_rowid, artist_rowid, role) VALUES (?1, ?2, 0)",
+                    params![track_rowid, artist_rowid],
+                )?;
+            }
+        }
+
+        Ok(())
+    }
+
+    fn delete_track(&self, id: &str) -> Result<bool> {
+        let conn = self.conn.lock().unwrap();
+
+        let track_rowid: Option<i64> = match conn.query_row(
+            "SELECT rowid FROM tracks WHERE id = ?1",
+            params![id],
+            |r| r.get(0),
+        ) {
+            Ok(rowid) => Some(rowid),
+            Err(rusqlite::Error::QueryReturnedNoRows) => None,
+            Err(e) => return Err(e.into()),
+        };
+
+        if let Some(rowid) = track_rowid {
+            conn.execute("DELETE FROM track_artists WHERE track_rowid = ?1", params![rowid])?;
+            conn.execute("DELETE FROM tracks WHERE rowid = ?1", params![rowid])?;
+            Ok(true)
+        } else {
+            Ok(false)
+        }
     }
 }
 

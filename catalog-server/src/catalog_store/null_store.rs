@@ -98,4 +98,40 @@ impl CatalogStore for NullCatalogStore {
     fn list_all_track_ids(&self) -> Result<Vec<String>> {
         Ok(Vec::new())
     }
+
+    fn create_artist(&self, _artist: &super::Artist) -> Result<()> {
+        anyhow::bail!("NullCatalogStore does not support write operations")
+    }
+
+    fn update_artist(&self, _artist: &super::Artist) -> Result<()> {
+        anyhow::bail!("NullCatalogStore does not support write operations")
+    }
+
+    fn delete_artist(&self, _id: &str) -> Result<bool> {
+        anyhow::bail!("NullCatalogStore does not support write operations")
+    }
+
+    fn create_album(&self, _album: &super::Album, _artist_ids: &[String]) -> Result<()> {
+        anyhow::bail!("NullCatalogStore does not support write operations")
+    }
+
+    fn update_album(&self, _album: &super::Album, _artist_ids: Option<&[String]>) -> Result<()> {
+        anyhow::bail!("NullCatalogStore does not support write operations")
+    }
+
+    fn delete_album(&self, _id: &str) -> Result<bool> {
+        anyhow::bail!("NullCatalogStore does not support write operations")
+    }
+
+    fn create_track(&self, _track: &super::Track, _artist_ids: &[String]) -> Result<()> {
+        anyhow::bail!("NullCatalogStore does not support write operations")
+    }
+
+    fn update_track(&self, _track: &super::Track, _artist_ids: Option<&[String]>) -> Result<()> {
+        anyhow::bail!("NullCatalogStore does not support write operations")
+    }
+
+    fn delete_track(&self, _id: &str) -> Result<bool> {
+        anyhow::bail!("NullCatalogStore does not support write operations")
+    }
 }

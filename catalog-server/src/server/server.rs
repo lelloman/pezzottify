@@ -875,7 +875,7 @@ async fn get_artist(
 ) -> Response {
     debug!("get_artist: id={}", id);
 
-    match catalog_store.get_artist_json(&id) {
+    match catalog_store.get_resolved_artist_json(&id) {
         Ok(Some(artist)) => Json(artist).into_response(),
         Ok(None) => StatusCode::NOT_FOUND.into_response(),
         Err(err) => (StatusCode::INTERNAL_SERVER_ERROR, format!("{}", err)).into_response(),
@@ -970,120 +970,333 @@ async fn get_image(
 
 // =============================================================================
 // Catalog Editing Handlers
-// NOTE: Disabled for Spotify schema - catalog is read-only
 // =============================================================================
+
+#[derive(Debug, Deserialize)]
+struct CreateArtistRequest {
+    id: String,
+    name: String,
+    #[serde(default)]
+    genres: Vec<String>,
+    #[serde(default)]
+    followers_total: i64,
+    #[serde(default = "default_popularity")]
+    popularity: i32,
+}
+
+fn default_popularity() -> i32 {
+    50
+}
+
+#[derive(Debug, Deserialize)]
+struct CreateAlbumRequest {
+    id: String,
+    name: String,
+    #[serde(default)]
+    album_type: String,
+    #[serde(default)]
+    artist_ids: Vec<String>,
+    label: Option<String>,
+    release_date: Option<String>,
+    release_date_precision: Option<String>,
+    external_id_upc: Option<String>,
+    #[serde(default = "default_popularity")]
+    popularity: i32,
+}
+
+#[derive(Debug, Deserialize)]
+struct CreateTrackRequest {
+    id: String,
+    name: String,
+    album_id: String,
+    #[serde(default)]
+    artist_ids: Vec<String>,
+    #[serde(default = "default_disc")]
+    disc_number: i32,
+    #[serde(default = "default_track")]
+    track_number: i32,
+    #[serde(default)]
+    duration_ms: i64,
+    #[serde(default)]
+    explicit: bool,
+    #[serde(default = "default_popularity")]
+    popularity: i32,
+    language: Option<String>,
+    external_id_isrc: Option<String>,
+}
+
+fn default_disc() -> i32 {
+    1
+}
+
+fn default_track() -> i32 {
+    1
+}
 
 async fn create_artist(
     _session: Session,
-    State(_catalog_store): State<GuardedCatalogStore>,
-    Json(_data): Json<serde_json::Value>,
+    State(catalog_store): State<GuardedCatalogStore>,
+    Json(data): Json<CreateArtistRequest>,
 ) -> Response {
-    (
-        StatusCode::NOT_IMPLEMENTED,
-        "Catalog editing not available - Spotify catalog is read-only",
-    )
-        .into_response()
+    use crate::catalog_store::{validate_artist, Artist};
+
+    let artist = Artist {
+        id: data.id,
+        name: data.name,
+        genres: data.genres,
+        followers_total: data.followers_total,
+        popularity: data.popularity,
+    };
+
+    if let Err(e) = validate_artist(&artist) {
+        return (StatusCode::BAD_REQUEST, e.to_string()).into_response();
+    }
+
+    match catalog_store.create_artist(&artist) {
+        Ok(()) => StatusCode::CREATED.into_response(),
+        Err(e) => {
+            let msg = e.to_string();
+            if msg.contains("already exists") {
+                (StatusCode::CONFLICT, msg).into_response()
+            } else {
+                (StatusCode::INTERNAL_SERVER_ERROR, msg).into_response()
+            }
+        }
+    }
 }
 
 async fn update_artist(
     _session: Session,
-    State(_catalog_store): State<GuardedCatalogStore>,
-    Path(_id): Path<String>,
-    Json(_data): Json<serde_json::Value>,
+    State(catalog_store): State<GuardedCatalogStore>,
+    Path(id): Path<String>,
+    Json(data): Json<CreateArtistRequest>,
 ) -> Response {
-    (
-        StatusCode::NOT_IMPLEMENTED,
-        "Catalog editing not available - Spotify catalog is read-only",
-    )
-        .into_response()
+    use crate::catalog_store::{validate_artist, Artist};
+
+    let artist = Artist {
+        id,
+        name: data.name,
+        genres: data.genres,
+        followers_total: data.followers_total,
+        popularity: data.popularity,
+    };
+
+    if let Err(e) = validate_artist(&artist) {
+        return (StatusCode::BAD_REQUEST, e.to_string()).into_response();
+    }
+
+    match catalog_store.update_artist(&artist) {
+        Ok(()) => StatusCode::OK.into_response(),
+        Err(e) => {
+            let msg = e.to_string();
+            if msg.contains("not found") {
+                (StatusCode::NOT_FOUND, msg).into_response()
+            } else {
+                (StatusCode::INTERNAL_SERVER_ERROR, msg).into_response()
+            }
+        }
+    }
 }
 
 async fn delete_artist(
     _session: Session,
-    State(_catalog_store): State<GuardedCatalogStore>,
-    Path(_id): Path<String>,
+    State(catalog_store): State<GuardedCatalogStore>,
+    Path(id): Path<String>,
 ) -> Response {
-    (
-        StatusCode::NOT_IMPLEMENTED,
-        "Catalog editing not available - Spotify catalog is read-only",
-    )
-        .into_response()
+    match catalog_store.delete_artist(&id) {
+        Ok(true) => StatusCode::NO_CONTENT.into_response(),
+        Ok(false) => StatusCode::NOT_FOUND.into_response(),
+        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
+    }
 }
 
 async fn create_album(
     _session: Session,
-    State(_catalog_store): State<GuardedCatalogStore>,
-    Json(_data): Json<serde_json::Value>,
+    State(catalog_store): State<GuardedCatalogStore>,
+    Json(data): Json<CreateAlbumRequest>,
 ) -> Response {
-    (
-        StatusCode::NOT_IMPLEMENTED,
-        "Catalog editing not available - Spotify catalog is read-only",
-    )
-        .into_response()
+    use crate::catalog_store::{validate_album, Album, AlbumType};
+
+    let album = Album {
+        id: data.id,
+        name: data.name,
+        album_type: AlbumType::from_db_str(&data.album_type),
+        label: data.label,
+        release_date: data.release_date,
+        release_date_precision: data.release_date_precision,
+        external_id_upc: data.external_id_upc,
+        popularity: data.popularity,
+    };
+
+    if let Err(e) = validate_album(&album) {
+        return (StatusCode::BAD_REQUEST, e.to_string()).into_response();
+    }
+
+    match catalog_store.create_album(&album, &data.artist_ids) {
+        Ok(()) => StatusCode::CREATED.into_response(),
+        Err(e) => {
+            let msg = e.to_string();
+            if msg.contains("already exists") {
+                (StatusCode::CONFLICT, msg).into_response()
+            } else if msg.contains("not found") {
+                (StatusCode::BAD_REQUEST, msg).into_response()
+            } else {
+                (StatusCode::INTERNAL_SERVER_ERROR, msg).into_response()
+            }
+        }
+    }
 }
 
 async fn update_album(
     _session: Session,
-    State(_catalog_store): State<GuardedCatalogStore>,
-    Path(_id): Path<String>,
-    Json(_data): Json<serde_json::Value>,
+    State(catalog_store): State<GuardedCatalogStore>,
+    Path(id): Path<String>,
+    Json(data): Json<CreateAlbumRequest>,
 ) -> Response {
-    (
-        StatusCode::NOT_IMPLEMENTED,
-        "Catalog editing not available - Spotify catalog is read-only",
-    )
-        .into_response()
+    use crate::catalog_store::{validate_album, Album, AlbumType};
+
+    let album = Album {
+        id,
+        name: data.name,
+        album_type: AlbumType::from_db_str(&data.album_type),
+        label: data.label,
+        release_date: data.release_date,
+        release_date_precision: data.release_date_precision,
+        external_id_upc: data.external_id_upc,
+        popularity: data.popularity,
+    };
+
+    if let Err(e) = validate_album(&album) {
+        return (StatusCode::BAD_REQUEST, e.to_string()).into_response();
+    }
+
+    let artist_ids = if data.artist_ids.is_empty() {
+        None
+    } else {
+        Some(data.artist_ids.as_slice())
+    };
+
+    match catalog_store.update_album(&album, artist_ids) {
+        Ok(()) => StatusCode::OK.into_response(),
+        Err(e) => {
+            let msg = e.to_string();
+            if msg.contains("not found") {
+                (StatusCode::NOT_FOUND, msg).into_response()
+            } else {
+                (StatusCode::INTERNAL_SERVER_ERROR, msg).into_response()
+            }
+        }
+    }
 }
 
 async fn delete_album(
     _session: Session,
-    State(_catalog_store): State<GuardedCatalogStore>,
-    Path(_id): Path<String>,
+    State(catalog_store): State<GuardedCatalogStore>,
+    Path(id): Path<String>,
 ) -> Response {
-    (
-        StatusCode::NOT_IMPLEMENTED,
-        "Catalog editing not available - Spotify catalog is read-only",
-    )
-        .into_response()
+    match catalog_store.delete_album(&id) {
+        Ok(true) => StatusCode::NO_CONTENT.into_response(),
+        Ok(false) => StatusCode::NOT_FOUND.into_response(),
+        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
+    }
 }
 
 async fn create_track(
     _session: Session,
-    State(_catalog_store): State<GuardedCatalogStore>,
-    Json(_data): Json<serde_json::Value>,
+    State(catalog_store): State<GuardedCatalogStore>,
+    Json(data): Json<CreateTrackRequest>,
 ) -> Response {
-    (
-        StatusCode::NOT_IMPLEMENTED,
-        "Catalog editing not available - Spotify catalog is read-only",
-    )
-        .into_response()
+    use crate::catalog_store::{validate_track, Track};
+
+    let track = Track {
+        id: data.id,
+        name: data.name,
+        album_id: data.album_id,
+        disc_number: data.disc_number,
+        track_number: data.track_number,
+        duration_ms: data.duration_ms,
+        explicit: data.explicit,
+        popularity: data.popularity,
+        language: data.language,
+        external_id_isrc: data.external_id_isrc,
+    };
+
+    if let Err(e) = validate_track(&track) {
+        return (StatusCode::BAD_REQUEST, e.to_string()).into_response();
+    }
+
+    match catalog_store.create_track(&track, &data.artist_ids) {
+        Ok(()) => StatusCode::CREATED.into_response(),
+        Err(e) => {
+            let msg = e.to_string();
+            if msg.contains("already exists") {
+                (StatusCode::CONFLICT, msg).into_response()
+            } else if msg.contains("not found") {
+                (StatusCode::BAD_REQUEST, msg).into_response()
+            } else {
+                (StatusCode::INTERNAL_SERVER_ERROR, msg).into_response()
+            }
+        }
+    }
 }
 
 async fn update_track(
     _session: Session,
-    State(_catalog_store): State<GuardedCatalogStore>,
-    Path(_id): Path<String>,
-    Json(_data): Json<serde_json::Value>,
+    State(catalog_store): State<GuardedCatalogStore>,
+    Path(id): Path<String>,
+    Json(data): Json<CreateTrackRequest>,
 ) -> Response {
-    (
-        StatusCode::NOT_IMPLEMENTED,
-        "Catalog editing not available - Spotify catalog is read-only",
-    )
-        .into_response()
+    use crate::catalog_store::{validate_track, Track};
+
+    let track = Track {
+        id,
+        name: data.name,
+        album_id: data.album_id,
+        disc_number: data.disc_number,
+        track_number: data.track_number,
+        duration_ms: data.duration_ms,
+        explicit: data.explicit,
+        popularity: data.popularity,
+        language: data.language,
+        external_id_isrc: data.external_id_isrc,
+    };
+
+    if let Err(e) = validate_track(&track) {
+        return (StatusCode::BAD_REQUEST, e.to_string()).into_response();
+    }
+
+    let artist_ids = if data.artist_ids.is_empty() {
+        None
+    } else {
+        Some(data.artist_ids.as_slice())
+    };
+
+    match catalog_store.update_track(&track, artist_ids) {
+        Ok(()) => StatusCode::OK.into_response(),
+        Err(e) => {
+            let msg = e.to_string();
+            if msg.contains("not found") {
+                (StatusCode::NOT_FOUND, msg).into_response()
+            } else {
+                (StatusCode::INTERNAL_SERVER_ERROR, msg).into_response()
+            }
+        }
+    }
 }
 
 async fn delete_track(
     _session: Session,
-    State(_catalog_store): State<GuardedCatalogStore>,
-    Path(_id): Path<String>,
+    State(catalog_store): State<GuardedCatalogStore>,
+    Path(id): Path<String>,
 ) -> Response {
-    (
-        StatusCode::NOT_IMPLEMENTED,
-        "Catalog editing not available - Spotify catalog is read-only",
-    )
-        .into_response()
+    match catalog_store.delete_track(&id) {
+        Ok(true) => StatusCode::NO_CONTENT.into_response(),
+        Ok(false) => StatusCode::NOT_FOUND.into_response(),
+        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
+    }
 }
 
+// Image CRUD not yet implemented
 async fn create_image(
     _session: Session,
     State(_catalog_store): State<GuardedCatalogStore>,
@@ -1091,7 +1304,7 @@ async fn create_image(
 ) -> Response {
     (
         StatusCode::NOT_IMPLEMENTED,
-        "Catalog editing not available - Spotify catalog is read-only",
+        "Image CRUD not yet implemented",
     )
         .into_response()
 }
@@ -1104,7 +1317,7 @@ async fn update_image(
 ) -> Response {
     (
         StatusCode::NOT_IMPLEMENTED,
-        "Catalog editing not available - Spotify catalog is read-only",
+        "Image CRUD not yet implemented",
     )
         .into_response()
 }
@@ -1116,7 +1329,7 @@ async fn delete_image(
 ) -> Response {
     (
         StatusCode::NOT_IMPLEMENTED,
-        "Catalog editing not available - Spotify catalog is read-only",
+        "Image CRUD not yet implemented",
     )
         .into_response()
 }
