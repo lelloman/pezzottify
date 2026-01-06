@@ -75,14 +75,45 @@ impl Fts5LevenshteinSearchVault {
     /// `start_background_build()` is called and completes.
     ///
     /// If a valid index already exists on disk, it will be loaded.
+    /// If a partial build was interrupted, it will be detected and can be resumed.
     pub fn new_lazy(db_path: &Path) -> Result<Self> {
         let conn = Connection::open(db_path)?;
         conn.pragma_update(None, "journal_mode", "WAL")?;
         Self::create_tables(&conn)?;
 
-        // Check if we have an existing valid index
+        // Check build state
+        let build_in_progress = Self::get_metadata(&conn, "build_in_progress")
+            .map(|v| v == "true")
+            .unwrap_or(false);
         let index_count = Self::get_index_item_count(&conn).unwrap_or(0);
-        let (vocabulary, state) = if index_count > 0 {
+
+        let (vocabulary, state) = if build_in_progress {
+            // Partial build detected - load what we have and prepare to resume
+            let build_offset = Self::get_metadata(&conn, "build_offset")
+                .and_then(|v| v.parse::<usize>().ok())
+                .unwrap_or(0);
+            let build_total = Self::get_metadata(&conn, "build_total")
+                .and_then(|v| v.parse::<usize>().ok());
+
+            info!(
+                "Detected partial build: {} items indexed, offset {}, total {:?}",
+                index_count, build_offset, build_total
+            );
+
+            let vocab = if index_count > 0 {
+                Self::load_vocabulary_from_index(&conn)?
+            } else {
+                Vocabulary::new()
+            };
+
+            (
+                vocab,
+                IndexState::Building {
+                    processed: build_offset,
+                    total: build_total,
+                },
+            )
+        } else if index_count > 0 {
             info!("Loading existing search index with {} items", index_count);
             let vocab = Self::load_vocabulary_from_index(&conn)?;
             (vocab, IndexState::Ready)
@@ -141,15 +172,21 @@ impl Fts5LevenshteinSearchVault {
     /// Items are indexed in batches by popularity (most popular first), so common
     /// searches work quickly even before indexing completes.
     ///
-    /// If the index is already building or ready, this is a no-op.
+    /// If a partial build was interrupted, this will resume from where it left off.
+    /// If the index is already complete and ready, this is a no-op.
     pub fn start_background_build(self: &Arc<Self>, catalog_store: Arc<dyn CatalogStore>) {
-        // Check if we should start building
+        // Check current state and determine resume offset
+        let resume_offset: Option<usize>;
         {
             let state = self.state.read().unwrap();
             match &*state {
-                IndexState::Building { .. } => {
-                    info!("Index is already building, ignoring start request");
-                    return;
+                IndexState::Building { processed, .. } => {
+                    // Resume from partial build
+                    resume_offset = Some(*processed);
+                    info!(
+                        "Resuming partial build from offset {}",
+                        resume_offset.unwrap()
+                    );
                 }
                 IndexState::Ready => {
                     // Check if index is actually populated
@@ -159,13 +196,16 @@ impl Fts5LevenshteinSearchVault {
                         info!("Index already has {} items, skipping build", count);
                         return;
                     }
+                    resume_offset = None;
                 }
-                _ => {}
+                _ => {
+                    resume_offset = None;
+                }
             }
         }
 
-        // Set state to building
-        {
+        // Set state to building (if not already)
+        if resume_offset.is_none() {
             let mut state = self.state.write().unwrap();
             *state = IndexState::Building {
                 processed: 0,
@@ -176,7 +216,7 @@ impl Fts5LevenshteinSearchVault {
         let vault = Arc::clone(self);
 
         std::thread::spawn(move || {
-            if let Err(e) = vault.build_index_progressively(catalog_store) {
+            if let Err(e) = vault.build_index_progressively(catalog_store, resume_offset) {
                 error!("Background index build failed: {}", e);
                 let mut state = vault.state.write().unwrap();
                 *state = IndexState::Failed {
@@ -190,8 +230,22 @@ impl Fts5LevenshteinSearchVault {
     ///
     /// Items are fetched and indexed by popularity order, so the most commonly
     /// searched content becomes available first.
-    fn build_index_progressively(&self, catalog_store: Arc<dyn CatalogStore>) -> Result<()> {
-        info!("Starting progressive index build...");
+    ///
+    /// If `resume_offset` is provided, the build resumes from that position.
+    fn build_index_progressively(
+        &self,
+        catalog_store: Arc<dyn CatalogStore>,
+        resume_offset: Option<usize>,
+    ) -> Result<()> {
+        let start_offset = resume_offset.unwrap_or(0);
+        if start_offset > 0 {
+            info!(
+                "Resuming progressive index build from offset {}...",
+                start_offset
+            );
+        } else {
+            info!("Starting progressive index build...");
+        }
 
         // Get all searchable content (already ordered by popularity)
         let searchable = catalog_store.get_searchable_content()?;
@@ -203,22 +257,38 @@ impl Fts5LevenshteinSearchVault {
         {
             let mut state = self.state.write().unwrap();
             *state = IndexState::Building {
-                processed: 0,
+                processed: start_offset,
                 total: Some(total),
             };
         }
 
-        // Clear existing index
+        // Mark build as in progress and store total in metadata
         {
             let conn = self.conn.lock().unwrap();
-            conn.execute("DELETE FROM search_index", [])?;
+            Self::set_metadata(&conn, "build_in_progress", "true")?;
+            Self::set_metadata(&conn, "build_total", &total.to_string())?;
+
+            // Only clear index if starting fresh
+            if start_offset == 0 {
+                conn.execute("DELETE FROM search_index", [])?;
+                Self::set_metadata(&conn, "build_offset", "0")?;
+            }
         }
 
-        let mut processed = 0;
-        let mut vocabulary = Vocabulary::new();
+        // Load existing vocabulary if resuming
+        let mut vocabulary = if start_offset > 0 {
+            let conn = self.conn.lock().unwrap();
+            Self::load_vocabulary_from_index(&conn)?
+        } else {
+            Vocabulary::new()
+        };
 
-        // Process in batches
-        for batch in searchable.chunks(INDEX_BATCH_SIZE) {
+        let mut processed = start_offset;
+
+        // Skip already-indexed items and process remaining in batches
+        let remaining_items: Vec<_> = searchable.into_iter().skip(start_offset).collect();
+
+        for batch in remaining_items.chunks(INDEX_BATCH_SIZE) {
             // Build vocabulary for this batch
             for item in batch {
                 vocabulary.add_text(&item.name);
@@ -243,6 +313,9 @@ impl Fts5LevenshteinSearchVault {
                 }
 
                 conn.execute("COMMIT", [])?;
+
+                // Persist progress after each batch
+                Self::set_metadata(&conn, "build_offset", &(processed + batch.len()).to_string())?;
             }
 
             processed += batch.len();
@@ -270,10 +343,13 @@ impl Fts5LevenshteinSearchVault {
             );
         }
 
-        // Store catalog version
+        // Build complete - clear progress metadata and store catalog version
         {
             let conn = self.conn.lock().unwrap();
             Self::set_stored_catalog_version(&conn, 0)?;
+            Self::delete_metadata(&conn, "build_in_progress")?;
+            Self::delete_metadata(&conn, "build_offset")?;
+            Self::delete_metadata(&conn, "build_total")?;
         }
 
         // Mark as ready
@@ -381,6 +457,31 @@ impl Fts5LevenshteinSearchVault {
         )
         .ok()
         .flatten()
+    }
+
+    /// Get a metadata value by key
+    fn get_metadata(conn: &Connection, key: &str) -> Option<String> {
+        conn.query_row(
+            "SELECT value FROM search_metadata WHERE key = ?",
+            [key],
+            |row| row.get(0),
+        )
+        .ok()
+    }
+
+    /// Set a metadata value
+    fn set_metadata(conn: &Connection, key: &str, value: &str) -> Result<()> {
+        conn.execute(
+            "INSERT OR REPLACE INTO search_metadata (key, value) VALUES (?, ?)",
+            [key, value],
+        )?;
+        Ok(())
+    }
+
+    /// Delete a metadata key
+    fn delete_metadata(conn: &Connection, key: &str) -> Result<()> {
+        conn.execute("DELETE FROM search_metadata WHERE key = ?", [key])?;
+        Ok(())
     }
 
     /// Get the number of items in the search index
@@ -1086,5 +1187,174 @@ mod tests {
         let results = vault.search("Beatles", 10, Some(vec![HashedItemType::Artist]));
         assert_eq!(results.len(), 1);
         assert_eq!(results[0].item_id, "artist1");
+    }
+
+    #[test]
+    fn test_resumable_build_detects_partial_state() {
+        let temp_dir = TempDir::new().unwrap();
+        let db_path = temp_dir.path().join("search.db");
+
+        // First, create a vault and manually simulate a partial build
+        {
+            let conn = Connection::open(&db_path).unwrap();
+            conn.pragma_update(None, "journal_mode", "WAL").unwrap();
+            Fts5LevenshteinSearchVault::create_tables(&conn).unwrap();
+
+            // Insert some items (simulating partial progress)
+            conn.execute(
+                "INSERT INTO search_index (item_id, item_type, name) VALUES ('a1', 'artist', 'The Beatles')",
+                [],
+            )
+            .unwrap();
+            conn.execute(
+                "INSERT INTO search_index (item_id, item_type, name) VALUES ('a2', 'artist', 'Pink Floyd')",
+                [],
+            )
+            .unwrap();
+
+            // Set partial build metadata
+            Fts5LevenshteinSearchVault::set_metadata(&conn, "build_in_progress", "true").unwrap();
+            Fts5LevenshteinSearchVault::set_metadata(&conn, "build_offset", "2").unwrap();
+            Fts5LevenshteinSearchVault::set_metadata(&conn, "build_total", "5").unwrap();
+        }
+
+        // Now create a new lazy vault - it should detect the partial build
+        let vault = Fts5LevenshteinSearchVault::new_lazy(&db_path).unwrap();
+
+        let stats = vault.get_stats();
+        assert_eq!(stats.indexed_items, 2);
+        assert!(
+            matches!(stats.state, IndexState::Building { processed: 2, total: Some(5) }),
+            "Expected Building state with processed=2, total=Some(5), got {:?}",
+            stats.state
+        );
+    }
+
+    #[test]
+    fn test_resumable_build_resumes_from_offset() {
+        let temp_dir = TempDir::new().unwrap();
+        let db_path = temp_dir.path().join("search.db");
+
+        // Create 5 items
+        let items = vec![
+            SearchableItem {
+                id: "a1".to_string(),
+                name: "The Beatles".to_string(),
+                content_type: SearchableContentType::Artist,
+                additional_text: vec![],
+            },
+            SearchableItem {
+                id: "a2".to_string(),
+                name: "Pink Floyd".to_string(),
+                content_type: SearchableContentType::Artist,
+                additional_text: vec![],
+            },
+            SearchableItem {
+                id: "a3".to_string(),
+                name: "Led Zeppelin".to_string(),
+                content_type: SearchableContentType::Artist,
+                additional_text: vec![],
+            },
+            SearchableItem {
+                id: "a4".to_string(),
+                name: "Metallica".to_string(),
+                content_type: SearchableContentType::Artist,
+                additional_text: vec![],
+            },
+            SearchableItem {
+                id: "a5".to_string(),
+                name: "Iron Maiden".to_string(),
+                content_type: SearchableContentType::Artist,
+                additional_text: vec![],
+            },
+        ];
+
+        // Simulate partial build: insert first 2 items manually
+        {
+            let conn = Connection::open(&db_path).unwrap();
+            conn.pragma_update(None, "journal_mode", "WAL").unwrap();
+            Fts5LevenshteinSearchVault::create_tables(&conn).unwrap();
+
+            // Insert first 2 items (simulating partial progress)
+            conn.execute(
+                "INSERT INTO search_index (item_id, item_type, name) VALUES ('a1', 'artist', 'The Beatles')",
+                [],
+            )
+            .unwrap();
+            conn.execute(
+                "INSERT INTO search_index (item_id, item_type, name) VALUES ('a2', 'artist', 'Pink Floyd')",
+                [],
+            )
+            .unwrap();
+
+            // Set partial build metadata
+            Fts5LevenshteinSearchVault::set_metadata(&conn, "build_in_progress", "true").unwrap();
+            Fts5LevenshteinSearchVault::set_metadata(&conn, "build_offset", "2").unwrap();
+            Fts5LevenshteinSearchVault::set_metadata(&conn, "build_total", "5").unwrap();
+        }
+
+        // Create vault and resume build
+        let vault = Arc::new(Fts5LevenshteinSearchVault::new_lazy(&db_path).unwrap());
+        let catalog = Arc::new(MockCatalogStore::new(items));
+
+        vault.start_background_build(catalog);
+
+        // Wait for build to complete
+        std::thread::sleep(std::time::Duration::from_millis(500));
+
+        // Should now have all 5 items
+        let stats = vault.get_stats();
+        assert_eq!(stats.indexed_items, 5, "Expected 5 items after resume");
+        assert_eq!(stats.state, IndexState::Ready);
+
+        // Verify all items are searchable
+        let results = vault.search("Beatles", 10, None);
+        assert_eq!(results.len(), 1);
+        let results = vault.search("Zeppelin", 10, None);
+        assert_eq!(results.len(), 1);
+        let results = vault.search("Maiden", 10, None);
+        assert_eq!(results.len(), 1);
+    }
+
+    #[test]
+    fn test_completed_build_clears_metadata() {
+        let temp_dir = TempDir::new().unwrap();
+        let db_path = temp_dir.path().join("search.db");
+
+        let items = vec![
+            SearchableItem {
+                id: "a1".to_string(),
+                name: "The Beatles".to_string(),
+                content_type: SearchableContentType::Artist,
+                additional_text: vec![],
+            },
+        ];
+
+        let vault = Arc::new(Fts5LevenshteinSearchVault::new_lazy(&db_path).unwrap());
+        let catalog = Arc::new(MockCatalogStore::new(items));
+
+        vault.start_background_build(catalog);
+
+        // Wait for build to complete
+        std::thread::sleep(std::time::Duration::from_millis(500));
+
+        // Check that metadata was cleared
+        let conn = Connection::open(&db_path).unwrap();
+        assert!(
+            Fts5LevenshteinSearchVault::get_metadata(&conn, "build_in_progress").is_none(),
+            "build_in_progress should be cleared after completion"
+        );
+        assert!(
+            Fts5LevenshteinSearchVault::get_metadata(&conn, "build_offset").is_none(),
+            "build_offset should be cleared after completion"
+        );
+        assert!(
+            Fts5LevenshteinSearchVault::get_metadata(&conn, "build_total").is_none(),
+            "build_total should be cleared after completion"
+        );
+
+        // Creating a new vault should show Ready state
+        let vault2 = Fts5LevenshteinSearchVault::new_lazy(&db_path).unwrap();
+        assert_eq!(vault2.get_stats().state, IndexState::Ready);
     }
 }
