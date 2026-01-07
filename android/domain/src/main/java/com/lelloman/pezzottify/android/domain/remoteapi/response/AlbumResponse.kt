@@ -23,8 +23,11 @@ private fun convertReleaseDateToInt(releaseDate: String): Int {
 
 @Serializable
 enum class AlbumType {
+    @SerialName("album")
     Album,
+    @SerialName("single")
     Single,
+    @SerialName("compilation")
     Compilation,
 }
 
