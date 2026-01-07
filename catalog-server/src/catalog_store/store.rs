@@ -709,12 +709,8 @@ impl CatalogStore for SqliteCatalogStore {
 
     fn get_searchable_content(&self) -> Result<Vec<SearchableItem>> {
         let conn = self.conn.lock().unwrap();
-        let mut items = Vec::new();
 
-        // Index top 5% of each category by popularity
-        const TOP_PERCENTAGE: f64 = 0.05;
-
-        // Calculate dynamic limits based on table sizes
+        // Get total counts for progress logging
         let artist_count: i64 = conn
             .query_row("SELECT COUNT(*) FROM artists", [], |r| r.get(0))
             .unwrap_or(0);
@@ -725,22 +721,19 @@ impl CatalogStore for SqliteCatalogStore {
             .query_row("SELECT COUNT(*) FROM tracks", [], |r| r.get(0))
             .unwrap_or(0);
 
-        let artist_limit = ((artist_count as f64 * TOP_PERCENTAGE) as i64).max(10000);
-        let album_limit = ((album_count as f64 * TOP_PERCENTAGE) as i64).max(10000);
-        let track_limit = ((track_count as f64 * TOP_PERCENTAGE) as i64).max(10000);
-
+        let total = artist_count + album_count + track_count;
         info!(
-            "Indexing top {:.0}%: {} artists, {} albums, {} tracks",
-            TOP_PERCENTAGE * 100.0,
-            artist_limit,
-            album_limit,
-            track_limit
+            "Indexing all content: {} artists, {} albums, {} tracks ({} total)",
+            artist_count, album_count, track_count, total
         );
 
-        // Artists (skip genres for speed - they can be added later if needed)
+        // Pre-allocate with capacity hint (may be large but avoids reallocations)
+        let mut items = Vec::with_capacity(total as usize);
+
+        // Artists - no LIMIT, get all sorted by popularity
         let mut artist_stmt =
-            conn.prepare("SELECT id, name FROM artists ORDER BY popularity DESC LIMIT ?")?;
-        let artist_iter = artist_stmt.query_map([artist_limit], |row| {
+            conn.prepare("SELECT id, name FROM artists ORDER BY popularity DESC")?;
+        let artist_iter = artist_stmt.query_map([], |row| {
             Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
         })?;
 
@@ -753,14 +746,16 @@ impl CatalogStore for SqliteCatalogStore {
                 additional_text: vec![],
             });
         }
+        info!("Loaded {} artists for indexing", items.len());
 
-        // Albums
+        // Albums - no LIMIT, get all sorted by popularity
         let mut album_stmt =
-            conn.prepare("SELECT id, name FROM albums ORDER BY popularity DESC LIMIT ?")?;
-        let album_iter = album_stmt.query_map([album_limit], |row| {
+            conn.prepare("SELECT id, name FROM albums ORDER BY popularity DESC")?;
+        let album_iter = album_stmt.query_map([], |row| {
             Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
         })?;
 
+        let album_start = items.len();
         for result in album_iter {
             let (id, name) = result?;
             items.push(SearchableItem {
@@ -770,14 +765,16 @@ impl CatalogStore for SqliteCatalogStore {
                 additional_text: vec![],
             });
         }
+        info!("Loaded {} albums for indexing", items.len() - album_start);
 
-        // Tracks
+        // Tracks - no LIMIT, get all sorted by popularity
         let mut track_stmt =
-            conn.prepare("SELECT id, name FROM tracks ORDER BY popularity DESC LIMIT ?")?;
-        let track_iter = track_stmt.query_map([track_limit], |row| {
+            conn.prepare("SELECT id, name FROM tracks ORDER BY popularity DESC")?;
+        let track_iter = track_stmt.query_map([], |row| {
             Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
         })?;
 
+        let track_start = items.len();
         for result in track_iter {
             let (id, name) = result?;
             items.push(SearchableItem {
@@ -787,7 +784,9 @@ impl CatalogStore for SqliteCatalogStore {
                 additional_text: vec![],
             });
         }
+        info!("Loaded {} tracks for indexing", items.len() - track_start);
 
+        info!("Total searchable items: {}", items.len());
         Ok(items)
     }
 
