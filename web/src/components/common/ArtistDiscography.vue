@@ -15,7 +15,9 @@
       <AlbumCard v-for="album in albums" :key="album.id" :album="album" />
     </div>
 
-    <div v-if="isLoading" class="loadingIndicator">Loading...</div>
+    <div v-if="isLoading" class="loadingIndicator">
+      <div class="spinner"></div>
+    </div>
 
     <div v-if="error" class="error">{{ error }}</div>
 
@@ -101,7 +103,7 @@ const setupIntersectionObserver = () => {
       }
     },
     {
-      rootMargin: "200px",
+      rootMargin: "600px",
     },
   );
 
@@ -194,9 +196,24 @@ onUnmounted(() => {
 }
 
 .loadingIndicator {
-  text-align: center;
-  padding: 16px;
-  color: var(--text-subtle, #b3b3b3);
+  display: flex;
+  justify-content: center;
+  padding: 24px;
+}
+
+.spinner {
+  width: 32px;
+  height: 32px;
+  border: 3px solid var(--border-default, #333);
+  border-top-color: var(--spotify-green, #1db954);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .error {
