@@ -117,8 +117,16 @@ impl PopularContentJob {
         let avail_spotify = spotify_score.is_some();
 
         // Base weights for available sources
-        let w_listening = if avail_listening { LISTENING_WEIGHT } else { 0.0 };
-        let w_impression = if avail_impression { IMPRESSION_WEIGHT } else { 0.0 };
+        let w_listening = if avail_listening {
+            LISTENING_WEIGHT
+        } else {
+            0.0
+        };
+        let w_impression = if avail_impression {
+            IMPRESSION_WEIGHT
+        } else {
+            0.0
+        };
         let w_spotify = if avail_spotify { SPOTIFY_WEIGHT } else { 0.0 };
 
         let total_weight = w_listening + w_impression + w_spotify;
@@ -475,12 +483,7 @@ impl BackgroundJob for PopularContentJob {
                 .unwrap_or_default();
 
             // Calculate max values for normalization
-            let max_listening = all_items
-                .values()
-                .copied()
-                .max()
-                .unwrap_or(1)
-                .max(1) as f64;
+            let max_listening = all_items.values().copied().max().unwrap_or(1).max(1) as f64;
             let max_impression = impression_totals
                 .values()
                 .copied()
@@ -635,9 +638,9 @@ mod tests {
     fn test_composite_score_all_sources() {
         // All three sources available
         let score = PopularContentJob::compute_composite_score(
-            Some(1.0),  // max listening
-            Some(1.0),  // max impression
-            Some(1.0),  // max spotify
+            Some(1.0), // max listening
+            Some(1.0), // max impression
+            Some(1.0), // max spotify
         );
         // Should be: 0.70 * 1.0 + 0.25 * 1.0 + 0.05 * 1.0 = 1.0
         assert!((score - 1.0).abs() < 0.001);
@@ -670,9 +673,9 @@ mod tests {
     fn test_composite_score_partial_values() {
         // Half values across all sources
         let score = PopularContentJob::compute_composite_score(
-            Some(0.5),  // half listening
-            Some(0.5),  // half impression
-            Some(0.5),  // half spotify
+            Some(0.5), // half listening
+            Some(0.5), // half impression
+            Some(0.5), // half spotify
         );
         // Should be: 0.70 * 0.5 + 0.25 * 0.5 + 0.05 * 0.5 = 0.5
         assert!((score - 0.5).abs() < 0.001);
