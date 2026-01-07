@@ -1,6 +1,7 @@
 package com.lelloman.pezzottify.android.domain.app
 
 import com.lelloman.pezzottify.android.domain.auth.AuthStore
+import com.lelloman.pezzottify.android.domain.impression.ImpressionSynchronizer
 import com.lelloman.pezzottify.android.domain.listening.ListeningEventSynchronizer
 import com.lelloman.pezzottify.android.domain.listening.ListeningTracker
 import com.lelloman.pezzottify.android.domain.player.PezzottifyPlayer
@@ -52,6 +53,10 @@ abstract class AppInitializersModule {
     @Binds
     @IntoSet
     internal abstract fun bindsListeningEventSynchronizer(synchronizer: ListeningEventSynchronizer): AppInitializer
+
+    @Binds
+    @IntoSet
+    internal abstract fun bindsImpressionSynchronizer(synchronizer: ImpressionSynchronizer): AppInitializer
 
     @Binds
     @IntoSet

@@ -56,6 +56,7 @@ import com.lelloman.pezzottify.android.domain.statics.usecase.GetPopularContent
 import com.lelloman.pezzottify.android.domain.statics.usecase.GetWhatsNew
 import com.lelloman.pezzottify.android.domain.statics.usecase.PerformSearch
 import com.lelloman.pezzottify.android.domain.statics.usecase.PerformStreamingSearch
+import com.lelloman.pezzottify.android.domain.impression.RecordImpressionUseCase
 import com.lelloman.pezzottify.android.domain.user.GetRecentlyViewedContentUseCase
 import com.lelloman.pezzottify.android.domain.user.GetSearchHistoryEntriesUseCase
 import com.lelloman.pezzottify.android.domain.user.LogSearchHistoryEntryUseCase
@@ -215,7 +216,6 @@ class InteractorsModule {
     fun provideAboutScreenInteractor(
         buildInfo: BuildInfo,
         configStore: ConfigStore,
-        skeletonStore: com.lelloman.pezzottify.android.domain.skeleton.SkeletonStore,
         webSocketManager: WebSocketManager,
     ): AboutScreenViewModel.Interactor = object : AboutScreenViewModel.Interactor {
         override fun getVersionName(): String = buildInfo.versionName
@@ -229,15 +229,6 @@ class InteractorsModule {
                 is DomainConnectionState.Connected -> state.serverVersion
                 else -> "disconnected"
             }
-        }
-
-        override suspend fun getSkeletonCounts(): AboutScreenViewModel.SkeletonCountsData {
-            val counts = skeletonStore.getCounts()
-            return AboutScreenViewModel.SkeletonCountsData(
-                artists = counts.artists,
-                albums = counts.albums,
-                tracks = counts.tracks,
-            )
         }
     }
 
@@ -719,6 +710,7 @@ class InteractorsModule {
     fun provideAlbumScreenInteractor(
         player: PezzottifyPlayer,
         logViewedContentUseCase: LogViewedContentUseCase,
+        recordImpressionUseCase: RecordImpressionUseCase,
         getLikedStateUseCase: GetLikedStateUseCase,
         toggleLikeUseCase: ToggleLikeUseCase,
         userPlaylistStore: UserPlaylistStore,
@@ -735,6 +727,7 @@ class InteractorsModule {
 
         override fun logViewedAlbum(albumId: String) {
             logViewedContentUseCase(albumId, ViewedContent.Type.Album)
+            recordImpressionUseCase.recordAlbum(albumId)
         }
 
         override fun getCurrentPlayingTrackId(): Flow<String?> =
@@ -804,11 +797,13 @@ class InteractorsModule {
     @Provides
     fun provideArtistScreenInteractor(
         logViewedContentUseCase: LogViewedContentUseCase,
+        recordImpressionUseCase: RecordImpressionUseCase,
         getLikedStateUseCase: GetLikedStateUseCase,
         toggleLikeUseCase: ToggleLikeUseCase,
     ): ArtistScreenViewModel.Interactor = object : ArtistScreenViewModel.Interactor {
         override fun logViewedArtist(artistId: String) {
             logViewedContentUseCase(artistId, ViewedContent.Type.Artist)
+            recordImpressionUseCase.recordArtist(artistId)
         }
 
         override fun isLiked(contentId: String): Flow<Boolean> =
@@ -823,6 +818,7 @@ class InteractorsModule {
     fun provideTrackScreenInteractor(
         player: PezzottifyPlayer,
         logViewedContentUseCase: LogViewedContentUseCase,
+        recordImpressionUseCase: RecordImpressionUseCase,
         getLikedStateUseCase: GetLikedStateUseCase,
         toggleLikeUseCase: ToggleLikeUseCase,
     ): TrackScreenViewModel.Interactor = object : TrackScreenViewModel.Interactor {
@@ -833,6 +829,7 @@ class InteractorsModule {
 
         override fun logViewedTrack(trackId: String) {
             logViewedContentUseCase(trackId, ViewedContent.Type.Track)
+            recordImpressionUseCase.recordTrack(trackId)
         }
 
         override fun getCurrentPlayingTrackId(): Flow<String?> =

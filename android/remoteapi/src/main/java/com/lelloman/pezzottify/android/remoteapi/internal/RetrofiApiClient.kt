@@ -3,6 +3,7 @@ package com.lelloman.pezzottify.android.remoteapi.internal
 import com.lelloman.pezzottify.android.remoteapi.internal.requests.AddTracksToPlaylistRequest
 import com.lelloman.pezzottify.android.remoteapi.internal.requests.CreatePlaylistRequest
 import com.lelloman.pezzottify.android.remoteapi.internal.requests.CreatePlaylistResponse
+import com.lelloman.pezzottify.android.remoteapi.internal.requests.ImpressionRequest
 import com.lelloman.pezzottify.android.remoteapi.internal.requests.ListeningEventRequest
 import com.lelloman.pezzottify.android.remoteapi.internal.requests.RemoveTracksFromPlaylistRequest
 import com.lelloman.pezzottify.android.remoteapi.internal.requests.ListeningEventResponse
@@ -124,6 +125,12 @@ internal interface RetrofitApiClient {
         @Header("Authorization") authToken: String,
         @Body request: ListeningEventRequest,
     ): Response<ListeningEventResponse>
+
+    @POST("/v1/user/impression")
+    suspend fun recordImpression(
+        @Header("Authorization") authToken: String,
+        @Body request: ImpressionRequest,
+    ): Response<Unit>
 
     @GET("/v1/user/listening/events")
     suspend fun getListeningEvents(

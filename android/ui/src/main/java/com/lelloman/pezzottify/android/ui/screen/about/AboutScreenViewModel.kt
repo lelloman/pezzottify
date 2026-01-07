@@ -21,15 +21,11 @@ class AboutScreenViewModel @Inject constructor(
 
     init {
         viewModelScope.launch {
-            val counts = interactor.getSkeletonCounts()
             mutableState.update {
                 it.copy(
                     versionName = interactor.getVersionName(),
                     gitCommit = interactor.getGitCommit(),
                     serverUrl = interactor.getServerUrl(),
-                    artistCount = counts.artists,
-                    albumCount = counts.albums,
-                    trackCount = counts.tracks,
                 )
             }
         }
@@ -45,12 +41,5 @@ class AboutScreenViewModel @Inject constructor(
         fun getGitCommit(): String
         fun getServerUrl(): String
         fun observeServerVersion(): Flow<String>
-        suspend fun getSkeletonCounts(): SkeletonCountsData
     }
-
-    data class SkeletonCountsData(
-        val artists: Int,
-        val albums: Int,
-        val tracks: Int,
-    )
 }

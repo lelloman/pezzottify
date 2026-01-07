@@ -90,6 +90,13 @@ interface RemoteApiClient {
     suspend fun recordListeningEvent(data: ListeningEventSyncData): RemoteApiResponse<ListeningEventRecordedResponse>
 
     /**
+     * Record an impression (page view) for content.
+     * @param itemType The type of content: "artist", "album", or "track"
+     * @param itemId The ID of the content item
+     */
+    suspend fun recordImpression(itemType: String, itemId: String): RemoteApiResponse<Unit>
+
+    /**
      * Get user's listening history events.
      * Returns detailed listening events with pagination support.
      */

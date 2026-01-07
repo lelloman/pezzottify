@@ -17,13 +17,12 @@ data class ArtistData(
 )
 
 /**
- * Server's ResolvedArtist response - nested structure with artist, display image, and related artists.
+ * Server's ResolvedArtist response - nested structure with artist and related artists.
+ * Images are fetched by artist ID via /v1/content/image/{id}
  */
 @Serializable
 data class ArtistResponse(
     val artist: ArtistData,
-    @SerialName("display_image")
-    val displayImage: Image?,
     @SerialName("related_artists")
     val relatedArtists: List<ArtistData>,
 )
@@ -34,7 +33,7 @@ fun ArtistResponse.toDomain() = object : Artist {
     override val name: String
         get() = this@toDomain.artist.name
     override val displayImageId: String?
-        get() = this@toDomain.displayImage?.id
+        get() = this@toDomain.artist.id // Images are fetched by artist ID
     override val related: List<String>
         get() = this@toDomain.relatedArtists.map { it.id }
 }
