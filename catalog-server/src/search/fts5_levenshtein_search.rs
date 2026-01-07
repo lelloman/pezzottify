@@ -101,8 +101,8 @@ impl Fts5LevenshteinSearchVault {
             let build_offset = Self::get_metadata(&write_conn, "build_offset")
                 .and_then(|v| v.parse::<usize>().ok())
                 .unwrap_or(0);
-            let build_total =
-                Self::get_metadata(&write_conn, "build_total").and_then(|v| v.parse::<usize>().ok());
+            let build_total = Self::get_metadata(&write_conn, "build_total")
+                .and_then(|v| v.parse::<usize>().ok());
 
             info!(
                 "Detected partial build: {} items indexed, offset {}, total {:?}",
