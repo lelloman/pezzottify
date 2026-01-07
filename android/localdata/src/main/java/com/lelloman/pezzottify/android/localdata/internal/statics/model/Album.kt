@@ -5,23 +5,8 @@ import androidx.room.Entity
 import androidx.room.PrimaryKey
 import kotlinx.serialization.Serializable
 
-sealed interface ActivityPeriod {
-
-    data class Timespan(
-
-        val startYear: Int,
-
-        val endYear: Int?,
-    ) : ActivityPeriod
-
-    data class Decade(
-        val value: Int,
-    ) : ActivityPeriod
-}
-
 @Serializable
 data class Disc(
-    override val name: String?,
     override val tracksIds: List<String>,
 ) : com.lelloman.pezzottify.android.domain.statics.Disc
 
@@ -34,13 +19,9 @@ internal data class Album(
 
     override val name: String,
 
-    override val date: Long,
-
-    override val genre: List<String>,
+    override val date: Int,
 
     override val displayImageId: String?,
-
-    override val related: List<String>,
 
     override val artistsIds: List<String>,
 
@@ -59,9 +40,7 @@ internal fun com.lelloman.pezzottify.android.domain.statics.Album.quack(): Album
     id = id,
     name = name,
     date = date,
-    genre = genre,
     displayImageId = displayImageId,
-    related = related,
     artistsIds = artistsIds,
-    discs = discs.map { Disc(it.name, tracksIds = it.tracksIds) },
+    discs = discs.map { Disc(tracksIds = it.tracksIds) },
 )

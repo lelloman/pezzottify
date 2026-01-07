@@ -57,7 +57,7 @@ class UiContentResolver(
             when (it) {
                 is StaticsItem.Error -> Content.Error(it.id)
                 is StaticsItem.Loading -> Content.Loading(it.id)
-                is StaticsItem.Loaded -> Content.Resolved(
+                    is StaticsItem.Loaded -> Content.Resolved(
                     it.id, Album(
                         id = it.id,
                         name = it.data.name,
@@ -69,7 +69,6 @@ class UiContentResolver(
                         ),
                         discs = it.data.discs.map { disc ->
                             com.lelloman.pezzottify.android.ui.content.Disc(
-                                name = disc.name,
                                 tracksIds = disc.tracksIds,
                             )
                         }

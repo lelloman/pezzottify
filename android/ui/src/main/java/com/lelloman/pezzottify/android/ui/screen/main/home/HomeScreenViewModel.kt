@@ -129,7 +129,6 @@ class HomeScreenViewModel(
                                 contentState.data.imageUrl,
                                 ViewedContentType.Album,
                                 contentState.data.artistsIds.map { ResolvedArtistInfo(it, "") },
-                                contentState.data.date.toYear(),
                             )
                         )
 
@@ -217,12 +216,15 @@ class HomeScreenViewModel(
                 }
 
                 else -> flowOf(content)
-            }
         }
+    }
 }
 
-private fun Long.toYear(): Int {
-    val calendar = Calendar.getInstance()
-    calendar.timeInMillis = this * 1000 // Convert seconds to milliseconds
-    return calendar.get(Calendar.YEAR)
+private fun Long.toYyyyMmdd(): Int {
+    val calendar = java.util.Calendar.getInstance()
+    calendar.timeInMillis = this * 1000
+    val year = calendar.get(java.util.Calendar.YEAR)
+    val month = calendar.get(java.util.Calendar.MONTH) + 1 // Calendar.MONTH is 0-based
+    val day = calendar.get(java.util.Calendar.DAY_OF_MONTH)
+    return year * 10000 + month * 100 + day
 }
