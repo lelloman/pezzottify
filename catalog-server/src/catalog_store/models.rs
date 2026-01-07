@@ -183,11 +183,20 @@ pub struct ResolvedTrack {
     pub artists: Vec<TrackArtist>,
 }
 
-/// Artist's complete discography
+/// Sort order for discography
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum DiscographySort {
+    #[default]
+    Popularity,
+    ReleaseDate,
+}
+
+/// Artist's discography with pagination
 #[derive(Clone, Debug, Serialize)]
 pub struct ArtistDiscography {
-    pub albums: Vec<Album>,   // Albums where artist is primary
-    pub features: Vec<Album>, // Albums where artist appears on
+    pub albums: Vec<Album>,
+    pub total: usize,
+    pub has_more: bool,
 }
 
 #[cfg(test)]

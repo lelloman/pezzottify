@@ -225,15 +225,19 @@ export const useRemoteStore = defineStore("remote", () => {
     }
   };
 
-  const fetchArtistDiscography = async (artistId) => {
+  const fetchArtistDiscography = async (
+    artistId,
+    { limit = 50, offset = 0, sort = "popularity" } = {},
+  ) => {
     try {
       const response = await axios.get(
         `/v1/content/artist/${artistId}/discography`,
+        { params: { limit, offset, sort } },
       );
       return response.data;
     } catch (error) {
       console.error("Error fetching artist albums:", error);
-      return [];
+      return null;
     }
   };
 

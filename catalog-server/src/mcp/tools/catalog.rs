@@ -201,10 +201,10 @@ async fn get_artist(ctx: &ToolContext, id: &str) -> ToolResult {
         .map_err(|e| McpError::ToolExecutionFailed(e.to_string()))?
         .ok_or_else(|| McpError::ResourceNotFound(format!("Artist not found: {}", id)))?;
 
-    // Get discography
+    // Get discography (first page, sorted by popularity)
     let discography = ctx
         .catalog_store
-        .get_discography(id)
+        .get_discography(id, 20, 0, crate::catalog_store::DiscographySort::Popularity)
         .map_err(|e| McpError::ToolExecutionFailed(e.to_string()))?;
 
     let result = serde_json::json!({
@@ -221,8 +221,7 @@ async fn get_artist(ctx: &ToolContext, id: &str) -> ToolResult {
             "album_type": format!("{:?}", a.album_type),
             "release_date": a.release_date,
         })).collect::<Vec<_>>()).unwrap_or_default(),
-        "album_count": discography.as_ref().map(|d| d.albums.len()).unwrap_or(0),
-        "features_count": discography.as_ref().map(|d| d.features.len()).unwrap_or(0),
+        "album_count": discography.as_ref().map(|d| d.total).unwrap_or(0),
         "related_artists": resolved.related_artists.iter().take(10).map(|a| serde_json::json!({
             "id": a.id,
             "name": a.name,

@@ -39,10 +39,6 @@ impl CatalogStore for NullCatalogStore {
         Ok(None)
     }
 
-    fn get_artist_discography_json(&self, _id: &str) -> Result<Option<serde_json::Value>> {
-        Ok(None)
-    }
-
     fn get_resolved_artist(&self, _id: &str) -> Result<Option<super::ResolvedArtist>> {
         Ok(None)
     }
@@ -55,7 +51,13 @@ impl CatalogStore for NullCatalogStore {
         Ok(None)
     }
 
-    fn get_discography(&self, _id: &str) -> Result<Option<super::ArtistDiscography>> {
+    fn get_discography(
+        &self,
+        _id: &str,
+        _limit: usize,
+        _offset: usize,
+        _sort: super::DiscographySort,
+    ) -> Result<Option<super::ArtistDiscography>> {
         Ok(None)
     }
 

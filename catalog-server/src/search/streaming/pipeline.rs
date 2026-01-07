@@ -209,18 +209,15 @@ impl<'a> StreamingSearchPipeline<'a> {
         }
 
         // Albums by this artist
-        if let Ok(Some(discography)) = self.catalog_store.get_discography(artist_id) {
+        if let Ok(Some(discography)) = self.catalog_store.get_discography(
+            artist_id,
+            self.config.albums_limit,
+            0,
+            crate::catalog_store::DiscographySort::Popularity,
+        ) {
             let mut albums: Vec<AlbumSummary> = Vec::new();
 
-            // Combine primary albums and features, prioritize primary
-            let all_albums: Vec<_> = discography
-                .albums
-                .iter()
-                .chain(discography.features.iter())
-                .take(self.config.albums_limit)
-                .collect();
-
-            for album in all_albums {
+            for album in discography.albums.iter() {
                 if let Ok(Some(resolved)) = self.catalog_store.get_resolved_album(&album.id) {
                     albums.push(AlbumSummary::from(&resolved));
                     emitted_ids.insert(album.id.clone());

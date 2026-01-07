@@ -46,11 +46,14 @@ pub trait CatalogStore: Send + Sync {
     /// Get a resolved track with all related data (typed version).
     fn get_resolved_track(&self, id: &str) -> Result<Option<super::ResolvedTrack>>;
 
-    /// Get an artist's discography.
-    fn get_artist_discography_json(&self, id: &str) -> Result<Option<serde_json::Value>>;
-
-    /// Get an artist's discography (typed version).
-    fn get_discography(&self, id: &str) -> Result<Option<super::ArtistDiscography>>;
+    /// Get an artist's discography with pagination.
+    fn get_discography(
+        &self,
+        id: &str,
+        limit: usize,
+        offset: usize,
+        sort: super::DiscographySort,
+    ) -> Result<Option<super::ArtistDiscography>>;
 
     // =========================================================================
     // Image URL Retrieval (Spotify CDN URLs)
