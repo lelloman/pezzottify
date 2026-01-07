@@ -13,8 +13,6 @@ enum class ArtistRole {
     Composer,
     Conductor,
     Orchestra,
-    Actor,
-    Unknown,
 }
 
 /**
@@ -46,7 +44,7 @@ fun TrackResponse.toDomain() = object : Track {
     override val artistsIds: List<String>
         get() = this@toDomain.artists.map { it.artist.id }
     override val durationSeconds: Int
-        get() = this@toDomain.track.durationSecs ?: 0
+        get() = (this@toDomain.track.durationMs / 1000).toInt()
     override val availability: TrackAvailability
-        get() = TrackAvailability.fromServerString(this@toDomain.track.availability)
+        get() = TrackAvailability.Available
 }

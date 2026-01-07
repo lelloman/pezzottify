@@ -4,14 +4,28 @@ import com.lelloman.pezzottify.android.domain.statics.Album
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
+private fun convertReleaseDateToInt(releaseDate: String): Int {
+    return when {
+        releaseDate.matches(Regex("^\\d{4}$")) -> {
+            releaseDate.toInt() * 10000
+        }
+        releaseDate.matches(Regex("^\\d{4}-\\d{2}$")) -> {
+            val parts = releaseDate.split("-")
+            parts[0].toInt() * 10000 + parts[1].toInt() * 100
+        }
+        releaseDate.matches(Regex("^\\d{4}-\\d{2}-\\d{2}$")) -> {
+            val parts = releaseDate.split("-")
+            parts[0].toInt() * 10000 + parts[1].toInt() * 100 + parts[2].toInt()
+        }
+        else -> 0
+    }
+}
+
 @Serializable
 enum class AlbumType {
     Album,
     Single,
-    Ep,
     Compilation,
-    Audiobook,
-    Podcast,
 }
 
 /**
@@ -27,29 +41,13 @@ data class TrackData(
     val discNumber: Int,
     @SerialName("track_number")
     val trackNumber: Int,
-    @SerialName("duration_secs")
-    val durationSecs: Int?,
-    @SerialName("is_explicit")
-    val isExplicit: Boolean,
-    @SerialName("audio_uri")
-    val audioUri: String,
-    val format: String,
-    val tags: List<String>,
-    @SerialName("has_lyrics")
-    val hasLyrics: Boolean,
-    val languages: List<String>,
-    @SerialName("original_title")
-    val originalTitle: String?,
-    @SerialName("version_title")
-    val versionTitle: String?,
-    /** Track availability state (available, unavailable, fetching, fetch_error). Defaults to "available". */
-    val availability: String? = "available",
+    @SerialName("duration_ms")
+    val durationMs: Long,
 )
 
 @Serializable
 data class Disc(
     val number: Int,
-    val name: String?,
     val tracks: List<TrackData>,
 )
 
@@ -62,13 +60,8 @@ data class AlbumData(
     val name: String,
     @SerialName("album_type")
     val albumType: AlbumType,
-    val label: String?,
-    val date: Long?,
-    val genres: List<String>,
-    @SerialName("original_title")
-    val originalTitle: String?,
-    @SerialName("version_title")
-    val versionTitle: String?,
+    @SerialName("release_date")
+    val releaseDate: String,
 )
 
 /**
@@ -88,20 +81,15 @@ fun AlbumResponse.toDomain() = object : Album {
         get() = this@toDomain.album.id
     override val name: String
         get() = this@toDomain.album.name
-    override val date: Long
-        get() = this@toDomain.album.date ?: 0L
+    override val date: Int
+        get() = convertReleaseDateToInt(this@toDomain.album.releaseDate)
     override val artistsIds: List<String>
         get() = this@toDomain.artists.map { it.id }
     override val displayImageId: String?
         get() = this@toDomain.displayImage?.id
-    override val genre: List<String>
-        get() = this@toDomain.album.genres
-    override val related: List<String>
-        get() = emptyList() // Server doesn't provide related albums currently
     override val discs: List<com.lelloman.pezzottify.android.domain.statics.Disc>
         get() = this@toDomain.discs.map {
             object : com.lelloman.pezzottify.android.domain.statics.Disc {
-                override val name: String? = it.name
                 override val tracksIds: List<String> = it.tracks.map { track -> track.id }
             }
         }

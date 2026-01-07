@@ -59,6 +59,18 @@ import com.lelloman.pezzottify.android.ui.component.AlbumGridItem
 import com.lelloman.pezzottify.android.ui.content.Content
 import com.lelloman.pezzottify.android.ui.content.ContentResolver
 import com.lelloman.pezzottify.android.ui.theme.Spacing
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Calendar
+
+private fun Long.toYyyyMmdd(): Int {
+    val calendar = java.util.Calendar.getInstance()
+    calendar.timeInMillis = this * 1000
+    val year = calendar.get(java.util.Calendar.YEAR)
+    val month = calendar.get(java.util.Calendar.MONTH) + 1
+    val day = calendar.get(java.util.Calendar.DAY_OF_MONTH)
+    return year * 10000 + month * 100 + day
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -475,7 +487,7 @@ private fun CompletedAlbumCard(
                     // Fallback to request data while loading or on error
                     AlbumGridItem(
                         albumName = request.albumName,
-                        albumDate = request.completedAt ?: request.createdAt,
+                        albumDate = timestampToYyyyMmdd(request.completedAt ?: request.createdAt),
                         albumCoverUrl = null,
                         onClick = onClick,
                     )
@@ -500,7 +512,7 @@ private fun CompletedAlbumCard(
         ) {
             AlbumGridItem(
                 albumName = request.albumName,
-                albumDate = request.completedAt ?: request.createdAt,
+                albumDate = (request.completedAt ?: request.createdAt).toYyyyMmdd(),
                 albumCoverUrl = null,
                 onClick = onClick,
             )
@@ -527,11 +539,21 @@ private fun formatRelativeTime(timestampSeconds: Long, currentTimeMillis: Long):
     val months = days / 30
 
     return when {
-        minutes < 1 -> stringResource(R.string.my_requests_time_just_now)
+        minutes <1 -> stringResource(R.string.my_requests_time_just_now)
         minutes < 60 -> stringResource(R.string.my_requests_time_minutes_ago, minutes.toInt())
         hours < 24 -> stringResource(R.string.my_requests_time_hours_ago, hours.toInt())
         days < 30 -> stringResource(R.string.my_requests_time_days_ago, days.toInt())
         months < 12 -> stringResource(R.string.my_requests_time_months_ago, months.toInt())
         else -> stringResource(R.string.my_requests_time_years_ago, (months / 12).toInt())
+    }
+}
+
+private fun timestampToYyyyMmdd(timestampSeconds: Long): Int {
+    return try {
+        val date = Date(timestampSeconds * 1000)
+        val sdf = java.text.SimpleDateFormat("yyyy", java.util.Locale.getDefault())
+        (sdf.format(date).toInt() * 10000)
+    } catch (e: Exception) {
+        0
     }
 }

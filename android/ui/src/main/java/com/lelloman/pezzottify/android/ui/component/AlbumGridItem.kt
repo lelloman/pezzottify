@@ -18,7 +18,7 @@ import java.util.Locale
 fun AlbumGridItem(
     modifier: Modifier = Modifier,
     albumName: String,
-    albumDate: Long,
+    albumDate: Int,
     albumCoverUrl: String? = null,
     onClick: () -> Unit,
 ) {
@@ -51,11 +51,11 @@ fun AlbumGridItem(
     }
 }
 
-private fun formatYear(timestamp: Long): String {
-    return try {
-        val date = Date(timestamp * 1000) // Convert from seconds to milliseconds
-        SimpleDateFormat("yyyy", Locale.getDefault()).format(date)
-    } catch (e: Exception) {
+private fun formatYear(yyyymmdd: Int): String {
+    return if (yyyymmdd > 0) {
+        val year = yyyymmdd / 10000
+        year.toString()
+    } else {
         ""
     }
 }

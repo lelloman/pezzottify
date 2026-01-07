@@ -12,8 +12,6 @@ data class ArtistData(
     val id: String,
     val name: String,
     val genres: List<String>,
-    @SerialName("activity_periods")
-    val activityPeriods: List<ActivityPeriod>,
 )
 
 /**
