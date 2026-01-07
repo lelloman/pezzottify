@@ -25,6 +25,23 @@ internal class SkeletonStoreImpl @Inject constructor(
 
     override suspend fun insertAlbumArtists(albumArtists: List<AlbumArtistRelationship>) =
         withContext(Dispatchers.IO) {
+            if (albumArtists.isEmpty()) return@withContext
+
+            // Extract unique artist IDs and insert them first (to satisfy foreign key)
+            val artistIds = albumArtists.map { it.artistId }.distinct()
+            artistIds.forEach { artistId ->
+                skeletonDao.insertArtist(
+                    com.lelloman.pezzottify.android.localdata.internal.skeleton.model.SkeletonArtist(artistId)
+                )
+            }
+
+            // Extract unique album IDs and insert them (to satisfy foreign key)
+            val albums = albumArtists.map { it.albumId }.distinct().map { albumId ->
+                com.lelloman.pezzottify.android.localdata.internal.skeleton.model.SkeletonAlbum(albumId)
+            }
+            skeletonDao.insertAlbums(albums)
+
+            // Now insert the relationships
             val daoAlbumArtists = albumArtists.map { relationship ->
                 com.lelloman.pezzottify.android.localdata.internal.skeleton.model.SkeletonAlbumArtist(
                     artistId = relationship.artistId,
