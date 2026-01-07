@@ -28,7 +28,8 @@ const props = defineProps({
 const router = useRouter();
 const playerStore = usePlayerStore();
 
-const imageUrl = computedImageUrl(props.track.image_id);
+// Image endpoint takes album ID (tracks use their album's image)
+const imageUrl = computedImageUrl(props.track.album_id);
 
 const artistNames = computed(() => {
   return props.track.artist_names ? props.track.artist_names.join(", ") : "";
@@ -51,7 +52,6 @@ const handlePlayClick = () => {
     name: props.track.name,
     duration: Math.floor(props.track.duration_ms / 1000),
     album_id: props.track.album_id,
-    image_id: props.track.image_id,
     artists_ids_names: props.track.artist_names
       ? props.track.artist_names.map((name) => ["", name])
       : [],

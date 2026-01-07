@@ -818,7 +818,12 @@ impl CatalogStore for SqliteCatalogStore {
 
         conn.execute(
             "INSERT INTO artists (id, name, followers_total, popularity) VALUES (?1, ?2, ?3, ?4)",
-            params![&artist.id, &artist.name, artist.followers_total, artist.popularity],
+            params![
+                &artist.id,
+                &artist.name,
+                artist.followers_total,
+                artist.popularity
+            ],
         )?;
 
         // Get the rowid for genres
@@ -857,7 +862,12 @@ impl CatalogStore for SqliteCatalogStore {
 
         conn.execute(
             "UPDATE artists SET name = ?1, followers_total = ?2, popularity = ?3 WHERE rowid = ?4",
-            params![&artist.name, artist.followers_total, artist.popularity, artist_rowid],
+            params![
+                &artist.name,
+                artist.followers_total,
+                artist.popularity,
+                artist_rowid
+            ],
         )?;
 
         // Replace genres
@@ -890,10 +900,22 @@ impl CatalogStore for SqliteCatalogStore {
 
         if let Some(rowid) = artist_rowid {
             // Delete related data first
-            conn.execute("DELETE FROM artist_genres WHERE artist_rowid = ?1", params![rowid])?;
-            conn.execute("DELETE FROM artist_albums WHERE artist_rowid = ?1", params![rowid])?;
-            conn.execute("DELETE FROM track_artists WHERE artist_rowid = ?1", params![rowid])?;
-            conn.execute("DELETE FROM artist_images WHERE artist_rowid = ?1", params![rowid])?;
+            conn.execute(
+                "DELETE FROM artist_genres WHERE artist_rowid = ?1",
+                params![rowid],
+            )?;
+            conn.execute(
+                "DELETE FROM artist_albums WHERE artist_rowid = ?1",
+                params![rowid],
+            )?;
+            conn.execute(
+                "DELETE FROM track_artists WHERE artist_rowid = ?1",
+                params![rowid],
+            )?;
+            conn.execute(
+                "DELETE FROM artist_images WHERE artist_rowid = ?1",
+                params![rowid],
+            )?;
             conn.execute("DELETE FROM artists WHERE rowid = ?1", params![rowid])?;
             Ok(true)
         } else {
@@ -937,11 +959,13 @@ impl CatalogStore for SqliteCatalogStore {
 
         // Link artists to album
         for (idx, artist_id) in artist_ids.iter().enumerate() {
-            let artist_rowid: i64 = conn.query_row(
-                "SELECT rowid FROM artists WHERE id = ?1",
-                params![artist_id],
-                |r| r.get(0),
-            ).context(format!("Artist '{}' not found", artist_id))?;
+            let artist_rowid: i64 = conn
+                .query_row(
+                    "SELECT rowid FROM artists WHERE id = ?1",
+                    params![artist_id],
+                    |r| r.get(0),
+                )
+                .context(format!("Artist '{}' not found", artist_id))?;
 
             conn.execute(
                 "INSERT INTO artist_albums (artist_rowid, album_rowid, is_appears_on, is_implicit_appears_on, index_in_album)
@@ -991,11 +1015,13 @@ impl CatalogStore for SqliteCatalogStore {
             )?;
 
             for (idx, artist_id) in artist_ids.iter().enumerate() {
-                let artist_rowid: i64 = conn.query_row(
-                    "SELECT rowid FROM artists WHERE id = ?1",
-                    params![artist_id],
-                    |r| r.get(0),
-                ).context(format!("Artist '{}' not found", artist_id))?;
+                let artist_rowid: i64 = conn
+                    .query_row(
+                        "SELECT rowid FROM artists WHERE id = ?1",
+                        params![artist_id],
+                        |r| r.get(0),
+                    )
+                    .context(format!("Artist '{}' not found", artist_id))?;
 
                 conn.execute(
                     "INSERT INTO artist_albums (artist_rowid, album_rowid, is_appears_on, is_implicit_appears_on, index_in_album)
@@ -1011,15 +1037,14 @@ impl CatalogStore for SqliteCatalogStore {
     fn delete_album(&self, id: &str) -> Result<bool> {
         let conn = self.conn.lock().unwrap();
 
-        let album_rowid: Option<i64> = match conn.query_row(
-            "SELECT rowid FROM albums WHERE id = ?1",
-            params![id],
-            |r| r.get(0),
-        ) {
-            Ok(rowid) => Some(rowid),
-            Err(rusqlite::Error::QueryReturnedNoRows) => None,
-            Err(e) => return Err(e.into()),
-        };
+        let album_rowid: Option<i64> =
+            match conn.query_row("SELECT rowid FROM albums WHERE id = ?1", params![id], |r| {
+                r.get(0)
+            }) {
+                Ok(rowid) => Some(rowid),
+                Err(rusqlite::Error::QueryReturnedNoRows) => None,
+                Err(e) => return Err(e.into()),
+            };
 
         if let Some(rowid) = album_rowid {
             // Delete track-artist relationships first
@@ -1031,8 +1056,14 @@ impl CatalogStore for SqliteCatalogStore {
             conn.execute("DELETE FROM tracks WHERE album_rowid = ?1", params![rowid])?;
 
             // Delete album relationships and data
-            conn.execute("DELETE FROM artist_albums WHERE album_rowid = ?1", params![rowid])?;
-            conn.execute("DELETE FROM album_images WHERE album_rowid = ?1", params![rowid])?;
+            conn.execute(
+                "DELETE FROM artist_albums WHERE album_rowid = ?1",
+                params![rowid],
+            )?;
+            conn.execute(
+                "DELETE FROM album_images WHERE album_rowid = ?1",
+                params![rowid],
+            )?;
             conn.execute("DELETE FROM albums WHERE rowid = ?1", params![rowid])?;
             Ok(true)
         } else {
@@ -1054,11 +1085,13 @@ impl CatalogStore for SqliteCatalogStore {
         }
 
         // Get album rowid
-        let album_rowid: i64 = conn.query_row(
-            "SELECT rowid FROM albums WHERE id = ?1",
-            params![&track.album_id],
-            |r| r.get(0),
-        ).context(format!("Album '{}' not found", track.album_id))?;
+        let album_rowid: i64 = conn
+            .query_row(
+                "SELECT rowid FROM albums WHERE id = ?1",
+                params![&track.album_id],
+                |r| r.get(0),
+            )
+            .context(format!("Album '{}' not found", track.album_id))?;
 
         conn.execute(
             "INSERT INTO tracks (id, name, album_rowid, track_number, external_id_isrc, popularity,
@@ -1085,11 +1118,13 @@ impl CatalogStore for SqliteCatalogStore {
 
         // Link artists to track
         for artist_id in artist_ids {
-            let artist_rowid: i64 = conn.query_row(
-                "SELECT rowid FROM artists WHERE id = ?1",
-                params![artist_id],
-                |r| r.get(0),
-            ).context(format!("Artist '{}' not found", artist_id))?;
+            let artist_rowid: i64 = conn
+                .query_row(
+                    "SELECT rowid FROM artists WHERE id = ?1",
+                    params![artist_id],
+                    |r| r.get(0),
+                )
+                .context(format!("Artist '{}' not found", artist_id))?;
 
             conn.execute(
                 "INSERT INTO track_artists (track_rowid, artist_rowid, role) VALUES (?1, ?2, 0)",
@@ -1116,11 +1151,13 @@ impl CatalogStore for SqliteCatalogStore {
         };
 
         // Get album rowid
-        let album_rowid: i64 = conn.query_row(
-            "SELECT rowid FROM albums WHERE id = ?1",
-            params![&track.album_id],
-            |r| r.get(0),
-        ).context(format!("Album '{}' not found", track.album_id))?;
+        let album_rowid: i64 = conn
+            .query_row(
+                "SELECT rowid FROM albums WHERE id = ?1",
+                params![&track.album_id],
+                |r| r.get(0),
+            )
+            .context(format!("Album '{}' not found", track.album_id))?;
 
         conn.execute(
             "UPDATE tracks SET name = ?1, album_rowid = ?2, track_number = ?3, external_id_isrc = ?4,
@@ -1147,11 +1184,13 @@ impl CatalogStore for SqliteCatalogStore {
             )?;
 
             for artist_id in artist_ids {
-                let artist_rowid: i64 = conn.query_row(
-                    "SELECT rowid FROM artists WHERE id = ?1",
-                    params![artist_id],
-                    |r| r.get(0),
-                ).context(format!("Artist '{}' not found", artist_id))?;
+                let artist_rowid: i64 = conn
+                    .query_row(
+                        "SELECT rowid FROM artists WHERE id = ?1",
+                        params![artist_id],
+                        |r| r.get(0),
+                    )
+                    .context(format!("Artist '{}' not found", artist_id))?;
 
                 conn.execute(
                     "INSERT INTO track_artists (track_rowid, artist_rowid, role) VALUES (?1, ?2, 0)",
@@ -1166,18 +1205,20 @@ impl CatalogStore for SqliteCatalogStore {
     fn delete_track(&self, id: &str) -> Result<bool> {
         let conn = self.conn.lock().unwrap();
 
-        let track_rowid: Option<i64> = match conn.query_row(
-            "SELECT rowid FROM tracks WHERE id = ?1",
-            params![id],
-            |r| r.get(0),
-        ) {
-            Ok(rowid) => Some(rowid),
-            Err(rusqlite::Error::QueryReturnedNoRows) => None,
-            Err(e) => return Err(e.into()),
-        };
+        let track_rowid: Option<i64> =
+            match conn.query_row("SELECT rowid FROM tracks WHERE id = ?1", params![id], |r| {
+                r.get(0)
+            }) {
+                Ok(rowid) => Some(rowid),
+                Err(rusqlite::Error::QueryReturnedNoRows) => None,
+                Err(e) => return Err(e.into()),
+            };
 
         if let Some(rowid) = track_rowid {
-            conn.execute("DELETE FROM track_artists WHERE track_rowid = ?1", params![rowid])?;
+            conn.execute(
+                "DELETE FROM track_artists WHERE track_rowid = ?1",
+                params![rowid],
+            )?;
             conn.execute("DELETE FROM tracks WHERE rowid = ?1", params![rowid])?;
             Ok(true)
         } else {

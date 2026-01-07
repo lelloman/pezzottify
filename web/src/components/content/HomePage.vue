@@ -12,8 +12,8 @@
         >
           <div class="albumCover">
             <img
-              v-if="item.album_image_id"
-              :src="getImageUrl(item.album_image_id)"
+              v-if="item.album_id"
+              :src="getImageUrl(item.album_id)"
               :alt="item.album_name"
               loading="lazy"
             />
@@ -41,8 +41,8 @@
         >
           <div class="albumCover">
             <img
-              v-if="album.image_id"
-              :src="getImageUrl(album.image_id)"
+              v-if="album.id"
+              :src="getImageUrl(album.id)"
               :alt="album.name"
               loading="lazy"
             />
@@ -70,8 +70,8 @@
         >
           <div class="artistImage">
             <img
-              v-if="artist.image_id"
-              :src="getImageUrl(artist.image_id)"
+              v-if="artist.id"
+              :src="getImageUrl(artist.id)"
               :alt="artist.name"
               loading="lazy"
             />
@@ -96,8 +96,8 @@
         >
           <div class="albumCover">
             <img
-              v-if="getAlbumImageId(album)"
-              :src="getImageUrl(getAlbumImageId(album))"
+              v-if="album.id"
+              :src="getImageUrl(album.id)"
               :alt="album.name"
               loading="lazy"
             />
@@ -152,20 +152,6 @@ const isEmpty = computed(() => {
 const formatArtistNames = (names) => {
   if (!names || names.length === 0) return "Unknown Artist";
   return names.join(", ");
-};
-
-// Helper to get album cover image ID from album object
-const getAlbumImageId = (album) => {
-  if (!album) return null;
-  // Check covers array first (preferred)
-  if (album.covers && album.covers.length > 0) {
-    return album.covers[0].id;
-  }
-  // Fall back to cover_group
-  if (album.cover_group && album.cover_group.length > 0) {
-    return album.cover_group[0].id;
-  }
-  return null;
 };
 
 const fetchRecentlyPlayed = async () => {

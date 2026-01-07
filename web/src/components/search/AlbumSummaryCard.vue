@@ -23,7 +23,8 @@ const props = defineProps({
 
 const router = useRouter();
 
-const imageUrl = computedImageUrl(props.album.image_id);
+// Image endpoint takes the album ID directly
+const imageUrl = computedImageUrl(props.album.id);
 
 const albumMeta = computed(() => {
   const parts = [];

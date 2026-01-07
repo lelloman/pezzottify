@@ -39,7 +39,8 @@ const props = defineProps({
   },
 });
 
-const imageUrl = computedImageUrl(props.result.image_id);
+// Image endpoint now takes the album ID directly
+const imageUrl = computedImageUrl(props.result.id);
 
 const router = useRouter();
 
