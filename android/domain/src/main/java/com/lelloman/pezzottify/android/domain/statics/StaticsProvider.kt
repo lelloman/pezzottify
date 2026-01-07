@@ -100,23 +100,15 @@ class StaticsProvider internal constructor(
 
                     fetchState?.isLoading == true -> StaticsItem.Loading(itemId)
                     fetchState?.errorReason != null -> {
-                        if (fetchState.isBackoffExpired()) {
-                            scheduleItemFetch(itemId, StaticItemType.Artist)
-                        }
-                        StaticsItem.Error(
-                            itemId,
-                            Throwable("${fetchState.errorReason}")
-                        )
+                        // Always retry errored items - backoff is for background sync, not user views
+                        scheduleItemFetch(itemId, StaticItemType.Artist)
+                        StaticsItem.Loading(itemId)
                     }
 
                     else -> {
                         scheduleItemFetch(itemId, StaticItemType.Artist)
                         StaticsItem.Loading(itemId)
                     }
-                }
-                if (output is StaticsItem.Error) {
-                    output.error.printStackTrace()
-                    logger.warn("Error providing artist", output.error)
                 }
                 logger.debug("provideArtist($itemId) newOutput = $output")
                 output
@@ -148,13 +140,9 @@ class StaticsProvider internal constructor(
 
                     fetchState?.isLoading == true -> StaticsItem.Loading(itemId)
                     fetchState?.errorReason != null -> {
-                        if (fetchState.isBackoffExpired()) {
-                            scheduleItemFetch(itemId, StaticItemType.Track)
-                        }
-                        StaticsItem.Error(
-                            itemId,
-                            Throwable("${fetchState.errorReason}")
-                        )
+                        // Always retry errored items - backoff is for background sync, not user views
+                        scheduleItemFetch(itemId, StaticItemType.Track)
+                        StaticsItem.Loading(itemId)
                     }
 
                     else -> {
@@ -192,13 +180,9 @@ class StaticsProvider internal constructor(
 
                     fetchState?.isLoading == true -> StaticsItem.Loading(itemId)
                     fetchState?.errorReason != null -> {
-                        if (fetchState.isBackoffExpired()) {
-                            scheduleItemFetch(itemId, StaticItemType.Album)
-                        }
-                        StaticsItem.Error(
-                            itemId,
-                            Throwable("${fetchState.errorReason}")
-                        )
+                        // Always retry errored items - backoff is for background sync, not user views
+                        scheduleItemFetch(itemId, StaticItemType.Album)
+                        StaticsItem.Loading(itemId)
                     }
 
                     else -> {
