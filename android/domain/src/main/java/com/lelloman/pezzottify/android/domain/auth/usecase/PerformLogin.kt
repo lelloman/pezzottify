@@ -6,7 +6,6 @@ import com.lelloman.pezzottify.android.domain.config.ConfigStore
 import com.lelloman.pezzottify.android.domain.device.DeviceInfoProvider
 import com.lelloman.pezzottify.android.domain.remoteapi.RemoteApiClient
 import com.lelloman.pezzottify.android.domain.remoteapi.response.RemoteApiResponse
-import com.lelloman.pezzottify.android.domain.skeleton.CatalogSkeletonSyncer
 import com.lelloman.pezzottify.android.domain.sync.SyncManager
 import com.lelloman.pezzottify.android.domain.usecase.UseCase
 import com.lelloman.pezzottify.android.domain.websocket.WebSocketManager
@@ -21,7 +20,6 @@ class PerformLogin @Inject constructor(
     private val syncManager: SyncManager,
     private val deviceInfoProvider: DeviceInfoProvider,
     private val webSocketManager: WebSocketManager,
-    private val skeletonSyncer: CatalogSkeletonSyncer,
     loggerFactory: LoggerFactory,
 ) : UseCase() {
 

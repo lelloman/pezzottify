@@ -4,7 +4,6 @@ import com.lelloman.pezzottify.android.domain.auth.AuthState
 import com.lelloman.pezzottify.android.domain.auth.AuthStore
 import com.lelloman.pezzottify.android.domain.auth.oidc.OidcAuthManager
 import com.lelloman.pezzottify.android.domain.config.ConfigStore
-import com.lelloman.pezzottify.android.domain.skeleton.CatalogSkeletonSyncer
 import com.lelloman.pezzottify.android.domain.sync.SyncManager
 import com.lelloman.pezzottify.android.domain.usecase.UseCase
 import com.lelloman.pezzottify.android.domain.websocket.WebSocketManager
@@ -13,21 +12,20 @@ import com.lelloman.pezzottify.android.logger.LoggerFactory
 import javax.inject.Inject
 
 /**
- * Completes the OIDC login after receiving the authorization callback.
+ * Completes OIDC login after receiving authorization callback.
  */
 class PerformOidcLogin @Inject constructor(
     private val authStore: AuthStore,
     private val configStore: ConfigStore,
     private val syncManager: SyncManager,
     private val webSocketManager: WebSocketManager,
-    private val skeletonSyncer: CatalogSkeletonSyncer,
     loggerFactory: LoggerFactory,
 ) : UseCase() {
 
     private val logger: Logger by loggerFactory
 
     /**
-     * Complete OIDC login with the authorization result.
+     * Complete OIDC login with authorization result.
      */
     suspend operator fun invoke(result: OidcAuthManager.AuthorizationResult): LoginResult {
         return when (result) {
@@ -45,15 +43,6 @@ class PerformOidcLogin @Inject constructor(
                 webSocketManager.connect()
                 logger.debug("invoke() initializing sync manager")
                 syncManager.initialize()
-                logger.debug("invoke() syncing catalog skeleton")
-                when (val syncResult = skeletonSyncer.sync()) {
-                    is CatalogSkeletonSyncer.SyncResult.Success ->
-                        logger.info("invoke() skeleton sync completed")
-                    is CatalogSkeletonSyncer.SyncResult.AlreadyUpToDate ->
-                        logger.info("invoke() skeleton already up to date")
-                    is CatalogSkeletonSyncer.SyncResult.Failed ->
-                        logger.error("invoke() skeleton sync failed: ${syncResult.error}")
-                }
                 LoginResult.Success
             }
 
