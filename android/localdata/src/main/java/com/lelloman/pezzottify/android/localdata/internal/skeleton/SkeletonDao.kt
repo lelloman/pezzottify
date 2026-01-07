@@ -30,6 +30,12 @@ internal interface SkeletonDao {
     // Insert Operations
     // =========================================================================
 
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertArtist(artist: SkeletonArtist)
+
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertAlbums(albums: List<SkeletonAlbum>)
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAlbumArtists(albumArtists: List<SkeletonAlbumArtist>)
 
