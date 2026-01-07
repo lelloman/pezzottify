@@ -33,6 +33,7 @@ import { ref, watch, onMounted } from "vue";
 import { chooseArtistCoverImageUrl } from "@/utils";
 import { useUserStore } from "@/store/user.js";
 import { useStaticsStore } from "@/store/statics.js";
+import { useRemoteStore } from "@/store/remote.js";
 import MultiSourceImage from "@/components/common/MultiSourceImage.vue";
 import ToggableFavoriteIcon from "@/components/common/ToggableFavoriteIcon.vue";
 import LoadArtistListItem from "@/components/common/LoadArtistListItem.vue";
@@ -50,6 +51,7 @@ const coverUrls = ref(null);
 const isArtistLiked = ref(false);
 const userStore = useUserStore();
 const staticsStore = useStaticsStore();
+const remoteStore = useRemoteStore();
 
 let artistDataUnwatcher = null;
 
@@ -90,11 +92,15 @@ watch(
   () => props.artistId,
   (newId) => {
     fetchData(newId);
+    if (newId) {
+      remoteStore.recordImpression("artist", newId);
+    }
   },
 );
 
 onMounted(() => {
   fetchData(props.artistId);
+  remoteStore.recordImpression("artist", props.artistId);
 });
 </script>
 

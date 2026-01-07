@@ -41,6 +41,7 @@ import { ref, watch, onMounted } from "vue";
 import MultiSourceImage from "@/components/common/MultiSourceImage.vue";
 import PlayIcon from "../icons/PlayIcon.vue";
 import { usePlayerStore } from "@/store/player";
+import { useRemoteStore } from "@/store/remote";
 import {
   chooseAlbumCoverImageUrl,
   formatDuration,
@@ -64,6 +65,7 @@ const coverUrls = ref([]);
 const router = useRouter();
 const player = usePlayerStore();
 const staticsStore = useStaticsStore();
+const remoteStore = useRemoteStore();
 
 let trackDataUnwatcher = null;
 let albumDataUnwatcher = null;
@@ -126,11 +128,15 @@ watch(
   () => props.trackId,
   (newId) => {
     fetchTrack(newId);
+    if (newId) {
+      remoteStore.recordImpression("track", newId);
+    }
   },
 );
 
 onMounted(() => {
   fetchTrack(props.trackId);
+  remoteStore.recordImpression("track", props.trackId);
 });
 </script>
 
