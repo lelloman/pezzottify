@@ -95,7 +95,8 @@ internal class StaticsSynchronizer(
                         is ArtistResponse -> staticsStore.storeArtist(remoteData.data.toDomain())
                         is TrackResponse -> staticsStore.storeTrack(remoteData.data.toDomain())
                         is ArtistDiscographyResponse -> {
-                            staticsStore.storeDiscography(remoteData.data.toDomain(itemId))
+                            val allAlbums = fetchAllDiscographyPages(itemId, remoteData.data)
+                            staticsStore.storeDiscography(allAlbums.toDomain(itemId))
                         }
                         else -> logger.error("Cannot store unknown response data of type ${remoteData.javaClass} -> ${remoteData.data}")
                     }
@@ -154,5 +155,50 @@ internal class StaticsSynchronizer(
         const val RETRY_DELAY_NOT_FOUND_ERROR_MS = 3_600_000L // 1 hour for 404/not found
         const val RETRY_DELAY_UNKNOWN_ERROR_MS = 300_000L // 5 minutes for unknown errors
         const val RETRY_DELAY_CLIENT_ERROR_MS = 300_000L // 5 minutes for client errors
+
+        // Pagination constants
+        const val DISCOGRAPHY_PAGE_SIZE = 50
+        const val DISCOGRAPHY_MAX_ALBUMS_TO_FETCH = 500 // Limit for initial fetch
+    }
+
+    /**
+     * Fetch all pages of an artist's discography and combine them.
+     * Limits total albums fetched to avoid overwhelming the system.
+     */
+    private suspend fun fetchAllDiscographyPages(
+        artistId: String,
+        initialResponse: com.lelloman.pezzottify.android.domain.remoteapi.response.ArtistDiscographyResponse
+    ): com.lelloman.pezzottify.android.domain.remoteapi.response.ArtistDiscographyResponse {
+        var allAlbums = initialResponse.albums.toMutableList()
+        var offset = initialResponse.offset ?: 0
+        var limit = initialResponse.limit ?: DISCOGRAPHY_PAGE_SIZE
+        var hasMore = initialResponse.hasMore
+
+        while (hasMore && allAlbums.size < DISCOGRAPHY_MAX_ALBUMS_TO_FETCH) {
+            val nextResponse = remoteApiClient.getArtistDiscography(
+                artistId = artistId,
+                offset = offset + limit,
+                limit = DISCOGRAPHY_PAGE_SIZE
+            )
+
+            when (nextResponse) {
+                is RemoteApiResponse.Success -> {
+                    allAlbums.addAll(nextResponse.data.albums)
+                    offset += limit
+                    limit = DISCOGRAPHY_PAGE_SIZE
+                    hasMore = nextResponse.data.hasMore
+                }
+                else -> {
+                    logger.warn("Failed to fetch discography page for $artistId: $nextResponse")
+                    break
+                }
+            }
+        }
+
+        return initialResponse.copy(
+            albums = allAlbums,
+            total = initialResponse.total,
+            hasMore = hasMore && allAlbums.size < initialResponse.total
+        )
     }
 }

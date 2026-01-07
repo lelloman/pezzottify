@@ -60,7 +60,9 @@ internal interface RetrofitApiClient {
     @GET("/v1/content/artist/{artistId}/discography")
     suspend fun getArtistDiscography(
         @Header("Authorization") authToken: String,
-        @Path("artistId") artistId: String
+        @Path("artistId") artistId: String,
+        @Query("offset") offset: Int? = null,
+        @Query("limit") limit: Int? = null,
     ): Response<ArtistDiscographyResponse>
 
     @GET("/v1/content/album/{albumId}/resolved")
