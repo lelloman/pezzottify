@@ -107,7 +107,7 @@ class HomeScreenViewModelTest {
             Content.Resolved("artist-1", Artist("artist-1", "Test Artist", null, emptyList()))
         )
         fakeContentResolver.albumResults["album-1"] = flowOf(
-            Content.Resolved("album-1", Album("album-1", "Test Album", 1609459200L, null, listOf("artist-1")))
+            Content.Resolved("album-1", Album("album-1", "Test Album", 1609459200, null, listOf("artist-1")))
         )
 
         createViewModel()

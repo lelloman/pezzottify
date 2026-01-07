@@ -9,9 +9,11 @@ import com.lelloman.pezzottify.android.domain.remoteapi.response.AlbumType
 import com.lelloman.pezzottify.android.domain.remoteapi.response.ArtistData
 import com.lelloman.pezzottify.android.domain.remoteapi.response.ArtistDiscographyResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.ArtistResponse
+import com.lelloman.pezzottify.android.domain.remoteapi.response.DiscographyAlbum
 import com.lelloman.pezzottify.android.domain.remoteapi.response.RemoteApiResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.TrackData
 import com.lelloman.pezzottify.android.domain.remoteapi.response.TrackResponse
+import com.lelloman.pezzottify.android.domain.skeleton.SkeletonStore
 import com.lelloman.pezzottify.android.domain.statics.StaticItemType
 import com.lelloman.pezzottify.android.domain.statics.StaticsStore
 import com.lelloman.pezzottify.android.domain.statics.fetchstate.ErrorReason
@@ -45,6 +47,7 @@ class StaticsSynchronizerTest {
     private lateinit var fetchStateStore: StaticItemFetchStateStore
     private lateinit var remoteApiClient: RemoteApiClient
     private lateinit var staticsStore: StaticsStore
+    private lateinit var skeletonStore: SkeletonStore
     private lateinit var timeProvider: TimeProvider
     private lateinit var loggerFactory: LoggerFactory
 
@@ -63,6 +66,7 @@ class StaticsSynchronizerTest {
         fetchStateStore = mockk(relaxed = true)
         remoteApiClient = mockk(relaxed = true)
         staticsStore = mockk(relaxed = true)
+        skeletonStore = mockk(relaxed = true)
         timeProvider = TimeProvider { currentTime }
 
         val mockLogger = mockk<Logger>(relaxed = true)
@@ -81,7 +85,6 @@ class StaticsSynchronizerTest {
         coEvery { staticsStore.storeArtist(any()) } returns Result.success(Unit)
         coEvery { staticsStore.storeAlbum(any()) } returns Result.success(Unit)
         coEvery { staticsStore.storeTrack(any()) } returns Result.success(Unit)
-        coEvery { staticsStore.storeDiscography(any()) } returns Result.success(Unit)
     }
 
     @After
@@ -95,6 +98,7 @@ class StaticsSynchronizerTest {
             fetchStateStore = fetchStateStore,
             remoteApiClient = remoteApiClient,
             staticsStore = staticsStore,
+            skeletonStore = skeletonStore,
             timeProvider = timeProvider,
             loggerFactory = loggerFactory,
             dispatcher = testDispatcher,
@@ -275,7 +279,7 @@ class StaticsSynchronizerTest {
         advanceUntilIdle()
 
         coVerify { remoteApiClient.getArtistDiscography(artistId) }
-        coVerify { staticsStore.storeDiscography(any()) }
+        coVerify { skeletonStore.insertAlbumArtists(any()) }
         coVerify { fetchStateStore.delete(artistId) }
     }
 
@@ -693,14 +697,13 @@ class StaticsSynchronizerTest {
     private fun createDiscographyResponse(): ArtistDiscographyResponse {
         return ArtistDiscographyResponse(
             albums = listOf(
-                AlbumData(
+                DiscographyAlbum(
                     id = "album-1",
                     name = "Album 1",
                     albumType = AlbumType.Album,
                     releaseDate = "2023-05-15",
                 )
             ),
-            features = emptyList(),
         )
     }
 }

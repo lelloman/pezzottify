@@ -103,7 +103,7 @@ class TrackScreenViewModelTest {
         val album = Album(
             id = "album-1",
             name = "Epic Album",
-            date = 1609459200L,
+            date = 1609459200,
             imageUrl = "http://img.com/cover.jpg",
             artistsIds = listOf("artist-1")
         )
