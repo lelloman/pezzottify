@@ -46,7 +46,10 @@ const INDEX_BATCH_SIZE: usize = 50_000;
 /// // Search works immediately, returns partial results during build
 /// ```
 pub struct Fts5LevenshteinSearchVault {
-    conn: Mutex<Connection>,
+    /// Read connection for search queries (separate from write to avoid blocking)
+    read_conn: Mutex<Connection>,
+    /// Write connection for indexing operations
+    write_conn: Mutex<Connection>,
     vocabulary: RwLock<Vocabulary>,
     /// Maximum edit distance for typo correction (default: 2)
     max_edit_distance: usize,
@@ -77,23 +80,29 @@ impl Fts5LevenshteinSearchVault {
     /// If a valid index already exists on disk, it will be loaded.
     /// If a partial build was interrupted, it will be detected and can be resumed.
     pub fn new_lazy(db_path: &Path) -> Result<Self> {
-        let conn = Connection::open(db_path)?;
-        conn.pragma_update(None, "journal_mode", "WAL")?;
-        Self::create_tables(&conn)?;
+        // Create write connection first (handles table creation)
+        let write_conn = Connection::open(db_path)?;
+        write_conn.pragma_update(None, "journal_mode", "WAL")?;
+        Self::create_tables(&write_conn)?;
+
+        // Create separate read connection for search queries
+        // This allows searches to proceed while writes are happening
+        let read_conn = Connection::open(db_path)?;
+        read_conn.pragma_update(None, "journal_mode", "WAL")?;
 
         // Check build state
-        let build_in_progress = Self::get_metadata(&conn, "build_in_progress")
+        let build_in_progress = Self::get_metadata(&write_conn, "build_in_progress")
             .map(|v| v == "true")
             .unwrap_or(false);
-        let index_count = Self::get_index_item_count(&conn).unwrap_or(0);
+        let index_count = Self::get_index_item_count(&write_conn).unwrap_or(0);
 
         let (vocabulary, state) = if build_in_progress {
             // Partial build detected - load what we have and prepare to resume
-            let build_offset = Self::get_metadata(&conn, "build_offset")
+            let build_offset = Self::get_metadata(&write_conn, "build_offset")
                 .and_then(|v| v.parse::<usize>().ok())
                 .unwrap_or(0);
             let build_total =
-                Self::get_metadata(&conn, "build_total").and_then(|v| v.parse::<usize>().ok());
+                Self::get_metadata(&write_conn, "build_total").and_then(|v| v.parse::<usize>().ok());
 
             info!(
                 "Detected partial build: {} items indexed, offset {}, total {:?}",
@@ -101,7 +110,7 @@ impl Fts5LevenshteinSearchVault {
             );
 
             let vocab = if index_count > 0 {
-                Self::load_vocabulary_from_index(&conn)?
+                Self::load_vocabulary_from_index(&write_conn)?
             } else {
                 Vocabulary::new()
             };
@@ -115,7 +124,7 @@ impl Fts5LevenshteinSearchVault {
             )
         } else if index_count > 0 {
             info!("Loading existing search index with {} items", index_count);
-            let vocab = Self::load_vocabulary_from_index(&conn)?;
+            let vocab = Self::load_vocabulary_from_index(&write_conn)?;
             (vocab, IndexState::Ready)
         } else {
             info!("Search index is empty, waiting for background build");
@@ -123,7 +132,8 @@ impl Fts5LevenshteinSearchVault {
         };
 
         Ok(Self {
-            conn: Mutex::new(conn),
+            read_conn: Mutex::new(read_conn),
+            write_conn: Mutex::new(write_conn),
             vocabulary: RwLock::new(vocabulary),
             max_edit_distance: 2,
             state: RwLock::new(state),
@@ -137,9 +147,13 @@ impl Fts5LevenshteinSearchVault {
         db_path: &Path,
         max_edit_distance: usize,
     ) -> Result<Self> {
-        let conn = Connection::open(db_path)?;
-        conn.pragma_update(None, "journal_mode", "WAL")?;
-        Self::create_tables(&conn)?;
+        let write_conn = Connection::open(db_path)?;
+        write_conn.pragma_update(None, "journal_mode", "WAL")?;
+        Self::create_tables(&write_conn)?;
+
+        // Create separate read connection
+        let read_conn = Connection::open(db_path)?;
+        read_conn.pragma_update(None, "journal_mode", "WAL")?;
 
         // For Spotify catalog (static), version is always 0
         let current_catalog_version: i64 = 0;
@@ -149,16 +163,17 @@ impl Fts5LevenshteinSearchVault {
             .unwrap_or(0);
 
         let needs_rebuild =
-            Self::check_needs_rebuild(&conn, current_catalog_version, expected_item_count);
+            Self::check_needs_rebuild(&write_conn, current_catalog_version, expected_item_count);
 
         let vocabulary = if needs_rebuild {
-            Self::rebuild_index_internal(&conn, &catalog_store, current_catalog_version)?
+            Self::rebuild_index_internal(&write_conn, &catalog_store, current_catalog_version)?
         } else {
-            Self::load_vocabulary_from_index(&conn)?
+            Self::load_vocabulary_from_index(&write_conn)?
         };
 
         Ok(Self {
-            conn: Mutex::new(conn),
+            read_conn: Mutex::new(read_conn),
+            write_conn: Mutex::new(write_conn),
             vocabulary: RwLock::new(vocabulary),
             max_edit_distance,
             state: RwLock::new(IndexState::Ready),
@@ -190,7 +205,7 @@ impl Fts5LevenshteinSearchVault {
                 }
                 IndexState::Ready => {
                     // Check if index is actually populated
-                    let conn = self.conn.lock().unwrap();
+                    let conn = self.write_conn.lock().unwrap();
                     let count = Self::get_index_item_count(&conn).unwrap_or(0);
                     if count > 0 {
                         info!("Index already has {} items, skipping build", count);
@@ -264,7 +279,7 @@ impl Fts5LevenshteinSearchVault {
 
         // Mark build as in progress and store total in metadata
         {
-            let conn = self.conn.lock().unwrap();
+            let conn = self.write_conn.lock().unwrap();
             Self::set_metadata(&conn, "build_in_progress", "true")?;
             Self::set_metadata(&conn, "build_total", &total.to_string())?;
 
@@ -277,7 +292,7 @@ impl Fts5LevenshteinSearchVault {
 
         // Load existing vocabulary if resuming
         let mut vocabulary = if start_offset > 0 {
-            let conn = self.conn.lock().unwrap();
+            let conn = self.write_conn.lock().unwrap();
             Self::load_vocabulary_from_index(&conn)?
         } else {
             Vocabulary::new()
@@ -296,7 +311,7 @@ impl Fts5LevenshteinSearchVault {
 
             // Insert batch into index
             {
-                let conn = self.conn.lock().unwrap();
+                let conn = self.write_conn.lock().unwrap();
                 conn.execute("BEGIN IMMEDIATE", [])?;
 
                 let mut stmt = conn.prepare(
@@ -349,7 +364,7 @@ impl Fts5LevenshteinSearchVault {
 
         // Build complete - clear progress metadata and store catalog version
         {
-            let conn = self.conn.lock().unwrap();
+            let conn = self.write_conn.lock().unwrap();
             Self::set_stored_catalog_version(&conn, 0)?;
             Self::delete_metadata(&conn, "build_in_progress")?;
             Self::delete_metadata(&conn, "build_offset")?;
@@ -594,7 +609,7 @@ impl Fts5LevenshteinSearchVault {
 
     /// Update popularity scores for items.
     pub fn update_popularity(&self, items: &[(String, HashedItemType, u64, f64)]) {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.write_conn.lock().unwrap();
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
@@ -632,7 +647,7 @@ impl Fts5LevenshteinSearchVault {
             return Ok(());
         }
 
-        let conn = self.conn.lock().unwrap();
+        let conn = self.write_conn.lock().unwrap();
 
         // Delete existing entries for these items (upsert behavior)
         let mut delete_stmt =
@@ -683,7 +698,7 @@ impl Fts5LevenshteinSearchVault {
             return Ok(());
         }
 
-        let conn = self.conn.lock().unwrap();
+        let conn = self.write_conn.lock().unwrap();
         let mut stmt =
             conn.prepare("DELETE FROM search_index WHERE item_id = ? AND item_type = ?")?;
 
@@ -767,7 +782,8 @@ impl SearchVault for Fts5LevenshteinSearchVault {
             debug!("Query corrected: '{}' -> '{}'", query, corrected_query);
         }
 
-        let conn = self.conn.lock().unwrap();
+        // Use read connection - this won't block on writes due to WAL mode
+        let conn = self.read_conn.lock().unwrap();
 
         let escaped_query = corrected_query.replace('"', "\"\"");
 
@@ -892,7 +908,7 @@ impl SearchVault for Fts5LevenshteinSearchVault {
     }
 
     fn get_stats(&self) -> SearchVaultStats {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.read_conn.lock().unwrap();
         let count: usize = conn
             .query_row("SELECT COUNT(*) FROM search_index", [], |row| row.get(0))
             .unwrap_or(0);
