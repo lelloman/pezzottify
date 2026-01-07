@@ -254,4 +254,21 @@ class StaticsProvider internal constructor(
         staticsCache.clearAll()
         logger.debug("Cache cleared")
     }
+
+    /**
+     * Clear error fetch states for the given item IDs, forcing them to be re-fetched
+     * when next requested. Call this when a screen opens to retry items that previously
+     * failed due to rate limiting or transient errors.
+     */
+    suspend fun retryErroredItems(itemIds: List<String>) {
+        withContext(coroutineContext) {
+            itemIds.forEach { itemId ->
+                staticItemFetchStateStore.delete(itemId)
+            }
+            if (itemIds.isNotEmpty()) {
+                logger.debug("Cleared fetch states for ${itemIds.size} items to force retry")
+                staticsSynchronizer.wakeUp()
+            }
+        }
+    }
 }
