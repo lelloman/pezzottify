@@ -67,6 +67,7 @@ import MultiSourceImage from "@/components/common/MultiSourceImage.vue";
 import PlayIcon from "@/components/icons/PlayIcon.vue";
 import { usePlayerStore } from "@/store/player";
 import { useUserStore } from "@/store/user";
+import { useRemoteStore } from "@/store/remote";
 import ToggableFavoriteIcon from "@/components/common/ToggableFavoriteIcon.vue";
 import LoadArtistListItem from "@/components/common/LoadArtistListItem.vue";
 import TrackContextMenu from "@/components/common/contextmenu/TrackContextMenu.vue";
@@ -86,6 +87,7 @@ const coverUrls = ref(null);
 const player = usePlayerStore();
 const userStore = useUserStore();
 const staticsStore = useStaticsStore();
+const remoteStore = useRemoteStore();
 
 const currentTrackId = ref(null);
 const currentTrackIndex = ref(null);
@@ -194,6 +196,9 @@ watch(
   () => props.albumId,
   (newId) => {
     fetchData(newId);
+    if (newId) {
+      remoteStore.recordImpression("album", newId);
+    }
   },
 );
 
@@ -214,6 +219,7 @@ watch(
 
 onMounted(() => {
   fetchData(props.albumId);
+  remoteStore.recordImpression("album", props.albumId);
 });
 </script>
 

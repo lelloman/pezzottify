@@ -241,6 +241,19 @@ export const useRemoteStore = defineStore("remote", () => {
     }
   };
 
+  // Impression tracking (for popularity scoring)
+  const recordImpression = async (itemType, itemId) => {
+    try {
+      await axios.post("/v1/user/impression", {
+        item_type: itemType,
+        item_id: itemId,
+      });
+    } catch (error) {
+      // Silent fail - impression tracking is non-critical
+      console.debug("Failed to record impression:", error);
+    }
+  };
+
   // Sync API operations
   const fetchSyncState = async () => {
     try {
@@ -928,6 +941,7 @@ export const useRemoteStore = defineStore("remote", () => {
     fetchAlbum,
     fetchArtist,
     fetchArtistDiscography,
+    recordImpression,
     // Sync API
     fetchSyncState,
     fetchSyncEvents,
