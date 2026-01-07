@@ -10,9 +10,7 @@ import com.lelloman.pezzottify.android.domain.statics.fetchstate.StaticItemFetch
 import com.lelloman.pezzottify.android.domain.statics.fetchstate.StaticItemFetchStateStore
 import com.lelloman.pezzottify.android.domain.sync.StaticsSynchronizer
 import com.lelloman.pezzottify.android.logger.LoggerFactory
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
@@ -34,8 +32,6 @@ class StaticsProvider internal constructor(
     private val coroutineContext: CoroutineContext,
 ) {
     private val logger by loggerFactory
-    private val viewModelScope = CoroutineScope(coroutineContext + kotlinx.coroutines.SupervisorJob())
-}
 
     @Inject
     internal constructor(
@@ -44,6 +40,7 @@ class StaticsProvider internal constructor(
         staticsSynchronizer: StaticsSynchronizer,
         timeProvider: TimeProvider,
         staticsCache: StaticsCache,
+        discographyCacheFetcher: DiscographyCacheFetcher,
         cacheMetricsCollector: CacheMetricsCollector,
         userSettingsStore: UserSettingsStore,
         skeletonStore: SkeletonStore,
@@ -54,14 +51,13 @@ class StaticsProvider internal constructor(
         staticsSynchronizer,
         timeProvider,
         staticsCache,
+        discographyCacheFetcher,
         cacheMetricsCollector,
         userSettingsStore,
         skeletonStore,
         loggerFactory,
         Dispatchers.IO
     )
-
-    private val logger by loggerFactory
 
     private val isCacheEnabled: Boolean
         get() = userSettingsStore.isInMemoryCacheEnabled.value
@@ -215,31 +211,44 @@ class StaticsProvider internal constructor(
             }
     }
 
+    /**
+     * Observe discography for an artist.
+     *
+     * Returns whatever is in the local cache immediately.
+     * Use [observeDiscographyState] to get loading/hasMore info,
+     * and [fetchMoreDiscography] to load more albums from server.
+     */
     fun provideDiscography(artistId: String): StaticsItemFlow<ArtistDiscography> {
-        // Ensure discography is cached before exposing to UI
-        // DiscographyCacheFetcher will fetch from server in batches as needed
-        discographyCacheFetcher.ensureDiscographyCached(artistId)
-
-        // Use skeleton cache as source of truth for artist-album relationships
-        // DiscographyCacheFetcher will populate cache progressively in background
-        return skeletonStore.observeAlbumIdsForArtist(artistId).map { skeletonAlbumIds ->
-            if (skeletonAlbumIds.isNotEmpty()) {
-                logger.debug("provideDiscography($artistId) skeleton has ${skeletonAlbumIds.size} albums")
-                StaticsItem.Loaded(
-                    artistId,
-                    object : ArtistDiscography {
-                        override val artistId = artistId
-                        override val albumsIds = skeletonAlbumIds
-                        override val featuresIds = emptyList<String>()
-                    }
-                )
-            } else {
-                // No skeleton data - waiting for DiscographyCacheFetcher to populate cache
-                logger.debug("provideDiscography($artistId) no skeleton data, waiting for cache fetcher")
-                StaticsItem.Loading(artistId)
-            }
+        return skeletonStore.observeAlbumIdsForArtist(artistId).map { cachedAlbumIds ->
+            logger.debug("provideDiscography($artistId) cached ${cachedAlbumIds.size} albums")
+            StaticsItem.Loaded(
+                artistId,
+                object : ArtistDiscography {
+                    override val artistId = artistId
+                    override val albumsIds = cachedAlbumIds
+                    override val featuresIds = emptyList<String>()
+                }
+            )
         }
     }
+
+    /**
+     * Observe full discography state including loading/hasMore info.
+     */
+    fun observeDiscographyState(artistId: String) = discographyCacheFetcher.observeDiscography(artistId)
+
+    /**
+     * Fetch the next page of albums for an artist from the server.
+     * Call this when user scrolls to bottom or taps "load more".
+     */
+    suspend fun fetchMoreDiscography(artistId: String) = discographyCacheFetcher.fetchNextPage(artistId)
+
+    /**
+     * Fetch ALL album IDs for an artist from the server.
+     * Call this when artist screen opens to ensure full skeleton is cached.
+     * Fetches in batches until local count = server total.
+     */
+    suspend fun fetchAllDiscography(artistId: String) = discographyCacheFetcher.fetchAllDiscography(artistId)
 
     fun clearCache() {
         staticsCache.clearAll()

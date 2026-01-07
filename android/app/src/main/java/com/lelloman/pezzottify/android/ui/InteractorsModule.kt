@@ -63,6 +63,7 @@ import com.lelloman.pezzottify.android.domain.user.LogSearchHistoryEntryUseCase
 import com.lelloman.pezzottify.android.domain.user.LogViewedContentUseCase
 import com.lelloman.pezzottify.android.domain.user.SearchHistoryEntry
 import com.lelloman.pezzottify.android.domain.user.ViewedContent
+import com.lelloman.pezzottify.android.domain.statics.StaticsProvider
 import com.lelloman.pezzottify.android.domain.statics.StaticsStore
 import com.lelloman.pezzottify.android.domain.usercontent.GetLikedStateUseCase
 import com.lelloman.pezzottify.android.domain.usercontent.PlaylistSyncStatus
@@ -800,6 +801,7 @@ class InteractorsModule {
         recordImpressionUseCase: RecordImpressionUseCase,
         getLikedStateUseCase: GetLikedStateUseCase,
         toggleLikeUseCase: ToggleLikeUseCase,
+        staticsProvider: StaticsProvider,
     ): ArtistScreenViewModel.Interactor = object : ArtistScreenViewModel.Interactor {
         override fun logViewedArtist(artistId: String) {
             logViewedContentUseCase(artistId, ViewedContent.Type.Artist)
@@ -811,6 +813,10 @@ class InteractorsModule {
 
         override fun toggleLike(contentId: String, currentlyLiked: Boolean) {
             toggleLikeUseCase(contentId, DomainLikedContent.ContentType.Artist, currentlyLiked)
+        }
+
+        override suspend fun fetchAllDiscography(artistId: String) {
+            staticsProvider.fetchAllDiscography(artistId)
         }
     }
 

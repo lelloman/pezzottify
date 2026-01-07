@@ -13,6 +13,8 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListScope
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -205,13 +207,12 @@ fun ArtistLoadedScreen(
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
                     )
                 }
-                item {
-                    AlbumGrid(
-                        albumIds = albums,
-                        contentResolver = contentResolver,
-                        navController = navController
-                    )
-                }
+                albumGridItems(
+                    albumIds = albums,
+                    keyPrefix = "album",
+                    contentResolver = contentResolver,
+                    navController = navController
+                )
             }
 
             // Features
@@ -223,13 +224,12 @@ fun ArtistLoadedScreen(
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
                     )
                 }
-                item {
-                    AlbumGrid(
-                        albumIds = features,
-                        contentResolver = contentResolver,
-                        navController = navController
-                    )
-                }
+                albumGridItems(
+                    albumIds = features,
+                    keyPrefix = "feature",
+                    contentResolver = contentResolver,
+                    navController = navController
+                )
             }
         }
 
@@ -331,51 +331,67 @@ fun ArtistLoadedScreen(
     }
 }
 
-@Composable
-private fun AlbumGrid(
+/**
+ * Emits lazy album grid items into a LazyListScope.
+ * Each item is a row of 2 albums, loaded lazily as they scroll into view.
+ */
+private fun LazyListScope.albumGridItems(
     albumIds: List<String>,
+    keyPrefix: String,
     contentResolver: ContentResolver,
     navController: NavController
 ) {
-    Column(modifier = Modifier.padding(horizontal = 12.dp)) {
-        val maxGroupSize = 2
-        albumIds.forEachGroup(maxGroupSize) { ids ->
-            Row(modifier = Modifier.fillMaxWidth()) {
-                for (i in 0 until maxGroupSize) {
-                    val albumId = ids.getOrNull(i)
-                    if (albumId != null) {
-                        val albumFlow = contentResolver.resolveAlbum(albumId)
-                        val albumState = albumFlow.collectAsState(Content.Loading(albumId))
-                        when (val album = albumState.value) {
-                            is Content.Resolved -> {
-                                AlbumGridItem(
-                                    modifier = Modifier.weight(1f),
-                                    albumName = album.data.name,
-                                    albumDate = album.data.date,
-                                    albumCoverUrl = album.data.imageUrl,
-                                    onClick = { navController.toAlbum(albumId) }
-                                )
-                            }
-                            is Content.Loading, is Content.Error -> {
-                                SkeletonAlbumGridItem(modifier = Modifier.weight(1f))
-                            }
-                        }
-                    } else {
-                        Spacer(modifier = Modifier.weight(1f))
-                    }
-                }
-            }
-        }
+    val columnsPerRow = 2
+    val rows = albumIds.chunked(columnsPerRow)
+
+    items(
+        items = rows,
+        key = { row -> "$keyPrefix-${row.first()}" }
+    ) { rowAlbumIds ->
+        AlbumGridRow(
+            albumIds = rowAlbumIds,
+            columnsPerRow = columnsPerRow,
+            contentResolver = contentResolver,
+            navController = navController
+        )
     }
 }
 
 @Composable
-private fun <T> List<T>.forEachGroup(maxGroupSize: Int, action: @Composable (List<T>) -> Unit) {
-    val nGroups = size / maxGroupSize + (if (size % maxGroupSize > 0) 1 else 0)
-    for (i in 0 until nGroups) {
-        val start = i * maxGroupSize
-        val end = minOf(start + maxGroupSize, size)
-        action(subList(start, end))
+private fun AlbumGridRow(
+    albumIds: List<String>,
+    columnsPerRow: Int,
+    contentResolver: ContentResolver,
+    navController: NavController
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp)
+    ) {
+        for (i in 0 until columnsPerRow) {
+            val albumId = albumIds.getOrNull(i)
+            if (albumId != null) {
+                val albumFlow = contentResolver.resolveAlbum(albumId)
+                val albumState = albumFlow.collectAsState(Content.Loading(albumId))
+                when (val album = albumState.value) {
+                    is Content.Resolved -> {
+                        AlbumGridItem(
+                            modifier = Modifier.weight(1f),
+                            albumName = album.data.name,
+                            albumDate = album.data.date,
+                            albumCoverUrl = album.data.imageUrl,
+                            onClick = { navController.toAlbum(albumId) }
+                        )
+                    }
+                    is Content.Loading, is Content.Error -> {
+                        SkeletonAlbumGridItem(modifier = Modifier.weight(1f))
+                    }
+                }
+            } else {
+                Spacer(modifier = Modifier.weight(1f))
+            }
+        }
     }
 }
 
