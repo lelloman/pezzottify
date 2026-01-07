@@ -52,6 +52,10 @@ data class ArtistDiscographyResponse(
     val total: Int = 0,
     @SerialName("has_more")
     val hasMore: Boolean = false,
+    @SerialName("offset")
+    val offset: Int? = null,
+    @SerialName("limit")
+    val limit: Int? = null,
 )
 
 fun ArtistDiscographyResponse.toDomain(artistId: String) = object : ArtistDiscography {

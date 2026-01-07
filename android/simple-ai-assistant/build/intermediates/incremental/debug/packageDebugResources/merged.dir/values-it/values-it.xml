@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="error_max_tool_iterations">Ho fatto troppi tentativi per completare questa richiesta. Prova a riformulare la tua domanda o a suddividerla in passaggi più semplici.</string>
+</resources>
