@@ -15,6 +15,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
 
 @HiltViewModel(assistedFactory = ArtistScreenViewModel.Factory::class)
 class ArtistScreenViewModel @AssistedInject constructor(
@@ -25,6 +26,13 @@ class ArtistScreenViewModel @AssistedInject constructor(
 ) : ViewModel(), ArtistScreenActions {
 
     private var hasLoggedView = false
+
+    init {
+        // Fetch all album IDs for this artist in background
+        viewModelScope.launch {
+            interactor.fetchAllDiscography(artistId)
+        }
+    }
 
     val state = combine(
         contentResolver.resolveArtist(artistId),
@@ -71,6 +79,7 @@ class ArtistScreenViewModel @AssistedInject constructor(
         fun logViewedArtist(artistId: String)
         fun isLiked(contentId: String): Flow<Boolean>
         fun toggleLike(contentId: String, currentlyLiked: Boolean)
+        suspend fun fetchAllDiscography(artistId: String)
     }
 
     @AssistedFactory
