@@ -183,6 +183,14 @@ class ArtistScreenViewModelTest {
             lastToggleLikeContentId = contentId
             lastToggleLikeCurrentlyLiked = currentlyLiked
         }
+
+        override suspend fun fetchAllDiscography(artistId: String) {
+            // No-op for tests
+        }
+
+        override suspend fun retryErroredItems(itemIds: List<String>) {
+            // No-op for tests
+        }
     }
 
     private class FakeContentResolver : ContentResolver {

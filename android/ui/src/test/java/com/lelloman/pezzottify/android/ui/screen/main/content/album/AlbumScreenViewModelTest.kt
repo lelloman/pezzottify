@@ -82,10 +82,10 @@ class AlbumScreenViewModelTest {
         val album = Album(
             id = "album-1",
             name = "Epic Album",
-            date = 1609459200L,
+            date = 1609459200,
             imageUrl = "http://img.com/cover.jpg",
             artistsIds = listOf("artist-1"),
-            discs = listOf(Disc("Disc 1", listOf("track-1", "track-2")))
+            discs = listOf(Disc(listOf("track-1", "track-2")))
         )
         fakeContentResolver.albumResults["album-1"] = flowOf(Content.Resolved("album-1", album))
 
@@ -103,10 +103,10 @@ class AlbumScreenViewModelTest {
         val album = Album(
             id = "album-1",
             name = "Album",
-            date = 1609459200L,
+            date = 1609459200,
             imageUrl = null,
             artistsIds = emptyList(),
-            discs = listOf(Disc("Disc 1", listOf("track-1", "track-2", "track-3")))
+            discs = listOf(Disc(listOf("track-1", "track-2", "track-3")))
         )
         fakeContentResolver.albumResults["album-1"] = flowOf(Content.Resolved("album-1", album))
 
@@ -121,7 +121,7 @@ class AlbumScreenViewModelTest {
         val album = Album(
             id = "album-1",
             name = "Album",
-            date = 1609459200L,
+            date = 1609459200,
             imageUrl = null,
             artistsIds = emptyList(),
             discs = emptyList()
@@ -142,7 +142,7 @@ class AlbumScreenViewModelTest {
         val album = Album(
             id = "album-1",
             name = "Album",
-            date = 1609459200L,
+            date = 1609459200,
             imageUrl = null,
             artistsIds = emptyList(),
             discs = emptyList()
@@ -161,7 +161,7 @@ class AlbumScreenViewModelTest {
         val album = Album(
             id = "album-1",
             name = "Album",
-            date = 1609459200L,
+            date = 1609459200,
             imageUrl = null,
             artistsIds = emptyList(),
             discs = emptyList()
@@ -184,7 +184,7 @@ class AlbumScreenViewModelTest {
         val album = Album(
             id = "album-1",
             name = "Album",
-            date = 1609459200L,
+            date = 1609459200,
             imageUrl = null,
             artistsIds = emptyList(),
             discs = emptyList()
@@ -204,10 +204,10 @@ class AlbumScreenViewModelTest {
         val album = Album(
             id = "album-1",
             name = "Album",
-            date = 1609459200L,
+            date = 1609459200,
             imageUrl = null,
             artistsIds = emptyList(),
-            discs = listOf(Disc("Disc 1", listOf("track-1")))
+            discs = listOf(Disc(listOf("track-1")))
         )
         fakeContentResolver.albumResults["album-1"] = flowOf(Content.Resolved("album-1", album))
 
@@ -225,7 +225,7 @@ class AlbumScreenViewModelTest {
         val album = Album(
             id = "album-1",
             name = "Album",
-            date = 1609459200L,
+            date = 1609459200,
             imageUrl = null,
             artistsIds = emptyList(),
             discs = emptyList()
@@ -246,7 +246,7 @@ class AlbumScreenViewModelTest {
         val album = Album(
             id = "album-1",
             name = "Album",
-            date = 1609459200L,
+            date = 1609459200,
             imageUrl = null,
             artistsIds = emptyList(),
             discs = emptyList()
@@ -266,7 +266,7 @@ class AlbumScreenViewModelTest {
         val album = Album(
             id = "album-1",
             name = "Album",
-            date = 1609459200L,
+            date = 1609459200,
             imageUrl = null,
             artistsIds = emptyList(),
             discs = emptyList()
@@ -286,7 +286,7 @@ class AlbumScreenViewModelTest {
         val album = Album(
             id = "album-1",
             name = "Album",
-            date = 1609459200L,
+            date = 1609459200,
             imageUrl = null,
             artistsIds = emptyList(),
             discs = emptyList()
@@ -306,7 +306,7 @@ class AlbumScreenViewModelTest {
         val album = Album(
             id = "album-1",
             name = "Album",
-            date = 1609459200L,
+            date = 1609459200,
             imageUrl = null,
             artistsIds = emptyList(),
             discs = emptyList()
@@ -324,7 +324,7 @@ class AlbumScreenViewModelTest {
         val album = Album(
             id = "album-1",
             name = "Album",
-            date = 1609459200L,
+            date = 1609459200,
             imageUrl = null,
             artistsIds = emptyList(),
             discs = emptyList()
@@ -345,7 +345,7 @@ class AlbumScreenViewModelTest {
         val album = Album(
             id = "album-1",
             name = "Album",
-            date = 1609459200L,
+            date = 1609459200,
             imageUrl = null,
             artistsIds = emptyList(),
             discs = emptyList()
