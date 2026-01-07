@@ -509,7 +509,10 @@ impl SqliteCatalogStore {
         let mut albums_stmt = conn.prepare_cached(&query)?;
 
         let albums: Vec<Album> = albums_stmt
-            .query_map(params![artist_rowid, limit as i64, offset as i64], Self::parse_album_row)?
+            .query_map(
+                params![artist_rowid, limit as i64, offset as i64],
+                Self::parse_album_row,
+            )?
             .filter_map(|r| r.ok())
             .collect();
 
