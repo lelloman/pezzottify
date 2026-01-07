@@ -818,6 +818,10 @@ class InteractorsModule {
         override suspend fun fetchAllDiscography(artistId: String) {
             staticsProvider.fetchAllDiscography(artistId)
         }
+
+        override suspend fun retryErroredItems(itemIds: List<String>) {
+            staticsProvider.retryErroredItems(itemIds)
+        }
     }
 
     @Provides

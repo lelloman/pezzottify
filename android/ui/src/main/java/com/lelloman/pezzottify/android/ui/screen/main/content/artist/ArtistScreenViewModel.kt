@@ -28,8 +28,10 @@ class ArtistScreenViewModel @AssistedInject constructor(
     private var hasLoggedView = false
 
     init {
-        // Fetch all album IDs for this artist in background
         viewModelScope.launch {
+            // Clear error states to force retry of previously failed items
+            interactor.retryErroredItems(listOf(artistId))
+            // Fetch all album IDs for this artist in background
             interactor.fetchAllDiscography(artistId)
         }
     }
@@ -80,6 +82,7 @@ class ArtistScreenViewModel @AssistedInject constructor(
         fun isLiked(contentId: String): Flow<Boolean>
         fun toggleLike(contentId: String, currentlyLiked: Boolean)
         suspend fun fetchAllDiscography(artistId: String)
+        suspend fun retryErroredItems(itemIds: List<String>)
     }
 
     @AssistedFactory
