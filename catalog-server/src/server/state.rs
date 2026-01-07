@@ -23,6 +23,7 @@ pub type OptionalOidcClient = Option<Arc<OidcClient>>;
 pub type GuardedAuthStateStore = Arc<AuthStateStore>;
 pub type GuardedMcpState = Arc<McpState>;
 pub type OptionalOrganicIndexer = Option<Arc<OrganicIndexer>>;
+pub type HttpClient = reqwest::Client;
 
 #[derive(Clone)]
 pub struct ServerState {
@@ -39,6 +40,7 @@ pub struct ServerState {
     pub auth_state_store: GuardedAuthStateStore,
     pub mcp_state: GuardedMcpState,
     pub organic_indexer: OptionalOrganicIndexer,
+    pub http_client: HttpClient,
 }
 
 unsafe impl Send for ServerState {}
@@ -107,5 +109,11 @@ impl FromRef<ServerState> for GuardedMcpState {
 impl FromRef<ServerState> for OptionalOrganicIndexer {
     fn from_ref(input: &ServerState) -> Self {
         input.organic_indexer.clone()
+    }
+}
+
+impl FromRef<ServerState> for HttpClient {
+    fn from_ref(input: &ServerState) -> Self {
+        input.http_client.clone()
     }
 }

@@ -62,6 +62,17 @@ pub trait CatalogStore: Send + Sync {
     /// Get the largest image URL for an artist from artist_images table.
     fn get_artist_image_url(&self, artist_id: &str) -> Result<Option<super::ImageUrl>>;
 
+    /// Get the largest image URL for an item (tries album first, then artist).
+    /// Returns the URL if found for either entity type.
+    fn get_item_image_url(&self, item_id: &str) -> Result<Option<super::ImageUrl>> {
+        // Try album first
+        if let Some(url) = self.get_album_image_url(item_id)? {
+            return Ok(Some(url));
+        }
+        // Then try artist
+        self.get_artist_image_url(item_id)
+    }
+
     // =========================================================================
     // File Path Resolution
     // =========================================================================
