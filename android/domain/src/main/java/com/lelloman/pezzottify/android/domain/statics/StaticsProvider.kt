@@ -210,37 +210,23 @@ class StaticsProvider internal constructor(
     }
 
     fun provideDiscography(artistId: String): StaticsItemFlow<ArtistDiscography> {
-        // Skeleton is the source of truth for artist-album relationships
-        // Fall back to stored discography when skeleton is empty (e.g., after destructive migration)
-        return combine(
-            skeletonStore.observeAlbumIdsForArtist(artistId),
-            staticsStore.getDiscography(artistId)
-        ) { skeletonAlbumIds, storedDiscography ->
-            when {
-                skeletonAlbumIds.isNotEmpty() -> {
-                    logger.debug("provideDiscography($artistId) skeleton has ${skeletonAlbumIds.size} albums")
-                    StaticsItem.Loaded(
-                        artistId,
-                        object : ArtistDiscography {
-                            override val artistId = artistId
-                            override val albumsIds = skeletonAlbumIds
-                            override val featuresIds = emptyList<String>()
-                        }
-                    )
-                }
-                storedDiscography != null && storedDiscography.albumsIds.isNotEmpty() -> {
-                    logger.debug("provideDiscography($artistId) using stored discography with ${storedDiscography.albumsIds.size} albums")
-                    StaticsItem.Loaded(
-                        artistId,
-                        storedDiscography
-                    )
-                }
-                else -> {
-                    // No data available - schedule discography fetch and show loading
-                    logger.debug("provideDiscography($artistId) no skeleton or discography data, scheduling fetch")
-                    scheduleItemFetch(artistId, StaticItemType.Discography)
-                    StaticsItem.Loading(artistId)
-                }
+        // Use skeleton cache as source of truth for artist-album relationships
+        // Discography is cached on-demand by DiscographyCacheFetcher
+        return skeletonStore.observeAlbumIdsForArtist(artistId).map { skeletonAlbumIds ->
+            if (skeletonAlbumIds.isNotEmpty()) {
+                logger.debug("provideDiscography($artistId) skeleton has ${skeletonAlbumIds.size} albums")
+                StaticsItem.Loaded(
+                    artistId,
+                    object : ArtistDiscography {
+                        override val artistId = artistId
+                        override val albumsIds = skeletonAlbumIds
+                        override val featuresIds = emptyList<String>()
+                    }
+                )
+            } else {
+                // No skeleton data - return loading (DiscographyCacheFetcher will populate cache)
+                logger.debug("provideDiscography($artistId) no skeleton data, waiting for cache")
+                StaticsItem.Loading(artistId)
             }
         }
     }
