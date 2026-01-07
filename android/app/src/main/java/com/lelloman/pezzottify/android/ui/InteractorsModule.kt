@@ -283,7 +283,6 @@ class InteractorsModule {
         updateNotifyWhatsNewSetting: UpdateNotifyWhatsNewSetting,
         logFileManager: LogFileManager,
         configStore: ConfigStore,
-        catalogSkeletonSyncer: com.lelloman.pezzottify.android.domain.skeleton.CatalogSkeletonSyncer,
         permissionsStore: PermissionsStore,
     ): SettingsScreenViewModel.Interactor = object : SettingsScreenViewModel.Interactor {
         override fun getThemeMode(): UiThemeMode = userSettingsStore.themeMode.value.toUi()
@@ -363,14 +362,8 @@ class InteractorsModule {
             }
 
         override suspend fun forceSkeletonResync(): com.lelloman.pezzottify.android.ui.screen.main.settings.SkeletonResyncResult {
-            return when (val result = catalogSkeletonSyncer.forceFullSync()) {
-                is com.lelloman.pezzottify.android.domain.skeleton.CatalogSkeletonSyncer.SyncResult.Success ->
-                    com.lelloman.pezzottify.android.ui.screen.main.settings.SkeletonResyncResult.Success
-                is com.lelloman.pezzottify.android.domain.skeleton.CatalogSkeletonSyncer.SyncResult.AlreadyUpToDate ->
-                    com.lelloman.pezzottify.android.ui.screen.main.settings.SkeletonResyncResult.AlreadyUpToDate
-                is com.lelloman.pezzottify.android.domain.skeleton.CatalogSkeletonSyncer.SyncResult.Failed ->
-                    com.lelloman.pezzottify.android.ui.screen.main.settings.SkeletonResyncResult.Failed(result.error)
-            }
+            // Skeleton sync has been replaced with on-demand caching - no full sync needed
+            return com.lelloman.pezzottify.android.ui.screen.main.settings.SkeletonResyncResult.AlreadyUpToDate
         }
 
         override fun observeCanReportBug(): Flow<Boolean> =

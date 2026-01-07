@@ -11,7 +11,6 @@ import com.lelloman.pezzottify.android.localdata.internal.skeleton.model.Skeleto
 import com.lelloman.pezzottify.android.localdata.internal.skeleton.model.SkeletonTrack
 import com.lelloman.pezzottify.android.localdata.internal.statics.model.Album
 import com.lelloman.pezzottify.android.localdata.internal.statics.model.Artist
-import com.lelloman.pezzottify.android.localdata.internal.statics.model.ArtistDiscography
 import com.lelloman.pezzottify.android.localdata.internal.statics.model.Track
 
 @Database(
@@ -20,7 +19,6 @@ import com.lelloman.pezzottify.android.localdata.internal.statics.model.Track
         Track::class,
         Album::class,
         StaticItemFetchStateRecord::class,
-        ArtistDiscography::class,
         // Skeleton entities
         SkeletonArtist::class,
         SkeletonAlbum::class,
@@ -41,7 +39,7 @@ internal abstract class StaticsDb : RoomDatabase() {
     abstract fun skeletonDao(): SkeletonDao
 
     companion object {
-        const val VERSION = 5
+        const val VERSION = 6
         const val NAME = "StaticsDb"
     }
 }
