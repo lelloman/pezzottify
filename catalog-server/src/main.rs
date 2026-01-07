@@ -201,34 +201,31 @@ async fn main() -> Result<()> {
 
     // Create search vault early so it can be shared with job scheduler
     // Use lazy initialization for fast startup, then build index in background
-    let search_vault: Box<dyn pezzottify_catalog_server::search::SearchVault> = match app_config
-        .search
-        .engine
-        .as_str()
-    {
-        "noop" => {
-            info!("Search disabled (noop engine)");
-            Box::new(NoopSearchVault)
-        }
-        _ => {
-            info!(
-                "Initializing search vault (engine: {})...",
-                app_config.search.engine
-            );
-            let vault = Arc::new(Fts5LevenshteinSearchVault::new_lazy(
-                &app_config.search_db_path(),
-            )?);
+    let search_vault: Box<dyn pezzottify_catalog_server::search::SearchVault> =
+        match app_config.search.engine.as_str() {
+            "noop" => {
+                info!("Search disabled (noop engine)");
+                Box::new(NoopSearchVault)
+            }
+            _ => {
+                info!(
+                    "Initializing search vault (engine: {})...",
+                    app_config.search.engine
+                );
+                let vault = Arc::new(Fts5LevenshteinSearchVault::new_lazy(
+                    &app_config.search_db_path(),
+                )?);
 
-            // No background build - search index grows organically via OrganicIndexer
-            // when users browse content (artists, albums, tracks)
-            info!(
+                // No background build - search index grows organically via OrganicIndexer
+                // when users browse content (artists, albums, tracks)
+                info!(
                 "Search vault ready (organic indexing mode - index grows as content is accessed)"
             );
 
-            // Box the Arc directly - SearchVault is implemented for Arc<T>
-            Box::new(vault)
-        }
-    };
+                // Box the Arc directly - SearchVault is implemented for Arc<T>
+                Box::new(vault)
+            }
+        };
     let guarded_search_vault: GuardedSearchVault =
         std::sync::Arc::new(std::sync::Mutex::new(search_vault));
 
