@@ -10,15 +10,11 @@ interface StaticsStore {
 
     fun getAlbum(albumId: String): Flow<Album?>
 
-    fun getDiscography(artistId: String): Flow<ArtistDiscography?>
-
     suspend fun storeArtist(artist: Artist): Result<Unit>
 
     suspend fun storeTrack(track: Track): Result<Unit>
 
     suspend fun storeAlbum(album: Album): Result<Unit>
-
-    suspend fun storeDiscography(artistDiscography: ArtistDiscography): Result<Unit>
 
     suspend fun deleteAll(): Result<Unit>
 }

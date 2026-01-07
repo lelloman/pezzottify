@@ -8,6 +8,7 @@ import com.lelloman.pezzottify.android.domain.remoteapi.response.ArtistResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.RemoteApiResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.TrackResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.toDomain
+import com.lelloman.pezzottify.android.domain.skeleton.SkeletonStore
 import com.lelloman.pezzottify.android.domain.statics.StaticItemType
 import com.lelloman.pezzottify.android.domain.statics.StaticsStore
 import com.lelloman.pezzottify.android.domain.statics.fetchstate.ErrorReason
@@ -30,6 +31,7 @@ internal class StaticsSynchronizer(
     private val fetchStateStore: StaticItemFetchStateStore,
     private val remoteApiClient: RemoteApiClient,
     private val staticsStore: StaticsStore,
+    private val skeletonStore: SkeletonStore,
     private val timeProvider: TimeProvider,
     loggerFactory: LoggerFactory,
     dispatcher: CoroutineDispatcher,
@@ -47,12 +49,14 @@ internal class StaticsSynchronizer(
         fetchStateStore: StaticItemFetchStateStore,
         remoteApiClient: RemoteApiClient,
         staticsStore: StaticsStore,
+        skeletonStore: SkeletonStore,
         timeProvider: TimeProvider,
         loggerFactory: LoggerFactory,
     ) : this(
         fetchStateStore,
         remoteApiClient,
         staticsStore,
+        skeletonStore,
         timeProvider,
         loggerFactory,
         Dispatchers.IO,
@@ -96,7 +100,13 @@ internal class StaticsSynchronizer(
                         is TrackResponse -> staticsStore.storeTrack(remoteData.data.toDomain())
                         is ArtistDiscographyResponse -> {
                             val allAlbums = fetchAllDiscographyPages(itemId, remoteData.data)
-                            staticsStore.storeDiscography(allAlbums.toDomain(itemId))
+                            val albumArtists = allAlbums.albums.map { album ->
+                                com.lelloman.pezzottify.android.domain.skeleton.AlbumArtistRelationship(
+                                    artistId = itemId,
+                                    albumId = album.id
+                                )
+                            }
+                            skeletonStore.insertAlbumArtists(albumArtists)
                         }
                         else -> logger.error("Cannot store unknown response data of type ${remoteData.javaClass} -> ${remoteData.data}")
                     }
