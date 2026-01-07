@@ -114,15 +114,21 @@ internal class RemoteApiClientImpl(
     private suspend fun getRetrofit(): RetrofitApiClient =
         retrofitFlow.filterNotNull().first()
 
-    private val <T>Response<T>.parsedBody: RemoteApiResponse<T>
-        get() = try {
-            RemoteApiResponse.Success(body()!!)
+    private fun <T> Response<T>.parsedBody(): RemoteApiResponse<T> =
+        try {
+            val body = body()
+            if (body == null) {
+                @Suppress("UNCHECKED_CAST")
+                RemoteApiResponse.Success(Unit as T)
+            } else {
+                RemoteApiResponse.Success(body)
+            }
         } catch (t: Throwable) {
             RemoteApiResponse.Error.Unknown(t.message ?: "Unknown error")
         }
 
     private fun <T> Response<T>.returnFromRetrofitResponse(): RemoteApiResponse<T> =
-        commonError ?: parsedBody
+        commonError ?: parsedBody()
 
     private fun makeRetrofit(baseUrl: String): RetrofitApiClient {
         val okHttpBuilder = okHttpClientFactory.createBuilder(baseUrl)
