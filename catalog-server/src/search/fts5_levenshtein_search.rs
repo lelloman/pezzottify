@@ -782,7 +782,11 @@ impl Fts5LevenshteinSearchVault {
     /// Increments today's impression count for the given item.
     pub fn record_impression(&self, item_id: &str, item_type: HashedItemType) {
         let conn = self.write_conn.lock().unwrap();
-        let today = chrono::Utc::now().format("%Y%m%d").to_string().parse::<i64>().unwrap_or(0);
+        let today = chrono::Utc::now()
+            .format("%Y%m%d")
+            .to_string()
+            .parse::<i64>()
+            .unwrap_or(0);
         let type_str = Self::item_type_to_str(&item_type);
 
         if let Err(e) = conn.execute(
@@ -792,13 +796,19 @@ impl Fts5LevenshteinSearchVault {
              DO UPDATE SET impression_count = impression_count + 1",
             rusqlite::params![item_id, type_str, today],
         ) {
-            warn!("Failed to record impression for {}/{}: {}", item_id, type_str, e);
+            warn!(
+                "Failed to record impression for {}/{}: {}",
+                item_id, type_str, e
+            );
         }
     }
 
     /// Get total impressions for all items within a date range.
     /// Returns a map of (item_id, item_type) -> total impression count.
-    pub fn get_impression_totals(&self, min_date: i64) -> std::collections::HashMap<(String, HashedItemType), u64> {
+    pub fn get_impression_totals(
+        &self,
+        min_date: i64,
+    ) -> std::collections::HashMap<(String, HashedItemType), u64> {
         let conn = self.read_conn.lock().unwrap();
         let mut totals = std::collections::HashMap::new();
 
@@ -806,7 +816,7 @@ impl Fts5LevenshteinSearchVault {
             "SELECT item_id, item_type, SUM(impression_count) as total
              FROM item_impressions
              WHERE date >= ?
-             GROUP BY item_id, item_type"
+             GROUP BY item_id, item_type",
         ) {
             Ok(s) => s,
             Err(e) => {
@@ -842,10 +852,7 @@ impl Fts5LevenshteinSearchVault {
     /// Deletes records older than the specified date (in YYYYMMDD format).
     pub fn prune_impressions(&self, before_date: i64) -> usize {
         let conn = self.write_conn.lock().unwrap();
-        match conn.execute(
-            "DELETE FROM item_impressions WHERE date < ?",
-            [before_date],
-        ) {
+        match conn.execute("DELETE FROM item_impressions WHERE date < ?", [before_date]) {
             Ok(count) => {
                 if count > 0 {
                     info!("Pruned {} old impression records", count);
@@ -1615,7 +1622,9 @@ mod tests {
         // Verify only newer record remains
         let conn = Connection::open(&db_path).unwrap();
         let count: i64 = conn
-            .query_row("SELECT COUNT(*) FROM item_impressions", [], |row| row.get(0))
+            .query_row("SELECT COUNT(*) FROM item_impressions", [], |row| {
+                row.get(0)
+            })
             .unwrap();
         assert_eq!(count, 1);
     }

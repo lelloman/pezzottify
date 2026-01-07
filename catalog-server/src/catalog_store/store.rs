@@ -1258,10 +1258,9 @@ impl CatalogStore for SqliteCatalogStore {
                 placeholders
             );
             let mut stmt = conn.prepare(&query)?;
-            let rows = stmt.query_map(
-                rusqlite::params_from_iter(artist_ids.iter()),
-                |row| Ok((row.get::<_, String>(0)?, row.get::<_, i32>(1)?)),
-            )?;
+            let rows = stmt.query_map(rusqlite::params_from_iter(artist_ids.iter()), |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, i32>(1)?))
+            })?;
             for row in rows.flatten() {
                 let (id, popularity) = row;
                 result.insert((id, SearchableContentType::Artist), popularity);
@@ -1276,10 +1275,9 @@ impl CatalogStore for SqliteCatalogStore {
                 placeholders
             );
             let mut stmt = conn.prepare(&query)?;
-            let rows = stmt.query_map(
-                rusqlite::params_from_iter(album_ids.iter()),
-                |row| Ok((row.get::<_, String>(0)?, row.get::<_, i32>(1)?)),
-            )?;
+            let rows = stmt.query_map(rusqlite::params_from_iter(album_ids.iter()), |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, i32>(1)?))
+            })?;
             for row in rows.flatten() {
                 let (id, popularity) = row;
                 result.insert((id, SearchableContentType::Album), popularity);
@@ -1294,10 +1292,9 @@ impl CatalogStore for SqliteCatalogStore {
                 placeholders
             );
             let mut stmt = conn.prepare(&query)?;
-            let rows = stmt.query_map(
-                rusqlite::params_from_iter(track_ids.iter()),
-                |row| Ok((row.get::<_, String>(0)?, row.get::<_, i32>(1)?)),
-            )?;
+            let rows = stmt.query_map(rusqlite::params_from_iter(track_ids.iter()), |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, i32>(1)?))
+            })?;
             for row in rows.flatten() {
                 let (id, popularity) = row;
                 result.insert((id, SearchableContentType::Track), popularity);

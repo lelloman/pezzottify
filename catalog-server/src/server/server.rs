@@ -2125,7 +2125,10 @@ async fn post_impression(
     }
 
     // Record the impression
-    search_vault.lock().unwrap().record_impression(&body.item_id, item_type);
+    search_vault
+        .lock()
+        .unwrap()
+        .record_impression(&body.item_id, item_type);
 
     StatusCode::NO_CONTENT
 }
