@@ -987,12 +987,6 @@ mod tests {
             ) -> anyhow::Result<Option<serde_json::Value>> {
                 Ok(None)
             }
-            fn get_artist_discography_json(
-                &self,
-                _id: &str,
-            ) -> anyhow::Result<Option<serde_json::Value>> {
-                Ok(None)
-            }
             fn get_resolved_artist(
                 &self,
                 _id: &str,
@@ -1014,6 +1008,9 @@ mod tests {
             fn get_discography(
                 &self,
                 _id: &str,
+                _limit: usize,
+                _offset: usize,
+                _sort: crate::catalog_store::DiscographySort,
             ) -> anyhow::Result<Option<crate::catalog_store::ArtistDiscography>> {
                 Ok(None)
             }

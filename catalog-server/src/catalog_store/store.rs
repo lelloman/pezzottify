@@ -466,8 +466,14 @@ impl SqliteCatalogStore {
         }))
     }
 
-    /// Get artist's discography.
-    pub fn get_discography(&self, id: &str) -> Result<Option<ArtistDiscography>> {
+    /// Get artist's discography with pagination.
+    pub fn get_discography(
+        &self,
+        id: &str,
+        limit: usize,
+        offset: usize,
+        sort: DiscographySort,
+    ) -> Result<Option<ArtistDiscography>> {
         let conn = self.conn.lock().unwrap();
 
         let artist_rowid = match Self::get_artist_rowid(&conn, id)? {
@@ -475,37 +481,45 @@ impl SqliteCatalogStore {
             None => return Ok(None),
         };
 
-        // Albums where artist is primary (is_appears_on = 0)
-        let mut albums_stmt = conn.prepare_cached(
+        // Get total count first
+        let total: usize = conn.query_row(
+            "SELECT COUNT(*) FROM artist_albums WHERE artist_rowid = ?1 AND is_appears_on = 0",
+            params![artist_rowid],
+            |row| row.get::<_, i64>(0),
+        )? as usize;
+
+        // Build ORDER BY clause based on sort
+        let order_clause = match sort {
+            DiscographySort::Popularity => "a.popularity DESC, a.release_date DESC",
+            DiscographySort::ReleaseDate => "a.release_date DESC, a.popularity DESC",
+        };
+
+        // Albums where artist is primary (is_appears_on = 0) with pagination
+        let query = format!(
             "SELECT a.id, a.name, a.album_type, a.external_id_upc, a.external_id_amgid,
                     a.label, a.popularity, a.release_date, a.release_date_precision
              FROM albums a
              INNER JOIN artist_albums aa ON a.rowid = aa.album_rowid
              WHERE aa.artist_rowid = ?1 AND aa.is_appears_on = 0
-             ORDER BY a.release_date DESC",
-        )?;
+             ORDER BY {}
+             LIMIT ?2 OFFSET ?3",
+            order_clause
+        );
+
+        let mut albums_stmt = conn.prepare_cached(&query)?;
 
         let albums: Vec<Album> = albums_stmt
-            .query_map(params![artist_rowid], Self::parse_album_row)?
+            .query_map(params![artist_rowid, limit as i64, offset as i64], Self::parse_album_row)?
             .filter_map(|r| r.ok())
             .collect();
 
-        // Albums where artist appears on (is_appears_on = 1)
-        let mut features_stmt = conn.prepare_cached(
-            "SELECT a.id, a.name, a.album_type, a.external_id_upc, a.external_id_amgid,
-                    a.label, a.popularity, a.release_date, a.release_date_precision
-             FROM albums a
-             INNER JOIN artist_albums aa ON a.rowid = aa.album_rowid
-             WHERE aa.artist_rowid = ?1 AND aa.is_appears_on = 1
-             ORDER BY a.release_date DESC",
-        )?;
+        let has_more = offset + albums.len() < total;
 
-        let features: Vec<Album> = features_stmt
-            .query_map(params![artist_rowid], Self::parse_album_row)?
-            .filter_map(|r| r.ok())
-            .collect();
-
-        Ok(Some(ArtistDiscography { albums, features }))
+        Ok(Some(ArtistDiscography {
+            albums,
+            total,
+            has_more,
+        }))
     }
 
     // =========================================================================
@@ -646,13 +660,14 @@ impl CatalogStore for SqliteCatalogStore {
         SqliteCatalogStore::get_resolved_track(self, id)
     }
 
-    fn get_artist_discography_json(&self, id: &str) -> Result<Option<serde_json::Value>> {
-        self.get_discography(id)
-            .map(|opt| opt.map(|d| serde_json::to_value(d).unwrap()))
-    }
-
-    fn get_discography(&self, id: &str) -> Result<Option<ArtistDiscography>> {
-        SqliteCatalogStore::get_discography(self, id)
+    fn get_discography(
+        &self,
+        id: &str,
+        limit: usize,
+        offset: usize,
+        sort: DiscographySort,
+    ) -> Result<Option<ArtistDiscography>> {
+        SqliteCatalogStore::get_discography(self, id, limit, offset, sort)
     }
 
     fn get_album_image_url(&self, album_id: &str) -> Result<Option<ImageUrl>> {

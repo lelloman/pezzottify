@@ -15,7 +15,7 @@ use std::{
 use tracing::{debug, error, info, warn};
 
 use crate::background_jobs::{JobError, JobInfo, SchedulerHandle};
-use crate::catalog_store::CatalogStore;
+use crate::catalog_store::{CatalogStore, DiscographySort};
 use crate::notifications::NotificationService;
 use crate::{
     server::stream_track::stream_track,
@@ -929,13 +929,21 @@ async fn get_artist_discography(
     State(catalog_store): State<GuardedCatalogStore>,
     State(organic_indexer): State<super::state::OptionalOrganicIndexer>,
     Path(id): Path<String>,
+    Query(query): Query<DiscographyQuery>,
 ) -> Response {
     // Queue artist for organic search index expansion (discography includes albums)
     if let Some(indexer) = &organic_indexer {
         indexer.touch_artist(&id);
     }
 
-    match catalog_store.get_artist_discography_json(&id) {
+    let limit = query.limit.unwrap_or(50).min(100);
+    let offset = query.offset.unwrap_or(0);
+    let sort = match query.sort.as_deref() {
+        Some("release_date") => DiscographySort::ReleaseDate,
+        _ => DiscographySort::Popularity, // default
+    };
+
+    match catalog_store.get_discography(&id, limit, offset, sort) {
         Ok(None) => StatusCode::NOT_FOUND.into_response(),
         Ok(Some(discography)) => Json(discography).into_response(),
         Err(err) => (StatusCode::INTERNAL_SERVER_ERROR, format!("{}", err)).into_response(),
@@ -2951,6 +2959,13 @@ struct TopTracksQuery {
 struct PopularContentQuery {
     pub albums_limit: Option<usize>,
     pub artists_limit: Option<usize>,
+}
+
+#[derive(Deserialize, Debug)]
+struct DiscographyQuery {
+    pub limit: Option<usize>,
+    pub offset: Option<usize>,
+    pub sort: Option<String>,
 }
 
 async fn admin_get_users(

@@ -260,9 +260,14 @@ impl OrganicIndexer {
             }
         }
 
-        // Get and index discography (albums)
-        if let Ok(Some(discography)) = catalog_store.get_discography(artist_id) {
-            for album in discography.albums.iter().chain(discography.features.iter()) {
+        // Get and index discography (albums) - fetch all for indexing purposes
+        if let Ok(Some(discography)) = catalog_store.get_discography(
+            artist_id,
+            1000, // Large limit for indexing
+            0,
+            crate::catalog_store::DiscographySort::Popularity,
+        ) {
+            for album in discography.albums.iter() {
                 if !self.is_indexed(&album.id, HashedItemType::Album) {
                     self.add_to_batch(batch, &album.id, &album.name, HashedItemType::Album);
                 }
