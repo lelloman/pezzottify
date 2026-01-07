@@ -142,19 +142,19 @@ fun AboutScreenInternal(
             ) {
                 CatalogStatCard(
                     icon = Icons.Outlined.Person,
-                    count = state.artistCount,
+                    count = 15_000_000,
                     label = stringResource(R.string.filter_artists),
                     modifier = Modifier.weight(1f)
                 )
                 CatalogStatCard(
                     icon = Icons.Outlined.Album,
-                    count = state.albumCount,
+                    count = 45_000_000,
                     label = stringResource(R.string.filter_albums),
                     modifier = Modifier.weight(1f)
                 )
                 CatalogStatCard(
                     icon = Icons.Outlined.MusicNote,
-                    count = state.trackCount,
+                    count = 250_000_000,
                     label = stringResource(R.string.filter_tracks),
                     modifier = Modifier.weight(1f)
                 )
@@ -233,9 +233,6 @@ fun AboutScreenPreview() {
             gitCommit = "abc1234",
             serverUrl = "https://music.example.com",
             serverVersion = "0.5.0 (def5678)",
-            artistCount = 6137,
-            albumCount = 712,
-            trackCount = 10666,
         )
     )
 }

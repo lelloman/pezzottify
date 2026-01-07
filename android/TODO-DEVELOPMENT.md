@@ -191,7 +191,6 @@ This document tracks development-related improvements for correctness, reliabili
 **Solution:**
 - [ ] Investigate HomeScreenViewModel initial state
 - [ ] Ensure initial state is "Loading" rather than "Empty"
-- [ ] Consider showing a loading indicator or skeleton UI until data is ready
 
 ---
 

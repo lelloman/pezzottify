@@ -29,6 +29,7 @@ import com.lelloman.pezzottify.android.domain.sync.UserSetting
 import com.lelloman.pezzottify.android.domain.remoteapi.SubmitBugReportResponse
 import com.lelloman.pezzottify.android.remoteapi.internal.requests.AddTracksToPlaylistRequest
 import com.lelloman.pezzottify.android.remoteapi.internal.requests.CreatePlaylistRequest
+import com.lelloman.pezzottify.android.remoteapi.internal.requests.ImpressionRequest
 import com.lelloman.pezzottify.android.remoteapi.internal.requests.RemoveTracksFromPlaylistRequest
 import com.lelloman.pezzottify.android.remoteapi.internal.requests.ListeningEventRequest
 import com.lelloman.pezzottify.android.remoteapi.internal.requests.LoginRequest
@@ -277,6 +278,16 @@ internal class RemoteApiClientImpl(
             ListeningEventRecordedResponse(id = body.id, created = body.created)
         )
     }
+
+    override suspend fun recordImpression(itemType: String, itemId: String): RemoteApiResponse<Unit> =
+        catchingNetworkError {
+            getRetrofit()
+                .recordImpression(
+                    authToken = authToken,
+                    request = ImpressionRequest(itemType = itemType, itemId = itemId)
+                )
+                .returnFromRetrofitResponse()
+        }
 
     override suspend fun getListeningEvents(
         startDate: Int?,

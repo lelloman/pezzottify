@@ -5,6 +5,8 @@ import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
+import com.lelloman.pezzottify.android.localdata.internal.impression.ImpressionDao
+import com.lelloman.pezzottify.android.localdata.internal.impression.ImpressionEntity
 import com.lelloman.pezzottify.android.localdata.internal.listening.ListeningEventDao
 import com.lelloman.pezzottify.android.localdata.internal.listening.ListeningEventEntity
 import com.lelloman.pezzottify.android.localdata.internal.notifications.NotificationDao
@@ -20,6 +22,7 @@ import com.lelloman.pezzottify.android.localdata.internal.usercontent.model.Play
         PlaylistEntity::class,
         NotificationEntity::class,
         PendingNotificationReadEntity::class,
+        ImpressionEntity::class,
     ],
     version = UserContentDb.VERSION,
     exportSchema = false,
@@ -35,8 +38,10 @@ internal abstract class UserContentDb : RoomDatabase() {
 
     abstract fun notificationDao(): NotificationDao
 
+    abstract fun impressionDao(): ImpressionDao
+
     companion object {
-        const val VERSION = 5
+        const val VERSION = 6
         const val NAME = "user_content"
 
         val MIGRATION_1_2 = object : Migration(1, 2) {
@@ -119,6 +124,24 @@ internal abstract class UserContentDb : RoomDatabase() {
                     """.trimIndent()
                 )
                 db.execSQL("CREATE INDEX IF NOT EXISTS index_playlist_sync_status ON playlist (sync_status)")
+            }
+        }
+
+        val MIGRATION_5_6 = object : Migration(5, 6) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                // Create impression table for tracking page views
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS impression (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        item_id TEXT NOT NULL,
+                        item_type TEXT NOT NULL,
+                        sync_status TEXT NOT NULL,
+                        created_at INTEGER NOT NULL
+                    )
+                    """.trimIndent()
+                )
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_impression_sync_status ON impression (sync_status)")
             }
         }
     }

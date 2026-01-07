@@ -653,7 +653,6 @@ class StaticsSynchronizerTest {
                 genres = listOf("Rock"),
                 activityPeriods = emptyList(),
             ),
-            displayImage = null,
             relatedArtists = emptyList(),
         )
     }

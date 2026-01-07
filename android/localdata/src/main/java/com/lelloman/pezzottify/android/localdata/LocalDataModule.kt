@@ -9,6 +9,7 @@ import com.lelloman.pezzottify.android.domain.skeleton.SkeletonStore
 import com.lelloman.pezzottify.android.domain.sync.SyncStateStore
 import com.lelloman.pezzottify.android.domain.statics.StaticsStore
 import com.lelloman.pezzottify.android.domain.statics.fetchstate.StaticItemFetchStateStore
+import com.lelloman.pezzottify.android.domain.impression.ImpressionStore
 import com.lelloman.pezzottify.android.domain.listening.ListeningEventStore
 import com.lelloman.pezzottify.android.domain.notifications.NotificationLocalStore
 import com.lelloman.pezzottify.android.domain.player.PlaybackStateStore
@@ -17,6 +18,8 @@ import com.lelloman.pezzottify.android.domain.user.PermissionsStore
 import com.lelloman.pezzottify.android.domain.usercontent.UserContentStore
 import com.lelloman.pezzottify.android.domain.usercontent.UserPlaylistStore
 import com.lelloman.pezzottify.android.localdata.internal.auth.AuthStoreImpl
+import com.lelloman.pezzottify.android.localdata.internal.impression.ImpressionDao
+import com.lelloman.pezzottify.android.localdata.internal.impression.ImpressionStoreImpl
 import com.lelloman.pezzottify.android.localdata.internal.listening.ListeningEventDao
 import com.lelloman.pezzottify.android.localdata.internal.listening.ListeningEventStoreImpl
 import com.lelloman.pezzottify.android.localdata.internal.notifications.NotificationDao
@@ -156,4 +159,16 @@ class LocalDataModule {
     fun providePlaybackStateStore(
         @ApplicationContext context: Context
     ): PlaybackStateStore = PlaybackStateStoreImpl(context)
+
+    @Provides
+    @Singleton
+    internal fun provideImpressionDao(
+        userContentDb: UserContentDb
+    ): ImpressionDao = userContentDb.impressionDao()
+
+    @Provides
+    @Singleton
+    internal fun provideImpressionStore(
+        dao: ImpressionDao
+    ): ImpressionStore = ImpressionStoreImpl(dao)
 }

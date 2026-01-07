@@ -112,6 +112,10 @@ class StaticsProvider internal constructor(
                         StaticsItem.Loading(itemId)
                     }
                 }
+                if (output is StaticsItem.Error) {
+                    output.error.printStackTrace()
+                    logger.warn("Error providing artist", output.error)
+                }
                 logger.debug("provideArtist($itemId) newOutput = $output")
                 output
             }
