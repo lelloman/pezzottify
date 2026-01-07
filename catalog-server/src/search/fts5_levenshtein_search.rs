@@ -19,7 +19,7 @@ use super::{
 use crate::catalog_store::{CatalogStore, SearchableContentType};
 use anyhow::Result;
 use rusqlite::Connection;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::{Arc, Mutex, RwLock};
 use tracing::{debug, error, info, warn};
 
@@ -55,8 +55,6 @@ pub struct Fts5LevenshteinSearchVault {
     max_edit_distance: usize,
     /// Current indexing state
     state: RwLock<IndexState>,
-    /// Path to database (needed for background rebuild)
-    db_path: PathBuf,
 }
 
 impl Fts5LevenshteinSearchVault {
@@ -137,7 +135,6 @@ impl Fts5LevenshteinSearchVault {
             vocabulary: RwLock::new(vocabulary),
             max_edit_distance: 2,
             state: RwLock::new(state),
-            db_path: db_path.to_path_buf(),
         })
     }
 
@@ -177,7 +174,6 @@ impl Fts5LevenshteinSearchVault {
             vocabulary: RwLock::new(vocabulary),
             max_edit_distance,
             state: RwLock::new(IndexState::Ready),
-            db_path: db_path.to_path_buf(),
         })
     }
 
@@ -445,10 +441,28 @@ impl Fts5LevenshteinSearchVault {
                 item_type TEXT NOT NULL,
                 play_count INTEGER NOT NULL DEFAULT 0,
                 score REAL NOT NULL DEFAULT 0.0,
+                listening_score REAL NOT NULL DEFAULT 0.0,
+                impression_score REAL NOT NULL DEFAULT 0.0,
+                spotify_score REAL NOT NULL DEFAULT 0.0,
                 updated_at INTEGER NOT NULL,
                 PRIMARY KEY (item_id, item_type)
             );
             CREATE INDEX IF NOT EXISTS idx_popularity_type ON item_popularity(item_type);
+        "#,
+        )?;
+
+        // Create item_impressions table for tracking page views
+        conn.execute_batch(
+            r#"
+            CREATE TABLE IF NOT EXISTS item_impressions (
+                item_id TEXT NOT NULL,
+                item_type TEXT NOT NULL,
+                date INTEGER NOT NULL,
+                impression_count INTEGER NOT NULL DEFAULT 1,
+                PRIMARY KEY (item_id, item_type, date)
+            );
+            CREATE INDEX IF NOT EXISTS idx_impressions_date ON item_impressions(date);
+            CREATE INDEX IF NOT EXISTS idx_impressions_item ON item_impressions(item_id, item_type);
         "#,
         )?;
 
@@ -747,7 +761,7 @@ impl Fts5LevenshteinSearchVault {
     /// Correct a query using the vocabulary
     fn correct_query(&self, query: &str) -> String {
         let vocabulary = self.vocabulary.read().unwrap();
-        if vocabulary.len() == 0 {
+        if vocabulary.is_empty() {
             // No vocabulary yet, return query as-is
             return query.to_string();
         }
@@ -762,6 +776,87 @@ impl Fts5LevenshteinSearchVault {
             );
         }
         corrected
+    }
+
+    /// Record an impression (page view) for an item.
+    /// Increments today's impression count for the given item.
+    pub fn record_impression(&self, item_id: &str, item_type: HashedItemType) {
+        let conn = self.write_conn.lock().unwrap();
+        let today = chrono::Utc::now().format("%Y%m%d").to_string().parse::<i64>().unwrap_or(0);
+        let type_str = Self::item_type_to_str(&item_type);
+
+        if let Err(e) = conn.execute(
+            "INSERT INTO item_impressions (item_id, item_type, date, impression_count)
+             VALUES (?, ?, ?, 1)
+             ON CONFLICT(item_id, item_type, date)
+             DO UPDATE SET impression_count = impression_count + 1",
+            rusqlite::params![item_id, type_str, today],
+        ) {
+            warn!("Failed to record impression for {}/{}: {}", item_id, type_str, e);
+        }
+    }
+
+    /// Get total impressions for all items within a date range.
+    /// Returns a map of (item_id, item_type) -> total impression count.
+    pub fn get_impression_totals(&self, min_date: i64) -> std::collections::HashMap<(String, HashedItemType), u64> {
+        let conn = self.read_conn.lock().unwrap();
+        let mut totals = std::collections::HashMap::new();
+
+        let mut stmt = match conn.prepare(
+            "SELECT item_id, item_type, SUM(impression_count) as total
+             FROM item_impressions
+             WHERE date >= ?
+             GROUP BY item_id, item_type"
+        ) {
+            Ok(s) => s,
+            Err(e) => {
+                warn!("Failed to prepare impression totals query: {}", e);
+                return totals;
+            }
+        };
+
+        let rows = match stmt.query_map([min_date], |row| {
+            let item_id: String = row.get(0)?;
+            let item_type_str: String = row.get(1)?;
+            let total: i64 = row.get(2)?;
+            Ok((item_id, item_type_str, total))
+        }) {
+            Ok(r) => r,
+            Err(e) => {
+                warn!("Failed to query impression totals: {}", e);
+                return totals;
+            }
+        };
+
+        for row in rows.flatten() {
+            let (item_id, item_type_str, total) = row;
+            if let Some(item_type) = Self::str_to_item_type(&item_type_str) {
+                totals.insert((item_id, item_type), total as u64);
+            }
+        }
+
+        totals
+    }
+
+    /// Prune old impression records.
+    /// Deletes records older than the specified date (in YYYYMMDD format).
+    pub fn prune_impressions(&self, before_date: i64) -> usize {
+        let conn = self.write_conn.lock().unwrap();
+        match conn.execute(
+            "DELETE FROM item_impressions WHERE date < ?",
+            [before_date],
+        ) {
+            Ok(count) => {
+                if count > 0 {
+                    info!("Pruned {} old impression records", count);
+                }
+                count
+            }
+            Err(e) => {
+                warn!("Failed to prune impressions: {}", e);
+                0
+            }
+        }
     }
 }
 
@@ -920,6 +1015,21 @@ impl SearchVault for Fts5LevenshteinSearchVault {
             index_type: "FTS5+Levenshtein".to_string(),
             state,
         }
+    }
+
+    fn record_impression(&self, item_id: &str, item_type: HashedItemType) {
+        Fts5LevenshteinSearchVault::record_impression(self, item_id, item_type)
+    }
+
+    fn get_impression_totals(
+        &self,
+        min_date: i64,
+    ) -> std::collections::HashMap<(String, HashedItemType), u64> {
+        Fts5LevenshteinSearchVault::get_impression_totals(self, min_date)
+    }
+
+    fn prune_impressions(&self, before_date: i64) -> usize {
+        Fts5LevenshteinSearchVault::prune_impressions(self, before_date)
     }
 }
 
@@ -1092,6 +1202,13 @@ mod tests {
             }
             fn delete_track(&self, _id: &str) -> anyhow::Result<bool> {
                 anyhow::bail!("MockCatalogStore does not support write operations")
+            }
+            fn get_items_popularity(
+                &self,
+                _items: &[(String, SearchableContentType)],
+            ) -> anyhow::Result<std::collections::HashMap<(String, SearchableContentType), i32>>
+            {
+                Ok(std::collections::HashMap::new())
             }
         }
     }
@@ -1393,5 +1510,113 @@ mod tests {
         // Creating a new vault should show Ready state
         let vault2 = Fts5LevenshteinSearchVault::new_lazy(&db_path).unwrap();
         assert_eq!(vault2.get_stats().state, IndexState::Ready);
+    }
+
+    #[test]
+    fn test_record_impression() {
+        let temp_dir = TempDir::new().unwrap();
+        let db_path = temp_dir.path().join("search.db");
+
+        let vault = Fts5LevenshteinSearchVault::new_lazy(&db_path).unwrap();
+
+        // Record impressions
+        vault.record_impression("artist1", HashedItemType::Artist);
+        vault.record_impression("artist1", HashedItemType::Artist);
+        vault.record_impression("album1", HashedItemType::Album);
+
+        // Verify they were recorded
+        let conn = Connection::open(&db_path).unwrap();
+        let count: i64 = conn
+            .query_row(
+                "SELECT impression_count FROM item_impressions WHERE item_id = 'artist1' AND item_type = 'artist'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(count, 2);
+
+        let count: i64 = conn
+            .query_row(
+                "SELECT impression_count FROM item_impressions WHERE item_id = 'album1' AND item_type = 'album'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(count, 1);
+    }
+
+    #[test]
+    fn test_get_impression_totals() {
+        let temp_dir = TempDir::new().unwrap();
+        let db_path = temp_dir.path().join("search.db");
+
+        let vault = Fts5LevenshteinSearchVault::new_lazy(&db_path).unwrap();
+
+        // Insert impressions with different dates directly
+        {
+            let conn = Connection::open(&db_path).unwrap();
+            conn.execute(
+                "INSERT INTO item_impressions (item_id, item_type, date, impression_count) VALUES ('a1', 'artist', 20250101, 10)",
+                [],
+            ).unwrap();
+            conn.execute(
+                "INSERT INTO item_impressions (item_id, item_type, date, impression_count) VALUES ('a1', 'artist', 20250102, 5)",
+                [],
+            ).unwrap();
+            conn.execute(
+                "INSERT INTO item_impressions (item_id, item_type, date, impression_count) VALUES ('a2', 'album', 20250101, 3)",
+                [],
+            ).unwrap();
+            conn.execute(
+                "INSERT INTO item_impressions (item_id, item_type, date, impression_count) VALUES ('a3', 'track', 20241201, 100)",
+                [],
+            ).unwrap();
+        }
+
+        // Get totals from 2025-01-01 onwards
+        let totals = vault.get_impression_totals(20250101);
+
+        assert_eq!(
+            totals.get(&("a1".to_string(), HashedItemType::Artist)),
+            Some(&15)
+        );
+        assert_eq!(
+            totals.get(&("a2".to_string(), HashedItemType::Album)),
+            Some(&3)
+        );
+        // a3 should not be included (date is before min_date)
+        assert_eq!(totals.get(&("a3".to_string(), HashedItemType::Track)), None);
+    }
+
+    #[test]
+    fn test_prune_impressions() {
+        let temp_dir = TempDir::new().unwrap();
+        let db_path = temp_dir.path().join("search.db");
+
+        let vault = Fts5LevenshteinSearchVault::new_lazy(&db_path).unwrap();
+
+        // Insert impressions with different dates
+        {
+            let conn = Connection::open(&db_path).unwrap();
+            conn.execute(
+                "INSERT INTO item_impressions (item_id, item_type, date, impression_count) VALUES ('a1', 'artist', 20240101, 10)",
+                [],
+            ).unwrap();
+            conn.execute(
+                "INSERT INTO item_impressions (item_id, item_type, date, impression_count) VALUES ('a2', 'artist', 20250101, 5)",
+                [],
+            ).unwrap();
+        }
+
+        // Prune old impressions (before 2025)
+        let pruned = vault.prune_impressions(20250101);
+        assert_eq!(pruned, 1);
+
+        // Verify only newer record remains
+        let conn = Connection::open(&db_path).unwrap();
+        let count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM item_impressions", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(count, 1);
     }
 }

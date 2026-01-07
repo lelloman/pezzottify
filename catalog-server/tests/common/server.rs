@@ -54,6 +54,19 @@ impl SearchVault for MockSearchVault {
             state: pezzottify_catalog_server::search::IndexState::Ready,
         }
     }
+
+    fn record_impression(&self, _item_id: &str, _item_type: HashedItemType) {}
+
+    fn get_impression_totals(
+        &self,
+        _min_date: i64,
+    ) -> std::collections::HashMap<(String, HashedItemType), u64> {
+        std::collections::HashMap::new()
+    }
+
+    fn prune_impressions(&self, _before_date: i64) -> usize {
+        0
+    }
 }
 
 /// Test server instance with isolated catalog and database
