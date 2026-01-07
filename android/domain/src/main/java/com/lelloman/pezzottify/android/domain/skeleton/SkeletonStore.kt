@@ -3,63 +3,58 @@ package com.lelloman.pezzottify.android.domain.skeleton
 /**
  * Interface for storing and querying catalog skeleton data.
  *
- * The skeleton contains just IDs and relationships for all catalog entities,
- * enabling efficient sync and discography queries without fetching full data.
+ * The skeleton is an on-demand cache of catalog entity relationships.
+ * It stores artist-album and album-track IDs for efficient queries
+ * without fetching full entity data from the server.
+ *
+ * This is NOT a sync mechanism - data is cached on-demand as needed.
  */
 interface SkeletonStore {
 
     /**
-     * Get the current skeleton version.
-     * Returns null if skeleton has never been synced.
-     */
-    suspend fun getVersion(): Long?
-
-    /**
-     * Get the current skeleton checksum.
-     * Returns null if skeleton has never been synced.
-     */
-    suspend fun getChecksum(): String?
-
-    /**
-     * Get all album IDs for a given artist.
-     * Returns empty list if artist not found in skeleton.
+     * Get all album IDs for a given artist from cache.
+     * Returns empty list if artist not found in cache.
      */
     suspend fun getAlbumIdsForArtist(artistId: String): List<String>
 
     /**
      * Observe album IDs for a given artist as a Flow.
-     * This is reactive and will emit updates when skeleton data changes.
+     * This is reactive and will emit updates when cache data changes.
      */
     fun observeAlbumIdsForArtist(artistId: String): kotlinx.coroutines.flow.Flow<List<String>>
 
     /**
-     * Get all track IDs for a given album.
-     * Returns empty list if album not found in skeleton.
+     * Get all track IDs for a given album from cache.
+     * Returns empty list if album not found in cache.
      */
     suspend fun getTrackIdsForAlbum(albumId: String): List<String>
 
     /**
-     * Get counts of all skeleton entities.
+     * Insert artist-album relationships into cache.
+     * Used when fetching discography for an artist.
      */
-    suspend fun getCounts(): SkeletonCounts
+    suspend fun insertAlbumArtists(albumArtists: List<AlbumArtistRelationship>)
 
     /**
-     * Replace all skeleton data with a full sync result.
-     * This should be called inside a transaction.
+     * Delete all cached album IDs for a given artist.
+     * Used to invalidate cache when needed.
      */
-    suspend fun replaceAll(fullSkeleton: FullSkeleton): Result<Unit>
+    suspend fun deleteAlbumsForArtist(artistId: String): Result<Unit>
 
     /**
-     * Apply delta changes to the skeleton.
-     * Returns failure if the delta cannot be applied (e.g., version mismatch).
-     */
-    suspend fun applyDelta(delta: SkeletonDelta): Result<Unit>
-
-    /**
-     * Clear all skeleton data.
+     * Clear all skeleton cache data.
+     * Used for migration or full cache invalidation.
      */
     suspend fun clear(): Result<Unit>
 }
+
+/**
+ * Artist-album relationship for caching.
+ */
+data class AlbumArtistRelationship(
+    val artistId: String,
+    val albumId: String
+)
 
 /**
  * Counts of skeleton entities.
