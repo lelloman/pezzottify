@@ -211,6 +211,7 @@ class StaticsProvider internal constructor(
 
     fun provideDiscography(artistId: String): StaticsItemFlow<ArtistDiscography> {
         // Skeleton is the source of truth for artist-album relationships
+        // Fall back to server fetch when skeleton is empty (e.g., after destructive migration)
         return skeletonStore.observeAlbumIdsForArtist(artistId).map { skeletonAlbumIds ->
             val output = if (skeletonAlbumIds.isNotEmpty()) {
                 logger.debug("provideDiscography($artistId) skeleton has ${skeletonAlbumIds.size} albums")
@@ -223,8 +224,9 @@ class StaticsProvider internal constructor(
                     }
                 )
             } else {
-                // No skeleton data yet - show loading (skeleton sync should populate this)
-                logger.debug("provideDiscography($artistId) no skeleton data, showing loading")
+                // No skeleton data - schedule discography fetch and show loading
+                logger.debug("provideDiscography($artistId) no skeleton data, scheduling fetch")
+                scheduleItemFetch(artistId, StaticItemType.Discography)
                 StaticsItem.Loading(artistId)
             }
             output

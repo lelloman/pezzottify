@@ -94,7 +94,9 @@ internal class StaticsSynchronizer(
                         is AlbumResponse -> staticsStore.storeAlbum(remoteData.data.toDomain())
                         is ArtistResponse -> staticsStore.storeArtist(remoteData.data.toDomain())
                         is TrackResponse -> staticsStore.storeTrack(remoteData.data.toDomain())
-                        is ArtistDiscographyResponse -> staticsStore.storeDiscography(remoteData.data.toDomain(itemId))
+                        is ArtistDiscographyResponse -> {
+                            staticsStore.storeDiscography(remoteData.data.toDomain(itemId))
+                        }
                         else -> logger.error("Cannot store unknown response data of type ${remoteData.javaClass} -> ${remoteData.data}")
                     }
                     fetchStateStore.delete(itemId)
