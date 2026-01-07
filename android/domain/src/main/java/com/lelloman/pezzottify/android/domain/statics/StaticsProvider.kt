@@ -3,12 +3,14 @@ package com.lelloman.pezzottify.android.domain.statics
 import com.lelloman.pezzottify.android.domain.app.TimeProvider
 import com.lelloman.pezzottify.android.domain.cache.CacheMetricsCollector
 import com.lelloman.pezzottify.android.domain.cache.StaticsCache
-import com.lelloman.pezzottify.android.domain.settings.UserSettingsStore
+import com.lelloman.pezzottify.android.domain.skeleton.DiscographyCacheFetcher
 import com.lelloman.pezzottify.android.domain.skeleton.SkeletonStore
+import com.lelloman.pezzottify.android.domain.settings.UserSettingsStore
 import com.lelloman.pezzottify.android.domain.statics.fetchstate.StaticItemFetchState
 import com.lelloman.pezzottify.android.domain.statics.fetchstate.StaticItemFetchStateStore
 import com.lelloman.pezzottify.android.domain.sync.StaticsSynchronizer
 import com.lelloman.pezzottify.android.logger.LoggerFactory
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
@@ -24,12 +26,16 @@ class StaticsProvider internal constructor(
     private val staticsSynchronizer: StaticsSynchronizer,
     private val timeProvider: TimeProvider,
     private val staticsCache: StaticsCache,
+    private val discographyCacheFetcher: DiscographyCacheFetcher,
     private val cacheMetricsCollector: CacheMetricsCollector,
     private val userSettingsStore: UserSettingsStore,
     private val skeletonStore: SkeletonStore,
     loggerFactory: LoggerFactory,
     private val coroutineContext: CoroutineContext,
 ) {
+    private val logger by loggerFactory
+    private val viewModelScope = CoroutineScope(coroutineContext + kotlinx.coroutines.SupervisorJob())
+}
 
     @Inject
     internal constructor(
@@ -210,8 +216,12 @@ class StaticsProvider internal constructor(
     }
 
     fun provideDiscography(artistId: String): StaticsItemFlow<ArtistDiscography> {
+        // Ensure discography is cached before exposing to UI
+        // DiscographyCacheFetcher will fetch from server in batches as needed
+        discographyCacheFetcher.ensureDiscographyCached(artistId)
+
         // Use skeleton cache as source of truth for artist-album relationships
-        // Discography is cached on-demand by DiscographyCacheFetcher
+        // DiscographyCacheFetcher will populate cache progressively in background
         return skeletonStore.observeAlbumIdsForArtist(artistId).map { skeletonAlbumIds ->
             if (skeletonAlbumIds.isNotEmpty()) {
                 logger.debug("provideDiscography($artistId) skeleton has ${skeletonAlbumIds.size} albums")
@@ -224,8 +234,8 @@ class StaticsProvider internal constructor(
                     }
                 )
             } else {
-                // No skeleton data - return loading (DiscographyCacheFetcher will populate cache)
-                logger.debug("provideDiscography($artistId) no skeleton data, waiting for cache")
+                // No skeleton data - waiting for DiscographyCacheFetcher to populate cache
+                logger.debug("provideDiscography($artistId) no skeleton data, waiting for cache fetcher")
                 StaticsItem.Loading(artistId)
             }
         }

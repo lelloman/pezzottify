@@ -1,4 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<resources>
-    <string name="error_max_tool_iterations">이 작업을 완료하기 위해 너무 많은 시도를 했습니다. 요청을 다시 표현하거나 더 작은 단계로 나눠 보세요.</string>
-</resources>

@@ -1,4 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<resources>
-    <string name="error_max_tool_iterations">我尝试了太多次来完成这个任务。请尝试重新表述您的请求或将其分解为更小的步骤。</string>
-</resources>

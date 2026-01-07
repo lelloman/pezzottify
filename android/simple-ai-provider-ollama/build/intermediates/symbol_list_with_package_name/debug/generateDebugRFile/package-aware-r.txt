@@ -1,1 +1,0 @@
-com.lelloman.simpleaiassistant.provider.ollama
