@@ -450,7 +450,7 @@ impl BackgroundJob for PopularContentJob {
             };
 
             // Add items that have impressions but no listening data
-            for ((item_id, item_type), _) in &impression_totals {
+            for (item_id, item_type) in impression_totals.keys() {
                 let hashed_type = match item_type {
                     HashedItemType::Artist => HashedItemType::Artist,
                     HashedItemType::Album => HashedItemType::Album,
