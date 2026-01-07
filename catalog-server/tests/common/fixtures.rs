@@ -48,11 +48,26 @@ pub fn create_test_catalog() -> Result<(TempDir, PathBuf, PathBuf)> {
     )?;
 
     // Write audio files (using track IDs)
-    fs::write(media_path.join(format!("audio/{}.ogg", TRACK_1_ID)), TEST_AUDIO_BYTES)?;
-    fs::write(media_path.join(format!("audio/{}.ogg", TRACK_2_ID)), TEST_AUDIO_BYTES)?;
-    fs::write(media_path.join(format!("audio/{}.ogg", TRACK_3_ID)), TEST_AUDIO_BYTES)?;
-    fs::write(media_path.join(format!("audio/{}.ogg", TRACK_4_ID)), TEST_AUDIO_BYTES)?;
-    fs::write(media_path.join(format!("audio/{}.ogg", TRACK_5_ID)), TEST_AUDIO_BYTES)?;
+    fs::write(
+        media_path.join(format!("audio/{}.ogg", TRACK_1_ID)),
+        TEST_AUDIO_BYTES,
+    )?;
+    fs::write(
+        media_path.join(format!("audio/{}.ogg", TRACK_2_ID)),
+        TEST_AUDIO_BYTES,
+    )?;
+    fs::write(
+        media_path.join(format!("audio/{}.ogg", TRACK_3_ID)),
+        TEST_AUDIO_BYTES,
+    )?;
+    fs::write(
+        media_path.join(format!("audio/{}.ogg", TRACK_4_ID)),
+        TEST_AUDIO_BYTES,
+    )?;
+    fs::write(
+        media_path.join(format!("audio/{}.ogg", TRACK_5_ID)),
+        TEST_AUDIO_BYTES,
+    )?;
 
     // Create SQLite catalog database with schema
     let catalog_db_path = dir.path().join("catalog.db");
@@ -133,11 +148,10 @@ pub fn create_test_catalog() -> Result<(TempDir, PathBuf, PathBuf)> {
         )?;
 
         // Get track rowid
-        let track_rowid: i64 = conn.query_row(
-            "SELECT rowid FROM tracks WHERE id = ?1",
-            [*id],
-            |r| r.get(0),
-        )?;
+        let track_rowid: i64 =
+            conn.query_row("SELECT rowid FROM tracks WHERE id = ?1", [*id], |r| {
+                r.get(0)
+            })?;
 
         // Link track to artist (using rowids)
         conn.execute(
@@ -159,11 +173,10 @@ pub fn create_test_catalog() -> Result<(TempDir, PathBuf, PathBuf)> {
         )?;
 
         // Get track rowid
-        let track_rowid: i64 = conn.query_row(
-            "SELECT rowid FROM tracks WHERE id = ?1",
-            [*id],
-            |r| r.get(0),
-        )?;
+        let track_rowid: i64 =
+            conn.query_row("SELECT rowid FROM tracks WHERE id = ?1", [*id], |r| {
+                r.get(0)
+            })?;
 
         // Link track to artist (using rowids)
         conn.execute(

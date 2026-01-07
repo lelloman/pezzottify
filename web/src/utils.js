@@ -21,79 +21,22 @@ export function formatDuration(d) {
 export const getYearFromTimestamp = (unixTimestamp) =>
   new Date(unixTimestamp * 1000).getFullYear();
 
-const makeImageIdsSortingFunction = (sortingPreferences, objectProps) => {
-  return (targetObject) => {
-    const mapImg = (preferred) => {
-      return (img) => {
-        return {
-          id: img.id,
-          size: img.size,
-          preferred: preferred,
-        };
-      };
-    };
-    const allImages = targetObject[objectProps[0]]
-      ? targetObject[objectProps[0]].map(mapImg(true))
-      : [];
-    // Safely handle missing secondary image array (e.g., missing cover_group or portraits)
-    const secondary = targetObject[objectProps[1]];
-    if (secondary && Array.isArray(secondary)) {
-      allImages.push(...secondary.map(mapImg(false)));
-    }
-    function imageSizeValue(x) {
-      // Handle both PascalCase (from server) and UPPERCASE (legacy format)
-      const sizeUpper = (x.size || "").toUpperCase();
-      return sortingPreferences[sizeUpper] || sortingPreferences[x.size] || 0;
-    }
-    const sortedImages = allImages.sort((a, b) => {
-      if (a.preferred === b.preferred) {
-        return imageSizeValue(b) - imageSizeValue(a);
-      }
-      return a.preferred ? -1 : 1;
-    });
-    return sortedImages.map((img) => img.id);
-  };
+// Image endpoint now takes item IDs (album or artist ID) directly.
+// The server lazily downloads and caches images from external URLs.
+
+export const chooseArtistCoverImageUrl = (artist) => {
+  if (!artist || !artist.id) return [];
+  return [formatImageUrl(artist.id)];
 };
 
-const makeImageUrlsSortingFunction = (sortingPreferences, objectProps) => {
-  return (targetObject) => {
-    return makeImageIdsSortingFunction(
-      sortingPreferences,
-      objectProps,
-    )(targetObject).map((imageId) => formatImageUrl(imageId));
-  };
+export const chooseSmallArtistImageUrl = chooseArtistCoverImageUrl;
+
+export const chooseAlbumCoverImageUrl = (album) => {
+  if (!album || !album.id) return [];
+  return [formatImageUrl(album.id)];
 };
 
-const bigImageSizePrefs = {
-  XLARGE: 5,
-  LARGE: 4,
-  DEFAULT: 2,
-  SMALL: 1,
+export const chooseAlbumCoverImageIds = (album) => {
+  if (!album || !album.id) return [];
+  return [album.id];
 };
-
-const smallImageSizePrefs = {
-  SMALL: 4,
-  DEFAULT: 3,
-  LARGE: 2,
-  XLARGE: 1,
-};
-
-const artistProps = ["portrait_group", "portraits"];
-const albumProps = ["covers", "cover_group"];
-
-export const chooseArtistCoverImageUrl = makeImageUrlsSortingFunction(
-  bigImageSizePrefs,
-  artistProps,
-);
-export const chooseSmallArtistImageUrl = makeImageUrlsSortingFunction(
-  smallImageSizePrefs,
-  artistProps,
-);
-export const chooseAlbumCoverImageUrl = makeImageUrlsSortingFunction(
-  bigImageSizePrefs,
-  albumProps,
-);
-export const chooseAlbumCoverImageIds = makeImageIdsSortingFunction(
-  smallImageSizePrefs,
-  albumProps,
-);

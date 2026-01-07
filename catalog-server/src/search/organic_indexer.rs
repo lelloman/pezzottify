@@ -90,7 +90,10 @@ impl OrganicIndexer {
             return;
         }
 
-        if let Err(e) = self.queue_tx.try_send(IndexTask::Artist(artist_id.to_string())) {
+        if let Err(e) = self
+            .queue_tx
+            .try_send(IndexTask::Artist(artist_id.to_string()))
+        {
             debug!("Failed to queue artist {} for indexing: {}", artist_id, e);
         }
     }
@@ -101,7 +104,10 @@ impl OrganicIndexer {
             return;
         }
 
-        if let Err(e) = self.queue_tx.try_send(IndexTask::Album(album_id.to_string())) {
+        if let Err(e) = self
+            .queue_tx
+            .try_send(IndexTask::Album(album_id.to_string()))
+        {
             debug!("Failed to queue album {} for indexing: {}", album_id, e);
         }
     }
@@ -112,7 +118,10 @@ impl OrganicIndexer {
             return;
         }
 
-        if let Err(e) = self.queue_tx.try_send(IndexTask::Track(track_id.to_string())) {
+        if let Err(e) = self
+            .queue_tx
+            .try_send(IndexTask::Track(track_id.to_string()))
+        {
             debug!("Failed to queue track {} for indexing: {}", track_id, e);
         }
     }
@@ -164,25 +173,21 @@ impl OrganicIndexer {
             }
 
             // Try to receive a task with timeout
-            let task = match tokio::time::timeout(
-                std::time::Duration::from_secs(1),
-                rx.recv(),
-            )
-            .await
-            {
-                Ok(Some(task)) => task,
-                Ok(None) => {
-                    // Channel closed
-                    break;
-                }
-                Err(_) => {
-                    // Timeout - flush any pending batch and continue
-                    if !batch.is_empty() {
-                        self.flush_batch(&search_vault, &mut batch);
+            let task =
+                match tokio::time::timeout(std::time::Duration::from_secs(1), rx.recv()).await {
+                    Ok(Some(task)) => task,
+                    Ok(None) => {
+                        // Channel closed
+                        break;
                     }
-                    continue;
-                }
-            };
+                    Err(_) => {
+                        // Timeout - flush any pending batch and continue
+                        if !batch.is_empty() {
+                            self.flush_batch(&search_vault, &mut batch);
+                        }
+                        continue;
+                    }
+                };
 
             // Process the task and collect items to index
             self.process_task(&task, &catalog_store, &mut batch);

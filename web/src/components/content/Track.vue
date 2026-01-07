@@ -43,7 +43,6 @@ import PlayIcon from "../icons/PlayIcon.vue";
 import { usePlayerStore } from "@/store/player";
 import {
   chooseAlbumCoverImageUrl,
-  chooseAlbumCoverImageIds,
   formatDuration,
   getYearFromTimestamp,
 } from "@/utils";
@@ -71,14 +70,12 @@ let albumDataUnwatcher = null;
 
 const handleClickOnPlayTrack = () => {
   if (track.value) {
-    const imagesIds = chooseAlbumCoverImageIds(album.value);
     player.setTrack({
       id: track.value.id,
       name: track.value.name,
       artists: track.value.artists_ids,
-      image_id: imagesIds.length ? imagesIds[0] : null,
       duration: track.value.duration,
-      albumId: track.value.album_id,
+      album_id: track.value.album_id,
     });
   }
 };

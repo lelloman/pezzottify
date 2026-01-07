@@ -45,7 +45,8 @@ const props = defineProps({
     required: true,
   },
 });
-const imageUrl = computedImageUrl(props.result.image_id);
+// Image endpoint takes album ID (tracks use their album's image)
+const imageUrl = computedImageUrl(props.result.album_id);
 
 const duration = formatDuration(props.result.duration);
 

@@ -92,8 +92,8 @@ impl Fts5LevenshteinSearchVault {
             let build_offset = Self::get_metadata(&conn, "build_offset")
                 .and_then(|v| v.parse::<usize>().ok())
                 .unwrap_or(0);
-            let build_total = Self::get_metadata(&conn, "build_total")
-                .and_then(|v| v.parse::<usize>().ok());
+            let build_total =
+                Self::get_metadata(&conn, "build_total").and_then(|v| v.parse::<usize>().ok());
 
             info!(
                 "Detected partial build: {} items indexed, offset {}, total {:?}",
@@ -315,7 +315,11 @@ impl Fts5LevenshteinSearchVault {
                 conn.execute("COMMIT", [])?;
 
                 // Persist progress after each batch
-                Self::set_metadata(&conn, "build_offset", &(processed + batch.len()).to_string())?;
+                Self::set_metadata(
+                    &conn,
+                    "build_offset",
+                    &(processed + batch.len()).to_string(),
+                )?;
             }
 
             processed += batch.len();
@@ -1042,19 +1046,35 @@ mod tests {
             fn delete_artist(&self, _id: &str) -> anyhow::Result<bool> {
                 anyhow::bail!("MockCatalogStore does not support write operations")
             }
-            fn create_album(&self, _album: &crate::catalog_store::Album, _artist_ids: &[String]) -> anyhow::Result<()> {
+            fn create_album(
+                &self,
+                _album: &crate::catalog_store::Album,
+                _artist_ids: &[String],
+            ) -> anyhow::Result<()> {
                 anyhow::bail!("MockCatalogStore does not support write operations")
             }
-            fn update_album(&self, _album: &crate::catalog_store::Album, _artist_ids: Option<&[String]>) -> anyhow::Result<()> {
+            fn update_album(
+                &self,
+                _album: &crate::catalog_store::Album,
+                _artist_ids: Option<&[String]>,
+            ) -> anyhow::Result<()> {
                 anyhow::bail!("MockCatalogStore does not support write operations")
             }
             fn delete_album(&self, _id: &str) -> anyhow::Result<bool> {
                 anyhow::bail!("MockCatalogStore does not support write operations")
             }
-            fn create_track(&self, _track: &crate::catalog_store::Track, _artist_ids: &[String]) -> anyhow::Result<()> {
+            fn create_track(
+                &self,
+                _track: &crate::catalog_store::Track,
+                _artist_ids: &[String],
+            ) -> anyhow::Result<()> {
                 anyhow::bail!("MockCatalogStore does not support write operations")
             }
-            fn update_track(&self, _track: &crate::catalog_store::Track, _artist_ids: Option<&[String]>) -> anyhow::Result<()> {
+            fn update_track(
+                &self,
+                _track: &crate::catalog_store::Track,
+                _artist_ids: Option<&[String]>,
+            ) -> anyhow::Result<()> {
                 anyhow::bail!("MockCatalogStore does not support write operations")
             }
             fn delete_track(&self, _id: &str) -> anyhow::Result<bool> {
@@ -1224,7 +1244,13 @@ mod tests {
         let stats = vault.get_stats();
         assert_eq!(stats.indexed_items, 2);
         assert!(
-            matches!(stats.state, IndexState::Building { processed: 2, total: Some(5) }),
+            matches!(
+                stats.state,
+                IndexState::Building {
+                    processed: 2,
+                    total: Some(5)
+                }
+            ),
             "Expected Building state with processed=2, total=Some(5), got {:?}",
             stats.state
         );
@@ -1321,14 +1347,12 @@ mod tests {
         let temp_dir = TempDir::new().unwrap();
         let db_path = temp_dir.path().join("search.db");
 
-        let items = vec![
-            SearchableItem {
-                id: "a1".to_string(),
-                name: "The Beatles".to_string(),
-                content_type: SearchableContentType::Artist,
-                additional_text: vec![],
-            },
-        ];
+        let items = vec![SearchableItem {
+            id: "a1".to_string(),
+            name: "The Beatles".to_string(),
+            content_type: SearchableContentType::Artist,
+            additional_text: vec![],
+        }];
 
         let vault = Arc::new(Fts5LevenshteinSearchVault::new_lazy(&db_path).unwrap());
         let catalog = Arc::new(MockCatalogStore::new(items));

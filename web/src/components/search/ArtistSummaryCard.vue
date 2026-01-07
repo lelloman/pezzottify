@@ -19,7 +19,8 @@ const props = defineProps({
 
 const router = useRouter();
 
-const imageUrl = computedImageUrl(props.artist.image_id);
+// Image endpoint takes the artist ID directly
+const imageUrl = computedImageUrl(props.artist.id);
 
 const handleClick = () => {
   router.push("/artist/" + props.artist.id);

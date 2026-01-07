@@ -21,7 +21,8 @@ const props = defineProps({
     required: true,
   },
 });
-const imageUrl = computedImageUrl(props.result.image_id);
+// Image endpoint takes the artist ID directly
+const imageUrl = computedImageUrl(props.result.id);
 
 const router = useRouter();
 

@@ -1,11 +1,9 @@
 <script setup>
 import { ref } from "vue";
 import { useAuthStore } from "@/store/auth.js";
-import { useRemoteStore } from "@/store/remote.js";
 import { useRouter } from "vue-router";
 
 const authStore = useAuthStore();
-const remoteStore = useRemoteStore();
 const router = useRouter();
 
 const isLoading = ref(false);
