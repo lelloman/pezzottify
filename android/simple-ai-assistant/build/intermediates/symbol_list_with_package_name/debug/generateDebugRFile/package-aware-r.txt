@@ -1,2 +1,0 @@
-com.lelloman.simpleaiassistant
-string error_max_tool_iterations

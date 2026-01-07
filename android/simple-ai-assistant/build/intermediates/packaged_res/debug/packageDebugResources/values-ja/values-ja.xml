@@ -1,4 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<resources>
-    <string name="error_max_tool_iterations">このタスクを完了するために試行回数が多すぎました。リクエストを言い換えるか、より小さなステップに分けてみてください。</string>
-</resources>
