@@ -3,6 +3,7 @@
     <div class="trackInfoRow">
       <MultiSourceImage
         :urls="imageUrls"
+        :lazy="false"
         alt="Image"
         class="trackImage scaleClickFeedback"
         @click.stop="handleClickOnAlbumCover"
