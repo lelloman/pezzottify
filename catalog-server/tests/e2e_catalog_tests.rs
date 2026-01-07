@@ -6,8 +6,8 @@ mod common;
 
 use common::{
     TestClient, TestServer, ALBUM_1_ID, ALBUM_1_TITLE, ALBUM_2_ID, ALBUM_2_TITLE, ARTIST_1_ID,
-    ARTIST_1_NAME, ARTIST_2_ID, ARTIST_2_NAME, IMAGE_1_ID, TRACK_1_ID, TRACK_1_TITLE, TRACK_2_ID,
-    TRACK_3_ID, TRACK_4_ID, TRACK_5_ID,
+    ARTIST_1_NAME, ARTIST_2_ID, ARTIST_2_NAME, TRACK_1_ID, TRACK_1_TITLE, TRACK_2_ID, TRACK_3_ID,
+    TRACK_4_ID, TRACK_5_ID,
 };
 use reqwest::StatusCode;
 
@@ -204,7 +204,8 @@ async fn test_get_image_returns_image_data() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated(server.base_url.clone()).await;
 
-    let response = client.get_image(IMAGE_1_ID).await;
+    // Image endpoint now takes item IDs (album or artist ID)
+    let response = client.get_image(ALBUM_1_ID).await;
 
     assert_eq!(response.status(), StatusCode::OK);
 

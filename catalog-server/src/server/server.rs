@@ -981,23 +981,103 @@ pub async fn get_resolved_track(
 async fn get_image(
     _session: Session,
     State(catalog_store): State<GuardedCatalogStore>,
+    State(http_client): State<HttpClient>,
     Path(id): Path<String>,
 ) -> Response {
     let file_path = catalog_store.get_image_path(&id);
-    if !file_path.exists() {
-        return StatusCode::NOT_FOUND.into_response();
+
+    // First, check if we have the image cached locally
+    if file_path.exists() {
+        return serve_image_file(&file_path).await;
     }
 
-    let mut file = File::open(file_path).unwrap();
+    // Image not cached locally - try to fetch from external URL
+    let image_url = match catalog_store.get_item_image_url(&id) {
+        Ok(Some(url)) => url,
+        Ok(None) => {
+            debug!("No image URL found for item: {}", id);
+            return StatusCode::NOT_FOUND.into_response();
+        }
+        Err(e) => {
+            error!("Failed to query image URL for {}: {}", id, e);
+            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+        }
+    };
+
+    // Download the image from the external URL
+    let response = match http_client.get(&image_url.url).send().await {
+        Ok(resp) => resp,
+        Err(e) => {
+            error!("Failed to download image from {}: {}", image_url.url, e);
+            return StatusCode::BAD_GATEWAY.into_response();
+        }
+    };
+
+    if !response.status().is_success() {
+        error!(
+            "Failed to download image from {}: status {}",
+            image_url.url,
+            response.status()
+        );
+        return StatusCode::BAD_GATEWAY.into_response();
+    }
+
+    let bytes = match response.bytes().await {
+        Ok(b) => b,
+        Err(e) => {
+            error!("Failed to read image bytes from {}: {}", image_url.url, e);
+            return StatusCode::BAD_GATEWAY.into_response();
+        }
+    };
+
+    // Verify it's actually an image
+    let mime_type = match infer::get(&bytes) {
+        Some(kind) if kind.mime_type().starts_with("image/") => kind.mime_type().to_string(),
+        _ => {
+            error!("Downloaded content is not an image: {}", image_url.url);
+            return StatusCode::BAD_GATEWAY.into_response();
+        }
+    };
+
+    // Save the image to disk for future requests
+    if let Some(parent) = file_path.parent() {
+        if let Err(e) = std::fs::create_dir_all(parent) {
+            warn!("Failed to create images directory: {}", e);
+        }
+    }
+    if let Err(e) = std::fs::write(&file_path, &bytes) {
+        warn!("Failed to cache image to {}: {}", file_path.display(), e);
+        // Continue anyway - we can still serve the image
+    } else {
+        debug!("Cached image for {} to {}", id, file_path.display());
+    }
+
+    // Return the image
+    Response::builder()
+        .status(StatusCode::OK)
+        .header(header::CONTENT_TYPE, mime_type)
+        .body(bytes.to_vec().into())
+        .unwrap()
+}
+
+/// Helper function to serve an image file from disk.
+async fn serve_image_file(file_path: &std::path::Path) -> Response {
+    let mut file = match File::open(file_path) {
+        Ok(f) => f,
+        Err(_) => return StatusCode::NOT_FOUND.into_response(),
+    };
+
     let mut buffer = Vec::new();
-    file.read_to_end(&mut buffer).unwrap();
+    if file.read_to_end(&mut buffer).is_err() {
+        return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+    }
 
     if let Some(kind) = infer::get(&buffer) {
         if kind.mime_type().starts_with("image/") {
             return Response::builder()
                 .status(StatusCode::OK)
                 .header(header::CONTENT_TYPE, kind.mime_type().to_string())
-                .body(buffer.to_vec().into())
+                .body(buffer.into())
                 .unwrap();
         }
     }
@@ -3755,6 +3835,12 @@ impl ServerState {
         // Note: This requires a tokio runtime, so we wrap in Option and create later
         let organic_indexer = None;
 
+        // HTTP client for downloading images from external URLs
+        let http_client = reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(30))
+            .build()
+            .expect("Failed to create HTTP client");
+
         ServerState {
             config,
             start_time: Instant::now(),
@@ -3769,6 +3855,7 @@ impl ServerState {
             auth_state_store,
             mcp_state,
             organic_indexer,
+            http_client,
         }
     }
 }

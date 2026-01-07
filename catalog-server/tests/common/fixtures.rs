@@ -37,10 +37,15 @@ pub fn create_test_catalog() -> Result<(TempDir, PathBuf, PathBuf)> {
     fs::create_dir_all(media_path.join("audio"))?;
     fs::create_dir_all(media_path.join("images"))?;
 
-    // Copy images
-    fs::write(media_path.join("images/image-1.jpg"), TEST_IMAGE_BYTES)?;
-    fs::write(media_path.join("images/image-2.jpg"), TEST_IMAGE_BYTES)?;
-    fs::write(media_path.join("images/image-3.jpg"), TEST_IMAGE_BYTES)?;
+    // Copy images (using album IDs as filenames - the image endpoint now takes item IDs)
+    fs::write(
+        media_path.join(format!("images/{}.jpg", ALBUM_1_ID)),
+        TEST_IMAGE_BYTES,
+    )?;
+    fs::write(
+        media_path.join(format!("images/{}.jpg", ALBUM_2_ID)),
+        TEST_IMAGE_BYTES,
+    )?;
 
     // Write audio files (using track IDs)
     fs::write(media_path.join(format!("audio/{}.ogg", TRACK_1_ID)), TEST_AUDIO_BYTES)?;

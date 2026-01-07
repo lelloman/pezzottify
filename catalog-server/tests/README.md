@@ -197,7 +197,7 @@ let admin = TestClient::authenticated_admin(server.base_url.clone()).await;
 - `client.get_track(id)` - GET /v1/content/track/{id}
 - `client.get_resolved_track(id)` - GET /v1/content/track/{id}/resolved
 - `client.get_artist_discography(id)` - GET /v1/content/artist/{id}/discography
-- `client.get_image(id)` - GET /v1/content/image/{id}
+- `client.get_image(id)` - GET /v1/content/image/{id} (id is album or artist ID)
 - `client.get_whats_new()` - GET /v1/content/whatsnew
 
 #### Streaming
@@ -260,7 +260,7 @@ use common::{
     ARTIST_1_ID, ARTIST_2_ID,       // Artist IDs
     ALBUM_1_ID, ALBUM_2_ID,         // Album IDs
     TRACK_1_ID, TRACK_2_ID, ...,    // Track IDs (1-5)
-    IMAGE_1_ID, IMAGE_2_ID,         // Image IDs
+    // Note: Images are now fetched by item ID (album/artist ID), not separate image IDs
 };
 ```
 

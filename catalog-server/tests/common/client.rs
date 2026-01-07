@@ -201,7 +201,7 @@ impl TestClient {
             .expect("Get resolved track request failed")
     }
 
-    /// GET /v1/content/image/{id}
+    /// GET /v1/content/image/{id} - Get image for an item (album or artist ID)
     pub async fn get_image(&self, id: &str) -> Response {
         self.client
             .get(format!("{}/v1/content/image/{}", self.base_url, id))

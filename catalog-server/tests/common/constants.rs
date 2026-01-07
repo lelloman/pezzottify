@@ -51,15 +51,6 @@ pub const TRACK_4_ID: &str = "test_track_004";
 /// Track ID for "Upbeat Jazz" on Jazz Collection
 pub const TRACK_5_ID: &str = "test_track_005";
 
-/// Image ID for artist-1 and album-1
-pub const IMAGE_1_ID: &str = "image-1";
-
-/// Image ID for artist-2 and album-2
-pub const IMAGE_2_ID: &str = "image-2";
-
-/// Image ID (spare)
-pub const IMAGE_3_ID: &str = "image-3";
-
 // ============================================================================
 // Test Catalog Metadata
 // ============================================================================
