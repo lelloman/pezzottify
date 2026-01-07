@@ -16,7 +16,6 @@ use tracing::{debug, error, info, warn};
 
 use crate::background_jobs::{JobError, JobInfo, SchedulerHandle};
 use crate::catalog_store::{CatalogStore, DiscographySort};
-use crate::notifications::NotificationService;
 use crate::{
     server::stream_track::stream_track,
     user::{
@@ -43,7 +42,7 @@ use tower_governor::GovernorLayer;
 use super::slowdown_request;
 use super::{
     extract_user_id_for_rate_limit, http_cache, log_requests, make_search_admin_routes,
-    make_search_routes, metrics, state::*, IpKeyExtractor, RequestsLoggingLevel, ServerConfig,
+    make_search_routes, state::*, IpKeyExtractor, RequestsLoggingLevel, ServerConfig,
     UserOrIpKeyExtractor, CONTENT_READ_PER_MINUTE, GLOBAL_PER_MINUTE, LOGIN_PER_MINUTE,
     SEARCH_PER_MINUTE, STREAM_PER_MINUTE, WRITE_PER_MINUTE,
 };
@@ -2091,6 +2090,46 @@ async fn get_user_listening_events(
     }
 }
 
+// =============================================================================
+// Impression Tracking Endpoints
+// =============================================================================
+
+/// Request body for recording an impression (page view).
+#[derive(Deserialize)]
+struct ImpressionBody {
+    /// Item type: "artist", "album", or "track"
+    item_type: String,
+    /// Item ID (Spotify ID)
+    item_id: String,
+}
+
+/// POST /v1/user/impression - Record a page view impression
+///
+/// Records that a user viewed an artist, album, or track page.
+/// This data is used for popularity scoring.
+async fn post_impression(
+    State(search_vault): State<super::state::GuardedSearchVault>,
+    Json(body): Json<ImpressionBody>,
+) -> StatusCode {
+    // Parse item type
+    let item_type = match body.item_type.to_lowercase().as_str() {
+        "artist" => crate::search::HashedItemType::Artist,
+        "album" => crate::search::HashedItemType::Album,
+        "track" => crate::search::HashedItemType::Track,
+        _ => return StatusCode::BAD_REQUEST,
+    };
+
+    // Validate item_id is not empty
+    if body.item_id.is_empty() {
+        return StatusCode::BAD_REQUEST;
+    }
+
+    // Record the impression
+    search_vault.lock().unwrap().record_impression(&body.item_id, item_type);
+
+    StatusCode::NO_CONTENT
+}
+
 /// Helper to get default date range (last 30 days if not specified)
 fn get_default_date_range(start_date: Option<u32>, end_date: Option<u32>) -> (u32, u32) {
     use std::time::SystemTime;
@@ -4114,6 +4153,7 @@ pub async fn make_app(
         .route("/listening/summary", get(get_user_listening_summary))
         .route("/listening/history", get(get_user_listening_history))
         .route("/listening/events", get(get_user_listening_events))
+        .route("/impression", post(post_impression))
         .layer(GovernorLayer::new(write_rate_limit.clone()))
         .route_layer(middleware::from_fn_with_state(
             state.clone(),
@@ -4548,6 +4588,19 @@ mod tests {
                 index_type: "Mock".to_string(),
                 state: crate::search::IndexState::Ready,
             }
+        }
+
+        fn record_impression(&self, _item_id: &str, _item_type: HashedItemType) {}
+
+        fn get_impression_totals(
+            &self,
+            _min_date: i64,
+        ) -> std::collections::HashMap<(String, HashedItemType), u64> {
+            std::collections::HashMap::new()
+        }
+
+        fn prune_impressions(&self, _before_date: i64) -> usize {
+            0
         }
     }
 

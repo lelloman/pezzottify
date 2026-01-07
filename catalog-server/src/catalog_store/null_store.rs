@@ -136,4 +136,11 @@ impl CatalogStore for NullCatalogStore {
     fn delete_track(&self, _id: &str) -> Result<bool> {
         anyhow::bail!("NullCatalogStore does not support write operations")
     }
+
+    fn get_items_popularity(
+        &self,
+        _items: &[(String, super::SearchableContentType)],
+    ) -> Result<std::collections::HashMap<(String, super::SearchableContentType), i32>> {
+        Ok(std::collections::HashMap::new())
+    }
 }

@@ -147,6 +147,22 @@ pub trait CatalogStore: Send + Sync {
 
     /// Delete a track by ID. Returns true if deleted, false if not found.
     fn delete_track(&self, id: &str) -> Result<bool>;
+
+    // =========================================================================
+    // Popularity Data
+    // =========================================================================
+
+    /// Get Spotify popularity scores for multiple items.
+    ///
+    /// Returns a map of (item_id, item_type) -> popularity (0-100).
+    /// Items not found in the catalog will not be included in the result.
+    ///
+    /// This is used by the popularity scoring job to incorporate static
+    /// Spotify popularity data into the composite score calculation.
+    fn get_items_popularity(
+        &self,
+        items: &[(String, SearchableContentType)],
+    ) -> Result<std::collections::HashMap<(String, SearchableContentType), i32>>;
 }
 
 /// A searchable item for the search index.
@@ -160,7 +176,7 @@ pub struct SearchableItem {
 }
 
 /// Type of searchable content.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum SearchableContentType {
     Artist,
     Album,

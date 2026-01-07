@@ -119,6 +119,30 @@ pub trait SearchVault: Send + Sync {
 
     /// Get statistics about the search index.
     fn get_stats(&self) -> SearchVaultStats;
+
+    /// Record an impression (page view) for an item.
+    /// Increments today's impression count for the given item.
+    fn record_impression(&self, item_id: &str, item_type: HashedItemType);
+
+    /// Get total impressions for all items within a date range.
+    /// Returns a map of (item_id, item_type) -> total impression count.
+    ///
+    /// # Arguments
+    /// * `min_date` - Minimum date in YYYYMMDD format
+    fn get_impression_totals(
+        &self,
+        min_date: i64,
+    ) -> std::collections::HashMap<(String, HashedItemType), u64>;
+
+    /// Prune old impression records.
+    /// Deletes records older than the specified date.
+    ///
+    /// # Arguments
+    /// * `before_date` - Date threshold in YYYYMMDD format
+    ///
+    /// # Returns
+    /// Number of records deleted
+    fn prune_impressions(&self, before_date: i64) -> usize;
 }
 
 /// Statistics about the search vault.
@@ -133,10 +157,11 @@ pub struct SearchVaultStats {
 }
 
 /// State of the search index.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
 #[serde(tag = "status")]
 pub enum IndexState {
     /// Index is empty/not started
+    #[default]
     Empty,
     /// Index is being built
     Building {
@@ -186,11 +211,18 @@ impl SearchVault for NoopSearchVault {
             state: IndexState::Ready,
         }
     }
-}
 
-impl Default for IndexState {
-    fn default() -> Self {
-        IndexState::Empty
+    fn record_impression(&self, _item_id: &str, _item_type: HashedItemType) {}
+
+    fn get_impression_totals(
+        &self,
+        _min_date: i64,
+    ) -> std::collections::HashMap<(String, HashedItemType), u64> {
+        std::collections::HashMap::new()
+    }
+
+    fn prune_impressions(&self, _before_date: i64) -> usize {
+        0
     }
 }
 
@@ -223,5 +255,20 @@ impl<T: SearchVault + ?Sized> SearchVault for std::sync::Arc<T> {
 
     fn get_stats(&self) -> SearchVaultStats {
         (**self).get_stats()
+    }
+
+    fn record_impression(&self, item_id: &str, item_type: HashedItemType) {
+        (**self).record_impression(item_id, item_type)
+    }
+
+    fn get_impression_totals(
+        &self,
+        min_date: i64,
+    ) -> std::collections::HashMap<(String, HashedItemType), u64> {
+        (**self).get_impression_totals(min_date)
+    }
+
+    fn prune_impressions(&self, before_date: i64) -> usize {
+        (**self).prune_impressions(before_date)
     }
 }

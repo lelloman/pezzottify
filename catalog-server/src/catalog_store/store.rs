@@ -134,24 +134,6 @@ impl SqliteCatalogStore {
         })
     }
 
-    /// Parse a Track from a row.
-    fn parse_track_row(row: &rusqlite::Row, album_id: String) -> rusqlite::Result<Track> {
-        let explicit: i32 = row.get(8)?;
-
-        Ok(Track {
-            id: row.get(0)?,
-            name: row.get(1)?,
-            album_id,
-            disc_number: row.get(6)?,
-            track_number: row.get(3)?,
-            duration_ms: row.get(7)?,
-            explicit: explicit != 0,
-            popularity: row.get(5)?,
-            language: row.get(9)?,
-            external_id_isrc: row.get(4)?,
-        })
-    }
-
     // =========================================================================
     // Read Operations - Core Entities
     // =========================================================================
@@ -1242,6 +1224,87 @@ impl CatalogStore for SqliteCatalogStore {
         } else {
             Ok(false)
         }
+    }
+
+    fn get_items_popularity(
+        &self,
+        items: &[(String, SearchableContentType)],
+    ) -> Result<HashMap<(String, SearchableContentType), i32>> {
+        if items.is_empty() {
+            return Ok(HashMap::new());
+        }
+
+        let conn = self.conn.lock().unwrap();
+        let mut result = HashMap::new();
+
+        // Group items by type for efficient querying
+        let mut artist_ids: Vec<&str> = Vec::new();
+        let mut album_ids: Vec<&str> = Vec::new();
+        let mut track_ids: Vec<&str> = Vec::new();
+
+        for (id, content_type) in items {
+            match content_type {
+                SearchableContentType::Artist => artist_ids.push(id),
+                SearchableContentType::Album => album_ids.push(id),
+                SearchableContentType::Track => track_ids.push(id),
+            }
+        }
+
+        // Query artists
+        if !artist_ids.is_empty() {
+            let placeholders = artist_ids.iter().map(|_| "?").collect::<Vec<_>>().join(",");
+            let query = format!(
+                "SELECT id, popularity FROM artists WHERE id IN ({})",
+                placeholders
+            );
+            let mut stmt = conn.prepare(&query)?;
+            let rows = stmt.query_map(
+                rusqlite::params_from_iter(artist_ids.iter()),
+                |row| Ok((row.get::<_, String>(0)?, row.get::<_, i32>(1)?)),
+            )?;
+            for row in rows.flatten() {
+                let (id, popularity) = row;
+                result.insert((id, SearchableContentType::Artist), popularity);
+            }
+        }
+
+        // Query albums
+        if !album_ids.is_empty() {
+            let placeholders = album_ids.iter().map(|_| "?").collect::<Vec<_>>().join(",");
+            let query = format!(
+                "SELECT id, popularity FROM albums WHERE id IN ({})",
+                placeholders
+            );
+            let mut stmt = conn.prepare(&query)?;
+            let rows = stmt.query_map(
+                rusqlite::params_from_iter(album_ids.iter()),
+                |row| Ok((row.get::<_, String>(0)?, row.get::<_, i32>(1)?)),
+            )?;
+            for row in rows.flatten() {
+                let (id, popularity) = row;
+                result.insert((id, SearchableContentType::Album), popularity);
+            }
+        }
+
+        // Query tracks
+        if !track_ids.is_empty() {
+            let placeholders = track_ids.iter().map(|_| "?").collect::<Vec<_>>().join(",");
+            let query = format!(
+                "SELECT id, popularity FROM tracks WHERE id IN ({})",
+                placeholders
+            );
+            let mut stmt = conn.prepare(&query)?;
+            let rows = stmt.query_map(
+                rusqlite::params_from_iter(track_ids.iter()),
+                |row| Ok((row.get::<_, String>(0)?, row.get::<_, i32>(1)?)),
+            )?;
+            for row in rows.flatten() {
+                let (id, popularity) = row;
+                result.insert((id, SearchableContentType::Track), popularity);
+            }
+        }
+
+        Ok(result)
     }
 }
 
