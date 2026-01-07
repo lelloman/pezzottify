@@ -319,6 +319,7 @@ async fn get_stats(ctx: &ToolContext) -> ToolResult {
 // catalog.mutate
 // ============================================================================
 
+#[allow(dead_code)]
 #[derive(Debug, Deserialize)]
 struct CatalogMutateParams {
     action: CatalogMutateAction,
@@ -329,6 +330,7 @@ struct CatalogMutateParams {
     data: Option<Value>,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "snake_case")]
 enum CatalogMutateAction {
@@ -337,6 +339,7 @@ enum CatalogMutateAction {
     Delete,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "snake_case")]
 enum CatalogEntityType {
