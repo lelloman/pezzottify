@@ -405,11 +405,7 @@ impl OrganicIndexer {
     }
 
     /// Flush the batch to the search vault.
-    fn flush_batch(
-        &self,
-        search_vault: &Arc<dyn SearchVault>,
-        batch: &mut Vec<SearchIndexItem>,
-    ) {
+    fn flush_batch(&self, search_vault: &Arc<dyn SearchVault>, batch: &mut Vec<SearchIndexItem>) {
         if batch.is_empty() {
             return;
         }

@@ -256,17 +256,26 @@ async fn test_batch_content_returns_multiple_items() {
 
     // Verify artist result
     let artist_result = &body["artists"][ARTIST_1_ID];
-    assert!(artist_result["ok"].is_object(), "Expected ok wrapper for artist");
+    assert!(
+        artist_result["ok"].is_object(),
+        "Expected ok wrapper for artist"
+    );
     assert_eq!(artist_result["ok"]["artist"]["name"], ARTIST_1_NAME);
 
     // Verify album result
     let album_result = &body["albums"][ALBUM_1_ID];
-    assert!(album_result["ok"].is_object(), "Expected ok wrapper for album");
+    assert!(
+        album_result["ok"].is_object(),
+        "Expected ok wrapper for album"
+    );
     assert_eq!(album_result["ok"]["album"]["name"], ALBUM_1_TITLE);
 
     // Verify track result
     let track_result = &body["tracks"][TRACK_1_ID];
-    assert!(track_result["ok"].is_object(), "Expected ok wrapper for track");
+    assert!(
+        track_result["ok"].is_object(),
+        "Expected ok wrapper for track"
+    );
     assert_eq!(track_result["ok"]["track"]["name"], TRACK_1_TITLE);
 }
 
