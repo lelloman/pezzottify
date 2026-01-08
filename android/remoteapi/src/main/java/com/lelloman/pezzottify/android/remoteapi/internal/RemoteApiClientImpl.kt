@@ -4,7 +4,10 @@ import com.lelloman.pezzottify.android.domain.listening.ListeningEventSyncData
 import com.lelloman.pezzottify.android.domain.remoteapi.DeviceInfo
 import com.lelloman.pezzottify.android.domain.remoteapi.RemoteApiClient
 import com.lelloman.pezzottify.android.domain.remoteapi.RemoteApiCredentialsProvider
+import com.lelloman.pezzottify.android.domain.remoteapi.request.BatchContentRequest as DomainBatchContentRequest
 import com.lelloman.pezzottify.android.domain.remoteapi.response.AlbumResponse
+import com.lelloman.pezzottify.android.domain.remoteapi.response.BatchContentResponse as DomainBatchContentResponse
+import com.lelloman.pezzottify.android.domain.remoteapi.response.BatchItemResult as DomainBatchItemResult
 import com.lelloman.pezzottify.android.domain.remoteapi.response.ArtistDiscographyResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.ArtistResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.DownloadLimitsResponse
@@ -28,6 +31,11 @@ import com.lelloman.pezzottify.android.domain.remoteapi.response.WhatsNewRespons
 import com.lelloman.pezzottify.android.domain.sync.UserSetting
 import com.lelloman.pezzottify.android.domain.remoteapi.SubmitBugReportResponse
 import com.lelloman.pezzottify.android.remoteapi.internal.requests.AddTracksToPlaylistRequest
+import com.lelloman.pezzottify.android.remoteapi.internal.requests.BatchAlbumResult
+import com.lelloman.pezzottify.android.remoteapi.internal.requests.BatchArtistResult
+import com.lelloman.pezzottify.android.remoteapi.internal.requests.BatchContentRequest
+import com.lelloman.pezzottify.android.remoteapi.internal.requests.BatchItemRequest
+import com.lelloman.pezzottify.android.remoteapi.internal.requests.BatchTrackResult
 import com.lelloman.pezzottify.android.remoteapi.internal.requests.CreatePlaylistRequest
 import com.lelloman.pezzottify.android.remoteapi.internal.requests.ImpressionRequest
 import com.lelloman.pezzottify.android.remoteapi.internal.requests.RemoveTracksFromPlaylistRequest
@@ -214,6 +222,47 @@ internal class RemoteApiClientImpl(
                 )
             )
         }
+
+    override suspend fun getBatchContent(
+        request: DomainBatchContentRequest
+    ): RemoteApiResponse<DomainBatchContentResponse> = catchingNetworkError {
+        // Map domain request to serializable request
+        val retrofitRequest = BatchContentRequest(
+            artists = request.artists.map { BatchItemRequest(it.id, it.resolved) },
+            albums = request.albums.map { BatchItemRequest(it.id, it.resolved) },
+            tracks = request.tracks.map { BatchItemRequest(it.id, it.resolved) },
+        )
+
+        val response = getRetrofit().postBatchContent(authToken = authToken, request = retrofitRequest)
+        response.commonError?.let { return@catchingNetworkError it }
+
+        val body = response.body()
+            ?: return@catchingNetworkError RemoteApiResponse.Error.Unknown("No body")
+
+        // Map serializable response to domain response
+        val domainResponse = DomainBatchContentResponse(
+            artists = body.artists.mapValues { (_, result) ->
+                when (result) {
+                    is BatchArtistResult.Ok -> DomainBatchItemResult.Ok(result.ok)
+                    is BatchArtistResult.Error -> DomainBatchItemResult.Error(result.error)
+                }
+            },
+            albums = body.albums.mapValues { (_, result) ->
+                when (result) {
+                    is BatchAlbumResult.Ok -> DomainBatchItemResult.Ok(result.ok)
+                    is BatchAlbumResult.Error -> DomainBatchItemResult.Error(result.error)
+                }
+            },
+            tracks = body.tracks.mapValues { (_, result) ->
+                when (result) {
+                    is BatchTrackResult.Ok -> DomainBatchItemResult.Ok(result.ok)
+                    is BatchTrackResult.Error -> DomainBatchItemResult.Error(result.error)
+                }
+            },
+        )
+
+        RemoteApiResponse.Success(domainResponse)
+    }
 
     override suspend fun getPopularContent(
         albumsLimit: Int,
