@@ -13,6 +13,15 @@ class BatchContentResponseTest {
     private val json = Json {
         ignoreUnknownKeys = true
         namingStrategy = JsonNamingStrategy.SnakeCase
+        encodeDefaults = true
+    }
+
+    // Full configuration as used in RemoteApiClientImpl
+    private val jsonWithDiscriminator = Json {
+        ignoreUnknownKeys = true
+        namingStrategy = JsonNamingStrategy.SnakeCase
+        classDiscriminator = "section"
+        encodeDefaults = true
     }
 
     @Test
@@ -215,8 +224,39 @@ class BatchContentResponseTest {
 
         assertThat(jsonString).contains("\"id\":\"artist-1\"")
         assertThat(jsonString).contains("\"id\":\"album-1\"")
-        // resolved=false is explicitly set, so it should be serialized
+        // Both resolved values should be serialized with encodeDefaults=true
         assertThat(jsonString).contains("\"resolved\":false")
-        // Note: resolved=true (the default) may not be serialized depending on encodeDefaults setting
+        assertThat(jsonString).contains("\"resolved\":true")
+    }
+
+    @Test
+    fun `deserializes with classDiscriminator config (matching RemoteApiClientImpl)`() {
+        val jsonString = """
+            {
+                "artists": {
+                    "artist-1": {
+                        "ok": {
+                            "artist": {
+                                "id": "artist-1",
+                                "name": "Test Artist",
+                                "genres": ["rock", "pop"]
+                            },
+                            "related_artists": []
+                        }
+                    }
+                },
+                "albums": {},
+                "tracks": {}
+            }
+        """.trimIndent()
+
+        val response = jsonWithDiscriminator.decodeFromString<BatchContentResponse>(jsonString)
+
+        assertThat(response.artists).hasSize(1)
+        val artistResult = response.artists["artist-1"]
+        assertThat(artistResult).isInstanceOf(BatchArtistResult.Ok::class.java)
+        val ok = artistResult as BatchArtistResult.Ok
+        assertThat(ok.ok.artist.id).isEqualTo("artist-1")
+        assertThat(ok.ok.artist.name).isEqualTo("Test Artist")
     }
 }

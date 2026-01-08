@@ -55,121 +55,139 @@ sqlite3 "$TEST_CATALOG_DB" << 'EOSQL'
 PRAGMA foreign_keys = ON;
 
 -- Create schema (matching catalog-server schema v0)
+-- Uses rowid-based schema with Spotify-style IDs
+
 CREATE TABLE artists (
-    id TEXT PRIMARY KEY,
+    rowid INTEGER PRIMARY KEY,
+    id TEXT NOT NULL UNIQUE,
     name TEXT NOT NULL,
-    genres TEXT,
-    activity_periods TEXT
+    followers_total INTEGER NOT NULL,
+    popularity INTEGER NOT NULL
 );
 
 CREATE TABLE albums (
-    id TEXT PRIMARY KEY,
+    rowid INTEGER PRIMARY KEY,
+    id TEXT NOT NULL UNIQUE,
     name TEXT NOT NULL,
     album_type TEXT NOT NULL,
-    label TEXT,
-    release_date INTEGER,
-    genres TEXT,
-    original_title TEXT,
-    version_title TEXT
-);
-
-CREATE TABLE images (
-    id TEXT PRIMARY KEY,
-    uri TEXT NOT NULL,
-    size TEXT NOT NULL,
-    width INTEGER NOT NULL,
-    height INTEGER NOT NULL
+    external_id_upc TEXT,
+    external_id_amgid TEXT,
+    label TEXT NOT NULL,
+    popularity INTEGER NOT NULL,
+    release_date TEXT NOT NULL,
+    release_date_precision TEXT NOT NULL
 );
 
 CREATE TABLE tracks (
-    id TEXT PRIMARY KEY,
+    rowid INTEGER PRIMARY KEY,
+    id TEXT NOT NULL UNIQUE,
     name TEXT NOT NULL,
-    album_id TEXT NOT NULL REFERENCES albums(id) ON DELETE CASCADE,
-    disc_number INTEGER NOT NULL DEFAULT 1,
+    album_rowid INTEGER NOT NULL,
     track_number INTEGER NOT NULL,
-    duration_secs INTEGER,
-    is_explicit INTEGER NOT NULL DEFAULT 0,
-    audio_uri TEXT NOT NULL,
-    format TEXT NOT NULL,
-    tags TEXT,
-    has_lyrics INTEGER NOT NULL DEFAULT 0,
-    languages TEXT,
-    original_title TEXT,
-    version_title TEXT
-);
-
-CREATE TABLE album_artists (
-    album_id TEXT NOT NULL REFERENCES albums(id) ON DELETE CASCADE,
-    artist_id TEXT NOT NULL REFERENCES artists(id) ON DELETE CASCADE,
-    position INTEGER NOT NULL,
-    UNIQUE(album_id, artist_id)
+    external_id_isrc TEXT,
+    popularity INTEGER NOT NULL,
+    disc_number INTEGER NOT NULL,
+    duration_ms INTEGER NOT NULL,
+    explicit INTEGER NOT NULL,
+    language TEXT
 );
 
 CREATE TABLE track_artists (
-    track_id TEXT NOT NULL REFERENCES tracks(id) ON DELETE CASCADE,
-    artist_id TEXT NOT NULL REFERENCES artists(id) ON DELETE CASCADE,
-    role TEXT NOT NULL,
-    position INTEGER NOT NULL,
-    UNIQUE(track_id, artist_id, role)
+    track_rowid INTEGER NOT NULL,
+    artist_rowid INTEGER NOT NULL,
+    role INTEGER
 );
 
-CREATE TABLE related_artists (
-    artist_id TEXT NOT NULL REFERENCES artists(id) ON DELETE CASCADE,
-    related_artist_id TEXT NOT NULL REFERENCES artists(id) ON DELETE CASCADE,
-    UNIQUE(artist_id, related_artist_id)
+CREATE TABLE artist_albums (
+    artist_rowid INTEGER NOT NULL,
+    album_rowid INTEGER NOT NULL,
+    is_appears_on INTEGER NOT NULL,
+    is_implicit_appears_on INTEGER NOT NULL,
+    index_in_album INTEGER
 );
 
-CREATE TABLE artist_images (
-    artist_id TEXT NOT NULL REFERENCES artists(id) ON DELETE CASCADE,
-    image_id TEXT NOT NULL REFERENCES images(id) ON DELETE CASCADE,
-    image_type TEXT NOT NULL,
-    position INTEGER NOT NULL,
-    UNIQUE(artist_id, image_id, image_type)
+CREATE TABLE artist_genres (
+    artist_rowid INTEGER NOT NULL,
+    genre TEXT NOT NULL
 );
 
 CREATE TABLE album_images (
-    album_id TEXT NOT NULL REFERENCES albums(id) ON DELETE CASCADE,
-    image_id TEXT NOT NULL REFERENCES images(id) ON DELETE CASCADE,
-    image_type TEXT NOT NULL,
-    position INTEGER NOT NULL,
-    UNIQUE(album_id, image_id, image_type)
+    album_rowid INTEGER NOT NULL,
+    width INTEGER NOT NULL,
+    height INTEGER NOT NULL,
+    url TEXT NOT NULL
+);
+
+CREATE TABLE artist_images (
+    artist_rowid INTEGER NOT NULL,
+    width INTEGER NOT NULL,
+    height INTEGER NOT NULL,
+    url TEXT NOT NULL
 );
 
 -- Create indices
-CREATE INDEX idx_tracks_album ON tracks(album_id);
-CREATE INDEX idx_tracks_disc_track ON tracks(album_id, disc_number, track_number);
-CREATE INDEX idx_album_artists_artist ON album_artists(artist_id);
-CREATE INDEX idx_track_artists_artist ON track_artists(artist_id);
-CREATE INDEX idx_artist_images_artist ON artist_images(artist_id);
-CREATE INDEX idx_album_images_album ON album_images(album_id);
+CREATE INDEX idx_artists_id ON artists(id);
+CREATE INDEX idx_albums_id ON albums(id);
+CREATE INDEX idx_tracks_id ON tracks(id);
+CREATE INDEX idx_tracks_album ON tracks(album_rowid);
+CREATE INDEX idx_tracks_isrc ON tracks(external_id_isrc);
+CREATE INDEX idx_track_artists_track ON track_artists(track_rowid);
+CREATE INDEX idx_track_artists_artist ON track_artists(artist_rowid);
+CREATE INDEX idx_artist_albums_artist ON artist_albums(artist_rowid);
+CREATE INDEX idx_artist_albums_album ON artist_albums(album_rowid);
+CREATE INDEX idx_artist_genres_artist ON artist_genres(artist_rowid);
+CREATE INDEX idx_album_images_album ON album_images(album_rowid);
+CREATE INDEX idx_artist_images_artist ON artist_images(artist_rowid);
 
 -- Schema version: BASE_DB_VERSION (99999) + schema_version (0) = 99999
 PRAGMA user_version = 99999;
 EOSQL
 
 # Insert test data using the IDs defined above
+# Note: rowid values are assigned explicitly for predictable foreign keys
 sqlite3 "$TEST_CATALOG_DB" << EOSQL
--- Insert test artist (Prince)
-INSERT INTO artists (id, name, genres, activity_periods)
-VALUES ('$ARTIST_ID', 'Prince', '["Funk", "Pop", "Rock"]', '[{"Timespan":{"start_year":1976,"end_year":2016}}]');
+-- Insert test artist (Prince) - rowid 1
+INSERT INTO artists (rowid, id, name, followers_total, popularity)
+VALUES (1, '$ARTIST_ID', 'Prince', 5000000, 85);
 
--- Insert test album (1999)
-INSERT INTO albums (id, name, album_type, label, release_date, genres)
-VALUES ('$ALBUM_ID', '1999', 'ALBUM', 'Warner Bros.', 404524800, '["Funk", "Pop"]');
+-- Insert test album (1999) - rowid 1
+INSERT INTO albums (rowid, id, name, album_type, label, popularity, release_date, release_date_precision)
+VALUES (1, '$ALBUM_ID', '1999', 'album', 'Warner Bros.', 80, '1982-10-27', 'day');
 
--- Insert test image
-INSERT INTO images (id, uri, size, width, height)
-VALUES ('$IMAGE_ID', 'images/$IMAGE_ID', 'DEFAULT', 300, 300);
+-- Insert second test album (Purple Rain) - rowid 2
+INSERT INTO albums (rowid, id, name, album_type, label, popularity, release_date, release_date_precision)
+VALUES (2, 'purple-rain-album-id', 'Purple Rain', 'album', 'Warner Bros.', 90, '1984-06-25', 'day');
 
--- Insert test track
-INSERT INTO tracks (id, name, album_id, disc_number, track_number, duration_secs, is_explicit, audio_uri, format, tags, has_lyrics, languages)
-VALUES ('$TRACK_ID', '1999', '$ALBUM_ID', 1, 1, 378, 0, 'albums/$ALBUM_ID/track_$TRACK_ID.flac', 'FLAC', '[]', 0, '["en"]');
+-- Insert third test album (Sign o the Times) - rowid 3
+INSERT INTO albums (rowid, id, name, album_type, label, popularity, release_date, release_date_precision)
+VALUES (3, 'sign-o-the-times-id', 'Sign o the Times', 'album', 'Paisley Park', 85, '1987-03-30', 'day');
 
--- Insert relationships
-INSERT INTO album_artists (album_id, artist_id, position) VALUES ('$ALBUM_ID', '$ARTIST_ID', 0);
-INSERT INTO track_artists (track_id, artist_id, role, position) VALUES ('$TRACK_ID', '$ARTIST_ID', 'MAIN_ARTIST', 0);
-INSERT INTO artist_images (artist_id, image_id, image_type, position) VALUES ('$ARTIST_ID', '$IMAGE_ID', 'portrait', 0);
-INSERT INTO album_images (album_id, image_id, image_type, position) VALUES ('$ALBUM_ID', '$IMAGE_ID', 'cover', 0);
+-- Insert test track - rowid 1
+INSERT INTO tracks (rowid, id, name, album_rowid, track_number, popularity, disc_number, duration_ms, explicit)
+VALUES (1, '$TRACK_ID', '1999', 1, 1, 75, 1, 378000, 0);
+
+-- Insert second test track - rowid 2
+INSERT INTO tracks (rowid, id, name, album_rowid, track_number, popularity, disc_number, duration_ms, explicit)
+VALUES (2, 'purple-rain-track-id', 'Purple Rain', 2, 1, 95, 1, 520000, 0);
+
+-- Insert third test track - rowid 3
+INSERT INTO tracks (rowid, id, name, album_rowid, track_number, popularity, disc_number, duration_ms, explicit)
+VALUES (3, 'sign-o-times-track-id', 'Sign o the Times', 3, 1, 80, 1, 290000, 0);
+
+-- Insert relationships using rowid references
+INSERT INTO artist_albums (artist_rowid, album_rowid, is_appears_on, is_implicit_appears_on, index_in_album) VALUES (1, 1, 0, 0, 0);
+INSERT INTO artist_albums (artist_rowid, album_rowid, is_appears_on, is_implicit_appears_on, index_in_album) VALUES (1, 2, 0, 0, 0);
+INSERT INTO artist_albums (artist_rowid, album_rowid, is_appears_on, is_implicit_appears_on, index_in_album) VALUES (1, 3, 0, 0, 0);
+INSERT INTO track_artists (track_rowid, artist_rowid, role) VALUES (1, 1, 0);
+INSERT INTO track_artists (track_rowid, artist_rowid, role) VALUES (2, 1, 0);
+INSERT INTO track_artists (track_rowid, artist_rowid, role) VALUES (3, 1, 0);
+INSERT INTO artist_genres (artist_rowid, genre) VALUES (1, 'Funk');
+INSERT INTO artist_genres (artist_rowid, genre) VALUES (1, 'Pop');
+INSERT INTO artist_genres (artist_rowid, genre) VALUES (1, 'Rock');
+INSERT INTO artist_images (artist_rowid, width, height, url) VALUES (1, 300, 300, 'https://example.com/prince.jpg');
+INSERT INTO album_images (album_rowid, width, height, url) VALUES (1, 300, 300, 'https://example.com/1999.jpg');
+INSERT INTO album_images (album_rowid, width, height, url) VALUES (2, 300, 300, 'https://example.com/purple-rain.jpg');
+INSERT INTO album_images (album_rowid, width, height, url) VALUES (3, 300, 300, 'https://example.com/sign-o-times.jpg');
 EOSQL
 
 echo "✅ Catalog database created with test data"

@@ -63,12 +63,18 @@ data class AlbumData(
     val name: String,
     @SerialName("album_type")
     val albumType: AlbumType,
+    val label: String? = null,
     @SerialName("release_date")
-    val releaseDate: String,
+    val releaseDate: String? = null,
+    @SerialName("release_date_precision")
+    val releaseDatePrecision: String? = null,
+    @SerialName("external_id_upc")
+    val externalIdUpc: String? = null,
+    val popularity: Int = 0,
 )
 
 /**
- * Server's ResolvedAlbum response - nested structure with album, artists, discs, and display_image.
+ * Server's ResolvedAlbum response - nested structure with album, artists, and discs.
  */
 @Serializable
 data class AlbumResponse(
@@ -76,7 +82,7 @@ data class AlbumResponse(
     val artists: List<ArtistData>,
     val discs: List<Disc>,
     @SerialName("display_image")
-    val displayImage: Image?,
+    val displayImage: Image? = null,
 )
 
 fun AlbumResponse.toDomain() = object : Album {
@@ -85,7 +91,7 @@ fun AlbumResponse.toDomain() = object : Album {
     override val name: String
         get() = this@toDomain.album.name
     override val date: Int
-        get() = convertReleaseDateToInt(this@toDomain.album.releaseDate)
+        get() = convertReleaseDateToInt(this@toDomain.album.releaseDate ?: "")
     override val artistsIds: List<String>
         get() = this@toDomain.artists.map { it.id }
     override val displayImageId: String?
