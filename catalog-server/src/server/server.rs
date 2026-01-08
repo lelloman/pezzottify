@@ -2243,10 +2243,7 @@ async fn post_impression(
     }
 
     // Record the impression
-    search_vault
-        .lock()
-        .unwrap()
-        .record_impression(&body.item_id, item_type);
+    search_vault.record_impression(&body.item_id, item_type);
 
     StatusCode::NO_CONTENT
 }
@@ -4880,7 +4877,7 @@ mod tests {
             user_store.clone(),
         )));
         let guarded_search_vault: crate::server::state::GuardedSearchVault =
-            Arc::new(std::sync::Mutex::new(Box::new(MockSearchVault)));
+            Arc::new(MockSearchVault);
         let server_store: Arc<dyn ServerStore> = Arc::new(MockServerStore::default());
         let app = &mut make_app(
             ServerConfig::default(),

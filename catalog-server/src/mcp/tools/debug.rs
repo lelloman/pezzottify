@@ -113,8 +113,7 @@ async fn inspect_catalog(ctx: &ToolContext) -> ToolResult {
 }
 
 async fn inspect_search(ctx: &ToolContext) -> ToolResult {
-    let search_vault = ctx.search_vault.lock().unwrap();
-    let stats = search_vault.get_stats();
+    let stats = ctx.search_vault.get_stats();
 
     let result = serde_json::json!({
         "search_index": {
@@ -145,9 +144,7 @@ async fn inspect_all(ctx: &ToolContext) -> ToolResult {
     let albums_count = ctx.catalog_store.get_albums_count();
     let tracks_count = ctx.catalog_store.get_tracks_count();
 
-    let search_vault = ctx.search_vault.lock().unwrap();
-    let search_stats = search_vault.get_stats();
-    drop(search_vault);
+    let search_stats = ctx.search_vault.get_stats();
 
     let result = serde_json::json!({
         "server": {

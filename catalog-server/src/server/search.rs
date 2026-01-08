@@ -275,12 +275,9 @@ async fn search(
             })
             .collect()
     });
-    let search_results =
-        server_state
-            .search_vault
-            .lock()
-            .unwrap()
-            .search(payload.query.as_str(), limit, filters);
+    let search_results = server_state
+        .search_vault
+        .search(payload.query.as_str(), limit, filters);
 
     // Apply relevance filtering as post-processing step
     let relevance_filter = get_relevance_filter(&server_state);
@@ -315,12 +312,9 @@ async fn streaming_search(
     let max_results = server_state.config.streaming_search.top_results_limit
         + server_state.config.streaming_search.other_results_limit
         + 50;
-    let search_results =
-        server_state
-            .search_vault
-            .lock()
-            .unwrap()
-            .search(&params.q, max_results, None);
+    let search_results = server_state
+        .search_vault
+        .search(&params.q, max_results, None);
 
     // Get the user_manager from state
     let user_manager = server_state.user_manager.lock().unwrap();

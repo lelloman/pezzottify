@@ -226,8 +226,8 @@ async fn main() -> Result<()> {
                 Box::new(vault)
             }
         };
-    let guarded_search_vault: GuardedSearchVault =
-        std::sync::Arc::new(std::sync::Mutex::new(search_vault));
+    // SearchVault is internally thread-safe - no external Mutex needed
+    let guarded_search_vault: GuardedSearchVault = std::sync::Arc::from(search_vault);
 
     // Set up background job scheduler
     let shutdown_token = CancellationToken::new();

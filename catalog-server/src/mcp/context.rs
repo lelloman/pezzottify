@@ -23,8 +23,8 @@ pub struct ToolContext {
     /// Access to catalog data
     pub catalog_store: Arc<dyn CatalogStore>,
 
-    /// Access to search functionality
-    pub search_vault: Arc<Mutex<Box<dyn SearchVault>>>,
+    /// Access to search functionality (internally thread-safe, no external lock needed)
+    pub search_vault: Arc<dyn SearchVault>,
 
     /// Access to user management
     pub user_manager: Arc<Mutex<UserManager>>,

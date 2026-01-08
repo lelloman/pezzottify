@@ -20,7 +20,7 @@
 use crate::catalog_store::CatalogStore;
 use crate::search::{HashedItemType, SearchIndexItem, SearchVault};
 use std::collections::HashSet;
-use std::sync::{Arc, Mutex, RwLock};
+use std::sync::{Arc, RwLock};
 use tokio::sync::mpsc;
 use tracing::{debug, error, info, warn};
 
@@ -62,7 +62,7 @@ impl OrganicIndexer {
     /// * `search_vault` - The search vault to add items to
     /// * `catalog_store` - The catalog store to fetch related items from
     pub fn new(
-        search_vault: Arc<Mutex<Box<dyn SearchVault>>>,
+        search_vault: Arc<dyn SearchVault>,
         catalog_store: Arc<dyn CatalogStore>,
     ) -> Arc<Self> {
         let (tx, rx) = mpsc::channel(QUEUE_CAPACITY);
@@ -159,7 +159,7 @@ impl OrganicIndexer {
     async fn background_worker(
         &self,
         mut rx: mpsc::Receiver<IndexTask>,
-        search_vault: Arc<Mutex<Box<dyn SearchVault>>>,
+        search_vault: Arc<dyn SearchVault>,
         catalog_store: Arc<dyn CatalogStore>,
     ) {
         info!("Organic indexer background worker started");
@@ -407,7 +407,7 @@ impl OrganicIndexer {
     /// Flush the batch to the search vault.
     fn flush_batch(
         &self,
-        search_vault: &Arc<Mutex<Box<dyn SearchVault>>>,
+        search_vault: &Arc<dyn SearchVault>,
         batch: &mut Vec<SearchIndexItem>,
     ) {
         if batch.is_empty() {
@@ -416,19 +416,12 @@ impl OrganicIndexer {
 
         let count = batch.len();
 
-        match search_vault.lock() {
-            Ok(vault) => {
-                if let Err(e) = vault.upsert_items(batch) {
-                    error!("Failed to upsert {} items to search index: {}", count, e);
-                    // Note: Items are already marked as indexed, so we won't retry
-                    // This is acceptable for organic growth
-                } else {
-                    debug!("Flushed {} items to search index", count);
-                }
-            }
-            Err(e) => {
-                error!("Failed to lock search vault: {}", e);
-            }
+        if let Err(e) = search_vault.upsert_items(batch) {
+            error!("Failed to upsert {} items to search index: {}", count, e);
+            // Note: Items are already marked as indexed, so we won't retry
+            // This is acceptable for organic growth
+        } else {
+            debug!("Flushed {} items to search index", count);
         }
 
         batch.clear();
@@ -445,7 +438,7 @@ impl OrganicIndexer {
     ///
     /// This should be called during initialization to restore the indexed state
     /// from the existing search database.
-    pub fn load_indexed_from_vault(&self, _search_vault: &Arc<Mutex<Box<dyn SearchVault>>>) {
+    pub fn load_indexed_from_vault(&self, _search_vault: &Arc<dyn SearchVault>) {
         // The search vault already tracks what's indexed in its FTS5 table
         // We could query it to populate our in-memory set, but for simplicity
         // we start fresh each time - the vault will de-dup on upsert anyway
