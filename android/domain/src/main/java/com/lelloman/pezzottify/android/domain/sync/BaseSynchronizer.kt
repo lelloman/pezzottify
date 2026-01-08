@@ -50,6 +50,14 @@ abstract class BaseSynchronizer<T>(
     protected abstract suspend fun processItem(item: T)
 
     /**
+     * Processes all items from a single iteration. Override to implement batch processing.
+     * Default implementation processes items one-by-one via [processItem].
+     */
+    protected open suspend fun processItems(items: List<T>) {
+        items.forEach { processItem(it) }
+    }
+
+    /**
      * Returns true if the loop should continue even when [getItemsToProcess] returns empty.
      * Default is false (go to sleep when no items).
      *
@@ -97,9 +105,7 @@ abstract class BaseSynchronizer<T>(
                 continue
             }
 
-            itemsToProcess.forEach { item ->
-                processItem(item)
-            }
+            processItems(itemsToProcess)
 
             logger.debug("mainLoop() going to wait for $sleepDuration")
             delay(sleepDuration)
