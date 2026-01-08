@@ -6,7 +6,7 @@ import com.lelloman.pezzottify.android.domain.listening.ListeningEventSynchroniz
 import com.lelloman.pezzottify.android.domain.listening.ListeningTracker
 import com.lelloman.pezzottify.android.domain.player.PezzottifyPlayer
 import com.lelloman.pezzottify.android.domain.settings.UserSettingsSynchronizer
-import com.lelloman.pezzottify.android.domain.sync.StaticsSynchronizer
+import com.lelloman.pezzottify.android.domain.statics.StaticsSynchronizer
 import com.lelloman.pezzottify.android.domain.sync.SyncWebSocketHandler
 import com.lelloman.pezzottify.android.domain.usercontent.PlaylistSynchronizer
 import com.lelloman.pezzottify.android.domain.usercontent.UserContentSynchronizer

@@ -8,7 +8,7 @@ import com.lelloman.pezzottify.android.domain.skeleton.SkeletonStore
 import com.lelloman.pezzottify.android.domain.settings.UserSettingsStore
 import com.lelloman.pezzottify.android.domain.statics.fetchstate.StaticItemFetchState
 import com.lelloman.pezzottify.android.domain.statics.fetchstate.StaticItemFetchStateStore
-import com.lelloman.pezzottify.android.domain.sync.StaticsSynchronizer
+import com.lelloman.pezzottify.android.domain.statics.StaticsSynchronizer
 import com.lelloman.pezzottify.android.logger.LoggerFactory
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.combine
