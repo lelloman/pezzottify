@@ -444,10 +444,7 @@ impl BackgroundJob for PopularContentJob {
 
             // Get impression data
             let impression_min_date = self.compute_impression_min_date();
-            let impression_totals = {
-                let vault = search_vault.lock().unwrap();
-                vault.get_impression_totals(impression_min_date)
-            };
+            let impression_totals = search_vault.get_impression_totals(impression_min_date);
 
             // Add items that have impressions but no listening data
             for (item_id, item_type) in impression_totals.keys() {
@@ -536,17 +533,11 @@ impl BackgroundJob for PopularContentJob {
                 ));
             }
 
-            search_vault
-                .lock()
-                .unwrap()
-                .update_popularity(&popularity_items);
+            search_vault.update_popularity(&popularity_items);
 
             // Prune old impression data
             let prune_date = self.compute_impression_prune_date();
-            let pruned_count = {
-                let vault = search_vault.lock().unwrap();
-                vault.prune_impressions(prune_date)
-            };
+            let pruned_count = search_vault.prune_impressions(prune_date);
 
             debug!(
                 "Updated search popularity for {} items (composite scoring); pruned {} old impressions",

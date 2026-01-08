@@ -125,7 +125,7 @@ impl TestServer {
         let user_store_for_test = user_store.clone();
 
         // Create search vault (use mock for speed in tests)
-        let search_vault: GuardedSearchVault = Arc::new(Mutex::new(Box::new(MockSearchVault)));
+        let search_vault: GuardedSearchVault = Arc::new(MockSearchVault);
 
         // Bind to random port
         let listener = TcpListener::bind("127.0.0.1:0")

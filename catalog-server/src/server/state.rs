@@ -14,7 +14,9 @@ use super::websocket::ConnectionManager;
 use super::ServerConfig;
 
 pub type GuardedCatalogStore = Arc<dyn CatalogStore>;
-pub type GuardedSearchVault = Arc<Mutex<Box<dyn SearchVault>>>;
+/// SearchVault is internally thread-safe (uses separate read/write connections with internal Mutex).
+/// No external Mutex needed - the implementation handles concurrent access.
+pub type GuardedSearchVault = Arc<dyn SearchVault>;
 pub type GuardedUserManager = Arc<Mutex<UserManager>>;
 pub type GuardedConnectionManager = Arc<ConnectionManager>;
 pub type OptionalSchedulerHandle = Option<SchedulerHandle>;
@@ -30,7 +32,7 @@ pub struct ServerState {
     pub config: ServerConfig,
     pub start_time: Instant,
     pub catalog_store: GuardedCatalogStore,
-    pub search_vault: Arc<Mutex<Box<dyn SearchVault>>>,
+    pub search_vault: GuardedSearchVault,
     pub user_manager: GuardedUserManager,
     pub ws_connection_manager: GuardedConnectionManager,
     pub scheduler_handle: OptionalSchedulerHandle,

@@ -9,7 +9,9 @@ use tokio_util::sync::CancellationToken;
 pub type GuardedUserManager = Arc<Mutex<UserManager>>;
 
 /// Type alias for thread-safe SearchVault access.
-pub type GuardedSearchVault = Arc<Mutex<Box<dyn SearchVault>>>;
+/// SearchVault is internally thread-safe (uses separate read/write connections with internal Mutex).
+/// No external Mutex needed - the implementation handles concurrent access.
+pub type GuardedSearchVault = Arc<dyn SearchVault>;
 
 /// Context provided to jobs during execution.
 ///

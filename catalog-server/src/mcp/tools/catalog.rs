@@ -78,8 +78,7 @@ async fn catalog_search_handler(ctx: ToolContext, params: Value) -> ToolResult {
     let limit = params.limit.min(100);
 
     // Perform search using the search vault
-    let search_vault = ctx.search_vault.lock().unwrap();
-    let results = search_vault.search(&params.query, limit * 3, None);
+    let results = ctx.search_vault.search(&params.query, limit * 3, None);
 
     // Convert results to our format, grouped by type
     let mut artists = Vec::new();
