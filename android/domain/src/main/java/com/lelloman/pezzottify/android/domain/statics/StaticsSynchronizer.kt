@@ -1,4 +1,4 @@
-package com.lelloman.pezzottify.android.domain.sync
+package com.lelloman.pezzottify.android.domain.statics
 
 import com.lelloman.pezzottify.android.domain.app.TimeProvider
 import com.lelloman.pezzottify.android.domain.remoteapi.RemoteApiClient
@@ -8,12 +8,12 @@ import com.lelloman.pezzottify.android.domain.remoteapi.response.ArtistResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.RemoteApiResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.TrackResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.toDomain
+import com.lelloman.pezzottify.android.domain.skeleton.AlbumArtistRelationship
 import com.lelloman.pezzottify.android.domain.skeleton.SkeletonStore
-import com.lelloman.pezzottify.android.domain.statics.StaticItemType
-import com.lelloman.pezzottify.android.domain.statics.StaticsStore
 import com.lelloman.pezzottify.android.domain.statics.fetchstate.ErrorReason
 import com.lelloman.pezzottify.android.domain.statics.fetchstate.StaticItemFetchState
 import com.lelloman.pezzottify.android.domain.statics.fetchstate.StaticItemFetchStateStore
+import com.lelloman.pezzottify.android.domain.sync.BaseSynchronizer
 import com.lelloman.pezzottify.android.logger.LoggerFactory
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
@@ -84,7 +84,7 @@ internal class StaticsSynchronizer(
     private suspend fun fetchItemFromRemote(itemId: String, type: StaticItemType) {
         withContext(coroutineContext) {
             val attemptTime = timeProvider.nowUtcMs()
-            val loadingState = StaticItemFetchState.loading(itemId, type, attemptTime)
+            val loadingState = StaticItemFetchState.Companion.loading(itemId, type, attemptTime)
             fetchStateStore.store(loadingState)
             val remoteData = when (type) {
                 StaticItemType.Album -> remoteApiClient.getAlbum(itemId)
@@ -101,13 +101,14 @@ internal class StaticsSynchronizer(
                         is ArtistDiscographyResponse -> {
                             val allAlbums = fetchAllDiscographyPages(itemId, remoteData.data)
                             val albumArtists = allAlbums.albums.map { album ->
-                                com.lelloman.pezzottify.android.domain.skeleton.AlbumArtistRelationship(
+                                AlbumArtistRelationship(
                                     artistId = itemId,
                                     albumId = album.id
                                 )
                             }
                             skeletonStore.insertAlbumArtists(albumArtists)
                         }
+
                         else -> logger.error("Cannot store unknown response data of type ${remoteData.javaClass} -> ${remoteData.data}")
                     }
                     fetchStateStore.delete(itemId)
@@ -119,7 +120,7 @@ internal class StaticsSynchronizer(
                     )
                     val tryNextTime = attemptTime + RETRY_DELAY_CLIENT_ERROR_MS
                     fetchStateStore.store(
-                        StaticItemFetchState.error(
+                        StaticItemFetchState.Companion.error(
                             itemId = itemId,
                             itemType = type,
                             errorReason = ErrorReason.Client,
@@ -133,7 +134,7 @@ internal class StaticsSynchronizer(
                 val (errorReason, retryDelayMs) = mapErrorToReasonAndDelay(remoteData)
                 val tryNextTime = attemptTime + retryDelayMs
                 fetchStateStore.store(
-                    StaticItemFetchState.error(
+                    StaticItemFetchState.Companion.error(
                         itemId = itemId,
                         itemType = type,
                         errorReason = errorReason,
@@ -177,8 +178,8 @@ internal class StaticsSynchronizer(
      */
     private suspend fun fetchAllDiscographyPages(
         artistId: String,
-        initialResponse: com.lelloman.pezzottify.android.domain.remoteapi.response.ArtistDiscographyResponse
-    ): com.lelloman.pezzottify.android.domain.remoteapi.response.ArtistDiscographyResponse {
+        initialResponse: ArtistDiscographyResponse
+    ): ArtistDiscographyResponse {
         var allAlbums = initialResponse.albums.toMutableList()
         var offset = initialResponse.offset ?: 0
         var limit = initialResponse.limit ?: DISCOGRAPHY_PAGE_SIZE

@@ -3,7 +3,7 @@ package com.lelloman.pezzottify.android.domain.usecase
 import com.lelloman.pezzottify.android.domain.app.AppInitializer
 import com.lelloman.pezzottify.android.domain.auth.AuthState
 import com.lelloman.pezzottify.android.domain.auth.AuthStore
-import com.lelloman.pezzottify.android.domain.sync.StaticsSynchronizer
+import com.lelloman.pezzottify.android.domain.statics.StaticsSynchronizer
 import com.lelloman.pezzottify.android.domain.sync.SyncManager
 import com.lelloman.pezzottify.android.domain.websocket.WebSocketManager
 import com.lelloman.pezzottify.android.logger.Logger

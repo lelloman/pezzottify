@@ -10,7 +10,7 @@ import com.lelloman.pezzottify.android.domain.skeleton.SkeletonStore
 import com.lelloman.pezzottify.android.domain.statics.fetchstate.ErrorReason
 import com.lelloman.pezzottify.android.domain.statics.fetchstate.StaticItemFetchState
 import com.lelloman.pezzottify.android.domain.statics.fetchstate.StaticItemFetchStateStore
-import com.lelloman.pezzottify.android.domain.sync.StaticsSynchronizer
+import com.lelloman.pezzottify.android.domain.statics.StaticsSynchronizer
 import com.lelloman.pezzottify.android.logger.Logger
 import com.lelloman.pezzottify.android.logger.LoggerFactory
 import io.mockk.coEvery
