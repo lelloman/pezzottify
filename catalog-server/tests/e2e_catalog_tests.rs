@@ -232,3 +232,174 @@ async fn test_get_nonexistent_image_returns_404() {
 
     assert_eq!(response.status(), StatusCode::NOT_FOUND);
 }
+
+// =============================================================================
+// Batch Content Tests
+// =============================================================================
+
+#[tokio::test]
+async fn test_batch_content_returns_multiple_items() {
+    let server = TestServer::spawn().await;
+    let client = TestClient::authenticated(server.base_url.clone()).await;
+
+    let response = client
+        .post_batch_content(serde_json::json!({
+            "artists": [{"id": ARTIST_1_ID, "resolved": true}],
+            "albums": [{"id": ALBUM_1_ID, "resolved": true}],
+            "tracks": [{"id": TRACK_1_ID, "resolved": true}]
+        }))
+        .await;
+
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let body: serde_json::Value = response.json().await.unwrap();
+
+    // Verify artist result
+    let artist_result = &body["artists"][ARTIST_1_ID];
+    assert!(artist_result["ok"].is_object(), "Expected ok wrapper for artist");
+    assert_eq!(artist_result["ok"]["artist"]["name"], ARTIST_1_NAME);
+
+    // Verify album result
+    let album_result = &body["albums"][ALBUM_1_ID];
+    assert!(album_result["ok"].is_object(), "Expected ok wrapper for album");
+    assert_eq!(album_result["ok"]["album"]["name"], ALBUM_1_TITLE);
+
+    // Verify track result
+    let track_result = &body["tracks"][TRACK_1_ID];
+    assert!(track_result["ok"].is_object(), "Expected ok wrapper for track");
+    assert_eq!(track_result["ok"]["track"]["name"], TRACK_1_TITLE);
+}
+
+#[tokio::test]
+async fn test_batch_content_handles_not_found() {
+    let server = TestServer::spawn().await;
+    let client = TestClient::authenticated(server.base_url.clone()).await;
+
+    let response = client
+        .post_batch_content(serde_json::json!({
+            "artists": [{"id": "nonexistent-artist", "resolved": true}],
+            "albums": [],
+            "tracks": []
+        }))
+        .await;
+
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let body: serde_json::Value = response.json().await.unwrap();
+
+    // Verify error result for nonexistent artist
+    let artist_result = &body["artists"]["nonexistent-artist"];
+    assert_eq!(artist_result["error"], "not_found");
+}
+
+#[tokio::test]
+async fn test_batch_content_mixed_success_and_failure() {
+    let server = TestServer::spawn().await;
+    let client = TestClient::authenticated(server.base_url.clone()).await;
+
+    let response = client
+        .post_batch_content(serde_json::json!({
+            "artists": [
+                {"id": ARTIST_1_ID, "resolved": true},
+                {"id": "nonexistent-artist", "resolved": true}
+            ],
+            "albums": [],
+            "tracks": []
+        }))
+        .await;
+
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let body: serde_json::Value = response.json().await.unwrap();
+
+    // Verify existing artist succeeds
+    assert!(body["artists"][ARTIST_1_ID]["ok"].is_object());
+
+    // Verify nonexistent artist fails
+    assert_eq!(body["artists"]["nonexistent-artist"]["error"], "not_found");
+}
+
+#[tokio::test]
+async fn test_batch_content_empty_request() {
+    let server = TestServer::spawn().await;
+    let client = TestClient::authenticated(server.base_url.clone()).await;
+
+    let response = client
+        .post_batch_content(serde_json::json!({
+            "artists": [],
+            "albums": [],
+            "tracks": []
+        }))
+        .await;
+
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let body: serde_json::Value = response.json().await.unwrap();
+
+    // Verify empty maps returned
+    assert!(body["artists"].as_object().unwrap().is_empty());
+    assert!(body["albums"].as_object().unwrap().is_empty());
+    assert!(body["tracks"].as_object().unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn test_batch_content_exceeds_limit() {
+    let server = TestServer::spawn().await;
+    let client = TestClient::authenticated(server.base_url.clone()).await;
+
+    // Create a request with 101 items (exceeds 100 limit)
+    let artists: Vec<serde_json::Value> = (0..101)
+        .map(|i| serde_json::json!({"id": format!("artist-{}", i), "resolved": false}))
+        .collect();
+
+    let response = client
+        .post_batch_content(serde_json::json!({
+            "artists": artists,
+            "albums": [],
+            "tracks": []
+        }))
+        .await;
+
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
+async fn test_batch_content_non_resolved() {
+    let server = TestServer::spawn().await;
+    let client = TestClient::authenticated(server.base_url.clone()).await;
+
+    let response = client
+        .post_batch_content(serde_json::json!({
+            "artists": [],
+            "albums": [{"id": ALBUM_1_ID, "resolved": false}],
+            "tracks": []
+        }))
+        .await;
+
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let body: serde_json::Value = response.json().await.unwrap();
+
+    // Non-resolved album should return basic Album (not ResolvedAlbum with discs)
+    let album_result = &body["albums"][ALBUM_1_ID]["ok"];
+    assert!(album_result.is_object());
+    assert_eq!(album_result["name"], ALBUM_1_TITLE);
+    // Non-resolved should NOT have discs field
+    assert!(album_result.get("discs").is_none());
+}
+
+#[tokio::test]
+async fn test_batch_content_requires_authentication() {
+    let server = TestServer::spawn().await;
+    let client = TestClient::new(server.base_url.clone());
+
+    let response = client
+        .post_batch_content(serde_json::json!({
+            "artists": [{"id": ARTIST_1_ID, "resolved": true}],
+            "albums": [],
+            "tracks": []
+        }))
+        .await;
+
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+}
