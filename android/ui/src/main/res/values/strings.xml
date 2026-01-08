@@ -134,17 +134,6 @@
     <string name="cache_description">Cache content in memory for faster loading</string>
     <!-- CACHE SETTINGS SECTION -->
 
-    <!-- CATALOG SYNC SECTION -->
-    <string name="catalog_sync">Catalog Sync</string>
-    <string name="force_resync_catalog">Force resync catalog</string>
-    <string name="catalog_sync_description">Resync the entire catalog structure from the server</string>
-    <string name="catalog_sync_button">Sync</string>
-    <string name="catalog_sync_in_progress">Syncing catalog…</string>
-    <string name="catalog_sync_success">Catalog synced successfully</string>
-    <string name="catalog_sync_up_to_date">Catalog already up to date</string>
-    <string name="catalog_sync_failed">Sync failed: %1$s</string>
-    <!-- CATALOG SYNC SECTION -->
-
     <!-- STORAGE INFO SECTION -->
     <string name="storage">Storage</string>
     <string name="storage_used">Used: %1$s GB / %2$s GB</string>

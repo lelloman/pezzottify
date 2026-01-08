@@ -361,11 +361,6 @@ class InteractorsModule {
                 ConfigStore.SetBaseUrlResult.InvalidUrl -> SettingsScreenViewModel.SetBaseUrlResult.InvalidUrl
             }
 
-        override suspend fun forceSkeletonResync(): com.lelloman.pezzottify.android.ui.screen.main.settings.SkeletonResyncResult {
-            // Skeleton sync has been replaced with on-demand caching - no full sync needed
-            return com.lelloman.pezzottify.android.ui.screen.main.settings.SkeletonResyncResult.AlreadyUpToDate
-        }
-
         override fun observeCanReportBug(): Flow<Boolean> =
             permissionsStore.permissions.map { permissions ->
                 permissions.contains(DomainPermission.ReportBug)
