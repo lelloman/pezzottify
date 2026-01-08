@@ -149,15 +149,6 @@ private fun SettingsScreenInternal(
 
             HorizontalDivider(modifier = Modifier.padding(vertical = 24.dp))
 
-            // Catalog Sync Section
-            CatalogSyncSection(
-                isResyncing = currentState.isSkeletonResyncing,
-                resyncResult = currentState.skeletonResyncResult,
-                onForceResync = actions::forceSkeletonResync
-            )
-
-            HorizontalDivider(modifier = Modifier.padding(vertical = 24.dp))
-
             // Notifications Section
             NotifyWhatsNewSection(
                 isEnabled = currentState.notifyWhatsNewEnabled,
@@ -251,7 +242,6 @@ private fun SettingsScreenPreview() {
                 override fun clearLogs() {}
                 override fun onBaseUrlInputChanged(input: String) {}
                 override fun saveBaseUrl() {}
-                override fun forceSkeletonResync() {}
             },
         )
     }
@@ -284,7 +274,6 @@ private fun SettingsScreenPreviewDark() {
                 override fun clearLogs() {}
                 override fun onBaseUrlInputChanged(input: String) {}
                 override fun saveBaseUrl() {}
-                override fun forceSkeletonResync() {}
             },
         )
     }
