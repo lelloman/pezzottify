@@ -2,7 +2,7 @@ package com.lelloman.pezzottify.android
 
 import android.content.Context
 import coil3.ImageLoader
-import coil3.intercept.Interceptor
+import coil3.intercept.Interceptor as CoilInterceptor
 import coil3.network.httpHeaders
 import coil3.network.okhttp.OkHttpNetworkFetcherFactory
 import coil3.request.ImageResult
@@ -25,9 +25,14 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import okhttp3.Interceptor as OkHttpInterceptor
 import okhttp3.OkHttpClient
+import okhttp3.Response
+import java.io.IOException
 import java.net.URI
 import javax.inject.Singleton
+import kotlin.math.min
+import kotlin.math.pow
 
 @InstallIn(SingletonComponent::class)
 @Module
@@ -69,13 +74,23 @@ class ApplicationModule {
         configStore: ConfigStore,
         okHttpClientFactory: OkHttpClientFactory,
     ): ImageLoader {
-        // Create OkHttpClient for our server
+        // Create retry interceptor with exponential backoff
+        val retryInterceptor = ExponentialBackoffRetryInterceptor(
+            maxRetries = 3,
+            initialDelayMs = 500,
+            maxDelayMs = 5000,
+        )
+
+        // Create OkHttpClient for our server with retry
         val internalOkHttpClient = okHttpClientFactory
             .createBuilder(configStore.baseUrl.value)
+            .addInterceptor(retryInterceptor)
             .build()
 
-        // Create a plain OkHttpClient for external URLs (no auth)
-        val externalOkHttpClient = OkHttpClient.Builder().build()
+        // Create a plain OkHttpClient for external URLs (no auth, with retry)
+        val externalOkHttpClient = OkHttpClient.Builder()
+            .addInterceptor(retryInterceptor)
+            .build()
 
         // Create a routing call factory that uses the appropriate client based on URL
         val routingCallFactory = RoutingCallFactory(
@@ -108,9 +123,9 @@ class ApplicationModule {
 private class CoilAuthTokenInterceptor(
     private val authStore: AuthStore,
     private val configStore: ConfigStore,
-) : Interceptor {
+) : CoilInterceptor {
 
-    override suspend fun intercept(chain: Interceptor.Chain): ImageResult {
+    override suspend fun intercept(chain: CoilInterceptor.Chain): ImageResult {
         val requestUrl = chain.request.data.toString()
 
         // Only add auth header for requests to our server
@@ -174,5 +189,69 @@ private class RoutingCallFactory(
         } catch (_: Exception) {
             null
         }
+    }
+}
+
+/**
+ * OkHttp interceptor that retries failed requests with exponential backoff.
+ *
+ * Retries on network errors (IOException) and server errors (5xx status codes).
+ * Does NOT retry on client errors (4xx) as those indicate a problem with the request.
+ *
+ * @param maxRetries Maximum number of retry attempts
+ * @param initialDelayMs Initial delay before first retry (milliseconds)
+ * @param maxDelayMs Maximum delay between retries (milliseconds)
+ */
+private class ExponentialBackoffRetryInterceptor(
+    private val maxRetries: Int = 3,
+    private val initialDelayMs: Long = 500,
+    private val maxDelayMs: Long = 5000,
+) : OkHttpInterceptor {
+
+    override fun intercept(chain: OkHttpInterceptor.Chain): Response {
+        val request = chain.request()
+        var lastException: IOException? = null
+        var lastResponse: Response? = null
+
+        repeat(maxRetries + 1) { attempt ->
+            // Close previous response if any
+            lastResponse?.close()
+
+            try {
+                val response = chain.proceed(request)
+
+                // Success or client error - don't retry
+                if (response.isSuccessful || response.code in 400..499) {
+                    return response
+                }
+
+                // Server error (5xx) - retry
+                if (response.code >= 500) {
+                    lastResponse = response
+                    if (attempt < maxRetries) {
+                        val delay = calculateDelay(attempt)
+                        Thread.sleep(delay)
+                    }
+                } else {
+                    return response
+                }
+            } catch (e: IOException) {
+                lastException = e
+                if (attempt < maxRetries) {
+                    val delay = calculateDelay(attempt)
+                    Thread.sleep(delay)
+                }
+            }
+        }
+
+        // All retries exhausted
+        lastResponse?.let { return it }
+        throw lastException ?: IOException("Request failed after $maxRetries retries")
+    }
+
+    private fun calculateDelay(attempt: Int): Long {
+        // Exponential backoff: initialDelay * 2^attempt
+        val exponentialDelay = initialDelayMs * 2.0.pow(attempt.toDouble()).toLong()
+        return min(exponentialDelay, maxDelayMs)
     }
 }
