@@ -729,7 +729,6 @@ class StaticsSynchronizerTest {
             ),
             artists = emptyList(),
             discs = emptyList(),
-            displayImage = null,
         )
     }
 

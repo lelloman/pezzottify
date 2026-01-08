@@ -78,10 +78,10 @@ class StaticsProviderTest {
     }
 
     @Test
-    fun `provideArtist always retries errored items for user views`() = runTest {
-        // Given: an error state (backoff is for background sync, not user views)
+    fun `provideArtist does not retry errored items when backoff not expired`() = runTest {
+        // Given: an error state with future tryNextTime (backoff not yet expired)
         val artistId = "artist-123"
-        val futureTime = currentTime + 3_600_000 // 1 hour in future (doesn't matter)
+        val futureTime = currentTime + 3_600_000 // 1 hour in future
         val errorState = StaticItemFetchState.error(
             itemId = artistId,
             itemType = StaticItemType.Artist,
@@ -97,14 +97,14 @@ class StaticsProviderTest {
         // When: we request the artist
         val result = staticsProvider.provideArtist(artistId).first()
 
-        // Then: result should be Loading (retry scheduled)
+        // Then: result should be Loading (shows loading while waiting for backoff)
         assertThat(result).isInstanceOf(StaticsItem.Loading::class.java)
 
-        // And: store() SHOULD have been called (new fetch scheduled)
-        coVerify(exactly = 1) { fetchStateStore.store(any()) }
+        // And: store() should NOT have been called (no retry until backoff expires)
+        coVerify(exactly = 0) { fetchStateStore.store(any()) }
 
-        // And: synchronizer SHOULD have been woken up
-        verify(exactly = 1) { staticsSynchronizer.wakeUp() }
+        // And: synchronizer should NOT have been woken up
+        verify(exactly = 0) { staticsSynchronizer.wakeUp() }
     }
 
     @Test
@@ -135,10 +135,10 @@ class StaticsProviderTest {
     }
 
     @Test
-    fun `provideAlbum always retries errored items for user views`() = runTest {
-        // Given: an error state (backoff is for background sync, not user views)
+    fun `provideAlbum does not retry errored items when backoff not expired`() = runTest {
+        // Given: an error state with future tryNextTime (backoff not yet expired)
         val albumId = "album-456"
-        val futureTime = currentTime + 3_600_000 // 1 hour in future (doesn't matter)
+        val futureTime = currentTime + 3_600_000 // 1 hour in future
         val errorState = StaticItemFetchState.error(
             itemId = albumId,
             itemType = StaticItemType.Album,
@@ -154,21 +154,21 @@ class StaticsProviderTest {
         // When: we request the album
         val result = staticsProvider.provideAlbum(albumId).first()
 
-        // Then: result should be Loading (retry scheduled)
+        // Then: result should be Loading (shows loading while waiting for backoff)
         assertThat(result).isInstanceOf(StaticsItem.Loading::class.java)
 
-        // And: store() SHOULD have been called (new fetch scheduled)
-        coVerify(exactly = 1) { fetchStateStore.store(any()) }
+        // And: store() should NOT have been called (no retry until backoff expires)
+        coVerify(exactly = 0) { fetchStateStore.store(any()) }
 
-        // And: synchronizer SHOULD have been woken up
-        verify(exactly = 1) { staticsSynchronizer.wakeUp() }
+        // And: synchronizer should NOT have been woken up
+        verify(exactly = 0) { staticsSynchronizer.wakeUp() }
     }
 
     @Test
-    fun `provideTrack always retries errored items for user views`() = runTest {
-        // Given: an error state (backoff is for background sync, not user views)
+    fun `provideTrack does not retry errored items when backoff not expired`() = runTest {
+        // Given: an error state with future tryNextTime (backoff not yet expired)
         val trackId = "track-789"
-        val futureTime = currentTime + 3_600_000 // 1 hour in future (doesn't matter)
+        val futureTime = currentTime + 3_600_000 // 1 hour in future
         val errorState = StaticItemFetchState.error(
             itemId = trackId,
             itemType = StaticItemType.Track,
@@ -184,14 +184,14 @@ class StaticsProviderTest {
         // When: we request the track
         val result = staticsProvider.provideTrack(trackId).first()
 
-        // Then: result should be Loading (retry scheduled)
+        // Then: result should be Loading (shows loading while waiting for backoff)
         assertThat(result).isInstanceOf(StaticsItem.Loading::class.java)
 
-        // And: store() SHOULD have been called (new fetch scheduled)
-        coVerify(exactly = 1) { fetchStateStore.store(any()) }
+        // And: store() should NOT have been called (no retry until backoff expires)
+        coVerify(exactly = 0) { fetchStateStore.store(any()) }
 
-        // And: synchronizer SHOULD have been woken up
-        verify(exactly = 1) { staticsSynchronizer.wakeUp() }
+        // And: synchronizer should NOT have been woken up
+        verify(exactly = 0) { staticsSynchronizer.wakeUp() }
     }
 
     @Test
