@@ -140,6 +140,12 @@ export function setupAxiosInterceptors() {
  * Handle authentication failure by clearing tokens and redirecting to login.
  */
 async function handleAuthFailure() {
+  // Don't redirect if we're on the auth callback page - the callback handler
+  // will complete the token exchange and handle auth itself
+  if (window.location.pathname === "/auth/callback") {
+    return;
+  }
+
   await oidc.logout(false);
   // Redirect to login page
   if (window.location.pathname !== "/login") {
