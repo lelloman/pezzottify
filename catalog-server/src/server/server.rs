@@ -985,6 +985,124 @@ pub async fn get_resolved_track(
     }
 }
 
+/// Batch fetch multiple artists, albums, and tracks in a single request.
+/// Returns per-item results with `{"ok": ...}` or `{"error": "..."}` wrapper.
+async fn post_batch_content(
+    _session: Session,
+    State(catalog_store): State<GuardedCatalogStore>,
+    State(organic_indexer): State<super::state::OptionalOrganicIndexer>,
+    Json(request): Json<BatchContentRequest>,
+) -> Response {
+    let total_items = request.artists.len() + request.albums.len() + request.tracks.len();
+    debug!(
+        "post_batch_content: {} artists, {} albums, {} tracks ({} total)",
+        request.artists.len(),
+        request.albums.len(),
+        request.tracks.len(),
+        total_items
+    );
+
+    if total_items > BATCH_MAX_ITEMS {
+        return (
+            StatusCode::BAD_REQUEST,
+            format!(
+                "Batch request exceeds maximum of {} items (requested {})",
+                BATCH_MAX_ITEMS, total_items
+            ),
+        )
+            .into_response();
+    }
+
+    let mut response = BatchContentResponse {
+        artists: std::collections::HashMap::with_capacity(request.artists.len()),
+        albums: std::collections::HashMap::with_capacity(request.albums.len()),
+        tracks: std::collections::HashMap::with_capacity(request.tracks.len()),
+    };
+
+    // Fetch artists
+    for item in request.artists {
+        if let Some(indexer) = &organic_indexer {
+            indexer.touch_artist(&item.id);
+        }
+
+        let result = if item.resolved {
+            catalog_store.get_resolved_artist_json(&item.id)
+        } else {
+            catalog_store.get_artist_json(&item.id)
+        };
+
+        let batch_result = match result {
+            Ok(Some(data)) => BatchItemResult::Ok { ok: data },
+            Ok(None) => BatchItemResult::Error {
+                error: "not_found".to_string(),
+            },
+            Err(e) => {
+                error!("Batch fetch artist {}: {}", item.id, e);
+                BatchItemResult::Error {
+                    error: "internal_error".to_string(),
+                }
+            }
+        };
+        response.artists.insert(item.id, batch_result);
+    }
+
+    // Fetch albums
+    for item in request.albums {
+        if let Some(indexer) = &organic_indexer {
+            indexer.touch_album(&item.id);
+        }
+
+        let result = if item.resolved {
+            catalog_store.get_resolved_album_json(&item.id)
+        } else {
+            catalog_store.get_album_json(&item.id)
+        };
+
+        let batch_result = match result {
+            Ok(Some(data)) => BatchItemResult::Ok { ok: data },
+            Ok(None) => BatchItemResult::Error {
+                error: "not_found".to_string(),
+            },
+            Err(e) => {
+                error!("Batch fetch album {}: {}", item.id, e);
+                BatchItemResult::Error {
+                    error: "internal_error".to_string(),
+                }
+            }
+        };
+        response.albums.insert(item.id, batch_result);
+    }
+
+    // Fetch tracks
+    for item in request.tracks {
+        if let Some(indexer) = &organic_indexer {
+            indexer.touch_track(&item.id);
+        }
+
+        let result = if item.resolved {
+            catalog_store.get_resolved_track_json(&item.id)
+        } else {
+            catalog_store.get_track_json(&item.id)
+        };
+
+        let batch_result = match result {
+            Ok(Some(data)) => BatchItemResult::Ok { ok: data },
+            Ok(None) => BatchItemResult::Error {
+                error: "not_found".to_string(),
+            },
+            Err(e) => {
+                error!("Batch fetch track {}: {}", item.id, e);
+                BatchItemResult::Error {
+                    error: "internal_error".to_string(),
+                }
+            }
+        };
+        response.tracks.insert(item.id, batch_result);
+    }
+
+    Json(response).into_response()
+}
+
 async fn get_image(
     _session: Session,
     State(catalog_store): State<GuardedCatalogStore>,
@@ -3010,6 +3128,40 @@ struct DiscographyQuery {
     pub sort: Option<String>,
 }
 
+// Batch content request/response types
+const BATCH_MAX_ITEMS: usize = 100;
+
+#[derive(Deserialize, Debug)]
+struct BatchItemRequest {
+    pub id: String,
+    #[serde(default)]
+    pub resolved: bool,
+}
+
+#[derive(Deserialize, Debug, Default)]
+struct BatchContentRequest {
+    #[serde(default)]
+    pub artists: Vec<BatchItemRequest>,
+    #[serde(default)]
+    pub albums: Vec<BatchItemRequest>,
+    #[serde(default)]
+    pub tracks: Vec<BatchItemRequest>,
+}
+
+#[derive(Serialize)]
+struct BatchContentResponse {
+    pub artists: std::collections::HashMap<String, BatchItemResult>,
+    pub albums: std::collections::HashMap<String, BatchItemResult>,
+    pub tracks: std::collections::HashMap<String, BatchItemResult>,
+}
+
+#[derive(Serialize)]
+#[serde(untagged)]
+enum BatchItemResult {
+    Ok { ok: serde_json::Value },
+    Error { error: String },
+}
+
 async fn admin_get_users(
     _session: Session,
     State(user_manager): State<GuardedUserManager>,
@@ -4043,6 +4195,7 @@ pub async fn make_app(
         .route("/image/{id}", get(get_image))
         .route("/whatsnew", get(get_whats_new))
         .route("/popular", get(get_popular_content))
+        .route("/batch", post(post_batch_content))
         .layer(GovernorLayer::new(content_read_rate_limit.clone()))
         .with_state(state.clone());
 

@@ -201,6 +201,16 @@ impl TestClient {
             .expect("Get resolved track request failed")
     }
 
+    /// POST /v1/content/batch - Batch fetch multiple artists, albums, and tracks
+    pub async fn post_batch_content(&self, body: serde_json::Value) -> Response {
+        self.client
+            .post(format!("{}/v1/content/batch", self.base_url))
+            .json(&body)
+            .send()
+            .await
+            .expect("Post batch content request failed")
+    }
+
     /// GET /v1/content/image/{id} - Get image for an item (album or artist ID)
     pub async fn get_image(&self, id: &str) -> Response {
         self.client
