@@ -1,6 +1,8 @@
 package com.lelloman.pezzottify.android.remoteapi.internal
 
 import com.lelloman.pezzottify.android.remoteapi.internal.requests.AddTracksToPlaylistRequest
+import com.lelloman.pezzottify.android.remoteapi.internal.requests.BatchContentRequest
+import com.lelloman.pezzottify.android.remoteapi.internal.requests.BatchContentResponse
 import com.lelloman.pezzottify.android.remoteapi.internal.requests.CreatePlaylistRequest
 import com.lelloman.pezzottify.android.remoteapi.internal.requests.CreatePlaylistResponse
 import com.lelloman.pezzottify.android.remoteapi.internal.requests.ImpressionRequest
@@ -82,6 +84,12 @@ internal interface RetrofitApiClient {
         @Header("Authorization") authToken: String,
         @Path("imageId") imageId: String
     ): Response<ResponseBody>
+
+    @POST("/v1/content/batch")
+    suspend fun postBatchContent(
+        @Header("Authorization") authToken: String,
+        @Body request: BatchContentRequest,
+    ): Response<BatchContentResponse>
 
     @GET("/v1/content/popular")
     suspend fun getPopularContent(

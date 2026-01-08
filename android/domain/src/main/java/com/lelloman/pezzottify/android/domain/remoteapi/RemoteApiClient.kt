@@ -1,9 +1,11 @@
 package com.lelloman.pezzottify.android.domain.remoteapi
 
 import com.lelloman.pezzottify.android.domain.listening.ListeningEventSyncData
+import com.lelloman.pezzottify.android.domain.remoteapi.request.BatchContentRequest
 import com.lelloman.pezzottify.android.domain.remoteapi.response.AlbumResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.ArtistDiscographyResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.ArtistResponse
+import com.lelloman.pezzottify.android.domain.remoteapi.response.BatchContentResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.DownloadLimitsResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.FullSkeletonResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.ImageResponse
@@ -58,6 +60,15 @@ interface RemoteApiClient {
     suspend fun getTrack(trackId: String): RemoteApiResponse<TrackResponse>
 
     suspend fun getImage(imageId: String): RemoteApiResponse<ImageResponse>
+
+    /**
+     * Fetch multiple content items in a single batch request.
+     * Server limit: 100 items total across all types.
+     *
+     * @param request The batch request specifying which items to fetch
+     * @return Response with maps of ID -> result for each content type
+     */
+    suspend fun getBatchContent(request: BatchContentRequest): RemoteApiResponse<BatchContentResponse>
 
     /**
      * Get popular albums and artists based on listening data from the last 7 days.
