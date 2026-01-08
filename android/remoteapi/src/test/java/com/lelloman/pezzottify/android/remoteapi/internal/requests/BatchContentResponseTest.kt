@@ -80,9 +80,7 @@ class BatchContentResponseTest {
 
     @Test
     fun `deserializes successful album result`() {
-        // Note: Images are fetched by ID via /v1/content/image/{id} endpoint
-        // The display_image field is still expected in the Android model for backwards compatibility
-        // but will be null since server no longer returns it
+        // Images are fetched by album ID via /v1/content/image/{id} endpoint
         val jsonString = """
             {
                 "artists": {},
@@ -100,8 +98,7 @@ class BatchContentResponseTest {
                             ],
                             "discs": [
                                 {"number": 1, "tracks": []}
-                            ],
-                            "display_image": null
+                            ]
                         }
                     }
                 },
@@ -117,7 +114,6 @@ class BatchContentResponseTest {
         val ok = albumResult as BatchAlbumResult.Ok
         assertThat(ok.ok.album.id).isEqualTo("album-1")
         assertThat(ok.ok.album.name).isEqualTo("Test Album")
-        assertThat(ok.ok.displayImage).isNull()
     }
 
     @Test

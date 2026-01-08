@@ -100,8 +100,11 @@ class StaticsProvider internal constructor(
 
                     fetchState?.isLoading == true -> StaticsItem.Loading(itemId)
                     fetchState?.errorReason != null -> {
-                        // Always retry errored items - backoff is for background sync, not user views
-                        scheduleItemFetch(itemId, StaticItemType.Artist)
+                        // Retry errored items only if backoff has expired to avoid tight retry loops
+                        if (fetchState.isBackoffExpired()) {
+                            scheduleItemFetch(itemId, StaticItemType.Artist)
+                        }
+                        // Show loading while waiting for retry
                         StaticsItem.Loading(itemId)
                     }
 
@@ -140,8 +143,11 @@ class StaticsProvider internal constructor(
 
                     fetchState?.isLoading == true -> StaticsItem.Loading(itemId)
                     fetchState?.errorReason != null -> {
-                        // Always retry errored items - backoff is for background sync, not user views
-                        scheduleItemFetch(itemId, StaticItemType.Track)
+                        // Retry errored items only if backoff has expired to avoid tight retry loops
+                        if (fetchState.isBackoffExpired()) {
+                            scheduleItemFetch(itemId, StaticItemType.Track)
+                        }
+                        // Show loading while waiting for retry
                         StaticsItem.Loading(itemId)
                     }
 
@@ -180,8 +186,11 @@ class StaticsProvider internal constructor(
 
                     fetchState?.isLoading == true -> StaticsItem.Loading(itemId)
                     fetchState?.errorReason != null -> {
-                        // Always retry errored items - backoff is for background sync, not user views
-                        scheduleItemFetch(itemId, StaticItemType.Album)
+                        // Retry errored items only if backoff has expired to avoid tight retry loops
+                        if (fetchState.isBackoffExpired()) {
+                            scheduleItemFetch(itemId, StaticItemType.Album)
+                        }
+                        // Show loading while waiting for retry
                         StaticsItem.Loading(itemId)
                     }
 

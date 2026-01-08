@@ -75,14 +75,13 @@ data class AlbumData(
 
 /**
  * Server's ResolvedAlbum response - nested structure with album, artists, and discs.
+ * Images are fetched by album ID via /v1/content/image/{id}
  */
 @Serializable
 data class AlbumResponse(
     val album: AlbumData,
     val artists: List<ArtistData>,
     val discs: List<Disc>,
-    @SerialName("display_image")
-    val displayImage: Image? = null,
 )
 
 fun AlbumResponse.toDomain() = object : Album {
@@ -95,7 +94,7 @@ fun AlbumResponse.toDomain() = object : Album {
     override val artistsIds: List<String>
         get() = this@toDomain.artists.map { it.id }
     override val displayImageId: String?
-        get() = this@toDomain.displayImage?.id
+        get() = this@toDomain.album.id
     override val discs: List<com.lelloman.pezzottify.android.domain.statics.Disc>
         get() = this@toDomain.discs.map {
             object : com.lelloman.pezzottify.android.domain.statics.Disc {
