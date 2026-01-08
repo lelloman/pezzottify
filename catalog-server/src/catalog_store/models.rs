@@ -124,6 +124,9 @@ pub struct Track {
     /// International Standard Recording Code for cross-referencing
     #[serde(skip_serializing_if = "Option::is_none")]
     pub external_id_isrc: Option<String>,
+    /// Relative path to audio file (e.g., "audio/7e/c2/Yj/trackid.ogg")
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub audio_uri: Option<String>,
 }
 
 // =============================================================================

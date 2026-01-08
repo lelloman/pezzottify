@@ -1460,6 +1460,7 @@ async fn create_track(
         popularity: data.popularity,
         language: data.language,
         external_id_isrc: data.external_id_isrc,
+        audio_uri: None,
     };
 
     if let Err(e) = validate_track(&track) {
@@ -1500,6 +1501,7 @@ async fn update_track(
         popularity: data.popularity,
         language: data.language,
         external_id_isrc: data.external_id_isrc,
+        audio_uri: None,
     };
 
     if let Err(e) = validate_track(&track) {
