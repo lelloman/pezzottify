@@ -101,6 +101,7 @@ internal class RemoteApiClientImpl(
         ignoreUnknownKeys = true
         namingStrategy = JsonNamingStrategy.SnakeCase
         classDiscriminator = "section"
+        encodeDefaults = true
     }
 
     private val retrofitFlow = hostUrlProvider.hostUrl
@@ -111,6 +112,7 @@ internal class RemoteApiClientImpl(
     private val <T>Response<T>.commonError
         get() = if (!isSuccessful) {
             when (code()) {
+                401 -> RemoteApiResponse.Error.Unauthorized
                 403 -> RemoteApiResponse.Error.Unauthorized
                 404 -> RemoteApiResponse.Error.NotFound
                 else -> RemoteApiResponse.Error.Unknown(message())

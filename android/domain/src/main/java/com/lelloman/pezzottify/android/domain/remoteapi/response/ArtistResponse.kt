@@ -12,6 +12,9 @@ data class ArtistData(
     val id: String,
     val name: String,
     val genres: List<String>,
+    @SerialName("followers_total")
+    val followersTotal: Long = 0,
+    val popularity: Int = 0,
 )
 
 /**
