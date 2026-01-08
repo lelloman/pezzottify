@@ -3,12 +3,15 @@ package com.lelloman.pezzottify.android.domain.sync
 import com.google.common.truth.Truth.assertThat
 import com.lelloman.pezzottify.android.domain.app.TimeProvider
 import com.lelloman.pezzottify.android.domain.remoteapi.RemoteApiClient
+import com.lelloman.pezzottify.android.domain.remoteapi.request.BatchContentRequest
 import com.lelloman.pezzottify.android.domain.remoteapi.response.AlbumData
 import com.lelloman.pezzottify.android.domain.remoteapi.response.AlbumResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.AlbumType
 import com.lelloman.pezzottify.android.domain.remoteapi.response.ArtistData
 import com.lelloman.pezzottify.android.domain.remoteapi.response.ArtistDiscographyResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.ArtistResponse
+import com.lelloman.pezzottify.android.domain.remoteapi.response.BatchContentResponse
+import com.lelloman.pezzottify.android.domain.remoteapi.response.BatchItemResult
 import com.lelloman.pezzottify.android.domain.remoteapi.response.DiscographyAlbum
 import com.lelloman.pezzottify.android.domain.remoteapi.response.RemoteApiResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.TrackData
@@ -31,7 +34,6 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.cancel
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -207,13 +209,19 @@ class StaticsSynchronizerTest {
             emptyList()
         )
         coEvery { fetchStateStore.getLoadingItemsCount() } returns 0
-        coEvery { remoteApiClient.getArtist(artistId) } returns RemoteApiResponse.Success(artistResponse)
+        coEvery { remoteApiClient.getBatchContent(any()) } returns RemoteApiResponse.Success(
+            BatchContentResponse(
+                artists = mapOf(artistId to BatchItemResult.Ok(artistResponse)),
+                albums = emptyMap(),
+                tracks = emptyMap(),
+            )
+        )
 
         synchronizer = createSynchronizer()
         synchronizer.initialize()
         advanceUntilIdle()
 
-        coVerify { remoteApiClient.getArtist(artistId) }
+        coVerify { remoteApiClient.getBatchContent(any()) }
         coVerify { staticsStore.storeArtist(any()) }
         coVerify { fetchStateStore.delete(artistId) }
     }
@@ -229,13 +237,19 @@ class StaticsSynchronizerTest {
             emptyList()
         )
         coEvery { fetchStateStore.getLoadingItemsCount() } returns 0
-        coEvery { remoteApiClient.getAlbum(albumId) } returns RemoteApiResponse.Success(albumResponse)
+        coEvery { remoteApiClient.getBatchContent(any()) } returns RemoteApiResponse.Success(
+            BatchContentResponse(
+                artists = emptyMap(),
+                albums = mapOf(albumId to BatchItemResult.Ok(albumResponse)),
+                tracks = emptyMap(),
+            )
+        )
 
         synchronizer = createSynchronizer()
         synchronizer.initialize()
         advanceUntilIdle()
 
-        coVerify { remoteApiClient.getAlbum(albumId) }
+        coVerify { remoteApiClient.getBatchContent(any()) }
         coVerify { staticsStore.storeAlbum(any()) }
         coVerify { fetchStateStore.delete(albumId) }
     }
@@ -251,13 +265,19 @@ class StaticsSynchronizerTest {
             emptyList()
         )
         coEvery { fetchStateStore.getLoadingItemsCount() } returns 0
-        coEvery { remoteApiClient.getTrack(trackId) } returns RemoteApiResponse.Success(trackResponse)
+        coEvery { remoteApiClient.getBatchContent(any()) } returns RemoteApiResponse.Success(
+            BatchContentResponse(
+                artists = emptyMap(),
+                albums = emptyMap(),
+                tracks = mapOf(trackId to BatchItemResult.Ok(trackResponse)),
+            )
+        )
 
         synchronizer = createSynchronizer()
         synchronizer.initialize()
         advanceUntilIdle()
 
-        coVerify { remoteApiClient.getTrack(trackId) }
+        coVerify { remoteApiClient.getBatchContent(any()) }
         coVerify { staticsStore.storeTrack(any()) }
         coVerify { fetchStateStore.delete(trackId) }
     }
@@ -299,7 +319,13 @@ class StaticsSynchronizerTest {
             storedStates.add(firstArg())
             Result.success(Unit)
         }
-        coEvery { remoteApiClient.getArtist(artistId) } returns RemoteApiResponse.Success(createArtistResponse(artistId))
+        coEvery { remoteApiClient.getBatchContent(any()) } returns RemoteApiResponse.Success(
+            BatchContentResponse(
+                artists = mapOf(artistId to BatchItemResult.Ok(createArtistResponse(artistId))),
+                albums = emptyMap(),
+                tracks = emptyMap(),
+            )
+        )
 
         synchronizer = createSynchronizer()
         synchronizer.initialize()
@@ -330,7 +356,7 @@ class StaticsSynchronizerTest {
             storedStates.add(firstArg())
             Result.success(Unit)
         }
-        coEvery { remoteApiClient.getArtist(artistId) } returns RemoteApiResponse.Error.Network
+        coEvery { remoteApiClient.getBatchContent(any()) } returns RemoteApiResponse.Error.Network
 
         synchronizer = createSynchronizer()
         synchronizer.initialize()
@@ -358,7 +384,7 @@ class StaticsSynchronizerTest {
             storedStates.add(firstArg())
             Result.success(Unit)
         }
-        coEvery { remoteApiClient.getArtist(artistId) } returns RemoteApiResponse.Error.Unauthorized
+        coEvery { remoteApiClient.getBatchContent(any()) } returns RemoteApiResponse.Error.Unauthorized
 
         synchronizer = createSynchronizer()
         synchronizer.initialize()
@@ -385,7 +411,14 @@ class StaticsSynchronizerTest {
             storedStates.add(firstArg())
             Result.success(Unit)
         }
-        coEvery { remoteApiClient.getArtist(artistId) } returns RemoteApiResponse.Error.NotFound
+        // Batch item-level not_found error
+        coEvery { remoteApiClient.getBatchContent(any()) } returns RemoteApiResponse.Success(
+            BatchContentResponse(
+                artists = mapOf(artistId to BatchItemResult.Error("not_found")),
+                albums = emptyMap(),
+                tracks = emptyMap(),
+            )
+        )
 
         synchronizer = createSynchronizer()
         synchronizer.initialize()
@@ -412,7 +445,7 @@ class StaticsSynchronizerTest {
             storedStates.add(firstArg())
             Result.success(Unit)
         }
-        coEvery { remoteApiClient.getArtist(artistId) } returns RemoteApiResponse.Error.Unknown("Something went wrong")
+        coEvery { remoteApiClient.getBatchContent(any()) } returns RemoteApiResponse.Error.Unknown("Something went wrong")
 
         synchronizer = createSynchronizer()
         synchronizer.initialize()
@@ -439,7 +472,13 @@ class StaticsSynchronizerTest {
             storedStates.add(firstArg())
             Result.success(Unit)
         }
-        coEvery { remoteApiClient.getArtist(artistId) } returns RemoteApiResponse.Success(createArtistResponse(artistId))
+        coEvery { remoteApiClient.getBatchContent(any()) } returns RemoteApiResponse.Success(
+            BatchContentResponse(
+                artists = mapOf(artistId to BatchItemResult.Ok(createArtistResponse(artistId))),
+                albums = emptyMap(),
+                tracks = emptyMap(),
+            )
+        )
         coEvery { staticsStore.storeArtist(any()) } throws RuntimeException("Storage failed")
 
         synchronizer = createSynchronizer()
@@ -455,7 +494,7 @@ class StaticsSynchronizerTest {
     // ========== Multiple Items Tests ==========
 
     @Test
-    fun `processes multiple idle items in single iteration`() = runTest {
+    fun `processes multiple idle items in single batch`() = runTest {
         val items = listOf(
             createIdleFetchState("artist-1", StaticItemType.Artist),
             createIdleFetchState("album-1", StaticItemType.Album),
@@ -464,17 +503,20 @@ class StaticsSynchronizerTest {
 
         coEvery { fetchStateStore.getIdle() } returnsMany listOf(items, emptyList())
         coEvery { fetchStateStore.getLoadingItemsCount() } returns 0
-        coEvery { remoteApiClient.getArtist("artist-1") } returns RemoteApiResponse.Success(createArtistResponse("artist-1"))
-        coEvery { remoteApiClient.getAlbum("album-1") } returns RemoteApiResponse.Success(createAlbumResponse("album-1"))
-        coEvery { remoteApiClient.getTrack("track-1") } returns RemoteApiResponse.Success(createTrackResponse("track-1"))
+        coEvery { remoteApiClient.getBatchContent(any()) } returns RemoteApiResponse.Success(
+            BatchContentResponse(
+                artists = mapOf("artist-1" to BatchItemResult.Ok(createArtistResponse("artist-1"))),
+                albums = mapOf("album-1" to BatchItemResult.Ok(createAlbumResponse("album-1"))),
+                tracks = mapOf("track-1" to BatchItemResult.Ok(createTrackResponse("track-1"))),
+            )
+        )
 
         synchronizer = createSynchronizer()
         synchronizer.initialize()
         advanceUntilIdle()
 
-        coVerify { remoteApiClient.getArtist("artist-1") }
-        coVerify { remoteApiClient.getAlbum("album-1") }
-        coVerify { remoteApiClient.getTrack("track-1") }
+        // Should make a single batch request instead of 3 individual ones
+        coVerify(exactly = 1) { remoteApiClient.getBatchContent(any()) }
         coVerify { fetchStateStore.delete("artist-1") }
         coVerify { fetchStateStore.delete("album-1") }
         coVerify { fetchStateStore.delete("track-1") }
@@ -489,16 +531,23 @@ class StaticsSynchronizerTest {
 
         coEvery { fetchStateStore.getIdle() } returnsMany listOf(items, emptyList())
         coEvery { fetchStateStore.getLoadingItemsCount() } returns 0
-        coEvery { remoteApiClient.getArtist("artist-fail") } returns RemoteApiResponse.Error.Network
-        coEvery { remoteApiClient.getArtist("artist-success") } returns RemoteApiResponse.Success(createArtistResponse("artist-success"))
+        coEvery { remoteApiClient.getBatchContent(any()) } returns RemoteApiResponse.Success(
+            BatchContentResponse(
+                artists = mapOf(
+                    "artist-fail" to BatchItemResult.Error("not_found"),
+                    "artist-success" to BatchItemResult.Ok(createArtistResponse("artist-success")),
+                ),
+                albums = emptyMap(),
+                tracks = emptyMap(),
+            )
+        )
 
         synchronizer = createSynchronizer()
         synchronizer.initialize()
         advanceUntilIdle()
 
-        // Both should be processed
-        coVerify { remoteApiClient.getArtist("artist-fail") }
-        coVerify { remoteApiClient.getArtist("artist-success") }
+        // Both should be processed in the same batch
+        coVerify(exactly = 1) { remoteApiClient.getBatchContent(any()) }
 
         // Success should be deleted, failure should have error state stored
         coVerify { fetchStateStore.delete("artist-success") }
@@ -524,7 +573,13 @@ class StaticsSynchronizerTest {
             storedStates.add(firstArg())
             Result.success(Unit)
         }
-        coEvery { remoteApiClient.getArtist(artistId) } returns RemoteApiResponse.Success(createArtistResponse(artistId))
+        coEvery { remoteApiClient.getBatchContent(any()) } returns RemoteApiResponse.Success(
+            BatchContentResponse(
+                artists = mapOf(artistId to BatchItemResult.Ok(createArtistResponse(artistId))),
+                albums = emptyMap(),
+                tracks = emptyMap(),
+            )
+        )
 
         synchronizer = createSynchronizer()
         synchronizer.initialize()
@@ -551,7 +606,7 @@ class StaticsSynchronizerTest {
             storedStates.add(firstArg())
             Result.success(Unit)
         }
-        coEvery { remoteApiClient.getArtist(artistId) } returns RemoteApiResponse.Error.Network
+        coEvery { remoteApiClient.getBatchContent(any()) } returns RemoteApiResponse.Error.Network
 
         synchronizer = createSynchronizer()
         synchronizer.initialize()
@@ -565,67 +620,40 @@ class StaticsSynchronizerTest {
     // ========== API Dispatch Tests ==========
 
     @Test
-    fun `Artist item type calls getArtist API`() = runTest {
+    fun `Artist Album Track items use batch API`() = runTest {
         val artistId = "dispatch-artist"
-        coEvery { fetchStateStore.getIdle() } returnsMany listOf(
-            listOf(createIdleFetchState(artistId, StaticItemType.Artist)),
-            emptyList()
-        )
-        coEvery { fetchStateStore.getLoadingItemsCount() } returns 0
-        coEvery { remoteApiClient.getArtist(artistId) } returns RemoteApiResponse.Success(createArtistResponse(artistId))
-
-        synchronizer = createSynchronizer()
-        synchronizer.initialize()
-        advanceUntilIdle()
-
-        coVerify(exactly = 1) { remoteApiClient.getArtist(artistId) }
-        coVerify(exactly = 0) { remoteApiClient.getAlbum(any()) }
-        coVerify(exactly = 0) { remoteApiClient.getTrack(any()) }
-        coVerify(exactly = 0) { remoteApiClient.getArtistDiscography(any()) }
-    }
-
-    @Test
-    fun `Album item type calls getAlbum API`() = runTest {
         val albumId = "dispatch-album"
-        coEvery { fetchStateStore.getIdle() } returnsMany listOf(
-            listOf(createIdleFetchState(albumId, StaticItemType.Album)),
-            emptyList()
+        val trackId = "dispatch-track"
+        val items = listOf(
+            createIdleFetchState(artistId, StaticItemType.Artist),
+            createIdleFetchState(albumId, StaticItemType.Album),
+            createIdleFetchState(trackId, StaticItemType.Track),
         )
+
+        coEvery { fetchStateStore.getIdle() } returnsMany listOf(items, emptyList())
         coEvery { fetchStateStore.getLoadingItemsCount() } returns 0
-        coEvery { remoteApiClient.getAlbum(albumId) } returns RemoteApiResponse.Success(createAlbumResponse(albumId))
+        coEvery { remoteApiClient.getBatchContent(any()) } returns RemoteApiResponse.Success(
+            BatchContentResponse(
+                artists = mapOf(artistId to BatchItemResult.Ok(createArtistResponse(artistId))),
+                albums = mapOf(albumId to BatchItemResult.Ok(createAlbumResponse(albumId))),
+                tracks = mapOf(trackId to BatchItemResult.Ok(createTrackResponse(trackId))),
+            )
+        )
 
         synchronizer = createSynchronizer()
         synchronizer.initialize()
         advanceUntilIdle()
 
+        // Should use batch API, not individual APIs
+        coVerify(exactly = 1) { remoteApiClient.getBatchContent(any()) }
         coVerify(exactly = 0) { remoteApiClient.getArtist(any()) }
-        coVerify(exactly = 1) { remoteApiClient.getAlbum(albumId) }
+        coVerify(exactly = 0) { remoteApiClient.getAlbum(any()) }
         coVerify(exactly = 0) { remoteApiClient.getTrack(any()) }
         coVerify(exactly = 0) { remoteApiClient.getArtistDiscography(any()) }
     }
 
     @Test
-    fun `Track item type calls getTrack API`() = runTest {
-        val trackId = "dispatch-track"
-        coEvery { fetchStateStore.getIdle() } returnsMany listOf(
-            listOf(createIdleFetchState(trackId, StaticItemType.Track)),
-            emptyList()
-        )
-        coEvery { fetchStateStore.getLoadingItemsCount() } returns 0
-        coEvery { remoteApiClient.getTrack(trackId) } returns RemoteApiResponse.Success(createTrackResponse(trackId))
-
-        synchronizer = createSynchronizer()
-        synchronizer.initialize()
-        advanceUntilIdle()
-
-        coVerify(exactly = 0) { remoteApiClient.getArtist(any()) }
-        coVerify(exactly = 0) { remoteApiClient.getAlbum(any()) }
-        coVerify(exactly = 1) { remoteApiClient.getTrack(trackId) }
-        coVerify(exactly = 0) { remoteApiClient.getArtistDiscography(any()) }
-    }
-
-    @Test
-    fun `Discography item type calls getArtistDiscography API`() = runTest {
+    fun `Discography item type calls getArtistDiscography API individually`() = runTest {
         val artistId = "dispatch-discog"
         coEvery { fetchStateStore.getIdle() } returnsMany listOf(
             listOf(createIdleFetchState(artistId, StaticItemType.Discography)),
@@ -638,10 +666,40 @@ class StaticsSynchronizerTest {
         synchronizer.initialize()
         advanceUntilIdle()
 
-        coVerify(exactly = 0) { remoteApiClient.getArtist(any()) }
-        coVerify(exactly = 0) { remoteApiClient.getAlbum(any()) }
-        coVerify(exactly = 0) { remoteApiClient.getTrack(any()) }
+        // Discography uses individual API (not batch), no batch call needed
+        coVerify(exactly = 0) { remoteApiClient.getBatchContent(any()) }
         coVerify(exactly = 1) { remoteApiClient.getArtistDiscography(artistId) }
+    }
+
+    @Test
+    fun `mixed batch and discography items processed correctly`() = runTest {
+        val artistId = "mixed-artist"
+        val discogArtistId = "mixed-discog"
+        val items = listOf(
+            createIdleFetchState(artistId, StaticItemType.Artist),
+            createIdleFetchState(discogArtistId, StaticItemType.Discography),
+        )
+
+        coEvery { fetchStateStore.getIdle() } returnsMany listOf(items, emptyList())
+        coEvery { fetchStateStore.getLoadingItemsCount() } returns 0
+        coEvery { remoteApiClient.getBatchContent(any()) } returns RemoteApiResponse.Success(
+            BatchContentResponse(
+                artists = mapOf(artistId to BatchItemResult.Ok(createArtistResponse(artistId))),
+                albums = emptyMap(),
+                tracks = emptyMap(),
+            )
+        )
+        coEvery { remoteApiClient.getArtistDiscography(discogArtistId) } returns RemoteApiResponse.Success(createDiscographyResponse())
+
+        synchronizer = createSynchronizer()
+        synchronizer.initialize()
+        advanceUntilIdle()
+
+        // Should use batch API for artist and individual API for discography
+        coVerify(exactly = 1) { remoteApiClient.getBatchContent(any()) }
+        coVerify(exactly = 1) { remoteApiClient.getArtistDiscography(discogArtistId) }
+        coVerify { fetchStateStore.delete(artistId) }
+        coVerify { fetchStateStore.delete(discogArtistId) }
     }
 
     // ========== Helper Functions ==========
