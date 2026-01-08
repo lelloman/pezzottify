@@ -105,7 +105,7 @@ impl From<&Artist> for ArtistSummary {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::catalog_store::{AlbumType, ArtistRole, Disc, Track, TrackArtist};
+    use crate::catalog_store::{AlbumType, ArtistRole, Disc, Track, TrackArtist, TrackAvailability};
 
     fn make_artist(id: &str, name: &str) -> Artist {
         Artist {
@@ -142,6 +142,8 @@ mod tests {
             popularity: 0,
             language: None,
             external_id_isrc: None,
+            audio_uri: None,
+            availability: TrackAvailability::default(),
         }
     }
 

@@ -396,7 +396,7 @@ impl<'a> StreamingSearchPipeline<'a> {
                 .flatten()
                 .map(|t| {
                     ResolvedSearchResult::Track(crate::search::SearchedTrack {
-                        id: t.track.id,
+                        id: t.track.id.clone(),
                         name: t.track.name,
                         // Convert from ms to seconds for display
                         duration: (t.track.duration_ms / 1000) as u32,
@@ -407,7 +407,7 @@ impl<'a> StreamingSearchPipeline<'a> {
                             .collect(),
                         image_id: Some(t.album.id.clone()), // Use album ID as image reference
                         album_id: t.album.id,
-                        availability: "available".to_string(), // Spotify tracks are all available
+                        availability: t.track.availability.as_str().to_string(),
                     })
                 }),
         }

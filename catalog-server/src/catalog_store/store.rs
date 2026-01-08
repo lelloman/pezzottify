@@ -242,6 +242,7 @@ impl SqliteCatalogStore {
             language,
             external_id_isrc: isrc,
             audio_uri,
+            availability: TrackAvailability::default(),
         }))
     }
 
@@ -335,9 +336,19 @@ impl SqliteCatalogStore {
                     language: row.get(9)?,
                     external_id_isrc: row.get(4)?,
                     audio_uri: row.get(10)?,
+                    availability: TrackAvailability::default(),
                 })
             })?
             .filter_map(|r| r.ok())
+            .collect();
+
+        // Set availability for each track (filesystem check, doesn't need DB)
+        let tracks: Vec<Track> = tracks
+            .into_iter()
+            .map(|mut t| {
+                t.availability = self.get_track_availability(&t.id);
+                t
+            })
             .collect();
 
         // Group tracks by disc
@@ -378,7 +389,7 @@ impl SqliteCatalogStore {
              WHERE t.rowid = ?1",
         )?;
 
-        let (track, album_id): (Track, String) =
+        let (mut track, album_id): (Track, String) =
             track_stmt.query_row(params![track_rowid], |row| {
                 let explicit: i32 = row.get(8)?;
                 let album_id: String = row.get(10)?;
@@ -395,10 +406,15 @@ impl SqliteCatalogStore {
                         language: row.get(9)?,
                         external_id_isrc: row.get(4)?,
                         audio_uri: row.get(11)?,
+                        availability: TrackAvailability::default(),
                     },
                     album_id,
                 ))
             })?;
+
+        // Compute availability based on audio file existence
+        // (done outside of DB query since it only checks filesystem)
+        track.availability = self.get_track_availability(&track.id);
 
         // Get album
         let mut album_stmt = conn.prepare_cached(
@@ -615,12 +631,22 @@ impl CatalogStore for SqliteCatalogStore {
 
     fn get_track_json(&self, id: &str) -> Result<Option<serde_json::Value>> {
         let conn = self.conn.lock().unwrap();
-        Self::get_track_inner(&conn, id).map(|opt| opt.map(|t| serde_json::to_value(t).unwrap()))
+        Self::get_track_inner(&conn, id).map(|opt| {
+            opt.map(|mut t| {
+                t.availability = self.get_track_availability(&t.id);
+                serde_json::to_value(t).unwrap()
+            })
+        })
     }
 
     fn get_track(&self, id: &str) -> Result<Option<Track>> {
         let conn = self.conn.lock().unwrap();
-        Self::get_track_inner(&conn, id)
+        Self::get_track_inner(&conn, id).map(|opt| {
+            opt.map(|mut t| {
+                t.availability = self.get_track_availability(&t.id);
+                t
+            })
+        })
     }
 
     fn get_resolved_artist_json(&self, id: &str) -> Result<Option<serde_json::Value>> {

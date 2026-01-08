@@ -107,6 +107,33 @@ pub struct Album {
     pub popularity: i32,
 }
 
+/// Track availability state
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum TrackAvailability {
+    /// Track audio file is available for streaming
+    #[default]
+    Available,
+    /// Track audio file is not available (missing)
+    Unavailable,
+    /// Track is currently being fetched/downloaded
+    Fetching,
+    /// Track fetch failed
+    FetchError,
+}
+
+impl TrackAvailability {
+    /// Get the snake_case string representation (matches serde serialization)
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            TrackAvailability::Available => "available",
+            TrackAvailability::Unavailable => "unavailable",
+            TrackAvailability::Fetching => "fetching",
+            TrackAvailability::FetchError => "fetch_error",
+        }
+    }
+}
+
 /// Track entity
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Track {
@@ -127,6 +154,9 @@ pub struct Track {
     /// Relative path to audio file (e.g., "audio/7e/c2/Yj/trackid.ogg")
     #[serde(skip_serializing_if = "Option::is_none")]
     pub audio_uri: Option<String>,
+    /// Track availability state (computed from audio file existence)
+    #[serde(default)]
+    pub availability: TrackAvailability,
 }
 
 // =============================================================================

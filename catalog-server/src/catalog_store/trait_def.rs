@@ -90,6 +90,15 @@ pub trait CatalogStore: Send + Sync {
     /// Get the album ID for a track (needed for audio path resolution).
     fn get_track_album_id(&self, track_id: &str) -> Option<String>;
 
+    /// Compute the availability of a track based on audio file existence.
+    fn get_track_availability(&self, track_id: &str) -> super::TrackAvailability {
+        if self.get_track_audio_path(track_id).is_some() {
+            super::TrackAvailability::Available
+        } else {
+            super::TrackAvailability::Unavailable
+        }
+    }
+
     // =========================================================================
     // Counts (for metrics)
     // =========================================================================

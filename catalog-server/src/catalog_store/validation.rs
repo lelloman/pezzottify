@@ -3,7 +3,7 @@
 //! Provides validation functions to ensure data integrity before
 //! inserting or updating entities in the catalog store.
 
-use super::models::{Album, Artist, Track};
+use super::models::{Album, Artist, Track, TrackAvailability};
 use std::fmt;
 
 /// Validation error types
@@ -151,6 +151,8 @@ mod tests {
             popularity: 50,
             language: None,
             external_id_isrc: None,
+            audio_uri: None,
+            availability: TrackAvailability::default(),
         }
     }
 

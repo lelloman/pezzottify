@@ -1447,7 +1447,7 @@ async fn create_track(
     State(catalog_store): State<GuardedCatalogStore>,
     Json(data): Json<CreateTrackRequest>,
 ) -> Response {
-    use crate::catalog_store::{validate_track, Track};
+    use crate::catalog_store::{validate_track, Track, TrackAvailability};
 
     let track = Track {
         id: data.id,
@@ -1461,6 +1461,7 @@ async fn create_track(
         language: data.language,
         external_id_isrc: data.external_id_isrc,
         audio_uri: None,
+        availability: TrackAvailability::default(),
     };
 
     if let Err(e) = validate_track(&track) {
@@ -1488,7 +1489,7 @@ async fn update_track(
     Path(id): Path<String>,
     Json(data): Json<CreateTrackRequest>,
 ) -> Response {
-    use crate::catalog_store::{validate_track, Track};
+    use crate::catalog_store::{validate_track, Track, TrackAvailability};
 
     let track = Track {
         id,
@@ -1502,6 +1503,7 @@ async fn update_track(
         language: data.language,
         external_id_isrc: data.external_id_isrc,
         audio_uri: None,
+        availability: TrackAvailability::default(),
     };
 
     if let Err(e) = validate_track(&track) {
