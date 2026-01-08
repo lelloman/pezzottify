@@ -184,7 +184,7 @@ impl SqliteCatalogStore {
         // First get the track with album_rowid
         let mut stmt = conn.prepare_cached(
             "SELECT id, name, album_rowid, track_number, external_id_isrc,
-                    popularity, disc_number, duration_ms, explicit, language
+                    popularity, disc_number, duration_ms, explicit, language, audio_uri
              FROM tracks WHERE id = ?1",
         )?;
 
@@ -201,6 +201,7 @@ impl SqliteCatalogStore {
                 row.get::<_, i64>(7)?,
                 row.get::<_, i32>(8)?,
                 row.get::<_, Option<String>>(9)?,
+                row.get::<_, Option<String>>(10)?,
             ))
         });
 
@@ -215,6 +216,7 @@ impl SqliteCatalogStore {
             duration_ms,
             explicit,
             language,
+            audio_uri,
         ) = match row_result {
             Ok(data) => data,
             Err(rusqlite::Error::QueryReturnedNoRows) => return Ok(None),
@@ -239,6 +241,7 @@ impl SqliteCatalogStore {
             popularity,
             language,
             external_id_isrc: isrc,
+            audio_uri,
         }))
     }
 
@@ -312,7 +315,7 @@ impl SqliteCatalogStore {
         // Get tracks grouped by disc
         let mut tracks_stmt = conn.prepare_cached(
             "SELECT id, name, album_rowid, track_number, external_id_isrc,
-                    popularity, disc_number, duration_ms, explicit, language
+                    popularity, disc_number, duration_ms, explicit, language, audio_uri
              FROM tracks WHERE album_rowid = ?1
              ORDER BY disc_number, track_number",
         )?;
@@ -331,6 +334,7 @@ impl SqliteCatalogStore {
                     popularity: row.get(5)?,
                     language: row.get(9)?,
                     external_id_isrc: row.get(4)?,
+                    audio_uri: row.get(10)?,
                 })
             })?
             .filter_map(|r| r.ok())
@@ -368,7 +372,7 @@ impl SqliteCatalogStore {
         let mut track_stmt = conn.prepare_cached(
             "SELECT t.id, t.name, t.album_rowid, t.track_number, t.external_id_isrc,
                     t.popularity, t.disc_number, t.duration_ms, t.explicit, t.language,
-                    a.id as album_id
+                    a.id as album_id, t.audio_uri
              FROM tracks t
              INNER JOIN albums a ON t.album_rowid = a.rowid
              WHERE t.rowid = ?1",
@@ -390,6 +394,7 @@ impl SqliteCatalogStore {
                         popularity: row.get(5)?,
                         language: row.get(9)?,
                         external_id_isrc: row.get(4)?,
+                        audio_uri: row.get(11)?,
                     },
                     album_id,
                 ))
@@ -671,16 +676,18 @@ impl CatalogStore for SqliteCatalogStore {
     }
 
     fn get_track_audio_path(&self, track_id: &str) -> Option<PathBuf> {
-        // Audio files are stored as {media_base_path}/audio/{track_id}.ogg
-        let path = self
-            .media_base_path
-            .join("audio")
-            .join(format!("{}.ogg", track_id));
-        if path.exists() {
-            Some(path)
-        } else {
-            None
-        }
+        // Look up audio_uri from database
+        let conn = self.conn.lock().unwrap();
+        let audio_uri: Option<String> = conn
+            .query_row(
+                "SELECT audio_uri FROM tracks WHERE id = ?1",
+                params![track_id],
+                |r| r.get(0),
+            )
+            .ok()
+            .flatten();
+
+        audio_uri.map(|uri| self.media_base_path.join(uri))
     }
 
     fn get_track_album_id(&self, track_id: &str) -> Option<String> {
@@ -1095,7 +1102,7 @@ impl CatalogStore for SqliteCatalogStore {
 
         conn.execute(
             "INSERT INTO tracks (id, name, album_rowid, track_number, external_id_isrc, popularity,
-             disc_number, duration_ms, explicit, language) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+             disc_number, duration_ms, explicit, language, audio_uri) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
             params![
                 &track.id,
                 &track.name,
@@ -1107,6 +1114,7 @@ impl CatalogStore for SqliteCatalogStore {
                 track.duration_ms,
                 if track.explicit { 1 } else { 0 },
                 &track.language,
+                &track.audio_uri,
             ],
         )?;
 
@@ -1161,7 +1169,7 @@ impl CatalogStore for SqliteCatalogStore {
 
         conn.execute(
             "UPDATE tracks SET name = ?1, album_rowid = ?2, track_number = ?3, external_id_isrc = ?4,
-             popularity = ?5, disc_number = ?6, duration_ms = ?7, explicit = ?8, language = ?9 WHERE rowid = ?10",
+             popularity = ?5, disc_number = ?6, duration_ms = ?7, explicit = ?8, language = ?9, audio_uri = ?10 WHERE rowid = ?11",
             params![
                 &track.name,
                 album_rowid,
@@ -1172,6 +1180,7 @@ impl CatalogStore for SqliteCatalogStore {
                 track.duration_ms,
                 if track.explicit { 1 } else { 0 },
                 &track.language,
+                &track.audio_uri,
                 track_rowid,
             ],
         )?;
