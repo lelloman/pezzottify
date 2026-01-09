@@ -5,6 +5,7 @@ import com.lelloman.pezzottify.android.domain.sync.Permission
 import com.lelloman.pezzottify.android.domain.sync.PermissionListSerializer
 import com.lelloman.pezzottify.android.domain.sync.StoredEvent
 import com.lelloman.pezzottify.android.domain.sync.UserSetting
+import com.lelloman.pezzottify.android.domain.sync.UserSettingListSerializer
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
@@ -16,6 +17,7 @@ import kotlinx.serialization.Serializable
 data class SyncStateResponse(
     val seq: Long,
     val likes: LikesState,
+    @Serializable(with = UserSettingListSerializer::class)
     val settings: List<UserSetting>,
     val playlists: List<PlaylistState>,
     @Serializable(with = PermissionListSerializer::class)
