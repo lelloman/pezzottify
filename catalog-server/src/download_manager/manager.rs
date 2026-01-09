@@ -1610,7 +1610,7 @@ mod tests {
         let queue_store = Arc::new(SqliteDownloadQueueStore::in_memory().unwrap());
         let catalog_db_path = temp_dir.path().join("catalog.db");
         let catalog_store =
-            Arc::new(SqliteCatalogStore::new(&catalog_db_path, temp_dir.path()).unwrap());
+            Arc::new(SqliteCatalogStore::new(&catalog_db_path, temp_dir.path(), 4).unwrap());
         let downloader_client =
             DownloaderClient::new("http://localhost:8080".to_string(), 30).unwrap();
         let config = DownloadManagerSettings::default();

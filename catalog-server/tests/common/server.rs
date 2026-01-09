@@ -115,7 +115,7 @@ impl TestServer {
 
         // Open SQLite catalog store
         let catalog_store = Arc::new(
-            SqliteCatalogStore::new(&catalog_db_path, &media_path)
+            SqliteCatalogStore::new(&catalog_db_path, &media_path, 4)
                 .expect("Failed to open catalog store"),
         );
 

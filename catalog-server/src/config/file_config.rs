@@ -23,6 +23,13 @@ pub struct FileConfig {
     pub background_jobs: Option<BackgroundJobsConfig>,
     pub search: Option<SearchConfig>,
     pub oidc: Option<OidcConfig>,
+    pub catalog_store: Option<CatalogStoreConfig>,
+}
+
+#[derive(Debug, Deserialize, Default, Clone)]
+#[serde(default)]
+pub struct CatalogStoreConfig {
+    pub read_pool_size: Option<usize>,
 }
 
 #[derive(Debug, Deserialize, Default, Clone)]

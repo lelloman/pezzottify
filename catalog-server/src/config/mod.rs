@@ -1,8 +1,8 @@
 mod file_config;
 
 pub use file_config::{
-    BackgroundJobsConfig, DownloadManagerConfig, FileConfig, OidcConfig, SearchConfig,
-    StreamingSearchConfig as StreamingSearchFileConfig,
+    BackgroundJobsConfig, CatalogStoreConfig, DownloadManagerConfig, FileConfig, OidcConfig,
+    SearchConfig, StreamingSearchConfig as StreamingSearchFileConfig,
 };
 
 use crate::server::RequestsLoggingLevel;
@@ -104,6 +104,7 @@ pub struct AppConfig {
     pub download_manager: DownloadManagerSettings,
     pub background_jobs: BackgroundJobsSettings,
     pub search: SearchSettings,
+    pub catalog_store: CatalogStoreSettings,
 }
 
 impl AppConfig {
@@ -199,6 +200,12 @@ impl AppConfig {
 
         let background_jobs = BackgroundJobsSettings::default();
 
+        // Catalog store settings from file config
+        let catalog_store_file = file.catalog_store.unwrap_or_default();
+        let catalog_store = CatalogStoreSettings {
+            read_pool_size: catalog_store_file.read_pool_size.unwrap_or(4),
+        };
+
         // Search settings from file config
         let search_file = file.search.clone().unwrap_or_default();
         let search_engine = search_file
@@ -262,6 +269,7 @@ impl AppConfig {
             download_manager,
             background_jobs,
             search,
+            catalog_store,
         })
     }
 
@@ -346,6 +354,17 @@ impl Default for DownloadManagerSettings {
 #[derive(Debug, Clone, Default)]
 pub struct BackgroundJobsSettings {
     // Future: per-job settings can be added here
+}
+
+#[derive(Debug, Clone)]
+pub struct CatalogStoreSettings {
+    pub read_pool_size: usize,
+}
+
+impl Default for CatalogStoreSettings {
+    fn default() -> Self {
+        Self { read_pool_size: 4 }
+    }
 }
 
 /// Parses a logging level string into RequestsLoggingLevel.

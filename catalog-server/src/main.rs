@@ -166,6 +166,7 @@ async fn main() -> Result<()> {
     let catalog_store = Arc::new(SqliteCatalogStore::new(
         app_config.catalog_db_path(),
         &app_config.media_path,
+        app_config.catalog_store.read_pool_size,
     )?);
 
     // Initialize metrics system
