@@ -26,7 +26,14 @@ pub struct SqliteCatalogStore {
 
 fn migrate_if_needed(conn: &mut Connection) -> Result<()> {
     let db_version: i64 = conn.query_row("PRAGMA user_version", [], |r| r.get(0))?;
-    let current_version = (db_version - BASE_DB_VERSION as i64) as usize;
+
+    // Handle legacy databases that don't have versioned schema yet (user_version = 0)
+    // These should be treated as version 0 and need migration
+    let current_version = if db_version < BASE_DB_VERSION as i64 {
+        0 // Legacy database, treat as version 0
+    } else {
+        (db_version - BASE_DB_VERSION as i64) as usize
+    };
 
     if current_version >= CATALOG_VERSIONED_SCHEMAS.len().saturating_sub(1) {
         return Ok(());
