@@ -89,6 +89,13 @@ corruption_successes_to_deescalate = 10
 # - noop: Disabled search (returns empty results, fastest startup)
 engine = "pezzothash"
 
+# Catalog Store settings
+[catalog_store]
+# Number of connections for concurrent read operations (default: 4)
+# Increase this value if you have high concurrent read traffic
+# Each connection uses additional memory, so don't over-provision
+read_pool_size = 4
+
 # Background Jobs settings
 [background_jobs]
 # Future: per-job configuration

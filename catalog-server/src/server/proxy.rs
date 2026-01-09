@@ -1161,7 +1161,7 @@ mod tests {
     fn setup_test_env() -> (TempDir, Arc<SqliteCatalogStore>) {
         let temp_dir = TempDir::new().unwrap();
         let db_path = temp_dir.path().join("test_catalog.db");
-        let catalog_store = Arc::new(SqliteCatalogStore::new(&db_path, temp_dir.path()).unwrap());
+        let catalog_store = Arc::new(SqliteCatalogStore::new(&db_path, temp_dir.path(), 4).unwrap());
         (temp_dir, catalog_store)
     }
 
