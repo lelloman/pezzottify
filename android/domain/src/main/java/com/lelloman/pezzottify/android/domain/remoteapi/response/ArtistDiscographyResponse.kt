@@ -1,5 +1,6 @@
 package com.lelloman.pezzottify.android.domain.remoteapi.response
 
+import com.lelloman.pezzottify.android.domain.statics.AlbumAvailability
 import com.lelloman.pezzottify.android.domain.statics.ArtistDiscography
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
@@ -40,6 +41,8 @@ data class DiscographyAlbum(
     val releaseDatePrecision: String? = null,
     @SerialName("external_id_upc")
     val externalIdUpc: String? = null,
+    @SerialName("album_availability")
+    val albumAvailability: AlbumAvailability = AlbumAvailability.Missing,
 )
 
 /**

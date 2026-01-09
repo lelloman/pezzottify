@@ -1,6 +1,7 @@
 package com.lelloman.pezzottify.android.localdata.internal.statics
 
 import androidx.room.TypeConverter
+import com.lelloman.pezzottify.android.domain.statics.AlbumAvailability
 import com.lelloman.pezzottify.android.localdata.internal.statics.model.Disc
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
@@ -25,5 +26,19 @@ internal object StaticsDbTypesConverter {
     @TypeConverter
     fun fromStringToDiscsList(value: String): List<Disc> {
         return Json.decodeFromString(value)
+    }
+
+    @TypeConverter
+    fun fromAlbumAvailabilityToString(value: AlbumAvailability): String {
+        return when (value) {
+            AlbumAvailability.Complete -> "complete"
+            AlbumAvailability.Partial -> "partial"
+            AlbumAvailability.Missing -> "missing"
+        }
+    }
+
+    @TypeConverter
+    fun fromStringToAlbumAvailability(value: String): AlbumAvailability {
+        return AlbumAvailability.fromServerString(value)
     }
 }

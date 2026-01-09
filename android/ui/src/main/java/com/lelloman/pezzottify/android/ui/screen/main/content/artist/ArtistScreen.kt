@@ -381,6 +381,7 @@ private fun AlbumGridRow(
                             albumName = album.data.name,
                             albumDate = album.data.date,
                             albumCoverUrl = album.data.imageUrl,
+                            availability = album.data.availability,
                             onClick = { navController.toAlbum(albumId) }
                         )
                     }

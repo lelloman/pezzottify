@@ -1,6 +1,7 @@
 package com.lelloman.pezzottify.android.domain.remoteapi.response
 
 import com.lelloman.pezzottify.android.domain.statics.Album
+import com.lelloman.pezzottify.android.domain.statics.AlbumAvailability
 import com.lelloman.pezzottify.android.domain.statics.TrackAvailability
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
@@ -75,7 +76,7 @@ data class AlbumData(
     val externalIdUpc: String? = null,
     val popularity: Int = 0,
     @SerialName("album_availability")
-    val albumAvailability: String = "missing",
+    val albumAvailability: AlbumAvailability = AlbumAvailability.Missing,
 )
 
 /**
@@ -106,4 +107,6 @@ fun AlbumResponse.toDomain() = object : Album {
                 override val tracksIds: List<String> = it.tracks.map { track -> track.id }
             }
         }
+    override val availability: AlbumAvailability
+        get() = this@toDomain.album.albumAvailability
 }

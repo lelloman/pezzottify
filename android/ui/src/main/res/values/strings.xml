@@ -312,6 +312,8 @@
     <string name="external_albums_error">Could not load external albums</string>
     <string name="no_external_albums_found">No external albums found</string>
     <string name="could_not_load_artist">Could not load artist</string>
+    <string name="album_unavailable">Album unavailable</string>
+    <string name="album_partial">Some tracks unavailable</string>
     <!-- ARTIST SCREEN -->
 
     <!-- LIBRARY SCREEN -->

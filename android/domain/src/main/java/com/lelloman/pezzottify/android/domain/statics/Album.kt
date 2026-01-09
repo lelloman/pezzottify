@@ -7,6 +7,7 @@ interface Album : StaticItem {
     val displayImageId: String?
     val artistsIds: List<String>
     val discs: List<Disc>
+    val availability: AlbumAvailability
 }
 
 interface Disc {

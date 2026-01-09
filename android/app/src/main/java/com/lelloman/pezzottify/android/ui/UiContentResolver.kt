@@ -3,8 +3,10 @@ package com.lelloman.pezzottify.android.ui
 import com.lelloman.pezzottify.android.domain.config.ConfigStore
 import com.lelloman.pezzottify.android.domain.statics.StaticsItem
 import com.lelloman.pezzottify.android.domain.statics.StaticsProvider
+import com.lelloman.pezzottify.android.domain.statics.AlbumAvailability as DomainAlbumAvailability
 import com.lelloman.pezzottify.android.domain.statics.TrackAvailability as DomainTrackAvailability
 import com.lelloman.pezzottify.android.ui.content.Album
+import com.lelloman.pezzottify.android.ui.content.AlbumAvailability
 import com.lelloman.pezzottify.android.ui.content.Artist
 import com.lelloman.pezzottify.android.ui.content.ArtistDiscography
 import com.lelloman.pezzottify.android.ui.content.Content
@@ -26,6 +28,13 @@ private fun DomainTrackAvailability.toUi(): TrackAvailability = when (this) {
     DomainTrackAvailability.Unavailable -> TrackAvailability.Unavailable
     DomainTrackAvailability.Fetching -> TrackAvailability.Fetching
     DomainTrackAvailability.FetchError -> TrackAvailability.FetchError
+}
+
+/** Maps domain AlbumAvailability to UI AlbumAvailability */
+private fun DomainAlbumAvailability.toUi(): AlbumAvailability = when (this) {
+    DomainAlbumAvailability.Missing -> AlbumAvailability.Missing
+    DomainAlbumAvailability.Partial -> AlbumAvailability.Partial
+    DomainAlbumAvailability.Complete -> AlbumAvailability.Complete
 }
 
 class UiContentResolver(
@@ -71,7 +80,8 @@ class UiContentResolver(
                             com.lelloman.pezzottify.android.ui.content.Disc(
                                 tracksIds = disc.tracksIds,
                             )
-                        }
+                        },
+                        availability = it.data.availability.toUi(),
                     )
                 )
             }

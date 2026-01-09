@@ -3,6 +3,7 @@ package com.lelloman.pezzottify.android.localdata.internal.statics.model
 import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.PrimaryKey
+import com.lelloman.pezzottify.android.domain.statics.AlbumAvailability
 import kotlinx.serialization.Serializable
 
 @Serializable
@@ -27,6 +28,9 @@ internal data class Album(
 
     override val discs: List<Disc>,
 
+    @ColumnInfo(name = COLUMN_AVAILABILITY, defaultValue = "missing")
+    override val availability: AlbumAvailability = AlbumAvailability.Missing,
+
     @ColumnInfo(name = COLUMN_CACHED_AT, defaultValue = "0")
     val cachedAt: Long = System.currentTimeMillis(),
 
@@ -36,6 +40,7 @@ internal data class Album(
         const val TABLE_NAME = "album"
 
         const val COLUMN_ID = "id"
+        const val COLUMN_AVAILABILITY = "availability"
         const val COLUMN_CACHED_AT = "cached_at"
     }
 }
@@ -47,5 +52,6 @@ internal fun com.lelloman.pezzottify.android.domain.statics.Album.quack(): Album
     displayImageId = displayImageId,
     artistsIds = artistsIds,
     discs = discs.map { Disc(tracksIds = it.tracksIds) },
+    availability = availability,
     cachedAt = System.currentTimeMillis(),
 )
