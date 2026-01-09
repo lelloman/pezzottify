@@ -4,6 +4,7 @@
       :urls="[imageUrl]"
       alt="Image"
       class="searchResultImage"
+      :class="{ 'image-unavailable': result.availability === 'missing' }"
     />
     <div class="column">
       <h3 class="title">{{ result.name }}</h3>
@@ -12,6 +13,11 @@
         :prefix="result.year + ' - '"
         :artistsIdsNames="result.artists_ids_names"
       />
+    </div>
+    <div class="availability-indicator" :class="result.availability">
+      <span v-if="result.availability === 'missing'" class="missing-badge">Not available</span>
+      <span v-else-if="result.availability === 'partial'" class="partial-badge">Partial</span>
+      <span v-else class="complete-indicator"></span>
     </div>
     <PlayIcon
       class="searchResultPlayIcon scaleClickFeedback bigIcon"
@@ -73,5 +79,34 @@ const handlePlayClick = (event) => {
   margin: 0;
   font-size: 14px;
   color: #666;
+}
+
+.image-unavailable {
+  opacity: 0.5;
+  filter: grayscale(100%);
+}
+
+.availability-indicator {
+  margin-right: 12px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.missing-badge {
+  color: #f44336;
+  background: rgba(244, 67, 54, 0.1);
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+
+.partial-badge {
+  color: #ff9800;
+  background: rgba(255, 152, 0, 0.1);
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+
+.complete-indicator {
+  display: none;
 }
 </style>

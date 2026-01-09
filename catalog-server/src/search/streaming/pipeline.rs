@@ -387,6 +387,7 @@ impl<'a> StreamingSearchPipeline<'a> {
                             .collect(),
                         image_id: Some(a.album.id), // Use album ID as image reference
                         year,
+                        availability: a.album.album_availability.to_db_str().to_string(),
                     })
                 }),
             HashedItemType::Track => self

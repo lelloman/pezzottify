@@ -75,6 +75,39 @@ impl AlbumType {
     }
 }
 
+/// Album availability status based on track audio file presence
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum AlbumAvailability {
+    /// No tracks have audio files available
+    #[default]
+    Missing,
+    /// Some tracks have audio, some are missing
+    Partial,
+    /// All tracks have audio files available
+    Complete,
+}
+
+impl AlbumAvailability {
+    /// Convert from database string representation
+    pub fn from_db_str(s: &str) -> Self {
+        match s {
+            "complete" => AlbumAvailability::Complete,
+            "partial" => AlbumAvailability::Partial,
+            "missing" | _ => AlbumAvailability::Missing,
+        }
+    }
+
+    /// Convert to database string representation
+    pub fn to_db_str(&self) -> &'static str {
+        match self {
+            AlbumAvailability::Complete => "complete",
+            AlbumAvailability::Partial => "partial",
+            AlbumAvailability::Missing => "missing",
+        }
+    }
+}
+
 // =============================================================================
 // Core Entities
 // =============================================================================
@@ -105,6 +138,9 @@ pub struct Album {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub external_id_upc: Option<String>,
     pub popularity: i32,
+    /// Availability status based on track audio file presence
+    #[serde(default)]
+    pub album_availability: AlbumAvailability,
 }
 
 /// Track availability state

@@ -74,6 +74,8 @@ data class AlbumData(
     @SerialName("external_id_upc")
     val externalIdUpc: String? = null,
     val popularity: Int = 0,
+    @SerialName("album_availability")
+    val albumAvailability: String = "missing",
 )
 
 /**

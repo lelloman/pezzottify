@@ -58,12 +58,13 @@ impl From<&ResolvedAlbum> for AlbumSummary {
             track_count,
             image_id: Some(resolved.album.id.clone()), // Use album ID as image ID
             artist_names,
+            availability: resolved.album.album_availability.to_db_str().to_string(),
         }
     }
 }
 
 /// Convert an Album to AlbumSummary (without resolved data).
-/// Note: track_count will be 0.
+/// Note: track_count will be 0, availability will be 'missing'.
 pub fn album_summary_basic(album: &Album, artist_names: Vec<String>) -> AlbumSummary {
     let release_year = album
         .release_date
@@ -77,6 +78,7 @@ pub fn album_summary_basic(album: &Album, artist_names: Vec<String>) -> AlbumSum
         track_count: 0,                   // Unknown without resolved data
         image_id: Some(album.id.clone()), // Use album ID as image ID
         artist_names,
+        availability: album.album_availability.to_db_str().to_string(),
     }
 }
 
@@ -106,7 +108,7 @@ impl From<&Artist> for ArtistSummary {
 mod tests {
     use super::*;
     use crate::catalog_store::{
-        AlbumType, ArtistRole, Disc, Track, TrackArtist, TrackAvailability,
+        AlbumAvailability, AlbumType, ArtistRole, Disc, Track, TrackArtist, TrackAvailability,
     };
 
     fn make_artist(id: &str, name: &str) -> Artist {
@@ -129,6 +131,7 @@ mod tests {
             release_date_precision: Some("day".to_string()),
             external_id_upc: None,
             popularity: 0,
+            album_availability: AlbumAvailability::default(),
         }
     }
 
@@ -220,6 +223,7 @@ mod tests {
         assert_eq!(summary.track_count, 2);
         assert_eq!(summary.image_id, Some("album_1".to_string()));
         assert_eq!(summary.artist_names, vec!["Prince"]);
+        assert_eq!(summary.availability, "missing");
     }
 
     #[test]
@@ -233,6 +237,7 @@ mod tests {
         assert_eq!(summary.track_count, 0);
         assert_eq!(summary.image_id, Some("album_1".to_string()));
         assert_eq!(summary.artist_names, vec!["Prince"]);
+        assert_eq!(summary.availability, "missing");
     }
 
     #[test]

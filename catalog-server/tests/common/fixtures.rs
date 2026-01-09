@@ -100,13 +100,13 @@ pub fn create_test_catalog() -> Result<(TempDir, PathBuf, PathBuf)> {
 
     // Insert albums (with all required fields)
     conn.execute(
-        "INSERT INTO albums (id, name, album_type, label, popularity, release_date, release_date_precision)
-         VALUES (?1, ?2, 'album', '', 50, '2023', 'year')",
+        "INSERT INTO albums (id, name, album_type, label, popularity, release_date, release_date_precision, album_availability)
+         VALUES (?1, ?2, 'album', '', 50, '2023', 'year', 'complete')",
         [ALBUM_1_ID, ALBUM_1_TITLE],
     )?;
     conn.execute(
-        "INSERT INTO albums (id, name, album_type, label, popularity, release_date, release_date_precision)
-         VALUES (?1, ?2, 'album', '', 50, '2023', 'year')",
+        "INSERT INTO albums (id, name, album_type, label, popularity, release_date, release_date_precision, album_availability)
+         VALUES (?1, ?2, 'album', '', 50, '2023', 'year', 'complete')",
         [ALBUM_2_ID, ALBUM_2_TITLE],
     )?;
 

@@ -10,6 +10,7 @@
       <MultiSourceImage
         :urls="chooseAlbumCoverImageUrl(album)"
         class="searchResultImage scaleClickFeedback"
+        :class="{ 'image-unavailable': albumData?.album_availability === 'missing' }"
       />
       <div class="column">
         <h3 class="title">{{ album.name }}</h3>
@@ -19,7 +20,9 @@
           :artistsIds="album.artists_ids"
         />
       </div>
-
+      <div v-if="albumData?.album_availability === 'partial'" class="availability-badge partial">
+        Partial
+      </div>
       <PlayIcon
         class="searchResultPlayIcon scaleClickFeedback bigIcon"
         :data-id="album.id"
@@ -34,7 +37,7 @@
 import "@/assets/base.css";
 import "@/assets/search.css";
 import "@/assets/icons.css";
-import { ref, watch } from "vue";
+import { ref, watch, computed } from "vue";
 import { useRouter } from "vue-router";
 import { chooseAlbumCoverImageUrl } from "@/utils";
 import MultiSourceImage from "./MultiSourceImage.vue";
@@ -67,6 +70,10 @@ const album = ref(props.album || null);
 const artistsRefs = ref(null);
 const loading = ref(!props.album);
 const error = ref(null);
+
+const albumData = computed(() => {
+  return props.album || album.value;
+});
 
 // Only fetch if we don't have album data passed directly
 if (props.albumId && !props.album) {
@@ -122,5 +129,23 @@ const handleClick = (albumId) => {
   flex: 1;
   display: flex;
   flex-direction: column;
+}
+
+.image-unavailable {
+  opacity: 0.5;
+  filter: grayscale(100%);
+}
+
+.availability-badge {
+  font-size: 11px;
+  font-weight: 500;
+  padding: 2px 6px;
+  border-radius: 4px;
+  margin-right: 8px;
+}
+
+.availability-badge.partial {
+  color: #ff9800;
+  background: rgba(255, 152, 0, 0.15);
 }
 </style>
