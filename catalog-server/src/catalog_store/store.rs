@@ -4,7 +4,9 @@
 //! from the Spotify metadata database dump.
 
 use super::models::*;
+use super::schema::CATALOG_VERSIONED_SCHEMAS;
 use super::trait_def::{CatalogStore, SearchableContentType, SearchableItem};
+use crate::sqlite_persistence::BASE_DB_VERSION;
 use anyhow::{Context, Result};
 use rusqlite::{params, Connection};
 use std::collections::HashMap;
@@ -22,6 +24,35 @@ pub struct SqliteCatalogStore {
     read_index: Arc<AtomicUsize>,
 }
 
+fn migrate_if_needed(conn: &mut Connection) -> Result<()> {
+    let db_version: i64 = conn.query_row("PRAGMA user_version", [], |r| r.get(0))?;
+    let current_version = (db_version - BASE_DB_VERSION as i64) as usize;
+
+    if current_version >= CATALOG_VERSIONED_SCHEMAS.len().saturating_sub(1) {
+        return Ok(());
+    }
+
+    let tx = conn.transaction()?;
+    let mut latest_from = current_version;
+    for schema in CATALOG_VERSIONED_SCHEMAS.iter().skip(current_version + 1) {
+        if let Some(migration_fn) = schema.migration {
+            info!(
+                "Migrating catalog db from version {} to {}",
+                latest_from, schema.version
+            );
+            migration_fn(&tx)?;
+            latest_from = schema.version;
+        }
+    }
+    tx.execute(
+        &format!("PRAGMA user_version = {}", BASE_DB_VERSION + latest_from),
+        [],
+    )?;
+
+    tx.commit()?;
+    Ok(())
+}
+
 impl SqliteCatalogStore {
     /// Create a new SqliteCatalogStore.
     ///
@@ -36,7 +67,7 @@ impl SqliteCatalogStore {
     ) -> Result<Self> {
         let db_path_ref = db_path.as_ref();
 
-        let write_conn = Connection::open_with_flags(
+        let mut write_conn = Connection::open_with_flags(
             db_path_ref,
             rusqlite::OpenFlags::SQLITE_OPEN_READ_WRITE
                 | rusqlite::OpenFlags::SQLITE_OPEN_CREATE
@@ -44,6 +75,8 @@ impl SqliteCatalogStore {
                 | rusqlite::OpenFlags::SQLITE_OPEN_NO_MUTEX,
         )
         .context("Failed to open catalog database")?;
+
+        migrate_if_needed(&mut write_conn)?;
 
         write_conn.pragma_update(None, "journal_mode", "WAL")?;
 
