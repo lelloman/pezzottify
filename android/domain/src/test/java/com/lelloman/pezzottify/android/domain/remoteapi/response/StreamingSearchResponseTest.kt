@@ -55,7 +55,8 @@ class StreamingSearchResponseTest {
                     "name": "Test Album",
                     "artists_ids_names": [["artist-1", "Artist Name"]],
                     "image_id": "img-789",
-                    "year": 2023
+                    "year": 2023,
+                    "availability": "Available"
                 },
                 "confidence": 0.88
             }
@@ -147,7 +148,8 @@ class StreamingSearchResponseTest {
                         "release_year": 2020,
                         "track_count": 12,
                         "image_id": "img-1",
-                        "artist_names": ["Artist Name"]
+                        "artist_names": ["Artist Name"],
+                        "availability": "Available"
                     }
                 ]
             }
@@ -235,7 +237,8 @@ class StreamingSearchResponseTest {
                         "type": "Album",
                         "id": "album-3",
                         "name": "Another Album",
-                        "artists_ids_names": [["a1", "Artist"]]
+                        "artists_ids_names": [["a1", "Artist"]],
+                        "availability": "Available"
                     }
                 ]
             }
@@ -322,7 +325,8 @@ class StreamingSearchResponseTest {
                 "id": "album-1",
                 "name": "Album Name",
                 "track_count": 10,
-                "artist_names": ["Artist"]
+                "artist_names": ["Artist"],
+                "availability": "Available"
             }
         """.trimIndent()
 
