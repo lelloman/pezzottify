@@ -179,8 +179,6 @@ pub struct DailyListeningStats {
 pub struct PopularAlbum {
     pub id: String,
     pub name: String,
-    /// Image ID for the album cover
-    pub image_id: Option<String>,
     /// Primary artist names for display
     pub artist_names: Vec<String>,
     /// Total play count across all tracks in the album
@@ -192,8 +190,6 @@ pub struct PopularAlbum {
 pub struct PopularArtist {
     pub id: String,
     pub name: String,
-    /// Image ID for the artist image
-    pub image_id: Option<String>,
     /// Total play count across all tracks by the artist
     pub play_count: u64,
 }

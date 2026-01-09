@@ -960,7 +960,7 @@ class InteractorsModule {
                         PopularAlbumState(
                             id = album.id,
                             name = album.name,
-                            imageUrl = ImageUrlProvider.buildImageUrl(baseUrl, album.displayImageId),
+                            imageUrl = ImageUrlProvider.buildImageUrl(baseUrl, album.id),
                             artistNames = album.artistNames,
                         )
                     },
@@ -968,7 +968,7 @@ class InteractorsModule {
                         PopularArtistState(
                             id = artist.id,
                             name = artist.name,
-                            imageUrl = ImageUrlProvider.buildImageUrl(baseUrl, artist.displayImageId),
+                            imageUrl = ImageUrlProvider.buildImageUrl(baseUrl, artist.id),
                         )
                     },
                 )

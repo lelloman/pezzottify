@@ -11,12 +11,10 @@ data class PopularContent(
 data class PopularAlbum(
     val id: String,
     val name: String,
-    val displayImageId: String?,
     val artistNames: List<String>,
 )
 
 data class PopularArtist(
     val id: String,
     val name: String,
-    val displayImageId: String?,
 )
