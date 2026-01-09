@@ -87,6 +87,24 @@ impl SqliteCatalogStore {
         self.read_pool[index].clone()
     }
 
+    /// Compute track availability from an already-fetched audio_uri.
+    ///
+    /// This avoids acquiring another database connection, preventing deadlocks
+    /// when called from within methods that already hold a connection.
+    fn availability_from_audio_uri(&self, audio_uri: &Option<String>) -> TrackAvailability {
+        match audio_uri {
+            Some(uri) if !uri.is_empty() => {
+                let path = self.media_base_path.join(uri);
+                if path.exists() {
+                    TrackAvailability::Available
+                } else {
+                    TrackAvailability::Unavailable
+                }
+            }
+            _ => TrackAvailability::Unavailable,
+        }
+    }
+
     // =========================================================================
     // Internal Helper Methods
     // =========================================================================
@@ -351,28 +369,30 @@ impl SqliteCatalogStore {
         let tracks: Vec<Track> = tracks_stmt
             .query_map(params![album_rowid], |row| {
                 let explicit: i32 = row.get(8)?;
-                Ok(Track {
-                    id: row.get(0)?,
-                    name: row.get(1)?,
-                    album_id: album.id.clone(),
-                    disc_number: row.get(6)?,
-                    track_number: row.get(3)?,
-                    duration_ms: row.get(7)?,
-                    explicit: explicit != 0,
-                    popularity: row.get(5)?,
-                    language: row.get(9)?,
-                    external_id_isrc: row.get(4)?,
-                    audio_uri: row.get(10)?,
-                    availability: TrackAvailability::default(),
-                })
+                let audio_uri: Option<String> = row.get(10)?;
+                Ok((
+                    Track {
+                        id: row.get(0)?,
+                        name: row.get(1)?,
+                        album_id: album.id.clone(),
+                        disc_number: row.get(6)?,
+                        track_number: row.get(3)?,
+                        duration_ms: row.get(7)?,
+                        explicit: explicit != 0,
+                        popularity: row.get(5)?,
+                        language: row.get(9)?,
+                        external_id_isrc: row.get(4)?,
+                        audio_uri: audio_uri.clone(),
+                        availability: TrackAvailability::default(),
+                    },
+                    audio_uri,
+                ))
             })?
             .filter_map(|r| r.ok())
-            .collect();
-
-        let tracks: Vec<Track> = tracks
-            .into_iter()
-            .map(|mut t| {
-                t.availability = self.get_track_availability(&t.id);
+            .map(|(mut t, audio_uri)| {
+                // Compute availability using already-fetched audio_uri to avoid
+                // acquiring another connection (which would cause deadlocks)
+                t.availability = self.availability_from_audio_uri(&audio_uri);
                 t
             })
             .collect();
@@ -414,10 +434,11 @@ impl SqliteCatalogStore {
              WHERE t.rowid = ?1",
         )?;
 
-        let (mut track, album_id): (Track, String) =
+        let (mut track, album_id, audio_uri): (Track, String, Option<String>) =
             track_stmt.query_row(params![track_rowid], |row| {
                 let explicit: i32 = row.get(8)?;
                 let album_id: String = row.get(10)?;
+                let audio_uri: Option<String> = row.get(11)?;
                 Ok((
                     Track {
                         id: row.get(0)?,
@@ -430,14 +451,17 @@ impl SqliteCatalogStore {
                         popularity: row.get(5)?,
                         language: row.get(9)?,
                         external_id_isrc: row.get(4)?,
-                        audio_uri: row.get(11)?,
+                        audio_uri: audio_uri.clone(),
                         availability: TrackAvailability::default(),
                     },
                     album_id,
+                    audio_uri,
                 ))
             })?;
 
-        track.availability = self.get_track_availability(&track.id);
+        // Compute availability using already-fetched audio_uri to avoid
+        // acquiring another connection (which would cause deadlocks)
+        track.availability = self.availability_from_audio_uri(&audio_uri);
 
         let mut album_stmt = conn.prepare_cached(
             "SELECT id, name, album_type, external_id_upc, external_id_amgid,
@@ -658,7 +682,9 @@ impl CatalogStore for SqliteCatalogStore {
         let conn = read_conn.lock().unwrap();
         Self::get_track_inner(&conn, id).map(|opt| {
             opt.map(|mut t| {
-                t.availability = self.get_track_availability(&t.id);
+                // Compute availability using already-fetched audio_uri to avoid
+                // acquiring another connection (which would cause deadlocks)
+                t.availability = self.availability_from_audio_uri(&t.audio_uri);
                 serde_json::to_value(t).unwrap()
             })
         })
@@ -669,7 +695,9 @@ impl CatalogStore for SqliteCatalogStore {
         let conn = read_conn.lock().unwrap();
         Self::get_track_inner(&conn, id).map(|opt| {
             opt.map(|mut t| {
-                t.availability = self.get_track_availability(&t.id);
+                // Compute availability using already-fetched audio_uri to avoid
+                // acquiring another connection (which would cause deadlocks)
+                t.availability = self.availability_from_audio_uri(&t.audio_uri);
                 t
             })
         })
