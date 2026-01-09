@@ -880,10 +880,18 @@ async fn get_artist(
         indexer.touch_artist(&id);
     }
 
-    match catalog_store.get_resolved_artist_json(&id) {
-        Ok(Some(artist)) => Json(artist).into_response(),
-        Ok(None) => StatusCode::NOT_FOUND.into_response(),
-        Err(err) => (StatusCode::INTERNAL_SERVER_ERROR, format!("{}", err)).into_response(),
+    let catalog_store = Arc::clone(&catalog_store);
+    let id = id.clone();
+
+    match tokio::task::spawn_blocking(move || catalog_store.get_resolved_artist_json(&id)).await {
+        Ok(Ok(Some(artist))) => Json(artist).into_response(),
+        Ok(Ok(None)) => StatusCode::NOT_FOUND.into_response(),
+        Ok(Err(err)) => (StatusCode::INTERNAL_SERVER_ERROR, format!("{}", err)).into_response(),
+        Err(_) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "Internal server error".to_string(),
+        )
+            .into_response(),
     }
 }
 
@@ -898,10 +906,18 @@ async fn get_album(
         indexer.touch_album(&id);
     }
 
-    match catalog_store.get_album_json(&id) {
-        Ok(Some(album)) => Json(album).into_response(),
-        Ok(None) => StatusCode::NOT_FOUND.into_response(),
-        Err(err) => (StatusCode::INTERNAL_SERVER_ERROR, format!("{}", err)).into_response(),
+    let catalog_store = Arc::clone(&catalog_store);
+    let id = id.clone();
+
+    match tokio::task::spawn_blocking(move || catalog_store.get_album_json(&id)).await {
+        Ok(Ok(Some(album))) => Json(album).into_response(),
+        Ok(Ok(None)) => StatusCode::NOT_FOUND.into_response(),
+        Ok(Err(err)) => (StatusCode::INTERNAL_SERVER_ERROR, format!("{}", err)).into_response(),
+        Err(_) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "Internal server error".to_string(),
+        )
+            .into_response(),
     }
 }
 
@@ -916,10 +932,18 @@ async fn get_resolved_album(
         indexer.touch_album(&id);
     }
 
-    match catalog_store.get_resolved_album_json(&id) {
-        Ok(Some(album)) => Json(album).into_response(),
-        Ok(None) => StatusCode::NOT_FOUND.into_response(),
-        Err(err) => (StatusCode::INTERNAL_SERVER_ERROR, format!("{}", err)).into_response(),
+    let catalog_store = Arc::clone(&catalog_store);
+    let id = id.clone();
+
+    match tokio::task::spawn_blocking(move || catalog_store.get_resolved_album_json(&id)).await {
+        Ok(Ok(Some(album))) => Json(album).into_response(),
+        Ok(Ok(None)) => StatusCode::NOT_FOUND.into_response(),
+        Ok(Err(err)) => (StatusCode::INTERNAL_SERVER_ERROR, format!("{}", err)).into_response(),
+        Err(_) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "Internal server error".to_string(),
+        )
+            .into_response(),
     }
 }
 
@@ -942,10 +966,22 @@ async fn get_artist_discography(
         _ => DiscographySort::Popularity, // default
     };
 
-    match catalog_store.get_discography(&id, limit, offset, sort) {
-        Ok(None) => StatusCode::NOT_FOUND.into_response(),
-        Ok(Some(discography)) => Json(discography).into_response(),
-        Err(err) => (StatusCode::INTERNAL_SERVER_ERROR, format!("{}", err)).into_response(),
+    let catalog_store = Arc::clone(&catalog_store);
+    let id = id.clone();
+
+    match tokio::task::spawn_blocking(move || {
+        catalog_store.get_discography(&id, limit, offset, sort)
+    })
+    .await
+    {
+        Ok(Ok(Some(discography))) => Json(discography).into_response(),
+        Ok(Ok(None)) => StatusCode::NOT_FOUND.into_response(),
+        Ok(Err(err)) => (StatusCode::INTERNAL_SERVER_ERROR, format!("{}", err)).into_response(),
+        Err(_) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "Internal server error".to_string(),
+        )
+            .into_response(),
     }
 }
 
@@ -960,10 +996,18 @@ pub async fn get_track(
         indexer.touch_track(&id);
     }
 
-    match catalog_store.get_track_json(&id) {
-        Ok(Some(track)) => Json(track).into_response(),
-        Ok(None) => StatusCode::NOT_FOUND.into_response(),
-        Err(err) => (StatusCode::INTERNAL_SERVER_ERROR, format!("{}", err)).into_response(),
+    let catalog_store = Arc::clone(&catalog_store);
+    let id = id.clone();
+
+    match tokio::task::spawn_blocking(move || catalog_store.get_track_json(&id)).await {
+        Ok(Ok(Some(track))) => Json(track).into_response(),
+        Ok(Ok(None)) => StatusCode::NOT_FOUND.into_response(),
+        Ok(Err(err)) => (StatusCode::INTERNAL_SERVER_ERROR, format!("{}", err)).into_response(),
+        Err(_) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "Internal server error".to_string(),
+        )
+            .into_response(),
     }
 }
 
@@ -978,10 +1022,18 @@ pub async fn get_resolved_track(
         indexer.touch_track(&id);
     }
 
-    match catalog_store.get_resolved_track_json(&id) {
-        Ok(Some(track)) => Json(track).into_response(),
-        Ok(None) => StatusCode::NOT_FOUND.into_response(),
-        Err(err) => (StatusCode::INTERNAL_SERVER_ERROR, format!("{}", err)).into_response(),
+    let catalog_store = Arc::clone(&catalog_store);
+    let id = id.clone();
+
+    match tokio::task::spawn_blocking(move || catalog_store.get_resolved_track_json(&id)).await {
+        Ok(Ok(Some(track))) => Json(track).into_response(),
+        Ok(Ok(None)) => StatusCode::NOT_FOUND.into_response(),
+        Ok(Err(err)) => (StatusCode::INTERNAL_SERVER_ERROR, format!("{}", err)).into_response(),
+        Err(_) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "Internal server error".to_string(),
+        )
+            .into_response(),
     }
 }
 
