@@ -416,7 +416,13 @@ private fun TrackItem(
         modifier = Modifier
             .fillMaxWidth()
             .background(backgroundColor)
-            .alpha(if (track.isFetching) fetchingAlpha else 1f)
+            .alpha(
+                when {
+                    track.isFetching -> fetchingAlpha
+                    track.isUnavailable -> 0.4f
+                    else -> 1f
+                }
+            )
             .clickable(enabled = track.isPlayable, onClick = onClick)
             .padding(start = 16.dp, top = 8.dp, bottom = 8.dp, end = 16.dp),
         verticalAlignment = Alignment.CenterVertically

@@ -1,6 +1,7 @@
 package com.lelloman.pezzottify.android.domain.remoteapi.response
 
 import com.lelloman.pezzottify.android.domain.statics.Album
+import com.lelloman.pezzottify.android.domain.statics.TrackAvailability
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
@@ -46,6 +47,8 @@ data class TrackData(
     val trackNumber: Int,
     @SerialName("duration_ms")
     val durationMs: Long,
+    @SerialName("availability")
+    val availability: TrackAvailability = TrackAvailability.Available,
 )
 
 @Serializable

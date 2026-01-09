@@ -569,7 +569,13 @@ private fun TrackSearchResult(
             .fillMaxWidth()
             .padding(8.dp)
             .height(PezzottifyImageShape.SmallSquare.size)
-            .alpha(if (searchResult.isFetching) fetchingAlpha else 1f)
+            .alpha(
+                when {
+                    searchResult.isFetching -> fetchingAlpha
+                    searchResult.isUnavailable -> 0.4f
+                    else -> 1f
+                }
+            )
             .clickable(enabled = searchResult.isPlayable) {
                 actions.clickOnTrackSearchResult(searchResult.id)
             }
