@@ -828,8 +828,21 @@ class InteractorsModule {
             toggleLikeUseCase(contentId, DomainLikedContent.ContentType.Artist, currentlyLiked)
         }
 
-        override suspend fun fetchAllDiscography(artistId: String) {
-            staticsProvider.fetchAllDiscography(artistId)
+        override fun observeDiscographyState(artistId: String) =
+            staticsProvider.observeDiscographyState(artistId).map { domainState ->
+                ArtistScreenViewModel.DiscographyUiState(
+                    albumIds = domainState.albumIds,
+                    hasMore = domainState.hasMore,
+                    isLoading = domainState.isLoading
+                )
+            }
+
+        override suspend fun fetchFirstDiscographyPage(artistId: String) {
+            staticsProvider.fetchFirstDiscographyPage(artistId)
+        }
+
+        override suspend fun fetchMoreDiscography(artistId: String) {
+            staticsProvider.fetchMoreDiscography(artistId)
         }
 
         override suspend fun retryErroredItems(itemIds: List<String>) {

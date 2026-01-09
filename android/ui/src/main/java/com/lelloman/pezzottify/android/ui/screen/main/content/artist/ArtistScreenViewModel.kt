@@ -31,15 +31,16 @@ class ArtistScreenViewModel @AssistedInject constructor(
         viewModelScope.launch {
             // Clear error states to force retry of previously failed items
             interactor.retryErroredItems(listOf(artistId))
-            // Fetch all album IDs for this artist in background
-            interactor.fetchAllDiscography(artistId)
+            // Fetch first page of albums (always fetch fresh to get proper ordering)
+            interactor.fetchFirstDiscographyPage(artistId)
         }
     }
 
     val state = combine(
         contentResolver.resolveArtist(artistId),
-        contentResolver.resolveArtistDiscography(artistId)
-    ) { artistContent, discographyContent ->
+        interactor.observeDiscographyState(artistId),
+        interactor.isLiked(artistId)
+    ) { artistContent, discographyState, isLiked ->
         when (artistContent) {
             is Content.Loading -> ArtistScreenState()
             is Content.Error -> ArtistScreenState(
@@ -47,19 +48,19 @@ class ArtistScreenViewModel @AssistedInject constructor(
                 isLoading = false,
             )
             is Content.Resolved -> {
-                val discography = (discographyContent as? Content.Resolved)?.data
                 ArtistScreenState(
                     artist = artistContent.data,
-                    albums = discography?.albums ?: emptyList(),
-                    features = discography?.features ?: emptyList(),
+                    albums = discographyState.albumIds,
+                    features = emptyList(), // TODO: features not currently supported
                     relatedArtists = artistContent.data.related,
                     isError = false,
                     isLoading = false,
+                    isLiked = isLiked,
+                    hasMoreAlbums = discographyState.hasMore,
+                    isLoadingMoreAlbums = discographyState.isLoading,
                 )
             }
         }
-    }.combine(interactor.isLiked(artistId)) { artistState, isLiked ->
-        artistState.copy(isLiked = isLiked)
     }.onEach { state ->
         if (!state.isLoading && !state.isError && !hasLoggedView) {
             hasLoggedView = true
@@ -77,11 +78,28 @@ class ArtistScreenViewModel @AssistedInject constructor(
         }
     }
 
+    override fun loadMoreAlbums() {
+        viewModelScope.launch {
+            interactor.fetchMoreDiscography(artistId)
+        }
+    }
+
+    /**
+     * UI-layer representation of discography state.
+     */
+    data class DiscographyUiState(
+        val albumIds: List<String>,
+        val hasMore: Boolean,
+        val isLoading: Boolean,
+    )
+
     interface Interactor {
         fun logViewedArtist(artistId: String)
         fun isLiked(contentId: String): Flow<Boolean>
         fun toggleLike(contentId: String, currentlyLiked: Boolean)
-        suspend fun fetchAllDiscography(artistId: String)
+        fun observeDiscographyState(artistId: String): Flow<DiscographyUiState>
+        suspend fun fetchFirstDiscographyPage(artistId: String)
+        suspend fun fetchMoreDiscography(artistId: String)
         suspend fun retryErroredItems(itemIds: List<String>)
     }
 

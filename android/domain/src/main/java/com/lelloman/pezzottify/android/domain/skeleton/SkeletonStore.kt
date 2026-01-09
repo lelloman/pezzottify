@@ -50,10 +50,12 @@ interface SkeletonStore {
 
 /**
  * Artist-album relationship for caching.
+ * @param orderIndex The position in the server's sorted discography (by availability, then popularity/date)
  */
 data class AlbumArtistRelationship(
     val artistId: String,
-    val albumId: String
+    val albumId: String,
+    val orderIndex: Int = 0
 )
 
 /**

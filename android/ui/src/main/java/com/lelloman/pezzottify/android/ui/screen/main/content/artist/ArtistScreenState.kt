@@ -10,4 +10,6 @@ data class ArtistScreenState(
     val isLoading: Boolean = true,
     val isError: Boolean = false,
     val isLiked: Boolean = false,
+    val hasMoreAlbums: Boolean = false,
+    val isLoadingMoreAlbums: Boolean = false,
 )

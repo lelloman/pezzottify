@@ -41,11 +41,12 @@ internal class SkeletonStoreImpl @Inject constructor(
             }
             skeletonDao.insertAlbums(albums)
 
-            // Now insert the relationships
+            // Now insert the relationships with order index
             val daoAlbumArtists = albumArtists.map { relationship ->
                 com.lelloman.pezzottify.android.localdata.internal.skeleton.model.SkeletonAlbumArtist(
                     artistId = relationship.artistId,
-                    albumId = relationship.albumId
+                    albumId = relationship.albumId,
+                    orderIndex = relationship.orderIndex
                 )
             }
             skeletonDao.insertAlbumArtists(daoAlbumArtists)

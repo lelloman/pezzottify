@@ -231,17 +231,17 @@ class StaticsProvider internal constructor(
     fun observeDiscographyState(artistId: String) = discographyCacheFetcher.observeDiscography(artistId)
 
     /**
-     * Fetch the next page of albums for an artist from the server.
-     * Call this when user scrolls to bottom or taps "load more".
+     * Fetch the first page of albums for an artist from the server.
+     * This clears existing cached albums and fetches fresh data to ensure proper ordering.
+     * Call this when artist screen opens.
      */
-    suspend fun fetchMoreDiscography(artistId: String) = discographyCacheFetcher.fetchNextPage(artistId)
+    suspend fun fetchFirstDiscographyPage(artistId: String) = discographyCacheFetcher.fetchFirstPage(artistId)
 
     /**
-     * Fetch ALL album IDs for an artist from the server.
-     * Call this when artist screen opens to ensure full skeleton is cached.
-     * Fetches in batches until local count = server total.
+     * Fetch more albums for an artist from the server (next page).
+     * Call this when user scrolls to bottom or taps "load more".
      */
-    suspend fun fetchAllDiscography(artistId: String) = discographyCacheFetcher.fetchAllDiscography(artistId)
+    suspend fun fetchMoreDiscography(artistId: String) = discographyCacheFetcher.fetchMoreAlbums(artistId)
 
     fun clearCache() {
         staticsCache.clearAll()

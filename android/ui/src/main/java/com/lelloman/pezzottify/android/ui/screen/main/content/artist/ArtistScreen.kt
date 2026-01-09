@@ -93,6 +93,8 @@ private fun ArtistScreenContent(
             features = state.features,
             relatedArtists = state.relatedArtists,
             isLiked = state.isLiked,
+            hasMoreAlbums = state.hasMoreAlbums,
+            isLoadingMoreAlbums = state.isLoadingMoreAlbums,
             contentResolver = contentResolver,
             navController = navController,
             actions = actions
@@ -118,12 +120,32 @@ fun ArtistLoadedScreen(
     features: List<String>,
     relatedArtists: List<String>,
     isLiked: Boolean,
+    hasMoreAlbums: Boolean,
+    isLoadingMoreAlbums: Boolean,
     contentResolver: ContentResolver,
     navController: NavController,
     actions: ArtistScreenActions
 ) {
     val listState = rememberLazyListState()
     val density = LocalDensity.current
+
+    // Trigger load more when near the end of the list
+    val reachedEnd by remember {
+        derivedStateOf {
+            val layoutInfo = listState.layoutInfo
+            val totalItems = layoutInfo.totalItemsCount
+            val lastVisibleItem = layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
+            // True when within 5 items of the end
+            totalItems > 0 && lastVisibleItem >= totalItems - 5
+        }
+    }
+
+    // Load more when we reach the end and there's more to load
+    androidx.compose.runtime.LaunchedEffect(reachedEnd, hasMoreAlbums, isLoadingMoreAlbums) {
+        if (reachedEnd && hasMoreAlbums && !isLoadingMoreAlbums) {
+            actions.loadMoreAlbums()
+        }
+    }
 
     // Get status bar height for proper inset handling
     val statusBarHeight = with(density) {
@@ -213,6 +235,25 @@ fun ArtistLoadedScreen(
                     contentResolver = contentResolver,
                     navController = navController
                 )
+
+                // Loading indicator for more albums
+                if (isLoadingMoreAlbums || hasMoreAlbums) {
+                    item(key = "albums-loading") {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            if (isLoadingMoreAlbums) {
+                                androidx.compose.material3.CircularProgressIndicator(
+                                    modifier = Modifier.size(32.dp),
+                                    strokeWidth = 3.dp
+                                )
+                            }
+                        }
+                    }
+                }
             }
 
             // Features

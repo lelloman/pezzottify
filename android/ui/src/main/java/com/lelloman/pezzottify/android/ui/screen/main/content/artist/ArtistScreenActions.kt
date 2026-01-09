@@ -5,4 +5,6 @@ interface ArtistScreenActions {
     fun clickOnLike()
 
     fun clickOnArtistImage(imageUrl: String?)
+
+    fun loadMoreAlbums()
 }

@@ -282,10 +282,13 @@ internal class StaticsSynchronizer(
             is RemoteApiResponse.Success -> {
                 try {
                     val allAlbums = fetchAllDiscographyPages(artistId, response.data)
-                    val albumArtists = allAlbums.albums.map { album ->
+                    // Clear existing albums and insert fresh data with order index
+                    skeletonStore.deleteAlbumsForArtist(artistId)
+                    val albumArtists = allAlbums.albums.mapIndexed { index, album ->
                         AlbumArtistRelationship(
                             artistId = artistId,
-                            albumId = album.id
+                            albumId = album.id,
+                            orderIndex = index
                         )
                     }
                     skeletonStore.insertAlbumArtists(albumArtists)

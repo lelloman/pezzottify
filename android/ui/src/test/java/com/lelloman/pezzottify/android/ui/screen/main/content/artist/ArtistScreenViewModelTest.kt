@@ -67,7 +67,6 @@ class ArtistScreenViewModelTest {
     @Test
     fun `state shows error when artist fails to load`() = runTest {
         fakeContentResolver.artistResults["artist-1"] = flowOf(Content.Error("artist-1"))
-        fakeContentResolver.discographyResults["artist-1"] = flowOf(Content.Loading("artist-1"))
 
         createViewModel("artist-1")
         advanceUntilIdle()
@@ -85,7 +84,6 @@ class ArtistScreenViewModelTest {
             related = listOf("artist-2", "artist-3")
         )
         fakeContentResolver.artistResults["artist-1"] = flowOf(Content.Resolved("artist-1", artist))
-        fakeContentResolver.discographyResults["artist-1"] = flowOf(Content.Loading("artist-1"))
 
         createViewModel("artist-1")
         advanceUntilIdle()
@@ -98,27 +96,27 @@ class ArtistScreenViewModelTest {
     }
 
     @Test
-    fun `state shows discography from content resolver`() = runTest {
+    fun `state shows discography from interactor`() = runTest {
         val artist = Artist("artist-1", "Artist", null, emptyList())
-        val discography = ArtistDiscography(
-            albums = listOf("album-1", "album-2"),
-            features = listOf("album-3")
-        )
         fakeContentResolver.artistResults["artist-1"] = flowOf(Content.Resolved("artist-1", artist))
-        fakeContentResolver.discographyResults["artist-1"] = flowOf(Content.Resolved("artist-1", discography))
+        fakeInteractor.discographyStates["artist-1"] = MutableStateFlow(
+            ArtistScreenViewModel.DiscographyUiState(
+                albumIds = listOf("album-1", "album-2"),
+                isLoading = false,
+                hasMore = false,
+            )
+        )
 
         createViewModel("artist-1")
         advanceUntilIdle()
 
         assertThat(viewModel.state.value.albums).containsExactly("album-1", "album-2")
-        assertThat(viewModel.state.value.features).containsExactly("album-3")
     }
 
     @Test
     fun `state shows liked status`() = runTest {
         val artist = Artist("artist-1", "Artist", null, emptyList())
         fakeContentResolver.artistResults["artist-1"] = flowOf(Content.Resolved("artist-1", artist))
-        fakeContentResolver.discographyResults["artist-1"] = flowOf(Content.Loading("artist-1"))
         fakeInteractor.likedContentIds.add("artist-1")
 
         createViewModel("artist-1")
@@ -131,7 +129,6 @@ class ArtistScreenViewModelTest {
     fun `clickOnLike calls interactor toggleLike`() = runTest {
         val artist = Artist("artist-1", "Artist", null, emptyList())
         fakeContentResolver.artistResults["artist-1"] = flowOf(Content.Resolved("artist-1", artist))
-        fakeContentResolver.discographyResults["artist-1"] = flowOf(Content.Loading("artist-1"))
 
         createViewModel("artist-1")
         advanceUntilIdle()
@@ -146,7 +143,6 @@ class ArtistScreenViewModelTest {
     fun `logs viewed artist when loaded`() = runTest {
         val artist = Artist("artist-1", "Artist", null, emptyList())
         fakeContentResolver.artistResults["artist-1"] = flowOf(Content.Resolved("artist-1", artist))
-        fakeContentResolver.discographyResults["artist-1"] = flowOf(Content.Loading("artist-1"))
 
         createViewModel("artist-1")
         advanceUntilIdle()
@@ -157,7 +153,6 @@ class ArtistScreenViewModelTest {
     @Test
     fun `does not log viewed artist when loading`() = runTest {
         fakeContentResolver.artistResults["artist-1"] = flowOf(Content.Loading("artist-1"))
-        fakeContentResolver.discographyResults["artist-1"] = flowOf(Content.Loading("artist-1"))
 
         createViewModel("artist-1")
         advanceUntilIdle()
@@ -167,6 +162,7 @@ class ArtistScreenViewModelTest {
 
     private class FakeInteractor : ArtistScreenViewModel.Interactor {
         val likedContentIds = mutableSetOf<String>()
+        val discographyStates = mutableMapOf<String, MutableStateFlow<ArtistScreenViewModel.DiscographyUiState>>()
 
         var loggedViewedArtistId: String? = null
         var lastToggleLikeContentId: String? = null
@@ -184,7 +180,22 @@ class ArtistScreenViewModelTest {
             lastToggleLikeCurrentlyLiked = currentlyLiked
         }
 
-        override suspend fun fetchAllDiscography(artistId: String) {
+        override fun observeDiscographyState(artistId: String): Flow<ArtistScreenViewModel.DiscographyUiState> =
+            discographyStates.getOrPut(artistId) {
+                MutableStateFlow(
+                    ArtistScreenViewModel.DiscographyUiState(
+                        albumIds = emptyList(),
+                        isLoading = false,
+                        hasMore = false,
+                    )
+                )
+            }
+
+        override suspend fun fetchFirstDiscographyPage(artistId: String) {
+            // No-op for tests
+        }
+
+        override suspend fun fetchMoreDiscography(artistId: String) {
             // No-op for tests
         }
 
@@ -195,7 +206,6 @@ class ArtistScreenViewModelTest {
 
     private class FakeContentResolver : ContentResolver {
         val artistResults = mutableMapOf<String, Flow<Content<Artist>>>()
-        val discographyResults = mutableMapOf<String, Flow<Content<ArtistDiscography>>>()
 
         override fun resolveSearchResult(
             itemId: String,
@@ -212,7 +222,7 @@ class ArtistScreenViewModelTest {
             flowOf(Content.Loading(trackId))
 
         override fun resolveArtistDiscography(artistId: String): Flow<Content<ArtistDiscography>> =
-            discographyResults[artistId] ?: flowOf(Content.Loading(artistId))
+            flowOf(Content.Loading(artistId))
 
         override fun buildImageUrl(displayImageId: String): String =
             "http://example.com/image/$displayImageId"

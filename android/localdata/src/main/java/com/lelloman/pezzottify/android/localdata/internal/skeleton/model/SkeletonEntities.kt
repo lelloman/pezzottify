@@ -38,6 +38,7 @@ internal data class SkeletonAlbum(
 
 /**
  * Junction table for album-artist relationships.
+ * Includes order_index to preserve server-side sorting (by availability, then popularity/date).
  */
 @Entity(
     tableName = SkeletonAlbumArtist.TABLE_NAME,
@@ -62,12 +63,15 @@ internal data class SkeletonAlbumArtist(
     @ColumnInfo(name = COLUMN_ALBUM_ID)
     val albumId: String,
     @ColumnInfo(name = COLUMN_ARTIST_ID)
-    val artistId: String
+    val artistId: String,
+    @ColumnInfo(name = COLUMN_ORDER_INDEX, defaultValue = "0")
+    val orderIndex: Int = 0
 ) {
     companion object {
         const val TABLE_NAME = "skeleton_album_artists"
         const val COLUMN_ALBUM_ID = "album_id"
         const val COLUMN_ARTIST_ID = "artist_id"
+        const val COLUMN_ORDER_INDEX = "order_index"
     }
 }
 
