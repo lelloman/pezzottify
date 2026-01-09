@@ -284,6 +284,7 @@ class InteractorsModule {
         logFileManager: LogFileManager,
         configStore: ConfigStore,
         permissionsStore: PermissionsStore,
+        cacheManager: com.lelloman.pezzottify.android.domain.cache.CacheManager,
     ): SettingsScreenViewModel.Interactor = object : SettingsScreenViewModel.Interactor {
         override fun getThemeMode(): UiThemeMode = userSettingsStore.themeMode.value.toUi()
 
@@ -365,6 +366,30 @@ class InteractorsModule {
             permissionsStore.permissions.map { permissions ->
                 permissions.contains(DomainPermission.ReportBug)
             }
+
+        override suspend fun getCacheStats(): SettingsScreenViewModel.CacheStats {
+            val stats = cacheManager.getStats()
+            return SettingsScreenViewModel.CacheStats(
+                staticsCacheSizeBytes = stats.totalStaticsCacheSizeBytes,
+                imageCacheSizeBytes = stats.imageCacheSizeBytes,
+            )
+        }
+
+        override suspend fun trimStaticsCache() {
+            cacheManager.trimStaticsCache()
+        }
+
+        override suspend fun clearStaticsCache() {
+            cacheManager.clearStaticsCache()
+        }
+
+        override suspend fun trimImageCache() {
+            cacheManager.trimImageCache()
+        }
+
+        override suspend fun clearImageCache() {
+            cacheManager.clearImageCache()
+        }
     }
 
     @Provides

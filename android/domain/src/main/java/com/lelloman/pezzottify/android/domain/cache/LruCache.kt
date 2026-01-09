@@ -86,6 +86,43 @@ class LruCache<K, V>(
         expirations = 0
     }
 
+    /**
+     * Returns the current total size of cached entries in bytes.
+     */
+    fun getSizeBytes(): Long = lock.read {
+        cache.values.sumOf { it.sizeBytes.toLong() }
+    }
+
+    /**
+     * Returns the current number of entries in the cache.
+     */
+    fun getEntryCount(): Int = lock.read {
+        cache.size
+    }
+
+    /**
+     * Trims the cache by removing the oldest entries by creation time.
+     * @param percent The percentage of entries to remove (0.0 to 1.0)
+     * @return The number of entries removed
+     */
+    fun trimOldestPercent(percent: Float): Int = lock.write {
+        require(percent in 0f..1f) { "Percent must be between 0 and 1" }
+
+        val entriesToRemove = (cache.size * percent).toInt()
+        if (entriesToRemove == 0) return 0
+
+        val sortedEntries = cache.entries
+            .sortedBy { it.value.createdAt }
+            .take(entriesToRemove)
+
+        sortedEntries.forEach { entry ->
+            cache.remove(entry.key)
+            evictions++
+        }
+
+        return sortedEntries.size
+    }
+
     private fun evictExpired(now: Long) {
         val expired = cache.entries.filter { it.value.isExpired(ttlMillis, now) }
         expired.forEach {

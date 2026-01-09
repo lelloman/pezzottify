@@ -22,6 +22,9 @@ internal data class Track(
 
     @ColumnInfo(name = COLUMN_AVAILABILITY, defaultValue = "available")
     val availabilityString: String = "available",
+
+    @ColumnInfo(name = COLUMN_CACHED_AT, defaultValue = "0")
+    val cachedAt: Long = System.currentTimeMillis(),
 ) : com.lelloman.pezzottify.android.domain.statics.Track {
 
     override val availability: TrackAvailability
@@ -32,6 +35,7 @@ internal data class Track(
 
         const val COLUMN_ID = "id"
         const val COLUMN_AVAILABILITY = "availability"
+        const val COLUMN_CACHED_AT = "cached_at"
     }
 }
 
@@ -42,4 +46,5 @@ internal fun com.lelloman.pezzottify.android.domain.statics.Track.quack(): Track
     artistsIds = artistsIds,
     durationSeconds = durationSeconds,
     availabilityString = availability.name.lowercase(),
+    cachedAt = System.currentTimeMillis(),
 )

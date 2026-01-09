@@ -16,12 +16,16 @@ internal data class Artist(
     override val displayImageId: String?,
 
     override val related: List<String>,
+
+    @ColumnInfo(name = COLUMN_CACHED_AT, defaultValue = "0")
+    val cachedAt: Long = System.currentTimeMillis(),
 ) : com.lelloman.pezzottify.android.domain.statics.Artist {
 
     companion object {
         const val TABLE_NAME = "artist"
 
         const val COLUMN_ID = "id"
+        const val COLUMN_CACHED_AT = "cached_at"
     }
 }
 
@@ -30,4 +34,5 @@ internal fun com.lelloman.pezzottify.android.domain.statics.Artist.quack(): Arti
     name = name,
     displayImageId = displayImageId,
     related = related,
+    cachedAt = System.currentTimeMillis(),
 )

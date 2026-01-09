@@ -145,6 +145,17 @@
     <string name="storage_unavailable">Storage information unavailable</string>
     <!-- STORAGE INFO SECTION -->
 
+    <!-- CACHE MANAGEMENT SECTION -->
+    <string name="catalog_cache">Catalog Cache</string>
+    <string name="catalog_cache_description">Cached metadata for artists, albums, and tracks</string>
+    <string name="image_cache">Image Cache</string>
+    <string name="image_cache_description">Cached album artwork and artist images</string>
+    <string name="cache_size_format">Size: %1$s</string>
+    <string name="cache_size_loading">Calculating size…</string>
+    <string name="trim_cache">Trim 50&#37;</string>
+    <string name="clear_cache">Clear All</string>
+    <!-- CACHE MANAGEMENT SECTION -->
+
     <!-- FILE LOGGING SECTION -->
     <string name="logging">Logging</string>
     <string name="save_logs_to_file">Save logs to file</string>
