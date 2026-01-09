@@ -94,7 +94,7 @@ impl AlbumAvailability {
         match s {
             "complete" => AlbumAvailability::Complete,
             "partial" => AlbumAvailability::Partial,
-            "missing" | _ => AlbumAvailability::Missing,
+            _ => AlbumAvailability::Missing,
         }
     }
 

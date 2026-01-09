@@ -533,14 +533,28 @@ impl SqliteCatalogStore {
         };
 
         let total: usize = conn.query_row(
-            "SELECT COUNT(*) FROM artist_albums WHERE artist_rowid = ?1 AND is_appears_on = 0",
+            "SELECT COUNT(*) FROM artist_albums aa
+             INNER JOIN albums a ON a.rowid = aa.album_rowid
+             WHERE aa.artist_rowid = ?1 AND aa.is_appears_on = 0 AND a.album_type != 'single'",
             params![artist_rowid],
             |row| row.get::<_, i64>(0),
         )? as usize;
 
+        let availability_order = "CASE a.album_availability
+            WHEN 'complete' THEN 1
+            WHEN 'partial' THEN 2
+            WHEN 'missing' THEN 3
+        END";
+
         let order_clause = match sort {
-            DiscographySort::Popularity => "a.popularity DESC, a.release_date DESC",
-            DiscographySort::ReleaseDate => "a.release_date DESC, a.popularity DESC",
+            DiscographySort::Popularity => format!(
+                "{}, a.popularity DESC, a.release_date DESC",
+                availability_order
+            ),
+            DiscographySort::ReleaseDate => format!(
+                "{}, a.release_date DESC, a.popularity DESC",
+                availability_order
+            ),
         };
 
         let query = format!(
@@ -548,7 +562,7 @@ impl SqliteCatalogStore {
                     a.label, a.popularity, a.release_date, a.release_date_precision, a.album_availability
              FROM albums a
              INNER JOIN artist_albums aa ON a.rowid = aa.album_rowid
-             WHERE aa.artist_rowid = ?1 AND aa.is_appears_on = 0
+             WHERE aa.artist_rowid = ?1 AND aa.is_appears_on = 0 AND a.album_type != 'single'
              ORDER BY {}
              LIMIT ?2 OFFSET ?3",
             order_clause
