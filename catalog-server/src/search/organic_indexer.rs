@@ -20,7 +20,7 @@
 use crate::catalog_store::CatalogStore;
 use crate::search::{HashedItemType, SearchIndexItem, SearchVault};
 use std::collections::HashSet;
-use std::sync::{Arc, RwLock};
+use std::sync::{Arc, Mutex, RwLock};
 use tokio::sync::mpsc;
 use tracing::{debug, error, info, warn};
 
@@ -36,6 +36,26 @@ pub enum IndexTask {
     Artist(String),
     Album(String),
     Track(String),
+}
+
+impl IndexTask {
+    /// Get the item ID for logging/tracing
+    pub fn id(&self) -> &str {
+        match self {
+            IndexTask::Artist(id) => id,
+            IndexTask::Album(id) => id,
+            IndexTask::Track(id) => id,
+        }
+    }
+
+    /// Get a display string for logging
+    pub fn type_name(&self) -> &'static str {
+        match self {
+            IndexTask::Artist(_) => "artist",
+            IndexTask::Album(_) => "album",
+            IndexTask::Track(_) => "track",
+        }
+    }
 }
 
 /// Combined ID for tracking indexed items
@@ -157,14 +177,16 @@ impl OrganicIndexer {
 
     /// Background worker that processes index tasks.
     async fn background_worker(
-        &self,
+        self: &Arc<Self>,
         mut rx: mpsc::Receiver<IndexTask>,
         search_vault: Arc<dyn SearchVault>,
         catalog_store: Arc<dyn CatalogStore>,
     ) {
         info!("Organic indexer background worker started");
 
-        let mut batch: Vec<SearchIndexItem> = Vec::with_capacity(BATCH_SIZE);
+        let batch: Arc<Mutex<Vec<SearchIndexItem>>> =
+            Arc::new(Mutex::new(Vec::with_capacity(BATCH_SIZE)));
+        let indexer = Arc::clone(self);
 
         loop {
             // Check if we should stop
@@ -182,25 +204,49 @@ impl OrganicIndexer {
                     }
                     Err(_) => {
                         // Timeout - flush any pending batch and continue
-                        if !batch.is_empty() {
-                            self.flush_batch(&search_vault, &mut batch);
+                        let mut batch_guard = batch.lock().unwrap();
+                        if !batch_guard.is_empty() {
+                            self.flush_batch(&search_vault, &mut batch_guard);
                         }
                         continue;
                     }
                 };
 
             // Process the task and collect items to index
-            self.process_task(&task, &catalog_store, &mut batch);
+            let task_clone = task.clone();
+            let catalog_store_clone = Arc::clone(&catalog_store);
+            let indexer_clone = Arc::clone(&indexer);
+            let batch_clone = Arc::clone(&batch);
+
+            let task_id = format!("{}:{}", task.type_name(), task.id());
+
+            let result = tokio::task::spawn_blocking(move || {
+                let mut batch = batch_clone.lock().unwrap();
+                indexer_clone.process_task(&task_clone, &catalog_store_clone, &mut batch);
+            })
+            .await;
+
+            if let Err(e) = result {
+                error!("Task {} processing failed: {}", task_id, e);
+            }
 
             // Flush batch when full
-            if batch.len() >= BATCH_SIZE {
-                self.flush_batch(&search_vault, &mut batch);
+            {
+                let batch_guard = batch.lock().unwrap();
+                if batch_guard.len() >= BATCH_SIZE {
+                    drop(batch_guard);
+                    let mut batch_guard = batch.lock().unwrap();
+                    self.flush_batch(&search_vault, &mut batch_guard);
+                }
             }
         }
 
         // Flush remaining items
-        if !batch.is_empty() {
-            self.flush_batch(&search_vault, &mut batch);
+        {
+            let mut batch_guard = batch.lock().unwrap();
+            if !batch_guard.is_empty() {
+                self.flush_batch(&search_vault, &mut batch_guard);
+            }
         }
 
         info!("Organic indexer background worker stopped");
