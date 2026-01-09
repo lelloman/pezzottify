@@ -40,6 +40,7 @@ data class AlbumSummary(
     val imageId: String? = null,
     @SerialName("artist_names")
     val artistNames: List<String>,
+    val availability: String,
 )
 
 @Serializable
@@ -75,6 +76,7 @@ data class SearchedAlbum(
     @SerialName("image_id")
     val imageId: String? = null,
     val year: Long? = null,
+    val availability: String,
 )
 
 @Serializable
@@ -117,6 +119,7 @@ sealed class ResolvedSearchResult {
         @SerialName("image_id")
         val imageId: String? = null,
         val year: Long? = null,
+        val availability: String,
     ) : ResolvedSearchResult()
 
     @Serializable

@@ -169,6 +169,7 @@ impl SqliteCatalogStore {
     fn parse_album_row(row: &rusqlite::Row) -> rusqlite::Result<Album> {
         let album_type_str: String = row.get(2)?;
         let label: String = row.get(5)?;
+        let availability_str: String = row.get(9)?;
 
         Ok(Album {
             id: row.get(0)?,
@@ -179,6 +180,7 @@ impl SqliteCatalogStore {
             release_date_precision: row.get(8)?,
             external_id_upc: row.get(3)?,
             popularity: row.get(6)?,
+            album_availability: AlbumAvailability::from_db_str(&availability_str),
         })
     }
 
@@ -218,7 +220,7 @@ impl SqliteCatalogStore {
 
         let mut stmt = conn.prepare_cached(
             "SELECT id, name, album_type, external_id_upc, external_id_amgid,
-                    label, popularity, release_date, release_date_precision
+                    label, popularity, release_date, release_date_precision, album_availability
              FROM albums WHERE id = ?1",
         )?;
 
@@ -323,7 +325,7 @@ impl SqliteCatalogStore {
 
         let mut album_stmt = conn.prepare_cached(
             "SELECT id, name, album_type, external_id_upc, external_id_amgid,
-                    label, popularity, release_date, release_date_precision
+                    label, popularity, release_date, release_date_precision, album_availability
              FROM albums WHERE rowid = ?1",
         )?;
         let album = album_stmt.query_row(params![album_rowid], Self::parse_album_row)?;
@@ -465,7 +467,7 @@ impl SqliteCatalogStore {
 
         let mut album_stmt = conn.prepare_cached(
             "SELECT id, name, album_type, external_id_upc, external_id_amgid,
-                    label, popularity, release_date, release_date_precision
+                    label, popularity, release_date, release_date_precision, album_availability
              FROM albums WHERE id = ?1",
         )?;
         let album = album_stmt.query_row(params![album_id], Self::parse_album_row)?;
@@ -543,7 +545,7 @@ impl SqliteCatalogStore {
 
         let query = format!(
             "SELECT a.id, a.name, a.album_type, a.external_id_upc, a.external_id_amgid,
-                    a.label, a.popularity, a.release_date, a.release_date_precision
+                    a.label, a.popularity, a.release_date, a.release_date_precision, a.album_availability
              FROM albums a
              INNER JOIN artist_albums aa ON a.rowid = aa.album_rowid
              WHERE aa.artist_rowid = ?1 AND aa.is_appears_on = 0
@@ -1056,8 +1058,8 @@ impl CatalogStore for SqliteCatalogStore {
             }
 
             conn.execute(
-                "INSERT INTO albums (id, name, album_type, external_id_upc, label, popularity, release_date, release_date_precision)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+                "INSERT INTO albums (id, name, album_type, external_id_upc, label, popularity, release_date, release_date_precision, album_availability)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
                 params![
                     &album.id,
                     &album.name,
@@ -1067,6 +1069,7 @@ impl CatalogStore for SqliteCatalogStore {
                     album.popularity,
                     &album.release_date,
                     &album.release_date_precision,
+                    album.album_availability.to_db_str(),
                 ],
             )?;
 
@@ -1125,7 +1128,7 @@ impl CatalogStore for SqliteCatalogStore {
 
             conn.execute(
                 "UPDATE albums SET name = ?1, album_type = ?2, external_id_upc = ?3, label = ?4,
-                 popularity = ?5, release_date = ?6, release_date_precision = ?7 WHERE rowid = ?8",
+                 popularity = ?5, release_date = ?6, release_date_precision = ?7, album_availability = ?8 WHERE rowid = ?9",
                 params![
                     &album.name,
                     album.album_type.to_db_str(),
@@ -1134,6 +1137,7 @@ impl CatalogStore for SqliteCatalogStore {
                     album.popularity,
                     &album.release_date,
                     &album.release_date_precision,
+                    album.album_availability.to_db_str(),
                     album_rowid,
                 ],
             )?;

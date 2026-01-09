@@ -25,6 +25,7 @@ pub struct SearchedAlbum {
     pub artists_ids_names: Vec<(String, String)>,
     pub image_id: Option<String>,
     pub year: Option<i64>,
+    pub availability: String,
 }
 
 #[derive(Debug, Clone, Serialize)]

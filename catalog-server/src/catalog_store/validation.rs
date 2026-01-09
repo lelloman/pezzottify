@@ -114,7 +114,7 @@ pub fn validate_track(track: &Track) -> ValidationResult<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::catalog_store::models::{AlbumType, TrackAvailability};
+    use crate::catalog_store::models::{AlbumAvailability, AlbumType, TrackAvailability};
 
     fn make_valid_artist() -> Artist {
         Artist {
@@ -136,6 +136,7 @@ mod tests {
             release_date_precision: Some("day".to_string()),
             external_id_upc: None,
             popularity: 50,
+            album_availability: AlbumAvailability::Missing,
         }
     }
 

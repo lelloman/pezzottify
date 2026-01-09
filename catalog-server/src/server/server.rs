@@ -1408,7 +1408,7 @@ async fn create_album(
     State(catalog_store): State<GuardedCatalogStore>,
     Json(data): Json<CreateAlbumRequest>,
 ) -> Response {
-    use crate::catalog_store::{validate_album, Album, AlbumType};
+    use crate::catalog_store::{validate_album, Album, AlbumAvailability, AlbumType};
 
     let album = Album {
         id: data.id,
@@ -1419,6 +1419,7 @@ async fn create_album(
         release_date_precision: data.release_date_precision,
         external_id_upc: data.external_id_upc,
         popularity: data.popularity,
+        album_availability: AlbumAvailability::Missing,
     };
 
     if let Err(e) = validate_album(&album) {
@@ -1446,7 +1447,7 @@ async fn update_album(
     Path(id): Path<String>,
     Json(data): Json<CreateAlbumRequest>,
 ) -> Response {
-    use crate::catalog_store::{validate_album, Album, AlbumType};
+    use crate::catalog_store::{validate_album, Album, AlbumAvailability, AlbumType};
 
     let album = Album {
         id,
@@ -1457,6 +1458,7 @@ async fn update_album(
         release_date_precision: data.release_date_precision,
         external_id_upc: data.external_id_upc,
         popularity: data.popularity,
+        album_availability: AlbumAvailability::Missing,
     };
 
     if let Err(e) = validate_album(&album) {

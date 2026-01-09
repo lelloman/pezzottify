@@ -97,6 +97,7 @@ pub struct AlbumSummary {
     pub track_count: u32,
     pub image_id: Option<String>,
     pub artist_names: Vec<String>,
+    pub availability: String,
 }
 
 /// Summary of an artist for enrichment sections.
@@ -197,6 +198,7 @@ mod tests {
                 track_count: 9,
                 image_id: Some("img_1".to_string()),
                 artist_names: vec!["Prince".to_string()],
+                availability: "complete".to_string(),
             }],
         };
 
@@ -257,6 +259,7 @@ mod tests {
             track_count: 10,
             image_id: None,
             artist_names: vec![],
+            availability: "partial".to_string(),
         };
 
         let json = serde_json::to_string(&summary).unwrap();

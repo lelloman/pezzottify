@@ -96,12 +96,21 @@ fn resolve_album(
         .and_then(|id| id.as_str())
         .map(String::from);
 
+    // Get album availability from the album data
+    let availability = album_json
+        .get("album")
+        .and_then(|a| a.get("album_availability"))
+        .and_then(|av| av.as_str())
+        .unwrap_or("missing")
+        .to_string();
+
     let resolved_album = SearchedAlbum {
         id: album_id.to_owned(),
         name,
         artists_ids_names,
         image_id,
         year,
+        availability,
     };
 
     Some(ResolvedSearchResult::Album(resolved_album))

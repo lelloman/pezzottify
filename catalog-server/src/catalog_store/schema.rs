@@ -39,10 +39,17 @@ const ALBUMS_TABLE: Table = Table {
         sqlite_column!("popularity", &SqlType::Integer, non_null = true),
         sqlite_column!("release_date", &SqlType::Text, non_null = true), // '2023-05-15', '2023-05', '2023'
         sqlite_column!("release_date_precision", &SqlType::Text, non_null = true), // 'day', 'month', 'year'
+        sqlite_column!(
+            "album_availability",
+            &SqlType::Text,
+            non_null = true,
+            default_value = Some("'missing'")
+        ), // 'complete', 'partial', 'missing'
     ],
     indices: &[
         ("idx_albums_id", "id"),
         ("idx_albums_upc", "external_id_upc"),
+        ("idx_albums_availability", "album_availability"),
     ],
     unique_constraints: &[&["id"]],
 };
@@ -156,7 +163,6 @@ const ARTIST_IMAGES_TABLE: Table = Table {
 /// Spotify catalog schema.
 ///
 /// This schema matches the Spotify metadata dump structure.
-/// No migrations - this is a fresh schema for importing Spotify data.
 pub const CATALOG_VERSIONED_SCHEMAS: &[VersionedSchema] = &[VersionedSchema {
     version: 0,
     tables: &[
