@@ -32,6 +32,28 @@ fn migrate_if_needed(conn: &mut Connection) -> Result<()> {
         return Ok(());
     }
 
+    let needs_v1_migration = {
+        let column_exists = conn
+            .query_row(
+                "SELECT 1 FROM pragma_table_info('albums') WHERE name = 'album_availability'",
+                [],
+                |r| r.get::<_, i32>(0),
+            )
+            .ok()
+            == Some(1);
+        !column_exists
+    };
+
+    if !needs_v1_migration {
+        conn.pragma_update(None, "user_version", BASE_DB_VERSION + 1)?;
+        let _ = conn.query_row(
+            "PRAGMA wal_checkpoint(TRUNCATE)",
+            [],
+            |_: &rusqlite::Row| Ok(()),
+        );
+        return Ok(());
+    }
+
     let tx = conn.transaction()?;
     let mut latest_from = current_version;
     for schema in CATALOG_VERSIONED_SCHEMAS.iter().skip(current_version + 1) {
@@ -44,12 +66,14 @@ fn migrate_if_needed(conn: &mut Connection) -> Result<()> {
             latest_from = schema.version;
         }
     }
-    tx.execute(
-        &format!("PRAGMA user_version = {}", BASE_DB_VERSION + latest_from),
-        [],
-    )?;
+    tx.pragma_update(None, "user_version", BASE_DB_VERSION + latest_from)?;
 
     tx.commit()?;
+    let _ = conn.query_row(
+        "PRAGMA wal_checkpoint(TRUNCATE)",
+        [],
+        |_: &rusqlite::Row| Ok(()),
+    );
     Ok(())
 }
 
