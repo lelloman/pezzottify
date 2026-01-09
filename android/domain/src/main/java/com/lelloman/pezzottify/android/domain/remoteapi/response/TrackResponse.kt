@@ -46,5 +46,5 @@ fun TrackResponse.toDomain() = object : Track {
     override val durationSeconds: Int
         get() = (this@toDomain.track.durationMs / 1000).toInt()
     override val availability: TrackAvailability
-        get() = TrackAvailability.Available
+        get() = this@toDomain.track.availability
 }
