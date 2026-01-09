@@ -28,6 +28,9 @@ enum class LikedContentType {
 /**
  * User setting types for setting_changed events.
  * Uses tagged serialization: {"key": "setting_key", "value": value}
+ *
+ * Note: Use [UserSettingListSerializer] for List<UserSetting> fields to gracefully
+ * handle unknown settings that may be added server-side before the Android app is updated.
  */
 @OptIn(ExperimentalSerializationApi::class)
 @JsonClassDiscriminator("key")
@@ -36,6 +39,77 @@ sealed interface UserSetting {
     @Serializable
     @SerialName("notify_whatsnew")
     data class NotifyWhatsNew(val value: Boolean) : UserSetting
+}
+
+/**
+ * Custom serializer for List<UserSetting> that filters out unknown settings
+ * instead of failing. This ensures forward compatibility when new settings
+ * are added server-side before the Android app is updated.
+ */
+object UserSettingListSerializer : KSerializer<List<UserSetting>> {
+    private val json = kotlinx.serialization.json.Json {
+        ignoreUnknownKeys = true
+        isLenient = true
+    }
+
+    override val descriptor: SerialDescriptor =
+        kotlinx.serialization.builtins.ListSerializer(
+            kotlinx.serialization.json.JsonElement.serializer()
+        ).descriptor
+
+    override fun serialize(encoder: Encoder, value: List<UserSetting>) {
+        val listSerializer = kotlinx.serialization.builtins.ListSerializer(UserSetting.serializer())
+        listSerializer.serialize(encoder, value)
+    }
+
+    override fun deserialize(decoder: Decoder): List<UserSetting> {
+        val jsonDecoder = decoder as? kotlinx.serialization.json.JsonDecoder
+            ?: return emptyList()
+
+        val jsonArray = jsonDecoder.decodeJsonElement() as? kotlinx.serialization.json.JsonArray
+            ?: return emptyList()
+
+        return jsonArray.mapNotNull { element ->
+            try {
+                json.decodeFromJsonElement(UserSetting.serializer(), element)
+            } catch (e: Exception) {
+                // Unknown setting type - skip it
+                null
+            }
+        }
+    }
+}
+
+/**
+ * Custom serializer for nullable UserSetting that gracefully handles unknown settings.
+ * Unknown setting types are deserialized as null instead of throwing.
+ */
+object NullableUserSettingSerializer : KSerializer<UserSetting?> {
+    private val json = kotlinx.serialization.json.Json {
+        ignoreUnknownKeys = true
+        isLenient = true
+    }
+
+    override val descriptor: SerialDescriptor = UserSetting.serializer().descriptor
+
+    override fun serialize(encoder: Encoder, value: UserSetting?) {
+        if (value != null) {
+            UserSetting.serializer().serialize(encoder, value)
+        }
+    }
+
+    override fun deserialize(decoder: Decoder): UserSetting? {
+        val jsonDecoder = decoder as? kotlinx.serialization.json.JsonDecoder
+            ?: return null
+
+        val element = jsonDecoder.decodeJsonElement()
+        return try {
+            json.decodeFromJsonElement(UserSetting.serializer(), element)
+        } catch (e: Exception) {
+            // Unknown setting type - return null
+            null
+        }
+    }
 }
 
 /**
@@ -432,7 +506,8 @@ data class SyncEventPayload(
     @SerialName("content_id")
     val contentId: String? = null,
 
-    // SettingChanged
+    // SettingChanged - use custom serializer for forward compatibility
+    @Serializable(with = NullableUserSettingSerializer::class)
     val setting: UserSetting? = null,
 
     // Playlist events
