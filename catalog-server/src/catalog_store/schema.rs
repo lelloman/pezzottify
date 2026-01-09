@@ -62,6 +62,7 @@ const TRACKS_TABLE: Table = Table {
         sqlite_column!("duration_ms", &SqlType::Integer, non_null = true),
         sqlite_column!("explicit", &SqlType::Integer, non_null = true),
         sqlite_column!("language", &SqlType::Text), // ISO 639-1 or 'zxx' for instrumental
+        sqlite_column!("audio_uri", &SqlType::Text),
     ],
     indices: &[
         ("idx_tracks_id", "id"),

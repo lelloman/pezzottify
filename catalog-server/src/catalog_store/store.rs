@@ -19,6 +19,7 @@ pub struct SqliteCatalogStore {
     read_pool: Vec<Arc<Mutex<Connection>>>,
     write_conn: Arc<Mutex<Connection>>,
     media_base_path: PathBuf,
+    read_index: Arc<AtomicUsize>,
 }
 
 impl SqliteCatalogStore {
@@ -77,12 +78,12 @@ impl SqliteCatalogStore {
             write_conn: Arc::new(Mutex::new(write_conn)),
             read_pool,
             media_base_path: media_base_path.as_ref().to_path_buf(),
+            read_index: Arc::new(AtomicUsize::new(0)),
         })
     }
 
     fn get_read_conn(&self) -> Arc<Mutex<Connection>> {
-        static READ_INDEX: AtomicUsize = AtomicUsize::new(0);
-        let index = READ_INDEX.fetch_add(1, Ordering::SeqCst) % self.read_pool.len();
+        let index = self.read_index.fetch_add(1, Ordering::SeqCst) % self.read_pool.len();
         self.read_pool[index].clone()
     }
 

@@ -142,9 +142,9 @@ pub fn create_test_catalog() -> Result<(TempDir, PathBuf, PathBuf)> {
     ];
     for (i, (id, name, duration_ms)) in tracks_album1.iter().enumerate() {
         conn.execute(
-            "INSERT INTO tracks (id, name, album_rowid, disc_number, track_number, duration_ms, explicit, popularity)
-             VALUES (?1, ?2, ?3, 1, ?4, ?5, 0, 50)",
-            rusqlite::params![id, name, album1_rowid, (i + 1) as i32, duration_ms],
+            "INSERT INTO tracks (id, name, album_rowid, disc_number, track_number, duration_ms, explicit, popularity, audio_uri)
+             VALUES (?1, ?2, ?3, 1, ?4, ?5, 0, 50, ?6)",
+            rusqlite::params![id, name, album1_rowid, (i + 1) as i32, duration_ms, format!("audio/{}.ogg", id)],
         )?;
 
         // Get track rowid
@@ -167,9 +167,9 @@ pub fn create_test_catalog() -> Result<(TempDir, PathBuf, PathBuf)> {
     ];
     for (i, (id, name, duration_ms)) in tracks_album2.iter().enumerate() {
         conn.execute(
-            "INSERT INTO tracks (id, name, album_rowid, disc_number, track_number, duration_ms, explicit, popularity)
-             VALUES (?1, ?2, ?3, 1, ?4, ?5, 0, 50)",
-            rusqlite::params![id, name, album2_rowid, (i + 1) as i32, duration_ms],
+            "INSERT INTO tracks (id, name, album_rowid, disc_number, track_number, duration_ms, explicit, popularity, audio_uri)
+             VALUES (?1, ?2, ?3, 1, ?4, ?5, 0, 50, ?6)",
+            rusqlite::params![id, name, album2_rowid, (i + 1) as i32, duration_ms, format!("audio/{}.ogg", id)],
         )?;
 
         // Get track rowid
