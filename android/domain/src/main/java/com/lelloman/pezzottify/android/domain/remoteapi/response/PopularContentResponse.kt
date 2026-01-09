@@ -10,8 +10,6 @@ import kotlinx.serialization.Serializable
 data class PopularAlbum(
     val id: String,
     val name: String,
-    @SerialName("image_id")
-    val imageId: String?,
     @SerialName("artist_names")
     val artistNames: List<String>,
     @SerialName("play_count")
@@ -25,8 +23,6 @@ data class PopularAlbum(
 data class PopularArtist(
     val id: String,
     val name: String,
-    @SerialName("image_id")
-    val imageId: String?,
     @SerialName("play_count")
     val playCount: Long,
 )

@@ -23,7 +23,6 @@ class GetPopularContent @Inject constructor(
                         PopularAlbum(
                             id = album.id,
                             name = album.name,
-                            displayImageId = album.imageId,
                             artistNames = album.artistNames,
                         )
                     },
@@ -31,7 +30,6 @@ class GetPopularContent @Inject constructor(
                         PopularArtist(
                             id = artist.id,
                             name = artist.name,
-                            displayImageId = artist.imageId,
                         )
                     },
                 )

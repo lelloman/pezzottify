@@ -325,7 +325,6 @@ impl BackgroundJob for PopularContentJob {
                 return Err(JobError::Cancelled);
             }
             if let Ok(Some(album_json)) = ctx.catalog_store.get_resolved_album_json(album_id) {
-                // ResolvedAlbum has: album: Album, artists: Vec<Artist>, display_image: Option<Image>
                 let name = album_json
                     .get("album")
                     .and_then(|a| a.get("name"))
@@ -333,13 +332,6 @@ impl BackgroundJob for PopularContentJob {
                     .unwrap_or("Unknown Album")
                     .to_string();
 
-                let image_id = album_json
-                    .get("display_image")
-                    .and_then(|img| img.get("id"))
-                    .and_then(|i| i.as_str())
-                    .map(|s| s.to_string());
-
-                // ResolvedAlbum.artists is Vec<Artist>, so we access name directly
                 let artist_names: Vec<String> = album_json
                     .get("artists")
                     .and_then(|a| a.as_array())
@@ -359,7 +351,6 @@ impl BackgroundJob for PopularContentJob {
                 popular_albums.push(PopularAlbum {
                     id: album_id.clone(),
                     name,
-                    image_id,
                     artist_names,
                     play_count: *play_count,
                 });
@@ -375,7 +366,6 @@ impl BackgroundJob for PopularContentJob {
                 return Err(JobError::Cancelled);
             }
             if let Ok(Some(artist_json)) = ctx.catalog_store.get_resolved_artist_json(artist_id) {
-                // ResolvedArtist has: artist: Artist, display_image: Option<Image>
                 let name = artist_json
                     .get("artist")
                     .and_then(|a| a.get("name"))
@@ -383,16 +373,9 @@ impl BackgroundJob for PopularContentJob {
                     .unwrap_or("Unknown Artist")
                     .to_string();
 
-                let image_id = artist_json
-                    .get("display_image")
-                    .and_then(|img| img.get("id"))
-                    .and_then(|i| i.as_str())
-                    .map(|s| s.to_string());
-
                 popular_artists.push(PopularArtist {
                     id: artist_id.clone(),
                     name,
-                    image_id,
                     play_count: *play_count,
                 });
             }

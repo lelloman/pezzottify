@@ -886,11 +886,6 @@ impl UserManager {
                         .and_then(|n| n.as_str())
                         .unwrap_or("Unknown")
                         .to_string();
-                    let image_id = album_json
-                        .get("display_image")
-                        .and_then(|img| img.get("id"))
-                        .and_then(|id| id.as_str())
-                        .map(|s| s.to_string());
                     let artist_names: Vec<String> = album_json
                         .get("artists")
                         .and_then(|a| a.as_array())
@@ -906,7 +901,6 @@ impl UserManager {
                     Some(PopularAlbum {
                         id,
                         name,
-                        image_id,
                         artist_names,
                         play_count,
                     })
@@ -983,16 +977,10 @@ impl UserManager {
                         .and_then(|n| n.as_str())
                         .unwrap_or("Unknown")
                         .to_string();
-                    let image_id = artist_json
-                        .get("display_image")
-                        .and_then(|img| img.get("id"))
-                        .and_then(|id| id.as_str())
-                        .map(|s| s.to_string());
 
                     Some(PopularArtist {
                         id,
                         name,
-                        image_id,
                         play_count,
                     })
                 } else {
