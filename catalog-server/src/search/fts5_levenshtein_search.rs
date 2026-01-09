@@ -673,7 +673,7 @@ impl Fts5LevenshteinSearchVault {
         conn.execute("BEGIN IMMEDIATE", [])?;
 
         let chunk_size = UPSERT_SUB_BATCH_SIZE;
-        let total_chunks = (items.len() + chunk_size - 1) / chunk_size;
+        let total_chunks = items.len().div_ceil(chunk_size);
         let mut delete_stmt =
             conn.prepare("DELETE FROM search_index WHERE item_id = ? AND item_type = ?")?;
         let mut insert_stmt =
@@ -733,7 +733,7 @@ impl Fts5LevenshteinSearchVault {
         conn.execute("BEGIN IMMEDIATE", [])?;
 
         let chunk_size = UPSERT_SUB_BATCH_SIZE;
-        let total_chunks = (items.len() + chunk_size - 1) / chunk_size;
+        let total_chunks = items.len().div_ceil(chunk_size);
 
         let result = (|| -> Result<()> {
             for (chunk_idx, chunk) in items.chunks(chunk_size).enumerate() {
