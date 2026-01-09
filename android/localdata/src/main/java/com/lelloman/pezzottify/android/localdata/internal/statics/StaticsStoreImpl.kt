@@ -16,6 +16,7 @@ private typealias IAlbum = com.lelloman.pezzottify.android.domain.statics.Album
 
 internal class StaticsStoreImpl(
     private val db: StaticsDb,
+    private val dbSizeCalculator: StaticsDbSizeCalculator,
     loggerFactory: LoggerFactory,
 ) : StaticsStore {
 
@@ -63,4 +64,33 @@ internal class StaticsStoreImpl(
         } catch (throwable: Throwable) {
             Result.failure(throwable)
         }
+
+    override suspend fun countEntries(): Int {
+        return staticsDao.countArtists() +
+            staticsDao.countAlbums() +
+            staticsDao.countTracks()
+    }
+
+    override suspend fun trimOldestPercent(percent: Float): Int {
+        require(percent in 0f..1f) { "Percent must be between 0 and 1" }
+
+        val artistCount = staticsDao.countArtists()
+        val albumCount = staticsDao.countAlbums()
+        val trackCount = staticsDao.countTracks()
+
+        var deleted = 0
+        deleted += staticsDao.deleteOldestArtists((artistCount * percent).toInt())
+        deleted += staticsDao.deleteOldestAlbums((albumCount * percent).toInt())
+        deleted += staticsDao.deleteOldestTracks((trackCount * percent).toInt())
+
+        return deleted
+    }
+
+    override suspend fun getDatabaseSizeBytes(): Long {
+        return dbSizeCalculator.getDatabaseSizeBytes()
+    }
+
+    override suspend fun vacuum() {
+        db.openHelper.writableDatabase.execSQL("VACUUM")
+    }
 }

@@ -41,4 +41,51 @@ internal interface StaticsDao {
 
     @Query("DELETE FROM ${Album.TABLE_NAME} WHERE ${Album.COLUMN_ID} = :albumId")
     suspend fun deleteAlbum(albumId: String): Int
+
+    // Count
+    @Query("SELECT COUNT(*) FROM ${Artist.TABLE_NAME}")
+    suspend fun countArtists(): Int
+
+    @Query("SELECT COUNT(*) FROM ${Album.TABLE_NAME}")
+    suspend fun countAlbums(): Int
+
+    @Query("SELECT COUNT(*) FROM ${Track.TABLE_NAME}")
+    suspend fun countTracks(): Int
+
+    // Delete oldest by cachedAt (for trimming)
+    @Query(
+        """
+        DELETE FROM ${Artist.TABLE_NAME}
+        WHERE ${Artist.COLUMN_ID} IN (
+            SELECT ${Artist.COLUMN_ID} FROM ${Artist.TABLE_NAME}
+            ORDER BY ${Artist.COLUMN_CACHED_AT} ASC
+            LIMIT :limit
+        )
+        """
+    )
+    suspend fun deleteOldestArtists(limit: Int): Int
+
+    @Query(
+        """
+        DELETE FROM ${Album.TABLE_NAME}
+        WHERE ${Album.COLUMN_ID} IN (
+            SELECT ${Album.COLUMN_ID} FROM ${Album.TABLE_NAME}
+            ORDER BY ${Album.COLUMN_CACHED_AT} ASC
+            LIMIT :limit
+        )
+        """
+    )
+    suspend fun deleteOldestAlbums(limit: Int): Int
+
+    @Query(
+        """
+        DELETE FROM ${Track.TABLE_NAME}
+        WHERE ${Track.COLUMN_ID} IN (
+            SELECT ${Track.COLUMN_ID} FROM ${Track.TABLE_NAME}
+            ORDER BY ${Track.COLUMN_CACHED_AT} ASC
+            LIMIT :limit
+        )
+        """
+    )
+    suspend fun deleteOldestTracks(limit: Int): Int
 }

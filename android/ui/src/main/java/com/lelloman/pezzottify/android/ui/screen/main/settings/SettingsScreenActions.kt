@@ -27,4 +27,13 @@ interface SettingsScreenActions {
     fun onBaseUrlInputChanged(input: String)
 
     fun saveBaseUrl()
+
+    // Cache management
+    fun trimStaticsCache()
+
+    fun trimImageCache()
+
+    fun clearStaticsCache()
+
+    fun clearImageCache()
 }

@@ -27,12 +27,16 @@ internal data class Album(
 
     override val discs: List<Disc>,
 
+    @ColumnInfo(name = COLUMN_CACHED_AT, defaultValue = "0")
+    val cachedAt: Long = System.currentTimeMillis(),
+
     ) : com.lelloman.pezzottify.android.domain.statics.Album {
 
     companion object {
         const val TABLE_NAME = "album"
 
         const val COLUMN_ID = "id"
+        const val COLUMN_CACHED_AT = "cached_at"
     }
 }
 
@@ -43,4 +47,5 @@ internal fun com.lelloman.pezzottify.android.domain.statics.Album.quack(): Album
     displayImageId = displayImageId,
     artistsIds = artistsIds,
     discs = discs.map { Disc(tracksIds = it.tracksIds) },
+    cachedAt = System.currentTimeMillis(),
 )

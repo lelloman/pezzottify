@@ -69,4 +69,34 @@ class StaticsCache @Inject constructor(
         albumCache.resetMetrics()
         trackCache.resetMetrics()
     }
+
+    /**
+     * Returns the total size of all caches in bytes.
+     */
+    fun getTotalSizeBytes(): Long {
+        return artistCache.getSizeBytes() +
+            albumCache.getSizeBytes() +
+            trackCache.getSizeBytes()
+    }
+
+    /**
+     * Returns the total number of entries across all caches.
+     */
+    fun getTotalEntryCount(): Int {
+        return artistCache.getEntryCount() +
+            albumCache.getEntryCount() +
+            trackCache.getEntryCount()
+    }
+
+    /**
+     * Trims all caches by removing the oldest entries by creation time.
+     * @param percent The percentage of entries to remove (0.0 to 1.0)
+     * @return The total number of entries removed across all caches
+     */
+    fun trimOldestPercent(percent: Float): Int {
+        logger.info("trimOldestPercent($percent) trimming caches")
+        return artistCache.trimOldestPercent(percent) +
+            albumCache.trimOldestPercent(percent) +
+            trackCache.trimOldestPercent(percent)
+    }
 }

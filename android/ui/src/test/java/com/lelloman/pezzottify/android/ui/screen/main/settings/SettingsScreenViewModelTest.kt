@@ -376,5 +376,28 @@ class SettingsScreenViewModelTest {
         override fun observeCanReportBug(): kotlinx.coroutines.flow.Flow<Boolean> {
             return kotlinx.coroutines.flow.flowOf(false)
         }
+
+        override suspend fun getCacheStats(): SettingsScreenViewModel.CacheStats {
+            return SettingsScreenViewModel.CacheStats(
+                staticsCacheSizeBytes = 0L,
+                imageCacheSizeBytes = 0L,
+            )
+        }
+
+        override suspend fun trimStaticsCache() {
+            // no-op for tests
+        }
+
+        override suspend fun clearStaticsCache() {
+            // no-op for tests
+        }
+
+        override suspend fun trimImageCache() {
+            // no-op for tests
+        }
+
+        override suspend fun clearImageCache() {
+            // no-op for tests
+        }
     }
 }

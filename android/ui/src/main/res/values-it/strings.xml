@@ -144,6 +144,17 @@
     <string name="storage_unavailable">Informazioni archiviazione non disponibili</string>
     <!-- STORAGE INFO SECTION -->
 
+    <!-- CACHE MANAGEMENT SECTION -->
+    <string name="catalog_cache">Cache catalogo</string>
+    <string name="catalog_cache_description">Metadati memorizzati per artisti, album e brani</string>
+    <string name="image_cache">Cache immagini</string>
+    <string name="image_cache_description">Copertine album e immagini artisti memorizzate</string>
+    <string name="cache_size_format">Dimensione: %1$s</string>
+    <string name="cache_size_loading">Calcolo dimensione…</string>
+    <string name="trim_cache">Riduci 50&#37;</string>
+    <string name="clear_cache">Cancella tutto</string>
+    <!-- CACHE MANAGEMENT SECTION -->
+
     <!-- FILE LOGGING SECTION -->
     <string name="logging">Log</string>
     <string name="save_logs_to_file">Salva log su file</string>

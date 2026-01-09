@@ -35,8 +35,9 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import com.lelloman.pezzottify.android.ui.R
 import androidx.navigation.compose.rememberNavController
+import com.lelloman.pezzottify.android.ui.model.StorageInfo
+import com.lelloman.pezzottify.android.ui.model.StoragePressureLevel
 import com.lelloman.pezzottify.android.ui.screen.main.profile.CacheSettingsSection
-import com.lelloman.pezzottify.android.ui.screen.main.profile.StorageInfoSection
 import com.lelloman.pezzottify.android.ui.theme.AppFontFamily
 import com.lelloman.pezzottify.android.ui.theme.ColorPalette
 import com.lelloman.pezzottify.android.ui.theme.PezzottifyTheme
@@ -186,8 +187,18 @@ private fun SettingsScreenInternal(
 
             HorizontalDivider(modifier = Modifier.padding(vertical = 24.dp))
 
-            StorageInfoSection(
-                storageInfo = currentState.storageInfo
+            StorageSection(
+                storageInfo = currentState.storageInfo,
+                staticsCacheSizeBytes = currentState.staticsCacheSizeBytes,
+                imageCacheSizeBytes = currentState.imageCacheSizeBytes,
+                isTrimStaticsInProgress = currentState.isTrimStaticsInProgress,
+                isTrimImageInProgress = currentState.isTrimImageInProgress,
+                isClearStaticsInProgress = currentState.isClearStaticsInProgress,
+                isClearImageInProgress = currentState.isClearImageInProgress,
+                onTrimStatics = actions::trimStaticsCache,
+                onTrimImage = actions::trimImageCache,
+                onClearStatics = actions::clearStaticsCache,
+                onClearImage = actions::clearImageCache,
             )
 
             HorizontalDivider(modifier = Modifier.padding(vertical = 24.dp))
@@ -242,6 +253,10 @@ private fun SettingsScreenPreview() {
                 override fun clearLogs() {}
                 override fun onBaseUrlInputChanged(input: String) {}
                 override fun saveBaseUrl() {}
+                override fun trimStaticsCache() {}
+                override fun trimImageCache() {}
+                override fun clearStaticsCache() {}
+                override fun clearImageCache() {}
             },
         )
     }
@@ -274,6 +289,10 @@ private fun SettingsScreenPreviewDark() {
                 override fun clearLogs() {}
                 override fun onBaseUrlInputChanged(input: String) {}
                 override fun saveBaseUrl() {}
+                override fun trimStaticsCache() {}
+                override fun trimImageCache() {}
+                override fun clearStaticsCache() {}
+                override fun clearImageCache() {}
             },
         )
     }

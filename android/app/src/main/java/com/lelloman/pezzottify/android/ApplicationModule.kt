@@ -6,6 +6,14 @@ import coil3.intercept.Interceptor as CoilInterceptor
 import coil3.network.httpHeaders
 import coil3.network.okhttp.OkHttpNetworkFetcherFactory
 import coil3.request.ImageResult
+import com.lelloman.pezzottify.android.cache.CacheManagerImpl
+import com.lelloman.pezzottify.android.cache.CoilImageCacheManager
+import com.lelloman.pezzottify.android.cache.TrackingDiskCache
+import com.lelloman.pezzottify.android.domain.cache.CacheManager
+import com.lelloman.pezzottify.android.domain.cache.ImageCacheManager
+import com.lelloman.pezzottify.android.domain.cache.StaticsCache
+import com.lelloman.pezzottify.android.domain.statics.StaticsStore
+import okio.Path.Companion.toOkioPath
 import com.lelloman.pezzottify.android.domain.auth.AuthState
 import com.lelloman.pezzottify.android.domain.auth.AuthStore
 import com.lelloman.pezzottify.android.domain.config.BuildInfo
@@ -68,11 +76,23 @@ class ApplicationModule {
 
     @Provides
     @Singleton
+    fun provideTrackingDiskCache(
+        @ApplicationContext context: Context,
+    ): TrackingDiskCache {
+        return TrackingDiskCache.create(
+            directory = context.cacheDir.resolve("image_cache").toOkioPath(),
+            maxSizeBytes = 50L * 1024 * 1024, // 50 MB
+        )
+    }
+
+    @Provides
+    @Singleton
     fun provideImageLoader(
         @ApplicationContext context: Context,
         authStore: AuthStore,
         configStore: ConfigStore,
         okHttpClientFactory: OkHttpClientFactory,
+        trackingDiskCache: TrackingDiskCache,
     ): ImageLoader {
         // Create retry interceptor with exponential backoff
         val retryInterceptor = ExponentialBackoffRetryInterceptor(
@@ -104,8 +124,23 @@ class ApplicationModule {
                 add(CoilAuthTokenInterceptor(authStore, configStore))
                 add(OkHttpNetworkFetcherFactory(callFactory = { routingCallFactory }))
             }
+            .diskCache { trackingDiskCache }
             .build()
     }
+
+    @Provides
+    @Singleton
+    fun provideImageCacheManager(
+        trackingDiskCache: TrackingDiskCache,
+    ): ImageCacheManager = CoilImageCacheManager(trackingDiskCache)
+
+    @Provides
+    @Singleton
+    fun provideCacheManager(
+        staticsCache: StaticsCache,
+        staticsStore: StaticsStore,
+        imageCacheManager: ImageCacheManager,
+    ): CacheManager = CacheManagerImpl(staticsCache, staticsStore, imageCacheManager)
 
     @Provides
     @Singleton

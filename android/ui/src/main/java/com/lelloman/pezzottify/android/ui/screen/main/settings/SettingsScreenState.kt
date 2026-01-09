@@ -22,4 +22,11 @@ data class SettingsScreenState(
     @StringRes val baseUrlErrorRes: Int? = null,
     val isBaseUrlSaving: Boolean = false,
     val canReportBug: Boolean = false,
+    // Cache management
+    val staticsCacheSizeBytes: Long? = null,
+    val imageCacheSizeBytes: Long? = null,
+    val isTrimStaticsInProgress: Boolean = false,
+    val isTrimImageInProgress: Boolean = false,
+    val isClearStaticsInProgress: Boolean = false,
+    val isClearImageInProgress: Boolean = false,
 )

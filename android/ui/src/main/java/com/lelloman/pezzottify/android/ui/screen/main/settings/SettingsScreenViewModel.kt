@@ -93,6 +93,18 @@ class SettingsScreenViewModel @Inject constructor(
                     mutableState.update { it.copy(canReportBug = canReportBug) }
                 }
             }
+            // Load initial cache sizes
+            refreshCacheSizes()
+        }
+    }
+
+    private suspend fun refreshCacheSizes() {
+        val stats = interactor.getCacheStats()
+        mutableState.update {
+            it.copy(
+                staticsCacheSizeBytes = stats.staticsCacheSizeBytes,
+                imageCacheSizeBytes = stats.imageCacheSizeBytes,
+            )
         }
     }
 
@@ -192,6 +204,42 @@ class SettingsScreenViewModel @Inject constructor(
         }
     }
 
+    override fun trimStaticsCache() {
+        viewModelScope.launch {
+            mutableState.update { it.copy(isTrimStaticsInProgress = true) }
+            interactor.trimStaticsCache()
+            refreshCacheSizes()
+            mutableState.update { it.copy(isTrimStaticsInProgress = false) }
+        }
+    }
+
+    override fun trimImageCache() {
+        viewModelScope.launch {
+            mutableState.update { it.copy(isTrimImageInProgress = true) }
+            interactor.trimImageCache()
+            refreshCacheSizes()
+            mutableState.update { it.copy(isTrimImageInProgress = false) }
+        }
+    }
+
+    override fun clearStaticsCache() {
+        viewModelScope.launch {
+            mutableState.update { it.copy(isClearStaticsInProgress = true) }
+            interactor.clearStaticsCache()
+            refreshCacheSizes()
+            mutableState.update { it.copy(isClearStaticsInProgress = false) }
+        }
+    }
+
+    override fun clearImageCache() {
+        viewModelScope.launch {
+            mutableState.update { it.copy(isClearImageInProgress = true) }
+            interactor.clearImageCache()
+            refreshCacheSizes()
+            mutableState.update { it.copy(isClearImageInProgress = false) }
+        }
+    }
+
     sealed interface SetBaseUrlResult {
         data object Success : SetBaseUrlResult
         data object InvalidUrl : SetBaseUrlResult
@@ -228,5 +276,16 @@ class SettingsScreenViewModel @Inject constructor(
         fun getBaseUrl(): String
         suspend fun setBaseUrl(url: String): SetBaseUrlResult
         fun observeCanReportBug(): kotlinx.coroutines.flow.Flow<Boolean>
+        // Cache management
+        suspend fun getCacheStats(): CacheStats
+        suspend fun trimStaticsCache()
+        suspend fun clearStaticsCache()
+        suspend fun trimImageCache()
+        suspend fun clearImageCache()
     }
+
+    data class CacheStats(
+        val staticsCacheSizeBytes: Long,
+        val imageCacheSizeBytes: Long,
+    )
 }

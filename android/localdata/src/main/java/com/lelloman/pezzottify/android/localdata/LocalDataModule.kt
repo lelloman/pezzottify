@@ -30,6 +30,7 @@ import com.lelloman.pezzottify.android.localdata.internal.settings.UserSettingsS
 import com.lelloman.pezzottify.android.localdata.internal.skeleton.SkeletonStoreImpl
 import com.lelloman.pezzottify.android.localdata.internal.sync.SyncStateStoreImpl
 import com.lelloman.pezzottify.android.localdata.internal.statics.StaticsDb
+import com.lelloman.pezzottify.android.localdata.internal.statics.StaticsDbSizeCalculator
 import com.lelloman.pezzottify.android.localdata.internal.statics.StaticsItemFetchStateStoreImpl
 import com.lelloman.pezzottify.android.localdata.internal.statics.StaticsStoreImpl
 import com.lelloman.pezzottify.android.localdata.internal.user.UserLocalDataDb
@@ -72,8 +73,9 @@ class LocalDataModule {
     @Singleton
     internal fun provideStaticsStore(
         staticsDb: StaticsDb,
-        loggerFactory: LoggerFactory
-    ): StaticsStore = StaticsStoreImpl(staticsDb, loggerFactory)
+        dbSizeCalculator: StaticsDbSizeCalculator,
+        loggerFactory: LoggerFactory,
+    ): StaticsStore = StaticsStoreImpl(staticsDb, dbSizeCalculator, loggerFactory)
 
     @Provides
     @Singleton
