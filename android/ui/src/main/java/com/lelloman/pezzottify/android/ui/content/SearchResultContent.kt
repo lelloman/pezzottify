@@ -10,7 +10,8 @@ sealed class SearchResultContent {
         override val id: String,
         val name: String,
         val artistNames: List<String>,
-        val imageUrl: String?
+        val imageUrl: String?,
+        val availability: AlbumAvailability = AlbumAvailability.Complete,
     ) : SearchResultContent()
 
     class Track(

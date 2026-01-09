@@ -161,6 +161,7 @@ class UiContentResolver(
                                             baseUrl = configStore.baseUrl.value,
                                             displayImageId = albumItem.data.displayImageId,
                                         ),
+                                        availability = albumItem.data.availability.toUi(),
                                     )
                                 )
                             )
@@ -175,6 +176,7 @@ class UiContentResolver(
                                             baseUrl = configStore.baseUrl.value,
                                             displayImageId = albumItem.data.displayImageId,
                                         ),
+                                        availability = albumItem.data.availability.toUi(),
                                     )
                                 )
                             }

@@ -33,7 +33,9 @@ import com.lelloman.pezzottify.android.domain.usercontent.LikedContent as Domain
 import com.lelloman.pezzottify.android.domain.player.PlaybackPlaylist as DomainPlaybackPlaylist
 import com.lelloman.pezzottify.android.domain.player.PlaybackPlaylistContext as DomainPlaybackPlaylistContext
 import com.lelloman.pezzottify.android.domain.statics.TrackAvailability as DomainTrackAvailability
+import com.lelloman.pezzottify.android.domain.statics.AlbumAvailability as DomainAlbumAvailability
 import com.lelloman.pezzottify.android.ui.content.TrackAvailability as UiTrackAvailability
+import com.lelloman.pezzottify.android.ui.content.AlbumAvailability as UiAlbumAvailability
 import com.lelloman.pezzottify.android.domain.settings.usecase.UpdateNotifyWhatsNewSetting
 import com.lelloman.pezzottify.android.ui.theme.AppFontFamily as UiAppFontFamily
 import com.lelloman.pezzottify.android.ui.theme.ColorPalette as UiColorPalette
@@ -577,6 +579,7 @@ class InteractorsModule {
                                     trackCount = album.trackCount,
                                     imageUrl = ImageUrlProvider.buildImageUrl(baseUrl, album.imageId),
                                     artistNames = album.artistNames,
+                                    availability = DomainAlbumAvailability.fromServerString(album.availability).toUi(),
                                 )
                             }
                         )
@@ -642,6 +645,7 @@ class InteractorsModule {
                             artistNames = result.artistsIdsNames.map { it[1] },
                             imageUrl = ImageUrlProvider.buildImageUrl(baseUrl, result.imageId),
                             year = result.year?.toInt(),
+                            availability = DomainAlbumAvailability.fromServerString(result.availability).toUi(),
                         )
                     }
                     is ResolvedSearchResult.Track -> {
@@ -1650,6 +1654,12 @@ private fun DomainTrackAvailability.toUi(): UiTrackAvailability = when (this) {
     DomainTrackAvailability.Unavailable -> UiTrackAvailability.Unavailable
     DomainTrackAvailability.Fetching -> UiTrackAvailability.Fetching
     DomainTrackAvailability.FetchError -> UiTrackAvailability.FetchError
+}
+
+private fun DomainAlbumAvailability.toUi(): UiAlbumAvailability = when (this) {
+    DomainAlbumAvailability.Missing -> UiAlbumAvailability.Missing
+    DomainAlbumAvailability.Partial -> UiAlbumAvailability.Partial
+    DomainAlbumAvailability.Complete -> UiAlbumAvailability.Complete
 }
 
 private fun DomainPermission.toUi(): UiPermission? = when (this) {

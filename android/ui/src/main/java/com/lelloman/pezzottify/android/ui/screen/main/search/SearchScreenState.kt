@@ -1,6 +1,7 @@
 package com.lelloman.pezzottify.android.ui.screen.main.search
 
 import androidx.annotation.StringRes
+import com.lelloman.pezzottify.android.ui.content.AlbumAvailability
 import com.lelloman.pezzottify.android.ui.content.Content
 import com.lelloman.pezzottify.android.ui.content.SearchResultContent
 import com.lelloman.pezzottify.android.ui.screen.main.home.ResolvedRecentlyViewedContent
@@ -156,6 +157,7 @@ data class StreamingAlbumSummary(
     val trackCount: Int,
     val imageUrl: String?,
     val artistNames: List<String>,
+    val availability: AlbumAvailability = AlbumAvailability.Complete,
 )
 
 data class StreamingArtistSummary(
@@ -177,6 +179,7 @@ sealed class StreamingSearchResult {
         val artistNames: List<String>,
         val imageUrl: String?,
         val year: Int?,
+        val availability: AlbumAvailability = AlbumAvailability.Complete,
     ) : StreamingSearchResult()
 
     data class Track(

@@ -6,6 +6,7 @@ import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -24,6 +25,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AssistChip
@@ -32,6 +34,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import com.lelloman.pezzottify.android.ui.component.LoaderSize
@@ -52,6 +55,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -64,6 +68,7 @@ import com.lelloman.pezzottify.android.ui.component.PezzottifyImagePlaceholder
 import com.lelloman.pezzottify.android.ui.component.PezzottifyImageShape
 import com.lelloman.pezzottify.android.ui.content.Content
 import com.lelloman.pezzottify.android.ui.content.SearchResultContent
+import com.lelloman.pezzottify.android.ui.content.AlbumAvailability
 import com.lelloman.pezzottify.android.ui.screen.main.home.ResolvedRecentlyViewedContent
 import com.lelloman.pezzottify.android.ui.theme.ComponentSize
 import com.lelloman.pezzottify.android.ui.theme.CornerRadius
@@ -505,14 +510,46 @@ private fun AlbumSearchResult(
     searchResult: SearchResultContent.Album,
     actions: SearchScreenActions
 ) {
+    val isUnavailable = searchResult.availability == AlbumAvailability.Missing
+    val isPartial = searchResult.availability == AlbumAvailability.Partial
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .padding(8.dp)
             .height(PezzottifyImageShape.SmallSquare.size)
+            .alpha(if (isUnavailable) 0.5f else 1f)
             .clickable { actions.clickOnAlbumSearchResult(searchResult.id) }
     ) {
-        NullablePezzottifyImage(url = searchResult.imageUrl)
+        Box {
+            NullablePezzottifyImage(url = searchResult.imageUrl)
+            if (isPartial || isUnavailable) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(4.dp)
+                        .size(20.dp)
+                        .background(
+                            color = if (isUnavailable)
+                                MaterialTheme.colorScheme.error.copy(alpha = 0.9f)
+                            else
+                                MaterialTheme.colorScheme.tertiary.copy(alpha = 0.9f),
+                            shape = CircleShape
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Warning,
+                        contentDescription = if (isUnavailable)
+                            stringResource(R.string.album_unavailable)
+                        else
+                            stringResource(R.string.album_partial),
+                        tint = Color.White,
+                        modifier = Modifier.size(14.dp)
+                    )
+                }
+            }
+        }
         Spacer(modifier = Modifier.width(Spacing.Medium))
         Column(
             modifier = Modifier.weight(1f).fillMaxHeight(),
@@ -1117,6 +1154,9 @@ private fun StreamingAlbumCard(
     album: StreamingAlbumSummary,
     actions: SearchScreenActions
 ) {
+    val isUnavailable = album.availability == AlbumAvailability.Missing
+    val isPartial = album.availability == AlbumAvailability.Partial
+
     Card(
         modifier = Modifier
             .width(120.dp)
@@ -1124,7 +1164,7 @@ private fun StreamingAlbumCard(
         shape = RoundedCornerShape(CornerRadius.Small),
         elevation = CardDefaults.cardElevation(defaultElevation = Elevation.Small)
     ) {
-        Column {
+        Box {
             NullablePezzottifyImage(
                 url = album.imageUrl,
                 shape = PezzottifyImageShape.FullSize,
@@ -1140,21 +1180,55 @@ private fun StreamingAlbumCard(
                         )
                     )
             )
-            Column(modifier = Modifier.padding(Spacing.Small)) {
-                Text(
-                    text = album.name,
-                    style = MaterialTheme.typography.titleSmall,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-                album.releaseYear?.let {
-                    Text(
-                        text = it.toString(),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+            if (isPartial || isUnavailable) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(4.dp)
+                        .size(20.dp)
+                        .background(
+                            color = if (isUnavailable)
+                                MaterialTheme.colorScheme.error.copy(alpha = 0.9f)
+                            else
+                                MaterialTheme.colorScheme.tertiary.copy(alpha = 0.9f),
+                            shape = CircleShape
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Warning,
+                        contentDescription = if (isUnavailable)
+                            stringResource(R.string.album_unavailable)
+                        else
+                            stringResource(R.string.album_partial),
+                        tint = Color.White,
+                        modifier = Modifier.size(14.dp)
                     )
                 }
+            }
+            if (isUnavailable) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .aspectRatio(1f)
+                        .alpha(0.5f)
+                )
+            }
+        }
+        Column(modifier = Modifier.padding(Spacing.Small)) {
+            Text(
+                text = album.name,
+                style = MaterialTheme.typography.titleSmall,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            album.releaseYear?.let {
+                Text(
+                    text = it.toString(),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
         }
     }
@@ -1238,18 +1312,50 @@ private fun StreamingSearchResultRow(
             }
         }
         is StreamingSearchResult.Album -> {
+            val isUnavailable = result.availability == AlbumAvailability.Missing
+            val isPartial = result.availability == AlbumAvailability.Partial
+
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .alpha(if (isUnavailable) 0.5f else 1f)
                     .clickable { actions.clickOnAlbumSearchResult(result.id) }
                     .padding(horizontal = Spacing.Medium, vertical = Spacing.Small),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                NullablePezzottifyImage(
-                    url = result.imageUrl,
-                    shape = PezzottifyImageShape.SmallSquare,
-                    modifier = Modifier.size(ComponentSize.ImageThumbSmall)
-                )
+                Box {
+                    NullablePezzottifyImage(
+                        url = result.imageUrl,
+                        shape = PezzottifyImageShape.SmallSquare,
+                        modifier = Modifier.size(ComponentSize.ImageThumbSmall)
+                    )
+                    if (isPartial || isUnavailable) {
+                        Box(
+                            modifier = Modifier
+                                .align(Alignment.TopEnd)
+                                .padding(2.dp)
+                                .size(16.dp)
+                                .background(
+                                    color = if (isUnavailable)
+                                        MaterialTheme.colorScheme.error.copy(alpha = 0.9f)
+                                    else
+                                        MaterialTheme.colorScheme.tertiary.copy(alpha = 0.9f),
+                                    shape = CircleShape
+                                ),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Warning,
+                                contentDescription = if (isUnavailable)
+                                    stringResource(R.string.album_unavailable)
+                                else
+                                    stringResource(R.string.album_partial),
+                                tint = Color.White,
+                                modifier = Modifier.size(10.dp)
+                            )
+                        }
+                    }
+                }
                 Spacer(modifier = Modifier.width(Spacing.Medium))
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
