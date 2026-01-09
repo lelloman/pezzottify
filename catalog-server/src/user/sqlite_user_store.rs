@@ -1132,6 +1132,12 @@ impl SqliteUserStore {
             })?
             .collect::<Result<Vec<_>, _>>()?;
 
+        // Filter out events with deprecated data (e.g., removed settings)
+        let events: Vec<_> = events
+            .into_iter()
+            .filter(|e| !e.event.is_deprecated())
+            .collect();
+
         record_db_query("get_events_since", start.elapsed());
         Ok(events)
     }

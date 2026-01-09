@@ -434,8 +434,8 @@ impl SqliteCatalogStore {
              WHERE t.rowid = ?1",
         )?;
 
-        let (mut track, album_id, audio_uri): (Track, String, Option<String>) =
-            track_stmt.query_row(params![track_rowid], |row| {
+        let (mut track, album_id, audio_uri): (Track, String, Option<String>) = track_stmt
+            .query_row(params![track_rowid], |row| {
                 let explicit: i32 = row.get(8)?;
                 let album_id: String = row.get(10)?;
                 let audio_uri: Option<String> = row.get(11)?;
