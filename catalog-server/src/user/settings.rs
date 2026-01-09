@@ -14,27 +14,44 @@ pub enum UserSetting {
     /// or queued via sync for delivery on next connection.
     #[serde(rename = "notify_whatsnew")]
     NotifyWhatsNew(bool),
+
+    /// Legacy setting that has been removed. Kept for backwards compatibility
+    /// with old sync events in the database. Should be filtered out when reading.
+    #[serde(rename = "enable_external_search")]
+    #[deprecated(note = "This setting has been removed")]
+    EnableExternalSearch(bool),
 }
 
 impl UserSetting {
     /// Get the storage key for this setting.
+    #[allow(deprecated)]
     pub fn key(&self) -> &'static str {
         match self {
             Self::NotifyWhatsNew(_) => "notify_whatsnew",
+            Self::EnableExternalSearch(_) => "enable_external_search",
         }
     }
 
     /// Serialize the value to a string for database storage.
+    #[allow(deprecated)]
     pub fn value_to_string(&self) -> String {
         match self {
             Self::NotifyWhatsNew(enabled) => enabled.to_string(),
+            Self::EnableExternalSearch(enabled) => enabled.to_string(),
         }
+    }
+
+    /// Check if this setting is deprecated and should be filtered out.
+    #[allow(deprecated)]
+    pub fn is_deprecated(&self) -> bool {
+        matches!(self, Self::EnableExternalSearch(_))
     }
 
     /// Deserialize from key-value strings (used by store implementation).
     ///
     /// Returns `Ok(setting)` if the key is known and value is valid,
     /// `Err` with a description if the key is unknown or value is invalid.
+    #[allow(deprecated)]
     pub fn from_key_value(key: &str, value: &str) -> Result<Self, String> {
         match key {
             "notify_whatsnew" => {
@@ -43,19 +60,29 @@ impl UserSetting {
                     .map_err(|_| format!("Invalid boolean value for {}: {}", key, value))?;
                 Ok(Self::NotifyWhatsNew(enabled))
             }
+            // Legacy setting - still parseable for backwards compat but deprecated
+            "enable_external_search" => {
+                let enabled = value
+                    .parse::<bool>()
+                    .map_err(|_| format!("Invalid boolean value for {}: {}", key, value))?;
+                Ok(Self::EnableExternalSearch(enabled))
+            }
             _ => Err(format!("Unknown setting key: {}", key)),
         }
     }
 
-    /// Check if a key is a known setting key.
+    /// Check if a key is a known setting key (including deprecated ones).
     pub fn is_known_key(key: &str) -> bool {
-        matches!(key, "notify_whatsnew")
+        matches!(key, "notify_whatsnew" | "enable_external_search")
     }
 
     /// Get the default value for a setting by key.
+    /// Returns None for deprecated settings.
     pub fn default_for_key(key: &str) -> Option<Self> {
         match key {
             "notify_whatsnew" => Some(Self::NotifyWhatsNew(false)),
+            // Don't provide defaults for deprecated settings
+            "enable_external_search" => None,
             _ => None,
         }
     }

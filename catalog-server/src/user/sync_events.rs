@@ -174,6 +174,14 @@ impl UserEvent {
             UserEvent::WhatsNewBatchClosed { .. } => "whatsnew_batch_closed",
         }
     }
+
+    /// Check if this event contains deprecated data and should be filtered out.
+    pub fn is_deprecated(&self) -> bool {
+        match self {
+            UserEvent::SettingChanged { setting } => setting.is_deprecated(),
+            _ => false,
+        }
+    }
 }
 
 /// An event stored in the database with its sequence number and timestamp.
