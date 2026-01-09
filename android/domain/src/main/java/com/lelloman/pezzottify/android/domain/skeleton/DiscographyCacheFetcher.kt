@@ -53,7 +53,7 @@ class DiscographyCacheFetcher @Inject constructor(
     private val logger: Logger by loggerFactory
 
     companion object {
-        const val PAGE_SIZE = 50
+        const val PAGE_SIZE = 10
     }
 
     // Track server totals per artist (so we know if there's more to fetch)
