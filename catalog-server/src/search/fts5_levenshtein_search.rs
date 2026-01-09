@@ -26,6 +26,13 @@ use tracing::{debug, error, info, warn};
 /// Batch size for progressive indexing (items per batch)
 const INDEX_BATCH_SIZE: usize = 50_000;
 
+/// Sub-batch size for upsert/remove operations (items per chunk)
+/// Smaller chunks allow concurrent writes to proceed between chunks
+const UPSERT_SUB_BATCH_SIZE: usize = 10;
+
+/// Sleep duration between sub-batches to yield to concurrent writers
+const UPSERT_SUB_BATCH_YIELD_MS: u64 = 10;
+
 /// FTS5 search vault with Levenshtein-based typo correction.
 ///
 /// This implementation builds a vocabulary from all indexed content and
@@ -663,25 +670,33 @@ impl Fts5LevenshteinSearchVault {
 
         let conn = self.write_conn.lock().unwrap();
 
-        // Delete existing entries for these items (upsert behavior)
+        conn.execute("BEGIN IMMEDIATE", [])?;
+
+        let chunk_size = UPSERT_SUB_BATCH_SIZE;
+        let total_chunks = (items.len() + chunk_size - 1) / chunk_size;
         let mut delete_stmt =
             conn.prepare("DELETE FROM search_index WHERE item_id = ? AND item_type = ?")?;
-
-        // Insert new entries
         let mut insert_stmt =
             conn.prepare("INSERT INTO search_index (item_id, item_type, name) VALUES (?, ?, ?)")?;
 
-        conn.execute("BEGIN IMMEDIATE", [])?;
-
         let result = (|| -> Result<()> {
-            for item in items {
-                let type_str = Self::item_type_to_str(&item.item_type);
+            for (chunk_idx, chunk) in items.chunks(chunk_size).enumerate() {
+                for item in chunk {
+                    let type_str = Self::item_type_to_str(&item.item_type);
+                    delete_stmt.execute([&item.id, type_str])?;
+                    insert_stmt.execute([&item.id, type_str, &item.name])?;
+                }
 
-                // Delete existing entry if any
-                delete_stmt.execute([&item.id, type_str])?;
-
-                // Insert new entry
-                insert_stmt.execute([&item.id, type_str, &item.name])?;
+                if chunk_idx < total_chunks - 1 {
+                    drop(delete_stmt);
+                    drop(insert_stmt);
+                    std::thread::sleep(std::time::Duration::from_millis(UPSERT_SUB_BATCH_YIELD_MS));
+                    delete_stmt = conn
+                        .prepare("DELETE FROM search_index WHERE item_id = ? AND item_type = ?")?;
+                    insert_stmt = conn.prepare(
+                        "INSERT INTO search_index (item_id, item_type, name) VALUES (?, ?, ?)",
+                    )?;
+                }
             }
             Ok(())
         })();
@@ -690,7 +705,6 @@ impl Fts5LevenshteinSearchVault {
             Ok(()) => {
                 conn.execute("COMMIT", [])?;
 
-                // Update vocabulary with new items
                 let mut vocabulary = self.vocabulary.write().unwrap();
                 for item in items {
                     vocabulary.add_text(&item.name);
@@ -718,10 +732,22 @@ impl Fts5LevenshteinSearchVault {
 
         conn.execute("BEGIN IMMEDIATE", [])?;
 
+        let chunk_size = UPSERT_SUB_BATCH_SIZE;
+        let total_chunks = (items.len() + chunk_size - 1) / chunk_size;
+
         let result = (|| -> Result<()> {
-            for (id, item_type) in items {
-                let type_str = Self::item_type_to_str(item_type);
-                stmt.execute([id.as_str(), type_str])?;
+            for (chunk_idx, chunk) in items.chunks(chunk_size).enumerate() {
+                for (id, item_type) in chunk {
+                    let type_str = Self::item_type_to_str(item_type);
+                    stmt.execute([id.as_str(), type_str])?;
+                }
+
+                if chunk_idx < total_chunks - 1 {
+                    drop(stmt);
+                    std::thread::sleep(std::time::Duration::from_millis(UPSERT_SUB_BATCH_YIELD_MS));
+                    stmt = conn
+                        .prepare("DELETE FROM search_index WHERE item_id = ? AND item_type = ?")?;
+                }
             }
             Ok(())
         })();
@@ -729,8 +755,6 @@ impl Fts5LevenshteinSearchVault {
         match result {
             Ok(()) => {
                 conn.execute("COMMIT", [])?;
-                // Note: We don't remove words from vocabulary - it's not critical
-                // and rebuilding vocabulary is expensive
                 info!("Removed {} items from search index", items.len());
                 Ok(())
             }
