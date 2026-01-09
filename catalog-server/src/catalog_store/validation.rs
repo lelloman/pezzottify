@@ -114,7 +114,7 @@ pub fn validate_track(track: &Track) -> ValidationResult<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::catalog_store::models::AlbumType;
+    use crate::catalog_store::models::{AlbumType, TrackAvailability};
 
     fn make_valid_artist() -> Artist {
         Artist {
