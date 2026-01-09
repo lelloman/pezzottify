@@ -190,25 +190,15 @@ pub const CATALOG_VERSIONED_SCHEMAS: &[VersionedSchema] = &[
             ALBUM_IMAGES_TABLE,
             ARTIST_IMAGES_TABLE,
         ],
-        migration: Some(|conn: &rusqlite::Connection| {
-            let column_exists: bool = conn
-                .query_row(
-                    "SELECT 1 FROM pragma_table_info('albums') WHERE name = 'album_availability'",
-                    [],
-                    |r| r.get(0),
-                )
-                .unwrap_or(false);
-
-            if !column_exists {
-                conn.execute(
-                    "ALTER TABLE albums ADD COLUMN album_availability TEXT NOT NULL DEFAULT 'missing'",
-                    [],
-                )?;
-                conn.execute(
-                    "CREATE INDEX IF NOT EXISTS idx_albums_availability ON albums(album_availability)",
-                    [],
-                )?;
-            }
+        migration: Some(|tx: &rusqlite::Connection| {
+            tx.execute(
+                "ALTER TABLE albums ADD COLUMN album_availability TEXT NOT NULL DEFAULT 'missing'",
+                [],
+            )?;
+            tx.execute(
+                "CREATE INDEX IF NOT EXISTS idx_albums_availability ON albums(album_availability)",
+                [],
+            )?;
             Ok(())
         }),
     },

@@ -152,10 +152,8 @@ impl VersionedSchema {
         for table in self.tables {
             table.create(conn)?;
         }
-        conn.execute(
-            &format!("PRAGMA user_version = {}", BASE_DB_VERSION + self.version),
-            [],
-        )?;
+        let version = BASE_DB_VERSION + self.version;
+        conn.execute_batch(&format!("PRAGMA user_version = {version}"))?;
         Ok(())
     }
     pub fn validate(&self, conn: &Connection) -> Result<()> {
