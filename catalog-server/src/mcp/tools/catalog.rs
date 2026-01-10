@@ -27,10 +27,18 @@ struct CatalogSearchParams {
     query: String,
     #[serde(default = "default_limit")]
     limit: usize,
+    /// If true (default), exclude unavailable content from results.
+    /// Set to false to include all content for exploration/discovery.
+    #[serde(default = "default_exclude_unavailable")]
+    exclude_unavailable: bool,
 }
 
 fn default_limit() -> usize {
     20
+}
+
+fn default_exclude_unavailable() -> bool {
+    true
 }
 
 #[derive(Debug, Serialize)]
@@ -45,11 +53,14 @@ struct CatalogSearchResult {
 struct SearchResultItem {
     id: String,
     name: String,
+    /// Whether the content is available for playback
+    #[serde(skip_serializing_if = "Option::is_none")]
+    available: Option<bool>,
 }
 
 fn catalog_search_tool() -> super::super::registry::RegisteredTool {
     ToolBuilder::new("catalog.search")
-        .description("Search the music catalog for artists, albums, and tracks")
+        .description("Search the music catalog for artists, albums, and tracks. By default excludes unavailable content.")
         .input_schema(serde_json::json!({
             "type": "object",
             "properties": {
@@ -62,6 +73,11 @@ fn catalog_search_tool() -> super::super::registry::RegisteredTool {
                     "description": "Maximum number of results per category (default 20)",
                     "minimum": 1,
                     "maximum": 100
+                },
+                "exclude_unavailable": {
+                    "type": "boolean",
+                    "description": "If true (default), exclude unavailable content. Set to false to include all content for exploration/discovery.",
+                    "default": true
                 }
             },
             "required": ["query"]
@@ -76,9 +92,13 @@ async fn catalog_search_handler(ctx: ToolContext, params: Value) -> ToolResult {
         serde_json::from_value(params).map_err(|e| McpError::InvalidParams(e.to_string()))?;
 
     let limit = params.limit.min(100);
+    let exclude_unavailable = params.exclude_unavailable;
 
-    // Perform search using the search vault
-    let results = ctx.search_vault.search(&params.query, limit * 3, None);
+    // Perform search using the search vault - request more results to account for filtering
+    let search_multiplier = if exclude_unavailable { 5 } else { 3 };
+    let results = ctx
+        .search_vault
+        .search(&params.query, limit * search_multiplier, None);
 
     // Convert results to our format, grouped by type
     let mut artists = Vec::new();
@@ -86,25 +106,88 @@ async fn catalog_search_handler(ctx: ToolContext, params: Value) -> ToolResult {
     let mut tracks = Vec::new();
 
     for result in results {
-        let item = SearchResultItem {
-            id: result.item_id.clone(),
-            name: result.matchable_text.clone(),
-        };
-
         match result.item_type {
             HashedItemType::Artist => {
                 if artists.len() < limit {
-                    artists.push(item)
+                    // Check artist availability
+                    let available = ctx
+                        .catalog_store
+                        .get_artist_json(&result.item_id)
+                        .ok()
+                        .flatten()
+                        .and_then(|json| {
+                            json.get("artist")
+                                .and_then(|a| a.get("available"))
+                                .and_then(|a| a.as_bool())
+                        })
+                        .unwrap_or(false);
+
+                    if !exclude_unavailable || available {
+                        artists.push(SearchResultItem {
+                            id: result.item_id.clone(),
+                            name: result.matchable_text.clone(),
+                            available: if exclude_unavailable {
+                                None
+                            } else {
+                                Some(available)
+                            },
+                        });
+                    }
                 }
             }
             HashedItemType::Album => {
                 if albums.len() < limit {
-                    albums.push(item)
+                    // Check album availability (not "missing")
+                    let availability = ctx
+                        .catalog_store
+                        .get_resolved_album_json(&result.item_id)
+                        .ok()
+                        .flatten()
+                        .and_then(|json| {
+                            json.get("album")
+                                .and_then(|a| a.get("album_availability"))
+                                .and_then(|a| a.as_str())
+                                .map(String::from)
+                        })
+                        .unwrap_or_else(|| "missing".to_string());
+                    let available = availability != "missing";
+
+                    if !exclude_unavailable || available {
+                        albums.push(SearchResultItem {
+                            id: result.item_id.clone(),
+                            name: result.matchable_text.clone(),
+                            available: if exclude_unavailable {
+                                None
+                            } else {
+                                Some(available)
+                            },
+                        });
+                    }
                 }
             }
             HashedItemType::Track => {
                 if tracks.len() < limit {
-                    tracks.push(item)
+                    // Check track availability
+                    let availability = ctx
+                        .catalog_store
+                        .get_track_json(&result.item_id)
+                        .ok()
+                        .flatten()
+                        .and_then(|json| json.get("availability").and_then(|a| a.as_str()).map(String::from))
+                        .unwrap_or_else(|| "available".to_string());
+                    let available = availability == "available";
+
+                    if !exclude_unavailable || available {
+                        tracks.push(SearchResultItem {
+                            id: result.item_id.clone(),
+                            name: result.matchable_text.clone(),
+                            available: if exclude_unavailable {
+                                None
+                            } else {
+                                Some(available)
+                            },
+                        });
+                    }
                 }
             }
         }
