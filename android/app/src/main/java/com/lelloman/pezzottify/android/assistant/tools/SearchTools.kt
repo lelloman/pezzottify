@@ -97,7 +97,8 @@ class SearchCatalogTool(
             SearchedItemType.Track -> {
                 val track = staticsStore.getTrack(id).firstOrNull()
                 if (track != null) {
-                    "[Track] \"${track.name}\" (ID: $id)"
+                    val artistNames = getArtistNames(track.artistsIds)
+                    "[Track] \"${track.name}\" by $artistNames (ID: $id)"
                 } else {
                     "[Track] ID: $id"
                 }
@@ -105,7 +106,8 @@ class SearchCatalogTool(
             SearchedItemType.Album -> {
                 val album = staticsStore.getAlbum(id).firstOrNull()
                 if (album != null) {
-                    "[Album] \"${album.name}\" (ID: $id)"
+                    val artistNames = getArtistNames(album.artistsIds)
+                    "[Album] \"${album.name}\" by $artistNames (ID: $id)"
                 } else {
                     "[Album] ID: $id"
                 }
@@ -120,6 +122,11 @@ class SearchCatalogTool(
             }
         }
     }
+
+    private suspend fun getArtistNames(artistIds: List<String>): String {
+        val names = artistIds.mapNotNull { staticsStore.getArtist(it).firstOrNull()?.name }
+        return if (names.isNotEmpty()) names.joinToString(", ") else "Unknown Artist"
+    }
 }
 
 /**
@@ -132,7 +139,7 @@ class GetArtistDiscographyTool(
 ) : Tool {
     override val spec = ToolSpec(
         name = "get_artist_discography",
-        description = "Get an artist's albums by artist ID. Use this after finding an artist via search_catalog to get their albums so you can play one.",
+        description = "Get an artist's albums by artist ID (from search_catalog). Returns album IDs that can be used with play_album.",
         inputSchema = mapOf(
             "type" to "object",
             "properties" to mapOf(
@@ -159,18 +166,23 @@ class GetArtistDiscographyTool(
             )
         }
 
+        // Fetch all albums and sort by date (newest first)
+        val albums = albumIds.mapNotNull { albumId ->
+            staticsStore.getAlbum(albumId).firstOrNull()?.let { albumId to it }
+        }.sortedByDescending { it.second.date }
+
         val formatted = buildString {
             val artistName = artist?.name ?: artistId
-            appendLine("Discography for \"$artistName\":")
+            appendLine("Discography for \"$artistName\" (${albums.size} albums):")
             appendLine()
-            appendLine("Albums (${albumIds.size}):")
-            for (albumId in albumIds) {
-                val album = staticsStore.getAlbum(albumId).firstOrNull()
-                if (album != null) {
-                    appendLine("- \"${album.name}\" (ID: $albumId)")
-                } else {
-                    appendLine("- Album ID: $albumId")
-                }
+            for ((albumId, album) in albums) {
+                val year = if (album.date > 0) " (${album.date})" else ""
+                appendLine("- \"${album.name}\"$year (ID: $albumId)")
+            }
+            // Show any albums we couldn't fetch
+            val missingIds = albumIds.filter { id -> albums.none { it.first == id } }
+            for (albumId in missingIds) {
+                appendLine("- Album ID: $albumId")
             }
         }
 

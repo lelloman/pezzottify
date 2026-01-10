@@ -143,33 +143,7 @@ object AssistantModule {
 
         return ToolRegistry(
             tools = allTools.associateBy { it.spec.name },
-            topography = listOf(
-                // Most common tools at root level - always available
-                ToolNode.ToolRef(playbackControlTool.spec.name),
-                ToolNode.ToolRef(skipTrackTool.spec.name),
-                ToolNode.ToolRef(nowPlayingTool.spec.name),
-                ToolNode.ToolRef(searchCatalogTool.spec.name),
-                ToolNode.ToolRef(getArtistDiscographyTool.spec.name),
-                ToolNode.ToolRef(whatsNewTool.spec.name),
-                ToolNode.ToolRef(playAlbumTool.spec.name),
-                // Less common tools in groups - can be expanded when needed
-                ToolNode.Group(
-                    id = "playback_modes",
-                    name = "Playback Modes",
-                    description = "Shuffle and repeat settings",
-                    children = listOf(
-                        ToolNode.ToolRef(playbackModeTool.spec.name)
-                    )
-                ),
-                ToolNode.Group(
-                    id = "queue_management",
-                    name = "Queue Management",
-                    description = "View and manage the playback queue",
-                    children = listOf(
-                        ToolNode.ToolRef(queueTool.spec.name)
-                    )
-                )
-            )
+            topography = allTools.map { ToolNode.ToolRef(it.spec.name) }
         )
     }
 
@@ -179,34 +153,37 @@ object AssistantModule {
         return DefaultSystemPromptBuilder(
             assistantName = "Pezzottify Assistant",
             additionalInstructions = """
-                You are an AI assistant for a music streaming app called Pezzottify.
-                You can help users discover music, control playback, manage the queue, and answer questions about artists and albums.
+                You are an AI assistant for Pezzottify, a music streaming app.
+                Help users discover music, control playback, manage queues, and explore the catalog.
+                Be helpful and concise.
 
-                You have access to the following tools:
-                - playback_control: Play, pause, or stop music
-                - skip_track: Skip to next or previous track
-                - playback_mode: Toggle shuffle and repeat modes
-                - now_playing: Get information about the currently playing track
-                - queue: View or manage the playback queue
-                - search_catalog: Search for tracks, albums, and artists
-                - get_artist_discography: Get an artist's albums by artist ID
-                - whats_new: Get latest releases and recent catalog additions
-                - play_album: Play an album by its ID
+                CRITICAL - ID Rules:
+                - Always use IDs exactly as returned by tools. Never guess or make up IDs.
+                - Track IDs are for queue operations and individual track playback.
+                - Album IDs are for play_album and get_artist_discography results.
+                - Artist IDs are for get_artist_discography input.
 
-                When the user asks to play music by an artist:
-                1. Use search_catalog to find the artist
-                2. Use get_artist_discography with the artist ID to get their albums
-                3. Use play_album with one of the album IDs to play it
+                Common Workflows:
 
-                When the user asks about new music, latest releases, or what's new, use the whats_new tool.
-                Always check now_playing first if the user asks about the current song.
-                Be helpful and concise in your responses.
+                Play music by artist:
+                1. search_catalog to find the artist → get artist ID
+                2. get_artist_discography with artist ID → get album IDs
+                3. play_album with album ID
 
-                IMPORTANT - Content availability:
-                - By default, search_catalog only returns content that is available for playback.
-                - If the user wants to explore or discover music (even if not currently available), use include_unavailable=true.
-                - If search returns no results, you can suggest trying with include_unavailable=true to see all catalog content.
-                - Unavailable content cannot be played but the user may want to know about it for discovery purposes.
+                Play a specific track:
+                1. search_catalog with filter="tracks" → get track ID
+                2. queue action="add_track" with track ID
+
+                Current song questions:
+                - Always use now_playing first to get current playback state.
+
+                New music / latest releases:
+                - Use whats_new to show recent catalog additions.
+
+                Content Availability:
+                - By default, search only returns playable content.
+                - Use include_unavailable=true for discovery/exploration.
+                - Unavailable content cannot be played but may interest the user.
             """.trimIndent()
         )
     }
