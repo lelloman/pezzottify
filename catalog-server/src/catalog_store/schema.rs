@@ -20,8 +20,17 @@ const ARTISTS_TABLE: Table = Table {
         sqlite_column!("name", &SqlType::Text, non_null = true),
         sqlite_column!("followers_total", &SqlType::Integer, non_null = true),
         sqlite_column!("popularity", &SqlType::Integer, non_null = true),
+        sqlite_column!(
+            "artist_available",
+            &SqlType::Integer,
+            non_null = true,
+            default_value = Some("0")
+        ), // 1 if artist has at least one available track
     ],
-    indices: &[("idx_artists_id", "id")],
+    indices: &[
+        ("idx_artists_id", "id"),
+        ("idx_artists_available", "artist_available"),
+    ],
     unique_constraints: &[&["id"]],
 };
 
@@ -70,11 +79,18 @@ const TRACKS_TABLE: Table = Table {
         sqlite_column!("explicit", &SqlType::Integer, non_null = true),
         sqlite_column!("language", &SqlType::Text), // ISO 639-1 or 'zxx' for instrumental
         sqlite_column!("audio_uri", &SqlType::Text),
+        sqlite_column!(
+            "track_available",
+            &SqlType::Integer,
+            non_null = true,
+            default_value = Some("0")
+        ), // 1 if audio file exists
     ],
     indices: &[
         ("idx_tracks_id", "id"),
         ("idx_tracks_album", "album_rowid"),
         ("idx_tracks_isrc", "external_id_isrc"),
+        ("idx_tracks_available", "track_available"),
     ],
     unique_constraints: &[&["id"]],
 };
@@ -197,6 +213,40 @@ pub const CATALOG_VERSIONED_SCHEMAS: &[VersionedSchema] = &[
             )?;
             tx.execute(
                 "CREATE INDEX IF NOT EXISTS idx_albums_availability ON albums(album_availability)",
+                [],
+            )?;
+            Ok(())
+        }),
+    },
+    VersionedSchema {
+        version: 2,
+        tables: &[
+            ARTISTS_TABLE,
+            ALBUMS_TABLE,
+            TRACKS_TABLE,
+            TRACK_ARTISTS_TABLE,
+            ARTIST_ALBUMS_TABLE,
+            ARTIST_GENRES_TABLE,
+            ALBUM_IMAGES_TABLE,
+            ARTIST_IMAGES_TABLE,
+        ],
+        migration: Some(|tx: &rusqlite::Connection| {
+            // Add track_available column (default 0 = unavailable)
+            tx.execute(
+                "ALTER TABLE tracks ADD COLUMN track_available INTEGER NOT NULL DEFAULT 0",
+                [],
+            )?;
+            tx.execute(
+                "CREATE INDEX IF NOT EXISTS idx_tracks_available ON tracks(track_available)",
+                [],
+            )?;
+            // Add artist_available column (default 0 = unavailable)
+            tx.execute(
+                "ALTER TABLE artists ADD COLUMN artist_available INTEGER NOT NULL DEFAULT 0",
+                [],
+            )?;
+            tx.execute(
+                "CREATE INDEX IF NOT EXISTS idx_artists_available ON artists(artist_available)",
                 [],
             )?;
             Ok(())
