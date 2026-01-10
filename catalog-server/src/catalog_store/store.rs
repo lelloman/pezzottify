@@ -27,20 +27,13 @@ pub struct SqliteCatalogStore {
 fn migrate_if_needed(conn: &mut Connection) -> Result<()> {
     let db_version: i64 = conn.query_row("PRAGMA user_version", [], |r| r.get(0))?;
 
+    let latest_version = CATALOG_VERSIONED_SCHEMAS.len() - 1;
+
     // Handle legacy databases that don't have versioned schema yet (user_version = 0)
     // These should be treated as version 0 and need migration
-    let current_version = if db_version < BASE_DB_VERSION as i64 {
-        0 // Legacy database, treat as version 0
-    } else {
-        (db_version - BASE_DB_VERSION as i64) as usize
-    };
-
-    if current_version >= CATALOG_VERSIONED_SCHEMAS.len().saturating_sub(1) {
-        return Ok(());
-    }
-
-    let needs_v1_migration = {
-        let column_exists = conn
+    let mut current_version = if db_version < BASE_DB_VERSION as i64 {
+        // Legacy database - check which columns exist to determine effective version
+        let has_album_availability = conn
             .query_row(
                 "SELECT 1 FROM pragma_table_info('albums') WHERE name = 'album_availability'",
                 [],
@@ -48,32 +41,32 @@ fn migrate_if_needed(conn: &mut Connection) -> Result<()> {
             )
             .ok()
             == Some(1);
-        !column_exists
+
+        if has_album_availability {
+            1 // Has v1 columns, treat as v1
+        } else {
+            0 // Legacy database at v0
+        }
+    } else {
+        (db_version - BASE_DB_VERSION as i64) as usize
     };
 
-    if !needs_v1_migration {
-        conn.pragma_update(None, "user_version", BASE_DB_VERSION + 1)?;
-        let _ = conn.query_row(
-            "PRAGMA wal_checkpoint(TRUNCATE)",
-            [],
-            |_: &rusqlite::Row| Ok(()),
-        );
+    if current_version >= latest_version {
         return Ok(());
     }
 
     let tx = conn.transaction()?;
-    let mut latest_from = current_version;
     for schema in CATALOG_VERSIONED_SCHEMAS.iter().skip(current_version + 1) {
         if let Some(migration_fn) = schema.migration {
             info!(
                 "Migrating catalog db from version {} to {}",
-                latest_from, schema.version
+                current_version, schema.version
             );
             migration_fn(&tx)?;
-            latest_from = schema.version;
+            current_version = schema.version;
         }
     }
-    tx.pragma_update(None, "user_version", BASE_DB_VERSION + latest_from)?;
+    tx.pragma_update(None, "user_version", BASE_DB_VERSION + current_version)?;
 
     tx.commit()?;
     let _ = conn.query_row(
