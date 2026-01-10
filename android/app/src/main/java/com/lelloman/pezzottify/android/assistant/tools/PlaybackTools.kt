@@ -226,7 +226,7 @@ class QueueTool(
 ) : Tool {
     override val spec = ToolSpec(
         name = "queue",
-        description = "View the current playback queue or add tracks to it.",
+        description = "Manage the playback queue: view current queue, add individual tracks by track ID, or clear the queue.",
         inputSchema = mapOf(
             "type" to "object",
             "properties" to mapOf(
@@ -287,7 +287,7 @@ class PlayAlbumTool(
 ) : Tool {
     override val spec = ToolSpec(
         name = "play_album",
-        description = "Play an album by its ID. Use the search tool first to find album IDs.",
+        description = "Play an album by its ID, replacing the current queue. Get album IDs from search_catalog or get_artist_discography.",
         inputSchema = mapOf(
             "type" to "object",
             "properties" to mapOf(
