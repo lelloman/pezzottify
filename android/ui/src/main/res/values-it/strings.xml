@@ -210,6 +210,8 @@
     <string name="search_section">Ricerca</string>
     <string name="smart_search">Ricerca intelligente</string>
     <string name="smart_search_description">Usa raggruppamento ed arricchimento intelligente dei risultati. Se disabilitato, usa i risultati di ricerca classici.</string>
+    <string name="exclude_unavailable">Nascondi contenuti non disponibili</string>
+    <string name="exclude_unavailable_description">Nascondi brani, album e artisti non disponibili per lo streaming dai risultati di ricerca.</string>
     <!-- SMART SEARCH SECTION -->
 
     <!-- CREATE PLAYLIST DIALOG -->
@@ -312,6 +314,8 @@
     <string name="external_albums_error">Impossibile caricare album esterni</string>
     <string name="no_external_albums_found">Nessun album esterno trovato</string>
     <string name="could_not_load_artist">Impossibile caricare artista</string>
+    <string name="album_unavailable">Album non disponibile</string>
+    <string name="album_partial">Alcuni brani non disponibili</string>
     <!-- ARTIST SCREEN -->
 
     <!-- LIBRARY SCREEN -->
