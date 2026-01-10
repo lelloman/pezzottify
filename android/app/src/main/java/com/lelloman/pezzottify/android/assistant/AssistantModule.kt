@@ -28,9 +28,11 @@ import com.lelloman.simpleaiassistant.data.DefaultSystemPromptBuilder
 import com.lelloman.simpleaiassistant.data.SystemPromptBuilder
 import com.lelloman.simpleaiassistant.data.local.ChatDatabase
 import com.lelloman.simpleaiassistant.data.local.ChatMessageDao
+import com.lelloman.simpleaiassistant.llm.DynamicLlmProvider
 import com.lelloman.simpleaiassistant.llm.LlmProvider
-import com.lelloman.simpleaiassistant.provider.ollama.OllamaConfig
-import com.lelloman.simpleaiassistant.provider.ollama.OllamaProvider
+import com.lelloman.simpleaiassistant.llm.ProviderConfigStore
+import com.lelloman.simpleaiassistant.llm.ProviderRegistry
+import com.lelloman.simpleaiassistant.provider.ollama.OllamaProviderFactory
 import com.lelloman.simpleaiassistant.tool.ToolNode
 import com.lelloman.simpleaiassistant.tool.ToolRegistry
 import dagger.Module
@@ -38,6 +40,7 @@ import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
+import kotlinx.coroutines.CoroutineScope
 import javax.inject.Singleton
 
 @Module
@@ -62,19 +65,29 @@ object AssistantModule {
 
     @Provides
     @Singleton
-    fun provideOllamaConfig(): OllamaConfig {
-        // TODO: Make this configurable via settings
-        return OllamaConfig(
-            baseUrl = "http://192.168.1.92:11434",
-            model = "gpt-oss:20b",
-            timeoutMs = 120_000L
+    fun provideProviderRegistry(): ProviderRegistry {
+        return ProviderRegistry(
+            OllamaProviderFactory()
+            // Add more providers here when available:
+            // AnthropicProviderFactory(),
+            // OpenAiProviderFactory(),
         )
     }
 
     @Provides
     @Singleton
-    fun provideLlmProvider(config: OllamaConfig): LlmProvider {
-        return OllamaProvider(config)
+    fun provideProviderConfigStore(@ApplicationContext context: Context): ProviderConfigStore {
+        return SharedPrefsProviderConfigStore(context)
+    }
+
+    @Provides
+    @Singleton
+    fun provideLlmProvider(
+        registry: ProviderRegistry,
+        configStore: ProviderConfigStore,
+        scope: CoroutineScope
+    ): LlmProvider {
+        return DynamicLlmProvider(registry, configStore, scope)
     }
 
     @Provides

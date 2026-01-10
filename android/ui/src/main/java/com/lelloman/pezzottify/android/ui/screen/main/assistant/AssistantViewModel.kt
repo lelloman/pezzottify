@@ -3,6 +3,8 @@ package com.lelloman.pezzottify.android.ui.screen.main.assistant
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.lelloman.simpleaiassistant.data.ChatRepository
+import com.lelloman.simpleaiassistant.llm.ProviderConfigStore
+import com.lelloman.simpleaiassistant.llm.ProviderRegistry
 import com.lelloman.simpleaiassistant.model.Language
 import com.lelloman.simpleaiassistant.ui.ChatUiState
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -15,7 +17,9 @@ import javax.inject.Inject
 
 @HiltViewModel
 class AssistantViewModel @Inject constructor(
-    private val chatRepository: ChatRepository
+    private val chatRepository: ChatRepository,
+    val providerRegistry: ProviderRegistry,
+    val providerConfigStore: ProviderConfigStore
 ) : ViewModel() {
 
     private val _debugMode = MutableStateFlow(false)
@@ -107,6 +111,12 @@ class AssistantViewModel @Inject constructor(
             } catch (e: Exception) {
                 _error.value = e.message ?: "Unknown error"
             }
+        }
+    }
+
+    fun saveProviderSettings(providerId: String, config: Map<String, Any?>) {
+        viewModelScope.launch {
+            providerConfigStore.save(providerId, config)
         }
     }
 }
