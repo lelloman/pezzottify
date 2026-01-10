@@ -201,6 +201,12 @@ object AssistantModule {
                 When the user asks about new music, latest releases, or what's new, use the whats_new tool.
                 Always check now_playing first if the user asks about the current song.
                 Be helpful and concise in your responses.
+
+                IMPORTANT - Content availability:
+                - By default, search_catalog only returns content that is available for playback.
+                - If the user wants to explore or discover music (even if not currently available), use include_unavailable=true.
+                - If search returns no results, you can suggest trying with include_unavailable=true to see all catalog content.
+                - Unavailable content cannot be played but the user may want to know about it for discovery purposes.
             """.trimIndent()
         )
     }

@@ -16,6 +16,8 @@ import java.util.Locale
 
 /**
  * Tool to search the music catalog for tracks, albums, and artists.
+ * By default, excludes unavailable content (most users want to play music).
+ * Set include_unavailable=true to explore/discover unavailable content.
  */
 class SearchCatalogTool(
     private val performSearch: PerformSearch,
@@ -23,7 +25,7 @@ class SearchCatalogTool(
 ) : Tool {
     override val spec = ToolSpec(
         name = "search_catalog",
-        description = "Search the music catalog for tracks, albums, and artists. Returns a list of matching items with their names, types, and IDs.",
+        description = "Search the music catalog for tracks, albums, and artists. By default excludes unavailable content. Set include_unavailable=true to explore all content.",
         inputSchema = mapOf(
             "type" to "object",
             "properties" to mapOf(
@@ -39,6 +41,10 @@ class SearchCatalogTool(
                 "limit" to mapOf(
                     "type" to "integer",
                     "description" to "Maximum number of results to return (default: 10)"
+                ),
+                "include_unavailable" to mapOf(
+                    "type" to "boolean",
+                    "description" to "If true, include unavailable content in results (for exploration/discovery). Default: false"
                 )
             ),
             "required" to listOf("query")
@@ -51,6 +57,7 @@ class SearchCatalogTool(
 
         val filterInput = input["filter"] as? String ?: "all"
         val limit = (input["limit"] as? Number)?.toInt() ?: 10
+        val includeUnavailable = input["include_unavailable"] as? Boolean ?: false
 
         val filters: List<RemoteApiClient.SearchFilter>? = when (filterInput.lowercase()) {
             "track", "tracks" -> listOf(RemoteApiClient.SearchFilter.Track)
@@ -59,10 +66,11 @@ class SearchCatalogTool(
             else -> null // "all" - no filter
         }
 
-        return performSearch(query, filters).fold(
+        return performSearch(query, filters, excludeUnavailable = !includeUnavailable).fold(
             onSuccess = { results ->
                 if (results.isEmpty()) {
-                    ToolResult(success = true, data = "No results found for \"$query\"")
+                    val hint = if (!includeUnavailable) " Try with include_unavailable=true to search all content." else ""
+                    ToolResult(success = true, data = "No results found for \"$query\".$hint")
                 } else {
                     val limitedResults = results.take(limit)
                     val formatted = buildString {
