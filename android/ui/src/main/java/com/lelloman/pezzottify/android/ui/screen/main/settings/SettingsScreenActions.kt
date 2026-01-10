@@ -18,6 +18,8 @@ interface SettingsScreenActions {
 
     fun setSmartSearchEnabled(enabled: Boolean)
 
+    fun setExcludeUnavailableEnabled(enabled: Boolean)
+
     fun setFileLoggingEnabled(enabled: Boolean)
 
     fun shareLogs()

@@ -22,6 +22,8 @@ import com.lelloman.pezzottify.android.ui.theme.PezzottifyTheme
 fun SmartSearchSection(
     isEnabled: Boolean,
     onEnabledChanged: (Boolean) -> Unit,
+    isExcludeUnavailableEnabled: Boolean,
+    onExcludeUnavailableChanged: (Boolean) -> Unit,
     modifier: Modifier = Modifier
 ) {
     Column(modifier = modifier) {
@@ -55,6 +57,31 @@ fun SmartSearchSection(
                 onCheckedChange = onEnabledChanged
             )
         }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = stringResource(R.string.exclude_unavailable),
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Text(
+                    text = stringResource(R.string.exclude_unavailable_description),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
+            Switch(
+                checked = isExcludeUnavailableEnabled,
+                onCheckedChange = onExcludeUnavailableChanged
+            )
+        }
     }
 }
 
@@ -65,6 +92,8 @@ private fun SmartSearchSectionPreviewEnabled() {
         SmartSearchSection(
             isEnabled = true,
             onEnabledChanged = {},
+            isExcludeUnavailableEnabled = true,
+            onExcludeUnavailableChanged = {},
             modifier = Modifier.padding(16.dp)
         )
     }
@@ -77,6 +106,8 @@ private fun SmartSearchSectionPreviewDisabled() {
         SmartSearchSection(
             isEnabled = false,
             onEnabledChanged = {},
+            isExcludeUnavailableEnabled = false,
+            onExcludeUnavailableChanged = {},
             modifier = Modifier.padding(16.dp)
         )
     }

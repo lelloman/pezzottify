@@ -88,6 +88,13 @@ internal class UserSettingsStoreImpl(
     }
     override val isSmartSearchEnabled: StateFlow<Boolean> = mutableSmartSearchEnabled.asStateFlow()
 
+    private val mutableExcludeUnavailableEnabled by lazy {
+        // Default to true (exclude unavailable content by default)
+        val enabled = prefs.getBoolean(KEY_EXCLUDE_UNAVAILABLE_ENABLED, DEFAULT_EXCLUDE_UNAVAILABLE_ENABLED)
+        MutableStateFlow(enabled)
+    }
+    override val isExcludeUnavailableEnabled: StateFlow<Boolean> = mutableExcludeUnavailableEnabled.asStateFlow()
+
     // Track sync status for synced settings (key -> SyncedUserSetting)
     private val mutableSyncedSettings by lazy {
         val settings = mutableMapOf<String, SyncedUserSetting>()
@@ -159,6 +166,11 @@ internal class UserSettingsStoreImpl(
     override fun setSmartSearchEnabled(enabled: Boolean) {
         mutableSmartSearchEnabled.value = enabled
         prefs.edit().putBoolean(KEY_SMART_SEARCH_ENABLED, enabled).apply()
+    }
+
+    override fun setExcludeUnavailableEnabled(enabled: Boolean) {
+        mutableExcludeUnavailableEnabled.value = enabled
+        prefs.edit().putBoolean(KEY_EXCLUDE_UNAVAILABLE_ENABLED, enabled).apply()
     }
 
     override suspend fun setSyncedSetting(setting: UserSetting, syncStatus: SyncStatus) {
@@ -276,5 +288,8 @@ internal class UserSettingsStoreImpl(
         // Smart search setting (local only)
         const val KEY_SMART_SEARCH_ENABLED = "SmartSearchEnabled"
         const val DEFAULT_SMART_SEARCH_ENABLED = true
+        // Exclude unavailable content setting (local only)
+        const val KEY_EXCLUDE_UNAVAILABLE_ENABLED = "ExcludeUnavailableEnabled"
+        const val DEFAULT_EXCLUDE_UNAVAILABLE_ENABLED = true
     }
 }

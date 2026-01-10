@@ -25,6 +25,12 @@ interface UserSettingsStore {
      */
     val isSmartSearchEnabled: StateFlow<Boolean>
 
+    /**
+     * Whether to exclude unavailable content from search results.
+     * This is a local-only setting.
+     */
+    val isExcludeUnavailableEnabled: StateFlow<Boolean>
+
     suspend fun setThemeMode(themeMode: ThemeMode)
     suspend fun setColorPalette(colorPalette: ColorPalette)
     suspend fun setFontFamily(fontFamily: AppFontFamily)
@@ -32,6 +38,7 @@ interface UserSettingsStore {
     suspend fun setFileLoggingEnabled(enabled: Boolean)
     suspend fun setNotifyWhatsNewEnabled(enabled: Boolean)
     fun setSmartSearchEnabled(enabled: Boolean)
+    fun setExcludeUnavailableEnabled(enabled: Boolean)
 
     /**
      * Set a synced setting with specified sync status.

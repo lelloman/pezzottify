@@ -161,7 +161,9 @@ private fun SettingsScreenInternal(
             // Search Section
             SmartSearchSection(
                 isEnabled = currentState.smartSearchEnabled,
-                onEnabledChanged = actions::setSmartSearchEnabled
+                onEnabledChanged = actions::setSmartSearchEnabled,
+                isExcludeUnavailableEnabled = currentState.excludeUnavailableEnabled,
+                onExcludeUnavailableChanged = actions::setExcludeUnavailableEnabled
             )
 
             HorizontalDivider(modifier = Modifier.padding(vertical = 24.dp))
@@ -248,6 +250,7 @@ private fun SettingsScreenPreview() {
                 override fun setCacheEnabled(enabled: Boolean) {}
                 override fun setNotifyWhatsNewEnabled(enabled: Boolean) {}
                 override fun setSmartSearchEnabled(enabled: Boolean) {}
+                override fun setExcludeUnavailableEnabled(enabled: Boolean) {}
                 override fun setFileLoggingEnabled(enabled: Boolean) {}
                 override fun shareLogs() {}
                 override fun clearLogs() {}
@@ -284,6 +287,7 @@ private fun SettingsScreenPreviewDark() {
                 override fun setCacheEnabled(enabled: Boolean) {}
                 override fun setNotifyWhatsNewEnabled(enabled: Boolean) {}
                 override fun setSmartSearchEnabled(enabled: Boolean) {}
+                override fun setExcludeUnavailableEnabled(enabled: Boolean) {}
                 override fun setFileLoggingEnabled(enabled: Boolean) {}
                 override fun shareLogs() {}
                 override fun clearLogs() {}

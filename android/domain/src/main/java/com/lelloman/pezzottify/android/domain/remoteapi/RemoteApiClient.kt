@@ -93,8 +93,11 @@ interface RemoteApiClient {
      * Perform streaming search with SSE.
      * Returns a Flow that emits SearchSection objects as they arrive.
      * The stream completes when a Done section is received.
+     *
+     * @param query The search query string
+     * @param excludeUnavailable If true, exclude unavailable content from results
      */
-    fun streamingSearch(query: String): Flow<SearchSection>
+    fun streamingSearch(query: String, excludeUnavailable: Boolean = false): Flow<SearchSection>
 
     suspend fun getLikedContent(contentType: String): RemoteApiResponse<List<String>>
 
