@@ -1,28 +1,25 @@
 ## [catalog-server]
 
-### Disabled features (Spotify schema - large catalog)
+### Completed
 
-- **Skeleton sync** - Disabled because it would require downloading indices of 350M+ tracks.
-  The skeleton API was designed for smaller self-hosted catalogs where clients could cache
-  the entire catalog structure locally. Files: `src/skeleton/`, `src/server/skeleton.rs`,
-  `tests/e2e_skeleton_tests.rs`
+- **Skeleton sync removed** - Dead code removed (`src/skeleton/`, `src/server/skeleton.rs`, `tests/e2e_skeleton_tests.rs`).
+  Android now uses on-demand discography API (`/v1/content/artist/{id}/discography`) instead.
 
 ## [android]
 
 ### Breaking changes from Spotify migration
 
-- **Skeleton removal** - Android heavily relies on skeleton sync for local catalog caching.
-  With skeleton disabled on the server, Android needs to be updated to work without it.
-  Affected files:
-  - `domain/.../skeleton/CatalogSkeletonSyncer.kt` - skeleton sync logic
-  - `domain/.../skeleton/SkeletonStore.kt` - local storage interface
-  - `localdata/.../skeleton/` - Room database implementation
-  - `domain/.../remoteapi/response/SkeletonResponses.kt` - API response models
-  - Various usages in login, logout, settings, app initialization
+- **Skeleton sync cleanup** - Android still has skeleton-related code that needs cleanup:
+  - Rename `domain/.../skeleton/` → `discography/` (it's a discography cache, not skeleton sync)
+  - Rename `SkeletonStore` → `DiscographyCache` (better naming)
+  - Remove unused skeleton sync API methods from `RemoteApiClient`:
+    - `getSkeletonVersion()`
+    - `getFullSkeleton()`
+    - `getSkeletonDelta()`
+  - Keep `DiscographyCacheFetcher` - it correctly uses regular discography API
 
-  **Options:**
-  1. Remove skeleton entirely and rely on on-demand fetching
-  2. Implement a lighter-weight local search index (if needed)
+Note: The Android `SkeletonStore` is actually a discography pagination cache, NOT skeleton sync.
+It stores album IDs per artist for efficient pagination. The naming is just confusing.
 
 ## [web]
 
