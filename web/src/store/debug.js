@@ -17,10 +17,16 @@ export const useDebugStore = defineStore("debug", () => {
     localStorage.getItem("useOrganicSearch") === "true" ? true : false;
   const useOrganicSearch = ref(useOrganicSearchValue);
 
+  // Exclude unavailable content from search results (enabled by default)
+  const excludeUnavailableValue =
+    localStorage.getItem("excludeUnavailable") === "false" ? false : true;
+  const excludeUnavailable = ref(excludeUnavailableValue);
+
   watch(imagesEnabled, (v) => localStorage.setItem("imagesEnabled", v));
   watch(blockHttpCache, (v) => localStorage.setItem("blockHttpCache", v));
   watch(blockRightClick, (v) => localStorage.setItem("blockRightClick", v));
   watch(useOrganicSearch, (v) => localStorage.setItem("useOrganicSearch", v));
+  watch(excludeUnavailable, (v) => localStorage.setItem("excludeUnavailable", v));
 
   const clearLocalStorageStatics = () => {
     // Removes all items that start with "statics_" from localStorage
@@ -38,6 +44,7 @@ export const useDebugStore = defineStore("debug", () => {
     blockHttpCache,
     blockRightClick,
     useOrganicSearch,
+    excludeUnavailable,
     clearLocalStorageStatics,
   };
 });
