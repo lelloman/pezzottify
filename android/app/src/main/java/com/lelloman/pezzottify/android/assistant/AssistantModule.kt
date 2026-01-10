@@ -19,6 +19,7 @@ import com.lelloman.pezzottify.android.domain.statics.usecase.GetWhatsNew
 import com.lelloman.pezzottify.android.domain.statics.usecase.PerformSearch
 import com.lelloman.pezzottify.android.logger.LoggerFactory
 import com.lelloman.simpleaiassistant.util.AssistantLogger
+import com.lelloman.simpleaiassistant.util.AuthErrorHandler
 import com.lelloman.simpleaiassistant.model.Language
 import com.lelloman.simpleaiassistant.util.LanguagePreferences
 import com.lelloman.simpleaiassistant.util.StringProvider
@@ -38,6 +39,7 @@ import com.lelloman.simpleaiassistant.tool.ToolNode
 import com.lelloman.simpleaiassistant.tool.ToolRegistry
 import com.lelloman.pezzottify.android.domain.auth.AuthState
 import com.lelloman.pezzottify.android.domain.auth.AuthStore
+import com.lelloman.pezzottify.android.domain.auth.TokenRefresher
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -242,6 +244,36 @@ object AssistantModule {
 
     @Provides
     @Singleton
+    fun provideAuthErrorHandler(
+        tokenRefresher: TokenRefresher,
+        loggerFactory: LoggerFactory
+    ): AuthErrorHandler {
+        val logger = loggerFactory.getLogger("AuthErrorHandler")
+        return AuthErrorHandler { errorMessage ->
+            logger.info("Auth error received, attempting token refresh: $errorMessage")
+            when (val result = tokenRefresher.refreshTokens()) {
+                is TokenRefresher.RefreshResult.Success -> {
+                    logger.info("Token refresh successful")
+                    true
+                }
+                is TokenRefresher.RefreshResult.Failed -> {
+                    logger.warn("Token refresh failed: ${result.reason}")
+                    false
+                }
+                is TokenRefresher.RefreshResult.NotAvailable -> {
+                    logger.warn("Token refresh not available (no refresh token)")
+                    false
+                }
+                is TokenRefresher.RefreshResult.RateLimited -> {
+                    logger.warn("Token refresh rate limited, retry after ${result.retryAfterMs}ms")
+                    false
+                }
+            }
+        }
+    }
+
+    @Provides
+    @Singleton
     fun provideChatRepository(
         chatMessageDao: ChatMessageDao,
         llmProvider: LlmProvider,
@@ -249,7 +281,8 @@ object AssistantModule {
         systemPromptBuilder: SystemPromptBuilder,
         stringProvider: StringProvider,
         languagePreferences: LanguagePreferences,
-        logger: AssistantLogger
+        logger: AssistantLogger,
+        authErrorHandler: AuthErrorHandler
     ): ChatRepository {
         return ChatRepositoryImpl(
             chatMessageDao = chatMessageDao,
@@ -258,7 +291,8 @@ object AssistantModule {
             systemPromptBuilder = systemPromptBuilder,
             stringProvider = stringProvider,
             languagePreferences = languagePreferences,
-            logger = logger
+            logger = logger,
+            authErrorHandler = authErrorHandler
         )
     }
 }

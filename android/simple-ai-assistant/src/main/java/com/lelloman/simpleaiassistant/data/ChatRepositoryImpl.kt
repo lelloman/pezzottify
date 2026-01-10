@@ -10,6 +10,7 @@ import com.lelloman.simpleaiassistant.model.StreamEvent
 import com.lelloman.simpleaiassistant.tool.ToolRegistry
 import com.lelloman.simpleaiassistant.R
 import com.lelloman.simpleaiassistant.util.AssistantLogger
+import com.lelloman.simpleaiassistant.util.AuthErrorHandler
 import com.lelloman.simpleaiassistant.util.LanguagePreferences
 import com.lelloman.simpleaiassistant.util.NoOpAssistantLogger
 import com.lelloman.simpleaiassistant.util.StringProvider
@@ -27,12 +28,14 @@ class ChatRepositoryImpl(
     private val systemPromptBuilder: SystemPromptBuilder,
     private val stringProvider: StringProvider,
     private val languagePreferences: LanguagePreferences,
-    private val logger: AssistantLogger = NoOpAssistantLogger
+    private val logger: AssistantLogger = NoOpAssistantLogger,
+    private val authErrorHandler: AuthErrorHandler = AuthErrorHandler.NoOp
 ) : ChatRepository {
 
     companion object {
         private const val TAG = "ChatRepository"
         private const val MAX_TOOL_ITERATIONS = 10
+        private const val AUTH_ERROR_PREFIX = "Authentication failed"
     }
 
     private val _streamingText = MutableStateFlow("")
@@ -83,7 +86,7 @@ class ChatRepositoryImpl(
         }
     }
 
-    private suspend fun processLlmResponse(iteration: Int) {
+    private suspend fun processLlmResponse(iteration: Int, isAuthRetry: Boolean = false) {
         if (iteration >= MAX_TOOL_ITERATIONS) {
             logger.warn(TAG, "Max tool iterations ($MAX_TOOL_ITERATIONS) reached, stopping")
             val errorMessage = ChatMessage(
@@ -116,6 +119,7 @@ class ChatRepositoryImpl(
 
         var assistantContent = StringBuilder()
         val toolCalls = mutableListOf<com.lelloman.simpleaiassistant.model.ToolCall>()
+        var authErrorMessage: String? = null
 
         llmProvider.streamChat(
             messages = currentMessages,
@@ -140,19 +144,54 @@ class ChatRepositoryImpl(
                 }
                 is StreamEvent.Error -> {
                     logger.error(TAG, "<<< LLM ERROR: ${event.message}")
-                    // Save error as assistant message
-                    val errorMessage = ChatMessage(
-                        id = generateId(),
-                        role = MessageRole.ASSISTANT,
-                        content = "Error: ${event.message}"
-                    )
-                    saveMessage(errorMessage)
+                    // Check if this is an auth error
+                    if (event.message.contains(AUTH_ERROR_PREFIX)) {
+                        authErrorMessage = event.message
+                    } else {
+                        // Non-auth error, save as message
+                        val errorMessage = ChatMessage(
+                            id = generateId(),
+                            role = MessageRole.ASSISTANT,
+                            content = "Error: ${event.message}"
+                        )
+                        saveMessage(errorMessage)
+                    }
                     return@collect
                 }
                 is StreamEvent.Done -> {
                     logger.debug(TAG, "<<< LLM STREAM DONE")
                 }
             }
+        }
+
+        // Handle auth error with retry
+        if (authErrorMessage != null && !isAuthRetry) {
+            logger.info(TAG, "Auth error detected, attempting token refresh and retry")
+            val shouldRetry = authErrorHandler.onAuthError(authErrorMessage!!)
+            if (shouldRetry) {
+                logger.info(TAG, "Token refreshed, retrying LLM request")
+                processLlmResponse(iteration, isAuthRetry = true)
+                return
+            } else {
+                logger.warn(TAG, "Auth error handler did not refresh tokens, showing error to user")
+                val errorMessage = ChatMessage(
+                    id = generateId(),
+                    role = MessageRole.ASSISTANT,
+                    content = "Error: $authErrorMessage"
+                )
+                saveMessage(errorMessage)
+                return
+            }
+        } else if (authErrorMessage != null) {
+            // Already retried once, show error
+            logger.warn(TAG, "Auth error persists after retry, showing error to user")
+            val errorMessage = ChatMessage(
+                id = generateId(),
+                role = MessageRole.ASSISTANT,
+                content = "Error: $authErrorMessage"
+            )
+            saveMessage(errorMessage)
+            return
         }
 
         // Log full assistant response
