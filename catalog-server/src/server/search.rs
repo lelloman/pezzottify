@@ -400,9 +400,7 @@ fn filter_sections_by_availability(sections: Vec<SearchSection>) -> Vec<SearchSe
                 }
             }
             // Always keep Done
-            SearchSection::Done { total_time_ms } => {
-                Some(SearchSection::Done { total_time_ms })
-            }
+            SearchSection::Done { total_time_ms } => Some(SearchSection::Done { total_time_ms }),
         })
         .collect()
 }

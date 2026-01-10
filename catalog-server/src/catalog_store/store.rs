@@ -426,17 +426,19 @@ impl SqliteCatalogStore {
                 ))
             })?
             .filter_map(|r| r.ok())
-            .map(|(id, name, followers, popularity, artist_rowid, available)| {
-                let genres = Self::get_artist_genres(&conn, artist_rowid).unwrap_or_default();
-                Artist {
-                    id,
-                    name,
-                    genres,
-                    followers_total: followers,
-                    popularity,
-                    available,
-                }
-            })
+            .map(
+                |(id, name, followers, popularity, artist_rowid, available)| {
+                    let genres = Self::get_artist_genres(&conn, artist_rowid).unwrap_or_default();
+                    Artist {
+                        id,
+                        name,
+                        genres,
+                        followers_total: followers,
+                        popularity,
+                        available,
+                    }
+                },
+            )
             .collect();
 
         let mut tracks_stmt = conn.prepare_cached(
@@ -574,20 +576,22 @@ impl SqliteCatalogStore {
                 ))
             })?
             .filter_map(|r| r.ok())
-            .map(|(id, name, followers, popularity, artist_rowid, role, available)| {
-                let genres = Self::get_artist_genres(&conn, artist_rowid).unwrap_or_default();
-                TrackArtist {
-                    artist: Artist {
-                        id,
-                        name,
-                        genres,
-                        followers_total: followers,
-                        popularity,
-                        available,
-                    },
-                    role: ArtistRole::from_db_int(role),
-                }
-            })
+            .map(
+                |(id, name, followers, popularity, artist_rowid, role, available)| {
+                    let genres = Self::get_artist_genres(&conn, artist_rowid).unwrap_or_default();
+                    TrackArtist {
+                        artist: Artist {
+                            id,
+                            name,
+                            genres,
+                            followers_total: followers,
+                            popularity,
+                            available,
+                        },
+                        role: ArtistRole::from_db_int(role),
+                    }
+                },
+            )
             .collect();
 
         Ok(Some(ResolvedTrack {
