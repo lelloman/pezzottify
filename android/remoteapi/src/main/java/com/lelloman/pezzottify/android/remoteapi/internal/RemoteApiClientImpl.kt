@@ -288,10 +288,18 @@ internal class RemoteApiClientImpl(
 
     override suspend fun search(
         query: String,
-        filters: List<RemoteApiClient.SearchFilter>?
+        filters: List<RemoteApiClient.SearchFilter>?,
+        excludeUnavailable: Boolean
     ): RemoteApiResponse<SearchResponse> = catchingNetworkError {
         getRetrofit()
-            .search(authToken, SearchRequest(query, filters?.map { it.name.lowercase() }))
+            .search(
+                authToken,
+                SearchRequest(
+                    query = query,
+                    filters = filters?.map { it.name.lowercase() },
+                    excludeUnavailable = excludeUnavailable
+                )
+            )
             .returnFromRetrofitResponse()
     }
 

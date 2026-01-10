@@ -18,10 +18,11 @@ class PerformSearch @Inject constructor(
 
     suspend operator fun invoke(
         query: String,
-        filters: List<RemoteApiClient.SearchFilter>? = null
+        filters: List<RemoteApiClient.SearchFilter>? = null,
+        excludeUnavailable: Boolean = false
     ): Result<List<Pair<String, SearchedItemType>>> {
-        logger.info("invoke() searching for: $query, filters: $filters")
-        return when (val response = remoteApiClient.search(query, filters)) {
+        logger.info("invoke() searching for: $query, filters: $filters, excludeUnavailable: $excludeUnavailable")
+        return when (val response = remoteApiClient.search(query, filters, excludeUnavailable)) {
             is RemoteApiResponse.Success -> {
                 logger.debug("invoke() search returned ${response.data.size} results")
                 Result.success(response.data.map { it.itemId to it.itemType })

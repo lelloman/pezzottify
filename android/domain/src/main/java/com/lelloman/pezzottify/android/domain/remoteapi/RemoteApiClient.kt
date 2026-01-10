@@ -86,7 +86,8 @@ interface RemoteApiClient {
 
     suspend fun search(
         query: String,
-        filters: List<SearchFilter>? = null
+        filters: List<SearchFilter>? = null,
+        excludeUnavailable: Boolean = false
     ): RemoteApiResponse<SearchResponse>
 
     /**
