@@ -34,10 +34,9 @@ class SimpleAiProviderFactory(
     override val configSchema: ProviderConfigSchema = ProviderConfigSchema(fields = emptyList())
 
     override fun createProvider(config: Map<String, Any?>): LlmProvider {
-        val authToken = authTokenProvider() ?: ""
         return SimpleAiProvider(
             context = context,
-            config = SimpleAiConfig(authToken = authToken)
+            config = SimpleAiConfig(authTokenProvider = { authTokenProvider() ?: "" })
         )
     }
 

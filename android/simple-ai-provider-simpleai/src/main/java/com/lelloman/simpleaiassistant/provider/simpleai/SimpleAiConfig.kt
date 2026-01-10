@@ -4,10 +4,10 @@ package com.lelloman.simpleaiassistant.provider.simpleai
  * Configuration for the SimpleAI LLM provider.
  *
  * SimpleAI communicates with the SimpleAI Android app via AIDL.
- * The auth token is passed to the SimpleAI app which handles the cloud LLM calls.
+ * The auth token provider is called for each request to ensure fresh tokens.
  *
- * @param authToken The authentication token for cloud AI calls
+ * @param authTokenProvider Function that returns the current authentication token for cloud AI calls
  */
-data class SimpleAiConfig(
-    val authToken: String
+class SimpleAiConfig(
+    val authTokenProvider: () -> String
 )

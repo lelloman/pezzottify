@@ -73,7 +73,7 @@ class SimpleAiProvider(
                 messagesJson,
                 toolsJson,
                 systemPrompt,
-                config.authToken
+                config.authTokenProvider()  // Fetch fresh token for each request
             )
 
             Log.d(TAG, "cloudChat response: $responseJson")
