@@ -324,6 +324,7 @@ class SettingsScreenViewModelTest {
         override fun getBaseUrl(): String = _baseUrl
         override fun isNotifyWhatsNewEnabled(): Boolean = false
         override fun isSmartSearchEnabled(): Boolean = false
+        override fun isExcludeUnavailableEnabled(): Boolean = true
 
         override fun observeThemeMode(): Flow<ThemeMode> = themeModeFlow
         override fun observeColorPalette(): Flow<ColorPalette> = colorPaletteFlow
@@ -333,6 +334,7 @@ class SettingsScreenViewModelTest {
         override fun observeFileLoggingEnabled(): Flow<Boolean> = fileLoggingEnabledFlow
         override fun observeNotifyWhatsNewEnabled(): Flow<Boolean> = MutableStateFlow(false)
         override fun observeSmartSearchEnabled(): Flow<Boolean> = MutableStateFlow(false)
+        override fun observeExcludeUnavailableEnabled(): Flow<Boolean> = MutableStateFlow(true)
 
         override suspend fun setThemeMode(themeMode: ThemeMode) {
             lastSetThemeMode = themeMode
@@ -355,6 +357,10 @@ class SettingsScreenViewModelTest {
         }
 
         override fun setSmartSearchEnabled(enabled: Boolean) {
+            // no-op for tests
+        }
+
+        override fun setExcludeUnavailableEnabled(enabled: Boolean) {
             // no-op for tests
         }
 

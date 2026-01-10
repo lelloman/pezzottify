@@ -211,6 +211,8 @@
     <string name="search_section">Search</string>
     <string name="smart_search">Smart search</string>
     <string name="smart_search_description">Use intelligent result grouping and enrichment. When disabled, uses classic flat search results.</string>
+    <string name="exclude_unavailable">Hide unavailable content</string>
+    <string name="exclude_unavailable_description">Filter out content that is not available for streaming from search results.</string>
     <!-- SMART SEARCH SECTION -->
 
     <!-- CREATE PLAYLIST DIALOG -->

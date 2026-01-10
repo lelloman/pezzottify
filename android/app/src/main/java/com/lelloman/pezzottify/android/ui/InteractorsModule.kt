@@ -312,9 +312,13 @@ class InteractorsModule {
 
         override fun isSmartSearchEnabled(): Boolean = userSettingsStore.isSmartSearchEnabled.value
 
+        override fun isExcludeUnavailableEnabled(): Boolean = userSettingsStore.isExcludeUnavailableEnabled.value
+
         override fun observeNotifyWhatsNewEnabled(): Flow<Boolean> = userSettingsStore.isNotifyWhatsNewEnabled
 
         override fun observeSmartSearchEnabled(): Flow<Boolean> = userSettingsStore.isSmartSearchEnabled
+
+        override fun observeExcludeUnavailableEnabled(): Flow<Boolean> = userSettingsStore.isExcludeUnavailableEnabled
 
         override suspend fun setNotifyWhatsNewEnabled(enabled: Boolean) {
             updateNotifyWhatsNewSetting(enabled)
@@ -322,6 +326,10 @@ class InteractorsModule {
 
         override fun setSmartSearchEnabled(enabled: Boolean) {
             userSettingsStore.setSmartSearchEnabled(enabled)
+        }
+
+        override fun setExcludeUnavailableEnabled(enabled: Boolean) {
+            userSettingsStore.setExcludeUnavailableEnabled(enabled)
         }
 
         override suspend fun setThemeMode(themeMode: UiThemeMode) {
@@ -508,9 +516,10 @@ class InteractorsModule {
             }
 
             override fun streamingSearch(query: String): Flow<StreamingSearchSection> {
-                logger.debug("streamingSearch($query)")
+                val excludeUnavailable = userSettingsStore.isExcludeUnavailableEnabled.value
+                logger.debug("streamingSearch($query, excludeUnavailable=$excludeUnavailable)")
                 val baseUrl = configStore.baseUrl.value
-                return performStreamingSearch(query).map { section ->
+                return performStreamingSearch(query, excludeUnavailable).map { section ->
                     mapToUiSection(section, baseUrl)
                 }.filterNotNull()
             }

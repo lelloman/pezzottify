@@ -555,10 +555,13 @@ internal class RemoteApiClientImpl(
 
     // Streaming search (SSE)
 
-    override fun streamingSearch(query: String): Flow<SearchSection> = flow {
+    override fun streamingSearch(query: String, excludeUnavailable: Boolean): Flow<SearchSection> = flow {
         val baseUrl = hostUrlProvider.hostUrl.first { isValidHttpUrl(it) }
         val encodedQuery = URLEncoder.encode(query, "UTF-8")
-        val url = "$baseUrl/v1/content/search/stream?q=$encodedQuery"
+        var url = "$baseUrl/v1/content/search/stream?q=$encodedQuery"
+        if (excludeUnavailable) {
+            url += "&exclude_unavailable=true"
+        }
 
         val request = Request.Builder()
             .url(url)

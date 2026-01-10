@@ -23,9 +23,9 @@ class PerformStreamingSearch @Inject constructor(
 
     private val logger: Logger by loggerFactory
 
-    operator fun invoke(query: String): Flow<SearchSection> {
-        logger.info("invoke() streaming search for: $query")
-        return remoteApiClient.streamingSearch(query)
+    operator fun invoke(query: String, excludeUnavailable: Boolean = false): Flow<SearchSection> {
+        logger.info("invoke() streaming search for: $query, excludeUnavailable=$excludeUnavailable")
+        return remoteApiClient.streamingSearch(query, excludeUnavailable)
             .onStart {
                 logger.debug("invoke() streaming search started")
             }
