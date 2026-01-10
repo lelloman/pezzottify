@@ -99,6 +99,10 @@ class AssistantViewModel @Inject constructor(
         _debugMode.value = !_debugMode.value
     }
 
+    fun setDebugMode(enabled: Boolean) {
+        _debugMode.value = enabled
+    }
+
     fun clearError() {
         _error.value = null
     }
