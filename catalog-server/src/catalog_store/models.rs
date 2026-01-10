@@ -120,6 +120,8 @@ pub struct Artist {
     pub genres: Vec<String>,
     pub followers_total: i64,
     pub popularity: i32,
+    /// Whether the artist has at least one available track
+    pub available: bool,
 }
 
 /// Album entity

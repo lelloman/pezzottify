@@ -28,6 +28,23 @@ fn migrate_if_needed(conn: &mut Connection) -> Result<()> {
     let db_version: i64 = conn.query_row("PRAGMA user_version", [], |r| r.get(0))?;
 
     let latest_version = CATALOG_VERSIONED_SCHEMAS.len() - 1;
+    let latest_schema = &CATALOG_VERSIONED_SCHEMAS[latest_version];
+
+    // Check if this is a brand new database (no tables exist)
+    let table_count: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap_or(0);
+
+    if table_count == 0 {
+        // Brand new database - create the latest schema directly
+        info!("Creating catalog db schema at version {}", latest_version);
+        latest_schema.create(conn)?;
+        return Ok(());
+    }
 
     // Handle legacy databases that don't have versioned schema yet (user_version = 0)
     // These should be treated as version 0 and need migration
@@ -219,6 +236,7 @@ impl SqliteCatalogStore {
             genres,
             followers_total: row.get(2)?,
             popularity: row.get(3)?,
+            available: row.get::<_, i32>(4)? != 0,
         })
     }
 
@@ -258,7 +276,7 @@ impl SqliteCatalogStore {
         let genres = Self::get_artist_genres(&conn, rowid)?;
 
         let mut stmt = conn.prepare_cached(
-            "SELECT id, name, followers_total, popularity FROM artists WHERE rowid = ?1",
+            "SELECT id, name, followers_total, popularity, artist_available FROM artists WHERE rowid = ?1",
         )?;
 
         match stmt.query_row(params![rowid], |row| {
@@ -388,7 +406,7 @@ impl SqliteCatalogStore {
         let album = album_stmt.query_row(params![album_rowid], Self::parse_album_row)?;
 
         let mut artists_stmt = conn.prepare_cached(
-            "SELECT a.id, a.name, a.followers_total, a.popularity, a.rowid
+            "SELECT a.id, a.name, a.followers_total, a.popularity, a.rowid, a.artist_available
              FROM artists a
              INNER JOIN artist_albums aa ON a.rowid = aa.artist_rowid
              WHERE aa.album_rowid = ?1 AND aa.is_appears_on = 0
@@ -397,16 +415,18 @@ impl SqliteCatalogStore {
         let artists: Vec<Artist> = artists_stmt
             .query_map(params![album_rowid], |row| {
                 let artist_rowid: i64 = row.get(4)?;
+                let available: i32 = row.get(5)?;
                 Ok((
                     row.get::<_, String>(0)?,
                     row.get::<_, String>(1)?,
                     row.get::<_, i64>(2)?,
                     row.get::<_, i32>(3)?,
                     artist_rowid,
+                    available != 0,
                 ))
             })?
             .filter_map(|r| r.ok())
-            .map(|(id, name, followers, popularity, artist_rowid)| {
+            .map(|(id, name, followers, popularity, artist_rowid, available)| {
                 let genres = Self::get_artist_genres(&conn, artist_rowid).unwrap_or_default();
                 Artist {
                     id,
@@ -414,6 +434,7 @@ impl SqliteCatalogStore {
                     genres,
                     followers_total: followers,
                     popularity,
+                    available,
                 }
             })
             .collect();
@@ -530,7 +551,7 @@ impl SqliteCatalogStore {
         let album = album_stmt.query_row(params![album_id], Self::parse_album_row)?;
 
         let mut artists_stmt = conn.prepare_cached(
-            "SELECT a.id, a.name, a.followers_total, a.popularity, a.rowid, ta.role
+            "SELECT a.id, a.name, a.followers_total, a.popularity, a.rowid, ta.role, a.artist_available
              FROM artists a
              INNER JOIN track_artists ta ON a.rowid = ta.artist_rowid
              WHERE ta.track_rowid = ?1
@@ -541,6 +562,7 @@ impl SqliteCatalogStore {
             .query_map(params![track_rowid], |row| {
                 let artist_rowid: i64 = row.get(4)?;
                 let role: Option<i32> = row.get(5)?;
+                let available: i32 = row.get(6)?;
                 Ok((
                     row.get::<_, String>(0)?,
                     row.get::<_, String>(1)?,
@@ -548,10 +570,11 @@ impl SqliteCatalogStore {
                     row.get::<_, i32>(3)?,
                     artist_rowid,
                     role.unwrap_or(0),
+                    available != 0,
                 ))
             })?
             .filter_map(|r| r.ok())
-            .map(|(id, name, followers, popularity, artist_rowid, role)| {
+            .map(|(id, name, followers, popularity, artist_rowid, role, available)| {
                 let genres = Self::get_artist_genres(&conn, artist_rowid).unwrap_or_default();
                 TrackArtist {
                     artist: Artist {
@@ -560,6 +583,7 @@ impl SqliteCatalogStore {
                         genres,
                         followers_total: followers,
                         popularity,
+                        available,
                     },
                     role: ArtistRole::from_db_int(role),
                 }

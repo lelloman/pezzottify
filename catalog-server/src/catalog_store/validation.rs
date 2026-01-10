@@ -123,6 +123,7 @@ mod tests {
             genres: vec!["rock".to_string()],
             followers_total: 1000,
             popularity: 50,
+            available: false,
         }
     }
 
