@@ -213,7 +213,20 @@ fun ChatScreen(
                             }
                         }
 
-                        items(state.messages.reversed(), key = { it.id }) { message ->
+                        // Filter out tool messages and empty assistant messages when not in debug mode
+                        val visibleMessages = if (state.debugMode) {
+                            state.messages
+                        } else {
+                            state.messages.filter { message ->
+                                when (message.role) {
+                                    com.lelloman.simpleaiassistant.model.MessageRole.TOOL -> false
+                                    com.lelloman.simpleaiassistant.model.MessageRole.ASSISTANT -> message.content.isNotEmpty()
+                                    else -> true
+                                }
+                            }
+                        }
+
+                        items(visibleMessages.reversed(), key = { it.id }) { message ->
                             ChatMessageItem(
                                 message = message,
                                 debugMode = state.debugMode,

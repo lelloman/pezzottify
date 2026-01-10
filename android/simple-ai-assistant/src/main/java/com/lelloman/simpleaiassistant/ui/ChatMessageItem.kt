@@ -109,48 +109,29 @@ fun ChatMessageItem(
                     )
                 }
 
-                // Tool calls indicator (for assistant messages)
-                if (message.toolCalls != null && message.toolCalls.isNotEmpty()) {
+                // Tool calls indicator (for assistant messages) - only shown in debug mode
+                if (debugMode && message.toolCalls != null && message.toolCalls.isNotEmpty()) {
                     Spacer(modifier = Modifier.height(8.dp))
-                    if (debugMode) {
-                        message.toolCalls.forEach { toolCall ->
-                            Surface(
-                                color = MaterialTheme.colorScheme.surfaceContainerHighest,
-                                shape = RoundedCornerShape(6.dp),
-                                modifier = Modifier.padding(top = 4.dp)
-                            ) {
-                                Column(modifier = Modifier.padding(8.dp)) {
-                                    Text(
-                                        text = toolCall.name,
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.primary
-                                    )
-                                    Text(
-                                        text = toolCall.input.toString(),
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        maxLines = 3,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
-                                }
-                            }
-                        }
-                    } else {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically
+                    message.toolCalls.forEach { toolCall ->
+                        Surface(
+                            color = MaterialTheme.colorScheme.surfaceContainerHighest,
+                            shape = RoundedCornerShape(6.dp),
+                            modifier = Modifier.padding(top = 4.dp)
                         ) {
-                            Icon(
-                                imageVector = Icons.Default.Build,
-                                contentDescription = null,
-                                modifier = Modifier.size(14.dp),
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                            Text(
-                                text = " Using ${message.toolCalls.size} tool${if (message.toolCalls.size > 1) "s" else ""}...",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                fontStyle = FontStyle.Italic
-                            )
+                            Column(modifier = Modifier.padding(8.dp)) {
+                                Text(
+                                    text = toolCall.name,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                                Text(
+                                    text = toolCall.input.toString(),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 3,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
                         }
                     }
                 }

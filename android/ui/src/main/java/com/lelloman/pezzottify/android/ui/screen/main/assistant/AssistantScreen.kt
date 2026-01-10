@@ -8,7 +8,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.lelloman.simpleaiassistant.ui.ChatScreen
-import com.lelloman.simpleaiassistant.ui.ProviderSettingsDialog
+import com.lelloman.simpleaiassistant.ui.SettingsBottomSheet
 
 @Composable
 fun AssistantScreen(
@@ -29,13 +29,14 @@ fun AssistantScreen(
     )
 
     if (showSettings) {
-        ProviderSettingsDialog(
+        SettingsBottomSheet(
             registry = viewModel.providerRegistry,
             currentProviderId = currentProviderId,
             currentConfig = currentConfig,
+            debugMode = state.debugMode,
+            onDebugModeChange = { viewModel.setDebugMode(it) },
             onSave = { providerId, config ->
                 viewModel.saveProviderSettings(providerId, config)
-                showSettings = false
             },
             onDismiss = { showSettings = false }
         )
