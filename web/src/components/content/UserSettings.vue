@@ -17,6 +17,19 @@
           <span class="toggle-slider"></span>
         </label>
       </div>
+      <div class="setting-row">
+        <div class="setting-info">
+          <span class="setting-label">Hide Unavailable Content</span>
+          <span class="setting-description">
+            Hide tracks, albums, and artists that are not available for
+            streaming from search results.
+          </span>
+        </div>
+        <label class="toggle">
+          <input type="checkbox" v-model="excludeUnavailable" />
+          <span class="toggle-slider"></span>
+        </label>
+      </div>
     </div>
 
     <div class="settings-section">
@@ -42,7 +55,8 @@ import { useDebugStore } from "@/store/debug";
 import { storeToRefs } from "pinia";
 
 const debugStore = useDebugStore();
-const { useOrganicSearch, imagesEnabled } = storeToRefs(debugStore);
+const { useOrganicSearch, imagesEnabled, excludeUnavailable } =
+  storeToRefs(debugStore);
 </script>
 
 <style scoped>

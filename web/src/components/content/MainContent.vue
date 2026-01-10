@@ -35,7 +35,7 @@ import StreamingSearchResults from "./StreamingSearchResults.vue";
 import { streamingSearch } from "@/services/streamingSearch";
 
 const debugStore = useDebugStore();
-const { useOrganicSearch } = storeToRefs(debugStore);
+const { useOrganicSearch, excludeUnavailable } = storeToRefs(debugStore);
 
 const results = ref(null);
 const streamingSections = ref([]);
@@ -52,7 +52,12 @@ const isSettingsRoute = computed(() => route.name === "settings");
 const isRequestsRoute = computed(() => route.name === "requests");
 
 const fetchCatalogResults = async (query, filters) => {
-  const requestBody = { query, resolve: true, limit: 15 };
+  const requestBody = {
+    query,
+    resolve: true,
+    limit: 15,
+    exclude_unavailable: excludeUnavailable.value,
+  };
   if (filters) {
     requestBody.filters = filters;
   }
@@ -90,6 +95,7 @@ const fetchStreamingResults = (query) => {
     () => {
       isStreamingLoading.value = false;
     },
+    { excludeUnavailable: excludeUnavailable.value },
   );
 };
 

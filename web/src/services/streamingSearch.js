@@ -28,12 +28,17 @@ export const SectionType = {
  * @param {function} onSection - Callback called with each section object
  * @param {function} onError - Callback called on error
  * @param {function} onComplete - Callback called when stream completes
+ * @param {Object} options - Optional search options
+ * @param {boolean} options.excludeUnavailable - If true, exclude unavailable content
  * @returns {function} Abort function to cancel the stream
  */
-export function streamingSearch(query, onSection, onError, onComplete) {
+export function streamingSearch(query, onSection, onError, onComplete, options = {}) {
   const controller = new AbortController();
   const encodedQuery = encodeURIComponent(query);
-  const url = `/v1/content/search/stream?q=${encodedQuery}`;
+  let url = `/v1/content/search/stream?q=${encodedQuery}`;
+  if (options.excludeUnavailable) {
+    url += "&exclude_unavailable=true";
+  }
 
   fetch(url, {
     method: "GET",
