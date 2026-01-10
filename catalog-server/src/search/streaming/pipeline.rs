@@ -365,6 +365,7 @@ impl<'a> StreamingSearchPipeline<'a> {
                         id: a.artist.id.clone(),
                         name: a.artist.name,
                         image_id: Some(a.artist.id), // Use artist ID as image reference
+                        available: a.artist.available,
                     })
                 }),
             HashedItemType::Album => self

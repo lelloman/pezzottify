@@ -73,8 +73,9 @@ pub fn create_test_catalog() -> Result<(TempDir, PathBuf, PathBuf)> {
     let catalog_db_path = dir.path().join("catalog.db");
     let conn = Connection::open(&catalog_db_path)?;
 
-    // Create schema
-    CATALOG_VERSIONED_SCHEMAS[0].create(&conn)?;
+    // Create schema (use latest version)
+    let latest_schema = &CATALOG_VERSIONED_SCHEMAS[CATALOG_VERSIONED_SCHEMAS.len() - 1];
+    latest_schema.create(&conn)?;
 
     // Insert artists
     conn.execute(
