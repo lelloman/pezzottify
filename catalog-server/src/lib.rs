@@ -14,7 +14,7 @@ pub mod oidc;
 pub mod search;
 pub mod server;
 pub mod server_store;
-// TODO: Re-enable after updating for Spotify schema
+// Skeleton sync module removed - Android now uses on-demand discography API
 // pub mod skeleton;
 pub mod sqlite_persistence;
 pub mod user;

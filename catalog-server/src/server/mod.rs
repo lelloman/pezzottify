@@ -7,7 +7,7 @@ mod search;
 #[allow(clippy::module_inception)]
 pub mod server;
 pub mod session;
-// TODO: Re-enable after updating for Spotify schema (depends on skeleton module)
+// Skeleton sync module removed - Android now uses on-demand discography API
 // mod skeleton;
 pub mod state;
 mod stream_track;

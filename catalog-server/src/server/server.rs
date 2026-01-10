@@ -4586,9 +4586,7 @@ pub async fn make_app(
         .merge(admin_changelog_routes)
         .merge(admin_search_routes);
 
-    // TODO: Re-enable download and skeleton routes after updating for Spotify schema
     // Download manager routes disabled - depends on download_manager module
-    // Skeleton routes disabled - depends on skeleton module
 
     let home_router: Router = match config.frontend_dir_path {
         Some(ref frontend_path) => {
@@ -4621,7 +4619,6 @@ pub async fn make_app(
         .nest("/v1/sync", sync_routes)
         // TODO: Re-enable after updating for Spotify schema
         // .nest("/v1/download", download_routes)
-        // .nest("/v1/catalog/skeleton", skeleton_routes)
         .nest("/v1", ws_routes)
         .nest("/v1", mcp_routes);
 
