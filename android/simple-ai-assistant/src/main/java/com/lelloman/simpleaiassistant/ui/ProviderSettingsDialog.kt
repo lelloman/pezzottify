@@ -306,8 +306,13 @@ private fun ProviderPicker(
                     contentDescription = "Select provider"
                 )
             },
+            modifier = Modifier.fillMaxWidth()
+        )
+        // Overlay a transparent clickable box to capture taps
+        // (OutlinedTextField with readOnly=true doesn't propagate clicks properly)
+        Box(
             modifier = Modifier
-                .fillMaxWidth()
+                .matchParentSize()
                 .clickable { expanded = true }
         )
         DropdownMenu(

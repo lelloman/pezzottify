@@ -168,6 +168,7 @@ dependencies {
     implementation(project(":logger"))
     implementation(project(":simple-ai-assistant"))
     implementation(project(":simple-ai-provider-ollama"))
+    implementation(project(":simple-ai-provider-simpleai"))
     debugImplementation(project(":debuginterface"))
 
     testImplementation(libs.junit)

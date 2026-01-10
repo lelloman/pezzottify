@@ -5,11 +5,21 @@ package com.lelloman.simpleaiassistant.llm
  *
  * Populated manually by the app during initialization with the provider
  * factories for the provider modules included in the build.
+ *
+ * @param factories List of available provider factories
+ * @param defaultProviderId The provider ID to use as default when no provider is selected.
+ *                          If null, uses the first provider in the list.
  */
 class ProviderRegistry(
-    private val factories: List<LlmProviderFactory>
+    private val factories: List<LlmProviderFactory>,
+    private val defaultProviderId: String? = null
 ) {
-    constructor(vararg factories: LlmProviderFactory) : this(factories.toList())
+    constructor(vararg factories: LlmProviderFactory) : this(factories.toList(), null)
+
+    constructor(
+        vararg factories: LlmProviderFactory,
+        defaultProviderId: String
+    ) : this(factories.toList(), defaultProviderId)
 
     /**
      * Get all available provider factories.
@@ -38,4 +48,17 @@ class ProviderRegistry(
      */
     fun getSingleFactory(): LlmProviderFactory? =
         if (isSingleProvider()) factories.firstOrNull() else null
+
+    /**
+     * Get the default provider factory.
+     * Returns the factory matching [defaultProviderId], or the first factory if no default is set.
+     */
+    fun getDefaultFactory(): LlmProviderFactory? =
+        defaultProviderId?.let { getFactory(it) } ?: factories.firstOrNull()
+
+    /**
+     * Get the default provider ID.
+     */
+    fun getDefaultProviderId(): String? =
+        defaultProviderId ?: factories.firstOrNull()?.providerId
 }

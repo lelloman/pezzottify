@@ -33,8 +33,11 @@ import com.lelloman.simpleaiassistant.llm.LlmProvider
 import com.lelloman.simpleaiassistant.llm.ProviderConfigStore
 import com.lelloman.simpleaiassistant.llm.ProviderRegistry
 import com.lelloman.simpleaiassistant.provider.ollama.OllamaProviderFactory
+import com.lelloman.simpleaiassistant.provider.simpleai.SimpleAiProviderFactory
 import com.lelloman.simpleaiassistant.tool.ToolNode
 import com.lelloman.simpleaiassistant.tool.ToolRegistry
+import com.lelloman.pezzottify.android.domain.auth.AuthState
+import com.lelloman.pezzottify.android.domain.auth.AuthStore
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -65,12 +68,25 @@ object AssistantModule {
 
     @Provides
     @Singleton
-    fun provideProviderRegistry(): ProviderRegistry {
+    fun provideProviderRegistry(
+        @ApplicationContext context: Context,
+        authStore: AuthStore
+    ): ProviderRegistry {
         return ProviderRegistry(
-            OllamaProviderFactory()
+            OllamaProviderFactory(),
+            SimpleAiProviderFactory(
+                context = context,
+                authTokenProvider = {
+                    when (val state = authStore.getAuthState().value) {
+                        is AuthState.LoggedIn -> state.authToken
+                        else -> null
+                    }
+                }
+            ),
             // Add more providers here when available:
             // AnthropicProviderFactory(),
             // OpenAiProviderFactory(),
+            defaultProviderId = "simpleai"
         )
     }
 

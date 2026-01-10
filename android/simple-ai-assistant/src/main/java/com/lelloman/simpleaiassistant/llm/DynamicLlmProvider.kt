@@ -44,12 +44,12 @@ class DynamicLlmProvider(
 
     private fun updateProvider(providerId: String?, config: Map<String, Any?>) {
         if (providerId == null) {
-            // No provider selected, try to use default from single provider
-            val singleFactory = registry.getSingleFactory()
-            if (singleFactory != null) {
-                val defaultConfig = singleFactory.getDefaultConfig()
-                currentProvider = singleFactory.createProvider(defaultConfig)
-                currentProviderId = singleFactory.providerId
+            // No provider selected, use the default provider
+            val defaultFactory = registry.getDefaultFactory()
+            if (defaultFactory != null) {
+                val defaultConfig = defaultFactory.getDefaultConfig()
+                currentProvider = defaultFactory.createProvider(defaultConfig)
+                currentProviderId = defaultFactory.providerId
                 _isConfigured.value = false // Using defaults, not user-configured
             } else {
                 currentProvider = null
