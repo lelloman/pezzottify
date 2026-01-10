@@ -3,7 +3,9 @@
 //! Provides conversions from full catalog models to lightweight summary types
 //! used in streaming search enrichment sections.
 
-use crate::catalog_store::{Album, Artist, ResolvedAlbum, ResolvedArtist, ResolvedTrack};
+use crate::catalog_store::{
+    Album, Artist, ResolvedAlbum, ResolvedArtist, ResolvedTrack, TrackAvailability,
+};
 
 use super::sections::{AlbumSummary, ArtistSummary, TrackSummary};
 
@@ -25,6 +27,7 @@ impl From<&ResolvedTrack> for TrackSummary {
             album_name: resolved.album.name.clone(),
             artist_names,
             image_id: Some(resolved.album.id.clone()), // Use album ID as image ID
+            available: resolved.track.availability == TrackAvailability::Available,
         }
     }
 }
@@ -89,6 +92,7 @@ impl From<&ResolvedArtist> for ArtistSummary {
             id: resolved.artist.id.clone(),
             name: resolved.artist.name.clone(),
             image_id: Some(resolved.artist.id.clone()), // Use artist ID as image ID
+            available: resolved.artist.available,
         }
     }
 }
@@ -100,6 +104,7 @@ impl From<&Artist> for ArtistSummary {
             id: artist.id.clone(),
             name: artist.name.clone(),
             image_id: Some(artist.id.clone()), // Use artist ID as image ID
+            available: artist.available,
         }
     }
 }
@@ -118,6 +123,7 @@ mod tests {
             genres: vec![],
             followers_total: 0,
             popularity: 0,
+            available: false,
         }
     }
 

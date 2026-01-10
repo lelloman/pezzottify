@@ -1339,6 +1339,7 @@ async fn create_artist(
         genres: data.genres,
         followers_total: data.followers_total,
         popularity: data.popularity,
+        available: false, // Will be updated when tracks are added
     };
 
     if let Err(e) = validate_artist(&artist) {
@@ -1372,6 +1373,7 @@ async fn update_artist(
         genres: data.genres,
         followers_total: data.followers_total,
         popularity: data.popularity,
+        available: false, // Preserved by update logic
     };
 
     if let Err(e) = validate_artist(&artist) {

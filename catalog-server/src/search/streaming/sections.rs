@@ -86,6 +86,7 @@ pub struct TrackSummary {
     pub album_name: String,
     pub artist_names: Vec<String>,
     pub image_id: Option<String>,
+    pub available: bool,
 }
 
 /// Summary of an album for enrichment sections.
@@ -106,6 +107,7 @@ pub struct ArtistSummary {
     pub id: String,
     pub name: String,
     pub image_id: Option<String>,
+    pub available: bool,
 }
 
 #[cfg(test)]
@@ -136,6 +138,7 @@ mod tests {
                 id: "artist_123".to_string(),
                 name: "Prince".to_string(),
                 image_id: Some("img_456".to_string()),
+                available: true,
             }),
             confidence: 0.95,
         };
@@ -178,6 +181,7 @@ mod tests {
                 album_name: "Purple Rain".to_string(),
                 artist_names: vec!["Prince".to_string()],
                 image_id: Some("img_1".to_string()),
+                available: true,
             }],
         };
 
@@ -215,6 +219,7 @@ mod tests {
                 id: "artist_456".to_string(),
                 name: "The Time".to_string(),
                 image_id: None,
+                available: true,
             }],
         };
 
@@ -243,6 +248,7 @@ mod tests {
             album_name: "Purple Rain".to_string(),
             artist_names: vec!["Prince".to_string()],
             image_id: Some("img_1".to_string()),
+            available: true,
         };
 
         let json = serde_json::to_string(&summary).unwrap();

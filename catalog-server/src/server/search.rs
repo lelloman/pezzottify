@@ -1,7 +1,7 @@
 //! Search API routes
 
 use crate::catalog_store::CatalogStore;
-use crate::search::streaming::StreamingSearchPipeline;
+use crate::search::streaming::{SearchSection, StreamingSearchPipeline};
 use crate::search::{
     HashedItemType, RelevanceFilterConfig, ResolvedSearchResult, SearchResult, SearchedAlbum,
     SearchedArtist, SearchedTrack,
@@ -49,6 +49,10 @@ struct SearchBody {
     pub limit: Option<usize>,
 
     pub filters: Option<Vec<SearchFilter>>,
+
+    /// If true, exclude unavailable content from results (requires resolve: true)
+    #[serde(default)]
+    pub exclude_unavailable: bool,
 }
 
 fn resolve_album(
@@ -137,10 +141,18 @@ fn resolve_artist(
         .and_then(|id| id.as_str())
         .map(String::from);
 
+    // Get availability (defaults to false if not present)
+    let available = artist_json
+        .get("artist")
+        .and_then(|a| a.get("available"))
+        .and_then(|a| a.as_bool())
+        .unwrap_or(false);
+
     let resolved_artist = SearchedArtist {
         name,
         id: artist_id.to_owned(),
         image_id,
+        available,
     };
 
     Some(ResolvedSearchResult::Artist(resolved_artist))
@@ -269,6 +281,132 @@ fn get_relevance_filter(server_state: &ServerState) -> RelevanceFilterConfig {
         .unwrap_or_default()
 }
 
+/// Filter resolved search results by availability
+fn filter_by_availability(results: Vec<ResolvedSearchResult>) -> Vec<ResolvedSearchResult> {
+    results
+        .into_iter()
+        .filter(|result| match result {
+            ResolvedSearchResult::Track(track) => track.availability == "available",
+            ResolvedSearchResult::Album(album) => album.availability != "missing",
+            ResolvedSearchResult::Artist(artist) => artist.available,
+        })
+        .collect()
+}
+
+/// Check if a resolved search result is available
+fn is_result_available(result: &ResolvedSearchResult) -> bool {
+    match result {
+        ResolvedSearchResult::Track(track) => track.availability == "available",
+        ResolvedSearchResult::Album(album) => album.availability != "missing",
+        ResolvedSearchResult::Artist(artist) => artist.available,
+    }
+}
+
+/// Filter streaming search sections by availability
+fn filter_sections_by_availability(sections: Vec<SearchSection>) -> Vec<SearchSection> {
+    sections
+        .into_iter()
+        .filter_map(|section| match section {
+            // Filter primary matches - skip if unavailable
+            SearchSection::PrimaryArtist { item, confidence } => {
+                if is_result_available(&item) {
+                    Some(SearchSection::PrimaryArtist { item, confidence })
+                } else {
+                    None
+                }
+            }
+            SearchSection::PrimaryAlbum { item, confidence } => {
+                if is_result_available(&item) {
+                    Some(SearchSection::PrimaryAlbum { item, confidence })
+                } else {
+                    None
+                }
+            }
+            SearchSection::PrimaryTrack { item, confidence } => {
+                if is_result_available(&item) {
+                    Some(SearchSection::PrimaryTrack { item, confidence })
+                } else {
+                    None
+                }
+            }
+            // Filter enrichment sections - keep only available items
+            SearchSection::PopularBy {
+                target_id,
+                target_type,
+                items,
+            } => {
+                let filtered: Vec<_> = items.into_iter().filter(|t| t.available).collect();
+                if filtered.is_empty() {
+                    None
+                } else {
+                    Some(SearchSection::PopularBy {
+                        target_id,
+                        target_type,
+                        items: filtered,
+                    })
+                }
+            }
+            SearchSection::AlbumsBy { target_id, items } => {
+                let filtered: Vec<_> = items
+                    .into_iter()
+                    .filter(|a| a.availability != "missing")
+                    .collect();
+                if filtered.is_empty() {
+                    None
+                } else {
+                    Some(SearchSection::AlbumsBy {
+                        target_id,
+                        items: filtered,
+                    })
+                }
+            }
+            SearchSection::TracksFrom { target_id, items } => {
+                let filtered: Vec<_> = items.into_iter().filter(|t| t.available).collect();
+                if filtered.is_empty() {
+                    None
+                } else {
+                    Some(SearchSection::TracksFrom {
+                        target_id,
+                        items: filtered,
+                    })
+                }
+            }
+            SearchSection::RelatedArtists { target_id, items } => {
+                let filtered: Vec<_> = items.into_iter().filter(|a| a.available).collect();
+                if filtered.is_empty() {
+                    None
+                } else {
+                    Some(SearchSection::RelatedArtists {
+                        target_id,
+                        items: filtered,
+                    })
+                }
+            }
+            // Filter result sections
+            SearchSection::MoreResults { items } => {
+                let filtered = filter_by_availability(items);
+                if filtered.is_empty() {
+                    None
+                } else {
+                    Some(SearchSection::MoreResults { items: filtered })
+                }
+            }
+            SearchSection::Results { items } => {
+                let filtered = filter_by_availability(items);
+                if filtered.is_empty() {
+                    None
+                } else {
+                    Some(SearchSection::Results { items: filtered })
+                }
+            }
+            // Always keep Done
+            SearchSection::Done { total_time_ms } => {
+                Some(SearchSection::Done { total_time_ms })
+            }
+        })
+        .collect()
+}
+
 async fn search(
     _session: Session,
     State(server_state): State<ServerState>,
@@ -293,10 +431,14 @@ async fn search(
     let filtered_results = relevance_filter.filter(search_results);
 
     if payload.resolve {
-        SearchResponse::Resolved(Json(resolve_search_results(
-            &server_state.catalog_store,
-            filtered_results,
-        )))
+        let mut resolved = resolve_search_results(&server_state.catalog_store, filtered_results);
+
+        // Apply availability filter if requested
+        if payload.exclude_unavailable {
+            resolved = filter_by_availability(resolved);
+        }
+
+        SearchResponse::Resolved(Json(resolved))
     } else {
         SearchResponse::Raw(Json(filtered_results))
     }
@@ -310,6 +452,9 @@ async fn search(
 struct StreamingSearchQuery {
     /// The search query string
     q: String,
+    /// If true, exclude unavailable content from results
+    #[serde(default)]
+    exclude_unavailable: bool,
 }
 
 async fn streaming_search(
@@ -338,6 +483,13 @@ async fn streaming_search(
     // Execute the pipeline with search results
     let sections = pipeline.execute(&params.q, search_results);
     drop(user_manager);
+
+    // Apply availability filter if requested
+    let sections = if params.exclude_unavailable {
+        filter_sections_by_availability(sections)
+    } else {
+        sections
+    };
 
     // Convert sections to SSE events
     let events: Vec<_> = sections

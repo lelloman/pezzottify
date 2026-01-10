@@ -33,6 +33,7 @@ pub struct SearchedArtist {
     pub id: String,
     pub name: String,
     pub image_id: Option<String>,
+    pub available: bool,
 }
 
 #[derive(Debug, Clone, Serialize)]
