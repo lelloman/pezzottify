@@ -173,7 +173,11 @@ async fn catalog_search_handler(ctx: ToolContext, params: Value) -> ToolResult {
                         .get_track_json(&result.item_id)
                         .ok()
                         .flatten()
-                        .and_then(|json| json.get("availability").and_then(|a| a.as_str()).map(String::from))
+                        .and_then(|json| {
+                            json.get("availability")
+                                .and_then(|a| a.as_str())
+                                .map(String::from)
+                        })
                         .unwrap_or_else(|| "available".to_string());
                     let available = availability == "available";
 

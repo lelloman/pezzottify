@@ -522,9 +522,10 @@ async fn search(
 
     if payload.resolve {
         // For resolved results, fetch more upfront since we need to resolve anyway
-        let search_results = server_state
-            .search_vault
-            .search(payload.query.as_str(), limit, filters);
+        let search_results =
+            server_state
+                .search_vault
+                .search(payload.query.as_str(), limit, filters);
         let filtered_results = relevance_filter.filter(search_results);
 
         let mut resolved = resolve_search_results(&server_state.catalog_store, filtered_results);
@@ -548,9 +549,10 @@ async fn search(
         SearchResponse::Raw(Json(results))
     } else {
         // No availability filter - simple search
-        let search_results = server_state
-            .search_vault
-            .search(payload.query.as_str(), limit, filters);
+        let search_results =
+            server_state
+                .search_vault
+                .search(payload.query.as_str(), limit, filters);
         let filtered_results = relevance_filter.filter(search_results);
         SearchResponse::Raw(Json(filtered_results))
     }
