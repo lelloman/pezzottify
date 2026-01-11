@@ -4123,6 +4123,7 @@ impl ServerState {
             organic_indexer,
             http_client,
             download_manager: None, // Will be set by make_app if download manager is enabled
+            shutdown_token: None,   // Will be set by make_app if download manager is enabled
         }
     }
 }
@@ -4200,28 +4201,43 @@ pub async fn make_app(
             let queue_db_path = config.db_dir.join("download_queue.db");
             match crate::download_manager::SqliteDownloadQueueStore::new(&queue_db_path) {
                 Ok(queue_store) => {
-                    let torrent_client = crate::download_manager::TorrentClient::new(
+                    let torrent_client = Arc::new(crate::download_manager::TorrentClient::new(
                         qt_base_url.clone(),
                         qt_ws_url.clone(),
                         qt_auth_token,
-                    );
-                    let manager = crate::download_manager::DownloadManager::new(
+                    ));
+                    let manager = Arc::new(crate::download_manager::DownloadManager::new(
                         Arc::new(queue_store),
-                        Arc::new(torrent_client),
+                        torrent_client.clone(),
                         catalog_store.clone(),
                         config.media_path.clone(),
                         config.download_manager.clone(),
-                    );
+                    ));
+
                     // Set the search vault for availability updates
-                    let search_vault_clone = search_vault.clone();
-                    let manager = Arc::new(manager);
                     {
                         let manager_clone = manager.clone();
+                        let search_vault_clone = search_vault.clone();
                         tokio::spawn(async move {
                             manager_clone.set_search_vault(search_vault_clone).await;
                         });
                     }
+
+                    // Spawn the queue processor for WebSocket event handling
+                    let processor = crate::download_manager::QueueProcessor::new(
+                        manager.clone(),
+                        torrent_client,
+                        config.download_manager.process_interval_secs,
+                    );
+                    let shutdown_token = tokio_util::sync::CancellationToken::new();
+                    let shutdown_token_clone = shutdown_token.clone();
+                    tokio::spawn(async move {
+                        processor.run(shutdown_token_clone).await;
+                    });
+                    info!("Queue processor spawned for WebSocket event handling");
+
                     state.download_manager = Some(manager);
+                    state.shutdown_token = Some(shutdown_token);
                     info!("Download manager initialized successfully");
                 }
                 Err(e) => {
