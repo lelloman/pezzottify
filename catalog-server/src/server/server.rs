@@ -4812,6 +4812,8 @@ mod tests {
         fn prune_impressions(&self, _before_date: i64) -> usize {
             0
         }
+
+        fn update_availability(&self, _items: &[(String, HashedItemType, bool)]) {}
     }
 
     /// A minimal in-memory ServerStore for testing

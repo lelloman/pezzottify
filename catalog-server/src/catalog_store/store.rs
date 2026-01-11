@@ -917,55 +917,73 @@ impl CatalogStore for SqliteCatalogStore {
 
         let mut items = Vec::with_capacity(total as usize);
 
-        let mut artist_stmt =
-            conn.prepare("SELECT id, name FROM artists ORDER BY popularity DESC")?;
+        let mut artist_stmt = conn
+            .prepare("SELECT id, name, artist_available FROM artists ORDER BY popularity DESC")?;
         let artist_iter = artist_stmt.query_map([], |row| {
-            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, i32>(2)? != 0,
+            ))
         })?;
 
         for result in artist_iter {
-            let (id, name) = result?;
+            let (id, name, is_available) = result?;
             items.push(SearchableItem {
                 id,
                 name,
                 content_type: SearchableContentType::Artist,
                 additional_text: vec![],
+                is_available,
             });
         }
         info!("Loaded {} artists for indexing", items.len());
 
-        let mut album_stmt =
-            conn.prepare("SELECT id, name FROM albums ORDER BY popularity DESC")?;
+        let mut album_stmt = conn
+            .prepare("SELECT id, name, album_availability FROM albums ORDER BY popularity DESC")?;
         let album_iter = album_stmt.query_map([], |row| {
-            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+            let availability: String = row.get(2)?;
+            // Album is available if it has at least some content (complete or partial)
+            let is_available = availability != "missing";
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                is_available,
+            ))
         })?;
 
         let album_start = items.len();
         for result in album_iter {
-            let (id, name) = result?;
+            let (id, name, is_available) = result?;
             items.push(SearchableItem {
                 id,
                 name,
                 content_type: SearchableContentType::Album,
                 additional_text: vec![],
+                is_available,
             });
         }
         info!("Loaded {} albums for indexing", items.len() - album_start);
 
         let mut track_stmt =
-            conn.prepare("SELECT id, name FROM tracks ORDER BY popularity DESC")?;
+            conn.prepare("SELECT id, name, track_available FROM tracks ORDER BY popularity DESC")?;
         let track_iter = track_stmt.query_map([], |row| {
-            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, i32>(2)? != 0,
+            ))
         })?;
 
         let track_start = items.len();
         for result in track_iter {
-            let (id, name) = result?;
+            let (id, name, is_available) = result?;
             items.push(SearchableItem {
                 id,
                 name,
                 content_type: SearchableContentType::Track,
                 additional_text: vec![],
+                is_available,
             });
         }
         info!("Loaded {} tracks for indexing", items.len() - track_start);

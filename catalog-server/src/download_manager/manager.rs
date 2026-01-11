@@ -15,6 +15,7 @@ use uuid::Uuid;
 use crate::catalog_store::{TrackAvailability, WritableCatalogStore};
 use crate::config::DownloadManagerSettings;
 use crate::notifications::{NotificationService, NotificationType};
+use crate::search::{HashedItemType, SearchVault};
 
 use super::audit_logger::AuditLogger;
 use super::corruption_handler::{CorruptionHandler, CorruptionHandlerConfig, HandlerAction};
@@ -57,6 +58,8 @@ pub struct DownloadManager {
     sync_notifier: RwLock<Option<Arc<DownloadSyncNotifier>>>,
     /// Notification service for creating user notifications (optional, uses interior mutability for late initialization).
     notification_service: RwLock<Option<Arc<NotificationService>>>,
+    /// Search vault for updating availability in the search index (optional, uses interior mutability for late initialization).
+    search_vault: RwLock<Option<Arc<dyn SearchVault>>>,
 }
 
 impl DownloadManager {
@@ -109,6 +112,7 @@ impl DownloadManager {
             corruption_handler,
             sync_notifier: RwLock::new(None),
             notification_service: RwLock::new(None),
+            search_vault: RwLock::new(None),
         }
     }
 
@@ -130,6 +134,30 @@ impl DownloadManager {
     pub async fn set_notification_service(&self, service: Arc<NotificationService>) {
         let mut guard = self.notification_service.write().await;
         *guard = Some(service);
+    }
+
+    /// Set the search vault for updating availability in the search index.
+    ///
+    /// This should be called after construction to enable search index
+    /// updates when track availability changes. Uses interior mutability
+    /// so it can be called even after the manager is wrapped in Arc.
+    pub async fn set_search_vault(&self, vault: Arc<dyn SearchVault>) {
+        let mut guard = self.search_vault.write().await;
+        *guard = Some(vault);
+    }
+
+    /// Update search index availability for a track.
+    ///
+    /// Called internally when track availability changes to keep the
+    /// search index in sync with the catalog.
+    async fn update_search_availability(&self, track_id: &str, is_available: bool) {
+        if let Some(vault) = self.search_vault.read().await.as_ref() {
+            vault.update_availability(&[(
+                track_id.to_string(),
+                HashedItemType::Track,
+                is_available,
+            )]);
+        }
     }
 
     /// Check if the download manager is enabled.
@@ -674,6 +702,8 @@ impl DownloadManager {
                                 item.content_id, e
                             );
                         }
+                        // Update search index availability
+                        self.update_search_availability(&item.content_id, false).await;
                     }
 
                     // Decrement user's queue count
@@ -973,6 +1003,9 @@ impl DownloadManager {
                     ),
                 )
             })?;
+
+        // 7. Update search index availability
+        self.update_search_availability(&item.content_id, true).await;
 
         // Note: Parent completion check is done in process_next() after mark_completed()
         Ok(bytes_downloaded)

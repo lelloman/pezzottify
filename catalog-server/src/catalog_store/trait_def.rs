@@ -182,6 +182,8 @@ pub struct SearchableItem {
     pub content_type: SearchableContentType,
     /// Additional searchable text (genres, etc.)
     pub additional_text: Vec<String>,
+    /// Whether this item is available (has audio content)
+    pub is_available: bool,
 }
 
 /// Type of searchable content.
