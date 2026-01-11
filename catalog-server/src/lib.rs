@@ -5,9 +5,7 @@
 pub mod background_jobs;
 pub mod catalog_store;
 pub mod config;
-// TODO: Re-enable after updating for Spotify schema
-// pub mod download_manager;
-// pub mod downloader;
+pub mod download_manager;
 pub mod mcp;
 pub mod notifications;
 pub mod oidc;
