@@ -22,19 +22,28 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.PlaylistAdd
+import androidx.compose.material.icons.filled.PlaylistPlay
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -54,18 +63,31 @@ fun LocalPlayerScreen(
     onSkipPrevious: () -> Unit,
     onSelectTrack: (Int) -> Unit,
     onAddFiles: () -> Unit,
+    onSaveAsPlaylist: (String) -> Unit,
+    onNavigateToPlaylists: () -> Unit,
     onClose: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    var showSaveDialog by remember { mutableStateOf(false) }
+    var playlistName by remember { mutableStateOf("") }
+
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Local Player") },
+                title = { Text("Player") },
                 navigationIcon = {
                     IconButton(onClick = onClose) {
                         Icon(
                             imageVector = Icons.Default.Close,
                             contentDescription = "Close"
+                        )
+                    }
+                },
+                actions = {
+                    IconButton(onClick = onNavigateToPlaylists) {
+                        Icon(
+                            imageVector = Icons.Default.PlaylistPlay,
+                            contentDescription = "Playlists"
                         )
                     }
                 },
@@ -108,12 +130,28 @@ fun LocalPlayerScreen(
                     modifier = Modifier.padding(Spacing.Medium)
                 )
 
-                // Queue header
-                Text(
-                    text = "Queue (${state.queue.size})",
-                    style = MaterialTheme.typography.titleMedium,
-                    modifier = Modifier.padding(horizontal = Spacing.Medium)
-                )
+                // Queue header with save button
+                Row(
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = Spacing.Medium)
+                ) {
+                    Text(
+                        text = "Queue (${state.queue.size})",
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                    IconButton(
+                        onClick = { showSaveDialog = true },
+                        enabled = state.queue.isNotEmpty()
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.PlaylistAdd,
+                            contentDescription = "Save as playlist"
+                        )
+                    }
+                }
 
                 Spacer(modifier = Modifier.height(Spacing.Small))
 
@@ -132,6 +170,50 @@ fun LocalPlayerScreen(
                 }
             }
         }
+    }
+
+    // Save as playlist dialog
+    if (showSaveDialog) {
+        AlertDialog(
+            onDismissRequest = {
+                showSaveDialog = false
+                playlistName = ""
+            },
+            title = { Text("Save as Playlist") },
+            text = {
+                OutlinedTextField(
+                    value = playlistName,
+                    onValueChange = { playlistName = it },
+                    label = { Text("Playlist name") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        if (playlistName.isNotBlank()) {
+                            onSaveAsPlaylist(playlistName.trim())
+                            showSaveDialog = false
+                            playlistName = ""
+                        }
+                    },
+                    enabled = playlistName.isNotBlank()
+                ) {
+                    Text("Save")
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        showSaveDialog = false
+                        playlistName = ""
+                    }
+                ) {
+                    Text("Cancel")
+                }
+            }
+        )
     }
 }
 

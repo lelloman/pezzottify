@@ -7,20 +7,30 @@ import android.net.Uri
 import android.provider.OpenableColumns
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.lelloman.pezzottify.android.localplayer.data.LocalPlaylistDao
+import com.lelloman.pezzottify.android.localplayer.data.LocalPlaylistEntity
+import com.lelloman.pezzottify.android.localplayer.data.LocalPlaylistTrackEntity
+import com.lelloman.pezzottify.android.localplayer.data.LocalPlaylistWithCount
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
+import java.util.UUID
 import javax.inject.Inject
 
 @HiltViewModel
 class LocalPlayerViewModel @Inject constructor(
-    application: Application
+    application: Application,
+    private val playlistDao: LocalPlaylistDao
 ) : AndroidViewModel(application) {
 
     private val localExoPlayer = LocalExoPlayer(application, viewModelScope)
 
     val state: StateFlow<LocalPlayerState> = localExoPlayer.state
+
+    val playlists: Flow<List<LocalPlaylistWithCount>> = playlistDao.getAllPlaylistsWithCount()
 
     private val _hasRestoredState = MutableStateFlow(false)
     val hasRestoredState: StateFlow<Boolean> = _hasRestoredState.asStateFlow()
@@ -137,6 +147,65 @@ class LocalPlayerViewModel @Inject constructor(
     override fun onCleared() {
         super.onCleared()
         localExoPlayer.release()
+    }
+
+    // Playlist methods
+
+    fun saveQueueAsPlaylist(name: String) {
+        val currentQueue = state.value.queue
+        if (currentQueue.isEmpty()) return
+
+        viewModelScope.launch {
+            val playlistId = UUID.randomUUID().toString()
+            val playlist = LocalPlaylistEntity(
+                id = playlistId,
+                name = name,
+                createdAt = System.currentTimeMillis()
+            )
+            val tracks = currentQueue.mapIndexed { index, track ->
+                LocalPlaylistTrackEntity(
+                    playlistId = playlistId,
+                    position = index,
+                    uri = track.uri,
+                    displayName = track.displayName
+                )
+            }
+            playlistDao.insertPlaylistWithTracks(playlist, tracks)
+        }
+    }
+
+    fun loadPlaylist(playlistId: String) {
+        viewModelScope.launch {
+            val trackEntities = playlistDao.getPlaylistTracks(playlistId)
+            if (trackEntities.isEmpty()) return@launch
+
+            val contentResolver = getApplication<Application>().contentResolver
+            val tracks = trackEntities.mapNotNull { entity ->
+                try {
+                    val uri = Uri.parse(entity.uri)
+                    // Check if we can still access this URI
+                    if (!canAccessUri(uri, contentResolver)) {
+                        return@mapNotNull null
+                    }
+                    LocalTrackInfo(
+                        uri = entity.uri,
+                        displayName = entity.displayName
+                    )
+                } catch (e: Exception) {
+                    null
+                }
+            }
+
+            if (tracks.isNotEmpty()) {
+                localExoPlayer.loadQueue(tracks)
+            }
+        }
+    }
+
+    fun deletePlaylist(playlistId: String) {
+        viewModelScope.launch {
+            playlistDao.deletePlaylist(playlistId)
+        }
     }
 
     private fun canAccessUri(uri: Uri, contentResolver: ContentResolver): Boolean {

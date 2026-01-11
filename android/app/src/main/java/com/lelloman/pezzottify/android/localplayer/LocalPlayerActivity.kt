@@ -21,6 +21,7 @@ import androidx.compose.runtime.setValue
 import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.lelloman.pezzottify.android.localplayer.ui.LocalPlayerScreen
+import com.lelloman.pezzottify.android.localplayer.ui.LocalPlaylistsScreen
 import com.lelloman.pezzottify.android.ui.theme.ColorPalette
 import com.lelloman.pezzottify.android.ui.theme.PezzottifyTheme
 import com.lelloman.pezzottify.android.ui.theme.ThemeMode
@@ -48,6 +49,10 @@ class LocalPlayerActivity : ComponentActivity() {
                 var hasLoadedInitial by remember { mutableStateOf(false) }
                 var hasRequestedPermission by remember { mutableStateOf(false) }
                 var hasMediaPermission by remember { mutableStateOf(hasMediaAudioPermission()) }
+                var showPlaylists by remember { mutableStateOf(false) }
+
+                // Playlists
+                val playlists by viewModel.playlists.collectAsState(initial = emptyList())
 
                 // Permission request launcher
                 val permissionLauncher = rememberLauncherForActivityResult(
@@ -108,18 +113,32 @@ class LocalPlayerActivity : ComponentActivity() {
                     }
                 }
 
-                LocalPlayerScreen(
-                    state = state,
-                    onPlayPause = viewModel::togglePlayPause,
-                    onSeek = viewModel::seekToPercent,
-                    onSkipNext = viewModel::skipNext,
-                    onSkipPrevious = viewModel::skipPrevious,
-                    onSelectTrack = viewModel::selectTrack,
-                    onAddFiles = {
-                        filePickerLauncher.launch(arrayOf("audio/*"))
-                    },
-                    onClose = { finish() }
-                )
+                if (showPlaylists) {
+                    LocalPlaylistsScreen(
+                        playlists = playlists,
+                        onPlaylistClick = { playlistId ->
+                            viewModel.loadPlaylist(playlistId)
+                            showPlaylists = false
+                        },
+                        onDeletePlaylist = viewModel::deletePlaylist,
+                        onBack = { showPlaylists = false }
+                    )
+                } else {
+                    LocalPlayerScreen(
+                        state = state,
+                        onPlayPause = viewModel::togglePlayPause,
+                        onSeek = viewModel::seekToPercent,
+                        onSkipNext = viewModel::skipNext,
+                        onSkipPrevious = viewModel::skipPrevious,
+                        onSelectTrack = viewModel::selectTrack,
+                        onAddFiles = {
+                            filePickerLauncher.launch(arrayOf("audio/*"))
+                        },
+                        onSaveAsPlaylist = viewModel::saveQueueAsPlaylist,
+                        onNavigateToPlaylists = { showPlaylists = true },
+                        onClose = { finish() }
+                    )
+                }
             }
         }
     }
