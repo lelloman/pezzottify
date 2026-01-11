@@ -3,23 +3,27 @@
 # Populate item_availability table in search.db from catalog.db
 #
 # Usage:
-#   ./populate-availability.sh [--dry-run] [--batch-size N]
+#   ./populate-availability.sh --catalog-db PATH --search-db PATH [OPTIONS]
+#
+# Required:
+#   --catalog-db PATH   Path to catalog.db
+#   --search-db PATH    Path to search.db
 #
 # Options:
-#   --dry-run       Show what would be done without making changes
-#   --batch-size N  Number of items to process per batch (default: 1000)
+#   --remote-host HOST  SSH host (e.g., user@host). If not set, runs locally.
+#   --dry-run           Show what would be done without making changes
+#   --batch-size N      Number of items to process per batch (default: 1000)
 #
 # The script can be safely interrupted with Ctrl+C and will resume from where it left off.
 
 set -euo pipefail
 
-# Configuration
-REMOTE_HOST="lelloman@192.168.1.101"
-CATALOG_DB="/home/lelloman/homelab-data/pezzottify/catalog.db"
-SEARCH_DB="/home/lelloman/homelab-data/pezzottify/search.db"
+# Configuration (defaults)
+REMOTE_HOST="${REMOTE_HOST:-}"
+CATALOG_DB="${CATALOG_DB:-}"
+SEARCH_DB="${SEARCH_DB:-}"
 BATCH_SIZE=1000
 DRY_RUN=false
-PROGRESS_FILE="/tmp/populate_availability_progress"
 
 # Parse arguments
 while [[ $# -gt 0 ]]; do
@@ -32,14 +36,34 @@ while [[ $# -gt 0 ]]; do
             BATCH_SIZE="$2"
             shift 2
             ;;
+        --remote-host)
+            REMOTE_HOST="$2"
+            shift 2
+            ;;
+        --catalog-db)
+            CATALOG_DB="$2"
+            shift 2
+            ;;
+        --search-db)
+            SEARCH_DB="$2"
+            shift 2
+            ;;
         -h|--help)
-            echo "Usage: $0 [--dry-run] [--batch-size N]"
+            echo "Usage: $0 --catalog-db PATH --search-db PATH [OPTIONS]"
             echo ""
             echo "Populate item_availability table in search.db from catalog.db"
             echo ""
+            echo "Required:"
+            echo "  --catalog-db PATH   Path to catalog.db"
+            echo "  --search-db PATH    Path to search.db"
+            echo ""
             echo "Options:"
-            echo "  --dry-run       Show what would be done without making changes"
-            echo "  --batch-size N  Number of items to process per batch (default: 1000)"
+            echo "  --remote-host HOST  SSH host (e.g., user@host). If not set, runs locally."
+            echo "  --dry-run           Show what would be done without making changes"
+            echo "  --batch-size N      Number of items to process per batch (default: 1000)"
+            echo ""
+            echo "Environment variables:"
+            echo "  REMOTE_HOST, CATALOG_DB, SEARCH_DB can also be set via environment"
             exit 0
             ;;
         *)
@@ -49,6 +73,16 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
+# Validate required arguments
+if [[ -z "$CATALOG_DB" ]]; then
+    echo "Error: --catalog-db is required"
+    exit 1
+fi
+if [[ -z "$SEARCH_DB" ]]; then
+    echo "Error: --search-db is required"
+    exit 1
+fi
+
 # Cleanup on exit
 cleanup() {
     echo ""
@@ -57,21 +91,33 @@ cleanup() {
 }
 trap cleanup SIGINT SIGTERM
 
-# Helper to run SQL on remote
+# Helper to run SQL (locally or remotely)
 run_catalog_sql() {
-    ssh "$REMOTE_HOST" "sqlite3 '$CATALOG_DB' \"$1\""
+    if [[ -n "$REMOTE_HOST" ]]; then
+        ssh "$REMOTE_HOST" "sqlite3 '$CATALOG_DB' \"$1\""
+    else
+        sqlite3 "$CATALOG_DB" "$1"
+    fi
 }
 
 run_search_sql() {
-    ssh "$REMOTE_HOST" "sqlite3 '$SEARCH_DB' \"$1\""
+    if [[ -n "$REMOTE_HOST" ]]; then
+        ssh "$REMOTE_HOST" "sqlite3 '$SEARCH_DB' \"$1\""
+    else
+        sqlite3 "$SEARCH_DB" "$1"
+    fi
 }
 
 run_search_sql_batch() {
-    ssh "$REMOTE_HOST" "sqlite3 '$SEARCH_DB'" <<< "$1"
+    if [[ -n "$REMOTE_HOST" ]]; then
+        ssh "$REMOTE_HOST" "sqlite3 '$SEARCH_DB'" <<< "$1"
+    else
+        sqlite3 "$SEARCH_DB" <<< "$1"
+    fi
 }
 
 echo "=== Populate Availability Script ==="
-echo "Remote host: $REMOTE_HOST"
+echo "Remote host: ${REMOTE_HOST:-<local>}"
 echo "Catalog DB:  $CATALOG_DB"
 echo "Search DB:   $SEARCH_DB"
 echo "Batch size:  $BATCH_SIZE"
