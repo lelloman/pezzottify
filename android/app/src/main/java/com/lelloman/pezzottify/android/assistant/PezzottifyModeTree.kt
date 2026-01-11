@@ -95,8 +95,9 @@ object PezzottifyModeTree {
                 - Control playback
                 - Manage playlists
 
-                If the user focuses on a specific area, suggest switching to a specialized mode
-                for a better experience (Catalog, Playback, or Playlists mode).
+                If the user focuses on a specific area (e.g., only playback control, only playlist management),
+                proactively call the switch_mode tool to change to the appropriate specialized mode.
+                Do NOT just mention the mode in text - actually call the tool to switch.
             """.trimIndent()
         )
 
@@ -113,7 +114,7 @@ object PezzottifyModeTree {
                 - Help find specific songs or albums
 
                 When the user finds something they like, you can play it with play_album.
-                Suggest switching to Playback mode if they want more playback control.
+                If they need more playback control features, call switch_mode to change to Playback mode.
             """.trimIndent()
         )
 
@@ -130,7 +131,7 @@ object PezzottifyModeTree {
                 - Show what's currently playing
 
                 You can search for music to add to the queue.
-                Suggest switching to Playlists mode for playlist management.
+                If the user wants to manage playlists, call switch_mode to change to Playlists mode.
             """.trimIndent()
         )
 
@@ -151,7 +152,7 @@ object PezzottifyModeTree {
                 include_unavailable=true. Playlists should only contain playable tracks.
                 The default search behavior already excludes unavailable content.
 
-                Suggest switching to Playback mode for more playback control.
+                If the user wants more playback control, call switch_mode to change to Playback mode.
             """.trimIndent()
         )
 
@@ -168,7 +169,7 @@ object PezzottifyModeTree {
                 - Provide tips for getting the most out of the app
 
                 Be friendly and patient. If the user wants to do something specific,
-                suggest switching to the appropriate mode (General, Catalog, Playback, or Playlists).
+                call switch_mode to change to the appropriate mode (General, Catalog, Playback, or Playlists).
             """.trimIndent()
         )
 

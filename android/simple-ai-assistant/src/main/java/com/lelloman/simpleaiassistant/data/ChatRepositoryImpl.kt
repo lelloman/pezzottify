@@ -417,7 +417,8 @@ class ChatRepositoryImpl(
                 if (allModes.size > 1) {
                     appendLine()
                     appendLine("## Available Modes")
-                    appendLine("Use the switch_mode tool to change modes:")
+                    appendLine("To switch modes, call the switch_mode tool with action='switch' and mode_id='<id>'.")
+                    appendLine("Do NOT just mention modes in text - actually call the tool to switch.")
                     allModes.forEach { m ->
                         val current = if (m.id == mode.id) " (current)" else ""
                         appendLine("- ${m.id}: ${m.name}$current")
