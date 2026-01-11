@@ -69,6 +69,7 @@ import com.lelloman.pezzottify.android.ui.component.PezzottifyImageShape
 import com.lelloman.pezzottify.android.ui.content.Content
 import com.lelloman.pezzottify.android.ui.content.SearchResultContent
 import com.lelloman.pezzottify.android.ui.content.AlbumAvailability
+import com.lelloman.pezzottify.android.ui.content.TrackAvailability
 import com.lelloman.pezzottify.android.ui.screen.main.home.ResolvedRecentlyViewedContent
 import com.lelloman.pezzottify.android.ui.theme.ComponentSize
 import com.lelloman.pezzottify.android.ui.theme.CornerRadius
@@ -1376,18 +1377,43 @@ private fun StreamingSearchResultRow(
             }
         }
         is StreamingSearchResult.Track -> {
+            val isUnavailable = result.availability != TrackAvailability.Available
+
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clickable { actions.clickOnTrackSearchResult(result.id) }
+                    .alpha(if (isUnavailable) 0.5f else 1f)
+                    .clickable(enabled = !isUnavailable) { actions.clickOnTrackSearchResult(result.id) }
                     .padding(horizontal = Spacing.Medium, vertical = Spacing.Small),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                NullablePezzottifyImage(
-                    url = result.imageUrl,
-                    shape = PezzottifyImageShape.SmallSquare,
-                    modifier = Modifier.size(ComponentSize.ImageThumbSmall)
-                )
+                Box {
+                    NullablePezzottifyImage(
+                        url = result.imageUrl,
+                        shape = PezzottifyImageShape.SmallSquare,
+                        modifier = Modifier.size(ComponentSize.ImageThumbSmall)
+                    )
+                    if (isUnavailable) {
+                        Box(
+                            modifier = Modifier
+                                .align(Alignment.TopEnd)
+                                .padding(2.dp)
+                                .size(16.dp)
+                                .background(
+                                    color = MaterialTheme.colorScheme.error.copy(alpha = 0.9f),
+                                    shape = CircleShape
+                                ),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Warning,
+                                contentDescription = stringResource(R.string.track_unavailable),
+                                tint = Color.White,
+                                modifier = Modifier.size(10.dp)
+                            )
+                        }
+                    }
+                }
                 Spacer(modifier = Modifier.width(Spacing.Medium))
                 Column(modifier = Modifier.weight(1f)) {
                     Text(

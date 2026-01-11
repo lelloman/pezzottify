@@ -3,6 +3,7 @@ package com.lelloman.pezzottify.android.ui.screen.main.search
 import androidx.annotation.StringRes
 import com.lelloman.pezzottify.android.ui.content.AlbumAvailability
 import com.lelloman.pezzottify.android.ui.content.Content
+import com.lelloman.pezzottify.android.ui.content.TrackAvailability
 import com.lelloman.pezzottify.android.ui.content.SearchResultContent
 import com.lelloman.pezzottify.android.ui.screen.main.home.ResolvedRecentlyViewedContent
 import com.lelloman.pezzottify.android.ui.screen.main.home.ViewedContentType
@@ -189,5 +190,6 @@ sealed class StreamingSearchResult {
         val imageUrl: String?,
         val albumId: String,
         val durationMs: Long,
+        val availability: TrackAvailability = TrackAvailability.Available,
     ) : StreamingSearchResult()
 }
