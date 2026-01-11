@@ -35,11 +35,6 @@ pub struct RequestAlbumBody {
 }
 
 #[derive(Debug, Deserialize)]
-pub struct RequestDiscographyBody {
-    pub artist_id: String,
-}
-
-#[derive(Debug, Deserialize)]
 pub struct PaginationQuery {
     #[serde(default = "default_limit")]
     pub limit: usize,
@@ -57,7 +52,6 @@ pub struct AuditLogQuery {
     pub limit: usize,
     #[serde(default)]
     pub offset: usize,
-    pub event_type: Option<String>,
     pub start_time: Option<i64>,
     pub end_time: Option<i64>,
 }

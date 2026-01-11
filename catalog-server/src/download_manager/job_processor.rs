@@ -133,7 +133,7 @@ impl QueueProcessor {
                     }
                 }
                 ws_result = &mut ws_task => {
-                    return ws_result?.map_err(Into::into);
+                    return ws_result?;
                 }
             }
         }
