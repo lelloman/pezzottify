@@ -23,8 +23,7 @@ use super::retry_policy::RetryPolicy;
 use super::sync_notifier::DownloadSyncNotifier;
 use super::torrent_client::TorrentClient;
 use super::torrent_types::{
-    AudioConstraints, MetadataEmbed, MusicTicket, SearchInfo, TicketStatus, TorrentEvent,
-    TrackInfo,
+    AudioConstraints, MetadataEmbed, MusicTicket, SearchInfo, TicketStatus, TorrentEvent, TrackInfo,
 };
 
 /// Main download manager that orchestrates all download operations.
@@ -107,11 +106,7 @@ impl DownloadManager {
     /// - Track exists in catalog
     /// - Track is not already available
     /// - Track is not already in queue
-    pub async fn request_track(
-        &self,
-        user_id: &str,
-        track_id: &str,
-    ) -> Result<QueueItem> {
+    pub async fn request_track(&self, user_id: &str, track_id: &str) -> Result<QueueItem> {
         // Check user limits
         let limits = self.queue_store.get_user_stats(user_id)?;
         if !limits.can_request {
@@ -119,7 +114,9 @@ impl DownloadManager {
         }
 
         // Check if track exists in catalog
-        let track = self.catalog_store.get_track(track_id)?
+        let track = self
+            .catalog_store
+            .get_track(track_id)?
             .ok_or_else(|| anyhow!("Track not found in catalog: {}", track_id))?;
 
         // Check if already available
@@ -128,7 +125,10 @@ impl DownloadManager {
         }
 
         // Check if already in active queue
-        if self.queue_store.is_in_active_queue(DownloadContentType::TrackAudio, track_id)? {
+        if self
+            .queue_store
+            .is_in_active_queue(DownloadContentType::TrackAudio, track_id)?
+        {
             return Err(anyhow!("Track is already in download queue"));
         }
 
@@ -151,10 +151,7 @@ impl DownloadManager {
         // Log audit event (queue_position 0 for now - will be computed later)
         self.audit_logger.log_request_created(&item, 0)?;
 
-        info!(
-            "Queued track download: {} ({})",
-            track.name, track_id
-        );
+        info!("Queued track download: {} ({})", track.name, track_id);
 
         Ok(item)
     }
@@ -165,11 +162,7 @@ impl DownloadManager {
     /// Returns the list of queued items.
     ///
     /// TODO: Implement when CatalogStore trait has get_album() and get_album_tracks()
-    pub async fn request_album(
-        &self,
-        _user_id: &str,
-        _album_id: &str,
-    ) -> Result<Vec<QueueItem>> {
+    pub async fn request_album(&self, _user_id: &str, _album_id: &str) -> Result<Vec<QueueItem>> {
         // TODO: Implement album download request
         // Need to add get_album() and get_album_tracks() to CatalogStore trait
         Err(anyhow!("Album download not yet implemented"))
@@ -214,7 +207,10 @@ impl DownloadManager {
             return Ok(0);
         }
 
-        info!("Found {} pending queue items to submit", pending_items.len());
+        info!(
+            "Found {} pending queue items to submit",
+            pending_items.len()
+        );
 
         // Group items by album_id (get album_id from track)
         let mut album_groups: HashMap<String, Vec<QueueItem>> = HashMap::new();
@@ -242,7 +238,11 @@ impl DownloadManager {
             match self.create_and_submit_ticket(&album_id, &items).await {
                 Ok(_) => {
                     tickets_submitted += 1;
-                    info!("Submitted ticket for album {} ({} tracks)", album_id, items.len());
+                    info!(
+                        "Submitted ticket for album {} ({} tracks)",
+                        album_id,
+                        items.len()
+                    );
                 }
                 Err(e) => {
                     error!("Failed to submit ticket for album {}: {}", album_id, e);
@@ -327,11 +327,8 @@ impl DownloadManager {
 
         // Create ticket mapping - use first item as representative
         let first_item = items.first().ok_or_else(|| anyhow!("No items"))?;
-        self.queue_store.create_ticket_mapping(
-            &first_item.id,
-            &ticket_id,
-            album_id,
-        )?;
+        self.queue_store
+            .create_ticket_mapping(&first_item.id, &ticket_id, album_id)?;
 
         // Update all queue items to IN_PROGRESS (claim them)
         for item in items {
@@ -376,7 +373,10 @@ impl DownloadManager {
     /// Updates queue status and track availability based on event type.
     pub async fn handle_ticket_event(&self, event: TorrentEvent) -> Result<()> {
         match event {
-            TorrentEvent::Completed { ticket_id, items_placed } => {
+            TorrentEvent::Completed {
+                ticket_id,
+                items_placed,
+            } => {
                 info!(
                     "Ticket {} completed with {} items placed",
                     ticket_id, items_placed
@@ -501,13 +501,9 @@ impl DownloadManager {
         }
 
         // Find and complete all queue items for this album
-        let items = self.queue_store.list_all(
-            Some(QueueStatus::InProgress),
-            true,
-            false,
-            1000,
-            0,
-        )?;
+        let items =
+            self.queue_store
+                .list_all(Some(QueueStatus::InProgress), true, false, 1000, 0)?;
 
         for item in items {
             if item.content_type == DownloadContentType::TrackAudio {
@@ -531,10 +527,7 @@ impl DownloadManager {
             .update_ticket_state(ticket_id, TicketStatus::Completed.as_str())?;
 
         // Log audit event
-        if let Some(queue_item_id) = self
-            .queue_store
-            .get_queue_item_for_ticket(ticket_id)?
-        {
+        if let Some(queue_item_id) = self.queue_store.get_queue_item_for_ticket(ticket_id)? {
             if let Ok(Some(item)) = self.queue_store.get_item(&queue_item_id) {
                 // Log with 0 bytes/duration since we don't track per-ticket stats
                 let _ = self.audit_logger.log_download_completed(&item, 0, 0, None);
@@ -571,13 +564,9 @@ impl DownloadManager {
         );
 
         // Find all queue items for this album
-        let items = self.queue_store.list_all(
-            Some(QueueStatus::InProgress),
-            true,
-            false,
-            1000,
-            0,
-        )?;
+        let items =
+            self.queue_store
+                .list_all(Some(QueueStatus::InProgress), true, false, 1000, 0)?;
 
         for item in items {
             if item.content_type == DownloadContentType::TrackAudio {
@@ -586,16 +575,19 @@ impl DownloadManager {
                         if retryable && item.retry_count < item.max_retries {
                             // Schedule retry - use exponential backoff
                             let retry_delay_secs = 60 * (1 << item.retry_count.min(6)); // max ~1 hour
-                            let next_retry_at = chrono::Utc::now().timestamp() + retry_delay_secs as i64;
-                            if let Err(e) = self
-                                .queue_store
-                                .mark_retry_waiting(&item.id, next_retry_at, &download_error)
-                            {
+                            let next_retry_at =
+                                chrono::Utc::now().timestamp() + retry_delay_secs as i64;
+                            if let Err(e) = self.queue_store.mark_retry_waiting(
+                                &item.id,
+                                next_retry_at,
+                                &download_error,
+                            ) {
                                 warn!("Failed to mark retry for {}: {}", item.id, e);
                             }
                         } else {
                             // Mark as permanently failed
-                            if let Err(e) = self.queue_store.mark_failed(&item.id, &download_error) {
+                            if let Err(e) = self.queue_store.mark_failed(&item.id, &download_error)
+                            {
                                 warn!("Failed to mark item {} as failed: {}", item.id, e);
                             }
 
@@ -649,7 +641,8 @@ impl DownloadManager {
         limit: usize,
         offset: usize,
     ) -> Result<Vec<QueueItem>> {
-        self.queue_store.list_all(status, false, true, limit, offset)
+        self.queue_store
+            .list_all(status, false, true, limit, offset)
     }
 
     /// Get audit log with filtering.
@@ -665,7 +658,9 @@ impl DownloadManager {
     pub fn get_status(&self) -> DownloadManagerStatus {
         DownloadManagerStatus {
             connected: self.torrent_client.is_connected(),
-            pending_count: self.queue_store.get_queue_stats()
+            pending_count: self
+                .queue_store
+                .get_queue_stats()
                 .map(|s| s.pending as usize)
                 .unwrap_or(0),
         }

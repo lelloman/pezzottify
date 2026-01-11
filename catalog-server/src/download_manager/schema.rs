@@ -150,7 +150,12 @@ const TICKET_MAPPING_TABLE_V1: Table = Table {
         // Local queue item ID (references download_queue.id)
         sqlite_column!("queue_item_id", &SqlType::Text, is_primary_key = true),
         // Quentin Torrentino ticket ID
-        sqlite_column!("ticket_id", &SqlType::Text, non_null = true, is_unique = true),
+        sqlite_column!(
+            "ticket_id",
+            &SqlType::Text,
+            non_null = true,
+            is_unique = true
+        ),
         // Album ID this ticket is for (for grouping related tracks)
         sqlite_column!("album_id", &SqlType::Text, non_null = true),
         // Current ticket state (from QT: PENDING, SEARCHING, DOWNLOADING, etc.)

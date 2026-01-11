@@ -200,7 +200,10 @@ impl TorrentClient {
     /// reconnection logic.
     pub async fn run_websocket(&self) -> Result<()> {
         let url = format!("{}?token={}", self.ws_url, self.auth_token);
-        info!("Connecting to Quentin Torrentino WebSocket: {}", self.ws_url);
+        info!(
+            "Connecting to Quentin Torrentino WebSocket: {}",
+            self.ws_url
+        );
 
         let (ws_stream, _) = connect_async(&url)
             .await
@@ -224,19 +227,17 @@ impl TorrentClient {
         // Process incoming messages
         while let Some(msg) = read.next().await {
             match msg {
-                Ok(Message::Text(text)) => {
-                    match serde_json::from_str::<TorrentEvent>(&text) {
-                        Ok(event) => {
-                            debug!("Received TorrentEvent: {:?}", event);
-                            if let Err(e) = self.event_tx.send(event) {
-                                warn!("No subscribers for event: {}", e);
-                            }
-                        }
-                        Err(e) => {
-                            warn!("Failed to parse WebSocket message: {} - {}", e, text);
+                Ok(Message::Text(text)) => match serde_json::from_str::<TorrentEvent>(&text) {
+                    Ok(event) => {
+                        debug!("Received TorrentEvent: {:?}", event);
+                        if let Err(e) = self.event_tx.send(event) {
+                            warn!("No subscribers for event: {}", e);
                         }
                     }
-                }
+                    Err(e) => {
+                        warn!("Failed to parse WebSocket message: {} - {}", e, text);
+                    }
+                },
                 Ok(Message::Ping(data)) => {
                     if let Err(e) = write.send(Message::Pong(data)).await {
                         error!("Failed to send pong: {}", e);

@@ -97,9 +97,10 @@ pub struct AuditLogResponse {
 fn get_download_manager(
     dm: &OptionalDownloadManager,
 ) -> Result<&DownloadManager, (StatusCode, &'static str)> {
-    dm.as_ref()
-        .map(|arc| arc.as_ref())
-        .ok_or((StatusCode::SERVICE_UNAVAILABLE, "Download manager not enabled"))
+    dm.as_ref().map(|arc| arc.as_ref()).ok_or((
+        StatusCode::SERVICE_UNAVAILABLE,
+        "Download manager not enabled",
+    ))
 }
 
 // =============================================================================
@@ -159,10 +160,7 @@ async fn request_track(
     };
 
     let user_id = session.user_id.to_string();
-    debug!(
-        "User {} requesting track {}",
-        user_id, body.track_id
-    );
+    debug!("User {} requesting track {}", user_id, body.track_id);
 
     match manager.request_track(&user_id, &body.track_id).await {
         Ok(item) => Json(RequestResponse {
@@ -174,11 +172,14 @@ async fn request_track(
         Err(e) => {
             let msg = e.to_string();
             debug!("Track request failed: {}", msg);
-            (StatusCode::BAD_REQUEST, Json(RequestResponse {
-                success: false,
-                message: msg,
-                queue_item_id: None,
-            }))
+            (
+                StatusCode::BAD_REQUEST,
+                Json(RequestResponse {
+                    success: false,
+                    message: msg,
+                    queue_item_id: None,
+                }),
+            )
                 .into_response()
         }
     }
@@ -196,10 +197,7 @@ async fn request_album(
     };
 
     let user_id = session.user_id.to_string();
-    debug!(
-        "User {} requesting album {}",
-        user_id, body.album_id
-    );
+    debug!("User {} requesting album {}", user_id, body.album_id);
 
     match manager.request_album(&user_id, &body.album_id).await {
         Ok(items) => Json(RequestResponse {
@@ -211,11 +209,14 @@ async fn request_album(
         Err(e) => {
             let msg = e.to_string();
             debug!("Album request failed: {}", msg);
-            (StatusCode::BAD_REQUEST, Json(RequestResponse {
-                success: false,
-                message: msg,
-                queue_item_id: None,
-            }))
+            (
+                StatusCode::BAD_REQUEST,
+                Json(RequestResponse {
+                    success: false,
+                    message: msg,
+                    queue_item_id: None,
+                }),
+            )
                 .into_response()
         }
     }
@@ -282,7 +283,11 @@ async fn get_admin_failed(
         Ok(items) => Json(items).into_response(),
         Err(e) => {
             warn!("Failed to get failed items: {}", e);
-            (StatusCode::INTERNAL_SERVER_ERROR, "Failed to get failed items").into_response()
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to get failed items",
+            )
+                .into_response()
         }
     }
 }

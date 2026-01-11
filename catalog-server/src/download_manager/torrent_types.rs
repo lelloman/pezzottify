@@ -327,9 +327,18 @@ mod tests {
 
     #[test]
     fn test_ticket_status_from_str() {
-        assert_eq!(TicketStatus::from_str("PENDING"), Some(TicketStatus::Pending));
-        assert_eq!(TicketStatus::from_str("DOWNLOADING"), Some(TicketStatus::Downloading));
-        assert_eq!(TicketStatus::from_str("AUTO_APPROVED"), Some(TicketStatus::Approved));
+        assert_eq!(
+            TicketStatus::from_str("PENDING"),
+            Some(TicketStatus::Pending)
+        );
+        assert_eq!(
+            TicketStatus::from_str("DOWNLOADING"),
+            Some(TicketStatus::Downloading)
+        );
+        assert_eq!(
+            TicketStatus::from_str("AUTO_APPROVED"),
+            Some(TicketStatus::Approved)
+        );
         assert_eq!(TicketStatus::from_str("invalid"), None);
     }
 
@@ -354,7 +363,10 @@ mod tests {
         let json = r#"{"type": "completed", "ticket_id": "abc123", "items_placed": 12}"#;
         let event: TorrentEvent = serde_json::from_str(json).unwrap();
         match event {
-            TorrentEvent::Completed { ticket_id, items_placed } => {
+            TorrentEvent::Completed {
+                ticket_id,
+                items_placed,
+            } => {
                 assert_eq!(ticket_id, "abc123");
                 assert_eq!(items_placed, 12);
             }
@@ -367,7 +379,11 @@ mod tests {
         let json = r#"{"type": "failed", "ticket_id": "abc123", "error": "No torrents found", "retryable": true}"#;
         let event: TorrentEvent = serde_json::from_str(json).unwrap();
         match event {
-            TorrentEvent::Failed { ticket_id, error, retryable } => {
+            TorrentEvent::Failed {
+                ticket_id,
+                error,
+                retryable,
+            } => {
                 assert_eq!(ticket_id, "abc123");
                 assert_eq!(error, "No torrents found");
                 assert!(retryable);
