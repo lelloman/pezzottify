@@ -3,8 +3,8 @@
 use crate::catalog_store::CatalogStore;
 use crate::search::streaming::{SearchSection, StreamingSearchPipeline};
 use crate::search::{
-    HashedItemType, RelevanceFilterConfig, ResolvedSearchResult, SearchResult, SearchedAlbum,
-    SearchedArtist, SearchedTrack,
+    HashedItemType, RelevanceFilterConfig, ResolvedSearchResult, SearchResult, SearchVault,
+    SearchedAlbum, SearchedArtist, SearchedTrack,
 };
 
 use axum::{
@@ -50,7 +50,7 @@ struct SearchBody {
 
     pub filters: Option<Vec<SearchFilter>>,
 
-    /// If true, exclude unavailable content from results (requires resolve: true)
+    /// If true, exclude unavailable content from results
     #[serde(default)]
     pub exclude_unavailable: bool,
 }
@@ -302,6 +302,103 @@ fn is_result_available(result: &ResolvedSearchResult) -> bool {
     }
 }
 
+/// Maximum number of results to search through when filtering by availability.
+/// With a large unavailable:available ratio, we need to search deep.
+const AVAILABILITY_MAX_SEARCH: usize = 5000;
+
+/// Batch size for progressive availability filtering.
+const AVAILABILITY_BATCH_SIZE: usize = 200;
+
+/// Search with availability filtering using a streaming approach.
+/// Fetches results in batches until we have enough available items or exhaust the search.
+fn search_with_availability_filter(
+    search_vault: &dyn SearchVault,
+    catalog_store: &Arc<dyn CatalogStore>,
+    relevance_filter: &RelevanceFilterConfig,
+    query: &str,
+    limit: usize,
+    filters: Option<Vec<HashedItemType>>,
+) -> Vec<SearchResult> {
+    let mut available_results: Vec<SearchResult> = Vec::with_capacity(limit);
+    let mut offset = 0;
+
+    while available_results.len() < limit && offset < AVAILABILITY_MAX_SEARCH {
+        let batch_size = AVAILABILITY_BATCH_SIZE.min(AVAILABILITY_MAX_SEARCH - offset);
+        let fetch_limit = offset + batch_size;
+
+        // Fetch a batch of results
+        let batch = search_vault.search(query, fetch_limit, filters.clone());
+
+        // Skip already processed results
+        let new_results: Vec<_> = batch.into_iter().skip(offset).collect();
+
+        if new_results.is_empty() {
+            // No more results from search
+            break;
+        }
+
+        // Apply relevance filter
+        let filtered_batch = relevance_filter.filter(new_results);
+
+        // Filter by availability and add to results
+        for result in filtered_batch {
+            if is_raw_result_available(catalog_store, &result) {
+                available_results.push(result);
+                if available_results.len() >= limit {
+                    break;
+                }
+            }
+        }
+
+        offset += batch_size;
+    }
+
+    available_results
+}
+
+/// Check if a raw search result is available by looking it up in the catalog.
+fn is_raw_result_available(catalog_store: &Arc<dyn CatalogStore>, result: &SearchResult) -> bool {
+    match result.item_type {
+        HashedItemType::Track => {
+            // Check track availability
+            if let Ok(Some(track_json)) = catalog_store.get_track_json(&result.item_id) {
+                track_json
+                    .get("availability")
+                    .and_then(|v| v.as_str())
+                    .map(|a| a == "available")
+                    .unwrap_or(false)
+            } else {
+                false
+            }
+        }
+        HashedItemType::Album => {
+            // Check album availability (not "missing")
+            if let Ok(Some(album_json)) = catalog_store.get_album_json(&result.item_id) {
+                album_json
+                    .get("availability")
+                    .and_then(|v| v.as_str())
+                    .map(|a| a != "missing")
+                    .unwrap_or(false)
+            } else {
+                false
+            }
+        }
+        HashedItemType::Artist => {
+            // Check if artist has any available content
+            if let Ok(Some(artist_json)) = catalog_store.get_artist_json(&result.item_id) {
+                // An artist is available if they have at least one non-missing album
+                artist_json
+                    .get("artist")
+                    .and_then(|a| a.get("available"))
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(false)
+            } else {
+                false
+            }
+        }
+    }
+}
+
 /// Filter streaming search sections by availability
 fn filter_sections_by_availability(sections: Vec<SearchSection>) -> Vec<SearchSection> {
     sections
@@ -411,7 +508,7 @@ async fn search(
     Json(payload): Json<SearchBody>,
 ) -> impl IntoResponse {
     let limit = payload.limit.unwrap_or(30).min(100); // Cap at 100 max
-    let filters = payload.filters.map(|v| {
+    let filters: Option<Vec<HashedItemType>> = payload.filters.map(|v| {
         v.iter()
             .map(|i| match i {
                 SearchFilter::Album => HashedItemType::Album,
@@ -420,15 +517,16 @@ async fn search(
             })
             .collect()
     });
-    let search_results = server_state
-        .search_vault
-        .search(payload.query.as_str(), limit, filters);
 
-    // Apply relevance filtering as post-processing step
     let relevance_filter = get_relevance_filter(&server_state);
-    let filtered_results = relevance_filter.filter(search_results);
 
     if payload.resolve {
+        // For resolved results, fetch more upfront since we need to resolve anyway
+        let search_results = server_state
+            .search_vault
+            .search(payload.query.as_str(), limit, filters);
+        let filtered_results = relevance_filter.filter(search_results);
+
         let mut resolved = resolve_search_results(&server_state.catalog_store, filtered_results);
 
         // Apply availability filter if requested
@@ -437,7 +535,23 @@ async fn search(
         }
 
         SearchResponse::Resolved(Json(resolved))
+    } else if payload.exclude_unavailable {
+        // Use streaming approach to find enough available results
+        let results = search_with_availability_filter(
+            server_state.search_vault.as_ref(),
+            &server_state.catalog_store,
+            &relevance_filter,
+            &payload.query,
+            limit,
+            filters,
+        );
+        SearchResponse::Raw(Json(results))
     } else {
+        // No availability filter - simple search
+        let search_results = server_state
+            .search_vault
+            .search(payload.query.as_str(), limit, filters);
+        let filtered_results = relevance_filter.filter(search_results);
         SearchResponse::Raw(Json(filtered_results))
     }
 }
