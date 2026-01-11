@@ -558,11 +558,12 @@ private fun StreamingMessageItem(
             isUser = false,
             modifier = Modifier.widthIn(max = 300.dp)
         ) {
-            Row {
-                Text(
+            Row(verticalAlignment = Alignment.Bottom) {
+                MarkdownText(
                     text = text,
                     style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurface
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.weight(1f, fill = false)
                 )
                 Text(
                     text = "▌",
