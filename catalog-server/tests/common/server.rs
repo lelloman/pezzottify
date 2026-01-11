@@ -67,6 +67,8 @@ impl SearchVault for MockSearchVault {
     fn prune_impressions(&self, _before_date: i64) -> usize {
         0
     }
+
+    fn update_availability(&self, _items: &[(String, HashedItemType, bool)]) {}
 }
 
 /// Test server instance with isolated catalog and database
