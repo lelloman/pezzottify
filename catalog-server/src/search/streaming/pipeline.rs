@@ -12,6 +12,7 @@ use std::time::Instant;
 
 use crate::catalog_store::CatalogStore;
 use crate::config::StreamingSearchSettings;
+use crate::search::resolve;
 use crate::search::{HashedItemType, ResolvedSearchResult};
 use crate::user::UserManager;
 
@@ -354,65 +355,7 @@ impl<'a> StreamingSearchPipeline<'a> {
         item_id: &str,
         item_type: HashedItemType,
     ) -> Option<ResolvedSearchResult> {
-        match item_type {
-            HashedItemType::Artist => self
-                .catalog_store
-                .get_resolved_artist(item_id)
-                .ok()
-                .flatten()
-                .map(|a| {
-                    ResolvedSearchResult::Artist(crate::search::SearchedArtist {
-                        id: a.artist.id.clone(),
-                        name: a.artist.name,
-                        image_id: Some(a.artist.id), // Use artist ID as image reference
-                        available: a.artist.available,
-                    })
-                }),
-            HashedItemType::Album => self
-                .catalog_store
-                .get_resolved_album(item_id)
-                .ok()
-                .flatten()
-                .map(|a| {
-                    // Extract year from string date (e.g., "2023-05-15", "2023-05", "2023")
-                    let year = a.album.release_date.as_ref().and_then(|date| {
-                        date.split('-').next().and_then(|y| y.parse::<i64>().ok())
-                    });
-                    ResolvedSearchResult::Album(crate::search::SearchedAlbum {
-                        id: a.album.id.clone(),
-                        name: a.album.name,
-                        artists_ids_names: a
-                            .artists
-                            .into_iter()
-                            .map(|ar| (ar.id, ar.name))
-                            .collect(),
-                        image_id: Some(a.album.id), // Use album ID as image reference
-                        year,
-                        availability: a.album.album_availability.to_db_str().to_string(),
-                    })
-                }),
-            HashedItemType::Track => self
-                .catalog_store
-                .get_resolved_track(item_id)
-                .ok()
-                .flatten()
-                .map(|t| {
-                    ResolvedSearchResult::Track(crate::search::SearchedTrack {
-                        id: t.track.id.clone(),
-                        name: t.track.name,
-                        // Convert from ms to seconds for display
-                        duration: (t.track.duration_ms / 1000) as u32,
-                        artists_ids_names: t
-                            .artists
-                            .into_iter()
-                            .map(|ta| (ta.artist.id, ta.artist.name))
-                            .collect(),
-                        image_id: Some(t.album.id.clone()), // Use album ID as image reference
-                        album_id: t.album.id,
-                        availability: t.track.availability.as_str().to_string(),
-                    })
-                }),
-        }
+        resolve::resolve_to_result(self.catalog_store, item_id, item_type)
     }
 }
 
