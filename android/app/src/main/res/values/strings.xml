@@ -26,4 +26,7 @@
         <item quantity="one">%d track</item>
         <item quantity="other">%d tracks</item>
     </plurals>
+
+    <!-- Local Player -->
+    <string name="local_player_name">Player</string>
 </resources>
