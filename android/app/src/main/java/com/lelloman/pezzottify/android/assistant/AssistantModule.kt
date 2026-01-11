@@ -2,14 +2,23 @@ package com.lelloman.pezzottify.android.assistant
 
 import android.content.Context
 import androidx.room.Room
+import com.lelloman.pezzottify.android.assistant.tools.AddPlaylistToQueueTool
+import com.lelloman.pezzottify.android.assistant.tools.AddTracksToPlaylistTool
+import com.lelloman.pezzottify.android.assistant.tools.CreatePlaylistTool
+import com.lelloman.pezzottify.android.assistant.tools.DeletePlaylistTool
 import com.lelloman.pezzottify.android.assistant.tools.GetArtistDiscographyTool
+import com.lelloman.pezzottify.android.assistant.tools.ListPlaylistsTool
 import com.lelloman.pezzottify.android.assistant.tools.NowPlayingTool
 import com.lelloman.pezzottify.android.assistant.tools.PlayAlbumTool
+import com.lelloman.pezzottify.android.assistant.tools.PlayPlaylistTool
 import com.lelloman.pezzottify.android.assistant.tools.PlaybackControlTool
 import com.lelloman.pezzottify.android.assistant.tools.PlaybackModeTool
 import com.lelloman.pezzottify.android.assistant.tools.QueueTool
+import com.lelloman.pezzottify.android.assistant.tools.RemoveTracksFromPlaylistTool
+import com.lelloman.pezzottify.android.assistant.tools.RenamePlaylistTool
 import com.lelloman.pezzottify.android.assistant.tools.SearchCatalogTool
 import com.lelloman.pezzottify.android.assistant.tools.SkipTrackTool
+import com.lelloman.pezzottify.android.assistant.tools.ViewPlaylistTool
 import com.lelloman.pezzottify.android.assistant.tools.WhatsNewTool
 import com.lelloman.pezzottify.android.domain.player.PlaybackMetadataProvider
 import com.lelloman.pezzottify.android.domain.player.PezzottifyPlayer
@@ -17,9 +26,11 @@ import com.lelloman.pezzottify.android.domain.statics.DiscographyProvider
 import com.lelloman.pezzottify.android.domain.statics.StaticsStore
 import com.lelloman.pezzottify.android.domain.statics.usecase.GetWhatsNew
 import com.lelloman.pezzottify.android.domain.statics.usecase.PerformSearch
+import com.lelloman.pezzottify.android.domain.usercontent.UserPlaylistStore
 import com.lelloman.pezzottify.android.logger.LoggerFactory
 import com.lelloman.simpleaiassistant.util.AssistantLogger
 import com.lelloman.simpleaiassistant.util.AuthErrorHandler
+import com.lelloman.simpleaiassistant.util.DebugModePreferences
 import com.lelloman.simpleaiassistant.model.Language
 import com.lelloman.simpleaiassistant.util.LanguagePreferences
 import com.lelloman.simpleaiassistant.util.StringProvider
@@ -33,6 +44,9 @@ import com.lelloman.simpleaiassistant.llm.DynamicLlmProvider
 import com.lelloman.simpleaiassistant.llm.LlmProvider
 import com.lelloman.simpleaiassistant.llm.ProviderConfigStore
 import com.lelloman.simpleaiassistant.llm.ProviderRegistry
+import com.lelloman.simpleaiassistant.mode.ModeManager
+import com.lelloman.simpleaiassistant.mode.ModePreferences
+import com.lelloman.simpleaiassistant.mode.ModeTree
 import com.lelloman.simpleaiassistant.provider.ollama.OllamaProviderFactory
 import com.lelloman.simpleaiassistant.provider.simpleai.SimpleAiProviderFactory
 import com.lelloman.simpleaiassistant.tool.ToolNode
@@ -116,29 +130,55 @@ object AssistantModule {
         performSearch: PerformSearch,
         staticsStore: StaticsStore,
         discographyProvider: DiscographyProvider,
-        getWhatsNew: GetWhatsNew
+        getWhatsNew: GetWhatsNew,
+        userPlaylistStore: UserPlaylistStore
     ): ToolRegistry {
-        // Create all the tools
+        // Catalog/Search tools
+        val searchCatalogTool = SearchCatalogTool(performSearch, staticsStore)
+        val getArtistDiscographyTool = GetArtistDiscographyTool(discographyProvider, staticsStore)
+        val whatsNewTool = WhatsNewTool(getWhatsNew)
+
+        // Playback control tools
         val playbackControlTool = PlaybackControlTool(player)
         val skipTrackTool = SkipTrackTool(player)
         val playbackModeTool = PlaybackModeTool(player)
         val nowPlayingTool = NowPlayingTool(player, metadataProvider)
         val queueTool = QueueTool(player, metadataProvider)
         val playAlbumTool = PlayAlbumTool(player)
-        val searchCatalogTool = SearchCatalogTool(performSearch, staticsStore)
-        val getArtistDiscographyTool = GetArtistDiscographyTool(discographyProvider, staticsStore)
-        val whatsNewTool = WhatsNewTool(getWhatsNew)
+
+        // Playlist tools
+        val listPlaylistsTool = ListPlaylistsTool(userPlaylistStore)
+        val viewPlaylistTool = ViewPlaylistTool(userPlaylistStore, staticsStore)
+        val createPlaylistTool = CreatePlaylistTool(userPlaylistStore)
+        val renamePlaylistTool = RenamePlaylistTool(userPlaylistStore)
+        val deletePlaylistTool = DeletePlaylistTool(userPlaylistStore)
+        val addTracksToPlaylistTool = AddTracksToPlaylistTool(userPlaylistStore, staticsStore)
+        val removeTracksFromPlaylistTool = RemoveTracksFromPlaylistTool(userPlaylistStore, staticsStore)
+        val playPlaylistTool = PlayPlaylistTool(player, userPlaylistStore)
+        val addPlaylistToQueueTool = AddPlaylistToQueueTool(player, userPlaylistStore)
 
         val allTools = listOf(
+            // Catalog tools
+            searchCatalogTool,
+            getArtistDiscographyTool,
+            whatsNewTool,
+            // Playback tools
             playbackControlTool,
             skipTrackTool,
             playbackModeTool,
             nowPlayingTool,
             queueTool,
             playAlbumTool,
-            searchCatalogTool,
-            getArtistDiscographyTool,
-            whatsNewTool
+            // Playlist tools
+            listPlaylistsTool,
+            viewPlaylistTool,
+            createPlaylistTool,
+            renamePlaylistTool,
+            deletePlaylistTool,
+            addTracksToPlaylistTool,
+            removeTracksFromPlaylistTool,
+            playPlaylistTool,
+            addPlaylistToQueueTool
         )
 
         return ToolRegistry(
@@ -227,6 +267,21 @@ object AssistantModule {
 
     @Provides
     @Singleton
+    fun provideDebugModePreferences(@ApplicationContext context: Context): DebugModePreferences {
+        val prefs = context.getSharedPreferences("assistant_prefs", Context.MODE_PRIVATE)
+        return object : DebugModePreferences {
+            override fun isDebugMode(): Boolean {
+                return prefs.getBoolean("debug_mode", false)
+            }
+
+            override fun setDebugMode(enabled: Boolean) {
+                prefs.edit().putBoolean("debug_mode", enabled).apply()
+            }
+        }
+    }
+
+    @Provides
+    @Singleton
     fun provideAuthErrorHandler(
         tokenRefresher: TokenRefresher,
         loggerFactory: LoggerFactory
@@ -257,6 +312,43 @@ object AssistantModule {
 
     @Provides
     @Singleton
+    fun provideModeTree(): ModeTree {
+        return PezzottifyModeTree.create()
+    }
+
+    @Provides
+    @Singleton
+    fun provideModePreferences(@ApplicationContext context: Context): ModePreferences {
+        val prefs = context.getSharedPreferences("assistant_prefs", Context.MODE_PRIVATE)
+        return object : ModePreferences {
+            override fun getCurrentModeId(): String? {
+                return prefs.getString("current_mode_id", null)
+            }
+
+            override fun setCurrentModeId(modeId: String?) {
+                prefs.edit().apply {
+                    if (modeId != null) {
+                        putString("current_mode_id", modeId)
+                    } else {
+                        remove("current_mode_id")
+                    }
+                    apply()
+                }
+            }
+        }
+    }
+
+    @Provides
+    @Singleton
+    fun provideModeManager(
+        modeTree: ModeTree,
+        modePreferences: ModePreferences
+    ): ModeManager {
+        return ModeManager(modeTree, modePreferences)
+    }
+
+    @Provides
+    @Singleton
     fun provideChatRepository(
         chatMessageDao: ChatMessageDao,
         llmProvider: LlmProvider,
@@ -265,7 +357,8 @@ object AssistantModule {
         stringProvider: StringProvider,
         languagePreferences: LanguagePreferences,
         logger: AssistantLogger,
-        authErrorHandler: AuthErrorHandler
+        authErrorHandler: AuthErrorHandler,
+        modeManager: ModeManager
     ): ChatRepository {
         return ChatRepositoryImpl(
             chatMessageDao = chatMessageDao,
@@ -275,7 +368,8 @@ object AssistantModule {
             stringProvider = stringProvider,
             languagePreferences = languagePreferences,
             logger = logger,
-            authErrorHandler = authErrorHandler
+            authErrorHandler = authErrorHandler,
+            modeManager = modeManager
         )
     }
 }

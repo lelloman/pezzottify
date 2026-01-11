@@ -52,6 +52,7 @@ import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -75,6 +76,7 @@ fun ChatScreen(
     onOpenSettings: () -> Unit,
     onRestartFromMessage: (String) -> Unit,
     onLanguageSelected: (com.lelloman.simpleaiassistant.model.Language?) -> Unit,
+    onModeSelected: (String) -> Unit = {},
     modifier: Modifier = Modifier,
     showTopBar: Boolean = true
 ) {
@@ -82,6 +84,13 @@ fun ChatScreen(
     var showClearConfirmation by remember { mutableStateOf(false) }
     var showLanguagePicker by remember { mutableStateOf(false) }
     val listState = rememberLazyListState()
+
+    // Scroll to bottom when new messages arrive or streaming starts
+    LaunchedEffect(state.messages.size, state.isStreaming) {
+        if (state.messages.isNotEmpty() || state.isStreaming) {
+            listState.animateScrollToItem(0)
+        }
+    }
 
     // Clear confirmation dialog
     if (showClearConfirmation) {
@@ -176,6 +185,15 @@ fun ChatScreen(
                     }
                 }
             )
+
+            // Mode selector bar (below top bar, full width)
+            if (state.currentMode != null) {
+                ModeSelectorBar(
+                    currentMode = state.currentMode,
+                    allModes = state.allModes,
+                    onModeSelected = onModeSelected
+                )
+            }
         }
 
         // Messages list or empty state

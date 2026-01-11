@@ -1,5 +1,6 @@
 package com.lelloman.simpleaiassistant.data
 
+import com.lelloman.simpleaiassistant.mode.AssistantMode
 import com.lelloman.simpleaiassistant.model.ChatMessage
 import com.lelloman.simpleaiassistant.model.Language
 import kotlinx.coroutines.flow.Flow
@@ -15,6 +16,12 @@ interface ChatRepository {
      * All messages in the current conversation.
      */
     val messages: Flow<List<ChatMessage>>
+
+    /**
+     * Current assistant mode.
+     * Modes determine which tools are available and the system prompt.
+     */
+    val currentMode: StateFlow<AssistantMode?>
 
     /**
      * Current streaming text from the assistant (while response is being generated).
@@ -63,4 +70,13 @@ interface ChatRepository {
      * @param messageId The ID of the user message to restart from
      */
     suspend fun restartFromMessage(messageId: String)
+
+    /**
+     * Switch to a different assistant mode.
+     * This may compact the conversation history depending on the HistoryCompactor.
+     *
+     * @param modeId The ID of the mode to switch to
+     * @return true if switch was successful, false if mode not found
+     */
+    suspend fun switchMode(modeId: String): Boolean
 }

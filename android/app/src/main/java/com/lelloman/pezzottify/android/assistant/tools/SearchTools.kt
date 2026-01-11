@@ -25,7 +25,7 @@ class SearchCatalogTool(
 ) : Tool {
     override val spec = ToolSpec(
         name = "search_catalog",
-        description = "Search the music catalog for tracks, albums, and artists. By default excludes unavailable content. Set include_unavailable=true to explore all content.",
+        description = "Search the music catalog for tracks, albums, and artists. Only returns playable content by default - unavailable content is excluded. Use include_unavailable=true only for discovery/exploration purposes.",
         inputSchema = mapOf(
             "type" to "object",
             "properties" to mapOf(
