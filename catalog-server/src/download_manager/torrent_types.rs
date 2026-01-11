@@ -4,6 +4,7 @@
 //! for communication with the Quentin Torrentino service.
 
 use serde::{Deserialize, Serialize};
+use std::str::FromStr;
 
 // =============================================================================
 // Ticket Request Types (sent to QT)
@@ -243,26 +244,41 @@ pub enum TicketStatus {
     Failed,
 }
 
-impl TicketStatus {
-    /// Parse from string (QT API format).
-    pub fn from_str(s: &str) -> Option<Self> {
+/// Error type for parsing TicketStatus from string.
+#[derive(Debug, Clone)]
+pub struct ParseTicketStatusError(pub String);
+
+impl std::fmt::Display for ParseTicketStatusError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "unknown ticket status: {}", self.0)
+    }
+}
+
+impl std::error::Error for ParseTicketStatusError {}
+
+impl FromStr for TicketStatus {
+    type Err = ParseTicketStatusError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.to_uppercase().as_str() {
-            "PENDING" => Some(Self::Pending),
-            "SEARCHING" => Some(Self::Searching),
-            "MATCHING" => Some(Self::Matching),
-            "NEEDS_APPROVAL" => Some(Self::NeedsApproval),
-            "APPROVED" | "AUTO_APPROVED" => Some(Self::Approved),
-            "DOWNLOADING" => Some(Self::Downloading),
-            "CONVERTING" => Some(Self::Converting),
-            "PLACING" => Some(Self::Placing),
-            "COMPLETED" => Some(Self::Completed),
-            "SEARCH_FAILED" => Some(Self::SearchFailed),
-            "REJECTED" => Some(Self::Rejected),
-            "FAILED" => Some(Self::Failed),
-            _ => None,
+            "PENDING" => Ok(Self::Pending),
+            "SEARCHING" => Ok(Self::Searching),
+            "MATCHING" => Ok(Self::Matching),
+            "NEEDS_APPROVAL" => Ok(Self::NeedsApproval),
+            "APPROVED" | "AUTO_APPROVED" => Ok(Self::Approved),
+            "DOWNLOADING" => Ok(Self::Downloading),
+            "CONVERTING" => Ok(Self::Converting),
+            "PLACING" => Ok(Self::Placing),
+            "COMPLETED" => Ok(Self::Completed),
+            "SEARCH_FAILED" => Ok(Self::SearchFailed),
+            "REJECTED" => Ok(Self::Rejected),
+            "FAILED" => Ok(Self::Failed),
+            _ => Err(ParseTicketStatusError(s.to_string())),
         }
     }
+}
 
+impl TicketStatus {
     /// Convert to database string.
     pub fn as_str(&self) -> &'static str {
         match self {
