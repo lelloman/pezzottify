@@ -1,4 +1,5 @@
 use axum::extract::FromRef;
+use tokio_util::sync::CancellationToken;
 
 use crate::background_jobs::SchedulerHandle;
 use crate::catalog_store::CatalogStore;
@@ -28,6 +29,7 @@ pub type GuardedMcpState = Arc<McpState>;
 pub type OptionalOrganicIndexer = Option<Arc<OrganicIndexer>>;
 pub type HttpClient = reqwest::Client;
 pub type OptionalDownloadManager = Option<Arc<DownloadManager>>;
+pub type OptionalShutdownToken = Option<CancellationToken>;
 
 #[derive(Clone)]
 pub struct ServerState {
@@ -46,6 +48,8 @@ pub struct ServerState {
     pub organic_indexer: OptionalOrganicIndexer,
     pub http_client: HttpClient,
     pub download_manager: OptionalDownloadManager,
+    /// Shutdown token for graceful termination of background tasks (e.g., QueueProcessor)
+    pub shutdown_token: OptionalShutdownToken,
 }
 
 unsafe impl Send for ServerState {}
