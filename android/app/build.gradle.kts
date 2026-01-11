@@ -162,6 +162,7 @@ dependencies {
     implementation(libs.appauth)
     implementation(libs.room.runtime)
     implementation(libs.exoplayer)
+    implementation(libs.androidx.media3.session)
 
     implementation(project(":ui"))
     implementation(project(":domain"))

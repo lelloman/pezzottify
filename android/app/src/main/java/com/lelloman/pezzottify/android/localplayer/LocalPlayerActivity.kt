@@ -1,7 +1,10 @@
 package com.lelloman.pezzottify.android.localplayer
 
+import android.Manifest
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -15,8 +18,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
-import android.os.Build
 import com.lelloman.pezzottify.android.localplayer.ui.LocalPlayerScreen
 import com.lelloman.pezzottify.android.ui.theme.ColorPalette
 import com.lelloman.pezzottify.android.ui.theme.PezzottifyTheme
@@ -41,8 +44,17 @@ class LocalPlayerActivity : ComponentActivity() {
                 val viewModel: LocalPlayerViewModel = hiltViewModel()
                 val state by viewModel.state.collectAsState()
 
-                // Track if we've loaded the initial URIs
+                // Track states
                 var hasLoadedInitial by remember { mutableStateOf(false) }
+                var hasRequestedPermission by remember { mutableStateOf(false) }
+                var hasMediaPermission by remember { mutableStateOf(hasMediaAudioPermission()) }
+
+                // Permission request launcher
+                val permissionLauncher = rememberLauncherForActivityResult(
+                    contract = ActivityResultContracts.RequestPermission()
+                ) { isGranted ->
+                    hasMediaPermission = isGranted
+                }
 
                 // File picker launcher
                 val filePickerLauncher = rememberLauncherForActivityResult(
@@ -69,10 +81,29 @@ class LocalPlayerActivity : ComponentActivity() {
                     }
                 }
 
-                // Load initial URIs
+                // Request media permission on first launch
+                LaunchedEffect(Unit) {
+                    if (!hasRequestedPermission && !hasMediaPermission) {
+                        hasRequestedPermission = true
+                        val permission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                            Manifest.permission.READ_MEDIA_AUDIO
+                        } else {
+                            Manifest.permission.READ_EXTERNAL_STORAGE
+                        }
+                        permissionLauncher.launch(permission)
+                    }
+                }
+
+                // Load initial URIs or restore previous state
                 LaunchedEffect(initialUris, hasLoadedInitial) {
-                    if (initialUris.isNotEmpty() && !hasLoadedInitial) {
-                        viewModel.loadFiles(initialUris)
+                    if (!hasLoadedInitial) {
+                        if (initialUris.isNotEmpty()) {
+                            // New files to play
+                            viewModel.loadFiles(initialUris)
+                        } else {
+                            // No new files - try to restore previous state
+                            viewModel.tryRestoreState()
+                        }
                         hasLoadedInitial = true
                     }
                 }
@@ -91,6 +122,15 @@ class LocalPlayerActivity : ComponentActivity() {
                 )
             }
         }
+    }
+
+    private fun hasMediaAudioPermission(): Boolean {
+        val permission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            Manifest.permission.READ_MEDIA_AUDIO
+        } else {
+            Manifest.permission.READ_EXTERNAL_STORAGE
+        }
+        return ContextCompat.checkSelfPermission(this, permission) == PackageManager.PERMISSION_GRANTED
     }
 
     override fun onNewIntent(intent: Intent) {

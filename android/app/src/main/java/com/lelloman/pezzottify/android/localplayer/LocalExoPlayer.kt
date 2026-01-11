@@ -1,13 +1,14 @@
 package com.lelloman.pezzottify.android.localplayer
 
+import android.content.ComponentName
 import android.content.Context
 import android.net.Uri
-import androidx.media3.common.AudioAttributes
-import androidx.media3.common.C
 import androidx.media3.common.MediaItem
-import androidx.media3.common.PlaybackException
+import androidx.media3.common.MediaMetadata
 import androidx.media3.common.Player
-import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.session.MediaController
+import androidx.media3.session.SessionToken
+import com.google.common.util.concurrent.MoreExecutors
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -20,24 +21,20 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 class LocalExoPlayer(
-    context: Context,
+    private val context: Context,
     private val coroutineScope: CoroutineScope
 ) {
-    private val exoPlayer: ExoPlayer = ExoPlayer.Builder(context)
-        .setAudioAttributes(
-            AudioAttributes.Builder()
-                .setUsage(C.USAGE_MEDIA)
-                .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
-                .build(),
-            true // handle audio focus
-        )
-        .build()
+    private var mediaController: MediaController? = null
+    private var sessionToken: SessionToken? = null
 
     private val _state = MutableStateFlow(LocalPlayerState())
     val state: StateFlow<LocalPlayerState> = _state.asStateFlow()
 
     private var progressPollingJob: Job? = null
     private var trackInfoList: List<LocalTrackInfo> = emptyList()
+
+    // Queue actions until controller is ready
+    private var pendingPlayWhenReady: Boolean? = null
 
     private val playerListener = object : Player.Listener {
         override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
@@ -46,32 +43,21 @@ class LocalExoPlayer(
         }
 
         override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
-            _state.update { it.copy(currentTrackIndex = exoPlayer.currentMediaItemIndex) }
+            val controller = mediaController ?: return
+            _state.update { it.copy(currentTrackIndex = controller.currentMediaItemIndex) }
         }
 
         override fun onPlaybackStateChanged(playbackState: Int) {
             if (playbackState == Player.STATE_READY) {
                 updateDuration()
+                // Update progress immediately when ready (important for restore)
+                updateProgress()
             }
         }
-
-        override fun onPlayerError(error: PlaybackException) {
-            // Log error but continue - could skip to next track
-        }
-    }
-
-    init {
-        exoPlayer.addListener(playerListener)
     }
 
     fun loadQueue(tracks: List<LocalTrackInfo>, startIndex: Int = 0) {
         trackInfoList = tracks
-        exoPlayer.clearMediaItems()
-
-        tracks.forEach { track ->
-            exoPlayer.addMediaItem(MediaItem.fromUri(Uri.parse(track.uri)))
-        }
-
         _state.update {
             it.copy(
                 queue = tracks,
@@ -82,69 +68,192 @@ class LocalExoPlayer(
             )
         }
 
-        if (tracks.isNotEmpty()) {
-            exoPlayer.seekTo(startIndex, 0)
-            exoPlayer.prepare()
-            exoPlayer.playWhenReady = true
+        if (tracks.isEmpty()) return
+
+        ensureMediaController { controller ->
+            controller.clearMediaItems()
+            tracks.forEach { track ->
+                val mediaItem = MediaItem.Builder()
+                    .setUri(Uri.parse(track.uri))
+                    .setMediaMetadata(
+                        MediaMetadata.Builder()
+                            .setTitle(track.displayName)
+                            .build()
+                    )
+                    .build()
+                controller.addMediaItem(mediaItem)
+            }
+            controller.seekTo(startIndex, 0)
+            controller.prepare()
+            controller.playWhenReady = true
         }
     }
 
     fun addToQueue(tracks: List<LocalTrackInfo>) {
+        if (tracks.isEmpty()) return
+
         trackInfoList = trackInfoList + tracks
-        tracks.forEach { track ->
-            exoPlayer.addMediaItem(MediaItem.fromUri(Uri.parse(track.uri)))
-        }
         _state.update { it.copy(queue = trackInfoList) }
+
+        mediaController?.let { controller ->
+            tracks.forEach { track ->
+                val mediaItem = MediaItem.Builder()
+                    .setUri(Uri.parse(track.uri))
+                    .setMediaMetadata(
+                        MediaMetadata.Builder()
+                            .setTitle(track.displayName)
+                            .build()
+                    )
+                    .build()
+                controller.addMediaItem(mediaItem)
+            }
+        }
+    }
+
+    fun restoreState(tracks: List<LocalTrackInfo>, currentIndex: Int, positionMs: Long) {
+        if (tracks.isEmpty()) return
+
+        trackInfoList = tracks
+        _state.update {
+            it.copy(
+                queue = tracks,
+                currentTrackIndex = currentIndex,
+                progressPercent = 0f,
+                progressSeconds = (positionMs / 1000).toInt(),
+                durationSeconds = 0
+            )
+        }
+
+        ensureMediaController { controller ->
+            controller.clearMediaItems()
+            tracks.forEach { track ->
+                val mediaItem = MediaItem.Builder()
+                    .setUri(Uri.parse(track.uri))
+                    .setMediaMetadata(
+                        MediaMetadata.Builder()
+                            .setTitle(track.displayName)
+                            .build()
+                    )
+                    .build()
+                controller.addMediaItem(mediaItem)
+            }
+            controller.seekTo(currentIndex, positionMs)
+            controller.prepare()
+            // Don't auto-play on restore
+            controller.playWhenReady = false
+        }
     }
 
     fun play() {
-        exoPlayer.playWhenReady = true
+        val controller = mediaController
+        if (controller != null) {
+            controller.playWhenReady = true
+        } else {
+            // Controller not ready yet - queue the action
+            pendingPlayWhenReady = true
+        }
     }
 
     fun pause() {
-        exoPlayer.playWhenReady = false
+        val controller = mediaController
+        if (controller != null) {
+            controller.playWhenReady = false
+        } else {
+            pendingPlayWhenReady = false
+        }
     }
 
     fun togglePlayPause() {
-        exoPlayer.playWhenReady = !exoPlayer.playWhenReady
+        val controller = mediaController
+        if (controller != null) {
+            controller.playWhenReady = !controller.playWhenReady
+        } else {
+            // Controller not ready yet - queue play action
+            pendingPlayWhenReady = !(pendingPlayWhenReady ?: false)
+        }
     }
 
     fun seekToPercent(percent: Float) {
-        val duration = exoPlayer.duration
-        if (duration > 0) {
-            val position = (duration * percent / 100f).toLong()
-            exoPlayer.seekTo(position)
-            updateProgress()
+        mediaController?.let { controller ->
+            val duration = controller.duration
+            if (duration > 0) {
+                val position = (duration * percent / 100f).toLong()
+                controller.seekTo(position)
+                updateProgress()
+            }
         }
     }
 
     fun skipNext() {
-        if (exoPlayer.hasNextMediaItem()) {
-            exoPlayer.seekToNext()
+        mediaController?.let {
+            if (it.hasNextMediaItem()) {
+                it.seekToNext()
+            }
         }
     }
 
     fun skipPrevious() {
-        // If more than 3 seconds into track, restart it; otherwise go to previous
-        if (exoPlayer.currentPosition > 3000) {
-            exoPlayer.seekTo(0)
-        } else if (exoPlayer.hasPreviousMediaItem()) {
-            exoPlayer.seekToPrevious()
-        } else {
-            exoPlayer.seekTo(0)
+        mediaController?.let { controller ->
+            // If more than 3 seconds into track, restart it; otherwise go to previous
+            if (controller.currentPosition > 3000) {
+                controller.seekTo(0)
+            } else if (controller.hasPreviousMediaItem()) {
+                controller.seekToPrevious()
+            } else {
+                controller.seekTo(0)
+            }
         }
     }
 
     fun selectTrack(index: Int) {
-        if (index in 0 until exoPlayer.mediaItemCount) {
-            exoPlayer.seekTo(index, 0)
+        mediaController?.let { controller ->
+            if (index in 0 until controller.mediaItemCount) {
+                controller.seekTo(index, 0)
+            }
         }
     }
 
     fun release() {
         stopProgressPolling()
-        exoPlayer.removeListener(playerListener)
-        exoPlayer.release()
+        mediaController?.removeListener(playerListener)
+        mediaController?.release()
+        mediaController = null
+        sessionToken = null
+    }
+
+    private fun ensureMediaController(onReady: (MediaController) -> Unit) {
+        if (mediaController != null) {
+            onReady(mediaController!!)
+            return
+        }
+
+        if (sessionToken == null) {
+            sessionToken = SessionToken(
+                context,
+                ComponentName(context, LocalPlaybackService::class.java)
+            )
+        }
+
+        val controllerFuture = MediaController.Builder(context, sessionToken!!).buildAsync()
+        controllerFuture.addListener(
+            {
+                mediaController = controllerFuture.get()
+                mediaController?.addListener(playerListener)
+                onReady(mediaController!!)
+
+                // Apply any pending play/pause action
+                pendingPlayWhenReady?.let { shouldPlay ->
+                    mediaController?.playWhenReady = shouldPlay
+                    pendingPlayWhenReady = null
+                }
+
+                // Start polling if already playing
+                if (mediaController?.playWhenReady == true) {
+                    startProgressPolling()
+                }
+            },
+            MoreExecutors.directExecutor()
+        )
     }
 
     private fun updateProgressPolling(isPlaying: Boolean) {
@@ -171,8 +280,9 @@ class LocalExoPlayer(
     }
 
     private fun updateProgress() {
-        val duration = exoPlayer.duration
-        val position = exoPlayer.currentPosition
+        val controller = mediaController ?: return
+        val duration = controller.duration
+        val position = controller.currentPosition
         if (duration > 0) {
             val percent = (position.toFloat() / duration.toFloat()) * 100f
             _state.update {
@@ -186,7 +296,8 @@ class LocalExoPlayer(
     }
 
     private fun updateDuration() {
-        val duration = exoPlayer.duration
+        val controller = mediaController ?: return
+        val duration = controller.duration
         if (duration > 0) {
             _state.update { it.copy(durationSeconds = (duration / 1000).toInt()) }
         }
