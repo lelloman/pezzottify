@@ -3,6 +3,8 @@ package com.lelloman.simpleaiassistant.ui
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.lelloman.simpleaiassistant.data.ChatRepository
+import com.lelloman.simpleaiassistant.mode.AssistantMode
+import com.lelloman.simpleaiassistant.mode.ModeManager
 import com.lelloman.simpleaiassistant.model.ChatMessage
 import com.lelloman.simpleaiassistant.model.Language
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -13,7 +15,8 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 class ChatViewModel(
-    private val chatRepository: ChatRepository
+    private val chatRepository: ChatRepository,
+    private val modeManager: ModeManager? = null
 ) : ViewModel() {
 
     private val _debugMode = MutableStateFlow(false)
@@ -24,23 +27,45 @@ class ChatViewModel(
 
     init {
         viewModelScope.launch {
-            // Combine repository flows
-            val repoFlow = combine(
+            // First combine: messages, streaming, and language (5 flows max)
+            val baseRepoFlow = combine(
                 chatRepository.messages,
                 chatRepository.streamingText,
                 chatRepository.isStreaming,
                 chatRepository.language,
                 chatRepository.isDetectingLanguage
             ) { messages: List<ChatMessage>, streamingText: String, isStreaming: Boolean, language: Language?, isDetectingLanguage: Boolean ->
-                RepoState(messages, streamingText, isStreaming, language, isDetectingLanguage)
+                BaseRepoState(messages, streamingText, isStreaming, language, isDetectingLanguage)
             }
 
-            // Combine with local state
+            // Second combine: add mode to base state
+            val repoFlow = combine(
+                baseRepoFlow,
+                chatRepository.currentMode
+            ) { baseState, currentMode ->
+                RepoState(
+                    baseState.messages,
+                    baseState.streamingText,
+                    baseState.isStreaming,
+                    baseState.language,
+                    baseState.isDetectingLanguage,
+                    currentMode
+                )
+            }
+
+            // Third combine: add local state
             combine(
                 repoFlow,
                 _debugMode,
                 _error
             ) { repoState, debugMode, error ->
+                // Get mode path from manager if available
+                val modePath = if (repoState.currentMode != null && modeManager != null) {
+                    modeManager.getCurrentPath()
+                } else {
+                    emptyList()
+                }
+
                 ChatUiState(
                     messages = repoState.messages,
                     streamingText = repoState.streamingText,
@@ -48,7 +73,10 @@ class ChatViewModel(
                     language = repoState.language,
                     isDetectingLanguage = repoState.isDetectingLanguage,
                     debugMode = debugMode,
-                    error = error
+                    error = error,
+                    currentMode = repoState.currentMode,
+                    allModes = modeManager?.getAllModes() ?: emptyList(),
+                    modePath = modePath
                 )
             }.collect { state ->
                 _uiState.value = state
@@ -56,12 +84,21 @@ class ChatViewModel(
         }
     }
 
-    private data class RepoState(
+    private data class BaseRepoState(
         val messages: List<ChatMessage>,
         val streamingText: String,
         val isStreaming: Boolean,
         val language: Language?,
         val isDetectingLanguage: Boolean
+    )
+
+    private data class RepoState(
+        val messages: List<ChatMessage>,
+        val streamingText: String,
+        val isStreaming: Boolean,
+        val language: Language?,
+        val isDetectingLanguage: Boolean,
+        val currentMode: AssistantMode?
     )
 
     fun sendMessage(text: String) {
@@ -102,6 +139,20 @@ class ChatViewModel(
             _error.value = null
             try {
                 chatRepository.restartFromMessage(messageId)
+            } catch (e: Exception) {
+                _error.value = e.message ?: "Unknown error"
+            }
+        }
+    }
+
+    fun switchMode(modeId: String) {
+        viewModelScope.launch {
+            _error.value = null
+            try {
+                val success = chatRepository.switchMode(modeId)
+                if (!success) {
+                    _error.value = "Failed to switch to mode: $modeId"
+                }
             } catch (e: Exception) {
                 _error.value = e.message ?: "Unknown error"
             }

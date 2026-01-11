@@ -3,10 +3,16 @@ package com.lelloman.simpleaiassistant.data
 import com.lelloman.simpleaiassistant.data.local.ChatMessageDao
 import com.lelloman.simpleaiassistant.data.local.ChatMessageEntity
 import com.lelloman.simpleaiassistant.llm.LlmProvider
+import com.lelloman.simpleaiassistant.mode.AssistantMode
+import com.lelloman.simpleaiassistant.mode.DefaultHistoryCompactor
+import com.lelloman.simpleaiassistant.mode.HistoryCompactor
+import com.lelloman.simpleaiassistant.mode.ModeManager
+import com.lelloman.simpleaiassistant.mode.SwitchModeTool
 import com.lelloman.simpleaiassistant.model.ChatMessage
 import com.lelloman.simpleaiassistant.model.Language
 import com.lelloman.simpleaiassistant.model.MessageRole
 import com.lelloman.simpleaiassistant.model.StreamEvent
+import com.lelloman.simpleaiassistant.tool.Tool
 import com.lelloman.simpleaiassistant.tool.ToolRegistry
 import com.lelloman.simpleaiassistant.R
 import com.lelloman.simpleaiassistant.util.AssistantLogger
@@ -29,7 +35,9 @@ class ChatRepositoryImpl(
     private val stringProvider: StringProvider,
     private val languagePreferences: LanguagePreferences,
     private val logger: AssistantLogger = NoOpAssistantLogger,
-    private val authErrorHandler: AuthErrorHandler = AuthErrorHandler.NoOp
+    private val authErrorHandler: AuthErrorHandler = AuthErrorHandler.NoOp,
+    private val modeManager: ModeManager? = null,
+    private val historyCompactor: HistoryCompactor = DefaultHistoryCompactor()
 ) : ChatRepository {
 
     companion object {
@@ -49,6 +57,20 @@ class ChatRepositoryImpl(
 
     private val _isDetectingLanguage = MutableStateFlow(false)
     override val isDetectingLanguage: StateFlow<Boolean> = _isDetectingLanguage.asStateFlow()
+
+    // Mode support - null if modes not configured
+    private val _currentMode = MutableStateFlow(modeManager?.currentMode?.value)
+    override val currentMode: StateFlow<AssistantMode?> = _currentMode.asStateFlow()
+
+    // Switch mode tool - created lazily if mode manager is available
+    private val switchModeTool: SwitchModeTool? = modeManager?.let {
+        SwitchModeTool(it) { fromMode, toMode ->
+            handleModeSwitch(fromMode, toMode)
+        }
+    }
+
+    // Context summary from history compaction (prepended to system prompt)
+    private var contextSummary: String? = null
 
     override val messages: Flow<List<ChatMessage>> = chatMessageDao.observeAll()
         .map { entities -> entities.map { it.toDomain() } }
@@ -98,8 +120,8 @@ class ChatRepositoryImpl(
             return
         }
         val currentMessages = chatMessageDao.getAll().map { it.toDomain() }
-        val systemPrompt = systemPromptBuilder.build(_language.value, toolRegistry)
-        val toolSpecs = toolRegistry.getRootSpecs()
+        val systemPrompt = buildModeAwareSystemPrompt()
+        val toolSpecs = getCurrentToolSpecs()
 
         // Log full conversation being sent to LLM
         logger.info(TAG, "=== SENDING TO LLM ===")
@@ -220,7 +242,7 @@ class ChatRepositoryImpl(
                 logger.info(TAG, ">>> EXECUTING TOOL: ${toolCall.name}")
                 logger.info(TAG, "    Input: ${toolCall.input}")
 
-                val tool = toolRegistry.findById(toolCall.name)
+                val tool = findTool(toolCall.name)
                 if (tool == null) {
                     logger.error(TAG, "    ERROR: Tool not found!")
                 }
@@ -307,6 +329,148 @@ class ChatRepositoryImpl(
     }
 
     private fun generateId(): String = UUID.randomUUID().toString()
+
+    // ==================== Mode Support ====================
+
+    override suspend fun switchMode(modeId: String): Boolean {
+        val manager = modeManager ?: return false
+        val fromMode = manager.currentMode.value
+        val targetMode = manager.getModeTree().findMode(modeId) ?: return false
+
+        if (fromMode.id == modeId) {
+            return true // Already in this mode
+        }
+
+        // Compact history before switching
+        handleModeSwitch(fromMode, targetMode)
+
+        // Actually switch the mode
+        val success = manager.switchToMode(modeId)
+        if (success) {
+            _currentMode.value = manager.currentMode.value
+        }
+        return success
+    }
+
+    private suspend fun handleModeSwitch(fromMode: AssistantMode, toMode: AssistantMode) {
+        logger.info(TAG, "Mode switch: ${fromMode.id} -> ${toMode.id}")
+
+        val currentMessages = chatMessageDao.getAll().map { it.toDomain() }
+        if (currentMessages.isEmpty()) {
+            contextSummary = null
+            return
+        }
+
+        val compacted = historyCompactor.compact(currentMessages, fromMode, toMode)
+
+        // Clear all messages and re-add only the kept ones
+        chatMessageDao.deleteAll()
+        compacted.keptMessages.forEach { msg ->
+            chatMessageDao.insert(ChatMessageEntity.fromDomain(msg))
+        }
+
+        // Store context summary for system prompt
+        contextSummary = compacted.contextSummary
+
+        // Update current mode state
+        _currentMode.value = toMode
+
+        logger.info(TAG, "History compacted: ${currentMessages.size} -> ${compacted.keptMessages.size} messages")
+        if (compacted.contextSummary != null) {
+            logger.debug(TAG, "Context summary: ${compacted.contextSummary}")
+        }
+    }
+
+    /**
+     * Builds the system prompt, optionally including mode-specific instructions.
+     */
+    private fun buildModeAwareSystemPrompt(): String {
+        val basePrompt = systemPromptBuilder.build(_language.value, toolRegistry)
+
+        val mode = _currentMode.value
+        if (mode == null) {
+            // No mode configured, use base prompt with optional context summary
+            return if (contextSummary != null) {
+                "$basePrompt\n\n## Previous Context\n$contextSummary"
+            } else {
+                basePrompt
+            }
+        }
+
+        // Build mode-aware prompt
+        return buildString {
+            append(basePrompt)
+
+            appendLine()
+            appendLine()
+            appendLine("## Current Mode: ${mode.name}")
+            appendLine(mode.description)
+
+            if (mode.promptInstructions.isNotBlank()) {
+                appendLine()
+                appendLine(mode.promptInstructions)
+            }
+
+            // Show all available modes
+            modeManager?.let { manager ->
+                val allModes = manager.getAllModes()
+                if (allModes.size > 1) {
+                    appendLine()
+                    appendLine("## Available Modes")
+                    appendLine("Use the switch_mode tool to change modes:")
+                    allModes.forEach { m ->
+                        val current = if (m.id == mode.id) " (current)" else ""
+                        appendLine("- ${m.id}: ${m.name}$current")
+                    }
+                }
+            }
+
+            // Add context summary if present
+            if (contextSummary != null) {
+                appendLine()
+                appendLine("## Previous Context")
+                appendLine(contextSummary)
+            }
+        }
+    }
+
+    /**
+     * Gets the tool specs available in the current mode.
+     * If modes are not configured, returns all root tools.
+     */
+    private fun getCurrentToolSpecs(): List<com.lelloman.simpleaiassistant.tool.ToolSpec> {
+        val mode = _currentMode.value
+        if (mode == null) {
+            // No mode configured, return all root tools
+            return toolRegistry.getRootSpecs()
+        }
+
+        // Get tools for current mode
+        val modeToolSpecs = mode.toolIds.mapNotNull { toolId ->
+            toolRegistry.findById(toolId)?.spec
+        }
+
+        // Always include switch_mode tool if available
+        val switchModeSpec = switchModeTool?.spec
+
+        return if (switchModeSpec != null) {
+            modeToolSpecs + switchModeSpec
+        } else {
+            modeToolSpecs
+        }
+    }
+
+    /**
+     * Finds a tool by name, checking both the registry and built-in tools.
+     */
+    private fun findTool(toolName: String): Tool? {
+        // Check built-in switch_mode tool first
+        if (toolName == SwitchModeTool.TOOL_NAME && switchModeTool != null) {
+            return switchModeTool
+        }
+        // Check registry
+        return toolRegistry.findById(toolName)
+    }
 }
 
 /**
