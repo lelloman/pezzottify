@@ -152,6 +152,9 @@ impl TestServer {
             frontend_dir_path: None,
             disable_password_auth: false,
             streaming_search: pezzottify_catalog_server::config::StreamingSearchSettings::default(),
+            download_manager: pezzottify_catalog_server::config::DownloadManagerSettings::default(),
+            db_dir: temp_db_dir.path().to_path_buf(),
+            media_path: media_path.clone(),
         };
 
         // Create user manager

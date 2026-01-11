@@ -1,4 +1,6 @@
-use crate::config::StreamingSearchSettings;
+use std::path::PathBuf;
+
+use crate::config::{DownloadManagerSettings, StreamingSearchSettings};
 
 use super::RequestsLoggingLevel;
 
@@ -13,6 +15,12 @@ pub struct ServerConfig {
     pub disable_password_auth: bool,
     /// Configuration for the streaming search pipeline.
     pub streaming_search: StreamingSearchSettings,
+    /// Download manager configuration.
+    pub download_manager: DownloadManagerSettings,
+    /// Database directory path.
+    pub db_dir: PathBuf,
+    /// Media files path.
+    pub media_path: PathBuf,
 }
 
 impl Default for ServerConfig {
@@ -24,6 +32,9 @@ impl Default for ServerConfig {
             frontend_dir_path: None,
             disable_password_auth: false,
             streaming_search: StreamingSearchSettings::default(),
+            download_manager: DownloadManagerSettings::default(),
+            db_dir: PathBuf::from("."),
+            media_path: PathBuf::from("."),
         }
     }
 }

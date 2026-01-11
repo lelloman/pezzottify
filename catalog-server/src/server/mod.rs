@@ -1,4 +1,5 @@
 pub mod config;
+mod download_routes;
 mod http_layers;
 pub mod metrics;
 // TODO: Re-enable after updating for Spotify schema (depends on downloader)
@@ -14,6 +15,7 @@ mod stream_track;
 pub mod websocket;
 
 pub use config::ServerConfig;
+pub use download_routes::download_routes;
 pub use http_layers::*;
 use search::{make_search_admin_routes, make_search_routes};
 #[allow(unused_imports)] // Used by main.rs

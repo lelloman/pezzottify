@@ -168,8 +168,16 @@ impl AppConfig {
 
         // Download manager settings - merge file config with defaults
         let dm_file = file.download_manager.unwrap_or_default();
+        let qt_base_url = dm_file.qt_base_url.clone();
+        let qt_ws_url = dm_file.qt_ws_url.clone();
+        let qt_auth_token = dm_file.qt_auth_token.clone();
+        // Enabled if both base URL and WS URL are configured
+        let qt_enabled = qt_base_url.is_some() && qt_ws_url.is_some();
         let download_manager = DownloadManagerSettings {
-            enabled: downloader_url.is_some(),
+            enabled: qt_enabled,
+            qt_base_url,
+            qt_ws_url,
+            qt_auth_token,
             max_albums_per_hour: dm_file.max_albums_per_hour.unwrap_or(10),
             max_albums_per_day: dm_file.max_albums_per_day.unwrap_or(60),
             user_max_requests_per_day: dm_file.user_max_requests_per_day.unwrap_or(100),
@@ -296,7 +304,13 @@ impl AppConfig {
 
 #[derive(Debug, Clone)]
 pub struct DownloadManagerSettings {
-    pub enabled: bool, // true if downloader_url is set
+    pub enabled: bool,
+    /// Quentin Torrentino HTTP base URL (e.g., "http://localhost:8080")
+    pub qt_base_url: Option<String>,
+    /// Quentin Torrentino WebSocket URL (e.g., "ws://localhost:8080/ws")
+    pub qt_ws_url: Option<String>,
+    /// Quentin Torrentino auth token
+    pub qt_auth_token: Option<String>,
     pub max_albums_per_hour: u32,
     pub max_albums_per_day: u32,
     pub user_max_requests_per_day: u32,
@@ -325,6 +339,9 @@ impl Default for DownloadManagerSettings {
     fn default() -> Self {
         Self {
             enabled: false,
+            qt_base_url: None,
+            qt_ws_url: None,
+            qt_auth_token: None,
             max_albums_per_hour: 10,
             max_albums_per_day: 60,
             user_max_requests_per_day: 100,
@@ -442,7 +459,8 @@ mod tests {
         assert_eq!(config.downloader_timeout_sec, 600);
         assert_eq!(config.event_retention_days, 60);
         assert_eq!(config.prune_interval_hours, 12);
-        assert!(config.download_manager.enabled);
+        // download_manager.enabled is now based on qt_base_url + qt_ws_url, not downloader_url
+        assert!(!config.download_manager.enabled);
     }
 
     #[test]
@@ -527,16 +545,37 @@ mod tests {
     }
 
     #[test]
-    fn test_resolve_download_manager_enabled_with_url() {
+    fn test_resolve_download_manager_enabled_with_qt_urls() {
         let temp_dir = make_temp_db_dir();
         let cli = CliConfig {
             db_dir: Some(temp_dir.path().to_path_buf()),
-            downloader_url: Some("http://localhost:3002".to_string()),
             ..Default::default()
         };
 
-        let config = AppConfig::resolve(&cli, None).unwrap();
+        let file_config = FileConfig {
+            download_manager: Some(DownloadManagerConfig {
+                qt_base_url: Some("http://localhost:8080".to_string()),
+                qt_ws_url: Some("ws://localhost:8080/ws".to_string()),
+                qt_auth_token: Some("test_token".to_string()),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+
+        let config = AppConfig::resolve(&cli, Some(file_config)).unwrap();
         assert!(config.download_manager.enabled);
+        assert_eq!(
+            config.download_manager.qt_base_url,
+            Some("http://localhost:8080".to_string())
+        );
+        assert_eq!(
+            config.download_manager.qt_ws_url,
+            Some("ws://localhost:8080/ws".to_string())
+        );
+        assert_eq!(
+            config.download_manager.qt_auth_token,
+            Some("test_token".to_string())
+        );
     }
 
     #[test]

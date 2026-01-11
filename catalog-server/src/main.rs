@@ -341,6 +341,9 @@ async fn main() -> Result<()> {
             server_store,
             oidc_config,
             app_config.search.streaming.clone(),
+            app_config.download_manager.clone(),
+            app_config.db_dir.clone(),
+            app_config.media_path.clone(),
         ) => {
             info!("HTTP server stopped: {:?}", result);
             shutdown_token.cancel();

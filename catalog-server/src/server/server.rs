@@ -4122,6 +4122,7 @@ impl ServerState {
             mcp_state,
             organic_indexer,
             http_client,
+            download_manager: None, // Will be set by make_app if download manager is enabled
         }
     }
 }
@@ -4177,9 +4178,60 @@ pub async fn make_app(
 
     // Create organic indexer for on-demand search index growth
     state.organic_indexer = Some(crate::search::OrganicIndexer::new(
-        search_vault,
-        catalog_store,
+        search_vault.clone(),
+        catalog_store.clone(),
     ));
+
+    // Initialize download manager if QT is configured
+    if config.download_manager.enabled {
+        if let (Some(ref qt_base_url), Some(ref qt_ws_url)) = (
+            &config.download_manager.qt_base_url,
+            &config.download_manager.qt_ws_url,
+        ) {
+            let qt_auth_token = config
+                .download_manager
+                .qt_auth_token
+                .clone()
+                .unwrap_or_default();
+            info!(
+                "Initializing download manager with QT base URL: {}, WS URL: {}",
+                qt_base_url, qt_ws_url
+            );
+            let queue_db_path = config.db_dir.join("download_queue.db");
+            match crate::download_manager::SqliteDownloadQueueStore::new(&queue_db_path) {
+                Ok(queue_store) => {
+                    let torrent_client = crate::download_manager::TorrentClient::new(
+                        qt_base_url.clone(),
+                        qt_ws_url.clone(),
+                        qt_auth_token,
+                    );
+                    let manager = crate::download_manager::DownloadManager::new(
+                        Arc::new(queue_store),
+                        Arc::new(torrent_client),
+                        catalog_store.clone(),
+                        config.media_path.clone(),
+                        config.download_manager.clone(),
+                    );
+                    // Set the search vault for availability updates
+                    let search_vault_clone = search_vault.clone();
+                    let manager = Arc::new(manager);
+                    {
+                        let manager_clone = manager.clone();
+                        tokio::spawn(async move {
+                            manager_clone.set_search_vault(search_vault_clone).await;
+                        });
+                    }
+                    state.download_manager = Some(manager);
+                    info!("Download manager initialized successfully");
+                }
+                Err(e) => {
+                    error!("Failed to initialize download queue store: {:?}", e);
+                }
+            }
+        }
+    } else {
+        debug!("Download manager not configured");
+    }
 
     // Login route with strict IP-based rate limiting
     // For rates < 60/min, we use per_second(1) and rely on burst_size to enforce the limit
@@ -4586,7 +4638,13 @@ pub async fn make_app(
         .merge(admin_changelog_routes)
         .merge(admin_search_routes);
 
-    // Download manager routes disabled - depends on download_manager module
+    // Download manager routes - require RequestContent permission for user routes
+    let download_routes: Router = super::download_routes()
+        .route_layer(middleware::from_fn_with_state(
+            state.clone(),
+            require_request_content,
+        ))
+        .with_state(state.clone());
 
     let home_router: Router = match config.frontend_dir_path {
         Some(ref frontend_path) => {
@@ -4617,8 +4675,7 @@ pub async fn make_app(
         .nest("/v1/user", user_routes)
         .nest("/v1/admin", admin_routes)
         .nest("/v1/sync", sync_routes)
-        // TODO: Re-enable after updating for Spotify schema
-        // .nest("/v1/download", download_routes)
+        .nest("/v1/download", download_routes)
         .nest("/v1", ws_routes)
         .nest("/v1", mcp_routes);
 
@@ -4669,6 +4726,9 @@ pub async fn run_server(
     server_store: Arc<dyn crate::server_store::ServerStore>,
     oidc_config: Option<crate::config::OidcConfig>,
     streaming_search: crate::config::StreamingSearchSettings,
+    download_manager: crate::config::DownloadManagerSettings,
+    db_dir: std::path::PathBuf,
+    media_path: std::path::PathBuf,
 ) -> Result<()> {
     let disable_password_auth = oidc_config
         .as_ref()
@@ -4682,6 +4742,9 @@ pub async fn run_server(
         frontend_dir_path,
         disable_password_auth,
         streaming_search,
+        download_manager,
+        db_dir,
+        media_path,
     };
 
     let app = make_app(
