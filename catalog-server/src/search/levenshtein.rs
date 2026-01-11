@@ -110,6 +110,14 @@ impl Vocabulary {
         let query = query.to_lowercase();
         let query_len = query.len();
 
+        // Don't try to correct very short words (1-2 chars).
+        // These are often intentional (articles, conjunctions like "e", "le", "la", "de", etc.)
+        // and trying to find a "match" within edit distance 2 produces too many false positives.
+        // Words < 2 chars aren't in the vocabulary anyway.
+        if query_len < 3 {
+            return None;
+        }
+
         // If the exact word exists, return it (O(1) lookup)
         if self.words_set.contains(&query) {
             return self.words_set.get(&query).map(|s| s.as_str());
@@ -340,5 +348,63 @@ mod tests {
         // Both have edit distance 1, but "dalla" has same length (substitution)
         // while "alla" requires a deletion
         assert_eq!(vocab.find_best_match("palla", 2), Some("dalla"));
+    }
+
+    #[test]
+    fn test_short_words_not_corrected() {
+        // Test that very short words (1-2 chars) are not incorrectly "corrected"
+        // to random longer words. This is important for languages with short
+        // articles/conjunctions like Italian "e", "le", "la", etc.
+        let mut vocab = Vocabulary::new();
+        vocab.add_text("Elio e le Storie Tese");
+        vocab.add_text("some random words like le la de");
+
+        // Single character words should return None (not get corrected)
+        assert_eq!(
+            vocab.find_best_match("e", 2),
+            None,
+            "Single char 'e' should not be corrected"
+        );
+        assert_eq!(
+            vocab.find_best_match("a", 2),
+            None,
+            "Single char 'a' should not be corrected"
+        );
+
+        // Two character words should also return None (not get corrected)
+        // since they're likely intentional short words
+        assert_eq!(
+            vocab.find_best_match("xy", 2),
+            None,
+            "Two char 'xy' should not be corrected"
+        );
+
+        // But 3+ char words should still be corrected if close match exists
+        assert_eq!(vocab.find_best_match("elio", 2), Some("elio"));
+        assert_eq!(vocab.find_best_match("eloi", 2), Some("elio")); // typo corrected
+    }
+
+    #[test]
+    fn test_elio_e_le_storie_tese_query() {
+        // Regression test for the specific bug where "elio e le storie tese"
+        // search was returning no results because "e" was being corrected
+        let mut vocab = Vocabulary::new();
+        vocab.add_text("Elio e le Storie Tese");
+        vocab.add_text("The Beatles Abbey Road");
+        vocab.add_text("some la de words");
+
+        // The corrected query should preserve "e" and "le" as-is
+        let corrected = vocab.correct_query("elio e le storie tese", 2);
+        assert_eq!(
+            corrected, "elio e le storie tese",
+            "Short words 'e' and 'le' should not be modified"
+        );
+
+        // Even with typos in longer words, short words should be preserved
+        let corrected = vocab.correct_query("eloi e le storei tesi", 2);
+        assert_eq!(
+            corrected, "elio e le storie tese",
+            "Typos in longer words corrected, but short words preserved"
+        );
     }
 }
