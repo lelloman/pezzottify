@@ -138,16 +138,60 @@ const DOWNLOAD_AUDIT_LOG_TABLE_V1: Table = Table {
     unique_constraints: &[],
 };
 
-pub const DOWNLOAD_QUEUE_VERSIONED_SCHEMAS: &[VersionedSchema] = &[VersionedSchema {
-    version: 0,
-    tables: &[
-        DOWNLOAD_QUEUE_TABLE_V1,
-        DOWNLOAD_ACTIVITY_LOG_TABLE_V1,
-        USER_REQUEST_STATS_TABLE_V1,
-        DOWNLOAD_AUDIT_LOG_TABLE_V1,
+// =============================================================================
+// Ticket Mapping Table - Version 1 (Quentin Torrentino integration)
+// =============================================================================
+
+/// Maps local queue items to Quentin Torrentino tickets.
+/// Added in schema version 1 for torrent-based downloads.
+const TICKET_MAPPING_TABLE_V1: Table = Table {
+    name: "ticket_mapping",
+    columns: &[
+        // Local queue item ID (references download_queue.id)
+        sqlite_column!("queue_item_id", &SqlType::Text, is_primary_key = true),
+        // Quentin Torrentino ticket ID
+        sqlite_column!("ticket_id", &SqlType::Text, non_null = true, is_unique = true),
+        // Album ID this ticket is for (for grouping related tracks)
+        sqlite_column!("album_id", &SqlType::Text, non_null = true),
+        // Current ticket state (from QT: PENDING, SEARCHING, DOWNLOADING, etc.)
+        sqlite_column!(
+            "ticket_state",
+            &SqlType::Text,
+            non_null = true,
+            default_value = Some("'PENDING'")
+        ),
+        // When the ticket was created
+        sqlite_column!("created_at", &SqlType::Integer, non_null = true),
+        // When the ticket state was last updated
+        sqlite_column!("updated_at", &SqlType::Integer, non_null = true),
     ],
-    migration: None,
-}];
+    indices: &[
+        ("idx_ticket_mapping_ticket_id", "ticket_id"),
+        ("idx_ticket_mapping_album", "album_id"),
+        ("idx_ticket_mapping_state", "ticket_state"),
+    ],
+    unique_constraints: &[],
+};
+
+pub const DOWNLOAD_QUEUE_VERSIONED_SCHEMAS: &[VersionedSchema] = &[
+    // Version 0: Initial schema
+    VersionedSchema {
+        version: 0,
+        tables: &[
+            DOWNLOAD_QUEUE_TABLE_V1,
+            DOWNLOAD_ACTIVITY_LOG_TABLE_V1,
+            USER_REQUEST_STATS_TABLE_V1,
+            DOWNLOAD_AUDIT_LOG_TABLE_V1,
+        ],
+        migration: None,
+    },
+    // Version 1: Add ticket_mapping table for Quentin Torrentino integration
+    VersionedSchema {
+        version: 1,
+        tables: &[TICKET_MAPPING_TABLE_V1],
+        migration: None,
+    },
+];
 
 #[cfg(test)]
 mod tests {
