@@ -14,8 +14,8 @@ use crate::catalog_store::CatalogStore;
 
 use super::audit_logger::AuditLogger;
 use super::models::{
-    DownloadContentType, MissingFilesMode, MissingFilesReport, MissingTrackInfo,
-    QueueItem, QueuePriority, RequestSource,
+    DownloadContentType, MissingFilesMode, MissingFilesReport, MissingTrackInfo, QueueItem,
+    QueuePriority, RequestSource,
 };
 use super::queue_store::DownloadQueueStore;
 
@@ -137,7 +137,7 @@ impl MissingFilesWatchdog {
                         track_id: track_id.clone(),
                         track_name: track.name,
                         album_id: Some(track.album_id),
-                        album_name: None, // Would need additional lookup
+                        album_name: None,     // Would need additional lookup
                         artist_names: vec![], // Would need additional lookup
                     });
                 }
@@ -188,7 +188,10 @@ impl MissingFilesWatchdog {
             }
 
             // Log audit event
-            if let Err(e) = self.audit_logger.log_watchdog_queued(&item, "missing_audio") {
+            if let Err(e) = self
+                .audit_logger
+                .log_watchdog_queued(&item, "missing_audio")
+            {
                 warn!("Failed to log watchdog queue event: {}", e);
             }
 

@@ -4583,7 +4583,9 @@ mod tests {
 
         // Set different states
         store.update_ticket_state("ticket-1", "PENDING").unwrap();
-        store.update_ticket_state("ticket-2", "DOWNLOADING").unwrap();
+        store
+            .update_ticket_state("ticket-2", "DOWNLOADING")
+            .unwrap();
         store.update_ticket_state("ticket-3", "COMPLETED").unwrap();
         store.update_ticket_state("ticket-4", "FAILED").unwrap();
 
