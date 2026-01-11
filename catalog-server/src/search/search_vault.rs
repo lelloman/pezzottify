@@ -145,6 +145,32 @@ pub trait SearchVault: Send + Sync {
     /// # Returns
     /// Number of records deleted
     fn prune_impressions(&self, before_date: i64) -> usize;
+
+    /// Update availability status for items in the search index.
+    ///
+    /// # Arguments
+    /// * `items` - Slice of (item_id, item_type, is_available) tuples
+    fn update_availability(&self, items: &[(String, HashedItemType, bool)]);
+
+    /// Search with availability filter built into the query.
+    /// This is more efficient than post-filtering when available_only is true.
+    ///
+    /// # Arguments
+    /// * `query` - Search query string
+    /// * `max_results` - Maximum number of results to return
+    /// * `filter` - Optional filter for item types
+    /// * `available_only` - If true, only return available items
+    fn search_with_availability(
+        &self,
+        query: &str,
+        max_results: usize,
+        filter: Option<Vec<HashedItemType>>,
+        _available_only: bool,
+    ) -> Vec<SearchResult> {
+        // Default implementation: falls back to regular search without availability filtering.
+        // Implementations that support availability filtering should override this method.
+        self.search(query, max_results, filter)
+    }
 }
 
 /// Statistics about the search vault.
@@ -226,6 +252,8 @@ impl SearchVault for NoopSearchVault {
     fn prune_impressions(&self, _before_date: i64) -> usize {
         0
     }
+
+    fn update_availability(&self, _items: &[(String, HashedItemType, bool)]) {}
 }
 
 /// Implement SearchVault for Arc<T> to allow shared ownership with background tasks.
@@ -272,5 +300,19 @@ impl<T: SearchVault + ?Sized> SearchVault for std::sync::Arc<T> {
 
     fn prune_impressions(&self, before_date: i64) -> usize {
         (**self).prune_impressions(before_date)
+    }
+
+    fn update_availability(&self, items: &[(String, HashedItemType, bool)]) {
+        (**self).update_availability(items)
+    }
+
+    fn search_with_availability(
+        &self,
+        query: &str,
+        max_results: usize,
+        filter: Option<Vec<HashedItemType>>,
+        available_only: bool,
+    ) -> Vec<SearchResult> {
+        (**self).search_with_availability(query, max_results, filter, available_only)
     }
 }

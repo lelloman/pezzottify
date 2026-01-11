@@ -320,6 +320,9 @@ impl Fts5LevenshteinSearchVault {
                 let mut stmt = conn.prepare(
                     "INSERT INTO search_index (item_id, item_type, name) VALUES (?, ?, ?)",
                 )?;
+                let mut avail_stmt = conn.prepare(
+                    "INSERT OR REPLACE INTO item_availability (item_id, item_type, is_available) VALUES (?, ?, ?)",
+                )?;
 
                 for item in batch {
                     let type_str = match item.content_type {
@@ -328,6 +331,11 @@ impl Fts5LevenshteinSearchVault {
                         SearchableContentType::Track => "track",
                     };
                     stmt.execute([&item.id, type_str, &item.name])?;
+                    avail_stmt.execute(rusqlite::params![
+                        &item.id,
+                        type_str,
+                        if item.is_available { 1 } else { 0 }
+                    ])?;
                 }
 
                 conn.execute("COMMIT", [])?;
@@ -482,6 +490,20 @@ impl Fts5LevenshteinSearchVault {
         "#,
         )?;
 
+        // Create item_availability table for availability filtering
+        conn.execute_batch(
+            r#"
+            CREATE TABLE IF NOT EXISTS item_availability (
+                item_id TEXT NOT NULL,
+                item_type TEXT NOT NULL,
+                is_available INTEGER NOT NULL DEFAULT 0,
+                PRIMARY KEY (item_id, item_type)
+            );
+            CREATE INDEX IF NOT EXISTS idx_availability_lookup
+                ON item_availability(item_id, item_type, is_available);
+        "#,
+        )?;
+
         Ok(())
     }
 
@@ -580,9 +602,13 @@ impl Fts5LevenshteinSearchVault {
 
         let result = (|| -> Result<()> {
             conn.execute("DELETE FROM search_index", [])?;
+            conn.execute("DELETE FROM item_availability", [])?;
 
             let mut stmt = conn
                 .prepare("INSERT INTO search_index (item_id, item_type, name) VALUES (?, ?, ?)")?;
+            let mut avail_stmt = conn.prepare(
+                "INSERT OR REPLACE INTO item_availability (item_id, item_type, is_available) VALUES (?, ?, ?)",
+            )?;
 
             for item in &searchable {
                 let type_str = match item.content_type {
@@ -591,6 +617,11 @@ impl Fts5LevenshteinSearchVault {
                     SearchableContentType::Track => "track",
                 };
                 stmt.execute([&item.id, type_str, &item.name])?;
+                avail_stmt.execute(rusqlite::params![
+                    &item.id,
+                    type_str,
+                    if item.is_available { 1 } else { 0 }
+                ])?;
             }
 
             Self::set_stored_catalog_version(conn, catalog_version)?;
@@ -889,6 +920,164 @@ impl Fts5LevenshteinSearchVault {
             }
         }
     }
+
+    /// Update availability status for items.
+    pub fn update_availability(&self, items: &[(String, HashedItemType, bool)]) {
+        if items.is_empty() {
+            return;
+        }
+
+        let conn = self.write_conn.lock().unwrap();
+
+        let mut stmt = match conn.prepare(
+            "INSERT OR REPLACE INTO item_availability (item_id, item_type, is_available) VALUES (?, ?, ?)",
+        ) {
+            Ok(s) => s,
+            Err(e) => {
+                warn!("Failed to prepare availability update statement: {}", e);
+                return;
+            }
+        };
+
+        for (id, item_type, is_available) in items {
+            if let Err(e) = stmt.execute(rusqlite::params![
+                id,
+                Self::item_type_to_str(item_type),
+                if *is_available { 1 } else { 0 }
+            ]) {
+                warn!("Failed to update availability for {}: {}", id, e);
+            }
+        }
+
+        debug!("Updated availability for {} items", items.len());
+    }
+
+    /// Search with availability filter in the query itself.
+    pub fn search_with_availability(
+        &self,
+        query: &str,
+        max_results: usize,
+        filter: Option<Vec<HashedItemType>>,
+        available_only: bool,
+    ) -> Vec<SearchResult> {
+        if !available_only {
+            // Fall back to regular search
+            return SearchVault::search(self, query, max_results, filter);
+        }
+
+        let corrected_query = self.correct_query(query);
+        let conn = self.read_conn.lock().unwrap();
+        let escaped_query = corrected_query.replace('"', "\"\"");
+
+        // Build query with availability JOIN
+        let (sql, params): (String, Vec<Box<dyn rusqlite::ToSql>>) = if let Some(types) = &filter {
+            let type_placeholders: Vec<&str> = types.iter().map(Self::item_type_to_str).collect();
+            let placeholders = type_placeholders
+                .iter()
+                .map(|_| "?")
+                .collect::<Vec<_>>()
+                .join(",");
+
+            let sql = format!(
+                r#"SELECT
+                       s.item_id,
+                       s.item_type,
+                       s.name,
+                       bm25(search_index) as text_score,
+                       COALESCE(p.score, 0.0) as popularity_score
+                   FROM search_index s
+                   INNER JOIN item_availability a
+                       ON s.item_id = a.item_id AND s.item_type = a.item_type AND a.is_available = 1
+                   LEFT JOIN item_popularity p
+                       ON s.item_id = p.item_id AND s.item_type = p.item_type
+                   WHERE search_index MATCH ?
+                   AND s.item_type IN ({})
+                   ORDER BY (bm25(search_index) * (1.0 + COALESCE(p.score, 0.0) * ?))
+                   LIMIT ?"#,
+                placeholders
+            );
+
+            let mut params: Vec<Box<dyn rusqlite::ToSql>> =
+                vec![Box::new(format!("\"{}\"", escaped_query))];
+            for t in type_placeholders {
+                params.push(Box::new(t.to_string()));
+            }
+            params.push(Box::new(POPULARITY_WEIGHT));
+            params.push(Box::new(max_results as i64));
+
+            (sql, params)
+        } else {
+            let sql = r#"SELECT
+                             s.item_id,
+                             s.item_type,
+                             s.name,
+                             bm25(search_index) as text_score,
+                             COALESCE(p.score, 0.0) as popularity_score
+                         FROM search_index s
+                         INNER JOIN item_availability a
+                             ON s.item_id = a.item_id AND s.item_type = a.item_type AND a.is_available = 1
+                         LEFT JOIN item_popularity p
+                             ON s.item_id = p.item_id AND s.item_type = p.item_type
+                         WHERE search_index MATCH ?
+                         ORDER BY (bm25(search_index) * (1.0 + COALESCE(p.score, 0.0) * ?))
+                         LIMIT ?"#
+                .to_string();
+
+            let params: Vec<Box<dyn rusqlite::ToSql>> = vec![
+                Box::new(format!("\"{}\"", escaped_query)),
+                Box::new(POPULARITY_WEIGHT),
+                Box::new(max_results as i64),
+            ];
+
+            (sql, params)
+        };
+
+        // Execute query (same pattern as existing search())
+        let param_refs: Vec<&dyn rusqlite::ToSql> = params.iter().map(|p| p.as_ref()).collect();
+
+        let mut stmt = match conn.prepare(&sql) {
+            Ok(s) => s,
+            Err(e) => {
+                warn!("Availability search query prepare failed: {}", e);
+                return Vec::new();
+            }
+        };
+
+        let results = stmt.query_map(param_refs.as_slice(), |row| {
+            let item_id: String = row.get(0)?;
+            let item_type_str: String = row.get(1)?;
+            let name: String = row.get(2)?;
+            let text_score: f64 = row.get(3)?;
+            let popularity_score: f64 = row.get(4)?;
+
+            Ok((item_id, item_type_str, name, text_score, popularity_score))
+        });
+
+        match results {
+            Ok(rows) => rows
+                .filter_map(|r| r.ok())
+                .filter_map(
+                    |(item_id, item_type_str, name, text_score, popularity_score)| {
+                        Self::str_to_item_type(&item_type_str).map(|item_type| {
+                            let combined_score =
+                                text_score * (1.0 + popularity_score * POPULARITY_WEIGHT);
+                            SearchResult {
+                                item_id,
+                                item_type,
+                                score: (-text_score * 1000.0) as u32,
+                                adjusted_score: (-combined_score * 1000.0) as i64,
+                                matchable_text: name,
+                            }
+                        })
+                    },
+                )
+                .collect(),
+            Err(e) => {
+                warn!("Availability search query failed: {}", e);
+                Vec::new()
+            }
+        }
+    }
 }
 
 /// Weight factor for popularity boost (0.5 = max 50% boost for most popular items)
@@ -1061,6 +1250,26 @@ impl SearchVault for Fts5LevenshteinSearchVault {
 
     fn prune_impressions(&self, before_date: i64) -> usize {
         Fts5LevenshteinSearchVault::prune_impressions(self, before_date)
+    }
+
+    fn update_availability(&self, items: &[(String, HashedItemType, bool)]) {
+        Fts5LevenshteinSearchVault::update_availability(self, items)
+    }
+
+    fn search_with_availability(
+        &self,
+        query: &str,
+        max_results: usize,
+        filter: Option<Vec<HashedItemType>>,
+        available_only: bool,
+    ) -> Vec<SearchResult> {
+        Fts5LevenshteinSearchVault::search_with_availability(
+            self,
+            query,
+            max_results,
+            filter,
+            available_only,
+        )
     }
 }
 
@@ -1270,12 +1479,14 @@ mod tests {
                 name: "The Beatles".to_string(),
                 content_type: SearchableContentType::Artist,
                 additional_text: vec![],
+                is_available: true,
             },
             SearchableItem {
                 id: "a2".to_string(),
                 name: "Metallica".to_string(),
                 content_type: SearchableContentType::Artist,
                 additional_text: vec![],
+                is_available: true,
             },
         ]));
 
@@ -1304,12 +1515,14 @@ mod tests {
                 name: "The Beatles".to_string(),
                 content_type: SearchableContentType::Artist,
                 additional_text: vec![],
+                is_available: true,
             },
             SearchableItem {
                 id: "a2".to_string(),
                 name: "Metallica".to_string(),
                 content_type: SearchableContentType::Artist,
                 additional_text: vec![],
+                is_available: true,
             },
         ]));
 
@@ -1342,18 +1555,21 @@ mod tests {
                 name: "The Beatles".to_string(),
                 content_type: SearchableContentType::Artist,
                 additional_text: vec![],
+                is_available: true,
             },
             SearchableItem {
                 id: "album1".to_string(),
                 name: "Beatles For Sale".to_string(),
                 content_type: SearchableContentType::Album,
                 additional_text: vec![],
+                is_available: true,
             },
             SearchableItem {
                 id: "track1".to_string(),
                 name: "Beatles Medley".to_string(),
                 content_type: SearchableContentType::Track,
                 additional_text: vec![],
+                is_available: true,
             },
         ];
 
@@ -1429,30 +1645,35 @@ mod tests {
                 name: "The Beatles".to_string(),
                 content_type: SearchableContentType::Artist,
                 additional_text: vec![],
+                is_available: true,
             },
             SearchableItem {
                 id: "a2".to_string(),
                 name: "Pink Floyd".to_string(),
                 content_type: SearchableContentType::Artist,
                 additional_text: vec![],
+                is_available: true,
             },
             SearchableItem {
                 id: "a3".to_string(),
                 name: "Led Zeppelin".to_string(),
                 content_type: SearchableContentType::Artist,
                 additional_text: vec![],
+                is_available: true,
             },
             SearchableItem {
                 id: "a4".to_string(),
                 name: "Metallica".to_string(),
                 content_type: SearchableContentType::Artist,
                 additional_text: vec![],
+                is_available: true,
             },
             SearchableItem {
                 id: "a5".to_string(),
                 name: "Iron Maiden".to_string(),
                 content_type: SearchableContentType::Artist,
                 additional_text: vec![],
+                is_available: true,
             },
         ];
 
@@ -1513,6 +1734,7 @@ mod tests {
             name: "The Beatles".to_string(),
             content_type: SearchableContentType::Artist,
             additional_text: vec![],
+            is_available: true,
         }];
 
         let vault = Arc::new(Fts5LevenshteinSearchVault::new_lazy(&db_path).unwrap());
@@ -1541,6 +1763,140 @@ mod tests {
         // Creating a new vault should show Ready state
         let vault2 = Fts5LevenshteinSearchVault::new_lazy(&db_path).unwrap();
         assert_eq!(vault2.get_stats().state, IndexState::Ready);
+    }
+
+    #[test]
+    fn test_search_with_availability_filters_unavailable() {
+        let temp_dir = TempDir::new().unwrap();
+        let db_path = temp_dir.path().join("search.db");
+
+        // Create items with mixed availability
+        let items = vec![
+            SearchableItem {
+                id: "available_artist".to_string(),
+                name: "The Beatles".to_string(),
+                content_type: SearchableContentType::Artist,
+                additional_text: vec![],
+                is_available: true,
+            },
+            SearchableItem {
+                id: "unavailable_artist".to_string(),
+                name: "Beatles Tribute Band".to_string(),
+                content_type: SearchableContentType::Artist,
+                additional_text: vec![],
+                is_available: false,
+            },
+            SearchableItem {
+                id: "available_album".to_string(),
+                name: "Beatles Greatest Hits".to_string(),
+                content_type: SearchableContentType::Album,
+                additional_text: vec![],
+                is_available: true,
+            },
+            SearchableItem {
+                id: "unavailable_album".to_string(),
+                name: "Beatles Live".to_string(),
+                content_type: SearchableContentType::Album,
+                additional_text: vec![],
+                is_available: false,
+            },
+        ];
+
+        let catalog = Arc::new(MockCatalogStore::new(items));
+        let vault = Fts5LevenshteinSearchVault::new(catalog, &db_path).unwrap();
+
+        // Regular search should return all 4 items
+        let all_results = vault.search("Beatles", 10, None);
+        assert_eq!(
+            all_results.len(),
+            4,
+            "Regular search should return all items"
+        );
+
+        // search_with_availability(available_only=true) should only return available items
+        let available_results = vault.search_with_availability("Beatles", 10, None, true);
+        assert_eq!(
+            available_results.len(),
+            2,
+            "Availability search should only return available items"
+        );
+
+        // Verify we got the right items
+        let available_ids: Vec<_> = available_results
+            .iter()
+            .map(|r| r.item_id.as_str())
+            .collect();
+        assert!(available_ids.contains(&"available_artist"));
+        assert!(available_ids.contains(&"available_album"));
+        assert!(!available_ids.contains(&"unavailable_artist"));
+        assert!(!available_ids.contains(&"unavailable_album"));
+
+        // search_with_availability(available_only=false) should return all items
+        let all_via_availability = vault.search_with_availability("Beatles", 10, None, false);
+        assert_eq!(
+            all_via_availability.len(),
+            4,
+            "Availability search with available_only=false should return all items"
+        );
+    }
+
+    #[test]
+    fn test_update_availability_changes_search_results() {
+        let temp_dir = TempDir::new().unwrap();
+        let db_path = temp_dir.path().join("search.db");
+
+        // Start with one available and one unavailable - both share "day" in the name for searching
+        let items = vec![
+            SearchableItem {
+                id: "track1".to_string(),
+                name: "Yesterday Song".to_string(),
+                content_type: SearchableContentType::Track,
+                additional_text: vec![],
+                is_available: true,
+            },
+            SearchableItem {
+                id: "track2".to_string(),
+                name: "Today Song".to_string(),
+                content_type: SearchableContentType::Track,
+                additional_text: vec![],
+                is_available: false,
+            },
+        ];
+
+        let catalog = Arc::new(MockCatalogStore::new(items));
+        let vault = Fts5LevenshteinSearchVault::new(catalog, &db_path).unwrap();
+
+        // Initially, only track1 should be available when searching for "day"
+        let results = vault.search_with_availability("Song", 10, None, true);
+        assert_eq!(
+            results.len(),
+            1,
+            "Initially only 1 track should be available"
+        );
+        assert_eq!(results[0].item_id, "track1");
+
+        // Update track2 to be available
+        vault.update_availability(&[("track2".to_string(), HashedItemType::Track, true)]);
+
+        // Now both should be available
+        let results = vault.search_with_availability("Song", 10, None, true);
+        assert_eq!(
+            results.len(),
+            2,
+            "After update, both tracks should be available"
+        );
+
+        // Update track1 to be unavailable
+        vault.update_availability(&[("track1".to_string(), HashedItemType::Track, false)]);
+
+        // Now only track2 should be available
+        let results = vault.search_with_availability("Song", 10, None, true);
+        assert_eq!(
+            results.len(),
+            1,
+            "After second update, only 1 track should be available"
+        );
+        assert_eq!(results[0].item_id, "track2");
     }
 
     #[test]
