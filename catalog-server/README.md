@@ -69,14 +69,12 @@ The catalog server is the backend component of Pezzottify that provides:
   - `Fts5LevenshteinSearchVault`: SQLite FTS5 with trigram tokenizer and Levenshtein typo correction
   - `streaming/`: Streaming search pipeline with target identification and enrichment
 
-- **`download_manager/`**: Content acquisition from external providers
+- **`download_manager/`**: Content acquisition via Quentin Torrentino
 
   - `DownloadManager`: Main facade for download operations
-  - `DownloadQueueStore`: SQLite-backed queue persistence
-  - `QueueProcessor`: Background processor for download queue
+  - `DownloadQueueStore`: SQLite-backed queue persistence (download_queue.db)
+  - `TorrentClient`: HTTP + WebSocket client for Quentin Torrentino
   - `AuditLogger`: Comprehensive audit trail for all operations
-  - `IntegrityWatchdog`: Scans catalog for missing content
-  - `SearchProxy`: Forwards searches to external downloader service
 
 - **`background_jobs/`**: Scheduled background task system
 
@@ -282,10 +280,11 @@ media_path = "/data/media"
 port = 3001
 logging_level = "path"
 
-# Enable download manager by setting downloader_url
-# downloader_url = "http://downloader:3002"
-
+# Enable download manager by configuring Quentin Torrentino
 [download_manager]
+qt_base_url = "http://quentin-torrentino:8080"
+qt_ws_url = "ws://quentin-torrentino:8080/ws"
+# qt_auth_token = "optional_auth_token"
 max_albums_per_hour = 10
 max_albums_per_day = 60
 ```
@@ -562,35 +561,50 @@ The download manager uses a priority-based queue:
 
 ### Configuration
 
-Enable the download manager by configuring the downloader service URL:
+Enable the download manager by configuring Quentin Torrentino:
 
 ```toml
 # In config.toml
-downloader_url = "http://downloader:3002"
-
 [download_manager]
-enabled = true
+# Quentin Torrentino connection (required for download manager)
+qt_base_url = "http://quentin-torrentino:8080"
+qt_ws_url = "ws://quentin-torrentino:8080/ws"
+qt_auth_token = "optional_auth_token"
+
+# Rate limiting
 max_albums_per_hour = 10
 max_albums_per_day = 60
-max_user_queue_size = 20
-process_interval_secs = 30
-max_retries = 5
-initial_retry_delay_secs = 60
-max_retry_delay_secs = 3600
+user_max_requests_per_day = 100
+user_max_queue_size = 200
+
+# Queue processing
+process_interval_secs = 5
 stale_in_progress_threshold_secs = 3600
+
+# Retry settings
+max_retries = 8
+initial_backoff_secs = 60
+max_backoff_secs = 86400
+backoff_multiplier = 2.5
+
+# Audit log
 audit_log_retention_days = 90
 ```
 
 | Option | Default | Description |
 | ------ | ------- | ----------- |
-| `enabled` | `true` | Enable/disable the download manager |
+| `qt_base_url` | None | Quentin Torrentino HTTP base URL (required) |
+| `qt_ws_url` | None | Quentin Torrentino WebSocket URL (required) |
+| `qt_auth_token` | None | Auth token for Quentin Torrentino (optional) |
 | `max_albums_per_hour` | `10` | Maximum albums a user can request per hour |
 | `max_albums_per_day` | `60` | Maximum albums a user can request per day |
-| `max_user_queue_size` | `20` | Maximum items a user can have in the queue |
-| `process_interval_secs` | `30` | Interval between queue processing ticks |
-| `max_retries` | `5` | Maximum retry attempts for failed downloads |
-| `initial_retry_delay_secs` | `60` | Initial delay before first retry |
-| `max_retry_delay_secs` | `3600` | Maximum delay between retries |
+| `user_max_requests_per_day` | `100` | Maximum requests a user can make per day |
+| `user_max_queue_size` | `200` | Maximum items a user can have in the queue |
+| `process_interval_secs` | `5` | Interval between queue processing ticks |
+| `max_retries` | `8` | Maximum retry attempts for failed downloads |
+| `initial_backoff_secs` | `60` | Initial delay before first retry |
+| `max_backoff_secs` | `86400` | Maximum delay between retries (24 hours) |
+| `backoff_multiplier` | `2.5` | Multiplier for exponential backoff |
 | `stale_in_progress_threshold_secs` | `3600` | Time before in-progress items are flagged as stale |
 | `audit_log_retention_days` | `90` | Days to retain audit log entries |
 

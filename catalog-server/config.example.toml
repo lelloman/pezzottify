@@ -21,11 +21,15 @@ event_retention_days = 30
 prune_interval_hours = 24
 
 # Download Manager settings
-# Enables queue-based content acquisition from external music providers.
-# Requires downloader_url to be set. Set enabled = false to disable even with downloader_url.
+# Enables queue-based content acquisition via Quentin Torrentino.
+# Requires qt_base_url and qt_ws_url to be set.
 [download_manager]
-# Enable/disable the download manager (default: true when downloader_url is set)
-enabled = true
+# Quentin Torrentino HTTP base URL (e.g., "http://qt-server:8080")
+# qt_base_url = "http://quentin-torrentino:8080"
+# Quentin Torrentino WebSocket URL (e.g., "ws://qt-server:8080/ws")
+# qt_ws_url = "ws://quentin-torrentino:8080/ws"
+# Quentin Torrentino auth token (optional, for authenticated QT instances)
+# qt_auth_token = "your_secret_token"
 
 # Rate Limiting
 # Maximum albums a user can request per hour

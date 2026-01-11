@@ -78,6 +78,9 @@ mod tests {
     fn make_default_config() -> DownloadManagerSettings {
         DownloadManagerSettings {
             enabled: true,
+            qt_base_url: None,
+            qt_ws_url: None,
+            qt_auth_token: None,
             max_albums_per_hour: 10,
             max_albums_per_day: 60,
             user_max_requests_per_day: 100,

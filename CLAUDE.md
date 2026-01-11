@@ -140,13 +140,12 @@ The Android project uses a multi-module Gradle setup with modules: `app`, `ui`, 
   - `SqliteServerStore`: Stores server state (job history, etc.)
 - `downloader/`: External content fetching (optional)
   - Integration with external downloader service for missing content
-- `download_manager/`: Queue-based content acquisition (optional)
+- `download_manager/`: Queue-based content acquisition via Quentin Torrentino (optional)
   - `DownloadManager`: Main facade for download operations
-  - `DownloadQueueStore`: SQLite queue persistence
-  - `QueueProcessor`: Background download processing
+  - `DownloadQueueStore`: SQLite queue persistence (download_queue.db)
+  - `TorrentClient`: HTTP + WebSocket client for Quentin Torrentino
   - `AuditLogger`: Comprehensive audit trail
-  - `IntegrityWatchdog`: Scans for missing content
-  - `SearchProxy`: External provider search
+  - Configured via `[download_manager]` section with `qt_base_url` and `qt_ws_url`
 
 **Key types:**
 - `SqliteCatalogStore`: SQLite-backed catalog with CRUD operations

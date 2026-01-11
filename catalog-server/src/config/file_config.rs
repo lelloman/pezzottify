@@ -35,6 +35,12 @@ pub struct CatalogStoreConfig {
 #[derive(Debug, Deserialize, Default, Clone)]
 #[serde(default)]
 pub struct DownloadManagerConfig {
+    /// Quentin Torrentino HTTP base URL (e.g., "http://localhost:8080")
+    pub qt_base_url: Option<String>,
+    /// Quentin Torrentino WebSocket URL (e.g., "ws://localhost:8080/ws")
+    pub qt_ws_url: Option<String>,
+    /// Quentin Torrentino auth token
+    pub qt_auth_token: Option<String>,
     pub max_albums_per_hour: Option<u32>,
     pub max_albums_per_day: Option<u32>,
     pub user_max_requests_per_day: Option<u32>,
