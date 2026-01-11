@@ -98,15 +98,21 @@ fun ChatMessageItem(
 
                 // Message content
                 if (message.content.isNotEmpty()) {
-                    Text(
-                        text = message.content,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = if (isUser) {
-                            MaterialTheme.colorScheme.onPrimary
-                        } else {
-                            MaterialTheme.colorScheme.onSurface
-                        }
-                    )
+                    if (isUser) {
+                        // User messages: plain text
+                        Text(
+                            text = message.content,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onPrimary
+                        )
+                    } else {
+                        // Assistant/Tool messages: render markdown
+                        MarkdownText(
+                            text = message.content,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
                 }
 
                 // Tool calls indicator (for assistant messages) - only shown in debug mode
