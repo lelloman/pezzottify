@@ -665,6 +665,7 @@ class InteractorsModule {
                             imageUrl = ImageUrlProvider.buildImageUrl(baseUrl, result.imageId),
                             albumId = result.albumId,
                             durationMs = result.duration.toLong() * 1000,
+                            availability = DomainTrackAvailability.fromServerString(result.availability).toUi(),
                         )
                     }
                 }
