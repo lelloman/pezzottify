@@ -245,7 +245,7 @@ pub enum TicketStatus {
 }
 
 /// Error type for parsing TicketStatus from string.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ParseTicketStatusError(pub String);
 
 impl std::fmt::Display for ParseTicketStatusError {
@@ -343,19 +343,16 @@ mod tests {
 
     #[test]
     fn test_ticket_status_from_str() {
-        assert_eq!(
-            TicketStatus::from_str("PENDING"),
-            Some(TicketStatus::Pending)
-        );
+        assert_eq!(TicketStatus::from_str("PENDING"), Ok(TicketStatus::Pending));
         assert_eq!(
             TicketStatus::from_str("DOWNLOADING"),
-            Some(TicketStatus::Downloading)
+            Ok(TicketStatus::Downloading)
         );
         assert_eq!(
             TicketStatus::from_str("AUTO_APPROVED"),
-            Some(TicketStatus::Approved)
+            Ok(TicketStatus::Approved)
         );
-        assert_eq!(TicketStatus::from_str("invalid"), None);
+        assert!(TicketStatus::from_str("invalid").is_err());
     }
 
     #[test]

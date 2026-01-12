@@ -4072,9 +4072,6 @@ async fn admin_get_changelog_entity_history(
         .into_response()
 }
 
-// NOTE: Download Manager Endpoints removed - depends on download_manager module
-// These will be re-added when download_manager is updated for Spotify schema
-
 impl ServerState {
     /// Create a new ServerState with an already-guarded search vault.
     /// This allows sharing the search vault with background tasks.
