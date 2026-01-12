@@ -179,6 +179,9 @@ export const useChatStore = defineStore('chat', () => {
   // Whether we're currently detecting language
   const isDetectingLanguage = ref(false);
 
+  // Whether we need to detect language on next message
+  const pendingLanguageDetection = ref(config.value.language === null);
+
   // Context summary from compacted messages
   const contextSummary = ref(null);
 
@@ -307,26 +310,40 @@ export const useChatStore = defineStore('chat', () => {
    * Detect language from a user message
    */
   async function detectLanguage(userMessage) {
+    console.log('[Lang] detectLanguage called, isConfigured:', isConfigured.value);
     if (!isConfigured.value) return null;
 
     isDetectingLanguage.value = true;
     try {
       const prompt = buildDetectionPrompt(userMessage);
+      console.log('[Lang] Sending detection prompt...');
       const response = await quickPrompt(config.value.provider, config.value, prompt);
+      console.log('[Lang] Got response:', response);
 
-      // Extract just the language code (first 2-3 chars, lowercase)
-      const code = response.toLowerCase().trim().slice(0, 2);
+      // Extract language code - look for a valid 2-letter code in the response
+      const cleanResponse = response.toLowerCase().trim();
 
-      // Validate it's a known language
-      const lang = getLanguage(code);
-      if (lang) {
-        return code;
+      // First try: exact match (response is just the code)
+      if (cleanResponse.length === 2 && getLanguage(cleanResponse)) {
+        console.log('[Lang] Exact match:', cleanResponse);
+        return cleanResponse;
+      }
+
+      // Second try: find any valid language code in the response
+      for (const lang of LANGUAGES) {
+        // Look for the code as a standalone word (not part of another word)
+        const regex = new RegExp(`\\b${lang.code}\\b`);
+        if (regex.test(cleanResponse)) {
+          console.log('[Lang] Found code in response:', lang.code);
+          return lang.code;
+        }
       }
 
       // Fallback to English
+      console.warn('[Lang] Could not parse response, falling back to en:', response);
       return 'en';
     } catch (e) {
-      console.warn('Language detection failed:', e);
+      console.warn('[Lang] Detection failed:', e);
       return 'en';
     } finally {
       isDetectingLanguage.value = false;
@@ -435,12 +452,17 @@ export const useChatStore = defineStore('chat', () => {
     error.value = null;
     streamingText.value = '';
 
-    // Detect language on first message if not set
+    // Detect language if pending (either first message or user selected auto-detect)
     const trimmedMessage = userMessage.trim();
-    if (config.value.language === null && messages.value.length === 0) {
+    console.log('[Lang] sendMessage - pendingLanguageDetection:', pendingLanguageDetection.value, 'current language:', config.value.language);
+    if (pendingLanguageDetection.value) {
+      console.log('[Lang] Triggering detection for message:', trimmedMessage.slice(0, 50));
       const detectedLang = await detectLanguage(trimmedMessage);
+      console.log('[Lang] Detection returned:', detectedLang);
       if (detectedLang) {
         config.value.language = detectedLang;
+        pendingLanguageDetection.value = false;
+        console.log('[Lang] Language set to:', detectedLang);
       }
     }
 
@@ -595,6 +617,9 @@ export const useChatStore = defineStore('chat', () => {
     contextSummary.value = null;
     error.value = null;
     streamingText.value = '';
+    // Reset language so it auto-detects on next conversation
+    config.value.language = null;
+    pendingLanguageDetection.value = true;
   }
 
   /**
@@ -630,13 +655,15 @@ export const useChatStore = defineStore('chat', () => {
    */
   function setLanguage(code) {
     config.value.language = code;
+    pendingLanguageDetection.value = false;
   }
 
   /**
-   * Reset language (clear preference, will auto-detect on next first message)
+   * Reset language (clear preference, will auto-detect on next message)
    */
   function resetLanguage() {
     config.value.language = null;
+    pendingLanguageDetection.value = true;
   }
 
   /**
