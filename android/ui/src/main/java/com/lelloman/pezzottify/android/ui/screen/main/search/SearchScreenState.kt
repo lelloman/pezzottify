@@ -18,6 +18,7 @@ data class SearchScreenState(
     val searchHistoryItems: List<Flow<Content<SearchHistoryItem>>>? = null,
     val selectedFilters: Set<SearchFilter> = emptySet(),
     val whatsNewContent: WhatsNewContentState? = null,
+    val genresContent: GenresContentState? = null,
     // Streaming search state
     val isStreamingSearchEnabled: Boolean = false,
     val streamingSections: List<StreamingSearchSection> = emptyList(),
@@ -57,6 +58,22 @@ data class SearchHistoryItem(
     val contentName: String,
     val contentImageUrl: String?,
     val contentType: ViewedContentType,
+)
+
+/**
+ * State for the Genres section on the search screen.
+ */
+data class GenresContentState(
+    val genres: List<GenreItem> = emptyList(),
+    val isLoading: Boolean = false,
+)
+
+/**
+ * A genre item displayed in the horizontal scrolling widget.
+ */
+data class GenreItem(
+    val name: String,
+    val trackCount: Int,
 )
 
 /**

@@ -14,4 +14,8 @@ sealed interface SearchScreensEvents {
 
     data object NavigateToWhatsNewScreen : SearchScreensEvents
 
+    data class NavigateToGenreScreen(val genreName: String) : SearchScreensEvents
+
+    data object NavigateToGenreListScreen : SearchScreensEvents
+
 }

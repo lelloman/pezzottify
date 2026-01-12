@@ -431,6 +431,9 @@ class SearchScreenViewModelTest {
 
         override suspend fun getWhatsNew(limit: Int): Result<List<SearchScreenViewModel.WhatsNewBatchData>> =
             Result.success(emptyList())
+
+        override suspend fun getGenres(limit: Int): Result<List<GenreItem>> =
+            Result.success(emptyList())
     }
 
     private class FakeContentResolver : ContentResolver {

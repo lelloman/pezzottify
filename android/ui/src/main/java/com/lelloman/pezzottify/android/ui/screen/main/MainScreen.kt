@@ -309,6 +309,18 @@ private fun MainScreenContent(state: MainScreenState, actions: MainScreenActions
                         navController = navController
                     )
                 }
+                composable<Screen.Main.Genre> {
+                    val genreName = it.toRoute<Screen.Main.Genre>().genreName
+                    com.lelloman.pezzottify.android.ui.screen.main.genre.GenreScreen(
+                        genreName = genreName,
+                        navController = navController,
+                    )
+                }
+                composable<Screen.Main.GenreList> {
+                    com.lelloman.pezzottify.android.ui.screen.main.genre.GenreListScreen(
+                        navController = navController
+                    )
+                }
 
                 // Overlay screens (no bottom nav/player)
                 composable<Screen.Main.Player> {

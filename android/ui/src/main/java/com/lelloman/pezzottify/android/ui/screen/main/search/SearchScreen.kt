@@ -79,6 +79,8 @@ import com.lelloman.pezzottify.android.ui.toAlbum
 import com.lelloman.pezzottify.android.ui.toWhatsNew
 import com.lelloman.pezzottify.android.ui.toArtist
 import com.lelloman.pezzottify.android.ui.toTrack
+import com.lelloman.pezzottify.android.ui.toGenre
+import com.lelloman.pezzottify.android.ui.toGenreList
 import kotlinx.coroutines.flow.Flow
 
 @Composable
@@ -111,6 +113,8 @@ fun SearchScreenContent(
                 is SearchScreensEvents.NavigateToTrackScreen -> navController.toTrack(it.trackId)
                 is SearchScreensEvents.ShowMessage -> snackbarHostState.showSnackbar(context.getString(it.messageRes))
                 is SearchScreensEvents.NavigateToWhatsNewScreen -> navController.toWhatsNew()
+                is SearchScreensEvents.NavigateToGenreScreen -> navController.toGenre(it.genreName)
+                is SearchScreensEvents.NavigateToGenreListScreen -> navController.toGenreList()
             }
         }
     }
@@ -178,6 +182,16 @@ fun SearchScreenContent(
                     if (whatsNew.albums.isNotEmpty()) {
                         WhatsNewSection(
                             whatsNewContent = whatsNew,
+                            actions = actions
+                        )
+                    }
+                }
+
+                // Genres section
+                state.genresContent?.let { genres ->
+                    if (genres.genres.isNotEmpty()) {
+                        GenresSection(
+                            genresContent = genres,
                             actions = actions
                         )
                     }
@@ -882,6 +896,94 @@ private fun WhatsNewAlbumCardError() {
                 color = MaterialTheme.colorScheme.onErrorContainer
             )
         }
+    }
+}
+
+@Composable
+private fun GenresSection(
+    genresContent: GenresContentState,
+    actions: SearchScreenActions
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = Spacing.Medium)
+            .padding(top = Spacing.Large)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = stringResource(R.string.genres_header),
+                style = MaterialTheme.typography.titleLarge
+            )
+            Text(
+                text = stringResource(R.string.genres_see_all),
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier
+                    .clickable { actions.clickOnGenreSeeAll() }
+                    .padding(Spacing.Small)
+            )
+        }
+
+        Spacer(modifier = Modifier.height(Spacing.Medium))
+
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(Spacing.Small)
+        ) {
+            genresContent.genres.forEach { genre ->
+                GenreCard(
+                    genre = genre,
+                    onClick = { actions.clickOnGenre(genre.name) }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun GenreCard(
+    genre: GenreItem,
+    onClick: () -> Unit,
+) {
+    Card(
+        modifier = Modifier
+            .width(140.dp)
+            .clickable(onClick = onClick),
+        shape = RoundedCornerShape(CornerRadius.Small),
+        elevation = CardDefaults.cardElevation(defaultElevation = Elevation.Small)
+    ) {
+        Column(
+            modifier = Modifier.padding(Spacing.Medium)
+        ) {
+            Text(
+                text = genre.name,
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Spacer(modifier = Modifier.height(Spacing.ExtraSmall))
+            Text(
+                text = formatTrackCount(genre.trackCount),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
+private fun formatTrackCount(count: Int): String {
+    return when {
+        count == 1 -> "1 track"
+        count > 1 -> "$count tracks"
+        else -> ""
     }
 }
 
