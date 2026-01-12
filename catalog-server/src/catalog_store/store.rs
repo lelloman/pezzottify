@@ -1646,24 +1646,28 @@ impl CatalogStore for SqliteCatalogStore {
         let conn = self.get_read_conn();
         let conn = conn.lock().unwrap();
 
-        // Get total count first
+        // Get total count using EXISTS (much faster than JOIN with DISTINCT)
         let total: i64 = conn.query_row(
-            "SELECT COUNT(DISTINCT t.rowid)
-             FROM tracks t
-             JOIN track_artists ta ON t.rowid = ta.track_rowid
-             JOIN artist_genres ag ON ta.artist_rowid = ag.artist_rowid
-             WHERE t.track_available = 1 AND ag.genre = ?1",
+            "SELECT COUNT(*) FROM tracks t
+             WHERE t.track_available = 1
+               AND EXISTS (
+                 SELECT 1 FROM track_artists ta
+                 JOIN artist_genres ag ON ta.artist_rowid = ag.artist_rowid
+                 WHERE ta.track_rowid = t.rowid AND ag.genre = ?1
+               )",
             params![genre],
             |row| row.get(0),
         )?;
 
-        // Get paginated track IDs
+        // Get paginated track IDs using EXISTS (much faster than JOIN with DISTINCT)
         let mut stmt = conn.prepare_cached(
-            "SELECT DISTINCT t.id
-             FROM tracks t
-             JOIN track_artists ta ON t.rowid = ta.track_rowid
-             JOIN artist_genres ag ON ta.artist_rowid = ag.artist_rowid
-             WHERE t.track_available = 1 AND ag.genre = ?1
+            "SELECT t.id FROM tracks t
+             WHERE t.track_available = 1
+               AND EXISTS (
+                 SELECT 1 FROM track_artists ta
+                 JOIN artist_genres ag ON ta.artist_rowid = ag.artist_rowid
+                 WHERE ta.track_rowid = t.rowid AND ag.genre = ?1
+               )
              ORDER BY t.popularity DESC
              LIMIT ?2 OFFSET ?3",
         )?;
@@ -1688,12 +1692,15 @@ impl CatalogStore for SqliteCatalogStore {
         let conn = self.get_read_conn();
         let conn = conn.lock().unwrap();
 
+        // Use EXISTS for much faster performance than JOIN with DISTINCT
         let mut stmt = conn.prepare_cached(
-            "SELECT DISTINCT t.id
-             FROM tracks t
-             JOIN track_artists ta ON t.rowid = ta.track_rowid
-             JOIN artist_genres ag ON ta.artist_rowid = ag.artist_rowid
-             WHERE t.track_available = 1 AND ag.genre = ?1
+            "SELECT t.id FROM tracks t
+             WHERE t.track_available = 1
+               AND EXISTS (
+                 SELECT 1 FROM track_artists ta
+                 JOIN artist_genres ag ON ta.artist_rowid = ag.artist_rowid
+                 WHERE ta.track_rowid = t.rowid AND ag.genre = ?1
+               )
              ORDER BY RANDOM()
              LIMIT ?2",
         )?;
