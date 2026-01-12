@@ -32,7 +32,14 @@ pub struct RequestTrackBody {
 #[derive(Debug, Deserialize)]
 pub struct RequestAlbumBody {
     pub album_id: String,
+    /// Album name for display (optional, used by clients)
+    #[serde(default)]
+    pub album_name: Option<String>,
+    /// Artist name for display (optional, used by clients)
+    #[serde(default)]
+    pub artist_name: Option<String>,
 }
+
 
 #[derive(Debug, Deserialize)]
 pub struct PaginationQuery {
@@ -63,6 +70,10 @@ pub struct AdminRequestsQuery {
     #[serde(default)]
     pub offset: usize,
     pub status: Option<String>,
+    #[serde(default)]
+    pub exclude_completed: bool,
+    #[serde(default)]
+    pub top_level_only: bool,
 }
 
 #[derive(Debug, Serialize)]
@@ -71,6 +82,16 @@ pub struct DownloadStatusResponse {
     pub pending_count: usize,
 }
 
+/// Response for POST /request/album
+#[derive(Debug, Serialize)]
+pub struct AlbumRequestResponse {
+    /// ID of the created queue item (first track's queue item)
+    pub request_id: String,
+    /// Initial status (usually PENDING)
+    pub status: String,
+}
+
+/// Legacy response format (kept for backwards compatibility)
 #[derive(Debug, Serialize)]
 pub struct RequestResponse {
     pub success: bool,
@@ -82,6 +103,22 @@ pub struct RequestResponse {
 pub struct AuditLogResponse {
     pub entries: Vec<serde_json::Value>,
     pub total_count: usize,
+}
+
+/// Downloader service status
+#[derive(Debug, Serialize)]
+pub struct DownloaderStatus {
+    /// Current state: "connected" or "disconnected"
+    pub state: String,
+}
+
+/// Admin stats response with queue and downloader status
+#[derive(Debug, Serialize)]
+pub struct AdminStatsResponse {
+    /// Queue statistics
+    pub queue: crate::download_manager::QueueStats,
+    /// Downloader service status
+    pub downloader: DownloaderStatus,
 }
 
 // =============================================================================
@@ -121,6 +158,13 @@ async fn get_user_limits(
     }
 }
 
+/// Response for GET /my-requests - includes requests and rate limit stats
+#[derive(Debug, Serialize)]
+pub struct MyRequestsResponse {
+    pub requests: Vec<crate::download_manager::QueueItem>,
+    pub stats: crate::download_manager::UserLimitStatus,
+}
+
 /// GET /my-requests - Get user's queued download requests
 async fn get_my_requests(
     session: Session,
@@ -133,13 +177,25 @@ async fn get_my_requests(
     };
 
     let user_id = session.user_id.to_string();
-    match manager.get_user_requests(&user_id, pagination.limit, pagination.offset) {
-        Ok(requests) => Json(requests).into_response(),
+
+    // Get both requests and limits in one response
+    let requests = match manager.get_user_requests(&user_id, pagination.limit, pagination.offset) {
+        Ok(r) => r,
         Err(e) => {
             warn!("Failed to get user requests: {}", e);
-            (StatusCode::INTERNAL_SERVER_ERROR, "Failed to get requests").into_response()
+            return (StatusCode::INTERNAL_SERVER_ERROR, "Failed to get requests").into_response();
         }
-    }
+    };
+
+    let stats = match manager.get_user_limits(&user_id) {
+        Ok(s) => s,
+        Err(e) => {
+            warn!("Failed to get user limits: {}", e);
+            return (StatusCode::INTERNAL_SERVER_ERROR, "Failed to get limits").into_response();
+        }
+    };
+
+    Json(MyRequestsResponse { requests, stats }).into_response()
 }
 
 /// POST /request/track - Request a single track download
@@ -191,27 +247,21 @@ async fn request_album(
     };
 
     let user_id = session.user_id.to_string();
-    debug!("User {} requesting album {}", user_id, body.album_id);
+    debug!(
+        "User {} requesting album {} ({:?} by {:?})",
+        user_id, body.album_id, body.album_name, body.artist_name
+    );
 
     match manager.request_album(&user_id, &body.album_id).await {
-        Ok(items) => Json(RequestResponse {
-            success: true,
-            message: format!("{} tracks queued for download", items.len()),
-            queue_item_id: items.first().map(|i| i.id.clone()),
+        Ok(items) => Json(AlbumRequestResponse {
+            request_id: items.first().map(|i| i.id.clone()).unwrap_or_default(),
+            status: "PENDING".to_string(),
         })
         .into_response(),
         Err(e) => {
             let msg = e.to_string();
             debug!("Album request failed: {}", msg);
-            (
-                StatusCode::BAD_REQUEST,
-                Json(RequestResponse {
-                    success: false,
-                    message: msg,
-                    queue_item_id: None,
-                }),
-            )
-                .into_response()
+            (StatusCode::BAD_REQUEST, msg).into_response()
         }
     }
 }
@@ -235,7 +285,7 @@ async fn get_status(State(dm): State<OptionalDownloadManager>) -> impl IntoRespo
 // Admin Routes
 // =============================================================================
 
-/// GET /admin/stats - Get queue statistics
+/// GET /admin/stats - Get queue statistics and downloader status
 async fn get_admin_stats(
     session: Session,
     State(dm): State<OptionalDownloadManager>,
@@ -250,7 +300,22 @@ async fn get_admin_stats(
     };
 
     match manager.get_queue_stats() {
-        Ok(stats) => Json(stats).into_response(),
+        Ok(queue_stats) => {
+            let status = manager.get_status();
+            let downloader = DownloaderStatus {
+                state: if status.connected {
+                    "connected".to_string()
+                } else {
+                    "disconnected".to_string()
+                },
+            };
+
+            Json(AdminStatsResponse {
+                queue: queue_stats,
+                downloader,
+            })
+            .into_response()
+        }
         Err(e) => {
             warn!("Failed to get queue stats: {}", e);
             (StatusCode::INTERNAL_SERVER_ERROR, "Failed to get stats").into_response()
@@ -310,7 +375,13 @@ async fn get_admin_requests(
         _ => None,
     });
 
-    match manager.get_all_requests(status, query.limit, query.offset) {
+    match manager.get_all_requests_filtered(
+        status,
+        query.exclude_completed,
+        query.top_level_only,
+        query.limit,
+        query.offset,
+    ) {
         Ok(items) => Json(items).into_response(),
         Err(e) => {
             warn!("Failed to get requests: {}", e);

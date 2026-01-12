@@ -6,8 +6,6 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use std::collections::HashMap;
-
 use anyhow::{anyhow, Result};
 use tokio::sync::RwLock;
 use tracing::{debug, error, info, warn};
@@ -23,7 +21,8 @@ use super::retry_policy::RetryPolicy;
 use super::sync_notifier::DownloadSyncNotifier;
 use super::torrent_client::TorrentClient;
 use super::torrent_types::{
-    AudioConstraints, MetadataEmbed, MusicTicket, SearchInfo, TicketStatus, TorrentEvent, TrackInfo,
+    AudioSearchConstraints, CreateTicketRequest, ExpectedContent, ExpectedTrack, OutputConstraints,
+    QueryContext, SearchConstraints, TicketStatus, TorrentEvent,
 };
 
 /// Main download manager that orchestrates all download operations.
@@ -158,14 +157,94 @@ impl DownloadManager {
 
     /// Request download of all tracks in an album.
     ///
-    /// Creates queue items for each track that is not already available.
-    /// Returns the list of queued items.
-    ///
-    /// TODO: Implement when CatalogStore trait has get_album() and get_album_tracks()
-    pub async fn request_album(&self, _user_id: &str, _album_id: &str) -> Result<Vec<QueueItem>> {
-        // TODO: Implement album download request
-        // Need to add get_album() and get_album_tracks() to CatalogStore trait
-        Err(anyhow!("Album download not yet implemented"))
+    /// Creates a queue item for the album (with null QT ticket ID).
+    /// The ticket will be submitted to Quentin Torrentino later by the queue processor.
+    /// Returns the queued item wrapped in a Vec (for compatibility).
+    pub async fn request_album(&self, user_id: &str, album_id: &str) -> Result<Vec<QueueItem>> {
+        // Check user limits
+        let limits = self.queue_store.get_user_stats(user_id)?;
+        if !limits.can_request {
+            return Err(anyhow!("User has reached request limit"));
+        }
+
+        // Get resolved album with all tracks
+        let resolved_album = self
+            .catalog_store
+            .get_resolved_album(album_id)?
+            .ok_or_else(|| anyhow!("Album not found in catalog: {}", album_id))?;
+
+        let album = &resolved_album.album;
+        let primary_artist = resolved_album
+            .artists
+            .first()
+            .map(|a| a.name.clone())
+            .unwrap_or_default();
+
+        // Count tracks that need downloading (for validation)
+        let mut tracks_needing_download = 0;
+        for disc in &resolved_album.discs {
+            for track in &disc.tracks {
+                if track.availability != TrackAvailability::Available {
+                    tracks_needing_download += 1;
+                }
+            }
+        }
+
+        if tracks_needing_download == 0 {
+            return Err(anyhow!(
+                "No tracks to download - all tracks in '{}' are already available",
+                album.name
+            ));
+        }
+
+        // Check if album is already in queue
+        if self
+            .queue_store
+            .is_in_active_queue(DownloadContentType::Album, album_id)?
+        {
+            return Err(anyhow!("Album is already in download queue"));
+        }
+
+        // Create a single album queue item (with null ticket_id - will be set when submitted to QT)
+        let album_item = QueueItem::new(
+            uuid::Uuid::new_v4().to_string(),
+            DownloadContentType::Album,
+            album_id.to_string(),
+            QueuePriority::User,
+            RequestSource::User,
+            self.config.max_retries as i32,
+        )
+        .with_names(Some(album.name.clone()), Some(primary_artist.clone()))
+        .with_user(user_id.to_string());
+
+        // Enqueue the item (status: PENDING, ticket_id: NULL)
+        self.queue_store.enqueue(album_item.clone())?;
+        self.audit_logger.log_request_created(&album_item, 0)?;
+
+        // Increment user request count (once per album)
+        self.queue_store.increment_user_requests(user_id)?;
+
+        info!(
+            "Queued album '{}' for download ({} tracks)",
+            album.name, tracks_needing_download
+        );
+
+        // Submit the pending item to QT if connected
+        if self.torrent_client.is_connected() {
+            match self.submit_pending_tickets().await {
+                Ok(count) => {
+                    if count > 0 {
+                        debug!("Submitted {} pending tickets after enqueue", count);
+                    }
+                }
+                Err(e) => {
+                    warn!("Failed to submit pending tickets after enqueue: {}", e);
+                    // Continue anyway - item is in queue and will be submitted on reconnect
+                }
+            }
+        }
+
+        Ok(vec![album_item])
     }
 
     /// Get rate limit status for a user.
@@ -190,7 +269,7 @@ impl DownloadManager {
     /// Submit pending queue items as tickets to Quentin Torrentino.
     ///
     /// Called when WebSocket connects to submit any items queued while offline.
-    /// Groups pending items by album and creates one ticket per album.
+    /// Each pending Album item creates one ticket.
     /// Returns the number of tickets submitted.
     pub async fn submit_pending_tickets(&self) -> Result<usize> {
         // Get all pending queue items
@@ -212,36 +291,23 @@ impl DownloadManager {
             pending_items.len()
         );
 
-        // Group items by album_id (get album_id from track)
-        let mut album_groups: HashMap<String, Vec<QueueItem>> = HashMap::new();
+        let mut tickets_submitted = 0;
+
+        // Process each pending item
         for item in pending_items {
-            if item.content_type != DownloadContentType::TrackAudio {
-                debug!("Skipping non-track item: {:?}", item.content_type);
+            // Only process Album items (atomic album downloads)
+            if item.content_type != DownloadContentType::Album {
+                debug!("Skipping non-album item: {:?}", item.content_type);
                 continue;
             }
 
-            // Get track to find its album_id
-            if let Ok(Some(track)) = self.catalog_store.get_track(&item.content_id) {
-                album_groups
-                    .entry(track.album_id.clone())
-                    .or_default()
-                    .push(item);
-            } else {
-                warn!("Track {} not found in catalog, skipping", item.content_id);
-            }
-        }
-
-        let mut tickets_submitted = 0;
-
-        // Process each album group
-        for (album_id, items) in album_groups {
-            match self.create_and_submit_ticket(&album_id, &items).await {
-                Ok(_) => {
+            let album_id = &item.content_id;
+            match self.create_and_submit_ticket(album_id, &item).await {
+                Ok(ticket_id) => {
                     tickets_submitted += 1;
                     info!(
-                        "Submitted ticket for album {} ({} tracks)",
-                        album_id,
-                        items.len()
+                        "Submitted ticket {} for album {}",
+                        ticket_id, album_id
                     );
                 }
                 Err(e) => {
@@ -253,11 +319,13 @@ impl DownloadManager {
         Ok(tickets_submitted)
     }
 
-    /// Create and submit a ticket for an album with the given queue items.
+    /// Create and submit a ticket for an album queue item.
+    ///
+    /// Creates a QT ticket, stores the mapping, and marks the item as in_progress.
     async fn create_and_submit_ticket(
         &self,
         album_id: &str,
-        items: &[QueueItem],
+        item: &QueueItem,
     ) -> Result<String> {
         // Get resolved album data
         let resolved_album = self
@@ -267,74 +335,70 @@ impl DownloadManager {
 
         let album = &resolved_album.album;
         let artists = &resolved_album.artists;
-        let primary_artist = artists.first().map(|a| a.name.clone()).unwrap_or_default();
+        let primary_artist = artists.first().map(|a| a.name.clone());
 
-        // Extract year from release_date
-        let year = album
-            .release_date
-            .as_ref()
-            .and_then(|d| d.split('-').next())
-            .and_then(|y| y.parse::<i32>().ok());
-
-        // Build track list from queue items and album discs
-        let mut tracks: Vec<TrackInfo> = Vec::new();
-        let requested_track_ids: std::collections::HashSet<&str> =
-            items.iter().map(|i| i.content_id.as_str()).collect();
-
+        // Build expected tracks from album discs
+        let mut expected_tracks: Vec<ExpectedTrack> = Vec::new();
         for disc in &resolved_album.discs {
             for track in &disc.tracks {
-                // Determine destination path
-                let dest_path = self.compute_track_dest_path(&track.id);
-
-                tracks.push(TrackInfo {
-                    id: track.id.clone(),
-                    disc_number: disc.number,
-                    track_number: track.track_number,
-                    name: track.name.clone(),
-                    duration_secs: (track.duration_ms / 1000) as u32,
-                    dest_path,
-                    requested: requested_track_ids.contains(track.id.as_str()),
+                expected_tracks.push(ExpectedTrack {
+                    number: track.track_number as u32,
+                    title: track.name.clone(),
+                    duration_secs: Some((track.duration_ms / 1000) as u32),
+                    disc_number: if disc.number > 1 {
+                        Some(disc.number as u32)
+                    } else {
+                        None
+                    },
                 });
             }
         }
 
-        // Create the ticket
-        let ticket_id = uuid::Uuid::new_v4().to_string();
-        let ticket = MusicTicket {
-            ticket_id: ticket_id.clone(),
-            created_at: chrono::Utc::now().to_rfc3339(),
-            content_type: "music".to_string(),
-            search: SearchInfo {
-                artist: primary_artist.clone(),
-                album: album.name.clone(),
-                year,
-                label: album.label.clone(),
-                genres: vec![], // Could add if we had genre data
-            },
-            tracks,
-            images: vec![], // Audio-only scope
-            constraints: AudioConstraints::default(),
-            metadata_to_embed: MetadataEmbed {
-                artist: primary_artist,
-                album: album.name.clone(),
-                year,
-                genre: None,
-            },
+        // Extract release year from release_date (format: "YYYY", "YYYY-MM", or "YYYY-MM-DD")
+        let release_year = album
+            .release_date
+            .as_ref()
+            .and_then(|d| d.split('-').next())
+            .filter(|y| y.len() == 4);
+
+        // Build description for search (include year if available)
+        let description = match (&primary_artist, release_year) {
+            (Some(artist), Some(year)) => format!("{} {} ({})", artist, album.name, year),
+            (Some(artist), None) => format!("{} {}", artist, album.name),
+            (None, Some(year)) => format!("{} ({})", album.name, year),
+            (None, None) => album.name.clone(),
         };
 
-        // Submit to QT
-        self.torrent_client.create_ticket(ticket).await?;
+        // Create the ticket request (matches QT's CreateTicketBody format)
+        let request = CreateTicketRequest {
+            priority: Some(0),
+            query_context: QueryContext {
+                tags: vec!["music".to_string(), "album".to_string()],
+                description,
+                expected: Some(ExpectedContent::Album {
+                    artist: primary_artist,
+                    title: album.name.clone(),
+                    tracks: expected_tracks,
+                }),
+                search_constraints: Some(SearchConstraints {
+                    audio: Some(AudioSearchConstraints::default()),
+                }),
+            },
+            dest_path: self.media_path.to_string_lossy().to_string(),
+            output_constraints: Some(OutputConstraints::default()),
+        };
 
-        // Create ticket mapping - use first item as representative
-        let first_item = items.first().ok_or_else(|| anyhow!("No items"))?;
+        // Submit to QT - QT assigns the ticket ID
+        let response = self.torrent_client.create_ticket(request).await?;
+        let ticket_id = response.id;
+
+        // Create ticket mapping (queue_item_id -> ticket_id -> album_id)
         self.queue_store
-            .create_ticket_mapping(&first_item.id, &ticket_id, album_id)?;
+            .create_ticket_mapping(&item.id, &ticket_id, album_id)?;
 
-        // Update all queue items to IN_PROGRESS (claim them)
-        for item in items {
-            if let Err(e) = self.queue_store.claim_for_processing(&item.id) {
-                warn!("Failed to claim item {} for processing: {}", item.id, e);
-            }
+        // Mark queue item as IN_PROGRESS (now has ticket_id)
+        if let Err(e) = self.queue_store.claim_for_processing(&item.id) {
+            warn!("Failed to claim item {} for processing: {}", item.id, e);
         }
 
         Ok(ticket_id)
@@ -395,17 +459,16 @@ impl DownloadManager {
                 self.handle_ticket_failed(&ticket_id, &error, retryable)
                     .await?;
             }
-            TorrentEvent::StateChange {
-                ticket_id,
-                old_state,
-                new_state,
-                ..
-            } => {
-                debug!("Ticket {} state: {} -> {}", ticket_id, old_state, new_state);
+            TorrentEvent::TicketUpdated { ticket_id, state } => {
+                debug!("Ticket {} updated to state: {}", ticket_id, state);
                 // Update ticket state in DB
-                if let Err(e) = self.queue_store.update_ticket_state(&ticket_id, &new_state) {
+                if let Err(e) = self.queue_store.update_ticket_state(&ticket_id, &state) {
                     warn!("Failed to update ticket state: {}", e);
                 }
+            }
+            TorrentEvent::TicketDeleted { ticket_id } => {
+                debug!("Ticket {} deleted", ticket_id);
+                // Could handle ticket deletion if needed
             }
             TorrentEvent::Progress {
                 ticket_id,
@@ -634,7 +697,7 @@ impl DownloadManager {
         Ok(())
     }
 
-    /// Get all requests (admin view).
+    /// Get all requests (admin view) - legacy version with hardcoded filters.
     pub fn get_all_requests(
         &self,
         status: Option<QueueStatus>,
@@ -643,6 +706,19 @@ impl DownloadManager {
     ) -> Result<Vec<QueueItem>> {
         self.queue_store
             .list_all(status, false, true, limit, offset)
+    }
+
+    /// Get all requests with explicit filter parameters.
+    pub fn get_all_requests_filtered(
+        &self,
+        status: Option<QueueStatus>,
+        exclude_completed: bool,
+        top_level_only: bool,
+        limit: usize,
+        offset: usize,
+    ) -> Result<Vec<QueueItem>> {
+        self.queue_store
+            .list_all(status, exclude_completed, top_level_only, limit, offset)
     }
 
     /// Get audit log with filtering.

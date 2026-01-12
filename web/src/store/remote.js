@@ -616,9 +616,9 @@ export const useRemoteStore = defineStore("remote", () => {
 
   const fetchDownloadQueue = async () => {
     try {
-      // Fetch top-level non-completed requests (user requests as atomic units)
+      // Fetch non-completed requests (includes both parent items and standalone tracks)
       const response = await axios.get("/v1/download/admin/requests", {
-        params: { limit: 200, offset: 0, exclude_completed: true, top_level_only: true },
+        params: { limit: 200, offset: 0, exclude_completed: true, top_level_only: false },
       });
       return response.data;
     } catch (error) {
@@ -775,22 +775,6 @@ export const useRemoteStore = defineStore("remote", () => {
       return { success: true, data: response.data };
     } catch (error) {
       console.error("Failed to request album download:", error);
-      if (error.response?.data) {
-        return { error: error.response.data };
-      }
-      return { error: "Failed to request download" };
-    }
-  };
-
-  const requestDiscographyDownload = async (artistId, artistName) => {
-    try {
-      const response = await axios.post("/v1/download/request/discography", {
-        artist_id: artistId,
-        artist_name: artistName,
-      });
-      return { success: true, data: response.data };
-    } catch (error) {
-      console.error("Failed to request discography download:", error);
       if (error.response?.data) {
         return { error: error.response.data };
       }
@@ -986,7 +970,6 @@ export const useRemoteStore = defineStore("remote", () => {
     retryDownload,
     deleteDownloadRequest,
     requestAlbumDownload,
-    requestDiscographyDownload,
     // Admin API - Changelog Batches
     fetchChangelogBatches,
     fetchChangelogBatch,

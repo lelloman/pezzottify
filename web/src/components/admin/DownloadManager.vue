@@ -8,21 +8,12 @@
         <span class="statusDot"></span>
         <span class="statusState">{{ downloaderState }}</span>
       </div>
-      <div v-if="stats?.downloader?.uptime_secs" class="statusUptime">
-        Uptime: {{ formatUptime(stats.downloader.uptime_secs) }}
-      </div>
-      <div v-if="stats?.downloader?.last_error" class="statusError">
-        {{ stats.downloader.last_error }}
-      </div>
     </div>
 
     <!-- Action Buttons -->
     <div class="actionButtons">
       <button class="actionButton" @click="openDownloadModal('album')">
         Download Album
-      </button>
-      <button class="actionButton" @click="openDownloadModal('artist')">
-        Download Artist
       </button>
       <button class="refreshButton" @click="loadData" :disabled="isLoading">
         {{ isLoading ? "Loading..." : "Refresh" }}
@@ -395,24 +386,20 @@
     <div v-if="showDownloadModal" class="detailOverlay" @click.self="closeDownloadModal">
       <div class="detailPanel downloadModal">
         <div class="detailHeader">
-          <h3 class="detailTitle">
-            {{ downloadModalType === "album" ? "Download Album" : "Download Artist Discography" }}
-          </h3>
+          <h3 class="detailTitle">Download Album</h3>
           <button class="closeDetailButton" @click="closeDownloadModal">×</button>
         </div>
         <div class="modalContent">
           <div class="formGroup">
-            <label class="formLabel">
-              {{ downloadModalType === "album" ? "Album ID" : "Artist ID" }}
-            </label>
+            <label class="formLabel">Album ID</label>
             <input
               v-model="downloadForm.id"
               type="text"
               class="formInput"
-              :placeholder="downloadModalType === 'album' ? 'External album ID' : 'External artist ID'"
+              placeholder="Album ID (e.g. Spotify album ID)"
             />
           </div>
-          <div v-if="downloadModalType === 'album'" class="formGroup">
+          <div class="formGroup">
             <label class="formLabel">Album Name</label>
             <input
               v-model="downloadForm.albumName"
@@ -541,7 +528,7 @@ const downloaderState = computed(() => {
 const downloaderStatusClass = computed(() => {
   const state = stats.value?.downloader?.state;
   if (!state) return "status-unknown";
-  if (state === "Healthy") return "status-online";
+  if (state === "Healthy" || state === "connected") return "status-online";
   if (state === "LoggingIn" || state === "Booting") return "status-pending";
   return "status-offline";
 });
@@ -566,28 +553,18 @@ const submitDownloadRequest = async () => {
   downloadError.value = null;
   downloadSuccess.value = null;
 
-  let result;
-  if (downloadModalType.value === "album") {
-    result = await remoteStore.requestAlbumDownload(
-      downloadForm.id,
-      downloadForm.albumName,
-      downloadForm.artistName,
-    );
-  } else {
-    result = await remoteStore.requestDiscographyDownload(
-      downloadForm.id,
-      downloadForm.artistName,
-    );
-  }
+  const result = await remoteStore.requestAlbumDownload(
+    downloadForm.id,
+    downloadForm.albumName,
+    downloadForm.artistName,
+  );
 
   isSubmitting.value = false;
 
   if (result.error) {
     downloadError.value = typeof result.error === "string" ? result.error : JSON.stringify(result.error);
   } else {
-    downloadSuccess.value = downloadModalType.value === "album"
-      ? "Album queued for download!"
-      : "Discography queued for download!";
+    downloadSuccess.value = "Album queued for download!";
     await loadData();
     setTimeout(() => {
       closeDownloadModal();
@@ -860,9 +837,10 @@ const loadData = async () => {
     ]);
 
     stats.value = statsResult;
-    queueItems.value = queueResult?.items || [];
-    failedItems.value = failedResult?.items || [];
-    completedItems.value = completedResult?.items || [];
+    // API returns arrays directly, not wrapped in { items: [...] }
+    queueItems.value = Array.isArray(queueResult) ? queueResult : (queueResult?.items || []);
+    failedItems.value = Array.isArray(failedResult) ? failedResult : (failedResult?.items || []);
+    completedItems.value = Array.isArray(completedResult) ? completedResult : (completedResult?.items || []);
     auditLog.value = auditResult?.entries || [];
 
     if (!statsResult) {
@@ -938,13 +916,6 @@ const formatPriority = (priority) => {
   if (p === "user") return "normal";
   if (p === "expansion") return "low";
   return "normal";
-};
-
-const formatUptime = (secs) => {
-  if (secs < 60) return `${secs}s`;
-  if (secs < 3600) return `${Math.floor(secs / 60)}m`;
-  if (secs < 86400) return `${Math.floor(secs / 3600)}h ${Math.floor((secs % 3600) / 60)}m`;
-  return `${Math.floor(secs / 86400)}d ${Math.floor((secs % 86400) / 3600)}h`;
 };
 
 const formatDate = (timestamp) => {
