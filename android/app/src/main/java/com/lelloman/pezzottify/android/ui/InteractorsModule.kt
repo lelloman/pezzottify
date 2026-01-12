@@ -36,6 +36,7 @@ import com.lelloman.pezzottify.android.domain.statics.TrackAvailability as Domai
 import com.lelloman.pezzottify.android.domain.statics.AlbumAvailability as DomainAlbumAvailability
 import com.lelloman.pezzottify.android.ui.content.TrackAvailability as UiTrackAvailability
 import com.lelloman.pezzottify.android.ui.content.AlbumAvailability as UiAlbumAvailability
+import com.lelloman.pezzottify.android.ui.content.ContentResolver
 import com.lelloman.pezzottify.android.domain.settings.usecase.UpdateNotifyWhatsNewSetting
 import com.lelloman.pezzottify.android.ui.theme.AppFontFamily as UiAppFontFamily
 import com.lelloman.pezzottify.android.ui.theme.ColorPalette as UiColorPalette
@@ -54,8 +55,11 @@ import com.lelloman.pezzottify.android.ui.screen.main.search.StreamingArtistSumm
 import com.lelloman.pezzottify.android.ui.screen.main.search.StreamingSearchResult
 import com.lelloman.pezzottify.android.ui.screen.main.search.StreamingSearchSection
 import com.lelloman.pezzottify.android.ui.screen.main.search.StreamingTrackSummary
+import com.lelloman.pezzottify.android.ui.screen.main.search.GenreItem
 import com.lelloman.pezzottify.android.domain.statics.usecase.GetPopularContent
 import com.lelloman.pezzottify.android.domain.statics.usecase.GetWhatsNew
+import com.lelloman.pezzottify.android.domain.statics.usecase.GetGenres
+import com.lelloman.pezzottify.android.domain.statics.usecase.GetGenreTracks
 import com.lelloman.pezzottify.android.domain.statics.usecase.PerformSearch
 import com.lelloman.pezzottify.android.domain.statics.usecase.PerformStreamingSearch
 import com.lelloman.pezzottify.android.domain.impression.RecordImpressionUseCase
@@ -105,6 +109,8 @@ import com.lelloman.pezzottify.android.ui.screen.main.settings.bugreport.BugRepo
 import com.lelloman.pezzottify.android.ui.screen.main.settings.bugreport.SubmitResult
 import com.lelloman.pezzottify.android.domain.remoteapi.response.RemoteApiResponse
 import com.lelloman.pezzottify.android.ui.screen.main.whatsnew.WhatsNewScreenViewModel
+import com.lelloman.pezzottify.android.ui.screen.main.genre.GenreListScreenViewModel
+import com.lelloman.pezzottify.android.ui.screen.main.genre.GenreScreenViewModel
 import com.lelloman.pezzottify.android.ui.screen.main.notifications.NotificationListScreenViewModel
 import com.lelloman.pezzottify.android.ui.screen.main.notifications.UiNotification
 import com.lelloman.pezzottify.android.ui.screen.main.settings.logviewer.LogViewerScreenViewModel
@@ -477,6 +483,7 @@ class InteractorsModule {
         getSearchHistoryEntries: GetSearchHistoryEntriesUseCase,
         logSearchHistoryEntry: LogSearchHistoryEntryUseCase,
         getWhatsNew: GetWhatsNew,
+        getGenres: GetGenres,
         userSettingsStore: UserSettingsStore,
         configStore: ConfigStore,
     ): SearchScreenViewModel.Interactor =
@@ -728,6 +735,18 @@ class InteractorsModule {
                             batchName = batch.name,
                             closedAt = batch.closedAt,
                             addedAlbumIds = batch.summary.albums.added.map { it.id },
+                        )
+                    }
+                }
+            }
+
+            override suspend fun getGenres(limit: Int): Result<List<GenreItem>> {
+                logger.debug("getGenres(limit=$limit)")
+                return getGenres(limit).map { response ->
+                    response.map { genre ->
+                        GenreItem(
+                            name = genre.name,
+                            trackCount = genre.trackCount,
                         )
                     }
                 }
@@ -1490,6 +1509,23 @@ class InteractorsModule {
         }
 
     @Provides
+    fun provideGenreListScreenInteractor(
+        getGenres: GetGenres,
+    ): GenreListScreenViewModel.Interactor =
+        object : GenreListScreenViewModel.Interactor {
+            override suspend fun getGenres(limit: Int): Result<List<GenreListScreenViewModel.GenreData>> {
+                return getGenres(limit).map { genres ->
+                    genres.map { genre ->
+                        GenreListScreenViewModel.GenreData(
+                            name = genre.name,
+                            trackCount = genre.trackCount,
+                        )
+                    }
+                }
+            }
+        }
+
+    @Provides
     fun provideNotificationListScreenInteractor(
         notificationRepository: NotificationRepository,
     ): NotificationListScreenViewModel.Interactor =
@@ -1562,7 +1598,6 @@ class InteractorsModule {
                 }
             }
         }
-
 }
 
 private fun DomainThemeMode.toUi(): UiThemeMode = when (this) {

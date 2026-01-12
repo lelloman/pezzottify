@@ -1,5 +1,6 @@
 <resources>
     <string name="app_name">Pezzottify</string>
+    <string name="local_player_name">Lettore</string>
 
     <!-- Notification channels -->
     <string name="notification_channel_whatsnew_name">Nuovi contenuti</string>

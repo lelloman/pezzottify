@@ -45,6 +45,11 @@
     <string name="home_empty_state">Start exploring to see your recently viewed content here!</string>
     <string name="whats_new_header">What\'s new</string>
     <string name="whats_new_see_all">See all</string>
+    <string name="genres_header">Browse genres</string>
+    <string name="genres_see_all">See all</string>
+    <string name="search_genres_placeholder">Search genres…</string>
+    <string name="no_genres_found">No genres found</string>
+    <string name="clear">Clear</string>
     <string name="settings">Settings</string>
     <!-- HOME SCREEN -->
 

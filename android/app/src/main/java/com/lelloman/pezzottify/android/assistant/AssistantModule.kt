@@ -20,11 +20,15 @@ import com.lelloman.pezzottify.android.assistant.tools.SearchCatalogTool
 import com.lelloman.pezzottify.android.assistant.tools.SkipTrackTool
 import com.lelloman.pezzottify.android.assistant.tools.ViewPlaylistTool
 import com.lelloman.pezzottify.android.assistant.tools.WhatsNewTool
+import com.lelloman.pezzottify.android.assistant.tools.ListGenresTool
+import com.lelloman.pezzottify.android.assistant.tools.GetGenreTracksTool
 import com.lelloman.pezzottify.android.domain.player.PlaybackMetadataProvider
 import com.lelloman.pezzottify.android.domain.player.PezzottifyPlayer
 import com.lelloman.pezzottify.android.domain.statics.DiscographyProvider
 import com.lelloman.pezzottify.android.domain.statics.StaticsStore
 import com.lelloman.pezzottify.android.domain.statics.usecase.GetWhatsNew
+import com.lelloman.pezzottify.android.domain.statics.usecase.GetGenres
+import com.lelloman.pezzottify.android.domain.statics.usecase.GetGenreTracks
 import com.lelloman.pezzottify.android.domain.statics.usecase.PerformSearch
 import com.lelloman.pezzottify.android.domain.usercontent.UserPlaylistStore
 import com.lelloman.pezzottify.android.logger.LoggerFactory
@@ -131,12 +135,16 @@ object AssistantModule {
         staticsStore: StaticsStore,
         discographyProvider: DiscographyProvider,
         getWhatsNew: GetWhatsNew,
+        getGenres: GetGenres,
+        getGenreTracks: GetGenreTracks,
         userPlaylistStore: UserPlaylistStore
     ): ToolRegistry {
         // Catalog/Search tools
         val searchCatalogTool = SearchCatalogTool(performSearch, staticsStore)
         val getArtistDiscographyTool = GetArtistDiscographyTool(discographyProvider, staticsStore)
         val whatsNewTool = WhatsNewTool(getWhatsNew)
+        val listGenresTool = ListGenresTool(getGenres)
+        val getGenreTracksTool = GetGenreTracksTool(getGenreTracks, staticsStore)
 
         // Playback control tools
         val playbackControlTool = PlaybackControlTool(player)
@@ -162,6 +170,8 @@ object AssistantModule {
             searchCatalogTool,
             getArtistDiscographyTool,
             whatsNewTool,
+            listGenresTool,
+            getGenreTracksTool,
             // Playback tools
             playbackControlTool,
             skipTrackTool,
@@ -213,6 +223,11 @@ object AssistantModule {
                 Play a specific track:
                 1. search_catalog with filter="tracks" → get track ID
                 2. queue action="add_track" with track ID
+
+                Browse and play by genre:
+                1. list_genres to see available genres
+                2. get_genre_tracks with genre name → get track IDs (shuffled by default)
+                3. queue action="add_track" with track IDs to play
 
                 Current song questions:
                 - Always use now_playing first to get current playback state.

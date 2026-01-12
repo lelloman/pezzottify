@@ -21,4 +21,8 @@ interface SearchScreenActions {
     fun clickOnWhatsNewAlbum(albumId: String)
 
     fun clickOnWhatsNewSeeAll()
+
+    fun clickOnGenre(genreName: String)
+
+    fun clickOnGenreSeeAll()
 }

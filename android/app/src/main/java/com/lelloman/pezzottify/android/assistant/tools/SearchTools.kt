@@ -4,6 +4,8 @@ import com.lelloman.pezzottify.android.domain.remoteapi.RemoteApiClient
 import com.lelloman.pezzottify.android.domain.remoteapi.response.SearchedItemType
 import com.lelloman.pezzottify.android.domain.statics.DiscographyProvider
 import com.lelloman.pezzottify.android.domain.statics.StaticsStore
+import com.lelloman.pezzottify.android.domain.statics.usecase.GetGenres
+import com.lelloman.pezzottify.android.domain.statics.usecase.GetGenreTracks
 import com.lelloman.pezzottify.android.domain.statics.usecase.GetWhatsNew
 import com.lelloman.pezzottify.android.domain.statics.usecase.PerformSearch
 import com.lelloman.simpleaiassistant.tool.Tool
@@ -259,6 +261,129 @@ class WhatsNewTool(
             },
             onFailure = { error ->
                 ToolResult(success = false, error = "Failed to get latest releases: ${error.message ?: "Unknown error"}")
+            }
+        )
+    }
+}
+
+/**
+ * Tool to list all available music genres with their track counts.
+ */
+class ListGenresTool(
+    private val getGenres: GetGenres
+) : Tool {
+    override val spec = ToolSpec(
+        name = "list_genres",
+        description = "List all available music genres with track counts. Use this when the user wants to browse by genre or asks what genres are available.",
+        inputSchema = mapOf(
+            "type" to "object",
+            "properties" to mapOf(
+                "limit" to mapOf(
+                    "type" to "integer",
+                    "description" to "Maximum number of genres to return (default: 20)"
+                )
+            )
+        )
+    )
+
+    override suspend fun execute(input: Map<String, Any?>): ToolResult {
+        val limit = (input["limit"] as? Number)?.toInt() ?: 20
+
+        return getGenres(limit).fold(
+            onSuccess = { genres ->
+                if (genres.isEmpty()) {
+                    ToolResult(success = true, data = "No genres found in the catalog.")
+                } else {
+                    val formatted = buildString {
+                        appendLine("Available genres (${genres.size}):")
+                        genres.sortedByDescending { it.trackCount }.forEach { genre ->
+                            appendLine("- ${genre.name} (${genre.trackCount} tracks)")
+                        }
+                    }
+                    ToolResult(success = true, data = formatted.trimEnd())
+                }
+            },
+            onFailure = { error ->
+                ToolResult(success = false, error = "Failed to get genres: ${error.message ?: "Unknown error"}")
+            }
+        )
+    }
+}
+
+/**
+ * Tool to get tracks for a specific genre.
+ * Can be used with queue tool to play genre tracks.
+ */
+class GetGenreTracksTool(
+    private val getGenreTracks: GetGenreTracks,
+    private val staticsStore: StaticsStore
+) : Tool {
+    override val spec = ToolSpec(
+        name = "get_genre_tracks",
+        description = "Get track IDs for a specific genre. Use the track IDs with the queue tool to play music from this genre. Returns random tracks from the genre.",
+        inputSchema = mapOf(
+            "type" to "object",
+            "properties" to mapOf(
+                "genre_name" to mapOf(
+                    "type" to "string",
+                    "description" to "The genre name (from list_genres)"
+                ),
+                "limit" to mapOf(
+                    "type" to "integer",
+                    "description" to "Maximum number of tracks to return (default: 20)"
+                ),
+                "shuffle" to mapOf(
+                    "type" to "boolean",
+                    "description" to "If true, return random tracks from the genre (default: true)"
+                )
+            ),
+            "required" to listOf("genre_name")
+        )
+    )
+
+    override suspend fun execute(input: Map<String, Any?>): ToolResult {
+        val genreName = input["genre_name"] as? String
+            ?: return ToolResult(success = false, error = "Missing genre_name parameter")
+        val limit = (input["limit"] as? Number)?.toInt() ?: 20
+        val shuffle = input["shuffle"] as? Boolean ?: true
+
+        return getGenreTracks(genreName, limit = 100).fold(
+            onSuccess = { response ->
+                if (response.trackIds.isEmpty()) {
+                    ToolResult(success = true, data = "No tracks found for genre \"$genreName\".")
+                } else {
+                    val trackIds = if (shuffle) {
+                        response.trackIds.shuffled().take(limit)
+                    } else {
+                        response.trackIds.take(limit)
+                    }
+
+                    // Resolve track names for display
+                    val tracksWithInfo = trackIds.mapNotNull { trackId ->
+                        val track = staticsStore.getTrack(trackId).firstOrNull()
+                        if (track != null) {
+                            val artistNames = track.artistsIds.mapNotNull {
+                                staticsStore.getArtist(it).firstOrNull()?.name
+                            }.joinToString(", ").ifEmpty { "Unknown Artist" }
+                            Triple(trackId, track.name, artistNames)
+                        } else {
+                            Triple(trackId, "Unknown Track", "Unknown Artist")
+                        }
+                    }
+
+                    val formatted = buildString {
+                        appendLine("Tracks from \"$genreName\" (${trackIds.size} of ${response.total} total):")
+                        tracksWithInfo.forEach { (id, name, artists) ->
+                            appendLine("- \"$name\" by $artists (ID: $id)")
+                        }
+                        appendLine()
+                        appendLine("Use queue action=\"add_track\" with these track IDs to play them.")
+                    }
+                    ToolResult(success = true, data = formatted.trimEnd())
+                }
+            },
+            onFailure = { error ->
+                ToolResult(success = false, error = "Failed to get genre tracks: ${error.message ?: "Unknown error"}")
             }
         )
     }

@@ -12,6 +12,8 @@ import com.lelloman.pezzottify.android.domain.remoteapi.response.ArtistDiscograp
 import com.lelloman.pezzottify.android.domain.remoteapi.response.ArtistResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.DownloadLimitsResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.FullSkeletonResponse
+import com.lelloman.pezzottify.android.domain.remoteapi.response.GenreResponse
+import com.lelloman.pezzottify.android.domain.remoteapi.response.GenreTracksResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.ImageResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.ListeningEventItem
 import com.lelloman.pezzottify.android.domain.remoteapi.response.ListeningEventRecordedResponse
@@ -283,6 +285,29 @@ internal class RemoteApiClientImpl(
         catchingNetworkError {
             getRetrofit()
                 .getWhatsNew(authToken = authToken, limit = limit)
+                .returnFromRetrofitResponse()
+        }
+
+    override suspend fun getGenres(): RemoteApiResponse<List<com.lelloman.pezzottify.android.domain.remoteapi.response.GenreResponse>> =
+        catchingNetworkError {
+            getRetrofit()
+                .getGenres(authToken = authToken)
+                .returnFromRetrofitResponse()
+        }
+
+    override suspend fun getGenreTracks(
+        genreName: String,
+        limit: Int,
+        offset: Int,
+    ): RemoteApiResponse<com.lelloman.pezzottify.android.domain.remoteapi.response.GenreTracksResponse> =
+        catchingNetworkError {
+            getRetrofit()
+                .getGenreTracks(
+                    authToken = authToken,
+                    genreName = genreName,
+                    limit = limit,
+                    offset = offset,
+                )
                 .returnFromRetrofitResponse()
         }
 

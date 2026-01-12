@@ -79,6 +79,26 @@ class SearchScreenViewModel(
         }
         // Load What's New content
         loadWhatsNew()
+        loadGenres()
+    }
+
+    private fun loadGenres() {
+        viewModelScope.launch(coroutineContext) {
+            mutableState.value = mutableState.value.copy(
+                genresContent = GenresContentState(isLoading = true)
+            )
+
+            val result = interactor.getGenres(MAX_GENRES)
+            result.getOrNull()?.let { genres ->
+                mutableState.value = mutableState.value.copy(
+                    genresContent = GenresContentState(genres = genres, isLoading = false)
+                )
+            } ?: run {
+                mutableState.value = mutableState.value.copy(
+                    genresContent = GenresContentState(isLoading = false)
+                )
+            }
+        }
     }
 
     private fun loadWhatsNew() {
@@ -429,6 +449,7 @@ class SearchScreenViewModel(
         fun getSearchHistoryEntries(maxCount: Int): Flow<List<SearchHistoryEntry>>
         fun logSearchHistoryEntry(query: String, contentType: SearchHistoryEntryType, contentId: String)
         suspend fun getWhatsNew(limit: Int = 10): Result<List<WhatsNewBatchData>>
+        suspend fun getGenres(limit: Int = 12): Result<List<GenreItem>>
     }
 
     /**
@@ -471,10 +492,23 @@ class SearchScreenViewModel(
         }
     }
 
+    override fun clickOnGenre(genreName: String) {
+        viewModelScope.launch {
+            mutableEvents.emit(SearchScreensEvents.NavigateToGenreScreen(genreName))
+        }
+    }
+
+    override fun clickOnGenreSeeAll() {
+        viewModelScope.launch {
+            mutableEvents.emit(SearchScreensEvents.NavigateToGenreListScreen)
+        }
+    }
+
     companion object {
         private const val MAX_RECENTLY_VIEWED_ITEMS = 10
         private const val MAX_SEARCH_HISTORY_ITEMS = 10
         private const val MAX_WHATS_NEW_BATCHES = 5
         private const val MAX_ALBUMS_PER_BATCH = 10
+        private const val MAX_GENRES = 12
     }
 }

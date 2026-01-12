@@ -8,6 +8,8 @@ import com.lelloman.pezzottify.android.domain.remoteapi.response.ArtistResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.BatchContentResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.DownloadLimitsResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.FullSkeletonResponse
+import com.lelloman.pezzottify.android.domain.remoteapi.response.GenreResponse
+import com.lelloman.pezzottify.android.domain.remoteapi.response.GenreTracksResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.ImageResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.ListeningEventItem
 import com.lelloman.pezzottify.android.domain.remoteapi.response.ListeningEventRecordedResponse
@@ -83,6 +85,20 @@ interface RemoteApiClient {
      * Returns closed batches with summaries of added/updated/deleted content.
      */
     suspend fun getWhatsNew(limit: Int = 10): RemoteApiResponse<WhatsNewResponse>
+
+    /**
+     * Get all available genres with track counts.
+     */
+    suspend fun getGenres(): RemoteApiResponse<List<GenreResponse>>
+
+    /**
+     * Get tracks for a specific genre with pagination.
+     */
+    suspend fun getGenreTracks(
+        genreName: String,
+        limit: Int = 20,
+        offset: Int = 0,
+    ): RemoteApiResponse<GenreTracksResponse>
 
     suspend fun search(
         query: String,
