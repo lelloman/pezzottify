@@ -13,7 +13,4 @@ data class RequestAlbumResponse(
     val requestId: String,
     /** Initial status (usually PENDING) */
     val status: DownloadQueueStatus,
-    /** Position in the queue */
-    @SerialName("queue_position")
-    val queuePosition: Int,
 )

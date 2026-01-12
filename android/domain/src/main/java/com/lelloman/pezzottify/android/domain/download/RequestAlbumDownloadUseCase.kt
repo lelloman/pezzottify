@@ -34,7 +34,7 @@ class RequestAlbumDownloadUseCase @Inject constructor(
         logger.info("invoke() requesting album download: $albumName by $artistName (id: $albumId)")
         return when (val response = remoteApiClient.requestAlbumDownload(albumId, albumName, artistName)) {
             is RemoteApiResponse.Success -> {
-                logger.debug("invoke() album download requested: requestId=${response.data.requestId}, queuePosition=${response.data.queuePosition}")
+                logger.debug("invoke() album download requested: requestId=${response.data.requestId}")
                 Result.success(response.data)
             }
             is RemoteApiResponse.Error -> {
