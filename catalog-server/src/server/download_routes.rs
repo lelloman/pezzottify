@@ -9,7 +9,7 @@ use axum::{
     extract::{Path, Query, State},
     http::StatusCode,
     response::IntoResponse,
-    routing::{get, post},
+    routing::{delete, get, post},
     Json, Router,
 };
 use serde::{Deserialize, Serialize};
@@ -420,6 +420,37 @@ async fn retry_failed(
     }
 }
 
+/// DELETE /admin/request/:id - Delete a download request
+async fn delete_request(
+    session: Session,
+    State(dm): State<OptionalDownloadManager>,
+    Path(item_id): Path<String>,
+) -> impl IntoResponse {
+    if !session.has_permission(Permission::EditCatalog) {
+        return StatusCode::FORBIDDEN.into_response();
+    }
+
+    let manager = match get_download_manager(&dm) {
+        Ok(m) => m,
+        Err(e) => return e.into_response(),
+    };
+
+    let user_id = session.user_id.to_string();
+    match manager.delete_request(&item_id, &user_id).await {
+        Ok(true) => Json(RequestResponse {
+            success: true,
+            message: "Request deleted".to_string(),
+            queue_item_id: Some(item_id),
+        })
+        .into_response(),
+        Ok(false) => (StatusCode::NOT_FOUND, "Request not found").into_response(),
+        Err(e) => {
+            warn!("Failed to delete request: {}", e);
+            (StatusCode::BAD_REQUEST, e.to_string()).into_response()
+        }
+    }
+}
+
 /// GET /admin/audit - Query audit log
 async fn get_audit_log(
     session: Session,
@@ -577,6 +608,7 @@ async fn get_audit_for_user(
 /// - GET /admin/stats
 /// - GET /admin/failed
 /// - GET /admin/requests
+/// - DELETE /admin/request/:id
 /// - POST /admin/retry/:id
 /// - GET /admin/audit
 /// - GET /admin/audit/item/:id
@@ -595,6 +627,7 @@ pub fn download_routes() -> Router<ServerState> {
         .route("/stats", get(get_admin_stats))
         .route("/failed", get(get_admin_failed))
         .route("/requests", get(get_admin_requests))
+        .route("/request/{id}", delete(delete_request))
         .route("/retry/{id}", post(retry_failed))
         .route("/audit", get(get_audit_log))
         .route("/audit/item/{id}", get(get_audit_for_item))

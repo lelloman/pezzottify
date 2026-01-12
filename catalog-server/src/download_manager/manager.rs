@@ -697,6 +697,48 @@ impl DownloadManager {
         Ok(())
     }
 
+    /// Delete a download request.
+    ///
+    /// If the item has an associated QT ticket, cancels it first.
+    /// Returns true if the item was deleted.
+    pub async fn delete_request(&self, item_id: &str, _admin_user_id: &str) -> Result<bool> {
+        // Get the queue item first
+        let item = self
+            .queue_store
+            .get_item(item_id)?
+            .ok_or_else(|| anyhow!("Queue item not found: {}", item_id))?;
+
+        // If item has a ticket, cancel it in QT and delete the mapping
+        if let Ok(Some(ticket_id)) = self.queue_store.get_ticket_for_queue_item(item_id) {
+            // Cancel the ticket in QT (ignore errors - ticket may already be deleted)
+            if let Err(e) = self.torrent_client.cancel(&ticket_id).await {
+                warn!(
+                    "Failed to cancel QT ticket {} (may already be deleted): {}",
+                    ticket_id, e
+                );
+            }
+
+            // Delete the ticket mapping
+            if let Err(e) = self.queue_store.delete_ticket_mapping(&ticket_id) {
+                warn!("Failed to delete ticket mapping for {}: {}", ticket_id, e);
+            }
+        }
+
+        // Delete the queue item
+        let deleted = self.queue_store.delete_item(item_id)?;
+
+        if deleted {
+            // Decrement user queue count if there was a user
+            if let Some(user_id) = &item.requested_by_user_id {
+                let _ = self.queue_store.decrement_user_queue(user_id);
+            }
+
+            info!("Deleted queue item: {} ({})", item_id, item.content_name.unwrap_or_default());
+        }
+
+        Ok(deleted)
+    }
+
     /// Get all requests (admin view) - legacy version with hardcoded filters.
     pub fn get_all_requests(
         &self,
