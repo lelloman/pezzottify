@@ -305,10 +305,7 @@ impl DownloadManager {
             match self.create_and_submit_ticket(album_id, &item).await {
                 Ok(ticket_id) => {
                     tickets_submitted += 1;
-                    info!(
-                        "Submitted ticket {} for album {}",
-                        ticket_id, album_id
-                    );
+                    info!("Submitted ticket {} for album {}", ticket_id, album_id);
                 }
                 Err(e) => {
                     error!("Failed to submit ticket for album {}: {}", album_id, e);
@@ -322,11 +319,7 @@ impl DownloadManager {
     /// Create and submit a ticket for an album queue item.
     ///
     /// Creates a QT ticket, stores the mapping, and marks the item as in_progress.
-    async fn create_and_submit_ticket(
-        &self,
-        album_id: &str,
-        item: &QueueItem,
-    ) -> Result<String> {
+    async fn create_and_submit_ticket(&self, album_id: &str, item: &QueueItem) -> Result<String> {
         // Get resolved album data
         let resolved_album = self
             .catalog_store
@@ -733,7 +726,11 @@ impl DownloadManager {
                 let _ = self.queue_store.decrement_user_queue(user_id);
             }
 
-            info!("Deleted queue item: {} ({})", item_id, item.content_name.unwrap_or_default());
+            info!(
+                "Deleted queue item: {} ({})",
+                item_id,
+                item.content_name.unwrap_or_default()
+            );
         }
 
         Ok(deleted)

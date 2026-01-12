@@ -270,6 +270,25 @@ pub struct ArtistDiscography {
     pub has_more: bool,
 }
 
+// =============================================================================
+// Genre Types
+// =============================================================================
+
+/// Genre information with track count
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct GenreInfo {
+    pub name: String,
+    pub track_count: usize,
+}
+
+/// Result for paginated genre tracks query
+#[derive(Clone, Debug, Serialize)]
+pub struct GenreTracksResult {
+    pub track_ids: Vec<String>,
+    pub total: usize,
+    pub has_more: bool,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

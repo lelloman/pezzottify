@@ -241,6 +241,43 @@ export const useRemoteStore = defineStore("remote", () => {
     }
   };
 
+  // Genre operations
+  const fetchGenres = async () => {
+    try {
+      const response = await axios.get("/v1/content/genres");
+      return response.data;
+    } catch (error) {
+      console.error("Error fetching genres:", error);
+      return [];
+    }
+  };
+
+  const fetchGenreTracks = async (genreName, limit = 20, offset = 0) => {
+    try {
+      const response = await axios.get(
+        `/v1/content/genre/${encodeURIComponent(genreName)}/tracks`,
+        { params: { limit, offset } },
+      );
+      return response.data;
+    } catch (error) {
+      console.error("Error fetching genre tracks:", error);
+      return null;
+    }
+  };
+
+  const fetchGenreRadio = async (genreName, count = 50) => {
+    try {
+      const response = await axios.get(
+        `/v1/content/genre/${encodeURIComponent(genreName)}/radio`,
+        { params: { count } },
+      );
+      return response.data;
+    } catch (error) {
+      console.error("Error fetching genre radio:", error);
+      return [];
+    }
+  };
+
   // Impression tracking (for popularity scoring)
   const recordImpression = async (itemType, itemId) => {
     try {
@@ -925,6 +962,9 @@ export const useRemoteStore = defineStore("remote", () => {
     fetchAlbum,
     fetchArtist,
     fetchArtistDiscography,
+    fetchGenres,
+    fetchGenreTracks,
+    fetchGenreRadio,
     recordImpression,
     // Sync API
     fetchSyncState,

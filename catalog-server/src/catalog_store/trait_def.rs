@@ -172,6 +172,26 @@ pub trait CatalogStore: Send + Sync {
         &self,
         items: &[(String, SearchableContentType)],
     ) -> Result<std::collections::HashMap<(String, SearchableContentType), i32>>;
+
+    // =========================================================================
+    // Genre Browsing
+    // =========================================================================
+
+    /// Get all genres with their available track counts.
+    /// Returns genres ordered by track count descending.
+    fn get_genres_with_counts(&self) -> Result<Vec<super::GenreInfo>>;
+
+    /// Get tracks for a specific genre with pagination.
+    /// Returns tracks ordered by popularity descending.
+    fn get_tracks_by_genre(
+        &self,
+        genre: &str,
+        limit: usize,
+        offset: usize,
+    ) -> Result<super::GenreTracksResult>;
+
+    /// Get random tracks for a genre (for radio/shuffle feature).
+    fn get_random_tracks_by_genre(&self, genre: &str, limit: usize) -> Result<Vec<String>>;
 }
 
 /// A searchable item for the search index.

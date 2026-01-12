@@ -188,36 +188,16 @@ pub enum TicketStateResponse {
     Pending,
     Searching,
     Matching,
-    NeedsApproval {
-        candidates: Vec<serde_json::Value>,
-    },
-    Approved {
-        selected: serde_json::Value,
-    },
-    Downloading {
-        progress: f32,
-    },
-    Converting {
-        progress: f32,
-    },
+    NeedsApproval { candidates: Vec<serde_json::Value> },
+    Approved { selected: serde_json::Value },
+    Downloading { progress: f32 },
+    Converting { progress: f32 },
     Placing,
-    Completed {
-        completed_at: String,
-    },
-    Failed {
-        error: String,
-        retryable: bool,
-    },
-    AcquisitionFailed {
-        error: String,
-        retryable: bool,
-    },
-    Cancelled {
-        reason: Option<String>,
-    },
-    Rejected {
-        reason: Option<String>,
-    },
+    Completed { completed_at: String },
+    Failed { error: String, retryable: bool },
+    AcquisitionFailed { error: String, retryable: bool },
+    Cancelled { reason: Option<String> },
+    Rejected { reason: Option<String> },
 }
 
 /// Current state of a ticket (simplified).
@@ -249,14 +229,9 @@ pub struct QTStats {
 pub enum TorrentEvent {
     /// Ticket changed state (QT sends "ticket_update", we also accept "ticket_updated")
     #[serde(alias = "ticket_update")]
-    TicketUpdated {
-        ticket_id: String,
-        state: String,
-    },
+    TicketUpdated { ticket_id: String, state: String },
     /// Ticket deleted
-    TicketDeleted {
-        ticket_id: String,
-    },
+    TicketDeleted { ticket_id: String },
     /// Download progress update
     Progress {
         ticket_id: String,

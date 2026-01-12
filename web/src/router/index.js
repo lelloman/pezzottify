@@ -56,6 +56,18 @@ const router = createRouter({
           component: HomeView,
           meta: { requiresAuth: true },
         },
+        {
+          path: "/genres",
+          name: "genres",
+          component: HomeView,
+          meta: { requiresAuth: true },
+        },
+        {
+          path: "/genre/:genreName",
+          name: "genre",
+          component: HomeView,
+          meta: { requiresAuth: true },
+        },
       ],
     },
 
