@@ -285,20 +285,29 @@ class ChatRepositoryImpl(
     }
 
     private suspend fun detectAndSetLanguage(text: String) {
+        logger.debug(TAG, "detectAndSetLanguage: starting detection for text: ${text.take(50)}")
         _isDetectingLanguage.value = true
         try {
             val detectedCode = llmProvider.detectLanguage(text)
+            logger.debug(TAG, "detectAndSetLanguage: LLM returned code: $detectedCode")
             if (detectedCode != null) {
                 val language = Language.fromCode(detectedCode)
+                logger.debug(TAG, "detectAndSetLanguage: mapped to language: $language")
                 _language.value = language
                 languagePreferences.setLanguage(language)
+                logger.info(TAG, "Language detected and set: ${language?.displayName ?: "null"}")
+            } else {
+                logger.warn(TAG, "detectAndSetLanguage: LLM returned null, language not set")
             }
+        } catch (e: Exception) {
+            logger.error(TAG, "detectAndSetLanguage: exception during detection", e)
         } finally {
             _isDetectingLanguage.value = false
         }
     }
 
     override suspend fun setLanguage(language: Language?) {
+        logger.info(TAG, "setLanguage: ${language?.displayName ?: "null (auto-detect)"}")
         _language.value = language
         languagePreferences.setLanguage(language)
     }

@@ -219,9 +219,37 @@ class SimpleAiProvider(
     }
 
     override suspend fun detectLanguage(text: String): String? = withContext(Dispatchers.IO) {
-        // SimpleAI app has translation capability but not direct language detection
-        // Could potentially use translate with "auto" source, but for now return null
-        null
+        try {
+            val service = ensureConnected()
+
+            // Use the translate method with "auto" source language - it will detect
+            // the language and return it in the response without actually translating
+            // (we just need the detectedSourceLang field)
+            val responseJson = service.translate(
+                PROTOCOL_VERSION,
+                text,
+                "auto",  // Auto-detect source language
+                "en"     // Target language (we don't care about the translation, just detection)
+            )
+
+            Log.d(TAG, "detectLanguage response: $responseJson")
+
+            val response = json.parseToJsonElement(responseJson).jsonObject
+            val status = response["status"]?.jsonPrimitive?.contentOrNull
+            if (status == "error") {
+                Log.w(TAG, "detectLanguage: translate returned error")
+                return@withContext null
+            }
+
+            val data = response["data"]?.jsonObject
+            val detectedLang = data?.get("detectedSourceLang")?.jsonPrimitive?.contentOrNull
+
+            Log.d(TAG, "detectLanguage: detected '$detectedLang'")
+            detectedLang
+        } catch (e: Exception) {
+            Log.e(TAG, "detectLanguage failed", e)
+            null
+        }
     }
 
     private fun isInstalled(): Boolean {
