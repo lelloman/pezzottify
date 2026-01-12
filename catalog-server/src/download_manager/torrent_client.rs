@@ -79,13 +79,13 @@ impl TorrentClient {
     }
 
     /// Create a new ticket for downloading music.
-    pub async fn create_ticket(&self, ticket: MusicTicket) -> Result<TicketResponse> {
-        let url = format!("{}/api/v1/ticket", self.base_url);
+    pub async fn create_ticket(&self, request: CreateTicketRequest) -> Result<TicketResponse> {
+        let url = format!("{}/api/v1/tickets", self.base_url);
         let response = self
             .http_client
             .post(&url)
             .bearer_auth(&self.auth_token)
-            .json(&ticket)
+            .json(&request)
             .send()
             .await?
             .error_for_status()?;
@@ -95,7 +95,7 @@ impl TorrentClient {
 
     /// Get the current state of a ticket.
     pub async fn get_ticket(&self, ticket_id: &str) -> Result<TicketState> {
-        let url = format!("{}/api/v1/ticket/{}", self.base_url, ticket_id);
+        let url = format!("{}/api/v1/tickets/{}", self.base_url, ticket_id);
         let response = self
             .http_client
             .get(&url)
@@ -135,7 +135,7 @@ impl TorrentClient {
 
     /// Approve a ticket (for NEEDS_APPROVAL state).
     pub async fn approve(&self, ticket_id: &str, candidate_idx: Option<usize>) -> Result<()> {
-        let url = format!("{}/api/v1/ticket/{}/approve", self.base_url, ticket_id);
+        let url = format!("{}/api/v1/tickets/{}/approve", self.base_url, ticket_id);
         let body = serde_json::json!({ "candidate_idx": candidate_idx });
         self.http_client
             .post(&url)
@@ -150,7 +150,7 @@ impl TorrentClient {
 
     /// Reject a ticket.
     pub async fn reject(&self, ticket_id: &str, reason: &str) -> Result<()> {
-        let url = format!("{}/api/v1/ticket/{}/reject", self.base_url, ticket_id);
+        let url = format!("{}/api/v1/tickets/{}/reject", self.base_url, ticket_id);
         let body = serde_json::json!({ "reason": reason });
         self.http_client
             .post(&url)
@@ -165,7 +165,7 @@ impl TorrentClient {
 
     /// Retry a failed ticket.
     pub async fn retry(&self, ticket_id: &str) -> Result<()> {
-        let url = format!("{}/api/v1/ticket/{}/retry", self.base_url, ticket_id);
+        let url = format!("{}/api/v1/tickets/{}/retry", self.base_url, ticket_id);
         self.http_client
             .post(&url)
             .bearer_auth(&self.auth_token)
@@ -178,7 +178,7 @@ impl TorrentClient {
 
     /// Cancel/delete a ticket.
     pub async fn cancel(&self, ticket_id: &str) -> Result<()> {
-        let url = format!("{}/api/v1/ticket/{}", self.base_url, ticket_id);
+        let url = format!("{}/api/v1/tickets/{}", self.base_url, ticket_id);
         self.http_client
             .delete(&url)
             .bearer_auth(&self.auth_token)
