@@ -84,6 +84,25 @@
       </div>
     </section>
 
+    <!-- Browse Genres Section -->
+    <section v-if="genres.length > 0" class="homeSection">
+      <div class="sectionHeader">
+        <h2 class="sectionTitle">Browse Genres</h2>
+        <router-link to="/genres" class="seeAllLink">See all</router-link>
+      </div>
+      <div class="genreGrid">
+        <router-link
+          v-for="genre in genres"
+          :key="genre.name"
+          :to="`/genre/${encodeURIComponent(genre.name)}`"
+          class="genreCard"
+        >
+          <span class="genreCardName">{{ genre.name }}</span>
+          <span class="genreTrackCount">{{ formatTrackCount(genre.track_count) }}</span>
+        </router-link>
+      </div>
+    </section>
+
     <!-- Your Favorites Section -->
     <section v-if="favorites.length > 0" class="homeSection">
       <h2 class="sectionTitle">Your Favorites</h2>
@@ -137,6 +156,7 @@ const getImageUrl = formatImageUrl;
 const recentlyPlayed = ref([]);
 const popular = ref({ albums: [], artists: [] });
 const favorites = ref([]);
+const genres = ref([]);
 const isLoading = ref(true);
 
 const isEmpty = computed(() => {
@@ -144,7 +164,8 @@ const isEmpty = computed(() => {
     recentlyPlayed.value.length === 0 &&
     popular.value.albums?.length === 0 &&
     popular.value.artists?.length === 0 &&
-    favorites.value.length === 0
+    favorites.value.length === 0 &&
+    genres.value.length === 0
   );
 });
 
@@ -152,6 +173,12 @@ const isEmpty = computed(() => {
 const formatArtistNames = (names) => {
   if (!names || names.length === 0) return "Unknown Artist";
   return names.join(", ");
+};
+
+// Helper to format track count
+const formatTrackCount = (count) => {
+  if (count === 1) return "1 track";
+  return `${count.toLocaleString()} tracks`;
 };
 
 const fetchRecentlyPlayed = async () => {
@@ -211,11 +238,25 @@ const fetchFavorites = async () => {
   }
 };
 
+const fetchGenres = async () => {
+  try {
+    const response = await fetch("/v1/content/genres");
+    if (response.ok) {
+      const allGenres = await response.json();
+      // Show top 12 genres by track count
+      genres.value = allGenres.slice(0, 12);
+    }
+  } catch (error) {
+    console.error("Error fetching genres:", error);
+  }
+};
+
 onMounted(async () => {
   await Promise.all([
     fetchRecentlyPlayed(),
     fetchPopular(),
     fetchFavorites(),
+    fetchGenres(),
   ]);
   isLoading.value = false;
 });
@@ -363,5 +404,55 @@ onMounted(async () => {
 
 .emptyState p {
   margin: 0;
+}
+
+.sectionHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.seeAllLink {
+  font-size: var(--text-sm);
+  color: var(--text-subdued);
+  text-decoration: none;
+}
+
+.seeAllLink:hover {
+  color: var(--text-base);
+  text-decoration: underline;
+}
+
+.genreGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: var(--spacing-3);
+}
+
+.genreCard {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-1);
+  padding: var(--spacing-3) var(--spacing-4);
+  background-color: var(--bg-elevated-base);
+  border-radius: var(--radius-lg);
+  text-decoration: none;
+  transition: background-color var(--transition-fast);
+}
+
+.genreCard:hover {
+  background-color: var(--bg-elevated-highlight);
+}
+
+.genreCardName {
+  font-size: var(--text-sm);
+  font-weight: var(--font-semibold);
+  color: var(--text-base);
+  text-transform: capitalize;
+}
+
+.genreTrackCount {
+  font-size: var(--text-xs);
+  color: var(--text-subdued);
 }
 </style>
