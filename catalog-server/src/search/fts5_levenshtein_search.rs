@@ -1450,6 +1450,30 @@ mod tests {
             {
                 Ok(std::collections::HashMap::new())
             }
+            fn get_genres_with_counts(
+                &self,
+            ) -> anyhow::Result<Vec<crate::catalog_store::GenreInfo>> {
+                Ok(Vec::new())
+            }
+            fn get_tracks_by_genre(
+                &self,
+                _genre: &str,
+                _limit: usize,
+                _offset: usize,
+            ) -> anyhow::Result<crate::catalog_store::GenreTracksResult> {
+                Ok(crate::catalog_store::GenreTracksResult {
+                    track_ids: Vec::new(),
+                    total: 0,
+                    has_more: false,
+                })
+            }
+            fn get_random_tracks_by_genre(
+                &self,
+                _genre: &str,
+                _limit: usize,
+            ) -> anyhow::Result<Vec<String>> {
+                Ok(Vec::new())
+            }
         }
     }
 

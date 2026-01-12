@@ -985,6 +985,87 @@ async fn get_artist_discography(
     }
 }
 
+// =========================================================================
+// Genre handlers
+// =========================================================================
+
+async fn get_genres(
+    _session: Session,
+    State(catalog_store): State<GuardedCatalogStore>,
+) -> Response {
+    let catalog_store = Arc::clone(&catalog_store);
+
+    match tokio::task::spawn_blocking(move || catalog_store.get_genres_with_counts()).await {
+        Ok(Ok(genres)) => Json(genres).into_response(),
+        Ok(Err(err)) => {
+            error!("Error getting genres: {}", err);
+            (StatusCode::INTERNAL_SERVER_ERROR, format!("{}", err)).into_response()
+        }
+        Err(_) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "Internal server error".to_string(),
+        )
+            .into_response(),
+    }
+}
+
+async fn get_genre_tracks(
+    _session: Session,
+    State(catalog_store): State<GuardedCatalogStore>,
+    Path(genre_name): Path<String>,
+    Query(query): Query<GenreTracksQuery>,
+) -> Response {
+    let limit = query.limit.unwrap_or(20).min(100);
+    let offset = query.offset.unwrap_or(0);
+
+    let catalog_store = Arc::clone(&catalog_store);
+
+    match tokio::task::spawn_blocking(move || {
+        catalog_store.get_tracks_by_genre(&genre_name, limit, offset)
+    })
+    .await
+    {
+        Ok(Ok(result)) => Json(result).into_response(),
+        Ok(Err(err)) => {
+            error!("Error getting genre tracks: {}", err);
+            (StatusCode::INTERNAL_SERVER_ERROR, format!("{}", err)).into_response()
+        }
+        Err(_) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "Internal server error".to_string(),
+        )
+            .into_response(),
+    }
+}
+
+async fn get_genre_radio(
+    _session: Session,
+    State(catalog_store): State<GuardedCatalogStore>,
+    Path(genre_name): Path<String>,
+    Query(query): Query<GenreRadioQuery>,
+) -> Response {
+    let count = query.count.unwrap_or(50).min(200);
+
+    let catalog_store = Arc::clone(&catalog_store);
+
+    match tokio::task::spawn_blocking(move || {
+        catalog_store.get_random_tracks_by_genre(&genre_name, count)
+    })
+    .await
+    {
+        Ok(Ok(track_ids)) => Json(track_ids).into_response(),
+        Ok(Err(err)) => {
+            error!("Error getting genre radio: {}", err);
+            (StatusCode::INTERNAL_SERVER_ERROR, format!("{}", err)).into_response()
+        }
+        Err(_) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "Internal server error".to_string(),
+        )
+            .into_response(),
+    }
+}
+
 pub async fn get_track(
     _session: Session,
     State(catalog_store): State<GuardedCatalogStore>,
@@ -3185,6 +3266,17 @@ struct DiscographyQuery {
     pub sort: Option<String>,
 }
 
+#[derive(Deserialize, Debug)]
+struct GenreTracksQuery {
+    pub limit: Option<usize>,
+    pub offset: Option<usize>,
+}
+
+#[derive(Deserialize, Debug)]
+struct GenreRadioQuery {
+    pub count: Option<usize>,
+}
+
 // Batch content request/response types
 const BATCH_MAX_ITEMS: usize = 100;
 
@@ -4318,6 +4410,9 @@ pub async fn make_app(
         .route("/whatsnew", get(get_whats_new))
         .route("/popular", get(get_popular_content))
         .route("/batch", post(post_batch_content))
+        .route("/genres", get(get_genres))
+        .route("/genre/{name}/tracks", get(get_genre_tracks))
+        .route("/genre/{name}/radio", get(get_genre_radio))
         .layer(GovernorLayer::new(content_read_rate_limit.clone()))
         .with_state(state.clone());
 

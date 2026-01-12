@@ -40,7 +40,6 @@ pub struct RequestAlbumBody {
     pub artist_name: Option<String>,
 }
 
-
 #[derive(Debug, Deserialize)]
 pub struct PaginationQuery {
     #[serde(default = "default_limit")]

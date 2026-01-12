@@ -1609,6 +1609,101 @@ impl CatalogStore for SqliteCatalogStore {
 
         Ok(result)
     }
+
+    fn get_genres_with_counts(&self) -> Result<Vec<GenreInfo>> {
+        let conn = self.get_read_conn();
+        let conn = conn.lock().unwrap();
+
+        let mut stmt = conn.prepare_cached(
+            "SELECT ag.genre, COUNT(DISTINCT t.rowid) as track_count
+             FROM artist_genres ag
+             JOIN track_artists ta ON ta.artist_rowid = ag.artist_rowid
+             JOIN tracks t ON t.rowid = ta.track_rowid
+             WHERE t.track_available = 1
+             GROUP BY ag.genre
+             HAVING track_count > 0
+             ORDER BY track_count DESC",
+        )?;
+
+        let genres = stmt
+            .query_map([], |row| {
+                Ok(GenreInfo {
+                    name: row.get(0)?,
+                    track_count: row.get::<_, i64>(1)? as usize,
+                })
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+
+        Ok(genres)
+    }
+
+    fn get_tracks_by_genre(
+        &self,
+        genre: &str,
+        limit: usize,
+        offset: usize,
+    ) -> Result<GenreTracksResult> {
+        let conn = self.get_read_conn();
+        let conn = conn.lock().unwrap();
+
+        // Get total count first
+        let total: i64 = conn.query_row(
+            "SELECT COUNT(DISTINCT t.rowid)
+             FROM tracks t
+             JOIN track_artists ta ON t.rowid = ta.track_rowid
+             JOIN artist_genres ag ON ta.artist_rowid = ag.artist_rowid
+             WHERE t.track_available = 1 AND ag.genre = ?1",
+            params![genre],
+            |row| row.get(0),
+        )?;
+
+        // Get paginated track IDs
+        let mut stmt = conn.prepare_cached(
+            "SELECT DISTINCT t.id
+             FROM tracks t
+             JOIN track_artists ta ON t.rowid = ta.track_rowid
+             JOIN artist_genres ag ON ta.artist_rowid = ag.artist_rowid
+             WHERE t.track_available = 1 AND ag.genre = ?1
+             ORDER BY t.popularity DESC
+             LIMIT ?2 OFFSET ?3",
+        )?;
+
+        let track_ids = stmt
+            .query_map(params![genre, limit as i64, offset as i64], |row| {
+                row.get::<_, String>(0)
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+
+        let total = total as usize;
+        let has_more = offset + track_ids.len() < total;
+
+        Ok(GenreTracksResult {
+            track_ids,
+            total,
+            has_more,
+        })
+    }
+
+    fn get_random_tracks_by_genre(&self, genre: &str, limit: usize) -> Result<Vec<String>> {
+        let conn = self.get_read_conn();
+        let conn = conn.lock().unwrap();
+
+        let mut stmt = conn.prepare_cached(
+            "SELECT DISTINCT t.id
+             FROM tracks t
+             JOIN track_artists ta ON t.rowid = ta.track_rowid
+             JOIN artist_genres ag ON ta.artist_rowid = ag.artist_rowid
+             WHERE t.track_available = 1 AND ag.genre = ?1
+             ORDER BY RANDOM()
+             LIMIT ?2",
+        )?;
+
+        let track_ids = stmt
+            .query_map(params![genre, limit as i64], |row| row.get::<_, String>(0))?
+            .collect::<Result<Vec<_>, _>>()?;
+
+        Ok(track_ids)
+    }
 }
 
 #[cfg(test)]

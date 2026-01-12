@@ -143,4 +143,25 @@ impl CatalogStore for NullCatalogStore {
     ) -> Result<std::collections::HashMap<(String, super::SearchableContentType), i32>> {
         Ok(std::collections::HashMap::new())
     }
+
+    fn get_genres_with_counts(&self) -> Result<Vec<super::GenreInfo>> {
+        Ok(Vec::new())
+    }
+
+    fn get_tracks_by_genre(
+        &self,
+        _genre: &str,
+        _limit: usize,
+        _offset: usize,
+    ) -> Result<super::GenreTracksResult> {
+        Ok(super::GenreTracksResult {
+            track_ids: Vec::new(),
+            total: 0,
+            has_more: false,
+        })
+    }
+
+    fn get_random_tracks_by_genre(&self, _genre: &str, _limit: usize) -> Result<Vec<String>> {
+        Ok(Vec::new())
+    }
 }

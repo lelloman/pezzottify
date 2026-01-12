@@ -14,6 +14,8 @@
     <UserPlaylist v-else-if="playlistId" :playlistId="playlistId" />
     <UserSettings v-else-if="isSettingsRoute" />
     <UserRequests v-else-if="isRequestsRoute" />
+    <GenreList v-else-if="isGenresRoute" />
+    <GenreDetail v-else-if="genreName" :genreName="genreName" />
     <HomePage v-else />
   </main>
 </template>
@@ -27,6 +29,8 @@ import UserPlaylist from "@/components/content/UserPlaylist.vue";
 import UserSettings from "@/components/content/UserSettings.vue";
 import UserRequests from "@/components/content/UserRequests.vue";
 import HomePage from "@/components/content/HomePage.vue";
+import GenreList from "@/components/content/GenreList.vue";
+import GenreDetail from "@/components/content/GenreDetail.vue";
 import { useRoute } from "vue-router";
 import { useDebugStore } from "@/store/debug";
 import { storeToRefs } from "pinia";
@@ -50,6 +54,8 @@ const albumId = ref(route.params.albumId || "");
 const playlistId = ref(route.params.playlistId || "");
 const isSettingsRoute = computed(() => route.name === "settings");
 const isRequestsRoute = computed(() => route.name === "requests");
+const isGenresRoute = computed(() => route.name === "genres");
+const genreName = ref(route.params.genreName || "");
 
 const fetchCatalogResults = async (query, filters) => {
   const requestBody = {
@@ -156,6 +162,13 @@ watch(
   () => route.params.playlistId,
   (newPlaylistId) => {
     playlistId.value = newPlaylistId || "";
+  },
+  { immediate: true },
+);
+watch(
+  () => route.params.genreName,
+  (newGenreName) => {
+    genreName.value = newGenreName || "";
   },
   { immediate: true },
 );
