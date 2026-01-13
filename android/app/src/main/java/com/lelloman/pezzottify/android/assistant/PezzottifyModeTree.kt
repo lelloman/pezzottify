@@ -21,6 +21,8 @@ object PezzottifyModeTree {
         const val SEARCH_CATALOG = "search_catalog"
         const val GET_ARTIST_DISCOGRAPHY = "get_artist_discography"
         const val WHATS_NEW = "whats_new"
+        const val LIST_GENRES = "list_genres"
+        const val GET_GENRE_TRACKS = "get_genre_tracks"
 
         // Playback control tools
         const val PLAYBACK_CONTROL = "playback_control"
@@ -54,7 +56,8 @@ object PezzottifyModeTree {
     private val catalogTools = setOf(
         Tools.SEARCH_CATALOG,
         Tools.GET_ARTIST_DISCOGRAPHY,
-        Tools.WHATS_NEW
+        Tools.WHATS_NEW,
+        Tools.LIST_GENRES
     )
 
     private val playbackTools = setOf(
@@ -63,7 +66,8 @@ object PezzottifyModeTree {
         Tools.PLAYBACK_MODE,
         Tools.NOW_PLAYING,
         Tools.QUEUE,
-        Tools.PLAY_ALBUM
+        Tools.PLAY_ALBUM,
+        Tools.GET_GENRE_TRACKS
     )
 
     private val playlistTools = setOf(
@@ -75,7 +79,8 @@ object PezzottifyModeTree {
         Tools.ADD_TRACKS_TO_PLAYLIST,
         Tools.REMOVE_TRACKS_FROM_PLAYLIST,
         Tools.PLAY_PLAYLIST,
-        Tools.ADD_PLAYLIST_TO_QUEUE
+        Tools.ADD_PLAYLIST_TO_QUEUE,
+        Tools.GET_GENRE_TRACKS
     )
 
     private val allTools = catalogTools + playbackTools + playlistTools
