@@ -111,6 +111,8 @@ pub mod msg_types {
     pub const SYNC: &str = "sync";
     /// Catalog updated notification (server -> all clients).
     pub const CATALOG_UPDATED: &str = "catalog_updated";
+    /// Ingestion job update notification (server -> client).
+    pub const INGESTION_UPDATE: &str = "ingestion_update";
 }
 
 /// Sync-related message payloads.
@@ -139,6 +141,63 @@ pub mod catalog {
     pub struct CatalogUpdatedMessage {
         /// Current skeleton version on server.
         pub skeleton_version: i64,
+    }
+}
+
+/// Ingestion-related message payloads.
+pub mod ingestion {
+    use serde::{Deserialize, Serialize};
+
+    /// Payload for ingestion_update messages.
+    ///
+    /// Sent to the user who initiated the ingestion when job state changes.
+    #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+    pub struct IngestionUpdateMessage {
+        /// Job ID.
+        pub job_id: String,
+        /// New status.
+        pub status: String,
+        /// Matched track ID (if status is CONVERTING or COMPLETED).
+        pub matched_track_id: Option<String>,
+        /// Match confidence.
+        pub match_confidence: Option<f32>,
+        /// Error message (if status is FAILED).
+        pub error_message: Option<String>,
+        /// True if human review is required.
+        pub needs_review: bool,
+    }
+
+    impl IngestionUpdateMessage {
+        pub fn new(job_id: impl Into<String>, status: impl Into<String>) -> Self {
+            Self {
+                job_id: job_id.into(),
+                status: status.into(),
+                matched_track_id: None,
+                match_confidence: None,
+                error_message: None,
+                needs_review: false,
+            }
+        }
+
+        pub fn with_match(
+            mut self,
+            track_id: impl Into<String>,
+            confidence: f32,
+        ) -> Self {
+            self.matched_track_id = Some(track_id.into());
+            self.match_confidence = Some(confidence);
+            self
+        }
+
+        pub fn with_error(mut self, message: impl Into<String>) -> Self {
+            self.error_message = Some(message.into());
+            self
+        }
+
+        pub fn with_review(mut self) -> Self {
+            self.needs_review = true;
+            self
+        }
     }
 }
 

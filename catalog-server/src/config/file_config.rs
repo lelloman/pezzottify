@@ -24,6 +24,8 @@ pub struct FileConfig {
     pub search: Option<SearchConfig>,
     pub oidc: Option<OidcConfig>,
     pub catalog_store: Option<CatalogStoreConfig>,
+    pub agent: Option<AgentConfig>,
+    pub ingestion: Option<IngestionConfig>,
 }
 
 #[derive(Debug, Deserialize, Default, Clone)]
@@ -134,6 +136,54 @@ fn default_scopes() -> Vec<String> {
         "profile".to_string(),
         "email".to_string(),
     ]
+}
+
+/// Configuration for the agent LLM backend.
+#[derive(Debug, Deserialize, Default, Clone)]
+#[serde(default)]
+pub struct AgentConfig {
+    /// Whether agent features are enabled.
+    pub enabled: Option<bool>,
+    /// Maximum iterations for agent workflows.
+    pub max_iterations: Option<usize>,
+    /// LLM configuration.
+    pub llm: Option<AgentLlmConfig>,
+}
+
+/// Configuration for the LLM provider used by agents.
+#[derive(Debug, Deserialize, Default, Clone)]
+#[serde(default)]
+pub struct AgentLlmConfig {
+    /// LLM provider: "ollama" (default), potentially "openai", "anthropic" later.
+    pub provider: Option<String>,
+    /// Base URL for the LLM API (e.g., "http://localhost:11434" for Ollama).
+    pub base_url: Option<String>,
+    /// Model to use (e.g., "llama3.1:8b").
+    pub model: Option<String>,
+    /// Temperature for sampling (0.0 = deterministic, 1.0 = creative).
+    pub temperature: Option<f32>,
+    /// Request timeout in seconds.
+    pub timeout_secs: Option<u64>,
+}
+
+/// Configuration for the ingestion feature.
+#[derive(Debug, Deserialize, Default, Clone)]
+#[serde(default)]
+pub struct IngestionConfig {
+    /// Whether ingestion is enabled (requires agent to be enabled).
+    pub enabled: Option<bool>,
+    /// Temporary directory for uploaded files.
+    pub temp_dir: Option<String>,
+    /// Maximum upload size in megabytes.
+    pub max_upload_size_mb: Option<u64>,
+    /// Confidence threshold for auto-approval (0.0 - 1.0).
+    pub auto_approve_threshold: Option<f32>,
+    /// Path to ffmpeg binary.
+    pub ffmpeg_path: Option<String>,
+    /// Path to ffprobe binary.
+    pub ffprobe_path: Option<String>,
+    /// Output bitrate for converted audio (e.g., "320k").
+    pub output_bitrate: Option<String>,
 }
 
 impl FileConfig {

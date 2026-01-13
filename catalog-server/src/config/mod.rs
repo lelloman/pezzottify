@@ -1,8 +1,9 @@
 mod file_config;
 
 pub use file_config::{
-    BackgroundJobsConfig, CatalogStoreConfig, DownloadManagerConfig, FileConfig, OidcConfig,
-    SearchConfig, StreamingSearchConfig as StreamingSearchFileConfig,
+    AgentConfig, AgentLlmConfig, BackgroundJobsConfig, CatalogStoreConfig, DownloadManagerConfig,
+    FileConfig, IngestionConfig, OidcConfig, SearchConfig,
+    StreamingSearchConfig as StreamingSearchFileConfig,
 };
 
 use crate::server::RequestsLoggingLevel;
@@ -105,6 +106,8 @@ pub struct AppConfig {
     pub background_jobs: BackgroundJobsSettings,
     pub search: SearchSettings,
     pub catalog_store: CatalogStoreSettings,
+    pub agent: AgentSettings,
+    pub ingestion: IngestionSettings,
 }
 
 impl AppConfig {
@@ -262,6 +265,53 @@ impl AppConfig {
             streaming,
         };
 
+        // Agent settings from file config
+        let agent_file = file.agent.unwrap_or_default();
+        let agent_llm_file = agent_file.llm.unwrap_or_default();
+        let agent_llm_defaults = AgentLlmSettings::default();
+        let agent = AgentSettings {
+            enabled: agent_file.enabled.unwrap_or(false),
+            max_iterations: agent_file.max_iterations.unwrap_or(20),
+            llm: AgentLlmSettings {
+                provider: agent_llm_file
+                    .provider
+                    .unwrap_or(agent_llm_defaults.provider),
+                base_url: agent_llm_file
+                    .base_url
+                    .unwrap_or(agent_llm_defaults.base_url),
+                model: agent_llm_file.model.unwrap_or(agent_llm_defaults.model),
+                temperature: agent_llm_file
+                    .temperature
+                    .unwrap_or(agent_llm_defaults.temperature),
+                timeout_secs: agent_llm_file
+                    .timeout_secs
+                    .unwrap_or(agent_llm_defaults.timeout_secs),
+            },
+        };
+
+        // Ingestion settings from file config
+        let ingestion_file = file.ingestion.unwrap_or_default();
+        let ingestion_defaults = IngestionSettings::default();
+        let ingestion = IngestionSettings {
+            enabled: ingestion_file.enabled.unwrap_or(false) && agent.enabled,
+            temp_dir: ingestion_file.temp_dir,
+            max_upload_size_mb: ingestion_file
+                .max_upload_size_mb
+                .unwrap_or(ingestion_defaults.max_upload_size_mb),
+            auto_approve_threshold: ingestion_file
+                .auto_approve_threshold
+                .unwrap_or(ingestion_defaults.auto_approve_threshold),
+            ffmpeg_path: ingestion_file
+                .ffmpeg_path
+                .unwrap_or(ingestion_defaults.ffmpeg_path),
+            ffprobe_path: ingestion_file
+                .ffprobe_path
+                .unwrap_or(ingestion_defaults.ffprobe_path),
+            output_bitrate: ingestion_file
+                .output_bitrate
+                .unwrap_or(ingestion_defaults.output_bitrate),
+        };
+
         Ok(Self {
             db_dir,
             media_path,
@@ -278,6 +328,8 @@ impl AppConfig {
             background_jobs,
             search,
             catalog_store,
+            agent,
+            ingestion,
         })
     }
 
@@ -299,6 +351,18 @@ impl AppConfig {
 
     pub fn search_db_path(&self) -> PathBuf {
         self.db_dir.join("search.db")
+    }
+
+    pub fn ingestion_db_path(&self) -> PathBuf {
+        self.db_dir.join("ingestion.db")
+    }
+
+    pub fn ingestion_temp_dir(&self) -> PathBuf {
+        self.ingestion
+            .temp_dir
+            .as_ref()
+            .map(PathBuf::from)
+            .unwrap_or_else(|| self.db_dir.join("ingestion_uploads"))
     }
 }
 
@@ -381,6 +445,72 @@ pub struct CatalogStoreSettings {
 impl Default for CatalogStoreSettings {
     fn default() -> Self {
         Self { read_pool_size: 4 }
+    }
+}
+
+/// Settings for the agent LLM backend.
+#[derive(Debug, Clone)]
+pub struct AgentSettings {
+    pub enabled: bool,
+    pub max_iterations: usize,
+    pub llm: AgentLlmSettings,
+}
+
+impl Default for AgentSettings {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            max_iterations: 20,
+            llm: AgentLlmSettings::default(),
+        }
+    }
+}
+
+/// Settings for the LLM provider.
+#[derive(Debug, Clone)]
+pub struct AgentLlmSettings {
+    pub provider: String,
+    pub base_url: String,
+    pub model: String,
+    pub temperature: f32,
+    pub timeout_secs: u64,
+}
+
+impl Default for AgentLlmSettings {
+    fn default() -> Self {
+        Self {
+            provider: "ollama".to_string(),
+            base_url: "http://localhost:11434".to_string(),
+            model: "llama3.1:8b".to_string(),
+            temperature: 0.3,
+            timeout_secs: 120,
+        }
+    }
+}
+
+/// Settings for the ingestion feature.
+#[derive(Debug, Clone)]
+pub struct IngestionSettings {
+    pub enabled: bool,
+    pub temp_dir: Option<String>,
+    pub max_upload_size_mb: u64,
+    pub auto_approve_threshold: f32,
+    pub ffmpeg_path: String,
+    pub ffprobe_path: String,
+    pub output_bitrate: String,
+}
+
+impl Default for IngestionSettings {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            temp_dir: None,
+            max_upload_size_mb: 500,
+            auto_approve_threshold: 0.9,
+            ffmpeg_path: "ffmpeg".to_string(),
+            ffprobe_path: "ffprobe".to_string(),
+            output_bitrate: "320k".to_string(),
+        }
     }
 }
 

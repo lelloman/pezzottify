@@ -1021,5 +1021,112 @@ export const useRemoteStore = defineStore("remote", () => {
     fetchBugReports,
     getBugReport,
     deleteBugReport,
+    // Admin API - Ingestion
+    uploadIngestionFile,
+    fetchIngestionMyJobs,
+    fetchIngestionJob,
+    processIngestionJob,
+    convertIngestionJob,
+    fetchIngestionReviews,
+    resolveIngestionReview,
+    fetchIngestionAdminJobs,
   };
 });
+
+// =====================================================
+// Admin API - Ingestion (EditCatalog)
+// =====================================================
+
+async function uploadIngestionFile(filename, base64Data, contextType = null, contextId = null) {
+  try {
+    const body = {
+      filename,
+      data: base64Data,
+    };
+    if (contextType) body.context_type = contextType;
+    if (contextId) body.context_id = contextId;
+    const response = await axios.post("/v1/ingestion/upload", body);
+    return { success: true, data: response.data };
+  } catch (error) {
+    console.error("Failed to upload file for ingestion:", error);
+    return { error: error.response?.data?.error || "Failed to upload file" };
+  }
+}
+
+async function fetchIngestionMyJobs(limit = 50) {
+  try {
+    const response = await axios.get("/v1/ingestion/my-jobs", {
+      params: { limit },
+    });
+    return response.data;
+  } catch (error) {
+    console.error("Failed to fetch ingestion jobs:", error);
+    return null;
+  }
+}
+
+async function fetchIngestionJob(jobId) {
+  try {
+    const response = await axios.get(`/v1/ingestion/job/${jobId}`);
+    return response.data;
+  } catch (error) {
+    console.error("Failed to fetch ingestion job:", error);
+    return null;
+  }
+}
+
+async function processIngestionJob(jobId) {
+  try {
+    const response = await axios.post(`/v1/ingestion/job/${jobId}/process`);
+    return { success: true, data: response.data };
+  } catch (error) {
+    console.error("Failed to process ingestion job:", error);
+    return { error: error.response?.data?.error || "Failed to process job" };
+  }
+}
+
+async function convertIngestionJob(jobId) {
+  try {
+    const response = await axios.post(`/v1/ingestion/job/${jobId}/convert`);
+    return { success: true, data: response.data };
+  } catch (error) {
+    console.error("Failed to convert ingestion job:", error);
+    return { error: error.response?.data?.error || "Failed to convert job" };
+  }
+}
+
+async function fetchIngestionReviews(limit = 50) {
+  try {
+    const response = await axios.get("/v1/ingestion/reviews", {
+      params: { limit },
+    });
+    return response.data;
+  } catch (error) {
+    console.error("Failed to fetch ingestion reviews:", error);
+    return null;
+  }
+}
+
+async function resolveIngestionReview(jobId, selectedOption) {
+  try {
+    const response = await axios.post(`/v1/ingestion/review/${jobId}/resolve`, {
+      selected_option: selectedOption,
+    });
+    return { success: true, data: response.data };
+  } catch (error) {
+    console.error("Failed to resolve ingestion review:", error);
+    return { error: error.response?.data?.error || "Failed to resolve review" };
+  }
+}
+
+async function fetchIngestionAdminJobs(limit = 50) {
+  try {
+    const response = await axios.get("/v1/ingestion/admin/jobs", {
+      params: { limit },
+    });
+    return response.data;
+  } catch (error) {
+    console.error("Failed to fetch admin ingestion jobs:", error);
+    return null;
+  }
+}
