@@ -111,6 +111,11 @@ const router = createRouter({
           name: "admin-bug-reports",
           meta: { requiresAuth: true, section: "bug-reports" },
         },
+        {
+          path: "ingestion",
+          name: "admin-ingestion",
+          meta: { requiresAuth: true, section: "ingestion" },
+        },
       ],
     },
 

@@ -2,10 +2,12 @@
 //!
 //! This library exposes the internal modules for testing and potential reuse.
 
+pub mod agent;
 pub mod background_jobs;
 pub mod catalog_store;
 pub mod config;
 pub mod download_manager;
+pub mod ingestion;
 pub mod mcp;
 pub mod notifications;
 pub mod oidc;

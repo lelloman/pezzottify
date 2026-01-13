@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use crate::config::{DownloadManagerSettings, StreamingSearchSettings};
+use crate::config::{AgentSettings, DownloadManagerSettings, IngestionSettings, StreamingSearchSettings};
 
 use super::RequestsLoggingLevel;
 
@@ -21,6 +21,10 @@ pub struct ServerConfig {
     pub db_dir: PathBuf,
     /// Media files path.
     pub media_path: PathBuf,
+    /// Agent (LLM) configuration.
+    pub agent: AgentSettings,
+    /// Ingestion configuration.
+    pub ingestion: IngestionSettings,
 }
 
 impl Default for ServerConfig {
@@ -35,6 +39,24 @@ impl Default for ServerConfig {
             download_manager: DownloadManagerSettings::default(),
             db_dir: PathBuf::from("."),
             media_path: PathBuf::from("."),
+            agent: AgentSettings::default(),
+            ingestion: IngestionSettings::default(),
         }
+    }
+}
+
+impl ServerConfig {
+    /// Path to the ingestion database.
+    pub fn ingestion_db_path(&self) -> PathBuf {
+        self.db_dir.join("ingestion.db")
+    }
+
+    /// Path to the ingestion temp directory.
+    pub fn ingestion_temp_dir(&self) -> PathBuf {
+        self.ingestion
+            .temp_dir
+            .as_ref()
+            .map(PathBuf::from)
+            .unwrap_or_else(|| self.db_dir.join("ingestion_uploads"))
     }
 }

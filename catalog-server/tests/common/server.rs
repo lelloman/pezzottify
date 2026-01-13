@@ -155,6 +155,8 @@ impl TestServer {
             download_manager: pezzottify_catalog_server::config::DownloadManagerSettings::default(),
             db_dir: temp_db_dir.path().to_path_buf(),
             media_path: media_path.clone(),
+            agent: pezzottify_catalog_server::config::AgentSettings::default(),
+            ingestion: pezzottify_catalog_server::config::IngestionSettings::default(),
         };
 
         // Create user manager

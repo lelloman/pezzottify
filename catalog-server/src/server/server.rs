@@ -4212,6 +4212,7 @@ impl ServerState {
             organic_indexer,
             http_client,
             download_manager: None, // Will be set by make_app if download manager is enabled
+            ingestion_manager: None, // Will be set by make_app if ingestion is enabled
             shutdown_token: None,   // Will be set by make_app if download manager is enabled
         }
     }
@@ -4336,6 +4337,68 @@ pub async fn make_app(
         }
     } else {
         debug!("Download manager not configured");
+    }
+
+    // Initialize Ingestion Manager if enabled
+    if config.ingestion.enabled {
+        info!("Initializing ingestion manager...");
+        let ingestion_db_path = config.ingestion_db_path();
+        match crate::ingestion::SqliteIngestionStore::open(&ingestion_db_path) {
+            Ok(store) => {
+                // Create LLM provider if agent is configured
+                let llm: Option<Arc<dyn crate::agent::LlmProvider>> =
+                    if config.agent.enabled && !config.agent.llm.base_url.is_empty() {
+                        Some(Arc::new(crate::agent::OllamaProvider::new(
+                            config.agent.llm.base_url.clone(),
+                            config.agent.llm.model.clone(),
+                        )))
+                    } else {
+                        warn!(
+                            "Ingestion enabled but agent not configured - LLM matching disabled"
+                        );
+                        None
+                    };
+
+                // Parse bitrate from string like "320k" to u32
+                let target_bitrate = config
+                    .ingestion
+                    .output_bitrate
+                    .trim_end_matches('k')
+                    .trim_end_matches('K')
+                    .parse::<u32>()
+                    .unwrap_or(320);
+
+                let ingestion_config = crate::ingestion::IngestionManagerConfig {
+                    temp_dir: config.ingestion_temp_dir(),
+                    media_dir: config.media_path.clone(),
+                    max_file_size: config.ingestion.max_upload_size_mb * 1024 * 1024,
+                    target_bitrate,
+                    auto_match_threshold: config.ingestion.auto_approve_threshold,
+                    ..Default::default()
+                };
+
+                let manager = Arc::new(crate::ingestion::IngestionManager::new(
+                    Arc::new(store),
+                    catalog_store.clone(),
+                    search_vault.clone(),
+                    llm,
+                    ingestion_config,
+                ));
+
+                // Initialize the manager (creates temp directory)
+                if let Err(e) = manager.init().await {
+                    error!("Failed to initialize ingestion manager: {:?}", e);
+                } else {
+                    state.ingestion_manager = Some(manager);
+                    info!("Ingestion manager initialized successfully");
+                }
+            }
+            Err(e) => {
+                error!("Failed to open ingestion database: {:?}", e);
+            }
+        }
+    } else {
+        debug!("Ingestion not enabled");
     }
 
     // Login route with strict IP-based rate limiting
@@ -4754,6 +4817,15 @@ pub async fn make_app(
         ))
         .with_state(state.clone());
 
+    // Ingestion routes - require EditCatalog permission
+    // Note: permission checks are also done inside each route handler
+    let ingestion_routes: Router = super::ingestion_routes()
+        .route_layer(middleware::from_fn_with_state(
+            state.clone(),
+            require_edit_catalog,
+        ))
+        .with_state(state.clone());
+
     let home_router: Router = match config.frontend_dir_path {
         Some(ref frontend_path) => {
             let index_path = std::path::Path::new(frontend_path).join("index.html");
@@ -4784,6 +4856,7 @@ pub async fn make_app(
         .nest("/v1/admin", admin_routes)
         .nest("/v1/sync", sync_routes)
         .nest("/v1/download", download_routes)
+        .nest("/v1/ingestion", ingestion_routes)
         .nest("/v1", ws_routes)
         .nest("/v1", mcp_routes);
 
@@ -4837,6 +4910,8 @@ pub async fn run_server(
     download_manager: crate::config::DownloadManagerSettings,
     db_dir: std::path::PathBuf,
     media_path: std::path::PathBuf,
+    agent: crate::config::AgentSettings,
+    ingestion: crate::config::IngestionSettings,
 ) -> Result<()> {
     let disable_password_auth = oidc_config
         .as_ref()
@@ -4853,6 +4928,8 @@ pub async fn run_server(
         download_manager,
         db_dir,
         media_path,
+        agent,
+        ingestion,
     };
 
     let app = make_app(
