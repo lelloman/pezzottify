@@ -158,6 +158,18 @@ pub trait CatalogStore: Send + Sync {
     fn delete_track(&self, id: &str) -> Result<bool>;
 
     // =========================================================================
+    // Availability Management
+    // =========================================================================
+
+    /// Set the audio URI for a track and update its availability flag.
+    /// The audio_uri should be relative to the media base path (e.g., "tracks/{id}.ogg").
+    fn set_track_audio_uri(&self, track_id: &str, audio_uri: &str) -> Result<()>;
+
+    /// Recompute and update album availability based on its tracks' audio files.
+    /// Returns the new availability status.
+    fn recompute_album_availability(&self, album_id: &str) -> Result<super::AlbumAvailability>;
+
+    // =========================================================================
     // Popularity Data
     // =========================================================================
 

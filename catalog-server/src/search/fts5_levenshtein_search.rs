@@ -1443,6 +1443,15 @@ mod tests {
             fn delete_track(&self, _id: &str) -> anyhow::Result<bool> {
                 anyhow::bail!("MockCatalogStore does not support write operations")
             }
+            fn set_track_audio_uri(&self, _track_id: &str, _audio_uri: &str) -> anyhow::Result<()> {
+                anyhow::bail!("MockCatalogStore does not support write operations")
+            }
+            fn recompute_album_availability(
+                &self,
+                _album_id: &str,
+            ) -> anyhow::Result<crate::catalog_store::AlbumAvailability> {
+                anyhow::bail!("MockCatalogStore does not support write operations")
+            }
             fn get_items_popularity(
                 &self,
                 _items: &[(String, SearchableContentType)],

@@ -137,6 +137,14 @@ impl CatalogStore for NullCatalogStore {
         anyhow::bail!("NullCatalogStore does not support write operations")
     }
 
+    fn set_track_audio_uri(&self, _track_id: &str, _audio_uri: &str) -> Result<()> {
+        anyhow::bail!("NullCatalogStore does not support write operations")
+    }
+
+    fn recompute_album_availability(&self, _album_id: &str) -> Result<super::AlbumAvailability> {
+        anyhow::bail!("NullCatalogStore does not support write operations")
+    }
+
     fn get_items_popularity(
         &self,
         _items: &[(String, super::SearchableContentType)],

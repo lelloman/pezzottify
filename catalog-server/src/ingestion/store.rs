@@ -119,7 +119,7 @@ impl SqliteIngestionStore {
     fn row_to_job(row: &rusqlite::Row) -> rusqlite::Result<IngestionJob> {
         Ok(IngestionJob {
             id: row.get("id")?,
-            status: IngestionJobStatus::from_str(&row.get::<_, String>("status")?)
+            status: IngestionJobStatus::parse(&row.get::<_, String>("status")?)
                 .unwrap_or(IngestionJobStatus::Pending),
             user_id: row.get("user_id")?,
             original_filename: row.get("original_filename")?,
@@ -127,7 +127,7 @@ impl SqliteIngestionStore {
             file_count: row.get("file_count")?,
             context_type: row
                 .get::<_, Option<String>>("context_type")?
-                .and_then(|s| IngestionContextType::from_str(&s)),
+                .and_then(|s| IngestionContextType::parse(&s)),
             context_id: row.get("context_id")?,
             detected_artist: row.get("detected_artist")?,
             detected_album: row.get("detected_album")?,
@@ -136,7 +136,7 @@ impl SqliteIngestionStore {
             match_confidence: row.get("match_confidence")?,
             match_source: row
                 .get::<_, Option<String>>("match_source")?
-                .and_then(|s| IngestionMatchSource::from_str(&s)),
+                .and_then(|s| IngestionMatchSource::parse(&s)),
             tracks_matched: row.get("tracks_matched")?,
             tracks_converted: row.get("tracks_converted")?,
             error_message: row.get("error_message")?,

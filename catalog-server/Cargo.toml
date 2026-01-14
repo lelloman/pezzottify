@@ -10,6 +10,7 @@ no_checks = [] # dev feature, ignore expensive catalog integrity checks
 test-fast-hasher = [] # dev feature, fast password hasher for tests (DO NOT use in production!)
 fast = ["no_checks", "test-fast-hasher"]
 slowdown = [] # dev feature, adds a slowdown layer in front of server routes
+mock = [] # dev feature, enables mockall for trait mocking in tests
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 

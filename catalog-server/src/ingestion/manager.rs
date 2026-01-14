@@ -26,6 +26,14 @@ use std::sync::Arc;
 use thiserror::Error;
 use tracing::{debug, error, info, warn};
 
+/// Trait for DownloadManager operations needed by IngestionManager.
+#[cfg_attr(feature = "mock", mockall::automock)]
+pub trait DownloadManagerTrait: Send + Sync {
+    /// Mark a download request as completed.
+    fn mark_request_completed(&self, item_id: &str, bytes_downloaded: u64, duration_ms: i64) -> Result<()>;
+}
+
+
 /// Errors that can occur during ingestion.
 #[derive(Debug, Error)]
 pub enum IngestionError {
@@ -100,9 +108,12 @@ pub struct IngestionManager {
     store: Arc<dyn IngestionStore>,
     catalog: Arc<dyn CatalogStore>,
     search: Arc<dyn SearchVault>,
+    /// LLM provider for future agentic features (currently unused).
+    #[allow(dead_code)]
     llm: Option<Arc<dyn LlmProvider>>,
     file_handler: FileHandler,
     config: IngestionManagerConfig,
+    download_manager: Option<Arc<dyn DownloadManagerTrait>>,
 }
 
 impl IngestionManager {
@@ -113,6 +124,7 @@ impl IngestionManager {
         search: Arc<dyn SearchVault>,
         llm: Option<Arc<dyn LlmProvider>>,
         config: IngestionManagerConfig,
+        download_manager: Option<Arc<dyn DownloadManagerTrait>>,
     ) -> Self {
         let file_handler = FileHandler::new(&config.temp_dir, config.max_file_size);
 
@@ -123,6 +135,7 @@ impl IngestionManager {
             llm,
             file_handler,
             config,
+            download_manager,
         }
     }
 
@@ -456,11 +469,32 @@ impl IngestionManager {
         // Get metadata summary
         let summary = self.build_metadata_summary(job_id)?;
 
+        debug!(
+            "Job {} metadata summary: artist={:?}, album={:?}, year={:?}, files={}, duration={}ms, tracks={:?}",
+            job_id,
+            summary.artist,
+            summary.album,
+            summary.year,
+            summary.file_count,
+            summary.total_duration_ms,
+            summary.track_titles
+        );
+
         // Search for matching albums in catalog
         let candidates = self.search_album_candidates(&summary).await?;
 
+        debug!(
+            "Job {} found {} album candidates",
+            job_id,
+            candidates.len()
+        );
+
         if candidates.is_empty() {
             // No candidates found
+            info!(
+                "Job {} - no album candidates found for query: artist={:?}, album={:?}",
+                job_id, summary.artist, summary.album
+            );
             job.status = IngestionJobStatus::AwaitingReview;
             self.create_no_match_review(&job, &summary)?;
             self.store.update_job(&job)?;
@@ -472,12 +506,23 @@ impl IngestionManager {
             .into_iter()
             .map(|candidate| {
                 let score = self.score_album_match(&summary, &candidate);
+                debug!(
+                    "Candidate {} - {} ({} tracks): score={:.2}",
+                    candidate.artist_name, candidate.name, candidate.track_count, score
+                );
                 (candidate, score)
             })
             .collect();
 
         // Sort by score descending
         scored.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+
+        if !scored.is_empty() {
+            debug!(
+                "Top candidate: {} - {} with score {:.2} (threshold: {:.2})",
+                scored[0].0.artist_name, scored[0].0.name, scored[0].1, self.config.auto_match_threshold
+            );
+        }
 
         // Find best match
         if let Some((best_candidate, confidence)) = scored.first() {
@@ -496,6 +541,10 @@ impl IngestionManager {
                     job_id, best_candidate.id, confidence * 100.0,
                     summary.file_count, best_candidate.track_count
                 );
+
+                // Continue to track mapping and conversion
+                self.map_tracks(job_id).await?;
+                self.convert_job(job_id).await?;
             } else {
                 // Low confidence - request review
                 let options: Vec<ReviewOption> = scored
@@ -546,41 +595,32 @@ impl IngestionManager {
     ) -> Result<Vec<AlbumCandidate>, IngestionError> {
         let mut candidates = Vec::new();
 
-        // Build search query from artist + album
-        let query = format!(
-            "{} {}",
-            summary.artist.as_deref().unwrap_or(""),
-            summary.album.as_deref().unwrap_or("")
-        )
-        .trim()
-        .to_string();
-
-        // Search for albums (filter to albums only)
-        let search_query = if query.is_empty() {
-            summary.source_name.clone()
-        } else {
-            query
-        };
-
         // Collect album IDs first, then fetch full details
         let mut album_ids: Vec<String> = Vec::new();
-
         let album_filter = Some(vec![HashedItemType::Album]);
-        let results = self.search.search(&search_query, 10, album_filter);
 
-        for result in results {
-            album_ids.push(result.item_id.clone());
+        // Strategy 1: Search for album by name only
+        if let Some(album_name) = &summary.album {
+            debug!("Searching albums by name: {:?}", album_name);
+            let results = self.search.search(album_name, 10, album_filter.clone());
+            debug!("Album name search returned {} results", results.len());
+            for result in results {
+                album_ids.push(result.item_id.clone());
+            }
         }
 
-        // Also search for artists and include their albums
-        if !search_query.is_empty() && summary.artist.is_some() {
+        // Strategy 2: Search for artist and include their albums
+        if let Some(artist_name) = &summary.artist {
+            debug!("Searching artists by name: {:?}", artist_name);
             let artist_filter = Some(vec![HashedItemType::Artist]);
-            let artist_results = self.search.search(&search_query, 5, artist_filter);
+            let artist_results = self.search.search(artist_name, 5, artist_filter);
+            debug!("Artist search returned {} results", artist_results.len());
 
             for result in artist_results {
                 if let Ok(Some(artist_json)) = self.catalog.get_resolved_artist_json(&result.item_id) {
                     if let Some(albums) = artist_json.get("albums").and_then(|a| a.as_array()) {
-                        for album in albums.iter().take(5) {
+                        // Include all albums from matched artists for scoring
+                        for album in albums.iter().take(20) {
                             if let Some(album_id) = album.get("id").and_then(|v| v.as_str()) {
                                 if !album_id.is_empty() {
                                     album_ids.push(album_id.to_string());
@@ -592,13 +632,25 @@ impl IngestionManager {
             }
         }
 
+        // Strategy 3: Fallback to source filename if no artist/album detected
+        if album_ids.is_empty() {
+            debug!("Falling back to source filename search: {:?}", summary.source_name);
+            let results = self.search.search(&summary.source_name, 10, album_filter);
+            debug!("Filename search returned {} results", results.len());
+            for result in results {
+                album_ids.push(result.item_id.clone());
+            }
+        }
+
         // Deduplicate IDs
         album_ids.sort();
         album_ids.dedup();
 
+        debug!("Total unique album IDs to evaluate: {} - {:?}", album_ids.len(), album_ids);
+
         // Fetch full album details with tracks for each candidate
-        for album_id in album_ids {
-            if let Some(candidate) = self.build_album_candidate(&album_id) {
+        for album_id in &album_ids {
+            if let Some(candidate) = self.build_album_candidate(album_id) {
                 candidates.push(candidate);
             }
         }
@@ -794,6 +846,7 @@ impl IngestionManager {
             name: String,
             track_number: i32,
             disc_number: i32,
+            duration_ms: i64,
         }
 
         let mut tracks: Vec<TrackInfo> = Vec::new();
@@ -805,6 +858,7 @@ impl IngestionManager {
                         let id = track.get("id").and_then(|v| v.as_str()).unwrap_or_default();
                         let name = track.get("name").and_then(|v| v.as_str()).unwrap_or_default();
                         let track_number = track.get("track_number").and_then(|n| n.as_i64()).unwrap_or(0) as i32;
+                        let duration_ms = track.get("duration_ms").and_then(|n| n.as_i64()).unwrap_or(0);
 
                         if !id.is_empty() {
                             tracks.push(TrackInfo {
@@ -812,6 +866,7 @@ impl IngestionManager {
                                 name: name.to_string(),
                                 track_number,
                                 disc_number,
+                                duration_ms,
                             });
                         }
                     }
@@ -868,10 +923,78 @@ impl IngestionManager {
         }
 
         job.tracks_matched = matched;
-        job.status = IngestionJobStatus::Converting;
-        self.store.update_job(&job)?;
 
         info!("Mapped {}/{} files for job {}", matched, files.len(), job_id);
+
+        // Validate durations - flag for review if any track differs by > 10 seconds
+        const DURATION_THRESHOLD_MS: i64 = 10_000;
+        let tracks_by_id: HashMap<&str, &TrackInfo> = tracks
+            .iter()
+            .map(|t| (t.id.as_str(), t))
+            .collect();
+
+        // Re-fetch files to get the updated matched_track_id values
+        let files = self.store.get_files_for_job(job_id)?;
+        let mut duration_mismatches: Vec<String> = Vec::new();
+
+        for file in &files {
+            if let (Some(track_id), Some(file_duration)) = (&file.matched_track_id, file.duration_ms) {
+                if let Some(track) = tracks_by_id.get(track_id.as_str()) {
+                    let delta = (file_duration - track.duration_ms).abs();
+                    if delta > DURATION_THRESHOLD_MS {
+                        debug!(
+                            "Duration mismatch for {}: file={}ms, catalog={}ms, delta={}ms",
+                            file.filename, file_duration, track.duration_ms, delta
+                        );
+                        duration_mismatches.push(format!(
+                            "{}: {}s vs {}s (delta: {}s)",
+                            track.name,
+                            file_duration / 1000,
+                            track.duration_ms / 1000,
+                            delta / 1000
+                        ));
+                    }
+                }
+            }
+        }
+
+        if !duration_mismatches.is_empty() {
+            // Flag for review due to duration mismatches
+            let question = format!(
+                "Duration mismatch detected for {} track(s):\n{}",
+                duration_mismatches.len(),
+                duration_mismatches.join("\n")
+            );
+
+            let options = vec![
+                ReviewOption {
+                    id: "continue".to_string(),
+                    label: "Continue anyway".to_string(),
+                    description: Some("Accept the files despite duration differences".to_string()),
+                },
+                ReviewOption {
+                    id: "no_match".to_string(),
+                    label: "Reject".to_string(),
+                    description: Some("These files don't match the album".to_string()),
+                },
+            ];
+
+            let options_json = serde_json::to_string(&options).unwrap_or_default();
+            self.store.create_review_item(job_id, &question, &options_json)?;
+
+            job.status = IngestionJobStatus::AwaitingReview;
+            self.store.update_job(&job)?;
+
+            warn!(
+                "Job {} flagged for review: {} duration mismatches",
+                job_id, duration_mismatches.len()
+            );
+
+            return Ok(());
+        }
+
+        job.status = IngestionJobStatus::Converting;
+        self.store.update_job(&job)?;
 
         Ok(())
     }
@@ -896,6 +1019,7 @@ impl IngestionManager {
 
         let files = self.store.get_files_for_job(job_id)?;
         let mut converted = 0;
+        let mut converted_track_ids: Vec<String> = Vec::new();
 
         for mut file in files {
             // Skip files without a matched track
@@ -915,6 +1039,14 @@ impl IngestionManager {
                     file.output_file_path = Some(output_path.to_string_lossy().to_string());
                     file.converted = true;
                     converted += 1;
+                    converted_track_ids.push(track_id.clone());
+
+                    // Update catalog: set audio_uri for the track
+                    let audio_uri = format!("tracks/{}.ogg", track_id);
+                    if let Err(e) = self.catalog.set_track_audio_uri(&track_id, &audio_uri) {
+                        warn!("Failed to update track {} audio_uri: {}", track_id, e);
+                    }
+
                     info!("Converted {} -> {}", file.filename, track_id);
                 }
                 Err(e) => {
@@ -926,10 +1058,66 @@ impl IngestionManager {
             self.store.update_file(&file)?;
         }
 
+        // Update album availability in catalog
+        if let Some(album_id) = &job.matched_album_id {
+            match self.catalog.recompute_album_availability(album_id) {
+                Ok(availability) => {
+                    info!("Album {} availability updated to {:?}", album_id, availability);
+
+                    // Update search index for album
+                    let album_available = availability != crate::catalog_store::AlbumAvailability::Missing;
+                    self.search.update_availability(&[(
+                        album_id.clone(),
+                        HashedItemType::Album,
+                        album_available,
+                    )]);
+                }
+                Err(e) => {
+                    warn!("Failed to recompute album {} availability: {}", album_id, e);
+                }
+            }
+        }
+
+        // Update search index for converted tracks
+        let track_availability_updates: Vec<_> = converted_track_ids
+            .iter()
+            .map(|id| (id.clone(), HashedItemType::Track, true))
+            .collect();
+        if !track_availability_updates.is_empty() {
+            self.search.update_availability(&track_availability_updates);
+        }
+
         job.tracks_converted = converted;
         job.status = IngestionJobStatus::Completed;
         job.completed_at = Some(chrono::Utc::now().timestamp_millis());
         self.store.update_job(&job)?;
+
+        // If this job is associated with a download request, mark it as completed
+        if let (Some(IngestionContextType::DownloadRequest), Some(context_id)) =
+            (job.context_type, &job.context_id)
+        {
+            if let Some(download_manager) = &self.download_manager {
+                let duration_ms = job.started_at.map_or(0, |started| {
+                    job.completed_at.unwrap_or(chrono::Utc::now().timestamp_millis()) - started
+                });
+
+                if let Err(e) = download_manager.mark_request_completed(
+                    context_id,
+                    job.total_size_bytes as u64,
+                    duration_ms,
+                ) {
+                    error!(
+                        "Failed to mark download request {} as completed: {}",
+                        context_id, e
+                    );
+                } else {
+                    info!(
+                        "Marked download request {} as completed for job {}",
+                        context_id, job_id
+                    );
+                }
+            }
+        }
 
         // Cleanup temp files
         let _ = self.file_handler.cleanup_job(job_id).await;
@@ -976,11 +1164,23 @@ impl IngestionManager {
             self.store.update_job(&job)?;
 
             info!("Review resolved: job {} matched to album {}", job_id, album_id);
+
+            // Continue to track mapping and conversion
+            self.map_tracks(job_id).await?;
+            self.convert_job(job_id).await?;
         } else if selected_option == "no_match" {
             job.status = IngestionJobStatus::Failed;
             job.error_message = Some("Album not in catalog".to_string());
             job.completed_at = Some(chrono::Utc::now().timestamp_millis());
             self.store.update_job(&job)?;
+        } else if selected_option == "continue" {
+            // User accepted duration mismatches, continue to conversion
+            job.status = IngestionJobStatus::Converting;
+            self.store.update_job(&job)?;
+
+            info!("Review resolved: job {} continuing despite duration mismatches", job_id);
+
+            self.convert_job(job_id).await?;
         } else if selected_option == "retry" {
             job.status = IngestionJobStatus::IdentifyingAlbum;
             self.store.update_job(&job)?;
@@ -1012,6 +1212,7 @@ impl IngestionManager {
     }
 }
 
+
 // =========================================================================
 // Utilities
 // =========================================================================
@@ -1037,6 +1238,7 @@ fn string_similarity(a: &str, b: &str) -> f32 {
 }
 
 /// Calculate Levenshtein distance between two strings.
+#[allow(clippy::needless_range_loop)]
 fn levenshtein_distance(a: &str, b: &str) -> usize {
     let a_chars: Vec<char> = a.chars().collect();
     let b_chars: Vec<char> = b.chars().collect();

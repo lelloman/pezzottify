@@ -271,10 +271,15 @@ const uploadFile = async (file) => {
   uploadState.success = null;
 
   try {
-    // Send file directly via FormData (no base64 bloat)
-    const result = await remoteStore.uploadIngestionFile(file);
-
-    uploadState.progress = 100;
+    // Send file directly via FormData with real-time progress tracking
+    const result = await remoteStore.uploadIngestionFile(
+      file,
+      null,
+      null,
+      (progress) => {
+        uploadState.progress = progress;
+      },
+    );
 
     if (result.error) {
       uploadState.error = result.error;

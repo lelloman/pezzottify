@@ -1535,6 +1535,58 @@ impl CatalogStore for SqliteCatalogStore {
         }
     }
 
+    fn set_track_audio_uri(&self, track_id: &str, audio_uri: &str) -> Result<()> {
+        let conn = self.write_conn.lock().unwrap();
+        let rows_affected = conn.execute(
+            "UPDATE tracks SET audio_uri = ?1, track_available = 1 WHERE id = ?2",
+            params![audio_uri, track_id],
+        )?;
+
+        if rows_affected == 0 {
+            anyhow::bail!("Track with id '{}' not found", track_id);
+        }
+
+        Ok(())
+    }
+
+    fn recompute_album_availability(&self, album_id: &str) -> Result<AlbumAvailability> {
+        let conn = self.write_conn.lock().unwrap();
+
+        // Get album rowid
+        let album_rowid: i64 = conn
+            .query_row(
+                "SELECT rowid FROM albums WHERE id = ?1",
+                params![album_id],
+                |r| r.get(0),
+            )
+            .context(format!("Album '{}' not found", album_id))?;
+
+        // Count total tracks and available tracks
+        // Use COALESCE for the SUM since it returns NULL when no rows match the condition
+        let (total_tracks, available_tracks): (i32, i32) = conn.query_row(
+            "SELECT COUNT(*), COALESCE(SUM(CASE WHEN track_available = 1 THEN 1 ELSE 0 END), 0) FROM tracks WHERE album_rowid = ?1",
+            params![album_rowid],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )?;
+
+        // Determine availability
+        let availability = if available_tracks == 0 {
+            AlbumAvailability::Missing
+        } else if available_tracks == total_tracks {
+            AlbumAvailability::Complete
+        } else {
+            AlbumAvailability::Partial
+        };
+
+        // Update album
+        conn.execute(
+            "UPDATE albums SET album_availability = ?1 WHERE rowid = ?2",
+            params![availability.to_db_str(), album_rowid],
+        )?;
+
+        Ok(availability)
+    }
+
     fn get_items_popularity(
         &self,
         items: &[(String, SearchableContentType)],

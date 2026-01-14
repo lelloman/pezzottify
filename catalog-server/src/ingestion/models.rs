@@ -45,7 +45,7 @@ impl IngestionJobStatus {
         }
     }
 
-    pub fn from_str(s: &str) -> Option<Self> {
+    pub fn parse(s: &str) -> Option<Self> {
         match s {
             "PENDING" => Some(Self::Pending),
             "ANALYZING" => Some(Self::Analyzing),
@@ -84,7 +84,7 @@ impl IngestionContextType {
         }
     }
 
-    pub fn from_str(s: &str) -> Option<Self> {
+    pub fn parse(s: &str) -> Option<Self> {
         match s {
             "SPONTANEOUS" => Some(Self::Spontaneous),
             "DOWNLOAD_REQUEST" => Some(Self::DownloadRequest),
@@ -111,7 +111,7 @@ impl IngestionMatchSource {
         }
     }
 
-    pub fn from_str(s: &str) -> Option<Self> {
+    pub fn parse(s: &str) -> Option<Self> {
         match s {
             "AGENT" => Some(Self::Agent),
             "HUMAN_REVIEW" => Some(Self::HumanReview),
@@ -385,7 +385,7 @@ mod tests {
             IngestionJobStatus::Failed,
         ] {
             let s = status.as_str();
-            let parsed = IngestionJobStatus::from_str(s);
+            let parsed = IngestionJobStatus::parse(s);
             assert_eq!(parsed, Some(status));
         }
     }
@@ -397,7 +397,7 @@ mod tests {
             IngestionContextType::DownloadRequest,
         ] {
             let s = ctx.as_str();
-            let parsed = IngestionContextType::from_str(s);
+            let parsed = IngestionContextType::parse(s);
             assert_eq!(parsed, Some(ctx));
         }
     }
