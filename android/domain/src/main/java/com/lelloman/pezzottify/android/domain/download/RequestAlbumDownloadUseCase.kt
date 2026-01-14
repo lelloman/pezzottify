@@ -39,10 +39,24 @@ class RequestAlbumDownloadUseCase @Inject constructor(
             }
             is RemoteApiResponse.Error -> {
                 logger.error("invoke() request album download failed: $response")
-                Result.failure(RequestAlbumDownloadException(response.toString()))
+                val errorType = when (response) {
+                    RemoteApiResponse.Error.Network -> RequestAlbumDownloadErrorType.Network
+                    RemoteApiResponse.Error.Unauthorized -> RequestAlbumDownloadErrorType.Unauthorized
+                    RemoteApiResponse.Error.NotFound -> RequestAlbumDownloadErrorType.NotFound
+                    RemoteApiResponse.Error.EventsPruned,
+                    is RemoteApiResponse.Error.Unknown -> RequestAlbumDownloadErrorType.Unknown
+                }
+                Result.failure(RequestAlbumDownloadException(errorType))
             }
         }
     }
 }
 
-class RequestAlbumDownloadException(message: String) : Exception(message)
+class RequestAlbumDownloadException(val errorType: RequestAlbumDownloadErrorType) : Exception(errorType.name)
+
+enum class RequestAlbumDownloadErrorType {
+    Network,
+    Unauthorized,
+    NotFound,
+    Unknown,
+}

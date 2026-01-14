@@ -437,6 +437,13 @@ class AlbumScreenViewModelTest {
         override suspend fun createPlaylist(name: String) {
             lastCreatedPlaylistName = name
         }
+
+        // Download request methods - not tested in this file
+        override fun hasRequestContentPermission(): Flow<Boolean> = MutableStateFlow(false)
+        override fun observeDownloadRequestStatus(albumId: String): Flow<AlbumScreenViewModel.DownloadRequestStatus?> =
+            MutableStateFlow(null)
+        override suspend fun requestAlbumDownload(albumId: String, albumName: String, artistName: String): Result<Unit> =
+            Result.success(Unit)
     }
 
     private class FakeContentResolver : ContentResolver {

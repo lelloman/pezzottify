@@ -58,6 +58,13 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import kotlin.math.min
 import kotlinx.coroutines.launch
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.ErrorOutline
+import androidx.compose.material.icons.filled.HourglassEmpty
+import androidx.compose.material.icons.outlined.CloudDownload
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import com.lelloman.pezzottify.android.ui.R
@@ -149,6 +156,7 @@ private fun AlbumScreenContent(
                     tracks = state.tracks,
                     currentPlayingTrackId = state.currentPlayingTrackId,
                     isLiked = state.isLiked,
+                    downloadRequestState = state.downloadRequestState,
                     contentResolver = contentResolver,
                     actions = actions,
                     onShowSnackbar = showSnackbar,
@@ -259,6 +267,7 @@ fun AlbumLoadedScreen(
     tracks: List<kotlinx.coroutines.flow.Flow<Content<Track>>>?,
     currentPlayingTrackId: String?,
     isLiked: Boolean,
+    downloadRequestState: DownloadRequestState,
     contentResolver: ContentResolver,
     actions: AlbumScreenActions,
     onShowSnackbar: (String) -> Unit = {},
@@ -339,6 +348,19 @@ fun AlbumLoadedScreen(
                         artistIds = album.artistsIds,
                         contentResolver = contentResolver,
                         onArtistClick = onArtistClick
+                    )
+                }
+                item {
+                    Spacer(modifier = Modifier.height(16.dp))
+                }
+            }
+
+            // Download request section
+            if (downloadRequestState !is DownloadRequestState.Hidden) {
+                item {
+                    DownloadRequestSection(
+                        state = downloadRequestState,
+                        onRequestDownload = { actions.requestDownload() },
                     )
                 }
                 item {
@@ -514,6 +536,152 @@ fun AlbumLoadedScreen(
                     contentDescription = stringResource(R.string.play),
                     tint = MaterialTheme.colorScheme.onPrimary,
                 )
+            }
+        }
+    }
+}
+
+@Composable
+private fun DownloadRequestSection(
+    state: DownloadRequestState,
+    onRequestDownload: () -> Unit,
+) {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant,
+        shape = MaterialTheme.shapes.medium,
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            when (state) {
+                is DownloadRequestState.CanRequest -> {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.weight(1f),
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.CloudDownload,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(24.dp),
+                        )
+                        Spacer(modifier = Modifier.size(12.dp))
+                        Text(
+                            text = stringResource(R.string.album_has_unavailable_tracks),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Spacer(modifier = Modifier.size(12.dp))
+                    androidx.compose.material3.Button(
+                        onClick = onRequestDownload,
+                    ) {
+                        Text(stringResource(R.string.request_download))
+                    }
+                }
+                is DownloadRequestState.Requesting -> {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        PezzottifyLoader(size = LoaderSize.Small)
+                        Spacer(modifier = Modifier.size(12.dp))
+                        Text(
+                            text = stringResource(R.string.requesting_download),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+                is DownloadRequestState.Requested -> {
+                    val statusText = when (state.status) {
+                        RequestStatus.Pending -> {
+                            val position = state.queuePosition
+                            if (position != null) {
+                                stringResource(R.string.download_queued_position, position)
+                            } else {
+                                stringResource(R.string.download_requested)
+                            }
+                        }
+                        RequestStatus.InProgress -> {
+                            val progress = state.progress
+                            if (progress != null) {
+                                stringResource(R.string.downloading_progress, progress.completed, progress.total)
+                            } else {
+                                stringResource(R.string.downloading)
+                            }
+                        }
+                        RequestStatus.Completed -> stringResource(R.string.download_completed)
+                        RequestStatus.Failed -> stringResource(R.string.download_failed)
+                    }
+                    val icon = when (state.status) {
+                        RequestStatus.Pending -> Icons.Filled.HourglassEmpty
+                        RequestStatus.InProgress -> Icons.Filled.Download
+                        RequestStatus.Completed -> Icons.Filled.CheckCircle
+                        RequestStatus.Failed -> Icons.Filled.ErrorOutline
+                    }
+                    val tint = when (state.status) {
+                        RequestStatus.Completed -> MaterialTheme.colorScheme.primary
+                        RequestStatus.Failed -> MaterialTheme.colorScheme.error
+                        else -> MaterialTheme.colorScheme.onSurfaceVariant
+                    }
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(
+                            imageVector = icon,
+                            contentDescription = null,
+                            tint = tint,
+                            modifier = Modifier.size(24.dp),
+                        )
+                        Spacer(modifier = Modifier.size(12.dp))
+                        Text(
+                            text = statusText,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+                is DownloadRequestState.Error -> {
+                    val errorMessage = when (state.errorType) {
+                        DownloadRequestErrorType.Network -> stringResource(R.string.download_request_error_network)
+                        DownloadRequestErrorType.Unauthorized -> stringResource(R.string.download_request_error_unauthorized)
+                        DownloadRequestErrorType.NotFound -> stringResource(R.string.download_request_error_not_found)
+                        DownloadRequestErrorType.Unknown -> stringResource(R.string.download_request_error_unknown)
+                    }
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.weight(1f),
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.ErrorOutline,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.size(24.dp),
+                        )
+                        Spacer(modifier = Modifier.size(12.dp))
+                        Text(
+                            text = errorMessage,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                    }
+                    Spacer(modifier = Modifier.size(12.dp))
+                    androidx.compose.material3.TextButton(
+                        onClick = onRequestDownload,
+                    ) {
+                        Text(stringResource(R.string.retry))
+                    }
+                }
+                is DownloadRequestState.Hidden -> {
+                    // Should not happen as we check before rendering
+                }
             }
         }
     }

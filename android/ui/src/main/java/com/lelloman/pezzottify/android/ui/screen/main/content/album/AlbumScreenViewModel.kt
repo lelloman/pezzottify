@@ -11,12 +11,21 @@ import dagger.assisted.Assisted
 import dagger.assisted.AssistedFactory
 import dagger.assisted.AssistedInject
 import dagger.hilt.android.lifecycle.HiltViewModel
+import com.lelloman.pezzottify.android.domain.download.RequestAlbumDownloadErrorType
+import com.lelloman.pezzottify.android.domain.download.RequestAlbumDownloadException
+import com.lelloman.pezzottify.android.ui.content.AlbumAvailability
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 @HiltViewModel(assistedFactory = AlbumScreenViewModel.Factory::class)
@@ -28,6 +37,42 @@ class AlbumScreenViewModel @AssistedInject constructor(
 ) : ViewModel(), AlbumScreenActions {
 
     private var hasLoggedView = false
+
+    // Local state for "Requesting" status before server confirms
+    private val localDownloadState = MutableStateFlow<DownloadRequestState?>(null)
+
+    // Observe download request status only when album has unavailable tracks
+    @OptIn(ExperimentalCoroutinesApi::class)
+    private val downloadRequestStatusFlow = contentResolver.resolveAlbum(albumId)
+        .flatMapLatest { albumContent ->
+            when (albumContent) {
+                is Content.Resolved -> {
+                    if (albumContent.data.availability != AlbumAvailability.Complete) {
+                        // Album has unavailable tracks, observe download status
+                        combine(
+                            interactor.hasRequestContentPermission(),
+                            interactor.observeDownloadRequestStatus(albumId),
+                            localDownloadState,
+                        ) { hasPermission, serverStatus, localState ->
+                            // Local state takes precedence during requesting
+                            when {
+                                localState != null -> localState
+                                !hasPermission -> DownloadRequestState.Hidden
+                                serverStatus != null -> DownloadRequestState.Requested(
+                                    status = serverStatus.status,
+                                    queuePosition = serverStatus.queuePosition,
+                                    progress = serverStatus.progress,
+                                )
+                                else -> DownloadRequestState.CanRequest
+                            }
+                        }
+                    } else {
+                        flowOf(DownloadRequestState.Hidden)
+                    }
+                }
+                else -> flowOf(DownloadRequestState.Hidden)
+            }
+        }
 
     val state = contentResolver.resolveAlbum(albumId)
         .map {
@@ -58,6 +103,9 @@ class AlbumScreenViewModel @AssistedInject constructor(
         }
         .combine(interactor.getUserPlaylists()) { albumState, playlists ->
             albumState.copy(userPlaylists = playlists)
+        }
+        .combine(downloadRequestStatusFlow) { albumState, downloadState ->
+            albumState.copy(downloadRequestState = downloadState)
         }
         .onEach { state ->
             if (!state.isLoading && !state.isError && !hasLoggedView) {
@@ -123,6 +171,43 @@ class AlbumScreenViewModel @AssistedInject constructor(
 
     override fun getTrackLikeState(trackId: String): Flow<Boolean> = interactor.isLiked(trackId)
 
+    override fun requestDownload() {
+        viewModelScope.launch {
+            val currentState = state.value
+            val album = currentState.album ?: return@launch
+
+            // Set local state to Requesting
+            localDownloadState.update { DownloadRequestState.Requesting }
+
+            try {
+                // Resolve first artist name for the download request
+                val firstArtistId = album.artistsIds.firstOrNull()
+                val artistName = if (firstArtistId != null) {
+                    val artistContent = contentResolver.resolveArtist(firstArtistId).first()
+                    if (artistContent is Content.Resolved) artistContent.data.name else "Unknown"
+                } else {
+                    "Unknown"
+                }
+
+                val result = interactor.requestAlbumDownload(albumId, album.name, artistName)
+                if (result.isSuccess) {
+                    // Clear local state - server status will take over via WebSocket
+                    localDownloadState.update { null }
+                } else {
+                    val errorType = (result.exceptionOrNull() as? RequestAlbumDownloadException)
+                        ?.errorType
+                        ?.toUiErrorType()
+                        ?: DownloadRequestErrorType.Unknown
+                    localDownloadState.update { DownloadRequestState.Error(errorType) }
+                }
+            } catch (e: RequestAlbumDownloadException) {
+                localDownloadState.update { DownloadRequestState.Error(e.errorType.toUiErrorType()) }
+            } catch (e: Exception) {
+                localDownloadState.update { DownloadRequestState.Error(DownloadRequestErrorType.Unknown) }
+            }
+        }
+    }
+
     interface Interactor {
         fun playAlbum(albumId: String)
         fun playTrack(albumId: String, trackId: String)
@@ -140,10 +225,29 @@ class AlbumScreenViewModel @AssistedInject constructor(
         suspend fun addTrackToPlaylist(trackId: String, playlistId: String)
         suspend fun addAlbumToPlaylist(albumId: String, playlistId: String)
         suspend fun createPlaylist(name: String)
+
+        // Methods for download request
+        fun hasRequestContentPermission(): Flow<Boolean>
+        fun observeDownloadRequestStatus(albumId: String): Flow<DownloadRequestStatus?>
+        suspend fun requestAlbumDownload(albumId: String, albumName: String, artistName: String): Result<Unit>
     }
+
+    /** Status of a download request from the server */
+    data class DownloadRequestStatus(
+        val status: RequestStatus,
+        val queuePosition: Int? = null,
+        val progress: RequestProgress? = null,
+    )
 
     @AssistedFactory
     interface Factory {
         fun create(albumId: String, navController: NavController): AlbumScreenViewModel
     }
+}
+
+private fun RequestAlbumDownloadErrorType.toUiErrorType(): DownloadRequestErrorType = when (this) {
+    RequestAlbumDownloadErrorType.Network -> DownloadRequestErrorType.Network
+    RequestAlbumDownloadErrorType.Unauthorized -> DownloadRequestErrorType.Unauthorized
+    RequestAlbumDownloadErrorType.NotFound -> DownloadRequestErrorType.NotFound
+    RequestAlbumDownloadErrorType.Unknown -> DownloadRequestErrorType.Unknown
 }
