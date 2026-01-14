@@ -12,6 +12,7 @@ use tracing::{debug, error, info, warn};
 
 use crate::catalog_store::{CatalogStore, TrackAvailability};
 use crate::config::DownloadManagerSettings;
+use crate::ingestion::DownloadManagerTrait;
 use crate::search::{HashedItemType, SearchVault};
 
 use super::audit_logger::AuditLogger;
@@ -24,6 +25,25 @@ use super::torrent_types::{
     AudioSearchConstraints, CreateTicketRequest, ExpectedContent, ExpectedTrack, OutputConstraints,
     QueryContext, SearchConstraints, TicketStatus, TorrentEvent,
 };
+
+impl DownloadManagerTrait for DownloadManager {
+    fn mark_request_completed(&self, item_id: &str, bytes_downloaded: u64, duration_ms: i64) -> Result<()> {
+        self.queue_store.mark_completed(item_id, bytes_downloaded, duration_ms)?;
+
+        // Log audit event
+        if let Ok(Some(item)) = self.queue_store.get_item(item_id) {
+            self.audit_logger.log_download_completed(
+                &item,
+                bytes_downloaded,
+                duration_ms,
+                None, // No track count available from ingestion
+            )?;
+        }
+
+        Ok(())
+    }
+}
+
 
 /// Main download manager that orchestrates all download operations.
 ///

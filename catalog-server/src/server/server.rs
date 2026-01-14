@@ -4377,19 +4377,26 @@ pub async fn make_app(
                     ..Default::default()
                 };
 
-                let manager = Arc::new(crate::ingestion::IngestionManager::new(
+                // Get download manager from state (if available) and cast to trait for ingestion
+                let manager_traits = state.download_manager.clone().map(|dm| {
+                    let dm_traits: Arc<dyn crate::ingestion::DownloadManagerTrait> = dm as Arc<dyn crate::ingestion::DownloadManagerTrait>;
+                    dm_traits
+                });
+
+                let ingestion_manager = Arc::new(crate::ingestion::IngestionManager::new(
                     Arc::new(store),
                     catalog_store.clone(),
                     search_vault.clone(),
                     llm,
                     ingestion_config,
+                    manager_traits,
                 ));
 
                 // Initialize the manager (creates temp directory)
-                if let Err(e) = manager.init().await {
+                if let Err(e) = ingestion_manager.init().await {
                     error!("Failed to initialize ingestion manager: {:?}", e);
                 } else {
-                    state.ingestion_manager = Some(manager);
+                    state.ingestion_manager = Some(ingestion_manager);
                     info!("Ingestion manager initialized successfully");
                 }
             }

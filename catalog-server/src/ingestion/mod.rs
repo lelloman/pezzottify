@@ -17,7 +17,7 @@ mod tools;
 
 pub use converter::{convert_to_ogg, probe_audio_file, AudioMetadata, ConversionError};
 pub use file_handler::{FileHandler, FileHandlerError};
-pub use manager::{IngestionError, IngestionManager, IngestionManagerConfig};
+pub use manager::{DownloadManagerTrait, IngestionError, IngestionManager, IngestionManagerConfig};
 pub use models::{
     AlbumMetadataSummary, IngestionContextType, IngestionFile, IngestionJob, IngestionJobStatus,
     IngestionMatchSource, ReviewOption, ReviewQueueItem,

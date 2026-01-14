@@ -41,8 +41,9 @@ pub struct ReviewQueueResponse {
     pub items: Vec<ReviewQueueItem>,
 }
 
-/// Request body for file upload
+/// Request body for file upload (reserved for future base64 upload support).
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 pub struct UploadBody {
     /// Original filename
     pub filename: String,
@@ -66,7 +67,9 @@ pub struct ResolveReviewBody {
 pub struct PaginationQuery {
     #[serde(default = "default_limit")]
     pub limit: usize,
+    /// Reserved for future pagination support.
     #[serde(default)]
+    #[allow(dead_code)]
     pub offset: usize,
 }
 
@@ -74,7 +77,9 @@ fn default_limit() -> usize {
     50
 }
 
+/// Response for ingestion statistics (reserved for future stats endpoint).
 #[derive(Debug, Serialize)]
+#[allow(dead_code)]
 pub struct IngestionStatsResponse {
     pub pending_jobs: usize,
     pub processing_jobs: usize,

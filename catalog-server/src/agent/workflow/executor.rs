@@ -43,12 +43,9 @@ pub struct Workflow {
 impl Workflow {
     /// Create a new workflow with a system prompt.
     pub fn new(system_prompt: impl Into<String>) -> Self {
-        let mut messages = Vec::new();
-        messages.push(Message::system(system_prompt));
-
         Self {
             state: WorkflowState::Started,
-            messages,
+            messages: vec![Message::system(system_prompt)],
             reasoning: ReasoningLogger::new(),
             iteration_count: 0,
             data: serde_json::Value::Null,

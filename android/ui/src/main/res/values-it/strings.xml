@@ -413,6 +413,13 @@
     <string name="retry_waiting">In attesa di riprovare</string>
     <string name="requesting_download">Richiesta download…</string>
     <string name="request_download">Richiedi download</string>
+    <string name="download_requested">Download richiesto</string>
+    <string name="download_queued_position">In coda (#%1$d)</string>
+    <string name="downloading_progress">Download in corso… (%1$d/%2$d)</string>
+    <string name="download_request_error_network">Errore di rete. Controlla la connessione.</string>
+    <string name="download_request_error_unauthorized">Non autorizzato. Effettua nuovamente l\'accesso.</string>
+    <string name="download_request_error_not_found">Album non trovato.</string>
+    <string name="download_request_error_unknown">Richiesta fallita. Riprova.</string>
     <!-- EXTERNAL ALBUM SCREEN -->
 
     <!-- MY REQUESTS SCREEN -->

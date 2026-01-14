@@ -89,8 +89,6 @@ impl LlmProvider for OllamaProvider {
             .map_err(|e| {
                 if e.is_timeout() {
                     LlmError::Timeout
-                } else if e.is_connect() {
-                    LlmError::Connection(e.to_string())
                 } else {
                     LlmError::Connection(e.to_string())
                 }

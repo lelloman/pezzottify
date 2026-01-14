@@ -74,6 +74,14 @@
                 {{ formatStatus(item.status) }}
               </span>
               <button
+                v-if="item.status === 'PENDING'"
+                class="uploadButton"
+                @click="openUploadModal(item)"
+                :disabled="uploadingItems[item.id]"
+              >
+                {{ uploadingItems[item.id] ? "Uploading..." : "Upload Files" }}
+              </button>
+              <button
                 v-if="item.status === 'FAILED'"
                 class="retryButton"
                 @click="handleRetry(item.id, false)"
@@ -468,6 +476,68 @@
         </div>
       </div>
     </div>
+
+    <!-- Upload Modal -->
+    <div v-if="showUploadModal" class="detailOverlay" @click.self="closeUploadModal">
+      <div class="detailPanel uploadModal">
+        <div class="detailHeader">
+          <h3 class="detailTitle">Upload Files for {{ formatItemName(itemToUpload) }}</h3>
+          <button class="closeDetailButton" @click="closeUploadModal">×</button>
+        </div>
+        <div class="modalContent">
+          <p class="uploadDescription">
+            Upload audio files (ZIP archive or individual audio files) to fulfill this download request.
+            The files will be analyzed and ingested automatically.
+          </p>
+
+          <div
+            class="uploadDropzone"
+            :class="{ 'dragging': isDragging }"
+            @click="triggerFileInput"
+            @dragover.prevent="isDragging = true"
+            @dragleave="isDragging = false"
+            @drop.prevent="onDrop"
+          >
+            <input
+              ref="fileInput"
+              type="file"
+              accept=".mp3,.flac,.wav,.ogg,.m4a,.aac,.wma,.opus,.zip"
+              @change="handleFileSelect"
+              style="display: none"
+            />
+            <div class="dropzoneContent">
+              <span class="dropzoneIcon">+</span>
+              <span class="dropzoneText">
+                Drag audio file here or <span class="browseLink">browse</span>
+              </span>
+              <span class="dropzoneHint">Supports MP3, FLAC, WAV, OGG, M4A, AAC, OPUS, or ZIP archive</span>
+            </div>
+          </div>
+
+          <!-- Upload Progress -->
+          <div v-if="uploadState.uploading" class="uploadProgress">
+            <div class="progressBar">
+              <div class="progressFill" :style="{ width: uploadState.progress + '%' }"></div>
+            </div>
+            <span class="progressText">Uploading {{ uploadState.filename }}...</span>
+          </div>
+
+          <div v-if="uploadState.error" class="modalError">
+            {{ uploadState.error }}
+          </div>
+
+          <div v-if="uploadState.success" class="modalSuccess">
+            {{ uploadState.success }}
+          </div>
+
+          <div class="modalActions">
+            <button class="cancelButton" @click="closeUploadModal" :disabled="uploadState.uploading">
+              Close
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -590,6 +660,21 @@ const showDeleteModal = ref(false);
 const itemToDelete = ref(null);
 const isDeleting = ref(false);
 const deleteError = ref(null);
+
+// Upload modal state
+const showUploadModal = ref(false);
+const itemToUpload = ref(null);
+const fileInput = ref(null);
+const isDragging = ref(false);
+const uploadingItems = reactive({});
+
+const uploadState = reactive({
+  uploading: false,
+  progress: 0,
+  filename: "",
+  error: null,
+  success: null,
+});
 
 // Statistics state
 const selectedPeriod = ref("7d");
@@ -898,6 +983,90 @@ const executeDelete = async () => {
     await loadData();
     deletingItems[itemId] = false;
     isDeleting.value = false;
+  }
+};
+
+const openUploadModal = (item) => {
+  itemToUpload.value = item;
+  uploadState.uploading = false;
+  uploadState.progress = 0;
+  uploadState.filename = "";
+  uploadState.error = null;
+  uploadState.success = null;
+  showUploadModal.value = true;
+};
+
+const closeUploadModal = () => {
+  showUploadModal.value = false;
+  itemToUpload.value = null;
+  uploadState.uploading = false;
+  uploadState.progress = 0;
+  uploadState.filename = "";
+  uploadState.error = null;
+  uploadState.success = null;
+};
+
+const triggerFileInput = () => {
+  fileInput.value?.click();
+};
+
+const handleFileSelect = (event) => {
+  const file = event.target.files?.[0];
+  if (file) {
+    uploadFile(file);
+  }
+};
+
+const onDrop = (e) => {
+  isDragging.value = false;
+  const file = e.dataTransfer?.files[0];
+  if (file) {
+    uploadFile(file);
+  }
+};
+
+const uploadFile = async (file) => {
+  if (!itemToUpload.value) return;
+
+  uploadState.uploading = true;
+  uploadState.progress = 0;
+  uploadState.filename = file.name;
+  uploadState.error = null;
+  uploadState.success = null;
+  uploadingItems[itemToUpload.value.id] = true;
+
+  try {
+    // Upload with context_type="download_request" and context_id set to the download request ID
+    // Pass progress callback for real-time upload progress tracking
+    const result = await remoteStore.uploadIngestionFile(
+      file,
+      "download_request",
+      itemToUpload.value.id,
+      (progress) => {
+        uploadState.progress = progress;
+      },
+    );
+
+    if (result.error) {
+      uploadState.error = result.error;
+    } else {
+      uploadState.success = `Upload successful! Job created: ${result.job_id}`;
+      // Close modal after a delay
+      setTimeout(() => {
+        closeUploadModal();
+        // Refresh the queue to show updated status
+        loadData();
+      }, 2000);
+    }
+  } catch (error) {
+    console.error("[Download Manager] Upload error:", error);
+    uploadState.error = error.message || "Upload failed";
+  } finally {
+    uploadState.uploading = false;
+    uploadingItems[itemToUpload.value.id] = false;
+    if (fileInput.value) {
+      fileInput.value.value = "";
+    }
   }
 };
 
@@ -2030,5 +2199,101 @@ onUnmounted(() => {
 .text-danger {
   color: #dc2626;
   font-weight: var(--font-semibold);
+}
+
+/* Upload Button */
+.uploadButton {
+  padding: 2px 10px;
+  background-color: #3b82f6;
+  color: white;
+  border: none;
+  border-radius: var(--radius-md);
+  font-size: var(--text-xs);
+  cursor: pointer;
+  transition: background-color var(--transition-fast);
+}
+
+.uploadButton:hover:not(:disabled) {
+  background-color: #2563eb;
+}
+
+.uploadButton:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Upload Modal */
+.uploadDescription {
+  color: var(--text-subdued);
+  font-size: var(--text-sm);
+  margin: 0 0 var(--spacing-4) 0;
+}
+
+.uploadDropzone {
+  border: 2px dashed var(--border-subdued);
+  border-radius: var(--radius-md);
+  padding: var(--spacing-6);
+  text-align: center;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  margin-bottom: var(--spacing-4);
+}
+
+.uploadDropzone:hover,
+.uploadDropzone.dragging {
+  border-color: var(--spotify-green);
+  background-color: rgba(29, 185, 84, 0.05);
+}
+
+.dropzoneContent {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--spacing-2);
+}
+
+.dropzoneIcon {
+  font-size: 32px;
+  color: var(--text-subdued);
+}
+
+.dropzoneText {
+  font-size: var(--text-base);
+  color: var(--text-base);
+}
+
+.browseLink {
+  color: var(--spotify-green);
+  text-decoration: underline;
+}
+
+.dropzoneHint {
+  font-size: var(--text-xs);
+  color: var(--text-subdued);
+}
+
+.uploadProgress {
+  margin-bottom: var(--spacing-4);
+}
+
+.uploadProgress .progressBar {
+  width: 100%;
+  height: 8px;
+  background-color: var(--bg-highlight);
+  border-radius: 4px;
+  overflow: hidden;
+  margin-bottom: var(--spacing-2);
+}
+
+.uploadProgress .progressFill {
+  height: 100%;
+  background-color: var(--spotify-green);
+  border-radius: 4px;
+  transition: width 0.3s ease;
+}
+
+.uploadProgress .progressText {
+  font-size: var(--text-sm);
+  color: var(--text-subdued);
 }
 </style>

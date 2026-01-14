@@ -945,7 +945,15 @@ export const useRemoteStore = defineStore("remote", () => {
   // Admin API - Ingestion (EditCatalog)
   // =====================================================
 
-  const uploadIngestionFile = async (file, contextType = null, contextId = null) => {
+  /**
+   * Upload a file for ingestion with progress tracking.
+   * @param {File} file - The file to upload
+   * @param {string|null} contextType - Optional context type (e.g., "download_request")
+   * @param {string|null} contextId - Optional context ID
+   * @param {function|null} onProgress - Optional callback (progress: number 0-100) => void
+   * @returns {Promise<{job_id?: string, error?: string}>}
+   */
+  const uploadIngestionFile = async (file, contextType = null, contextId = null, onProgress = null) => {
     const formData = new FormData();
     formData.append("file", file);
     if (contextType) formData.append("context_type", contextType);
@@ -954,28 +962,53 @@ export const useRemoteStore = defineStore("remote", () => {
     const { getIdToken } = await import("@/services/oidc");
     const idToken = await getIdToken();
 
-    const headers = {};
-    if (idToken) {
-      headers["Authorization"] = idToken;
-    }
+    return new Promise((resolve) => {
+      const xhr = new XMLHttpRequest();
 
-    try {
-      const response = await fetch("/v1/ingestion/upload", {
-        method: "POST",
-        body: formData,
-        headers,
-      });
-
-      if (!response.ok) {
-        const error = await response.json().catch(() => ({}));
-        return { error: error.error || `Upload failed: ${response.status}` };
+      // Track upload progress
+      if (onProgress) {
+        xhr.upload.onprogress = (event) => {
+          if (event.lengthComputable) {
+            const percent = Math.round((event.loaded / event.total) * 100);
+            onProgress(percent);
+          }
+        };
       }
 
-      return await response.json();
-    } catch (error) {
-      console.error("Failed to upload file for ingestion:", error);
-      return { error: error.message || "Failed to upload file" };
-    }
+      xhr.onload = () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          try {
+            const result = JSON.parse(xhr.responseText);
+            resolve(result);
+          } catch {
+            resolve({ error: "Invalid response from server" });
+          }
+        } else {
+          try {
+            const errorData = JSON.parse(xhr.responseText);
+            resolve({ error: errorData.error || `Upload failed: ${xhr.status}` });
+          } catch {
+            resolve({ error: `Upload failed: ${xhr.status}` });
+          }
+        }
+      };
+
+      xhr.onerror = () => {
+        console.error("Failed to upload file for ingestion: Network error");
+        resolve({ error: "Network error during upload" });
+      };
+
+      xhr.ontimeout = () => {
+        console.error("Failed to upload file for ingestion: Timeout");
+        resolve({ error: "Upload timed out" });
+      };
+
+      xhr.open("POST", "/v1/ingestion/upload");
+      if (idToken) {
+        xhr.setRequestHeader("Authorization", idToken);
+      }
+      xhr.send(formData);
+    });
   };
 
   const fetchIngestionMyJobs = async (limit = 50) => {
