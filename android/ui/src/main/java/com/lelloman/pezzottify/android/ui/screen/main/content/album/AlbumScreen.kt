@@ -562,28 +562,21 @@ private fun DownloadRequestSection(
         ) {
             when (state) {
                 is DownloadRequestState.CanRequest -> {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.weight(1f),
+                    Box(
+                        modifier = Modifier.fillMaxWidth(),
+                        contentAlignment = Alignment.Center,
                     ) {
-                        Icon(
-                            imageVector = Icons.Outlined.CloudDownload,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(24.dp),
-                        )
-                        Spacer(modifier = Modifier.size(12.dp))
-                        Text(
-                            text = stringResource(R.string.album_has_unavailable_tracks),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                    Spacer(modifier = Modifier.size(12.dp))
-                    androidx.compose.material3.Button(
-                        onClick = onRequestDownload,
-                    ) {
-                        Text(stringResource(R.string.request_download))
+                        androidx.compose.material3.Button(
+                            onClick = onRequestDownload,
+                        ) {
+                            Icon(
+                                imageVector = Icons.Outlined.CloudDownload,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp),
+                            )
+                            Spacer(modifier = Modifier.size(8.dp))
+                            Text(stringResource(R.string.request_download))
+                        }
                     }
                 }
                 is DownloadRequestState.Requesting -> {
