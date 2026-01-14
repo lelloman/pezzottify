@@ -79,8 +79,8 @@ class AppAuthOidcManager @Inject constructor(
             }
         }
 
-    override suspend fun createAuthorizationIntent(deviceInfo: DeviceInfo): Intent? {
-        logger.debug("[OIDC_DBG] createAuthorizationIntent() starting")
+    override suspend fun createAuthorizationIntent(deviceInfo: DeviceInfo, loginHint: String?): Intent? {
+        logger.debug("[OIDC_DBG] createAuthorizationIntent() starting, loginHint=$loginHint")
 
         val config = getServiceConfiguration()
         if (config == null) {
@@ -105,6 +105,12 @@ class AppAuthOidcManager @Inject constructor(
         authRequestBuilder
             .setPrompt("login")
             .setAdditionalParameters(additionalParams)
+
+        // Add login hint if provided (pre-fills username on login page)
+        if (!loginHint.isNullOrBlank()) {
+            authRequestBuilder.setLoginHint(loginHint)
+            logger.debug("[OIDC_DBG] createAuthorizationIntent() set login_hint=$loginHint")
+        }
 
         val authRequest = authRequestBuilder.build()
         logger.debug("[OIDC_DBG] createAuthorizationIntent() built request, state=${authRequest.state}, saving...")

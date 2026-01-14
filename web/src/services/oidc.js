@@ -95,6 +95,27 @@ function getOrCreateDeviceId() {
   return deviceId;
 }
 
+const LAST_USERNAME_KEY = "pezzottify_last_username";
+
+/**
+ * Store the last used username for login hint.
+ * @param {string} username - The username to store
+ */
+export function storeLastUsername(username) {
+  if (username) {
+    localStorage.setItem(LAST_USERNAME_KEY, username);
+    console.debug("[OIDC] Stored last username:", username);
+  }
+}
+
+/**
+ * Get the last used username for login hint.
+ * @returns {string|null} The last username or null
+ */
+export function getLastUsername() {
+  return localStorage.getItem(LAST_USERNAME_KEY);
+}
+
 /**
  * Set the session cookie with the ID token.
  * This is needed for WebSocket connections since browsers can't send custom headers.
@@ -139,18 +160,26 @@ function getDeviceName() {
 /**
  * Initiate OIDC login flow.
  * Redirects the browser to the OIDC provider.
+ *
+ * @param {string} [loginHint] - Optional username hint to pre-fill on login page
  */
-export async function login() {
+export async function login(loginHint = null) {
   const manager = getUserManager();
   const deviceInfo = getDeviceInfo();
 
-  // Pass device info as extra query params
+  const extraQueryParams = {
+    device_id: deviceInfo.deviceId,
+    device_type: deviceInfo.deviceType,
+    device_name: deviceInfo.deviceName,
+  };
+
+  // Add login_hint if provided (standard OIDC parameter)
+  if (loginHint) {
+    extraQueryParams.login_hint = loginHint;
+  }
+
   await manager.signinRedirect({
-    extraQueryParams: {
-      device_id: deviceInfo.deviceId,
-      device_type: deviceInfo.deviceType,
-      device_name: deviceInfo.deviceName,
-    },
+    extraQueryParams,
   });
 }
 
@@ -451,4 +480,6 @@ export default {
   refreshTokens,
   logout,
   clearStorage,
+  storeLastUsername,
+  getLastUsername,
 };
