@@ -215,7 +215,11 @@ impl IngestionJob {
     }
 
     /// Set the context for this job.
-    pub fn with_context(mut self, context_type: IngestionContextType, context_id: Option<String>) -> Self {
+    pub fn with_context(
+        mut self,
+        context_type: IngestionContextType,
+        context_id: Option<String>,
+    ) -> Self {
         self.context_type = Some(context_type);
         self.context_id = context_id;
         self

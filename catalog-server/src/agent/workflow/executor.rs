@@ -72,7 +72,9 @@ impl Workflow {
     pub fn provide_review_answer(&mut self, selected_option_id: &str) {
         if let WorkflowState::AwaitingReview { question, options } = &self.state {
             let selected = options.iter().find(|o| o.id == selected_option_id);
-            let answer_text = selected.map(|o| o.label.as_str()).unwrap_or(selected_option_id);
+            let answer_text = selected
+                .map(|o| o.label.as_str())
+                .unwrap_or(selected_option_id);
 
             self.reasoning.log(
                 ReasoningStepType::ReviewAnswer,
@@ -138,7 +140,9 @@ impl WorkflowExecutor {
 
         match &workflow.state {
             WorkflowState::Started => {
-                workflow.reasoning.log(ReasoningStepType::Context, "Starting workflow");
+                workflow
+                    .reasoning
+                    .log(ReasoningStepType::Context, "Starting workflow");
                 workflow.state = WorkflowState::Thinking;
             }
 
@@ -204,7 +208,10 @@ impl WorkflowExecutor {
                         .await;
 
                     let (content, is_error) = match result {
-                        Ok(value) => (serde_json::to_string_pretty(&value).unwrap_or_default(), false),
+                        Ok(value) => (
+                            serde_json::to_string_pretty(&value).unwrap_or_default(),
+                            false,
+                        ),
                         Err(e) => (format!("Error: {}", e), true),
                     };
 

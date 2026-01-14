@@ -112,7 +112,9 @@ pub async fn probe_audio_file(path: &Path) -> Result<AudioMetadata, ConversionEr
         .bit_rate
         .as_ref()
         .or(probe.format.bit_rate.as_ref());
-    let bitrate = bitrate_str.and_then(|b| b.parse::<i64>().ok()).map(|b| (b / 1000) as i32);
+    let bitrate = bitrate_str
+        .and_then(|b| b.parse::<i64>().ok())
+        .map(|b| (b / 1000) as i32);
 
     // Parse sample rate
     let sample_rate = audio_stream

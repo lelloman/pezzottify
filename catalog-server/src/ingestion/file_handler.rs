@@ -25,9 +25,7 @@ pub enum FileHandlerError {
 }
 
 /// Supported audio file extensions.
-const SUPPORTED_EXTENSIONS: &[&str] = &[
-    "mp3", "flac", "wav", "ogg", "m4a", "aac", "wma", "opus",
-];
+const SUPPORTED_EXTENSIONS: &[&str] = &["mp3", "flac", "wav", "ogg", "m4a", "aac", "wma", "opus"];
 
 /// File handler for managing uploaded files.
 pub struct FileHandler {
@@ -128,8 +126,8 @@ impl FileHandler {
         let cursor = std::io::Cursor::new(zip_data);
 
         // Extract using zip crate (sync operation)
-        let mut archive = zip::ZipArchive::new(cursor)
-            .map_err(|e| FileHandlerError::ZipError(e.to_string()))?;
+        let mut archive =
+            zip::ZipArchive::new(cursor).map_err(|e| FileHandlerError::ZipError(e.to_string()))?;
 
         let mut audio_files = Vec::new();
 
@@ -276,10 +274,7 @@ mod tests {
             "track.mp3"
         );
         // Path traversal is stripped, leaving just the filename
-        assert_eq!(
-            sanitize_filename("../track.mp3").unwrap(),
-            "track.mp3"
-        );
+        assert_eq!(sanitize_filename("../track.mp3").unwrap(), "track.mp3");
         assert_eq!(
             sanitize_filename("track:name.mp3").unwrap(),
             "track_name.mp3"

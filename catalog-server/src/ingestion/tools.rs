@@ -77,10 +77,7 @@ impl AgentTool for SearchCatalogTool {
             .and_then(|v| v.as_str())
             .unwrap_or("all");
 
-        let limit = args
-            .get("limit")
-            .and_then(|v| v.as_u64())
-            .unwrap_or(10) as usize;
+        let limit = args.get("limit").and_then(|v| v.as_u64()).unwrap_or(10) as usize;
 
         // Map search_type to filter
         let filter = match search_type {
@@ -103,7 +100,8 @@ impl AgentTool for SearchCatalogTool {
                 HashedItemType::Album => {
                     if let Ok(Some(resolved)) = self.catalog.get_resolved_album(&result.item_id) {
                         // Count tracks across all discs
-                        let track_count: usize = resolved.discs.iter().map(|d| d.tracks.len()).sum();
+                        let track_count: usize =
+                            resolved.discs.iter().map(|d| d.tracks.len()).sum();
                         albums.push(json!({
                             "id": resolved.album.id,
                             "name": resolved.album.name,
@@ -182,24 +180,31 @@ impl AgentTool for GetAlbumDetailsTool {
         let album_id = args
             .get("album_id")
             .and_then(|v| v.as_str())
-            .ok_or_else(|| ToolError::InvalidArguments("Missing 'album_id' parameter".to_string()))?;
+            .ok_or_else(|| {
+                ToolError::InvalidArguments("Missing 'album_id' parameter".to_string())
+            })?;
 
-        let resolved = self.catalog.get_resolved_album(album_id)
+        let resolved = self
+            .catalog
+            .get_resolved_album(album_id)
             .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?
             .ok_or_else(|| ToolError::ExecutionFailed(format!("Album '{}' not found", album_id)))?;
 
         // Flatten tracks from all discs
-        let track_list: Vec<Value> = resolved.discs
+        let track_list: Vec<Value> = resolved
+            .discs
             .iter()
             .flat_map(|disc| {
-                disc.tracks.iter().map(|t| json!({
-                    "id": t.id,
-                    "name": t.name,
-                    "track_number": t.track_number,
-                    "disc_number": t.disc_number,
-                    "duration_ms": t.duration_ms,
-                    "has_audio": t.audio_uri.is_some()
-                }))
+                disc.tracks.iter().map(|t| {
+                    json!({
+                        "id": t.id,
+                        "name": t.name,
+                        "track_number": t.track_number,
+                        "disc_number": t.disc_number,
+                        "duration_ms": t.duration_ms,
+                        "has_audio": t.audio_uri.is_some()
+                    })
+                })
             })
             .collect();
 
@@ -253,9 +258,13 @@ impl AgentTool for GetTrackDetailsTool {
         let track_id = args
             .get("track_id")
             .and_then(|v| v.as_str())
-            .ok_or_else(|| ToolError::InvalidArguments("Missing 'track_id' parameter".to_string()))?;
+            .ok_or_else(|| {
+                ToolError::InvalidArguments("Missing 'track_id' parameter".to_string())
+            })?;
 
-        let resolved = self.catalog.get_resolved_track(track_id)
+        let resolved = self
+            .catalog
+            .get_resolved_track(track_id)
             .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?
             .ok_or_else(|| ToolError::ExecutionFailed(format!("Track '{}' not found", track_id)))?;
 
@@ -292,7 +301,8 @@ impl AgentTool for GetArtistDetailsTool {
     fn definition(&self) -> ToolDefinition {
         ToolDefinition {
             name: "get_artist_details".to_string(),
-            description: "Get detailed information about an artist including their albums.".to_string(),
+            description: "Get detailed information about an artist including their albums."
+                .to_string(),
             parameters: json!({
                 "type": "object",
                 "properties": {
@@ -310,27 +320,43 @@ impl AgentTool for GetArtistDetailsTool {
         let artist_id = args
             .get("artist_id")
             .and_then(|v| v.as_str())
-            .ok_or_else(|| ToolError::InvalidArguments("Missing 'artist_id' parameter".to_string()))?;
+            .ok_or_else(|| {
+                ToolError::InvalidArguments("Missing 'artist_id' parameter".to_string())
+            })?;
 
-        let resolved = self.catalog.get_resolved_artist(artist_id)
+        let resolved = self
+            .catalog
+            .get_resolved_artist(artist_id)
             .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?
-            .ok_or_else(|| ToolError::ExecutionFailed(format!("Artist '{}' not found", artist_id)))?;
+            .ok_or_else(|| {
+                ToolError::ExecutionFailed(format!("Artist '{}' not found", artist_id))
+            })?;
 
         // Get discography
-        let discography = self.catalog.get_discography(
-            artist_id,
-            50, // limit
-            0,  // offset
-            crate::catalog_store::DiscographySort::default(), // Use default (Popularity)
-        ).map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
+        let discography = self
+            .catalog
+            .get_discography(
+                artist_id,
+                50,                                               // limit
+                0,                                                // offset
+                crate::catalog_store::DiscographySort::default(), // Use default (Popularity)
+            )
+            .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
 
         let album_list: Vec<Value> = discography
-            .map(|d| d.albums.into_iter().map(|a| json!({
-                "id": a.id,
-                "name": a.name,
-                "release_date": a.release_date,
-                "album_type": format!("{:?}", a.album_type)
-            })).collect())
+            .map(|d| {
+                d.albums
+                    .into_iter()
+                    .map(|a| {
+                        json!({
+                            "id": a.id,
+                            "name": a.name,
+                            "release_date": a.release_date,
+                            "album_type": format!("{:?}", a.album_type)
+                        })
+                    })
+                    .collect()
+            })
             .unwrap_or_default();
 
         Ok(json!({
@@ -385,9 +411,11 @@ impl AgentTool for CompareMetadataTool {
     }
 
     async fn execute(&self, args: Value, _ctx: &ToolContext) -> Result<Value, ToolError> {
-        let file_meta = args.get("file_metadata")
+        let file_meta = args
+            .get("file_metadata")
             .ok_or_else(|| ToolError::InvalidArguments("Missing 'file_metadata'".to_string()))?;
-        let catalog_track = args.get("catalog_track")
+        let catalog_track = args
+            .get("catalog_track")
             .ok_or_else(|| ToolError::InvalidArguments("Missing 'catalog_track'".to_string()))?;
 
         let mut scores = vec![];
@@ -526,15 +554,18 @@ impl AgentTool for ProposeMatchTool {
     }
 
     async fn execute(&self, args: Value, _ctx: &ToolContext) -> Result<Value, ToolError> {
-        let track_id = args.get("track_id")
+        let track_id = args
+            .get("track_id")
             .and_then(|v| v.as_str())
             .ok_or_else(|| ToolError::InvalidArguments("Missing 'track_id'".to_string()))?;
 
-        let confidence = args.get("confidence")
+        let confidence = args
+            .get("confidence")
             .and_then(|v| v.as_f64())
             .ok_or_else(|| ToolError::InvalidArguments("Missing 'confidence'".to_string()))?;
 
-        let reasoning = args.get("reasoning")
+        let reasoning = args
+            .get("reasoning")
             .and_then(|v| v.as_str())
             .ok_or_else(|| ToolError::InvalidArguments("Missing 'reasoning'".to_string()))?;
 
@@ -589,11 +620,13 @@ impl AgentTool for RequestReviewTool {
     }
 
     async fn execute(&self, args: Value, _ctx: &ToolContext) -> Result<Value, ToolError> {
-        let question = args.get("question")
+        let question = args
+            .get("question")
             .and_then(|v| v.as_str())
             .ok_or_else(|| ToolError::InvalidArguments("Missing 'question'".to_string()))?;
 
-        let options = args.get("options")
+        let options = args
+            .get("options")
             .ok_or_else(|| ToolError::InvalidArguments("Missing 'options'".to_string()))?;
 
         let context = args.get("context").and_then(|v| v.as_str());
@@ -635,11 +668,13 @@ impl AgentTool for MarkNoMatchTool {
     }
 
     async fn execute(&self, args: Value, _ctx: &ToolContext) -> Result<Value, ToolError> {
-        let reasoning = args.get("reasoning")
+        let reasoning = args
+            .get("reasoning")
             .and_then(|v| v.as_str())
             .ok_or_else(|| ToolError::InvalidArguments("Missing 'reasoning'".to_string()))?;
 
-        let suggestions = args.get("suggestions")
+        let suggestions = args
+            .get("suggestions")
             .and_then(|v| v.as_array())
             .map(|arr| arr.iter().filter_map(|v| v.as_str()).collect::<Vec<_>>())
             .unwrap_or_default();
@@ -706,7 +741,11 @@ fn levenshtein_distance(a: &str, b: &str) -> usize {
 
     for i in 1..=m {
         for j in 1..=n {
-            let cost = if a_chars[i - 1] == b_chars[j - 1] { 0 } else { 1 };
+            let cost = if a_chars[i - 1] == b_chars[j - 1] {
+                0
+            } else {
+                1
+            };
             dp[i][j] = (dp[i - 1][j] + 1)
                 .min(dp[i][j - 1] + 1)
                 .min(dp[i - 1][j - 1] + cost);

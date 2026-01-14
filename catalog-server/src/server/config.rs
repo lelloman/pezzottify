@@ -1,6 +1,8 @@
 use std::path::PathBuf;
 
-use crate::config::{AgentSettings, DownloadManagerSettings, IngestionSettings, StreamingSearchSettings};
+use crate::config::{
+    AgentSettings, DownloadManagerSettings, IngestionSettings, StreamingSearchSettings,
+};
 
 use super::RequestsLoggingLevel;
 

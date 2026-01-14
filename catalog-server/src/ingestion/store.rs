@@ -37,8 +37,11 @@ pub trait IngestionStore: Send + Sync {
     fn list_jobs_by_user(&self, user_id: &str, limit: usize) -> Result<Vec<IngestionJob>>;
 
     /// List jobs by status.
-    fn list_jobs_by_status(&self, status: IngestionJobStatus, limit: usize)
-        -> Result<Vec<IngestionJob>>;
+    fn list_jobs_by_status(
+        &self,
+        status: IngestionJobStatus,
+        limit: usize,
+    ) -> Result<Vec<IngestionJob>>;
 
     /// List all jobs (for admin).
     fn list_all_jobs(&self, limit: usize) -> Result<Vec<IngestionJob>>;
@@ -302,9 +305,8 @@ impl IngestionStore for SqliteIngestionStore {
 
     fn list_all_jobs(&self, limit: usize) -> Result<Vec<IngestionJob>> {
         let conn = self.conn.lock().unwrap();
-        let mut stmt = conn.prepare(
-            "SELECT * FROM ingestion_jobs ORDER BY created_at DESC LIMIT ?1",
-        )?;
+        let mut stmt =
+            conn.prepare("SELECT * FROM ingestion_jobs ORDER BY created_at DESC LIMIT ?1")?;
         let jobs = stmt
             .query_map(params![limit as i64], Self::row_to_job)?
             .collect::<rusqlite::Result<Vec<_>>>()?;
@@ -630,12 +632,24 @@ mod tests {
         let job = IngestionJob::new("job1", "user1", "album.zip", 1024000, 2);
         store.create_job(&job).unwrap();
 
-        let mut file1 = IngestionFile::new("file1", "job1", "01 - Come Together.mp3", 5000000, "/tmp/job1/01.mp3");
+        let mut file1 = IngestionFile::new(
+            "file1",
+            "job1",
+            "01 - Come Together.mp3",
+            5000000,
+            "/tmp/job1/01.mp3",
+        );
         file1.tag_track_num = Some(1);
         file1.tag_title = Some("Come Together".to_string());
         store.create_file(&file1).unwrap();
 
-        let mut file2 = IngestionFile::new("file2", "job1", "02 - Something.mp3", 4000000, "/tmp/job1/02.mp3");
+        let mut file2 = IngestionFile::new(
+            "file2",
+            "job1",
+            "02 - Something.mp3",
+            4000000,
+            "/tmp/job1/02.mp3",
+        );
         file2.tag_track_num = Some(2);
         file2.tag_title = Some("Something".to_string());
         store.create_file(&file2).unwrap();
@@ -690,7 +704,11 @@ mod tests {
         store.create_job(&job).unwrap();
 
         store
-            .create_review_item("job1", "Which album is this?", r#"[{"id":"album:abc","label":"Abbey Road"}]"#)
+            .create_review_item(
+                "job1",
+                "Which album is this?",
+                r#"[{"id":"album:abc","label":"Abbey Road"}]"#,
+            )
             .unwrap();
 
         let pending = store.get_pending_reviews(10).unwrap();

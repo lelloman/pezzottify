@@ -27,8 +27,14 @@ use super::torrent_types::{
 };
 
 impl DownloadManagerTrait for DownloadManager {
-    fn mark_request_completed(&self, item_id: &str, bytes_downloaded: u64, duration_ms: i64) -> Result<()> {
-        self.queue_store.mark_completed(item_id, bytes_downloaded, duration_ms)?;
+    fn mark_request_completed(
+        &self,
+        item_id: &str,
+        bytes_downloaded: u64,
+        duration_ms: i64,
+    ) -> Result<()> {
+        self.queue_store
+            .mark_completed(item_id, bytes_downloaded, duration_ms)?;
 
         // Log audit event
         if let Ok(Some(item)) = self.queue_store.get_item(item_id) {
@@ -43,7 +49,6 @@ impl DownloadManagerTrait for DownloadManager {
         Ok(())
     }
 }
-
 
 /// Main download manager that orchestrates all download operations.
 ///
