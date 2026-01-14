@@ -194,7 +194,9 @@ class InteractorsModule {
             // Clear processed state when starting a new auth flow
             oidcCallbackHandler.clearProcessedState()
             val deviceInfo = deviceInfoProvider.getDeviceInfo()
-            val intent = oidcAuthManager.createAuthorizationIntent(deviceInfo)
+            // Pass last used handle as login hint to pre-fill username on login page
+            val loginHint = authStore.getLastUsedHandle()
+            val intent = oidcAuthManager.createAuthorizationIntent(deviceInfo, loginHint)
             return if (intent != null) {
                 LoginViewModel.Interactor.OidcIntentResult.Success(intent)
             } else {

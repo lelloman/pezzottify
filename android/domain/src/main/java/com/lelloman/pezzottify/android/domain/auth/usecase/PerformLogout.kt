@@ -38,6 +38,14 @@ class PerformLogout @Inject internal constructor(
 
     suspend operator fun invoke() {
         logger.info("invoke() starting logout")
+
+        // Save the current username for login hint before clearing auth
+        val currentAuthState = authStore.getAuthState().value
+        if (currentAuthState is AuthState.LoggedIn) {
+            logger.debug("invoke() saving last used handle: ${currentAuthState.userHandle}")
+            authStore.storeLastUsedHandle(currentAuthState.userHandle)
+        }
+
         logger.debug("invoke() clearing player session")
         player.clearSession()
         logger.debug("invoke() disconnecting WebSocket")

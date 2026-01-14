@@ -16,9 +16,11 @@ export const useAuthStore = defineStore("auth", {
     /**
      * Initiate OIDC login flow.
      * Redirects the browser to the OIDC provider.
+     * Passes last used username as login hint if available.
      */
     async loginWithOidc() {
-      await oidc.login();
+      const loginHint = oidc.getLastUsername();
+      await oidc.login(loginHint);
     },
 
     /**
@@ -88,6 +90,11 @@ export const useAuthStore = defineStore("auth", {
     },
 
     async logout() {
+      // Save the current username for login hint before clearing auth
+      if (this.user?.handle) {
+        oidc.storeLastUsername(this.user.handle);
+      }
+
       // Unregister sync handler and disconnect WebSocket before clearing auth
       ws.unregisterHandler("sync");
       ws.disconnect();

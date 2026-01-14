@@ -17,9 +17,10 @@ interface OidcAuthManager {
      * Creates an Intent to launch the authorization flow.
      *
      * @param deviceInfo Device information to pass to the OIDC provider
+     * @param loginHint Optional username hint to pre-fill on the login page
      * @return Intent to launch, or null if OIDC is not configured
      */
-    suspend fun createAuthorizationIntent(deviceInfo: DeviceInfo): Intent?
+    suspend fun createAuthorizationIntent(deviceInfo: DeviceInfo, loginHint: String? = null): Intent?
 
     /**
      * Handles the authorization response from the browser redirect.

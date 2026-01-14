@@ -19,6 +19,7 @@ import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.runTest
 import org.junit.Before
 import org.junit.Test
@@ -55,6 +56,17 @@ class PerformLogoutTest {
         syncManager = mockk(relaxed = true)
         player = mockk(relaxed = true)
         webSocketManager = mockk(relaxed = true)
+
+        // Mock auth state for login hint feature
+        val authStateFlow = MutableStateFlow<AuthState>(
+            AuthState.LoggedIn(
+                userHandle = "test-user",
+                authToken = "test-token",
+                refreshToken = "test-refresh-token",
+                remoteUrl = "http://localhost:3001"
+            )
+        )
+        every { authStore.getAuthState() } returns authStateFlow
 
         val mockLogger = mockk<Logger>(relaxed = true)
         loggerFactory = mockk()
@@ -182,5 +194,34 @@ class PerformLogoutTest {
             player.clearSession()
             staticsCache.clearAll()
         }
+    }
+
+    @Test
+    fun `invoke saves last used handle for login hint`() = runTest {
+        performLogout()
+
+        coVerify { authStore.storeLastUsedHandle("test-user") }
+    }
+
+    @Test
+    fun `invoke does not save last used handle when logged out`() = runTest {
+        // Setup: auth state is LoggedOut
+        val authStateFlow = MutableStateFlow<AuthState>(AuthState.LoggedOut)
+        every { authStore.getAuthState() } returns authStateFlow
+
+        performLogout()
+
+        coVerify(exactly = 0) { authStore.storeLastUsedHandle(any()) }
+    }
+
+    @Test
+    fun `invoke does not save last used handle when loading`() = runTest {
+        // Setup: auth state is Loading
+        val authStateFlow = MutableStateFlow<AuthState>(AuthState.Loading)
+        every { authStore.getAuthState() } returns authStateFlow
+
+        performLogout()
+
+        coVerify(exactly = 0) { authStore.storeLastUsedHandle(any()) }
     }
 }
