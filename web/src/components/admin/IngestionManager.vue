@@ -4,11 +4,14 @@
 
     <!-- Upload Section -->
     <div class="uploadSection">
-      <div class="uploadDropzone"
-           @dragover.prevent="isDragging = true"
-           @dragleave="isDragging = false"
-           @drop.prevent="handleDrop"
-           :class="{ 'dragging': isDragging }">
+      <div
+        class="uploadDropzone"
+        :class="{ 'dragging': isDragging }"
+        @click="triggerFileInput"
+        @dragover.prevent="isDragging = true"
+        @dragleave="isDragging = false"
+        @drop.prevent="onDrop"
+      >
         <input
           ref="fileInput"
           type="file"
@@ -19,8 +22,7 @@
         <div class="dropzoneContent">
           <span class="dropzoneIcon">+</span>
           <span class="dropzoneText">
-            Drag audio file here or
-            <button class="browseButton" @click="triggerFileInput">browse</button>
+            Drag audio file here or <span class="browseLink">browse</span>
           </span>
           <span class="dropzoneHint">Supports MP3, FLAC, WAV, OGG, M4A, AAC, OPUS, or ZIP archive</span>
         </div>
@@ -106,6 +108,14 @@
                 :disabled="processingJobs[job.id]"
               >
                 {{ processingJobs[job.id] ? "..." : "Convert" }}
+              </button>
+              <button
+                class="actionButton danger"
+                @click="deleteJob(job.id)"
+                :disabled="processingJobs[job.id]"
+                title="Delete job"
+              >
+                ✕
               </button>
             </div>
           </div>
@@ -243,12 +253,11 @@ const handleFileSelect = (event) => {
   if (file) {
     uploadFile(file);
   }
-  event.target.value = "";
 };
 
-const handleDrop = (event) => {
+const onDrop = (e) => {
   isDragging.value = false;
-  const file = event.dataTransfer?.files?.[0];
+  const file = e.dataTransfer?.files[0];
   if (file) {
     uploadFile(file);
   }
@@ -262,27 +271,8 @@ const uploadFile = async (file) => {
   uploadState.success = null;
 
   try {
-    // Read file as base64
-    const reader = new FileReader();
-    const base64Data = await new Promise((resolve, reject) => {
-      reader.onload = () => {
-        const dataUrl = reader.result;
-        const base64 = dataUrl.split(",")[1];
-        resolve(base64);
-      };
-      reader.onerror = reject;
-      reader.onprogress = (e) => {
-        if (e.lengthComputable) {
-          uploadState.progress = Math.round((e.loaded / e.total) * 50);
-        }
-      };
-      reader.readAsDataURL(file);
-    });
-
-    uploadState.progress = 50;
-
-    // Send to API
-    const result = await remoteStore.uploadIngestionFile(file.name, base64Data);
+    // Send file directly via FormData (no base64 bloat)
+    const result = await remoteStore.uploadIngestionFile(file);
 
     uploadState.progress = 100;
 
@@ -293,9 +283,13 @@ const uploadFile = async (file) => {
       await loadData();
     }
   } catch (error) {
+    console.error("[Ingestion] Upload error:", error);
     uploadState.error = error.message || "Upload failed";
   } finally {
     uploadState.uploading = false;
+    if (fileInput.value) {
+      fileInput.value.value = "";
+    }
   }
 };
 
@@ -337,6 +331,18 @@ const convertJob = async (jobId) => {
     await loadData();
   } catch (error) {
     console.error("Failed to convert job:", error);
+  }
+  processingJobs[jobId] = false;
+};
+
+const deleteJob = async (jobId) => {
+  if (!confirm("Delete this ingestion job?")) return;
+  processingJobs[jobId] = true;
+  try {
+    await remoteStore.deleteIngestionJob(jobId);
+    await loadData();
+  } catch (error) {
+    console.error("Failed to delete job:", error);
   }
   processingJobs[jobId] = false;
 };
@@ -460,6 +466,7 @@ onUnmounted(() => {
   gap: var(--spacing-2);
 }
 
+
 .dropzoneIcon {
   font-size: var(--text-4xl);
   color: var(--text-subdued);
@@ -470,12 +477,9 @@ onUnmounted(() => {
   font-size: var(--text-sm);
 }
 
-.browseButton {
-  background: none;
-  border: none;
+.browseLink {
   color: var(--spotify-green);
   font-weight: var(--font-medium);
-  cursor: pointer;
   text-decoration: underline;
 }
 
@@ -677,6 +681,18 @@ onUnmounted(() => {
 .actionButton.secondary:hover:not(:disabled) {
   border-color: var(--text-base);
   color: var(--text-base);
+}
+
+.actionButton.danger {
+  background-color: transparent;
+  color: var(--text-subdued);
+  border: 1px solid var(--border-subdued);
+  padding: 4px 8px;
+}
+
+.actionButton.danger:hover:not(:disabled) {
+  border-color: #dc2626;
+  color: #dc2626;
 }
 
 .actionButton:disabled {

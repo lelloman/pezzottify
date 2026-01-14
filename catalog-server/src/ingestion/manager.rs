@@ -54,6 +54,17 @@ pub enum IngestionError {
     AlbumNotMatched,
 }
 
+/// Album candidate with track information for scoring.
+#[derive(Debug, Clone)]
+struct AlbumCandidate {
+    id: String,
+    name: String,
+    artist_name: String,
+    track_count: i32,
+    total_duration_ms: i64,
+    track_titles: Vec<String>,
+}
+
 /// Configuration for the IngestionManager.
 #[derive(Clone)]
 pub struct IngestionManagerConfig {
@@ -456,39 +467,46 @@ impl IngestionManager {
             return Ok(());
         }
 
-        // Score candidates
-        let scored: Vec<(String, String, f32)> = candidates
+        // Score candidates (now includes track-based scoring)
+        let mut scored: Vec<(AlbumCandidate, f32)> = candidates
             .into_iter()
-            .map(|(album_id, album_name, artist_name)| {
-                let score = self.score_album_match(&summary, &album_name, &artist_name);
-                (album_id, format!("{} - {}", artist_name, album_name), score)
+            .map(|candidate| {
+                let score = self.score_album_match(&summary, &candidate);
+                (candidate, score)
             })
             .collect();
 
-        // Find best match
-        let best = scored.iter().max_by(|a, b| a.2.partial_cmp(&b.2).unwrap());
+        // Sort by score descending
+        scored.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
 
-        if let Some((album_id, label, confidence)) = best {
+        // Find best match
+        if let Some((best_candidate, confidence)) = scored.first() {
+            let label = format!("{} - {}", best_candidate.artist_name, best_candidate.name);
+
             if *confidence >= self.config.auto_match_threshold {
                 // High confidence - auto-match
-                job.matched_album_id = Some(album_id.clone());
+                job.matched_album_id = Some(best_candidate.id.clone());
                 job.match_confidence = Some(*confidence);
                 job.match_source = Some(IngestionMatchSource::Agent);
                 job.status = IngestionJobStatus::MappingTracks;
                 self.store.update_job(&job)?;
 
                 info!(
-                    "Auto-matched job {} to album {} with {:.0}% confidence",
-                    job_id, album_id, confidence * 100.0
+                    "Auto-matched job {} to album {} with {:.0}% confidence (tracks: {}/{})",
+                    job_id, best_candidate.id, confidence * 100.0,
+                    summary.file_count, best_candidate.track_count
                 );
             } else {
                 // Low confidence - request review
                 let options: Vec<ReviewOption> = scored
                     .iter()
                     .take(5)
-                    .map(|(id, label, conf)| ReviewOption {
-                        id: format!("album:{}", id),
-                        label: format!("{} ({:.0}%)", label, conf * 100.0),
+                    .map(|(candidate, conf)| ReviewOption {
+                        id: format!("album:{}", candidate.id),
+                        label: format!(
+                            "{} - {} ({:.0}%, {} tracks)",
+                            candidate.artist_name, candidate.name, conf * 100.0, candidate.track_count
+                        ),
                         description: None,
                     })
                     .chain(std::iter::once(ReviewOption {
@@ -499,9 +517,10 @@ impl IngestionManager {
                     .collect();
 
                 let question = format!(
-                    "Which album is this?\nDetected: {} - {}",
+                    "Which album is this?\nDetected: {} - {} ({} files)",
                     summary.artist.as_deref().unwrap_or("Unknown Artist"),
-                    summary.album.as_deref().unwrap_or("Unknown Album")
+                    summary.album.as_deref().unwrap_or("Unknown Album"),
+                    summary.file_count
                 );
 
                 let options_json = serde_json::to_string(&options).unwrap_or_default();
@@ -524,7 +543,7 @@ impl IngestionManager {
     async fn search_album_candidates(
         &self,
         summary: &AlbumMetadataSummary,
-    ) -> Result<Vec<(String, String, String)>, IngestionError> {
+    ) -> Result<Vec<AlbumCandidate>, IngestionError> {
         let mut candidates = Vec::new();
 
         // Build search query from artist + album
@@ -543,33 +562,14 @@ impl IngestionManager {
             query
         };
 
+        // Collect album IDs first, then fetch full details
+        let mut album_ids: Vec<String> = Vec::new();
+
         let album_filter = Some(vec![HashedItemType::Album]);
         let results = self.search.search(&search_query, 10, album_filter);
 
         for result in results {
-            if let Ok(Some(album_json)) = self.catalog.get_resolved_album_json(&result.item_id) {
-                // Extract album info from JSON
-                if let (Some(album), Some(artists)) = (
-                    album_json.get("album"),
-                    album_json.get("artists").and_then(|a| a.as_array()),
-                ) {
-                    let album_id = album.get("id").and_then(|v| v.as_str()).unwrap_or_default();
-                    let album_name = album.get("name").and_then(|v| v.as_str()).unwrap_or_default();
-                    let artist_name = artists
-                        .first()
-                        .and_then(|a| a.get("name"))
-                        .and_then(|v| v.as_str())
-                        .unwrap_or_default();
-
-                    if !album_id.is_empty() {
-                        candidates.push((
-                            album_id.to_string(),
-                            album_name.to_string(),
-                            artist_name.to_string(),
-                        ));
-                    }
-                }
-            }
+            album_ids.push(result.item_id.clone());
         }
 
         // Also search for artists and include their albums
@@ -579,23 +579,12 @@ impl IngestionManager {
 
             for result in artist_results {
                 if let Ok(Some(artist_json)) = self.catalog.get_resolved_artist_json(&result.item_id) {
-                    let artist_name = artist_json
-                        .get("artist")
-                        .and_then(|a| a.get("name"))
-                        .and_then(|v| v.as_str())
-                        .unwrap_or_default();
-
                     if let Some(albums) = artist_json.get("albums").and_then(|a| a.as_array()) {
                         for album in albums.iter().take(5) {
-                            let album_id = album.get("id").and_then(|v| v.as_str()).unwrap_or_default();
-                            let album_name = album.get("name").and_then(|v| v.as_str()).unwrap_or_default();
-
-                            if !album_id.is_empty() {
-                                candidates.push((
-                                    album_id.to_string(),
-                                    album_name.to_string(),
-                                    artist_name.to_string(),
-                                ));
+                            if let Some(album_id) = album.get("id").and_then(|v| v.as_str()) {
+                                if !album_id.is_empty() {
+                                    album_ids.push(album_id.to_string());
+                                }
                             }
                         }
                     }
@@ -603,36 +592,138 @@ impl IngestionManager {
             }
         }
 
-        // Deduplicate
-        candidates.sort_by(|a, b| a.0.cmp(&b.0));
-        candidates.dedup_by(|a, b| a.0 == b.0);
+        // Deduplicate IDs
+        album_ids.sort();
+        album_ids.dedup();
+
+        // Fetch full album details with tracks for each candidate
+        for album_id in album_ids {
+            if let Some(candidate) = self.build_album_candidate(&album_id) {
+                candidates.push(candidate);
+            }
+        }
 
         Ok(candidates)
     }
 
-    /// Score how well an album matches the detected metadata.
-    fn score_album_match(&self, summary: &AlbumMetadataSummary, album_name: &str, artist_name: &str) -> f32 {
+    /// Build an AlbumCandidate from a resolved album JSON.
+    fn build_album_candidate(&self, album_id: &str) -> Option<AlbumCandidate> {
+        let album_json = self.catalog.get_resolved_album_json(album_id).ok()??;
+
+        let album = album_json.get("album")?;
+        let artists = album_json.get("artists")?.as_array()?;
+
+        let id = album.get("id")?.as_str()?.to_string();
+        let name = album.get("name")?.as_str()?.to_string();
+        let artist_name = artists
+            .first()
+            .and_then(|a| a.get("name"))
+            .and_then(|v| v.as_str())
+            .unwrap_or("Unknown Artist")
+            .to_string();
+
+        // Extract track info from discs
+        let mut track_titles = Vec::new();
+        let mut total_duration_ms: i64 = 0;
+        let mut track_count = 0;
+
+        if let Some(discs) = album_json.get("discs").and_then(|d| d.as_array()) {
+            for disc in discs {
+                if let Some(tracks) = disc.get("tracks").and_then(|t| t.as_array()) {
+                    for track in tracks {
+                        track_count += 1;
+                        if let Some(title) = track.get("name").and_then(|v| v.as_str()) {
+                            track_titles.push(title.to_string());
+                        }
+                        if let Some(duration) = track.get("duration_ms").and_then(|v| v.as_i64()) {
+                            total_duration_ms += duration;
+                        }
+                    }
+                }
+            }
+        }
+
+        Some(AlbumCandidate {
+            id,
+            name,
+            artist_name,
+            track_count,
+            total_duration_ms,
+            track_titles,
+        })
+    }
+
+    /// Score how well an album candidate matches the detected metadata.
+    ///
+    /// Scoring weights:
+    /// - 25% Artist name similarity
+    /// - 25% Album name similarity
+    /// - 15% Track count match
+    /// - 15% Track title overlap
+    /// - 10% Total duration similarity
+    /// - 10% Source filename similarity
+    fn score_album_match(&self, summary: &AlbumMetadataSummary, candidate: &AlbumCandidate) -> f32 {
         let mut score = 0.0;
         let mut factors = 0.0;
 
-        // Artist similarity
+        // Artist similarity (25%)
         if let Some(detected_artist) = &summary.artist {
-            let sim = string_similarity(detected_artist, artist_name);
-            score += sim * 0.4; // 40% weight
-            factors += 0.4;
+            let sim = string_similarity(detected_artist, &candidate.artist_name);
+            score += sim * 0.25;
+            factors += 0.25;
         }
 
-        // Album name similarity
+        // Album name similarity (25%)
         if let Some(detected_album) = &summary.album {
-            let sim = string_similarity(detected_album, album_name);
-            score += sim * 0.4; // 40% weight
-            factors += 0.4;
+            let sim = string_similarity(detected_album, &candidate.name);
+            score += sim * 0.25;
+            factors += 0.25;
         }
 
-        // Source filename similarity (lower weight)
-        let source_sim = string_similarity(&summary.source_name, &format!("{} - {}", artist_name, album_name));
-        score += source_sim * 0.2; // 20% weight
-        factors += 0.2;
+        // Track count match (15%)
+        // Perfect match = 1.0, each track difference reduces by 0.1
+        let track_diff = (summary.file_count - candidate.track_count).abs();
+        let track_count_score = (1.0 - (track_diff as f32 * 0.1)).max(0.0);
+        score += track_count_score * 0.15;
+        factors += 0.15;
+
+        // Track title overlap (15%)
+        // Calculate how many uploaded track titles match catalog track titles
+        if !summary.track_titles.is_empty() && !candidate.track_titles.is_empty() {
+            let mut matched_titles = 0;
+            for upload_title in &summary.track_titles {
+                // Find best match in candidate tracks
+                let best_sim = candidate.track_titles
+                    .iter()
+                    .map(|t| string_similarity(upload_title, t))
+                    .max_by(|a, b| a.partial_cmp(b).unwrap())
+                    .unwrap_or(0.0);
+                if best_sim > 0.7 {
+                    matched_titles += 1;
+                }
+            }
+            let title_overlap = matched_titles as f32 / summary.track_titles.len() as f32;
+            score += title_overlap * 0.15;
+            factors += 0.15;
+        }
+
+        // Duration similarity (10%)
+        // Allow 10% tolerance, perfect match = 1.0
+        if summary.total_duration_ms > 0 && candidate.total_duration_ms > 0 {
+            let duration_ratio = summary.total_duration_ms as f64 / candidate.total_duration_ms as f64;
+            let duration_diff = (1.0 - duration_ratio).abs();
+            let duration_score = (1.0 - duration_diff * 5.0).max(0.0) as f32; // 20% diff = 0 score
+            score += duration_score * 0.10;
+            factors += 0.10;
+        }
+
+        // Source filename similarity (10%)
+        let source_sim = string_similarity(
+            &summary.source_name,
+            &format!("{} - {}", candidate.artist_name, candidate.name)
+        );
+        score += source_sim * 0.10;
+        factors += 0.10;
 
         if factors > 0.0 {
             score / factors
@@ -904,6 +995,20 @@ impl IngestionManager {
         limit: usize,
     ) -> Result<Vec<super::models::ReviewQueueItem>, IngestionError> {
         Ok(self.store.get_pending_reviews(limit)?)
+    }
+
+    /// Delete a job and its associated files.
+    pub async fn delete_job(&self, job_id: &str) -> Result<(), IngestionError> {
+        // Clean up temp files
+        if let Err(e) = self.file_handler.cleanup_job(job_id).await {
+            warn!("Failed to cleanup files for job {}: {}", job_id, e);
+        }
+
+        // Delete from database (cascades to files and review queue)
+        self.store.delete_job(job_id)?;
+
+        info!("Deleted job {}", job_id);
+        Ok(())
     }
 }
 
