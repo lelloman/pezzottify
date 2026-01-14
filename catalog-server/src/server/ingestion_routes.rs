@@ -7,13 +7,12 @@
 //! - Admin job management
 
 use axum::{
-    extract::{Path, Query, State},
+    extract::{Path, Query, State, Multipart, DefaultBodyLimit},
     http::StatusCode,
     response::IntoResponse,
-    routing::{delete, get, post},
+    routing::{get, post},
     Json, Router,
 };
-use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
 use serde::{Deserialize, Serialize};
 use tracing::{debug, info, warn};
 
@@ -106,11 +105,11 @@ fn get_ingestion_manager(
 // User Routes
 // =============================================================================
 
-/// POST /upload - Upload a file for ingestion
+/// POST /upload - Upload a file for ingestion (multipart/form-data)
 async fn upload_file(
     session: Session,
     State(im): State<OptionalIngestionManager>,
-    Json(body): Json<UploadBody>,
+    mut multipart: Multipart,
 ) -> impl IntoResponse {
     if !session.has_permission(Permission::EditCatalog) {
         return StatusCode::FORBIDDEN.into_response();
@@ -123,36 +122,70 @@ async fn upload_file(
 
     let user_id = session.user_id.to_string();
 
-    // Parse context type
-    let context_type = match body.context_type.as_deref() {
-        Some("download_request") => IngestionContextType::DownloadRequest,
-        _ => IngestionContextType::Spontaneous,
-    };
+    let mut filename: Option<String> = None;
+    let mut data: Option<Vec<u8>> = None;
+    let mut context_type = IngestionContextType::Spontaneous;
+    let mut context_id: Option<String> = None;
 
-    // Decode base64 data
-    let data = match BASE64.decode(&body.data) {
-        Ok(d) => d,
-        Err(e) => {
-            warn!("Failed to decode base64 data: {}", e);
+    // Process multipart fields
+    while let Ok(Some(field)) = multipart.next_field().await {
+        let field_name = field.name().unwrap_or("").to_string();
+
+        match field_name.as_str() {
+            "file" => {
+                filename = field.file_name().map(|s| s.to_string());
+                match field.bytes().await {
+                    Ok(bytes) => data = Some(bytes.to_vec()),
+                    Err(e) => {
+                        warn!("Failed to read file data: {}", e);
+                        return (
+                            StatusCode::BAD_REQUEST,
+                            Json(ErrorResponse { error: "Failed to read file".to_string() }),
+                        ).into_response();
+                    }
+                }
+            }
+            "context_type" => {
+                if let Ok(bytes) = field.bytes().await {
+                    let value = String::from_utf8_lossy(&bytes);
+                    if value == "download_request" {
+                        context_type = IngestionContextType::DownloadRequest;
+                    }
+                }
+            }
+            "context_id" => {
+                if let Ok(bytes) = field.bytes().await {
+                    let value = String::from_utf8_lossy(&bytes).to_string();
+                    if !value.is_empty() {
+                        context_id = Some(value);
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+
+    let filename = match filename {
+        Some(f) if !f.is_empty() => f,
+        _ => {
             return (
                 StatusCode::BAD_REQUEST,
-                Json(ErrorResponse { error: "Invalid base64 data".to_string() }),
+                Json(ErrorResponse { error: "No filename provided".to_string() }),
             ).into_response();
         }
     };
 
-    if body.filename.is_empty() || data.is_empty() {
-        return (
-            StatusCode::BAD_REQUEST,
-            Json(ErrorResponse { error: "No file provided".to_string() }),
-        ).into_response();
-    }
+    let data = match data {
+        Some(d) if !d.is_empty() => d,
+        _ => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(ErrorResponse { error: "No file data provided".to_string() }),
+            ).into_response();
+        }
+    };
 
-    debug!("User {} uploading file: {} ({} bytes)", user_id, body.filename, data.len());
-
-    // Clone what we need before the await
-    let filename = body.filename.clone();
-    let context_id = body.context_id.clone();
+    debug!("User {} uploading file: {} ({} bytes)", user_id, filename, data.len());
 
     match manager.create_job(&user_id, &filename, &data, context_type, context_id).await {
         Ok(job_id) => {
@@ -401,18 +434,49 @@ async fn admin_list_jobs(
     }
 }
 
-/// DELETE /admin/job/:id - Delete a job
-async fn admin_delete_job(
+/// DELETE /job/:id - Delete a job (user can delete their own jobs)
+async fn delete_job(
     session: Session,
-    State(_im): State<OptionalIngestionManager>,
-    Path(_job_id): Path<String>,
+    State(im): State<OptionalIngestionManager>,
+    Path(job_id): Path<String>,
 ) -> impl IntoResponse {
     if !session.has_permission(Permission::EditCatalog) {
         return StatusCode::FORBIDDEN.into_response();
     }
 
-    // TODO: Implement job deletion
-    (StatusCode::NOT_IMPLEMENTED, "Job deletion not implemented").into_response()
+    let manager = match get_ingestion_manager(&im) {
+        Ok(m) => m,
+        Err(e) => return e.into_response(),
+    };
+
+    // Check job ownership (unless admin)
+    match manager.get_job(&job_id) {
+        Ok(Some(job)) => {
+            let user_id_str = session.user_id.to_string();
+            if job.user_id != user_id_str && !session.has_permission(Permission::ViewAnalytics) {
+                return StatusCode::FORBIDDEN.into_response();
+            }
+        }
+        Ok(None) => return StatusCode::NOT_FOUND.into_response(),
+        Err(e) => {
+            warn!("Failed to get job {}: {}", job_id, e);
+            return (StatusCode::INTERNAL_SERVER_ERROR, "Failed to get job").into_response();
+        }
+    }
+
+    match manager.delete_job(&job_id).await {
+        Ok(()) => {
+            info!("Deleted ingestion job {}", job_id);
+            StatusCode::NO_CONTENT.into_response()
+        }
+        Err(e) => {
+            warn!("Failed to delete job {}: {}", job_id, e);
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorResponse { error: e.to_string() }),
+            ).into_response()
+        }
+    }
 }
 
 // =============================================================================
@@ -436,10 +500,16 @@ async fn admin_delete_job(
 /// - GET /admin/jobs - List all jobs
 /// - DELETE /admin/job/:id - Delete a job
 pub fn ingestion_routes() -> Router<ServerState> {
+    // Upload route with 5GB body limit for large FLAC box sets
+    // Actual limit is enforced by IngestionManager config (max_upload_size_mb)
+    let upload_route = Router::new()
+        .route("/upload", post(upload_file))
+        .layer(DefaultBodyLimit::max(5 * 1024 * 1024 * 1024)); // 5GB
+
     // User routes
     let user_routes = Router::new()
-        .route("/upload", post(upload_file))
-        .route("/job/{id}", get(get_job))
+        .merge(upload_route)
+        .route("/job/{id}", get(get_job).delete(delete_job))
         .route("/my-jobs", get(get_my_jobs))
         .route("/job/{id}/process", post(process_job))
         .route("/job/{id}/convert", post(convert_job));
@@ -451,8 +521,7 @@ pub fn ingestion_routes() -> Router<ServerState> {
 
     // Admin routes
     let admin_routes = Router::new()
-        .route("/jobs", get(admin_list_jobs))
-        .route("/job/{id}", delete(admin_delete_job));
+        .route("/jobs", get(admin_list_jobs));
 
     user_routes
         .merge(review_routes)

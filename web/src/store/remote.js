@@ -941,6 +941,131 @@ export const useRemoteStore = defineStore("remote", () => {
     }
   };
 
+  // =====================================================
+  // Admin API - Ingestion (EditCatalog)
+  // =====================================================
+
+  const uploadIngestionFile = async (file, contextType = null, contextId = null) => {
+    const formData = new FormData();
+    formData.append("file", file);
+    if (contextType) formData.append("context_type", contextType);
+    if (contextId) formData.append("context_id", contextId);
+
+    const { getIdToken } = await import("@/services/oidc");
+    const idToken = await getIdToken();
+
+    const headers = {};
+    if (idToken) {
+      headers["Authorization"] = idToken;
+    }
+
+    try {
+      const response = await fetch("/v1/ingestion/upload", {
+        method: "POST",
+        body: formData,
+        headers,
+      });
+
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({}));
+        return { error: error.error || `Upload failed: ${response.status}` };
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error("Failed to upload file for ingestion:", error);
+      return { error: error.message || "Failed to upload file" };
+    }
+  };
+
+  const fetchIngestionMyJobs = async (limit = 50) => {
+    try {
+      const response = await axios.get("/v1/ingestion/my-jobs", {
+        params: { limit },
+      });
+      return response.data;
+    } catch (error) {
+      console.error("Failed to fetch ingestion jobs:", error);
+      return null;
+    }
+  };
+
+  const fetchIngestionJob = async (jobId) => {
+    try {
+      const response = await axios.get(`/v1/ingestion/job/${jobId}`);
+      return response.data;
+    } catch (error) {
+      console.error("Failed to fetch ingestion job:", error);
+      return null;
+    }
+  };
+
+  const processIngestionJob = async (jobId) => {
+    try {
+      const response = await axios.post(`/v1/ingestion/job/${jobId}/process`);
+      return response.data;
+    } catch (error) {
+      console.error("Failed to process ingestion job:", error);
+      return { error: error.response?.data?.error || "Failed to process job" };
+    }
+  };
+
+  const convertIngestionJob = async (jobId) => {
+    try {
+      const response = await axios.post(`/v1/ingestion/job/${jobId}/convert`);
+      return response.data;
+    } catch (error) {
+      console.error("Failed to convert ingestion job:", error);
+      return { error: error.response?.data?.error || "Failed to convert job" };
+    }
+  };
+
+  const deleteIngestionJob = async (jobId) => {
+    try {
+      const response = await axios.delete(`/v1/ingestion/job/${jobId}`);
+      return response.data;
+    } catch (error) {
+      console.error("Failed to delete ingestion job:", error);
+      return { error: error.response?.data?.error || "Failed to delete job" };
+    }
+  };
+
+  const fetchIngestionReviews = async (limit = 50) => {
+    try {
+      const response = await axios.get("/v1/ingestion/reviews", {
+        params: { limit },
+      });
+      return response.data;
+    } catch (error) {
+      console.error("Failed to fetch ingestion reviews:", error);
+      return null;
+    }
+  };
+
+  const resolveIngestionReview = async (jobId, selectedOption) => {
+    try {
+      const response = await axios.post(`/v1/ingestion/review/${jobId}/resolve`, {
+        selected_option: selectedOption,
+      });
+      return response.data;
+    } catch (error) {
+      console.error("Failed to resolve ingestion review:", error);
+      return { error: error.response?.data?.error || "Failed to resolve review" };
+    }
+  };
+
+  const fetchIngestionAdminJobs = async (limit = 50) => {
+    try {
+      const response = await axios.get("/v1/ingestion/admin/jobs", {
+        params: { limit },
+      });
+      return response.data;
+    } catch (error) {
+      console.error("Failed to fetch admin ingestion jobs:", error);
+      return null;
+    }
+  };
+
   return {
     setBlockHttpCache,
     fetchLikedAlbums,
@@ -1027,106 +1152,9 @@ export const useRemoteStore = defineStore("remote", () => {
     fetchIngestionJob,
     processIngestionJob,
     convertIngestionJob,
+    deleteIngestionJob,
     fetchIngestionReviews,
     resolveIngestionReview,
     fetchIngestionAdminJobs,
   };
 });
-
-// =====================================================
-// Admin API - Ingestion (EditCatalog)
-// =====================================================
-
-async function uploadIngestionFile(filename, base64Data, contextType = null, contextId = null) {
-  try {
-    const body = {
-      filename,
-      data: base64Data,
-    };
-    if (contextType) body.context_type = contextType;
-    if (contextId) body.context_id = contextId;
-    const response = await axios.post("/v1/ingestion/upload", body);
-    return { success: true, data: response.data };
-  } catch (error) {
-    console.error("Failed to upload file for ingestion:", error);
-    return { error: error.response?.data?.error || "Failed to upload file" };
-  }
-}
-
-async function fetchIngestionMyJobs(limit = 50) {
-  try {
-    const response = await axios.get("/v1/ingestion/my-jobs", {
-      params: { limit },
-    });
-    return response.data;
-  } catch (error) {
-    console.error("Failed to fetch ingestion jobs:", error);
-    return null;
-  }
-}
-
-async function fetchIngestionJob(jobId) {
-  try {
-    const response = await axios.get(`/v1/ingestion/job/${jobId}`);
-    return response.data;
-  } catch (error) {
-    console.error("Failed to fetch ingestion job:", error);
-    return null;
-  }
-}
-
-async function processIngestionJob(jobId) {
-  try {
-    const response = await axios.post(`/v1/ingestion/job/${jobId}/process`);
-    return { success: true, data: response.data };
-  } catch (error) {
-    console.error("Failed to process ingestion job:", error);
-    return { error: error.response?.data?.error || "Failed to process job" };
-  }
-}
-
-async function convertIngestionJob(jobId) {
-  try {
-    const response = await axios.post(`/v1/ingestion/job/${jobId}/convert`);
-    return { success: true, data: response.data };
-  } catch (error) {
-    console.error("Failed to convert ingestion job:", error);
-    return { error: error.response?.data?.error || "Failed to convert job" };
-  }
-}
-
-async function fetchIngestionReviews(limit = 50) {
-  try {
-    const response = await axios.get("/v1/ingestion/reviews", {
-      params: { limit },
-    });
-    return response.data;
-  } catch (error) {
-    console.error("Failed to fetch ingestion reviews:", error);
-    return null;
-  }
-}
-
-async function resolveIngestionReview(jobId, selectedOption) {
-  try {
-    const response = await axios.post(`/v1/ingestion/review/${jobId}/resolve`, {
-      selected_option: selectedOption,
-    });
-    return { success: true, data: response.data };
-  } catch (error) {
-    console.error("Failed to resolve ingestion review:", error);
-    return { error: error.response?.data?.error || "Failed to resolve review" };
-  }
-}
-
-async function fetchIngestionAdminJobs(limit = 50) {
-  try {
-    const response = await axios.get("/v1/ingestion/admin/jobs", {
-      params: { limit },
-    });
-    return response.data;
-  } catch (error) {
-    console.error("Failed to fetch admin ingestion jobs:", error);
-    return null;
-  }
-}

@@ -217,12 +217,15 @@ fn sanitize_filename(filename: &str) -> Result<String, FileHandlerError> {
         .and_then(|n| n.to_str())
         .ok_or_else(|| FileHandlerError::InvalidFilename(filename.to_string()))?;
 
-    // Check for suspicious patterns
-    if name.contains("..") || name.starts_with('.') || name.contains('\0') {
+    // Check for suspicious patterns:
+    // - Null bytes are never allowed
+    // - Hidden files (starting with .) are not allowed
+    // - Exact ".." is path traversal (but "..." as ellipsis in a name is fine)
+    if name.contains('\0') || name.starts_with('.') || name == ".." {
         return Err(FileHandlerError::InvalidFilename(filename.to_string()));
     }
 
-    // Replace problematic characters
+    // Replace problematic characters (keep Unicode letters/symbols)
     let sanitized: String = name
         .chars()
         .map(|c| match c {

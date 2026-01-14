@@ -19,7 +19,7 @@ base64 = "0.22"
 ctrlc = "3.4"
 argon2 = "0.5.3"
 async-trait = "0.1.85"
-axum = { version = "0.8.1", features = ["ws"] }
+axum = { version = "0.8.1", features = ["ws", "multipart"] }
 axum-extra = { version = "0.10.0", features = ["cookie"] }
 byte-unit = "5.1.6"
 chrono = "0.4.39"
