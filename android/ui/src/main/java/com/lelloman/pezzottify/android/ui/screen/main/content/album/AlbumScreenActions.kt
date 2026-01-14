@@ -18,4 +18,7 @@ interface AlbumScreenActions {
     fun createPlaylist(name: String)
     fun toggleTrackLike(trackId: String, currentlyLiked: Boolean)
     fun getTrackLikeState(trackId: String): Flow<Boolean>
+
+    // Download request action
+    fun requestDownload()
 }

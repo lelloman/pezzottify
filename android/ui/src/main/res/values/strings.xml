@@ -401,19 +401,27 @@
     <string name="track_fallback">Track</string>
     <!-- ERROR MESSAGES -->
 
-    <!-- EXTERNAL ALBUM SCREEN -->
+    <!-- EXTERNAL ALBUM SCREEN / DOWNLOAD REQUEST -->
     <string name="tracks">Tracks</string>
     <string name="retry">Retry</string>
     <string name="in_your_catalog">In Your Catalog</string>
     <string name="download_completed">Download Completed</string>
     <string name="downloading">Downloading…</string>
+    <string name="downloading_progress">Downloading… (%1$d/%2$d)</string>
     <string name="pending_in_queue">Pending in Queue</string>
     <string name="queue_position">Position #%1$d</string>
     <string name="download_failed">Download Failed</string>
     <string name="retry_waiting">Waiting to Retry</string>
     <string name="requesting_download">Requesting Download…</string>
     <string name="request_download">Request Download</string>
-    <!-- EXTERNAL ALBUM SCREEN -->
+    <string name="download_requested">Download Requested</string>
+    <string name="download_queued_position">Queued (#%1$d)</string>
+    <string name="album_has_unavailable_tracks">Some tracks are not available</string>
+    <string name="download_request_error_network">Network error. Check your connection.</string>
+    <string name="download_request_error_unauthorized">Not authorized. Please log in again.</string>
+    <string name="download_request_error_not_found">Album not found.</string>
+    <string name="download_request_error_unknown">Request failed. Please try again.</string>
+    <!-- EXTERNAL ALBUM SCREEN / DOWNLOAD REQUEST -->
 
     <!-- MY REQUESTS SCREEN -->
     <string name="my_requests_title">My Requests</string>

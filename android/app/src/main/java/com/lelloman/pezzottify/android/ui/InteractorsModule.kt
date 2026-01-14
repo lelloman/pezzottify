@@ -763,6 +763,10 @@ class InteractorsModule {
         userPlaylistStore: UserPlaylistStore,
         staticsStore: StaticsStore,
         playlistSynchronizer: PlaylistSynchronizer,
+        permissionsStore: PermissionsStore,
+        downloadStatusRepository: com.lelloman.pezzottify.android.domain.download.DownloadStatusRepository,
+        requestAlbumDownloadUseCase: com.lelloman.pezzottify.android.domain.download.RequestAlbumDownloadUseCase,
+        getMyDownloadRequestsUseCase: com.lelloman.pezzottify.android.domain.download.GetMyDownloadRequestsUseCase,
     ): AlbumScreenViewModel.Interactor = object : AlbumScreenViewModel.Interactor {
         override fun playAlbum(albumId: String) {
             player.loadAlbum(albumId)
@@ -838,6 +842,82 @@ class InteractorsModule {
             val id = UUID.randomUUID().toString()
             userPlaylistStore.createOrUpdatePlaylist(id, name, emptyList(), PlaylistSyncStatus.PendingCreate)
             playlistSynchronizer.wakeUp()
+        }
+
+        override fun hasRequestContentPermission(): Flow<Boolean> =
+            permissionsStore.permissions.map { permissions ->
+                permissions.contains(DomainPermission.RequestContent)
+            }
+
+        override fun observeDownloadRequestStatus(albumId: String): Flow<AlbumScreenViewModel.DownloadRequestStatus?> {
+            // Flow that emits initial state from API, then continues with WebSocket updates
+            return kotlinx.coroutines.flow.flow {
+                // First, check the initial state via API
+                val initialResult = getMyDownloadRequestsUseCase(limit = 100, offset = 0)
+                val initialRequest = initialResult.getOrNull()?.requests?.find { it.contentId == albumId }
+
+                var currentStatus = initialRequest?.let { request ->
+                    AlbumScreenViewModel.DownloadRequestStatus(
+                        status = when (request.status) {
+                            com.lelloman.pezzottify.android.domain.remoteapi.response.DownloadQueueStatus.Pending ->
+                                com.lelloman.pezzottify.android.ui.screen.main.content.album.RequestStatus.Pending
+                            com.lelloman.pezzottify.android.domain.remoteapi.response.DownloadQueueStatus.InProgress ->
+                                com.lelloman.pezzottify.android.ui.screen.main.content.album.RequestStatus.InProgress
+                            com.lelloman.pezzottify.android.domain.remoteapi.response.DownloadQueueStatus.RetryWaiting ->
+                                com.lelloman.pezzottify.android.ui.screen.main.content.album.RequestStatus.Pending
+                            com.lelloman.pezzottify.android.domain.remoteapi.response.DownloadQueueStatus.Completed ->
+                                com.lelloman.pezzottify.android.ui.screen.main.content.album.RequestStatus.Completed
+                            com.lelloman.pezzottify.android.domain.remoteapi.response.DownloadQueueStatus.Failed ->
+                                com.lelloman.pezzottify.android.ui.screen.main.content.album.RequestStatus.Failed
+                        },
+                        queuePosition = request.queuePosition,
+                        progress = request.progress?.let { progress ->
+                            com.lelloman.pezzottify.android.ui.screen.main.content.album.RequestProgress(
+                                completed = progress.completed,
+                                total = progress.totalChildren,
+                            )
+                        },
+                    )
+                }
+                emit(currentStatus)
+
+                // Then collect WebSocket updates - only update when we get actual status info
+                downloadStatusRepository.observeStatus(albumId).collect { statusInfo ->
+                    if (statusInfo != null) {
+                        currentStatus = AlbumScreenViewModel.DownloadRequestStatus(
+                            status = when (statusInfo.status) {
+                                com.lelloman.pezzottify.android.domain.remoteapi.response.DownloadQueueStatus.Pending ->
+                                    com.lelloman.pezzottify.android.ui.screen.main.content.album.RequestStatus.Pending
+                                com.lelloman.pezzottify.android.domain.remoteapi.response.DownloadQueueStatus.InProgress ->
+                                    com.lelloman.pezzottify.android.ui.screen.main.content.album.RequestStatus.InProgress
+                                com.lelloman.pezzottify.android.domain.remoteapi.response.DownloadQueueStatus.RetryWaiting ->
+                                    com.lelloman.pezzottify.android.ui.screen.main.content.album.RequestStatus.Pending
+                                com.lelloman.pezzottify.android.domain.remoteapi.response.DownloadQueueStatus.Completed ->
+                                    com.lelloman.pezzottify.android.ui.screen.main.content.album.RequestStatus.Completed
+                                com.lelloman.pezzottify.android.domain.remoteapi.response.DownloadQueueStatus.Failed ->
+                                    com.lelloman.pezzottify.android.ui.screen.main.content.album.RequestStatus.Failed
+                            },
+                            queuePosition = statusInfo.queuePosition,
+                            progress = statusInfo.progress?.let { progress ->
+                                com.lelloman.pezzottify.android.ui.screen.main.content.album.RequestProgress(
+                                    completed = progress.completed,
+                                    total = progress.totalChildren,
+                                )
+                            },
+                        )
+                        emit(currentStatus)
+                    }
+                    // If statusInfo is null, don't emit - keep the current status from initial check
+                }
+            }
+        }
+
+        override suspend fun requestAlbumDownload(
+            albumId: String,
+            albumName: String,
+            artistName: String
+        ): Result<Unit> {
+            return requestAlbumDownloadUseCase(albumId, albumName, artistName).map { }
         }
     }
 
