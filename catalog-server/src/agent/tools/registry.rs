@@ -156,7 +156,9 @@ impl AgentToolRegistry {
         args: serde_json::Value,
         ctx: &ToolContext,
     ) -> Result<serde_json::Value, ToolError> {
-        let tool = self.get(name).ok_or_else(|| ToolError::NotFound(name.to_string()))?;
+        let tool = self
+            .get(name)
+            .ok_or_else(|| ToolError::NotFound(name.to_string()))?;
         tool.execute(args, ctx).await
     }
 
@@ -238,7 +240,9 @@ mod tests {
     async fn test_tool_not_found() {
         let registry = AgentToolRegistry::new();
         let ctx = ToolContext::new();
-        let result = registry.execute("nonexistent", serde_json::json!({}), &ctx).await;
+        let result = registry
+            .execute("nonexistent", serde_json::json!({}), &ctx)
+            .await;
 
         assert!(matches!(result, Err(ToolError::NotFound(_))));
     }

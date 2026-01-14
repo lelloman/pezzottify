@@ -179,11 +179,7 @@ pub mod ingestion {
             }
         }
 
-        pub fn with_match(
-            mut self,
-            track_id: impl Into<String>,
-            confidence: f32,
-        ) -> Self {
+        pub fn with_match(mut self, track_id: impl Into<String>, confidence: f32) -> Self {
             self.matched_track_id = Some(track_id.into());
             self.match_confidence = Some(confidence);
             self

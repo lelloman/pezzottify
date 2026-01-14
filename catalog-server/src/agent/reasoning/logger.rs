@@ -52,11 +52,7 @@ pub struct ReasoningStep {
 
 impl ReasoningStep {
     /// Create a new reasoning step.
-    pub fn new(
-        step_number: u32,
-        step_type: ReasoningStepType,
-        content: impl Into<String>,
-    ) -> Self {
+    pub fn new(step_number: u32, step_type: ReasoningStepType, content: impl Into<String>) -> Self {
         Self {
             id: Uuid::new_v4().to_string(),
             step_number,
@@ -126,11 +122,7 @@ impl ReasoningLogger {
     }
 
     /// Log a step and include the elapsed time since start_timer was called.
-    pub fn log_with_elapsed(
-        &mut self,
-        step_type: ReasoningStepType,
-        content: impl Into<String>,
-    ) {
+    pub fn log_with_elapsed(&mut self, step_type: ReasoningStepType, content: impl Into<String>) {
         let step_number = self.step_counter.fetch_add(1, Ordering::SeqCst) as u32;
         let mut step = ReasoningStep::new(step_number, step_type, content);
 

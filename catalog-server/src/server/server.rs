@@ -4353,9 +4353,7 @@ pub async fn make_app(
                             config.agent.llm.model.clone(),
                         )))
                     } else {
-                        warn!(
-                            "Ingestion enabled but agent not configured - LLM matching disabled"
-                        );
+                        warn!("Ingestion enabled but agent not configured - LLM matching disabled");
                         None
                     };
 
@@ -4379,7 +4377,8 @@ pub async fn make_app(
 
                 // Get download manager from state (if available) and cast to trait for ingestion
                 let manager_traits = state.download_manager.clone().map(|dm| {
-                    let dm_traits: Arc<dyn crate::ingestion::DownloadManagerTrait> = dm as Arc<dyn crate::ingestion::DownloadManagerTrait>;
+                    let dm_traits: Arc<dyn crate::ingestion::DownloadManagerTrait> =
+                        dm as Arc<dyn crate::ingestion::DownloadManagerTrait>;
                     dm_traits
                 });
 

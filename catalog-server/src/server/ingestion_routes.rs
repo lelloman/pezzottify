@@ -7,7 +7,7 @@
 //! - Admin job management
 
 use axum::{
-    extract::{Path, Query, State, Multipart, DefaultBodyLimit},
+    extract::{DefaultBodyLimit, Multipart, Path, Query, State},
     http::StatusCode,
     response::IntoResponse,
     routing::{get, post},
@@ -145,8 +145,11 @@ async fn upload_file(
                         warn!("Failed to read file data: {}", e);
                         return (
                             StatusCode::BAD_REQUEST,
-                            Json(ErrorResponse { error: "Failed to read file".to_string() }),
-                        ).into_response();
+                            Json(ErrorResponse {
+                                error: "Failed to read file".to_string(),
+                            }),
+                        )
+                            .into_response();
                     }
                 }
             }
@@ -175,8 +178,11 @@ async fn upload_file(
         _ => {
             return (
                 StatusCode::BAD_REQUEST,
-                Json(ErrorResponse { error: "No filename provided".to_string() }),
-            ).into_response();
+                Json(ErrorResponse {
+                    error: "No filename provided".to_string(),
+                }),
+            )
+                .into_response();
         }
     };
 
@@ -185,27 +191,42 @@ async fn upload_file(
         _ => {
             return (
                 StatusCode::BAD_REQUEST,
-                Json(ErrorResponse { error: "No file data provided".to_string() }),
-            ).into_response();
+                Json(ErrorResponse {
+                    error: "No file data provided".to_string(),
+                }),
+            )
+                .into_response();
         }
     };
 
-    debug!("User {} uploading file: {} ({} bytes)", user_id, filename, data.len());
+    debug!(
+        "User {} uploading file: {} ({} bytes)",
+        user_id,
+        filename,
+        data.len()
+    );
 
-    match manager.create_job(&user_id, &filename, &data, context_type, context_id).await {
+    match manager
+        .create_job(&user_id, &filename, &data, context_type, context_id)
+        .await
+    {
         Ok(job_id) => {
             info!("Created ingestion job {} for user {}", job_id, user_id);
             Json(UploadResponse {
                 job_id,
                 status: "PENDING".to_string(),
-            }).into_response()
+            })
+            .into_response()
         }
         Err(e) => {
             warn!("Failed to create ingestion job: {}", e);
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ErrorResponse { error: e.to_string() }),
-            ).into_response()
+                Json(ErrorResponse {
+                    error: e.to_string(),
+                }),
+            )
+                .into_response()
         }
     }
 }
@@ -299,8 +320,11 @@ async fn process_job(
             warn!("Failed to process job {}: {}", job_id, e);
             (
                 StatusCode::BAD_REQUEST,
-                Json(ErrorResponse { error: e.to_string() }),
-            ).into_response()
+                Json(ErrorResponse {
+                    error: e.to_string(),
+                }),
+            )
+                .into_response()
         }
     }
 }
@@ -336,8 +360,11 @@ async fn convert_job(
             warn!("Failed to convert job {}: {}", job_id, e);
             (
                 StatusCode::BAD_REQUEST,
-                Json(ErrorResponse { error: e.to_string() }),
-            ).into_response()
+                Json(ErrorResponse {
+                    error: e.to_string(),
+                }),
+            )
+                .into_response()
         }
     }
 }
@@ -388,9 +415,15 @@ async fn resolve_review(
 
     let reviewer_id = session.user_id.to_string();
 
-    match manager.resolve_review(&job_id, &reviewer_id, &body.selected_option).await {
+    match manager
+        .resolve_review(&job_id, &reviewer_id, &body.selected_option)
+        .await
+    {
         Ok(()) => {
-            info!("Review resolved for job {} by {}: {}", job_id, reviewer_id, body.selected_option);
+            info!(
+                "Review resolved for job {} by {}: {}",
+                job_id, reviewer_id, body.selected_option
+            );
             // Return updated job status
             match manager.get_job(&job_id) {
                 Ok(Some(job)) => Json(JobStatusResponse { job }).into_response(),
@@ -405,8 +438,11 @@ async fn resolve_review(
             warn!("Failed to resolve review for job {}: {}", job_id, e);
             (
                 StatusCode::BAD_REQUEST,
-                Json(ErrorResponse { error: e.to_string() }),
-            ).into_response()
+                Json(ErrorResponse {
+                    error: e.to_string(),
+                }),
+            )
+                .into_response()
         }
     }
 }
@@ -478,8 +514,11 @@ async fn delete_job(
             warn!("Failed to delete job {}: {}", job_id, e);
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ErrorResponse { error: e.to_string() }),
-            ).into_response()
+                Json(ErrorResponse {
+                    error: e.to_string(),
+                }),
+            )
+                .into_response()
         }
     }
 }
@@ -525,8 +564,7 @@ pub fn ingestion_routes() -> Router<ServerState> {
         .route("/review/{job_id}/resolve", post(resolve_review));
 
     // Admin routes
-    let admin_routes = Router::new()
-        .route("/jobs", get(admin_list_jobs));
+    let admin_routes = Router::new().route("/jobs", get(admin_list_jobs));
 
     user_routes
         .merge(review_routes)

@@ -1,7 +1,7 @@
 //! Ollama LLM provider implementation.
 
 use super::provider::{CompletionOptions, LlmError, LlmProvider};
-use super::types::{CompletionResponse, FinishReason, Message, MessageRole, ToolCall, TokenUsage};
+use super::types::{CompletionResponse, FinishReason, Message, MessageRole, TokenUsage, ToolCall};
 use crate::agent::tools::ToolDefinition;
 use async_trait::async_trait;
 use reqwest::Client;

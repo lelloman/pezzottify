@@ -14,9 +14,7 @@ pub enum WorkflowState {
     Thinking,
 
     /// Agent has requested tool calls.
-    ExecutingTools {
-        tool_calls: Vec<ToolCall>,
-    },
+    ExecutingTools { tool_calls: Vec<ToolCall> },
 
     /// Waiting for human review.
     AwaitingReview {
@@ -25,29 +23,25 @@ pub enum WorkflowState {
     },
 
     /// Agent has decided on an action, ready to execute.
-    ReadyToExecute {
-        action: AgentAction,
-    },
+    ReadyToExecute { action: AgentAction },
 
     /// Executing the final action.
     Executing,
 
     /// Workflow completed successfully.
-    Completed {
-        result: WorkflowResult,
-    },
+    Completed { result: WorkflowResult },
 
     /// Workflow failed.
-    Failed {
-        error: String,
-        recoverable: bool,
-    },
+    Failed { error: String, recoverable: bool },
 }
 
 impl WorkflowState {
     /// Check if the workflow is in a terminal state.
     pub fn is_terminal(&self) -> bool {
-        matches!(self, WorkflowState::Completed { .. } | WorkflowState::Failed { .. })
+        matches!(
+            self,
+            WorkflowState::Completed { .. } | WorkflowState::Failed { .. }
+        )
     }
 
     /// Check if the workflow is blocked waiting for human input.
@@ -129,9 +123,7 @@ pub enum AgentAction {
     },
 
     /// Reject the upload (no suitable match).
-    Reject {
-        reason: String,
-    },
+    Reject { reason: String },
 
     /// Custom action (for extensibility).
     Custom {
