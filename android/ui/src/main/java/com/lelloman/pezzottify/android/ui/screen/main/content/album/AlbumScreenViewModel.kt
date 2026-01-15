@@ -54,21 +54,23 @@ class AlbumScreenViewModel @AssistedInject constructor(
                             interactor.observeDownloadRequestStatus(albumId),
                             localDownloadState,
                         ) { hasPermission, serverStatus, localState ->
-                            // Local state takes precedence during requesting and confirmation waiting
+                            // Local state takes precedence during requesting
                             when {
-                                localState != null && localState != DownloadRequestState.WaitingForConfirmation -> localState
+                                localState == DownloadRequestState.Requesting -> localState
+                                localState is DownloadRequestState.Error -> localState
                                 !hasPermission -> DownloadRequestState.Hidden
-                                serverStatus != null -> {
-                                    // Server status received - clear local state
-                                    localDownloadState.update { null }
-                                    DownloadRequestState.Requested(
-                                        status = serverStatus.status,
-                                        queuePosition = serverStatus.queuePosition,
-                                        progress = serverStatus.progress,
-                                    )
-                                }
+                                serverStatus != null -> DownloadRequestState.Requested(
+                                    status = serverStatus.status,
+                                    queuePosition = serverStatus.queuePosition,
+                                    progress = serverStatus.progress,
+                                )
                                 localState == DownloadRequestState.WaitingForConfirmation -> DownloadRequestState.Requesting
                                 else -> DownloadRequestState.CanRequest
+                            }
+                        }.onEach { downloadState ->
+                            // Clear local state once server confirms (side effect outside combine)
+                            if (downloadState is DownloadRequestState.Requested) {
+                                localDownloadState.update { null }
                             }
                         }
                     } else {
