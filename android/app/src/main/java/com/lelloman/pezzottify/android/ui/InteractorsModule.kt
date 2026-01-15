@@ -919,7 +919,19 @@ class InteractorsModule {
             albumName: String,
             artistName: String
         ): Result<Unit> {
-            return requestAlbumDownloadUseCase(albumId, albumName, artistName).map { }
+            val result = requestAlbumDownloadUseCase(albumId, albumName, artistName)
+            // On success, immediately update the status repository so the UI reflects the new state
+            // without waiting for the WebSocket event
+            result.onSuccess { response ->
+                downloadStatusRepository.onRequestCreated(
+                    requestId = response.requestId,
+                    contentId = albumId,
+                    contentName = albumName,
+                    artistName = artistName,
+                    queuePosition = 0, // Position not provided in response, will be updated via WebSocket
+                )
+            }
+            return result.map { }
         }
     }
 
