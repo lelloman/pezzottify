@@ -24,6 +24,8 @@ sealed class DownloadRequestState {
     data object CanRequest : DownloadRequestState()
     /** Currently requesting - show loading state */
     data object Requesting : DownloadRequestState()
+    /** Request submitted, waiting for server confirmation - show loading */
+    data object WaitingForConfirmation : DownloadRequestState()
     /** Already in user's download queue - show "requested" label */
     data class Requested(
         val status: RequestStatus = RequestStatus.Pending,

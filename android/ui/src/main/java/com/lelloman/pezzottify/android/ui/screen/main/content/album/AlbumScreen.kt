@@ -579,7 +579,8 @@ private fun DownloadRequestSection(
                         }
                     }
                 }
-                is DownloadRequestState.Requesting -> {
+                is DownloadRequestState.Requesting,
+                is DownloadRequestState.WaitingForConfirmation -> {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
