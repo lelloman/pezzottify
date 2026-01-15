@@ -20,7 +20,7 @@ use super::models::*;
 use super::queue_store::DownloadQueueStore;
 use super::retry_policy::RetryPolicy;
 use super::sync_notifier::DownloadSyncNotifier;
-use super::torrent_client::TorrentClient;
+use super::torrent_client::TorrentClientTrait;
 use super::torrent_types::{
     AudioSearchConstraints, CreateTicketRequest, ExpectedContent, ExpectedTrack, OutputConstraints,
     QueryContext, SearchConstraints, TicketStatus, TorrentEvent,
@@ -61,8 +61,8 @@ impl DownloadManagerTrait for DownloadManager {
 pub struct DownloadManager {
     /// Queue store for persisting download requests.
     queue_store: Arc<dyn DownloadQueueStore>,
-    /// Torrent client for communicating with Quentin Torrentino.
-    torrent_client: Arc<TorrentClient>,
+    /// Torrent client for communicating with Quentin Torrentino (optional).
+    torrent_client: Option<Arc<dyn TorrentClientTrait + 'static>>,
     /// Catalog store for checking existing content and updating availability.
     catalog_store: Arc<dyn CatalogStore>,
     /// Path to media files directory.
@@ -84,7 +84,7 @@ impl DownloadManager {
     /// Create a new DownloadManager.
     pub fn new(
         queue_store: Arc<dyn DownloadQueueStore>,
-        torrent_client: Arc<TorrentClient>,
+        torrent_client: Option<Arc<dyn TorrentClientTrait + 'static>>,
         catalog_store: Arc<dyn CatalogStore>,
         media_path: PathBuf,
         config: DownloadManagerSettings,
@@ -117,7 +117,9 @@ impl DownloadManager {
 
     /// Check if Quentin Torrentino is connected (WebSocket alive).
     pub fn is_connected(&self) -> bool {
-        self.torrent_client.is_connected()
+        self.torrent_client
+            .as_ref()
+            .is_some_and(|c| c.is_connected())
     }
 
     // =========================================================================
@@ -255,16 +257,18 @@ impl DownloadManager {
         );
 
         // Submit the pending item to QT if connected
-        if self.torrent_client.is_connected() {
-            match self.submit_pending_tickets().await {
-                Ok(count) => {
-                    if count > 0 {
-                        debug!("Submitted {} pending tickets after enqueue", count);
+        if let Some(client) = &self.torrent_client {
+            if client.is_connected() {
+                match self.submit_pending_tickets().await {
+                    Ok(count) => {
+                        if count > 0 {
+                            debug!("Submitted {} pending tickets after enqueue", count);
+                        }
                     }
-                }
-                Err(e) => {
-                    warn!("Failed to submit pending tickets after enqueue: {}", e);
-                    // Continue anyway - item is in queue and will be submitted on reconnect
+                    Err(e) => {
+                        warn!("Failed to submit pending tickets after enqueue: {}", e);
+                        // Continue anyway - item is in queue and will be submitted on reconnect
+                    }
                 }
             }
         }
@@ -297,6 +301,15 @@ impl DownloadManager {
     /// Each pending Album item creates one ticket.
     /// Returns the number of tickets submitted.
     pub async fn submit_pending_tickets(&self) -> Result<usize> {
+        // Return early if torrent client is not available
+        let torrent_client = match &self.torrent_client {
+            Some(client) => client,
+            None => {
+                debug!("Torrent client not configured, skipping ticket submission");
+                return Ok(0);
+            }
+        };
+
         // Get all pending queue items
         let pending_items = self.queue_store.list_all(
             Some(QueueStatus::Pending),
@@ -327,7 +340,10 @@ impl DownloadManager {
             }
 
             let album_id = &item.content_id;
-            match self.create_and_submit_ticket(album_id, &item).await {
+            match self
+                .create_and_submit_ticket(album_id, &item, torrent_client)
+                .await
+            {
                 Ok(ticket_id) => {
                     tickets_submitted += 1;
                     info!("Submitted ticket {} for album {}", ticket_id, album_id);
@@ -344,7 +360,12 @@ impl DownloadManager {
     /// Create and submit a ticket for an album queue item.
     ///
     /// Creates a QT ticket, stores the mapping, and marks the item as in_progress.
-    async fn create_and_submit_ticket(&self, album_id: &str, item: &QueueItem) -> Result<String> {
+    async fn create_and_submit_ticket(
+        &self,
+        album_id: &str,
+        item: &QueueItem,
+        torrent_client: &Arc<dyn TorrentClientTrait + 'static>,
+    ) -> Result<String> {
         // Get resolved album data
         let resolved_album = self
             .catalog_store
@@ -407,7 +428,7 @@ impl DownloadManager {
         };
 
         // Submit to QT - QT assigns the ticket ID
-        let response = self.torrent_client.create_ticket(request).await?;
+        let response = torrent_client.create_ticket(request).await?;
         let ticket_id = response.id;
 
         // Create ticket mapping (queue_item_id -> ticket_id -> album_id)
@@ -728,12 +749,14 @@ impl DownloadManager {
 
         // If item has a ticket, cancel it in QT and delete the mapping
         if let Ok(Some(ticket_id)) = self.queue_store.get_ticket_for_queue_item(item_id) {
-            // Cancel the ticket in QT (ignore errors - ticket may already be deleted)
-            if let Err(e) = self.torrent_client.cancel(&ticket_id).await {
-                warn!(
-                    "Failed to cancel QT ticket {} (may already be deleted): {}",
-                    ticket_id, e
-                );
+            // Cancel the ticket in QT if client is available (ignore errors - ticket may already be deleted)
+            if let Some(client) = &self.torrent_client {
+                if let Err(e) = client.cancel(&ticket_id).await {
+                    warn!(
+                        "Failed to cancel QT ticket {} (may already be deleted): {}",
+                        ticket_id, e
+                    );
+                }
             }
 
             // Delete the ticket mapping
@@ -797,7 +820,10 @@ impl DownloadManager {
     /// Get download manager status.
     pub fn get_status(&self) -> DownloadManagerStatus {
         DownloadManagerStatus {
-            connected: self.torrent_client.is_connected(),
+            connected: self
+                .torrent_client
+                .as_ref()
+                .is_some_and(|c| c.is_connected()),
             pending_count: self
                 .queue_store
                 .get_queue_stats()

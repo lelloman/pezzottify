@@ -12,6 +12,37 @@ use tokio::sync::broadcast;
 use tokio_tungstenite::{connect_async, tungstenite::Message};
 use tracing::{debug, error, info, warn};
 
+/// Trait for Quentin Torrentino client operations needed by DownloadManager.
+#[async_trait::async_trait]
+pub trait TorrentClientTrait: Send + Sync {
+    /// Check if WebSocket is currently connected.
+    fn is_connected(&self) -> bool;
+
+    /// Subscribe to ticket events.
+    fn subscribe(&self) -> broadcast::Receiver<TorrentEvent>;
+
+    /// Run the WebSocket connection loop.
+    async fn run_websocket(&self) -> Result<()>;
+
+    /// Create a new ticket for downloading music.
+    async fn create_ticket(&self, request: CreateTicketRequest) -> Result<TicketResponse>;
+
+    /// Cancel a ticket.
+    async fn cancel(&self, ticket_id: &str) -> Result<()>;
+
+    /// Get the current state of a ticket.
+    async fn get_ticket(&self, ticket_id: &str) -> Result<TicketState>;
+
+    /// Retry a failed ticket.
+    async fn retry_ticket(&self, ticket_id: &str) -> Result<()>;
+
+    /// Check if Quentin Torrentino is healthy.
+    async fn health_check(&self) -> Result<bool>;
+
+    /// Get QT statistics.
+    async fn get_stats(&self) -> Result<QTStats>;
+}
+
 /// Client for communicating with Quentin Torrentino.
 pub struct TorrentClient {
     http_client: Client,
@@ -36,78 +67,9 @@ impl TorrentClient {
         }
     }
 
-    /// Check if WebSocket is currently connected.
-    pub fn is_connected(&self) -> bool {
-        self.connected.load(Ordering::SeqCst)
-    }
-
-    /// Subscribe to ticket events.
-    pub fn subscribe(&self) -> broadcast::Receiver<TorrentEvent> {
-        self.event_tx.subscribe()
-    }
-
-    // =========================================================================
-    // HTTP API Methods
-    // =========================================================================
-
-    /// Check if Quentin Torrentino is healthy.
-    pub async fn health_check(&self) -> Result<bool> {
-        let url = format!("{}/api/v1/health", self.base_url);
-        let response = self
-            .http_client
-            .get(&url)
-            .bearer_auth(&self.auth_token)
-            .timeout(std::time::Duration::from_secs(5))
-            .send()
-            .await?;
-
-        Ok(response.status().is_success())
-    }
-
-    /// Get QT statistics.
-    pub async fn get_stats(&self) -> Result<QTStats> {
-        let url = format!("{}/api/v1/stats", self.base_url);
-        let response = self
-            .http_client
-            .get(&url)
-            .bearer_auth(&self.auth_token)
-            .send()
-            .await?
-            .error_for_status()?;
-
-        Ok(response.json().await?)
-    }
-
-    /// Create a new ticket for downloading music.
-    pub async fn create_ticket(&self, request: CreateTicketRequest) -> Result<TicketResponse> {
-        let url = format!("{}/api/v1/tickets", self.base_url);
-        let response = self
-            .http_client
-            .post(&url)
-            .bearer_auth(&self.auth_token)
-            .json(&request)
-            .send()
-            .await?
-            .error_for_status()?;
-
-        Ok(response.json().await?)
-    }
-
-    /// Get the current state of a ticket.
-    pub async fn get_ticket(&self, ticket_id: &str) -> Result<TicketState> {
-        let url = format!("{}/api/v1/tickets/{}", self.base_url, ticket_id);
-        let response = self
-            .http_client
-            .get(&url)
-            .bearer_auth(&self.auth_token)
-            .send()
-            .await?
-            .error_for_status()?;
-
-        Ok(response.json().await?)
-    }
-
     /// List tickets with optional state filter.
+    ///
+    /// This method is not part of the trait as it's only used for admin operations.
     pub async fn list_tickets(
         &self,
         state: Option<&str>,
@@ -134,6 +96,8 @@ impl TorrentClient {
     }
 
     /// Approve a ticket (for NEEDS_APPROVAL state).
+    ///
+    /// This method is not part of the trait as it's only used for admin operations.
     pub async fn approve(&self, ticket_id: &str, candidate_idx: Option<usize>) -> Result<()> {
         let url = format!("{}/api/v1/tickets/{}/approve", self.base_url, ticket_id);
         let body = serde_json::json!({ "candidate_idx": candidate_idx });
@@ -149,6 +113,8 @@ impl TorrentClient {
     }
 
     /// Reject a ticket.
+    ///
+    /// This method is not part of the trait as it's only used for admin operations.
     pub async fn reject(&self, ticket_id: &str, reason: &str) -> Result<()> {
         let url = format!("{}/api/v1/tickets/{}/reject", self.base_url, ticket_id);
         let body = serde_json::json!({ "reason": reason });
@@ -163,42 +129,8 @@ impl TorrentClient {
         Ok(())
     }
 
-    /// Retry a failed ticket.
-    pub async fn retry(&self, ticket_id: &str) -> Result<()> {
-        let url = format!("{}/api/v1/tickets/{}/retry", self.base_url, ticket_id);
-        self.http_client
-            .post(&url)
-            .bearer_auth(&self.auth_token)
-            .send()
-            .await?
-            .error_for_status()?;
-
-        Ok(())
-    }
-
-    /// Cancel/delete a ticket.
-    pub async fn cancel(&self, ticket_id: &str) -> Result<()> {
-        let url = format!("{}/api/v1/tickets/{}", self.base_url, ticket_id);
-        self.http_client
-            .delete(&url)
-            .bearer_auth(&self.auth_token)
-            .send()
-            .await?
-            .error_for_status()?;
-
-        Ok(())
-    }
-
-    // =========================================================================
-    // WebSocket Methods
-    // =========================================================================
-
-    /// Run the WebSocket connection loop.
-    ///
-    /// This method connects to QT and processes events until the connection
-    /// is closed or an error occurs. It should be called in a loop with
-    /// reconnection logic.
-    pub async fn run_websocket(&self) -> Result<()> {
+    /// Internal WebSocket implementation (called by trait method).
+    async fn run_websocket_internal(&self) -> Result<()> {
         let url = format!("{}?token={}", self.ws_url, self.auth_token);
         info!(
             "Connecting to Quentin Torrentino WebSocket: {}",
@@ -259,6 +191,92 @@ impl TorrentClient {
         self.connected.store(false, Ordering::SeqCst);
         ping_task.abort();
         Err(anyhow!("WebSocket connection closed"))
+    }
+}
+
+#[async_trait::async_trait]
+impl TorrentClientTrait for TorrentClient {
+    fn is_connected(&self) -> bool {
+        self.connected.load(Ordering::SeqCst)
+    }
+
+    fn subscribe(&self) -> broadcast::Receiver<TorrentEvent> {
+        self.event_tx.subscribe()
+    }
+
+    async fn run_websocket(&self) -> Result<()> {
+        self.run_websocket_internal().await
+    }
+
+    async fn create_ticket(&self, request: CreateTicketRequest) -> Result<TicketResponse> {
+        let url = format!("{}/api/v1/tickets", self.base_url);
+        let response = self
+            .http_client
+            .post(&url)
+            .bearer_auth(&self.auth_token)
+            .json(&request)
+            .send()
+            .await?
+            .error_for_status()?;
+        Ok(response.json().await?)
+    }
+
+    async fn cancel(&self, ticket_id: &str) -> Result<()> {
+        let url = format!("{}/api/v1/tickets/{}", self.base_url, ticket_id);
+        self.http_client
+            .delete(&url)
+            .bearer_auth(&self.auth_token)
+            .send()
+            .await?
+            .error_for_status()?;
+        Ok(())
+    }
+
+    async fn get_ticket(&self, ticket_id: &str) -> Result<TicketState> {
+        let url = format!("{}/api/v1/tickets/{}", self.base_url, ticket_id);
+        let response = self
+            .http_client
+            .get(&url)
+            .bearer_auth(&self.auth_token)
+            .send()
+            .await?
+            .error_for_status()?;
+        Ok(response.json().await?)
+    }
+
+    async fn retry_ticket(&self, ticket_id: &str) -> Result<()> {
+        let url = format!("{}/api/v1/tickets/{}/retry", self.base_url, ticket_id);
+        self.http_client
+            .post(&url)
+            .bearer_auth(&self.auth_token)
+            .send()
+            .await?
+            .error_for_status()?;
+        Ok(())
+    }
+
+    async fn health_check(&self) -> Result<bool> {
+        let url = format!("{}/api/v1/health", self.base_url);
+        let response = self
+            .http_client
+            .get(&url)
+            .bearer_auth(&self.auth_token)
+            .timeout(std::time::Duration::from_secs(5))
+            .send()
+            .await?;
+        Ok(response.status().is_success())
+    }
+
+    async fn get_stats(&self) -> Result<QTStats> {
+        let url = format!("{}/api/v1/stats", self.base_url);
+        let response = self
+            .http_client
+            .get(&url)
+            .bearer_auth(&self.auth_token)
+            .send()
+            .await?
+            .error_for_status()?;
+        Ok(response.json().await?)
     }
 }
 
