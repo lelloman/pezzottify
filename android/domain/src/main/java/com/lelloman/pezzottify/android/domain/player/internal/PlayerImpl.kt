@@ -43,6 +43,7 @@ internal class PlayerImpl(
     private var loadNexPlaylistJob: Job? = null
     private var statePersistenceJob: Job? = null
     private var restorationAttempted = false
+    private var restorationInProgress = false
 
     private val mutablePlaybackPlaylist = MutableStateFlow<PlaybackPlaylist?>(null)
     override val playbackPlaylist = mutablePlaybackPlaylist.asStateFlow()
@@ -135,13 +136,21 @@ internal class PlayerImpl(
      * Override togglePlayPause to attempt state restoration if player is inactive.
      */
     override fun togglePlayPause() {
+        // If restoration is in progress, ignore this toggle to avoid race conditions
+        if (restorationInProgress) {
+            logger.debug("togglePlayPause() - restoration in progress, ignoring")
+            return
+        }
+
         if (!platformPlayer.isActive.value) {
             // Player is not active - try to restore saved state
+            restorationInProgress = true
             runOnPlayerThread {
                 val restored = tryRestoreState()
+                restorationInProgress = false
+
                 if (!restored) {
-                    // No saved state to restore, just forward to platform player
-                    // (will likely do nothing, but that's expected)
+                    // No saved state to restore, forward toggle to platform player
                     platformPlayer.togglePlayPause()
                 }
                 // If restored, playback starts automatically via loadPlaylist
@@ -155,12 +164,21 @@ internal class PlayerImpl(
      * Override setIsPlaying to attempt state restoration if player is inactive.
      */
     override fun setIsPlaying(isPlaying: Boolean) {
+        // If restoration is in progress, ignore this call to avoid race conditions
+        if (restorationInProgress) {
+            logger.debug("setIsPlaying($isPlaying) - restoration in progress, ignoring")
+            return
+        }
+
         if (isPlaying && !platformPlayer.isActive.value) {
             // Trying to play but player is not active - try to restore saved state
+            restorationInProgress = true
             runOnPlayerThread {
                 val restored = tryRestoreState()
+                restorationInProgress = false
+
                 if (!restored) {
-                    // No saved state to restore, just forward to platform player
+                    // No saved state to restore, forward to platform player
                     platformPlayer.setIsPlaying(isPlaying)
                 }
                 // If restored, playback starts automatically via loadPlaylist
@@ -404,6 +422,7 @@ internal class PlayerImpl(
             playbackStateStore.clearState()
         }
         restorationAttempted = false
+        restorationInProgress = false
         logger.info("Cleared player session")
     }
 
