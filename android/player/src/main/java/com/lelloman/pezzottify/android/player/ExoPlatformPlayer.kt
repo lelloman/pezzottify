@@ -46,6 +46,14 @@ internal class ExoPlatformPlayer(
 
     private var sessionToken: SessionToken? = null
 
+    private enum class MediaControllerState {
+        DISCONNECTED,
+        CONNECTING,
+        CONNECTED,
+    }
+
+    private val mutableControllerState = MutableStateFlow(MediaControllerState.DISCONNECTED)
+
     private var progressPollingJob: Job? = null
 
     private var pendingTrackIndex: Int? = null
@@ -95,6 +103,7 @@ internal class ExoPlatformPlayer(
                     Player.EVENT_PLAY_WHEN_READY_CHANGED -> {
                         mutableIsPlaying.value = player.playWhenReady
                         updateProgressPolling(player.playWhenReady)
+                        updateControllerState()
                     }
 
                     Player.EVENT_POSITION_DISCONTINUITY -> {
@@ -114,6 +123,7 @@ internal class ExoPlatformPlayer(
                 else -> "$playbackState"
             }
             logger.debug("onPlaybackStateChanged: $playbackStateText")
+            updateControllerState()
 
             // Clear error when entering READY state (after recovery or retry)
             if (playbackState == Player.STATE_READY && mutablePlayerError.value != null) {
@@ -231,31 +241,60 @@ internal class ExoPlatformPlayer(
                         sessionToken = null
                         mutableIsActive.value = false
                         mutableCurrentTrackDurationSeconds.value = null
+                        mutableControllerState.value = MediaControllerState.DISCONNECTED
                     }
                 }
             }
         }
     }
 
-    override fun setIsPlaying(isPlaying: Boolean) {
+    /**
+     * Check if the MediaController is ready for operations.
+     * Returns true if controller exists and is connected.
+     * Note: We don't check playbackState == STATE_READY here because we need to be able
+     * to set playWhenReady before the player reaches READY state (e.g., during IDLE or BUFFERING).
+     */
+    private fun isControllerReady(): Boolean {
+        val controller = mediaController ?: return false
+        return controller.isConnected
+    }
+
+    /**
+     * Update the controller state based on current connection and playback status.
+     */
+    private fun updateControllerState() {
         val controller = mediaController
-        logger.info("setIsPlaying($isPlaying) - controller=${controller != null}, isConnected=${controller?.isConnected}")
-        controller?.playWhenReady = isPlaying
+        when {
+            controller == null -> mutableControllerState.value = MediaControllerState.DISCONNECTED
+            !controller.isConnected -> mutableControllerState.value = MediaControllerState.CONNECTING
+            else -> mutableControllerState.value = MediaControllerState.CONNECTED
+        }
+    }
+
+    override fun setIsPlaying(isPlaying: Boolean) {
+        // Always update our state - this ensures loadPlaylist uses the correct value
+        mutableIsPlaying.value = isPlaying
+        if (!isControllerReady()) {
+            logger.debug("setIsPlaying($isPlaying) - controller not ready, state saved for when ready")
+            return
+        }
+        mediaController!!.playWhenReady = isPlaying
     }
 
     override fun loadPlaylist(tracksUrls: List<String>) {
         logger.info("loadPlaylist() - ${tracksUrls.size} tracks, sessionToken=${sessionToken != null}")
-        mutableIsPlaying.value = true
         pendingTrackIndex = null
         if (sessionToken == null) {
             sessionToken =
                 SessionToken(context, ComponentName(context, PlaybackService::class.java))
+            mutableControllerState.value = MediaControllerState.CONNECTING
             val controllerFuture = MediaController.Builder(context, sessionToken!!).buildAsync()
             controllerFuture.addListener(
                 {
                     mediaController = controllerFuture.get()
                     logger.info("MediaController created - isConnected=${mediaController?.isConnected}")
                     mediaController?.addListener(playerListener)
+                    updateControllerState()
                     loadPlaylistWhenMediaControllerIsReady(tracksUrls)
                 },
                 MoreExecutors.directExecutor()
@@ -267,19 +306,20 @@ internal class ExoPlatformPlayer(
 
     private fun loadPlaylistWhenMediaControllerIsReady(tracksUrls: List<String>) {
         mediaController?.let {
-            mediaController?.clearMediaItems()
-            tracksUrls.forEach {
-                mediaController?.addMediaItem(MediaItem.fromUri(it))
+            it.clearMediaItems()
+            tracksUrls.forEach { url ->
+                it.addMediaItem(MediaItem.fromUri(url))
             }
-            mediaController?.prepare()
-            mediaController?.playWhenReady = isPlaying.value
+            it.prepare()
+            it.playWhenReady = isPlaying.value
             mutableIsActive.value = true
+            updateControllerState()
             if (isPlaying.value) {
                 startProgressPolling()
             }
             // Apply pending track index if one was set before playlist was ready
             pendingTrackIndex?.let { index ->
-                mediaController?.seekTo(index, 0)
+                it.seekTo(index, 0)
                 pendingTrackIndex = null
             }
         }
@@ -295,14 +335,15 @@ internal class ExoPlatformPlayer(
     }
 
     override fun togglePlayPause() {
-        val controller = mediaController
-        if (controller == null) {
-            logger.warn("togglePlayPause() - mediaController is null, ignoring")
+        if (!isControllerReady()) {
+            logger.warn("togglePlayPause() - controller not ready, ignoring")
             return
         }
-        val newState = !controller.playWhenReady
-        logger.info("togglePlayPause() - newState=$newState, isConnected=${controller.isConnected}, playbackState=${controller.playbackState}")
-        controller.playWhenReady = newState
+        mediaController?.let { controller ->
+            val newState = !controller.playWhenReady
+            logger.info("togglePlayPause() - newState=$newState, isConnected=${controller.isConnected}, playbackState=${controller.playbackState}")
+            controller.playWhenReady = newState
+        }
     }
 
     override fun seekToPercentage(percentage: Float) {
