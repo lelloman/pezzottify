@@ -54,15 +54,20 @@ class AlbumScreenViewModel @AssistedInject constructor(
                             interactor.observeDownloadRequestStatus(albumId),
                             localDownloadState,
                         ) { hasPermission, serverStatus, localState ->
-                            // Local state takes precedence during requesting
+                            // Local state takes precedence during requesting and confirmation waiting
                             when {
-                                localState != null -> localState
+                                localState != null && localState != DownloadRequestState.WaitingForConfirmation -> localState
                                 !hasPermission -> DownloadRequestState.Hidden
-                                serverStatus != null -> DownloadRequestState.Requested(
-                                    status = serverStatus.status,
-                                    queuePosition = serverStatus.queuePosition,
-                                    progress = serverStatus.progress,
-                                )
+                                serverStatus != null -> {
+                                    // Server status received - clear local state
+                                    localDownloadState.update { null }
+                                    DownloadRequestState.Requested(
+                                        status = serverStatus.status,
+                                        queuePosition = serverStatus.queuePosition,
+                                        progress = serverStatus.progress,
+                                    )
+                                }
+                                localState == DownloadRequestState.WaitingForConfirmation -> DownloadRequestState.Requesting
                                 else -> DownloadRequestState.CanRequest
                             }
                         }
@@ -191,8 +196,9 @@ class AlbumScreenViewModel @AssistedInject constructor(
 
                 val result = interactor.requestAlbumDownload(albumId, album.name, artistName)
                 if (result.isSuccess) {
-                    // Clear local state - server status will take over via WebSocket
-                    localDownloadState.update { null }
+                    // Set state to WaitingForConfirmation to prevent flicker
+                    // Server status will update shortly via WebSocket
+                    localDownloadState.update { DownloadRequestState.WaitingForConfirmation }
                 } else {
                     val errorType = (result.exceptionOrNull() as? RequestAlbumDownloadException)
                         ?.errorType
