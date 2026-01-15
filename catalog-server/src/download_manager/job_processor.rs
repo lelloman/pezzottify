@@ -9,7 +9,7 @@ use std::time::Duration;
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, info, warn};
 
-use super::torrent_client::TorrentClient;
+use super::torrent_client::TorrentClientTrait;
 use super::DownloadManager;
 
 /// Background processor that connects to Quentin Torrentino via WebSocket.
@@ -23,7 +23,7 @@ pub struct QueueProcessor {
     /// Reference to the download manager for queue operations.
     download_manager: Arc<DownloadManager>,
     /// Reference to the torrent client.
-    torrent_client: Arc<TorrentClient>,
+    torrent_client: Arc<dyn TorrentClientTrait + 'static>,
     /// Delay between reconnection attempts.
     reconnect_delay: Duration,
 }
@@ -32,7 +32,7 @@ impl QueueProcessor {
     /// Create a new QueueProcessor.
     pub fn new(
         download_manager: Arc<DownloadManager>,
-        torrent_client: Arc<TorrentClient>,
+        torrent_client: Arc<dyn TorrentClientTrait + 'static>,
         reconnect_delay_secs: u64,
     ) -> Self {
         Self {
