@@ -11,6 +11,7 @@ import com.lelloman.pezzottify.android.logger.LoggerFactory
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
 import com.google.common.util.concurrent.MoreExecutors
+import com.lelloman.pezzottify.android.domain.player.ControlsAndStatePlayer
 import com.lelloman.pezzottify.android.domain.player.ControlsAndStatePlayer.SeekEvent
 import com.lelloman.pezzottify.android.domain.player.PlatformPlayer
 import com.lelloman.pezzottify.android.domain.player.RepeatMode
@@ -79,6 +80,13 @@ internal class ExoPlatformPlayer(
     private val mutableSeekEvents = MutableSharedFlow<SeekEvent>()
     override val seekEvents: SharedFlow<SeekEvent> = mutableSeekEvents.asSharedFlow()
 
+    private val mutablePlayerError = MutableStateFlow<ControlsAndStatePlayer.PlayerError?>(null)
+    override val playerError: StateFlow<ControlsAndStatePlayer.PlayerError?> = mutablePlayerError.asStateFlow()
+
+    private var lastKnownPositionMs: Long = 0L
+
+    private var autoRetryJob: Job? = null
+
     private val playerListener = object : Player.Listener {
         override fun onEvents(player: Player, events: Player.Events) {
             super.onEvents(player, events)
@@ -106,11 +114,72 @@ internal class ExoPlatformPlayer(
                 else -> "$playbackState"
             }
             logger.debug("onPlaybackStateChanged: $playbackStateText")
+
+            // Clear error when entering READY state (after recovery or retry)
+            if (playbackState == Player.STATE_READY && mutablePlayerError.value != null) {
+                logger.info("Playback resumed successfully - clearing error state")
+                mutablePlayerError.value = null
+            }
         }
 
         override fun onPlayerError(error: PlaybackException) {
             super.onPlayerError(error)
             logger.error("Player error: ${error.errorCodeName} - ${error.message}", error)
+
+            // Store last known position before error
+            mediaController?.let { controller ->
+                lastKnownPositionMs = controller.currentPosition
+                logger.debug("Stored last known position: ${lastKnownPositionMs}ms")
+            }
+
+            // Classify error as transient (recoverable) or permanent
+            val isRecoverable = isTransientError(error)
+            val errorMessage = when (error.errorCode) {
+                PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED -> "Network connection failed"
+                PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT -> "Network connection timeout"
+                PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS -> "Server error"
+                PlaybackException.ERROR_CODE_DECODER_INIT_FAILED -> "Decoder initialization failed"
+                PlaybackException.ERROR_CODE_DECODER_QUERY_FAILED -> "Decoder query failed"
+                else -> "Playback error: ${error.errorCodeName}"
+            }
+
+            // Extract track ID from current media item URL (format: .../stream/{trackId})
+            val currentTrackId = mediaController?.currentMediaItem
+                ?.localConfiguration?.uri?.lastPathSegment
+
+            // Create error state
+            val playerError = ControlsAndStatePlayer.PlayerError(
+                trackId = currentTrackId,
+                message = errorMessage,
+                errorCode = error.errorCodeName,
+                isRecoverable = isRecoverable,
+                positionMs = lastKnownPositionMs.takeIf { it > 0 }
+            )
+
+            mutablePlayerError.value = playerError
+
+            // Cancel any pending auto-retry from a previous error
+            autoRetryJob?.cancel()
+
+            // Handle recovery based on error type
+            if (isRecoverable) {
+                logger.info("Transient error detected - will auto-retry")
+                autoRetryJob = coroutineScope.launch {
+                    delay(2500) // Wait 2.5 seconds before retry
+                    if (mutablePlayerError.value?.isRecoverable == true) {
+                        logger.info("Auto-retrying playback after transient error")
+                        retryInternal()
+                    }
+                }
+            } else {
+                logger.info("Permanent error detected - skipping to next track")
+                // After a PlaybackException, ExoPlayer transitions to STATE_IDLE.
+                // We must call prepare() before seeking to next track.
+                mediaController?.let { controller ->
+                    controller.prepare()
+                    controller.seekToNext()
+                }
+            }
         }
     }
 
@@ -278,6 +347,8 @@ internal class ExoPlatformPlayer(
 
     override fun clearSession() {
         stopProgressPolling()
+        autoRetryJob?.cancel()
+        autoRetryJob = null
         mediaController?.stop()
         mediaController?.clearMediaItems()
         mutableIsActive.value = false
@@ -286,6 +357,7 @@ internal class ExoPlatformPlayer(
         mutableCurrentTrackPercent.value = null
         mutableCurrentTrackProgressSec.value = null
         mutableCurrentTrackDurationSeconds.value = null
+        mutablePlayerError.value = null
     }
 
     override fun setVolume(volume: Float) {
@@ -335,6 +407,54 @@ internal class ExoPlatformPlayer(
             RepeatMode.OFF -> Player.REPEAT_MODE_OFF
             RepeatMode.ALL -> Player.REPEAT_MODE_ALL
             RepeatMode.ONE -> Player.REPEAT_MODE_ONE
+        }
+    }
+
+    /**
+     * Classify an error as transient (recoverable) or permanent.
+     * Transient errors are those that might resolve on retry (e.g., network issues).
+     * Permanent errors are those that won't be fixed by retry (e.g., codec errors).
+     */
+    private fun isTransientError(error: PlaybackException): Boolean {
+        return when (error.errorCode) {
+            PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED,
+            PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT,
+            PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS -> true
+
+            PlaybackException.ERROR_CODE_DECODER_INIT_FAILED,
+            PlaybackException.ERROR_CODE_DECODER_QUERY_FAILED -> false
+
+            else -> false // Default to permanent for unknown errors
+        }
+    }
+
+    /**
+     * Internal retry implementation.
+     * Clears error state and resumes playback from last known position.
+     */
+    private fun retryInternal() {
+        mediaController?.let { controller ->
+            val positionMs = lastKnownPositionMs.takeIf { it > 0 } ?: 0L
+            logger.info("Retrying playback from position: ${positionMs}ms")
+            // After a PlaybackException, ExoPlayer transitions to STATE_IDLE.
+            // We must call prepare() to restart playback.
+            controller.prepare()
+            controller.seekTo(positionMs)
+            controller.playWhenReady = true
+            // Error state will be cleared when playback reaches READY state
+        }
+    }
+
+    /**
+     * Retry playback after an error.
+     * Resumes from the last position if available.
+     */
+    override fun retry() {
+        if (mutablePlayerError.value != null) {
+            logger.info("Manual retry requested by user")
+            retryInternal()
+        } else {
+            logger.debug("Retry requested but no error present")
         }
     }
 }

@@ -31,10 +31,13 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -42,6 +45,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.flow.collectLatest
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -74,7 +78,21 @@ import kotlin.math.abs
 fun PlayerScreen(navController: NavController) {
     val viewModel = hiltViewModel<PlayerScreenViewModel>()
     val state by viewModel.state.collectAsState()
-    PlayerScreenContent(state = state, actions = viewModel, navController = navController)
+    val snackbarHostState = remember { SnackbarHostState() }
+
+    // Collect toast events from the ViewModel
+    LaunchedEffect(viewModel) {
+        viewModel.toastEvents.collectLatest { message ->
+            snackbarHostState.showSnackbar(message)
+        }
+    }
+
+    PlayerScreenContent(
+        state = state,
+        actions = viewModel,
+        navController = navController,
+        snackbarHostState = snackbarHostState,
+    )
 }
 
 private const val DISMISS_THRESHOLD = 0.3f
@@ -85,6 +103,7 @@ private fun PlayerScreenContent(
     state: PlayerScreenState,
     actions: PlayerScreenActions,
     navController: NavController,
+    snackbarHostState: SnackbarHostState,
 ) {
     var dismissOffsetY by remember { mutableFloatStateOf(0f) }
     var isDraggingToDismiss by remember { mutableStateOf(false) }
@@ -156,6 +175,7 @@ private fun PlayerScreenContent(
                     translationY = dismissOffsetY
                     alpha = backgroundAlpha
                 },
+            snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
             topBar = {
                 TopAppBar(
                     title = {
