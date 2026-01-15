@@ -414,4 +414,8 @@ internal class PlayerImpl(
     override fun cycleRepeatMode() {
         platformPlayer.cycleRepeatMode()
     }
+
+    override fun retry() {
+        platformPlayer.retry()
+    }
 }

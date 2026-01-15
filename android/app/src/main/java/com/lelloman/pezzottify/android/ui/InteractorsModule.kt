@@ -1174,38 +1174,53 @@ class InteractorsModule {
                         PlaybackData3(data.queueState, data.isPlaying, data.trackPercent, data.progressSec, data.volume, data.isMuted, shuffleEnabled)
                     }
                     .combine(player.repeatMode) { data, repeatMode ->
+                        data class PlaybackData4(
+                            val queueState: com.lelloman.pezzottify.android.domain.player.PlaybackQueueState?,
+                            val isPlaying: Boolean,
+                            val trackPercent: Float?,
+                            val progressSec: Int?,
+                            val volume: Float,
+                            val isMuted: Boolean,
+                            val shuffleEnabled: Boolean,
+                            val repeatMode: RepeatMode,
+                        )
+                        PlaybackData4(data.queueState, data.isPlaying, data.trackPercent, data.progressSec, data.volume, data.isMuted, data.shuffleEnabled, repeatMode)
+                    }
+                    .combine(player.playerError) { data, playerError ->
                         val currentTrack = data.queueState?.currentTrack
-                        if (currentTrack != null) {
-                            val currentIndex = data.queueState.currentIndex
-                            val hasNext = currentIndex < data.queueState.tracks.lastIndex
+                        if (currentTrack != null || playerError != null) {
+                            val currentIndex = data.queueState?.currentIndex ?: 0
+                            val tracksCount = data.queueState?.tracks?.size ?: 0
+                            val hasNext = currentIndex < tracksCount - 1
                             val hasPrevious = currentIndex > 0
-                            val repeatModeUi = when (repeatMode) {
+                            val repeatModeUi = when (data.repeatMode) {
                                 RepeatMode.OFF -> RepeatModeUi.OFF
                                 RepeatMode.ALL -> RepeatModeUi.ALL
                                 RepeatMode.ONE -> RepeatModeUi.ONE
                             }
                             PlayerScreenViewModel.Interactor.PlaybackState.Loaded(
                                 isPlaying = data.isPlaying,
-                                trackId = currentTrack.trackId,
-                                trackName = currentTrack.trackName,
-                                albumId = currentTrack.albumId,
-                                albumName = currentTrack.albumName,
-                                albumImageUrl = currentTrack.artworkUrl,
-                                artists = currentTrack.artistNames.mapIndexed { index, name ->
+                                trackId = currentTrack?.trackId ?: "",
+                                trackName = currentTrack?.trackName ?: "",
+                                albumId = currentTrack?.albumId ?: "",
+                                albumName = currentTrack?.albumName ?: "",
+                                albumImageUrl = currentTrack?.artworkUrl,
+                                artists = currentTrack?.artistNames?.mapIndexed { index, name ->
                                     com.lelloman.pezzottify.android.ui.content.ArtistInfo(
                                         id = index.toString(),
                                         name = name,
                                     )
-                                },
+                                } ?: emptyList(),
                                 trackPercent = data.trackPercent ?: 0f,
                                 trackProgressSec = data.progressSec ?: 0,
-                                trackDurationSec = currentTrack.durationSeconds,
+                                trackDurationSec = currentTrack?.durationSeconds ?: 0,
                                 hasNextTrack = hasNext,
                                 hasPreviousTrack = hasPrevious,
                                 volume = data.volume,
                                 isMuted = data.isMuted,
                                 shuffleEnabled = data.shuffleEnabled,
                                 repeatMode = repeatModeUi,
+                                playerError = playerError,
                             )
                         } else {
                             null
@@ -1230,6 +1245,8 @@ class InteractorsModule {
             override fun toggleShuffle() = player.toggleShuffle()
 
             override fun cycleRepeatMode() = player.cycleRepeatMode()
+
+            override fun retry() = player.retry()
         }
 
     @Provides

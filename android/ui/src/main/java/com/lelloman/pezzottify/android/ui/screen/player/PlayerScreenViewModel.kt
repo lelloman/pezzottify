@@ -5,7 +5,9 @@ import androidx.lifecycle.viewModelScope
 import com.lelloman.pezzottify.android.ui.content.ArtistInfo
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -18,7 +20,12 @@ class PlayerScreenViewModel @Inject constructor(
     private val mutableState = MutableStateFlow(PlayerScreenState())
     val state = mutableState.asStateFlow()
 
+    private val mutableToastEvents = MutableSharedFlow<String>(extraBufferCapacity = 1)
+    val toastEvents: Flow<String> = mutableToastEvents.asSharedFlow()
+
     init {
+        var lastErrorMessage: String? = null
+
         viewModelScope.launch {
             interactor.getPlaybackState().collect { playbackState ->
                 mutableState.value = when (playbackState) {
@@ -26,6 +33,25 @@ class PlayerScreenViewModel @Inject constructor(
                         PlayerScreenState(isLoading = true)
                     }
                     is Interactor.PlaybackState.Loaded -> {
+                        // Check for new error to show toast
+                        val error = playbackState.playerError
+                        if (error != null && error.message != lastErrorMessage) {
+                            lastErrorMessage = error.message
+                            when {
+                                error.isRecoverable -> {
+                                    // Transient error - show retry message
+                                    mutableToastEvents.emit("Playback failed: ${error.message}. Retrying...")
+                                }
+                                else -> {
+                                    // Permanent error - show skip message
+                                    mutableToastEvents.emit("Playback failed: ${error.message}. Skipping to next track.")
+                                }
+                            }
+                        } else if (error == null) {
+                            // Error cleared - reset tracking state
+                            lastErrorMessage = null
+                        }
+
                         PlayerScreenState(
                             isLoading = false,
                             trackId = playbackState.trackId,
@@ -44,6 +70,12 @@ class PlayerScreenViewModel @Inject constructor(
                             isMuted = playbackState.isMuted,
                             shuffleEnabled = playbackState.shuffleEnabled,
                             repeatMode = playbackState.repeatMode,
+                            playerError = playbackState.playerError?.let {
+                                PlayerErrorUi(
+                                    message = it.message,
+                                    isRecoverable = it.isRecoverable
+                                )
+                            },
                         )
                     }
                 }
@@ -67,6 +99,8 @@ class PlayerScreenViewModel @Inject constructor(
 
     override fun clickOnRepeat() = interactor.cycleRepeatMode()
 
+    override fun retry() = interactor.retry()
+
     interface Interactor {
         fun getPlaybackState(): Flow<PlaybackState?>
         fun togglePlayPause()
@@ -77,6 +111,7 @@ class PlayerScreenViewModel @Inject constructor(
         fun toggleMute()
         fun toggleShuffle()
         fun cycleRepeatMode()
+        fun retry()
 
         sealed interface PlaybackState {
             data object Idle : PlaybackState
@@ -98,6 +133,7 @@ class PlayerScreenViewModel @Inject constructor(
                 val isMuted: Boolean,
                 val shuffleEnabled: Boolean,
                 val repeatMode: RepeatModeUi,
+                val playerError: com.lelloman.pezzottify.android.domain.player.ControlsAndStatePlayer.PlayerError?,
             ) : PlaybackState
         }
     }

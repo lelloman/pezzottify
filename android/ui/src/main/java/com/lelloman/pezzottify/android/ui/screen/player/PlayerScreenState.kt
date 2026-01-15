@@ -26,4 +26,10 @@ data class PlayerScreenState(
     val isMuted: Boolean = false,
     val shuffleEnabled: Boolean = false,
     val repeatMode: RepeatModeUi = RepeatModeUi.OFF,
+    val playerError: PlayerErrorUi? = null,
+)
+
+data class PlayerErrorUi(
+    val message: String,
+    val isRecoverable: Boolean,
 )
