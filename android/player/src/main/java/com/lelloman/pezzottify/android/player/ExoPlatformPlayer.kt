@@ -275,7 +275,10 @@ internal class ExoPlatformPlayer(
         // Always update our state - this ensures loadPlaylist uses the correct value
         mutableIsPlaying.value = isPlaying
         if (!isControllerReady()) {
-            logger.debug("setIsPlaying($isPlaying) - controller not ready, state saved for when ready")
+            logger.info("setIsPlaying($isPlaying) - controller not ready, attempting to reconnect")
+            reconnectAndExecute { controller ->
+                controller.playWhenReady = isPlaying
+            }
             return
         }
         mediaController!!.playWhenReady = isPlaying
@@ -336,7 +339,10 @@ internal class ExoPlatformPlayer(
 
     override fun togglePlayPause() {
         if (!isControllerReady()) {
-            logger.warn("togglePlayPause() - controller not ready, ignoring")
+            logger.info("togglePlayPause() - controller not ready, attempting to reconnect")
+            reconnectAndExecute { controller ->
+                controller.playWhenReady = !controller.playWhenReady
+            }
             return
         }
         mediaController?.let { controller ->
@@ -344,6 +350,51 @@ internal class ExoPlatformPlayer(
             logger.info("togglePlayPause() - newState=$newState, isConnected=${controller.isConnected}, playbackState=${controller.playbackState}")
             controller.playWhenReady = newState
         }
+    }
+
+    /**
+     * Reconnect to the PlaybackService and execute an action once connected.
+     * This handles the case where the MediaController has disconnected but the service is still running.
+     */
+    private fun reconnectAndExecute(action: (MediaController) -> Unit) {
+        // Release old controller if it exists but is disconnected
+        mediaController?.let { controller ->
+            if (!controller.isConnected) {
+                logger.debug("Releasing disconnected controller")
+                controller.removeListener(playerListener)
+                controller.release()
+                mediaController = null
+            }
+        }
+
+        // Build a new controller
+        val token = sessionToken ?: SessionToken(context, ComponentName(context, PlaybackService::class.java))
+        sessionToken = token
+        mutableControllerState.value = MediaControllerState.CONNECTING
+
+        val controllerFuture = MediaController.Builder(context, token).buildAsync()
+        controllerFuture.addListener(
+            {
+                val controller = controllerFuture.get()
+                mediaController = controller
+                logger.info("Reconnected MediaController - isConnected=${controller.isConnected}")
+                controller.addListener(playerListener)
+                updateControllerState()
+
+                if (controller.isConnected) {
+                    // Sync state from the reconnected controller
+                    mutableIsPlaying.value = controller.playWhenReady
+                    mutableIsActive.value = controller.mediaItemCount > 0
+                    if (controller.playWhenReady) {
+                        startProgressPolling()
+                    }
+                    action(controller)
+                } else {
+                    logger.warn("Reconnected but controller still not connected")
+                }
+            },
+            MoreExecutors.directExecutor()
+        )
     }
 
     override fun seekToPercentage(percentage: Float) {
