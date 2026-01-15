@@ -66,6 +66,7 @@ class PlayerScreenViewModelTest {
             isMuted = false,
             shuffleEnabled = true,
             repeatMode = RepeatModeUi.ALL,
+            playerError = null,
         )
 
         createViewModel()
@@ -242,6 +243,7 @@ class PlayerScreenViewModelTest {
         isMuted = false,
         shuffleEnabled = false,
         repeatMode = RepeatModeUi.OFF,
+        playerError = null,
     )
 
     private class FakeInteractor : PlayerScreenViewModel.Interactor {
@@ -255,6 +257,7 @@ class PlayerScreenViewModelTest {
         var toggleMuteCalled = false
         var toggleShuffleCalled = false
         var cycleRepeatModeCalled = false
+        var retryCalled = false
 
         override fun getPlaybackState(): Flow<PlayerScreenViewModel.Interactor.PlaybackState?> =
             playbackStateFlow
@@ -289,6 +292,10 @@ class PlayerScreenViewModelTest {
 
         override fun cycleRepeatMode() {
             cycleRepeatModeCalled = true
+        }
+
+        override fun retry() {
+            retryCalled = true
         }
     }
 }
