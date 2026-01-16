@@ -37,6 +37,10 @@ pub struct CatalogStoreConfig {
 #[derive(Debug, Deserialize, Default, Clone)]
 #[serde(default)]
 pub struct DownloadManagerConfig {
+    /// Enable the download manager queue (allows users to request downloads).
+    /// Defaults to true. Set to false to disable the feature entirely.
+    /// Note: Automatic processing requires qt_base_url and qt_ws_url to be set.
+    pub enabled: Option<bool>,
     /// Quentin Torrentino HTTP base URL (e.g., "http://localhost:8080")
     pub qt_base_url: Option<String>,
     /// Quentin Torrentino WebSocket URL (e.g., "ws://localhost:8080/ws")
