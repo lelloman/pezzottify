@@ -4273,93 +4273,98 @@ pub async fn make_app(
         catalog_store.clone(),
     ));
 
-    // Initialize download manager (always, even if QT is not configured)
-    info!("Initializing download manager...");
-    let queue_db_path = config.db_dir.join("download_queue.db");
-    match crate::download_manager::SqliteDownloadQueueStore::new(&queue_db_path) {
-        Ok(queue_store) => {
-            // Check if Quentin Torrentino is configured
-            let (qt_base_url, qt_ws_url, torrent_client) = match (
-                config.download_manager.qt_base_url.as_ref(),
-                config.download_manager.qt_ws_url.as_ref(),
-            ) {
-                (Some(base_url), Some(ws_url)) => {
-                    let auth_token = config
-                        .download_manager
-                        .qt_auth_token
-                        .clone()
-                        .unwrap_or_default();
-                    info!(
-                        "Initializing download manager with QT base URL: {}, WS URL: {}",
-                        base_url, ws_url
-                    );
-                    let client = Arc::new(crate::download_manager::TorrentClient::new(
-                        base_url.to_string(),
-                        ws_url.to_string(),
-                        auth_token,
-                    ));
-                    (Some(base_url), Some(ws_url), Some(client))
-                }
-                _ => {
-                    warn!(
+    // Initialize download manager if enabled (queue works even without QT configured)
+    if config.download_manager.enabled {
+        info!("Initializing download manager...");
+        let queue_db_path = config.db_dir.join("download_queue.db");
+        match crate::download_manager::SqliteDownloadQueueStore::new(&queue_db_path) {
+            Ok(queue_store) => {
+                // Check if Quentin Torrentino is configured
+                let (qt_base_url, qt_ws_url, torrent_client) = match (
+                    config.download_manager.qt_base_url.as_ref(),
+                    config.download_manager.qt_ws_url.as_ref(),
+                ) {
+                    (Some(base_url), Some(ws_url)) => {
+                        let auth_token = config
+                            .download_manager
+                            .qt_auth_token
+                            .clone()
+                            .unwrap_or_default();
+                        info!(
+                            "Initializing download manager with QT base URL: {}, WS URL: {}",
+                            base_url, ws_url
+                        );
+                        let client = Arc::new(crate::download_manager::TorrentClient::new(
+                            base_url.to_string(),
+                            ws_url.to_string(),
+                            auth_token,
+                        ));
+                        (Some(base_url), Some(ws_url), Some(client))
+                    }
+                    _ => {
+                        warn!(
                         "QT not configured - download queue will accept requests but automatic downloads are disabled. \
                          Use manual ingestion to complete queued items."
                     );
-                    (None, None, None)
-                }
-            };
+                        (None, None, None)
+                    }
+                };
 
-            // Create the download manager
-            let torrent_client_dyn: Option<Arc<dyn crate::download_manager::TorrentClientTrait>> =
-                torrent_client
+                // Create the download manager
+                let torrent_client_dyn: Option<
+                    Arc<dyn crate::download_manager::TorrentClientTrait>,
+                > = torrent_client
                     .clone()
                     .map(|c| c as Arc<dyn crate::download_manager::TorrentClientTrait>);
-            let manager = Arc::new(crate::download_manager::DownloadManager::new(
-                Arc::new(queue_store),
-                torrent_client_dyn, // None if QT not configured
-                catalog_store.clone(),
-                config.media_path.clone(),
-                config.download_manager.clone(),
-            ));
+                let manager = Arc::new(crate::download_manager::DownloadManager::new(
+                    Arc::new(queue_store),
+                    torrent_client_dyn, // None if QT not configured
+                    catalog_store.clone(),
+                    config.media_path.clone(),
+                    config.download_manager.clone(),
+                ));
 
-            // Set the search vault for availability updates
-            {
-                let manager_clone = manager.clone();
-                let search_vault_clone = search_vault.clone();
-                tokio::spawn(async move {
-                    manager_clone.set_search_vault(search_vault_clone).await;
-                });
+                // Set the search vault for availability updates
+                {
+                    let manager_clone = manager.clone();
+                    let search_vault_clone = search_vault.clone();
+                    tokio::spawn(async move {
+                        manager_clone.set_search_vault(search_vault_clone).await;
+                    });
+                }
+
+                // Spawn the queue processor only if QT is configured
+                let shutdown_token = if qt_base_url.is_some() && qt_ws_url.is_some() {
+                    info!("Spawning queue processor for WebSocket event handling");
+                    let torrent_client_trait: Arc<dyn crate::download_manager::TorrentClientTrait> =
+                        torrent_client.clone().unwrap()
+                            as Arc<dyn crate::download_manager::TorrentClientTrait>;
+                    let processor = crate::download_manager::QueueProcessor::new(
+                        manager.clone(),
+                        torrent_client_trait,
+                        config.download_manager.process_interval_secs,
+                    );
+                    let shutdown_token = tokio_util::sync::CancellationToken::new();
+                    let shutdown_token_clone = shutdown_token.clone();
+                    tokio::spawn(async move {
+                        processor.run(shutdown_token_clone).await;
+                    });
+                    Some(shutdown_token)
+                } else {
+                    info!("QT not configured - skipping queue processor");
+                    None
+                };
+
+                state.download_manager = Some(manager);
+                state.shutdown_token = shutdown_token;
+                info!("Download manager initialized successfully");
             }
-
-            // Spawn the queue processor only if QT is configured
-            let shutdown_token = if qt_base_url.is_some() && qt_ws_url.is_some() {
-                info!("Spawning queue processor for WebSocket event handling");
-                let torrent_client_trait: Arc<dyn crate::download_manager::TorrentClientTrait> =
-                    torrent_client.clone().unwrap()
-                        as Arc<dyn crate::download_manager::TorrentClientTrait>;
-                let processor = crate::download_manager::QueueProcessor::new(
-                    manager.clone(),
-                    torrent_client_trait,
-                    config.download_manager.process_interval_secs,
-                );
-                let shutdown_token = tokio_util::sync::CancellationToken::new();
-                let shutdown_token_clone = shutdown_token.clone();
-                tokio::spawn(async move {
-                    processor.run(shutdown_token_clone).await;
-                });
-                Some(shutdown_token)
-            } else {
-                info!("QT not configured - skipping queue processor");
-                None
-            };
-
-            state.download_manager = Some(manager);
-            state.shutdown_token = shutdown_token;
-            info!("Download manager initialized successfully");
+            Err(e) => {
+                error!("Failed to initialize download queue store: {:?}", e);
+            }
         }
-        Err(e) => {
-            error!("Failed to initialize download queue store: {:?}", e);
-        }
+    } else {
+        info!("Download manager disabled in config");
     }
 
     // Initialize Ingestion Manager if enabled

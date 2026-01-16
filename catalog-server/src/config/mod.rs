@@ -174,10 +174,10 @@ impl AppConfig {
         let qt_base_url = dm_file.qt_base_url.clone();
         let qt_ws_url = dm_file.qt_ws_url.clone();
         let qt_auth_token = dm_file.qt_auth_token.clone();
-        // Enabled if both base URL and WS URL are configured
-        let qt_enabled = qt_base_url.is_some() && qt_ws_url.is_some();
+        // Enabled defaults to true (queue accepts requests even without QT).
+        // Automatic processing only works when both qt_base_url and qt_ws_url are set.
         let download_manager = DownloadManagerSettings {
-            enabled: qt_enabled,
+            enabled: dm_file.enabled.unwrap_or(true),
             qt_base_url,
             qt_ws_url,
             qt_auth_token,
@@ -595,8 +595,8 @@ mod tests {
         assert_eq!(config.downloader_timeout_sec, 600);
         assert_eq!(config.event_retention_days, 60);
         assert_eq!(config.prune_interval_hours, 12);
-        // download_manager.enabled is now based on qt_base_url + qt_ws_url, not downloader_url
-        assert!(!config.download_manager.enabled);
+        // download_manager.enabled defaults to true (queue works without QT)
+        assert!(config.download_manager.enabled);
     }
 
     #[test]
@@ -668,20 +668,42 @@ mod tests {
     }
 
     #[test]
-    fn test_resolve_download_manager_disabled_without_url() {
+    fn test_resolve_download_manager_enabled_by_default() {
         let temp_dir = make_temp_db_dir();
         let cli = CliConfig {
             db_dir: Some(temp_dir.path().to_path_buf()),
-            downloader_url: None,
             ..Default::default()
         };
 
+        // enabled defaults to true even without QT URLs
         let config = AppConfig::resolve(&cli, None).unwrap();
+        assert!(config.download_manager.enabled);
+        assert!(config.download_manager.qt_base_url.is_none());
+        assert!(config.download_manager.qt_ws_url.is_none());
+    }
+
+    #[test]
+    fn test_resolve_download_manager_explicit_disabled() {
+        let temp_dir = make_temp_db_dir();
+        let cli = CliConfig {
+            db_dir: Some(temp_dir.path().to_path_buf()),
+            ..Default::default()
+        };
+
+        let file_config = FileConfig {
+            download_manager: Some(DownloadManagerConfig {
+                enabled: Some(false),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+
+        let config = AppConfig::resolve(&cli, Some(file_config)).unwrap();
         assert!(!config.download_manager.enabled);
     }
 
     #[test]
-    fn test_resolve_download_manager_enabled_with_qt_urls() {
+    fn test_resolve_download_manager_with_qt_urls() {
         let temp_dir = make_temp_db_dir();
         let cli = CliConfig {
             db_dir: Some(temp_dir.path().to_path_buf()),
