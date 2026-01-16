@@ -12,7 +12,7 @@ use tracing::{debug, error, info, warn};
 
 use crate::catalog_store::{CatalogStore, TrackAvailability};
 use crate::config::DownloadManagerSettings;
-use crate::ingestion::DownloadManagerTrait;
+use crate::ingestion::{DownloadManagerTrait, QueueItemInfo};
 use crate::search::{HashedItemType, SearchVault};
 
 use super::audit_logger::AuditLogger;
@@ -27,6 +27,16 @@ use super::torrent_types::{
 };
 
 impl DownloadManagerTrait for DownloadManager {
+    fn get_queue_item(&self, item_id: &str) -> Result<Option<QueueItemInfo>> {
+        let item = self.queue_store.get_item(item_id)?;
+        Ok(item.map(|i| QueueItemInfo {
+            id: i.id,
+            content_id: i.content_id,
+            content_name: i.content_name,
+            artist_name: i.artist_name,
+        }))
+    }
+
     fn mark_request_completed(
         &self,
         item_id: &str,

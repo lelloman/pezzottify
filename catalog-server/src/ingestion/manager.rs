@@ -25,9 +25,25 @@ use std::sync::Arc;
 use thiserror::Error;
 use tracing::{debug, error, info, warn};
 
+/// Minimal queue item info needed by IngestionManager.
+#[derive(Debug, Clone)]
+pub struct QueueItemInfo {
+    /// Queue item ID
+    pub id: String,
+    /// Content ID (album ID for album downloads)
+    pub content_id: String,
+    /// Content name (album name)
+    pub content_name: Option<String>,
+    /// Artist name
+    pub artist_name: Option<String>,
+}
+
 /// Trait for DownloadManager operations needed by IngestionManager.
 #[cfg_attr(feature = "mock", mockall::automock)]
 pub trait DownloadManagerTrait: Send + Sync {
+    /// Get queue item info by ID.
+    fn get_queue_item(&self, item_id: &str) -> Result<Option<QueueItemInfo>>;
+
     /// Mark a download request as completed.
     fn mark_request_completed(
         &self,
@@ -436,6 +452,10 @@ impl IngestionManager {
     // =========================================================================
 
     /// Process a job in IDENTIFYING_ALBUM state - search catalog and find matching album.
+    ///
+    /// For download request jobs (context_type == DownloadRequest), the album is already
+    /// known from the queue item, so we skip the search/scoring phase and directly verify
+    /// the uploaded content matches the expected album.
     pub async fn process_job(&self, job_id: &str) -> Result<(), IngestionError> {
         let mut job = self
             .store
@@ -462,6 +482,17 @@ impl IngestionManager {
 
         // Get metadata summary
         let summary = self.build_metadata_summary(job_id)?;
+
+        // Check if this is a download request - if so, use the fast path
+        if job.context_type == Some(IngestionContextType::DownloadRequest) {
+            if let Some(context_id) = job.context_id.clone() {
+                return self
+                    .process_download_request_job(&mut job, &context_id, &summary)
+                    .await;
+            }
+        }
+
+        // Otherwise, use the normal search-based identification
 
         debug!(
             "Job {} metadata summary: artist={:?}, album={:?}, year={:?}, files={}, duration={}ms, tracks={:?}",
@@ -586,6 +617,156 @@ impl IngestionManager {
                 );
             }
         }
+
+        Ok(())
+    }
+
+    /// Process a download request job - album is already known, just verify and proceed.
+    ///
+    /// For download requests, we skip the search/scoring phase because the album ID
+    /// is already specified in the queue item. We still verify the uploaded content
+    /// is a reasonable match (track count, duration) before proceeding.
+    async fn process_download_request_job(
+        &self,
+        job: &mut IngestionJob,
+        queue_item_id: &str,
+        summary: &AlbumMetadataSummary,
+    ) -> Result<(), IngestionError> {
+        let job_id = job.id.clone();
+
+        // Get the queue item to find the album ID
+        let queue_item = match &self.download_manager {
+            Some(dm) => dm.get_queue_item(queue_item_id).map_err(|e| {
+                IngestionError::Store(anyhow::anyhow!(
+                    "Failed to get queue item {}: {}",
+                    queue_item_id,
+                    e
+                ))
+            })?,
+            None => {
+                warn!(
+                    "Job {} has download request context but no download manager configured",
+                    job_id
+                );
+                return Err(IngestionError::Store(anyhow::anyhow!(
+                    "Download manager not configured"
+                )));
+            }
+        };
+
+        let queue_item = match queue_item {
+            Some(item) => item,
+            None => {
+                warn!(
+                    "Job {} references non-existent queue item {}",
+                    job_id, queue_item_id
+                );
+                return Err(IngestionError::Store(anyhow::anyhow!(
+                    "Queue item {} not found",
+                    queue_item_id
+                )));
+            }
+        };
+
+        let album_id = &queue_item.content_id;
+        let album_name = queue_item.content_name.as_deref().unwrap_or("Unknown Album");
+        let artist_name = queue_item.artist_name.as_deref().unwrap_or("Unknown Artist");
+
+        info!(
+            "Job {} is a download request for album {} ({} - {})",
+            job_id, album_id, artist_name, album_name
+        );
+
+        // Build the album candidate to verify content matches
+        let candidate = match self.build_album_candidate(album_id) {
+            Some(c) => c,
+            None => {
+                warn!(
+                    "Job {} - album {} not found in catalog",
+                    job_id, album_id
+                );
+                return Err(IngestionError::Store(anyhow::anyhow!(
+                    "Album {} not found in catalog",
+                    album_id
+                )));
+            }
+        };
+
+        // Verify the uploaded content is reasonable for this album
+        let score = self.score_album_match(summary, &candidate);
+
+        debug!(
+            "Job {} download request verification: album={}, expected_tracks={}, uploaded_files={}, score={:.2}",
+            job_id, album_id, candidate.track_count, summary.file_count, score
+        );
+
+        // For download requests, we're more lenient since the user explicitly requested this album.
+        // We only fail if there's a major mismatch (e.g., completely wrong number of tracks).
+        // A score below 0.3 suggests something is very wrong.
+        const MIN_VERIFICATION_SCORE: f32 = 0.3;
+
+        if score < MIN_VERIFICATION_SCORE {
+            // Very low score - create a review to confirm
+            warn!(
+                "Job {} - download request verification score too low ({:.2}), requesting review",
+                job_id, score
+            );
+
+            let options = vec![
+                ReviewOption {
+                    id: format!("album:{}", album_id),
+                    label: format!(
+                        "{} - {} ({:.0}% match, {} tracks expected)",
+                        candidate.artist_name, candidate.name, score * 100.0, candidate.track_count
+                    ),
+                    description: Some("Proceed with this album anyway".to_string()),
+                },
+                ReviewOption {
+                    id: "no_match".to_string(),
+                    label: "Content doesn't match".to_string(),
+                    description: Some("Reject this upload".to_string()),
+                },
+            ];
+
+            let question = format!(
+                "Downloaded content for '{}' has low match score ({:.0}%).\n\
+                 Expected: {} tracks\n\
+                 Uploaded: {} files\n\
+                 Confirm this is the correct album:",
+                album_name,
+                score * 100.0,
+                candidate.track_count,
+                summary.file_count
+            );
+
+            let options_json = serde_json::to_string(&options).unwrap_or_default();
+            self.store
+                .create_review_item(&job_id, &question, &options_json)?;
+
+            job.status = IngestionJobStatus::AwaitingReview;
+            self.store.update_job(job)?;
+            return Ok(());
+        }
+
+        // Good match - proceed directly to track mapping
+        job.matched_album_id = Some(album_id.clone());
+        job.match_confidence = Some(score);
+        job.match_source = Some(IngestionMatchSource::DownloadRequest);
+        job.status = IngestionJobStatus::MappingTracks;
+        self.store.update_job(job)?;
+
+        info!(
+            "Download request job {} matched to album {} with {:.0}% verification score (tracks: {}/{})",
+            job_id,
+            album_id,
+            score * 100.0,
+            summary.file_count,
+            candidate.track_count
+        );
+
+        // Continue to track mapping and conversion
+        self.map_tracks(&job_id).await?;
+        self.convert_job(&job_id).await?;
 
         Ok(())
     }
