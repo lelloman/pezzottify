@@ -101,6 +101,8 @@ pub enum IngestionMatchSource {
     Agent,
     /// Matched via human review.
     HumanReview,
+    /// Matched from download request (album was pre-specified).
+    DownloadRequest,
 }
 
 impl IngestionMatchSource {
@@ -108,6 +110,7 @@ impl IngestionMatchSource {
         match self {
             Self::Agent => "AGENT",
             Self::HumanReview => "HUMAN_REVIEW",
+            Self::DownloadRequest => "DOWNLOAD_REQUEST",
         }
     }
 
@@ -115,6 +118,7 @@ impl IngestionMatchSource {
         match s {
             "AGENT" => Some(Self::Agent),
             "HUMAN_REVIEW" => Some(Self::HumanReview),
+            "DOWNLOAD_REQUEST" => Some(Self::DownloadRequest),
             _ => None,
         }
     }
