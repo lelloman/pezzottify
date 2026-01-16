@@ -212,6 +212,19 @@ async fn upload_file(
     {
         Ok(job_id) => {
             info!("Created ingestion job {} for user {}", job_id, user_id);
+
+            // Spawn background task to auto-process the job
+            let manager_clone = im.clone();
+            let job_id_clone = job_id.clone();
+            tokio::spawn(async move {
+                if let Some(manager) = manager_clone {
+                    debug!("Auto-processing job {}", job_id_clone);
+                    if let Err(e) = manager.process_job(&job_id_clone).await {
+                        warn!("Auto-process failed for job {}: {}", job_id_clone, e);
+                    }
+                }
+            });
+
             Json(UploadResponse {
                 job_id,
                 status: "PENDING".to_string(),

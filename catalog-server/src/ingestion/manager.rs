@@ -669,8 +669,14 @@ impl IngestionManager {
         };
 
         let album_id = &queue_item.content_id;
-        let album_name = queue_item.content_name.as_deref().unwrap_or("Unknown Album");
-        let artist_name = queue_item.artist_name.as_deref().unwrap_or("Unknown Artist");
+        let album_name = queue_item
+            .content_name
+            .as_deref()
+            .unwrap_or("Unknown Album");
+        let artist_name = queue_item
+            .artist_name
+            .as_deref()
+            .unwrap_or("Unknown Artist");
 
         info!(
             "Job {} is a download request for album {} ({} - {})",
@@ -681,10 +687,7 @@ impl IngestionManager {
         let candidate = match self.build_album_candidate(album_id) {
             Some(c) => c,
             None => {
-                warn!(
-                    "Job {} - album {} not found in catalog",
-                    job_id, album_id
-                );
+                warn!("Job {} - album {} not found in catalog", job_id, album_id);
                 return Err(IngestionError::Store(anyhow::anyhow!(
                     "Album {} not found in catalog",
                     album_id
@@ -717,7 +720,10 @@ impl IngestionManager {
                     id: format!("album:{}", album_id),
                     label: format!(
                         "{} - {} ({:.0}% match, {} tracks expected)",
-                        candidate.artist_name, candidate.name, score * 100.0, candidate.track_count
+                        candidate.artist_name,
+                        candidate.name,
+                        score * 100.0,
+                        candidate.track_count
                     ),
                     description: Some("Proceed with this album anyway".to_string()),
                 },
