@@ -295,7 +295,7 @@ impl AppConfig {
         let ingestion_file = file.ingestion.unwrap_or_default();
         let ingestion_defaults = IngestionSettings::default();
         let ingestion = IngestionSettings {
-            enabled: ingestion_file.enabled.unwrap_or(false) && agent.enabled,
+            enabled: ingestion_file.enabled.unwrap_or(false),
             temp_dir: ingestion_file.temp_dir,
             max_upload_size_mb: ingestion_file
                 .max_upload_size_mb

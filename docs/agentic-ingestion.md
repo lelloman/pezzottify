@@ -2,7 +2,9 @@
 
 ## Feature Summary
 
-**Agentic Ingestion** is an LLM-powered feature that intelligently processes user-uploaded audio files and adds them to the Pezzottify music catalog. Instead of requiring manual metadata entry and file placement, an AI agent analyzes uploaded files, matches them to the correct catalog entries, handles format conversion, and manages the entire ingestion pipeline automatically.
+**Ingestion** is a feature that processes user-uploaded audio files and adds them to the Pezzottify music catalog. Instead of requiring manual metadata entry and file placement, the system analyzes uploaded files using heuristic matching (metadata extraction, string similarity, track count, duration), matches them to the correct catalog entries, handles format conversion, and manages the entire ingestion pipeline automatically.
+
+> **Note**: The original design called for LLM-powered matching, but the current implementation uses heuristic scoring which works well for most cases. The agent infrastructure exists in the codebase for potential future use but is not wired into ingestion.
 
 ### Why This Feature?
 
@@ -118,13 +120,12 @@ When human review is needed:
 
 ## Key Design Decisions
 
-- **LLM on backend** (Rust) - HTTP calls to Ollama (extensible to other providers)
+- **Heuristic matching** - Uses string similarity, track count, duration matching (no LLM required)
 - **Audio conversion** via server-side ffmpeg
 - **Manual upload** through web UI
 - **Human review queue** for uncertain matches (configurable threshold)
-- **Detailed reasoning logs** - step-by-step observability
-- **Generic agent module** - reusable for future workflows
 - **WebSocket push** for real-time status updates
+- **Generic agent module** - exists in codebase for potential future LLM integration
 
 ---
 
@@ -474,50 +475,16 @@ Broadcast on:
 
 ## 8. Configuration
 
+Ingestion uses heuristic matching (string similarity, track count, duration) and does not require an LLM.
+
 ```toml
-[agent]
-enabled = true
-max_iterations = 20
-
-[agent.llm]
-# Provider: "ollama" (default) or "openai" (OpenAI-compatible APIs)
-provider = "ollama"
-base_url = "http://localhost:11434"
-model = "llama3.1:8b"
-temperature = 0.3
-timeout_secs = 120
-
-# For OpenAI-compatible providers, use one of:
-# api_key = "sk-..."                        # Static API key
-# api_key_command = "cat /run/secrets/key"  # Dynamic token (10s timeout)
-
 [ingestion]
 enabled = true
-temp_dir = "{db_dir}/ingestion_uploads"
+temp_dir = "{db_dir}/ingestion_uploads"  # Optional, defaults to db_dir/ingestion_uploads
 max_upload_size_mb = 500
-auto_approve_threshold = 0.9
-ffmpeg_path = "ffmpeg"          # or full path
-output_bitrate = "320k"
-```
-
-Example with OpenAI:
-
-```toml
-[agent.llm]
-provider = "openai"
-base_url = "https://api.openai.com/v1"
-model = "gpt-4o-mini"
-api_key = "sk-..."
-```
-
-Example with rotating tokens:
-
-```toml
-[agent.llm]
-provider = "openai"
-base_url = "https://api.example.com/v1"
-model = "gpt-4o"
-api_key_command = "vault kv get -field=token secret/openai"
+auto_approve_threshold = 0.9             # Confidence threshold for auto-matching (0.0-1.0)
+ffmpeg_path = "ffmpeg"                   # Or full path to ffmpeg binary
+output_bitrate = "320k"                  # Target bitrate for OGG Vorbis output
 ```
 
 ---

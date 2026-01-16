@@ -62,8 +62,7 @@ impl ApiKeySource {
                     warn!(command = %cmd, stderr = %stderr, "api_key_command failed");
                     return Err(LlmError::Connection(format!(
                         "api_key_command failed with status {}: {}",
-                        output.status,
-                        stderr
+                        output.status, stderr
                     )));
                 }
 
@@ -187,13 +186,17 @@ impl LlmProvider for OpenAIProvider {
             req_builder = req_builder.header("Authorization", format!("Bearer {}", api_key));
         }
 
-        let response = req_builder.timeout(options.timeout).send().await.map_err(|e| {
-            if e.is_timeout() {
-                LlmError::Timeout
-            } else {
-                LlmError::Connection(e.to_string())
-            }
-        })?;
+        let response = req_builder
+            .timeout(options.timeout)
+            .send()
+            .await
+            .map_err(|e| {
+                if e.is_timeout() {
+                    LlmError::Timeout
+                } else {
+                    LlmError::Connection(e.to_string())
+                }
+            })?;
 
         let status = response.status();
         if status.as_u16() == 429 {
