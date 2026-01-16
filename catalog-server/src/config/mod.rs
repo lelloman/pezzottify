@@ -280,6 +280,8 @@ impl AppConfig {
                     .base_url
                     .unwrap_or(agent_llm_defaults.base_url),
                 model: agent_llm_file.model.unwrap_or(agent_llm_defaults.model),
+                api_key: agent_llm_file.api_key,
+                api_key_command: agent_llm_file.api_key_command,
                 temperature: agent_llm_file
                     .temperature
                     .unwrap_or(agent_llm_defaults.temperature),
@@ -472,6 +474,8 @@ pub struct AgentLlmSettings {
     pub provider: String,
     pub base_url: String,
     pub model: String,
+    pub api_key: Option<String>,
+    pub api_key_command: Option<String>,
     pub temperature: f32,
     pub timeout_secs: u64,
 }
@@ -482,6 +486,8 @@ impl Default for AgentLlmSettings {
             provider: "ollama".to_string(),
             base_url: "http://localhost:11434".to_string(),
             model: "llama3.1:8b".to_string(),
+            api_key: None,
+            api_key_command: None,
             temperature: 0.3,
             timeout_secs: 120,
         }

@@ -154,12 +154,19 @@ pub struct AgentConfig {
 #[derive(Debug, Deserialize, Default, Clone)]
 #[serde(default)]
 pub struct AgentLlmConfig {
-    /// LLM provider: "ollama" (default), potentially "openai", "anthropic" later.
+    /// LLM provider: "ollama" (default), "openai" for OpenAI-compatible APIs.
     pub provider: Option<String>,
-    /// Base URL for the LLM API (e.g., "http://localhost:11434" for Ollama).
+    /// Base URL for the LLM API (e.g., "http://localhost:11434" for Ollama,
+    /// "https://api.openai.com/v1" for OpenAI).
     pub base_url: Option<String>,
-    /// Model to use (e.g., "llama3.1:8b").
+    /// Model to use (e.g., "llama3.1:8b" for Ollama, "gpt-4o-mini" for OpenAI).
     pub model: Option<String>,
+    /// Static API key for authentication. Mutually exclusive with api_key_command.
+    pub api_key: Option<String>,
+    /// Shell command to fetch API key dynamically (executed before each request).
+    /// Use this for rotating tokens. Example: "cat /run/secrets/openai-key"
+    /// Mutually exclusive with api_key.
+    pub api_key_command: Option<String>,
     /// Temperature for sampling (0.0 = deterministic, 1.0 = creative).
     pub temperature: Option<f32>,
     /// Request timeout in seconds.
