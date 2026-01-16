@@ -14,7 +14,7 @@ pub mod workflow;
 
 pub use llm::{
     CompletionOptions, CompletionResponse, LlmError, LlmProvider, Message, MessageRole,
-    OllamaProvider,
+    OllamaProvider, OpenAIProvider,
 };
 pub use reasoning::{ReasoningLogger, ReasoningStep, ReasoningStepType};
 pub use tools::{AgentTool, AgentToolRegistry, ToolContext, ToolDefinition, ToolError};

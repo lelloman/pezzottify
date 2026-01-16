@@ -138,7 +138,8 @@ catalog-server/src/
 │   │   ├── mod.rs
 │   │   ├── types.rs            # Message, ToolCall, CompletionResponse
 │   │   ├── provider.rs         # LlmProvider trait
-│   │   └── ollama.rs           # Ollama implementation
+│   │   ├── ollama.rs           # Ollama implementation
+│   │   └── openai.rs           # OpenAI-compatible implementation
 │   ├── tools/                  # Tool registry pattern
 │   │   ├── mod.rs
 │   │   └── registry.rs         # Tool definitions and execution
@@ -219,6 +220,13 @@ pub trait LlmProvider: Send + Sync {
 - POST to `/api/chat` with tool calling support
 - Map between Ollama format and common types
 - Handle streaming vs non-streaming responses
+
+### OpenAI Implementation (`agent/llm/openai.rs`)
+
+- POST to `/v1/chat/completions` with function calling support
+- Compatible with OpenAI, OpenRouter, Together AI, vLLM, and other OpenAI-compatible APIs
+- Supports static API keys or dynamic token fetching via shell command
+- 10-second timeout on api_key_command execution
 
 ---
 
@@ -472,11 +480,16 @@ enabled = true
 max_iterations = 20
 
 [agent.llm]
+# Provider: "ollama" (default) or "openai" (OpenAI-compatible APIs)
 provider = "ollama"
 base_url = "http://localhost:11434"
 model = "llama3.1:8b"
 temperature = 0.3
 timeout_secs = 120
+
+# For OpenAI-compatible providers, use one of:
+# api_key = "sk-..."                        # Static API key
+# api_key_command = "cat /run/secrets/key"  # Dynamic token (10s timeout)
 
 [ingestion]
 enabled = true
@@ -485,6 +498,26 @@ max_upload_size_mb = 500
 auto_approve_threshold = 0.9
 ffmpeg_path = "ffmpeg"          # or full path
 output_bitrate = "320k"
+```
+
+Example with OpenAI:
+
+```toml
+[agent.llm]
+provider = "openai"
+base_url = "https://api.openai.com/v1"
+model = "gpt-4o-mini"
+api_key = "sk-..."
+```
+
+Example with rotating tokens:
+
+```toml
+[agent.llm]
+provider = "openai"
+base_url = "https://api.example.com/v1"
+model = "gpt-4o"
+api_key_command = "vault kv get -field=token secret/openai"
 ```
 
 ---
@@ -545,6 +578,7 @@ Always explain your reasoning before making decisions.
 | `catalog-server/src/agent/llm/types.rs` | Common types |
 | `catalog-server/src/agent/llm/provider.rs` | LlmProvider trait |
 | `catalog-server/src/agent/llm/ollama.rs` | Ollama impl |
+| `catalog-server/src/agent/llm/openai.rs` | OpenAI-compatible impl |
 | `catalog-server/src/agent/tools/mod.rs` | Tools submodule |
 | `catalog-server/src/agent/tools/registry.rs` | Tool registry |
 | `catalog-server/src/agent/workflow/mod.rs` | Workflow submodule |

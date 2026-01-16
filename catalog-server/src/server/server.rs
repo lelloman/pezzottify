@@ -4371,10 +4371,30 @@ pub async fn make_app(
                 // Create LLM provider if agent is configured
                 let llm: Option<Arc<dyn crate::agent::LlmProvider>> =
                     if config.agent.enabled && !config.agent.llm.base_url.is_empty() {
-                        Some(Arc::new(crate::agent::OllamaProvider::new(
-                            config.agent.llm.base_url.clone(),
-                            config.agent.llm.model.clone(),
-                        )))
+                        let provider: Arc<dyn crate::agent::LlmProvider> =
+                            match config.agent.llm.provider.as_str() {
+                                "openai" => {
+                                    // Prefer api_key_command over static api_key
+                                    if let Some(ref cmd) = config.agent.llm.api_key_command {
+                                        Arc::new(crate::agent::OpenAIProvider::with_key_command(
+                                            config.agent.llm.base_url.clone(),
+                                            config.agent.llm.model.clone(),
+                                            cmd.clone(),
+                                        ))
+                                    } else {
+                                        Arc::new(crate::agent::OpenAIProvider::new(
+                                            config.agent.llm.base_url.clone(),
+                                            config.agent.llm.model.clone(),
+                                            config.agent.llm.api_key.clone(),
+                                        ))
+                                    }
+                                }
+                                _ => Arc::new(crate::agent::OllamaProvider::new(
+                                    config.agent.llm.base_url.clone(),
+                                    config.agent.llm.model.clone(),
+                                )),
+                            };
+                        Some(provider)
                     } else {
                         warn!("Ingestion enabled but agent not configured - LLM matching disabled");
                         None
