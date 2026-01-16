@@ -16,7 +16,6 @@ use super::models::{
     IngestionMatchSource, ReviewOption,
 };
 use super::store::IngestionStore;
-use crate::agent::llm::LlmProvider;
 use crate::catalog_store::CatalogStore;
 use crate::search::{HashedItemType, SearchVault};
 use anyhow::Result;
@@ -55,9 +54,6 @@ pub enum IngestionError {
 
     #[error("Invalid job state: expected {expected}, got {actual}")]
     InvalidState { expected: String, actual: String },
-
-    #[error("No LLM provider configured")]
-    NoLlmProvider,
 
     #[error("No files in upload")]
     NoFiles,
@@ -112,9 +108,6 @@ pub struct IngestionManager {
     store: Arc<dyn IngestionStore>,
     catalog: Arc<dyn CatalogStore>,
     search: Arc<dyn SearchVault>,
-    /// LLM provider for future agentic features (currently unused).
-    #[allow(dead_code)]
-    llm: Option<Arc<dyn LlmProvider>>,
     file_handler: FileHandler,
     config: IngestionManagerConfig,
     download_manager: Option<Arc<dyn DownloadManagerTrait>>,
@@ -126,7 +119,6 @@ impl IngestionManager {
         store: Arc<dyn IngestionStore>,
         catalog: Arc<dyn CatalogStore>,
         search: Arc<dyn SearchVault>,
-        llm: Option<Arc<dyn LlmProvider>>,
         config: IngestionManagerConfig,
         download_manager: Option<Arc<dyn DownloadManagerTrait>>,
     ) -> Self {
@@ -136,7 +128,6 @@ impl IngestionManager {
             store,
             catalog,
             search,
-            llm,
             file_handler,
             config,
             download_manager,
