@@ -6,6 +6,7 @@ plugins {
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.hilt)
     alias(libs.plugins.kotlin.kapt)
+    alias(libs.plugins.google.ksp)
 }
 
 // Load local.properties for OIDC config
@@ -174,6 +175,10 @@ dependencies {
     implementation(project(":simple-ai-provider-ollama"))
     implementation(project(":simple-ai-provider-simpleai"))
     debugImplementation(project(":debuginterface"))
+
+    // DuckMapper for automatic mapping code generation
+    implementation("com.github.lelloman.duckmapper:annotations:0.2.1")
+    ksp("com.github.lelloman.duckmapper:ksp:0.2.1")
 
     testImplementation(libs.junit)
     testImplementation(libs.truth)

@@ -13,10 +13,11 @@ import coil3.compose.setSingletonImageLoaderFactory
 import com.lelloman.pezzottify.android.domain.settings.UserSettingsStore
 import com.lelloman.pezzottify.android.oidc.OidcCallbackHandler
 import com.lelloman.pezzottify.android.ui.AppUi
+import com.lelloman.pezzottify.android.mapping.toAppFontFamily
+import com.lelloman.pezzottify.android.mapping.toColorPalette as toColorPalette
+import com.lelloman.pezzottify.android.mapping.toThemeMode as toThemeMode
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
-
-private typealias UiThemeMode = com.lelloman.pezzottify.android.ui.theme.ThemeMode
 private typealias DomainThemeMode = com.lelloman.pezzottify.android.domain.settings.ThemeMode
 private typealias UiColorPalette = com.lelloman.pezzottify.android.ui.theme.ColorPalette
 private typealias DomainColorPalette = com.lelloman.pezzottify.android.domain.settings.ColorPalette
@@ -49,9 +50,9 @@ class MainActivity : ComponentActivity() {
             val fontFamily by userSettingsStore.fontFamily.collectAsState()
             AppUi(
                 darkTheme = isSystemInDarkTheme(),
-                themeMode = themeMode.toUi(),
-                colorPalette = colorPalette.toUi(),
-                fontFamily = fontFamily.toUi(),
+                themeMode = themeMode.toThemeMode(),
+                colorPalette = colorPalette.toColorPalette(),
+                fontFamily = fontFamily.toAppFontFamily(),
             )
         }
     }
@@ -66,28 +67,4 @@ class MainActivity : ComponentActivity() {
             oidcCallbackHandler.handleCallback(intent)
         }
     }
-}
-
-private fun DomainThemeMode.toUi(): UiThemeMode = when (this) {
-    DomainThemeMode.System -> UiThemeMode.System
-    DomainThemeMode.Light -> UiThemeMode.Light
-    DomainThemeMode.Dark -> UiThemeMode.Dark
-    DomainThemeMode.Amoled -> UiThemeMode.Amoled
-}
-
-private fun DomainColorPalette.toUi(): UiColorPalette = when (this) {
-    DomainColorPalette.Classic -> UiColorPalette.Classic
-    DomainColorPalette.OceanBlue -> UiColorPalette.OceanBlue
-    DomainColorPalette.SunsetCoral -> UiColorPalette.SunsetCoral
-    DomainColorPalette.PurpleHaze -> UiColorPalette.PurpleHaze
-    DomainColorPalette.RoseGold -> UiColorPalette.RoseGold
-    DomainColorPalette.Midnight -> UiColorPalette.Midnight
-    DomainColorPalette.Forest -> UiColorPalette.Forest
-}
-
-private fun DomainAppFontFamily.toUi(): UiAppFontFamily = when (this) {
-    DomainAppFontFamily.System -> UiAppFontFamily.System
-    DomainAppFontFamily.SansSerif -> UiAppFontFamily.SansSerif
-    DomainAppFontFamily.Serif -> UiAppFontFamily.Serif
-    DomainAppFontFamily.Monospace -> UiAppFontFamily.Monospace
 }

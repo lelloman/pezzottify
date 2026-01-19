@@ -1,5 +1,7 @@
 package com.lelloman.pezzottify.android.ui
 
+import com.lelloman.pezzottify.android.mapping.toTrackAvailability
+import com.lelloman.pezzottify.android.mapping.toAlbumAvailability
 import com.lelloman.pezzottify.android.domain.config.ConfigStore
 import com.lelloman.pezzottify.android.domain.statics.StaticsItem
 import com.lelloman.pezzottify.android.domain.statics.StaticsProvider
@@ -22,19 +24,18 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 
-/** Maps domain TrackAvailability to UI TrackAvailability */
-private fun DomainTrackAvailability.toUi(): TrackAvailability = when (this) {
-    DomainTrackAvailability.Available -> TrackAvailability.Available
-    DomainTrackAvailability.Unavailable -> TrackAvailability.Unavailable
-    DomainTrackAvailability.Fetching -> TrackAvailability.Fetching
-    DomainTrackAvailability.FetchError -> TrackAvailability.FetchError
+// Manual mappings for availability enums
+private fun com.lelloman.pezzottify.android.domain.statics.TrackAvailability.toUi(): com.lelloman.pezzottify.android.ui.content.TrackAvailability = when (this) {
+    com.lelloman.pezzottify.android.domain.statics.TrackAvailability.Available -> com.lelloman.pezzottify.android.ui.content.TrackAvailability.Available
+    com.lelloman.pezzottify.android.domain.statics.TrackAvailability.Unavailable -> com.lelloman.pezzottify.android.ui.content.TrackAvailability.Unavailable
+    com.lelloman.pezzottify.android.domain.statics.TrackAvailability.Fetching -> com.lelloman.pezzottify.android.ui.content.TrackAvailability.Fetching
+    com.lelloman.pezzottify.android.domain.statics.TrackAvailability.FetchError -> com.lelloman.pezzottify.android.ui.content.TrackAvailability.FetchError
 }
 
-/** Maps domain AlbumAvailability to UI AlbumAvailability */
-private fun DomainAlbumAvailability.toUi(): AlbumAvailability = when (this) {
-    DomainAlbumAvailability.Missing -> AlbumAvailability.Missing
-    DomainAlbumAvailability.Partial -> AlbumAvailability.Partial
-    DomainAlbumAvailability.Complete -> AlbumAvailability.Complete
+private fun com.lelloman.pezzottify.android.domain.statics.AlbumAvailability.toUi(): com.lelloman.pezzottify.android.ui.content.AlbumAvailability = when (this) {
+    com.lelloman.pezzottify.android.domain.statics.AlbumAvailability.Missing -> com.lelloman.pezzottify.android.ui.content.AlbumAvailability.Missing
+    com.lelloman.pezzottify.android.domain.statics.AlbumAvailability.Partial -> com.lelloman.pezzottify.android.ui.content.AlbumAvailability.Partial
+    com.lelloman.pezzottify.android.domain.statics.AlbumAvailability.Complete -> com.lelloman.pezzottify.android.ui.content.AlbumAvailability.Complete
 }
 
 class UiContentResolver(
