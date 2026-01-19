@@ -1,6 +1,7 @@
 package com.lelloman.pezzottify.android.mapping
 
 import com.github.lelloman.duckmapper.DuckMap
+import com.github.lelloman.duckmapper.DuckImplement
 import com.lelloman.pezzottify.android.domain.settings.ThemeMode as DomainThemeMode
 import com.lelloman.pezzottify.android.domain.settings.ColorPalette as DomainColorPalette
 import com.lelloman.pezzottify.android.domain.settings.AppFontFamily as DomainAppFontFamily
@@ -19,8 +20,16 @@ import com.lelloman.pezzottify.android.ui.content.TrackAvailability as UiTrackAv
 import com.lelloman.pezzottify.android.ui.content.AlbumAvailability as UiAlbumAvailability
 import com.lelloman.pezzottify.android.ui.model.Permission as UiPermission
 import com.lelloman.pezzottify.android.ui.model.LikedContent.ContentType as UiLikedContentType
+import com.lelloman.pezzottify.android.domain.websocket.ConnectionState as DomainConnectionState
+import com.lelloman.pezzottify.android.domain.player.PlaybackPlaylistContext as DomainPlaybackPlaylistContext
+import com.lelloman.pezzottify.android.domain.player.PlaybackPlaylist as DomainPlaybackPlaylist
+import com.lelloman.pezzottify.android.ui.component.ConnectionState as UiConnectionState
+import com.lelloman.pezzottify.android.ui.model.PlaybackPlaylistContext as UiPlaybackPlaylistContext
+import com.lelloman.pezzottify.android.ui.model.PlaybackPlaylist as UiPlaybackPlaylist
+import com.lelloman.pezzottify.android.domain.usercontent.LikedContent as DomainLikedContent
+import com.lelloman.pezzottify.android.ui.model.LikedContent as UiLikedContent
 
-// Simple enums (no nested types)
+// Enums
 @DuckMap(DomainThemeMode::class, UiThemeMode::class)
 @DuckMap(DomainColorPalette::class, UiColorPalette::class)
 @DuckMap(DomainAppFontFamily::class, UiAppFontFamily::class)
@@ -30,13 +39,7 @@ import com.lelloman.pezzottify.android.ui.model.LikedContent.ContentType as UiLi
 @DuckMap(DomainPermission::class, UiPermission::class)
 @DuckMap(DomainLikedContentType::class, UiLikedContentType::class)
 
-// Simple data classes (no nested types)
+// Data classes
 @DuckMap(DomainStorageInfo::class, UiStorageInfo::class)
-
-// Nested types and sealed classes - keep manual for now
-// TODO: Add these once DuckMapper supports them:
-// - DomainConnectionState ↔ UiConnectionState (sealed class)
-// - DomainPlaybackPlaylistContext ↔ UiPlaybackPlaylistContext (enum)  
-// - DomainPlaybackPlaylist ↔ UiPlaybackPlaylist (data class with nested enum)
 
 object Mappings
