@@ -1,13 +1,5 @@
 package com.lelloman.pezzottify.android.ui
 
-import com.lelloman.pezzottify.android.mapping.toAppFontFamily
-import com.lelloman.pezzottify.android.mapping.toColorPalette
-import com.lelloman.pezzottify.android.mapping.toThemeMode
-import com.lelloman.pezzottify.android.mapping.toStoragePressureLevel
-import com.lelloman.pezzottify.android.mapping.toStorageInfo
-import com.lelloman.pezzottify.android.mapping.toPermission
-import com.lelloman.pezzottify.android.mapping.toTrackAvailability
-import com.lelloman.pezzottify.android.mapping.toAlbumAvailability
 import android.content.Intent
 import com.lelloman.pezzottify.android.domain.auth.AuthState
 import com.lelloman.pezzottify.android.domain.auth.AuthStore
@@ -17,115 +9,87 @@ import com.lelloman.pezzottify.android.domain.auth.usecase.IsLoggedIn
 import com.lelloman.pezzottify.android.domain.auth.usecase.PerformLogin
 import com.lelloman.pezzottify.android.domain.auth.usecase.PerformLogout
 import com.lelloman.pezzottify.android.domain.auth.usecase.PerformOidcLogin
-import com.lelloman.pezzottify.android.domain.device.DeviceInfoProvider
 import com.lelloman.pezzottify.android.domain.config.BuildInfo
 import com.lelloman.pezzottify.android.domain.config.ConfigStore
+import com.lelloman.pezzottify.android.domain.device.DeviceInfoProvider
+import com.lelloman.pezzottify.android.domain.impression.RecordImpressionUseCase
 import com.lelloman.pezzottify.android.domain.notifications.NotificationRepository
 import com.lelloman.pezzottify.android.domain.notifications.getAlbumId
-import com.lelloman.pezzottify.android.domain.websocket.ConnectionState as DomainConnectionState
-import com.lelloman.pezzottify.android.domain.websocket.WebSocketManager
-import com.lelloman.pezzottify.android.ui.component.ConnectionState as UiConnectionState
 import com.lelloman.pezzottify.android.domain.player.PezzottifyPlayer
 import com.lelloman.pezzottify.android.domain.player.RepeatMode
-import com.lelloman.pezzottify.android.domain.sync.Permission as DomainPermission
-import com.lelloman.pezzottify.android.domain.user.PermissionsStore
-import com.lelloman.pezzottify.android.ui.model.Permission as UiPermission
-import com.lelloman.pezzottify.android.ui.screen.player.RepeatModeUi
-import com.lelloman.pezzottify.android.domain.settings.AppFontFamily as DomainAppFontFamily
-import com.lelloman.pezzottify.android.domain.settings.ColorPalette as DomainColorPalette
-import com.lelloman.pezzottify.android.domain.settings.ThemeMode as DomainThemeMode
-import com.lelloman.pezzottify.android.domain.settings.UserSettingsStore
-import com.lelloman.pezzottify.android.domain.storage.StorageInfo as DomainStorageInfo
-import com.lelloman.pezzottify.android.domain.storage.StoragePressureLevel as DomainStoragePressureLevel
-import com.lelloman.pezzottify.android.domain.usercontent.LikedContent as DomainLikedContent
-import com.lelloman.pezzottify.android.domain.player.PlaybackPlaylist as DomainPlaybackPlaylist
-import com.lelloman.pezzottify.android.domain.player.PlaybackPlaylistContext as DomainPlaybackPlaylistContext
-import com.lelloman.pezzottify.android.domain.statics.TrackAvailability as DomainTrackAvailability
-import com.lelloman.pezzottify.android.domain.statics.AlbumAvailability as DomainAlbumAvailability
-import com.lelloman.pezzottify.android.ui.content.TrackAvailability as UiTrackAvailability
-import com.lelloman.pezzottify.android.ui.content.AlbumAvailability as UiAlbumAvailability
-import com.lelloman.pezzottify.android.ui.content.ContentResolver
-import com.lelloman.pezzottify.android.domain.settings.usecase.UpdateNotifyWhatsNewSetting
-import com.lelloman.pezzottify.android.ui.theme.AppFontFamily as UiAppFontFamily
-import com.lelloman.pezzottify.android.ui.theme.ColorPalette as UiColorPalette
-import com.lelloman.pezzottify.android.ui.theme.ThemeMode as UiThemeMode
-import com.lelloman.pezzottify.android.ui.model.StorageInfo as UiStorageInfo
-import com.lelloman.pezzottify.android.ui.model.StoragePressureLevel as UiStoragePressureLevel
-import com.lelloman.pezzottify.android.ui.model.LikedContent as UiLikedContent
-import com.lelloman.pezzottify.android.ui.model.PlaybackPlaylist as UiPlaybackPlaylist
-import com.lelloman.pezzottify.android.ui.model.PlaybackPlaylistContext as UiPlaybackPlaylistContext
 import com.lelloman.pezzottify.android.domain.remoteapi.RemoteApiClient
+import com.lelloman.pezzottify.android.domain.remoteapi.response.RemoteApiResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.ResolvedSearchResult
 import com.lelloman.pezzottify.android.domain.remoteapi.response.SearchSection
-import com.lelloman.pezzottify.android.ui.screen.main.search.PrimaryMatchType
-import com.lelloman.pezzottify.android.ui.screen.main.search.StreamingAlbumSummary
-import com.lelloman.pezzottify.android.ui.screen.main.search.StreamingArtistSummary
-import com.lelloman.pezzottify.android.ui.screen.main.search.StreamingSearchResult
-import com.lelloman.pezzottify.android.ui.screen.main.search.StreamingSearchSection
-import com.lelloman.pezzottify.android.ui.screen.main.search.StreamingTrackSummary
-import com.lelloman.pezzottify.android.ui.screen.main.search.GenreItem
+import com.lelloman.pezzottify.android.domain.settings.UserSettingsStore
+import com.lelloman.pezzottify.android.domain.settings.usecase.UpdateNotifyWhatsNewSetting
+import com.lelloman.pezzottify.android.domain.statics.StaticsProvider
+import com.lelloman.pezzottify.android.domain.statics.StaticsStore
+import com.lelloman.pezzottify.android.domain.statics.usecase.GetGenres
 import com.lelloman.pezzottify.android.domain.statics.usecase.GetPopularContent
 import com.lelloman.pezzottify.android.domain.statics.usecase.GetWhatsNew
-import com.lelloman.pezzottify.android.domain.statics.usecase.GetGenres
-import com.lelloman.pezzottify.android.domain.statics.usecase.GetGenreTracks
 import com.lelloman.pezzottify.android.domain.statics.usecase.PerformSearch
 import com.lelloman.pezzottify.android.domain.statics.usecase.PerformStreamingSearch
-import com.lelloman.pezzottify.android.domain.impression.RecordImpressionUseCase
 import com.lelloman.pezzottify.android.domain.user.GetRecentlyViewedContentUseCase
 import com.lelloman.pezzottify.android.domain.user.GetSearchHistoryEntriesUseCase
 import com.lelloman.pezzottify.android.domain.user.LogSearchHistoryEntryUseCase
 import com.lelloman.pezzottify.android.domain.user.LogViewedContentUseCase
+import com.lelloman.pezzottify.android.domain.user.PermissionsStore
 import com.lelloman.pezzottify.android.domain.user.SearchHistoryEntry
 import com.lelloman.pezzottify.android.domain.user.ViewedContent
-import com.lelloman.pezzottify.android.domain.statics.StaticsProvider
-import com.lelloman.pezzottify.android.domain.statics.StaticsStore
 import com.lelloman.pezzottify.android.domain.usercontent.GetLikedStateUseCase
 import com.lelloman.pezzottify.android.domain.usercontent.PlaylistSyncStatus
 import com.lelloman.pezzottify.android.domain.usercontent.PlaylistSynchronizer
 import com.lelloman.pezzottify.android.domain.usercontent.ToggleLikeUseCase
 import com.lelloman.pezzottify.android.domain.usercontent.UserContentStore
 import com.lelloman.pezzottify.android.domain.usercontent.UserPlaylistStore
-import com.lelloman.pezzottify.android.ui.screen.main.library.UiUserPlaylist
-import java.util.UUID
-import kotlinx.coroutines.flow.first
+import com.lelloman.pezzottify.android.domain.websocket.WebSocketManager
 import com.lelloman.pezzottify.android.logger.LoggerFactory
 import com.lelloman.pezzottify.android.logging.LogFileManager
+import com.lelloman.pezzottify.android.oidc.OidcCallbackHandler
 import com.lelloman.pezzottify.android.ui.screen.about.AboutScreenViewModel
 import com.lelloman.pezzottify.android.ui.screen.login.LoginViewModel
 import com.lelloman.pezzottify.android.ui.screen.main.MainScreenViewModel
 import com.lelloman.pezzottify.android.ui.screen.main.content.album.AlbumScreenViewModel
 import com.lelloman.pezzottify.android.ui.screen.main.content.artist.ArtistScreenViewModel
 import com.lelloman.pezzottify.android.ui.screen.main.content.track.TrackScreenViewModel
+import com.lelloman.pezzottify.android.ui.screen.main.content.userplaylist.UiUserPlaylistDetails
+import com.lelloman.pezzottify.android.ui.screen.main.content.userplaylist.UserPlaylistScreenViewModel
+import com.lelloman.pezzottify.android.ui.screen.main.genre.GenreListScreenViewModel
+import com.lelloman.pezzottify.android.ui.screen.main.genre.GenreScreenViewModel
 import com.lelloman.pezzottify.android.ui.screen.main.home.HomeScreenState
 import com.lelloman.pezzottify.android.ui.screen.main.home.HomeScreenViewModel
 import com.lelloman.pezzottify.android.ui.screen.main.home.PopularAlbumState
 import com.lelloman.pezzottify.android.ui.screen.main.home.PopularArtistState
 import com.lelloman.pezzottify.android.ui.screen.main.home.PopularContentState
 import com.lelloman.pezzottify.android.ui.screen.main.home.ViewedContentType
-import com.lelloman.pezzottify.android.ui.screen.main.content.userplaylist.UiUserPlaylistDetails
-import com.lelloman.pezzottify.android.ui.screen.main.content.userplaylist.UserPlaylistScreenViewModel
 import com.lelloman.pezzottify.android.ui.screen.main.library.LibraryScreenViewModel
+import com.lelloman.pezzottify.android.ui.screen.main.library.UiUserPlaylist
 import com.lelloman.pezzottify.android.ui.screen.main.listeninghistory.ListeningHistoryErrorType
 import com.lelloman.pezzottify.android.ui.screen.main.listeninghistory.ListeningHistoryException
 import com.lelloman.pezzottify.android.ui.screen.main.listeninghistory.ListeningHistoryScreenViewModel
 import com.lelloman.pezzottify.android.ui.screen.main.listeninghistory.UiListeningEvent
+import com.lelloman.pezzottify.android.ui.screen.main.notifications.NotificationListScreenViewModel
+import com.lelloman.pezzottify.android.ui.screen.main.notifications.UiNotification
 import com.lelloman.pezzottify.android.ui.screen.main.profile.ProfileScreenViewModel
 import com.lelloman.pezzottify.android.ui.screen.main.profile.stylesettings.StyleSettingsViewModel
+import com.lelloman.pezzottify.android.ui.screen.main.search.GenreItem
+import com.lelloman.pezzottify.android.ui.screen.main.search.PrimaryMatchType
 import com.lelloman.pezzottify.android.ui.screen.main.search.SearchScreenViewModel
+import com.lelloman.pezzottify.android.ui.screen.main.search.StreamingAlbumSummary
+import com.lelloman.pezzottify.android.ui.screen.main.search.StreamingArtistSummary
+import com.lelloman.pezzottify.android.ui.screen.main.search.StreamingSearchResult
+import com.lelloman.pezzottify.android.ui.screen.main.search.StreamingSearchSection
+import com.lelloman.pezzottify.android.ui.screen.main.search.StreamingTrackSummary
 import com.lelloman.pezzottify.android.ui.screen.main.settings.SettingsScreenViewModel
 import com.lelloman.pezzottify.android.ui.screen.main.settings.bugreport.BugReportScreenViewModel
 import com.lelloman.pezzottify.android.ui.screen.main.settings.bugreport.SubmitResult
-import com.lelloman.pezzottify.android.domain.remoteapi.response.RemoteApiResponse
-import com.lelloman.pezzottify.android.ui.screen.main.whatsnew.WhatsNewScreenViewModel
-import com.lelloman.pezzottify.android.ui.screen.main.genre.GenreListScreenViewModel
-import com.lelloman.pezzottify.android.ui.screen.main.genre.GenreScreenViewModel
-import com.lelloman.pezzottify.android.ui.screen.main.notifications.NotificationListScreenViewModel
-import com.lelloman.pezzottify.android.ui.screen.main.notifications.UiNotification
 import com.lelloman.pezzottify.android.ui.screen.main.settings.logviewer.LogViewerScreenViewModel
+import com.lelloman.pezzottify.android.ui.screen.main.whatsnew.WhatsNewScreenViewModel
 import com.lelloman.pezzottify.android.ui.screen.player.PlayerScreenViewModel
+import com.lelloman.pezzottify.android.ui.screen.player.RepeatModeUi
 import com.lelloman.pezzottify.android.ui.screen.queue.QueueScreenViewModel
 import com.lelloman.pezzottify.android.ui.screen.splash.SplashViewModel
-import com.lelloman.pezzottify.android.oidc.OidcCallbackHandler
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -137,8 +101,34 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
+import java.util.UUID
+import com.lelloman.pezzottify.android.domain.player.PlaybackPlaylist as DomainPlaybackPlaylist
+import com.lelloman.pezzottify.android.domain.player.PlaybackPlaylistContext as DomainPlaybackPlaylistContext
+import com.lelloman.pezzottify.android.domain.settings.AppFontFamily as DomainAppFontFamily
+import com.lelloman.pezzottify.android.domain.settings.ColorPalette as DomainColorPalette
+import com.lelloman.pezzottify.android.domain.settings.ThemeMode as DomainThemeMode
+import com.lelloman.pezzottify.android.domain.statics.AlbumAvailability as DomainAlbumAvailability
+import com.lelloman.pezzottify.android.domain.statics.TrackAvailability as DomainTrackAvailability
+import com.lelloman.pezzottify.android.domain.storage.StorageInfo as DomainStorageInfo
+import com.lelloman.pezzottify.android.domain.storage.StoragePressureLevel as DomainStoragePressureLevel
+import com.lelloman.pezzottify.android.domain.sync.Permission as DomainPermission
+import com.lelloman.pezzottify.android.domain.usercontent.LikedContent as DomainLikedContent
+import com.lelloman.pezzottify.android.domain.websocket.ConnectionState as DomainConnectionState
+import com.lelloman.pezzottify.android.ui.component.ConnectionState as UiConnectionState
+import com.lelloman.pezzottify.android.ui.content.AlbumAvailability as UiAlbumAvailability
+import com.lelloman.pezzottify.android.ui.content.TrackAvailability as UiTrackAvailability
+import com.lelloman.pezzottify.android.ui.model.LikedContent as UiLikedContent
+import com.lelloman.pezzottify.android.ui.model.Permission as UiPermission
+import com.lelloman.pezzottify.android.ui.model.PlaybackPlaylist as UiPlaybackPlaylist
+import com.lelloman.pezzottify.android.ui.model.PlaybackPlaylistContext as UiPlaybackPlaylistContext
+import com.lelloman.pezzottify.android.ui.model.StorageInfo as UiStorageInfo
+import com.lelloman.pezzottify.android.ui.model.StoragePressureLevel as UiStoragePressureLevel
+import com.lelloman.pezzottify.android.ui.theme.AppFontFamily as UiAppFontFamily
+import com.lelloman.pezzottify.android.ui.theme.ColorPalette as UiColorPalette
+import com.lelloman.pezzottify.android.ui.theme.ThemeMode as UiThemeMode
 
 @InstallIn(ViewModelComponent::class)
 @Module
@@ -223,8 +213,10 @@ class InteractorsModule {
             return when (val loginResult = performOidcLogin(authResult)) {
                 is PerformOidcLogin.LoginResult.Success ->
                     LoginViewModel.Interactor.OidcLoginResult.Success
+
                 is PerformOidcLogin.LoginResult.Cancelled ->
                     LoginViewModel.Interactor.OidcLoginResult.Cancelled
+
                 is PerformOidcLogin.LoginResult.Error ->
                     LoginViewModel.Interactor.OidcLoginResult.Error(loginResult.message)
             }
@@ -314,27 +306,36 @@ class InteractorsModule {
 
         override fun getStorageInfo(): UiStorageInfo = storageMonitor.storageInfo.value.toUi()
 
-        override fun observeThemeMode(): Flow<UiThemeMode> = userSettingsStore.themeMode.map { it.toUi()}
+        override fun observeThemeMode(): Flow<UiThemeMode> =
+            userSettingsStore.themeMode.map { it.toUi() }
 
-        override fun observeColorPalette(): Flow<UiColorPalette>  = userSettingsStore.colorPalette.map { it.toUi() }
+        override fun observeColorPalette(): Flow<UiColorPalette> =
+            userSettingsStore.colorPalette.map { it.toUi() }
 
-        override fun observeFontFamily(): Flow<UiAppFontFamily> = userSettingsStore.fontFamily.map { it.toUi() }
+        override fun observeFontFamily(): Flow<UiAppFontFamily> =
+            userSettingsStore.fontFamily.map { it.toUi() }
 
         override fun observeCacheEnabled() = userSettingsStore.isInMemoryCacheEnabled
 
-        override fun observeStorageInfo(): Flow<UiStorageInfo> = storageMonitor.storageInfo.map { it.toUi() }
+        override fun observeStorageInfo(): Flow<UiStorageInfo> =
+            storageMonitor.storageInfo.map { it.toUi() }
 
-        override fun isNotifyWhatsNewEnabled(): Boolean = userSettingsStore.isNotifyWhatsNewEnabled.value
+        override fun isNotifyWhatsNewEnabled(): Boolean =
+            userSettingsStore.isNotifyWhatsNewEnabled.value
 
         override fun isSmartSearchEnabled(): Boolean = userSettingsStore.isSmartSearchEnabled.value
 
-        override fun isExcludeUnavailableEnabled(): Boolean = userSettingsStore.isExcludeUnavailableEnabled.value
+        override fun isExcludeUnavailableEnabled(): Boolean =
+            userSettingsStore.isExcludeUnavailableEnabled.value
 
-        override fun observeNotifyWhatsNewEnabled(): Flow<Boolean> = userSettingsStore.isNotifyWhatsNewEnabled
+        override fun observeNotifyWhatsNewEnabled(): Flow<Boolean> =
+            userSettingsStore.isNotifyWhatsNewEnabled
 
-        override fun observeSmartSearchEnabled(): Flow<Boolean> = userSettingsStore.isSmartSearchEnabled
+        override fun observeSmartSearchEnabled(): Flow<Boolean> =
+            userSettingsStore.isSmartSearchEnabled
 
-        override fun observeExcludeUnavailableEnabled(): Flow<Boolean> = userSettingsStore.isExcludeUnavailableEnabled
+        override fun observeExcludeUnavailableEnabled(): Flow<Boolean> =
+            userSettingsStore.isExcludeUnavailableEnabled
 
         override suspend fun setNotifyWhatsNewEnabled(enabled: Boolean) {
             updateNotifyWhatsNewSetting(enabled)
@@ -364,7 +365,8 @@ class InteractorsModule {
             userSettingsStore.setInMemoryCacheEnabled(enabled)
         }
 
-        override fun observeFileLoggingEnabled(): Flow<Boolean> = userSettingsStore.isFileLoggingEnabled
+        override fun observeFileLoggingEnabled(): Flow<Boolean> =
+            userSettingsStore.isFileLoggingEnabled
 
         override suspend fun setFileLoggingEnabled(enabled: Boolean) {
             userSettingsStore.setFileLoggingEnabled(enabled)
@@ -376,7 +378,8 @@ class InteractorsModule {
 
         override fun getLogFilesSize(): String = logFileManager.getFormattedLogSize()
 
-        override fun getShareLogsIntent(): android.content.Intent = logFileManager.createShareIntent()
+        override fun getShareLogsIntent(): android.content.Intent =
+            logFileManager.createShareIntent()
 
         override fun clearLogs() = logFileManager.clearLogs()
 
@@ -428,11 +431,14 @@ class InteractorsModule {
 
         override fun getFontFamily(): UiAppFontFamily = userSettingsStore.fontFamily.value.toUi()
 
-        override fun observeThemeMode(): Flow<UiThemeMode> = userSettingsStore.themeMode.map { it.toUi() }
+        override fun observeThemeMode(): Flow<UiThemeMode> =
+            userSettingsStore.themeMode.map { it.toUi() }
 
-        override fun observeColorPalette(): Flow<UiColorPalette> = userSettingsStore.colorPalette.map { it.toUi() }
+        override fun observeColorPalette(): Flow<UiColorPalette> =
+            userSettingsStore.colorPalette.map { it.toUi() }
 
-        override fun observeFontFamily(): Flow<UiAppFontFamily> = userSettingsStore.fontFamily.map { it.toUi() }
+        override fun observeFontFamily(): Flow<UiAppFontFamily> =
+            userSettingsStore.fontFamily.map { it.toUi() }
 
         override suspend fun setThemeMode(themeMode: UiThemeMode) {
             userSettingsStore.setThemeMode(themeMode.toDomain())
@@ -541,7 +547,10 @@ class InteractorsModule {
                 }.filterNotNull()
             }
 
-            private fun mapToUiSection(section: SearchSection, baseUrl: String): StreamingSearchSection? {
+            private fun mapToUiSection(
+                section: SearchSection,
+                baseUrl: String
+            ): StreamingSearchSection? {
                 return when (section) {
                     is SearchSection.PrimaryArtist -> {
                         val artist = section.item as? ResolvedSearchResult.Artist ?: return null
@@ -553,6 +562,7 @@ class InteractorsModule {
                             confidence = section.confidence,
                         )
                     }
+
                     is SearchSection.PrimaryAlbum -> {
                         val album = section.item as? ResolvedSearchResult.Album ?: return null
                         StreamingSearchSection.PrimaryMatch(
@@ -565,6 +575,7 @@ class InteractorsModule {
                             year = album.year?.toInt(),
                         )
                     }
+
                     is SearchSection.PrimaryTrack -> {
                         val track = section.item as? ResolvedSearchResult.Track ?: return null
                         StreamingSearchSection.PrimaryMatch(
@@ -577,6 +588,7 @@ class InteractorsModule {
                             durationMs = track.duration.toLong() * 1000,
                         )
                     }
+
                     is SearchSection.PopularBy -> {
                         StreamingSearchSection.PopularTracks(
                             targetId = section.targetId,
@@ -589,11 +601,15 @@ class InteractorsModule {
                                     albumId = track.albumId,
                                     albumName = track.albumName,
                                     artistNames = track.artistNames,
-                                    imageUrl = ImageUrlProvider.buildImageUrl(baseUrl, track.imageId),
+                                    imageUrl = ImageUrlProvider.buildImageUrl(
+                                        baseUrl,
+                                        track.imageId
+                                    ),
                                 )
                             }
                         )
                     }
+
                     is SearchSection.AlbumsBy -> {
                         StreamingSearchSection.ArtistAlbums(
                             targetId = section.targetId,
@@ -603,13 +619,18 @@ class InteractorsModule {
                                     name = album.name,
                                     releaseYear = album.releaseYear,
                                     trackCount = album.trackCount,
-                                    imageUrl = ImageUrlProvider.buildImageUrl(baseUrl, album.imageId),
+                                    imageUrl = ImageUrlProvider.buildImageUrl(
+                                        baseUrl,
+                                        album.imageId
+                                    ),
                                     artistNames = album.artistNames,
-                                    availability = DomainAlbumAvailability.fromServerString(album.availability).toUi(),
+                                    availability = DomainAlbumAvailability.fromServerString(album.availability)
+                                        .toUi(),
                                 )
                             }
                         )
                     }
+
                     is SearchSection.TracksFrom -> {
                         StreamingSearchSection.AlbumTracks(
                             targetId = section.targetId,
@@ -622,11 +643,15 @@ class InteractorsModule {
                                     albumId = track.albumId,
                                     albumName = track.albumName,
                                     artistNames = track.artistNames,
-                                    imageUrl = ImageUrlProvider.buildImageUrl(baseUrl, track.imageId),
+                                    imageUrl = ImageUrlProvider.buildImageUrl(
+                                        baseUrl,
+                                        track.imageId
+                                    ),
                                 )
                             }
                         )
                     }
+
                     is SearchSection.RelatedArtists -> {
                         StreamingSearchSection.RelatedArtists(
                             targetId = section.targetId,
@@ -634,28 +659,37 @@ class InteractorsModule {
                                 StreamingArtistSummary(
                                     id = artist.id,
                                     name = artist.name,
-                                    imageUrl = ImageUrlProvider.buildImageUrl(baseUrl, artist.imageId),
+                                    imageUrl = ImageUrlProvider.buildImageUrl(
+                                        baseUrl,
+                                        artist.imageId
+                                    ),
                                 )
                             }
                         )
                     }
+
                     is SearchSection.MoreResults -> {
                         StreamingSearchSection.MoreResults(
                             results = section.items.map { mapSearchResult(it, baseUrl) }
                         )
                     }
+
                     is SearchSection.Results -> {
                         StreamingSearchSection.AllResults(
                             results = section.items.map { mapSearchResult(it, baseUrl) }
                         )
                     }
+
                     is SearchSection.Done -> {
                         StreamingSearchSection.Done(totalTimeMs = section.totalTimeMs)
                     }
                 }
             }
 
-            private fun mapSearchResult(result: ResolvedSearchResult, baseUrl: String): StreamingSearchResult {
+            private fun mapSearchResult(
+                result: ResolvedSearchResult,
+                baseUrl: String
+            ): StreamingSearchResult {
                 return when (result) {
                     is ResolvedSearchResult.Artist -> {
                         StreamingSearchResult.Artist(
@@ -664,6 +698,7 @@ class InteractorsModule {
                             imageUrl = ImageUrlProvider.buildImageUrl(baseUrl, result.imageId),
                         )
                     }
+
                     is ResolvedSearchResult.Album -> {
                         StreamingSearchResult.Album(
                             id = result.id,
@@ -671,9 +706,11 @@ class InteractorsModule {
                             artistNames = result.artistsIdsNames.map { it[1] },
                             imageUrl = ImageUrlProvider.buildImageUrl(baseUrl, result.imageId),
                             year = result.year?.toInt(),
-                            availability = DomainAlbumAvailability.fromServerString(result.availability).toUi(),
+                            availability = DomainAlbumAvailability.fromServerString(result.availability)
+                                .toUi(),
                         )
                     }
+
                     is ResolvedSearchResult.Track -> {
                         StreamingSearchResult.Track(
                             id = result.id,
@@ -682,7 +719,8 @@ class InteractorsModule {
                             imageUrl = ImageUrlProvider.buildImageUrl(baseUrl, result.imageId),
                             albumId = result.albumId,
                             durationMs = result.duration.toLong() * 1000,
-                            availability = DomainTrackAvailability.fromServerString(result.availability).toUi(),
+                            availability = DomainTrackAvailability.fromServerString(result.availability)
+                                .toUi(),
                         )
                     }
                 }
@@ -850,7 +888,12 @@ class InteractorsModule {
 
         override suspend fun createPlaylist(name: String) {
             val id = UUID.randomUUID().toString()
-            userPlaylistStore.createOrUpdatePlaylist(id, name, emptyList(), PlaylistSyncStatus.PendingCreate)
+            userPlaylistStore.createOrUpdatePlaylist(
+                id,
+                name,
+                emptyList(),
+                PlaylistSyncStatus.PendingCreate
+            )
             playlistSynchronizer.wakeUp()
         }
 
@@ -864,19 +907,24 @@ class InteractorsModule {
             return kotlinx.coroutines.flow.flow {
                 // First, check the initial state via API
                 val initialResult = getMyDownloadRequestsUseCase(limit = 100, offset = 0)
-                val initialRequest = initialResult.getOrNull()?.requests?.find { it.contentId == albumId }
+                val initialRequest =
+                    initialResult.getOrNull()?.requests?.find { it.contentId == albumId }
 
                 var currentStatus = initialRequest?.let { request ->
                     AlbumScreenViewModel.DownloadRequestStatus(
                         status = when (request.status) {
                             com.lelloman.pezzottify.android.domain.remoteapi.response.DownloadQueueStatus.Pending ->
                                 com.lelloman.pezzottify.android.ui.screen.main.content.album.RequestStatus.Pending
+
                             com.lelloman.pezzottify.android.domain.remoteapi.response.DownloadQueueStatus.InProgress ->
                                 com.lelloman.pezzottify.android.ui.screen.main.content.album.RequestStatus.InProgress
+
                             com.lelloman.pezzottify.android.domain.remoteapi.response.DownloadQueueStatus.RetryWaiting ->
                                 com.lelloman.pezzottify.android.ui.screen.main.content.album.RequestStatus.Pending
+
                             com.lelloman.pezzottify.android.domain.remoteapi.response.DownloadQueueStatus.Completed ->
                                 com.lelloman.pezzottify.android.ui.screen.main.content.album.RequestStatus.Completed
+
                             com.lelloman.pezzottify.android.domain.remoteapi.response.DownloadQueueStatus.Failed ->
                                 com.lelloman.pezzottify.android.ui.screen.main.content.album.RequestStatus.Failed
                         },
@@ -898,12 +946,16 @@ class InteractorsModule {
                             status = when (statusInfo.status) {
                                 com.lelloman.pezzottify.android.domain.remoteapi.response.DownloadQueueStatus.Pending ->
                                     com.lelloman.pezzottify.android.ui.screen.main.content.album.RequestStatus.Pending
+
                                 com.lelloman.pezzottify.android.domain.remoteapi.response.DownloadQueueStatus.InProgress ->
                                     com.lelloman.pezzottify.android.ui.screen.main.content.album.RequestStatus.InProgress
+
                                 com.lelloman.pezzottify.android.domain.remoteapi.response.DownloadQueueStatus.RetryWaiting ->
                                     com.lelloman.pezzottify.android.ui.screen.main.content.album.RequestStatus.Pending
+
                                 com.lelloman.pezzottify.android.domain.remoteapi.response.DownloadQueueStatus.Completed ->
                                     com.lelloman.pezzottify.android.ui.screen.main.content.album.RequestStatus.Completed
+
                                 com.lelloman.pezzottify.android.domain.remoteapi.response.DownloadQueueStatus.Failed ->
                                     com.lelloman.pezzottify.android.ui.screen.main.content.album.RequestStatus.Failed
                             },
@@ -1096,7 +1148,11 @@ class InteractorsModule {
 
         override fun connectionState(scope: CoroutineScope): StateFlow<UiConnectionState> =
             webSocketManager.connectionState.map { it.toUi() }
-                .stateIn(scope, SharingStarted.Eagerly, webSocketManager.connectionState.value.toUi())
+                .stateIn(
+                    scope,
+                    SharingStarted.Eagerly,
+                    webSocketManager.connectionState.value.toUi()
+                )
 
         override suspend fun getRecentlyViewedContent(maxCount: Int): Flow<List<HomeScreenState.RecentlyViewedContent>> =
             getRecentlyViewedContent(maxCount).map {
@@ -1179,7 +1235,14 @@ class InteractorsModule {
                             val volume: Float,
                             val isMuted: Boolean,
                         )
-                        PlaybackData2(data.queueState, data.isPlaying, data.trackPercent, data.progressSec, volumeState.volume, volumeState.isMuted)
+                        PlaybackData2(
+                            data.queueState,
+                            data.isPlaying,
+                            data.trackPercent,
+                            data.progressSec,
+                            volumeState.volume,
+                            volumeState.isMuted
+                        )
                     }
                     .combine(player.shuffleEnabled) { data, shuffleEnabled ->
                         data class PlaybackData3(
@@ -1191,7 +1254,15 @@ class InteractorsModule {
                             val isMuted: Boolean,
                             val shuffleEnabled: Boolean,
                         )
-                        PlaybackData3(data.queueState, data.isPlaying, data.trackPercent, data.progressSec, data.volume, data.isMuted, shuffleEnabled)
+                        PlaybackData3(
+                            data.queueState,
+                            data.isPlaying,
+                            data.trackPercent,
+                            data.progressSec,
+                            data.volume,
+                            data.isMuted,
+                            shuffleEnabled
+                        )
                     }
                     .combine(player.repeatMode) { data, repeatMode ->
                         data class PlaybackData4(
@@ -1204,7 +1275,16 @@ class InteractorsModule {
                             val shuffleEnabled: Boolean,
                             val repeatMode: RepeatMode,
                         )
-                        PlaybackData4(data.queueState, data.isPlaying, data.trackPercent, data.progressSec, data.volume, data.isMuted, data.shuffleEnabled, repeatMode)
+                        PlaybackData4(
+                            data.queueState,
+                            data.isPlaying,
+                            data.trackPercent,
+                            data.progressSec,
+                            data.volume,
+                            data.isMuted,
+                            data.shuffleEnabled,
+                            repeatMode
+                        )
                     }
                     .combine(player.playerError) { data, playerError ->
                         val currentTrack = data.queueState?.currentTrack
@@ -1240,7 +1320,12 @@ class InteractorsModule {
                                 isMuted = data.isMuted,
                                 shuffleEnabled = data.shuffleEnabled,
                                 repeatMode = repeatModeUi,
-                                playerError = playerError,
+                                playerError = playerError?.let {
+                                    com.lelloman.pezzottify.android.ui.screen.player.PlayerErrorUi(
+                                        message = it.message,
+                                        isRecoverable = it.isRecoverable
+                                    )
+                                },
                             )
                         } else {
                             null
@@ -1290,11 +1375,13 @@ class InteractorsModule {
                                     playlistContext.albumId,
                                     false
                                 )
+
                                 is com.lelloman.pezzottify.android.domain.player.PlaybackPlaylistContext.UserPlaylist -> Triple(
                                     com.lelloman.pezzottify.android.ui.screen.queue.QueueContextType.UserPlaylist,
                                     playlistContext.userPlaylistId,
                                     playlistContext.isEdited
                                 )
+
                                 is com.lelloman.pezzottify.android.domain.player.PlaybackPlaylistContext.UserMix -> Triple(
                                     com.lelloman.pezzottify.android.ui.screen.queue.QueueContextType.UserMix,
                                     "user_mix",
@@ -1336,7 +1423,8 @@ class InteractorsModule {
 
             override fun playTrackDirectly(trackId: String) = player.loadSingleTrack(trackId)
 
-            override fun addTrackToQueue(trackId: String) = player.addTracksToPlaylist(listOf(trackId))
+            override fun addTrackToQueue(trackId: String) =
+                player.addTracksToPlaylist(listOf(trackId))
 
             override suspend fun addTrackToPlaylist(trackId: String, playlistId: String) {
                 userPlaylistStore.addTrackToPlaylist(playlistId, trackId)
@@ -1345,7 +1433,12 @@ class InteractorsModule {
 
             override suspend fun createPlaylist(name: String) {
                 val id = UUID.randomUUID().toString()
-                userPlaylistStore.createOrUpdatePlaylist(id, name, emptyList(), PlaylistSyncStatus.PendingCreate)
+                userPlaylistStore.createOrUpdatePlaylist(
+                    id,
+                    name,
+                    emptyList(),
+                    PlaylistSyncStatus.PendingCreate
+                )
                 playlistSynchronizer.wakeUp()
             }
 
@@ -1389,7 +1482,12 @@ class InteractorsModule {
 
             override suspend fun createPlaylist(name: String) {
                 val id = UUID.randomUUID().toString()
-                userPlaylistStore.createOrUpdatePlaylist(id, name, emptyList(), PlaylistSyncStatus.PendingCreate)
+                userPlaylistStore.createOrUpdatePlaylist(
+                    id,
+                    name,
+                    emptyList(),
+                    PlaylistSyncStatus.PendingCreate
+                )
                 playlistSynchronizer.wakeUp()
             }
         }
@@ -1472,7 +1570,12 @@ class InteractorsModule {
 
             override suspend fun createPlaylist(name: String) {
                 val id = UUID.randomUUID().toString()
-                userPlaylistStore.createOrUpdatePlaylist(id, name, emptyList(), PlaylistSyncStatus.PendingCreate)
+                userPlaylistStore.createOrUpdatePlaylist(
+                    id,
+                    name,
+                    emptyList(),
+                    PlaylistSyncStatus.PendingCreate
+                )
                 playlistSynchronizer.wakeUp()
             }
 
@@ -1490,8 +1593,12 @@ class InteractorsModule {
         getDownloadLimitsUseCase: com.lelloman.pezzottify.android.domain.download.GetDownloadLimitsUseCase,
         downloadStatusRepository: com.lelloman.pezzottify.android.domain.download.DownloadStatusRepository,
     ): com.lelloman.pezzottify.android.ui.screen.main.myrequests.MyRequestsScreenViewModel.Interactor =
-        object : com.lelloman.pezzottify.android.ui.screen.main.myrequests.MyRequestsScreenViewModel.Interactor {
-            override suspend fun getMyRequests(limit: Int, offset: Int): Result<List<com.lelloman.pezzottify.android.ui.screen.main.myrequests.UiDownloadRequest>> {
+        object :
+            com.lelloman.pezzottify.android.ui.screen.main.myrequests.MyRequestsScreenViewModel.Interactor {
+            override suspend fun getMyRequests(
+                limit: Int,
+                offset: Int
+            ): Result<List<com.lelloman.pezzottify.android.ui.screen.main.myrequests.UiDownloadRequest>> {
                 val result = getMyDownloadRequestsUseCase(limit, offset)
                 return result.map { response ->
                     response.requests.map { request ->
@@ -1502,12 +1609,16 @@ class InteractorsModule {
                             status = when (request.status) {
                                 com.lelloman.pezzottify.android.domain.remoteapi.response.DownloadQueueStatus.Pending ->
                                     com.lelloman.pezzottify.android.ui.screen.main.myrequests.RequestStatus.Pending
+
                                 com.lelloman.pezzottify.android.domain.remoteapi.response.DownloadQueueStatus.InProgress ->
                                     com.lelloman.pezzottify.android.ui.screen.main.myrequests.RequestStatus.InProgress
+
                                 com.lelloman.pezzottify.android.domain.remoteapi.response.DownloadQueueStatus.RetryWaiting ->
                                     com.lelloman.pezzottify.android.ui.screen.main.myrequests.RequestStatus.Pending
+
                                 com.lelloman.pezzottify.android.domain.remoteapi.response.DownloadQueueStatus.Completed ->
                                     com.lelloman.pezzottify.android.ui.screen.main.myrequests.RequestStatus.Completed
+
                                 com.lelloman.pezzottify.android.domain.remoteapi.response.DownloadQueueStatus.Failed ->
                                     com.lelloman.pezzottify.android.ui.screen.main.myrequests.RequestStatus.Failed
                             },
@@ -1550,30 +1661,37 @@ class InteractorsModule {
                                 artistName = update.artistName,
                                 queuePosition = update.queuePosition,
                             )
+
                         is com.lelloman.pezzottify.android.domain.download.DownloadStatusUpdate.StatusChanged ->
                             com.lelloman.pezzottify.android.ui.screen.main.myrequests.UiDownloadStatusUpdate.StatusChanged(
                                 requestId = update.requestId,
                                 status = when (update.status) {
                                     com.lelloman.pezzottify.android.domain.remoteapi.response.DownloadQueueStatus.Pending ->
                                         com.lelloman.pezzottify.android.ui.screen.main.myrequests.RequestStatus.Pending
+
                                     com.lelloman.pezzottify.android.domain.remoteapi.response.DownloadQueueStatus.InProgress ->
                                         com.lelloman.pezzottify.android.ui.screen.main.myrequests.RequestStatus.InProgress
+
                                     com.lelloman.pezzottify.android.domain.remoteapi.response.DownloadQueueStatus.Completed ->
                                         com.lelloman.pezzottify.android.ui.screen.main.myrequests.RequestStatus.Completed
+
                                     com.lelloman.pezzottify.android.domain.remoteapi.response.DownloadQueueStatus.Failed ->
                                         com.lelloman.pezzottify.android.ui.screen.main.myrequests.RequestStatus.Failed
+
                                     com.lelloman.pezzottify.android.domain.remoteapi.response.DownloadQueueStatus.RetryWaiting ->
                                         com.lelloman.pezzottify.android.ui.screen.main.myrequests.RequestStatus.Pending
                                 },
                                 queuePosition = update.queuePosition,
                                 errorMessage = update.errorMessage,
                             )
+
                         is com.lelloman.pezzottify.android.domain.download.DownloadStatusUpdate.ProgressUpdated ->
                             com.lelloman.pezzottify.android.ui.screen.main.myrequests.UiDownloadStatusUpdate.ProgressUpdated(
                                 requestId = update.requestId,
                                 completed = update.progress.completed,
                                 total = update.progress.totalChildren,
                             )
+
                         is com.lelloman.pezzottify.android.domain.download.DownloadStatusUpdate.Completed ->
                             com.lelloman.pezzottify.android.ui.screen.main.myrequests.UiDownloadStatusUpdate.Completed(
                                 requestId = update.requestId,
@@ -1613,12 +1731,15 @@ class InteractorsModule {
                             }
                         )
                     }
+
                     is com.lelloman.pezzottify.android.domain.remoteapi.response.RemoteApiResponse.Error -> {
                         val errorType = when (response) {
                             is com.lelloman.pezzottify.android.domain.remoteapi.response.RemoteApiResponse.Error.Network ->
                                 ListeningHistoryErrorType.Network
+
                             is com.lelloman.pezzottify.android.domain.remoteapi.response.RemoteApiResponse.Error.Unauthorized ->
                                 ListeningHistoryErrorType.Unauthorized
+
                             else -> ListeningHistoryErrorType.Unknown
                         }
                         Result.failure(ListeningHistoryException(errorType))
@@ -1684,8 +1805,9 @@ class InteractorsModule {
                     diff < 86400 -> "${diff / 3600}h ago"
                     diff < 604800 -> "${diff / 86400}d ago"
                     else -> {
-                        val date = java.text.SimpleDateFormat("MMM d", java.util.Locale.getDefault())
-                            .format(java.util.Date(timestamp * 1000))
+                        val date =
+                            java.text.SimpleDateFormat("MMM d", java.util.Locale.getDefault())
+                                .format(java.util.Date(timestamp * 1000))
                         date
                     }
                 }
@@ -1717,124 +1839,151 @@ class InteractorsModule {
                 }
             }
         }
-}
 
-private fun DomainThemeMode.toUi(): UiThemeMode = when (this) {
-    DomainThemeMode.System -> UiThemeMode.System
-    DomainThemeMode.Light -> UiThemeMode.Light
-    DomainThemeMode.Dark -> UiThemeMode.Dark
-    DomainThemeMode.Amoled -> UiThemeMode.Amoled
-}
+    @Provides
+    fun provideGenreScreenInteractor(
+        getGenreTracks: com.lelloman.pezzottify.android.domain.statics.usecase.GetGenreTracks,
+        player: com.lelloman.pezzottify.android.domain.player.PezzottifyPlayer,
+    ): GenreScreenViewModel.Interactor = object : GenreScreenViewModel.Interactor {
+        override suspend fun getGenreTracks(genreName: String): Result<GenreScreenViewModel.GenreTracksData> {
+            return getGenreTracks(genreName).map { response ->
+                GenreScreenViewModel.GenreTracksData(
+                    trackIds = response.trackIds,
+                    total = response.total,
+                )
+            }
+        }
 
-private fun DomainColorPalette.toUi(): UiColorPalette = when (this) {
-    DomainColorPalette.Classic -> UiColorPalette.Classic
-    DomainColorPalette.OceanBlue -> UiColorPalette.OceanBlue
-    DomainColorPalette.SunsetCoral -> UiColorPalette.SunsetCoral
-    DomainColorPalette.PurpleHaze -> UiColorPalette.PurpleHaze
-    DomainColorPalette.RoseGold -> UiColorPalette.RoseGold
-    DomainColorPalette.Midnight -> UiColorPalette.Midnight
-    DomainColorPalette.Forest -> UiColorPalette.Forest
-}
+        override fun loadSingleTrack(trackId: String) {
+            player.loadSingleTrack(trackId)
+        }
 
-private fun DomainAppFontFamily.toUi(): UiAppFontFamily = when (this) {
-    DomainAppFontFamily.System -> UiAppFontFamily.System
-    DomainAppFontFamily.SansSerif -> UiAppFontFamily.SansSerif
-    DomainAppFontFamily.Serif -> UiAppFontFamily.Serif
-    DomainAppFontFamily.Monospace -> UiAppFontFamily.Monospace
-}
+        override fun addTracksToPlaylist(tracksIds: List<String>) {
+            player.addTracksToPlaylist(tracksIds)
+        }
+    }
 
-private fun UiThemeMode.toDomain(): DomainThemeMode = when (this) {
-    UiThemeMode.System -> DomainThemeMode.System
-    UiThemeMode.Light -> DomainThemeMode.Light
-    UiThemeMode.Dark -> DomainThemeMode.Dark
-    UiThemeMode.Amoled -> DomainThemeMode.Amoled
-}
+    private fun DomainThemeMode.toUi(): UiThemeMode = when (this) {
+        DomainThemeMode.System -> UiThemeMode.System
+        DomainThemeMode.Light -> UiThemeMode.Light
+        DomainThemeMode.Dark -> UiThemeMode.Dark
+        DomainThemeMode.Amoled -> UiThemeMode.Amoled
+    }
 
-private fun UiColorPalette.toDomain(): DomainColorPalette = when (this) {
-    UiColorPalette.Classic -> DomainColorPalette.Classic
-    UiColorPalette.OceanBlue -> DomainColorPalette.OceanBlue
-    UiColorPalette.SunsetCoral -> DomainColorPalette.SunsetCoral
-    UiColorPalette.PurpleHaze -> DomainColorPalette.PurpleHaze
-    UiColorPalette.RoseGold -> DomainColorPalette.RoseGold
-    UiColorPalette.Midnight -> DomainColorPalette.Midnight
-    UiColorPalette.Forest -> DomainColorPalette.Forest
-}
+    private fun DomainColorPalette.toUi(): UiColorPalette = when (this) {
+        DomainColorPalette.Classic -> UiColorPalette.Classic
+        DomainColorPalette.OceanBlue -> UiColorPalette.OceanBlue
+        DomainColorPalette.SunsetCoral -> UiColorPalette.SunsetCoral
+        DomainColorPalette.PurpleHaze -> UiColorPalette.PurpleHaze
+        DomainColorPalette.RoseGold -> UiColorPalette.RoseGold
+        DomainColorPalette.Midnight -> UiColorPalette.Midnight
+        DomainColorPalette.Forest -> UiColorPalette.Forest
+    }
 
-private fun UiAppFontFamily.toDomain(): DomainAppFontFamily = when (this) {
-    UiAppFontFamily.System -> DomainAppFontFamily.System
-    UiAppFontFamily.SansSerif -> DomainAppFontFamily.SansSerif
-    UiAppFontFamily.Serif -> DomainAppFontFamily.Serif
-    UiAppFontFamily.Monospace -> DomainAppFontFamily.Monospace
-}
+    private fun DomainAppFontFamily.toUi(): UiAppFontFamily = when (this) {
+        DomainAppFontFamily.System -> UiAppFontFamily.System
+        DomainAppFontFamily.SansSerif -> UiAppFontFamily.SansSerif
+        DomainAppFontFamily.Serif -> UiAppFontFamily.Serif
+        DomainAppFontFamily.Monospace -> UiAppFontFamily.Monospace
+    }
 
-private fun DomainStoragePressureLevel.toUi(): UiStoragePressureLevel = when (this) {
-    DomainStoragePressureLevel.LOW -> UiStoragePressureLevel.LOW
-    DomainStoragePressureLevel.MEDIUM -> UiStoragePressureLevel.MEDIUM
-    DomainStoragePressureLevel.HIGH -> UiStoragePressureLevel.HIGH
-    DomainStoragePressureLevel.CRITICAL -> UiStoragePressureLevel.CRITICAL
-}
+    private fun UiThemeMode.toDomain(): DomainThemeMode = when (this) {
+        UiThemeMode.System -> DomainThemeMode.System
+        UiThemeMode.Light -> DomainThemeMode.Light
+        UiThemeMode.Dark -> DomainThemeMode.Dark
+        UiThemeMode.Amoled -> DomainThemeMode.Amoled
+    }
 
-private fun DomainStorageInfo.toUi(): UiStorageInfo = UiStorageInfo(
-    totalBytes = totalBytes,
-    availableBytes = availableBytes,
-    usedBytes = usedBytes,
-    pressureLevel = pressureLevel.toUi()
-)
+    private fun UiColorPalette.toDomain(): DomainColorPalette = when (this) {
+        UiColorPalette.Classic -> DomainColorPalette.Classic
+        UiColorPalette.OceanBlue -> DomainColorPalette.OceanBlue
+        UiColorPalette.SunsetCoral -> DomainColorPalette.SunsetCoral
+        UiColorPalette.PurpleHaze -> DomainColorPalette.PurpleHaze
+        UiColorPalette.RoseGold -> DomainColorPalette.RoseGold
+        UiColorPalette.Midnight -> DomainColorPalette.Midnight
+        UiColorPalette.Forest -> DomainColorPalette.Forest
+    }
 
-private fun DomainLikedContent.toUi(): UiLikedContent = UiLikedContent(
-    contentId = contentId,
-    contentType = contentType.toUi(),
-    isLiked = isLiked
-)
+    private fun UiAppFontFamily.toDomain(): DomainAppFontFamily = when (this) {
+        UiAppFontFamily.System -> DomainAppFontFamily.System
+        UiAppFontFamily.SansSerif -> DomainAppFontFamily.SansSerif
+        UiAppFontFamily.Serif -> DomainAppFontFamily.Serif
+        UiAppFontFamily.Monospace -> DomainAppFontFamily.Monospace
+    }
 
-private fun DomainLikedContent.ContentType.toUi(): UiLikedContent.ContentType = when (this) {
-    DomainLikedContent.ContentType.Album -> UiLikedContent.ContentType.Album
-    DomainLikedContent.ContentType.Artist -> UiLikedContent.ContentType.Artist
-    DomainLikedContent.ContentType.Track -> UiLikedContent.ContentType.Track
-}
+    private fun DomainStoragePressureLevel.toUi(): UiStoragePressureLevel = when (this) {
+        DomainStoragePressureLevel.LOW -> UiStoragePressureLevel.LOW
+        DomainStoragePressureLevel.MEDIUM -> UiStoragePressureLevel.MEDIUM
+        DomainStoragePressureLevel.HIGH -> UiStoragePressureLevel.HIGH
+        DomainStoragePressureLevel.CRITICAL -> UiStoragePressureLevel.CRITICAL
+    }
 
-private fun List<DomainLikedContent>.toUi(): List<UiLikedContent> = map { it.toUi() }
+    private fun DomainStorageInfo.toUi(): UiStorageInfo = UiStorageInfo(
+        totalBytes = totalBytes,
+        availableBytes = availableBytes,
+        usedBytes = usedBytes,
+        pressureLevel = pressureLevel.toUi()
+    )
 
-private fun DomainPlaybackPlaylistContext.toUi(): UiPlaybackPlaylistContext = when (this) {
-    is DomainPlaybackPlaylistContext.Album -> UiPlaybackPlaylistContext.Album(albumId)
-    is DomainPlaybackPlaylistContext.UserPlaylist -> UiPlaybackPlaylistContext.UserPlaylist(userPlaylistId, isEdited)
-    DomainPlaybackPlaylistContext.UserMix -> UiPlaybackPlaylistContext.UserMix
-}
+    private fun DomainLikedContent.toUi(): UiLikedContent = UiLikedContent(
+        contentId = contentId,
+        contentType = contentType.toUi(),
+        isLiked = isLiked
+    )
 
-private fun DomainPlaybackPlaylist.toUi(): UiPlaybackPlaylist = UiPlaybackPlaylist(
-    context = context.toUi(),
-    tracksIds = tracksIds
-)
+    private fun DomainLikedContent.ContentType.toUi(): UiLikedContent.ContentType = when (this) {
+        DomainLikedContent.ContentType.Album -> UiLikedContent.ContentType.Album
+        DomainLikedContent.ContentType.Artist -> UiLikedContent.ContentType.Artist
+        DomainLikedContent.ContentType.Track -> UiLikedContent.ContentType.Track
+    }
 
-private fun DomainConnectionState.toUi(): UiConnectionState = when (this) {
-    is DomainConnectionState.Connected -> UiConnectionState.Connected(deviceId, serverVersion)
-    DomainConnectionState.Connecting -> UiConnectionState.Connecting
-    DomainConnectionState.Disconnected -> UiConnectionState.Disconnected
-    is DomainConnectionState.Error -> UiConnectionState.Error(message)
-}
+    private fun List<DomainLikedContent>.toUi(): List<UiLikedContent> = map { it.toUi() }
 
-private fun DomainTrackAvailability.toUi(): UiTrackAvailability = when (this) {
-    DomainTrackAvailability.Available -> UiTrackAvailability.Available
-    DomainTrackAvailability.Unavailable -> UiTrackAvailability.Unavailable
-    DomainTrackAvailability.Fetching -> UiTrackAvailability.Fetching
-    DomainTrackAvailability.FetchError -> UiTrackAvailability.FetchError
-}
+    private fun DomainPlaybackPlaylistContext.toUi(): UiPlaybackPlaylistContext = when (this) {
+        is DomainPlaybackPlaylistContext.Album -> UiPlaybackPlaylistContext.Album(albumId)
+        is DomainPlaybackPlaylistContext.UserPlaylist -> UiPlaybackPlaylistContext.UserPlaylist(
+            userPlaylistId,
+            isEdited
+        )
 
-private fun DomainAlbumAvailability.toUi(): UiAlbumAvailability = when (this) {
-    DomainAlbumAvailability.Missing -> UiAlbumAvailability.Missing
-    DomainAlbumAvailability.Partial -> UiAlbumAvailability.Partial
-    DomainAlbumAvailability.Complete -> UiAlbumAvailability.Complete
-}
+        DomainPlaybackPlaylistContext.UserMix -> UiPlaybackPlaylistContext.UserMix
+    }
 
-private fun DomainPermission.toUi(): UiPermission? = when (this) {
-    DomainPermission.AccessCatalog -> UiPermission.AccessCatalog
-    DomainPermission.LikeContent -> UiPermission.LikeContent
-    DomainPermission.OwnPlaylists -> UiPermission.OwnPlaylists
-    DomainPermission.EditCatalog -> UiPermission.EditCatalog
-    DomainPermission.ManagePermissions -> UiPermission.ManagePermissions
-    DomainPermission.ServerAdmin -> UiPermission.ServerAdmin
-    DomainPermission.ViewAnalytics -> UiPermission.ViewAnalytics
-    DomainPermission.RequestContent -> UiPermission.RequestContent
-    DomainPermission.DownloadManagerAdmin -> UiPermission.DownloadManagerAdmin
-    DomainPermission.ReportBug -> UiPermission.ReportBug
+    private fun DomainPlaybackPlaylist.toUi(): UiPlaybackPlaylist = UiPlaybackPlaylist(
+        context = context.toUi(),
+        tracksIds = tracksIds
+    )
+
+    private fun DomainConnectionState.toUi(): UiConnectionState = when (this) {
+        is DomainConnectionState.Connected -> UiConnectionState.Connected(deviceId, serverVersion)
+        DomainConnectionState.Connecting -> UiConnectionState.Connecting
+        DomainConnectionState.Disconnected -> UiConnectionState.Disconnected
+        is DomainConnectionState.Error -> UiConnectionState.Error(message)
+    }
+
+    private fun DomainTrackAvailability.toUi(): UiTrackAvailability = when (this) {
+        DomainTrackAvailability.Available -> UiTrackAvailability.Available
+        DomainTrackAvailability.Unavailable -> UiTrackAvailability.Unavailable
+        DomainTrackAvailability.Fetching -> UiTrackAvailability.Fetching
+        DomainTrackAvailability.FetchError -> UiTrackAvailability.FetchError
+    }
+
+    private fun DomainAlbumAvailability.toUi(): UiAlbumAvailability = when (this) {
+        DomainAlbumAvailability.Missing -> UiAlbumAvailability.Missing
+        DomainAlbumAvailability.Partial -> UiAlbumAvailability.Partial
+        DomainAlbumAvailability.Complete -> UiAlbumAvailability.Complete
+    }
+
+    private fun DomainPermission.toUi(): UiPermission? = when (this) {
+        DomainPermission.AccessCatalog -> UiPermission.AccessCatalog
+        DomainPermission.LikeContent -> UiPermission.LikeContent
+        DomainPermission.OwnPlaylists -> UiPermission.OwnPlaylists
+        DomainPermission.EditCatalog -> UiPermission.EditCatalog
+        DomainPermission.ManagePermissions -> UiPermission.ManagePermissions
+        DomainPermission.ServerAdmin -> UiPermission.ServerAdmin
+        DomainPermission.ViewAnalytics -> UiPermission.ViewAnalytics
+        DomainPermission.RequestContent -> UiPermission.RequestContent
+        DomainPermission.DownloadManagerAdmin -> UiPermission.DownloadManagerAdmin
+        DomainPermission.ReportBug -> UiPermission.ReportBug
+    }
 }
