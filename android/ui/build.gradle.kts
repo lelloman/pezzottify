@@ -58,7 +58,6 @@ dependencies {
     implementation(libs.coil.network)
     implementation(project(":logger"))
     implementation(project(":simple-ai-assistant"))
-    implementation(project(":domain"))
 
     implementation(libs.hilt)
     implementation(libs.hilt.navigation.compose)

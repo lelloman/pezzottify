@@ -2,8 +2,6 @@ package com.lelloman.pezzottify.android.ui.screen.main.genre
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.lelloman.pezzottify.android.domain.player.PezzottifyPlayer
-import com.lelloman.pezzottify.android.domain.statics.usecase.GetGenreTracks
 import com.lelloman.pezzottify.android.ui.content.Content
 import com.lelloman.pezzottify.android.ui.content.ContentResolver
 import dagger.assisted.Assisted
@@ -21,9 +19,8 @@ import kotlinx.coroutines.launch
 
 @HiltViewModel(assistedFactory = GenreScreenViewModel.Factory::class)
 class GenreScreenViewModel @AssistedInject constructor(
-    private val getGenreTracks: GetGenreTracks,
+    private val interactor: Interactor,
     private val contentResolver: ContentResolver,
-    private val player: PezzottifyPlayer,
     @Assisted private val genreName: String,
 ) : ViewModel(), GenreScreenActions {
 
@@ -46,7 +43,7 @@ class GenreScreenViewModel @AssistedInject constructor(
         viewModelScope.launch(coroutineContext) {
             mutableState.value = mutableState.value.copy(isLoading = true, error = null)
 
-            val result = getGenreTracks(genreName)
+            val result = interactor.getGenreTracks(genreName)
             result.fold(
                 onSuccess = { response ->
                     trackIds = response.trackIds
@@ -153,12 +150,12 @@ class GenreScreenViewModel @AssistedInject constructor(
             // Shuffle the track IDs and take up to SHUFFLE_PLAY_TRACK_COUNT tracks
             val shuffledTrackIds = trackIds.shuffled().take(SHUFFLE_PLAY_TRACK_COUNT)
             // Load the first track, then add the rest after a small delay to avoid race condition
-            player.loadSingleTrack(shuffledTrackIds.first())
+            interactor.loadSingleTrack(shuffledTrackIds.first())
             if (shuffledTrackIds.size > 1) {
                 viewModelScope.launch {
                     // Wait for loadSingleTrack to complete its playlist creation
                     kotlinx.coroutines.delay(100)
-                    player.addTracksToPlaylist(shuffledTrackIds.drop(1))
+                    interactor.addTracksToPlaylist(shuffledTrackIds.drop(1))
                 }
             }
         }
@@ -173,6 +170,19 @@ class GenreScreenViewModel @AssistedInject constructor(
             mutableEvents.emit(GenreScreenEvents.NavigateBack)
         }
     }
+
+    interface Interactor {
+        suspend fun getGenreTracks(genreName: String): Result<GenreTracksData>
+
+        fun loadSingleTrack(trackId: String)
+
+        fun addTracksToPlaylist(tracksIds: List<String>)
+    }
+
+    data class GenreTracksData(
+        val trackIds: List<String>,
+        val total: Int,
+    )
 
     @AssistedFactory
     interface Factory {

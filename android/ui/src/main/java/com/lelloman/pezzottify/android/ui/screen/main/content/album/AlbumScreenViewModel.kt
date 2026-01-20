@@ -11,8 +11,6 @@ import dagger.assisted.Assisted
 import dagger.assisted.AssistedFactory
 import dagger.assisted.AssistedInject
 import dagger.hilt.android.lifecycle.HiltViewModel
-import com.lelloman.pezzottify.android.domain.download.RequestAlbumDownloadErrorType
-import com.lelloman.pezzottify.android.domain.download.RequestAlbumDownloadException
 import com.lelloman.pezzottify.android.ui.content.AlbumAvailability
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
@@ -186,32 +184,26 @@ class AlbumScreenViewModel @AssistedInject constructor(
             // Set local state to Requesting
             localDownloadState.update { DownloadRequestState.Requesting }
 
-            try {
-                // Resolve first artist name for the download request
-                val firstArtistId = album.artistsIds.firstOrNull()
-                val artistName = if (firstArtistId != null) {
-                    val artistContent = contentResolver.resolveArtist(firstArtistId).first()
-                    if (artistContent is Content.Resolved) artistContent.data.name else "Unknown"
-                } else {
-                    "Unknown"
-                }
+            // Resolve first artist name for the download request
+            val firstArtistId = album.artistsIds.firstOrNull()
+            val artistName = if (firstArtistId != null) {
+                val artistContent = contentResolver.resolveArtist(firstArtistId).first()
+                if (artistContent is Content.Resolved) artistContent.data.name else "Unknown"
+            } else {
+                "Unknown"
+            }
 
-                val result = interactor.requestAlbumDownload(albumId, album.name, artistName)
-                if (result.isSuccess) {
-                    // Set state to WaitingForConfirmation to prevent flicker
-                    // Server status will update shortly via WebSocket
-                    localDownloadState.update { DownloadRequestState.WaitingForConfirmation }
-                } else {
-                    val errorType = (result.exceptionOrNull() as? RequestAlbumDownloadException)
-                        ?.errorType
-                        ?.toUiErrorType()
-                        ?: DownloadRequestErrorType.Unknown
-                    localDownloadState.update { DownloadRequestState.Error(errorType) }
-                }
-            } catch (e: RequestAlbumDownloadException) {
-                localDownloadState.update { DownloadRequestState.Error(e.errorType.toUiErrorType()) }
-            } catch (e: Exception) {
-                localDownloadState.update { DownloadRequestState.Error(DownloadRequestErrorType.Unknown) }
+            val result = interactor.requestAlbumDownload(albumId, album.name, artistName)
+            if (result.isSuccess) {
+                // Set state to WaitingForConfirmation to prevent flicker
+                // Server status will update shortly via WebSocket
+                localDownloadState.update { DownloadRequestState.WaitingForConfirmation }
+            } else {
+                val errorType = result.exceptionOrNull()
+                    ?.let { it as? AlbumDownloadError }
+                    ?.errorType
+                    ?: DownloadRequestErrorType.Unknown
+                localDownloadState.update { DownloadRequestState.Error(errorType) }
             }
         }
     }
@@ -240,6 +232,9 @@ class AlbumScreenViewModel @AssistedInject constructor(
         suspend fun requestAlbumDownload(albumId: String, albumName: String, artistName: String): Result<Unit>
     }
 
+    /** UI-specific exception for album download errors */
+    class AlbumDownloadError(val errorType: DownloadRequestErrorType) : Exception(errorType.name)
+
     /** Status of a download request from the server */
     data class DownloadRequestStatus(
         val status: RequestStatus,
@@ -251,11 +246,4 @@ class AlbumScreenViewModel @AssistedInject constructor(
     interface Factory {
         fun create(albumId: String, navController: NavController): AlbumScreenViewModel
     }
-}
-
-private fun RequestAlbumDownloadErrorType.toUiErrorType(): DownloadRequestErrorType = when (this) {
-    RequestAlbumDownloadErrorType.Network -> DownloadRequestErrorType.Network
-    RequestAlbumDownloadErrorType.Unauthorized -> DownloadRequestErrorType.Unauthorized
-    RequestAlbumDownloadErrorType.NotFound -> DownloadRequestErrorType.NotFound
-    RequestAlbumDownloadErrorType.Unknown -> DownloadRequestErrorType.Unknown
 }

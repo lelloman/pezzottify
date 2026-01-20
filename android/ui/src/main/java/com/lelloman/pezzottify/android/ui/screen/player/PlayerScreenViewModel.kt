@@ -70,12 +70,7 @@ class PlayerScreenViewModel @Inject constructor(
                             isMuted = playbackState.isMuted,
                             shuffleEnabled = playbackState.shuffleEnabled,
                             repeatMode = playbackState.repeatMode,
-                            playerError = playbackState.playerError?.let {
-                                PlayerErrorUi(
-                                    message = it.message,
-                                    isRecoverable = it.isRecoverable
-                                )
-                            },
+                            playerError = playbackState.playerError,
                         )
                     }
                 }
@@ -133,7 +128,7 @@ class PlayerScreenViewModel @Inject constructor(
                 val isMuted: Boolean,
                 val shuffleEnabled: Boolean,
                 val repeatMode: RepeatModeUi,
-                val playerError: com.lelloman.pezzottify.android.domain.player.ControlsAndStatePlayer.PlayerError?,
+                val playerError: PlayerErrorUi?,
             ) : PlaybackState
         }
     }
