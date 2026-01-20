@@ -1,42 +1,24 @@
 package com.lelloman.pezzottify.android.ui
 
-import com.lelloman.pezzottify.android.mapping.toTrackAvailability
 import com.lelloman.pezzottify.android.mapping.toAlbumAvailability
+import com.lelloman.pezzottify.android.mapping.toTrackAvailability
 import com.lelloman.pezzottify.android.domain.config.ConfigStore
 import com.lelloman.pezzottify.android.domain.statics.StaticsItem
 import com.lelloman.pezzottify.android.domain.statics.StaticsProvider
-import com.lelloman.pezzottify.android.domain.statics.AlbumAvailability as DomainAlbumAvailability
-import com.lelloman.pezzottify.android.domain.statics.TrackAvailability as DomainTrackAvailability
 import com.lelloman.pezzottify.android.ui.content.Album
-import com.lelloman.pezzottify.android.ui.content.AlbumAvailability
 import com.lelloman.pezzottify.android.ui.content.Artist
 import com.lelloman.pezzottify.android.ui.content.ArtistDiscography
+import com.lelloman.pezzottify.android.ui.content.ArtistInfo
 import com.lelloman.pezzottify.android.ui.content.Content
 import com.lelloman.pezzottify.android.ui.content.ContentResolver
 import com.lelloman.pezzottify.android.ui.content.SearchResultContent
 import com.lelloman.pezzottify.android.ui.content.Track
-import com.lelloman.pezzottify.android.ui.content.TrackAvailability
-import com.lelloman.pezzottify.android.ui.content.ArtistInfo
 import com.lelloman.pezzottify.android.ui.screen.main.search.SearchScreenViewModel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
-
-// Manual mappings for availability enums
-private fun com.lelloman.pezzottify.android.domain.statics.TrackAvailability.toUi(): com.lelloman.pezzottify.android.ui.content.TrackAvailability = when (this) {
-    com.lelloman.pezzottify.android.domain.statics.TrackAvailability.Available -> com.lelloman.pezzottify.android.ui.content.TrackAvailability.Available
-    com.lelloman.pezzottify.android.domain.statics.TrackAvailability.Unavailable -> com.lelloman.pezzottify.android.ui.content.TrackAvailability.Unavailable
-    com.lelloman.pezzottify.android.domain.statics.TrackAvailability.Fetching -> com.lelloman.pezzottify.android.ui.content.TrackAvailability.Fetching
-    com.lelloman.pezzottify.android.domain.statics.TrackAvailability.FetchError -> com.lelloman.pezzottify.android.ui.content.TrackAvailability.FetchError
-}
-
-private fun com.lelloman.pezzottify.android.domain.statics.AlbumAvailability.toUi(): com.lelloman.pezzottify.android.ui.content.AlbumAvailability = when (this) {
-    com.lelloman.pezzottify.android.domain.statics.AlbumAvailability.Missing -> com.lelloman.pezzottify.android.ui.content.AlbumAvailability.Missing
-    com.lelloman.pezzottify.android.domain.statics.AlbumAvailability.Partial -> com.lelloman.pezzottify.android.ui.content.AlbumAvailability.Partial
-    com.lelloman.pezzottify.android.domain.statics.AlbumAvailability.Complete -> com.lelloman.pezzottify.android.ui.content.AlbumAvailability.Complete
-}
 
 class UiContentResolver(
     private val staticsProvider: StaticsProvider,
@@ -82,7 +64,7 @@ class UiContentResolver(
                                 tracksIds = disc.tracksIds,
                             )
                         },
-                        availability = it.data.availability.toUi(),
+                        availability = it.data.availability.toAlbumAvailability(),
                     )
                 )
             }
@@ -111,7 +93,7 @@ class UiContentResolver(
                                     albumId = trackItem.data.albumId,
                                     artists = emptyList(),
                                     durationSeconds = trackItem.data.durationSeconds,
-                                    availability = trackItem.data.availability.toUi(),
+                                    availability = trackItem.data.availability.toTrackAvailability(),
                                 )
                             )
                         )
@@ -124,7 +106,7 @@ class UiContentResolver(
                                     albumId = trackItem.data.albumId,
                                     artists = artists.toList(),
                                     durationSeconds = trackItem.data.durationSeconds,
-                                    availability = trackItem.data.availability.toUi(),
+                                    availability = trackItem.data.availability.toTrackAvailability(),
                                 )
                             )
                         }
@@ -162,7 +144,7 @@ class UiContentResolver(
                                             baseUrl = configStore.baseUrl.value,
                                             displayImageId = albumItem.data.displayImageId,
                                         ),
-                                        availability = albumItem.data.availability.toUi(),
+                                        availability = albumItem.data.availability.toAlbumAvailability(),
                                     )
                                 )
                             )
@@ -177,7 +159,7 @@ class UiContentResolver(
                                             baseUrl = configStore.baseUrl.value,
                                             displayImageId = albumItem.data.displayImageId,
                                         ),
-                                        availability = albumItem.data.availability.toUi(),
+                                        availability = albumItem.data.availability.toAlbumAvailability(),
                                     )
                                 )
                             }
@@ -222,7 +204,7 @@ class UiContentResolver(
                                     durationSeconds = trackItem.data.durationSeconds,
                                     albumId = trackItem.data.albumId,
                                     albumImageUrl = albumImageUrl,
-                                    availability = trackItem.data.availability.toUi(),
+                                    availability = trackItem.data.availability.toTrackAvailability(),
                                 )
                             )
                         }
