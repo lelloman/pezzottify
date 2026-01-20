@@ -46,6 +46,14 @@ import com.lelloman.pezzottify.android.domain.usercontent.UserPlaylistStore
 import com.lelloman.pezzottify.android.domain.websocket.WebSocketManager
 import com.lelloman.pezzottify.android.logger.LoggerFactory
 import com.lelloman.pezzottify.android.logging.LogFileManager
+import com.lelloman.pezzottify.android.mapping.toAlbumAvailability
+import com.lelloman.pezzottify.android.mapping.toAppFontFamily
+import com.lelloman.pezzottify.android.mapping.toColorPalette
+import com.lelloman.pezzottify.android.mapping.toContentType
+import com.lelloman.pezzottify.android.mapping.toPermission
+import com.lelloman.pezzottify.android.mapping.toStorageInfo
+import com.lelloman.pezzottify.android.mapping.toThemeMode
+import com.lelloman.pezzottify.android.mapping.toTrackAvailability
 import com.lelloman.pezzottify.android.oidc.OidcCallbackHandler
 import com.lelloman.pezzottify.android.ui.screen.about.AboutScreenViewModel
 import com.lelloman.pezzottify.android.ui.screen.login.LoginViewModel
@@ -107,25 +115,17 @@ import kotlinx.coroutines.flow.stateIn
 import java.util.UUID
 import com.lelloman.pezzottify.android.domain.player.PlaybackPlaylist as DomainPlaybackPlaylist
 import com.lelloman.pezzottify.android.domain.player.PlaybackPlaylistContext as DomainPlaybackPlaylistContext
-import com.lelloman.pezzottify.android.domain.settings.AppFontFamily as DomainAppFontFamily
-import com.lelloman.pezzottify.android.domain.settings.ColorPalette as DomainColorPalette
-import com.lelloman.pezzottify.android.domain.settings.ThemeMode as DomainThemeMode
 import com.lelloman.pezzottify.android.domain.statics.AlbumAvailability as DomainAlbumAvailability
 import com.lelloman.pezzottify.android.domain.statics.TrackAvailability as DomainTrackAvailability
-import com.lelloman.pezzottify.android.domain.storage.StorageInfo as DomainStorageInfo
-import com.lelloman.pezzottify.android.domain.storage.StoragePressureLevel as DomainStoragePressureLevel
 import com.lelloman.pezzottify.android.domain.sync.Permission as DomainPermission
 import com.lelloman.pezzottify.android.domain.usercontent.LikedContent as DomainLikedContent
 import com.lelloman.pezzottify.android.domain.websocket.ConnectionState as DomainConnectionState
 import com.lelloman.pezzottify.android.ui.component.ConnectionState as UiConnectionState
-import com.lelloman.pezzottify.android.ui.content.AlbumAvailability as UiAlbumAvailability
-import com.lelloman.pezzottify.android.ui.content.TrackAvailability as UiTrackAvailability
 import com.lelloman.pezzottify.android.ui.model.LikedContent as UiLikedContent
 import com.lelloman.pezzottify.android.ui.model.Permission as UiPermission
 import com.lelloman.pezzottify.android.ui.model.PlaybackPlaylist as UiPlaybackPlaylist
 import com.lelloman.pezzottify.android.ui.model.PlaybackPlaylistContext as UiPlaybackPlaylistContext
 import com.lelloman.pezzottify.android.ui.model.StorageInfo as UiStorageInfo
-import com.lelloman.pezzottify.android.ui.model.StoragePressureLevel as UiStoragePressureLevel
 import com.lelloman.pezzottify.android.ui.theme.AppFontFamily as UiAppFontFamily
 import com.lelloman.pezzottify.android.ui.theme.ColorPalette as UiColorPalette
 import com.lelloman.pezzottify.android.ui.theme.ThemeMode as UiThemeMode
@@ -282,7 +282,7 @@ class InteractorsModule {
 
         override fun observePermissions(): Flow<Set<UiPermission>> =
             permissionsStore.permissions.map { permissions ->
-                permissions.mapNotNull { it.toUi() }.toSet()
+                permissions.map { it.toPermission() }.toSet()
             }
     }
 
@@ -296,29 +296,29 @@ class InteractorsModule {
         permissionsStore: PermissionsStore,
         cacheManager: com.lelloman.pezzottify.android.domain.cache.CacheManager,
     ): SettingsScreenViewModel.Interactor = object : SettingsScreenViewModel.Interactor {
-        override fun getThemeMode(): UiThemeMode = userSettingsStore.themeMode.value.toUi()
+        override fun getThemeMode(): UiThemeMode = userSettingsStore.themeMode.value.toThemeMode()
 
-        override fun getColorPalette(): UiColorPalette = userSettingsStore.colorPalette.value.toUi()
+        override fun getColorPalette(): UiColorPalette = userSettingsStore.colorPalette.value.toColorPalette()
 
-        override fun getFontFamily(): UiAppFontFamily = userSettingsStore.fontFamily.value.toUi()
+        override fun getFontFamily(): UiAppFontFamily = userSettingsStore.fontFamily.value.toAppFontFamily()
 
         override fun isCacheEnabled(): Boolean = userSettingsStore.isInMemoryCacheEnabled.value
 
-        override fun getStorageInfo(): UiStorageInfo = storageMonitor.storageInfo.value.toUi()
+        override fun getStorageInfo(): UiStorageInfo = storageMonitor.storageInfo.value.toStorageInfo()
 
         override fun observeThemeMode(): Flow<UiThemeMode> =
-            userSettingsStore.themeMode.map { it.toUi() }
+            userSettingsStore.themeMode.map { it.toThemeMode() }
 
         override fun observeColorPalette(): Flow<UiColorPalette> =
-            userSettingsStore.colorPalette.map { it.toUi() }
+            userSettingsStore.colorPalette.map { it.toColorPalette() }
 
         override fun observeFontFamily(): Flow<UiAppFontFamily> =
-            userSettingsStore.fontFamily.map { it.toUi() }
+            userSettingsStore.fontFamily.map { it.toAppFontFamily() }
 
         override fun observeCacheEnabled() = userSettingsStore.isInMemoryCacheEnabled
 
         override fun observeStorageInfo(): Flow<UiStorageInfo> =
-            storageMonitor.storageInfo.map { it.toUi() }
+            storageMonitor.storageInfo.map { it.toStorageInfo() }
 
         override fun isNotifyWhatsNewEnabled(): Boolean =
             userSettingsStore.isNotifyWhatsNewEnabled.value
@@ -350,15 +350,15 @@ class InteractorsModule {
         }
 
         override suspend fun setThemeMode(themeMode: UiThemeMode) {
-            userSettingsStore.setThemeMode(themeMode.toDomain())
+            userSettingsStore.setThemeMode(themeMode.toThemeMode())
         }
 
         override suspend fun setColorPalette(colorPalette: UiColorPalette) {
-            userSettingsStore.setColorPalette(colorPalette.toDomain())
+            userSettingsStore.setColorPalette(colorPalette.toColorPalette())
         }
 
         override suspend fun setFontFamily(fontFamily: UiAppFontFamily) {
-            userSettingsStore.setFontFamily(fontFamily.toDomain())
+            userSettingsStore.setFontFamily(fontFamily.toAppFontFamily())
         }
 
         override suspend fun setCacheEnabled(enabled: Boolean) {
@@ -425,31 +425,31 @@ class InteractorsModule {
     fun provideStyleSettingsInteractor(
         userSettingsStore: UserSettingsStore,
     ): StyleSettingsViewModel.Interactor = object : StyleSettingsViewModel.Interactor {
-        override fun getThemeMode(): UiThemeMode = userSettingsStore.themeMode.value.toUi()
+        override fun getThemeMode(): UiThemeMode = userSettingsStore.themeMode.value.toThemeMode()
 
-        override fun getColorPalette(): UiColorPalette = userSettingsStore.colorPalette.value.toUi()
+        override fun getColorPalette(): UiColorPalette = userSettingsStore.colorPalette.value.toColorPalette()
 
-        override fun getFontFamily(): UiAppFontFamily = userSettingsStore.fontFamily.value.toUi()
+        override fun getFontFamily(): UiAppFontFamily = userSettingsStore.fontFamily.value.toAppFontFamily()
 
         override fun observeThemeMode(): Flow<UiThemeMode> =
-            userSettingsStore.themeMode.map { it.toUi() }
+            userSettingsStore.themeMode.map { it.toThemeMode() }
 
         override fun observeColorPalette(): Flow<UiColorPalette> =
-            userSettingsStore.colorPalette.map { it.toUi() }
+            userSettingsStore.colorPalette.map { it.toColorPalette() }
 
         override fun observeFontFamily(): Flow<UiAppFontFamily> =
-            userSettingsStore.fontFamily.map { it.toUi() }
+            userSettingsStore.fontFamily.map { it.toAppFontFamily() }
 
         override suspend fun setThemeMode(themeMode: UiThemeMode) {
-            userSettingsStore.setThemeMode(themeMode.toDomain())
+            userSettingsStore.setThemeMode(themeMode.toThemeMode())
         }
 
         override suspend fun setColorPalette(colorPalette: UiColorPalette) {
-            userSettingsStore.setColorPalette(colorPalette.toDomain())
+            userSettingsStore.setColorPalette(colorPalette.toColorPalette())
         }
 
         override suspend fun setFontFamily(fontFamily: UiAppFontFamily) {
-            userSettingsStore.setFontFamily(fontFamily.toDomain())
+            userSettingsStore.setFontFamily(fontFamily.toAppFontFamily())
         }
     }
 
@@ -625,7 +625,7 @@ class InteractorsModule {
                                     ),
                                     artistNames = album.artistNames,
                                     availability = DomainAlbumAvailability.fromServerString(album.availability)
-                                        .toUi(),
+                                        .toAlbumAvailability(),
                                 )
                             }
                         )
@@ -707,7 +707,7 @@ class InteractorsModule {
                             imageUrl = ImageUrlProvider.buildImageUrl(baseUrl, result.imageId),
                             year = result.year?.toInt(),
                             availability = DomainAlbumAvailability.fromServerString(result.availability)
-                                .toUi(),
+                                .toAlbumAvailability(),
                         )
                     }
 
@@ -720,7 +720,7 @@ class InteractorsModule {
                             albumId = result.albumId,
                             durationMs = result.duration.toLong() * 1000,
                             availability = DomainTrackAvailability.fromServerString(result.availability)
-                                .toUi(),
+                                .toTrackAvailability(),
                         )
                     }
                 }
@@ -1401,7 +1401,7 @@ class InteractorsModule {
                                             )
                                         },
                                         durationSeconds = track.durationSeconds,
-                                        availability = track.availability.toUi(),
+                                        availability = track.availability.toTrackAvailability(),
                                     )
                                 },
                                 currentIndex = queueState.currentIndex,
@@ -1863,79 +1863,13 @@ class InteractorsModule {
         }
     }
 
-    private fun DomainThemeMode.toUi(): UiThemeMode = when (this) {
-        DomainThemeMode.System -> UiThemeMode.System
-        DomainThemeMode.Light -> UiThemeMode.Light
-        DomainThemeMode.Dark -> UiThemeMode.Dark
-        DomainThemeMode.Amoled -> UiThemeMode.Amoled
-    }
-
-    private fun DomainColorPalette.toUi(): UiColorPalette = when (this) {
-        DomainColorPalette.Classic -> UiColorPalette.Classic
-        DomainColorPalette.OceanBlue -> UiColorPalette.OceanBlue
-        DomainColorPalette.SunsetCoral -> UiColorPalette.SunsetCoral
-        DomainColorPalette.PurpleHaze -> UiColorPalette.PurpleHaze
-        DomainColorPalette.RoseGold -> UiColorPalette.RoseGold
-        DomainColorPalette.Midnight -> UiColorPalette.Midnight
-        DomainColorPalette.Forest -> UiColorPalette.Forest
-    }
-
-    private fun DomainAppFontFamily.toUi(): UiAppFontFamily = when (this) {
-        DomainAppFontFamily.System -> UiAppFontFamily.System
-        DomainAppFontFamily.SansSerif -> UiAppFontFamily.SansSerif
-        DomainAppFontFamily.Serif -> UiAppFontFamily.Serif
-        DomainAppFontFamily.Monospace -> UiAppFontFamily.Monospace
-    }
-
-    private fun UiThemeMode.toDomain(): DomainThemeMode = when (this) {
-        UiThemeMode.System -> DomainThemeMode.System
-        UiThemeMode.Light -> DomainThemeMode.Light
-        UiThemeMode.Dark -> DomainThemeMode.Dark
-        UiThemeMode.Amoled -> DomainThemeMode.Amoled
-    }
-
-    private fun UiColorPalette.toDomain(): DomainColorPalette = when (this) {
-        UiColorPalette.Classic -> DomainColorPalette.Classic
-        UiColorPalette.OceanBlue -> DomainColorPalette.OceanBlue
-        UiColorPalette.SunsetCoral -> DomainColorPalette.SunsetCoral
-        UiColorPalette.PurpleHaze -> DomainColorPalette.PurpleHaze
-        UiColorPalette.RoseGold -> DomainColorPalette.RoseGold
-        UiColorPalette.Midnight -> DomainColorPalette.Midnight
-        UiColorPalette.Forest -> DomainColorPalette.Forest
-    }
-
-    private fun UiAppFontFamily.toDomain(): DomainAppFontFamily = when (this) {
-        UiAppFontFamily.System -> DomainAppFontFamily.System
-        UiAppFontFamily.SansSerif -> DomainAppFontFamily.SansSerif
-        UiAppFontFamily.Serif -> DomainAppFontFamily.Serif
-        UiAppFontFamily.Monospace -> DomainAppFontFamily.Monospace
-    }
-
-    private fun DomainStoragePressureLevel.toUi(): UiStoragePressureLevel = when (this) {
-        DomainStoragePressureLevel.LOW -> UiStoragePressureLevel.LOW
-        DomainStoragePressureLevel.MEDIUM -> UiStoragePressureLevel.MEDIUM
-        DomainStoragePressureLevel.HIGH -> UiStoragePressureLevel.HIGH
-        DomainStoragePressureLevel.CRITICAL -> UiStoragePressureLevel.CRITICAL
-    }
-
-    private fun DomainStorageInfo.toUi(): UiStorageInfo = UiStorageInfo(
-        totalBytes = totalBytes,
-        availableBytes = availableBytes,
-        usedBytes = usedBytes,
-        pressureLevel = pressureLevel.toUi()
-    )
+    // Manual mappings for sealed interfaces (DuckMapper cross-module support not yet available)
 
     private fun DomainLikedContent.toUi(): UiLikedContent = UiLikedContent(
         contentId = contentId,
-        contentType = contentType.toUi(),
+        contentType = contentType.toContentType(),
         isLiked = isLiked
     )
-
-    private fun DomainLikedContent.ContentType.toUi(): UiLikedContent.ContentType = when (this) {
-        DomainLikedContent.ContentType.Album -> UiLikedContent.ContentType.Album
-        DomainLikedContent.ContentType.Artist -> UiLikedContent.ContentType.Artist
-        DomainLikedContent.ContentType.Track -> UiLikedContent.ContentType.Track
-    }
 
     private fun List<DomainLikedContent>.toUi(): List<UiLikedContent> = map { it.toUi() }
 
@@ -1959,31 +1893,5 @@ class InteractorsModule {
         DomainConnectionState.Connecting -> UiConnectionState.Connecting
         DomainConnectionState.Disconnected -> UiConnectionState.Disconnected
         is DomainConnectionState.Error -> UiConnectionState.Error(message)
-    }
-
-    private fun DomainTrackAvailability.toUi(): UiTrackAvailability = when (this) {
-        DomainTrackAvailability.Available -> UiTrackAvailability.Available
-        DomainTrackAvailability.Unavailable -> UiTrackAvailability.Unavailable
-        DomainTrackAvailability.Fetching -> UiTrackAvailability.Fetching
-        DomainTrackAvailability.FetchError -> UiTrackAvailability.FetchError
-    }
-
-    private fun DomainAlbumAvailability.toUi(): UiAlbumAvailability = when (this) {
-        DomainAlbumAvailability.Missing -> UiAlbumAvailability.Missing
-        DomainAlbumAvailability.Partial -> UiAlbumAvailability.Partial
-        DomainAlbumAvailability.Complete -> UiAlbumAvailability.Complete
-    }
-
-    private fun DomainPermission.toUi(): UiPermission? = when (this) {
-        DomainPermission.AccessCatalog -> UiPermission.AccessCatalog
-        DomainPermission.LikeContent -> UiPermission.LikeContent
-        DomainPermission.OwnPlaylists -> UiPermission.OwnPlaylists
-        DomainPermission.EditCatalog -> UiPermission.EditCatalog
-        DomainPermission.ManagePermissions -> UiPermission.ManagePermissions
-        DomainPermission.ServerAdmin -> UiPermission.ServerAdmin
-        DomainPermission.ViewAnalytics -> UiPermission.ViewAnalytics
-        DomainPermission.RequestContent -> UiPermission.RequestContent
-        DomainPermission.DownloadManagerAdmin -> UiPermission.DownloadManagerAdmin
-        DomainPermission.ReportBug -> UiPermission.ReportBug
     }
 }
