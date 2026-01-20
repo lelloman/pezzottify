@@ -42,4 +42,7 @@ import com.lelloman.pezzottify.android.ui.model.LikedContent as UiLikedContent
 // Data classes
 @DuckMap(DomainStorageInfo::class, UiStorageInfo::class)
 
+// Sealed interfaces - keep manual for now (cross-module not supported yet)
+// TODO: ConnectionState and PlaybackPlaylistContext can't be mapped by DuckMapper
+
 object Mappings
