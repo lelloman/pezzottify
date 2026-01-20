@@ -177,8 +177,8 @@ dependencies {
     debugImplementation(project(":debuginterface"))
 
     // DuckMapper for automatic mapping code generation
-    implementation("com.github.lelloman.duckmapper:annotations:0.2.1")
-    ksp("com.github.lelloman.duckmapper:ksp:0.2.1")
+    implementation("com.github.lelloman.duckmapper:annotations:0.3.0")
+    ksp("com.github.lelloman.duckmapper:ksp:0.3.0")
 
     testImplementation(libs.junit)
     testImplementation(libs.truth)
