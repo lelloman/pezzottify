@@ -49,6 +49,7 @@ import com.lelloman.pezzottify.android.logging.LogFileManager
 import com.lelloman.pezzottify.android.mapping.toAlbumAvailability
 import com.lelloman.pezzottify.android.mapping.toAppFontFamily
 import com.lelloman.pezzottify.android.mapping.toColorPalette
+import com.lelloman.pezzottify.android.mapping.toConnectionState
 import com.lelloman.pezzottify.android.mapping.toContentType
 import com.lelloman.pezzottify.android.mapping.toPermission
 import com.lelloman.pezzottify.android.mapping.toStorageInfo
@@ -1147,11 +1148,11 @@ class InteractorsModule {
     ) = object : HomeScreenViewModel.Interactor {
 
         override fun connectionState(scope: CoroutineScope): StateFlow<UiConnectionState> =
-            webSocketManager.connectionState.map { it.toUi() }
+            webSocketManager.connectionState.map { it.toConnectionState() }
                 .stateIn(
                     scope,
                     SharingStarted.Eagerly,
-                    webSocketManager.connectionState.value.toUi()
+                    webSocketManager.connectionState.value.toConnectionState()
                 )
 
         override suspend fun getRecentlyViewedContent(maxCount: Int): Flow<List<HomeScreenState.RecentlyViewedContent>> =
@@ -1863,7 +1864,7 @@ class InteractorsModule {
         }
     }
 
-    // Manual mappings for sealed interfaces (DuckMapper cross-module support not yet available)
+    // Manual mapping for LikedContent (domain is interface with extra fields, UI is data class)
 
     private fun DomainLikedContent.toUi(): UiLikedContent = UiLikedContent(
         contentId = contentId,
@@ -1872,26 +1873,4 @@ class InteractorsModule {
     )
 
     private fun List<DomainLikedContent>.toUi(): List<UiLikedContent> = map { it.toUi() }
-
-    private fun DomainPlaybackPlaylistContext.toUi(): UiPlaybackPlaylistContext = when (this) {
-        is DomainPlaybackPlaylistContext.Album -> UiPlaybackPlaylistContext.Album(albumId)
-        is DomainPlaybackPlaylistContext.UserPlaylist -> UiPlaybackPlaylistContext.UserPlaylist(
-            userPlaylistId,
-            isEdited
-        )
-
-        DomainPlaybackPlaylistContext.UserMix -> UiPlaybackPlaylistContext.UserMix
-    }
-
-    private fun DomainPlaybackPlaylist.toUi(): UiPlaybackPlaylist = UiPlaybackPlaylist(
-        context = context.toUi(),
-        tracksIds = tracksIds
-    )
-
-    private fun DomainConnectionState.toUi(): UiConnectionState = when (this) {
-        is DomainConnectionState.Connected -> UiConnectionState.Connected(deviceId, serverVersion)
-        DomainConnectionState.Connecting -> UiConnectionState.Connecting
-        DomainConnectionState.Disconnected -> UiConnectionState.Disconnected
-        is DomainConnectionState.Error -> UiConnectionState.Error(message)
-    }
 }
