@@ -128,7 +128,7 @@ const ARTIST_ALBUMS_TABLE: Table = Table {
         ("idx_artist_albums_artist", "artist_rowid"),
         ("idx_artist_albums_album", "album_rowid"),
     ],
-    unique_constraints: &[],
+    unique_constraints: &[&["artist_rowid", "album_rowid", "is_appears_on"]],
 };
 
 /// Artist <-> Genre relationship
@@ -247,6 +247,38 @@ pub const CATALOG_VERSIONED_SCHEMAS: &[VersionedSchema] = &[
             )?;
             tx.execute(
                 "CREATE INDEX IF NOT EXISTS idx_artists_available ON artists(artist_available)",
+                [],
+            )?;
+            Ok(())
+        }),
+    },
+    VersionedSchema {
+        version: 3,
+        tables: &[
+            ARTISTS_TABLE,
+            ALBUMS_TABLE,
+            TRACKS_TABLE,
+            TRACK_ARTISTS_TABLE,
+            ARTIST_ALBUMS_TABLE,
+            ARTIST_GENRES_TABLE,
+            ALBUM_IMAGES_TABLE,
+            ARTIST_IMAGES_TABLE,
+        ],
+        migration: Some(|tx: &rusqlite::Connection| {
+            // Delete duplicate artist_albums entries, keeping the one with lowest rowid
+            tx.execute(
+                "DELETE FROM artist_albums
+                 WHERE rowid NOT IN (
+                     SELECT MIN(rowid)
+                     FROM artist_albums
+                     GROUP BY artist_rowid, album_rowid, is_appears_on
+                 )",
+                [],
+            )?;
+            // Create unique index to prevent future duplicates
+            tx.execute(
+                "CREATE UNIQUE INDEX IF NOT EXISTS idx_artist_albums_unique
+                 ON artist_albums(artist_rowid, album_rowid, is_appears_on)",
                 [],
             )?;
             Ok(())
