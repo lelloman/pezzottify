@@ -1,6 +1,5 @@
 #!/bin/bash
 # Build Docker image with git version info detected from host
-# For production deployment, see the homelab repo
 
 set -e
 

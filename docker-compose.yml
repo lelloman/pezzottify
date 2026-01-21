@@ -1,5 +1,4 @@
 # Development docker-compose
-# For production deployment, see the homelab repo
 
 services:
   catalog-server:
