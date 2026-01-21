@@ -29,9 +29,17 @@ class MainScreenViewModel @Inject constructor(
                     logger.debug("Collecting new playback state $playbackState")
                     val newBottomPlayerState = when (playbackState) {
                         is Interactor.PlaybackState.Idle, null -> MainScreenState.BottomPlayer()
+                        is Interactor.PlaybackState.Loading -> {
+                            // Show bottom player with loading state while metadata is being fetched
+                            MainScreenState.BottomPlayer(
+                                isVisible = true,
+                                isLoading = true,
+                            )
+                        }
                         is Interactor.PlaybackState.Loaded -> {
                             MainScreenState.BottomPlayer(
                                 isVisible = true,
+                                isLoading = false,
                                 trackId = playbackState.trackId,
                                 trackName = playbackState.trackName,
                                 albumName = playbackState.albumName,
@@ -79,6 +87,8 @@ class MainScreenViewModel @Inject constructor(
 
         sealed interface PlaybackState {
             data object Idle : PlaybackState
+
+            data object Loading : PlaybackState
 
             data class Loaded(
                 val isPlaying: Boolean,

@@ -199,15 +199,22 @@ internal class PlayerImpl(
                 }
                 if (loadedAlbum != null) {
                     val tracksIds = loadedAlbum.data.discs.flatMap { it.tracksIds }
-                    mutablePlaybackPlaylist.value = PlaybackPlaylist(
-                        context = PlaybackPlaylistContext.Album(albumId),
-                        tracksIds = tracksIds,
-                    )
+
+                    // Start playback FIRST, before setting playlist state
+                    // This ensures ExoPlayer starts streaming immediately while
+                    // metadata loading happens in the background
                     platformPlayer.setIsPlaying(true)
                     logger.info("Loading new track list into platform player.")
                     val baseUrl = configStore.baseUrl.value
                     val urls = tracksIds.map { "$baseUrl/v1/content/stream/$it" }
                     platformPlayer.loadPlaylist(urls)
+
+                    // Set playlist state AFTER starting playback
+                    // This triggers metadata loading which can be slow
+                    mutablePlaybackPlaylist.value = PlaybackPlaylist(
+                        context = PlaybackPlaylistContext.Album(albumId),
+                        tracksIds = tracksIds,
+                    )
 
                     // If a specific track was requested, start from that track
                     if (startTrackId != null) {
@@ -250,15 +257,19 @@ internal class PlayerImpl(
                 }
                 if (playlist != null && playlist.trackIds.isNotEmpty()) {
                     val tracksIds = playlist.trackIds
-                    mutablePlaybackPlaylist.value = PlaybackPlaylist(
-                        context = PlaybackPlaylistContext.UserPlaylist(userPlaylistId, isEdited = false),
-                        tracksIds = tracksIds,
-                    )
+
+                    // Start playback FIRST, before setting playlist state
                     platformPlayer.setIsPlaying(true)
                     logger.info("Loading user playlist into platform player.")
                     val baseUrl = configStore.baseUrl.value
                     val urls = tracksIds.map { "$baseUrl/v1/content/stream/$it" }
                     platformPlayer.loadPlaylist(urls)
+
+                    // Set playlist state AFTER starting playback
+                    mutablePlaybackPlaylist.value = PlaybackPlaylist(
+                        context = PlaybackPlaylistContext.UserPlaylist(userPlaylistId, isEdited = false),
+                        tracksIds = tracksIds,
+                    )
 
                     // If a specific track was requested, start from that track
                     if (startTrackId != null) {
@@ -297,14 +308,17 @@ internal class PlayerImpl(
         runOnPlayerThread {
             loadNexPlaylistJob?.cancel()
             loadNexPlaylistJob = runOnPlayerThread {
-                mutablePlaybackPlaylist.value = PlaybackPlaylist(
-                    context = PlaybackPlaylistContext.UserMix,
-                    tracksIds = listOf(trackId),
-                )
+                // Start playback FIRST, before setting playlist state
                 platformPlayer.setIsPlaying(true)
                 val baseUrl = configStore.baseUrl.value
                 val url = "$baseUrl/v1/content/stream/$trackId"
                 platformPlayer.loadPlaylist(listOf(url))
+
+                // Set playlist state AFTER starting playback
+                mutablePlaybackPlaylist.value = PlaybackPlaylist(
+                    context = PlaybackPlaylistContext.UserMix,
+                    tracksIds = listOf(trackId),
+                )
                 logger.info("Loaded single track $trackId")
             }
         }

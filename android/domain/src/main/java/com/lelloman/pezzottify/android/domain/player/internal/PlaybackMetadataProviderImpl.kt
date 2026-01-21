@@ -5,6 +5,7 @@ import com.lelloman.pezzottify.android.domain.player.PlaybackMetadataProvider
 import com.lelloman.pezzottify.android.domain.player.PlaybackQueueState
 import com.lelloman.pezzottify.android.domain.player.PezzottifyPlayer
 import com.lelloman.pezzottify.android.domain.player.PlatformPlayer
+import com.lelloman.pezzottify.android.domain.player.QueueLoadingState
 import com.lelloman.pezzottify.android.domain.player.TrackMetadata
 import com.lelloman.pezzottify.android.domain.statics.Album
 import com.lelloman.pezzottify.android.domain.statics.Artist
@@ -91,13 +92,11 @@ internal class PlaybackMetadataProviderImpl(
 
     private suspend fun loadMetadataForTracks(tracksIds: List<String>) {
         val currentIndex = platformPlayer.currentTrackIndex.value ?: 0
+        logger.debug("Loading metadata for ${tracksIds.size} tracks, currentIndex=$currentIndex")
 
-        // First emit a state with empty metadata but correct structure
-        // This allows UI to show loading state
-        mutableQueueState.value = PlaybackQueueState(
-            tracks = emptyList(),
-            currentIndex = currentIndex,
-        )
+        // Don't emit empty/loading state during initial load - this can confuse the UI
+        // and cause issues with playback state. Just keep the previous state until
+        // we have the new metadata ready.
 
         // Collect all unique album and artist IDs we need to fetch
         val trackDataMap = mutableMapOf<String, Track>()
@@ -159,9 +158,10 @@ internal class PlaybackMetadataProviderImpl(
         mutableQueueState.value = PlaybackQueueState(
             tracks = tracksMetadata,
             currentIndex = updatedIndex,
+            loadingState = QueueLoadingState.LOADED,
         )
 
-        logger.info("Loaded metadata for ${tracksMetadata.size}/${tracksIds.size} tracks")
+        logger.info("Loaded metadata for ${tracksMetadata.size}/${tracksIds.size} tracks, currentIndex=$updatedIndex")
     }
 
     private suspend fun fetchTrack(trackId: String): Track? {

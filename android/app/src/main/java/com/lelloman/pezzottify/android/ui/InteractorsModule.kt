@@ -1091,43 +1091,48 @@ class InteractorsModule {
                 playbackMetadataProvider.queueState
                     .combine(player.isPlaying) { queueState, isPlaying -> queueState to isPlaying }
                     .combine(player.currentTrackPercent) { (queueState, isPlaying), trackPercent ->
-                        logger.debug("Combining queueState + isPlaying + trackPercent: ${queueState?.currentTrack?.trackName} - $isPlaying - $trackPercent")
+                        logger.debug("Combining queueState: track=${queueState?.currentTrack?.trackName}, isLoading=${queueState?.isLoading}, isPlaying=$isPlaying")
                         val currentTrack = queueState?.currentTrack
-                        if (currentTrack != null) {
-                            val currentIndex = queueState.currentIndex
-                            val nextTrack = queueState.tracks.getOrNull(currentIndex + 1)
-                            val previousTrack = queueState.tracks.getOrNull(currentIndex - 1)
+                        when {
+                            currentTrack != null -> {
+                                val currentIndex = queueState.currentIndex
+                                val nextTrack = queueState.tracks.getOrNull(currentIndex + 1)
+                                val previousTrack = queueState.tracks.getOrNull(currentIndex - 1)
 
-                            MainScreenViewModel.Interactor.PlaybackState.Loaded(
-                                isPlaying = isPlaying,
-                                trackId = currentTrack.trackId,
-                                trackName = currentTrack.trackName,
-                                albumName = currentTrack.albumName,
-                                albumImageUrl = currentTrack.artworkUrl,
-                                artists = currentTrack.artistNames.mapIndexed { index, name ->
-                                    com.lelloman.pezzottify.android.ui.content.ArtistInfo(
-                                        id = index.toString(), // We don't have artist IDs in metadata
-                                        name = name,
-                                    )
-                                },
-                                trackPercent = trackPercent ?: 0f,
-                                nextTrackName = nextTrack?.trackName,
-                                nextTrackArtists = nextTrack?.artistNames?.mapIndexed { index, name ->
-                                    com.lelloman.pezzottify.android.ui.content.ArtistInfo(
-                                        id = index.toString(),
-                                        name = name,
-                                    )
-                                } ?: emptyList(),
-                                previousTrackName = previousTrack?.trackName,
-                                previousTrackArtists = previousTrack?.artistNames?.mapIndexed { index, name ->
-                                    com.lelloman.pezzottify.android.ui.content.ArtistInfo(
-                                        id = index.toString(),
-                                        name = name,
-                                    )
-                                } ?: emptyList(),
-                            )
-                        } else {
-                            null
+                                MainScreenViewModel.Interactor.PlaybackState.Loaded(
+                                    isPlaying = isPlaying,
+                                    trackId = currentTrack.trackId,
+                                    trackName = currentTrack.trackName,
+                                    albumName = currentTrack.albumName,
+                                    albumImageUrl = currentTrack.artworkUrl,
+                                    artists = currentTrack.artistNames.mapIndexed { index, name ->
+                                        com.lelloman.pezzottify.android.ui.content.ArtistInfo(
+                                            id = index.toString(), // We don't have artist IDs in metadata
+                                            name = name,
+                                        )
+                                    },
+                                    trackPercent = trackPercent ?: 0f,
+                                    nextTrackName = nextTrack?.trackName,
+                                    nextTrackArtists = nextTrack?.artistNames?.mapIndexed { index, name ->
+                                        com.lelloman.pezzottify.android.ui.content.ArtistInfo(
+                                            id = index.toString(),
+                                            name = name,
+                                        )
+                                    } ?: emptyList(),
+                                    previousTrackName = previousTrack?.trackName,
+                                    previousTrackArtists = previousTrack?.artistNames?.mapIndexed { index, name ->
+                                        com.lelloman.pezzottify.android.ui.content.ArtistInfo(
+                                            id = index.toString(),
+                                            name = name,
+                                        )
+                                    } ?: emptyList(),
+                                )
+                            }
+                            // Show loading state when metadata is being loaded
+                            queueState?.isLoading == true -> {
+                                MainScreenViewModel.Interactor.PlaybackState.Loading
+                            }
+                            else -> null
                         }
                     }
 
