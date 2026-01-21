@@ -1,4 +1,8 @@
 dummy-catalog/
+dev-data/
+
+# Android build artifacts
+android/**/build/
 
 # used by bruno
 api_test/
