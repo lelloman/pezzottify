@@ -9,6 +9,7 @@ data class MainScreenState(
 
     data class BottomPlayer(
         val isVisible: Boolean = false,
+        val isLoading: Boolean = false,
         val trackId: String = "",
         val trackName: String = "",
         val albumName: String = "",

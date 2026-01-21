@@ -272,9 +272,11 @@ internal class ExoPlatformPlayer(
     }
 
     override fun setIsPlaying(isPlaying: Boolean) {
+        val controllerReady = isControllerReady()
+        logger.debug("setIsPlaying($isPlaying) - current=${mutableIsPlaying.value}, controllerReady=$controllerReady")
         // Always update our state - this ensures loadPlaylist uses the correct value
         mutableIsPlaying.value = isPlaying
-        if (!isControllerReady()) {
+        if (!controllerReady) {
             logger.info("setIsPlaying($isPlaying) - controller not ready, attempting to reconnect")
             reconnectAndExecute { controller ->
                 controller.playWhenReady = isPlaying
@@ -357,6 +359,7 @@ internal class ExoPlatformPlayer(
      * This handles the case where the MediaController has disconnected but the service is still running.
      */
     private fun reconnectAndExecute(action: (MediaController) -> Unit) {
+        logger.debug("reconnectAndExecute() - starting reconnection")
         // Release old controller if it exists but is disconnected
         mediaController?.let { controller ->
             if (!controller.isConnected) {
@@ -377,7 +380,7 @@ internal class ExoPlatformPlayer(
             {
                 val controller = controllerFuture.get()
                 mediaController = controller
-                logger.info("Reconnected MediaController - isConnected=${controller.isConnected}")
+                logger.info("reconnectAndExecute() - MediaController built: isConnected=${controller.isConnected}, mediaItemCount=${controller.mediaItemCount}")
                 controller.addListener(playerListener)
                 updateControllerState()
 
@@ -389,8 +392,9 @@ internal class ExoPlatformPlayer(
                         startProgressPolling()
                     }
                     action(controller)
+                    logger.debug("reconnectAndExecute() - action executed successfully")
                 } else {
-                    logger.warn("Reconnected but controller still not connected")
+                    logger.warn("reconnectAndExecute() - controller built but not connected")
                 }
             },
             MoreExecutors.directExecutor()

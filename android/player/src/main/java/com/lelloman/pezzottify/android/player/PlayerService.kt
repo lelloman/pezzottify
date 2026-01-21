@@ -70,6 +70,7 @@ class PlaybackService : MediaSessionService() {
     private var metadataObserverJob: Job? = null
     private var artworkLoadJob: Job? = null
     private var currentArtworkUrl: String? = null
+    private var currentArtworkTrackId: String? = null
 
     private val authToken get() = (authStore.getAuthState().value as? AuthState.LoggedIn)?.authToken.orEmpty()
 
@@ -146,7 +147,7 @@ class PlaybackService : MediaSessionService() {
     }
 
     private fun updateMediaSessionMetadata(track: TrackMetadata) {
-        logger.info("Updating media session metadata: ${track.trackName} by ${track.artistNames.joinToString()}")
+        logger.info("Updating media session metadata: trackId=${track.trackId}, name=${track.trackName}")
 
         val metadata = MediaMetadata.Builder()
             .setTitle(track.trackName)
@@ -161,6 +162,7 @@ class PlaybackService : MediaSessionService() {
         val artworkUrl = track.artworkUrl
         if (artworkUrl != null && artworkUrl != currentArtworkUrl) {
             currentArtworkUrl = artworkUrl
+            currentArtworkTrackId = track.trackId
             loadArtworkAsync(artworkUrl, track)
         }
     }
@@ -182,7 +184,7 @@ class PlaybackService : MediaSessionService() {
     private fun loadArtworkAsync(artworkUrl: String, track: TrackMetadata) {
         artworkLoadJob?.cancel()
         artworkLoadJob = serviceScope.launch(Dispatchers.IO) {
-            logger.debug("Loading artwork from: $artworkUrl")
+            logger.debug("Loading artwork for trackId=${track.trackId} from: $artworkUrl")
             try {
                 val request = ImageRequest.Builder(this@PlaybackService)
                     .data(artworkUrl)
@@ -192,13 +194,19 @@ class PlaybackService : MediaSessionService() {
                 val result = imageLoader.execute(request)
                 if (result is SuccessResult) {
                     val bitmap = result.image.toBitmap()
-                    logger.debug("Artwork loaded successfully: ${bitmap.width}x${bitmap.height}")
-                    updateMediaSessionWithArtwork(track, bitmap)
+                    logger.debug("Artwork loaded for trackId=${track.trackId}: ${bitmap.width}x${bitmap.height}")
+
+                    // Validate that we're still on the same track before applying artwork
+                    if (currentArtworkTrackId == track.trackId) {
+                        updateMediaSessionWithArtwork(track, bitmap)
+                    } else {
+                        logger.warn("Artwork discarded: expected trackId=${track.trackId} but current is $currentArtworkTrackId")
+                    }
                 } else {
-                    logger.warn("Failed to load artwork: $result")
+                    logger.warn("Failed to load artwork for trackId=${track.trackId}: $result")
                 }
             } catch (e: Exception) {
-                logger.error("Error loading artwork", e)
+                logger.error("Error loading artwork for trackId=${track.trackId}", e)
             }
         }
     }
@@ -213,7 +221,7 @@ class PlaybackService : MediaSessionService() {
                 .build()
 
             updateCurrentMediaItemMetadata(metadata)
-            logger.info("Media session updated with artwork")
+            logger.info("Media session updated with artwork for trackId=${track.trackId}")
         }
     }
 
@@ -225,9 +233,11 @@ class PlaybackService : MediaSessionService() {
 
     private fun clearMediaSessionMetadata() {
         currentArtworkUrl = null
+        currentArtworkTrackId = null
         artworkLoadJob?.cancel()
         // Clear metadata by updating with empty metadata
         updateCurrentMediaItemMetadata(MediaMetadata.EMPTY)
+        logger.debug("Media session metadata cleared")
     }
 
     override fun onDestroy() {

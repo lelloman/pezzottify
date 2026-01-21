@@ -13,10 +13,19 @@ data class TrackMetadata(
     val availability: TrackAvailability = TrackAvailability.Available,
 )
 
+enum class QueueLoadingState {
+    LOADED,
+    LOADING,
+}
+
 data class PlaybackQueueState(
     val tracks: List<TrackMetadata>,
     val currentIndex: Int,
+    val loadingState: QueueLoadingState = QueueLoadingState.LOADED,
 ) {
     val currentTrack: TrackMetadata?
         get() = tracks.getOrNull(currentIndex)
+
+    val isLoading: Boolean
+        get() = loadingState == QueueLoadingState.LOADING
 }
