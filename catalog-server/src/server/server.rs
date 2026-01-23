@@ -4422,11 +4422,10 @@ pub async fn make_app(
         debug!("Ingestion not enabled");
     }
 
-    // Login route with strict IP-based rate limiting
-    // For rates < 60/min, we use per_second(1) and rely on burst_size to enforce the limit
+    // Login route with strict IP-based rate limiting (10 req/min = 1 token per 6000ms)
     let login_rate_limit = Arc::new(
         GovernorConfigBuilder::default()
-            .per_second(std::cmp::max(1, (LOGIN_PER_MINUTE / 60) as u64))
+            .per_millisecond(60000_u64.saturating_div(u64::from(LOGIN_PER_MINUTE)))
             .burst_size(LOGIN_PER_MINUTE)
             .key_extractor(IpKeyExtractor)
             .finish()
@@ -4458,10 +4457,10 @@ pub async fn make_app(
         .merge(oidc_login_routes)
         .merge(other_auth_routes);
 
-    // Separate stream routes for different rate limiting
+    // Separate stream routes for different rate limiting (200 req/min = 1 token per 300ms)
     let stream_rate_limit = Arc::new(
         GovernorConfigBuilder::default()
-            .per_second(std::cmp::max(1, (STREAM_PER_MINUTE / 60) as u64))
+            .per_millisecond(60000_u64.saturating_div(u64::from(STREAM_PER_MINUTE)))
             .burst_size(STREAM_PER_MINUTE)
             .key_extractor(UserOrIpKeyExtractor)
             .finish()
@@ -4473,10 +4472,10 @@ pub async fn make_app(
         .layer(GovernorLayer::new(stream_rate_limit))
         .with_state(state.clone());
 
-    // Content read routes (album, artist, track, image)
+    // Content read routes (album, artist, track, image) (2000 req/min = 1 token per 30ms)
     let content_read_rate_limit = Arc::new(
         GovernorConfigBuilder::default()
-            .per_second(std::cmp::max(1, (CONTENT_READ_PER_MINUTE / 60) as u64))
+            .per_millisecond(60000_u64.saturating_div(u64::from(CONTENT_READ_PER_MINUTE)))
             .burst_size(CONTENT_READ_PER_MINUTE)
             .key_extractor(UserOrIpKeyExtractor)
             .finish()
@@ -4512,10 +4511,10 @@ pub async fn make_app(
             http_cache,
         ));
 
-    // Write rate limiting for user content modifications
+    // Write rate limiting for user content modifications (60 req/min = 1 token per 1000ms)
     let write_rate_limit = Arc::new(
         GovernorConfigBuilder::default()
-            .per_second(std::cmp::max(1, (WRITE_PER_MINUTE / 60) as u64))
+            .per_millisecond(60000_u64.saturating_div(u64::from(WRITE_PER_MINUTE)))
             .burst_size(WRITE_PER_MINUTE)
             .key_extractor(UserOrIpKeyExtractor)
             .finish()
@@ -4525,7 +4524,7 @@ pub async fn make_app(
     // Create a separate rate limit config for user content reads (same as general content reads)
     let user_content_read_rate_limit = Arc::new(
         GovernorConfigBuilder::default()
-            .per_second(std::cmp::max(1, (CONTENT_READ_PER_MINUTE / 60) as u64))
+            .per_millisecond(60000_u64.saturating_div(u64::from(CONTENT_READ_PER_MINUTE)))
             .burst_size(CONTENT_READ_PER_MINUTE)
             .key_extractor(UserOrIpKeyExtractor)
             .finish()
@@ -4590,11 +4589,11 @@ pub async fn make_app(
 
     let playlist_routes = playlist_read_routes.merge(playlist_write_routes);
 
-    // Apply search rate limiting to search routes
+    // Apply search rate limiting to search routes (100 req/min = 1 token per 600ms)
     let search_routes = make_search_routes(state.clone());
     let search_rate_limit = Arc::new(
         GovernorConfigBuilder::default()
-            .per_second(std::cmp::max(1, (SEARCH_PER_MINUTE / 60) as u64))
+            .per_millisecond(60000_u64.saturating_div(u64::from(SEARCH_PER_MINUTE)))
             .burst_size(SEARCH_PER_MINUTE)
             .key_extractor(UserOrIpKeyExtractor)
             .finish()
@@ -4886,10 +4885,10 @@ pub async fn make_app(
         app = app.layer(middleware::from_fn(slowdown_request));
     }
 
-    // Apply global rate limit to entire app (protects against overall abuse)
+    // Apply global rate limit to entire app (5000 req/min = 1 token per 12ms)
     let global_rate_limit = Arc::new(
         GovernorConfigBuilder::default()
-            .per_second(std::cmp::max(1, (GLOBAL_PER_MINUTE / 60) as u64))
+            .per_millisecond(60000_u64.saturating_div(u64::from(GLOBAL_PER_MINUTE)))
             .burst_size(GLOBAL_PER_MINUTE)
             .key_extractor(UserOrIpKeyExtractor)
             .finish()
