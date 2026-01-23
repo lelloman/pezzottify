@@ -331,8 +331,7 @@ impl IngestionStore for SqliteIngestionStore {
         let conversion_reason_json = file
             .conversion_reason
             .as_ref()
-            .map(|r| serde_json::to_string(r).ok())
-            .flatten();
+            .and_then(|r| serde_json::to_string(r).ok());
 
         conn.execute(
             r#"
@@ -393,8 +392,7 @@ impl IngestionStore for SqliteIngestionStore {
         let conversion_reason_json = file
             .conversion_reason
             .as_ref()
-            .map(|r| serde_json::to_string(r).ok())
-            .flatten();
+            .and_then(|r| serde_json::to_string(r).ok());
 
         conn.execute(
             r#"
