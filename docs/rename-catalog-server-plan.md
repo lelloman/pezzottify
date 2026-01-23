@@ -40,7 +40,15 @@ Rename the `catalog-server` directory and all references to `pezzottify-server` 
 - `docs/composite-popularity-scoring.md` - References
 - `docs/FINGERPRINTS_SPEC.md` - Path references
 
-### 8. Git (optional)
+### 8. Workspace Configuration
+- `Cargo.toml` (workspace root, if exists) - Member references
+- `gradle.properties` - Property references
+
+### 9. Web Configuration
+- `.env.example` - Environment variable examples or comments
+- `web/vite.config.ts` - Build path references
+
+### 10. Git (optional)
 - Consider renaming remote branches: `catalog-server` → `pezzottify-server`
 
 ## Implementation Steps
@@ -130,6 +138,29 @@ git add catalog-server pezzottify-server
 **File**: `web/playwright.config.ts`
 - Comment about starting service
 
+### Step 16: Update workspace Cargo.toml (if exists)
+**File**: `Cargo.toml` (workspace root)
+- Check for `[workspace.members]` or `members =` containing `catalog-server`
+- Update to `pezzottify-server`
+
+### Step 17: Update gradle.properties (if applicable)
+**File**: `gradle.properties` or `android/gradle.properties`
+- Check for any properties referencing `catalog-server`
+
+### Step 18: Update web config files (if applicable)
+**File**: `.env.example`
+- Check for any comments or examples referencing `catalog-server`
+**File**: `web/vite.config.ts`
+- Check for build path references
+
+### Step 19: Final grep sweep
+Run comprehensive searches for any remaining references:
+```bash
+git grep -i "catalog-server" -- ':!.git/*'
+git grep -i "catalog_server" -- ':!.git/*'
+git grep -i "pezzottify-catalog-server" -- ':!.git/*'
+```
+
 ## Verification
 
 1. **Build the Rust project**:
@@ -162,8 +193,11 @@ git add catalog-server pezzottify-server
 
 6. **Verify CI/CD workflow** (push to branch or check workflow file syntax)
 
+7. **Final verification**: Ensure git grep searches return no unexpected results (only docs/rename-catalog-server-plan.md should match)
+
 ## Notes
 
 - The Android app and Web frontend connect via configurable URLs (not hardcoded service names), so no changes are needed in the client applications themselves
 - The binary name change means the executable will be `pezzottify-server` instead of `catalog-server`
 - Consider whether to rename git remote branches (optional, not breaking)
+- This plan file itself (`docs/rename-catalog-server-plan.md`) will still contain "catalog-server" references - these can be left as-is for historical context, or the file can be renamed/updated after completion
