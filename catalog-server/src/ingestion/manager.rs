@@ -429,9 +429,8 @@ impl IngestionManager {
         let low_bitrate_files: Vec<_> = files
             .iter()
             .filter_map(|f| {
-                if let Some(ConversionReason::LowBitratePendingConfirmation {
-                    original_bitrate,
-                }) = &f.conversion_reason
+                if let Some(ConversionReason::LowBitratePendingConfirmation { original_bitrate }) =
+                    &f.conversion_reason
                 {
                     Some((f.filename.clone(), *original_bitrate))
                 } else {
@@ -1391,7 +1390,8 @@ impl IngestionManager {
 
                 match tokio::fs::copy(&input_path, &output_path_with_ext).await {
                     Ok(_) => {
-                        file.output_file_path = Some(output_path_with_ext.to_string_lossy().to_string());
+                        file.output_file_path =
+                            Some(output_path_with_ext.to_string_lossy().to_string());
                         file.converted = true; // Mark as processed even if not transcoded
                         converted += 1;
                         converted_track_ids.push(track_id.clone());
@@ -1404,7 +1404,9 @@ impl IngestionManager {
 
                         info!(
                             "Copied {} -> {} (no conversion needed, {} kbps)",
-                            file.filename, track_id, file.bitrate.unwrap_or(0)
+                            file.filename,
+                            track_id,
+                            file.bitrate.unwrap_or(0)
                         );
                     }
                     Err(e) => {
@@ -1435,8 +1437,10 @@ impl IngestionManager {
                         warn!("Failed to update track {} audio_uri: {}", track_id, e);
                     }
 
-                    info!("Converted {} -> {} (target: {} kbps)", file.filename, track_id,
-                          self.config.target_bitrate);
+                    info!(
+                        "Converted {} -> {} (target: {} kbps)",
+                        file.filename, track_id, self.config.target_bitrate
+                    );
                 }
                 Err(e) => {
                     error!("Failed to convert {}: {}", file.filename, e);
@@ -1587,13 +1591,11 @@ impl IngestionManager {
             // User approved converting low bitrate files
             let mut files = self.store.get_files_for_job(job_id)?;
             for file in &mut files {
-                if let Some(ConversionReason::LowBitratePendingConfirmation {
-                    original_bitrate,
-                }) = file.conversion_reason
+                if let Some(ConversionReason::LowBitratePendingConfirmation { original_bitrate }) =
+                    file.conversion_reason
                 {
-                    file.conversion_reason = Some(ConversionReason::LowBitrateApproved {
-                        original_bitrate,
-                    });
+                    file.conversion_reason =
+                        Some(ConversionReason::LowBitrateApproved { original_bitrate });
                     self.store.update_file(file)?;
                 }
             }
@@ -1736,7 +1738,10 @@ mod tests {
     }
 
     /// Test bitrate decision logic with default config (320 kbps ± 50 kbps)
-    fn bitrate_to_conversion_reason(config: &IngestionManagerConfig, bitrate: Option<i32>) -> ConversionReason {
+    fn bitrate_to_conversion_reason(
+        config: &IngestionManagerConfig,
+        bitrate: Option<i32>,
+    ) -> ConversionReason {
         let min_bitrate = config.target_bitrate as i32 - config.bitrate_tolerance as i32;
         let max_bitrate = config.target_bitrate as i32 + config.bitrate_tolerance as i32;
 
@@ -1776,14 +1781,18 @@ mod tests {
         let result = bitrate_to_conversion_reason(&config, Some(128));
         assert!(matches!(
             result,
-            ConversionReason::LowBitratePendingConfirmation { original_bitrate: 128 }
+            ConversionReason::LowBitratePendingConfirmation {
+                original_bitrate: 128
+            }
         ));
 
         // Test low bitrate at boundary (269 kbps)
         let result = bitrate_to_conversion_reason(&config, Some(269));
         assert!(matches!(
             result,
-            ConversionReason::LowBitratePendingConfirmation { original_bitrate: 269 }
+            ConversionReason::LowBitratePendingConfirmation {
+                original_bitrate: 269
+            }
         ));
 
         // Test acceptable bitrate (270 kbps - lower boundary)
@@ -1802,14 +1811,18 @@ mod tests {
         let result = bitrate_to_conversion_reason(&config, Some(371));
         assert!(matches!(
             result,
-            ConversionReason::HighBitrate { original_bitrate: 371 }
+            ConversionReason::HighBitrate {
+                original_bitrate: 371
+            }
         ));
 
         // Test high bitrate (500 kbps)
         let result = bitrate_to_conversion_reason(&config, Some(500));
         assert!(matches!(
             result,
-            ConversionReason::HighBitrate { original_bitrate: 500 }
+            ConversionReason::HighBitrate {
+                original_bitrate: 500
+            }
         ));
     }
 }
