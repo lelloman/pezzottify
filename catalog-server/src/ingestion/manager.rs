@@ -1396,8 +1396,9 @@ impl IngestionManager {
                         converted += 1;
                         converted_track_ids.push(track_id.clone());
 
-                        // Update catalog with appropriate extension
-                        let audio_uri = format!("tracks/{}.{}", track_id, extension);
+                        // Update catalog with appropriate extension (sharded path)
+                        let (dir1, dir2) = super::file_handler::FileHandler::shard_dirs(&track_id);
+                        let audio_uri = format!("audio/{}/{}/{}.{}", dir1, dir2, track_id, extension);
                         if let Err(e) = self.catalog.set_track_audio_uri(&track_id, &audio_uri) {
                             warn!("Failed to update track {} audio_uri: {}", track_id, e);
                         }
@@ -1431,8 +1432,9 @@ impl IngestionManager {
                     converted += 1;
                     converted_track_ids.push(track_id.clone());
 
-                    // Update catalog: set audio_uri for the track
-                    let audio_uri = format!("tracks/{}.ogg", track_id);
+                    // Update catalog: set audio_uri for the track (sharded path)
+                    let (dir1, dir2) = super::file_handler::FileHandler::shard_dirs(&track_id);
+                    let audio_uri = format!("audio/{}/{}/{}.ogg", dir1, dir2, track_id);
                     if let Err(e) = self.catalog.set_track_audio_uri(&track_id, &audio_uri) {
                         warn!("Failed to update track {} audio_uri: {}", track_id, e);
                     }
