@@ -36,20 +36,8 @@ COPY VERSION VERSION
 
 WORKDIR /app/catalog-server
 
-# Write version info to a file to bust cache when version changes
-# This ensures the binary is rebuilt when GIT_HASH, GIT_DIRTY, or COMMIT_COUNT change
-RUN echo "GIT_HASH=$GIT_HASH GIT_DIRTY=$GIT_DIRTY COMMIT_COUNT=$COMMIT_COUNT" > /tmp/version-info
-
 # Build with version info from build args
-# Use BuildKit cache mounts for cargo registry and target directory
-# Binaries are copied out because cache mounts aren't available in later stages
-# Touch build.rs to ensure cargo reruns it after cache restore
-RUN --mount=type=cache,target=/usr/local/cargo/registry \
-    --mount=type=cache,target=/app/catalog-server/target \
-    touch build.rs && \
-    GIT_HASH="$GIT_HASH" GIT_DIRTY="$GIT_DIRTY" COMMIT_COUNT="$COMMIT_COUNT" cargo build --release && \
-    cp target/release/cli-auth /tmp/ && \
-    cp target/release/catalog-server /tmp/
+RUN GIT_HASH="$GIT_HASH" GIT_DIRTY="$GIT_DIRTY" COMMIT_COUNT="$COMMIT_COUNT" cargo build --release
 
 
 # ------------------------------------------
@@ -66,8 +54,8 @@ RUN apt-get update && apt-get install -y libsqlite3-dev ffmpeg ca-certificates &
 WORKDIR /app
 
 # Copy the binaries from the builder stage
-COPY --from=rust-builder /tmp/cli-auth /usr/local/bin/cli-auth
-COPY --from=rust-builder /tmp/catalog-server /usr/local/bin/catalog-server
+COPY --from=rust-builder /app/catalog-server/target/release/cli-auth /usr/local/bin/cli-auth
+COPY --from=rust-builder /app/catalog-server/target/release/catalog-server /usr/local/bin/catalog-server
 
 # Copy the web frontend from the web builder stage
 COPY --from=web-builder /web/dist /app/web
