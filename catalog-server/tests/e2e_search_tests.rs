@@ -5,7 +5,7 @@
 
 mod common;
 
-use common::{TestClient, TestServer, ARTIST_1_NAME, ARTIST_2_NAME};
+use common::{TestClient, TestServer, ARTIST_1_NAME};
 use reqwest::StatusCode;
 
 // =============================================================================
@@ -618,7 +618,7 @@ async fn test_streaming_search_with_no_results() {
 
     // Should have TopResults (possibly empty) and Done
     assert!(
-        events.len() >= 1,
+        !events.is_empty(),
         "Should have at least Done event, got: {:?}",
         events
     );

@@ -27,8 +27,10 @@ mod server;
 
 // Public API - this is what tests import
 pub use client::TestClient;
-pub use constants::*;
 pub use server::TestServer;
+
+// Re-export constants for test convenience
+pub use constants::*;
 
 // Keep fixtures internal - only accessed via TestServer::spawn()
 #[allow(unused_imports)]
