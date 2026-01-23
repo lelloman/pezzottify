@@ -159,8 +159,10 @@ pub async fn convert_to_ogg(
             "libvorbis",
             "-b:a",
             &format!("{}k", bitrate_kbps),
-            "-vn", // No video
-            "-y",  // Overwrite output
+            "-ar",
+            "48000", // Resample to 48kHz - libvorbis may fail with high sample rates (192kHz)
+            "-vn",   // No video
+            "-y",    // Overwrite output
         ])
         .arg(output_path)
         .stdout(Stdio::piped())

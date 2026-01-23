@@ -201,9 +201,31 @@ impl FileHandler {
     }
 
     /// Get the output path for a converted track.
+    /// Uses sharded directory structure: audio/{first2}/{next2}/{track_id}.ogg
     pub fn get_output_path(&self, media_path: &Path, track_id: &str) -> PathBuf {
-        // Media files are stored as: {media_path}/tracks/{track_id}.ogg
-        media_path.join("tracks").join(format!("{}.ogg", track_id))
+        let (dir1, dir2) = Self::shard_dirs(track_id);
+        media_path
+            .join("audio")
+            .join(dir1)
+            .join(dir2)
+            .join(format!("{}.ogg", track_id))
+    }
+
+    /// Compute shard directory components from track ID.
+    /// Returns (first 2 chars, chars 2-4) for directory structure.
+    pub fn shard_dirs(track_id: &str) -> (&str, &str) {
+        let bytes = track_id.as_bytes();
+        let dir1 = if bytes.len() >= 2 {
+            &track_id[0..2]
+        } else {
+            "00"
+        };
+        let dir2 = if bytes.len() >= 4 {
+            &track_id[2..4]
+        } else {
+            "00"
+        };
+        (dir1, dir2)
     }
 }
 
