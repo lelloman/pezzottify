@@ -409,10 +409,7 @@ mod tests {
         assert_eq!(json, r#""NO_CONVERSION_NEEDED""#);
 
         let deserialized: ConversionReason = serde_json::from_str(&json).unwrap();
-        assert!(matches!(
-            deserialized,
-            ConversionReason::NoConversionNeeded
-        ));
+        assert!(matches!(deserialized, ConversionReason::NoConversionNeeded));
 
         // Test HighBitrate - enum with data serializes as object with variant name as key
         let reason = ConversionReason::HighBitrate {
@@ -424,7 +421,9 @@ mod tests {
         let deserialized: ConversionReason = serde_json::from_str(&json).unwrap();
         assert!(matches!(
             deserialized,
-            ConversionReason::HighBitrate { original_bitrate: 500 }
+            ConversionReason::HighBitrate {
+                original_bitrate: 500
+            }
         ));
 
         // Test LowBitratePendingConfirmation
@@ -450,10 +449,7 @@ mod tests {
             original_bitrate: 192,
         };
         let json = serde_json::to_string(&reason).unwrap();
-        assert_eq!(
-            json,
-            r#"{"LOW_BITRATE_APPROVED":{"original_bitrate":192}}"#
-        );
+        assert_eq!(json, r#"{"LOW_BITRATE_APPROVED":{"original_bitrate":192}}"#);
 
         let deserialized: ConversionReason = serde_json::from_str(&json).unwrap();
         assert!(matches!(
