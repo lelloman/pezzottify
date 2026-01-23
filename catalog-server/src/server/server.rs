@@ -2383,8 +2383,12 @@ async fn post_impression(
         return StatusCode::BAD_REQUEST;
     }
 
-    // Record the impression
-    search_vault.record_impression(&body.item_id, item_type);
+    // Record the impression in a blocking task to avoid blocking the async runtime
+    // while waiting for the write_conn mutex (which may be held by long-running index operations)
+    let item_id = body.item_id;
+    tokio::task::spawn_blocking(move || {
+        search_vault.record_impression(&item_id, item_type);
+    });
 
     StatusCode::NO_CONTENT
 }
