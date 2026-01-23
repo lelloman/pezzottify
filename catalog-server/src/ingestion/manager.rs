@@ -1594,7 +1594,7 @@ impl IngestionManager {
                     file.conversion_reason = Some(ConversionReason::LowBitrateApproved {
                         original_bitrate,
                     });
-                    self.store.update_file(&file)?;
+                    self.store.update_file(file)?;
                 }
             }
 
