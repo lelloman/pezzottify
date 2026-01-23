@@ -7,8 +7,8 @@
 //! - Review queue
 
 use super::models::{
-    IngestionContextType, IngestionFile, IngestionJob, IngestionJobStatus, IngestionMatchSource,
-    ReviewQueueItem,
+    ConversionReason, IngestionContextType, IngestionFile, IngestionJob, IngestionJobStatus,
+    IngestionMatchSource, ReviewQueueItem,
 };
 use super::schema::INGESTION_SCHEMA_SQL;
 use crate::agent::reasoning::ReasoningStep;
@@ -103,6 +103,9 @@ impl SqliteIngestionStore {
         // Apply schema
         conn.execute_batch(INGESTION_SCHEMA_SQL)?;
 
+        // Run migrations if needed
+        super::schema::migrate_v2_to_v3(&conn)?;
+
         Ok(Self {
             conn: Arc::new(Mutex::new(conn)),
         })
@@ -114,6 +117,7 @@ impl SqliteIngestionStore {
         let conn = Connection::open_in_memory()?;
         conn.execute("PRAGMA foreign_keys = ON", [])?;
         conn.execute_batch(INGESTION_SCHEMA_SQL)?;
+        super::schema::migrate_v2_to_v3(&conn)?;
         Ok(Self {
             conn: Arc::new(Mutex::new(conn)),
         })
@@ -151,6 +155,11 @@ impl SqliteIngestionStore {
     }
 
     fn row_to_file(row: &rusqlite::Row) -> rusqlite::Result<IngestionFile> {
+        // Parse conversion_reason from JSON if present
+        let conversion_reason: Option<ConversionReason> = row
+            .get::<_, Option<String>>("conversion_reason")?
+            .and_then(|s| serde_json::from_str(&s).ok());
+
         Ok(IngestionFile {
             id: row.get("id")?,
             job_id: row.get("job_id")?,
@@ -173,6 +182,7 @@ impl SqliteIngestionStore {
             output_file_path: row.get("output_file_path")?,
             converted: row.get::<_, i32>("converted")? != 0,
             error_message: row.get("error_message")?,
+            conversion_reason,
             created_at: row.get("created_at")?,
         })
     }
@@ -317,15 +327,23 @@ impl IngestionStore for SqliteIngestionStore {
 
     fn create_file(&self, file: &IngestionFile) -> Result<()> {
         let conn = self.conn.lock().unwrap();
+        // Serialize conversion_reason to JSON
+        let conversion_reason_json = file
+            .conversion_reason
+            .as_ref()
+            .map(|r| serde_json::to_string(r).ok())
+            .flatten();
+
         conn.execute(
             r#"
             INSERT INTO ingestion_files (
                 id, job_id, filename, file_size_bytes, temp_file_path,
                 duration_ms, codec, bitrate, sample_rate,
                 tag_artist, tag_album, tag_title, tag_track_num, tag_track_total, tag_disc_num, tag_year,
-                matched_track_id, match_confidence, output_file_path, converted, error_message, created_at
+                matched_track_id, match_confidence, output_file_path, converted, error_message,
+                conversion_reason, created_at
             ) VALUES (
-                ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22
+                ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23
             )
             "#,
             params![
@@ -350,6 +368,7 @@ impl IngestionStore for SqliteIngestionStore {
                 file.output_file_path,
                 file.converted as i32,
                 file.error_message,
+                conversion_reason_json,
                 file.created_at,
             ],
         )?;
@@ -370,6 +389,13 @@ impl IngestionStore for SqliteIngestionStore {
 
     fn update_file(&self, file: &IngestionFile) -> Result<()> {
         let conn = self.conn.lock().unwrap();
+        // Serialize conversion_reason to JSON
+        let conversion_reason_json = file
+            .conversion_reason
+            .as_ref()
+            .map(|r| serde_json::to_string(r).ok())
+            .flatten();
+
         conn.execute(
             r#"
             UPDATE ingestion_files SET
@@ -377,7 +403,8 @@ impl IngestionStore for SqliteIngestionStore {
                 tag_artist = ?6, tag_album = ?7, tag_title = ?8, tag_track_num = ?9,
                 tag_track_total = ?10, tag_disc_num = ?11, tag_year = ?12,
                 matched_track_id = ?13, match_confidence = ?14,
-                output_file_path = ?15, converted = ?16, error_message = ?17
+                output_file_path = ?15, converted = ?16, error_message = ?17,
+                conversion_reason = ?18
             WHERE id = ?1
             "#,
             params![
@@ -398,6 +425,7 @@ impl IngestionStore for SqliteIngestionStore {
                 file.output_file_path,
                 file.converted as i32,
                 file.error_message,
+                conversion_reason_json,
             ],
         )?;
         Ok(())

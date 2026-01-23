@@ -284,6 +284,10 @@ pub struct IngestionFile {
     /// Error message for this specific file.
     pub error_message: Option<String>,
 
+    // Conversion decision
+    /// Reason for conversion or why it was skipped.
+    pub conversion_reason: Option<ConversionReason>,
+
     // Timestamps
     pub created_at: i64,
 }
@@ -319,6 +323,7 @@ impl IngestionFile {
             output_file_path: None,
             converted: false,
             error_message: None,
+            conversion_reason: None,
             created_at: chrono::Utc::now().timestamp_millis(),
         }
     }
@@ -376,9 +381,99 @@ pub struct ReviewOption {
     pub description: Option<String>,
 }
 
+/// Reason why a file needs conversion (or why it was skipped).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum ConversionReason {
+    /// Bitrate within target range, format acceptable - no conversion needed
+    NoConversionNeeded,
+    /// Bitrate too high, downsampling to target bitrate
+    HighBitrate { original_bitrate: i32 },
+    /// Bitrate too low, awaiting user confirmation
+    LowBitratePendingConfirmation { original_bitrate: i32 },
+    /// User approved conversion of low bitrate file
+    LowBitrateApproved { original_bitrate: i32 },
+    /// Could not detect bitrate - will convert to ensure known quality
+    UndetectableBitrate,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_conversion_reason_serialization() {
+        // Test NoConversionNeeded - simple enum variant serializes as a string
+        let reason = ConversionReason::NoConversionNeeded;
+        let json = serde_json::to_string(&reason).unwrap();
+        assert_eq!(json, r#""NO_CONVERSION_NEEDED""#);
+
+        let deserialized: ConversionReason = serde_json::from_str(&json).unwrap();
+        assert!(matches!(
+            deserialized,
+            ConversionReason::NoConversionNeeded
+        ));
+
+        // Test HighBitrate - enum with data serializes as object with variant name as key
+        let reason = ConversionReason::HighBitrate {
+            original_bitrate: 500,
+        };
+        let json = serde_json::to_string(&reason).unwrap();
+        assert_eq!(json, r#"{"HIGH_BITRATE":{"original_bitrate":500}}"#);
+
+        let deserialized: ConversionReason = serde_json::from_str(&json).unwrap();
+        assert!(matches!(
+            deserialized,
+            ConversionReason::HighBitrate { original_bitrate: 500 }
+        ));
+
+        // Test LowBitratePendingConfirmation
+        let reason = ConversionReason::LowBitratePendingConfirmation {
+            original_bitrate: 128,
+        };
+        let json = serde_json::to_string(&reason).unwrap();
+        assert_eq!(
+            json,
+            r#"{"LOW_BITRATE_PENDING_CONFIRMATION":{"original_bitrate":128}}"#
+        );
+
+        let deserialized: ConversionReason = serde_json::from_str(&json).unwrap();
+        assert!(matches!(
+            deserialized,
+            ConversionReason::LowBitratePendingConfirmation {
+                original_bitrate: 128
+            }
+        ));
+
+        // Test LowBitrateApproved
+        let reason = ConversionReason::LowBitrateApproved {
+            original_bitrate: 192,
+        };
+        let json = serde_json::to_string(&reason).unwrap();
+        assert_eq!(
+            json,
+            r#"{"LOW_BITRATE_APPROVED":{"original_bitrate":192}}"#
+        );
+
+        let deserialized: ConversionReason = serde_json::from_str(&json).unwrap();
+        assert!(matches!(
+            deserialized,
+            ConversionReason::LowBitrateApproved {
+                original_bitrate: 192
+            }
+        ));
+
+        // Test UndetectableBitrate
+        let reason = ConversionReason::UndetectableBitrate;
+        let json = serde_json::to_string(&reason).unwrap();
+        assert_eq!(json, r#""UNDETECTABLE_BITRATE""#);
+
+        let deserialized: ConversionReason = serde_json::from_str(&json).unwrap();
+        assert!(matches!(
+            deserialized,
+            ConversionReason::UndetectableBitrate
+        ));
+    }
 
     #[test]
     fn test_job_status_roundtrip() {

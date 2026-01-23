@@ -12,8 +12,8 @@
 use super::converter::{convert_to_ogg, probe_audio_file};
 use super::file_handler::{FileHandler, FileHandlerError};
 use super::models::{
-    AlbumMetadataSummary, IngestionContextType, IngestionFile, IngestionJob, IngestionJobStatus,
-    IngestionMatchSource, ReviewOption,
+    AlbumMetadataSummary, ConversionReason, IngestionContextType, IngestionFile, IngestionJob,
+    IngestionJobStatus, IngestionMatchSource, ReviewOption,
 };
 use super::store::IngestionStore;
 use crate::catalog_store::CatalogStore;
@@ -100,6 +100,8 @@ pub struct IngestionManagerConfig {
     pub max_file_size: u64,
     /// Target bitrate for audio conversion (kbps).
     pub target_bitrate: u32,
+    /// Acceptable bitrate range (± this value from target).
+    pub bitrate_tolerance: u32,
     /// Maximum LLM iterations per job.
     pub max_iterations: usize,
     /// Confidence threshold for auto-matching (0.0 - 1.0).
@@ -113,6 +115,7 @@ impl Default for IngestionManagerConfig {
             media_dir: PathBuf::from("media"),
             max_file_size: 500 * 1024 * 1024, // 500 MB for zip files
             target_bitrate: 320,
+            bitrate_tolerance: 50,
             max_iterations: 20,
             auto_match_threshold: 0.85,
         }
@@ -293,6 +296,13 @@ impl IngestionManager {
                     file.codec = Some(metadata.codec);
                     file.bitrate = metadata.bitrate;
                     file.sample_rate = metadata.sample_rate;
+
+                    // Determine if conversion is needed based on bitrate
+                    file.conversion_reason = Some(self.determine_conversion_need(
+                        file.bitrate,
+                        &file.codec,
+                        Path::new(&file.temp_file_path),
+                    ));
                 }
                 Err(e) => {
                     warn!("Failed to probe {}: {}", file.filename, e);
@@ -330,6 +340,13 @@ impl IngestionManager {
         job.detected_artist = summary.artist;
         job.detected_album = summary.album;
         job.detected_year = summary.year;
+
+        // Check for low bitrate files before continuing
+        if self.check_low_bitrate_files(job_id, &mut job).await? {
+            return Ok(()); // Job is now in AwaitingReview
+        }
+
+        // No low bitrate issues, continue to identification
         job.status = IngestionJobStatus::IdentifyingAlbum;
         self.store.update_job(&job)?;
 
@@ -369,6 +386,100 @@ impl IngestionManager {
         }
 
         Ok(tags)
+    }
+
+    /// Determine if a file needs conversion based on bitrate and format.
+    fn determine_conversion_need(
+        &self,
+        bitrate: Option<i32>,
+        _codec: &Option<String>,
+        _temp_path: &Path,
+    ) -> ConversionReason {
+        let min_bitrate = self.config.target_bitrate as i32 - self.config.bitrate_tolerance as i32;
+        let max_bitrate = self.config.target_bitrate as i32 + self.config.bitrate_tolerance as i32;
+
+        let bitrate = match bitrate {
+            Some(b) if b > 0 => b,
+            _ => return ConversionReason::UndetectableBitrate,
+        };
+
+        if bitrate < min_bitrate {
+            return ConversionReason::LowBitratePendingConfirmation {
+                original_bitrate: bitrate,
+            };
+        }
+
+        if bitrate > max_bitrate {
+            return ConversionReason::HighBitrate {
+                original_bitrate: bitrate,
+            };
+        }
+
+        // Bitrate is within range - no conversion needed
+        ConversionReason::NoConversionNeeded
+    }
+
+    /// Check if any files have low bitrate and create review if needed.
+    async fn check_low_bitrate_files(
+        &self,
+        job_id: &str,
+        job: &mut IngestionJob,
+    ) -> Result<bool, IngestionError> {
+        let files = self.store.get_files_for_job(job_id)?;
+        let low_bitrate_files: Vec<_> = files
+            .iter()
+            .filter_map(|f| {
+                if let Some(ConversionReason::LowBitratePendingConfirmation {
+                    original_bitrate,
+                }) = &f.conversion_reason
+                {
+                    Some((f.filename.clone(), *original_bitrate))
+                } else {
+                    None
+                }
+            })
+            .collect();
+
+        if !low_bitrate_files.is_empty() {
+            let files_list = low_bitrate_files
+                .iter()
+                .map(|(name, br)| format!("{} ({} kbps)", name, br))
+                .collect::<Vec<_>>()
+                .join("\n");
+
+            let question = format!(
+                "Audio quality is below target ({} kbps).\n\n\
+                 The following files have low bitrate:\n{}\n\n\
+                 Convert anyway or reject?",
+                self.config.target_bitrate, files_list
+            );
+
+            let options = vec![
+                ReviewOption {
+                    id: "convert_low_bitrate".to_string(),
+                    label: "Convert anyway".to_string(),
+                    description: Some(format!(
+                        "Convert low bitrate files to {}kbps OGG",
+                        self.config.target_bitrate
+                    )),
+                },
+                ReviewOption {
+                    id: "no_match".to_string(),
+                    label: "Reject upload".to_string(),
+                    description: Some("Cancel this ingestion due to low quality".to_string()),
+                },
+            ];
+
+            let options_json = serde_json::to_string(&options).unwrap_or_default();
+            self.store
+                .create_review_item(job_id, &question, &options_json)?;
+
+            job.status = IngestionJobStatus::AwaitingReview;
+            self.store.update_job(job)?;
+            return Ok(true);
+        }
+
+        Ok(false)
     }
 
     /// Build aggregated metadata summary from all files in a job.
@@ -1255,6 +1366,58 @@ impl IngestionManager {
             };
 
             let input_path = Path::new(&file.temp_file_path);
+
+            // Check if conversion is needed
+            let needs_conversion = matches!(
+                file.conversion_reason,
+                Some(ConversionReason::HighBitrate { .. })
+                    | Some(ConversionReason::LowBitrateApproved { .. })
+                    | Some(ConversionReason::UndetectableBitrate)
+            );
+
+            if !needs_conversion {
+                // No conversion needed - copy file directly to output
+                let output_path = self
+                    .file_handler
+                    .get_output_path(&self.config.media_dir, &track_id);
+
+                // Determine output extension based on original format
+                let extension = Path::new(&file.filename)
+                    .extension()
+                    .and_then(|e| e.to_str())
+                    .unwrap_or("ogg");
+
+                let output_path_with_ext = output_path.with_extension(extension);
+
+                match tokio::fs::copy(&input_path, &output_path_with_ext).await {
+                    Ok(_) => {
+                        file.output_file_path = Some(output_path_with_ext.to_string_lossy().to_string());
+                        file.converted = true; // Mark as processed even if not transcoded
+                        converted += 1;
+                        converted_track_ids.push(track_id.clone());
+
+                        // Update catalog with appropriate extension
+                        let audio_uri = format!("tracks/{}.{}", track_id, extension);
+                        if let Err(e) = self.catalog.set_track_audio_uri(&track_id, &audio_uri) {
+                            warn!("Failed to update track {} audio_uri: {}", track_id, e);
+                        }
+
+                        info!(
+                            "Copied {} -> {} (no conversion needed, {} kbps)",
+                            file.filename, track_id, file.bitrate.unwrap_or(0)
+                        );
+                    }
+                    Err(e) => {
+                        error!("Failed to copy {}: {}", file.filename, e);
+                        file.error_message = Some(e.to_string());
+                    }
+                }
+
+                self.store.update_file(&file)?;
+                continue;
+            }
+
+            // Original conversion logic for files that need conversion
             let output_path = self
                 .file_handler
                 .get_output_path(&self.config.media_dir, &track_id);
@@ -1272,7 +1435,8 @@ impl IngestionManager {
                         warn!("Failed to update track {} audio_uri: {}", track_id, e);
                     }
 
-                    info!("Converted {} -> {}", file.filename, track_id);
+                    info!("Converted {} -> {} (target: {} kbps)", file.filename, track_id,
+                          self.config.target_bitrate);
                 }
                 Err(e) => {
                     error!("Failed to convert {}: {}", file.filename, e);
@@ -1419,6 +1583,32 @@ impl IngestionManager {
             );
 
             self.convert_job(job_id).await?;
+        } else if selected_option == "convert_low_bitrate" {
+            // User approved converting low bitrate files
+            let mut files = self.store.get_files_for_job(job_id)?;
+            for file in &mut files {
+                if let Some(ConversionReason::LowBitratePendingConfirmation {
+                    original_bitrate,
+                }) = file.conversion_reason
+                {
+                    file.conversion_reason = Some(ConversionReason::LowBitrateApproved {
+                        original_bitrate,
+                    });
+                    self.store.update_file(&file)?;
+                }
+            }
+
+            // Continue to identification phase
+            job.status = IngestionJobStatus::IdentifyingAlbum;
+            self.store.update_job(&job)?;
+
+            info!(
+                "Review resolved: job {} low bitrate files approved for conversion",
+                job_id
+            );
+
+            // Continue processing
+            self.process_job(job_id).await?;
         } else if selected_option == "retry" {
             job.status = IngestionJobStatus::IdentifyingAlbum;
             self.store.update_job(&job)?;
@@ -1522,6 +1712,7 @@ mod tests {
     fn test_config_defaults() {
         let config = IngestionManagerConfig::default();
         assert_eq!(config.target_bitrate, 320);
+        assert_eq!(config.bitrate_tolerance, 50);
         assert_eq!(config.max_iterations, 20);
         assert!((config.auto_match_threshold - 0.85).abs() < 0.001);
     }
@@ -1542,5 +1733,83 @@ mod tests {
         assert_eq!(levenshtein_distance("abc", ""), 3);
         assert_eq!(levenshtein_distance("", "abc"), 3);
         assert_eq!(levenshtein_distance("kitten", "sitting"), 3);
+    }
+
+    /// Test bitrate decision logic with default config (320 kbps ± 50 kbps)
+    fn bitrate_to_conversion_reason(config: &IngestionManagerConfig, bitrate: Option<i32>) -> ConversionReason {
+        let min_bitrate = config.target_bitrate as i32 - config.bitrate_tolerance as i32;
+        let max_bitrate = config.target_bitrate as i32 + config.bitrate_tolerance as i32;
+
+        let bitrate = match bitrate {
+            Some(b) if b > 0 => b,
+            _ => return ConversionReason::UndetectableBitrate,
+        };
+
+        if bitrate < min_bitrate {
+            return ConversionReason::LowBitratePendingConfirmation {
+                original_bitrate: bitrate,
+            };
+        }
+
+        if bitrate > max_bitrate {
+            return ConversionReason::HighBitrate {
+                original_bitrate: bitrate,
+            };
+        }
+
+        ConversionReason::NoConversionNeeded
+    }
+
+    #[test]
+    fn test_bitrate_conversion_decision() {
+        let config = IngestionManagerConfig::default();
+
+        // Test undetectable bitrate (None)
+        let result = bitrate_to_conversion_reason(&config, None);
+        assert!(matches!(result, ConversionReason::UndetectableBitrate));
+
+        // Test undetectable bitrate (Some(0))
+        let result = bitrate_to_conversion_reason(&config, Some(0));
+        assert!(matches!(result, ConversionReason::UndetectableBitrate));
+
+        // Test low bitrate (< 270 kbps)
+        let result = bitrate_to_conversion_reason(&config, Some(128));
+        assert!(matches!(
+            result,
+            ConversionReason::LowBitratePendingConfirmation { original_bitrate: 128 }
+        ));
+
+        // Test low bitrate at boundary (269 kbps)
+        let result = bitrate_to_conversion_reason(&config, Some(269));
+        assert!(matches!(
+            result,
+            ConversionReason::LowBitratePendingConfirmation { original_bitrate: 269 }
+        ));
+
+        // Test acceptable bitrate (270 kbps - lower boundary)
+        let result = bitrate_to_conversion_reason(&config, Some(270));
+        assert!(matches!(result, ConversionReason::NoConversionNeeded));
+
+        // Test acceptable bitrate (320 kbps - target)
+        let result = bitrate_to_conversion_reason(&config, Some(320));
+        assert!(matches!(result, ConversionReason::NoConversionNeeded));
+
+        // Test acceptable bitrate (370 kbps - upper boundary)
+        let result = bitrate_to_conversion_reason(&config, Some(370));
+        assert!(matches!(result, ConversionReason::NoConversionNeeded));
+
+        // Test high bitrate (371 kbps)
+        let result = bitrate_to_conversion_reason(&config, Some(371));
+        assert!(matches!(
+            result,
+            ConversionReason::HighBitrate { original_bitrate: 371 }
+        ));
+
+        // Test high bitrate (500 kbps)
+        let result = bitrate_to_conversion_reason(&config, Some(500));
+        assert!(matches!(
+            result,
+            ConversionReason::HighBitrate { original_bitrate: 500 }
+        ));
     }
 }
