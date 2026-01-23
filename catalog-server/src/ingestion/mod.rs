@@ -21,8 +21,8 @@ pub use manager::{
     DownloadManagerTrait, IngestionError, IngestionManager, IngestionManagerConfig, QueueItemInfo,
 };
 pub use models::{
-    AlbumMetadataSummary, IngestionContextType, IngestionFile, IngestionJob, IngestionJobStatus,
-    IngestionMatchSource, ReviewOption, ReviewQueueItem,
+    AlbumMetadataSummary, ConversionReason, IngestionContextType, IngestionFile, IngestionJob,
+    IngestionJobStatus, IngestionMatchSource, ReviewOption, ReviewQueueItem,
 };
 pub use schema::{INGESTION_SCHEMA_SQL, INGESTION_SCHEMA_VERSION};
 pub use store::{IngestionStore, SqliteIngestionStore};

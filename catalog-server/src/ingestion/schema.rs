@@ -79,6 +79,9 @@ CREATE TABLE IF NOT EXISTS ingestion_files (
     converted INTEGER NOT NULL DEFAULT 0,
     error_message TEXT,
 
+    -- Conversion decision (JSON serialized ConversionReason)
+    conversion_reason TEXT,
+
     -- Timestamps
     created_at INTEGER NOT NULL,
 
@@ -120,4 +123,25 @@ CREATE INDEX IF NOT EXISTS idx_ingestion_review_pending ON ingestion_review_queu
 "#;
 
 /// Current schema version.
-pub const INGESTION_SCHEMA_VERSION: i32 = 2;
+pub const INGESTION_SCHEMA_VERSION: i32 = 3;
+
+/// Migration from version 2 to 3: Add conversion_reason column.
+pub fn migrate_v2_to_v3(conn: &rusqlite::Connection) -> Result<(), rusqlite::Error> {
+    // Check if conversion_reason column already exists
+    let column_exists: bool = conn
+        .query_row(
+            "SELECT 1 FROM pragma_table_info('ingestion_files') WHERE name='conversion_reason'",
+            [],
+            |_| Ok(true),
+        )
+        .unwrap_or(false);
+
+    if !column_exists {
+        conn.execute(
+            "ALTER TABLE ingestion_files ADD COLUMN conversion_reason TEXT",
+            [],
+        )?;
+    }
+
+    Ok(())
+}
