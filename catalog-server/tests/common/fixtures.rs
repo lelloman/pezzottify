@@ -6,7 +6,7 @@
 
 use super::constants::*;
 use anyhow::Result;
-use pezzottify_catalog_server::catalog_store::{SqliteCatalogStore, CATALOG_VERSIONED_SCHEMAS};
+use pezzottify_catalog_server::catalog_store::CATALOG_VERSIONED_SCHEMAS;
 use pezzottify_catalog_server::user::auth::PezzottifyHasher;
 use pezzottify_catalog_server::user::{
     SqliteUserStore, UserAuthCredentials, UserAuthCredentialsStore, UserRole, UserStore,

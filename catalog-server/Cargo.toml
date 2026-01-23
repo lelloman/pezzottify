@@ -10,7 +10,7 @@ no_checks = [] # dev feature, ignore expensive catalog integrity checks
 test-fast-hasher = [] # dev feature, fast password hasher for tests (DO NOT use in production!)
 fast = ["no_checks", "test-fast-hasher"]
 slowdown = [] # dev feature, adds a slowdown layer in front of server routes
-mock = [] # dev feature, enables mockall for trait mocking in tests
+mock = ["mockall"] # dev feature, enables mockall for trait mocking in tests
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -66,6 +66,7 @@ tokio-tungstenite = { version = "0.26", features = ["native-tls"] }
 openidconnect = "4.0"
 jsonwebtoken = "9"
 indicatif = "0.17"
+mockall = { version = "0.13", optional = true }
 
 [dev-dependencies]
 reqwest = { version = "0.12", features = ["json", "cookies"] }

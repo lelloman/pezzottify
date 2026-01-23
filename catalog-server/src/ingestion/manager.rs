@@ -1398,7 +1398,8 @@ impl IngestionManager {
 
                         // Update catalog with appropriate extension (sharded path)
                         let (dir1, dir2) = super::file_handler::FileHandler::shard_dirs(&track_id);
-                        let audio_uri = format!("audio/{}/{}/{}.{}", dir1, dir2, track_id, extension);
+                        let audio_uri =
+                            format!("audio/{}/{}/{}.{}", dir1, dir2, track_id, extension);
                         if let Err(e) = self.catalog.set_track_audio_uri(&track_id, &audio_uri) {
                             warn!("Failed to update track {} audio_uri: {}", track_id, e);
                         }

@@ -1283,7 +1283,7 @@ mod tests {
     mod mock {
         use super::*;
         use std::path::PathBuf;
-        use std::sync::atomic::{AtomicI64, Ordering};
+        use std::sync::atomic::AtomicI64;
 
         pub struct MockCatalogStore {
             pub items: Vec<SearchableItem>,
