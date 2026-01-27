@@ -145,6 +145,14 @@ impl CatalogStore for NullCatalogStore {
         anyhow::bail!("NullCatalogStore does not support write operations")
     }
 
+    fn recompute_artist_availability(&self, _artist_id: &str) -> Result<bool> {
+        anyhow::bail!("NullCatalogStore does not support write operations")
+    }
+
+    fn get_album_artist_ids(&self, _album_id: &str) -> Result<Vec<String>> {
+        Ok(Vec::new())
+    }
+
     fn get_items_popularity(
         &self,
         _items: &[(String, super::SearchableContentType)],
