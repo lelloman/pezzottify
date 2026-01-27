@@ -67,7 +67,10 @@
           <div class="queueItemHeader">
             <div class="queueItemMain">
               <span class="queueItemType">{{ formatContentType(item.content_type) }}</span>
-              <span class="queueItemName">{{ formatItemName(item) }}</span>
+              <span class="queueItemName clickable" @click="goToContent(item)">
+                {{ formatItemName(item) }}
+                <span class="linkIcon">→</span>
+              </span>
             </div>
             <div class="queueItemActions">
               <span class="statusBadge" :class="statusClass(item.status)">
@@ -165,7 +168,10 @@
           <div class="queueItemHeader">
             <div class="queueItemMain">
               <span class="queueItemType">{{ formatContentType(item.content_type) }}</span>
-              <span class="queueItemName">{{ formatItemName(item) }}</span>
+              <span class="queueItemName clickable" @click="goToContent(item)">
+                {{ formatItemName(item) }}
+                <span class="linkIcon">→</span>
+              </span>
             </div>
             <div class="queueItemActions">
               <button
@@ -222,7 +228,10 @@
         <div v-for="item in completedItems" :key="item.id" class="queueItem completed">
           <div class="queueItemMain">
             <span class="queueItemType">{{ formatContentType(item.content_type) }}</span>
-            <span class="queueItemName">{{ formatItemName(item) }}</span>
+            <span class="queueItemName clickable" @click="goToContent(item)">
+              {{ formatItemName(item) }}
+              <span class="linkIcon">→</span>
+            </span>
           </div>
           <div class="queueItemMeta">
             <span class="statusBadge status-completed">completed</span>
@@ -505,21 +514,34 @@
               @change="handleFileSelect"
               style="display: none"
             />
+            <input
+              ref="folderInput"
+              type="file"
+              webkitdirectory
+              directory
+              @change="handleFolderSelect"
+              style="display: none"
+            />
             <div class="dropzoneContent">
               <span class="dropzoneIcon">+</span>
               <span class="dropzoneText">
-                Drag audio file here or <span class="browseLink">browse</span>
+                Drag files/folders here or <span class="browseLink">browse files</span>
               </span>
-              <span class="dropzoneHint">Supports MP3, FLAC, WAV, OGG, M4A, AAC, OPUS, or ZIP archive</span>
+              <span class="dropzoneHint">Supports MP3, FLAC, WAV, OGG, M4A, AAC, OPUS, ZIP, or folders</span>
+              <button class="folderButton" @click.stop="triggerFolderInput">
+                Select Folder
+              </button>
             </div>
           </div>
 
           <!-- Upload Progress -->
-          <div v-if="uploadState.uploading" class="uploadProgress">
+          <div v-if="uploadState.uploading || uploadState.zipping" class="uploadProgress">
             <div class="progressBar">
               <div class="progressFill" :style="{ width: uploadState.progress + '%' }"></div>
             </div>
-            <span class="progressText">Uploading {{ uploadState.filename }}...</span>
+            <span class="progressText">
+              {{ uploadState.zipping ? 'Zipping' : 'Uploading' }} {{ uploadState.filename }}...
+            </span>
           </div>
 
           <div v-if="uploadState.error" class="modalError">
@@ -543,6 +565,7 @@
 
 <script setup>
 import { ref, reactive, computed, onMounted, onUnmounted, watch } from "vue";
+import { useRouter } from "vue-router";
 import { Line } from "vue-chartjs";
 import {
   Chart as ChartJS,
@@ -556,6 +579,10 @@ import {
   Filler,
 } from "chart.js";
 import { useRemoteStore } from "@/store/remote";
+import JSZip from "jszip";
+
+// Supported audio extensions
+const AUDIO_EXTENSIONS = ["mp3", "flac", "wav", "ogg", "m4a", "aac", "wma", "opus"];
 
 // Register Chart.js components
 ChartJS.register(
@@ -570,6 +597,16 @@ ChartJS.register(
 );
 
 const remoteStore = useRemoteStore();
+const router = useRouter();
+
+// Navigate to album/artist page
+const goToContent = (item) => {
+  if (item.content_type === "ALBUM") {
+    router.push(`/album/${item.content_id}`);
+  } else if (item.content_type === "ARTIST") {
+    router.push(`/artist/${item.content_id}`);
+  }
+};
 
 // Download modal state
 const showDownloadModal = ref(false);
@@ -665,11 +702,13 @@ const deleteError = ref(null);
 const showUploadModal = ref(false);
 const itemToUpload = ref(null);
 const fileInput = ref(null);
+const folderInput = ref(null);
 const isDragging = ref(false);
 const uploadingItems = reactive({});
 
 const uploadState = reactive({
   uploading: false,
+  zipping: false,
   progress: 0,
   filename: "",
   error: null,
@@ -1010,6 +1049,10 @@ const triggerFileInput = () => {
   fileInput.value?.click();
 };
 
+const triggerFolderInput = () => {
+  folderInput.value?.click();
+};
+
 const handleFileSelect = (event) => {
   const file = event.target.files?.[0];
   if (file) {
@@ -1017,12 +1060,246 @@ const handleFileSelect = (event) => {
   }
 };
 
-const onDrop = (e) => {
+const handleFolderSelect = async (event) => {
+  const files = event.target.files;
+  if (files && files.length > 0) {
+    await uploadFolder(files);
+  }
+};
+
+// Check if a file is a supported audio format
+const isAudioFile = (filename) => {
+  const ext = filename.split('.').pop()?.toLowerCase();
+  return AUDIO_EXTENSIONS.includes(ext);
+};
+
+const onDrop = async (e) => {
   isDragging.value = false;
+
+  // Check if it's a folder drop using DataTransferItemList
+  const items = e.dataTransfer?.items;
+  if (items && items.length > 0) {
+    const firstItem = items[0];
+
+    // Try to get as directory entry (for folder drops)
+    if (firstItem.webkitGetAsEntry) {
+      const entry = firstItem.webkitGetAsEntry();
+      if (entry && entry.isDirectory) {
+        await uploadDirectoryEntry(entry);
+        return;
+      }
+    }
+  }
+
+  // Fall back to regular file upload
   const file = e.dataTransfer?.files[0];
   if (file) {
     uploadFile(file);
   }
+};
+
+// Upload a folder by zipping it first
+const uploadFolder = async (files) => {
+  if (!itemToUpload.value) return;
+
+  // Filter to only audio files
+  const audioFiles = Array.from(files).filter(f => isAudioFile(f.name));
+
+  if (audioFiles.length === 0) {
+    uploadState.error = "No audio files found in folder";
+    return;
+  }
+
+  // Get folder name from webkitRelativePath
+  const folderName = audioFiles[0].webkitRelativePath?.split('/')[0] || 'folder';
+
+  uploadState.zipping = true;
+  uploadState.progress = 0;
+  uploadState.filename = folderName;
+  uploadState.error = null;
+  uploadState.success = null;
+  uploadingItems[itemToUpload.value.id] = true;
+
+  try {
+    // Create zip
+    const zip = new JSZip();
+
+    for (let i = 0; i < audioFiles.length; i++) {
+      const file = audioFiles[i];
+      const relativePath = file.webkitRelativePath || file.name;
+      zip.file(relativePath, file);
+      uploadState.progress = Math.round((i / audioFiles.length) * 50);
+    }
+
+    // Generate zip blob
+    const zipBlob = await zip.generateAsync(
+      { type: "blob" },
+      (metadata) => {
+        uploadState.progress = 50 + Math.round(metadata.percent / 2);
+      }
+    );
+
+    uploadState.zipping = false;
+    uploadState.uploading = true;
+    uploadState.progress = 0;
+
+    // Upload the zip
+    const zipFile = new File([zipBlob], `${folderName}.zip`, { type: "application/zip" });
+
+    const result = await remoteStore.uploadIngestionFile(
+      zipFile,
+      "download_request",
+      itemToUpload.value.id,
+      (progress) => {
+        uploadState.progress = progress;
+      },
+    );
+
+    if (result.error) {
+      uploadState.error = result.error;
+    } else {
+      uploadState.success = `Upload successful! Job created: ${result.job_id}`;
+      setTimeout(() => {
+        closeUploadModal();
+        loadData();
+      }, 2000);
+    }
+  } catch (error) {
+    console.error("[Download Manager] Folder upload error:", error);
+    uploadState.error = error.message || "Folder upload failed";
+  } finally {
+    uploadState.uploading = false;
+    uploadState.zipping = false;
+    uploadingItems[itemToUpload.value.id] = false;
+    if (folderInput.value) {
+      folderInput.value.value = "";
+    }
+  }
+};
+
+// Upload a directory from drag & drop using webkitGetAsEntry
+const uploadDirectoryEntry = async (dirEntry) => {
+  if (!itemToUpload.value) return;
+
+  const folderName = dirEntry.name;
+
+  uploadState.zipping = true;
+  uploadState.progress = 0;
+  uploadState.filename = folderName;
+  uploadState.error = null;
+  uploadState.success = null;
+  uploadingItems[itemToUpload.value.id] = true;
+
+  try {
+    // Recursively read all files from the directory
+    const files = await readDirectoryRecursive(dirEntry);
+    const audioFiles = files.filter(f => isAudioFile(f.path));
+
+    if (audioFiles.length === 0) {
+      uploadState.error = "No audio files found in folder";
+      uploadState.zipping = false;
+      uploadingItems[itemToUpload.value.id] = false;
+      return;
+    }
+
+    // Create zip
+    const zip = new JSZip();
+
+    for (let i = 0; i < audioFiles.length; i++) {
+      const { path, file } = audioFiles[i];
+      zip.file(path, file);
+      uploadState.progress = Math.round((i / audioFiles.length) * 50);
+    }
+
+    // Generate zip blob
+    const zipBlob = await zip.generateAsync(
+      { type: "blob" },
+      (metadata) => {
+        uploadState.progress = 50 + Math.round(metadata.percent / 2);
+      }
+    );
+
+    uploadState.zipping = false;
+    uploadState.uploading = true;
+    uploadState.progress = 0;
+
+    // Upload the zip
+    const zipFile = new File([zipBlob], `${folderName}.zip`, { type: "application/zip" });
+
+    const result = await remoteStore.uploadIngestionFile(
+      zipFile,
+      "download_request",
+      itemToUpload.value.id,
+      (progress) => {
+        uploadState.progress = progress;
+      },
+    );
+
+    if (result.error) {
+      uploadState.error = result.error;
+    } else {
+      uploadState.success = `Upload successful! Job created: ${result.job_id}`;
+      setTimeout(() => {
+        closeUploadModal();
+        loadData();
+      }, 2000);
+    }
+  } catch (error) {
+    console.error("[Download Manager] Directory upload error:", error);
+    uploadState.error = error.message || "Directory upload failed";
+  } finally {
+    uploadState.uploading = false;
+    uploadState.zipping = false;
+    uploadingItems[itemToUpload.value.id] = false;
+  }
+};
+
+// Recursively read all files from a directory entry
+const readDirectoryRecursive = async (dirEntry, basePath = "") => {
+  const files = [];
+  const entries = await readDirectoryEntries(dirEntry);
+
+  for (const entry of entries) {
+    const path = basePath ? `${basePath}/${entry.name}` : entry.name;
+
+    if (entry.isFile) {
+      const file = await getFileFromEntry(entry);
+      files.push({ path, file });
+    } else if (entry.isDirectory) {
+      const subFiles = await readDirectoryRecursive(entry, path);
+      files.push(...subFiles);
+    }
+  }
+
+  return files;
+};
+
+// Read all entries from a directory
+const readDirectoryEntries = (dirEntry) => {
+  return new Promise((resolve, reject) => {
+    const reader = dirEntry.createReader();
+    const entries = [];
+
+    const readBatch = () => {
+      reader.readEntries((batch) => {
+        if (batch.length === 0) {
+          resolve(entries);
+        } else {
+          entries.push(...batch);
+          readBatch();
+        }
+      }, reject);
+    };
+
+    readBatch();
+  });
+};
+
+// Get File object from FileEntry
+const getFileFromEntry = (fileEntry) => {
+  return new Promise((resolve, reject) => {
+    fileEntry.file(resolve, reject);
+  });
 };
 
 const uploadFile = async (file) => {
@@ -1527,6 +1804,26 @@ onUnmounted(() => {
 .queueItemName {
   font-weight: var(--font-medium);
   color: var(--text-base);
+}
+
+.queueItemName.clickable {
+  cursor: pointer;
+  transition: color var(--transition-fast);
+}
+
+.queueItemName.clickable:hover {
+  color: var(--spotify-green);
+}
+
+.linkIcon {
+  font-size: var(--text-xs);
+  margin-left: var(--spacing-1);
+  opacity: 0.5;
+  transition: opacity var(--transition-fast);
+}
+
+.queueItemName.clickable:hover .linkIcon {
+  opacity: 1;
 }
 
 .queueItemArtist {
@@ -2270,6 +2567,23 @@ onUnmounted(() => {
 .dropzoneHint {
   font-size: var(--text-xs);
   color: var(--text-subdued);
+}
+
+.folderButton {
+  margin-top: var(--spacing-2);
+  padding: var(--spacing-2) var(--spacing-4);
+  background-color: var(--bg-elevated-base);
+  border: 1px solid var(--border-subdued);
+  border-radius: var(--radius-md);
+  color: var(--text-subdued);
+  font-size: var(--text-sm);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.folderButton:hover {
+  border-color: var(--spotify-green);
+  color: var(--spotify-green);
 }
 
 .uploadProgress {
