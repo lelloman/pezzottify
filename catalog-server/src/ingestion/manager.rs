@@ -11,9 +11,12 @@
 
 use super::converter::{convert_to_ogg, probe_audio_file};
 use super::file_handler::{FileHandler, FileHandlerError};
+use super::fingerprint::{
+    match_album_with_fallbacks, FingerprintConfig, FingerprintMatchResult, ScoredCandidate,
+};
 use super::models::{
     AlbumMetadataSummary, ConversionReason, IngestionContextType, IngestionFile, IngestionJob,
-    IngestionJobStatus, IngestionMatchSource, ReviewOption,
+    IngestionJobStatus, IngestionMatchSource, ReviewOption, TicketType, UploadType,
 };
 use super::store::IngestionStore;
 use crate::catalog_store::CatalogStore;
@@ -87,6 +90,19 @@ struct AlbumCandidate {
     track_count: i32,
     total_duration_ms: i64,
     track_titles: Vec<String>,
+}
+
+/// Result of processing an upload (may create multiple jobs for collections).
+#[derive(Debug, Clone)]
+pub struct UploadResult {
+    /// Upload session ID (groups jobs from same upload).
+    pub session_id: String,
+    /// Detected upload type.
+    pub upload_type: UploadType,
+    /// Created job IDs.
+    pub job_ids: Vec<String>,
+    /// Number of albums detected (for collections).
+    pub album_count: usize,
 }
 
 /// Configuration for the IngestionManager.
@@ -233,6 +249,347 @@ impl IngestionManager {
         );
 
         Ok(job_id)
+    }
+
+    /// Process an upload with automatic type detection and fingerprint matching.
+    ///
+    /// This is the main entry point for the redesigned ingestion flow:
+    /// 1. Extracts files from upload
+    /// 2. Detects upload type (Track, Album, Collection)
+    /// 3. For collections: creates separate jobs per album
+    /// 4. Runs duration fingerprint matching
+    /// 5. Creates tickets based on match quality
+    pub async fn process_upload(
+        &self,
+        user_id: &str,
+        filename: &str,
+        data: &[u8],
+        context_type: IngestionContextType,
+        context_id: Option<String>,
+    ) -> Result<UploadResult, IngestionError> {
+        let session_id = uuid::Uuid::new_v4().to_string();
+        let total_size = data.len() as i64;
+
+        // Create a temp session directory
+        let session_dir = self
+            .file_handler
+            .create_job_dir(&session_id)
+            .await?;
+
+        // Save uploaded file
+        let temp_path = self
+            .file_handler
+            .save_upload(&session_id, filename, data)
+            .await?;
+
+        // Extract if zip
+        let extract_dir = if FileHandler::is_zip(filename) {
+            let audio_files = self.file_handler.extract_zip(&session_id, &temp_path).await?;
+            if audio_files.is_empty() {
+                return Err(IngestionError::NoFiles);
+            }
+            session_dir.join("extracted")
+        } else if FileHandler::is_supported_audio(filename) {
+            // Single file - just use the session dir
+            session_dir.clone()
+        } else {
+            return Err(IngestionError::FileHandler(
+                FileHandlerError::UnsupportedFileType(filename.to_string()),
+            ));
+        };
+
+        // Detect upload type
+        let upload_type = self.file_handler.detect_upload_type(&extract_dir).await?;
+
+        info!(
+            session_id = %session_id,
+            upload_type = ?upload_type,
+            "Detected upload type"
+        );
+
+        // Create jobs based on upload type
+        let job_ids = match upload_type {
+            UploadType::Track => {
+                // Single track - create one job
+                let job_id = self
+                    .create_job_internal(
+                        user_id,
+                        filename,
+                        total_size,
+                        &extract_dir,
+                        Some(session_id.clone()),
+                        upload_type,
+                        context_type,
+                        context_id,
+                    )
+                    .await?;
+                vec![job_id]
+            }
+            UploadType::Album => {
+                // Single album - create one job
+                let job_id = self
+                    .create_job_internal(
+                        user_id,
+                        filename,
+                        total_size,
+                        &extract_dir,
+                        Some(session_id.clone()),
+                        upload_type,
+                        context_type,
+                        context_id,
+                    )
+                    .await?;
+                vec![job_id]
+            }
+            UploadType::Collection => {
+                // Collection - create one job per album directory
+                let albums = self.file_handler.group_files_by_album(&extract_dir).await?;
+                let mut job_ids = Vec::with_capacity(albums.len());
+
+                for (album_dir, _files) in &albums {
+                    let album_name = album_dir
+                        .file_name()
+                        .and_then(|n| n.to_str())
+                        .unwrap_or(filename);
+
+                    let job_id = self
+                        .create_job_internal(
+                            user_id,
+                            album_name,
+                            0, // Individual album size not tracked
+                            album_dir,
+                            Some(session_id.clone()),
+                            UploadType::Album, // Each sub-job is an album
+                            context_type,
+                            context_id.clone(),
+                        )
+                        .await?;
+                    job_ids.push(job_id);
+                }
+
+                job_ids
+            }
+        };
+
+        let album_count = job_ids.len();
+
+        info!(
+            session_id = %session_id,
+            job_count = album_count,
+            "Created ingestion jobs"
+        );
+
+        Ok(UploadResult {
+            session_id,
+            upload_type,
+            job_ids,
+            album_count,
+        })
+    }
+
+    /// Internal helper to create a job from a directory of audio files.
+    async fn create_job_internal(
+        &self,
+        user_id: &str,
+        name: &str,
+        total_size: i64,
+        dir: &Path,
+        session_id: Option<String>,
+        upload_type: UploadType,
+        context_type: IngestionContextType,
+        context_id: Option<String>,
+    ) -> Result<String, IngestionError> {
+        let job_id = uuid::Uuid::new_v4().to_string();
+
+        // Get audio files
+        let audio_files = self.file_handler.list_audio_files_recursive(dir).await?;
+        if audio_files.is_empty() {
+            return Err(IngestionError::NoFiles);
+        }
+
+        let file_count = audio_files.len() as i32;
+
+        // Create job record with upload info
+        let job = IngestionJob::new(&job_id, user_id, name, total_size, file_count)
+            .with_context(context_type, context_id)
+            .with_upload_info(session_id, upload_type);
+
+        self.store.create_job(&job)?;
+
+        // Create file records
+        for audio_path in &audio_files {
+            let file_id = uuid::Uuid::new_v4().to_string();
+            let file_name = audio_path
+                .file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or("unknown");
+            let file_size = tokio::fs::metadata(audio_path)
+                .await
+                .map(|m| m.len() as i64)
+                .unwrap_or(0);
+
+            let file = IngestionFile::new(
+                &file_id,
+                &job_id,
+                file_name,
+                file_size,
+                audio_path.to_string_lossy().to_string(),
+            );
+
+            self.store.create_file(&file)?;
+        }
+
+        info!(
+            job_id = %job_id,
+            file_count = file_count,
+            upload_type = ?upload_type,
+            "Created ingestion job"
+        );
+
+        Ok(job_id)
+    }
+
+    /// Run fingerprint matching for a job and update its ticket type.
+    pub async fn run_fingerprint_match(&self, job_id: &str) -> Result<FingerprintMatchResult, IngestionError> {
+        let mut job = self
+            .store
+            .get_job(job_id)?
+            .ok_or_else(|| IngestionError::JobNotFound(job_id.to_string()))?;
+
+        // Get all files and their durations
+        let files = self.store.get_files_for_job(job_id)?;
+
+        // Extract durations (need to analyze if not already done)
+        let mut durations: Vec<(i32, i64)> = Vec::with_capacity(files.len());
+
+        for file in &files {
+            // Get track number and duration
+            let track_num = file.tag_track_num.unwrap_or(0);
+            let duration = match file.duration_ms {
+                Some(d) => d,
+                None => {
+                    // Need to probe the file
+                    let path = Path::new(&file.temp_file_path);
+                    let metadata = probe_audio_file(path).await?;
+                    metadata.duration_ms as i64
+                }
+            };
+            durations.push((track_num, duration));
+        }
+
+        // Sort by track number to ensure correct order
+        durations.sort_by_key(|(track_num, _)| *track_num);
+        let ordered_durations: Vec<i64> = durations.into_iter().map(|(_, d)| d).collect();
+
+        // Run fingerprint matching
+        let config = FingerprintConfig::default();
+        let result = match_album_with_fallbacks(&ordered_durations, self.catalog.as_ref(), &config)?;
+
+        // Update job with fingerprint results
+        job.ticket_type = Some(result.ticket_type);
+        job.match_score = Some(result.match_score);
+        job.match_delta_ms = Some(result.total_delta_ms);
+
+        if let Some(ref album) = result.matched_album {
+            job.matched_album_id = Some(album.id.clone());
+            job.match_confidence = Some(result.match_score);
+            job.match_source = Some(IngestionMatchSource::Fingerprint);
+
+            // Update detected metadata from the matched album
+            job.detected_album = Some(album.name.clone());
+            job.detected_artist = Some(album.artist_name.clone());
+        }
+
+        // Update status based on ticket type
+        match result.ticket_type {
+            TicketType::Success => {
+                // Auto-matched, proceed to track mapping
+                job.status = IngestionJobStatus::MappingTracks;
+            }
+            TicketType::Review => {
+                // Needs human review
+                job.status = IngestionJobStatus::AwaitingReview;
+                // Create review item with top candidates
+                self.create_fingerprint_review(&job, &result.candidates)?;
+            }
+            TicketType::Failure => {
+                // No match - needs manual resolution
+                job.status = IngestionJobStatus::AwaitingReview;
+                self.create_failure_review(&job)?;
+            }
+        }
+
+        self.store.update_job(&job)?;
+
+        info!(
+            job_id = %job_id,
+            ticket_type = ?result.ticket_type,
+            match_score = result.match_score,
+            delta_ms = result.total_delta_ms,
+            "Fingerprint matching complete"
+        );
+
+        Ok(result)
+    }
+
+    /// Create a review item for fingerprint match candidates.
+    fn create_fingerprint_review(
+        &self,
+        job: &IngestionJob,
+        candidates: &[ScoredCandidate],
+    ) -> Result<(), IngestionError> {
+        let options: Vec<ReviewOption> = candidates
+            .iter()
+            .map(|c| ReviewOption {
+                id: format!("album:{}", c.album.id),
+                label: format!("{} - {}", c.album.artist_name, c.album.name),
+                description: Some(format!(
+                    "Match: {:.0}%, Delta: {}ms, {} tracks",
+                    c.score * 100.0,
+                    c.delta_ms,
+                    c.album.track_count
+                )),
+            })
+            .collect();
+
+        let options_json = serde_json::to_string(&options).unwrap_or_default();
+
+        self.store.create_review_item(
+            &job.id,
+            "Multiple album candidates found. Please select the correct album:",
+            &options_json,
+        )?;
+
+        Ok(())
+    }
+
+    /// Create a review item for failed fingerprint match.
+    fn create_failure_review(&self, job: &IngestionJob) -> Result<(), IngestionError> {
+        let options = vec![
+            ReviewOption {
+                id: "search".to_string(),
+                label: "Search manually".to_string(),
+                description: Some("Search the catalog for the correct album".to_string()),
+            },
+            ReviewOption {
+                id: "dismiss".to_string(),
+                label: "Dismiss upload".to_string(),
+                description: Some("Reject this upload - album not in catalog".to_string()),
+            },
+        ];
+
+        let options_json = serde_json::to_string(&options).unwrap_or_default();
+
+        self.store.create_review_item(
+            &job.id,
+            &format!(
+                "No matching album found for '{}'. Would you like to search manually?",
+                job.original_filename
+            ),
+            &options_json,
+        )?;
+
+        Ok(())
     }
 
     // =========================================================================

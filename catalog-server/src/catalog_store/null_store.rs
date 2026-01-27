@@ -172,4 +172,16 @@ impl CatalogStore for NullCatalogStore {
     fn get_random_tracks_by_genre(&self, _genre: &str, _limit: usize) -> Result<Vec<String>> {
         Ok(Vec::new())
     }
+
+    fn find_albums_by_fingerprint(
+        &self,
+        _track_count: i32,
+        _total_duration_ms: i64,
+    ) -> Result<Vec<super::AlbumFingerprintCandidate>> {
+        Ok(Vec::new())
+    }
+
+    fn update_album_fingerprint(&self, _album_id: &str) -> Result<()> {
+        anyhow::bail!("NullCatalogStore does not support write operations")
+    }
 }

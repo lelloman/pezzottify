@@ -103,6 +103,8 @@ pub enum IngestionMatchSource {
     HumanReview,
     /// Matched from download request (album was pre-specified).
     DownloadRequest,
+    /// Matched via duration fingerprint algorithm.
+    Fingerprint,
 }
 
 impl IngestionMatchSource {
@@ -111,6 +113,7 @@ impl IngestionMatchSource {
             Self::Agent => "AGENT",
             Self::HumanReview => "HUMAN_REVIEW",
             Self::DownloadRequest => "DOWNLOAD_REQUEST",
+            Self::Fingerprint => "FINGERPRINT",
         }
     }
 
@@ -119,6 +122,69 @@ impl IngestionMatchSource {
             "AGENT" => Some(Self::Agent),
             "HUMAN_REVIEW" => Some(Self::HumanReview),
             "DOWNLOAD_REQUEST" => Some(Self::DownloadRequest),
+            "FINGERPRINT" => Some(Self::Fingerprint),
+            _ => None,
+        }
+    }
+}
+
+/// Type of upload detected from file structure.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum UploadType {
+    /// Single audio file.
+    Track,
+    /// Multiple audio files representing an album.
+    Album,
+    /// Multiple directories containing albums.
+    Collection,
+}
+
+impl UploadType {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Track => "TRACK",
+            Self::Album => "ALBUM",
+            Self::Collection => "COLLECTION",
+        }
+    }
+
+    pub fn parse(s: &str) -> Option<Self> {
+        match s {
+            "TRACK" => Some(Self::Track),
+            "ALBUM" => Some(Self::Album),
+            "COLLECTION" => Some(Self::Collection),
+            _ => None,
+        }
+    }
+}
+
+/// Ticket type based on fingerprint match quality.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum TicketType {
+    /// 100% match with delta < 1s - auto-ingest.
+    Success,
+    /// 90-99% match - needs human review.
+    Review,
+    /// < 90% match or no candidates - manual resolution required.
+    Failure,
+}
+
+impl TicketType {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Success => "SUCCESS",
+            Self::Review => "REVIEW",
+            Self::Failure => "FAILURE",
+        }
+    }
+
+    pub fn parse(s: &str) -> Option<Self> {
+        match s {
+            "SUCCESS" => Some(Self::Success),
+            "REVIEW" => Some(Self::Review),
+            "FAILURE" => Some(Self::Failure),
             _ => None,
         }
     }
@@ -149,6 +215,12 @@ pub struct IngestionJob {
     /// Context ID (e.g., download_queue_item_id).
     pub context_id: Option<String>,
 
+    // Upload session and type (for collection uploads)
+    /// Groups jobs from the same upload (for collections).
+    pub upload_session_id: Option<String>,
+    /// Detected upload type (Track, Album, Collection).
+    pub upload_type: Option<UploadType>,
+
     // Album identification (populated during IDENTIFYING_ALBUM phase)
     /// Detected artist name (from embedded tags).
     pub detected_artist: Option<String>,
@@ -164,6 +236,14 @@ pub struct IngestionJob {
     pub match_confidence: Option<f32>,
     /// Source of the match.
     pub match_source: Option<IngestionMatchSource>,
+
+    // Fingerprint match details
+    /// Ticket type based on fingerprint match quality.
+    pub ticket_type: Option<TicketType>,
+    /// Fingerprint match score (percentage of tracks matched).
+    pub match_score: Option<f32>,
+    /// Total duration delta in milliseconds across all tracks.
+    pub match_delta_ms: Option<i64>,
 
     // Stats
     /// Number of tracks successfully matched.
@@ -202,12 +282,17 @@ impl IngestionJob {
             file_count,
             context_type: None,
             context_id: None,
+            upload_session_id: None,
+            upload_type: None,
             detected_artist: None,
             detected_album: None,
             detected_year: None,
             matched_album_id: None,
             match_confidence: None,
             match_source: None,
+            ticket_type: None,
+            match_score: None,
+            match_delta_ms: None,
             tracks_matched: 0,
             tracks_converted: 0,
             error_message: None,
@@ -226,6 +311,33 @@ impl IngestionJob {
     ) -> Self {
         self.context_type = Some(context_type);
         self.context_id = context_id;
+        self
+    }
+
+    /// Set the upload session and type for this job.
+    pub fn with_upload_info(
+        mut self,
+        session_id: Option<String>,
+        upload_type: UploadType,
+    ) -> Self {
+        self.upload_session_id = session_id;
+        self.upload_type = Some(upload_type);
+        self
+    }
+
+    /// Set the fingerprint match result for this job.
+    pub fn with_fingerprint_match(
+        mut self,
+        ticket_type: TicketType,
+        match_score: f32,
+        match_delta_ms: i64,
+        matched_album_id: Option<String>,
+    ) -> Self {
+        self.ticket_type = Some(ticket_type);
+        self.match_score = Some(match_score);
+        self.match_delta_ms = Some(match_delta_ms);
+        self.matched_album_id = matched_album_id;
+        self.match_source = Some(IngestionMatchSource::Fingerprint);
         self
     }
 }

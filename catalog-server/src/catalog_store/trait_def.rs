@@ -204,6 +204,24 @@ pub trait CatalogStore: Send + Sync {
 
     /// Get random tracks for a genre (for radio/shuffle feature).
     fn get_random_tracks_by_genre(&self, genre: &str, limit: usize) -> Result<Vec<String>>;
+
+    // =========================================================================
+    // Duration Fingerprint Matching
+    // =========================================================================
+
+    /// Find album candidates by duration fingerprint.
+    ///
+    /// Phase 1: Filter albums with matching track count and total duration (±0.1%).
+    /// Returns album candidates with their track durations for Phase 2 comparison.
+    fn find_albums_by_fingerprint(
+        &self,
+        track_count: i32,
+        total_duration_ms: i64,
+    ) -> Result<Vec<super::AlbumFingerprintCandidate>>;
+
+    /// Update the fingerprint columns (track_count, total_duration_ms) for an album.
+    /// Called after tracks are added/removed.
+    fn update_album_fingerprint(&self, album_id: &str) -> Result<()>;
 }
 
 /// A searchable item for the search index.

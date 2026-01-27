@@ -1483,6 +1483,16 @@ mod tests {
             ) -> anyhow::Result<Vec<String>> {
                 Ok(Vec::new())
             }
+            fn find_albums_by_fingerprint(
+                &self,
+                _track_count: i32,
+                _total_duration_ms: i64,
+            ) -> anyhow::Result<Vec<crate::catalog_store::AlbumFingerprintCandidate>> {
+                Ok(Vec::new())
+            }
+            fn update_album_fingerprint(&self, _album_id: &str) -> anyhow::Result<()> {
+                Ok(())
+            }
         }
     }
 
