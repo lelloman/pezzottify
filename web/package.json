@@ -17,6 +17,7 @@
     "axios": "^1.7.9",
     "chart.js": "^4.5.1",
     "howler": "^2.2.4",
+    "jszip": "^3.10.1",
     "lodash-es": "^4.17.21",
     "oidc-client-ts": "^3.4.1",
     "pinia": "^2.3.1",

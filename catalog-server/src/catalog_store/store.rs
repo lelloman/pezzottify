@@ -1763,6 +1763,106 @@ impl CatalogStore for SqliteCatalogStore {
 
         Ok(track_ids)
     }
+
+    fn find_albums_by_fingerprint(
+        &self,
+        track_count: i32,
+        total_duration_ms: i64,
+    ) -> Result<Vec<AlbumFingerprintCandidate>> {
+        let read_conn = self.get_read_conn();
+        let conn = read_conn.lock().unwrap();
+
+        // Phase 1: Filter by track count and total duration (±0.1% tolerance)
+        let min_duration = total_duration_ms * 999 / 1000;
+        let max_duration = total_duration_ms * 1001 / 1000;
+
+        // Query albums with matching fingerprint and get their track durations
+        let mut stmt = conn.prepare_cached(
+            "SELECT a.rowid, a.id, a.name, a.release_date
+             FROM albums a
+             WHERE a.track_count = ?1
+               AND a.total_duration_ms BETWEEN ?2 AND ?3",
+        )?;
+
+        let album_rows: Vec<(i64, String, String, Option<String>)> = stmt
+            .query_map(params![track_count, min_duration, max_duration], |row| {
+                Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?))
+            })?
+            .filter_map(|r| r.ok())
+            .collect();
+
+        // For each candidate, get the track durations and primary artist
+        let mut candidates = Vec::with_capacity(album_rows.len());
+
+        for (album_rowid, album_id, album_name, release_date) in album_rows {
+            // Get primary artist name
+            let artist_name: String = conn
+                .query_row(
+                    "SELECT ar.name FROM artists ar
+                     JOIN artist_albums aa ON ar.rowid = aa.artist_rowid
+                     WHERE aa.album_rowid = ?1 AND aa.is_appears_on = 0
+                     ORDER BY aa.index_in_album ASC
+                     LIMIT 1",
+                    params![album_rowid],
+                    |r| r.get(0),
+                )
+                .unwrap_or_else(|_| "Unknown Artist".to_string());
+
+            // Get track durations ordered by disc and track number
+            let mut duration_stmt = conn.prepare_cached(
+                "SELECT duration_ms FROM tracks
+                 WHERE album_rowid = ?1
+                 ORDER BY disc_number ASC, track_number ASC",
+            )?;
+
+            let track_durations: Vec<i64> = duration_stmt
+                .query_map(params![album_rowid], |row| row.get(0))?
+                .filter_map(|r| r.ok())
+                .collect();
+
+            let total_duration: i64 = track_durations.iter().sum();
+
+            candidates.push(AlbumFingerprintCandidate {
+                id: album_id,
+                name: album_name,
+                artist_name,
+                release_date,
+                track_count,
+                total_duration_ms: total_duration,
+                track_durations,
+            });
+        }
+
+        Ok(candidates)
+    }
+
+    fn update_album_fingerprint(&self, album_id: &str) -> Result<()> {
+        let conn = self.write_conn.lock().unwrap();
+
+        // Get album rowid
+        let album_rowid: i64 = conn
+            .query_row(
+                "SELECT rowid FROM albums WHERE id = ?1",
+                params![album_id],
+                |r| r.get(0),
+            )
+            .context(format!("Album '{}' not found", album_id))?;
+
+        // Compute track_count and total_duration_ms from tracks
+        let (track_count, total_duration_ms): (i32, i64) = conn.query_row(
+            "SELECT COUNT(*), COALESCE(SUM(duration_ms), 0) FROM tracks WHERE album_rowid = ?1",
+            params![album_rowid],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )?;
+
+        // Update the album fingerprint columns
+        conn.execute(
+            "UPDATE albums SET track_count = ?1, total_duration_ms = ?2 WHERE rowid = ?3",
+            params![track_count, total_duration_ms, album_rowid],
+        )?;
+
+        Ok(())
+    }
 }
 
 #[cfg(test)]

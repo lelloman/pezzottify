@@ -8,7 +8,7 @@
 
 use super::models::{
     ConversionReason, IngestionContextType, IngestionFile, IngestionJob, IngestionJobStatus,
-    IngestionMatchSource, ReviewQueueItem,
+    IngestionMatchSource, ReviewQueueItem, TicketType, UploadType,
 };
 use super::schema::INGESTION_SCHEMA_SQL;
 use crate::agent::reasoning::ReasoningStep;
@@ -105,6 +105,7 @@ impl SqliteIngestionStore {
 
         // Run migrations if needed
         super::schema::migrate_v2_to_v3(&conn)?;
+        super::schema::migrate_v3_to_v4(&conn)?;
 
         Ok(Self {
             conn: Arc::new(Mutex::new(conn)),
@@ -118,6 +119,7 @@ impl SqliteIngestionStore {
         conn.execute("PRAGMA foreign_keys = ON", [])?;
         conn.execute_batch(INGESTION_SCHEMA_SQL)?;
         super::schema::migrate_v2_to_v3(&conn)?;
+        super::schema::migrate_v3_to_v4(&conn)?;
         Ok(Self {
             conn: Arc::new(Mutex::new(conn)),
         })
@@ -136,6 +138,10 @@ impl SqliteIngestionStore {
                 .get::<_, Option<String>>("context_type")?
                 .and_then(|s| IngestionContextType::parse(&s)),
             context_id: row.get("context_id")?,
+            upload_session_id: row.get("upload_session_id")?,
+            upload_type: row
+                .get::<_, Option<String>>("upload_type")?
+                .and_then(|s| UploadType::parse(&s)),
             detected_artist: row.get("detected_artist")?,
             detected_album: row.get("detected_album")?,
             detected_year: row.get("detected_year")?,
@@ -144,6 +150,11 @@ impl SqliteIngestionStore {
             match_source: row
                 .get::<_, Option<String>>("match_source")?
                 .and_then(|s| IngestionMatchSource::parse(&s)),
+            ticket_type: row
+                .get::<_, Option<String>>("ticket_type")?
+                .and_then(|s| TicketType::parse(&s)),
+            match_score: row.get("match_score")?,
+            match_delta_ms: row.get("match_delta_ms")?,
             tracks_matched: row.get("tracks_matched")?,
             tracks_converted: row.get("tracks_converted")?,
             error_message: row.get("error_message")?,
@@ -197,13 +208,16 @@ impl IngestionStore for SqliteIngestionStore {
             r#"
             INSERT INTO ingestion_jobs (
                 id, status, user_id, original_filename, total_size_bytes, file_count,
-                context_type, context_id,
+                context_type, context_id, upload_session_id, upload_type,
                 detected_artist, detected_album, detected_year,
                 matched_album_id, match_confidence, match_source,
+                ticket_type, match_score, match_delta_ms,
                 tracks_matched, tracks_converted, error_message,
                 created_at, started_at, completed_at, workflow_state
             ) VALUES (
-                ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21
+                ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10,
+                ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19,
+                ?20, ?21, ?22, ?23, ?24, ?25, ?26
             )
             "#,
             params![
@@ -215,12 +229,17 @@ impl IngestionStore for SqliteIngestionStore {
                 job.file_count,
                 job.context_type.map(|c| c.as_str()),
                 job.context_id,
+                job.upload_session_id,
+                job.upload_type.map(|u| u.as_str()),
                 job.detected_artist,
                 job.detected_album,
                 job.detected_year,
                 job.matched_album_id,
                 job.match_confidence,
                 job.match_source.map(|m| m.as_str()),
+                job.ticket_type.map(|t| t.as_str()),
+                job.match_score,
+                job.match_delta_ms,
                 job.tracks_matched,
                 job.tracks_converted,
                 job.error_message,
@@ -252,10 +271,12 @@ impl IngestionStore for SqliteIngestionStore {
             UPDATE ingestion_jobs SET
                 status = ?2, file_count = ?3,
                 context_type = ?4, context_id = ?5,
-                detected_artist = ?6, detected_album = ?7, detected_year = ?8,
-                matched_album_id = ?9, match_confidence = ?10, match_source = ?11,
-                tracks_matched = ?12, tracks_converted = ?13, error_message = ?14,
-                started_at = ?15, completed_at = ?16, workflow_state = ?17
+                upload_session_id = ?6, upload_type = ?7,
+                detected_artist = ?8, detected_album = ?9, detected_year = ?10,
+                matched_album_id = ?11, match_confidence = ?12, match_source = ?13,
+                ticket_type = ?14, match_score = ?15, match_delta_ms = ?16,
+                tracks_matched = ?17, tracks_converted = ?18, error_message = ?19,
+                started_at = ?20, completed_at = ?21, workflow_state = ?22
             WHERE id = ?1
             "#,
             params![
@@ -264,12 +285,17 @@ impl IngestionStore for SqliteIngestionStore {
                 job.file_count,
                 job.context_type.map(|c| c.as_str()),
                 job.context_id,
+                job.upload_session_id,
+                job.upload_type.map(|u| u.as_str()),
                 job.detected_artist,
                 job.detected_album,
                 job.detected_year,
                 job.matched_album_id,
                 job.match_confidence,
                 job.match_source.map(|m| m.as_str()),
+                job.ticket_type.map(|t| t.as_str()),
+                job.match_score,
+                job.match_delta_ms,
                 job.tracks_matched,
                 job.tracks_converted,
                 job.error_message,

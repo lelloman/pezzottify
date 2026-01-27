@@ -6,7 +6,7 @@
 //! - ingestion_reasoning_log: Agent reasoning steps
 //! - ingestion_review_queue: Human review items
 
-/// SQL schema for the ingestion database (version 2 - album-first).
+/// SQL schema for the ingestion database (version 4 - fingerprint matching).
 pub const INGESTION_SCHEMA_SQL: &str = r#"
 -- Album-level job tracking
 CREATE TABLE IF NOT EXISTS ingestion_jobs (
@@ -21,6 +21,10 @@ CREATE TABLE IF NOT EXISTS ingestion_jobs (
     context_type TEXT,
     context_id TEXT,
 
+    -- Upload session and type (for collection uploads)
+    upload_session_id TEXT,
+    upload_type TEXT,
+
     -- Detected metadata (from embedded tags)
     detected_artist TEXT,
     detected_album TEXT,
@@ -30,6 +34,11 @@ CREATE TABLE IF NOT EXISTS ingestion_jobs (
     matched_album_id TEXT,
     match_confidence REAL,
     match_source TEXT,
+
+    -- Fingerprint match details
+    ticket_type TEXT,
+    match_score REAL,
+    match_delta_ms INTEGER,
 
     -- Stats
     tracks_matched INTEGER NOT NULL DEFAULT 0,
@@ -123,7 +132,7 @@ CREATE INDEX IF NOT EXISTS idx_ingestion_review_pending ON ingestion_review_queu
 "#;
 
 /// Current schema version.
-pub const INGESTION_SCHEMA_VERSION: i32 = 3;
+pub const INGESTION_SCHEMA_VERSION: i32 = 4;
 
 /// Migration from version 2 to 3: Add conversion_reason column.
 pub fn migrate_v2_to_v3(conn: &rusqlite::Connection) -> Result<(), rusqlite::Error> {
@@ -142,6 +151,97 @@ pub fn migrate_v2_to_v3(conn: &rusqlite::Connection) -> Result<(), rusqlite::Err
             [],
         )?;
     }
+
+    Ok(())
+}
+
+/// Migration from version 3 to 4: Add fingerprint matching columns.
+pub fn migrate_v3_to_v4(conn: &rusqlite::Connection) -> Result<(), rusqlite::Error> {
+    // Add upload_session_id column
+    let has_session_id: bool = conn
+        .query_row(
+            "SELECT 1 FROM pragma_table_info('ingestion_jobs') WHERE name='upload_session_id'",
+            [],
+            |_| Ok(true),
+        )
+        .unwrap_or(false);
+
+    if !has_session_id {
+        conn.execute(
+            "ALTER TABLE ingestion_jobs ADD COLUMN upload_session_id TEXT",
+            [],
+        )?;
+    }
+
+    // Add upload_type column
+    let has_upload_type: bool = conn
+        .query_row(
+            "SELECT 1 FROM pragma_table_info('ingestion_jobs') WHERE name='upload_type'",
+            [],
+            |_| Ok(true),
+        )
+        .unwrap_or(false);
+
+    if !has_upload_type {
+        conn.execute(
+            "ALTER TABLE ingestion_jobs ADD COLUMN upload_type TEXT",
+            [],
+        )?;
+    }
+
+    // Add ticket_type column
+    let has_ticket_type: bool = conn
+        .query_row(
+            "SELECT 1 FROM pragma_table_info('ingestion_jobs') WHERE name='ticket_type'",
+            [],
+            |_| Ok(true),
+        )
+        .unwrap_or(false);
+
+    if !has_ticket_type {
+        conn.execute(
+            "ALTER TABLE ingestion_jobs ADD COLUMN ticket_type TEXT",
+            [],
+        )?;
+    }
+
+    // Add match_score column
+    let has_match_score: bool = conn
+        .query_row(
+            "SELECT 1 FROM pragma_table_info('ingestion_jobs') WHERE name='match_score'",
+            [],
+            |_| Ok(true),
+        )
+        .unwrap_or(false);
+
+    if !has_match_score {
+        conn.execute(
+            "ALTER TABLE ingestion_jobs ADD COLUMN match_score REAL",
+            [],
+        )?;
+    }
+
+    // Add match_delta_ms column
+    let has_match_delta: bool = conn
+        .query_row(
+            "SELECT 1 FROM pragma_table_info('ingestion_jobs') WHERE name='match_delta_ms'",
+            [],
+            |_| Ok(true),
+        )
+        .unwrap_or(false);
+
+    if !has_match_delta {
+        conn.execute(
+            "ALTER TABLE ingestion_jobs ADD COLUMN match_delta_ms INTEGER",
+            [],
+        )?;
+    }
+
+    // Create index on upload_session_id for grouping collection jobs
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_ingestion_jobs_session ON ingestion_jobs(upload_session_id)",
+        [],
+    )?;
 
     Ok(())
 }

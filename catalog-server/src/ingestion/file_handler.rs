@@ -1,5 +1,7 @@
 //! File handling for ingestion uploads.
 
+use super::models::UploadType;
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use thiserror::Error;
 use tokio::fs;
@@ -198,6 +200,102 @@ impl FileHandler {
         }
 
         Ok(audio_files)
+    }
+
+    /// Detect upload type from extracted directory structure.
+    ///
+    /// - Single audio file → Track
+    /// - Multiple audio files in root or single subdirectory → Album
+    /// - Multiple directories containing audio files → Collection
+    pub async fn detect_upload_type(
+        &self,
+        extracted_dir: &Path,
+    ) -> Result<UploadType, FileHandlerError> {
+        // Count audio files directly in the root
+        let root_audio_files = self.list_audio_files(extracted_dir).await?;
+
+        // Find subdirectories containing audio files
+        let mut dirs_with_audio: HashSet<PathBuf> = HashSet::new();
+        let mut total_audio_count = root_audio_files.len();
+
+        let mut entries = fs::read_dir(extracted_dir).await?;
+        while let Some(entry) = entries.next_entry().await? {
+            let path = entry.path();
+            if path.is_dir() {
+                let sub_audio = self.list_audio_files_recursive(&path).await?;
+                if !sub_audio.is_empty() {
+                    dirs_with_audio.insert(path);
+                    total_audio_count += sub_audio.len();
+                }
+            }
+        }
+
+        // Determine upload type based on structure
+        if total_audio_count == 1 {
+            Ok(UploadType::Track)
+        } else if dirs_with_audio.len() > 1 {
+            // Multiple directories with audio → Collection
+            Ok(UploadType::Collection)
+        } else {
+            // All files in root or single subdirectory → Album
+            Ok(UploadType::Album)
+        }
+    }
+
+    /// List audio files recursively in a directory.
+    pub async fn list_audio_files_recursive(
+        &self,
+        dir: &Path,
+    ) -> Result<Vec<PathBuf>, FileHandlerError> {
+        let mut audio_files = Vec::new();
+        let mut stack = vec![dir.to_path_buf()];
+
+        while let Some(current_dir) = stack.pop() {
+            let mut entries = fs::read_dir(&current_dir).await?;
+            while let Some(entry) = entries.next_entry().await? {
+                let path = entry.path();
+                if path.is_dir() {
+                    stack.push(path);
+                } else if path.is_file() {
+                    if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
+                        if Self::is_supported_audio(name) {
+                            audio_files.push(path);
+                        }
+                    }
+                }
+            }
+        }
+
+        Ok(audio_files)
+    }
+
+    /// Group audio files by their parent directory (for collection uploads).
+    /// Returns a map of directory path to audio files in that directory.
+    pub async fn group_files_by_album(
+        &self,
+        extracted_dir: &Path,
+    ) -> Result<Vec<(PathBuf, Vec<PathBuf>)>, FileHandlerError> {
+        let mut albums: Vec<(PathBuf, Vec<PathBuf>)> = Vec::new();
+
+        // Check root directory for audio files
+        let root_audio = self.list_audio_files(extracted_dir).await?;
+        if !root_audio.is_empty() {
+            albums.push((extracted_dir.to_path_buf(), root_audio));
+        }
+
+        // Check subdirectories
+        let mut entries = fs::read_dir(extracted_dir).await?;
+        while let Some(entry) = entries.next_entry().await? {
+            let path = entry.path();
+            if path.is_dir() {
+                let sub_audio = self.list_audio_files_recursive(&path).await?;
+                if !sub_audio.is_empty() {
+                    albums.push((path, sub_audio));
+                }
+            }
+        }
+
+        Ok(albums)
     }
 
     /// Get the output path for a converted track.

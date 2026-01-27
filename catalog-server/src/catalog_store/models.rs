@@ -289,6 +289,29 @@ pub struct GenreTracksResult {
     pub has_more: bool,
 }
 
+// =============================================================================
+// Duration Fingerprint Types
+// =============================================================================
+
+/// Album candidate for duration fingerprint matching (Phase 2)
+#[derive(Clone, Debug, Serialize)]
+pub struct AlbumFingerprintCandidate {
+    /// Album ID
+    pub id: String,
+    /// Album name
+    pub name: String,
+    /// Primary artist name
+    pub artist_name: String,
+    /// Release date (for disambiguation)
+    pub release_date: Option<String>,
+    /// Track count
+    pub track_count: i32,
+    /// Total duration in milliseconds
+    pub total_duration_ms: i64,
+    /// Track durations ordered by disc_number, track_number
+    pub track_durations: Vec<i64>,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

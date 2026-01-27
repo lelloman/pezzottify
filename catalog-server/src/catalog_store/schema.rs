@@ -54,11 +54,15 @@ const ALBUMS_TABLE: Table = Table {
             non_null = true,
             default_value = Some("'missing'")
         ), // 'complete', 'partial', 'missing'
+        // Duration fingerprint columns for album matching
+        sqlite_column!("track_count", &SqlType::Integer),     // Pre-computed track count
+        sqlite_column!("total_duration_ms", &SqlType::Integer), // Pre-computed total duration
     ],
     indices: &[
         ("idx_albums_id", "id"),
         ("idx_albums_upc", "external_id_upc"),
         ("idx_albums_availability", "album_availability"),
+        ("idx_album_fingerprint", "track_count, total_duration_ms"),
     ],
     unique_constraints: &[&["id"]],
 };
@@ -279,6 +283,45 @@ pub const CATALOG_VERSIONED_SCHEMAS: &[VersionedSchema] = &[
             tx.execute(
                 "CREATE UNIQUE INDEX IF NOT EXISTS idx_artist_albums_unique
                  ON artist_albums(artist_rowid, album_rowid, is_appears_on)",
+                [],
+            )?;
+            Ok(())
+        }),
+    },
+    VersionedSchema {
+        version: 4,
+        tables: &[
+            ARTISTS_TABLE,
+            ALBUMS_TABLE,
+            TRACKS_TABLE,
+            TRACK_ARTISTS_TABLE,
+            ARTIST_ALBUMS_TABLE,
+            ARTIST_GENRES_TABLE,
+            ALBUM_IMAGES_TABLE,
+            ARTIST_IMAGES_TABLE,
+        ],
+        migration: Some(|tx: &rusqlite::Connection| {
+            // Add duration fingerprint columns for album matching
+            tx.execute(
+                "ALTER TABLE albums ADD COLUMN track_count INTEGER",
+                [],
+            )?;
+            tx.execute(
+                "ALTER TABLE albums ADD COLUMN total_duration_ms INTEGER",
+                [],
+            )?;
+
+            // Populate the columns from existing track data
+            tx.execute(
+                "UPDATE albums SET
+                    track_count = (SELECT COUNT(*) FROM tracks WHERE tracks.album_rowid = albums.rowid),
+                    total_duration_ms = (SELECT COALESCE(SUM(duration_ms), 0) FROM tracks WHERE tracks.album_rowid = albums.rowid)",
+                [],
+            )?;
+
+            // Create composite index for efficient fingerprint queries
+            tx.execute(
+                "CREATE INDEX IF NOT EXISTS idx_album_fingerprint ON albums(track_count, total_duration_ms)",
                 [],
             )?;
             Ok(())
