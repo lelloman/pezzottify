@@ -1828,6 +1828,36 @@ impl IngestionManager {
                         HashedItemType::Album,
                         album_available,
                     )]);
+
+                    // Update artist availability for album's artists
+                    match self.catalog.get_album_artist_ids(album_id) {
+                        Ok(artist_ids) => {
+                            for artist_id in artist_ids {
+                                match self.catalog.recompute_artist_availability(&artist_id) {
+                                    Ok(artist_available) => {
+                                        info!(
+                                            "Artist {} availability updated to {}",
+                                            artist_id, artist_available
+                                        );
+                                        self.search.update_availability(&[(
+                                            artist_id,
+                                            HashedItemType::Artist,
+                                            artist_available,
+                                        )]);
+                                    }
+                                    Err(e) => {
+                                        warn!(
+                                            "Failed to recompute artist {} availability: {}",
+                                            artist_id, e
+                                        );
+                                    }
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            warn!("Failed to get artist IDs for album {}: {}", album_id, e);
+                        }
+                    }
                 }
                 Err(e) => {
                     warn!("Failed to recompute album {} availability: {}", album_id, e);

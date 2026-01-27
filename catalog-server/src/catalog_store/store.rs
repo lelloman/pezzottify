@@ -1587,6 +1587,70 @@ impl CatalogStore for SqliteCatalogStore {
         Ok(availability)
     }
 
+    fn recompute_artist_availability(&self, artist_id: &str) -> Result<bool> {
+        let conn = self.write_conn.lock().unwrap();
+
+        // Get artist rowid
+        let artist_rowid: i64 = conn
+            .query_row(
+                "SELECT rowid FROM artists WHERE id = ?1",
+                params![artist_id],
+                |r| r.get(0),
+            )
+            .context(format!("Artist '{}' not found", artist_id))?;
+
+        // Check if artist has any non-Missing albums
+        let has_available_album: bool = conn
+            .query_row(
+                "SELECT EXISTS(
+                    SELECT 1 FROM albums a
+                    JOIN artist_albums aa ON a.rowid = aa.album_rowid
+                    WHERE aa.artist_rowid = ?1
+                      AND a.album_availability != 'MISSING'
+                )",
+                params![artist_rowid],
+                |r| r.get(0),
+            )
+            .unwrap_or(false);
+
+        // Update artist availability
+        conn.execute(
+            "UPDATE artists SET artist_available = ?1 WHERE rowid = ?2",
+            params![has_available_album as i32, artist_rowid],
+        )?;
+
+        Ok(has_available_album)
+    }
+
+    fn get_album_artist_ids(&self, album_id: &str) -> Result<Vec<String>> {
+        let read_conn = self.get_read_conn();
+        let conn = read_conn.lock().unwrap();
+
+        // Get album rowid
+        let album_rowid: i64 = conn
+            .query_row(
+                "SELECT rowid FROM albums WHERE id = ?1",
+                params![album_id],
+                |r| r.get(0),
+            )
+            .context(format!("Album '{}' not found", album_id))?;
+
+        // Get primary artist IDs (not appears_on)
+        let mut stmt = conn.prepare_cached(
+            "SELECT ar.id FROM artists ar
+             JOIN artist_albums aa ON ar.rowid = aa.artist_rowid
+             WHERE aa.album_rowid = ?1 AND aa.is_appears_on = 0
+             ORDER BY aa.index_in_album ASC",
+        )?;
+
+        let artist_ids: Vec<String> = stmt
+            .query_map(params![album_rowid], |row| row.get(0))?
+            .filter_map(|r| r.ok())
+            .collect();
+
+        Ok(artist_ids)
+    }
+
     fn get_items_popularity(
         &self,
         items: &[(String, SearchableContentType)],

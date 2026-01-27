@@ -169,6 +169,14 @@ pub trait CatalogStore: Send + Sync {
     /// Returns the new availability status.
     fn recompute_album_availability(&self, album_id: &str) -> Result<super::AlbumAvailability>;
 
+    /// Recompute and update artist availability based on their albums' availability.
+    /// An artist is available if they have at least one available album.
+    /// Returns true if the artist is now available.
+    fn recompute_artist_availability(&self, artist_id: &str) -> Result<bool>;
+
+    /// Get the primary artist IDs for an album.
+    fn get_album_artist_ids(&self, album_id: &str) -> Result<Vec<String>>;
+
     // =========================================================================
     // Popularity Data
     // =========================================================================

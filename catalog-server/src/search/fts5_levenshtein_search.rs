@@ -1452,6 +1452,12 @@ mod tests {
             ) -> anyhow::Result<crate::catalog_store::AlbumAvailability> {
                 anyhow::bail!("MockCatalogStore does not support write operations")
             }
+            fn recompute_artist_availability(&self, _artist_id: &str) -> anyhow::Result<bool> {
+                anyhow::bail!("MockCatalogStore does not support write operations")
+            }
+            fn get_album_artist_ids(&self, _album_id: &str) -> anyhow::Result<Vec<String>> {
+                Ok(Vec::new())
+            }
             fn get_items_popularity(
                 &self,
                 _items: &[(String, SearchableContentType)],
