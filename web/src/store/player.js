@@ -164,6 +164,18 @@ export const usePlayerStore = defineStore("player", () => {
       type: PLAYBACK_CONTEXTS.userMix,
     };
   };
+
+  const makePlaylistFromTrackIds = (trackIds, name = "Remote Transfer") => {
+    return {
+      context: {
+        name,
+        id: null,
+        edited: false,
+      },
+      tracksIds: trackIds,
+      type: PLAYBACK_CONTEXTS.userMix,
+    };
+  };
   /* Playlist creation */
 
   const setNewPlaylingPlaylist = (newPlaylist) => {
@@ -240,6 +252,19 @@ export const usePlayerStore = defineStore("player", () => {
     setNewPlaylingPlaylist(userPlaylistPlaylist);
     loadTrack(0);
     play();
+  };
+
+  // Set playlist from array of track IDs (used for remote playback transfer)
+  const setPlaylistFromTrackIds = (trackIds, startIndex = 0, autoPlay = false) => {
+    if (!trackIds || trackIds.length === 0) {
+      return;
+    }
+    const playlist = makePlaylistFromTrackIds(trackIds);
+    setNewPlaylingPlaylist(playlist);
+    loadTrack(startIndex);
+    if (autoPlay) {
+      play();
+    }
   };
   /* Playlist starters */
 
@@ -607,9 +632,12 @@ export const usePlayerStore = defineStore("player", () => {
     PLAYBACK_CONTEXTS,
     setTrack,
     setUserPlaylist,
+    setPlaylistFromTrackIds,
     setAlbumId,
     seekToPercentage,
     setIsPlaying,
+    play,
+    pause,
     playPause,
     skipPreviousTrack,
     skipNextTrack,
