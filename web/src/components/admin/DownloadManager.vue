@@ -579,6 +579,7 @@ import {
   Filler,
 } from "chart.js";
 import { useRemoteStore } from "@/store/remote";
+import { useIngestionStore } from "@/store/ingestion";
 import JSZip from "jszip";
 
 // Supported audio extensions
@@ -597,6 +598,7 @@ ChartJS.register(
 );
 
 const remoteStore = useRemoteStore();
+const ingestionStore = useIngestionStore();
 const router = useRouter();
 
 // Navigate to album/artist page
@@ -1158,11 +1160,22 @@ const uploadFolder = async (files) => {
     if (result.error) {
       uploadState.error = result.error;
     } else {
-      uploadState.success = `Upload successful! Job created: ${result.job_id}`;
-      setTimeout(() => {
-        closeUploadModal();
-        loadData();
-      }, 2000);
+      // Add session to ingestion store and open monitor modal
+      const jobIds = result.job_ids || (result.job_id ? [result.job_id] : []);
+      for (const jobId of jobIds) {
+        ingestionStore.addSession({
+          id: jobId,
+          status: "PENDING",
+          original_filename: folderName,
+        });
+        ingestionStore.fetchJobDetails(jobId);
+      }
+      if (jobIds.length > 0) {
+        ingestionStore.openModal(jobIds[0]);
+      }
+      // Close upload modal and refresh data
+      closeUploadModal();
+      loadData();
     }
   } catch (error) {
     console.error("[Download Manager] Folder upload error:", error);
@@ -1238,11 +1251,22 @@ const uploadDirectoryEntry = async (dirEntry) => {
     if (result.error) {
       uploadState.error = result.error;
     } else {
-      uploadState.success = `Upload successful! Job created: ${result.job_id}`;
-      setTimeout(() => {
-        closeUploadModal();
-        loadData();
-      }, 2000);
+      // Add session to ingestion store and open monitor modal
+      const jobIds = result.job_ids || (result.job_id ? [result.job_id] : []);
+      for (const jobId of jobIds) {
+        ingestionStore.addSession({
+          id: jobId,
+          status: "PENDING",
+          original_filename: folderName,
+        });
+        ingestionStore.fetchJobDetails(jobId);
+      }
+      if (jobIds.length > 0) {
+        ingestionStore.openModal(jobIds[0]);
+      }
+      // Close upload modal and refresh data
+      closeUploadModal();
+      loadData();
     }
   } catch (error) {
     console.error("[Download Manager] Directory upload error:", error);
@@ -1327,13 +1351,22 @@ const uploadFile = async (file) => {
     if (result.error) {
       uploadState.error = result.error;
     } else {
-      uploadState.success = `Upload successful! Job created: ${result.job_id}`;
-      // Close modal after a delay
-      setTimeout(() => {
-        closeUploadModal();
-        // Refresh the queue to show updated status
-        loadData();
-      }, 2000);
+      // Add session to ingestion store and open monitor modal
+      const jobIds = result.job_ids || (result.job_id ? [result.job_id] : []);
+      for (const jobId of jobIds) {
+        ingestionStore.addSession({
+          id: jobId,
+          status: "PENDING",
+          original_filename: file.name,
+        });
+        ingestionStore.fetchJobDetails(jobId);
+      }
+      if (jobIds.length > 0) {
+        ingestionStore.openModal(jobIds[0]);
+      }
+      // Close upload modal and refresh data
+      closeUploadModal();
+      loadData();
     }
   } catch (error) {
     console.error("[Download Manager] Upload error:", error);

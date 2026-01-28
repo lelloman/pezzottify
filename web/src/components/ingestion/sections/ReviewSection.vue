@@ -15,7 +15,7 @@
         :key="option.id"
         class="option-btn"
         :class="{ selected: selectedOption === option.id }"
-        :disabled="isSubmitting"
+        :disabled="isResolving"
         @click="selectOption(option.id)"
       >
         <span class="option-label">{{ option.label }}</span>
@@ -25,13 +25,17 @@
       </button>
     </div>
 
+    <div v-if="resolveError" class="review-error">
+      {{ resolveError }}
+    </div>
+
     <div class="review-actions">
       <button
         class="submit-btn"
-        :disabled="!selectedOption || isSubmitting"
+        :disabled="!selectedOption || isResolving"
         @click="submit"
       >
-        {{ isSubmitting ? 'Submitting...' : 'Submit' }}
+        {{ isResolving ? 'Submitting...' : 'Submit' }}
       </button>
     </div>
   </div>
@@ -49,29 +53,31 @@ const props = defineProps({
     type: String,
     required: true,
   },
+  isResolving: {
+    type: Boolean,
+    default: false,
+  },
+  resolveError: {
+    type: String,
+    default: null,
+  },
 });
 
 const emit = defineEmits(["resolve"]);
 
 const selectedOption = ref(null);
-const isSubmitting = ref(false);
 
 function selectOption(optionId) {
   selectedOption.value = optionId;
 }
 
-async function submit() {
-  if (!selectedOption.value || isSubmitting.value) return;
+function submit() {
+  if (!selectedOption.value || props.isResolving) return;
 
-  isSubmitting.value = true;
-  try {
-    emit("resolve", {
-      jobId: props.jobId,
-      optionId: selectedOption.value,
-    });
-  } finally {
-    isSubmitting.value = false;
-  }
+  emit("resolve", {
+    jobId: props.jobId,
+    optionId: selectedOption.value,
+  });
 }
 </script>
 
@@ -161,6 +167,15 @@ async function submit() {
   font-size: 12px;
   color: var(--text-subdued);
   margin-top: 4px;
+}
+
+.review-error {
+  color: #ff6b6b;
+  font-size: 13px;
+  margin-bottom: 12px;
+  padding: 8px;
+  background: rgba(255, 107, 107, 0.1);
+  border-radius: 4px;
 }
 
 .review-actions {

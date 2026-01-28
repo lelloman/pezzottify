@@ -58,6 +58,36 @@ impl DownloadManagerTrait for DownloadManager {
 
         Ok(())
     }
+
+    fn complete_requests_for_album(
+        &self,
+        album_id: &str,
+        bytes_downloaded: u64,
+        duration_ms: i64,
+    ) -> Result<Vec<String>> {
+        let pending_requests = self
+            .queue_store
+            .find_pending_by_content(DownloadContentType::Album, album_id)?;
+
+        let mut completed_ids = Vec::new();
+
+        for item in pending_requests {
+            if let Err(e) = self.mark_request_completed(&item.id, bytes_downloaded, duration_ms) {
+                warn!(
+                    "Failed to auto-complete download request {} for album {}: {}",
+                    item.id, album_id, e
+                );
+            } else {
+                info!(
+                    "Auto-completed download request {} for album {} (ingestion fulfilled)",
+                    item.id, album_id
+                );
+                completed_ids.push(item.id);
+            }
+        }
+
+        Ok(completed_ids)
+    }
 }
 
 /// Main download manager that orchestrates all download operations.
