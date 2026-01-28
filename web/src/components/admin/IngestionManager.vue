@@ -574,17 +574,22 @@ const uploadFile = async (file) => {
     if (result.error) {
       uploadState.error = result.error;
     } else {
-      uploadState.success = `Job created: ${result.job_id}`;
-      // Add session to ingestion store and open monitor
-      if (result.job_id) {
+      const jobIds = result.job_ids || (result.job_id ? [result.job_id] : []);
+      const jobCount = jobIds.length;
+      uploadState.success = jobCount > 1
+        ? `Created ${jobCount} jobs from ${file.name}`
+        : `Job created: ${jobIds[0]}`;
+      // Add sessions to ingestion store and open monitor
+      for (const jobId of jobIds) {
         ingestionStore.addSession({
-          id: result.job_id,
+          id: jobId,
           status: "PENDING",
           original_filename: file.name,
-          file_count: 1,
         });
-        ingestionStore.openModal(result.job_id);
-        ingestionStore.fetchJobDetails(result.job_id);
+        ingestionStore.fetchJobDetails(jobId);
+      }
+      if (jobIds.length > 0) {
+        ingestionStore.openModal(jobIds[0]);
       }
       await loadData();
     }

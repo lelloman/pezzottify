@@ -29,7 +29,14 @@ use crate::user::Permission;
 
 #[derive(Debug, Serialize)]
 pub struct UploadResponse {
+    /// Primary job ID (first job, for backwards compatibility).
     pub job_id: String,
+    /// All job IDs created from this upload.
+    pub job_ids: Vec<String>,
+    /// Upload session ID (groups jobs from same upload).
+    pub session_id: String,
+    /// Number of albums detected.
+    pub album_count: usize,
     pub status: String,
 }
 
@@ -229,26 +236,38 @@ async fn upload_file(
     );
 
     match manager
-        .create_job(&user_id, &filename, &data, context_type, context_id)
+        .process_upload(&user_id, &filename, &data, context_type, context_id)
         .await
     {
-        Ok(job_id) => {
-            info!("Created ingestion job {} for user {}", job_id, user_id);
+        Ok(result) => {
+            info!(
+                "Created {} ingestion job(s) for user {} (session: {})",
+                result.job_ids.len(),
+                user_id,
+                result.session_id
+            );
 
-            // Spawn background task to auto-process the job
-            let manager_clone = im.clone();
-            let job_id_clone = job_id.clone();
-            tokio::spawn(async move {
-                if let Some(manager) = manager_clone {
-                    debug!("Auto-processing job {}", job_id_clone);
-                    if let Err(e) = manager.process_job(&job_id_clone).await {
-                        warn!("Auto-process failed for job {}: {}", job_id_clone, e);
+            // Spawn background tasks to auto-process each job
+            for job_id in &result.job_ids {
+                let manager_clone = im.clone();
+                let job_id_clone = job_id.clone();
+                tokio::spawn(async move {
+                    if let Some(manager) = manager_clone {
+                        debug!("Auto-processing job {}", job_id_clone);
+                        if let Err(e) = manager.process_job(&job_id_clone).await {
+                            warn!("Auto-process failed for job {}: {}", job_id_clone, e);
+                        }
                     }
-                }
-            });
+                });
+            }
+
+            let primary_job_id = result.job_ids.first().cloned().unwrap_or_default();
 
             Json(UploadResponse {
-                job_id,
+                job_id: primary_job_id,
+                job_ids: result.job_ids,
+                session_id: result.session_id,
+                album_count: result.album_count,
                 status: "PENDING".to_string(),
             })
             .into_response()
