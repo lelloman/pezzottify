@@ -4276,6 +4276,18 @@ pub async fn make_app(
     );
     state.oidc_client = oidc_client;
 
+    // Spawn playback session heartbeat checker task
+    {
+        let playback_manager = state.playback_session_manager.clone();
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(std::time::Duration::from_secs(5));
+            loop {
+                interval.tick().await;
+                playback_manager.check_heartbeats().await;
+            }
+        });
+    }
+
     // Create organic indexer for on-demand search index growth
     state.organic_indexer = Some(crate::search::OrganicIndexer::new(
         search_vault.clone(),
