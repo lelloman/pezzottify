@@ -59,6 +59,8 @@
           v-if="session.review && session.job?.status === 'AWAITING_REVIEW'"
           :review="session.review"
           :jobId="session.job.id"
+          :isResolving="ingestionStore.isResolving"
+          :resolveError="ingestionStore.resolveError"
           @resolve="handleResolve"
         />
       </div>
