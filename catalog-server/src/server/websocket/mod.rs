@@ -9,7 +9,9 @@ pub mod connection;
 pub mod handler;
 pub mod messages;
 pub mod playback_messages;
+pub mod playback_session;
 
 pub use connection::ConnectionManager;
 pub use handler::ws_handler;
 pub use messages::{ClientMessage, ServerMessage};
+pub use playback_session::PlaybackSessionManager;
