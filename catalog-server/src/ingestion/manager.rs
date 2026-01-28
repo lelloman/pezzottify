@@ -138,6 +138,27 @@ impl Default for IngestionManagerConfig {
     }
 }
 
+/// Parameters for creating an ingestion job.
+#[derive(Debug)]
+struct JobCreationParams<'a> {
+    /// User ID creating the job
+    user_id: &'a str,
+    /// Job name
+    name: &'a str,
+    /// Total size in bytes
+    total_size: i64,
+    /// Directory containing audio files
+    dir: &'a Path,
+    /// Upload session ID (if from upload)
+    session_id: Option<String>,
+    /// Upload type (track, album, collection)
+    upload_type: UploadType,
+    /// Context type (manual, download, etc.)
+    context_type: IngestionContextType,
+    /// Context ID (e.g., download queue item ID)
+    context_id: Option<String>,
+}
+
 /// Manages the album-first ingestion workflow.
 pub struct IngestionManager {
     store: Arc<dyn IngestionStore>,
@@ -312,32 +333,32 @@ impl IngestionManager {
             UploadType::Track => {
                 // Single track - create one job
                 let job_id = self
-                    .create_job_internal(
+                    .create_job_internal(JobCreationParams {
                         user_id,
-                        filename,
+                        name: filename,
                         total_size,
-                        &extract_dir,
-                        Some(session_id.clone()),
+                        dir: &extract_dir,
+                        session_id: Some(session_id.clone()),
                         upload_type,
                         context_type,
                         context_id,
-                    )
+                    })
                     .await?;
                 vec![job_id]
             }
             UploadType::Album => {
                 // Single album - create one job
                 let job_id = self
-                    .create_job_internal(
+                    .create_job_internal(JobCreationParams {
                         user_id,
-                        filename,
+                        name: filename,
                         total_size,
-                        &extract_dir,
-                        Some(session_id.clone()),
+                        dir: &extract_dir,
+                        session_id: Some(session_id.clone()),
                         upload_type,
                         context_type,
                         context_id,
-                    )
+                    })
                     .await?;
                 vec![job_id]
             }
@@ -353,16 +374,16 @@ impl IngestionManager {
                         .unwrap_or(filename);
 
                     let job_id = self
-                        .create_job_internal(
+                        .create_job_internal(JobCreationParams {
                             user_id,
-                            album_name,
-                            0, // Individual album size not tracked
-                            album_dir,
-                            Some(session_id.clone()),
-                            UploadType::Album, // Each sub-job is an album
+                            name: album_name,
+                            total_size: 0, // Individual album size not tracked
+                            dir: album_dir,
+                            session_id: Some(session_id.clone()),
+                            upload_type: UploadType::Album, // Each sub-job is an album
                             context_type,
-                            context_id.clone(),
-                        )
+                            context_id: context_id.clone(),
+                        })
                         .await?;
                     job_ids.push(job_id);
                 }
@@ -388,21 +409,11 @@ impl IngestionManager {
     }
 
     /// Internal helper to create a job from a directory of audio files.
-    async fn create_job_internal(
-        &self,
-        user_id: &str,
-        name: &str,
-        total_size: i64,
-        dir: &Path,
-        session_id: Option<String>,
-        upload_type: UploadType,
-        context_type: IngestionContextType,
-        context_id: Option<String>,
-    ) -> Result<String, IngestionError> {
+    async fn create_job_internal(&self, params: JobCreationParams<'_>) -> Result<String, IngestionError> {
         let job_id = uuid::Uuid::new_v4().to_string();
 
         // Get audio files
-        let audio_files = self.file_handler.list_audio_files_recursive(dir).await?;
+        let audio_files = self.file_handler.list_audio_files_recursive(params.dir).await?;
         if audio_files.is_empty() {
             return Err(IngestionError::NoFiles);
         }
@@ -410,9 +421,9 @@ impl IngestionManager {
         let file_count = audio_files.len() as i32;
 
         // Create job record with upload info
-        let job = IngestionJob::new(&job_id, user_id, name, total_size, file_count)
-            .with_context(context_type, context_id)
-            .with_upload_info(session_id, upload_type);
+        let job = IngestionJob::new(&job_id, params.user_id, params.name, params.total_size, file_count)
+            .with_context(params.context_type, params.context_id)
+            .with_upload_info(params.session_id, params.upload_type);
 
         self.store.create_job(&job)?;
 
@@ -442,7 +453,7 @@ impl IngestionManager {
         info!(
             job_id = %job_id,
             file_count = file_count,
-            upload_type = ?upload_type,
+            upload_type = ?params.upload_type,
             "Created ingestion job"
         );
 

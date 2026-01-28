@@ -1287,6 +1287,7 @@ mod tests {
 
         pub struct MockCatalogStore {
             pub items: Vec<SearchableItem>,
+            #[allow(dead_code)]
             pub skeleton_version: AtomicI64,
         }
 
