@@ -32,6 +32,12 @@ export const useIngestionStore = defineStore("ingestion", () => {
   /** Whether the store has been initialized */
   const isInitialized = ref(false);
 
+  /** Whether a review is being resolved */
+  const isResolving = ref(false);
+
+  /** Error from last resolve attempt */
+  const resolveError = ref(null);
+
   // =====================================================
   // Computed
   // =====================================================
@@ -395,19 +401,32 @@ export const useIngestionStore = defineStore("ingestion", () => {
    * @param {string} optionId - Selected option ID
    */
   async function resolveReview(jobId, optionId) {
-    const result = await remoteStore.resolveIngestionReview(jobId, optionId);
-    if (result && !result.error) {
-      const session = sessions.value.get(jobId);
-      if (session) {
-        session.review = null;
-        // Update job with new status from response
-        if (result.job) {
-          session.job = result.job;
+    isResolving.value = true;
+    resolveError.value = null;
+
+    try {
+      const result = await remoteStore.resolveIngestionReview(jobId, optionId);
+      if (result && !result.error) {
+        const session = sessions.value.get(jobId);
+        if (session) {
+          session.review = null;
+          // Update job with new status from response
+          if (result.job) {
+            session.job = result.job;
+          }
+          sessions.value = new Map(sessions.value);
         }
-        sessions.value = new Map(sessions.value);
+        return result;
+      } else {
+        resolveError.value = result?.error || "Failed to resolve review";
+        return result;
       }
+    } catch (e) {
+      resolveError.value = e.message || "Failed to resolve review";
+      return { error: resolveError.value };
+    } finally {
+      isResolving.value = false;
     }
-    return result;
   }
 
   // =====================================================
@@ -420,6 +439,8 @@ export const useIngestionStore = defineStore("ingestion", () => {
     isModalOpen,
     activeTabId,
     isInitialized,
+    isResolving,
+    resolveError,
 
     // Computed
     visibleSessions,

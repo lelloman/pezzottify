@@ -127,6 +127,14 @@ pub trait DownloadQueueStore: Send + Sync {
         content_id: &str,
     ) -> Result<bool>;
 
+    /// Find all pending/active queue items for a content type and ID.
+    /// Returns items with status PENDING, IN_PROGRESS, or RETRY_WAITING.
+    fn find_pending_by_content(
+        &self,
+        content_type: DownloadContentType,
+        content_id: &str,
+    ) -> Result<Vec<QueueItem>>;
+
     // === User Rate Limiting ===
 
     /// Get rate limit status for a user.
@@ -1125,6 +1133,29 @@ impl DownloadQueueStore for SqliteDownloadQueueStore {
         )?;
 
         Ok(count > 0)
+    }
+
+    fn find_pending_by_content(
+        &self,
+        content_type: DownloadContentType,
+        content_id: &str,
+    ) -> Result<Vec<QueueItem>> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare(
+            r#"SELECT * FROM download_queue
+               WHERE content_type = ?1 AND content_id = ?2
+               AND status IN ('PENDING', 'IN_PROGRESS', 'RETRY_WAITING')
+               ORDER BY created_at ASC"#,
+        )?;
+
+        let items = stmt
+            .query_map(
+                rusqlite::params![content_type.as_str(), content_id],
+                Self::row_to_queue_item,
+            )?
+            .collect::<std::result::Result<Vec<_>, _>>()?;
+
+        Ok(items)
     }
 
     // === User Rate Limiting ===

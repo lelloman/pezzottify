@@ -54,6 +54,15 @@ pub trait DownloadManagerTrait: Send + Sync {
         bytes_downloaded: u64,
         duration_ms: i64,
     ) -> Result<()>;
+
+    /// Complete all pending download requests for an album.
+    /// Returns the IDs of completed requests.
+    fn complete_requests_for_album(
+        &self,
+        album_id: &str,
+        bytes_downloaded: u64,
+        duration_ms: i64,
+    ) -> Result<Vec<String>>;
 }
 
 /// Errors that can occur during ingestion.
@@ -1854,6 +1863,11 @@ impl IngestionManager {
             job.status = IngestionJobStatus::AwaitingReview;
             self.store.update_job(&job)?;
 
+            // Notify review needed via WebSocket
+            if let Some(notifier) = &self.notifier {
+                notifier.notify_review_needed(&job, &question, &options).await;
+            }
+
             warn!(
                 "Job {} flagged for review: {} duration mismatches",
                 job_id,
@@ -2106,6 +2120,39 @@ impl IngestionManager {
                         "Marked download request {} as completed for job {}",
                         context_id, job_id
                     );
+                }
+            }
+        }
+
+        // Auto-complete any other pending download requests for the same album
+        if let Some(album_id) = &job.matched_album_id {
+            if let Some(download_manager) = &self.download_manager {
+                let duration_ms = job.started_at.map_or(0, |started| {
+                    job.completed_at
+                        .unwrap_or(chrono::Utc::now().timestamp_millis())
+                        - started
+                });
+
+                match download_manager.complete_requests_for_album(
+                    album_id,
+                    job.total_size_bytes as u64,
+                    duration_ms,
+                ) {
+                    Ok(completed_ids) if !completed_ids.is_empty() => {
+                        info!(
+                            "Auto-completed {} additional download request(s) for album {}: {:?}",
+                            completed_ids.len(),
+                            album_id,
+                            completed_ids
+                        );
+                    }
+                    Ok(_) => {} // No additional requests to complete
+                    Err(e) => {
+                        warn!(
+                            "Failed to auto-complete download requests for album {}: {}",
+                            album_id, e
+                        );
+                    }
                 }
             }
         }
