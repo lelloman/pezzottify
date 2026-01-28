@@ -8,6 +8,7 @@
 pub mod connection;
 pub mod handler;
 pub mod messages;
+pub mod playback_messages;
 
 pub use connection::ConnectionManager;
 pub use handler::ws_handler;
