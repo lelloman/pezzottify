@@ -83,7 +83,7 @@ pub struct HelloPayload {
 }
 
 /// Payload for playback.command message.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PlaybackCommandPayload {
     pub command: String,
     #[serde(default)]
