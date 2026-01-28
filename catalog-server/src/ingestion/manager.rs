@@ -92,6 +92,23 @@ struct AlbumCandidate {
     track_titles: Vec<String>,
 }
 
+/// Album candidate info returned from job details query.
+#[derive(Debug, Clone)]
+pub struct AlbumCandidateInfo {
+    /// Album ID.
+    pub id: String,
+    /// Album name.
+    pub name: String,
+    /// Artist name.
+    pub artist_name: String,
+    /// Track count.
+    pub track_count: i32,
+    /// Match score (0.0 - 1.0).
+    pub score: f32,
+    /// Duration delta in ms.
+    pub delta_ms: i64,
+}
+
 /// Result of processing an upload (may create multiple jobs for collections).
 #[derive(Debug, Clone)]
 pub struct UploadResult {
@@ -167,6 +184,7 @@ pub struct IngestionManager {
     file_handler: FileHandler,
     config: IngestionManagerConfig,
     download_manager: Option<Arc<dyn DownloadManagerTrait>>,
+    notifier: Option<Arc<super::notifier::IngestionNotifier>>,
 }
 
 impl IngestionManager {
@@ -187,7 +205,14 @@ impl IngestionManager {
             file_handler,
             config,
             download_manager,
+            notifier: None,
         }
+    }
+
+    /// Set the notifier for WebSocket updates.
+    pub fn with_notifier(mut self, notifier: Arc<super::notifier::IngestionNotifier>) -> Self {
+        self.notifier = Some(notifier);
+        self
     }
 
     /// Initialize the manager (creates temp directory, etc.).
@@ -647,6 +672,75 @@ impl IngestionManager {
         Ok(self.store.list_all_jobs(limit)?)
     }
 
+    /// Get detailed job information including candidates and review.
+    ///
+    /// Returns (candidates, review) where candidates are parsed from the review options
+    /// if the job is awaiting review.
+    pub fn get_job_details(
+        &self,
+        job_id: &str,
+    ) -> Result<
+        (
+            Vec<AlbumCandidateInfo>,
+            Option<super::models::ReviewQueueItem>,
+        ),
+        IngestionError,
+    > {
+        let review = self.store.get_review_item(job_id)?;
+
+        let mut candidates = Vec::new();
+
+        // Parse candidates from review options if available
+        if let Some(ref review_item) = review {
+            // Only parse if this is a pending review (not resolved)
+            if review_item.resolved_at.is_none() {
+                if let Ok(options) =
+                    serde_json::from_str::<Vec<super::models::ReviewOption>>(&review_item.options)
+                {
+                    for opt in options {
+                        // Parse album candidates from options like "album:abc123"
+                        if opt.id.starts_with("album:") {
+                            let album_id = opt.id.trim_start_matches("album:");
+
+                            // Try to extract info from the option label/description
+                            // Format: "Artist - Album (XX%, N tracks)"
+                            let (score, track_count, delta_ms) =
+                                parse_option_metadata(&opt.label, opt.description.as_deref());
+
+                            // Try to get album name and artist from catalog
+                            let (name, artist_name) =
+                                if let Some(candidate) = self.build_album_candidate(album_id) {
+                                    (candidate.name, candidate.artist_name)
+                                } else {
+                                    // Fallback: parse from label
+                                    let parts: Vec<&str> = opt.label.splitn(2, " - ").collect();
+                                    if parts.len() == 2 {
+                                        (
+                                            parts[1].split(" (").next().unwrap_or("").to_string(),
+                                            parts[0].to_string(),
+                                        )
+                                    } else {
+                                        (opt.label.clone(), "Unknown".to_string())
+                                    }
+                                };
+
+                            candidates.push(AlbumCandidateInfo {
+                                id: album_id.to_string(),
+                                name,
+                                artist_name,
+                                track_count,
+                                score,
+                                delta_ms,
+                            });
+                        }
+                    }
+                }
+            }
+        }
+
+        Ok((candidates, review))
+    }
+
     // =========================================================================
     // Phase 1: Analyze Files
     // =========================================================================
@@ -670,8 +764,17 @@ impl IngestionManager {
         self.store.update_job(&job)?;
 
         let files = self.store.get_files_for_job(job_id)?;
+        let total_files = files.len();
 
-        for mut file in files {
+        for (idx, mut file) in files.into_iter().enumerate() {
+            // Notify progress
+            if let Some(notifier) = &self.notifier {
+                let progress = ((idx as f32 / total_files as f32) * 100.0) as u8;
+                notifier
+                    .notify_progress(&job, "analyzing", progress, idx as u32)
+                    .await;
+            }
+
             // Probe audio metadata
             let path = Path::new(&file.temp_file_path);
             match probe_audio_file(path).await {
@@ -1063,6 +1166,26 @@ impl IngestionManager {
                     best_candidate.track_count
                 );
 
+                // Notify match found
+                if let Some(notifier) = &self.notifier {
+                    use crate::server::websocket::messages::ingestion::CandidateSummary;
+                    let candidates: Vec<CandidateSummary> = scored
+                        .iter()
+                        .take(5)
+                        .map(|(c, s)| CandidateSummary {
+                            id: c.id.clone(),
+                            name: c.name.clone(),
+                            artist_name: c.artist_name.clone(),
+                            track_count: c.track_count,
+                            score: *s,
+                            delta_ms: 0, // Not available from this scoring path
+                        })
+                        .collect();
+                    notifier
+                        .notify_match_found(&job, TicketType::Success, candidates)
+                        .await;
+                }
+
                 // Continue to track mapping and conversion
                 self.map_tracks(job_id).await?;
                 self.convert_job(job_id).await?;
@@ -1102,6 +1225,13 @@ impl IngestionManager {
 
                 job.status = IngestionJobStatus::AwaitingReview;
                 self.store.update_job(&job)?;
+
+                // Notify review needed
+                if let Some(notifier) = &self.notifier {
+                    notifier
+                        .notify_review_needed(&job, &question, &options)
+                        .await;
+                }
 
                 info!(
                     "Job {} requires review - best match: {} ({:.0}%)",
@@ -1938,6 +2068,21 @@ impl IngestionManager {
         // Cleanup temp files
         let _ = self.file_handler.cleanup_job(job_id).await;
 
+        // Notify completion
+        if let Some(notifier) = &self.notifier {
+            let album_name = job
+                .detected_album
+                .clone()
+                .unwrap_or_else(|| "Unknown Album".to_string());
+            let artist_name = job
+                .detected_artist
+                .clone()
+                .unwrap_or_else(|| "Unknown Artist".to_string());
+            notifier
+                .notify_completed(&job, converted as u32, &album_name, &artist_name)
+                .await;
+        }
+
         info!(
             "Completed job {} - converted {}/{} tracks",
             job_id, converted, job.tracks_matched
@@ -1993,6 +2138,11 @@ impl IngestionManager {
             job.error_message = Some("Album not in catalog".to_string());
             job.completed_at = Some(chrono::Utc::now().timestamp_millis());
             self.store.update_job(&job)?;
+
+            // Notify failure
+            if let Some(notifier) = &self.notifier {
+                notifier.notify_failed(&job, "Album not in catalog").await;
+            }
         } else if selected_option == "continue" {
             // User accepted duration mismatches, continue to conversion
             job.status = IngestionJobStatus::Converting;
@@ -2081,6 +2231,71 @@ fn string_similarity(a: &str, b: &str) -> f32 {
     let max_len = a.len().max(b.len());
 
     1.0 - (distance as f32 / max_len as f32)
+}
+
+/// Parse metadata from review option label/description.
+///
+/// Returns (score, track_count, delta_ms) parsed from strings like:
+/// - Label: "Artist - Album (75%, 12 tracks)"
+/// - Description: "Match: 75%, Delta: 500ms, 12 tracks"
+fn parse_option_metadata(label: &str, description: Option<&str>) -> (f32, i32, i64) {
+    let mut score = 0.0f32;
+    let mut track_count = 0i32;
+    let mut delta_ms = 0i64;
+
+    // Try to parse from description first (more structured)
+    if let Some(desc) = description {
+        // Format: "Match: XX%, Delta: Yms, Z tracks"
+        if let Some(match_start) = desc.find("Match: ") {
+            let rest = &desc[match_start + 7..];
+            if let Some(pct_end) = rest.find('%') {
+                if let Ok(pct) = rest[..pct_end].trim().parse::<f32>() {
+                    score = pct / 100.0;
+                }
+            }
+        }
+        if let Some(delta_start) = desc.find("Delta: ") {
+            let rest = &desc[delta_start + 7..];
+            if let Some(ms_end) = rest.find("ms") {
+                if let Ok(ms) = rest[..ms_end].trim().parse::<i64>() {
+                    delta_ms = ms;
+                }
+            }
+        }
+        // Parse track count from "N tracks"
+        for word in desc.split_whitespace() {
+            if let Ok(n) = word.parse::<i32>() {
+                // Check if next word is "tracks"
+                if desc.contains(&format!("{} tracks", n)) {
+                    track_count = n;
+                    break;
+                }
+            }
+        }
+    }
+
+    // Fallback: parse from label format "Artist - Album (XX%, N tracks)"
+    if score == 0.0 {
+        if let Some(paren_start) = label.rfind('(') {
+            let in_parens = &label[paren_start + 1..];
+            if let Some(pct_end) = in_parens.find('%') {
+                if let Ok(pct) = in_parens[..pct_end].trim().parse::<f32>() {
+                    score = pct / 100.0;
+                }
+            }
+            // Parse track count
+            for word in in_parens.split_whitespace() {
+                if let Ok(n) = word.parse::<i32>() {
+                    if in_parens.contains(&format!("{} tracks", n)) {
+                        track_count = n;
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    (score, track_count, delta_ms)
 }
 
 /// Calculate Levenshtein distance between two strings.

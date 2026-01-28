@@ -229,9 +229,11 @@
 <script setup>
 import { ref, reactive, computed, onMounted, onUnmounted } from "vue";
 import { useRemoteStore } from "@/store/remote";
+import { useIngestionStore } from "@/store/ingestion";
 import JSZip from "jszip";
 
 const remoteStore = useRemoteStore();
+const ingestionStore = useIngestionStore();
 
 // Supported audio extensions
 const AUDIO_EXTENSIONS = ["mp3", "flac", "wav", "ogg", "m4a", "aac", "wma", "opus"];
@@ -391,6 +393,19 @@ const uploadFolder = async (files) => {
       uploadState.success = jobCount > 1
         ? `Created ${jobCount} jobs from ${folderName}`
         : `Job created: ${result.job_id || result.job_ids?.[0]}`;
+      // Add sessions to ingestion store and open monitor
+      const jobIds = result.job_ids || (result.job_id ? [result.job_id] : []);
+      for (const jobId of jobIds) {
+        ingestionStore.addSession({
+          id: jobId,
+          status: "PENDING",
+          original_filename: folderName,
+        });
+        ingestionStore.fetchJobDetails(jobId);
+      }
+      if (jobIds.length > 0) {
+        ingestionStore.openModal(jobIds[0]);
+      }
       await loadData();
     }
   } catch (error) {
@@ -466,6 +481,19 @@ const uploadDirectoryEntry = async (dirEntry) => {
       uploadState.success = jobCount > 1
         ? `Created ${jobCount} jobs from ${folderName}`
         : `Job created: ${result.job_id || result.job_ids?.[0]}`;
+      // Add sessions to ingestion store and open monitor
+      const jobIds = result.job_ids || (result.job_id ? [result.job_id] : []);
+      for (const jobId of jobIds) {
+        ingestionStore.addSession({
+          id: jobId,
+          status: "PENDING",
+          original_filename: folderName,
+        });
+        ingestionStore.fetchJobDetails(jobId);
+      }
+      if (jobIds.length > 0) {
+        ingestionStore.openModal(jobIds[0]);
+      }
       await loadData();
     }
   } catch (error) {
@@ -547,6 +575,17 @@ const uploadFile = async (file) => {
       uploadState.error = result.error;
     } else {
       uploadState.success = `Job created: ${result.job_id}`;
+      // Add session to ingestion store and open monitor
+      if (result.job_id) {
+        ingestionStore.addSession({
+          id: result.job_id,
+          status: "PENDING",
+          original_filename: file.name,
+          file_count: 1,
+        });
+        ingestionStore.openModal(result.job_id);
+        ingestionStore.fetchJobDetails(result.job_id);
+      }
       await loadData();
     }
   } catch (error) {

@@ -12,6 +12,7 @@ mod file_handler;
 mod fingerprint;
 mod manager;
 mod models;
+mod notifier;
 mod schema;
 mod store;
 mod tools;
@@ -23,14 +24,15 @@ pub use fingerprint::{
     FingerprintMatchResult, ScoredCandidate,
 };
 pub use manager::{
-    DownloadManagerTrait, IngestionError, IngestionManager, IngestionManagerConfig, QueueItemInfo,
-    UploadResult,
+    AlbumCandidateInfo, DownloadManagerTrait, IngestionError, IngestionManager,
+    IngestionManagerConfig, QueueItemInfo, UploadResult,
 };
 pub use models::{
     AlbumMetadataSummary, ConversionReason, IngestionContextType, IngestionFile, IngestionJob,
     IngestionJobStatus, IngestionMatchSource, ReviewOption, ReviewQueueItem, TicketType,
     UploadType,
 };
+pub use notifier::IngestionNotifier;
 pub use schema::{INGESTION_SCHEMA_SQL, INGESTION_SCHEMA_VERSION};
 pub use store::{IngestionStore, SqliteIngestionStore};
 pub use tools::create_ingestion_tools;

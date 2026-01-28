@@ -1099,6 +1099,21 @@ export const useRemoteStore = defineStore("remote", () => {
     }
   };
 
+  /**
+   * Fetch detailed job information including files, candidates, and review.
+   * @param {string} jobId - Job ID
+   * @returns {Object|null} Job details or null on error
+   */
+  const fetchIngestionJobDetails = async (jobId) => {
+    try {
+      const response = await axios.get(`/v1/ingestion/job/${jobId}/details`);
+      return response.data;
+    } catch (error) {
+      console.error("Failed to fetch ingestion job details:", error);
+      return null;
+    }
+  };
+
   return {
     setBlockHttpCache,
     fetchLikedAlbums,
@@ -1183,6 +1198,7 @@ export const useRemoteStore = defineStore("remote", () => {
     uploadIngestionFile,
     fetchIngestionMyJobs,
     fetchIngestionJob,
+    fetchIngestionJobDetails,
     processIngestionJob,
     convertIngestionJob,
     deleteIngestionJob,

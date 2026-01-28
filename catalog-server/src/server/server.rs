@@ -4402,13 +4402,21 @@ pub async fn make_app(
                     dm_traits
                 });
 
-                let ingestion_manager = Arc::new(crate::ingestion::IngestionManager::new(
-                    Arc::new(store),
-                    catalog_store.clone(),
-                    search_vault.clone(),
-                    ingestion_config,
-                    manager_traits,
+                // Create notifier for WebSocket updates
+                let notifier = Arc::new(crate::ingestion::IngestionNotifier::new(
+                    state.ws_connection_manager.clone(),
                 ));
+
+                let ingestion_manager = Arc::new(
+                    crate::ingestion::IngestionManager::new(
+                        Arc::new(store),
+                        catalog_store.clone(),
+                        search_vault.clone(),
+                        ingestion_config,
+                        manager_traits,
+                    )
+                    .with_notifier(notifier),
+                );
 
                 // Initialize the manager (creates temp directory)
                 if let Err(e) = ingestion_manager.init().await {

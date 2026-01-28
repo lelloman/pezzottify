@@ -16,7 +16,9 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use tracing::{debug, info, warn};
 
-use crate::ingestion::{IngestionContextType, IngestionJob, IngestionManager, ReviewQueueItem};
+use crate::ingestion::{
+    IngestionContextType, IngestionFile, IngestionJob, IngestionManager, ReviewQueueItem,
+};
 use crate::server::session::Session;
 use crate::server::state::{OptionalIngestionManager, ServerState};
 use crate::user::Permission;
@@ -34,6 +36,26 @@ pub struct UploadResponse {
 #[derive(Debug, Serialize)]
 pub struct JobStatusResponse {
     pub job: IngestionJob,
+}
+
+/// Detailed job information including files, candidates, and review data.
+#[derive(Debug, Serialize)]
+pub struct JobDetailsResponse {
+    pub job: IngestionJob,
+    pub files: Vec<IngestionFile>,
+    pub candidates: Vec<AlbumCandidateSummary>,
+    pub review: Option<ReviewQueueItem>,
+}
+
+/// Summary of an album candidate for display in the monitor.
+#[derive(Debug, Serialize)]
+pub struct AlbumCandidateSummary {
+    pub id: String,
+    pub name: String,
+    pub artist_name: String,
+    pub track_count: i32,
+    pub score: f32,
+    pub delta_ms: i64,
 }
 
 #[derive(Debug, Serialize)]
@@ -274,6 +296,78 @@ async fn get_job(
             (StatusCode::INTERNAL_SERVER_ERROR, "Failed to get job").into_response()
         }
     }
+}
+
+/// GET /job/:id/details - Get detailed job information including files, candidates, and review
+async fn get_job_details(
+    session: Session,
+    State(im): State<OptionalIngestionManager>,
+    Path(job_id): Path<String>,
+) -> impl IntoResponse {
+    if !session.has_permission(Permission::EditCatalog) {
+        return StatusCode::FORBIDDEN.into_response();
+    }
+
+    let manager = match get_ingestion_manager(&im) {
+        Ok(m) => m,
+        Err(e) => return e.into_response(),
+    };
+
+    // Get the job
+    let job = match manager.get_job(&job_id) {
+        Ok(Some(job)) => {
+            // Only allow users to see their own jobs (unless admin)
+            let user_id_str = session.user_id.to_string();
+            if job.user_id != user_id_str && !session.has_permission(Permission::ViewAnalytics) {
+                return StatusCode::FORBIDDEN.into_response();
+            }
+            job
+        }
+        Ok(None) => return StatusCode::NOT_FOUND.into_response(),
+        Err(e) => {
+            warn!("Failed to get job {}: {}", job_id, e);
+            return (StatusCode::INTERNAL_SERVER_ERROR, "Failed to get job").into_response();
+        }
+    };
+
+    // Get files for the job
+    let files = match manager.get_files(&job_id) {
+        Ok(files) => files,
+        Err(e) => {
+            warn!("Failed to get files for job {}: {}", job_id, e);
+            Vec::new()
+        }
+    };
+
+    // Get candidates from the pending review (if any)
+    let (candidates, review) = match manager.get_job_details(&job_id) {
+        Ok((cands, rev)) => (cands, rev),
+        Err(e) => {
+            warn!("Failed to get job details for {}: {}", job_id, e);
+            (Vec::new(), None)
+        }
+    };
+
+    // Convert candidates to summary format
+    let candidates = candidates
+        .into_iter()
+        .map(|c| AlbumCandidateSummary {
+            id: c.id,
+            name: c.name,
+            artist_name: c.artist_name,
+            track_count: c.track_count,
+            score: c.score,
+            delta_ms: c.delta_ms,
+        })
+        .collect();
+
+    Json(JobDetailsResponse {
+        job,
+        files,
+        candidates,
+        review,
+    })
+    .into_response()
 }
 
 /// GET /my-jobs - Get user's jobs
@@ -567,6 +661,7 @@ pub fn ingestion_routes() -> Router<ServerState> {
     let user_routes = Router::new()
         .merge(upload_route)
         .route("/job/{id}", get(get_job).delete(delete_job))
+        .route("/job/{id}/details", get(get_job_details))
         .route("/my-jobs", get(get_my_jobs))
         .route("/job/{id}/process", post(process_job))
         .route("/job/{id}/convert", post(convert_job));
