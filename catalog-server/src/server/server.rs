@@ -4184,6 +4184,10 @@ impl ServerState {
         // Create connection manager
         let ws_connection_manager = Arc::new(super::websocket::ConnectionManager::new());
 
+        // Create playback session manager for multi-device sync
+        let playback_session_manager =
+            Arc::new(super::websocket::PlaybackSessionManager::new(ws_connection_manager.clone()));
+
         // Create auth state store for OIDC flow (always created, even if OIDC is disabled)
         let auth_state_store = Arc::new(crate::oidc::AuthStateStore::new());
 
@@ -4218,6 +4222,7 @@ impl ServerState {
             download_manager: None, // Will be set by make_app if download manager is enabled
             ingestion_manager: None, // Will be set by make_app if ingestion is enabled
             shutdown_token: None,   // Will be set by make_app if download manager is enabled
+            playback_session_manager,
         }
     }
 }

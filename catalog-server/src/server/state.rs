@@ -13,7 +13,7 @@ use crate::user::UserManager;
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
-use super::websocket::ConnectionManager;
+use super::websocket::{ConnectionManager, PlaybackSessionManager};
 use super::ServerConfig;
 
 pub type GuardedCatalogStore = Arc<dyn CatalogStore>;
@@ -32,6 +32,7 @@ pub type HttpClient = reqwest::Client;
 pub type OptionalDownloadManager = Option<Arc<DownloadManager>>;
 pub type OptionalIngestionManager = Option<Arc<IngestionManager>>;
 pub type OptionalShutdownToken = Option<CancellationToken>;
+pub type GuardedPlaybackSessionManager = Arc<PlaybackSessionManager>;
 
 #[derive(Clone)]
 pub struct ServerState {
@@ -53,6 +54,8 @@ pub struct ServerState {
     pub ingestion_manager: OptionalIngestionManager,
     /// Shutdown token for graceful termination of background tasks (e.g., QueueProcessor)
     pub shutdown_token: OptionalShutdownToken,
+    /// Playback session manager for multi-device playback sync
+    pub playback_session_manager: GuardedPlaybackSessionManager,
 }
 
 unsafe impl Send for ServerState {}
@@ -139,5 +142,11 @@ impl FromRef<ServerState> for OptionalDownloadManager {
 impl FromRef<ServerState> for OptionalIngestionManager {
     fn from_ref(input: &ServerState) -> Self {
         input.ingestion_manager.clone()
+    }
+}
+
+impl FromRef<ServerState> for GuardedPlaybackSessionManager {
+    fn from_ref(input: &ServerState) -> Self {
+        input.playback_session_manager.clone()
     }
 }
