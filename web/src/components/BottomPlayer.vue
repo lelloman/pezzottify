@@ -1,5 +1,5 @@
 <template>
-  <footer v-if="localCurrentTrack" class="footerPlayer">
+  <footer v-if="localCurrentTrack || isRemoteMode" class="footerPlayer">
     <div class="trackInfoRow">
       <MultiSourceImage
         :urls="imageUrls"
@@ -89,6 +89,7 @@ import LoadClickableArtistsNames from "@/components/common/LoadClickableArtistsN
 import { useRouter } from "vue-router";
 import TrackName from "./common/TrackName.vue";
 import { useStaticsStore } from "@/store/statics";
+import { useRemotePlaybackStore } from "@/store/remotePlayback";
 import DeviceSelector from "./player/DeviceSelector.vue";
 
 const ControlIconButton = {
@@ -115,6 +116,12 @@ const ControlIconButton = {
 const router = useRouter();
 const player = usePlayerStore();
 const staticsStore = useStaticsStore();
+const remotePlayback = useRemotePlaybackStore();
+
+// Computed to determine if we're in remote mode (watching playback from another device)
+const isRemoteMode = computed(
+  () => remotePlayback.sessionExists && !remotePlayback.isAudioDevice,
+);
 
 const localCurrentTrack = ref(null);
 const localProgressPercent = ref(0);
@@ -179,7 +186,14 @@ const seekTrack = () => {
   if (draggingTrackPercent.value) {
     const targetSeekPercent = draggingTrackPercent.value;
     console.log("seekTrack target value: " + targetSeekPercent);
-    player.seekToPercentage(targetSeekPercent);
+    if (isRemoteMode.value) {
+      // Calculate position in seconds from percentage
+      const trackDuration = remotePlayback.remoteState?.current_track?.duration || 0;
+      const position = targetSeekPercent * trackDuration;
+      remotePlayback.sendCommand("seek", { position });
+    } else {
+      player.seekToPercentage(targetSeekPercent);
+    }
     draggingTrackPercent.value = null;
     console.log("stopDragging");
   }
@@ -189,7 +203,12 @@ const formattedTime = computed(() => formatTime(currentTimeSec.value));
 
 function playPause() {
   console.log("BottomPlayer calling playPause() on PlayerStore.");
-  player.playPause();
+  if (isRemoteMode.value) {
+    const currentlyPlaying = remotePlayback.remoteState?.is_playing;
+    remotePlayback.sendCommand(currentlyPlaying ? "pause" : "play");
+  } else {
+    player.playPause();
+  }
 }
 
 function updateTrackProgress(event) {
@@ -197,23 +216,44 @@ function updateTrackProgress(event) {
 }
 
 function forward10Sec() {
-  player.forward10Sec();
+  if (isRemoteMode.value) {
+    const currentPos = remotePlayback.interpolatedPosition || 0;
+    remotePlayback.sendCommand("seek", { position: currentPos + 10 });
+  } else {
+    player.forward10Sec();
+  }
 }
 
 function rewind10Sec() {
-  player.rewind10Sec();
+  if (isRemoteMode.value) {
+    const currentPos = remotePlayback.interpolatedPosition || 0;
+    remotePlayback.sendCommand("seek", { position: Math.max(0, currentPos - 10) });
+  } else {
+    player.rewind10Sec();
+  }
 }
 
 function skipNextTrack() {
-  player.skipNextTrack();
+  if (isRemoteMode.value) {
+    remotePlayback.sendCommand("next");
+  } else {
+    player.skipNextTrack();
+  }
 }
 
 function skipPreviousTrack() {
-  player.skipPreviousTrack();
+  if (isRemoteMode.value) {
+    remotePlayback.sendCommand("prev");
+  } else {
+    player.skipPreviousTrack();
+  }
 }
 
 function stop() {
-  player.stop();
+  // Stop doesn't make sense in remote mode - ignore or unregister
+  if (!isRemoteMode.value) {
+    player.stop();
+  }
 }
 
 const startDraggingVolumeProgress = () => {
@@ -225,19 +265,31 @@ const updateVolumeProgress = (event) => {
 };
 
 const volumeOn = () => {
-  player.setMuted(false);
+  if (isRemoteMode.value) {
+    remotePlayback.sendCommand("setMuted", { muted: false });
+  } else {
+    player.setMuted(false);
+  }
 };
 
 const volumeOff = () => {
-  player.setMuted(true);
+  if (isRemoteMode.value) {
+    remotePlayback.sendCommand("setMuted", { muted: true });
+  } else {
+    player.setMuted(true);
+  }
 };
 
 const setVolume = () => {
   volumePercent.value = draggingVolumePercent.value;
   draggingVolumePercent.value = null;
   console.log("BottomPlayer setVolume " + volumePercent.value);
-  player.setVolume(volumePercent.value);
-  player.setMuted(false);
+  if (isRemoteMode.value) {
+    remotePlayback.sendCommand("setVolume", { volume: volumePercent.value });
+  } else {
+    player.setVolume(volumePercent.value);
+    player.setMuted(false);
+  }
 };
 
 watch(
@@ -349,6 +401,61 @@ watch(
     }
   },
   { immediate: true },
+);
+
+// Remote playback watchers - update UI when remote state changes
+watch(
+  () => remotePlayback.remoteState,
+  (newRemoteState) => {
+    if (!isRemoteMode.value || !newRemoteState) return;
+
+    // Update track info from remote state
+    const track = newRemoteState.current_track;
+    if (track) {
+      localCurrentTrack.value = {
+        id: track.id,
+        name: track.title,
+        title: track.title,
+        artists_ids: track.artist_id ? [track.artist_id] : [],
+        album_id: track.album_id,
+        duration: track.duration,
+      };
+      songName.value = track.title;
+      artists.value = track.artist_id ? [track.artist_id] : [];
+      duration.value = track.duration ? formatDuration(track.duration) : "";
+      currentAlbumId.value = track.album_id || null;
+    }
+  },
+  { deep: true },
+);
+
+watch(
+  () => remotePlayback.interpolatedPosition,
+  (newPosition) => {
+    if (!isRemoteMode.value) return;
+    currentTimeSec.value = newPosition || 0;
+    // Calculate percentage if we have duration
+    const track = remotePlayback.remoteState?.current_track;
+    if (track?.duration > 0) {
+      localProgressPercent.value = newPosition / track.duration;
+    }
+  },
+);
+
+watch(
+  () => remotePlayback.remoteState?.is_playing,
+  (newIsPlaying) => {
+    if (!isRemoteMode.value) return;
+    isPlaying.value = newIsPlaying || false;
+  },
+);
+
+watch(
+  () => remotePlayback.remoteState?.volume,
+  (newVolume) => {
+    if (!isRemoteMode.value || newVolume === undefined) return;
+    volumePercent.value = newVolume;
+  },
 );
 </script>
 
