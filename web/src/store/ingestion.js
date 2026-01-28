@@ -129,13 +129,25 @@ export const useIngestionStore = defineStore("ingestion", () => {
 
       case "ingestion_progress":
         // Progress update during processing
-        if (session.job) {
-          session.job.status = payload.status;
+        {
+          const previousStatus = session.job?.status;
+          if (session.job) {
+            session.job.status = payload.status;
+          }
+          session.phase = payload.phase;
+          session.phaseProgress = payload.phase_progress;
+          session.filesProcessed = payload.files_processed;
+          session.filesTotal = payload.files_total;
+
+          // Re-fetch details when transitioning to CONVERTING or COMPLETED
+          // to get updated file data (matched_track_id, converted status, etc.)
+          const needsRefresh =
+            (previousStatus === "MAPPING_TRACKS" && payload.status === "CONVERTING") ||
+            (previousStatus !== "COMPLETED" && payload.status === "COMPLETED");
+          if (needsRefresh) {
+            fetchJobDetails(jobId);
+          }
         }
-        session.phase = payload.phase;
-        session.phaseProgress = payload.phase_progress;
-        session.filesProcessed = payload.files_processed;
-        session.filesTotal = payload.files_total;
         break;
 
       case "ingestion_match_found":
@@ -150,6 +162,8 @@ export const useIngestionStore = defineStore("ingestion", () => {
         }
         session.candidates = payload.candidates || [];
         session.ticketType = payload.ticket_type;
+        // Fetch full details to get candidates with all metadata
+        fetchJobDetails(jobId);
         break;
 
       case "ingestion_review_needed":
@@ -173,6 +187,8 @@ export const useIngestionStore = defineStore("ingestion", () => {
         }
         session.phase = "complete";
         session.phaseProgress = 100;
+        // Fetch final state with all file updates
+        fetchJobDetails(jobId);
         break;
 
       case "ingestion_failed":

@@ -114,6 +114,7 @@ impl FileHandler {
     }
 
     /// Extract a zip file and return paths to audio files.
+    /// Preserves directory structure from the zip for collection detection.
     pub async fn extract_zip(
         &self,
         job_id: &str,
@@ -162,9 +163,14 @@ impl FileHandler {
                 continue;
             }
 
-            // Sanitize the filename from the zip
-            let safe_name = sanitize_filename(&filename)?;
-            let output_path = extract_dir.join(&safe_name);
+            // Sanitize and preserve the path structure from the zip
+            let safe_path = sanitize_zip_path(&filename)?;
+            let output_path = extract_dir.join(&safe_path);
+
+            // Create parent directories if needed
+            if let Some(parent) = output_path.parent() {
+                fs::create_dir_all(parent).await?;
+            }
 
             // Write to output (ZipFile already dropped, so this await is safe)
             fs::write(&output_path, &content).await?;
@@ -357,6 +363,56 @@ fn sanitize_filename(filename: &str) -> Result<String, FileHandlerError> {
     }
 
     Ok(sanitized)
+}
+
+/// Sanitize a zip file path while preserving directory structure.
+/// Prevents path traversal attacks while keeping album subdirectories intact.
+fn sanitize_zip_path(zip_path: &str) -> Result<PathBuf, FileHandlerError> {
+    let mut result = PathBuf::new();
+
+    // Normalize path separators and split into components
+    let normalized = zip_path.replace('\\', "/");
+
+    for component in normalized.split('/') {
+        // Skip empty components (from leading/trailing/double slashes)
+        if component.is_empty() {
+            continue;
+        }
+
+        // Reject path traversal attempts
+        if component == ".." {
+            return Err(FileHandlerError::InvalidFilename(zip_path.to_string()));
+        }
+
+        // Skip hidden files/directories (starting with .)
+        if component.starts_with('.') {
+            continue;
+        }
+
+        // Check for null bytes
+        if component.contains('\0') {
+            return Err(FileHandlerError::InvalidFilename(zip_path.to_string()));
+        }
+
+        // Sanitize problematic characters in this component
+        let sanitized: String = component
+            .chars()
+            .map(|c| match c {
+                ':' | '*' | '?' | '"' | '<' | '>' | '|' => '_',
+                _ => c,
+            })
+            .collect();
+
+        if !sanitized.is_empty() {
+            result.push(sanitized);
+        }
+    }
+
+    if result.as_os_str().is_empty() {
+        return Err(FileHandlerError::InvalidFilename(zip_path.to_string()));
+    }
+
+    Ok(result)
 }
 
 #[cfg(test)]
