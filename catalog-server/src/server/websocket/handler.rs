@@ -18,13 +18,16 @@ use tracing::{debug, error, warn};
 use super::{
     connection::ConnectionManager,
     messages::{msg_types, system, ClientMessage, ServerMessage},
+    playback_messages::*,
+    playback_session::PlaybackSessionManager,
 };
 use crate::server::session::Session;
-use crate::server::state::GuardedConnectionManager;
+use crate::server::state::{GuardedConnectionManager, GuardedPlaybackSessionManager};
 
 /// State needed for WebSocket handling (internal).
 struct WsState {
     connection_manager: Arc<ConnectionManager>,
+    playback_session_manager: Arc<PlaybackSessionManager>,
 }
 
 /// WebSocket upgrade handler.
@@ -35,8 +38,12 @@ pub async fn ws_handler(
     ws: WebSocketUpgrade,
     session: Session,
     State(connection_manager): State<GuardedConnectionManager>,
+    State(playback_session_manager): State<GuardedPlaybackSessionManager>,
 ) -> Response {
-    let state = Arc::new(WsState { connection_manager });
+    let state = Arc::new(WsState {
+        connection_manager,
+        playback_session_manager,
+    });
     // Require device_id for WebSocket connections
     let device_id = match session.device_id {
         Some(id) => id,
@@ -73,18 +80,18 @@ async fn handle_socket(
     socket: WebSocket,
     user_id: usize,
     device_id: usize,
-    device_type: String,
+    device_type_str: String,
     state: Arc<WsState>,
 ) {
     debug!(
         "WebSocket connected: user {} device {} ({})",
-        user_id, device_id, device_type
+        user_id, device_id, device_type_str
     );
 
     // Register connection and get receiver for outgoing messages
     let outgoing_rx = state
         .connection_manager
-        .register(user_id, device_id, device_type)
+        .register(user_id, device_id, device_type_str.clone())
         .await;
 
     let (ws_sink, ws_stream) = socket.split();
@@ -110,6 +117,22 @@ async fn handle_socket(
         user_id, device_id
     );
     outgoing_handle.abort();
+
+    // Parse device type for playback session manager
+    let device_type = match device_type_str.as_str() {
+        "web" => DeviceType::Web,
+        "android" => DeviceType::Android,
+        "ios" => DeviceType::Ios,
+        _ => DeviceType::Web, // Default to web for unknown types
+    };
+
+    // Notify playback session manager of disconnect
+    // Note: device_name is tracked internally by PlaybackSessionManager
+    state
+        .playback_session_manager
+        .handle_device_disconnect(user_id, device_id, "Unknown", device_type)
+        .await;
+
     state
         .connection_manager
         .unregister(user_id, device_id)
@@ -219,8 +242,7 @@ async fn handle_client_message(
                 // Future: dispatch to sync handler
                 debug!("Received sync message: {}", other);
             } else if other.starts_with("playback.") {
-                // Future: dispatch to playback handler
-                debug!("Received playback message: {}", other);
+                handle_playback_message(user_id, device_id, other, msg.payload, state).await;
             } else {
                 debug!("Unknown message type: {}", other);
                 let error_msg = ServerMessage::new(
@@ -233,5 +255,141 @@ async fn handle_client_message(
                     .await;
             }
         }
+    }
+}
+
+/// Handle playback-related messages.
+async fn handle_playback_message(
+    user_id: usize,
+    device_id: usize,
+    msg_type: &str,
+    payload: serde_json::Value,
+    state: &WsState,
+) {
+    let manager = &state.playback_session_manager;
+
+    let result: Result<(), String> = match msg_type {
+        msg_types::PLAYBACK_HELLO => {
+            match serde_json::from_value::<HelloPayload>(payload) {
+                Ok(p) => {
+                    let welcome = manager
+                        .handle_hello(user_id, device_id, p.device_name, p.device_type)
+                        .await;
+                    let _ = state
+                        .connection_manager
+                        .send_to_device(
+                            user_id,
+                            device_id,
+                            ServerMessage::new(msg_types::PLAYBACK_WELCOME, welcome),
+                        )
+                        .await;
+                    Ok(())
+                }
+                Err(e) => Err(format!("Invalid hello payload: {}", e)),
+            }
+        }
+
+        msg_types::PLAYBACK_STATE => {
+            match serde_json::from_value::<PlaybackState>(payload) {
+                Ok(state_payload) => manager
+                    .handle_state_update(user_id, device_id, state_payload)
+                    .await
+                    .map_err(|e| e.to_string()),
+                Err(e) => Err(format!("Invalid state payload: {}", e)),
+            }
+        }
+
+        msg_types::PLAYBACK_QUEUE_UPDATE => {
+            match serde_json::from_value::<QueueUpdatePayload>(payload) {
+                Ok(p) => manager
+                    .handle_queue_update(user_id, device_id, p.queue, p.queue_version)
+                    .await
+                    .map_err(|e| e.to_string()),
+                Err(e) => Err(format!("Invalid queue_update payload: {}", e)),
+            }
+        }
+
+        msg_types::PLAYBACK_COMMAND => {
+            match serde_json::from_value::<PlaybackCommandPayload>(payload) {
+                Ok(cmd) => manager
+                    .handle_command(user_id, device_id, &cmd.command, cmd.payload)
+                    .await
+                    .map_err(|e| e.to_string()),
+                Err(e) => Err(format!("Invalid command payload: {}", e)),
+            }
+        }
+
+        msg_types::PLAYBACK_REQUEST_QUEUE => {
+            match manager.handle_request_queue(user_id, device_id).await {
+                Ok(sync) => {
+                    let _ = state
+                        .connection_manager
+                        .send_to_device(
+                            user_id,
+                            device_id,
+                            ServerMessage::new(msg_types::PLAYBACK_QUEUE_SYNC, sync),
+                        )
+                        .await;
+                    Ok(())
+                }
+                Err(e) => Err(e.to_string()),
+            }
+        }
+
+        msg_types::PLAYBACK_REGISTER_AUDIO_DEVICE => manager
+            .register_audio_device(user_id, device_id)
+            .await
+            .map_err(|e| e.to_string()),
+
+        msg_types::PLAYBACK_UNREGISTER_AUDIO_DEVICE => manager
+            .unregister_audio_device(user_id, device_id)
+            .await
+            .map_err(|e| e.to_string()),
+
+        msg_types::PLAYBACK_TRANSFER_READY => {
+            match serde_json::from_value::<TransferReadyPayload>(payload) {
+                Ok(p) => manager
+                    .handle_transfer_ready(user_id, device_id, p.transfer_id, p.state, p.queue)
+                    .await
+                    .map_err(|e| e.to_string()),
+                Err(e) => Err(format!("Invalid transfer_ready payload: {}", e)),
+            }
+        }
+
+        msg_types::PLAYBACK_TRANSFER_COMPLETE => {
+            match serde_json::from_value::<TransferCompletePayload>(payload) {
+                Ok(p) => manager
+                    .handle_transfer_complete(user_id, device_id, p.transfer_id)
+                    .await
+                    .map_err(|e| e.to_string()),
+                Err(e) => Err(format!("Invalid transfer_complete payload: {}", e)),
+            }
+        }
+
+        msg_types::PLAYBACK_RECLAIM_AUDIO_DEVICE => {
+            match serde_json::from_value::<PlaybackState>(payload) {
+                Ok(state_payload) => manager
+                    .handle_reclaim(user_id, device_id, state_payload)
+                    .await
+                    .map_err(|e| e.to_string()),
+                Err(e) => Err(format!("Invalid reclaim payload: {}", e)),
+            }
+        }
+
+        _ => {
+            debug!("Unknown playback message type: {}", msg_type);
+            Err(format!("Unknown playback message type: {}", msg_type))
+        }
+    };
+
+    if let Err(e) = result {
+        let error_msg = ServerMessage::new(
+            msg_types::ERROR,
+            system::Error::new("playback_error", e),
+        );
+        let _ = state
+            .connection_manager
+            .send_to_device(user_id, device_id, error_msg)
+            .await;
     }
 }
