@@ -498,32 +498,23 @@ export const useRemotePlaybackStore = defineStore("remotePlayback", () => {
 
     const trackIds = queue.map((item) => item.id);
 
-    // Create a user mix playlist from the queue
-    const playlist = {
-      context: { name: "Remote Transfer", id: null, edited: false },
-      tracksIds: trackIds,
-      type: player.PLAYBACK_CONTEXTS.userMix,
-    };
-
-    // Set the playlist (this will load the first track)
-    player.playlistsHistory.value = [playlist];
-    player.currentPlaylistIndex.value = 0;
-
-    // Wait for tracks to be loaded
+    // Wait for tracks to be loaded first
     for (const id of trackIds) {
       await staticsStore.waitTrackData(id);
     }
 
-    // Load the correct track
-    if (state.queue_position >= 0 && state.queue_position < trackIds.length) {
-      player.loadTrackIndex(state.queue_position);
-    }
+    // Set the playlist using the proper method
+    const startIndex =
+      state.queue_position >= 0 && state.queue_position < trackIds.length
+        ? state.queue_position
+        : 0;
+    player.setPlaylistFromTrackIds(trackIds, startIndex, false);
 
-    // Seek to position
+    // Seek to position after track loads
     if (state.position > 0) {
       // Need to wait for track to load
       setTimeout(() => {
-        const track = staticsStore.tracks[trackIds[state.queue_position]];
+        const track = staticsStore.tracks[trackIds[startIndex]];
         if (track?.duration) {
           player.seekToPercentage(state.position / track.duration);
         }
