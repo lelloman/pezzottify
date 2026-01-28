@@ -2,6 +2,7 @@ import { defineStore } from "pinia";
 import { computed, ref, watch } from "vue";
 import { Howl } from "howler";
 import { useStaticsStore } from "./statics";
+import { useRemotePlaybackStore } from "./remotePlayback";
 
 export const usePlayerStore = defineStore("player", () => {
   const staticsStore = useStaticsStore();
@@ -346,6 +347,17 @@ export const usePlayerStore = defineStore("player", () => {
     }
     sound.play();
     isPlaying.value = true;
+
+    // Register as audio device if no existing session
+    try {
+      const remotePlayback = useRemotePlaybackStore();
+      if (!remotePlayback.sessionExists && !remotePlayback.isAudioDevice) {
+        remotePlayback.registerAsAudioDevice();
+      }
+    } catch (e) {
+      // Remote playback store may not be initialized yet
+      console.debug("[Player] Remote playback integration skipped:", e.message);
+    }
   };
 
   const pause = () => {
