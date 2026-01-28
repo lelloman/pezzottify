@@ -837,6 +837,18 @@ impl IngestionManager {
         job.status = IngestionJobStatus::IdentifyingAlbum;
         self.store.update_job(&job)?;
 
+        // Verify files still exist after analysis
+        let files_for_verify = self.store.get_files_for_job(job_id)?;
+        for f in &files_for_verify {
+            let path = Path::new(&f.temp_file_path);
+            if !path.exists() {
+                error!(
+                    "File missing after analysis: {} (path: {})",
+                    f.filename, f.temp_file_path
+                );
+            }
+        }
+
         info!(
             "Analyzed job {} - detected: {:?} - {:?}",
             job_id, job.detected_artist, job.detected_album
@@ -1716,6 +1728,17 @@ impl IngestionManager {
 
         let mut files = self.store.get_files_for_job(job_id)?;
 
+        // Verify files exist at start of mapping
+        for f in &files {
+            let path = Path::new(&f.temp_file_path);
+            if !path.exists() {
+                error!(
+                    "File missing at map_tracks start: {} (path: {})",
+                    f.filename, f.temp_file_path
+                );
+            }
+        }
+
         info!(
             "Mapping {} files to {} tracks in album {}",
             files.len(),
@@ -1902,6 +1925,25 @@ impl IngestionManager {
 
                 let output_path_with_ext = output_path.with_extension(extension);
 
+                // Ensure output directory exists
+                if let Some(parent) = output_path_with_ext.parent() {
+                    if let Err(e) = tokio::fs::create_dir_all(parent).await {
+                        error!(
+                            "Failed to create output directory {:?}: {}",
+                            parent, e
+                        );
+                    }
+                }
+
+                // Check if input file exists before attempting copy
+                let input_exists = input_path.exists();
+                if !input_exists {
+                    error!(
+                        "Input file does not exist: {:?} (temp_file_path: {})",
+                        input_path, file.temp_file_path
+                    );
+                }
+
                 match tokio::fs::copy(&input_path, &output_path_with_ext).await {
                     Ok(_) => {
                         file.output_file_path =
@@ -1926,7 +1968,10 @@ impl IngestionManager {
                         );
                     }
                     Err(e) => {
-                        error!("Failed to copy {}: {}", file.filename, e);
+                        error!(
+                            "Failed to copy {} from {:?} to {:?}: {}",
+                            file.filename, input_path, output_path_with_ext, e
+                        );
                         file.error_message = Some(e.to_string());
                     }
                 }
