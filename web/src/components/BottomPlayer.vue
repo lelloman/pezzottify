@@ -46,6 +46,7 @@
       </div>
     </div>
     <div class="extraControlsRow">
+      <DeviceSelector />
       <ControlIconButton
         v-if="isMuted"
         :action="volumeOn"
@@ -88,6 +89,7 @@ import LoadClickableArtistsNames from "@/components/common/LoadClickableArtistsN
 import { useRouter } from "vue-router";
 import TrackName from "./common/TrackName.vue";
 import { useStaticsStore } from "@/store/statics";
+import DeviceSelector from "./player/DeviceSelector.vue";
 
 const ControlIconButton = {
   props: ["icon", "action", "big"],
