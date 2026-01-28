@@ -147,15 +147,14 @@ pub fn match_album_by_fingerprint<C: CatalogStore + ?Sized>(
     // Determine ticket type based on best match
     let (matched_album, match_score, total_delta_ms, ticket_type) =
         if let Some(best) = scored.first() {
-            let ticket_type = if best.score >= 1.0
-                && best.delta_ms < config.auto_ingest_delta_threshold_ms
-            {
-                TicketType::Success
-            } else if best.score >= config.review_score_threshold {
-                TicketType::Review
-            } else {
-                TicketType::Failure
-            };
+            let ticket_type =
+                if best.score >= 1.0 && best.delta_ms < config.auto_ingest_delta_threshold_ms {
+                    TicketType::Success
+                } else if best.score >= config.review_score_threshold {
+                    TicketType::Review
+                } else {
+                    TicketType::Failure
+                };
 
             (
                 Some(best.album.clone()),
@@ -241,7 +240,9 @@ pub fn match_album_with_fallbacks<C: CatalogStore + ?Sized>(
             for candidate in candidates {
                 // For different track counts, we need a different comparison strategy
                 // Compare the subset of tracks that overlap
-                let overlap_count = uploaded_durations.len().min(candidate.track_durations.len());
+                let overlap_count = uploaded_durations
+                    .len()
+                    .min(candidate.track_durations.len());
                 let (matches, delta_ms) = compare_durations(
                     &uploaded_durations[..overlap_count],
                     &candidate.track_durations[..overlap_count],

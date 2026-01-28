@@ -292,10 +292,7 @@ impl IngestionManager {
         let total_size = data.len() as i64;
 
         // Create a temp session directory
-        let session_dir = self
-            .file_handler
-            .create_job_dir(&session_id)
-            .await?;
+        let session_dir = self.file_handler.create_job_dir(&session_id).await?;
 
         // Save uploaded file
         let temp_path = self
@@ -305,7 +302,10 @@ impl IngestionManager {
 
         // Extract if zip
         let extract_dir = if FileHandler::is_zip(filename) {
-            let audio_files = self.file_handler.extract_zip(&session_id, &temp_path).await?;
+            let audio_files = self
+                .file_handler
+                .extract_zip(&session_id, &temp_path)
+                .await?;
             if audio_files.is_empty() {
                 return Err(IngestionError::NoFiles);
             }
@@ -409,11 +409,17 @@ impl IngestionManager {
     }
 
     /// Internal helper to create a job from a directory of audio files.
-    async fn create_job_internal(&self, params: JobCreationParams<'_>) -> Result<String, IngestionError> {
+    async fn create_job_internal(
+        &self,
+        params: JobCreationParams<'_>,
+    ) -> Result<String, IngestionError> {
         let job_id = uuid::Uuid::new_v4().to_string();
 
         // Get audio files
-        let audio_files = self.file_handler.list_audio_files_recursive(params.dir).await?;
+        let audio_files = self
+            .file_handler
+            .list_audio_files_recursive(params.dir)
+            .await?;
         if audio_files.is_empty() {
             return Err(IngestionError::NoFiles);
         }
@@ -421,9 +427,15 @@ impl IngestionManager {
         let file_count = audio_files.len() as i32;
 
         // Create job record with upload info
-        let job = IngestionJob::new(&job_id, params.user_id, params.name, params.total_size, file_count)
-            .with_context(params.context_type, params.context_id)
-            .with_upload_info(params.session_id, params.upload_type);
+        let job = IngestionJob::new(
+            &job_id,
+            params.user_id,
+            params.name,
+            params.total_size,
+            file_count,
+        )
+        .with_context(params.context_type, params.context_id)
+        .with_upload_info(params.session_id, params.upload_type);
 
         self.store.create_job(&job)?;
 
@@ -461,7 +473,10 @@ impl IngestionManager {
     }
 
     /// Run fingerprint matching for a job and update its ticket type.
-    pub async fn run_fingerprint_match(&self, job_id: &str) -> Result<FingerprintMatchResult, IngestionError> {
+    pub async fn run_fingerprint_match(
+        &self,
+        job_id: &str,
+    ) -> Result<FingerprintMatchResult, IngestionError> {
         let mut job = self
             .store
             .get_job(job_id)?
@@ -494,7 +509,8 @@ impl IngestionManager {
 
         // Run fingerprint matching
         let config = FingerprintConfig::default();
-        let result = match_album_with_fallbacks(&ordered_durations, self.catalog.as_ref(), &config)?;
+        let result =
+            match_album_with_fallbacks(&ordered_durations, self.catalog.as_ref(), &config)?;
 
         // Update job with fingerprint results
         job.ticket_type = Some(result.ticket_type);

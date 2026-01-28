@@ -55,7 +55,7 @@ const ALBUMS_TABLE: Table = Table {
             default_value = Some("'missing'")
         ), // 'complete', 'partial', 'missing'
         // Duration fingerprint columns for album matching
-        sqlite_column!("track_count", &SqlType::Integer),     // Pre-computed track count
+        sqlite_column!("track_count", &SqlType::Integer), // Pre-computed track count
         sqlite_column!("total_duration_ms", &SqlType::Integer), // Pre-computed total duration
     ],
     indices: &[
@@ -302,10 +302,7 @@ pub const CATALOG_VERSIONED_SCHEMAS: &[VersionedSchema] = &[
         ],
         migration: Some(|tx: &rusqlite::Connection| {
             // Add duration fingerprint columns for album matching
-            tx.execute(
-                "ALTER TABLE albums ADD COLUMN track_count INTEGER",
-                [],
-            )?;
+            tx.execute("ALTER TABLE albums ADD COLUMN track_count INTEGER", [])?;
             tx.execute(
                 "ALTER TABLE albums ADD COLUMN total_duration_ms INTEGER",
                 [],

@@ -315,11 +315,7 @@ impl IngestionJob {
     }
 
     /// Set the upload session and type for this job.
-    pub fn with_upload_info(
-        mut self,
-        session_id: Option<String>,
-        upload_type: UploadType,
-    ) -> Self {
+    pub fn with_upload_info(mut self, session_id: Option<String>, upload_type: UploadType) -> Self {
         self.upload_session_id = session_id;
         self.upload_type = Some(upload_type);
         self

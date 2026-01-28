@@ -183,10 +183,7 @@ pub fn migrate_v3_to_v4(conn: &rusqlite::Connection) -> Result<(), rusqlite::Err
         .unwrap_or(false);
 
     if !has_upload_type {
-        conn.execute(
-            "ALTER TABLE ingestion_jobs ADD COLUMN upload_type TEXT",
-            [],
-        )?;
+        conn.execute("ALTER TABLE ingestion_jobs ADD COLUMN upload_type TEXT", [])?;
     }
 
     // Add ticket_type column
@@ -199,10 +196,7 @@ pub fn migrate_v3_to_v4(conn: &rusqlite::Connection) -> Result<(), rusqlite::Err
         .unwrap_or(false);
 
     if !has_ticket_type {
-        conn.execute(
-            "ALTER TABLE ingestion_jobs ADD COLUMN ticket_type TEXT",
-            [],
-        )?;
+        conn.execute("ALTER TABLE ingestion_jobs ADD COLUMN ticket_type TEXT", [])?;
     }
 
     // Add match_score column
@@ -215,10 +209,7 @@ pub fn migrate_v3_to_v4(conn: &rusqlite::Connection) -> Result<(), rusqlite::Err
         .unwrap_or(false);
 
     if !has_match_score {
-        conn.execute(
-            "ALTER TABLE ingestion_jobs ADD COLUMN match_score REAL",
-            [],
-        )?;
+        conn.execute("ALTER TABLE ingestion_jobs ADD COLUMN match_score REAL", [])?;
     }
 
     // Add match_delta_ms column
