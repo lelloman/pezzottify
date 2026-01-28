@@ -668,14 +668,6 @@ const formatBytes = (bytes) => {
   return `${value.toFixed(unitIndex > 0 ? 1 : 0)} ${units[unitIndex]}`;
 };
 
-const formatDuration = (ms) => {
-  if (ms == null) return "";
-  const secs = Math.floor(ms / 1000);
-  const mins = Math.floor(secs / 60);
-  const remainingSecs = secs % 60;
-  return `${mins}:${remainingSecs.toString().padStart(2, "0")}`;
-};
-
 const formatDate = (timestamp) => {
   if (!timestamp) return "";
   const date = new Date(timestamp);
