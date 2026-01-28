@@ -2,15 +2,31 @@
 import { RouterView } from "vue-router";
 import { usePlayerStore } from "./store/player";
 import { useAuthStore } from "./store/auth";
-import { onMounted, onUnmounted, computed } from "vue";
+import { useIngestionStore } from "./store/ingestion";
+import { onMounted, onUnmounted, computed, watch } from "vue";
 import ChatButton from "./components/chat/ChatButton.vue";
 import ChatPanel from "./components/chat/ChatPanel.vue";
+import IngestionMonitorModal from "./components/ingestion/IngestionMonitorModal.vue";
 
 const player = usePlayerStore();
 const authStore = useAuthStore();
+const ingestionStore = useIngestionStore();
 
 // Only show chat when authenticated
 const showChat = computed(() => authStore.sessionChecked && authStore.user);
+
+// Initialize ingestion store when authenticated
+watch(
+  () => authStore.sessionChecked && authStore.user,
+  (isAuthenticated) => {
+    if (isAuthenticated && !ingestionStore.isInitialized) {
+      ingestionStore.initialize();
+    } else if (!isAuthenticated && ingestionStore.isInitialized) {
+      ingestionStore.cleanup();
+    }
+  },
+  { immediate: true }
+);
 
 function handleKeyDown(event) {
   const isEditable =
@@ -35,6 +51,7 @@ onUnmounted(() => {
     <ChatButton />
     <ChatPanel />
   </template>
+  <IngestionMonitorModal />
 </template>
 
 <style scoped>

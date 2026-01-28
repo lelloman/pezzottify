@@ -29,6 +29,18 @@
         <div class="connectionStatus" :title="connectionTitle">
           <span class="statusDot" :class="connectionStatusClass"></span>
         </div>
+        <button
+          v-if="showIngestionBadge"
+          class="ingestionBadge scaleClickFeedback"
+          :class="ingestionBadgeClass"
+          :title="ingestionBadgeTitle"
+          @click="openIngestionMonitor"
+        >
+          <UploadIcon class="uploadIcon" />
+          <span v-if="ingestionStore.activeCount > 0" class="badgeCount">
+            {{ ingestionStore.activeCount }}
+          </span>
+        </button>
         <router-link
           v-if="userStore.hasAnyAdminPermission"
           to="/admin"
@@ -73,11 +85,14 @@ import SettingsIcon from "./icons/SettingsIcon.vue";
 import LogoutIcon from "./icons/LogoutIcon.vue";
 import AdminIcon from "./icons/AdminIcon.vue";
 import DownloadIcon from "./icons/DownloadIcon.vue";
+import UploadIcon from "./icons/UploadIcon.vue";
 import MusicNoteIcon from "./icons/MusicNoteIcon.vue";
 import { wsConnectionStatus, wsServerVersion } from "../services/websocket";
 import { useUserStore } from "../store/user";
+import { useIngestionStore } from "../store/ingestion";
 
 const userStore = useUserStore();
+const ingestionStore = useIngestionStore();
 
 // App version injected by Vite at build time
 const appVersion = __APP_VERSION__; // eslint-disable-line no-undef
@@ -151,6 +166,45 @@ const connectionTitle = computed(() => {
       return `Disconnected\nWeb: v${appVersion}`;
   }
 });
+
+// Ingestion monitor badge
+const showIngestionBadge = computed(() => {
+  return ingestionStore.badgeState !== "hidden";
+});
+
+const ingestionBadgeClass = computed(() => {
+  switch (ingestionStore.badgeState) {
+    case "active":
+      return "badge-active";
+    case "review":
+      return "badge-review";
+    case "complete":
+      return "badge-complete";
+    default:
+      return "";
+  }
+});
+
+const ingestionBadgeTitle = computed(() => {
+  const active = ingestionStore.activeCount;
+  const review = ingestionStore.reviewCount;
+  const complete = ingestionStore.completedCount;
+
+  if (review > 0) {
+    return `${review} upload(s) need review`;
+  }
+  if (active > 0) {
+    return `${active} upload(s) in progress`;
+  }
+  if (complete > 0) {
+    return `${complete} upload(s) complete`;
+  }
+  return "Ingestion Monitor";
+});
+
+function openIngestionMonitor() {
+  ingestionStore.openModal();
+}
 </script>
 
 <style scoped>
@@ -320,5 +374,71 @@ const connectionTitle = computed(() => {
   50% {
     opacity: 0.5;
   }
+}
+
+/* Ingestion badge */
+.ingestionBadge {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-full);
+  border: none;
+  background: transparent;
+  color: var(--text-subdued);
+  cursor: pointer;
+  transition:
+    color var(--transition-fast),
+    background-color var(--transition-fast);
+}
+
+.ingestionBadge:hover {
+  color: var(--text-base);
+  background-color: var(--bg-elevated);
+}
+
+.ingestionBadge.badge-active {
+  color: #4a90d9;
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+.ingestionBadge.badge-review {
+  color: #f5a623;
+}
+
+.ingestionBadge.badge-complete {
+  color: #7ed321;
+}
+
+.uploadIcon {
+  width: 20px;
+  height: 20px;
+}
+
+.badgeCount {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  background: #4a90d9;
+  color: white;
+  border-radius: 8px;
+  font-size: 10px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.badge-review .badgeCount {
+  background: #f5a623;
+}
+
+.badge-complete .badgeCount {
+  background: #7ed321;
 }
 </style>
