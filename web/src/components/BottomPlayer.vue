@@ -143,12 +143,20 @@ const computedVolumePercent = computed(() => {
 
 const {
   currentTrackId,
-  isPlaying,
+  isPlaying: playerIsPlaying,
   progressPercent,
   progressSec,
   volume,
   muted,
 } = storeToRefs(player);
+
+// Use remote state for display when in remote mode
+const isPlaying = computed(() => {
+  if (isRemoteMode.value) {
+    return remotePlayback.remoteState?.is_playing || false;
+  }
+  return playerIsPlaying.value;
+});
 
 const songName = ref("");
 const artists = ref([]);
@@ -377,14 +385,7 @@ watch(
   },
   { immediate: true },
 );
-watch(
-  isPlaying,
-  (newIsPlaying) => {
-    isPlaying.value = newIsPlaying;
-    console.log("Bottom Player newIsPlaying: " + newIsPlaying);
-  },
-  { immediate: true },
-);
+// isPlaying is now a computed - no need to watch it
 
 watch(
   muted,
@@ -442,13 +443,7 @@ watch(
   },
 );
 
-watch(
-  () => remotePlayback.remoteState?.is_playing,
-  (newIsPlaying) => {
-    if (!isRemoteMode.value) return;
-    isPlaying.value = newIsPlaying || false;
-  },
-);
+// isPlaying is now a computed that automatically uses remote state when in remote mode
 
 watch(
   () => remotePlayback.remoteState?.volume,
