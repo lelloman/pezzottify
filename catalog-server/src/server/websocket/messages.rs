@@ -113,6 +113,16 @@ pub mod msg_types {
     pub const CATALOG_UPDATED: &str = "catalog_updated";
     /// Ingestion job update notification (server -> client).
     pub const INGESTION_UPDATE: &str = "ingestion_update";
+    /// Ingestion job progress update (server -> client).
+    pub const INGESTION_PROGRESS: &str = "ingestion_progress";
+    /// Ingestion match found (server -> client).
+    pub const INGESTION_MATCH_FOUND: &str = "ingestion_match_found";
+    /// Ingestion review needed (server -> client).
+    pub const INGESTION_REVIEW_NEEDED: &str = "ingestion_review_needed";
+    /// Ingestion job completed (server -> client).
+    pub const INGESTION_COMPLETED: &str = "ingestion_completed";
+    /// Ingestion job failed (server -> client).
+    pub const INGESTION_FAILED: &str = "ingestion_failed";
 }
 
 /// Sync-related message payloads.
@@ -194,6 +204,120 @@ pub mod ingestion {
             self.needs_review = true;
             self
         }
+    }
+
+    /// Detailed progress update for the ingestion monitor.
+    ///
+    /// Sent periodically during processing to show real-time progress.
+    #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+    pub struct JobProgressUpdate {
+        /// Job ID.
+        pub job_id: String,
+        /// Current status.
+        pub status: String,
+        /// Current processing phase.
+        pub phase: String,
+        /// Progress within current phase (0-100).
+        pub phase_progress: u8,
+        /// Number of files processed so far.
+        pub files_processed: u32,
+        /// Total number of files.
+        pub files_total: u32,
+    }
+
+    impl JobProgressUpdate {
+        pub fn new(
+            job_id: impl Into<String>,
+            status: impl Into<String>,
+            phase: impl Into<String>,
+        ) -> Self {
+            Self {
+                job_id: job_id.into(),
+                status: status.into(),
+                phase: phase.into(),
+                phase_progress: 0,
+                files_processed: 0,
+                files_total: 0,
+            }
+        }
+
+        pub fn with_progress(mut self, progress: u8, processed: u32, total: u32) -> Self {
+            self.phase_progress = progress;
+            self.files_processed = processed;
+            self.files_total = total;
+            self
+        }
+    }
+
+    /// Album candidate summary for match found messages.
+    #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+    pub struct CandidateSummary {
+        pub id: String,
+        pub name: String,
+        pub artist_name: String,
+        pub track_count: i32,
+        pub score: f32,
+        pub delta_ms: i64,
+    }
+
+    /// Sent when an album match is found (either auto or for review).
+    #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+    pub struct MatchFoundUpdate {
+        /// Job ID.
+        pub job_id: String,
+        /// Matched album ID (if high confidence).
+        pub album_id: Option<String>,
+        /// Album name.
+        pub album_name: Option<String>,
+        /// Artist name.
+        pub artist_name: Option<String>,
+        /// Match confidence (0.0 - 1.0).
+        pub confidence: f32,
+        /// Ticket type: "SUCCESS", "REVIEW", or "FAILURE".
+        pub ticket_type: String,
+        /// Top album candidates (for review).
+        pub candidates: Vec<CandidateSummary>,
+    }
+
+    /// Sent when human review is required.
+    #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+    pub struct ReviewNeededUpdate {
+        /// Job ID.
+        pub job_id: String,
+        /// Question to present to user.
+        pub question: String,
+        /// Available options.
+        pub options: Vec<ReviewOptionSummary>,
+    }
+
+    /// Review option for WebSocket messages.
+    #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+    pub struct ReviewOptionSummary {
+        pub id: String,
+        pub label: String,
+        pub description: Option<String>,
+    }
+
+    /// Sent when job completes successfully.
+    #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+    pub struct JobCompletedUpdate {
+        /// Job ID.
+        pub job_id: String,
+        /// Number of tracks added.
+        pub tracks_added: u32,
+        /// Album name.
+        pub album_name: String,
+        /// Artist name.
+        pub artist_name: String,
+    }
+
+    /// Sent when job fails.
+    #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+    pub struct JobFailedUpdate {
+        /// Job ID.
+        pub job_id: String,
+        /// Error message.
+        pub error: String,
     }
 }
 

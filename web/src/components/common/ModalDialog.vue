@@ -58,27 +58,19 @@ onUnmounted(() => {
   left: 0;
   width: 100%;
   height: 100%;
-  background: rgba(0, 0, 0, 0.5);
+  background: rgba(0, 0, 0, 0.7);
   display: flex;
   justify-content: center;
   align-items: center;
+  z-index: 1000;
 }
 
 .modal {
-  background: #ffffff !important;
-  color: #1a1a1a !important;
+  background: var(--bg-elevated);
+  color: var(--text-base);
   padding: 20px;
   border-radius: 8px;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-}
-
-.modal h1,
-.modal h2,
-.modal h3,
-.modal p,
-.modal span,
-.modal div {
-  color: #1a1a1a;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
 }
 
 .v-enter-active,
