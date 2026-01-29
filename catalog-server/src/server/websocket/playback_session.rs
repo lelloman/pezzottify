@@ -8,6 +8,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use tokio::sync::RwLock;
+use tracing::{info, warn};
 
 use super::connection::ConnectionManager;
 use super::messages::{msg_types, ServerMessage};
@@ -169,6 +170,11 @@ impl PlaybackSessionManager {
         device_name: String,
         device_type: DeviceType,
     ) -> WelcomePayload {
+        info!(
+            "[playback] handle_hello: user={} device={} name={:?} type={:?}",
+            user_id, device_id, device_name, device_type
+        );
+
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
@@ -177,6 +183,7 @@ impl PlaybackSessionManager {
         // Store device metadata
         {
             let mut devices = self.devices.write().await;
+            let device_count = devices.len();
             devices.insert(
                 (user_id, device_id),
                 DeviceMetadata {
@@ -185,11 +192,24 @@ impl PlaybackSessionManager {
                     connected_at: now,
                 },
             );
+            info!(
+                "[playback] stored device metadata, total devices: {}",
+                device_count + 1
+            );
         }
 
         // Get or create session
         let mut sessions = self.sessions.write().await;
         let session = sessions.entry(user_id).or_default();
+
+        info!(
+            "[playback] session state: audio_device_id={:?}, has_state={}, queue_len={}, has_recent={}, pending_transfer={:?}",
+            session.audio_device_id,
+            session.state.is_some(),
+            session.queue.len(),
+            session.recent_audio_device.is_some(),
+            session.pending_transfer.as_ref().map(|t| &t.transfer_id)
+        );
 
         // Check if this device can reclaim audio device status
         let reclaimable = session
@@ -197,6 +217,10 @@ impl PlaybackSessionManager {
             .as_ref()
             .map(|r| r.device_id == device_id && r.disconnected_at.elapsed() < RECLAIM_WINDOW)
             .unwrap_or(false);
+
+        if reclaimable {
+            info!("[playback] device {} can reclaim audio device status", device_id);
+        }
 
         // Build session info
         let session_info = SessionInfo {
@@ -211,8 +235,21 @@ impl PlaybackSessionManager {
             reclaimable: if reclaimable { Some(true) } else { None },
         };
 
+        info!(
+            "[playback] session_info: exists={}, has_state={}, audio_device_id={:?}, reclaimable={:?}",
+            session_info.exists,
+            session_info.state.is_some(),
+            session_info.audio_device_id,
+            session_info.reclaimable
+        );
+
         // Get list of connected devices
         let connected_devices = self.build_device_list(user_id, session).await;
+        info!(
+            "[playback] connected_devices count: {}, ids: {:?}",
+            connected_devices.len(),
+            connected_devices.iter().map(|d| d.id).collect::<Vec<_>>()
+        );
 
         // Broadcast device list changed to other devices
         let change_msg = ServerMessage::new(
@@ -230,6 +267,12 @@ impl PlaybackSessionManager {
             .send_to_other_devices(user_id, device_id, change_msg)
             .await;
 
+        info!(
+            "[playback] handle_hello complete: returning welcome with {} devices, session_exists={}",
+            connected_devices.len(),
+            session_info.exists
+        );
+
         WelcomePayload {
             device_id,
             session: session_info,
@@ -246,10 +289,22 @@ impl PlaybackSessionManager {
         let device_ids = self.connection_manager.get_connected_devices(user_id).await;
         let devices = self.devices.read().await;
 
-        device_ids
+        info!(
+            "[playback] build_device_list: user={} connection_manager_devices={:?} metadata_count={}",
+            user_id, device_ids, devices.len()
+        );
+
+        let result: Vec<ConnectedDevice> = device_ids
             .into_iter()
             .filter_map(|id| {
-                devices.get(&(user_id, id)).map(|meta| ConnectedDevice {
+                let meta = devices.get(&(user_id, id));
+                if meta.is_none() {
+                    info!(
+                        "[playback] build_device_list: no metadata for device {} (user={})",
+                        id, user_id
+                    );
+                }
+                meta.map(|meta| ConnectedDevice {
                     id,
                     name: meta.name.clone(),
                     device_type: meta.device_type,
@@ -257,7 +312,15 @@ impl PlaybackSessionManager {
                     connected_at: meta.connected_at,
                 })
             })
-            .collect()
+            .collect();
+
+        info!(
+            "[playback] build_device_list result: {} devices, audio_device_id={:?}",
+            result.len(),
+            session.audio_device_id
+        );
+
+        result
     }
 
     /// Register a device as the audio device.
@@ -266,11 +329,20 @@ impl PlaybackSessionManager {
         user_id: usize,
         device_id: usize,
     ) -> Result<(), PlaybackError> {
+        info!(
+            "[playback] register_audio_device: user={} device={}",
+            user_id, device_id
+        );
+
         let mut sessions = self.sessions.write().await;
         let session = sessions.entry(user_id).or_default();
 
         // Check if there's already an active audio device
-        if session.audio_device_id.is_some() {
+        if let Some(existing) = session.audio_device_id {
+            warn!(
+                "[playback] register_audio_device FAILED: device {} already registered as audio device",
+                existing
+            );
             return Err(PlaybackError::CommandFailed(
                 "Another device is already the audio device".to_string(),
             ));
@@ -284,6 +356,11 @@ impl PlaybackSessionManager {
 
         // Get device list for broadcast
         let connected_devices = self.build_device_list(user_id, session).await;
+
+        info!(
+            "[playback] broadcasting device_list_changed (became_audio_device) to {} devices",
+            connected_devices.len()
+        );
 
         // Broadcast device list changed
         let change_msg = ServerMessage::new(
@@ -301,6 +378,10 @@ impl PlaybackSessionManager {
             .send_to_other_devices(user_id, device_id, change_msg)
             .await;
 
+        info!(
+            "[playback] register_audio_device SUCCESS: device {} is now the audio device",
+            device_id
+        );
         Ok(())
     }
 
@@ -310,10 +391,22 @@ impl PlaybackSessionManager {
         user_id: usize,
         device_id: usize,
     ) -> Result<(), PlaybackError> {
+        info!(
+            "[playback] unregister_audio_device: user={} device={}",
+            user_id, device_id
+        );
+
         let mut sessions = self.sessions.write().await;
-        let session = sessions.get_mut(&user_id).ok_or(PlaybackError::NoSession)?;
+        let session = sessions.get_mut(&user_id).ok_or_else(|| {
+            warn!("[playback] unregister_audio_device FAILED: no session for user {}", user_id);
+            PlaybackError::NoSession
+        })?;
 
         if session.audio_device_id != Some(device_id) {
+            warn!(
+                "[playback] unregister_audio_device FAILED: device {} is not audio device (current: {:?})",
+                device_id, session.audio_device_id
+            );
             return Err(PlaybackError::NotAudioDevice);
         }
 
@@ -325,6 +418,8 @@ impl PlaybackSessionManager {
 
         // Get device list for broadcast
         let connected_devices = self.build_device_list(user_id, session).await;
+
+        info!("[playback] broadcasting session_ended to other devices");
 
         // Broadcast session ended to other devices
         let ended_msg = ServerMessage::new(
@@ -354,6 +449,7 @@ impl PlaybackSessionManager {
             .send_to_other_devices(user_id, device_id, change_msg)
             .await;
 
+        info!("[playback] unregister_audio_device SUCCESS: device {} unregistered", device_id);
         Ok(())
     }
 
@@ -364,10 +460,26 @@ impl PlaybackSessionManager {
         device_id: usize,
         state: PlaybackState,
     ) -> Result<(), PlaybackError> {
+        info!(
+            "[playback] handle_state_update: user={} device={} track={:?} pos={:.1}s playing={}",
+            user_id,
+            device_id,
+            state.current_track.as_ref().map(|t| &t.title),
+            state.position,
+            state.is_playing
+        );
+
         let mut sessions = self.sessions.write().await;
-        let session = sessions.get_mut(&user_id).ok_or(PlaybackError::NoSession)?;
+        let session = sessions.get_mut(&user_id).ok_or_else(|| {
+            warn!("[playback] handle_state_update FAILED: no session for user {}", user_id);
+            PlaybackError::NoSession
+        })?;
 
         if session.audio_device_id != Some(device_id) {
+            warn!(
+                "[playback] handle_state_update FAILED: device {} is not audio device (current: {:?})",
+                device_id, session.audio_device_id
+            );
             return Err(PlaybackError::NotAudioDevice);
         }
 
@@ -433,10 +545,26 @@ impl PlaybackSessionManager {
         command: &str,
         payload: serde_json::Value,
     ) -> Result<(), PlaybackError> {
-        let sessions = self.sessions.read().await;
-        let session = sessions.get(&user_id).ok_or(PlaybackError::NoSession)?;
+        info!(
+            "[playback] handle_command: user={} from_device={} command={:?}",
+            user_id, from_device_id, command
+        );
 
-        let audio_device_id = session.audio_device_id.ok_or(PlaybackError::NoSession)?;
+        let sessions = self.sessions.read().await;
+        let session = sessions.get(&user_id).ok_or_else(|| {
+            warn!("[playback] handle_command FAILED: no session for user {}", user_id);
+            PlaybackError::NoSession
+        })?;
+
+        let audio_device_id = session.audio_device_id.ok_or_else(|| {
+            warn!("[playback] handle_command FAILED: no audio device for user {}", user_id);
+            PlaybackError::NoSession
+        })?;
+
+        info!(
+            "[playback] handle_command: audio_device_id={}, from_device={}",
+            audio_device_id, from_device_id
+        );
 
         // Handle special command to become audio device (initiates transfer)
         if command == "becomeAudioDevice" {
@@ -446,6 +574,11 @@ impl PlaybackSessionManager {
                 .ok_or_else(|| PlaybackError::InvalidMessage("missing transfer_id".to_string()))?
                 .to_string();
 
+            info!(
+                "[playback] handle_command: initiating transfer, transfer_id={}",
+                transfer_id
+            );
+
             drop(sessions);
             return self
                 .initiate_transfer(user_id, from_device_id, transfer_id)
@@ -453,6 +586,11 @@ impl PlaybackSessionManager {
         }
 
         // Forward command to audio device
+        info!(
+            "[playback] forwarding command {:?} to audio device {}",
+            command, audio_device_id
+        );
+
         let cmd_msg = ServerMessage::new(
             msg_types::PLAYBACK_COMMAND,
             PlaybackCommandPayload {
@@ -490,23 +628,49 @@ impl PlaybackSessionManager {
         requesting_device_id: usize,
         transfer_id: String,
     ) -> Result<(), PlaybackError> {
+        info!(
+            "[playback] initiate_transfer: user={} requesting_device={} transfer_id={}",
+            user_id, requesting_device_id, transfer_id
+        );
+
         let mut sessions = self.sessions.write().await;
-        let session = sessions.get_mut(&user_id).ok_or(PlaybackError::NoSession)?;
+        let session = sessions.get_mut(&user_id).ok_or_else(|| {
+            warn!("[playback] initiate_transfer FAILED: no session for user {}", user_id);
+            PlaybackError::NoSession
+        })?;
 
         // Check no transfer in progress
-        if session.pending_transfer.is_some() {
+        if let Some(ref pending) = session.pending_transfer {
+            warn!(
+                "[playback] initiate_transfer FAILED: transfer {} already in progress",
+                pending.transfer_id
+            );
             return Err(PlaybackError::TransferInProgress);
         }
 
-        let source_device_id = session.audio_device_id.ok_or(PlaybackError::NoSession)?;
+        let source_device_id = session.audio_device_id.ok_or_else(|| {
+            warn!("[playback] initiate_transfer FAILED: no audio device for user {}", user_id);
+            PlaybackError::NoSession
+        })?;
 
         // Get target device name
         let devices = self.devices.read().await;
         let target_meta = devices
             .get(&(user_id, requesting_device_id))
-            .ok_or(PlaybackError::DeviceNotFound)?;
+            .ok_or_else(|| {
+                warn!(
+                    "[playback] initiate_transfer FAILED: target device {} not found",
+                    requesting_device_id
+                );
+                PlaybackError::DeviceNotFound
+            })?;
         let target_device_name = target_meta.name.clone();
         drop(devices);
+
+        info!(
+            "[playback] transfer: source={} -> target={} ({:?})",
+            source_device_id, requesting_device_id, target_device_name
+        );
 
         // Create pending transfer
         session.pending_transfer = Some(PendingTransfer {
@@ -529,6 +693,11 @@ impl PlaybackSessionManager {
             .connection_manager
             .send_to_device(user_id, source_device_id, prepare_msg)
             .await;
+
+        info!(
+            "[playback] initiate_transfer: sent prepare_transfer to source device {}",
+            source_device_id
+        );
 
         // Spawn timeout task
         let manager = self.clone_for_timeout();
@@ -557,11 +726,23 @@ impl PlaybackSessionManager {
         state: PlaybackState,
         queue: Vec<QueueItem>,
     ) -> Result<(), PlaybackError> {
+        info!(
+            "[playback] handle_transfer_ready: user={} device={} transfer_id={} queue_len={}",
+            user_id, device_id, transfer_id, queue.len()
+        );
+
         let sessions = self.sessions.read().await;
-        let session = sessions.get(&user_id).ok_or(PlaybackError::NoSession)?;
+        let session = sessions.get(&user_id).ok_or_else(|| {
+            warn!("[playback] handle_transfer_ready FAILED: no session for user {}", user_id);
+            PlaybackError::NoSession
+        })?;
 
         // Verify device is current audio device
         if session.audio_device_id != Some(device_id) {
+            warn!(
+                "[playback] handle_transfer_ready FAILED: device {} is not audio device (current: {:?})",
+                device_id, session.audio_device_id
+            );
             return Err(PlaybackError::NotAudioDevice);
         }
 
@@ -569,15 +750,27 @@ impl PlaybackSessionManager {
         let pending = session
             .pending_transfer
             .as_ref()
-            .ok_or(PlaybackError::InvalidTransfer("no pending transfer".to_string()))?;
+            .ok_or_else(|| {
+                warn!("[playback] handle_transfer_ready FAILED: no pending transfer");
+                PlaybackError::InvalidTransfer("no pending transfer".to_string())
+            })?;
 
         if pending.transfer_id != transfer_id {
+            warn!(
+                "[playback] handle_transfer_ready FAILED: transfer_id mismatch (expected={}, got={})",
+                pending.transfer_id, transfer_id
+            );
             return Err(PlaybackError::InvalidTransfer(
                 "transfer_id mismatch".to_string(),
             ));
         }
 
         let target_device_id = pending.target_device_id;
+
+        info!(
+            "[playback] sending become_audio_device to target device {}",
+            target_device_id
+        );
 
         // Send become_audio_device to target
         let become_msg = ServerMessage::new(
@@ -593,6 +786,10 @@ impl PlaybackSessionManager {
             .send_to_device(user_id, target_device_id, become_msg)
             .await;
 
+        info!(
+            "[playback] handle_transfer_ready: sent become_audio_device to device {}",
+            target_device_id
+        );
         Ok(())
     }
 
@@ -603,16 +800,31 @@ impl PlaybackSessionManager {
         device_id: usize,
         transfer_id: String,
     ) -> Result<(), PlaybackError> {
+        info!(
+            "[playback] handle_transfer_complete: user={} device={} transfer_id={}",
+            user_id, device_id, transfer_id
+        );
+
         let mut sessions = self.sessions.write().await;
-        let session = sessions.get_mut(&user_id).ok_or(PlaybackError::NoSession)?;
+        let session = sessions.get_mut(&user_id).ok_or_else(|| {
+            warn!("[playback] handle_transfer_complete FAILED: no session for user {}", user_id);
+            PlaybackError::NoSession
+        })?;
 
         // Verify transfer matches pending
         let pending = session
             .pending_transfer
             .take()
-            .ok_or(PlaybackError::InvalidTransfer("no pending transfer".to_string()))?;
+            .ok_or_else(|| {
+                warn!("[playback] handle_transfer_complete FAILED: no pending transfer");
+                PlaybackError::InvalidTransfer("no pending transfer".to_string())
+            })?;
 
         if pending.transfer_id != transfer_id {
+            warn!(
+                "[playback] handle_transfer_complete FAILED: transfer_id mismatch (expected={}, got={})",
+                pending.transfer_id, transfer_id
+            );
             // Put it back
             session.pending_transfer = Some(pending);
             return Err(PlaybackError::InvalidTransfer(
@@ -621,6 +833,10 @@ impl PlaybackSessionManager {
         }
 
         if pending.target_device_id != device_id {
+            warn!(
+                "[playback] handle_transfer_complete FAILED: device_id mismatch (expected={}, got={})",
+                pending.target_device_id, device_id
+            );
             session.pending_transfer = Some(pending);
             return Err(PlaybackError::InvalidTransfer(
                 "device_id mismatch".to_string(),
@@ -632,6 +848,11 @@ impl PlaybackSessionManager {
         // Update audio_device_id
         session.audio_device_id = Some(device_id);
         session.last_state_update = Instant::now();
+
+        info!(
+            "[playback] transfer complete: old_audio_device={} -> new_audio_device={}",
+            old_audio_device, device_id
+        );
 
         // Send transfer_complete to old device
         let complete_msg = ServerMessage::new(
@@ -662,6 +883,10 @@ impl PlaybackSessionManager {
             .broadcast_to_user(user_id, change_msg)
             .await;
 
+        info!(
+            "[playback] handle_transfer_complete SUCCESS: device {} is now the audio device",
+            device_id
+        );
         Ok(())
     }
 
@@ -738,17 +963,32 @@ impl PlaybackSessionManager {
         device_name: &str,
         device_type: DeviceType,
     ) {
+        info!(
+            "[playback] handle_device_disconnect: user={} device={} name={:?} type={:?}",
+            user_id, device_id, device_name, device_type
+        );
+
         // Remove device metadata
         {
             let mut devices = self.devices.write().await;
             devices.remove(&(user_id, device_id));
+            info!("[playback] removed device metadata, remaining devices: {}", devices.len());
         }
 
         let mut sessions = self.sessions.write().await;
         let session = match sessions.get_mut(&user_id) {
             Some(s) => s,
-            None => return,
+            None => {
+                info!("[playback] no session for user {}, nothing to clean up", user_id);
+                return;
+            }
         };
+
+        info!(
+            "[playback] session before disconnect: audio_device_id={:?}, pending_transfer={:?}",
+            session.audio_device_id,
+            session.pending_transfer.as_ref().map(|t| &t.transfer_id)
+        );
 
         // Check if this affects a pending transfer
         let transfer_abort_info = session.pending_transfer.as_ref().and_then(|pending| {
@@ -773,6 +1013,10 @@ impl PlaybackSessionManager {
         });
 
         if let Some((transfer_id, other_device_id, reason)) = transfer_abort_info {
+            warn!(
+                "[playback] aborting transfer {} due to disconnect: {}",
+                transfer_id, reason
+            );
             session.pending_transfer = None;
 
             // Notify other device
@@ -791,6 +1035,11 @@ impl PlaybackSessionManager {
 
         // Check if this was the audio device
         if session.audio_device_id == Some(device_id) {
+            info!(
+                "[playback] audio device {} disconnected, saving for reclaim",
+                device_id
+            );
+
             // Save for reclaim
             if let Some(state) = session.state.clone() {
                 session.recent_audio_device = Some(RecentAudioDevice {
@@ -801,6 +1050,7 @@ impl PlaybackSessionManager {
                     last_state: state,
                     queue: session.queue.clone(),
                 });
+                info!("[playback] saved recent_audio_device for potential reclaim");
             }
 
             session.audio_device_id = None;
@@ -809,6 +1059,10 @@ impl PlaybackSessionManager {
 
         // Get device list for broadcast
         let connected_devices = self.build_device_list(user_id, session).await;
+        info!(
+            "[playback] broadcasting device_list_changed (disconnected), remaining devices: {}",
+            connected_devices.len()
+        );
 
         // Broadcast device list changed
         let change_msg = ServerMessage::new(
@@ -825,6 +1079,8 @@ impl PlaybackSessionManager {
             .connection_manager
             .broadcast_to_user(user_id, change_msg)
             .await;
+
+        info!("[playback] handle_device_disconnect complete for device {}", device_id);
     }
 
     /// Run heartbeat check (called periodically).
@@ -832,17 +1088,33 @@ impl PlaybackSessionManager {
         let mut sessions = self.sessions.write().await;
         let mut to_end: Vec<usize> = Vec::new();
 
+        let session_count = sessions.len();
+        if session_count > 0 {
+            info!("[playback] check_heartbeats: checking {} sessions", session_count);
+        }
+
         for (user_id, session) in sessions.iter_mut() {
             // Check if audio device timed out
             if session.audio_device_id.is_some()
                 && session.last_state_update.elapsed() > HEARTBEAT_TIMEOUT
             {
+                warn!(
+                    "[playback] heartbeat timeout: user={} audio_device={:?} last_update={:?} ago",
+                    user_id,
+                    session.audio_device_id,
+                    session.last_state_update.elapsed()
+                );
                 to_end.push(*user_id);
             }
 
             // Check if recent_audio_device expired
             if let Some(ref recent) = session.recent_audio_device {
                 if recent.disconnected_at.elapsed() >= RECLAIM_WINDOW {
+                    info!(
+                        "[playback] reclaim window expired for user={} device={}",
+                        user_id, recent.device_id
+                    );
+
                     // Clear session data since reclaim is no longer possible
                     session.state = None;
                     session.queue.clear();
@@ -868,6 +1140,11 @@ impl PlaybackSessionManager {
         for user_id in to_end {
             if let Some(session) = sessions.get_mut(&user_id) {
                 let audio_device_id = session.audio_device_id;
+                info!(
+                    "[playback] ending session due to heartbeat timeout: user={} audio_device={:?}",
+                    user_id, audio_device_id
+                );
+
                 session.audio_device_id = None;
                 session.state = None;
                 session.queue.clear();

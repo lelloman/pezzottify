@@ -9,8 +9,9 @@
         @click.stop="handleClickOnAlbumCover"
       />
       <div class="trackNamesColumn">
-        <TrackName :track="displayTrack" :infiniteAnimation="true" />
-        <LoadClickableArtistsNames :artistsIds="artists" />
+        <TrackName v-if="displayTrack" :track="displayTrack" :infiniteAnimation="true" />
+        <LoadClickableArtistsNames v-if="artists.length > 0" :artistsIds="artists" />
+        <span v-else-if="remoteArtistName" class="remoteArtistName">{{ remoteArtistName }}</span>
       </div>
     </div>
     <div class="playerControlsColumn">
@@ -73,7 +74,7 @@
 import { computed, ref, watch, h } from "vue";
 import { usePlayerStore } from "@/store/player";
 import { storeToRefs } from "pinia";
-import { formatDuration, chooseAlbumCoverImageUrl } from "@/utils";
+import { formatDuration, chooseAlbumCoverImageUrl, formatImageUrl } from "@/utils";
 import PlayIcon from "./icons/PlayIcon.vue";
 import PauseIcon from "./icons/PauseIcon.vue";
 import Forward10Sec from "./icons/Forward10Sec.vue";
@@ -132,6 +133,7 @@ const currentPosition = computed(() => remotePlayback.currentPosition);
 // Track info for display - combines local and remote
 const displayTrack = ref(null);
 const artists = ref([]);
+const remoteArtistName = ref(null); // For remote playback - already resolved name
 const imageUrls = ref([]);
 const duration = ref("");
 const currentAlbumId = ref(null);
@@ -301,9 +303,18 @@ watch(
         album_id: track.album_id,
         duration: track.duration,
       };
-      artists.value = track.artist_id ? [track.artist_id] : [];
+      // For remote playback, use the pre-resolved artist name instead of IDs
+      artists.value = [];
+      remoteArtistName.value = track.artist_name || null;
       duration.value = track.duration ? formatDuration(track.duration) : "";
-      currentAlbumId.value = track.album_id || null;
+      // For remote playback, use image_id directly instead of fetching via album
+      if (track.image_id) {
+        imageUrls.value = [formatImageUrl(track.image_id)];
+      } else {
+        imageUrls.value = [];
+      }
+      // Don't set currentAlbumId - we're handling the image directly
+      currentAlbumId.value = null;
     }
   },
   { deep: true, immediate: true },
@@ -314,7 +325,8 @@ watch(
   () => remotePlayback.isLocalOutput,
   (isLocal) => {
     if (isLocal) {
-      // Switched to local - let the currentTrackId watcher handle it
+      // Switched to local - clear remote artist name, let the currentTrackId watcher handle the rest
+      remoteArtistName.value = null;
       if (player.currentTrackId) {
         // Trigger track watcher
         const id = player.currentTrackId;
@@ -424,7 +436,6 @@ watch(
   align-items: center;
   background-color: var(--bg-base);
   border-top: 1px solid var(--border-default);
-  overflow: hidden;
 }
 
 /* ============================================
@@ -480,6 +491,14 @@ watch(
 
 .trackArtist {
   margin: 0;
+  font-size: var(--text-sm);
+  color: var(--text-subdued);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.remoteArtistName {
   font-size: var(--text-sm);
   color: var(--text-subdued);
   white-space: nowrap;

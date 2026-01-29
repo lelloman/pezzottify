@@ -233,12 +233,25 @@ export const useRemotePlaybackStore = defineStore("remotePlayback", () => {
     // Update selected output if the audio device changed
     const currentAudioDevice = devices.value.find((d) => d.is_audio_device);
     if (currentAudioDevice) {
+      // A session exists if there's an audio device
+      sessionExists.value = true;
+
       if (currentAudioDevice.id === deviceId.value) {
+        // We are now the audio device
         selectedOutputDevice.value = null;
+        stopInterpolation();
+        startBroadcasting();
       } else if (selectedOutputDevice.value !== currentAudioDevice.id) {
-        // Audio device changed to a different device
+        // Another device is now the audio device
         selectedOutputDevice.value = currentAudioDevice.id;
+        stopBroadcasting();
+        startInterpolation();
       }
+    } else {
+      // No audio device - session ended
+      sessionExists.value = false;
+      stopBroadcasting();
+      stopInterpolation();
     }
 
     console.log(
@@ -267,7 +280,7 @@ export const useRemotePlaybackStore = defineStore("remotePlayback", () => {
         if (cmdPayload?.position !== undefined) {
           // cmdPayload.position is in seconds, seekToPercentage expects 0-1
           const staticsStore = useStaticsStore();
-          const track = staticsStore.tracks[player.currentTrackId];
+          const track = staticsStore.tracks?.[player.currentTrackId];
           const duration = track?.duration || 0;
           if (duration > 0) {
             player.seekToPercentage(cmdPayload.position / duration);
@@ -331,7 +344,7 @@ export const useRemotePlaybackStore = defineStore("remotePlayback", () => {
     if (isLocalOutput.value) {
       const player = usePlayerStore();
       const staticsStore = useStaticsStore();
-      const track = staticsStore.tracks[player.currentTrackId];
+      const track = staticsStore.tracks?.[player.currentTrackId];
       if (track?.duration > 0) {
         player.seekToPercentage(positionSec / track.duration);
       }
@@ -447,12 +460,21 @@ export const useRemotePlaybackStore = defineStore("remotePlayback", () => {
   // ============================================
 
   function registerAsAudioDevice() {
+    console.log("[RemotePlayback] registerAsAudioDevice called, deviceId:", deviceId.value, "devices before:", JSON.stringify(devices.value));
     ws.send("playback.register_audio_device", {});
     sessionExists.value = true;
     selectedOutputDevice.value = null;
+
+    // Mark ourselves as audio device locally (server will confirm via device_list_changed)
+    devices.value = devices.value.map((d) => ({
+      ...d,
+      is_audio_device: d.id === deviceId.value,
+    }));
+
+    console.log("[RemotePlayback] devices after update:", JSON.stringify(devices.value), "isAudioDevice now:", isAudioDevice.value);
     startBroadcasting();
     stopInterpolation();
-    console.log("[RemotePlayback] Registered as audio device");
+    console.log("[RemotePlayback] Registered as audio device, broadcasting started");
   }
 
   function unregisterAsAudioDevice() {
@@ -466,6 +488,13 @@ export const useRemotePlaybackStore = defineStore("remotePlayback", () => {
     const state = buildPlaybackState(player);
     ws.send("playback.reclaim_audio_device", state);
     selectedOutputDevice.value = null;
+
+    // Mark ourselves as audio device locally
+    devices.value = devices.value.map((d) => ({
+      ...d,
+      is_audio_device: d.id === deviceId.value,
+    }));
+
     startBroadcasting();
     stopInterpolation();
     console.log("[RemotePlayback] Reclaimed audio device status");
@@ -493,11 +522,34 @@ export const useRemotePlaybackStore = defineStore("remotePlayback", () => {
     }
   }
 
+  let pendingBroadcastRetry = null;
+
   function broadcastCurrentState() {
-    if (!isAudioDevice.value) return;
+    console.log("[RemotePlayback] broadcastCurrentState called, isAudioDevice:", isAudioDevice.value, "deviceId:", deviceId.value, "audioDevice:", audioDevice.value);
+    if (!isAudioDevice.value) {
+      console.log("[RemotePlayback] broadcastCurrentState: NOT audio device, returning early. devices:", devices.value);
+      return;
+    }
 
     const player = usePlayerStore();
     const state = buildPlaybackState(player);
+
+    // Always send state (needed for heartbeat), but schedule retry if track data is missing
+    if (player.currentTrackId && !state.current_track && !pendingBroadcastRetry) {
+      console.log("[RemotePlayback] Track data not ready yet, scheduling retry");
+      pendingBroadcastRetry = setTimeout(() => {
+        pendingBroadcastRetry = null;
+        broadcastCurrentState();
+      }, 200);
+    }
+
+    // Clear pending retry if we now have track data
+    if (state.current_track && pendingBroadcastRetry) {
+      clearTimeout(pendingBroadcastRetry);
+      pendingBroadcastRetry = null;
+    }
+
+    console.log("[RemotePlayback] Sending playback.state:", state);
     ws.send("playback.state", state);
   }
 
@@ -582,6 +634,13 @@ export const useRemotePlaybackStore = defineStore("remotePlayback", () => {
     sessionExists.value = true;
     selectedOutputDevice.value = null;
     pendingTransfer.value = null;
+
+    // Mark ourselves as audio device locally
+    devices.value = devices.value.map((d) => ({
+      ...d,
+      is_audio_device: d.id === deviceId.value,
+    }));
+
     startBroadcasting();
     stopInterpolation();
 
@@ -652,32 +711,38 @@ export const useRemotePlaybackStore = defineStore("remotePlayback", () => {
 
   // Current playback state - combines local and remote
   const currentTrack = computed(() => {
-    if (isLocalOutput.value) {
-      const player = usePlayerStore();
-      const staticsStore = useStaticsStore();
-      const track = player.currentTrackId
-        ? staticsStore.tracks[player.currentTrackId]
-        : null;
-      if (!track) return null;
+    try {
+      if (isLocalOutput.value) {
+        const player = usePlayerStore();
+        const staticsStore = useStaticsStore();
+        if (!staticsStore?.tracks) return null;
+        const track = player.currentTrackId
+          ? staticsStore.tracks[player.currentTrackId]
+          : null;
+        if (!track || !track.id) return null;
 
-      const album = track.album_id ? staticsStore.albums[track.album_id] : null;
-      const artist = track.artist_id
-        ? staticsStore.artists[track.artist_id]
-        : null;
+        const album = track.album_id && staticsStore.albums ? staticsStore.albums[track.album_id] : null;
+        const artist = track.artist_id && staticsStore.artists
+          ? staticsStore.artists[track.artist_id]
+          : null;
 
-      return {
-        id: track.id,
-        title: track.title,
-        artist_id: track.artist_id || "",
-        artist_name: artist?.name || "Unknown Artist",
-        album_id: track.album_id || "",
-        album_title: album?.name || "Unknown Album",
-        duration: track.duration || 0,
-        track_number: track.track_number,
-        image_id: album?.image_id || null,
-      };
+        return {
+          id: track.id,
+          title: track.title,
+          artist_id: track.artist_id || "",
+          artist_name: artist?.name || "Unknown Artist",
+          album_id: track.album_id || "",
+          album_title: album?.name || "Unknown Album",
+          duration: track.duration || 0,
+          track_number: track.track_number,
+          image_id: album?.image_id || null,
+        };
+      }
+      return remoteState.value?.current_track || null;
+    } catch (e) {
+      console.error("[RemotePlayback] currentTrack computed error:", e);
+      return null;
     }
-    return remoteState.value?.current_track || null;
   });
 
   const currentPosition = computed(() => {
@@ -732,10 +797,10 @@ export const useRemotePlaybackStore = defineStore("remotePlayback", () => {
     const staticsStore = useStaticsStore();
     let currentTrackData = null;
 
-    if (player.currentTrackId) {
+    if (player.currentTrackId && staticsStore.tracks) {
       const track = staticsStore.tracks[player.currentTrackId];
-      const album = track?.album_id ? staticsStore.albums[track.album_id] : null;
-      const artist = track?.artist_id
+      const album = track?.album_id && staticsStore.albums ? staticsStore.albums[track.album_id] : null;
+      const artist = track?.artist_id && staticsStore.artists
         ? staticsStore.artists[track.artist_id]
         : null;
 
@@ -800,7 +865,7 @@ export const useRemotePlaybackStore = defineStore("remotePlayback", () => {
     // Store the pending seek position before setting the playlist
     // The player's onload callback will handle seeking when ready
     if (state.position > 0) {
-      const track = staticsStore.tracks[trackIds[startIndex]];
+      const track = staticsStore.tracks?.[trackIds[startIndex]];
       if (track?.duration) {
         // Store pending seek as percentage for player.js to handle on load
         player.setPendingTransferSeek(state.position / track.duration);
@@ -873,6 +938,10 @@ export const useRemotePlaybackStore = defineStore("remotePlayback", () => {
   function cleanup() {
     stopBroadcasting();
     stopInterpolation();
+    if (pendingBroadcastRetry) {
+      clearTimeout(pendingBroadcastRetry);
+      pendingBroadcastRetry = null;
+    }
     ws.unregisterHandler("playback");
   }
 
