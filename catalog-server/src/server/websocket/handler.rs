@@ -126,11 +126,17 @@ async fn handle_socket(
         _ => DeviceType::Web, // Default to web for unknown types
     };
 
+    // Look up device name from playback session manager before disconnecting
+    let device_name = state
+        .playback_session_manager
+        .get_device_name(user_id, device_id)
+        .await
+        .unwrap_or_else(|| "Unknown".to_string());
+
     // Notify playback session manager of disconnect
-    // Note: device_name is tracked internally by PlaybackSessionManager
     state
         .playback_session_manager
-        .handle_device_disconnect(user_id, device_id, "Unknown", device_type)
+        .handle_device_disconnect(user_id, device_id, &device_name, device_type)
         .await;
 
     state

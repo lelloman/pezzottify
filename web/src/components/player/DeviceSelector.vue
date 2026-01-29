@@ -7,11 +7,19 @@ const remotePlayback = useRemotePlaybackStore();
 const showDropdown = ref(false);
 const selectorRef = ref(null);
 
-const currentDevice = computed(() =>
+// Current device (this device)
+const thisDevice = computed(() =>
   remotePlayback.devices.find((d) => d.id === remotePlayback.deviceId),
 );
 
-const audioDevice = computed(() => remotePlayback.audioDevice);
+// Currently selected output device
+const currentOutputDevice = computed(() => remotePlayback.currentOutputDevice);
+
+// Is output going to a remote device?
+const isRemoteOutput = computed(() => !remotePlayback.isLocalOutput);
+
+// Other devices available as output options
+const otherDevices = computed(() => remotePlayback.otherDevices);
 
 function toggleDropdown() {
   showDropdown.value = !showDropdown.value;
@@ -27,17 +35,13 @@ function handleClickOutside(event) {
   }
 }
 
-function selectDevice(device) {
-  if (device.is_audio_device) {
-    closeDropdown();
-    return; // Already audio device
-  }
-  if (device.id === remotePlayback.deviceId) {
-    // This device wants to become audio device
-    if (!remotePlayback.isAudioDevice && remotePlayback.sessionExists) {
-      remotePlayback.requestBecomeAudioDevice();
-    }
-  }
+function selectOutput(deviceId) {
+  remotePlayback.selectOutputDevice(deviceId);
+  closeDropdown();
+}
+
+function selectThisDevice() {
+  remotePlayback.selectOutputDevice(null);
   closeDropdown();
 }
 
@@ -69,45 +73,52 @@ onUnmounted(() => {
       v-if="remotePlayback.devices.length > 0"
       class="device-button"
       @click="toggleDropdown"
-      :class="{ 'remote-active': remotePlayback.isRemoteMode }"
+      :class="{ 'remote-output': isRemoteOutput }"
       :title="
-        audioDevice && audioDevice.id !== remotePlayback.deviceId
-          ? `Playing on ${audioDevice.name}`
-          : 'Connected devices'
+        isRemoteOutput
+          ? `Playing on ${currentOutputDevice?.name}`
+          : 'Select output device'
       "
     >
-      <span class="device-icon">{{ getDeviceIcon(currentDevice?.device_type) }}</span>
-      <span
-        v-if="audioDevice && audioDevice.id !== remotePlayback.deviceId"
-        class="remote-indicator"
-      >
-        •
-      </span>
+      <span class="device-icon">{{ getDeviceIcon(currentOutputDevice?.device_type) }}</span>
+      <span v-if="isRemoteOutput" class="remote-indicator"> • </span>
     </button>
 
     <div v-if="showDropdown" class="device-dropdown">
-      <div class="dropdown-header">Connected devices</div>
+      <div class="dropdown-header">Select output device</div>
 
+      <!-- This device option -->
       <div
-        v-for="device in remotePlayback.devices"
+        v-if="thisDevice"
+        class="device-item"
+        :class="{ active: remotePlayback.isLocalOutput }"
+        @click="selectThisDevice"
+      >
+        <span class="device-icon">{{ getDeviceIcon(thisDevice.device_type) }}</span>
+        <span class="device-name">{{ thisDevice.name }}</span>
+        <span v-if="remotePlayback.isLocalOutput" class="playing-indicator">Playing</span>
+        <span class="this-device">(this device)</span>
+      </div>
+
+      <!-- Other devices -->
+      <div
+        v-for="device in otherDevices"
         :key="device.id"
         class="device-item"
-        :class="{
-          active: device.is_audio_device,
-          current: device.id === remotePlayback.deviceId,
-        }"
-        @click="selectDevice(device)"
+        :class="{ active: remotePlayback.selectedOutputDevice === device.id }"
+        @click="selectOutput(device.id)"
       >
         <span class="device-icon">{{ getDeviceIcon(device.device_type) }}</span>
         <span class="device-name">{{ device.name }}</span>
-        <span v-if="device.is_audio_device" class="playing-indicator">Playing</span>
-        <span v-if="device.id === remotePlayback.deviceId" class="this-device"
-          >(this device)</span
+        <span
+          v-if="remotePlayback.selectedOutputDevice === device.id"
+          class="playing-indicator"
+          >Playing</span
         >
       </div>
 
-      <div v-if="remotePlayback.devices.length === 0" class="no-devices">
-        No devices connected
+      <div v-if="remotePlayback.devices.length <= 1" class="no-devices">
+        No other devices connected
       </div>
     </div>
   </div>
@@ -136,7 +147,7 @@ onUnmounted(() => {
   color: var(--text-base);
 }
 
-.device-button.remote-active {
+.device-button.remote-output {
   color: var(--spotify-green);
 }
 

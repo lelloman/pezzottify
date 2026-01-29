@@ -15,6 +15,7 @@ import com.lelloman.pezzottify.android.domain.device.DeviceInfoProvider
 import com.lelloman.pezzottify.android.domain.impression.RecordImpressionUseCase
 import com.lelloman.pezzottify.android.domain.notifications.NotificationRepository
 import com.lelloman.pezzottify.android.domain.notifications.getAlbumId
+import com.lelloman.pezzottify.android.domain.playback.RemotePlaybackManager
 import com.lelloman.pezzottify.android.domain.player.PezzottifyPlayer
 import com.lelloman.pezzottify.android.domain.player.RepeatMode
 import com.lelloman.pezzottify.android.domain.remoteapi.RemoteApiClient
@@ -95,6 +96,7 @@ import com.lelloman.pezzottify.android.ui.screen.main.settings.bugreport.BugRepo
 import com.lelloman.pezzottify.android.ui.screen.main.settings.bugreport.SubmitResult
 import com.lelloman.pezzottify.android.ui.screen.main.settings.logviewer.LogViewerScreenViewModel
 import com.lelloman.pezzottify.android.ui.screen.main.whatsnew.WhatsNewScreenViewModel
+import com.lelloman.pezzottify.android.ui.screen.player.OutputDeviceUi
 import com.lelloman.pezzottify.android.ui.screen.player.PlayerScreenViewModel
 import com.lelloman.pezzottify.android.ui.screen.player.RepeatModeUi
 import com.lelloman.pezzottify.android.ui.screen.queue.QueueScreenViewModel
@@ -1215,6 +1217,7 @@ class InteractorsModule {
     fun providePlayerScreenInteractor(
         player: PezzottifyPlayer,
         playbackMetadataProvider: com.lelloman.pezzottify.android.domain.player.PlaybackMetadataProvider,
+        remotePlaybackManager: RemotePlaybackManager,
     ): PlayerScreenViewModel.Interactor =
         object : PlayerScreenViewModel.Interactor {
             override fun getPlaybackState(): Flow<PlayerScreenViewModel.Interactor.PlaybackState?> =
@@ -1358,6 +1361,29 @@ class InteractorsModule {
             override fun cycleRepeatMode() = player.cycleRepeatMode()
 
             override fun retry() = player.retry()
+
+            override fun getDeviceState(): Flow<PlayerScreenViewModel.Interactor.DeviceState> =
+                remotePlaybackManager.devices
+                    .combine(remotePlaybackManager.selectedOutputDevice) { devices, selectedId ->
+                        devices to selectedId
+                    }
+                    .combine(remotePlaybackManager.isLocalOutput) { (devices, selectedId), isLocal ->
+                        PlayerScreenViewModel.Interactor.DeviceState(
+                            devices = devices.map { device ->
+                                OutputDeviceUi(
+                                    id = device.id,
+                                    name = device.name,
+                                    deviceType = device.deviceType,
+                                    isAudioDevice = device.isAudioDevice,
+                                )
+                            },
+                            selectedDeviceId = selectedId,
+                            isLocalOutput = isLocal,
+                        )
+                    }
+
+            override fun selectOutputDevice(deviceId: Long?) =
+                remotePlaybackManager.selectOutputDevice(deviceId)
         }
 
     @Provides

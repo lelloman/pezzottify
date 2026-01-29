@@ -925,6 +925,14 @@ impl PlaybackSessionManager {
             .map(|s| s.audio_device_id.is_some())
             .unwrap_or(false)
     }
+
+    /// Get the name of a connected device.
+    pub async fn get_device_name(&self, user_id: usize, device_id: usize) -> Option<String> {
+        let devices = self.devices.read().await;
+        devices
+            .get(&(user_id, device_id))
+            .map(|meta| meta.name.clone())
+    }
 }
 
 /// Helper struct for handling transfer timeouts without holding the main manager.
@@ -1054,6 +1062,7 @@ mod tests {
             position: 0.0,
             is_playing: false,
             volume: 1.0,
+            muted: false,
             shuffle: false,
             repeat: RepeatMode::Off,
             timestamp: 0,
@@ -1113,6 +1122,7 @@ mod tests {
             position: 30.0,
             is_playing: true,
             volume: 0.8,
+            muted: false,
             shuffle: false,
             repeat: RepeatMode::Off,
             timestamp: 1000,

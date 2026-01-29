@@ -4,6 +4,8 @@ import com.lelloman.pezzottify.android.domain.auth.AuthStore
 import com.lelloman.pezzottify.android.domain.impression.ImpressionSynchronizer
 import com.lelloman.pezzottify.android.domain.listening.ListeningEventSynchronizer
 import com.lelloman.pezzottify.android.domain.listening.ListeningTracker
+import com.lelloman.pezzottify.android.domain.playback.PlaybackSessionIntegration
+import com.lelloman.pezzottify.android.domain.playback.PlaybackWebSocketHandler
 import com.lelloman.pezzottify.android.domain.player.PezzottifyPlayer
 import com.lelloman.pezzottify.android.domain.settings.UserSettingsSynchronizer
 import com.lelloman.pezzottify.android.domain.statics.StaticsSynchronizer
@@ -64,4 +66,12 @@ abstract class AppInitializersModule {
     @Binds
     @IntoSet
     internal abstract fun bindsSyncWebSocketHandler(handler: SyncWebSocketHandler): AppInitializer
+
+    @Binds
+    @IntoSet
+    internal abstract fun bindsPlaybackWebSocketHandler(handler: PlaybackWebSocketHandler): AppInitializer
+
+    @Binds
+    @IntoSet
+    internal abstract fun bindsPlaybackSessionIntegration(integration: PlaybackSessionIntegration): AppInitializer
 }

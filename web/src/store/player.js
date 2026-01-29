@@ -268,6 +268,14 @@ export const usePlayerStore = defineStore("player", () => {
   };
   /* Playlist starters */
 
+  // Pending seek from remote playback transfer (set by remotePlayback store via setPendingTransferSeek)
+  let pendingTransferSeek = null;
+
+  // Set a pending seek position for the next track load (used by remote playback transfer)
+  const setPendingTransferSeek = (percentage) => {
+    pendingTransferSeek = percentage;
+  };
+
   const loadTrack = (index) => {
     if (sound) {
       sound.unload();
@@ -291,10 +299,19 @@ export const usePlayerStore = defineStore("player", () => {
         console.log("PlayerStore onplay()");
       },
       onload: () => {
+        // Handle pending seek from persistence
         if (pendingPercentSeek) {
           requestAnimationFrame(() => {
             seekToPercentage(pendingPercentSeek);
             pendingPercentSeek = null;
+            updateProgress();
+          });
+        }
+        // Handle pending seek from remote playback transfer
+        if (pendingTransferSeek !== null) {
+          requestAnimationFrame(() => {
+            seekToPercentage(pendingTransferSeek);
+            pendingTransferSeek = null;
             updateProgress();
           });
         }
@@ -652,5 +669,6 @@ export const usePlayerStore = defineStore("player", () => {
     moveTrack,
     addTracksToPlaylist,
     removeTrackFromPlaylist,
+    setPendingTransferSeek,
   };
 });
