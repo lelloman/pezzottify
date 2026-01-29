@@ -4,7 +4,7 @@
       <button
         :class="computePreviousPlaylistButtonClasses"
         @click.stop="seekPlaybackHistory(-1)"
-        :disabled="!player.canGoToPreviousPlaylist"
+        :disabled="!playback.canGoToPreviousPlaylist"
         aria-label="Previous playlist"
       >
         <ChevronLeft class="navIcon" />
@@ -17,7 +17,7 @@
       <button
         :class="computeNextPlaylistButtonClasses"
         @click.stop="seekPlaybackHistory(1)"
-        :disabled="!player.canGoToNextPlaylist"
+        :disabled="!playback.canGoToNextPlaylist"
         aria-label="Next playlist"
       >
         <ChevronRight class="navIcon" />
@@ -51,7 +51,7 @@
 <script setup>
 import "@/assets/main.css";
 import { watch, ref, computed } from "vue";
-import { usePlayerStore } from "@/store/player";
+import { usePlaybackStore } from "@/store/playback";
 import TrackContextMenu from "@/components/common/contextmenu/TrackContextMenu.vue";
 import ChevronLeft from "@/components/icons/ChevronLeft.vue";
 import ChevronRight from "@/components/icons/ChevronRight.vue";
@@ -65,12 +65,12 @@ const playingContext = ref({
   text: "Currently Playing",
 });
 
-const player = usePlayerStore();
+const playback = usePlaybackStore();
 
 const tracksVModel = ref([]);
 
 const handleClick = (index) => {
-  player.loadTrackIndex(index);
+  playback.loadTrackIndex(index);
 };
 
 const trackContextMenuRef = ref(null);
@@ -82,36 +82,36 @@ const openContextMenu = (event, track, trackIndex) => {
 
 const seekPlaybackHistory = (direction) => {
   if (direction == 1) {
-    player.goToNextPlaylist();
+    playback.goToNextPlaylist();
   } else {
-    player.goToPreviousPlaylist();
+    playback.goToPreviousPlaylist();
   }
 };
 
 const handleDrop = (event) => {
   const { newIndex, oldIndex } = event;
   console.log(event);
-  player.moveTrack(oldIndex, newIndex);
+  playback.moveTrack(oldIndex, newIndex);
 };
 
 const computeNextPlaylistButtonClasses = computed(() => {
   return {
     navButton: true,
-    navButtonEnabled: player.canGoToNextPlaylist,
-    navButtonDisabled: !player.canGoToNextPlaylist,
+    navButtonEnabled: playback.canGoToNextPlaylist,
+    navButtonDisabled: !playback.canGoToNextPlaylist,
   };
 });
 
 const computePreviousPlaylistButtonClasses = computed(() => {
   return {
     navButton: true,
-    navButtonEnabled: player.canGoToPreviousPlaylist,
-    navButtonDisabled: !player.canGoToPreviousPlaylist,
+    navButtonEnabled: playback.canGoToPreviousPlaylist,
+    navButtonDisabled: !playback.canGoToPreviousPlaylist,
   };
 });
 
 watch(
-  () => player.currentTrackIndex,
+  () => playback.currentTrackIndex,
   (index) => {
     currentIndex.value = index;
   },
@@ -119,15 +119,15 @@ watch(
 );
 
 watch(
-  () => player.currentPlaylist,
+  () => playback.currentPlaylist,
   (playlist) => {
     if (playlist && playlist.tracksIds) {
       let playingContextText = playlist.type;
-      if (playlist.type == player.PLAYBACK_CONTEXTS.album) {
+      if (playlist.type == playback.PLAYBACK_CONTEXTS.album) {
         playingContextText = "Album: " + playlist.context.name;
-      } else if (playlist.type == player.PLAYBACK_CONTEXTS.userPlaylist) {
+      } else if (playlist.type == playback.PLAYBACK_CONTEXTS.userPlaylist) {
         playingContextText = "Playlist: " + playlist.context.name;
-      } else if (playlist.type == player.PLAYBACK_CONTEXTS.userMix) {
+      } else if (playlist.type == playback.PLAYBACK_CONTEXTS.userMix) {
         playingContextText = "Your mix";
       }
       playingContext.value.text = playingContextText;

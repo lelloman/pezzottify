@@ -1,6 +1,6 @@
 <script setup>
 import { RouterView } from "vue-router";
-import { usePlayerStore } from "./store/player";
+import { usePlaybackStore } from "./store/playback";
 import { useAuthStore } from "./store/auth";
 import { useIngestionStore } from "./store/ingestion";
 import { onMounted, onUnmounted, computed, watch } from "vue";
@@ -8,7 +8,7 @@ import ChatButton from "./components/chat/ChatButton.vue";
 import ChatPanel from "./components/chat/ChatPanel.vue";
 import IngestionMonitorModal from "./components/ingestion/IngestionMonitorModal.vue";
 
-const player = usePlayerStore();
+const playback = usePlaybackStore();
 const authStore = useAuthStore();
 const ingestionStore = useIngestionStore();
 
@@ -34,7 +34,7 @@ function handleKeyDown(event) {
     event.target.tagName === "TEXTAREA" ||
     event.target.isContentEditable;
   if (!isEditable && event.key === " ") {
-    player.playPause();
+    playback.playPause();
   }
 }
 onMounted(() => {

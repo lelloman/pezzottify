@@ -13,7 +13,7 @@
 <script setup>
 import { computed } from "vue";
 import { useRouter } from "vue-router";
-import { usePlayerStore } from "@/store/player";
+import { usePlaybackStore } from "@/store/playback";
 import { computedImageUrl, formatDuration } from "@/utils";
 import MultiSourceImage from "@/components/common/MultiSourceImage.vue";
 import PlayIcon from "@/components/icons/PlayIcon.vue";
@@ -26,7 +26,7 @@ const props = defineProps({
 });
 
 const router = useRouter();
-const playerStore = usePlayerStore();
+const playbackStore = usePlaybackStore();
 
 // Image endpoint takes album ID (tracks use their album's image)
 const imageUrl = computedImageUrl(props.track.album_id);
@@ -56,8 +56,7 @@ const handlePlayClick = () => {
       ? props.track.artist_names.map((name) => ["", name])
       : [],
   };
-  playerStore.setTrack(trackForPlayer);
-  playerStore.setIsPlaying(true);
+  playbackStore.setTrack(trackForPlayer);
 };
 </script>
 

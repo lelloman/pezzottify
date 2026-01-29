@@ -31,7 +31,7 @@
 import "@/assets/search.css";
 import { ref, computed } from "vue";
 import { computedImageUrl, formatDuration } from "@/utils";
-import { usePlayerStore } from "@/store/player";
+import { usePlaybackStore } from "@/store/playback";
 import { useRouter } from "vue-router";
 import PlayIcon from "@/components/icons/PlayIcon.vue";
 import ClickableArtistsNames from "@/components/common/ClickableArtistsNames.vue";
@@ -70,7 +70,7 @@ const computeRowClasses = computed(() => {
   };
 });
 
-const playerStore = usePlayerStore();
+const playbackStore = usePlaybackStore();
 const router = useRouter();
 
 const trackContextMenuRef = ref(null);
@@ -90,8 +90,7 @@ const handlePlayClick = (event) => {
   }
   console.log("play click");
   console.log(event);
-  playerStore.setTrack(event);
-  playerStore.setIsPlaying(true);
+  playbackStore.setTrack(event);
 };
 
 const handleImageClick = () => {

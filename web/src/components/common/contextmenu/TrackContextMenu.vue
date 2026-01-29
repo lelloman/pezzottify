@@ -8,7 +8,7 @@ import ContextMenu from "@/components/common/contextmenu/ContextMenu.vue";
 import { ref, markRaw } from "vue";
 import PlaylistPlusIcon from "@/components/icons/PlaylistPlusIcon.vue";
 import { useUserStore } from "@/store/user";
-import { usePlayerStore } from "@/store/player";
+import { usePlaybackStore } from "@/store/playback";
 import PlaylistCancelIcon from "@/components/icons/PlaylistCancelIcon.vue";
 import TrashOutlineIcon from "@/components/icons/TrashOutlineIcon.vue";
 
@@ -29,7 +29,7 @@ const props = defineProps({
 
 const contextMenu = ref(null);
 const userStore = useUserStore();
-const player = usePlayerStore();
+const playback = usePlaybackStore();
 
 const trackId = ref(null);
 const trackIndex = ref(null);
@@ -37,7 +37,7 @@ const trackIndex = ref(null);
 const handleAddToQueueClick = () => {
   console.log("TrackContextMenu handleAddToQueueClick" + trackId.value);
   if (trackId.value) {
-    player.addTracksToPlaylist([trackId.value]);
+    playback.addTracksToPlaylist([trackId.value]);
   }
 };
 
@@ -95,7 +95,7 @@ if (props.canRemoveFromQueue) {
     name: "Remove from queue",
     action: () => {
       if (Number.isInteger(trackIndex.value)) {
-        player.removeTrackFromPlaylist(trackIndex.value);
+        playback.removeTrackFromPlaylist(trackIndex.value);
       }
     },
   });

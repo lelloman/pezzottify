@@ -13,7 +13,7 @@
  * Use ui.help to get detailed documentation for a category.
  */
 
-import { usePlayerStore } from '../store/player';
+import { usePlaybackStore } from '../store/playback';
 import { useUserStore } from '../store/user';
 import { useStaticsStore } from '../store/statics';
 import router from '../router';
@@ -234,17 +234,17 @@ const tools = [
       },
     },
     execute: async (args) => {
-      const playerStore = usePlayerStore();
+      const playbackStore = usePlaybackStore();
       if (args.trackId) {
         const staticsStore = useStaticsStore();
         const track = await staticsStore.waitTrackData(args.trackId);
         if (track) {
-          playerStore.setTrack(track);
+          playbackStore.setTrack(track);
           return { success: true, message: `Now playing: ${track.name}` };
         }
         return { success: false, error: 'Track not found' };
       }
-      playerStore.setIsPlaying(true);
+      playbackStore.setIsPlaying(true);
       return { success: true, message: 'Playback resumed' };
     },
   },
@@ -253,8 +253,8 @@ const tools = [
     description: 'Pause playback.',
     inputSchema: { type: 'object', properties: {} },
     execute: async () => {
-      const playerStore = usePlayerStore();
-      playerStore.setIsPlaying(false);
+      const playbackStore = usePlaybackStore();
+      playbackStore.setIsPlaying(false);
       return { success: true, message: 'Playback paused' };
     },
   },
@@ -263,9 +263,9 @@ const tools = [
     description: 'Toggle play/pause.',
     inputSchema: { type: 'object', properties: {} },
     execute: async () => {
-      const playerStore = usePlayerStore();
-      playerStore.playPause();
-      return { success: true, playing: playerStore.isPlaying };
+      const playbackStore = usePlaybackStore();
+      playbackStore.playPause();
+      return { success: true, playing: playbackStore.isPlaying };
     },
   },
   {
@@ -273,8 +273,8 @@ const tools = [
     description: 'Skip to next track.',
     inputSchema: { type: 'object', properties: {} },
     execute: async () => {
-      const playerStore = usePlayerStore();
-      playerStore.skipNextTrack();
+      const playbackStore = usePlaybackStore();
+      playbackStore.skipNextTrack();
       return { success: true, message: 'Skipped to next track' };
     },
   },
@@ -283,8 +283,8 @@ const tools = [
     description: 'Go to previous track.',
     inputSchema: { type: 'object', properties: {} },
     execute: async () => {
-      const playerStore = usePlayerStore();
-      playerStore.skipPreviousTrack();
+      const playbackStore = usePlaybackStore();
+      playbackStore.skipPreviousTrack();
       return { success: true, message: 'Went to previous track' };
     },
   },
@@ -299,11 +299,11 @@ const tools = [
       required: ['trackIds'],
     },
     execute: async (args) => {
-      const playerStore = usePlayerStore();
+      const playbackStore = usePlaybackStore();
       if (!args.trackIds || args.trackIds.length === 0) {
         return { success: false, error: 'No track IDs provided' };
       }
-      playerStore.addTracksToPlaylist(args.trackIds);
+      playbackStore.addTracksToPlaylist(args.trackIds);
       return { success: true, message: `Added ${args.trackIds.length} track(s) to queue` };
     },
   },
@@ -318,8 +318,8 @@ const tools = [
       required: ['volume'],
     },
     execute: async (args) => {
-      const playerStore = usePlayerStore();
-      playerStore.setVolume(args.volume);
+      const playbackStore = usePlaybackStore();
+      playbackStore.setVolume(args.volume);
       return { success: true, volume: args.volume };
     },
   },
@@ -328,24 +328,24 @@ const tools = [
     description: 'Get current track info.',
     inputSchema: { type: 'object', properties: {} },
     execute: async () => {
-      const playerStore = usePlayerStore();
+      const playbackStore = usePlaybackStore();
       const staticsStore = useStaticsStore();
 
-      if (!playerStore.currentTrackId) {
+      if (!playbackStore.currentTrackId) {
         return { success: true, currentTrack: null, message: 'No track currently playing' };
       }
 
-      const track = await staticsStore.waitTrackData(playerStore.currentTrackId);
+      const track = await staticsStore.waitTrackData(playbackStore.currentTrackId);
       return {
         success: true,
         currentTrack: {
-          id: playerStore.currentTrackId,
+          id: playbackStore.currentTrackId,
           name: track?.name,
-          isPlaying: playerStore.isPlaying,
-          progressPercent: playerStore.progressPercent,
-          progressSec: playerStore.progressSec,
-          volume: playerStore.volume,
-          muted: playerStore.muted,
+          isPlaying: playbackStore.isPlaying,
+          progressPercent: playbackStore.progressPercent,
+          progressSec: playbackStore.progressSec,
+          volume: playbackStore.volume,
+          muted: playbackStore.muted,
         },
       };
     },
@@ -361,8 +361,8 @@ const tools = [
       required: ['albumId'],
     },
     execute: async (args) => {
-      const playerStore = usePlayerStore();
-      await playerStore.setAlbumId(args.albumId);
+      const playbackStore = usePlaybackStore();
+      await playbackStore.setAlbumId(args.albumId);
       return { success: true, message: 'Album playback started' };
     },
   },
@@ -378,7 +378,7 @@ const tools = [
     },
     execute: async (args) => {
       const userStore = useUserStore();
-      const playerStore = usePlayerStore();
+      const playbackStore = usePlaybackStore();
 
       const playlist = userStore.playlistsData?.by_id?.[args.playlistId];
       if (!playlist) {
@@ -392,7 +392,7 @@ const tools = [
         return { success: false, error: 'Playlist is empty' };
       }
 
-      await playerStore.setUserPlaylist(playlist);
+      await playbackStore.setUserPlaylist(playlist);
       return {
         success: true,
         message: `Now playing playlist "${playlist.name}" with ${playlist.tracks.length} track(s)`,

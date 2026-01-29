@@ -11,7 +11,7 @@
       <div class="trackNamesColumn">
         <TrackName v-if="displayTrack" :track="displayTrack" :infiniteAnimation="true" />
         <LoadClickableArtistsNames v-if="artists.length > 0" :artistsIds="artists" />
-        <span v-else-if="remoteArtistName" class="remoteArtistName">{{ remoteArtistName }}</span>
+        <span v-else-if="artistName" class="artistName">{{ artistName }}</span>
       </div>
     </div>
     <div class="playerControlsColumn">
@@ -19,13 +19,13 @@
         <ControlIconButton :action="handleRewind10Sec" :icon="Rewind10Sec" />
         <ControlIconButton :action="handleSkipPrevious" :icon="SkipPrevious" />
         <ControlIconButton
-          v-if="!isPlaying"
+          v-if="!playback.isPlaying"
           :action="handlePlayPause"
           :icon="PlayIcon"
           :big="true"
         />
         <ControlIconButton
-          v-if="isPlaying"
+          v-if="playback.isPlaying"
           :action="handlePlayPause"
           :icon="PauseIcon"
           :big="true"
@@ -49,12 +49,12 @@
     <div class="extraControlsRow">
       <DeviceSelector />
       <ControlIconButton
-        v-if="isMuted"
+        v-if="playback.muted"
         :action="handleVolumeOn"
         :icon="VolumeOffIcon"
       />
       <ControlIconButton
-        v-if="!isMuted"
+        v-if="!playback.muted"
         :action="handleVolumeOff"
         :icon="VolumeOnIcon"
       />
@@ -72,8 +72,8 @@
 
 <script setup>
 import { computed, ref, watch, h } from "vue";
-import { usePlayerStore } from "@/store/player";
-import { storeToRefs } from "pinia";
+import { usePlaybackStore } from "@/store/playback";
+import { useDevicesStore } from "@/store/devices";
 import { formatDuration, chooseAlbumCoverImageUrl, formatImageUrl } from "@/utils";
 import PlayIcon from "./icons/PlayIcon.vue";
 import PauseIcon from "./icons/PauseIcon.vue";
@@ -90,7 +90,6 @@ import LoadClickableArtistsNames from "@/components/common/LoadClickableArtistsN
 import { useRouter } from "vue-router";
 import TrackName from "./common/TrackName.vue";
 import { useStaticsStore } from "@/store/statics";
-import { useRemotePlaybackStore } from "@/store/remotePlayback";
 import DeviceSelector from "./player/DeviceSelector.vue";
 
 const ControlIconButton = {
@@ -115,51 +114,35 @@ const ControlIconButton = {
 };
 
 const router = useRouter();
-const player = usePlayerStore();
+const playback = usePlaybackStore();
+const devices = useDevicesStore();
 const staticsStore = useStaticsStore();
-const remotePlayback = useRemotePlaybackStore();
 
 // Track whether there's any playback to display
 const hasPlayback = computed(() => {
-  // Show player if we have local playback OR remote session
-  return player.currentTrackId || remotePlayback.sessionExists;
+  return playback.currentTrackId || devices.sessionExists;
 });
-
-// Use unified state from remotePlayback (handles local/remote transparently)
-const isPlaying = computed(() => remotePlayback.isPlaying);
-const currentProgressPercent = computed(() => remotePlayback.currentProgressPercent);
-const currentPosition = computed(() => remotePlayback.currentPosition);
-
-// Track info for display - combines local and remote
-const displayTrack = ref(null);
-const artists = ref([]);
-const remoteArtistName = ref(null); // For remote playback - already resolved name
-const imageUrls = ref([]);
-const duration = ref("");
-const currentAlbumId = ref(null);
 
 // Progress dragging state
 const draggingTrackPercent = ref(null);
 const combinedProgressPercent = computed(() => {
-  return draggingTrackPercent.value ?? currentProgressPercent.value;
+  return draggingTrackPercent.value ?? playback.progressPercent;
 });
 
-// Volume state
-const volumePercent = ref(0.0);
+// Volume dragging state
 const draggingVolumePercent = ref(null);
-const isMuted = ref(false);
-
 const computedVolumePercent = computed(() => {
   return (
-    draggingVolumePercent.value ?? (isMuted.value ? 0.0 : volumePercent.value)
+    draggingVolumePercent.value ?? (playback.muted ? 0.0 : playback.volume)
   );
 });
 
-// Get refs for local player state (for watching)
-const { currentTrackId, volume, muted } = storeToRefs(player);
-
-let trackDataUnwatcher = null;
-let albumDataUnwatcher = null;
+// Track display state
+const displayTrack = ref(null);
+const artists = ref([]);
+const artistName = ref(null);
+const imageUrls = ref([]);
+const duration = ref("");
 
 const formatTime = (timeInSeconds) => {
   const hours = Math.floor(timeInSeconds / 3600);
@@ -171,7 +154,7 @@ const formatTime = (timeInSeconds) => {
   return `${pad(hours)}:${pad(minutes)}:${pad(seconds)}`;
 };
 
-const formattedTime = computed(() => formatTime(currentPosition.value));
+const formattedTime = computed(() => formatTime(playback.progressSec));
 
 const handleClickOnAlbumCover = () => {
   if (displayTrack.value && displayTrack.value.album_id) {
@@ -180,38 +163,36 @@ const handleClickOnAlbumCover = () => {
 };
 
 // ============================================
-// Playback controls - all route through remotePlayback
+// Playback controls - all route through playback store
 // ============================================
 
 function handlePlayPause() {
-  console.log("BottomPlayer calling playPause()");
-  remotePlayback.playPause();
+  playback.playPause();
 }
 
 function handleSkipNext() {
-  remotePlayback.skipNext();
+  playback.skipNextTrack();
 }
 
 function handleSkipPrevious() {
-  remotePlayback.skipPrevious();
+  playback.skipPreviousTrack();
 }
 
 function handleForward10Sec() {
-  remotePlayback.forward10Sec();
+  playback.forward10Sec();
 }
 
 function handleRewind10Sec() {
-  remotePlayback.rewind10Sec();
+  playback.rewind10Sec();
 }
 
 function handleStop() {
-  remotePlayback.stop();
+  playback.stop();
 }
 
 // Progress bar handling
 const startDraggingTrackProgress = () => {
-  console.log("startDragging");
-  draggingTrackPercent.value = currentProgressPercent.value;
+  draggingTrackPercent.value = playback.progressPercent;
 };
 
 const updateTrackProgress = (event) => {
@@ -220,17 +201,14 @@ const updateTrackProgress = (event) => {
 
 const handleSeek = () => {
   if (draggingTrackPercent.value !== null) {
-    const targetSeekPercent = draggingTrackPercent.value;
-    console.log("seekTrack target value: " + targetSeekPercent);
-    remotePlayback.seekToPercentage(targetSeekPercent);
+    playback.seekToPercentage(draggingTrackPercent.value);
     draggingTrackPercent.value = null;
-    console.log("stopDragging");
   }
 };
 
 // Volume handling
 const startDraggingVolumeProgress = () => {
-  draggingVolumePercent.value = volumePercent.value;
+  draggingVolumePercent.value = playback.volume;
 };
 
 const updateVolumeProgress = (event) => {
@@ -238,185 +216,105 @@ const updateVolumeProgress = (event) => {
 };
 
 const handleVolumeOn = () => {
-  remotePlayback.setMuted(false);
+  playback.setMuted(false);
 };
 
 const handleVolumeOff = () => {
-  remotePlayback.setMuted(true);
+  playback.setMuted(true);
 };
 
 const handleSetVolume = () => {
   if (draggingVolumePercent.value !== null) {
-    volumePercent.value = draggingVolumePercent.value;
+    playback.setVolume(draggingVolumePercent.value);
+    playback.setMuted(false);
     draggingVolumePercent.value = null;
-    console.log("BottomPlayer setVolume " + volumePercent.value);
-    remotePlayback.setVolume(volumePercent.value);
-    remotePlayback.setMuted(false);
   }
 };
 
 // ============================================
-// Watch track info - handles both local and remote
+// Watch current track from unified store
 // ============================================
 
-// Watch local track changes
+let trackDataUnwatcher = null;
+let albumDataUnwatcher = null;
+
 watch(
-  currentTrackId,
-  (newCurrentTrackId) => {
+  () => playback.currentTrack,
+  (track) => {
+    // Clean up existing watchers
     if (trackDataUnwatcher) {
       trackDataUnwatcher();
       trackDataUnwatcher = null;
     }
-
-    // Only watch local track if we're local output
-    if (newCurrentTrackId && remotePlayback.isLocalOutput) {
-      trackDataUnwatcher = watch(
-        staticsStore.getTrack(newCurrentTrackId),
-        (newCurrentTrackRef) => {
-          if (newCurrentTrackRef.item) {
-            const track = newCurrentTrackRef.item;
-            displayTrack.value = track;
-            artists.value = track.artists_ids || [];
-            duration.value = track.duration
-              ? formatDuration(track.duration)
-              : "";
-            currentAlbumId.value = track.album_id || null;
-          }
-        },
-        { immediate: true },
-      );
-    }
-  },
-  { immediate: true },
-);
-
-// Watch remote track changes
-watch(
-  () => remotePlayback.currentTrack,
-  (track) => {
-    if (!remotePlayback.isLocalOutput && track) {
-      displayTrack.value = {
-        id: track.id,
-        name: track.title,
-        title: track.title,
-        artists_ids: track.artist_id ? [track.artist_id] : [],
-        album_id: track.album_id,
-        duration: track.duration,
-      };
-      // For remote playback, use the pre-resolved artist name instead of IDs
-      artists.value = [];
-      remoteArtistName.value = track.artist_name || null;
-      duration.value = track.duration ? formatDuration(track.duration) : "";
-      // For remote playback, use image_id directly instead of fetching via album
-      if (track.image_id) {
-        imageUrls.value = [formatImageUrl(track.image_id)];
-      } else {
-        imageUrls.value = [];
-      }
-      // Don't set currentAlbumId - we're handling the image directly
-      currentAlbumId.value = null;
-    }
-  },
-  { deep: true, immediate: true },
-);
-
-// Watch output mode changes - reset track display appropriately
-watch(
-  () => remotePlayback.isLocalOutput,
-  (isLocal) => {
-    if (isLocal) {
-      // Switched to local - clear remote artist name, let the currentTrackId watcher handle the rest
-      remoteArtistName.value = null;
-      if (player.currentTrackId) {
-        // Trigger track watcher
-        const id = player.currentTrackId;
-        if (trackDataUnwatcher) {
-          trackDataUnwatcher();
-        }
-        trackDataUnwatcher = watch(
-          staticsStore.getTrack(id),
-          (ref) => {
-            if (ref.item) {
-              displayTrack.value = ref.item;
-              artists.value = ref.item.artists_ids || [];
-              duration.value = ref.item.duration
-                ? formatDuration(ref.item.duration)
-                : "";
-              currentAlbumId.value = ref.item.album_id || null;
-            }
-          },
-          { immediate: true },
-        );
-      }
-    }
-    // Remote case is handled by the remotePlayback.currentTrack watcher
-  },
-);
-
-// Album cover image handling
-watch(
-  currentAlbumId,
-  (newAlbumId) => {
     if (albumDataUnwatcher) {
       albumDataUnwatcher();
       albumDataUnwatcher = null;
     }
 
-    if (newAlbumId) {
-      albumDataUnwatcher = watch(
-        staticsStore.getAlbum(newAlbumId),
-        (albumRef) => {
-          if (albumRef && albumRef.item) {
-            imageUrls.value = chooseAlbumCoverImageUrl(albumRef.item);
+    if (!track) {
+      displayTrack.value = null;
+      artists.value = [];
+      artistName.value = null;
+      imageUrls.value = [];
+      duration.value = "";
+      return;
+    }
+
+    // For remote playback, track data is already resolved
+    if (!playback.isLocalOutput) {
+      displayTrack.value = {
+        id: track.id,
+        name: track.title,
+        title: track.title,
+        artists_ids: track.artistId ? [track.artistId] : [],
+        album_id: track.albumId,
+        duration: track.duration,
+      };
+      artists.value = [];
+      artistName.value = track.artistName || null;
+      duration.value = track.duration ? formatDuration(track.duration) : "";
+
+      if (track.imageId) {
+        imageUrls.value = [formatImageUrl(track.imageId)];
+      } else {
+        imageUrls.value = [];
+      }
+      return;
+    }
+
+    // For local playback, we need to resolve the track data
+    if (playback.currentTrackId) {
+      trackDataUnwatcher = watch(
+        staticsStore.getTrack(playback.currentTrackId),
+        (trackRef) => {
+          if (trackRef.item) {
+            const localTrack = trackRef.item;
+            displayTrack.value = localTrack;
+            artists.value = localTrack.artists_ids || [];
+            artistName.value = null;
+            duration.value = localTrack.duration
+              ? formatDuration(localTrack.duration)
+              : "";
+
+            // Watch album for cover image
+            if (localTrack.album_id && !albumDataUnwatcher) {
+              albumDataUnwatcher = watch(
+                staticsStore.getAlbum(localTrack.album_id),
+                (albumRef) => {
+                  if (albumRef && albumRef.item) {
+                    imageUrls.value = chooseAlbumCoverImageUrl(albumRef.item);
+                  }
+                },
+                { immediate: true }
+              );
+            }
           }
         },
-        { immediate: true },
+        { immediate: true }
       );
-    } else {
-      imageUrls.value = [];
     }
   },
-  { immediate: true },
-);
-
-// Volume state sync
-watch(
-  () => remotePlayback.currentVolume,
-  (newVolume) => {
-    if (newVolume !== undefined) {
-      volumePercent.value = newVolume;
-    }
-  },
-  { immediate: true },
-);
-
-watch(
-  () => remotePlayback.currentMuted,
-  (newMuted) => {
-    isMuted.value = newMuted;
-  },
-  { immediate: true },
-);
-
-// Also watch local muted state when in local mode
-watch(
-  muted,
-  (newMuted) => {
-    if (remotePlayback.isLocalOutput) {
-      isMuted.value = newMuted;
-    }
-  },
-  { immediate: true },
-);
-
-watch(
-  volume,
-  (newVolume) => {
-    if (remotePlayback.isLocalOutput && newVolume !== undefined) {
-      volumePercent.value = newVolume;
-    }
-  },
-  { immediate: true },
+  { immediate: true, deep: true }
 );
 </script>
 
@@ -498,7 +396,7 @@ watch(
   text-overflow: ellipsis;
 }
 
-.remoteArtistName {
+.artistName {
   font-size: var(--text-sm);
   color: var(--text-subdued);
   white-space: nowrap;

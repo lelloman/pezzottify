@@ -1,25 +1,30 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from "vue";
-import { useRemotePlaybackStore } from "@/store/remotePlayback";
+import { useDevicesStore } from "@/store/devices";
+import { usePlaybackStore } from "@/store/playback";
 
-const remotePlayback = useRemotePlaybackStore();
+const devices = useDevicesStore();
+const playback = usePlaybackStore();
 
 const showDropdown = ref(false);
 const selectorRef = ref(null);
 
 // Current device (this device)
-const thisDevice = computed(() =>
-  remotePlayback.devices.find((d) => d.id === remotePlayback.deviceId),
-);
+const thisDevice = computed(() => devices.thisDevice);
 
 // Currently selected output device
-const currentOutputDevice = computed(() => remotePlayback.currentOutputDevice);
+const currentOutputDevice = computed(() => {
+  if (playback.isLocalOutput) {
+    return devices.thisDevice;
+  }
+  return devices.devices.find((d) => d.id === playback.remoteDeviceId);
+});
 
 // Is output going to a remote device?
-const isRemoteOutput = computed(() => !remotePlayback.isLocalOutput);
+const isRemoteOutput = computed(() => !playback.isLocalOutput);
 
 // Other devices available as output options
-const otherDevices = computed(() => remotePlayback.otherDevices);
+const otherDevices = computed(() => devices.otherDevices);
 
 function toggleDropdown() {
   showDropdown.value = !showDropdown.value;
@@ -36,12 +41,12 @@ function handleClickOutside(event) {
 }
 
 function selectOutput(deviceId) {
-  remotePlayback.selectOutputDevice(deviceId);
+  playback.selectOutputDevice(deviceId);
   closeDropdown();
 }
 
 function selectThisDevice() {
-  remotePlayback.selectOutputDevice(null);
+  playback.selectOutputDevice(null);
   closeDropdown();
 }
 
@@ -70,7 +75,7 @@ onUnmounted(() => {
 <template>
   <div class="device-selector" ref="selectorRef">
     <button
-      v-if="remotePlayback.devices.length > 0"
+      v-if="devices.devices.length > 0"
       class="device-button"
       @click="toggleDropdown"
       :class="{ 'remote-output': isRemoteOutput }"
@@ -91,12 +96,12 @@ onUnmounted(() => {
       <div
         v-if="thisDevice"
         class="device-item"
-        :class="{ active: remotePlayback.isLocalOutput }"
+        :class="{ active: playback.isLocalOutput }"
         @click="selectThisDevice"
       >
         <span class="device-icon">{{ getDeviceIcon(thisDevice.device_type) }}</span>
         <span class="device-name">{{ thisDevice.name }}</span>
-        <span v-if="remotePlayback.isLocalOutput" class="playing-indicator">Playing</span>
+        <span v-if="playback.isLocalOutput" class="playing-indicator">Playing</span>
         <span class="this-device">(this device)</span>
       </div>
 
@@ -105,19 +110,19 @@ onUnmounted(() => {
         v-for="device in otherDevices"
         :key="device.id"
         class="device-item"
-        :class="{ active: remotePlayback.selectedOutputDevice === device.id }"
+        :class="{ active: playback.remoteDeviceId === device.id }"
         @click="selectOutput(device.id)"
       >
         <span class="device-icon">{{ getDeviceIcon(device.device_type) }}</span>
         <span class="device-name">{{ device.name }}</span>
         <span
-          v-if="remotePlayback.selectedOutputDevice === device.id"
+          v-if="playback.remoteDeviceId === device.id"
           class="playing-indicator"
           >Playing</span
         >
       </div>
 
-      <div v-if="remotePlayback.devices.length <= 1" class="no-devices">
+      <div v-if="devices.devices.length <= 1" class="no-devices">
         No other devices connected
       </div>
     </div>

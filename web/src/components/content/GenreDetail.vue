@@ -53,7 +53,7 @@
 <script setup>
 import { ref, computed, onMounted, watch } from "vue";
 import { useRemoteStore } from "@/store/remote";
-import { usePlayerStore } from "@/store/player";
+import { usePlaybackStore } from "@/store/playback";
 import LoadTrackListItem from "@/components/common/LoadTrackListItem.vue";
 import PlayIcon from "@/components/icons/PlayIcon.vue";
 
@@ -65,7 +65,7 @@ const props = defineProps({
 });
 
 const remoteStore = useRemoteStore();
-const player = usePlayerStore();
+const playback = usePlaybackStore();
 
 const genreData = ref(null);
 const isLoading = ref(true);
@@ -120,11 +120,11 @@ const handleTrackSelection = (track) => {
     name: `${decodedGenreName.value} Radio`,
     tracks: genreData.value.track_ids,
   };
-  player.setUserPlaylist(playlist);
+  playback.setUserPlaylist(playlist);
   // Find the track's index in the loaded tracks
   const trackIndex = genreData.value.track_ids.indexOf(track.id);
   if (trackIndex >= 0) {
-    player.loadTrack(trackIndex);
+    playback.loadTrackIndex(trackIndex);
   }
 };
 
@@ -138,7 +138,7 @@ const handleShufflePlay = async () => {
       name: `${decodedGenreName.value} Radio`,
       tracks: radioTracks,
     };
-    player.setUserPlaylist(playlist);
+    playback.setUserPlaylist(playlist);
   }
 };
 
