@@ -1,8 +1,12 @@
 /**
- * Remote playback store for multi-device playback sync.
+ * Remote playback store for multi-device playback sync (Spotify-style).
  *
- * Manages remote playback state, device list, and communication with the server
- * via WebSocket for coordinating playback across multiple devices.
+ * This store manages output device selection and playback state synchronization.
+ * The BottomPlayer always acts as the controller - we just select WHERE audio plays.
+ *
+ * Key concept: selectedOutputDevice
+ * - null: Audio plays locally on this device
+ * - deviceId: Audio plays on the selected remote device
  */
 
 import { defineStore } from "pinia";
@@ -15,12 +19,16 @@ export const useRemotePlaybackStore = defineStore("remotePlayback", () => {
   // Connection state
   const deviceId = ref(null);
   const devices = ref([]);
-  const isAudioDevice = ref(false);
-  const sessionExists = ref(false);
-  const reclaimable = ref(false);
   const initialized = ref(false);
 
-  // Remote state (when not audio device)
+  // Output device selection (null = local, deviceId = remote)
+  const selectedOutputDevice = ref(null);
+
+  // Session state from server
+  const sessionExists = ref(false);
+  const reclaimable = ref(false);
+
+  // Remote state (when outputting to remote device)
   const remoteState = ref(null);
   const remoteQueue = ref([]);
   const remoteQueueVersion = ref(0);
@@ -32,7 +40,7 @@ export const useRemotePlaybackStore = defineStore("remotePlayback", () => {
   const interpolatedPosition = ref(0);
   let interpolationFrame = null;
 
-  // Broadcast interval
+  // Broadcast interval (when this device is the output)
   let broadcastInterval = null;
   const BROADCAST_INTERVAL_MS = 5000;
 
@@ -40,17 +48,29 @@ export const useRemotePlaybackStore = defineStore("remotePlayback", () => {
   const queueVersion = ref(0);
 
   // Computed
-  const audioDevice = computed(() =>
-    devices.value.find((d) => d.is_audio_device),
-  );
+  const isLocalOutput = computed(() => selectedOutputDevice.value === null);
+
+  const currentOutputDevice = computed(() => {
+    if (selectedOutputDevice.value === null) {
+      return devices.value.find((d) => d.id === deviceId.value);
+    }
+    return devices.value.find((d) => d.id === selectedOutputDevice.value);
+  });
 
   const otherDevices = computed(() =>
     devices.value.filter((d) => d.id !== deviceId.value),
   );
 
-  const isRemoteMode = computed(
-    () => sessionExists.value && !isAudioDevice.value,
+  // For backward compatibility - audioDevice is the device currently outputting audio
+  const audioDevice = computed(() =>
+    devices.value.find((d) => d.is_audio_device),
   );
+
+  // Are we the device outputting audio in the session?
+  const isAudioDevice = computed(() => {
+    const ad = audioDevice.value;
+    return ad && ad.id === deviceId.value;
+  });
 
   // Initialize - called after WebSocket connects
   function initialize() {
@@ -154,11 +174,20 @@ export const useRemotePlaybackStore = defineStore("remotePlayback", () => {
       remoteState.value = payload.session.state;
       remoteQueue.value = payload.session.queue || [];
       remoteQueueVersion.value = payload.session.state.queue_version;
-    }
 
-    // Start interpolation if there's an active session and we're not the audio device
-    if (payload.session.exists && !isAudioDevice.value) {
-      startInterpolation();
+      // Set selected output to the current audio device
+      const currentAudioDevice = devices.value.find((d) => d.is_audio_device);
+      if (currentAudioDevice) {
+        if (currentAudioDevice.id === payload.device_id) {
+          // We are the audio device
+          selectedOutputDevice.value = null;
+          startBroadcasting();
+        } else {
+          // Another device is the audio device
+          selectedOutputDevice.value = currentAudioDevice.id;
+          startInterpolation();
+        }
+      }
     }
 
     // Check if we should reclaim audio device status
@@ -193,13 +222,25 @@ export const useRemotePlaybackStore = defineStore("remotePlayback", () => {
     sessionExists.value = false;
     remoteState.value = null;
     remoteQueue.value = [];
-    isAudioDevice.value = false;
+    selectedOutputDevice.value = null;
     stopInterpolation();
     stopBroadcasting();
   }
 
   function handleDeviceListChanged(payload) {
     devices.value = payload.devices;
+
+    // Update selected output if the audio device changed
+    const currentAudioDevice = devices.value.find((d) => d.is_audio_device);
+    if (currentAudioDevice) {
+      if (currentAudioDevice.id === deviceId.value) {
+        selectedOutputDevice.value = null;
+      } else if (selectedOutputDevice.value !== currentAudioDevice.id) {
+        // Audio device changed to a different device
+        selectedOutputDevice.value = currentAudioDevice.id;
+      }
+    }
+
     console.log(
       "[RemotePlayback] Device list changed:",
       payload.change.type,
@@ -254,11 +295,161 @@ export const useRemotePlaybackStore = defineStore("remotePlayback", () => {
     }
   }
 
-  // Audio device registration
+  // ============================================
+  // Unified command interface - routes based on selectedOutputDevice
+  // ============================================
+
+  function play() {
+    if (isLocalOutput.value) {
+      const player = usePlayerStore();
+      player.play();
+    } else {
+      sendCommand("play");
+    }
+  }
+
+  function pause() {
+    if (isLocalOutput.value) {
+      const player = usePlayerStore();
+      player.pause();
+    } else {
+      sendCommand("pause");
+    }
+  }
+
+  function playPause() {
+    if (isLocalOutput.value) {
+      const player = usePlayerStore();
+      player.playPause();
+    } else {
+      const currentlyPlaying = remoteState.value?.is_playing;
+      sendCommand(currentlyPlaying ? "pause" : "play");
+    }
+  }
+
+  function seek(positionSec) {
+    if (isLocalOutput.value) {
+      const player = usePlayerStore();
+      const staticsStore = useStaticsStore();
+      const track = staticsStore.tracks[player.currentTrackId];
+      if (track?.duration > 0) {
+        player.seekToPercentage(positionSec / track.duration);
+      }
+    } else {
+      sendCommand("seek", { position: positionSec });
+    }
+  }
+
+  function seekToPercentage(percent) {
+    if (isLocalOutput.value) {
+      const player = usePlayerStore();
+      player.seekToPercentage(percent);
+    } else {
+      const duration = remoteState.value?.current_track?.duration || 0;
+      if (duration > 0) {
+        sendCommand("seek", { position: percent * duration });
+      }
+    }
+  }
+
+  function skipNext() {
+    if (isLocalOutput.value) {
+      const player = usePlayerStore();
+      player.skipNextTrack();
+    } else {
+      sendCommand("next");
+    }
+  }
+
+  function skipPrevious() {
+    if (isLocalOutput.value) {
+      const player = usePlayerStore();
+      player.skipPreviousTrack();
+    } else {
+      sendCommand("prev");
+    }
+  }
+
+  function forward10Sec() {
+    if (isLocalOutput.value) {
+      const player = usePlayerStore();
+      player.forward10Sec();
+    } else {
+      const currentPos = interpolatedPosition.value || 0;
+      sendCommand("seek", { position: currentPos + 10 });
+    }
+  }
+
+  function rewind10Sec() {
+    if (isLocalOutput.value) {
+      const player = usePlayerStore();
+      player.rewind10Sec();
+    } else {
+      const currentPos = interpolatedPosition.value || 0;
+      sendCommand("seek", { position: Math.max(0, currentPos - 10) });
+    }
+  }
+
+  function setVolume(volume) {
+    if (isLocalOutput.value) {
+      const player = usePlayerStore();
+      player.setVolume(volume);
+    } else {
+      sendCommand("setVolume", { volume });
+    }
+  }
+
+  function setMuted(muted) {
+    if (isLocalOutput.value) {
+      const player = usePlayerStore();
+      player.setMuted(muted);
+    } else {
+      sendCommand("setMuted", { muted });
+    }
+  }
+
+  function stop() {
+    // Stop only makes sense for local playback
+    if (isLocalOutput.value) {
+      const player = usePlayerStore();
+      player.stop();
+    }
+    // For remote: ignore (no equivalent remote command)
+  }
+
+  // ============================================
+  // Output device selection
+  // ============================================
+
+  function selectOutputDevice(targetDeviceId) {
+    if (targetDeviceId === deviceId.value || targetDeviceId === null) {
+      // Select this device as output
+      if (!isAudioDevice.value) {
+        // Need to transfer playback to this device
+        requestBecomeAudioDevice();
+      }
+      selectedOutputDevice.value = null;
+    } else {
+      // Select a remote device as output
+      const currentAudioDeviceId = audioDevice.value?.id;
+      if (currentAudioDeviceId === targetDeviceId) {
+        // Already outputting to that device, just update selection
+        selectedOutputDevice.value = targetDeviceId;
+      } else {
+        // Need to transfer playback to the target device
+        requestTransferTo(targetDeviceId);
+      }
+    }
+  }
+
+  // ============================================
+  // Audio device management (internal)
+  // ============================================
+
   function registerAsAudioDevice() {
     ws.send("playback.register_audio_device", {});
-    isAudioDevice.value = true;
     sessionExists.value = true;
+    selectedOutputDevice.value = null;
     startBroadcasting();
     stopInterpolation();
     console.log("[RemotePlayback] Registered as audio device");
@@ -266,7 +457,6 @@ export const useRemotePlaybackStore = defineStore("remotePlayback", () => {
 
   function unregisterAsAudioDevice() {
     ws.send("playback.unregister_audio_device", {});
-    isAudioDevice.value = false;
     stopBroadcasting();
     console.log("[RemotePlayback] Unregistered as audio device");
   }
@@ -275,7 +465,7 @@ export const useRemotePlaybackStore = defineStore("remotePlayback", () => {
     const player = usePlayerStore();
     const state = buildPlaybackState(player);
     ws.send("playback.reclaim_audio_device", state);
-    isAudioDevice.value = true;
+    selectedOutputDevice.value = null;
     startBroadcasting();
     stopInterpolation();
     console.log("[RemotePlayback] Reclaimed audio device status");
@@ -343,6 +533,17 @@ export const useRemotePlaybackStore = defineStore("remotePlayback", () => {
     console.log("[RemotePlayback] Requesting to become audio device");
   }
 
+  function requestTransferTo(targetDeviceId) {
+    // Currently we can only request transfer to ourselves
+    // To transfer to another device, we'd need a different protocol
+    // For now, just update the selection if there's already a session
+    if (sessionExists.value) {
+      selectedOutputDevice.value = targetDeviceId;
+      startInterpolation();
+    }
+    console.log("[RemotePlayback] Transfer to remote device:", targetDeviceId);
+  }
+
   function handlePrepareTransfer(payload) {
     // We're the current audio device, prepare to transfer
     const player = usePlayerStore();
@@ -378,8 +579,8 @@ export const useRemotePlaybackStore = defineStore("remotePlayback", () => {
     // Confirm transfer
     ws.send("playback.transfer_complete", { transfer_id: payload.transfer_id });
 
-    isAudioDevice.value = true;
     sessionExists.value = true;
+    selectedOutputDevice.value = null;
     pendingTransfer.value = null;
     startBroadcasting();
     stopInterpolation();
@@ -398,7 +599,12 @@ export const useRemotePlaybackStore = defineStore("remotePlayback", () => {
     const player = usePlayerStore();
     player.stop(); // Fully stop local playback
 
-    isAudioDevice.value = false;
+    // Update selected output to the new audio device
+    const newAudioDevice = devices.value.find((d) => d.is_audio_device);
+    if (newAudioDevice) {
+      selectedOutputDevice.value = newAudioDevice.id;
+    }
+
     pendingTransfer.value = null;
     stopBroadcasting();
     startInterpolation();
@@ -417,7 +623,7 @@ export const useRemotePlaybackStore = defineStore("remotePlayback", () => {
     }
   }
 
-  // Position interpolation for remote clients
+  // Position interpolation for remote output
   function startInterpolation() {
     if (interpolationFrame) return;
 
@@ -440,10 +646,91 @@ export const useRemotePlaybackStore = defineStore("remotePlayback", () => {
     }
   }
 
+  // ============================================
+  // Unified state getters for UI
+  // ============================================
+
+  // Current playback state - combines local and remote
+  const currentTrack = computed(() => {
+    if (isLocalOutput.value) {
+      const player = usePlayerStore();
+      const staticsStore = useStaticsStore();
+      const track = player.currentTrackId
+        ? staticsStore.tracks[player.currentTrackId]
+        : null;
+      if (!track) return null;
+
+      const album = track.album_id ? staticsStore.albums[track.album_id] : null;
+      const artist = track.artist_id
+        ? staticsStore.artists[track.artist_id]
+        : null;
+
+      return {
+        id: track.id,
+        title: track.title,
+        artist_id: track.artist_id || "",
+        artist_name: artist?.name || "Unknown Artist",
+        album_id: track.album_id || "",
+        album_title: album?.name || "Unknown Album",
+        duration: track.duration || 0,
+        track_number: track.track_number,
+        image_id: album?.image_id || null,
+      };
+    }
+    return remoteState.value?.current_track || null;
+  });
+
+  const currentPosition = computed(() => {
+    if (isLocalOutput.value) {
+      const player = usePlayerStore();
+      return player.progressSec || 0;
+    }
+    return interpolatedPosition.value || 0;
+  });
+
+  const currentProgressPercent = computed(() => {
+    if (isLocalOutput.value) {
+      const player = usePlayerStore();
+      return player.progressPercent || 0;
+    }
+    const track = remoteState.value?.current_track;
+    if (track?.duration > 0) {
+      return interpolatedPosition.value / track.duration;
+    }
+    return 0;
+  });
+
+  const isPlaying = computed(() => {
+    if (isLocalOutput.value) {
+      const player = usePlayerStore();
+      return player.isPlaying;
+    }
+    return remoteState.value?.is_playing || false;
+  });
+
+  const currentVolume = computed(() => {
+    if (isLocalOutput.value) {
+      const player = usePlayerStore();
+      return player.volume;
+    }
+    return remoteState.value?.volume || 1;
+  });
+
+  const currentMuted = computed(() => {
+    if (isLocalOutput.value) {
+      const player = usePlayerStore();
+      return player.muted;
+    }
+    return remoteState.value?.muted || false;
+  });
+
+  // ============================================
   // Helpers
+  // ============================================
+
   function buildPlaybackState(player) {
     const staticsStore = useStaticsStore();
-    let currentTrack = null;
+    let currentTrackData = null;
 
     if (player.currentTrackId) {
       const track = staticsStore.tracks[player.currentTrackId];
@@ -453,7 +740,7 @@ export const useRemotePlaybackStore = defineStore("remotePlayback", () => {
         : null;
 
       if (track) {
-        currentTrack = {
+        currentTrackData = {
           id: track.id,
           title: track.title,
           artist_id: track.artist_id || "",
@@ -468,12 +755,13 @@ export const useRemotePlaybackStore = defineStore("remotePlayback", () => {
     }
 
     return {
-      current_track: currentTrack,
+      current_track: currentTrackData,
       queue_position: player.currentTrackIndex || 0,
       queue_version: queueVersion.value,
       position: player.progressSec || 0,
       is_playing: player.isPlaying,
       volume: player.volume,
+      muted: player.muted || false,
       shuffle: false, // Not implemented in player yet
       repeat: "off", // Not implemented in player yet
       timestamp: Date.now(),
@@ -508,22 +796,27 @@ export const useRemotePlaybackStore = defineStore("remotePlayback", () => {
       state.queue_position >= 0 && state.queue_position < trackIds.length
         ? state.queue_position
         : 0;
-    player.setPlaylistFromTrackIds(trackIds, startIndex, false);
 
-    // Seek to position after track loads
+    // Store the pending seek position before setting the playlist
+    // The player's onload callback will handle seeking when ready
     if (state.position > 0) {
-      // Need to wait for track to load
-      setTimeout(() => {
-        const track = staticsStore.tracks[trackIds[startIndex]];
-        if (track?.duration) {
-          player.seekToPercentage(state.position / track.duration);
-        }
-      }, 500);
+      const track = staticsStore.tracks[trackIds[startIndex]];
+      if (track?.duration) {
+        // Store pending seek as percentage for player.js to handle on load
+        player.setPendingTransferSeek(state.position / track.duration);
+      }
     }
+
+    player.setPlaylistFromTrackIds(trackIds, startIndex, false);
 
     // Apply volume
     if (state.volume !== undefined) {
       player.setVolume(state.volume);
+    }
+
+    // Apply muted state if available
+    if (state.muted !== undefined) {
+      player.setMuted(state.muted);
     }
   }
 
@@ -538,6 +831,7 @@ export const useRemotePlaybackStore = defineStore("remotePlayback", () => {
         initialized.value = false;
         deviceId.value = null;
         devices.value = [];
+        selectedOutputDevice.value = null;
         stopBroadcasting();
         stopInterpolation();
       }
@@ -586,7 +880,7 @@ export const useRemotePlaybackStore = defineStore("remotePlayback", () => {
     // State
     deviceId,
     devices,
-    isAudioDevice,
+    selectedOutputDevice,
     sessionExists,
     reclaimable,
     remoteState,
@@ -595,18 +889,43 @@ export const useRemotePlaybackStore = defineStore("remotePlayback", () => {
     interpolatedPosition,
 
     // Computed
+    isLocalOutput,
+    isAudioDevice,
+    currentOutputDevice,
     audioDevice,
     otherDevices,
-    isRemoteMode,
 
-    // Actions
-    initialize,
+    // Unified state getters
+    currentTrack,
+    currentPosition,
+    currentProgressPercent,
+    isPlaying,
+    currentVolume,
+    currentMuted,
+
+    // Unified commands (route based on selectedOutputDevice)
+    play,
+    pause,
+    playPause,
+    seek,
+    seekToPercentage,
+    skipNext,
+    skipPrevious,
+    forward10Sec,
+    rewind10Sec,
+    setVolume,
+    setMuted,
+    stop,
+
+    // Output device selection
+    selectOutputDevice,
+
+    // Internal (for compatibility with player.js integration)
     registerAsAudioDevice,
     unregisterAsAudioDevice,
     broadcastCurrentState,
     broadcastQueueUpdate,
     sendCommand,
-    requestBecomeAudioDevice,
     cleanup,
   };
 });

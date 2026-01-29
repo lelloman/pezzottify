@@ -30,6 +30,8 @@ pub struct PlaybackState {
     pub position: f64,
     pub is_playing: bool,
     pub volume: f64,
+    #[serde(default)]
+    pub muted: bool,
     pub shuffle: bool,
     pub repeat: RepeatMode,
     pub timestamp: u64,
@@ -231,6 +233,7 @@ mod tests {
             position: 30.5,
             is_playing: true,
             volume: 0.8,
+            muted: false,
             shuffle: false,
             repeat: RepeatMode::Off,
             timestamp: 1234567890,
@@ -240,6 +243,7 @@ mod tests {
         assert!(json.contains("\"title\":\"Test Song\""));
         assert!(json.contains("\"is_playing\":true"));
         assert!(json.contains("\"repeat\":\"off\""));
+        assert!(json.contains("\"muted\":false"));
     }
 
     #[test]

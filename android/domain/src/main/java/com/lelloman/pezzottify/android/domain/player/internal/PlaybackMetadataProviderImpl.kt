@@ -146,9 +146,11 @@ internal class PlaybackMetadataProviderImpl(
                 trackId = trackId,
                 trackName = track.name,
                 artistNames = artistNames,
+                primaryArtistId = track.artistsIds.firstOrNull() ?: "",
                 albumId = track.albumId,
                 albumName = album?.name ?: "",
                 artworkUrl = artworkUrl,
+                imageId = album?.displayImageId,
                 durationSeconds = track.durationSeconds,
                 availability = track.availability,
             )

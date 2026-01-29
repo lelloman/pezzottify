@@ -8,6 +8,13 @@ enum class RepeatModeUi {
     ONE
 }
 
+data class OutputDeviceUi(
+    val id: Long,
+    val name: String,
+    val deviceType: String,
+    val isAudioDevice: Boolean = false,
+)
+
 data class PlayerScreenState(
     val isLoading: Boolean = true,
     val trackId: String = "",
@@ -27,6 +34,10 @@ data class PlayerScreenState(
     val shuffleEnabled: Boolean = false,
     val repeatMode: RepeatModeUi = RepeatModeUi.OFF,
     val playerError: PlayerErrorUi? = null,
+    // Device selector state
+    val devices: List<OutputDeviceUi> = emptyList(),
+    val selectedOutputDeviceId: Long? = null, // null = local
+    val isLocalOutput: Boolean = true,
 )
 
 data class PlayerErrorUi(

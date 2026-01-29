@@ -6,9 +6,13 @@ data class TrackMetadata(
     val trackId: String,
     val trackName: String,
     val artistNames: List<String>,
+    /** Primary artist ID for remote playback sync */
+    val primaryArtistId: String = "",
     val albumId: String,
     val albumName: String,
     val artworkUrl: String?,
+    /** Raw image ID for remote playback sync (other devices construct their own URLs) */
+    val imageId: String? = null,
     val durationSeconds: Int,
     val availability: TrackAvailability = TrackAvailability.Available,
 )

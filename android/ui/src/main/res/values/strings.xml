@@ -244,6 +244,7 @@
     <string name="mute">Mute</string>
     <string name="unmute">Unmute</string>
     <string name="max_volume">Max volume</string>
+    <string name="this_device">This device</string>
     <!-- PLAYER SCREEN -->
 
     <!-- QUEUE SCREEN -->

@@ -1,5 +1,5 @@
 <template>
-  <footer v-if="localCurrentTrack || isRemoteMode" class="footerPlayer">
+  <footer v-if="hasPlayback" class="footerPlayer">
     <div class="trackInfoRow">
       <MultiSourceImage
         :urls="imageUrls"
@@ -9,28 +9,28 @@
         @click.stop="handleClickOnAlbumCover"
       />
       <div class="trackNamesColumn">
-        <TrackName :track="localCurrentTrack" :infiniteAnimation="true" />
+        <TrackName :track="displayTrack" :infiniteAnimation="true" />
         <LoadClickableArtistsNames :artistsIds="artists" />
       </div>
     </div>
     <div class="playerControlsColumn">
       <div class="playerControlsButtonsRow">
-        <ControlIconButton :action="rewind10Sec" :icon="Rewind10Sec" />
-        <ControlIconButton :action="skipPreviousTrack" :icon="SkipPrevious" />
+        <ControlIconButton :action="handleRewind10Sec" :icon="Rewind10Sec" />
+        <ControlIconButton :action="handleSkipPrevious" :icon="SkipPrevious" />
         <ControlIconButton
           v-if="!isPlaying"
-          :action="playPause"
+          :action="handlePlayPause"
           :icon="PlayIcon"
           :big="true"
         />
         <ControlIconButton
           v-if="isPlaying"
-          :action="playPause"
+          :action="handlePlayPause"
           :icon="PauseIcon"
           :big="true"
         />
-        <ControlIconButton :action="skipNextTrack" :icon="NextTrack" />
-        <ControlIconButton :action="forward10Sec" :icon="Forward10Sec" />
+        <ControlIconButton :action="handleSkipNext" :icon="NextTrack" />
+        <ControlIconButton :action="handleForward10Sec" :icon="Forward10Sec" />
       </div>
       <div class="progressControlsRow">
         <span>{{ formattedTime }}</span>
@@ -40,7 +40,7 @@
           :progress="combinedProgressPercent"
           @update:progress="updateTrackProgress"
           @update:startDrag="startDraggingTrackProgress"
-          @update:stopDrag="seekTrack"
+          @update:stopDrag="handleSeek"
         />
         <span>{{ duration }}</span>
       </div>
@@ -49,12 +49,12 @@
       <DeviceSelector />
       <ControlIconButton
         v-if="isMuted"
-        :action="volumeOn"
+        :action="handleVolumeOn"
         :icon="VolumeOffIcon"
       />
       <ControlIconButton
         v-if="!isMuted"
-        :action="volumeOff"
+        :action="handleVolumeOff"
         :icon="VolumeOnIcon"
       />
       <ProgressBar
@@ -62,9 +62,9 @@
         :progress="computedVolumePercent"
         @update:progress="updateVolumeProgress"
         @update:stratDrag="startDraggingVolumeProgress"
-        @update:stopDrag="setVolume"
+        @update:stopDrag="handleSetVolume"
       />
-      <ControlIconButton :action="stop" :icon="StopIcon" />
+      <ControlIconButton :action="handleStop" :icon="StopIcon" />
     </div>
   </footer>
 </template>
@@ -118,55 +118,45 @@ const player = usePlayerStore();
 const staticsStore = useStaticsStore();
 const remotePlayback = useRemotePlaybackStore();
 
-// Computed to determine if we're in remote mode (watching playback from another device)
-const isRemoteMode = computed(
-  () => remotePlayback.sessionExists && !remotePlayback.isAudioDevice,
-);
-
-const localCurrentTrack = ref(null);
-const localProgressPercent = ref(0);
-
-const combinedProgressPercent = computed(() => {
-  return draggingTrackPercent.value || localProgressPercent.value;
+// Track whether there's any playback to display
+const hasPlayback = computed(() => {
+  // Show player if we have local playback OR remote session
+  return player.currentTrackId || remotePlayback.sessionExists;
 });
-const draggingTrackPercent = ref(null);
 
+// Use unified state from remotePlayback (handles local/remote transparently)
+const isPlaying = computed(() => remotePlayback.isPlaying);
+const currentProgressPercent = computed(() => remotePlayback.currentProgressPercent);
+const currentPosition = computed(() => remotePlayback.currentPosition);
+
+// Track info for display - combines local and remote
+const displayTrack = ref(null);
+const artists = ref([]);
+const imageUrls = ref([]);
+const duration = ref("");
+const currentAlbumId = ref(null);
+
+// Progress dragging state
+const draggingTrackPercent = ref(null);
+const combinedProgressPercent = computed(() => {
+  return draggingTrackPercent.value ?? currentProgressPercent.value;
+});
+
+// Volume state
 const volumePercent = ref(0.0);
 const draggingVolumePercent = ref(null);
 const isMuted = ref(false);
 
 const computedVolumePercent = computed(() => {
   return (
-    draggingVolumePercent.value || (isMuted.value ? 0.0 : volumePercent.value)
+    draggingVolumePercent.value ?? (isMuted.value ? 0.0 : volumePercent.value)
   );
 });
 
-const {
-  currentTrackId,
-  isPlaying: playerIsPlaying,
-  progressPercent,
-  progressSec,
-  volume,
-  muted,
-} = storeToRefs(player);
+// Get refs for local player state (for watching)
+const { currentTrackId, volume, muted } = storeToRefs(player);
 
-// Use remote state for display when in remote mode
-const isPlaying = computed(() => {
-  if (isRemoteMode.value) {
-    return remotePlayback.remoteState?.is_playing || false;
-  }
-  return playerIsPlaying.value;
-});
-
-const songName = ref("");
-const artists = ref([]);
-const imageUrls = ref([]);
-const duration = ref("");
-const currentAlbumId = ref(null);
-
-const currentTimeSec = ref(0);
-
-let localCurrentTrackUnwatcher = null;
+let trackDataUnwatcher = null;
 let albumDataUnwatcher = null;
 
 const formatTime = (timeInSeconds) => {
@@ -179,91 +169,64 @@ const formatTime = (timeInSeconds) => {
   return `${pad(hours)}:${pad(minutes)}:${pad(seconds)}`;
 };
 
+const formattedTime = computed(() => formatTime(currentPosition.value));
+
 const handleClickOnAlbumCover = () => {
-  if (localCurrentTrack.value && localCurrentTrack.value.album_id) {
-    router.push("/album/" + localCurrentTrack.value.album_id);
+  if (displayTrack.value && displayTrack.value.album_id) {
+    router.push("/album/" + displayTrack.value.album_id);
   }
 };
 
+// ============================================
+// Playback controls - all route through remotePlayback
+// ============================================
+
+function handlePlayPause() {
+  console.log("BottomPlayer calling playPause()");
+  remotePlayback.playPause();
+}
+
+function handleSkipNext() {
+  remotePlayback.skipNext();
+}
+
+function handleSkipPrevious() {
+  remotePlayback.skipPrevious();
+}
+
+function handleForward10Sec() {
+  remotePlayback.forward10Sec();
+}
+
+function handleRewind10Sec() {
+  remotePlayback.rewind10Sec();
+}
+
+function handleStop() {
+  remotePlayback.stop();
+}
+
+// Progress bar handling
 const startDraggingTrackProgress = () => {
   console.log("startDragging");
-  draggingTrackPercent.value = localProgressPercent.value;
+  draggingTrackPercent.value = currentProgressPercent.value;
 };
 
-const seekTrack = () => {
-  if (draggingTrackPercent.value) {
+const updateTrackProgress = (event) => {
+  draggingTrackPercent.value = event;
+};
+
+const handleSeek = () => {
+  if (draggingTrackPercent.value !== null) {
     const targetSeekPercent = draggingTrackPercent.value;
     console.log("seekTrack target value: " + targetSeekPercent);
-    if (isRemoteMode.value) {
-      // Calculate position in seconds from percentage
-      const trackDuration = remotePlayback.remoteState?.current_track?.duration || 0;
-      const position = targetSeekPercent * trackDuration;
-      remotePlayback.sendCommand("seek", { position });
-    } else {
-      player.seekToPercentage(targetSeekPercent);
-    }
+    remotePlayback.seekToPercentage(targetSeekPercent);
     draggingTrackPercent.value = null;
     console.log("stopDragging");
   }
 };
 
-const formattedTime = computed(() => formatTime(currentTimeSec.value));
-
-function playPause() {
-  console.log("BottomPlayer calling playPause() on PlayerStore.");
-  if (isRemoteMode.value) {
-    const currentlyPlaying = remotePlayback.remoteState?.is_playing;
-    remotePlayback.sendCommand(currentlyPlaying ? "pause" : "play");
-  } else {
-    player.playPause();
-  }
-}
-
-function updateTrackProgress(event) {
-  draggingTrackPercent.value = event;
-}
-
-function forward10Sec() {
-  if (isRemoteMode.value) {
-    const currentPos = remotePlayback.interpolatedPosition || 0;
-    remotePlayback.sendCommand("seek", { position: currentPos + 10 });
-  } else {
-    player.forward10Sec();
-  }
-}
-
-function rewind10Sec() {
-  if (isRemoteMode.value) {
-    const currentPos = remotePlayback.interpolatedPosition || 0;
-    remotePlayback.sendCommand("seek", { position: Math.max(0, currentPos - 10) });
-  } else {
-    player.rewind10Sec();
-  }
-}
-
-function skipNextTrack() {
-  if (isRemoteMode.value) {
-    remotePlayback.sendCommand("next");
-  } else {
-    player.skipNextTrack();
-  }
-}
-
-function skipPreviousTrack() {
-  if (isRemoteMode.value) {
-    remotePlayback.sendCommand("prev");
-  } else {
-    player.skipPreviousTrack();
-  }
-}
-
-function stop() {
-  // Stop doesn't make sense in remote mode - ignore or unregister
-  if (!isRemoteMode.value) {
-    player.stop();
-  }
-}
-
+// Volume handling
 const startDraggingVolumeProgress = () => {
   draggingVolumePercent.value = volumePercent.value;
 };
@@ -272,95 +235,113 @@ const updateVolumeProgress = (event) => {
   draggingVolumePercent.value = event;
 };
 
-const volumeOn = () => {
-  if (isRemoteMode.value) {
-    remotePlayback.sendCommand("setMuted", { muted: false });
-  } else {
-    player.setMuted(false);
+const handleVolumeOn = () => {
+  remotePlayback.setMuted(false);
+};
+
+const handleVolumeOff = () => {
+  remotePlayback.setMuted(true);
+};
+
+const handleSetVolume = () => {
+  if (draggingVolumePercent.value !== null) {
+    volumePercent.value = draggingVolumePercent.value;
+    draggingVolumePercent.value = null;
+    console.log("BottomPlayer setVolume " + volumePercent.value);
+    remotePlayback.setVolume(volumePercent.value);
+    remotePlayback.setMuted(false);
   }
 };
 
-const volumeOff = () => {
-  if (isRemoteMode.value) {
-    remotePlayback.sendCommand("setMuted", { muted: true });
-  } else {
-    player.setMuted(true);
-  }
-};
+// ============================================
+// Watch track info - handles both local and remote
+// ============================================
 
-const setVolume = () => {
-  volumePercent.value = draggingVolumePercent.value;
-  draggingVolumePercent.value = null;
-  console.log("BottomPlayer setVolume " + volumePercent.value);
-  if (isRemoteMode.value) {
-    remotePlayback.sendCommand("setVolume", { volume: volumePercent.value });
-  } else {
-    player.setVolume(volumePercent.value);
-    player.setMuted(false);
-  }
-};
-
-watch(
-  progressPercent,
-  (newProgressPercent) => {
-    if (newProgressPercent) {
-      localProgressPercent.value = newProgressPercent;
-    } else {
-      localProgressPercent.value = 0;
-    }
-  },
-  { immediate: true },
-);
-watch(
-  progressSec,
-  (newProgressSec) => {
-    if (newProgressSec) {
-      currentTimeSec.value = newProgressSec;
-    } else {
-      currentTimeSec.value = 0;
-    }
-  },
-  { immediate: true },
-);
+// Watch local track changes
 watch(
   currentTrackId,
   (newCurrentTrackId) => {
-    if (localCurrentTrackUnwatcher) {
-      localCurrentTrackUnwatcher();
-      localCurrentTrackUnwatcher = null;
+    if (trackDataUnwatcher) {
+      trackDataUnwatcher();
+      trackDataUnwatcher = null;
     }
 
-    if (newCurrentTrackId) {
-      localCurrentTrackUnwatcher = watch(
+    // Only watch local track if we're local output
+    if (newCurrentTrackId && remotePlayback.isLocalOutput) {
+      trackDataUnwatcher = watch(
         staticsStore.getTrack(newCurrentTrackId),
         (newCurrentTrackRef) => {
           if (newCurrentTrackRef.item) {
-            const newCurrentTrack = newCurrentTrackRef.item;
-
-            localCurrentTrack.value = newCurrentTrack;
-            songName.value = newCurrentTrack.name;
-            artists.value = newCurrentTrack.artists_ids || [];
-            duration.value = newCurrentTrack.duration
-              ? formatDuration(newCurrentTrack.duration)
+            const track = newCurrentTrackRef.item;
+            displayTrack.value = track;
+            artists.value = track.artists_ids || [];
+            duration.value = track.duration
+              ? formatDuration(track.duration)
               : "";
-            currentAlbumId.value = newCurrentTrack.album_id || null;
+            currentAlbumId.value = track.album_id || null;
           }
         },
         { immediate: true },
       );
-    } else {
-      localCurrentTrack.value = null;
-      songName.value = "";
-      artists.value = [];
-      imageUrls.value = [];
-      duration.value = "";
-      currentAlbumId.value = null;
     }
   },
   { immediate: true },
 );
 
-// Separate watcher for album cover image to avoid infinite loop
+// Watch remote track changes
+watch(
+  () => remotePlayback.currentTrack,
+  (track) => {
+    if (!remotePlayback.isLocalOutput && track) {
+      displayTrack.value = {
+        id: track.id,
+        name: track.title,
+        title: track.title,
+        artists_ids: track.artist_id ? [track.artist_id] : [],
+        album_id: track.album_id,
+        duration: track.duration,
+      };
+      artists.value = track.artist_id ? [track.artist_id] : [];
+      duration.value = track.duration ? formatDuration(track.duration) : "";
+      currentAlbumId.value = track.album_id || null;
+    }
+  },
+  { deep: true, immediate: true },
+);
+
+// Watch output mode changes - reset track display appropriately
+watch(
+  () => remotePlayback.isLocalOutput,
+  (isLocal) => {
+    if (isLocal) {
+      // Switched to local - let the currentTrackId watcher handle it
+      if (player.currentTrackId) {
+        // Trigger track watcher
+        const id = player.currentTrackId;
+        if (trackDataUnwatcher) {
+          trackDataUnwatcher();
+        }
+        trackDataUnwatcher = watch(
+          staticsStore.getTrack(id),
+          (ref) => {
+            if (ref.item) {
+              displayTrack.value = ref.item;
+              artists.value = ref.item.artists_ids || [];
+              duration.value = ref.item.duration
+                ? formatDuration(ref.item.duration)
+                : "";
+              currentAlbumId.value = ref.item.album_id || null;
+            }
+          },
+          { immediate: true },
+        );
+      }
+    }
+    // Remote case is handled by the remotePlayback.currentTrack watcher
+  },
+);
+
+// Album cover image handling
 watch(
   currentAlbumId,
   (newAlbumId) => {
@@ -385,72 +366,45 @@ watch(
   },
   { immediate: true },
 );
-// isPlaying is now a computed - no need to watch it
 
+// Volume state sync
 watch(
-  muted,
-  (newMuted) => {
-    isMuted.value = newMuted;
-  },
-  { immediate: true },
-);
-watch(
-  volume,
+  () => remotePlayback.currentVolume,
   (newVolume) => {
-    if (newVolume) {
+    if (newVolume !== undefined) {
       volumePercent.value = newVolume;
     }
   },
   { immediate: true },
 );
 
-// Remote playback watchers - update UI when remote state changes
 watch(
-  () => remotePlayback.remoteState,
-  (newRemoteState) => {
-    if (!isRemoteMode.value || !newRemoteState) return;
+  () => remotePlayback.currentMuted,
+  (newMuted) => {
+    isMuted.value = newMuted;
+  },
+  { immediate: true },
+);
 
-    // Update track info from remote state
-    const track = newRemoteState.current_track;
-    if (track) {
-      localCurrentTrack.value = {
-        id: track.id,
-        name: track.title,
-        title: track.title,
-        artists_ids: track.artist_id ? [track.artist_id] : [],
-        album_id: track.album_id,
-        duration: track.duration,
-      };
-      songName.value = track.title;
-      artists.value = track.artist_id ? [track.artist_id] : [];
-      duration.value = track.duration ? formatDuration(track.duration) : "";
-      currentAlbumId.value = track.album_id || null;
+// Also watch local muted state when in local mode
+watch(
+  muted,
+  (newMuted) => {
+    if (remotePlayback.isLocalOutput) {
+      isMuted.value = newMuted;
     }
   },
-  { deep: true },
+  { immediate: true },
 );
 
 watch(
-  () => remotePlayback.interpolatedPosition,
-  (newPosition) => {
-    if (!isRemoteMode.value) return;
-    currentTimeSec.value = newPosition || 0;
-    // Calculate percentage if we have duration
-    const track = remotePlayback.remoteState?.current_track;
-    if (track?.duration > 0) {
-      localProgressPercent.value = newPosition / track.duration;
-    }
-  },
-);
-
-// isPlaying is now a computed that automatically uses remote state when in remote mode
-
-watch(
-  () => remotePlayback.remoteState?.volume,
+  volume,
   (newVolume) => {
-    if (!isRemoteMode.value || newVolume === undefined) return;
-    volumePercent.value = newVolume;
+    if (remotePlayback.isLocalOutput && newVolume !== undefined) {
+      volumePercent.value = newVolume;
+    }
   },
+  { immediate: true },
 );
 </script>
 
