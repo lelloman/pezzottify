@@ -3,6 +3,7 @@ package com.lelloman.pezzottify.android.domain.auth.usecase
 import com.lelloman.pezzottify.android.domain.auth.AuthState
 import com.lelloman.pezzottify.android.domain.auth.AuthStore
 import com.lelloman.pezzottify.android.domain.cache.StaticsCache
+import com.lelloman.pezzottify.android.domain.catalogsync.CatalogSyncManager
 import com.lelloman.pezzottify.android.domain.listening.ListeningEventStore
 import com.lelloman.pezzottify.android.domain.player.PezzottifyPlayer
 import com.lelloman.pezzottify.android.domain.remoteapi.RemoteApiClient
@@ -29,6 +30,7 @@ class PerformLogout @Inject internal constructor(
     private val permissionsStore: PermissionsStore,
     private val listeningEventStore: ListeningEventStore,
     private val syncManager: SyncManager,
+    private val catalogSyncManager: CatalogSyncManager,
     private val player: PezzottifyPlayer,
     private val webSocketManager: WebSocketManager,
     loggerFactory: LoggerFactory,
@@ -52,6 +54,8 @@ class PerformLogout @Inject internal constructor(
         webSocketManager.disconnect()
         logger.debug("invoke() cleaning up sync manager")
         syncManager.cleanup()
+        logger.debug("invoke() resetting catalog sync manager")
+        catalogSyncManager.reset()
         logger.debug("invoke() setting auth state to LoggedOut")
         authStore.storeAuthState(AuthState.LoggedOut)
         logger.debug("invoke() calling remote logout")

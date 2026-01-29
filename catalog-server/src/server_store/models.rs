@@ -1,6 +1,101 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
+// =============================================================================
+// Catalog Events
+// =============================================================================
+
+/// Type of catalog event that occurred.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CatalogEventType {
+    /// Album metadata or availability changed.
+    AlbumUpdated,
+    /// Artist metadata changed.
+    ArtistUpdated,
+    /// Track metadata or availability changed.
+    TrackUpdated,
+    /// New album added to catalog.
+    AlbumAdded,
+    /// New artist added.
+    ArtistAdded,
+    /// New track added.
+    TrackAdded,
+}
+
+impl CatalogEventType {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            CatalogEventType::AlbumUpdated => "album_updated",
+            CatalogEventType::ArtistUpdated => "artist_updated",
+            CatalogEventType::TrackUpdated => "track_updated",
+            CatalogEventType::AlbumAdded => "album_added",
+            CatalogEventType::ArtistAdded => "artist_added",
+            CatalogEventType::TrackAdded => "track_added",
+        }
+    }
+
+    pub fn parse(s: &str) -> Option<Self> {
+        match s {
+            "album_updated" => Some(CatalogEventType::AlbumUpdated),
+            "artist_updated" => Some(CatalogEventType::ArtistUpdated),
+            "track_updated" => Some(CatalogEventType::TrackUpdated),
+            "album_added" => Some(CatalogEventType::AlbumAdded),
+            "artist_added" => Some(CatalogEventType::ArtistAdded),
+            "track_added" => Some(CatalogEventType::TrackAdded),
+            _ => None,
+        }
+    }
+}
+
+/// Content type for catalog events.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CatalogContentType {
+    Album,
+    Artist,
+    Track,
+}
+
+impl CatalogContentType {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            CatalogContentType::Album => "album",
+            CatalogContentType::Artist => "artist",
+            CatalogContentType::Track => "track",
+        }
+    }
+
+    pub fn parse(s: &str) -> Option<Self> {
+        match s {
+            "album" => Some(CatalogContentType::Album),
+            "artist" => Some(CatalogContentType::Artist),
+            "track" => Some(CatalogContentType::Track),
+            _ => None,
+        }
+    }
+}
+
+/// A catalog invalidation event.
+///
+/// Represents a change to catalog content that clients should respond to
+/// by invalidating their cached data.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CatalogEvent {
+    /// Sequence number for ordering and catch-up.
+    pub seq: i64,
+    /// Type of event.
+    pub event_type: CatalogEventType,
+    /// Type of content affected.
+    pub content_type: CatalogContentType,
+    /// ID of the affected content.
+    pub content_id: String,
+    /// Unix timestamp when the event occurred.
+    pub timestamp: i64,
+    /// What triggered this event (e.g., "download_completion", "ingestion", "admin_edit").
+    pub triggered_by: Option<String>,
+}
+
 /// Size limits for bug report fields (in bytes)
 pub const BUG_REPORT_TITLE_MAX_LEN: usize = 200;
 pub const BUG_REPORT_DESCRIPTION_MAX_SIZE: usize = 100 * 1024; // 100KB

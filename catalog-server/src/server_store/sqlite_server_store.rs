@@ -1,4 +1,6 @@
-use super::models::{JobRun, JobRunStatus, JobScheduleState};
+use super::models::{
+    CatalogContentType, CatalogEvent, CatalogEventType, JobRun, JobRunStatus, JobScheduleState,
+};
 use super::schema::SERVER_VERSIONED_SCHEMAS;
 use super::ServerStore;
 use crate::sqlite_persistence::BASE_DB_VERSION;
@@ -201,6 +203,22 @@ impl SqliteServerStore {
             client_type: row.get("client_type")?,
             created_at,
             size_bytes: size_bytes as usize,
+        })
+    }
+
+    fn row_to_catalog_event(row: &rusqlite::Row) -> rusqlite::Result<CatalogEvent> {
+        let event_type_str: String = row.get("event_type")?;
+        let content_type_str: String = row.get("content_type")?;
+
+        Ok(CatalogEvent {
+            seq: row.get("seq")?,
+            event_type: CatalogEventType::parse(&event_type_str)
+                .unwrap_or(CatalogEventType::AlbumUpdated),
+            content_type: CatalogContentType::parse(&content_type_str)
+                .unwrap_or(CatalogContentType::Album),
+            content_id: row.get("content_id")?,
+            timestamp: row.get("timestamp")?,
+            triggered_by: row.get("triggered_by")?,
         })
     }
 }
@@ -569,6 +587,70 @@ impl ServerStore for SqliteServerStore {
         }
 
         Ok(deleted_count)
+    }
+
+    fn append_catalog_event(
+        &self,
+        event_type: CatalogEventType,
+        content_type: CatalogContentType,
+        content_id: &str,
+        triggered_by: Option<&str>,
+    ) -> Result<i64> {
+        let conn = self.conn.lock().unwrap();
+        let now = Utc::now().timestamp();
+
+        conn.execute(
+            "INSERT INTO catalog_events (event_type, content_type, content_id, timestamp, triggered_by)
+             VALUES (?1, ?2, ?3, ?4, ?5)",
+            params![
+                event_type.as_str(),
+                content_type.as_str(),
+                content_id,
+                now,
+                triggered_by
+            ],
+        )?;
+
+        Ok(conn.last_insert_rowid())
+    }
+
+    fn get_catalog_events_since(&self, since_seq: i64) -> Result<Vec<CatalogEvent>> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare(
+            "SELECT seq, event_type, content_type, content_id, timestamp, triggered_by
+             FROM catalog_events
+             WHERE seq > ?1
+             ORDER BY seq ASC",
+        )?;
+
+        let events = stmt
+            .query_map(params![since_seq], Self::row_to_catalog_event)?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+
+        Ok(events)
+    }
+
+    fn get_catalog_events_current_seq(&self) -> Result<i64> {
+        let conn = self.conn.lock().unwrap();
+        let seq: Option<i64> = conn
+            .query_row(
+                "SELECT MAX(seq) FROM catalog_events",
+                [],
+                |row| row.get(0),
+            )
+            .optional()?
+            .flatten();
+
+        Ok(seq.unwrap_or(0))
+    }
+
+    fn cleanup_old_catalog_events(&self, before_timestamp: i64) -> Result<usize> {
+        let conn = self.conn.lock().unwrap();
+        let deleted = conn.execute(
+            "DELETE FROM catalog_events WHERE timestamp < ?1",
+            params![before_timestamp],
+        )?;
+        Ok(deleted)
     }
 }
 
@@ -948,5 +1030,169 @@ mod tests {
         // Cleanup with a large limit - should delete nothing
         let deleted = store.cleanup_bug_reports_to_size(1_000_000).unwrap();
         assert_eq!(deleted, 0);
+    }
+
+    // Catalog event tests
+
+    #[test]
+    fn test_catalog_event_append_and_get() {
+        use crate::server_store::{CatalogContentType, CatalogEventType};
+
+        let test = create_test_store();
+        let store = &test.store;
+
+        // Initially no events
+        let events = store.get_catalog_events_since(0).unwrap();
+        assert!(events.is_empty());
+        assert_eq!(store.get_catalog_events_current_seq().unwrap(), 0);
+
+        // Append an event
+        let seq = store
+            .append_catalog_event(
+                CatalogEventType::AlbumUpdated,
+                CatalogContentType::Album,
+                "album-123",
+                Some("download_completion"),
+            )
+            .unwrap();
+        assert_eq!(seq, 1);
+
+        // Get events since 0
+        let events = store.get_catalog_events_since(0).unwrap();
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].seq, 1);
+        assert_eq!(events[0].event_type, CatalogEventType::AlbumUpdated);
+        assert_eq!(events[0].content_type, CatalogContentType::Album);
+        assert_eq!(events[0].content_id, "album-123");
+        assert_eq!(
+            events[0].triggered_by,
+            Some("download_completion".to_string())
+        );
+
+        // Current seq should be 1
+        assert_eq!(store.get_catalog_events_current_seq().unwrap(), 1);
+    }
+
+    #[test]
+    fn test_catalog_event_sequence_numbers() {
+        use crate::server_store::{CatalogContentType, CatalogEventType};
+
+        let test = create_test_store();
+        let store = &test.store;
+
+        // Append multiple events
+        for i in 1..=5 {
+            let seq = store
+                .append_catalog_event(
+                    CatalogEventType::AlbumUpdated,
+                    CatalogContentType::Album,
+                    &format!("album-{}", i),
+                    None,
+                )
+                .unwrap();
+            assert_eq!(seq, i as i64);
+        }
+
+        // Get events since seq 2 (should return events 3, 4, 5)
+        let events = store.get_catalog_events_since(2).unwrap();
+        assert_eq!(events.len(), 3);
+        assert_eq!(events[0].seq, 3);
+        assert_eq!(events[1].seq, 4);
+        assert_eq!(events[2].seq, 5);
+
+        // Current seq should be 5
+        assert_eq!(store.get_catalog_events_current_seq().unwrap(), 5);
+    }
+
+    #[test]
+    fn test_catalog_event_different_types() {
+        use crate::server_store::{CatalogContentType, CatalogEventType};
+
+        let test = create_test_store();
+        let store = &test.store;
+
+        // Append events of different types
+        store
+            .append_catalog_event(
+                CatalogEventType::AlbumAdded,
+                CatalogContentType::Album,
+                "album-1",
+                Some("ingestion"),
+            )
+            .unwrap();
+        store
+            .append_catalog_event(
+                CatalogEventType::ArtistUpdated,
+                CatalogContentType::Artist,
+                "artist-1",
+                Some("admin_edit"),
+            )
+            .unwrap();
+        store
+            .append_catalog_event(
+                CatalogEventType::TrackUpdated,
+                CatalogContentType::Track,
+                "track-1",
+                None,
+            )
+            .unwrap();
+
+        let events = store.get_catalog_events_since(0).unwrap();
+        assert_eq!(events.len(), 3);
+
+        assert_eq!(events[0].event_type, CatalogEventType::AlbumAdded);
+        assert_eq!(events[0].content_type, CatalogContentType::Album);
+
+        assert_eq!(events[1].event_type, CatalogEventType::ArtistUpdated);
+        assert_eq!(events[1].content_type, CatalogContentType::Artist);
+
+        assert_eq!(events[2].event_type, CatalogEventType::TrackUpdated);
+        assert_eq!(events[2].content_type, CatalogContentType::Track);
+        assert!(events[2].triggered_by.is_none());
+    }
+
+    #[test]
+    fn test_catalog_event_cleanup() {
+        use crate::server_store::{CatalogContentType, CatalogEventType};
+
+        let test = create_test_store();
+        let store = &test.store;
+
+        // Append events with specific timestamps (we need to do this manually)
+        {
+            let conn = store.conn.lock().unwrap();
+            // Event 1 at timestamp 1000
+            conn.execute(
+                "INSERT INTO catalog_events (event_type, content_type, content_id, timestamp)
+                 VALUES ('album_updated', 'album', 'old-1', 1000)",
+                [],
+            )
+            .unwrap();
+            // Event 2 at timestamp 2000
+            conn.execute(
+                "INSERT INTO catalog_events (event_type, content_type, content_id, timestamp)
+                 VALUES ('album_updated', 'album', 'old-2', 2000)",
+                [],
+            )
+            .unwrap();
+            // Event 3 at timestamp 5000 (should survive cleanup)
+            conn.execute(
+                "INSERT INTO catalog_events (event_type, content_type, content_id, timestamp)
+                 VALUES ('album_updated', 'album', 'new-1', 5000)",
+                [],
+            )
+            .unwrap();
+        }
+
+        assert_eq!(store.get_catalog_events_since(0).unwrap().len(), 3);
+
+        // Cleanup events before timestamp 3000
+        let deleted = store.cleanup_old_catalog_events(3000).unwrap();
+        assert_eq!(deleted, 2);
+
+        // Only one event should remain
+        let events = store.get_catalog_events_since(0).unwrap();
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].content_id, "new-1");
     }
 }

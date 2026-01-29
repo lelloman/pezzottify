@@ -3,6 +3,7 @@ package com.lelloman.pezzottify.android.localdata
 import android.content.Context
 import com.lelloman.pezzottify.android.domain.app.TimeProvider
 import com.lelloman.pezzottify.android.domain.auth.AuthStore
+import com.lelloman.pezzottify.android.domain.catalogsync.CatalogSyncStore
 import com.lelloman.pezzottify.android.domain.config.ConfigStore
 import com.lelloman.pezzottify.android.domain.settings.UserSettingsStore
 import com.lelloman.pezzottify.android.domain.skeleton.SkeletonStore
@@ -18,6 +19,7 @@ import com.lelloman.pezzottify.android.domain.user.PermissionsStore
 import com.lelloman.pezzottify.android.domain.usercontent.UserContentStore
 import com.lelloman.pezzottify.android.domain.usercontent.UserPlaylistStore
 import com.lelloman.pezzottify.android.localdata.internal.auth.AuthStoreImpl
+import com.lelloman.pezzottify.android.localdata.internal.catalogsync.CatalogSyncStoreImpl
 import com.lelloman.pezzottify.android.localdata.internal.impression.ImpressionDao
 import com.lelloman.pezzottify.android.localdata.internal.impression.ImpressionStoreImpl
 import com.lelloman.pezzottify.android.localdata.internal.listening.ListeningEventDao
@@ -131,6 +133,12 @@ class LocalDataModule {
     fun provideSyncStateStore(
         @ApplicationContext context: Context
     ): SyncStateStore = SyncStateStoreImpl(context)
+
+    @Provides
+    @Singleton
+    fun provideCatalogSyncStore(
+        @ApplicationContext context: Context
+    ): CatalogSyncStore = CatalogSyncStoreImpl(context)
 
     @Provides
     @Singleton

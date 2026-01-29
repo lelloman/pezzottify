@@ -3,6 +3,7 @@ package com.lelloman.pezzottify.android.domain.auth.usecase
 import com.lelloman.pezzottify.android.domain.auth.AuthState
 import com.lelloman.pezzottify.android.domain.auth.AuthStore
 import com.lelloman.pezzottify.android.domain.cache.StaticsCache
+import com.lelloman.pezzottify.android.domain.catalogsync.CatalogSyncManager
 import com.lelloman.pezzottify.android.domain.listening.ListeningEventStore
 import com.lelloman.pezzottify.android.domain.player.PezzottifyPlayer
 import com.lelloman.pezzottify.android.domain.remoteapi.RemoteApiClient
@@ -36,6 +37,7 @@ class PerformLogoutTest {
     private lateinit var permissionsStore: PermissionsStore
     private lateinit var listeningEventStore: ListeningEventStore
     private lateinit var syncManager: SyncManager
+    private lateinit var catalogSyncManager: CatalogSyncManager
     private lateinit var player: PezzottifyPlayer
     private lateinit var webSocketManager: WebSocketManager
     private lateinit var loggerFactory: LoggerFactory
@@ -54,6 +56,7 @@ class PerformLogoutTest {
         permissionsStore = mockk(relaxed = true)
         listeningEventStore = mockk(relaxed = true)
         syncManager = mockk(relaxed = true)
+        catalogSyncManager = mockk(relaxed = true)
         player = mockk(relaxed = true)
         webSocketManager = mockk(relaxed = true)
 
@@ -84,6 +87,7 @@ class PerformLogoutTest {
             permissionsStore = permissionsStore,
             listeningEventStore = listeningEventStore,
             syncManager = syncManager,
+            catalogSyncManager = catalogSyncManager,
             player = player,
             webSocketManager = webSocketManager,
             loggerFactory = loggerFactory,
@@ -168,6 +172,13 @@ class PerformLogoutTest {
     }
 
     @Test
+    fun `invoke resets catalog sync manager`() = runTest {
+        performLogout()
+
+        coVerify { catalogSyncManager.reset() }
+    }
+
+    @Test
     fun `invoke clears permissions store`() = runTest {
         performLogout()
 
@@ -181,6 +192,7 @@ class PerformLogoutTest {
         coVerify {
             webSocketManager.disconnect()
             syncManager.cleanup()
+            catalogSyncManager.reset()
             authStore.storeAuthState(AuthState.LoggedOut)
             remoteApiClient.logout()
             staticsStore.deleteAll()

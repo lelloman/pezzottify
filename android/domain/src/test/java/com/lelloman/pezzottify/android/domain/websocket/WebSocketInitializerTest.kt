@@ -2,6 +2,7 @@ package com.lelloman.pezzottify.android.domain.websocket
 
 import com.lelloman.pezzottify.android.domain.auth.AuthState
 import com.lelloman.pezzottify.android.domain.auth.AuthStore
+import com.lelloman.pezzottify.android.domain.catalogsync.CatalogSyncManager
 import com.lelloman.pezzottify.android.domain.lifecycle.AppLifecycleObserver
 import com.lelloman.pezzottify.android.domain.lifecycle.NetworkConnectivityObserver
 import com.lelloman.pezzottify.android.domain.player.PezzottifyPlayer
@@ -30,6 +31,7 @@ class WebSocketInitializerTest {
     private lateinit var networkConnectivityObserver: NetworkConnectivityObserver
     private lateinit var player: PezzottifyPlayer
     private lateinit var syncManager: SyncManager
+    private lateinit var catalogSyncManager: CatalogSyncManager
 
     private lateinit var authStateFlow: MutableStateFlow<AuthState>
     private lateinit var isInForegroundFlow: MutableStateFlow<Boolean>
@@ -45,6 +47,7 @@ class WebSocketInitializerTest {
         networkConnectivityObserver = mockk(relaxed = true)
         player = mockk(relaxed = true)
         syncManager = mockk(relaxed = true)
+        catalogSyncManager = mockk(relaxed = true)
 
         authStateFlow = MutableStateFlow(AuthState.LoggedOut)
         isInForegroundFlow = MutableStateFlow(false)
@@ -68,6 +71,7 @@ class WebSocketInitializerTest {
         networkConnectivityObserver = networkConnectivityObserver,
         player = player,
         syncManager = syncManager,
+        catalogSyncManager = catalogSyncManager,
         scope = scope,
     )
 

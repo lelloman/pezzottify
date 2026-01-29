@@ -2173,6 +2173,18 @@ impl IngestionManager {
             notifier
                 .notify_completed(&job, converted as u32, &album_name, &artist_name)
                 .await;
+
+            // Emit catalog invalidation event for the album
+            if let Some(album_id) = &job.matched_album_id {
+                notifier
+                    .emit_catalog_event(
+                        crate::server_store::CatalogEventType::AlbumUpdated,
+                        crate::server_store::CatalogContentType::Album,
+                        album_id,
+                        "ingestion",
+                    )
+                    .await;
+            }
         }
 
         info!(

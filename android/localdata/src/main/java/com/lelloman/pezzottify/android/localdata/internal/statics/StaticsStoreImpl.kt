@@ -93,4 +93,25 @@ internal class StaticsStoreImpl(
     override suspend fun vacuum() {
         db.openHelper.writableDatabase.execSQL("VACUUM")
     }
+
+    override suspend fun deleteAlbum(albumId: String): Result<Unit> = try {
+        staticsDao.deleteAlbum(albumId)
+        Result.success(Unit)
+    } catch (throwable: Throwable) {
+        Result.failure(throwable)
+    }
+
+    override suspend fun deleteArtist(artistId: String): Result<Unit> = try {
+        staticsDao.deleteArtist(artistId)
+        Result.success(Unit)
+    } catch (throwable: Throwable) {
+        Result.failure(throwable)
+    }
+
+    override suspend fun deleteTrack(trackId: String): Result<Unit> = try {
+        staticsDao.deleteTrack(trackId)
+        Result.success(Unit)
+    } catch (throwable: Throwable) {
+        Result.failure(throwable)
+    }
 }

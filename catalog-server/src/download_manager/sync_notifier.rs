@@ -8,10 +8,11 @@ use std::sync::Arc;
 use tracing::{debug, info, warn};
 
 use crate::server::websocket::connection::ConnectionManager;
-use crate::server::websocket::messages::catalog::CatalogUpdatedMessage;
-use crate::server::websocket::messages::msg_types::{CATALOG_UPDATED, SYNC};
+use crate::server::websocket::messages::catalog::{CatalogInvalidationMessage, CatalogUpdatedMessage};
+use crate::server::websocket::messages::msg_types::{CATALOG_INVALIDATION, CATALOG_UPDATED, SYNC};
 use crate::server::websocket::messages::sync::SyncEventMessage;
 use crate::server::websocket::messages::ServerMessage;
+use crate::server_store::{CatalogContentType, CatalogEvent, CatalogEventType, ServerStore};
 use crate::user::sync_events::{
     StoredEvent, SyncDownloadContentType, SyncDownloadProgress, SyncQueueStatus, UserEvent,
 };
@@ -26,6 +27,7 @@ use super::models::{DownloadProgress, QueueItem, QueueStatus};
 pub struct DownloadSyncNotifier {
     user_store: Arc<dyn FullUserStore>,
     connection_manager: Arc<ConnectionManager>,
+    server_store: Arc<dyn ServerStore>,
 }
 
 impl DownloadSyncNotifier {
@@ -33,10 +35,12 @@ impl DownloadSyncNotifier {
     pub fn new(
         user_store: Arc<dyn FullUserStore>,
         connection_manager: Arc<ConnectionManager>,
+        server_store: Arc<dyn ServerStore>,
     ) -> Self {
         Self {
             user_store,
             connection_manager,
+            server_store,
         }
     }
 
@@ -148,6 +152,76 @@ impl DownloadSyncNotifier {
         info!(
             "Broadcast catalog_updated (version={}) to all connected clients",
             skeleton_version
+        );
+    }
+
+    /// Emit a catalog invalidation event and broadcast to ALL connected clients.
+    ///
+    /// This is used for surgical cache invalidation - clients can invalidate
+    /// specific content entries rather than their entire cache.
+    pub async fn emit_catalog_event(
+        &self,
+        event_type: CatalogEventType,
+        content_type: CatalogContentType,
+        content_id: &str,
+        triggered_by: &str,
+    ) {
+        // Store the event in the server database
+        let event = match self.server_store.append_catalog_event(
+            event_type.clone(),
+            content_type.clone(),
+            content_id,
+            Some(triggered_by),
+        ) {
+            Ok(seq) => CatalogEvent {
+                seq,
+                event_type: event_type.clone(),
+                content_type: content_type.clone(),
+                content_id: content_id.to_string(),
+                timestamp: chrono::Utc::now().timestamp(),
+                triggered_by: Some(triggered_by.to_string()),
+            },
+            Err(e) => {
+                warn!("Failed to store catalog event: {}", e);
+                // Create a minimal event for broadcast even if storage failed
+                CatalogEvent {
+                    seq: 0,
+                    event_type: event_type.clone(),
+                    content_type: content_type.clone(),
+                    content_id: content_id.to_string(),
+                    timestamp: chrono::Utc::now().timestamp(),
+                    triggered_by: Some(triggered_by.to_string()),
+                }
+            }
+        };
+
+        // Broadcast to all connected clients
+        let ws_msg = ServerMessage::new(
+            CATALOG_INVALIDATION,
+            CatalogInvalidationMessage {
+                seq: event.seq,
+                event_type: event.event_type.as_str().to_string(),
+                content_type: event.content_type.as_str().to_string(),
+                content_id: event.content_id.clone(),
+                timestamp: event.timestamp,
+            },
+        );
+
+        let failed_count = self.connection_manager.broadcast_to_all(ws_msg).await;
+
+        if failed_count > 0 {
+            debug!(
+                "Failed to send catalog_invalidation to {} connections",
+                failed_count
+            );
+        }
+
+        info!(
+            "Broadcast catalog_invalidation: {} {} {} (seq={})",
+            event.event_type.as_str(),
+            event.content_type.as_str(),
+            event.content_id,
+            event.seq
         );
     }
 

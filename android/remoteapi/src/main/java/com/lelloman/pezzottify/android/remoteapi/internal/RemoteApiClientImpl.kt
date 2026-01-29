@@ -28,6 +28,7 @@ import com.lelloman.pezzottify.android.domain.remoteapi.response.SkeletonDeltaRe
 import com.lelloman.pezzottify.android.domain.remoteapi.response.SkeletonVersionResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.SyncEventsResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.SyncStateResponse
+import com.lelloman.pezzottify.android.domain.catalogsync.CatalogSyncResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.TrackResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.WhatsNewResponse
 import com.lelloman.pezzottify.android.domain.sync.UserSetting
@@ -415,6 +416,13 @@ internal class RemoteApiClientImpl(
                 return@catchingNetworkError RemoteApiResponse.Error.EventsPruned
             }
             response.returnFromRetrofitResponse()
+        }
+
+    override suspend fun getCatalogSync(since: Long): RemoteApiResponse<CatalogSyncResponse> =
+        catchingNetworkError {
+            getRetrofit()
+                .getCatalogSync(authToken = authToken, since = since)
+                .returnFromRetrofitResponse()
         }
 
     override suspend fun updateUserSettings(settings: List<UserSetting>): RemoteApiResponse<Unit> =
