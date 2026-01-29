@@ -266,11 +266,11 @@ watch(
         id: track.id,
         name: track.title,
         title: track.title,
-        artists_ids: track.artistId ? [track.artistId] : [],
+        artists_ids: track.artistsIds || [],
         album_id: track.albumId,
         duration: track.duration,
       };
-      artists.value = [];
+      artists.value = track.artistsIds || [];
       artistName.value = track.artistName || null;
       duration.value = track.duration ? formatDuration(track.duration) : "";
 

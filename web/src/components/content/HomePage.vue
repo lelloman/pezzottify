@@ -188,7 +188,8 @@ const fetchRecentlyPlayed = async () => {
       const data = await response.json();
       // Deduplicate by album_id, keeping only first occurrence
       const seen = new Set();
-      recentlyPlayed.value = data.entries
+      const entries = Array.isArray(data.entries) ? data.entries : [];
+      recentlyPlayed.value = entries
         .filter((entry) => {
           if (seen.has(entry.album_id)) return false;
           seen.add(entry.album_id);

@@ -118,9 +118,21 @@ export const usePlaybackStore = defineStore("playback", () => {
   // Normalized current track data
   const currentTrack = computed(() => {
     if (outlet.value === "remote") {
-      // Get from remote state via devices store
+      // Get from remote state via devices store, normalize to camelCase
       const state = devicesStore.remoteState;
-      return state?.current_track || null;
+      const rt = state?.current_track;
+      if (!rt) return null;
+      return {
+        id: rt.id,
+        title: rt.title,
+        artistsIds: rt.artists_ids || [],
+        artistName: rt.artist_name || "Unknown Artist",
+        albumId: rt.album_id || "",
+        albumTitle: rt.album_title || "Unknown Album",
+        duration: rt.duration || 0,
+        trackNumber: rt.track_number,
+        imageId: rt.image_id || null,
+      };
     }
 
     // Local: resolve from statics
@@ -708,6 +720,8 @@ export const usePlaybackStore = defineStore("playback", () => {
           } else {
             // Another device is the audio device
             switchToRemoteOutput(currentAudioDevice.id);
+            // Feed the initial state to the remote outlet
+            outletManager.updateRemoteState(payload.session.state);
           }
         }
       }
@@ -860,11 +874,12 @@ export const usePlaybackStore = defineStore("playback", () => {
           title: track.name || track.title,
           artist_id: artistId || "",
           artist_name: artist?.name || "Unknown Artist",
+          artists_ids: track.artists_ids || (artistId ? [artistId] : []),
           album_id: track.album_id || "",
           album_title: album?.name || "Unknown Album",
           duration: track.duration || 0,
           track_number: track.track_number,
-          image_id: album?.image_id || album?.covers?.[0]?.id || null,
+          image_id: album?.id || null,
         };
       }
     }
