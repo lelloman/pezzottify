@@ -111,6 +111,8 @@ pub mod msg_types {
     pub const SYNC: &str = "sync";
     /// Catalog updated notification (server -> all clients).
     pub const CATALOG_UPDATED: &str = "catalog_updated";
+    /// Catalog invalidation event (server -> all clients) - detailed per-content invalidation.
+    pub const CATALOG_INVALIDATION: &str = "catalog_invalidation";
     /// Ingestion job update notification (server -> client).
     pub const INGESTION_UPDATE: &str = "ingestion_update";
     /// Ingestion job progress update (server -> client).
@@ -187,6 +189,24 @@ pub mod catalog {
     pub struct CatalogUpdatedMessage {
         /// Current skeleton version on server.
         pub skeleton_version: i64,
+    }
+
+    /// Payload for catalog_invalidation messages.
+    ///
+    /// Broadcast to ALL connected clients when catalog content changes.
+    /// Provides detailed per-content invalidation for surgical cache updates.
+    #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+    pub struct CatalogInvalidationMessage {
+        /// Sequence number for ordering and catch-up.
+        pub seq: i64,
+        /// Type of event (album_updated, artist_updated, track_updated, etc.)
+        pub event_type: String,
+        /// Type of content affected (album, artist, track).
+        pub content_type: String,
+        /// ID of the affected content.
+        pub content_id: String,
+        /// Unix timestamp when the event occurred.
+        pub timestamp: i64,
     }
 }
 

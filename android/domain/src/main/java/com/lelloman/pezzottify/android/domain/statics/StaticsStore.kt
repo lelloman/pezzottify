@@ -19,6 +19,24 @@ interface StaticsStore {
     suspend fun deleteAll(): Result<Unit>
 
     /**
+     * Delete a specific album from the store.
+     * Used for surgical cache invalidation when catalog content changes.
+     */
+    suspend fun deleteAlbum(albumId: String): Result<Unit>
+
+    /**
+     * Delete a specific artist from the store.
+     * Used for surgical cache invalidation when catalog content changes.
+     */
+    suspend fun deleteArtist(artistId: String): Result<Unit>
+
+    /**
+     * Delete a specific track from the store.
+     * Used for surgical cache invalidation when catalog content changes.
+     */
+    suspend fun deleteTrack(trackId: String): Result<Unit>
+
+    /**
      * Returns the total number of entries (artists + albums + tracks) in the database.
      */
     suspend fun countEntries(): Int

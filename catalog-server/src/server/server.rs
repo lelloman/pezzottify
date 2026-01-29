@@ -399,6 +399,18 @@ struct SyncEventsQuery {
     since: i64,
 }
 
+#[derive(Deserialize)]
+struct CatalogSyncQuery {
+    #[serde(default)]
+    since: i64,
+}
+
+#[derive(Serialize)]
+struct CatalogSyncResponse {
+    events: Vec<crate::server_store::CatalogEvent>,
+    current_seq: i64,
+}
+
 // ========================================================================
 // Bug Report API Types
 // ========================================================================
@@ -595,6 +607,40 @@ async fn get_sync_events(
     };
 
     Json(SyncEventsResponse {
+        events,
+        current_seq,
+    })
+    .into_response()
+}
+
+/// GET /v1/sync/catalog - Returns catalog events since a given sequence number
+///
+/// This endpoint allows clients to catch up on catalog changes they may have missed.
+/// Use `since=0` to get all events (up to a reasonable limit).
+async fn get_catalog_sync(
+    _session: Session, // Authentication required but not user-specific
+    State(server_store): State<GuardedServerStore>,
+    Query(query): Query<CatalogSyncQuery>,
+) -> Response {
+    // Get events since the requested sequence
+    let events = match server_store.get_catalog_events_since(query.since) {
+        Ok(e) => e,
+        Err(err) => {
+            error!("Error getting catalog events since {}: {}", query.since, err);
+            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+        }
+    };
+
+    // Get current sequence number
+    let current_seq = match server_store.get_catalog_events_current_seq() {
+        Ok(seq) => seq,
+        Err(err) => {
+            error!("Error getting catalog events current seq: {}", err);
+            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+        }
+    };
+
+    Json(CatalogSyncResponse {
         events,
         current_seq,
     })
@@ -4420,9 +4466,10 @@ pub async fn make_app(
                 });
 
                 // Create notifier for WebSocket updates
-                let notifier = Arc::new(crate::ingestion::IngestionNotifier::new(
-                    state.ws_connection_manager.clone(),
-                ));
+                let notifier = Arc::new(
+                    crate::ingestion::IngestionNotifier::new(state.ws_connection_manager.clone())
+                        .with_server_store(state.server_store.clone()),
+                );
 
                 let ingestion_manager = Arc::new(
                     crate::ingestion::IngestionManager::new(
@@ -4689,6 +4736,7 @@ pub async fn make_app(
     let sync_routes: Router = Router::new()
         .route("/state", get(get_sync_state))
         .route("/events", get(get_sync_events))
+        .route("/catalog", get(get_catalog_sync))
         .layer(GovernorLayer::new(user_content_read_rate_limit.clone()))
         .route_layer(middleware::from_fn_with_state(
             state.clone(),
@@ -5220,6 +5268,27 @@ mod tests {
             Ok(0)
         }
         fn cleanup_bug_reports_to_size(&self, _max_size: usize) -> anyhow::Result<usize> {
+            Ok(0)
+        }
+        fn append_catalog_event(
+            &self,
+            _event_type: crate::server_store::CatalogEventType,
+            _content_type: crate::server_store::CatalogContentType,
+            _content_id: &str,
+            _triggered_by: Option<&str>,
+        ) -> anyhow::Result<i64> {
+            Ok(1)
+        }
+        fn get_catalog_events_since(
+            &self,
+            _since_seq: i64,
+        ) -> anyhow::Result<Vec<crate::server_store::CatalogEvent>> {
+            Ok(vec![])
+        }
+        fn get_catalog_events_current_seq(&self) -> anyhow::Result<i64> {
+            Ok(0)
+        }
+        fn cleanup_old_catalog_events(&self, _before_timestamp: i64) -> anyhow::Result<usize> {
             Ok(0)
         }
     }

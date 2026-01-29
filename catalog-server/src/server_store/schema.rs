@@ -195,6 +195,52 @@ fn migrate_v3_to_v4(conn: &rusqlite::Connection) -> anyhow::Result<()> {
 }
 
 // =============================================================================
+// Version 5 - Catalog events
+// =============================================================================
+
+/// Catalog events table - stores catalog invalidation events for client sync
+const CATALOG_EVENTS_TABLE_V5: Table = Table {
+    name: "catalog_events",
+    columns: &[
+        sqlite_column!("seq", &SqlType::Integer, is_primary_key = true), // AUTOINCREMENT
+        sqlite_column!("event_type", &SqlType::Text, non_null = true),
+        sqlite_column!("content_type", &SqlType::Text, non_null = true),
+        sqlite_column!("content_id", &SqlType::Text, non_null = true),
+        sqlite_column!("timestamp", &SqlType::Integer, non_null = true),
+        sqlite_column!("triggered_by", &SqlType::Text),
+    ],
+    indices: &[
+        ("idx_catalog_events_timestamp", "timestamp DESC"),
+        ("idx_catalog_events_content", "content_type, content_id"),
+    ],
+    unique_constraints: &[],
+};
+
+/// Migration from version 4 to version 5: add catalog_events table
+fn migrate_v4_to_v5(conn: &rusqlite::Connection) -> anyhow::Result<()> {
+    conn.execute(
+        "CREATE TABLE catalog_events (
+            seq INTEGER PRIMARY KEY AUTOINCREMENT,
+            event_type TEXT NOT NULL,
+            content_type TEXT NOT NULL,
+            content_id TEXT NOT NULL,
+            timestamp INTEGER NOT NULL,
+            triggered_by TEXT
+        )",
+        [],
+    )?;
+    conn.execute(
+        "CREATE INDEX idx_catalog_events_timestamp ON catalog_events(timestamp DESC)",
+        [],
+    )?;
+    conn.execute(
+        "CREATE INDEX idx_catalog_events_content ON catalog_events(content_type, content_id)",
+        [],
+    )?;
+    Ok(())
+}
+
+// =============================================================================
 // Versioned Schema Definition
 // =============================================================================
 
@@ -204,6 +250,7 @@ fn migrate_v3_to_v4(conn: &rusqlite::Connection) -> anyhow::Result<()> {
 /// Version 2: Server state key-value store
 /// Version 3: Job audit log table
 /// Version 4: Bug reports table
+/// Version 5: Catalog events table
 pub const SERVER_VERSIONED_SCHEMAS: &[VersionedSchema] = &[
     VersionedSchema {
         version: 1,
@@ -239,6 +286,18 @@ pub const SERVER_VERSIONED_SCHEMAS: &[VersionedSchema] = &[
             BUG_REPORTS_TABLE_V4,
         ],
         migration: Some(migrate_v3_to_v4),
+    },
+    VersionedSchema {
+        version: 5,
+        tables: &[
+            JOB_RUNS_TABLE_V1,
+            JOB_SCHEDULES_TABLE_V1,
+            SERVER_STATE_TABLE_V2,
+            JOB_AUDIT_LOG_TABLE_V3,
+            BUG_REPORTS_TABLE_V4,
+            CATALOG_EVENTS_TABLE_V5,
+        ],
+        migration: Some(migrate_v4_to_v5),
     },
 ];
 
@@ -496,5 +555,132 @@ mod tests {
         assert_eq!(device_info, "{\"model\":\"Pixel\"}");
         assert_eq!(logs, "some logs");
         assert_eq!(attachments, "[\"base64img\"]");
+    }
+
+    #[test]
+    fn test_v5_schema_creates_successfully() {
+        let conn = Connection::open_in_memory().unwrap();
+        let schema = &SERVER_VERSIONED_SCHEMAS[4];
+        schema.create(&conn).unwrap();
+        schema.validate(&conn).unwrap();
+    }
+
+    #[test]
+    fn test_v5_catalog_events_indices_created() {
+        let conn = Connection::open_in_memory().unwrap();
+        let schema = &SERVER_VERSIONED_SCHEMAS[4];
+        schema.create(&conn).unwrap();
+
+        // Verify catalog events indices exist
+        let idx_timestamp: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND name='idx_catalog_events_timestamp'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(idx_timestamp, 1);
+
+        let idx_content: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND name='idx_catalog_events_content'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(idx_content, 1);
+    }
+
+    #[test]
+    fn test_migration_v4_to_v5() {
+        let conn = Connection::open_in_memory().unwrap();
+
+        // Create V4 schema
+        let v4_schema = &SERVER_VERSIONED_SCHEMAS[3];
+        v4_schema.create(&conn).unwrap();
+
+        // Run migration to V5
+        if let Some(migrate_fn) = SERVER_VERSIONED_SCHEMAS[4].migration {
+            migrate_fn(&conn).unwrap();
+        }
+
+        // Verify catalog_events table exists
+        let catalog_events_exists: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='catalog_events'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(catalog_events_exists, 1);
+
+        // Verify V5 schema validates
+        let v5_schema = &SERVER_VERSIONED_SCHEMAS[4];
+        v5_schema.validate(&conn).unwrap();
+    }
+
+    #[test]
+    fn test_catalog_events_table_columns() {
+        let conn = Connection::open_in_memory().unwrap();
+        let schema = &SERVER_VERSIONED_SCHEMAS[4];
+        schema.create(&conn).unwrap();
+
+        // Insert a test catalog event to verify schema
+        conn.execute(
+            "INSERT INTO catalog_events (event_type, content_type, content_id, timestamp, triggered_by)
+             VALUES ('album_updated', 'album', 'album-123', 1700000000, 'download_completion')",
+            [],
+        )
+        .unwrap();
+
+        // Verify we can read it back with autoincrement seq
+        let (seq, event_type, content_type, content_id, timestamp, triggered_by): (
+            i64,
+            String,
+            String,
+            String,
+            i64,
+            String,
+        ) = conn
+            .query_row(
+                "SELECT seq, event_type, content_type, content_id, timestamp, triggered_by FROM catalog_events WHERE content_id = 'album-123'",
+                [],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?, r.get(5)?)),
+            )
+            .unwrap();
+        assert_eq!(seq, 1);
+        assert_eq!(event_type, "album_updated");
+        assert_eq!(content_type, "album");
+        assert_eq!(content_id, "album-123");
+        assert_eq!(timestamp, 1700000000);
+        assert_eq!(triggered_by, "download_completion");
+    }
+
+    #[test]
+    fn test_catalog_events_autoincrement_seq() {
+        let conn = Connection::open_in_memory().unwrap();
+        let schema = &SERVER_VERSIONED_SCHEMAS[4];
+        schema.create(&conn).unwrap();
+
+        // Insert multiple events
+        for i in 1..=3 {
+            conn.execute(
+                "INSERT INTO catalog_events (event_type, content_type, content_id, timestamp)
+                 VALUES ('album_updated', 'album', ?1, ?2)",
+                rusqlite::params![format!("album-{}", i), 1700000000 + i],
+            )
+            .unwrap();
+        }
+
+        // Verify seq is auto-incremented
+        let seqs: Vec<i64> = conn
+            .prepare("SELECT seq FROM catalog_events ORDER BY seq")
+            .unwrap()
+            .query_map([], |row| row.get(0))
+            .unwrap()
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap();
+
+        assert_eq!(seqs, vec![1, 2, 3]);
     }
 }

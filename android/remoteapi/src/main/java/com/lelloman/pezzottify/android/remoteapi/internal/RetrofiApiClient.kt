@@ -34,6 +34,7 @@ import com.lelloman.pezzottify.android.domain.remoteapi.response.GenreResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.GenreTracksResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.SyncEventsResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.SyncStateResponse
+import com.lelloman.pezzottify.android.domain.catalogsync.CatalogSyncResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.TrackResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.WhatsNewResponse
 import okhttp3.ResponseBody
@@ -176,6 +177,12 @@ internal interface RetrofitApiClient {
         @Header("Authorization") authToken: String,
         @Query("since") since: Long,
     ): Response<SyncEventsResponse>
+
+    @GET("/v1/sync/catalog")
+    suspend fun getCatalogSync(
+        @Header("Authorization") authToken: String,
+        @Query("since") since: Long,
+    ): Response<CatalogSyncResponse>
 
     @PUT("/v1/user/settings")
     suspend fun updateUserSettings(

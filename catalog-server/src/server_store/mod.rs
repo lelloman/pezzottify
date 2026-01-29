@@ -59,4 +59,20 @@ pub trait ServerStore: Send + Sync {
     /// Deletes oldest bug reports until total size is under the given limit.
     /// Returns the number of reports deleted.
     fn cleanup_bug_reports_to_size(&self, max_size: usize) -> Result<usize>;
+
+    // Catalog events
+    /// Append a new catalog event. Returns the sequence number.
+    fn append_catalog_event(
+        &self,
+        event_type: CatalogEventType,
+        content_type: CatalogContentType,
+        content_id: &str,
+        triggered_by: Option<&str>,
+    ) -> Result<i64>;
+    /// Get catalog events since a given sequence number (exclusive).
+    fn get_catalog_events_since(&self, since_seq: i64) -> Result<Vec<CatalogEvent>>;
+    /// Get the current (highest) sequence number for catalog events.
+    fn get_catalog_events_current_seq(&self) -> Result<i64>;
+    /// Delete catalog events older than a given timestamp (for pruning).
+    fn cleanup_old_catalog_events(&self, before_timestamp: i64) -> Result<usize>;
 }

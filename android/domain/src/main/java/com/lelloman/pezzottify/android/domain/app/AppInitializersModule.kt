@@ -1,6 +1,7 @@
 package com.lelloman.pezzottify.android.domain.app
 
 import com.lelloman.pezzottify.android.domain.auth.AuthStore
+import com.lelloman.pezzottify.android.domain.catalogsync.CatalogWebSocketHandler
 import com.lelloman.pezzottify.android.domain.impression.ImpressionSynchronizer
 import com.lelloman.pezzottify.android.domain.listening.ListeningEventSynchronizer
 import com.lelloman.pezzottify.android.domain.listening.ListeningTracker
@@ -74,4 +75,8 @@ abstract class AppInitializersModule {
     @Binds
     @IntoSet
     internal abstract fun bindsPlaybackSessionIntegration(integration: PlaybackSessionIntegration): AppInitializer
+
+    @Binds
+    @IntoSet
+    internal abstract fun bindsCatalogWebSocketHandler(handler: CatalogWebSocketHandler): AppInitializer
 }

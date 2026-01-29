@@ -1,5 +1,6 @@
 package com.lelloman.pezzottify.android.domain.remoteapi
 
+import com.lelloman.pezzottify.android.domain.catalogsync.CatalogSyncResponse
 import com.lelloman.pezzottify.android.domain.listening.ListeningEventSyncData
 import com.lelloman.pezzottify.android.domain.remoteapi.request.BatchContentRequest
 import com.lelloman.pezzottify.android.domain.remoteapi.response.AlbumResponse
@@ -152,6 +153,12 @@ interface RemoteApiClient {
      * Returns RemoteApiResponse.Error.EventsPruned if the sequence has been pruned.
      */
     suspend fun getSyncEvents(since: Long): RemoteApiResponse<SyncEventsResponse>
+
+    /**
+     * Get catalog events since a given sequence number.
+     * Used for catching up on catalog changes after reconnection.
+     */
+    suspend fun getCatalogSync(since: Long): RemoteApiResponse<CatalogSyncResponse>
 
     /**
      * Update user settings on the server.

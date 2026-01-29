@@ -3,6 +3,7 @@ package com.lelloman.pezzottify.android.domain.websocket
 import com.lelloman.pezzottify.android.domain.app.AppInitializer
 import com.lelloman.pezzottify.android.domain.auth.AuthState
 import com.lelloman.pezzottify.android.domain.auth.AuthStore
+import com.lelloman.pezzottify.android.domain.catalogsync.CatalogSyncManager
 import com.lelloman.pezzottify.android.domain.lifecycle.AppLifecycleObserver
 import com.lelloman.pezzottify.android.domain.lifecycle.NetworkConnectivityObserver
 import com.lelloman.pezzottify.android.domain.player.PezzottifyPlayer
@@ -26,6 +27,7 @@ class WebSocketInitializer internal constructor(
     private val networkConnectivityObserver: NetworkConnectivityObserver,
     private val player: PezzottifyPlayer,
     private val syncManager: SyncManager,
+    private val catalogSyncManager: CatalogSyncManager,
     private val scope: CoroutineScope,
 ) : AppInitializer {
 
@@ -37,6 +39,7 @@ class WebSocketInitializer internal constructor(
         networkConnectivityObserver: NetworkConnectivityObserver,
         player: PezzottifyPlayer,
         syncManager: SyncManager,
+        catalogSyncManager: CatalogSyncManager,
     ) : this(
         authStore,
         webSocketManager,
@@ -44,6 +47,7 @@ class WebSocketInitializer internal constructor(
         networkConnectivityObserver,
         player,
         syncManager,
+        catalogSyncManager,
         CoroutineScope(SupervisorJob() + Dispatchers.IO),
     )
 
@@ -80,6 +84,7 @@ class WebSocketInitializer internal constructor(
                         if (wasDisconnected) {
                             // Reconnected after being disconnected - catch up on missed events
                             syncManager.catchUp()
+                            catalogSyncManager.catchUp()
                         }
                         wasDisconnected = false
                     }
