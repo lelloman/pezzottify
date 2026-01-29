@@ -161,7 +161,7 @@ export const useStaticsStore = defineStore("statics", () => {
   const getItem = (type, id) => {
     let entry = statics[type][id];
     if (entry) {
-      if (!entry.item) {
+      if (!entry.ref.item) {
         triggerStaticItemFetch(type, id);
       }
       return entry.ref;
