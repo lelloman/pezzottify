@@ -393,12 +393,16 @@ export const usePlayerStore = defineStore("player", () => {
     // Register as audio device if no existing session
     try {
       const remotePlayback = useRemotePlaybackStore();
+      console.log("[Player] play() checking remote playback: sessionExists=", remotePlayback.sessionExists, "isAudioDevice=", remotePlayback.isAudioDevice);
       if (!remotePlayback.sessionExists && !remotePlayback.isAudioDevice) {
+        console.log("[Player] Calling registerAsAudioDevice()");
         remotePlayback.registerAsAudioDevice();
+      } else {
+        console.log("[Player] Skipping registerAsAudioDevice - session exists or already audio device");
       }
     } catch (e) {
       // Remote playback store may not be initialized yet
-      console.debug("[Player] Remote playback integration skipped:", e.message);
+      console.warn("[Player] Remote playback integration error:", e);
     }
   };
 
