@@ -344,10 +344,7 @@ export const useDevicesStore = defineStore("devices", () => {
 
     broadcastInterval = setInterval(() => {
       if (playbackCallbacks?.getPlaybackState) {
-        const state = playbackCallbacks.getPlaybackState();
-        if (state.isPlaying) {
-          broadcastState(state);
-        }
+        broadcastState(playbackCallbacks.getPlaybackState());
       }
     }, BROADCAST_INTERVAL_MS);
 
