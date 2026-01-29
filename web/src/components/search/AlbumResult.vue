@@ -29,14 +29,14 @@
 
 <script setup>
 import "@/assets/search.css";
-import { usePlayerStore } from "@/store/player";
+import { usePlaybackStore } from "@/store/playback";
 import { computedImageUrl } from "@/utils.js";
 import { useRouter } from "vue-router";
 import PlayIcon from "@/components/icons/PlayIcon.vue";
 import ClickableArtistsNames from "@/components/common/ClickableArtistsNames.vue";
 import MultiSourceImage from "../common/MultiSourceImage.vue";
 
-const playerStore = usePlayerStore();
+const playbackStore = usePlaybackStore();
 
 const props = defineProps({
   result: {
@@ -58,8 +58,7 @@ const handleClick = (event) => {
 const handlePlayClick = (event) => {
   console.log("play click");
   console.log(event);
-  playerStore.setAlbumId(event.id);
-  playerStore.setIsPlaying(true);
+  playbackStore.setAlbumId(event.id);
 };
 </script>
 

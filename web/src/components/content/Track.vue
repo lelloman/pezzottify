@@ -40,7 +40,7 @@
 import { ref, watch, onMounted } from "vue";
 import MultiSourceImage from "@/components/common/MultiSourceImage.vue";
 import PlayIcon from "../icons/PlayIcon.vue";
-import { usePlayerStore } from "@/store/player";
+import { usePlaybackStore } from "@/store/playback";
 import { useRemoteStore } from "@/store/remote";
 import {
   chooseAlbumCoverImageUrl,
@@ -63,7 +63,7 @@ const album = ref(null);
 const coverUrls = ref([]);
 
 const router = useRouter();
-const player = usePlayerStore();
+const playback = usePlaybackStore();
 const staticsStore = useStaticsStore();
 const remoteStore = useRemoteStore();
 
@@ -72,7 +72,7 @@ let albumDataUnwatcher = null;
 
 const handleClickOnPlayTrack = () => {
   if (track.value) {
-    player.setTrack({
+    playback.setTrack({
       id: track.value.id,
       name: track.value.name,
       artists: track.value.artists_ids,

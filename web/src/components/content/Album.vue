@@ -98,7 +98,7 @@ import { ref, watch, onMounted, computed } from "vue";
 import { chooseAlbumCoverImageUrl } from "@/utils";
 import MultiSourceImage from "@/components/common/MultiSourceImage.vue";
 import PlayIcon from "@/components/icons/PlayIcon.vue";
-import { usePlayerStore } from "@/store/player";
+import { usePlaybackStore } from "@/store/playback";
 import { useUserStore } from "@/store/user";
 import { useRemoteStore } from "@/store/remote";
 import ToggableFavoriteIcon from "@/components/common/ToggableFavoriteIcon.vue";
@@ -117,7 +117,7 @@ const props = defineProps({
 const album = ref(null);
 const coverUrls = ref(null);
 
-const player = usePlayerStore();
+const playback = usePlaybackStore();
 const userStore = useUserStore();
 const staticsStore = useStaticsStore();
 const remoteStore = useRemoteStore();
@@ -150,7 +150,7 @@ const getFlatTrackIndex = (discIndex, trackIndex) => {
 };
 
 watch(
-  () => player.currentTrackId,
+  () => playback.currentTrackId,
   (newTrackId) => {
     console.log("CurrentTrackId: " + newTrackId);
     currentTrackId.value = newTrackId;
@@ -159,7 +159,7 @@ watch(
 );
 
 watch(
-  [() => player.currentTrackIndex, () => player.currentPlaylist],
+  [() => playback.currentTrackIndex, () => playback.currentPlaylist],
   ([newTrackIndex, newPlaylist]) => {
     console.log(
       "Album.vue watcher - TrackIndex:",
@@ -208,7 +208,7 @@ const handleClickOnFavoriteIcon = () => {
 };
 
 const handleClickOnPlayAlbum = () => {
-  player.setAlbumId(props.albumId);
+  playback.setAlbumId(props.albumId);
 };
 
 const handleClickOnTrack = (trackId) => {
@@ -217,7 +217,7 @@ const handleClickOnTrack = (trackId) => {
       disc.tracks.includes(trackId),
     );
     const trackIndex = album.value.discs[discIndex].tracks.indexOf(trackId);
-    player.setAlbumId(props.albumId, discIndex, trackIndex);
+    playback.setAlbumId(props.albumId, discIndex, trackIndex);
   }
 };
 

@@ -42,13 +42,13 @@ import { useRouter } from "vue-router";
 import { chooseAlbumCoverImageUrl } from "@/utils";
 import MultiSourceImage from "./MultiSourceImage.vue";
 import PlayIcon from "@/components/icons/PlayIcon.vue";
-import { usePlayerStore } from "@/store/player";
+import { usePlaybackStore } from "@/store/playback";
 import LoadClickableArtistsNames from "@/components/common/LoadClickableArtistsNames.vue";
 import { useStaticsStore } from "@/store/statics";
 
 const router = useRouter();
 const staticsStore = useStaticsStore();
-const playerStore = usePlayerStore();
+const playbackStore = usePlaybackStore();
 
 const props = defineProps({
   albumId: {
@@ -97,8 +97,7 @@ if (props.albumId && !props.album) {
 }
 
 const handlePlayClick = (event) => {
-  playerStore.setAlbumId(event);
-  playerStore.setIsPlaying(true);
+  playbackStore.setAlbumId(event);
 };
 
 const handleClick = (albumId) => {

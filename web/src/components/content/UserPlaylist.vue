@@ -92,7 +92,7 @@ import { useRoute, useRouter } from "vue-router";
 import { useUserStore } from "@/store/user";
 import EditIcon from "@/components/icons/EditIcon.vue";
 import LoadTrackListItem from "@/components/common/LoadTrackListItem.vue";
-import { usePlayerStore } from "@/store/player";
+import { usePlaybackStore } from "@/store/playback";
 import TrackContextMenu from "@/components/common/contextmenu/TrackContextMenu.vue";
 
 // Define playlistId prop
@@ -106,7 +106,7 @@ const props = defineProps({
 const router = useRouter();
 const route = useRoute();
 const userStore = useUserStore();
-const player = usePlayerStore();
+const playback = usePlaybackStore();
 
 const loading = ref(true);
 const error = ref(null);
@@ -147,7 +147,7 @@ const handleDeletePlaylistConfirmation = async () => {
 
 const handleClickOnPlay = () => {
   console.log("Play playlist:", props.playlistId);
-  player.setUserPlaylist(playlist.value);
+  playback.setUserPlaylist(playlist.value);
 };
 
 const handleClickOnDelete = () => {
@@ -160,7 +160,7 @@ const handleTrackSelection = (track) => {
 };
 
 watch(
-  [() => player.currentTrackIndex, () => player.currentPlaylist],
+  [() => playback.currentTrackIndex, () => playback.currentPlaylist],
   ([newTrackIndex, newPlaylist]) => {
     console.log(
       "UserPlaylist.vue watcher - TrackIndex:",
