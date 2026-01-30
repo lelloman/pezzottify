@@ -19,7 +19,7 @@ use super::{
     connection::ConnectionManager,
     messages::{msg_types, system, ClientMessage, ServerMessage},
     playback_messages::*,
-    playback_session::PlaybackSessionManager,
+    playback_session::{PlaybackError, PlaybackSessionManager},
 };
 use crate::server::session::Session;
 use crate::server::state::{GuardedConnectionManager, GuardedPlaybackSessionManager};
@@ -274,7 +274,7 @@ async fn handle_playback_message(
 ) {
     let manager = &state.playback_session_manager;
 
-    let result: Result<(), String> = match msg_type {
+    let result: Result<(), PlaybackError> = match msg_type {
         msg_types::PLAYBACK_HELLO => {
             match serde_json::from_value::<HelloPayload>(payload) {
                 Ok(p) => {
@@ -291,7 +291,10 @@ async fn handle_playback_message(
                         .await;
                     Ok(())
                 }
-                Err(e) => Err(format!("Invalid hello payload: {}", e)),
+                Err(e) => Err(PlaybackError::InvalidMessage(format!(
+                    "Invalid hello payload: {}",
+                    e
+                ))),
             }
         }
 
@@ -299,9 +302,11 @@ async fn handle_playback_message(
             match serde_json::from_value::<PlaybackState>(payload) {
                 Ok(state_payload) => manager
                     .handle_state_update(user_id, device_id, state_payload)
-                    .await
-                    .map_err(|e| e.to_string()),
-                Err(e) => Err(format!("Invalid state payload: {}", e)),
+                    .await,
+                Err(e) => Err(PlaybackError::InvalidMessage(format!(
+                    "Invalid state payload: {}",
+                    e
+                ))),
             }
         }
 
@@ -309,9 +314,11 @@ async fn handle_playback_message(
             match serde_json::from_value::<QueueUpdatePayload>(payload) {
                 Ok(p) => manager
                     .handle_queue_update(user_id, device_id, p.queue, p.queue_version)
-                    .await
-                    .map_err(|e| e.to_string()),
-                Err(e) => Err(format!("Invalid queue_update payload: {}", e)),
+                    .await,
+                Err(e) => Err(PlaybackError::InvalidMessage(format!(
+                    "Invalid queue_update payload: {}",
+                    e
+                ))),
             }
         }
 
@@ -319,9 +326,11 @@ async fn handle_playback_message(
             match serde_json::from_value::<PlaybackCommandPayload>(payload) {
                 Ok(cmd) => manager
                     .handle_command(user_id, device_id, &cmd.command, cmd.payload)
-                    .await
-                    .map_err(|e| e.to_string()),
-                Err(e) => Err(format!("Invalid command payload: {}", e)),
+                    .await,
+                Err(e) => Err(PlaybackError::InvalidMessage(format!(
+                    "Invalid command payload: {}",
+                    e
+                ))),
             }
         }
 
@@ -338,27 +347,47 @@ async fn handle_playback_message(
                         .await;
                     Ok(())
                 }
-                Err(e) => Err(e.to_string()),
+                Err(e) => Err(e),
             }
         }
 
-        msg_types::PLAYBACK_REGISTER_AUDIO_DEVICE => manager
-            .register_audio_device(user_id, device_id)
-            .await
-            .map_err(|e| e.to_string()),
+        msg_types::PLAYBACK_REGISTER_AUDIO_DEVICE => {
+            let result = manager.register_audio_device(user_id, device_id).await;
+            // Send register_ack regardless of success/failure
+            let ack = match &result {
+                Ok(()) => RegisterAckPayload {
+                    success: true,
+                    error: None,
+                },
+                Err(e) => RegisterAckPayload {
+                    success: false,
+                    error: Some(e.clone().into()),
+                },
+            };
+            let _ = state
+                .connection_manager
+                .send_to_device(
+                    user_id,
+                    device_id,
+                    ServerMessage::new(msg_types::PLAYBACK_REGISTER_ACK, ack),
+                )
+                .await;
+            result
+        }
 
-        msg_types::PLAYBACK_UNREGISTER_AUDIO_DEVICE => manager
-            .unregister_audio_device(user_id, device_id)
-            .await
-            .map_err(|e| e.to_string()),
+        msg_types::PLAYBACK_UNREGISTER_AUDIO_DEVICE => {
+            manager.unregister_audio_device(user_id, device_id).await
+        }
 
         msg_types::PLAYBACK_TRANSFER_READY => {
             match serde_json::from_value::<TransferReadyPayload>(payload) {
                 Ok(p) => manager
                     .handle_transfer_ready(user_id, device_id, p.transfer_id, p.state, p.queue)
-                    .await
-                    .map_err(|e| e.to_string()),
-                Err(e) => Err(format!("Invalid transfer_ready payload: {}", e)),
+                    .await,
+                Err(e) => Err(PlaybackError::InvalidMessage(format!(
+                    "Invalid transfer_ready payload: {}",
+                    e
+                ))),
             }
         }
 
@@ -366,9 +395,11 @@ async fn handle_playback_message(
             match serde_json::from_value::<TransferCompletePayload>(payload) {
                 Ok(p) => manager
                     .handle_transfer_complete(user_id, device_id, p.transfer_id)
-                    .await
-                    .map_err(|e| e.to_string()),
-                Err(e) => Err(format!("Invalid transfer_complete payload: {}", e)),
+                    .await,
+                Err(e) => Err(PlaybackError::InvalidMessage(format!(
+                    "Invalid transfer_complete payload: {}",
+                    e
+                ))),
             }
         }
 
@@ -376,23 +407,26 @@ async fn handle_playback_message(
             match serde_json::from_value::<PlaybackState>(payload) {
                 Ok(state_payload) => manager
                     .handle_reclaim(user_id, device_id, state_payload)
-                    .await
-                    .map_err(|e| e.to_string()),
-                Err(e) => Err(format!("Invalid reclaim payload: {}", e)),
+                    .await,
+                Err(e) => Err(PlaybackError::InvalidMessage(format!(
+                    "Invalid reclaim payload: {}",
+                    e
+                ))),
             }
         }
 
         _ => {
             debug!("Unknown playback message type: {}", msg_type);
-            Err(format!("Unknown playback message type: {}", msg_type))
+            Err(PlaybackError::InvalidMessage(format!(
+                "Unknown playback message type: {}",
+                msg_type
+            )))
         }
     };
 
     if let Err(e) = result {
-        let error_msg = ServerMessage::new(
-            msg_types::ERROR,
-            system::Error::new("playback_error", e),
-        );
+        let payload: PlaybackErrorPayload = e.into();
+        let error_msg = ServerMessage::new(msg_types::PLAYBACK_ERROR, payload);
         let _ = state
             .connection_manager
             .send_to_device(user_id, device_id, error_msg)
