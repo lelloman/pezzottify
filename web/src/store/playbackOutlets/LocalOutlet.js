@@ -175,6 +175,13 @@ export class LocalOutlet {
   }
 
   /**
+   * Check if a sound is loaded
+   */
+  hasLoadedSound() {
+    return this.sound !== null;
+  }
+
+  /**
    * Check if currently playing
    */
   isPlaying() {

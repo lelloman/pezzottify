@@ -160,6 +160,10 @@ export class OutletManager {
   // State getters
   // ============================================
 
+  hasLoadedSound() {
+    return this.localOutlet.hasLoadedSound();
+  }
+
   getPosition() {
     return this.activeOutlet.getPosition();
   }
