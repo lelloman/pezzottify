@@ -161,6 +161,10 @@ pub mod msg_types {
     pub const PLAYBACK_UNREGISTER_AUDIO_DEVICE: &str = "playback.unregister_audio_device";
     /// Reclaim audio device status after reconnection.
     pub const PLAYBACK_RECLAIM_AUDIO_DEVICE: &str = "playback.reclaim_audio_device";
+    /// Playback-specific error response.
+    pub const PLAYBACK_ERROR: &str = "playback.error";
+    /// Acknowledgment for audio device registration.
+    pub const PLAYBACK_REGISTER_ACK: &str = "playback.register_ack";
 }
 
 /// Sync-related message payloads.

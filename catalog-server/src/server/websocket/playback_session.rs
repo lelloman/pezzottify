@@ -8,14 +8,11 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use tokio::sync::RwLock;
-use tracing::{info, warn};
+use tracing::{debug, info, warn};
 
 use super::connection::ConnectionManager;
 use super::messages::{msg_types, ServerMessage};
 use super::playback_messages::*;
-
-/// Heartbeat timeout - audio device must send state updates at least this often.
-const HEARTBEAT_TIMEOUT: Duration = Duration::from_secs(15);
 
 /// Transfer timeout - how long to wait for transfer handshake completion.
 const TRANSFER_TIMEOUT: Duration = Duration::from_secs(5);
@@ -24,11 +21,12 @@ const TRANSFER_TIMEOUT: Duration = Duration::from_secs(5);
 const MAX_QUEUE_SIZE: usize = 500;
 
 /// Duration for which a disconnected audio device can reclaim its session.
-const RECLAIM_WINDOW: Duration = Duration::from_secs(15);
+/// After this period, the orphaned session is cleaned up.
+const ORPHAN_GRACE_PERIOD: Duration = Duration::from_secs(30);
 
 /// Manages playback sessions for all users.
 pub struct PlaybackSessionManager {
-    sessions: RwLock<HashMap<usize, UserPlaybackSession>>,
+    sessions: Arc<RwLock<HashMap<usize, UserPlaybackSession>>>,
     /// Device metadata indexed by (user_id, device_id).
     devices: RwLock<HashMap<(usize, usize), DeviceMetadata>>,
     connection_manager: Arc<ConnectionManager>,
@@ -156,7 +154,7 @@ impl PlaybackSessionManager {
     /// Create a new playback session manager.
     pub fn new(connection_manager: Arc<ConnectionManager>) -> Self {
         Self {
-            sessions: RwLock::new(HashMap::new()),
+            sessions: Arc::new(RwLock::new(HashMap::new())),
             devices: RwLock::new(HashMap::new()),
             connection_manager,
         }
@@ -215,7 +213,7 @@ impl PlaybackSessionManager {
         let reclaimable = session
             .recent_audio_device
             .as_ref()
-            .map(|r| r.device_id == device_id && r.disconnected_at.elapsed() < RECLAIM_WINDOW)
+            .map(|r| r.device_id == device_id && r.disconnected_at.elapsed() < ORPHAN_GRACE_PERIOD)
             .unwrap_or(false);
 
         if reclaimable {
@@ -233,6 +231,7 @@ impl PlaybackSessionManager {
             },
             audio_device_id: session.audio_device_id,
             reclaimable: if reclaimable { Some(true) } else { None },
+            queue_version: session.queue_version,
         };
 
         info!(
@@ -289,7 +288,7 @@ impl PlaybackSessionManager {
         let device_ids = self.connection_manager.get_connected_devices(user_id).await;
         let devices = self.devices.read().await;
 
-        info!(
+        debug!(
             "[playback] build_device_list: user={} connection_manager_devices={:?} metadata_count={}",
             user_id, device_ids, devices.len()
         );
@@ -299,7 +298,7 @@ impl PlaybackSessionManager {
             .filter_map(|id| {
                 let meta = devices.get(&(user_id, id));
                 if meta.is_none() {
-                    info!(
+                    debug!(
                         "[playback] build_device_list: no metadata for device {} (user={})",
                         id, user_id
                     );
@@ -314,7 +313,7 @@ impl PlaybackSessionManager {
             })
             .collect();
 
-        info!(
+        debug!(
             "[playback] build_device_list result: {} devices, audio_device_id={:?}",
             result.len(),
             session.audio_device_id
@@ -710,9 +709,10 @@ impl PlaybackSessionManager {
         Ok(())
     }
 
-    /// Clone self for use in timeout task (just wraps connection_manager).
+    /// Clone self for use in timeout task (shares sessions and connection_manager).
     fn clone_for_timeout(&self) -> PlaybackSessionTimeoutHandler {
         PlaybackSessionTimeoutHandler {
+            sessions: self.sessions.clone(),
             connection_manager: self.connection_manager.clone(),
         }
     }
@@ -912,7 +912,7 @@ impl PlaybackSessionManager {
             ));
         }
 
-        if recent.disconnected_at.elapsed() >= RECLAIM_WINDOW {
+        if recent.disconnected_at.elapsed() >= ORPHAN_GRACE_PERIOD {
             return Err(PlaybackError::CommandFailed(
                 "reclaim window expired".to_string(),
             ));
@@ -1083,35 +1083,16 @@ impl PlaybackSessionManager {
         info!("[playback] handle_device_disconnect complete for device {}", device_id);
     }
 
-    /// Run heartbeat check (called periodically).
-    pub async fn check_heartbeats(&self) {
+    /// Check for orphaned sessions whose grace period has expired.
+    pub async fn check_orphaned_sessions(&self) {
         let mut sessions = self.sessions.write().await;
-        let mut to_end: Vec<usize> = Vec::new();
-
-        let session_count = sessions.len();
-        if session_count > 0 {
-            info!("[playback] check_heartbeats: checking {} sessions", session_count);
-        }
 
         for (user_id, session) in sessions.iter_mut() {
-            // Check if audio device timed out
-            if session.audio_device_id.is_some()
-                && session.last_state_update.elapsed() > HEARTBEAT_TIMEOUT
-            {
-                warn!(
-                    "[playback] heartbeat timeout: user={} audio_device={:?} last_update={:?} ago",
-                    user_id,
-                    session.audio_device_id,
-                    session.last_state_update.elapsed()
-                );
-                to_end.push(*user_id);
-            }
-
-            // Check if recent_audio_device expired
+            // Check if recent_audio_device expired past the orphan grace period
             if let Some(ref recent) = session.recent_audio_device {
-                if recent.disconnected_at.elapsed() >= RECLAIM_WINDOW {
+                if recent.disconnected_at.elapsed() >= ORPHAN_GRACE_PERIOD {
                     info!(
-                        "[playback] reclaim window expired for user={} device={}",
+                        "[playback] orphan grace period expired for user={} device={}",
                         user_id, recent.device_id
                     );
 
@@ -1131,53 +1112,6 @@ impl PlaybackSessionManager {
                     let _ = self
                         .connection_manager
                         .broadcast_to_user(*user_id, ended_msg)
-                        .await;
-                }
-            }
-        }
-
-        // End sessions for timed out audio devices
-        for user_id in to_end {
-            if let Some(session) = sessions.get_mut(&user_id) {
-                let audio_device_id = session.audio_device_id;
-                info!(
-                    "[playback] ending session due to heartbeat timeout: user={} audio_device={:?}",
-                    user_id, audio_device_id
-                );
-
-                session.audio_device_id = None;
-                session.state = None;
-                session.queue.clear();
-                session.queue_version = 0;
-
-                // Broadcast session ended
-                let ended_msg = ServerMessage::new(
-                    msg_types::PLAYBACK_SESSION_ENDED,
-                    SessionEndedPayload {
-                        reason: "heartbeat_timeout".to_string(),
-                    },
-                );
-                let _ = self
-                    .connection_manager
-                    .broadcast_to_user(user_id, ended_msg)
-                    .await;
-
-                // Broadcast device list changed if there was an audio device
-                if let Some(device_id) = audio_device_id {
-                    let connected_devices = self.build_device_list(user_id, session).await;
-                    let change_msg = ServerMessage::new(
-                        msg_types::PLAYBACK_DEVICE_LIST_CHANGED,
-                        DeviceListChangedPayload {
-                            devices: connected_devices,
-                            change: DeviceChange {
-                                change_type: "stopped_audio_device".to_string(),
-                                device_id,
-                            },
-                        },
-                    );
-                    let _ = self
-                        .connection_manager
-                        .broadcast_to_user(user_id, change_msg)
                         .await;
                 }
             }
@@ -1214,23 +1148,44 @@ impl PlaybackSessionManager {
 
 /// Helper struct for handling transfer timeouts without holding the main manager.
 struct PlaybackSessionTimeoutHandler {
+    sessions: Arc<RwLock<HashMap<usize, UserPlaybackSession>>>,
     connection_manager: Arc<ConnectionManager>,
 }
 
 impl PlaybackSessionTimeoutHandler {
     async fn handle_transfer_timeout(&self, user_id: usize, transfer_id: &str) {
-        // Send abort message to all devices of the user
-        let abort_msg = ServerMessage::new(
-            msg_types::PLAYBACK_TRANSFER_ABORTED,
-            TransferAbortedPayload {
-                transfer_id: transfer_id.to_string(),
-                reason: "timeout".to_string(),
-            },
-        );
-        let _ = self
-            .connection_manager
-            .broadcast_to_user(user_id, abort_msg)
-            .await;
+        // Check if the transfer is still pending (race check)
+        let should_abort = {
+            let mut sessions = self.sessions.write().await;
+            if let Some(session) = sessions.get_mut(&user_id) {
+                if let Some(pending) = &session.pending_transfer {
+                    if pending.transfer_id == transfer_id {
+                        session.pending_transfer = None;
+                        true
+                    } else {
+                        false // Different transfer, already completed/replaced
+                    }
+                } else {
+                    false // No pending transfer, already completed
+                }
+            } else {
+                false
+            }
+        };
+
+        if should_abort {
+            let abort_msg = ServerMessage::new(
+                msg_types::PLAYBACK_TRANSFER_ABORTED,
+                TransferAbortedPayload {
+                    transfer_id: transfer_id.to_string(),
+                    reason: "timeout".to_string(),
+                },
+            );
+            let _ = self
+                .connection_manager
+                .broadcast_to_user(user_id, abort_msg)
+                .await;
+        }
     }
 }
 

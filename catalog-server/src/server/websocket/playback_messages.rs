@@ -137,6 +137,7 @@ pub struct SessionInfo {
     pub audio_device_id: Option<usize>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub reclaimable: Option<bool>,
+    pub queue_version: u64,
 }
 
 /// Payload for playback.device_list_changed message.
@@ -184,6 +185,14 @@ pub struct TransferAbortedPayload {
 pub struct QueueSyncPayload {
     pub queue: Vec<QueueItem>,
     pub queue_version: u64,
+}
+
+/// Payload for playback.register_ack message.
+#[derive(Debug, Clone, Serialize)]
+pub struct RegisterAckPayload {
+    pub success: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<PlaybackErrorPayload>,
 }
 
 /// Payload for playback.session_ended message.
@@ -297,6 +306,7 @@ mod tests {
                 queue: None,
                 audio_device_id: None,
                 reclaimable: None,
+                queue_version: 0,
             },
             devices: vec![ConnectedDevice {
                 id: 42,
