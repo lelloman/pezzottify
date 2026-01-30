@@ -410,7 +410,7 @@ export const usePlaybackStore = defineStore("playback", () => {
     if (outlet.value === "remote") {
       outletManager.play();
     } else {
-      if (!currentTrackId.value && currentTrackIndex.value !== null) {
+      if (currentTrackIndex.value !== null && !outletManager.hasLoadedSound()) {
         loadTrack(currentTrackIndex.value, progressPercent.value);
       }
       outletManager.play();
@@ -526,6 +526,11 @@ export const usePlaybackStore = defineStore("playback", () => {
     currentTrackIndex.value = null;
     currentPlaylistIndex.value = null;
     playlistsHistory.value = [];
+  };
+
+  const suspendForRemote = () => {
+    outletManager.stop();
+    isPlaying.value = false;
   };
 
   // ============================================
@@ -726,8 +731,8 @@ export const usePlaybackStore = defineStore("playback", () => {
         }
       }
 
-      // Check if we should reclaim
-      if (devicesStore.reclaimable && currentTrackId.value) {
+      // Check if we should reclaim (only if no device is currently playing)
+      if (devicesStore.reclaimable && currentTrackId.value && !devicesStore.audioDevice) {
         devicesStore.reclaimAudioDevice(buildPlaybackState());
       }
     },
@@ -828,8 +833,8 @@ export const usePlaybackStore = defineStore("playback", () => {
     },
 
     onTransferComplete: () => {
-      // We were the source, now stop local playback
-      stop();
+      // We were the source, suspend local audio but preserve playlist state
+      suspendForRemote();
       const newAudioDevice = devicesStore.devices.find(
         (d) => d.is_audio_device
       );
@@ -879,7 +884,7 @@ export const usePlaybackStore = defineStore("playback", () => {
           album_title: album?.name || "Unknown Album",
           duration: track.duration || 0,
           track_number: track.track_number,
-          image_id: album?.id || null,
+          image_id: album?.image_id || album?.covers?.[0]?.id || null,
         };
       }
     }
@@ -956,7 +961,16 @@ export const usePlaybackStore = defineStore("playback", () => {
     devicesStore.broadcastStateNow();
   };
 
-  watch(() => isPlaying.value, throttledBroadcast);
+  watch(() => isPlaying.value, (playing) => {
+    throttledBroadcast();
+    if (devicesStore.isAudioDevice) {
+      if (playing) {
+        devicesStore.startPositionBroadcast();
+      } else {
+        devicesStore.stopPositionBroadcast();
+      }
+    }
+  });
   watch(() => currentTrackId.value, throttledBroadcast);
   watch(() => currentTrackIndex.value, throttledBroadcast);
 
