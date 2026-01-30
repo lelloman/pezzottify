@@ -70,7 +70,7 @@ function handleSelect(item) {
   width: 100%;
   height: 100%;
   display: grid;
-  grid-template-rows: var(--topbar-height) 1fr var(--player-height-desktop);
+  grid-template-rows: var(--topbar-height) 1fr auto;
   grid-template-columns: 1fr;
   overflow: hidden;
 }
@@ -92,6 +92,7 @@ function handleSelect(item) {
 .userContentSideBar {
   display: none;
   flex-direction: column;
+  overflow-y: auto;
 }
 
 .currentlyPlayingSideBar {
@@ -181,10 +182,10 @@ function handleSelect(item) {
   }
 }
 
-/* Mobile Player Height */
+/* Mobile Player Height - auto handles collapse when player hidden */
 @media (max-width: 767px) {
   .mainContainer {
-    grid-template-rows: var(--topbar-height) 1fr var(--player-height-mobile);
+    grid-template-rows: var(--topbar-height) 1fr auto;
   }
 }
 </style>

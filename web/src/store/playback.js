@@ -526,6 +526,10 @@ export const usePlaybackStore = defineStore("playback", () => {
     currentTrackIndex.value = null;
     currentPlaylistIndex.value = null;
     playlistsHistory.value = [];
+
+    if (devicesStore.isAudioDevice) {
+      devicesStore.unregisterAsAudioDevice();
+    }
   };
 
   const suspendForRemote = () => {
