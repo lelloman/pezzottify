@@ -32,8 +32,8 @@ export const useDevicesStore = defineStore("devices", () => {
   const pendingTransfer = ref(null);
 
   // Broadcast state (when this device is audio device)
-  let broadcastInterval = null;
-  const BROADCAST_INTERVAL_MS = 5000;
+  let positionBroadcastInterval = null;
+  const POSITION_BROADCAST_INTERVAL_MS = 5000;
   const queueVersion = ref(0);
 
   // Callbacks for playback store
@@ -157,6 +157,12 @@ export const useDevicesStore = defineStore("devices", () => {
       case "playback.transfer_aborted":
         handleTransferAborted(payload);
         break;
+      case "playback.register_ack":
+        handleRegisterAck(payload);
+        break;
+      case "playback.error":
+        handlePlaybackError(payload);
+        break;
     }
   }
 
@@ -165,6 +171,11 @@ export const useDevicesStore = defineStore("devices", () => {
     devices.value = payload.devices;
     sessionExists.value = payload.session.exists;
     reclaimable.value = payload.session.reclaimable || false;
+
+    // Adopt server-authoritative queue version
+    if (payload.session?.queue_version != null) {
+      queueVersion.value = payload.session.queue_version;
+    }
 
     if (payload.session.exists && payload.session.state) {
       remoteState.value = payload.session.state;
@@ -298,6 +309,32 @@ export const useDevicesStore = defineStore("devices", () => {
     }
   }
 
+  function handleRegisterAck(payload) {
+    if (payload.success) {
+      console.log("[Devices] Audio device registration confirmed");
+    } else {
+      console.warn(
+        "[Devices] Audio device registration failed:",
+        payload.error?.message
+      );
+      // Rollback optimistic state
+      sessionExists.value = false;
+      devices.value = devices.value.map((d) => ({
+        ...d,
+        is_audio_device: false,
+      }));
+      stopBroadcasting();
+    }
+  }
+
+  function handlePlaybackError(payload) {
+    console.warn(
+      "[Devices] Playback error:",
+      payload.code,
+      payload.message
+    );
+  }
+
   // ============================================
   // Audio device management
   // ============================================
@@ -340,25 +377,32 @@ export const useDevicesStore = defineStore("devices", () => {
   // ============================================
 
   function startBroadcasting() {
-    if (broadcastInterval) return;
-
-    broadcastInterval = setInterval(() => {
-      if (playbackCallbacks?.getPlaybackState) {
-        broadcastState(playbackCallbacks.getPlaybackState());
-      }
-    }, BROADCAST_INTERVAL_MS);
-
-    // Broadcast immediately
+    // Broadcast immediately on registration
     if (playbackCallbacks?.getPlaybackState) {
-      broadcastState(playbackCallbacks.getPlaybackState());
+      const state = playbackCallbacks.getPlaybackState();
+      broadcastState(state);
+      if (state?.is_playing) {
+        startPositionBroadcast();
+      }
+    }
+  }
+
+  function startPositionBroadcast() {
+    if (positionBroadcastInterval) return;
+    positionBroadcastInterval = setInterval(() => {
+      broadcastStateNow();
+    }, POSITION_BROADCAST_INTERVAL_MS);
+  }
+
+  function stopPositionBroadcast() {
+    if (positionBroadcastInterval) {
+      clearInterval(positionBroadcastInterval);
+      positionBroadcastInterval = null;
     }
   }
 
   function stopBroadcasting() {
-    if (broadcastInterval) {
-      clearInterval(broadcastInterval);
-      broadcastInterval = null;
-    }
+    stopPositionBroadcast();
   }
 
   function broadcastState(state) {
@@ -480,6 +524,8 @@ export const useDevicesStore = defineStore("devices", () => {
     // Broadcasting
     broadcastStateNow,
     broadcastQueueUpdate,
+    startPositionBroadcast,
+    stopPositionBroadcast,
 
     // Remote commands
     sendCommand,
