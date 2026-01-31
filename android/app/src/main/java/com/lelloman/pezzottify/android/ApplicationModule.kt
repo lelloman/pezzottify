@@ -101,10 +101,11 @@ class ApplicationModule {
             maxDelayMs = 5000,
         )
 
-        // Create OkHttpClient for our server with retry
+        // Create OkHttpClient for our server with retry and auth
         val internalOkHttpClient = okHttpClientFactory
             .createBuilder(configStore.baseUrl.value)
             .addInterceptor(retryInterceptor)
+            .addInterceptor(OkHttpAuthInterceptor(authStore))
             .build()
 
         // Create a plain OkHttpClient for external URLs (no auth, with retry)
@@ -288,5 +289,31 @@ private class ExponentialBackoffRetryInterceptor(
         // Exponential backoff: initialDelay * 2^attempt
         val exponentialDelay = initialDelayMs * 2.0.pow(attempt.toDouble()).toLong()
         return min(exponentialDelay, maxDelayMs)
+    }
+}
+
+/**
+ * OkHttp interceptor that adds authentication token to requests.
+ *
+ * This interceptor adds the Authorization header to all requests using
+ * the current auth token from AuthStore. If no token is available,
+ * the request proceeds without auth (will likely fail with 401).
+ */
+private class OkHttpAuthInterceptor(
+    private val authStore: AuthStore,
+) : OkHttpInterceptor {
+
+    override fun intercept(chain: OkHttpInterceptor.Chain): Response {
+        val authToken = (authStore.getAuthState().value as? AuthState.LoggedIn)?.authToken
+
+        val requestWithAuth = if (authToken != null) {
+            chain.request().newBuilder()
+                .addHeader("Authorization", authToken)
+                .build()
+        } else {
+            chain.request()
+        }
+
+        return chain.proceed(requestWithAuth)
     }
 }
