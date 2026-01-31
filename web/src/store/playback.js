@@ -41,6 +41,7 @@ export const usePlaybackStore = defineStore("playback", () => {
   const isPlaying = ref(false);
   const progressPercent = ref(0.0);
   const progressSec = ref(0);
+  const localDuration = ref(0); // Duration reported by Howler (ground truth)
 
   // Volume
   const volume = ref(0.5);
@@ -72,8 +73,8 @@ export const usePlaybackStore = defineStore("playback", () => {
       progressSec.value = sec;
       progressPercent.value = percent;
     },
-    onTrackLoaded: () => {
-      // Duration available now
+    onTrackLoaded: (duration) => {
+      localDuration.value = duration || 0;
     },
     onRemoteStateUpdate: (state) => {
       // Update state from remote
@@ -158,7 +159,7 @@ export const usePlaybackStore = defineStore("playback", () => {
       artistName: artist?.name || "Unknown Artist",
       albumId: track.album_id || "",
       albumTitle: album?.name || "Unknown Album",
-      duration: track.duration || 0,
+      duration: track.duration || localDuration.value || 0,
       trackNumber: track.track_number,
       imageId: album?.image_id || album?.covers?.[0]?.id || null,
     };
@@ -904,7 +905,7 @@ export const usePlaybackStore = defineStore("playback", () => {
           artists_ids: track.artists_ids || (artistId ? [artistId] : []),
           album_id: track.album_id || "",
           album_title: album?.name || "Unknown Album",
-          duration: track.duration || 0,
+          duration: track.duration || localDuration.value || 0,
           track_number: track.track_number,
           image_id: album?.image_id || album?.covers?.[0]?.id || null,
         };
