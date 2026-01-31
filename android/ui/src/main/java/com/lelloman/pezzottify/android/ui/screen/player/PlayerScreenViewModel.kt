@@ -78,16 +78,6 @@ class PlayerScreenViewModel @Inject constructor(
             }
         }
 
-        // Collect device state separately
-        viewModelScope.launch {
-            interactor.getDeviceState().collect { deviceState ->
-                mutableState.value = mutableState.value.copy(
-                    devices = deviceState.devices,
-                    selectedOutputDeviceId = deviceState.selectedDeviceId,
-                    isLocalOutput = deviceState.isLocalOutput,
-                )
-            }
-        }
     }
 
     override fun clickOnPlayPause() = interactor.togglePlayPause()
@@ -108,11 +98,8 @@ class PlayerScreenViewModel @Inject constructor(
 
     override fun retry() = interactor.retry()
 
-    override fun selectOutputDevice(deviceId: Long?) = interactor.selectOutputDevice(deviceId)
-
     interface Interactor {
         fun getPlaybackState(): Flow<PlaybackState?>
-        fun getDeviceState(): Flow<DeviceState>
         fun togglePlayPause()
         fun skipToNext()
         fun skipToPrevious()
@@ -122,7 +109,6 @@ class PlayerScreenViewModel @Inject constructor(
         fun toggleShuffle()
         fun cycleRepeatMode()
         fun retry()
-        fun selectOutputDevice(deviceId: Long?)
 
         sealed interface PlaybackState {
             data object Idle : PlaybackState
@@ -147,11 +133,5 @@ class PlayerScreenViewModel @Inject constructor(
                 val playerError: PlayerErrorUi?,
             ) : PlaybackState
         }
-
-        data class DeviceState(
-            val devices: List<OutputDeviceUi>,
-            val selectedDeviceId: Long?,
-            val isLocalOutput: Boolean,
-        )
     }
 }

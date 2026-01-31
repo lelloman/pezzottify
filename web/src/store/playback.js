@@ -1,24 +1,17 @@
 /**
- * Unified Playback Store
+ * Playback Store
  *
  * Single source of truth for all playback state.
- * Delegates to outlets (local/remote) for actual playback.
- *
- * Key benefits:
- * - UI components only interact with this store
- * - No conditional isLocalOutput checks needed in components
- * - Normalized track format regardless of source
+ * Uses LocalOutlet (Howler.js) directly for audio playback.
  */
 
 import { defineStore } from "pinia";
-import { computed, ref, watch } from "vue";
+import { computed, ref, shallowRef, watch } from "vue";
 import { useStaticsStore } from "./statics";
-import { useDevicesStore } from "./devices";
-import { OutletManager } from "./playbackOutlets/OutletManager";
+import { LocalOutlet } from "./playbackOutlets/LocalOutlet";
 
 export const usePlaybackStore = defineStore("playback", () => {
   const staticsStore = useStaticsStore();
-  const devicesStore = useDevicesStore();
 
   // ============================================
   // Constants
@@ -35,13 +28,15 @@ export const usePlaybackStore = defineStore("playback", () => {
   // Core playback state
   // ============================================
 
+  const isPlaying = ref(false);
+  const progressSec = ref(0);
+  const progressPercent = ref(0.0);
+  const localDuration = ref(0);
+  const currentTrack = shallowRef(null);
+
   // Track & position
   const currentTrackId = ref(null);
   const currentTrackIndex = ref(null);
-  const isPlaying = ref(false);
-  const progressPercent = ref(0.0);
-  const progressSec = ref(0);
-  const localDuration = ref(0); // Duration reported by Howler (ground truth)
 
   // Volume
   const volume = ref(0.5);
@@ -51,23 +46,15 @@ export const usePlaybackStore = defineStore("playback", () => {
   const playlistsHistory = ref(null);
   const currentPlaylistIndex = ref(null);
 
-  // Output mode
-  const outlet = ref("local"); // 'local' or 'remote'
-  const remoteDeviceId = ref(null);
-
   // ============================================
-  // Outlet Manager
+  // Local Outlet
   // ============================================
 
-  const outletManager = new OutletManager({
-    // Callbacks from outlets
+  const localOutlet = new LocalOutlet({
     getVolume: () => (muted.value ? 0 : volume.value),
     onTrackEnd: () => skipNextTrack(),
     onPlayStateChange: (playing) => {
       isPlaying.value = playing;
-      if (playing && !devicesStore.sessionExists && !devicesStore.isAudioDevice) {
-        devicesStore.registerAsAudioDevice();
-      }
     },
     onProgressUpdate: (sec, percent) => {
       progressSec.value = sec;
@@ -76,22 +63,7 @@ export const usePlaybackStore = defineStore("playback", () => {
     onTrackLoaded: (duration) => {
       localDuration.value = duration || 0;
     },
-    onRemoteStateUpdate: (state) => {
-      // Update state from remote
-      if (state.is_playing !== undefined) {
-        isPlaying.value = state.is_playing;
-      }
-      if (state.volume !== undefined) {
-        volume.value = state.volume;
-      }
-      if (state.muted !== undefined) {
-        muted.value = state.muted;
-      }
-    },
   });
-
-  // Connect outlet manager to devices store
-  outletManager.setDevicesStore(devicesStore);
 
   // ============================================
   // Computed
@@ -114,34 +86,22 @@ export const usePlaybackStore = defineStore("playback", () => {
       currentPlaylistIndex.value < playlistsHistory.value.length - 1
   );
 
-  const isLocalOutput = computed(() => outlet.value === "local");
+  // ============================================
+  // Local track resolution
+  // ============================================
 
-  // Normalized current track data
-  const currentTrack = computed(() => {
-    if (outlet.value === "remote") {
-      // Get from remote state via devices store, normalize to camelCase
-      const state = devicesStore.remoteState;
-      const rt = state?.current_track;
-      if (!rt) return null;
-      return {
-        id: rt.id,
-        title: rt.title,
-        artistsIds: rt.artists_ids || [],
-        artistName: rt.artist_name || "Unknown Artist",
-        albumId: rt.album_id || "",
-        albumTitle: rt.album_title || "Unknown Album",
-        duration: rt.duration || 0,
-        trackNumber: rt.track_number,
-        imageId: rt.image_id || null,
-      };
+  const resolveLocalTrack = () => {
+    if (!currentTrackId.value) {
+      currentTrack.value = null;
+      return;
     }
-
-    // Local: resolve from statics
-    if (!currentTrackId.value) return null;
 
     const trackRef = staticsStore.getTrack(currentTrackId.value);
     const track = trackRef?.item;
-    if (!track) return null;
+    if (!track) {
+      currentTrack.value = null;
+      return;
+    }
 
     const albumRef = track.album_id
       ? staticsStore.getAlbum(track.album_id)
@@ -152,7 +112,7 @@ export const usePlaybackStore = defineStore("playback", () => {
     const artistRef = artistId ? staticsStore.getArtist(artistId) : null;
     const artist = artistRef?.item;
 
-    return {
+    currentTrack.value = {
       id: track.id,
       title: track.name || track.title,
       artistId: artistId || "",
@@ -163,13 +123,37 @@ export const usePlaybackStore = defineStore("playback", () => {
       trackNumber: track.track_number,
       imageId: album?.image_id || album?.covers?.[0]?.id || null,
     };
-  });
+  };
+
+  watch(() => currentTrackId.value, resolveLocalTrack);
+
+  // Re-resolve when statics data loads (artist/album names become available)
+  watch(
+    () => {
+      if (!currentTrackId.value) return null;
+      const t = staticsStore.getTrack(currentTrackId.value);
+      const track = t?.item;
+      if (!track) return null;
+      const albumRef = track.album_id
+        ? staticsStore.getAlbum(track.album_id)
+        : null;
+      const artistId = track.artists_ids?.[0] || track.artist_id;
+      const artistRef = artistId ? staticsStore.getArtist(artistId) : null;
+      return {
+        trackName: track.name || track.title,
+        albumName: albumRef?.item?.name,
+        artistName: artistRef?.item?.name,
+        imageId: albumRef?.item?.image_id || albumRef?.item?.covers?.[0]?.id,
+      };
+    },
+    () => resolveLocalTrack(),
+    { deep: true }
+  );
 
   // ============================================
   // Persistence
   // ============================================
 
-  // Load saved state
   const loadPersistedState = () => {
     const savedPlaylistsHistory = localStorage.getItem("playlistsHistory");
     if (savedPlaylistsHistory) {
@@ -255,7 +239,6 @@ export const usePlaybackStore = defineStore("playback", () => {
   };
 
   watch(progressSec, (newSec) => {
-    if (outlet.value === "remote") return;
     const diff = Math.abs(Math.round(newSec) - lastSecProgressSaved);
     if (diff > 4) {
       persistProgressPercent();
@@ -284,7 +267,7 @@ export const usePlaybackStore = defineStore("playback", () => {
     type: PLAYBACK_CONTEXTS.userMix,
   });
 
-  const makePlaylistFromTrackIds = (trackIds, name = "Remote Transfer") => ({
+  const makePlaylistFromTrackIds = (trackIds, name = "Mix") => ({
     context: { name, id: null, edited: false },
     tracksIds: trackIds,
     type: PLAYBACK_CONTEXTS.userMix,
@@ -341,8 +324,7 @@ export const usePlaybackStore = defineStore("playback", () => {
     const trackId = currentPlaylist.value.tracksIds[index];
     currentTrackId.value = trackId;
 
-    // Load via outlet manager
-    outletManager.loadTrack(
+    localOutlet.loadTrack(
       trackId,
       isPlaying.value,
       seekPercent || pendingSeekPercent
@@ -361,15 +343,9 @@ export const usePlaybackStore = defineStore("playback", () => {
       return;
     }
 
-    const trackIds = album.discs.flatMap((disc) => disc.tracks);
     let startIndex = 0;
     if (Number.isInteger(discIndex) && Number.isInteger(trackIndex)) {
       startIndex = findTrackIndex(album, discIndex, trackIndex);
-    }
-
-    if (outlet.value === "remote") {
-      devicesStore.sendCommand("loadPlaylist", { trackIds, startIndex });
-      return;
     }
 
     const albumPlaylist = makePlaylistFromAlbumData(album);
@@ -379,13 +355,6 @@ export const usePlaybackStore = defineStore("playback", () => {
   };
 
   const setTrack = (newTrack) => {
-    if (outlet.value === "remote") {
-      devicesStore.sendCommand("loadPlaylist", {
-        trackIds: [newTrack.id],
-        startIndex: 0,
-      });
-      return;
-    }
     const trackPlaylist = makePlaylistFromTrackId(newTrack.id);
     setNewPlayingPlaylist(trackPlaylist);
     loadTrack(0);
@@ -394,13 +363,6 @@ export const usePlaybackStore = defineStore("playback", () => {
 
   const setUserPlaylist = async (newPlaylist) => {
     if (newPlaylist.tracks.length === 0) return;
-    if (outlet.value === "remote") {
-      devicesStore.sendCommand("loadPlaylist", {
-        trackIds: newPlaylist.tracks.map((t) => t),
-        startIndex: 0,
-      });
-      return;
-    }
     const userPlaylistPlaylist = makePlaylistFromUserPlaylist(newPlaylist);
     setNewPlayingPlaylist(userPlaylistPlaylist);
     loadTrack(0);
@@ -421,28 +383,20 @@ export const usePlaybackStore = defineStore("playback", () => {
     }
   };
 
-  const setPendingTransferSeek = (percentage) => {
-    pendingSeekPercent = percentage;
-  };
-
   // ============================================
   // Playback controls
   // ============================================
 
   const play = () => {
-    if (outlet.value === "remote") {
-      outletManager.play();
-    } else {
-      if (currentTrackIndex.value !== null && !outletManager.hasLoadedSound()) {
-        loadTrack(currentTrackIndex.value, progressPercent.value);
-      }
-      outletManager.play();
+    if (currentTrackIndex.value !== null && !localOutlet.hasLoadedSound()) {
+      loadTrack(currentTrackIndex.value, progressPercent.value);
     }
+    localOutlet.play();
     isPlaying.value = true;
   };
 
   const pause = () => {
-    outletManager.pause();
+    localOutlet.pause();
     isPlaying.value = false;
   };
 
@@ -463,14 +417,9 @@ export const usePlaybackStore = defineStore("playback", () => {
   };
 
   const skipNextTrack = () => {
-    if (outlet.value === "remote") {
-      outletManager.skipNext();
-      return;
-    }
-
     const nextIndex = currentTrackIndex.value + 1;
     if (nextIndex >= currentPlaylist.value.tracksIds.length) {
-      outletManager.stop();
+      localOutlet.stop();
       isPlaying.value = false;
       progressPercent.value = 0.0;
       progressSec.value = 0;
@@ -483,14 +432,9 @@ export const usePlaybackStore = defineStore("playback", () => {
   };
 
   const skipPreviousTrack = () => {
-    if (outlet.value === "remote") {
-      outletManager.skipPrevious();
-      return;
-    }
-
     const previousIndex = currentTrackIndex.value - 1;
     if (previousIndex < 0) {
-      outletManager.stop();
+      localOutlet.stop();
       isPlaying.value = false;
       progressPercent.value = 0.0;
       progressSec.value = 0;
@@ -503,34 +447,28 @@ export const usePlaybackStore = defineStore("playback", () => {
   };
 
   const seekToPercentage = (percentage) => {
-    outletManager.seekToPercentage(percentage);
-    // Update local state immediately for responsive UI (especially remote)
-    if (outlet.value === "remote") {
-      progressPercent.value = percentage;
-      const track = currentTrack.value;
-      if (track?.duration) {
-        progressSec.value = percentage * track.duration;
-      }
-    }
+    localOutlet.seekToPercentage(percentage);
     persistProgressPercent();
   };
 
   const forward10Sec = () => {
-    outletManager.forward10Sec();
+    const pos = localOutlet.getPosition();
+    localOutlet.seekTo(pos + 10);
   };
 
   const rewind10Sec = () => {
-    outletManager.rewind10Sec();
+    const pos = localOutlet.getPosition();
+    localOutlet.seekTo(Math.max(0, pos - 10));
   };
 
   const setVolume = (newVolume) => {
     volume.value = newVolume;
-    outletManager.setVolume(newVolume);
+    localOutlet.setVolume(newVolume);
   };
 
   const setMuted = (newMuted) => {
     muted.value = newMuted;
-    outletManager.setMuted(newMuted, volume.value);
+    localOutlet.setMuted(newMuted, volume.value);
   };
 
   const loadTrackIndex = (index) => {
@@ -548,7 +486,7 @@ export const usePlaybackStore = defineStore("playback", () => {
   };
 
   const stop = () => {
-    outletManager.stop();
+    localOutlet.stop();
     isPlaying.value = false;
     progressPercent.value = 0.0;
     progressSec.value = 0;
@@ -557,15 +495,6 @@ export const usePlaybackStore = defineStore("playback", () => {
     currentTrackIndex.value = null;
     currentPlaylistIndex.value = null;
     playlistsHistory.value = [];
-
-    if (devicesStore.isAudioDevice) {
-      devicesStore.unregisterAsAudioDevice();
-    }
-  };
-
-  const suspendForRemote = () => {
-    outletManager.stop();
-    isPlaying.value = false;
   };
 
   // ============================================
@@ -705,365 +634,6 @@ export const usePlaybackStore = defineStore("playback", () => {
   };
 
   // ============================================
-  // Output device management
-  // ============================================
-
-  const selectOutputDevice = (targetDeviceId) => {
-    if (targetDeviceId === devicesStore.deviceId || targetDeviceId === null) {
-      // Select this device as output (local)
-      if (!devicesStore.isAudioDevice) {
-        devicesStore.requestBecomeAudioDevice();
-      }
-      switchToLocalOutput();
-    } else {
-      // Select remote device as output
-      switchToRemoteOutput(targetDeviceId);
-    }
-  };
-
-  const switchToLocalOutput = () => {
-    if (outlet.value === "local") return;
-
-    const wasRemote = outlet.value === "remote";
-    outlet.value = "local";
-    remoteDeviceId.value = null;
-
-    // When returning from remote with no loaded sound, restore persisted
-    // progress instead of carrying over the remote position values.
-    if (wasRemote && !outletManager.hasLoadedSound()) {
-      const savedPercent = Number.parseFloat(
-        localStorage.getItem("progressPercent")
-      );
-      if (!Number.isNaN(savedPercent) && savedPercent >= 0.0 && savedPercent <= 1.0) {
-        progressPercent.value = savedPercent;
-      }
-      const savedSec = Number.parseFloat(localStorage.getItem("progressSec"));
-      if (!Number.isNaN(savedSec)) {
-        progressSec.value = savedSec;
-      }
-      isPlaying.value = false;
-    }
-
-    outletManager.switchToLocal({
-      trackId: currentTrackId.value,
-      position: progressSec.value,
-      isPlaying: isPlaying.value,
-      volume: volume.value,
-      muted: muted.value,
-    });
-  };
-
-  const switchToRemoteOutput = (deviceId) => {
-    outlet.value = "remote";
-    remoteDeviceId.value = deviceId;
-    outletManager.switchToRemote();
-  };
-
-  // ============================================
-  // Devices store callbacks
-  // ============================================
-
-  devicesStore.setPlaybackCallbacks({
-    onWelcome: (payload) => {
-      if (payload.session.exists && payload.session.state) {
-        const currentAudioDevice = devicesStore.devices.find(
-          (d) => d.is_audio_device
-        );
-        if (currentAudioDevice) {
-          if (currentAudioDevice.id === payload.device_id) {
-            // We are the audio device
-            switchToLocalOutput();
-            devicesStore.registerAsAudioDevice();
-          } else {
-            // Another device is the audio device
-            switchToRemoteOutput(currentAudioDevice.id);
-            // Feed the initial state to the remote outlet
-            outletManager.updateRemoteState(payload.session.state);
-          }
-        }
-      }
-
-      // Check if we should reclaim (only if no device is currently playing)
-      if (devicesStore.reclaimable && currentTrackId.value && !devicesStore.audioDevice) {
-        devicesStore.reclaimAudioDevice(buildPlaybackState());
-      }
-    },
-
-    onRemoteState: (state) => {
-      outletManager.updateRemoteState(state);
-
-      // Update local state from remote
-      if (outlet.value === "remote") {
-        isPlaying.value = state.is_playing;
-        if (state.volume !== undefined) {
-          volume.value = state.volume;
-        }
-        if (state.muted !== undefined) {
-          muted.value = state.muted;
-        }
-      }
-    },
-
-    onQueueSync: () => {
-      // Could update queue display here if needed
-    },
-
-    onSessionEnded: () => {
-      switchToLocalOutput();
-    },
-
-    onDeviceListChanged: () => {
-      const currentAudioDevice = devicesStore.devices.find(
-        (d) => d.is_audio_device
-      );
-      if (currentAudioDevice) {
-        if (currentAudioDevice.id === devicesStore.deviceId) {
-          // We are now the audio device
-          switchToLocalOutput();
-        } else if (remoteDeviceId.value !== currentAudioDevice.id) {
-          // Another device is now the audio device
-          switchToRemoteOutput(currentAudioDevice.id);
-        }
-      }
-    },
-
-    onCommand: (payload) => {
-      // Handle commands when we're the audio device
-      const { command, payload: cmdPayload } = payload;
-
-      switch (command) {
-        case "play":
-          play();
-          break;
-        case "pause":
-          pause();
-          break;
-        case "seek":
-          if (cmdPayload?.position !== undefined) {
-            const track = currentTrack.value;
-            const duration = track?.duration || 0;
-            if (duration > 0) {
-              seekToPercentage(cmdPayload.position / duration);
-            }
-          }
-          break;
-        case "next":
-          skipNextTrack();
-          break;
-        case "prev":
-          skipPreviousTrack();
-          break;
-        case "setVolume":
-          if (cmdPayload?.volume !== undefined) {
-            setVolume(cmdPayload.volume);
-          }
-          break;
-        case "setMuted":
-          if (cmdPayload?.muted !== undefined) {
-            setMuted(cmdPayload.muted);
-          }
-          break;
-        case "loadPlaylist":
-          if (cmdPayload?.trackIds?.length > 0) {
-            setPlaylistFromTrackIds(
-              cmdPayload.trackIds,
-              cmdPayload.startIndex || 0,
-              true
-            );
-          }
-          break;
-      }
-    },
-
-    onPrepareTransfer: (payload) => {
-      const state = buildPlaybackState();
-      const queue = buildQueueItems();
-      pause();
-      devicesStore.sendTransferReady(payload.transfer_id, state, queue);
-    },
-
-    onBecomeAudioDevice: async (payload) => {
-      // Apply received state
-      await applyRemoteStateToLocal(payload.state, payload.queue);
-      devicesStore.confirmTransferComplete(payload.transfer_id);
-      switchToLocalOutput();
-
-      if (payload.state.is_playing) {
-        play();
-      }
-    },
-
-    onTransferComplete: () => {
-      // We were the source, suspend local audio but preserve playlist state
-      suspendForRemote();
-      const newAudioDevice = devicesStore.devices.find(
-        (d) => d.is_audio_device
-      );
-      if (newAudioDevice) {
-        switchToRemoteOutput(newAudioDevice.id);
-      }
-    },
-
-    onTransferAborted: () => {
-      // If we were source, resume
-      if (devicesStore.isAudioDevice) {
-        play();
-      }
-    },
-
-    getPlaybackState: () => buildPlaybackState(),
-  });
-
-  // ============================================
-  // State building helpers
-  // ============================================
-
-  const buildPlaybackState = () => {
-    let currentTrackData = null;
-
-    if (currentTrackId.value) {
-      const trackRef = staticsStore.getTrack(currentTrackId.value);
-      const track = trackRef?.item;
-
-      if (track) {
-        const albumRef = track.album_id
-          ? staticsStore.getAlbum(track.album_id)
-          : null;
-        const album = albumRef?.item;
-
-        const artistId = track.artists_ids?.[0] || track.artist_id;
-        const artistRef = artistId ? staticsStore.getArtist(artistId) : null;
-        const artist = artistRef?.item;
-
-        currentTrackData = {
-          id: track.id,
-          title: track.name || track.title,
-          artist_id: artistId || "",
-          artist_name: artist?.name || "Unknown Artist",
-          artists_ids: track.artists_ids || (artistId ? [artistId] : []),
-          album_id: track.album_id || "",
-          album_title: album?.name || "Unknown Album",
-          duration: track.duration || localDuration.value || 0,
-          track_number: track.track_number,
-          image_id: album?.image_id || album?.covers?.[0]?.id || null,
-        };
-      }
-    }
-
-    return {
-      current_track: currentTrackData,
-      queue_position: currentTrackIndex.value || 0,
-      queue_version: devicesStore.queueVersion,
-      position: progressSec.value || 0,
-      is_playing: isPlaying.value,
-      volume: volume.value,
-      muted: muted.value || false,
-      shuffle: false,
-      repeat: "off",
-      timestamp: Date.now(),
-    };
-  };
-
-  const buildQueueItems = () => {
-    if (!currentPlaylist.value?.tracksIds) {
-      return [];
-    }
-    return currentPlaylist.value.tracksIds.map((id) => ({
-      id,
-      added_at: Date.now(),
-    }));
-  };
-
-  const applyRemoteStateToLocal = async (state, queue) => {
-    if (!queue || queue.length === 0) return;
-
-    const trackIds = queue.map((item) => item.id);
-
-    // Wait for tracks to be loaded
-    for (const id of trackIds) {
-      await staticsStore.waitTrackData(id);
-    }
-
-    const startIndex =
-      state.queue_position >= 0 && state.queue_position < trackIds.length
-        ? state.queue_position
-        : 0;
-
-    // Store pending seek
-    if (state.position > 0) {
-      const track = await staticsStore.waitTrackData(trackIds[startIndex]);
-      if (track?.duration) {
-        pendingSeekPercent = state.position / track.duration;
-      }
-    }
-
-    setPlaylistFromTrackIds(trackIds, startIndex, false);
-
-    if (state.volume !== undefined) {
-      setVolume(state.volume);
-    }
-    if (state.muted !== undefined) {
-      setMuted(state.muted);
-    }
-  };
-
-  // ============================================
-  // Watch for state changes to broadcast
-  // ============================================
-
-  let lastBroadcastTime = 0;
-  let pendingBroadcast = null;
-  const MIN_BROADCAST_INTERVAL = 500;
-
-  const throttledBroadcast = () => {
-    if (!devicesStore.isAudioDevice) return;
-
-    const now = Date.now();
-    const timeSince = now - lastBroadcastTime;
-
-    if (timeSince >= MIN_BROADCAST_INTERVAL) {
-      // Enough time passed - broadcast immediately
-      lastBroadcastTime = now;
-      if (pendingBroadcast) {
-        clearTimeout(pendingBroadcast);
-        pendingBroadcast = null;
-      }
-      devicesStore.broadcastStateNow();
-    } else if (!pendingBroadcast) {
-      // Schedule a trailing broadcast to catch changes during throttle window
-      pendingBroadcast = setTimeout(() => {
-        pendingBroadcast = null;
-        lastBroadcastTime = Date.now();
-        devicesStore.broadcastStateNow();
-      }, MIN_BROADCAST_INTERVAL - timeSince);
-    }
-  };
-
-  watch(() => isPlaying.value, (playing) => {
-    throttledBroadcast();
-    if (devicesStore.isAudioDevice) {
-      if (playing) {
-        devicesStore.startPositionBroadcast();
-      } else {
-        devicesStore.stopPositionBroadcast();
-      }
-    }
-  });
-  watch(() => currentTrackId.value, throttledBroadcast);
-  watch(() => currentTrackIndex.value, throttledBroadcast);
-  // Broadcast when track metadata changes (e.g. statics load after track change)
-  watch(currentTrack, throttledBroadcast, { deep: true });
-
-  watch(
-    () => currentPlaylist.value?.tracksIds?.length,
-    () => {
-      if (devicesStore.isAudioDevice) {
-        devicesStore.broadcastQueueUpdate(buildQueueItems());
-      }
-    }
-  );
-
-  // ============================================
   // Exports
   // ============================================
 
@@ -1077,14 +647,11 @@ export const usePlaybackStore = defineStore("playback", () => {
     progressSec,
     volume,
     muted,
-    outlet,
-    remoteDeviceId,
 
     // Computed
     currentTrack,
     canGoToPreviousPlaylist,
     canGoToNextPlaylist,
-    isLocalOutput,
 
     // Constants
     PLAYBACK_CONTEXTS,
@@ -1094,7 +661,6 @@ export const usePlaybackStore = defineStore("playback", () => {
     setTrack,
     setUserPlaylist,
     setPlaylistFromTrackIds,
-    setPendingTransferSeek,
 
     // Playback controls
     play,
@@ -1119,8 +685,5 @@ export const usePlaybackStore = defineStore("playback", () => {
     moveTrack,
     addTracksToPlaylist,
     removeTrackFromPlaylist,
-
-    // Output device
-    selectOutputDevice,
   };
 });

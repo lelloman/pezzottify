@@ -297,23 +297,5 @@ class PlayerScreenViewModelTest {
         override fun retry() {
             retryCalled = true
         }
-
-        val deviceStateFlow = MutableStateFlow(
-            PlayerScreenViewModel.Interactor.DeviceState(
-                devices = emptyList(),
-                selectedDeviceId = null,
-                isLocalOutput = true,
-            )
-        )
-        var lastSelectedDeviceId: Long? = null
-        var selectOutputDeviceCalled = false
-
-        override fun getDeviceState(): Flow<PlayerScreenViewModel.Interactor.DeviceState> =
-            deviceStateFlow
-
-        override fun selectOutputDevice(deviceId: Long?) {
-            selectOutputDeviceCalled = true
-            lastSelectedDeviceId = deviceId
-        }
     }
 }
