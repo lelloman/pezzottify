@@ -254,6 +254,7 @@ export const usePlaybackStore = defineStore("playback", () => {
   };
 
   watch(progressSec, (newSec) => {
+    if (outlet.value === "remote") return;
     const diff = Math.abs(Math.round(newSec) - lastSecProgressSaved);
     if (diff > 4) {
       persistProgressPercent();
@@ -693,8 +694,25 @@ export const usePlaybackStore = defineStore("playback", () => {
   const switchToLocalOutput = () => {
     if (outlet.value === "local") return;
 
+    const wasRemote = outlet.value === "remote";
     outlet.value = "local";
     remoteDeviceId.value = null;
+
+    // When returning from remote with no loaded sound, restore persisted
+    // progress instead of carrying over the remote position values.
+    if (wasRemote && !outletManager.hasLoadedSound()) {
+      const savedPercent = Number.parseFloat(
+        localStorage.getItem("progressPercent")
+      );
+      if (!Number.isNaN(savedPercent) && savedPercent >= 0.0 && savedPercent <= 1.0) {
+        progressPercent.value = savedPercent;
+      }
+      const savedSec = Number.parseFloat(localStorage.getItem("progressSec"));
+      if (!Number.isNaN(savedSec)) {
+        progressSec.value = savedSec;
+      }
+      isPlaying.value = false;
+    }
 
     outletManager.switchToLocal({
       trackId: currentTrackId.value,

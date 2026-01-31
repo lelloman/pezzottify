@@ -272,7 +272,7 @@ watch(
       };
       artists.value = track.artistsIds || [];
       artistName.value = track.artistName || null;
-      duration.value = track.duration ? formatDuration(track.duration) : "";
+      duration.value = track.duration ? formatDuration(track.duration) : "--:--";
 
       if (track.imageId) {
         imageUrls.value = [formatImageUrl(track.imageId)];

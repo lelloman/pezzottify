@@ -1343,6 +1343,7 @@ mod tests {
                 title: "Test".to_string(),
                 artist_id: "artist-1".to_string(),
                 artist_name: "Artist".to_string(),
+                artists_ids: vec!["artist-1".to_string()],
                 album_id: "album-1".to_string(),
                 album_title: "Album".to_string(),
                 duration: 180.0,

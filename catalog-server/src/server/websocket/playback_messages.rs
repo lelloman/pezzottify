@@ -12,6 +12,8 @@ pub struct PlaybackTrack {
     pub title: String,
     pub artist_id: String,
     pub artist_name: String,
+    #[serde(default)]
+    pub artists_ids: Vec<String>,
     pub album_id: String,
     pub album_title: String,
     pub duration: f64,
@@ -231,6 +233,7 @@ mod tests {
                 title: "Test Song".to_string(),
                 artist_id: "artist-1".to_string(),
                 artist_name: "Test Artist".to_string(),
+                artists_ids: vec!["artist-1".to_string()],
                 album_id: "album-1".to_string(),
                 album_title: "Test Album".to_string(),
                 duration: 180.5,
