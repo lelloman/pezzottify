@@ -356,22 +356,36 @@ export const usePlaybackStore = defineStore("playback", () => {
 
   const setAlbumId = async (albumId, discIndex, trackIndex) => {
     const album = await Promise.resolve(staticsStore.waitAlbumData(albumId));
-    if (album) {
-      const albumPlaylist = makePlaylistFromAlbumData(album);
-      setNewPlayingPlaylist(albumPlaylist);
-      if (Number.isInteger(discIndex) && Number.isInteger(trackIndex)) {
-        const desiredTrackIndex = findTrackIndex(album, discIndex, trackIndex);
-        loadTrack(desiredTrackIndex);
-      } else {
-        loadTrack(0);
-      }
-      play();
-    } else {
+    if (!album) {
       console.error("Album", albumId, "not found in staticsStore");
+      return;
     }
+
+    const trackIds = album.discs.flatMap((disc) => disc.tracks);
+    let startIndex = 0;
+    if (Number.isInteger(discIndex) && Number.isInteger(trackIndex)) {
+      startIndex = findTrackIndex(album, discIndex, trackIndex);
+    }
+
+    if (outlet.value === "remote") {
+      devicesStore.sendCommand("loadPlaylist", { trackIds, startIndex });
+      return;
+    }
+
+    const albumPlaylist = makePlaylistFromAlbumData(album);
+    setNewPlayingPlaylist(albumPlaylist);
+    loadTrack(startIndex);
+    play();
   };
 
   const setTrack = (newTrack) => {
+    if (outlet.value === "remote") {
+      devicesStore.sendCommand("loadPlaylist", {
+        trackIds: [newTrack.id],
+        startIndex: 0,
+      });
+      return;
+    }
     const trackPlaylist = makePlaylistFromTrackId(newTrack.id);
     setNewPlayingPlaylist(trackPlaylist);
     loadTrack(0);
@@ -380,6 +394,13 @@ export const usePlaybackStore = defineStore("playback", () => {
 
   const setUserPlaylist = async (newPlaylist) => {
     if (newPlaylist.tracks.length === 0) return;
+    if (outlet.value === "remote") {
+      devicesStore.sendCommand("loadPlaylist", {
+        trackIds: newPlaylist.tracks.map((t) => t),
+        startIndex: 0,
+      });
+      return;
+    }
     const userPlaylistPlaylist = makePlaylistFromUserPlaylist(newPlaylist);
     setNewPlayingPlaylist(userPlaylistPlaylist);
     loadTrack(0);
@@ -483,6 +504,14 @@ export const usePlaybackStore = defineStore("playback", () => {
 
   const seekToPercentage = (percentage) => {
     outletManager.seekToPercentage(percentage);
+    // Update local state immediately for responsive UI (especially remote)
+    if (outlet.value === "remote") {
+      progressPercent.value = percentage;
+      const track = currentTrack.value;
+      if (track?.duration) {
+        progressSec.value = percentage * track.duration;
+      }
+    }
     persistProgressPercent();
   };
 
@@ -832,6 +861,15 @@ export const usePlaybackStore = defineStore("playback", () => {
         case "setMuted":
           if (cmdPayload?.muted !== undefined) {
             setMuted(cmdPayload.muted);
+          }
+          break;
+        case "loadPlaylist":
+          if (cmdPayload?.trackIds?.length > 0) {
+            setPlaylistFromTrackIds(
+              cmdPayload.trackIds,
+              cmdPayload.startIndex || 0,
+              true
+            );
           }
           break;
       }

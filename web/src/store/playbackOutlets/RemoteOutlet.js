@@ -17,6 +17,9 @@ export class RemoteOutlet {
     // Position interpolation
     this.interpolatedPosition = 0;
     this.interpolationFrame = null;
+
+    // Pending seek - hold this position until remote state catches up
+    this.pendingSeekPosition = null;
   }
 
   /**
@@ -24,6 +27,8 @@ export class RemoteOutlet {
    */
   updateRemoteState(state) {
     this.remoteState = state;
+    // New state from the audio device supersedes any pending seek
+    this.pendingSeekPosition = null;
 
     // If we're the active outlet, notify the playback store
     if (this.isActive && state) {
@@ -49,6 +54,7 @@ export class RemoteOutlet {
    * Seek to a position in seconds
    */
   seekTo(seconds) {
+    this.pendingSeekPosition = seconds;
     this.devicesStore.sendCommand("seek", { position: seconds });
   }
 
@@ -165,7 +171,9 @@ export class RemoteOutlet {
     if (this.interpolationFrame) return;
 
     const tick = () => {
-      if (this.remoteState?.is_playing) {
+      if (this.pendingSeekPosition !== null) {
+        this.interpolatedPosition = this.pendingSeekPosition;
+      } else if (this.remoteState?.is_playing) {
         const elapsed = (Date.now() - this.remoteState.timestamp) / 1000;
         this.interpolatedPosition = this.remoteState.position + elapsed;
       } else if (this.remoteState) {
