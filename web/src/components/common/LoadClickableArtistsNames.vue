@@ -15,7 +15,7 @@
 </template>
 
 <script setup>
-import { onMounted, ref, watch, reactive } from "vue";
+import { ref, watch, reactive } from "vue";
 import ClickableArtistsNames from "./ClickableArtistsNames.vue";
 import { useStaticsStore } from "@/store/statics";
 
@@ -54,22 +54,23 @@ watch(
   { deep: true, immediate: true },
 );
 
-onMounted(() => {
-  isLoading.value = true;
-  loadedArtistsIdsNames.value = [];
+// Watch artistsIds prop for changes (handles both initial load and track changes)
+watch(
+  () => props.artistsIds,
+  (ids) => {
+    isLoading.value = true;
+    loadedArtistsIdsNames.value = [];
+    artistsRefs.length = 0;
 
-  // Clear any previous refs
-  artistsRefs.length = 0;
+    if (!ids || !Array.isArray(ids) || ids.length === 0) {
+      isLoading.value = false;
+      return;
+    }
 
-  // Guard against undefined or non-array artistsIds
-  if (!props.artistsIds || !Array.isArray(props.artistsIds)) {
-    isLoading.value = false;
-    return;
-  }
-
-  // Add new reactive refs to our array
-  props.artistsIds.forEach((artistId) => {
-    artistsRefs.push(staticsStore.getArtist(artistId));
-  });
-});
+    ids.forEach((artistId) => {
+      artistsRefs.push(staticsStore.getArtist(artistId));
+    });
+  },
+  { immediate: true, deep: true },
+);
 </script>

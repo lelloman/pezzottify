@@ -974,14 +974,31 @@ export const usePlaybackStore = defineStore("playback", () => {
   // ============================================
 
   let lastBroadcastTime = 0;
+  let pendingBroadcast = null;
   const MIN_BROADCAST_INTERVAL = 500;
 
   const throttledBroadcast = () => {
     if (!devicesStore.isAudioDevice) return;
+
     const now = Date.now();
-    if (now - lastBroadcastTime < MIN_BROADCAST_INTERVAL) return;
-    lastBroadcastTime = now;
-    devicesStore.broadcastStateNow();
+    const timeSince = now - lastBroadcastTime;
+
+    if (timeSince >= MIN_BROADCAST_INTERVAL) {
+      // Enough time passed - broadcast immediately
+      lastBroadcastTime = now;
+      if (pendingBroadcast) {
+        clearTimeout(pendingBroadcast);
+        pendingBroadcast = null;
+      }
+      devicesStore.broadcastStateNow();
+    } else if (!pendingBroadcast) {
+      // Schedule a trailing broadcast to catch changes during throttle window
+      pendingBroadcast = setTimeout(() => {
+        pendingBroadcast = null;
+        lastBroadcastTime = Date.now();
+        devicesStore.broadcastStateNow();
+      }, MIN_BROADCAST_INTERVAL - timeSince);
+    }
   };
 
   watch(() => isPlaying.value, (playing) => {
@@ -996,6 +1013,8 @@ export const usePlaybackStore = defineStore("playback", () => {
   });
   watch(() => currentTrackId.value, throttledBroadcast);
   watch(() => currentTrackIndex.value, throttledBroadcast);
+  // Broadcast when track metadata changes (e.g. statics load after track change)
+  watch(currentTrack, throttledBroadcast, { deep: true });
 
   watch(
     () => currentPlaylist.value?.tracksIds?.length,

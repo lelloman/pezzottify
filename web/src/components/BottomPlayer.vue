@@ -274,7 +274,9 @@ watch(
       artistName.value = track.artistName || null;
       duration.value = track.duration ? formatDuration(track.duration) : "--:--";
 
-      if (track.imageId) {
+      if (track.albumId) {
+        imageUrls.value = [formatImageUrl(track.albumId)];
+      } else if (track.imageId) {
         imageUrls.value = [formatImageUrl(track.imageId)];
       } else {
         imageUrls.value = [];
