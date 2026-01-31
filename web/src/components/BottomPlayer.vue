@@ -47,7 +47,6 @@
       </div>
     </div>
     <div class="extraControlsRow">
-      <DeviceSelector />
       <ControlIconButton
         v-if="playback.muted"
         :action="handleVolumeOn"
@@ -73,8 +72,7 @@
 <script setup>
 import { computed, ref, watch, h } from "vue";
 import { usePlaybackStore } from "@/store/playback";
-import { useDevicesStore } from "@/store/devices";
-import { formatDuration, chooseAlbumCoverImageUrl, formatImageUrl } from "@/utils";
+import { formatDuration, chooseAlbumCoverImageUrl } from "@/utils";
 import PlayIcon from "./icons/PlayIcon.vue";
 import PauseIcon from "./icons/PauseIcon.vue";
 import Forward10Sec from "./icons/Forward10Sec.vue";
@@ -90,7 +88,6 @@ import LoadClickableArtistsNames from "@/components/common/LoadClickableArtistsN
 import { useRouter } from "vue-router";
 import TrackName from "./common/TrackName.vue";
 import { useStaticsStore } from "@/store/statics";
-import DeviceSelector from "./player/DeviceSelector.vue";
 
 const ControlIconButton = {
   props: ["icon", "action", "big"],
@@ -115,12 +112,11 @@ const ControlIconButton = {
 
 const router = useRouter();
 const playback = usePlaybackStore();
-const devices = useDevicesStore();
 const staticsStore = useStaticsStore();
 
 // Track whether there's any playback to display
 const hasPlayback = computed(() => {
-  return playback.currentTrackId || devices.sessionExists;
+  return playback.currentTrackId;
 });
 
 // Progress dragging state
@@ -260,31 +256,7 @@ watch(
       return;
     }
 
-    // For remote playback, track data is already resolved
-    if (!playback.isLocalOutput) {
-      displayTrack.value = {
-        id: track.id,
-        name: track.title,
-        title: track.title,
-        artists_ids: track.artistsIds || [],
-        album_id: track.albumId,
-        duration: track.duration,
-      };
-      artists.value = track.artistsIds || [];
-      artistName.value = track.artistName || null;
-      duration.value = track.duration ? formatDuration(track.duration) : "--:--";
-
-      if (track.albumId) {
-        imageUrls.value = [formatImageUrl(track.albumId)];
-      } else if (track.imageId) {
-        imageUrls.value = [formatImageUrl(track.imageId)];
-      } else {
-        imageUrls.value = [];
-      }
-      return;
-    }
-
-    // For local playback, we need to resolve the track data
+    // Resolve the track data from statics store
     if (playback.currentTrackId) {
       trackDataUnwatcher = watch(
         staticsStore.getTrack(playback.currentTrackId),

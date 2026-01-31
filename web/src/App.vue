@@ -7,7 +7,7 @@ import { onMounted, onUnmounted, computed, watch } from "vue";
 import ChatButton from "./components/chat/ChatButton.vue";
 import ChatPanel from "./components/chat/ChatPanel.vue";
 import IngestionMonitorModal from "./components/ingestion/IngestionMonitorModal.vue";
-import DebugPlaybackOverlay from "./components/debug/DebugPlaybackOverlay.vue";
+
 
 const playback = usePlaybackStore();
 const authStore = useAuthStore();
@@ -53,7 +53,6 @@ onUnmounted(() => {
     <ChatPanel />
   </template>
   <IngestionMonitorModal />
-  <DebugPlaybackOverlay v-if="showChat" />
 </template>
 
 <style scoped>

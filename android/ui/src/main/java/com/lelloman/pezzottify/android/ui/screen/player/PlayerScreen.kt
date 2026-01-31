@@ -23,14 +23,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Computer
-import androidx.compose.material.icons.filled.PhoneAndroid
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Speaker
-import androidx.compose.material.icons.filled.Tv
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -300,17 +292,6 @@ private fun PlayerScreenContent(
                 )
 
                 Spacer(modifier = Modifier.height(24.dp))
-
-                // Device selector (only show if there are multiple devices)
-                if (state.devices.size > 1) {
-                    DeviceSelector(
-                        devices = state.devices,
-                        selectedDeviceId = state.selectedOutputDeviceId,
-                        isLocalOutput = state.isLocalOutput,
-                        onSelectDevice = actions::selectOutputDevice,
-                    )
-                    Spacer(modifier = Modifier.height(16.dp))
-                }
 
                 Spacer(modifier = Modifier.weight(1f))
 
@@ -624,109 +605,6 @@ private fun VolumeControl(
             )
         }
     }
-}
-
-@Composable
-private fun DeviceSelector(
-    devices: List<OutputDeviceUi>,
-    selectedDeviceId: Long?,
-    isLocalOutput: Boolean,
-    onSelectDevice: (Long?) -> Unit,
-) {
-    var expanded by remember { mutableStateOf(false) }
-
-    // Find the currently selected device for display
-    val currentDevice = if (isLocalOutput) {
-        devices.find { it.isAudioDevice }
-    } else {
-        devices.find { it.id == selectedDeviceId }
-    }
-    val displayName = currentDevice?.name ?: stringResource(R.string.this_device)
-
-    Box {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(8.dp))
-                .clickable { expanded = true }
-                .padding(horizontal = 12.dp, vertical = 8.dp),
-            horizontalArrangement = Arrangement.Center,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Icon(
-                imageVector = getDeviceIcon(currentDevice?.deviceType),
-                contentDescription = null,
-                modifier = Modifier.size(20.dp),
-                tint = if (isLocalOutput) {
-                    MaterialTheme.colorScheme.primary
-                } else {
-                    MaterialTheme.colorScheme.onSurfaceVariant
-                }
-            )
-            Spacer(modifier = Modifier.width(8.dp))
-            Text(
-                text = displayName,
-                style = MaterialTheme.typography.bodyMedium,
-                color = if (isLocalOutput) {
-                    MaterialTheme.colorScheme.primary
-                } else {
-                    MaterialTheme.colorScheme.onSurfaceVariant
-                }
-            )
-        }
-
-        DropdownMenu(
-            expanded = expanded,
-            onDismissRequest = { expanded = false },
-        ) {
-            devices.forEach { device ->
-                val isSelected = if (isLocalOutput) {
-                    device.isAudioDevice
-                } else {
-                    device.id == selectedDeviceId
-                }
-
-                DropdownMenuItem(
-                    text = {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Icon(
-                                imageVector = getDeviceIcon(device.deviceType),
-                                contentDescription = null,
-                                modifier = Modifier.size(20.dp),
-                            )
-                            Spacer(modifier = Modifier.width(12.dp))
-                            Text(text = device.name)
-                            if (isSelected) {
-                                Spacer(modifier = Modifier.weight(1f))
-                                Icon(
-                                    imageVector = Icons.Filled.Check,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(20.dp),
-                                    tint = MaterialTheme.colorScheme.primary,
-                                )
-                            }
-                        }
-                    },
-                    onClick = {
-                        expanded = false
-                        // Select null for this device (local), or the device's id for remote
-                        onSelectDevice(if (device.isAudioDevice) null else device.id)
-                    }
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun getDeviceIcon(deviceType: String?) = when (deviceType?.lowercase()) {
-    "mobile", "phone", "android" -> Icons.Filled.PhoneAndroid
-    "computer", "desktop", "laptop", "web" -> Icons.Filled.Computer
-    "tv", "television" -> Icons.Filled.Tv
-    "speaker", "audio" -> Icons.Filled.Speaker
-    else -> Icons.Filled.PhoneAndroid
 }
 
 private fun formatTime(seconds: Int): String {
