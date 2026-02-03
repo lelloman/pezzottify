@@ -356,6 +356,7 @@ private fun PlaylistGrid(
     }
 }
 
+@Suppress("ComposableNaming")
 @Composable
 private fun <T> List<T>.forEachGroup(maxGroupSize: Int, action: @Composable (List<T>) -> Unit) {
     val nGroups = size / maxGroupSize + (if (size % maxGroupSize > 0) 1 else 0)

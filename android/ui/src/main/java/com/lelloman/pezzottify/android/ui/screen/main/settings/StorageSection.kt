@@ -26,6 +26,7 @@ import com.lelloman.pezzottify.android.ui.R
 import com.lelloman.pezzottify.android.ui.model.StorageInfo
 import com.lelloman.pezzottify.android.ui.model.StoragePressureLevel
 import com.lelloman.pezzottify.android.ui.theme.PezzottifyTheme
+import java.util.Locale
 import kotlin.math.roundToInt
 
 @Composable
@@ -63,7 +64,7 @@ fun StorageSection(
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Text(
-                        text = stringResource(R.string.storage_used, String.format("%.2f", usedGB), String.format("%.2f", totalGB)),
+                        text = stringResource(R.string.storage_used, String.format(Locale.US, "%.2f", usedGB), String.format(Locale.US, "%.2f", totalGB)),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurface
                     )
@@ -88,7 +89,7 @@ fun StorageSection(
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Text(
-                        text = stringResource(R.string.storage_available, String.format("%.2f", availableGB)),
+                        text = stringResource(R.string.storage_available, String.format(Locale.US, "%.2f", availableGB)),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )

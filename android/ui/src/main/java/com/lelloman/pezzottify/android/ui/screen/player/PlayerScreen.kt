@@ -50,8 +50,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.platform.LocalConfiguration
-import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
@@ -108,9 +107,8 @@ private fun PlayerScreenContent(
     var isDraggingToDismiss by remember { mutableStateOf(false) }
 
     val scope = rememberCoroutineScope()
-    val density = LocalDensity.current
-    val configuration = LocalConfiguration.current
-    val screenHeightPx = with(density) { configuration.screenHeightDp.dp.toPx() }
+    val windowInfo = LocalWindowInfo.current
+    val screenHeightPx = windowInfo.containerSize.height.toFloat()
 
     val dismissOffsetAnimatable = remember { Animatable(0f) }
 

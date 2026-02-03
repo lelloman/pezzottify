@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<resources>
+<resources xmlns:tools="http://schemas.android.com/tools">
 
     <!-- COMMON -->
     <string name="back">Back</string>
@@ -25,9 +25,9 @@
     <string name="version">App version: %1$s</string>
     <string name="commit">Commit hash: %1$s</string>
     <string name="catalog_section_title">Catalog</string>
-    <string name="catalog_artists_count">%1$d artists</string>
-    <string name="catalog_albums_count">%1$d albums</string>
-    <string name="catalog_tracks_count">%1$d tracks</string>
+    <string name="catalog_artists_count" tools:ignore="PluralsCandidate">%1$d artists</string>
+    <string name="catalog_albums_count" tools:ignore="PluralsCandidate">%1$d albums</string>
+    <string name="catalog_tracks_count" tools:ignore="PluralsCandidate">%1$d tracks</string>
     <!-- ABOUT SCREEN -->
 
     <!-- MAIN SCREEN -->
@@ -92,7 +92,7 @@
     <string name="theme">Theme</string>
     <string name="color_palette">Color Palette</string>
     <string name="font">Font</string>
-    <string name="selected">Selected</string>
+    <string name="selected" tools:override="true">Selected</string>
     <string name="font_preview">Aa</string>
     <string name="theme_system">System</string>
     <string name="theme_light">Light</string>
@@ -277,9 +277,9 @@
     <string name="date_section_last_week">Last Week</string>
     <string name="date_section_last_month">Last Month</string>
     <string name="date_section_months_ago_one">1 month ago</string>
-    <string name="date_section_months_ago">%1$d months ago</string>
+    <string name="date_section_months_ago" tools:ignore="PluralsCandidate">%1$d months ago</string>
     <string name="date_section_years_ago_one">1 year ago</string>
-    <string name="date_section_years_ago">%1$d years ago</string>
+    <string name="date_section_years_ago" tools:ignore="PluralsCandidate">%1$d years ago</string>
     <!-- LISTENING HISTORY SCREEN -->
 
     <!-- SEARCH SCREEN -->
@@ -433,16 +433,16 @@
     <string name="my_requests_empty_completed">No completed downloads yet</string>
     <string name="my_requests_requested_time">Requested %1$s</string>
     <string name="my_requests_queue_position">#%1$d in queue</string>
-    <string name="my_requests_tracks_progress">%1$d / %2$d tracks</string>
+    <string name="my_requests_tracks_progress" tools:ignore="PluralsCandidate">%1$d / %2$d tracks</string>
     <string name="my_requests_status_pending">Pending</string>
     <string name="my_requests_status_in_progress">In Progress</string>
     <string name="my_requests_status_failed">Failed</string>
     <string name="my_requests_time_just_now">just now</string>
     <string name="my_requests_time_minutes_ago">%1$d min ago</string>
     <string name="my_requests_time_hours_ago">%1$d hr ago</string>
-    <string name="my_requests_time_days_ago">%1$d days ago</string>
-    <string name="my_requests_time_months_ago">%1$d months ago</string>
-    <string name="my_requests_time_years_ago">%1$d years ago</string>
+    <string name="my_requests_time_days_ago" tools:ignore="PluralsCandidate">%1$d days ago</string>
+    <string name="my_requests_time_months_ago" tools:ignore="PluralsCandidate">%1$d months ago</string>
+    <string name="my_requests_time_years_ago" tools:ignore="PluralsCandidate">%1$d years ago</string>
     <string name="my_requests_load_more">Load more</string>
     <!-- MY REQUESTS SCREEN -->
 </resources>

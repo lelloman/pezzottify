@@ -28,8 +28,7 @@ import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChanged
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalConfiguration
-import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
@@ -54,9 +53,8 @@ fun FullScreenImageScreen(
     var isDraggingToDismiss by remember { mutableStateOf(false) }
 
     val scope = rememberCoroutineScope()
-    val density = LocalDensity.current
-    val configuration = LocalConfiguration.current
-    val screenHeightPx = with(density) { configuration.screenHeightDp.dp.toPx() }
+    val windowInfo = LocalWindowInfo.current
+    val screenHeightPx = windowInfo.containerSize.height.toFloat()
 
     val dismissOffsetAnimatable = remember { Animatable(0f) }
 
