@@ -25,6 +25,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
@@ -448,16 +449,31 @@ class SyncManagerImpl internal constructor(
     }
 
     private suspend fun applyPlaylistsState(playlists: List<PlaylistState>) {
-        val domainPlaylists = playlists.map { playlist ->
-            object : com.lelloman.pezzottify.android.domain.usercontent.UserPlaylist {
-                override val id = playlist.id
-                override val name = playlist.name
-                override val trackIds = playlist.tracks
-                override val syncStatus = com.lelloman.pezzottify.android.domain.usercontent.PlaylistSyncStatus.Synced
+        // Collect locally-pending playlists before replacing
+        val pendingPlaylists = userPlaylistStore.getPendingSyncPlaylists().first()
+        val pendingById = pendingPlaylists.associateBy { it.id }
+
+        val serverPlaylists = playlists.map { playlist ->
+            // If a local version is pending sync, preserve the local version
+            val pending = pendingById[playlist.id]
+            if (pending != null) {
+                pending
+            } else {
+                object : com.lelloman.pezzottify.android.domain.usercontent.UserPlaylist {
+                    override val id = playlist.id
+                    override val name = playlist.name
+                    override val trackIds = playlist.tracks
+                    override val syncStatus = com.lelloman.pezzottify.android.domain.usercontent.PlaylistSyncStatus.Synced
+                }
             }
         }
-        userPlaylistStore.replaceAllPlaylists(domainPlaylists)
-        logger.debug("Applied ${playlists.size} playlists")
+
+        // Also include pending playlists that don't exist on the server (e.g. PendingCreate)
+        val serverIds = playlists.map { it.id }.toSet()
+        val localOnlyPending = pendingPlaylists.filter { it.id !in serverIds }
+
+        userPlaylistStore.replaceAllPlaylists(serverPlaylists + localOnlyPending)
+        logger.debug("Applied ${playlists.size} playlists (preserved ${pendingPlaylists.size} pending)")
     }
 
     private suspend fun applySetting(setting: UserSetting) {

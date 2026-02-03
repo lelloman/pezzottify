@@ -7,8 +7,11 @@ import com.lelloman.pezzottify.android.domain.notifications.SystemNotificationHe
 import com.lelloman.pezzottify.android.domain.remoteapi.RemoteApiClient
 import com.lelloman.pezzottify.android.domain.remoteapi.response.LikesState
 import com.lelloman.pezzottify.android.domain.remoteapi.response.RemoteApiResponse
+import com.lelloman.pezzottify.android.domain.remoteapi.response.PlaylistState
 import com.lelloman.pezzottify.android.domain.remoteapi.response.SyncEventsResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.SyncStateResponse
+import com.lelloman.pezzottify.android.domain.usercontent.PlaylistSyncStatus
+import com.lelloman.pezzottify.android.domain.usercontent.UserPlaylist
 import com.lelloman.pezzottify.android.domain.settings.UserSettingsStore
 import com.lelloman.pezzottify.android.domain.user.PermissionsStore
 import com.lelloman.pezzottify.android.domain.usercontent.LikedContent
@@ -64,6 +67,9 @@ class SyncManagerImplTest {
 
         // Default: no full sync needed (tests can override)
         every { syncStateStore.needsFullSync() } returns false
+
+        // Default: no pending playlists (tests can override)
+        every { userPlaylistStore.getPendingSyncPlaylists() } returns kotlinx.coroutines.flow.flowOf(emptyList())
 
         syncManager = SyncManagerImpl(
             remoteApiClient = remoteApiClient,
@@ -200,6 +206,161 @@ class SyncManagerImplTest {
         syncManager.fullSync()
 
         assertThat(statesDuringSync).contains(SyncState.Syncing)
+    }
+
+    // endregion
+
+    // region fullSync playlists
+
+    @Test
+    fun `fullSync replaces all playlists with server state`() = runTest(testDispatcher) {
+        val serverPlaylists = listOf(
+            PlaylistState(id = "pl-1", name = "Playlist One", tracks = listOf("t1", "t2")),
+            PlaylistState(id = "pl-2", name = "Playlist Two", tracks = listOf("t3")),
+        )
+        coEvery { remoteApiClient.getSyncState() } returns RemoteApiResponse.Success(
+            createSyncStateResponse(seq = 10L, playlists = serverPlaylists)
+        )
+
+        syncManager.fullSync()
+
+        val playlistsSlot = slot<List<UserPlaylist>>()
+        coVerify { userPlaylistStore.replaceAllPlaylists(capture(playlistsSlot)) }
+        val replaced = playlistsSlot.captured
+        assertThat(replaced).hasSize(2)
+        assertThat(replaced[0].id).isEqualTo("pl-1")
+        assertThat(replaced[0].name).isEqualTo("Playlist One")
+        assertThat(replaced[0].trackIds).containsExactly("t1", "t2").inOrder()
+        assertThat(replaced[0].syncStatus).isEqualTo(PlaylistSyncStatus.Synced)
+        assertThat(replaced[1].id).isEqualTo("pl-2")
+    }
+
+    @Test
+    fun `fullSync should preserve locally pending playlists during replacement`() = runTest(testDispatcher) {
+        // Local playlist has been modified (PendingUpdate) with locally-added tracks
+        val localPlaylist = object : UserPlaylist {
+            override val id = "pl-1"
+            override val name = "My Playlist"
+            override val trackIds = listOf("t1", "t2", "t3-local")
+            override val syncStatus = PlaylistSyncStatus.PendingUpdate
+        }
+        coEvery { userPlaylistStore.getPendingSyncPlaylists() } returns kotlinx.coroutines.flow.flowOf(
+            listOf(localPlaylist)
+        )
+
+        // Server has the same playlist but without the locally-added track
+        val serverPlaylists = listOf(
+            PlaylistState(id = "pl-1", name = "My Playlist", tracks = listOf("t1", "t2")),
+        )
+        coEvery { remoteApiClient.getSyncState() } returns RemoteApiResponse.Success(
+            createSyncStateResponse(seq = 10L, playlists = serverPlaylists)
+        )
+
+        syncManager.fullSync()
+
+        // The locally-modified playlist's tracks should be preserved
+        val playlistsSlot = slot<List<UserPlaylist>>()
+        coVerify { userPlaylistStore.replaceAllPlaylists(capture(playlistsSlot)) }
+        val replaced = playlistsSlot.captured
+        val playlist = replaced.find { it.id == "pl-1" }!!
+        assertThat(playlist.trackIds).contains("t3-local")
+        assertThat(playlist.syncStatus).isEqualTo(PlaylistSyncStatus.PendingUpdate)
+    }
+
+    @Test
+    fun `fullSync should preserve PendingCreate playlists that are not on server`() = runTest(testDispatcher) {
+        // Local playlist was just created, server doesn't know about it yet
+        val localPlaylist = object : UserPlaylist {
+            override val id = "local-pl-new"
+            override val name = "Brand New Playlist"
+            override val trackIds = listOf("t1")
+            override val syncStatus = PlaylistSyncStatus.PendingCreate
+        }
+        coEvery { userPlaylistStore.getPendingSyncPlaylists() } returns kotlinx.coroutines.flow.flowOf(
+            listOf(localPlaylist)
+        )
+
+        // Server has no playlists
+        coEvery { remoteApiClient.getSyncState() } returns RemoteApiResponse.Success(
+            createSyncStateResponse(seq = 10L, playlists = emptyList())
+        )
+
+        syncManager.fullSync()
+
+        // The PendingCreate playlist should survive the replaceAll
+        val playlistsSlot = slot<List<UserPlaylist>>()
+        coVerify { userPlaylistStore.replaceAllPlaylists(capture(playlistsSlot)) }
+        val replaced = playlistsSlot.captured
+        val localResult = replaced.find { it.id == "local-pl-new" }
+        assertThat(localResult).isNotNull()
+        assertThat(localResult!!.name).isEqualTo("Brand New Playlist")
+        assertThat(localResult.trackIds).containsExactly("t1")
+        assertThat(localResult.syncStatus).isEqualTo(PlaylistSyncStatus.PendingCreate)
+    }
+
+    // endregion
+
+    // region catchUp playlists
+
+    @Test
+    fun `catchUp applies playlist_created event`() = runTest(testDispatcher) {
+        every { syncStateStore.getCurrentCursor() } returns 5L
+        val events = listOf(
+            createPlaylistCreatedEvent(seq = 6L, playlistId = "pl-new", name = "New Playlist"),
+        )
+        coEvery { remoteApiClient.getSyncEvents(5L) } returns RemoteApiResponse.Success(
+            SyncEventsResponse(events = events, currentSeq = 6L)
+        )
+
+        syncManager.catchUp()
+
+        coVerify {
+            userPlaylistStore.createOrUpdatePlaylist(
+                id = "pl-new",
+                name = "New Playlist",
+                trackIds = emptyList(),
+            )
+        }
+    }
+
+    @Test
+    fun `catchUp applies playlist_deleted event`() = runTest(testDispatcher) {
+        every { syncStateStore.getCurrentCursor() } returns 5L
+        val events = listOf(
+            createPlaylistDeletedEvent(seq = 6L, playlistId = "pl-gone"),
+        )
+        coEvery { remoteApiClient.getSyncEvents(5L) } returns RemoteApiResponse.Success(
+            SyncEventsResponse(events = events, currentSeq = 6L)
+        )
+
+        syncManager.catchUp()
+
+        coVerify { userPlaylistStore.deletePlaylist("pl-gone") }
+    }
+
+    @Test
+    fun `catchUp applies playlist_tracks_updated event`() = runTest(testDispatcher) {
+        every { syncStateStore.getCurrentCursor() } returns 5L
+        val events = listOf(
+            createPlaylistTracksUpdatedEvent(
+                seq = 6L,
+                playlistId = "pl-1",
+                trackIds = listOf("t1", "t2", "t3"),
+            ),
+        )
+        coEvery { remoteApiClient.getSyncEvents(5L) } returns RemoteApiResponse.Success(
+            SyncEventsResponse(events = events, currentSeq = 6L)
+        )
+
+        syncManager.catchUp()
+
+        coVerify {
+            userPlaylistStore.updatePlaylistTracks(
+                playlistId = "pl-1",
+                trackIds = listOf("t1", "t2", "t3"),
+                fromServer = true,
+            )
+        }
     }
 
     // endregion
@@ -472,6 +633,7 @@ class SyncManagerImplTest {
         likesArtists: List<String> = emptyList(),
         likesTracks: List<String> = emptyList(),
         settings: List<UserSetting> = emptyList(),
+        playlists: List<PlaylistState> = emptyList(),
     ): SyncStateResponse {
         return SyncStateResponse(
             seq = seq,
@@ -481,7 +643,7 @@ class SyncManagerImplTest {
                 tracks = likesTracks,
             ),
             settings = settings,
-            playlists = emptyList(),
+            playlists = playlists,
             permissions = emptyList(),
         )
     }
@@ -515,6 +677,55 @@ class SyncManagerImplTest {
             payload = SyncEventPayload(
                 contentType = contentType,
                 contentId = contentId,
+            ),
+            serverTimestamp = serverTimestamp,
+        )
+    }
+
+    private fun createPlaylistCreatedEvent(
+        seq: Long,
+        playlistId: String,
+        name: String,
+        serverTimestamp: Long = System.currentTimeMillis(),
+    ): StoredEvent {
+        return StoredEvent(
+            seq = seq,
+            type = "playlist_created",
+            payload = SyncEventPayload(
+                playlistId = playlistId,
+                name = name,
+            ),
+            serverTimestamp = serverTimestamp,
+        )
+    }
+
+    private fun createPlaylistDeletedEvent(
+        seq: Long,
+        playlistId: String,
+        serverTimestamp: Long = System.currentTimeMillis(),
+    ): StoredEvent {
+        return StoredEvent(
+            seq = seq,
+            type = "playlist_deleted",
+            payload = SyncEventPayload(
+                playlistId = playlistId,
+            ),
+            serverTimestamp = serverTimestamp,
+        )
+    }
+
+    private fun createPlaylistTracksUpdatedEvent(
+        seq: Long,
+        playlistId: String,
+        trackIds: List<String>,
+        serverTimestamp: Long = System.currentTimeMillis(),
+    ): StoredEvent {
+        return StoredEvent(
+            seq = seq,
+            type = "playlist_tracks_updated",
+            payload = SyncEventPayload(
+                playlistId = playlistId,
+                trackIds = trackIds,
             ),
             serverTimestamp = serverTimestamp,
         )

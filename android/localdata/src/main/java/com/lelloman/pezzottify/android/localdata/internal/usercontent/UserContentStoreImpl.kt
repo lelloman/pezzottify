@@ -35,7 +35,7 @@ internal class UserContentStoreImpl(
                 contentType = type,
                 isLiked = liked,
                 modifiedAt = modifiedAt,
-                syncStatus = SyncStatus.PendingSync,
+                syncStatus = syncStatus,
             )
         )
     }
