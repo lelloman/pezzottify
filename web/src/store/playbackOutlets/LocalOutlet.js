@@ -47,10 +47,8 @@ export class LocalOutlet {
       },
       onload: () => {
         if (seekPercent !== null && seekPercent > 0) {
-          requestAnimationFrame(() => {
-            this.seekToPercentage(seekPercent);
-            this.updateProgress();
-          });
+          this.seekToPercentage(seekPercent);
+          this.updateProgress();
         }
         this.callbacks.onTrackLoaded(this.sound.duration());
       },
