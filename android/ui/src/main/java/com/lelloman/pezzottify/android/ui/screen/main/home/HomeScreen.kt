@@ -395,6 +395,7 @@ private fun HomeScreenPreview() {
     HomeScreen(navController = navController)
 }
 
+@Suppress("ComposableNaming")
 @Composable
 private fun <T> List<T>.forEachGroup(maxGroupSize: Int, action: @Composable (List<T>) -> Unit) {
 

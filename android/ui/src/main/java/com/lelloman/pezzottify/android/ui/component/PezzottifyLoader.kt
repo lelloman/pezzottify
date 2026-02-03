@@ -65,8 +65,8 @@ enum class LoaderSize {
  */
 @Composable
 fun PezzottifyLoader(
-    size: LoaderSize = LoaderSize.Section,
     modifier: Modifier = Modifier,
+    size: LoaderSize = LoaderSize.Section,
     color: Color = Color.Unspecified,
 ) {
     when (size) {

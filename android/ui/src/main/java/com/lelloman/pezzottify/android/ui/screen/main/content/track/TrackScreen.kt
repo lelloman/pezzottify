@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
@@ -321,7 +322,7 @@ private fun TrackLoadedScreen(
             onClick = { actions.clickOnLike() },
             modifier = Modifier
                 .align(Alignment.TopEnd)
-                .offset(y = headerHeight - playButtonSize / 2)
+                .offset { IntOffset(0, (headerHeight - playButtonSize / 2).roundToPx()) }
                 .padding(end = 80.dp)
                 .size(playButtonSize)
         ) {
@@ -350,7 +351,7 @@ private fun TrackLoadedScreen(
             enabled = track.isPlayable,
             modifier = Modifier
                 .align(Alignment.TopEnd)
-                .offset(y = headerHeight - playButtonSize / 2)
+                .offset { IntOffset(0, (headerHeight - playButtonSize / 2).roundToPx()) }
                 .padding(end = 16.dp)
                 .size(playButtonSize)
         ) {
