@@ -626,7 +626,10 @@ async fn get_catalog_sync(
     let events = match server_store.get_catalog_events_since(query.since) {
         Ok(e) => e,
         Err(err) => {
-            error!("Error getting catalog events since {}: {}", query.since, err);
+            error!(
+                "Error getting catalog events since {}: {}",
+                query.since, err
+            );
             return StatusCode::INTERNAL_SERVER_ERROR.into_response();
         }
     };
@@ -4231,8 +4234,9 @@ impl ServerState {
         let ws_connection_manager = Arc::new(super::websocket::ConnectionManager::new());
 
         // Create playback session manager for multi-device sync
-        let playback_session_manager =
-            Arc::new(super::websocket::PlaybackSessionManager::new(ws_connection_manager.clone()));
+        let playback_session_manager = Arc::new(super::websocket::PlaybackSessionManager::new(
+            ws_connection_manager.clone(),
+        ));
 
         // Create auth state store for OIDC flow (always created, even if OIDC is disabled)
         let auth_state_store = Arc::new(crate::oidc::AuthStateStore::new());

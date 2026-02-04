@@ -8,7 +8,9 @@ use std::sync::Arc;
 use tracing::{debug, info, warn};
 
 use crate::server::websocket::connection::ConnectionManager;
-use crate::server::websocket::messages::catalog::{CatalogInvalidationMessage, CatalogUpdatedMessage};
+use crate::server::websocket::messages::catalog::{
+    CatalogInvalidationMessage, CatalogUpdatedMessage,
+};
 use crate::server::websocket::messages::msg_types::{CATALOG_INVALIDATION, CATALOG_UPDATED, SYNC};
 use crate::server::websocket::messages::sync::SyncEventMessage;
 use crate::server::websocket::messages::ServerMessage;
