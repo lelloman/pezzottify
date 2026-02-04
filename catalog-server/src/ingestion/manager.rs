@@ -12,7 +12,8 @@
 use super::converter::{convert_to_ogg, probe_audio_file};
 use super::file_handler::{FileHandler, FileHandlerError};
 use super::fingerprint::{
-    match_album_with_fallbacks, FingerprintConfig, FingerprintMatchResult, ScoredCandidate,
+    compare_durations, match_album_with_fallbacks, FingerprintConfig, FingerprintMatchResult,
+    ScoredCandidate,
 };
 use super::models::{
     AlbumMetadataSummary, ConversionReason, IngestionContextType, IngestionFile, IngestionJob,
@@ -653,6 +654,32 @@ impl IngestionManager {
         Ok(())
     }
 
+    /// Extract ordered track durations from ingestion files for a job.
+    ///
+    /// Returns durations in ms sorted by track number (tag_track_num).
+    /// Files without duration data (probe failed) are skipped.
+    async fn extract_ordered_durations(&self, job_id: &str) -> Result<Vec<i64>, IngestionError> {
+        let files = self.store.get_files_for_job(job_id)?;
+
+        let mut durations: Vec<(i32, i64)> = Vec::with_capacity(files.len());
+
+        for file in &files {
+            let track_num = file.tag_track_num.unwrap_or(0);
+            let duration = match file.duration_ms {
+                Some(d) => d,
+                None => {
+                    let path = Path::new(&file.temp_file_path);
+                    let metadata = probe_audio_file(path).await?;
+                    metadata.duration_ms as i64
+                }
+            };
+            durations.push((track_num, duration));
+        }
+
+        durations.sort_by_key(|(track_num, _)| *track_num);
+        Ok(durations.into_iter().map(|(_, d)| d).collect())
+    }
+
     // =========================================================================
     // Job Queries
     // =========================================================================
@@ -1161,6 +1188,137 @@ impl IngestionManager {
             summary.track_titles
         );
 
+        // Try fingerprint matching first (works even without metadata tags)
+        let ordered_durations = self.extract_ordered_durations(job_id).await?;
+        if !ordered_durations.is_empty() {
+            let fp_config = FingerprintConfig::default();
+            let fp_result = match_album_with_fallbacks(
+                &ordered_durations,
+                self.catalog.as_ref(),
+                &fp_config,
+            )?;
+
+            match fp_result.ticket_type {
+                TicketType::Success => {
+                    let album = fp_result.matched_album.as_ref().unwrap();
+                    job.matched_album_id = Some(album.id.clone());
+                    job.match_confidence = Some(fp_result.match_score);
+                    job.match_source = Some(IngestionMatchSource::Fingerprint);
+                    job.status = IngestionJobStatus::MappingTracks;
+                    self.store.update_job(&job)?;
+
+                    info!(
+                        "Fingerprint auto-matched job {} to album {} ({} - {}) with {:.0}% confidence, delta={}ms",
+                        job_id, album.id, album.artist_name, album.name,
+                        fp_result.match_score * 100.0, fp_result.total_delta_ms
+                    );
+
+                    if let Some(notifier) = &self.notifier {
+                        use crate::server::websocket::messages::ingestion::CandidateSummary;
+                        let candidates: Vec<CandidateSummary> = fp_result
+                            .candidates
+                            .iter()
+                            .map(|c| CandidateSummary {
+                                id: c.album.id.clone(),
+                                name: c.album.name.clone(),
+                                artist_name: c.album.artist_name.clone(),
+                                track_count: c.album.track_count,
+                                score: c.score,
+                                delta_ms: c.delta_ms,
+                            })
+                            .collect();
+                        notifier
+                            .notify_match_found(&job, TicketType::Success, candidates)
+                            .await;
+                    }
+
+                    self.map_tracks(job_id).await?;
+
+                    let job_after_map = self.store.get_job(job_id)?.unwrap();
+                    if job_after_map.tracks_matched == 0 {
+                        let mut job = job_after_map;
+                        job.status = IngestionJobStatus::Failed;
+                        job.error_message = Some(
+                            "No tracks could be matched — files may lack metadata tags or have corrupt audio data"
+                                .to_string(),
+                        );
+                        job.completed_at = Some(chrono::Utc::now().timestamp_millis());
+                        self.store.update_job(&job)?;
+
+                        if let Some(notifier) = &self.notifier {
+                            notifier
+                                .notify_failed(&job, job.error_message.as_deref().unwrap())
+                                .await;
+                        }
+
+                        return Err(IngestionError::Store(anyhow::anyhow!(
+                            "Zero tracks matched for job {}",
+                            job_id
+                        )));
+                    }
+
+                    self.convert_job(job_id).await?;
+                    return Ok(());
+                }
+                TicketType::Review => {
+                    let mut options: Vec<ReviewOption> = fp_result
+                        .candidates
+                        .iter()
+                        .map(|c| ReviewOption {
+                            id: format!("album:{}", c.album.id),
+                            label: format!(
+                                "{} - {} ({:.0}%, {} tracks, delta={}ms)",
+                                c.album.artist_name,
+                                c.album.name,
+                                c.score * 100.0,
+                                c.album.track_count,
+                                c.delta_ms
+                            ),
+                            description: None,
+                        })
+                        .collect();
+                    options.push(ReviewOption {
+                        id: "no_match".to_string(),
+                        label: "None of these".to_string(),
+                        description: Some("Album not in catalog".to_string()),
+                    });
+
+                    let question = format!(
+                        "Fingerprint matched candidates for '{}' ({} files).\nDetected: {} - {}",
+                        job.original_filename,
+                        summary.file_count,
+                        summary.artist.as_deref().unwrap_or("Unknown Artist"),
+                        summary.album.as_deref().unwrap_or("Unknown Album"),
+                    );
+
+                    let options_json = serde_json::to_string(&options).unwrap_or_default();
+                    self.store
+                        .create_review_item(job_id, &question, &options_json)?;
+
+                    job.status = IngestionJobStatus::AwaitingReview;
+                    self.store.update_job(&job)?;
+
+                    if let Some(notifier) = &self.notifier {
+                        notifier
+                            .notify_review_needed(&job, &question, &options)
+                            .await;
+                    }
+
+                    info!(
+                        "Fingerprint review needed for job {} - best match: {:.0}%",
+                        job_id, fp_result.match_score * 100.0
+                    );
+                    return Ok(());
+                }
+                TicketType::Failure => {
+                    debug!(
+                        "Fingerprint matching failed for job {}, falling through to search-based identification",
+                        job_id
+                    );
+                }
+            }
+        }
+
         // Search for matching albums in catalog
         let candidates = self.search_album_candidates(&summary).await?;
 
@@ -1391,47 +1549,98 @@ impl IngestionManager {
             job_id, album_id, artist_name, album_name
         );
 
-        // Build the album candidate to verify content matches
-        let candidate = match self.build_album_candidate(album_id) {
-            Some(c) => c,
-            None => {
-                warn!("Job {} - album {} not found in catalog", job_id, album_id);
-                return Err(IngestionError::Store(anyhow::anyhow!(
-                    "Album {} not found in catalog",
-                    album_id
-                )));
-            }
+        // Verify using duration fingerprint comparison
+        let uploaded_durations = self.extract_ordered_durations(&job_id).await?;
+        let catalog_durations = self
+            .catalog
+            .get_album_track_durations(album_id)
+            .map_err(|e| {
+                IngestionError::Store(anyhow::anyhow!(
+                    "Failed to get track durations for album {}: {}",
+                    album_id,
+                    e
+                ))
+            })?;
+
+        // Also compute metadata score as a secondary signal
+        let metadata_score = if let Some(candidate) = self.build_album_candidate(album_id) {
+            self.score_album_match(summary, &candidate)
+        } else {
+            0.0
         };
 
-        // Verify the uploaded content is reasonable for this album
-        let score = self.score_album_match(summary, &candidate);
+        let fp_config = FingerprintConfig::default();
+        let (fp_matches, fp_delta) = if !uploaded_durations.is_empty() && !catalog_durations.is_empty() {
+            compare_durations(&uploaded_durations, &catalog_durations, fp_config.track_tolerance_ms)
+        } else {
+            (0, 0)
+        };
+        let total_tracks = uploaded_durations.len().max(catalog_durations.len());
+        let fp_score = if total_tracks > 0 {
+            fp_matches as f32 / total_tracks as f32
+        } else {
+            0.0
+        };
 
         debug!(
-            "Job {} download request verification: album={}, expected_tracks={}, uploaded_files={}, score={:.2}",
-            job_id, album_id, candidate.track_count, summary.file_count, score
+            "Job {} download request verification: album={}, fp_score={:.2} ({}/{} tracks, delta={}ms), metadata_score={:.2}",
+            job_id, album_id, fp_score, fp_matches, total_tracks, fp_delta, metadata_score
         );
 
-        // For download requests, we're more lenient since the user explicitly requested this album.
-        // We only fail if there's a major mismatch (e.g., completely wrong number of tracks).
-        // A score below 0.3 suggests something is very wrong.
-        const MIN_VERIFICATION_SCORE: f32 = 0.3;
+        if fp_score >= 1.0 && fp_delta < fp_config.auto_ingest_delta_threshold_ms {
+            // Perfect fingerprint match — auto-proceed
+        } else if fp_score >= 0.9 {
+            // High but not perfect — review with details
+            let options = vec![
+                ReviewOption {
+                    id: format!("album:{}", album_id),
+                    label: format!(
+                        "{} - {} (fingerprint {:.0}%, metadata {:.0}%)",
+                        artist_name, album_name,
+                        fp_score * 100.0, metadata_score * 100.0
+                    ),
+                    description: Some("Proceed with this album".to_string()),
+                },
+                ReviewOption {
+                    id: "no_match".to_string(),
+                    label: "Content doesn't match".to_string(),
+                    description: Some("Reject this upload".to_string()),
+                },
+            ];
 
-        if score < MIN_VERIFICATION_SCORE {
-            // Very low score - create a review to confirm
+            let question = format!(
+                "Downloaded content for '{}' has near-match fingerprint ({:.0}%, delta={}ms).\n\
+                 Metadata score: {:.0}%\n\
+                 Expected: {} tracks, Uploaded: {} files\n\
+                 Confirm this is the correct album:",
+                album_name,
+                fp_score * 100.0, fp_delta,
+                metadata_score * 100.0,
+                catalog_durations.len(),
+                summary.file_count
+            );
+
+            let options_json = serde_json::to_string(&options).unwrap_or_default();
+            self.store
+                .create_review_item(&job_id, &question, &options_json)?;
+
+            job.status = IngestionJobStatus::AwaitingReview;
+            self.store.update_job(job)?;
+            return Ok(());
+        } else {
+            // Low fingerprint score — review with warning
             warn!(
-                "Job {} - download request verification score too low ({:.2}), requesting review",
-                job_id, score
+                "Job {} - download request fingerprint score low ({:.2}), requesting review",
+                job_id, fp_score
             );
 
             let options = vec![
                 ReviewOption {
                     id: format!("album:{}", album_id),
                     label: format!(
-                        "{} - {} ({:.0}% match, {} tracks expected)",
-                        candidate.artist_name,
-                        candidate.name,
-                        score * 100.0,
-                        candidate.track_count
+                        "{} - {} (fingerprint {:.0}%, metadata {:.0}%)",
+                        artist_name, album_name,
+                        fp_score * 100.0, metadata_score * 100.0
                     ),
                     description: Some("Proceed with this album anyway".to_string()),
                 },
@@ -1443,13 +1652,14 @@ impl IngestionManager {
             ];
 
             let question = format!(
-                "Downloaded content for '{}' has low match score ({:.0}%).\n\
-                 Expected: {} tracks\n\
-                 Uploaded: {} files\n\
+                "Downloaded content for '{}' has low fingerprint match ({:.0}%, delta={}ms).\n\
+                 Metadata score: {:.0}%\n\
+                 Expected: {} tracks, Uploaded: {} files\n\
                  Confirm this is the correct album:",
                 album_name,
-                score * 100.0,
-                candidate.track_count,
+                fp_score * 100.0, fp_delta,
+                metadata_score * 100.0,
+                catalog_durations.len(),
                 summary.file_count
             );
 
@@ -1462,20 +1672,20 @@ impl IngestionManager {
             return Ok(());
         }
 
-        // Good match - proceed directly to track mapping
+        // Perfect fingerprint match - proceed directly to track mapping
         job.matched_album_id = Some(album_id.clone());
-        job.match_confidence = Some(score);
+        job.match_confidence = Some(fp_score);
         job.match_source = Some(IngestionMatchSource::DownloadRequest);
         job.status = IngestionJobStatus::MappingTracks;
         self.store.update_job(job)?;
 
         info!(
-            "Download request job {} matched to album {} with {:.0}% verification score (tracks: {}/{})",
-            job_id,
-            album_id,
-            score * 100.0,
+            "Download request job {} matched to album {} with fingerprint {:.0}% (delta={}ms, metadata {:.0}%, tracks: {}/{})",
+            job_id, album_id,
+            fp_score * 100.0, fp_delta,
+            metadata_score * 100.0,
             summary.file_count,
-            candidate.track_count
+            catalog_durations.len()
         );
 
         // Continue to track mapping and conversion

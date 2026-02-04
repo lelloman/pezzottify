@@ -1900,6 +1900,32 @@ impl CatalogStore for SqliteCatalogStore {
         Ok(candidates)
     }
 
+    fn get_album_track_durations(&self, album_id: &str) -> Result<Vec<i64>> {
+        let read_conn = self.get_read_conn();
+        let conn = read_conn.lock().unwrap();
+
+        let album_rowid: i64 = conn
+            .query_row(
+                "SELECT rowid FROM albums WHERE id = ?1",
+                params![album_id],
+                |r| r.get(0),
+            )
+            .context(format!("Album '{}' not found", album_id))?;
+
+        let mut stmt = conn.prepare_cached(
+            "SELECT duration_ms FROM tracks
+             WHERE album_rowid = ?1
+             ORDER BY disc_number ASC, track_number ASC",
+        )?;
+
+        let durations: Vec<i64> = stmt
+            .query_map(params![album_rowid], |row| row.get(0))?
+            .filter_map(|r| r.ok())
+            .collect();
+
+        Ok(durations)
+    }
+
     fn update_album_fingerprint(&self, album_id: &str) -> Result<()> {
         let conn = self.write_conn.lock().unwrap();
 

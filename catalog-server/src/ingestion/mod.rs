@@ -20,7 +20,7 @@ mod tools;
 pub use converter::{convert_to_ogg, probe_audio_file, AudioMetadata, ConversionError};
 pub use file_handler::{FileHandler, FileHandlerError};
 pub use fingerprint::{
-    match_album_by_fingerprint, match_album_with_fallbacks, FingerprintConfig,
+    compare_durations, match_album_by_fingerprint, match_album_with_fallbacks, FingerprintConfig,
     FingerprintMatchResult, ScoredCandidate,
 };
 pub use manager::{

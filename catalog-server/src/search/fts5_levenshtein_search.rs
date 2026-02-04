@@ -1490,6 +1490,9 @@ mod tests {
             ) -> anyhow::Result<Vec<String>> {
                 Ok(Vec::new())
             }
+            fn get_album_track_durations(&self, _album_id: &str) -> anyhow::Result<Vec<i64>> {
+                Ok(vec![])
+            }
             fn find_albums_by_fingerprint(
                 &self,
                 _track_count: i32,
