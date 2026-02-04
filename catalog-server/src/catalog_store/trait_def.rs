@@ -227,6 +227,11 @@ pub trait CatalogStore: Send + Sync {
         total_duration_ms: i64,
     ) -> Result<Vec<super::AlbumFingerprintCandidate>>;
 
+    /// Get track durations for a specific album, ordered by disc/track number.
+    ///
+    /// Used for verifying uploaded content against a known album via duration fingerprint.
+    fn get_album_track_durations(&self, album_id: &str) -> Result<Vec<i64>>;
+
     /// Update the fingerprint columns (track_count, total_duration_ms) for an album.
     /// Called after tracks are added/removed.
     fn update_album_fingerprint(&self, album_id: &str) -> Result<()>;

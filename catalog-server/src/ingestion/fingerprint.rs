@@ -65,7 +65,7 @@ impl Default for FingerprintConfig {
 /// Returns (matches, total_delta):
 /// - matches: number of tracks within tolerance
 /// - total_delta: sum of absolute differences in ms
-fn compare_durations(uploaded: &[i64], catalog: &[i64], tolerance_ms: i64) -> (usize, i64) {
+pub fn compare_durations(uploaded: &[i64], catalog: &[i64], tolerance_ms: i64) -> (usize, i64) {
     let mut matches = 0;
     let mut total_delta = 0i64;
 
