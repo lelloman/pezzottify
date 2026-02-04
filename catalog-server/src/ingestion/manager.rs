@@ -656,12 +656,14 @@ impl IngestionManager {
 
     /// Extract ordered track durations from ingestion files for a job.
     ///
-    /// Returns durations in ms sorted by track number (tag_track_num).
-    /// Files without duration data (probe failed) are skipped.
+    /// Returns durations in ms sorted by track number when available,
+    /// falling back to filename sort when embedded tags are missing.
     async fn extract_ordered_durations(&self, job_id: &str) -> Result<Vec<i64>, IngestionError> {
         let files = self.store.get_files_for_job(job_id)?;
 
-        let mut durations: Vec<(i32, i64)> = Vec::with_capacity(files.len());
+        let has_track_nums = files.iter().any(|f| f.tag_track_num.is_some());
+
+        let mut entries: Vec<(i32, String, i64)> = Vec::with_capacity(files.len());
 
         for file in &files {
             let track_num = file.tag_track_num.unwrap_or(0);
@@ -673,11 +675,16 @@ impl IngestionManager {
                     metadata.duration_ms as i64
                 }
             };
-            durations.push((track_num, duration));
+            entries.push((track_num, file.filename.clone(), duration));
         }
 
-        durations.sort_by_key(|(track_num, _)| *track_num);
-        Ok(durations.into_iter().map(|(_, d)| d).collect())
+        if has_track_nums {
+            entries.sort_by_key(|(track_num, _, _)| *track_num);
+        } else {
+            entries.sort_by(|(_, name_a, _), (_, name_b, _)| name_a.cmp(name_b));
+        }
+
+        Ok(entries.into_iter().map(|(_, _, d)| d).collect())
     }
 
     // =========================================================================
@@ -2060,6 +2067,8 @@ impl IngestionManager {
             .collect();
 
         let mut matched = 0;
+        let mut claimed_track_ids: std::collections::HashSet<String> =
+            std::collections::HashSet::new();
 
         for file in &mut files {
             // Try to match by disc + track number first
@@ -2068,6 +2077,7 @@ impl IngestionManager {
                 if let Some(track) = tracks_by_num.get(&(disc_num, track_num)) {
                     file.matched_track_id = Some(track.id.clone());
                     file.match_confidence = Some(1.0);
+                    claimed_track_ids.insert(track.id.clone());
                     matched += 1;
                     self.store.update_file(file)?;
                     continue;
@@ -2078,6 +2088,7 @@ impl IngestionManager {
             if let Some(title) = &file.tag_title {
                 let best_match = tracks
                     .iter()
+                    .filter(|t| !claimed_track_ids.contains(&t.id))
                     .map(|t| (t, string_similarity(title, &t.name)))
                     .max_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
 
@@ -2085,9 +2096,72 @@ impl IngestionManager {
                     if confidence > 0.7 {
                         file.matched_track_id = Some(track.id.clone());
                         file.match_confidence = Some(confidence);
+                        claimed_track_ids.insert(track.id.clone());
                         matched += 1;
                         self.store.update_file(file)?;
                     }
+                }
+            }
+        }
+
+        // Duration-based fallback: match remaining files by closest track duration.
+        // This handles the case where files have no embedded tags but durations
+        // are unique enough to identify tracks (common after fingerprint matching).
+        let unmatched_count = files.iter().filter(|f| f.matched_track_id.is_none()).count();
+        if unmatched_count > 0 {
+            debug!(
+                "Tag-based matching left {} unmatched files, trying duration-based mapping",
+                unmatched_count
+            );
+
+            // Build scored pairs: (file_index, track_index, duration_delta, name_similarity)
+            let mut pairs: Vec<(usize, usize, i64, f32)> = Vec::new();
+            for (fi, file) in files.iter().enumerate() {
+                if file.matched_track_id.is_some() {
+                    continue;
+                }
+                let file_duration = match file.duration_ms {
+                    Some(d) => d,
+                    None => continue,
+                };
+                let file_stem = Path::new(&file.filename)
+                    .file_stem()
+                    .and_then(|s| s.to_str())
+                    .unwrap_or(&file.filename);
+                for (ti, track) in tracks.iter().enumerate() {
+                    if claimed_track_ids.contains(&track.id) {
+                        continue;
+                    }
+                    let delta = (file_duration - track.duration_ms).abs();
+                    let name_sim = string_similarity(file_stem, &track.name);
+                    pairs.push((fi, ti, delta, name_sim));
+                }
+            }
+
+            // Sort by duration delta ascending, then name similarity descending as tiebreaker
+            pairs.sort_by(|a, b| a.2.cmp(&b.2).then(b.3.partial_cmp(&a.3).unwrap()));
+
+            let mut claimed_files: std::collections::HashSet<usize> =
+                std::collections::HashSet::new();
+            for (fi, ti, delta, name_sim) in pairs {
+                if claimed_files.contains(&fi) || claimed_track_ids.contains(&tracks[ti].id) {
+                    continue;
+                }
+                // Confidence based on duration proximity (10s threshold → 1.0, worse → lower)
+                let duration_confidence = (1.0 - (delta as f64 / 10_000.0).min(1.0)) as f32;
+                // Blend: 70% duration, 30% name similarity
+                let confidence = duration_confidence * 0.7 + name_sim * 0.3;
+                if confidence > 0.3 {
+                    files[fi].matched_track_id = Some(tracks[ti].id.clone());
+                    files[fi].match_confidence = Some(confidence);
+                    claimed_track_ids.insert(tracks[ti].id.clone());
+                    claimed_files.insert(fi);
+                    matched += 1;
+                    self.store.update_file(&files[fi])?;
+                    debug!(
+                        "Duration-matched '{}' → '{}' (delta={}ms, name_sim={:.2}, conf={:.2})",
+                        files[fi].filename, tracks[ti].name, delta, name_sim, confidence
+                    );
                 }
             }
         }
