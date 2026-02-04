@@ -78,11 +78,7 @@ export class LocalOutlet {
    */
   seekTo(seconds) {
     if (this.sound) {
-      const wasPlaying = this.sound.playing();
       this.sound.seek(seconds);
-      if (wasPlaying) {
-        this.sound.play();
-      }
       this.updateProgress();
       this.requestUpdateProgressOnNewFrame();
     }

@@ -527,7 +527,7 @@ export const usePlaybackStore = defineStore("playback", () => {
     if (mode.value === "local") {
       localOutlet.loadTrack(
         trackId,
-        isPlaying.value,
+        false,
         seekPercent || pendingSeekPercent,
       );
     }
