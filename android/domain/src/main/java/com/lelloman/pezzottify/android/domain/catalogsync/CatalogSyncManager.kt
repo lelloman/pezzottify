@@ -6,6 +6,7 @@ import com.lelloman.pezzottify.android.domain.remoteapi.response.RemoteApiRespon
 import com.lelloman.pezzottify.android.domain.statics.StaticsStore
 import com.lelloman.pezzottify.android.logger.Logger
 import com.lelloman.pezzottify.android.logger.LoggerFactory
+import kotlinx.coroutines.flow.first
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -100,11 +101,24 @@ class CatalogSyncManager @Inject constructor(
 
         when (event.contentType) {
             CatalogContentType.Album -> {
-                // Invalidate in-memory cache
+                // Collect track IDs before deleting the album so we can invalidate them too.
+                // Track availability changes alongside album availability (e.g., after download),
+                // and stale track entries would keep showing as unavailable.
+                val trackIds = staticsCache.albumCache.get(event.contentId)?.discs
+                    ?.flatMap { it.tracksIds }
+                    ?: staticsStore.getAlbum(event.contentId).first()?.discs
+                        ?.flatMap { it.tracksIds }
+                    ?: emptyList()
+
+                trackIds.forEach { trackId ->
+                    staticsCache.trackCache.remove(trackId)
+                    staticsStore.deleteTrack(trackId)
+                }
+
+                // Invalidate the album itself
                 staticsCache.albumCache.remove(event.contentId)
-                // Invalidate persistent store
                 staticsStore.deleteAlbum(event.contentId)
-                logger.info("Invalidated album: ${event.contentId}")
+                logger.info("Invalidated album: ${event.contentId} and ${trackIds.size} tracks")
             }
             CatalogContentType.Artist -> {
                 staticsCache.artistCache.remove(event.contentId)
