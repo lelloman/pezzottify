@@ -3,6 +3,7 @@ import axios from "axios";
 import * as ws from "../services/websocket";
 import * as oidc from "../services/oidc";
 import { useSyncStore } from "./sync";
+import { usePlaybackSessionStore } from "./playbackSession";
 
 export const useAuthStore = defineStore("auth", {
   state: () => ({
@@ -59,7 +60,20 @@ export const useAuthStore = defineStore("auth", {
         // Connect to WebSocket after confirming session
         const syncStore = useSyncStore();
         ws.registerHandler("sync", syncStore.handleSyncMessage);
+
+        const playbackSessionStore = usePlaybackSessionStore();
+        ws.registerHandler("playback", (type, payload) =>
+          playbackSessionStore.handleMessage(type, payload),
+        );
+
         ws.connect();
+
+        // Wire up playback session store <-> playback store
+        const { usePlaybackStore } = await import("./playback");
+        const playbackStore = usePlaybackStore();
+        playbackSessionStore.setPlaybackStore(playbackStore);
+        playbackStore.setSessionStore(playbackSessionStore);
+        playbackSessionStore.initialize();
 
         return true;
       } catch (error) {
@@ -95,8 +109,9 @@ export const useAuthStore = defineStore("auth", {
         oidc.storeLastUsername(this.user.handle);
       }
 
-      // Unregister sync handler and disconnect WebSocket before clearing auth
+      // Unregister handlers and disconnect WebSocket before clearing auth
       ws.unregisterHandler("sync");
+      ws.unregisterHandler("playback");
       ws.disconnect();
 
       // Cleanup sync state and reset user store
@@ -108,6 +123,10 @@ export const useAuthStore = defineStore("auth", {
 
         syncStore.cleanup();
         userStore.reset();
+
+        const { usePlaybackSessionStore } = await import("./playbackSession");
+        const playbackSessionStore = usePlaybackSessionStore();
+        playbackSessionStore.cleanup();
       } catch (error) {
         console.error("Failed to cleanup stores:", error);
       }

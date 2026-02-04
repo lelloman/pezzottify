@@ -1,4 +1,29 @@
 <template>
+  <div
+    v-if="showRemoteBanner"
+    class="remoteBanner"
+  >
+    <span v-if="playback.mode === 'remote'" class="remoteBannerText">
+      Playing on {{ sessionStore.audioDeviceName || 'another device' }}
+    </span>
+    <span v-else class="remoteBannerText">
+      Music playing on {{ sessionStore.audioDeviceName || 'another device' }}
+    </span>
+    <button
+      v-if="playback.mode !== 'remote'"
+      class="remoteBannerAction"
+      @click="handleEnterRemoteMode"
+    >
+      Control it
+    </button>
+    <button
+      v-if="playback.mode !== 'remote'"
+      class="remoteBannerDismiss"
+      @click="dismissBanner"
+    >
+      Dismiss
+    </button>
+  </div>
   <footer v-if="hasPlayback" class="footerPlayer">
     <div class="trackInfoRow">
       <MultiSourceImage
@@ -64,7 +89,8 @@
         @update:stratDrag="startDraggingVolumeProgress"
         @update:stopDrag="handleSetVolume"
       />
-      <ControlIconButton :action="handleStop" :icon="StopIcon" />
+      <DeviceSelector />
+      <ControlIconButton v-if="playback.mode === 'local'" :action="handleStop" :icon="StopIcon" />
     </div>
   </footer>
 </template>
@@ -88,6 +114,8 @@ import LoadClickableArtistsNames from "@/components/common/LoadClickableArtistsN
 import { useRouter } from "vue-router";
 import TrackName from "./common/TrackName.vue";
 import { useStaticsStore } from "@/store/statics";
+import { usePlaybackSessionStore } from "@/store/playbackSession";
+import DeviceSelector from "./DeviceSelector.vue";
 
 const ControlIconButton = {
   props: ["icon", "action", "big"],
@@ -113,11 +141,48 @@ const ControlIconButton = {
 const router = useRouter();
 const playback = usePlaybackStore();
 const staticsStore = useStaticsStore();
+const sessionStore = usePlaybackSessionStore();
 
 // Track whether there's any playback to display
 const hasPlayback = computed(() => {
   return playback.currentTrackId;
 });
+
+// Remote mode banner state
+const bannerDismissed = ref(false);
+
+const showRemoteBanner = computed(() => {
+  if (playback.mode === "remote") return true;
+
+  // Show "ask" banner when there's a remote session we could control
+  if (
+    !bannerDismissed.value &&
+    sessionStore.sessionExists &&
+    sessionStore.audioDeviceId !== sessionStore.myDeviceId &&
+    sessionStore.role === "idle" &&
+    sessionStore.getRemoteControlPreference() === "ask"
+  ) {
+    return true;
+  }
+
+  return false;
+});
+
+function handleEnterRemoteMode() {
+  sessionStore.enterRemoteMode();
+}
+
+function dismissBanner() {
+  bannerDismissed.value = true;
+}
+
+// Reset banner dismissal when session state changes
+watch(
+  () => sessionStore.sessionExists,
+  () => {
+    bannerDismissed.value = false;
+  },
+);
 
 // Progress dragging state
 const draggingTrackPercent = ref(null);
@@ -256,6 +321,25 @@ watch(
       return;
     }
 
+    // In remote mode, track data comes directly from the playback store
+    if (playback.mode === "remote") {
+      displayTrack.value = {
+        id: track.id,
+        name: track.title,
+        album_id: track.albumId,
+        artists_ids: track.artistId ? [track.artistId] : [],
+      };
+      artists.value = track.artistId ? [track.artistId] : [];
+      artistName.value = track.artistName;
+      duration.value = track.duration ? formatDuration(track.duration) : "";
+      if (track.imageId) {
+        imageUrls.value = [`/v1/content/image/${track.imageId}`];
+      } else {
+        imageUrls.value = [];
+      }
+      return;
+    }
+
     // Resolve the track data from statics store
     if (playback.currentTrackId) {
       trackDataUnwatcher = watch(
@@ -294,6 +378,57 @@ watch(
 
 <style scoped>
 @import "@/assets/icons.css";
+
+/* ============================================
+   Remote Banner
+   ============================================ */
+
+.remoteBanner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-3);
+  padding: var(--spacing-1) var(--spacing-4);
+  background-color: var(--spotify-green);
+  color: var(--bg-base);
+  font-size: var(--text-sm);
+}
+
+.remoteBannerText {
+  font-weight: var(--font-medium);
+}
+
+.remoteBannerAction {
+  padding: 2px var(--spacing-3);
+  font-size: var(--text-xs);
+  font-weight: var(--font-semibold);
+  background-color: var(--bg-base);
+  color: var(--spotify-green);
+  border: none;
+  border-radius: var(--radius-full);
+  cursor: pointer;
+  transition: opacity var(--transition-fast);
+}
+
+.remoteBannerAction:hover {
+  opacity: 0.9;
+}
+
+.remoteBannerDismiss {
+  padding: 2px var(--spacing-2);
+  font-size: var(--text-xs);
+  background: transparent;
+  color: var(--bg-base);
+  border: 1px solid var(--bg-base);
+  border-radius: var(--radius-full);
+  cursor: pointer;
+  opacity: 0.7;
+  transition: opacity var(--transition-fast);
+}
+
+.remoteBannerDismiss:hover {
+  opacity: 1;
+}
 
 /* ============================================
    Footer Player - Desktop Layout

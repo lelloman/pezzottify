@@ -3,6 +3,7 @@
  *
  * Single source of truth for all playback state.
  * Uses LocalOutlet (Howler.js) directly for audio playback.
+ * Supports local mode (audio plays here) and remote mode (controlling another device).
  */
 
 import { defineStore } from "pinia";
@@ -28,6 +29,7 @@ export const usePlaybackStore = defineStore("playback", () => {
   // Core playback state
   // ============================================
 
+  const mode = ref("local"); // 'local' | 'remote'
   const isPlaying = ref(false);
   const progressSec = ref(0);
   const progressPercent = ref(0.0);
@@ -47,6 +49,20 @@ export const usePlaybackStore = defineStore("playback", () => {
   const currentPlaylistIndex = ref(null);
 
   // ============================================
+  // Session store reference (set externally to avoid circular imports)
+  // ============================================
+
+  let _sessionStore = null;
+
+  function setSessionStore(store) {
+    _sessionStore = store;
+  }
+
+  function getSessionStore() {
+    return _sessionStore;
+  }
+
+  // ============================================
   // Local Outlet
   // ============================================
 
@@ -57,8 +73,10 @@ export const usePlaybackStore = defineStore("playback", () => {
       isPlaying.value = playing;
     },
     onProgressUpdate: (sec, percent) => {
-      progressSec.value = sec;
-      progressPercent.value = percent;
+      if (mode.value === "local") {
+        progressSec.value = sec;
+        progressPercent.value = percent;
+      }
     },
     onTrackLoaded: (duration) => {
       localDuration.value = duration || 0;
@@ -77,13 +95,13 @@ export const usePlaybackStore = defineStore("playback", () => {
   });
 
   const canGoToPreviousPlaylist = computed(
-    () => currentPlaylistIndex.value > 0
+    () => currentPlaylistIndex.value > 0,
   );
 
   const canGoToNextPlaylist = computed(
     () =>
       playlistsHistory.value &&
-      currentPlaylistIndex.value < playlistsHistory.value.length - 1
+      currentPlaylistIndex.value < playlistsHistory.value.length - 1,
   );
 
   // ============================================
@@ -91,6 +109,8 @@ export const usePlaybackStore = defineStore("playback", () => {
   // ============================================
 
   const resolveLocalTrack = () => {
+    if (mode.value === "remote") return;
+
     if (!currentTrackId.value) {
       currentTrack.value = null;
       return;
@@ -130,6 +150,7 @@ export const usePlaybackStore = defineStore("playback", () => {
   // Re-resolve when statics data loads (artist/album names become available)
   watch(
     () => {
+      if (mode.value === "remote") return null;
       if (!currentTrackId.value) return null;
       const t = staticsStore.getTrack(currentTrackId.value);
       const track = t?.item;
@@ -147,7 +168,7 @@ export const usePlaybackStore = defineStore("playback", () => {
       };
     },
     () => resolveLocalTrack(),
-    { deep: true }
+    { deep: true },
   );
 
   // ============================================
@@ -162,7 +183,9 @@ export const usePlaybackStore = defineStore("playback", () => {
         const savedCurrentPlaylistIndex =
           localStorage.getItem("currentPlaylistIndex") ||
           playlistsHistory.value.length - 1;
-        currentPlaylistIndex.value = Number.parseInt(savedCurrentPlaylistIndex);
+        currentPlaylistIndex.value = Number.parseInt(
+          savedCurrentPlaylistIndex,
+        );
 
         const loadedTrackIndex = localStorage.getItem("currentTrackIndex");
         if (loadedTrackIndex) {
@@ -180,7 +203,7 @@ export const usePlaybackStore = defineStore("playback", () => {
         }
 
         const savedPercent = Number.parseFloat(
-          localStorage.getItem("progressPercent")
+          localStorage.getItem("progressPercent"),
         );
         if (
           !Number.isNaN(savedPercent) &&
@@ -190,7 +213,9 @@ export const usePlaybackStore = defineStore("playback", () => {
           progressPercent.value = savedPercent;
         }
 
-        const savedSec = Number.parseFloat(localStorage.getItem("progressSec"));
+        const savedSec = Number.parseFloat(
+          localStorage.getItem("progressSec"),
+        );
         if (!Number.isNaN(savedSec)) {
           progressSec.value = savedSec;
         }
@@ -213,37 +238,210 @@ export const usePlaybackStore = defineStore("playback", () => {
 
   loadPersistedState();
 
-  // Save state watchers
+  // Save state watchers - guarded against remote mode
   const savePlaylistHistory = (history) =>
     localStorage.setItem("playlistsHistory", JSON.stringify(history));
 
-  watch(playlistsHistory, (newHistory) => savePlaylistHistory(newHistory));
-  watch(muted, (newMuted) => localStorage.setItem("muted", newMuted));
-  watch(volume, (newVolume) => localStorage.setItem("volume", newVolume));
+  watch(playlistsHistory, (newHistory) => {
+    if (mode.value === "local") savePlaylistHistory(newHistory);
+  });
+  watch(muted, (newMuted) => {
+    if (mode.value === "local") localStorage.setItem("muted", newMuted);
+  });
+  watch(volume, (newVolume) => {
+    if (mode.value === "local") localStorage.setItem("volume", newVolume);
+  });
   watch(currentTrackIndex, (newIndex) => {
-    if (Number.isInteger(newIndex)) {
+    if (mode.value === "local" && Number.isInteger(newIndex)) {
       localStorage.setItem("currentTrackIndex", newIndex);
     }
   });
   watch(currentPlaylistIndex, (newIndex) => {
-    if (Number.isInteger(newIndex)) {
+    if (mode.value === "local" && Number.isInteger(newIndex)) {
       localStorage.setItem("currentPlaylistIndex", newIndex);
     }
   });
 
   let lastSecProgressSaved = 0;
   const persistProgressPercent = () => {
+    if (mode.value !== "local") return;
     localStorage.setItem("progressPercent", progressPercent.value);
     lastSecProgressSaved = progressSec.value || 0;
     localStorage.setItem("progressSec", progressSec.value);
   };
 
   watch(progressSec, (newSec) => {
+    if (mode.value !== "local") return;
     const diff = Math.abs(Math.round(newSec) - lastSecProgressSaved);
     if (diff > 4) {
       persistProgressPercent();
     }
   });
+
+  // ============================================
+  // Remote mode: Position interpolation
+  // ============================================
+
+  let _remoteTimestamp = 0;
+  let _remotePosition = 0;
+  let _remoteIsPlaying = false;
+  let _interpolationFrame = null;
+
+  function startInterpolation() {
+    stopInterpolation();
+    function tick() {
+      if (mode.value !== "remote") return;
+      if (_remoteIsPlaying) {
+        const elapsed = (Date.now() - _remoteTimestamp) / 1000;
+        const interpolated = _remotePosition + elapsed;
+        const dur = currentTrack.value?.duration || 0;
+        progressSec.value = Math.min(interpolated, dur);
+        progressPercent.value = dur > 0 ? progressSec.value / dur : 0;
+      }
+      _interpolationFrame = requestAnimationFrame(tick);
+    }
+    _interpolationFrame = requestAnimationFrame(tick);
+  }
+
+  function stopInterpolation() {
+    if (_interpolationFrame) {
+      cancelAnimationFrame(_interpolationFrame);
+      _interpolationFrame = null;
+    }
+  }
+
+  // ============================================
+  // Remote mode: State application
+  // ============================================
+
+  function applyRemoteState(state) {
+    if (mode.value !== "remote") return;
+
+    isPlaying.value = state.is_playing;
+    volume.value = state.volume;
+    muted.value = state.muted;
+    progressSec.value = state.position;
+
+    // Update interpolation anchor
+    _remoteTimestamp = state.timestamp || Date.now();
+    _remotePosition = state.position;
+    _remoteIsPlaying = state.is_playing;
+
+    if (state.current_track) {
+      currentTrack.value = {
+        id: state.current_track.id,
+        title: state.current_track.title,
+        artistId: state.current_track.artist_id,
+        artistName: state.current_track.artist_name,
+        albumId: state.current_track.album_id,
+        albumTitle: state.current_track.album_title,
+        duration: state.current_track.duration,
+        trackNumber: state.current_track.track_number,
+        imageId: state.current_track.image_id,
+      };
+      currentTrackId.value = state.current_track.id;
+      localDuration.value = state.current_track.duration;
+    } else {
+      currentTrack.value = null;
+      currentTrackId.value = null;
+    }
+
+    const dur = state.current_track?.duration || 0;
+    progressPercent.value = dur > 0 ? state.position / dur : 0;
+  }
+
+  function applyRemoteQueue(queue) {
+    if (mode.value !== "remote") return;
+
+    const trackIds = queue.map((item) => item.id);
+    playlistsHistory.value = [
+      {
+        context: { name: "Remote", id: null, edited: false },
+        tracksIds: trackIds,
+        type: PLAYBACK_CONTEXTS.userMix,
+      },
+    ];
+    currentPlaylistIndex.value = 0;
+  }
+
+  // ============================================
+  // Remote mode: Enter / Exit
+  // ============================================
+
+  function enterRemoteMode() {
+    localOutlet.stop();
+    mode.value = "remote";
+    startInterpolation();
+  }
+
+  function exitRemoteMode() {
+    stopInterpolation();
+    mode.value = "local";
+    loadPersistedState();
+  }
+
+  // ============================================
+  // Snapshot methods for broadcasting
+  // ============================================
+
+  function snapshotState(queueVersion = 0) {
+    return {
+      current_track: currentTrack.value
+        ? {
+            id: currentTrack.value.id,
+            title: currentTrack.value.title,
+            artist_id: currentTrack.value.artistId,
+            artist_name: currentTrack.value.artistName,
+            artists_ids: [currentTrack.value.artistId],
+            album_id: currentTrack.value.albumId,
+            album_title: currentTrack.value.albumTitle,
+            duration: currentTrack.value.duration,
+            track_number: currentTrack.value.trackNumber ?? null,
+            image_id: currentTrack.value.imageId ?? null,
+          }
+        : null,
+      queue_position: currentTrackIndex.value ?? 0,
+      queue_version: queueVersion,
+      position: progressSec.value,
+      is_playing: isPlaying.value,
+      volume: volume.value,
+      muted: muted.value,
+      shuffle: false,
+      repeat: "off",
+      timestamp: Date.now(),
+    };
+  }
+
+  function snapshotQueue() {
+    if (!currentPlaylist.value) return [];
+    return currentPlaylist.value.tracksIds.map((id) => ({
+      id,
+      added_at: Date.now(),
+    }));
+  }
+
+  // ============================================
+  // Transfer support
+  // ============================================
+
+  function assumeFromTransfer(state, queue) {
+    const trackIds = queue.map((item) => item.id);
+    const playlist = makePlaylistFromTrackIds(trackIds);
+    setNewPlayingPlaylist(playlist);
+
+    if (state.current_track) {
+      const trackIndex = state.queue_position;
+      const dur = state.current_track.duration || 0;
+      const seekPct = dur > 0 ? state.position / dur : 0;
+      loadTrack(trackIndex, seekPct);
+      if (state.is_playing) {
+        play();
+      }
+    }
+
+    setVolume(state.volume);
+    setMuted(state.muted);
+  }
 
   // ============================================
   // Playlist creation helpers
@@ -299,6 +497,8 @@ export const usePlaybackStore = defineStore("playback", () => {
 
     playlistsHistory.value = newHistory;
     currentPlaylistIndex.value = newHistory.length - 1;
+
+    getSessionStore()?.notifyQueueChanged();
   };
 
   const findTrackIndex = (album, discIndex, trackIndex) => {
@@ -324,11 +524,13 @@ export const usePlaybackStore = defineStore("playback", () => {
     const trackId = currentPlaylist.value.tracksIds[index];
     currentTrackId.value = trackId;
 
-    localOutlet.loadTrack(
-      trackId,
-      isPlaying.value,
-      seekPercent || pendingSeekPercent
-    );
+    if (mode.value === "local") {
+      localOutlet.loadTrack(
+        trackId,
+        isPlaying.value,
+        seekPercent || pendingSeekPercent,
+      );
+    }
     pendingSeekPercent = null;
   };
 
@@ -337,6 +539,8 @@ export const usePlaybackStore = defineStore("playback", () => {
   // ============================================
 
   const setAlbumId = async (albumId, discIndex, trackIndex) => {
+    if (mode.value === "remote") return;
+
     const album = await Promise.resolve(staticsStore.waitAlbumData(albumId));
     if (!album) {
       console.error("Album", albumId, "not found in staticsStore");
@@ -355,6 +559,8 @@ export const usePlaybackStore = defineStore("playback", () => {
   };
 
   const setTrack = (newTrack) => {
+    if (mode.value === "remote") return;
+
     const trackPlaylist = makePlaylistFromTrackId(newTrack.id);
     setNewPlayingPlaylist(trackPlaylist);
     loadTrack(0);
@@ -362,7 +568,9 @@ export const usePlaybackStore = defineStore("playback", () => {
   };
 
   const setUserPlaylist = async (newPlaylist) => {
+    if (mode.value === "remote") return;
     if (newPlaylist.tracks.length === 0) return;
+
     const userPlaylistPlaylist = makePlaylistFromUserPlaylist(newPlaylist);
     setNewPlayingPlaylist(userPlaylistPlaylist);
     loadTrack(0);
@@ -372,9 +580,11 @@ export const usePlaybackStore = defineStore("playback", () => {
   const setPlaylistFromTrackIds = (
     trackIds,
     startIndex = 0,
-    autoPlay = false
+    autoPlay = false,
   ) => {
+    if (mode.value === "remote") return;
     if (!trackIds || trackIds.length === 0) return;
+
     const playlist = makePlaylistFromTrackIds(trackIds);
     setNewPlayingPlaylist(playlist);
     loadTrack(startIndex);
@@ -388,16 +598,34 @@ export const usePlaybackStore = defineStore("playback", () => {
   // ============================================
 
   const play = () => {
+    if (mode.value === "remote") {
+      getSessionStore()?.sendCommand("play");
+      return;
+    }
+
+    const wasIdle = !isPlaying.value && currentTrackIndex.value !== null;
+
     if (currentTrackIndex.value !== null && !localOutlet.hasLoadedSound()) {
       loadTrack(currentTrackIndex.value, progressPercent.value);
     }
     localOutlet.play();
     isPlaying.value = true;
+
+    if (wasIdle) {
+      getSessionStore()?.notifyPlaybackStarted();
+    }
+    getSessionStore()?.notifyStateChanged();
   };
 
   const pause = () => {
+    if (mode.value === "remote") {
+      getSessionStore()?.sendCommand("pause");
+      return;
+    }
+
     localOutlet.pause();
     isPlaying.value = false;
+    getSessionStore()?.notifyStateChanged();
   };
 
   const playPause = () => {
@@ -417,61 +645,117 @@ export const usePlaybackStore = defineStore("playback", () => {
   };
 
   const skipNextTrack = () => {
+    if (mode.value === "remote") {
+      getSessionStore()?.sendCommand("next");
+      return;
+    }
+
     const nextIndex = currentTrackIndex.value + 1;
     if (nextIndex >= currentPlaylist.value.tracksIds.length) {
       localOutlet.stop();
       isPlaying.value = false;
       progressPercent.value = 0.0;
       progressSec.value = 0;
+      getSessionStore()?.notifyStateChanged();
       return;
     }
     loadTrack(nextIndex);
     if (isPlaying.value) {
-      play();
+      localOutlet.play();
     }
+    getSessionStore()?.notifyStateChanged();
   };
 
   const skipPreviousTrack = () => {
+    if (mode.value === "remote") {
+      getSessionStore()?.sendCommand("prev");
+      return;
+    }
+
     const previousIndex = currentTrackIndex.value - 1;
     if (previousIndex < 0) {
       localOutlet.stop();
       isPlaying.value = false;
       progressPercent.value = 0.0;
       progressSec.value = 0;
+      getSessionStore()?.notifyStateChanged();
       return;
     }
     loadTrack(previousIndex);
     if (isPlaying.value) {
-      play();
+      localOutlet.play();
     }
+    getSessionStore()?.notifyStateChanged();
   };
 
   const seekToPercentage = (percentage) => {
+    if (mode.value === "remote") {
+      const dur = currentTrack.value?.duration || 0;
+      getSessionStore()?.sendCommand("seek", { position: dur * percentage });
+      return;
+    }
+
     localOutlet.seekToPercentage(percentage);
     persistProgressPercent();
+    getSessionStore()?.notifyStateChanged();
   };
 
   const forward10Sec = () => {
+    if (mode.value === "remote") {
+      const pos = progressSec.value;
+      const dur = currentTrack.value?.duration || 0;
+      if (dur > 0) {
+        getSessionStore()?.sendCommand("seek", {
+          position: Math.min(pos + 10, dur),
+        });
+      }
+      return;
+    }
+
     const pos = localOutlet.getPosition();
     localOutlet.seekTo(pos + 10);
+    getSessionStore()?.notifyStateChanged();
   };
 
   const rewind10Sec = () => {
+    if (mode.value === "remote") {
+      const pos = progressSec.value;
+      getSessionStore()?.sendCommand("seek", {
+        position: Math.max(0, pos - 10),
+      });
+      return;
+    }
+
     const pos = localOutlet.getPosition();
     localOutlet.seekTo(Math.max(0, pos - 10));
+    getSessionStore()?.notifyStateChanged();
   };
 
   const setVolume = (newVolume) => {
+    if (mode.value === "remote") {
+      getSessionStore()?.sendCommand("setVolume", { volume: newVolume });
+      return;
+    }
+
     volume.value = newVolume;
     localOutlet.setVolume(newVolume);
+    getSessionStore()?.notifyStateChanged();
   };
 
   const setMuted = (newMuted) => {
+    if (mode.value === "remote") {
+      getSessionStore()?.sendCommand("setMuted", { muted: newMuted });
+      return;
+    }
+
     muted.value = newMuted;
     localOutlet.setMuted(newMuted, volume.value);
+    getSessionStore()?.notifyStateChanged();
   };
 
   const loadTrackIndex = (index) => {
+    if (mode.value === "remote") return;
+
     pendingSeekPercent = null;
     if (
       currentPlaylist.value?.tracksIds.length &&
@@ -486,6 +770,8 @@ export const usePlaybackStore = defineStore("playback", () => {
   };
 
   const stop = () => {
+    if (mode.value === "remote") return;
+
     localOutlet.stop();
     isPlaying.value = false;
     progressPercent.value = 0.0;
@@ -502,6 +788,7 @@ export const usePlaybackStore = defineStore("playback", () => {
   // ============================================
 
   const goToPreviousPlaylist = () => {
+    if (mode.value === "remote") return;
     if (canGoToPreviousPlaylist.value) {
       currentPlaylistIndex.value -= 1;
       loadTrack(0);
@@ -512,6 +799,7 @@ export const usePlaybackStore = defineStore("playback", () => {
   };
 
   const goToNextPlaylist = () => {
+    if (mode.value === "remote") return;
     if (canGoToNextPlaylist.value) {
       currentPlaylistIndex.value += 1;
       loadTrack(0);
@@ -526,6 +814,7 @@ export const usePlaybackStore = defineStore("playback", () => {
   // ============================================
 
   const moveTrack = (fromIndex, toIndex) => {
+    if (mode.value === "remote") return;
     if (fromIndex === toIndex) return;
 
     const newTracks = [...currentPlaylist.value.tracksIds];
@@ -543,7 +832,9 @@ export const usePlaybackStore = defineStore("playback", () => {
       newPlaylist.type = PLAYBACK_CONTEXTS.userMix;
       newPlaylist.context = { name: null, id: null, edited: false };
       pushNewHistory = true;
-    } else if (currentPlaylist.value.type === PLAYBACK_CONTEXTS.userPlaylist) {
+    } else if (
+      currentPlaylist.value.type === PLAYBACK_CONTEXTS.userPlaylist
+    ) {
       newPlaylist.context.edited = true;
     }
 
@@ -552,6 +843,7 @@ export const usePlaybackStore = defineStore("playback", () => {
     } else {
       playlistsHistory.value[currentPlaylistIndex.value] = newPlaylist;
       savePlaylistHistory(playlistsHistory.value);
+      getSessionStore()?.notifyQueueChanged();
     }
 
     // Adjust current track index
@@ -572,6 +864,7 @@ export const usePlaybackStore = defineStore("playback", () => {
   };
 
   const addTracksToPlaylist = (tracksIds) => {
+    if (mode.value === "remote") return;
     if (!currentPlaylist.value) return;
 
     let pushNewHistory = false;
@@ -586,7 +879,9 @@ export const usePlaybackStore = defineStore("playback", () => {
       newPlaylist.type = PLAYBACK_CONTEXTS.userMix;
       newPlaylist.context = { name: null, id: null, edited: false };
       pushNewHistory = true;
-    } else if (currentPlaylist.value.type === PLAYBACK_CONTEXTS.userPlaylist) {
+    } else if (
+      currentPlaylist.value.type === PLAYBACK_CONTEXTS.userPlaylist
+    ) {
       newPlaylist.context.edited = true;
     }
 
@@ -595,10 +890,12 @@ export const usePlaybackStore = defineStore("playback", () => {
     } else {
       playlistsHistory.value[currentPlaylistIndex.value] = newPlaylist;
       savePlaylistHistory(playlistsHistory.value);
+      getSessionStore()?.notifyQueueChanged();
     }
   };
 
   const removeTrackFromPlaylist = (index) => {
+    if (mode.value === "remote") return;
     if (!currentPlaylist.value) return;
 
     let pushNewHistory = false;
@@ -615,7 +912,9 @@ export const usePlaybackStore = defineStore("playback", () => {
       newPlaylist.type = PLAYBACK_CONTEXTS.userMix;
       newPlaylist.context = { name: null, id: null, edited: false };
       pushNewHistory = true;
-    } else if (currentPlaylist.value.type === PLAYBACK_CONTEXTS.userPlaylist) {
+    } else if (
+      currentPlaylist.value.type === PLAYBACK_CONTEXTS.userPlaylist
+    ) {
       newPlaylist.context.edited = true;
     }
 
@@ -630,6 +929,7 @@ export const usePlaybackStore = defineStore("playback", () => {
     } else {
       playlistsHistory.value[currentPlaylistIndex.value] = newPlaylist;
       savePlaylistHistory(playlistsHistory.value);
+      getSessionStore()?.notifyQueueChanged();
     }
   };
 
@@ -639,6 +939,7 @@ export const usePlaybackStore = defineStore("playback", () => {
 
   return {
     // Core state
+    mode,
     currentTrackId,
     currentTrackIndex,
     currentPlaylist,
@@ -685,5 +986,16 @@ export const usePlaybackStore = defineStore("playback", () => {
     moveTrack,
     addTracksToPlaylist,
     removeTrackFromPlaylist,
+
+    // Remote mode
+    enterRemoteMode,
+    exitRemoteMode,
+    applyRemoteState,
+    applyRemoteQueue,
+    assumeFromTransfer,
+    snapshotState,
+    snapshotQueue,
+    loadPersistedState,
+    setSessionStore,
   };
 });
