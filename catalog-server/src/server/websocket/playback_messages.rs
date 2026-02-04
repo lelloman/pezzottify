@@ -260,34 +260,19 @@ mod tests {
 
     #[test]
     fn repeat_mode_serializes_lowercase() {
-        assert_eq!(
-            serde_json::to_string(&RepeatMode::Off).unwrap(),
-            "\"off\""
-        );
-        assert_eq!(
-            serde_json::to_string(&RepeatMode::All).unwrap(),
-            "\"all\""
-        );
-        assert_eq!(
-            serde_json::to_string(&RepeatMode::One).unwrap(),
-            "\"one\""
-        );
+        assert_eq!(serde_json::to_string(&RepeatMode::Off).unwrap(), "\"off\"");
+        assert_eq!(serde_json::to_string(&RepeatMode::All).unwrap(), "\"all\"");
+        assert_eq!(serde_json::to_string(&RepeatMode::One).unwrap(), "\"one\"");
     }
 
     #[test]
     fn device_type_serializes_lowercase() {
-        assert_eq!(
-            serde_json::to_string(&DeviceType::Web).unwrap(),
-            "\"web\""
-        );
+        assert_eq!(serde_json::to_string(&DeviceType::Web).unwrap(), "\"web\"");
         assert_eq!(
             serde_json::to_string(&DeviceType::Android).unwrap(),
             "\"android\""
         );
-        assert_eq!(
-            serde_json::to_string(&DeviceType::Ios).unwrap(),
-            "\"ios\""
-        );
+        assert_eq!(serde_json::to_string(&DeviceType::Ios).unwrap(), "\"ios\"");
     }
 
     #[test]

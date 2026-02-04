@@ -275,46 +275,46 @@ async fn handle_playback_message(
     let manager = &state.playback_session_manager;
 
     let result: Result<(), PlaybackError> = match msg_type {
-        msg_types::PLAYBACK_HELLO => {
-            match serde_json::from_value::<HelloPayload>(payload) {
-                Ok(p) => {
-                    let welcome = manager
-                        .handle_hello(user_id, device_id, p.device_name, p.device_type)
-                        .await;
-                    let _ = state
-                        .connection_manager
-                        .send_to_device(
-                            user_id,
-                            device_id,
-                            ServerMessage::new(msg_types::PLAYBACK_WELCOME, welcome),
-                        )
-                        .await;
-                    Ok(())
-                }
-                Err(e) => Err(PlaybackError::InvalidMessage(format!(
-                    "Invalid hello payload: {}",
-                    e
-                ))),
+        msg_types::PLAYBACK_HELLO => match serde_json::from_value::<HelloPayload>(payload) {
+            Ok(p) => {
+                let welcome = manager
+                    .handle_hello(user_id, device_id, p.device_name, p.device_type)
+                    .await;
+                let _ = state
+                    .connection_manager
+                    .send_to_device(
+                        user_id,
+                        device_id,
+                        ServerMessage::new(msg_types::PLAYBACK_WELCOME, welcome),
+                    )
+                    .await;
+                Ok(())
             }
-        }
+            Err(e) => Err(PlaybackError::InvalidMessage(format!(
+                "Invalid hello payload: {}",
+                e
+            ))),
+        },
 
-        msg_types::PLAYBACK_STATE => {
-            match serde_json::from_value::<PlaybackState>(payload) {
-                Ok(state_payload) => manager
+        msg_types::PLAYBACK_STATE => match serde_json::from_value::<PlaybackState>(payload) {
+            Ok(state_payload) => {
+                manager
                     .handle_state_update(user_id, device_id, state_payload)
-                    .await,
-                Err(e) => Err(PlaybackError::InvalidMessage(format!(
-                    "Invalid state payload: {}",
-                    e
-                ))),
+                    .await
             }
-        }
+            Err(e) => Err(PlaybackError::InvalidMessage(format!(
+                "Invalid state payload: {}",
+                e
+            ))),
+        },
 
         msg_types::PLAYBACK_QUEUE_UPDATE => {
             match serde_json::from_value::<QueueUpdatePayload>(payload) {
-                Ok(p) => manager
-                    .handle_queue_update(user_id, device_id, p.queue, p.queue_version)
-                    .await,
+                Ok(p) => {
+                    manager
+                        .handle_queue_update(user_id, device_id, p.queue, p.queue_version)
+                        .await
+                }
                 Err(e) => Err(PlaybackError::InvalidMessage(format!(
                     "Invalid queue_update payload: {}",
                     e
@@ -324,9 +324,11 @@ async fn handle_playback_message(
 
         msg_types::PLAYBACK_COMMAND => {
             match serde_json::from_value::<PlaybackCommandPayload>(payload) {
-                Ok(cmd) => manager
-                    .handle_command(user_id, device_id, &cmd.command, cmd.payload)
-                    .await,
+                Ok(cmd) => {
+                    manager
+                        .handle_command(user_id, device_id, &cmd.command, cmd.payload)
+                        .await
+                }
                 Err(e) => Err(PlaybackError::InvalidMessage(format!(
                     "Invalid command payload: {}",
                     e
@@ -381,9 +383,11 @@ async fn handle_playback_message(
 
         msg_types::PLAYBACK_TRANSFER_READY => {
             match serde_json::from_value::<TransferReadyPayload>(payload) {
-                Ok(p) => manager
-                    .handle_transfer_ready(user_id, device_id, p.transfer_id, p.state, p.queue)
-                    .await,
+                Ok(p) => {
+                    manager
+                        .handle_transfer_ready(user_id, device_id, p.transfer_id, p.state, p.queue)
+                        .await
+                }
                 Err(e) => Err(PlaybackError::InvalidMessage(format!(
                     "Invalid transfer_ready payload: {}",
                     e
@@ -393,9 +397,11 @@ async fn handle_playback_message(
 
         msg_types::PLAYBACK_TRANSFER_COMPLETE => {
             match serde_json::from_value::<TransferCompletePayload>(payload) {
-                Ok(p) => manager
-                    .handle_transfer_complete(user_id, device_id, p.transfer_id)
-                    .await,
+                Ok(p) => {
+                    manager
+                        .handle_transfer_complete(user_id, device_id, p.transfer_id)
+                        .await
+                }
                 Err(e) => Err(PlaybackError::InvalidMessage(format!(
                     "Invalid transfer_complete payload: {}",
                     e
@@ -405,9 +411,11 @@ async fn handle_playback_message(
 
         msg_types::PLAYBACK_RECLAIM_AUDIO_DEVICE => {
             match serde_json::from_value::<PlaybackState>(payload) {
-                Ok(state_payload) => manager
-                    .handle_reclaim(user_id, device_id, state_payload)
-                    .await,
+                Ok(state_payload) => {
+                    manager
+                        .handle_reclaim(user_id, device_id, state_payload)
+                        .await
+                }
                 Err(e) => Err(PlaybackError::InvalidMessage(format!(
                     "Invalid reclaim payload: {}",
                     e

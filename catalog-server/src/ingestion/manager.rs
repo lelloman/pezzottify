@@ -1199,11 +1199,8 @@ impl IngestionManager {
         let ordered_durations = self.extract_ordered_durations(job_id).await?;
         if !ordered_durations.is_empty() {
             let fp_config = FingerprintConfig::default();
-            let fp_result = match_album_with_fallbacks(
-                &ordered_durations,
-                self.catalog.as_ref(),
-                &fp_config,
-            )?;
+            let fp_result =
+                match_album_with_fallbacks(&ordered_durations, self.catalog.as_ref(), &fp_config)?;
 
             match fp_result.ticket_type {
                 TicketType::Success => {
@@ -1313,7 +1310,8 @@ impl IngestionManager {
 
                     info!(
                         "Fingerprint review needed for job {} - best match: {:.0}%",
-                        job_id, fp_result.match_score * 100.0
+                        job_id,
+                        fp_result.match_score * 100.0
                     );
                     return Ok(());
                 }
@@ -1577,11 +1575,16 @@ impl IngestionManager {
         };
 
         let fp_config = FingerprintConfig::default();
-        let (fp_matches, fp_delta) = if !uploaded_durations.is_empty() && !catalog_durations.is_empty() {
-            compare_durations(&uploaded_durations, &catalog_durations, fp_config.track_tolerance_ms)
-        } else {
-            (0, 0)
-        };
+        let (fp_matches, fp_delta) =
+            if !uploaded_durations.is_empty() && !catalog_durations.is_empty() {
+                compare_durations(
+                    &uploaded_durations,
+                    &catalog_durations,
+                    fp_config.track_tolerance_ms,
+                )
+            } else {
+                (0, 0)
+            };
         let total_tracks = uploaded_durations.len().max(catalog_durations.len());
         let fp_score = if total_tracks > 0 {
             fp_matches as f32 / total_tracks as f32
@@ -1603,8 +1606,10 @@ impl IngestionManager {
                     id: format!("album:{}", album_id),
                     label: format!(
                         "{} - {} (fingerprint {:.0}%, metadata {:.0}%)",
-                        artist_name, album_name,
-                        fp_score * 100.0, metadata_score * 100.0
+                        artist_name,
+                        album_name,
+                        fp_score * 100.0,
+                        metadata_score * 100.0
                     ),
                     description: Some("Proceed with this album".to_string()),
                 },
@@ -1621,7 +1626,8 @@ impl IngestionManager {
                  Expected: {} tracks, Uploaded: {} files\n\
                  Confirm this is the correct album:",
                 album_name,
-                fp_score * 100.0, fp_delta,
+                fp_score * 100.0,
+                fp_delta,
                 metadata_score * 100.0,
                 catalog_durations.len(),
                 summary.file_count
@@ -1646,8 +1652,10 @@ impl IngestionManager {
                     id: format!("album:{}", album_id),
                     label: format!(
                         "{} - {} (fingerprint {:.0}%, metadata {:.0}%)",
-                        artist_name, album_name,
-                        fp_score * 100.0, metadata_score * 100.0
+                        artist_name,
+                        album_name,
+                        fp_score * 100.0,
+                        metadata_score * 100.0
                     ),
                     description: Some("Proceed with this album anyway".to_string()),
                 },
@@ -1664,7 +1672,8 @@ impl IngestionManager {
                  Expected: {} tracks, Uploaded: {} files\n\
                  Confirm this is the correct album:",
                 album_name,
-                fp_score * 100.0, fp_delta,
+                fp_score * 100.0,
+                fp_delta,
                 metadata_score * 100.0,
                 catalog_durations.len(),
                 summary.file_count
@@ -2107,7 +2116,10 @@ impl IngestionManager {
         // Duration-based fallback: match remaining files by closest track duration.
         // This handles the case where files have no embedded tags but durations
         // are unique enough to identify tracks (common after fingerprint matching).
-        let unmatched_count = files.iter().filter(|f| f.matched_track_id.is_none()).count();
+        let unmatched_count = files
+            .iter()
+            .filter(|f| f.matched_track_id.is_none())
+            .count();
         if unmatched_count > 0 {
             debug!(
                 "Tag-based matching left {} unmatched files, trying duration-based mapping",
@@ -2237,7 +2249,9 @@ impl IngestionManager {
 
             // Notify review needed via WebSocket
             if let Some(notifier) = &self.notifier {
-                notifier.notify_review_needed(&job, &question, &options).await;
+                notifier
+                    .notify_review_needed(&job, &question, &options)
+                    .await;
             }
 
             warn!(
@@ -2314,10 +2328,7 @@ impl IngestionManager {
                 // Ensure output directory exists
                 if let Some(parent) = output_path_with_ext.parent() {
                     if let Err(e) = tokio::fs::create_dir_all(parent).await {
-                        error!(
-                            "Failed to create output directory {:?}: {}",
-                            parent, e
-                        );
+                        error!("Failed to create output directory {:?}: {}", parent, e);
                     }
                 }
 

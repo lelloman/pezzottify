@@ -633,11 +633,7 @@ impl ServerStore for SqliteServerStore {
     fn get_catalog_events_current_seq(&self) -> Result<i64> {
         let conn = self.conn.lock().unwrap();
         let seq: Option<i64> = conn
-            .query_row(
-                "SELECT MAX(seq) FROM catalog_events",
-                [],
-                |row| row.get(0),
-            )
+            .query_row("SELECT MAX(seq) FROM catalog_events", [], |row| row.get(0))
             .optional()?
             .flatten();
 
