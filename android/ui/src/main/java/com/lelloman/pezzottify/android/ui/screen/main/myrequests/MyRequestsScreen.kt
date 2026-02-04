@@ -169,6 +169,7 @@ fun MyRequestsScreen(
                             MyRequestsTab.Queue -> QueueTabContent(
                                 requests = state.requests ?: emptyList(),
                                 currentTimeMillis = currentTimeMillis.longValue,
+                                actions = viewModel,
                             )
                             MyRequestsTab.Completed -> CompletedTabContent(
                                 requests = state.requests ?: emptyList(),
@@ -244,6 +245,7 @@ private fun LimitItem(
 private fun QueueTabContent(
     requests: List<UiDownloadRequest>,
     currentTimeMillis: Long,
+    actions: MyRequestsScreenActions,
     modifier: Modifier = Modifier,
 ) {
     val queueRequests = requests.filter {
@@ -272,7 +274,11 @@ private fun QueueTabContent(
             modifier = modifier.fillMaxSize(),
         ) {
             items(queueRequests, key = { it.id }) { request ->
-                QueueRequestItem(request = request, currentTimeMillis = currentTimeMillis)
+                QueueRequestItem(
+                    request = request,
+                    currentTimeMillis = currentTimeMillis,
+                    onClick = { actions.onRequestClick(request) },
+                )
             }
         }
     }
@@ -282,6 +288,7 @@ private fun QueueTabContent(
 private fun QueueRequestItem(
     request: UiDownloadRequest,
     currentTimeMillis: Long,
+    onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val isFailed = request.status == RequestStatus.Failed
@@ -290,6 +297,7 @@ private fun QueueRequestItem(
     Row(
         modifier = modifier
             .fillMaxWidth()
+            .clickable(onClick = onClick)
             .padding(horizontal = Spacing.Medium, vertical = Spacing.Small),
         verticalAlignment = Alignment.CenterVertically,
     ) {

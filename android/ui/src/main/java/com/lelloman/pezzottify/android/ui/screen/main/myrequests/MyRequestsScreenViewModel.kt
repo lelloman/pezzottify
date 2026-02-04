@@ -170,11 +170,8 @@ class MyRequestsScreenViewModel(
 
     override fun onRequestClick(request: UiDownloadRequest) {
         val albumId = request.catalogId ?: return
-        // Only navigate to album if completed (exists in catalog)
-        if (request.status == RequestStatus.Completed) {
-            viewModelScope.launch {
-                mutableEvents.emit(MyRequestsScreenEvent.NavigateToAlbum(albumId))
-            }
+        viewModelScope.launch {
+            mutableEvents.emit(MyRequestsScreenEvent.NavigateToAlbum(albumId))
         }
     }
 
