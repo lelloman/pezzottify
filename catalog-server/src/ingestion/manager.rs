@@ -802,6 +802,7 @@ impl IngestionManager {
                 }
                 Err(e) => {
                     warn!("Failed to probe {}: {}", file.filename, e);
+                    file.error_message = Some(format!("Probe failed: {}", e));
                 }
             }
 
@@ -829,6 +830,43 @@ impl IngestionManager {
             }
 
             self.store.update_file(&file)?;
+        }
+
+        // Count probe failures — fail early if no files could be probed
+        let files_after = self.store.get_files_for_job(job_id)?;
+        let probed_count = files_after
+            .iter()
+            .filter(|f| f.duration_ms.is_some())
+            .count();
+        let failed_count = files_after.len() - probed_count;
+
+        if probed_count == 0 {
+            job.status = IngestionJobStatus::Failed;
+            job.error_message = Some(format!(
+                "All {} audio files failed to probe — files may be corrupted or in an unsupported format",
+                failed_count
+            ));
+            job.completed_at = Some(chrono::Utc::now().timestamp_millis());
+            self.store.update_job(&job)?;
+
+            if let Some(notifier) = &self.notifier {
+                notifier
+                    .notify_failed(&job, job.error_message.as_deref().unwrap())
+                    .await;
+            }
+
+            return Err(IngestionError::Store(anyhow::anyhow!(
+                "All files failed audio probe"
+            )));
+        }
+
+        if failed_count > 0 {
+            warn!(
+                "Job {} — {}/{} files failed to probe",
+                job_id,
+                failed_count,
+                files_after.len()
+            );
         }
 
         // Aggregate detected metadata
@@ -1209,6 +1247,31 @@ impl IngestionManager {
 
                 // Continue to track mapping and conversion
                 self.map_tracks(job_id).await?;
+
+                // Fail if no tracks could be matched
+                let job_after_map = self.store.get_job(job_id)?.unwrap();
+                if job_after_map.tracks_matched == 0 {
+                    let mut job = job_after_map;
+                    job.status = IngestionJobStatus::Failed;
+                    job.error_message = Some(
+                        "No tracks could be matched — files may lack metadata tags or have corrupt audio data"
+                            .to_string(),
+                    );
+                    job.completed_at = Some(chrono::Utc::now().timestamp_millis());
+                    self.store.update_job(&job)?;
+
+                    if let Some(notifier) = &self.notifier {
+                        notifier
+                            .notify_failed(&job, job.error_message.as_deref().unwrap())
+                            .await;
+                    }
+
+                    return Err(IngestionError::Store(anyhow::anyhow!(
+                        "Zero tracks matched for job {}",
+                        job_id
+                    )));
+                }
+
                 self.convert_job(job_id).await?;
             } else {
                 // Low confidence - request review
@@ -1417,6 +1480,31 @@ impl IngestionManager {
 
         // Continue to track mapping and conversion
         self.map_tracks(&job_id).await?;
+
+        // Fail if no tracks could be matched
+        let job_after_map = self.store.get_job(&job_id)?.unwrap();
+        if job_after_map.tracks_matched == 0 {
+            let mut job = job_after_map;
+            job.status = IngestionJobStatus::Failed;
+            job.error_message = Some(
+                "No tracks could be matched — files may lack metadata tags or have corrupt audio data"
+                    .to_string(),
+            );
+            job.completed_at = Some(chrono::Utc::now().timestamp_millis());
+            self.store.update_job(&job)?;
+
+            if let Some(notifier) = &self.notifier {
+                notifier
+                    .notify_failed(&job, job.error_message.as_deref().unwrap())
+                    .await;
+            }
+
+            return Err(IngestionError::Store(anyhow::anyhow!(
+                "Zero tracks matched for job {}",
+                job_id
+            )));
+        }
+
         self.convert_job(&job_id).await?;
 
         Ok(())
@@ -2236,6 +2324,31 @@ impl IngestionManager {
 
             // Continue to track mapping and conversion
             self.map_tracks(job_id).await?;
+
+            // Fail if no tracks could be matched
+            let job_after_map = self.store.get_job(job_id)?.unwrap();
+            if job_after_map.tracks_matched == 0 {
+                let mut job = job_after_map;
+                job.status = IngestionJobStatus::Failed;
+                job.error_message = Some(
+                    "No tracks could be matched — files may lack metadata tags or have corrupt audio data"
+                        .to_string(),
+                );
+                job.completed_at = Some(chrono::Utc::now().timestamp_millis());
+                self.store.update_job(&job)?;
+
+                if let Some(notifier) = &self.notifier {
+                    notifier
+                        .notify_failed(&job, job.error_message.as_deref().unwrap())
+                        .await;
+                }
+
+                return Err(IngestionError::Store(anyhow::anyhow!(
+                    "Zero tracks matched for job {}",
+                    job_id
+                )));
+            }
+
             self.convert_job(job_id).await?;
         } else if selected_option == "no_match" {
             job.status = IngestionJobStatus::Failed;
