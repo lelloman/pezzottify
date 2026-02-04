@@ -468,7 +468,20 @@ class InteractorsModule {
         buildInfo: BuildInfo,
         deviceInfoProvider: DeviceInfoProvider,
     ): BugReportScreenViewModel.Interactor = object : BugReportScreenViewModel.Interactor {
-        override fun getLogs(): String? = logFileManager.getLogContent().takeIf { it.isNotBlank() }
+        private val maxLogSize = 1024 * 1024 // 1MB
+
+        override fun getLogs(): String? = logFileManager.getLogContent()
+            .takeIf { it.isNotBlank() }
+            ?.let { content ->
+                if (content.length > maxLogSize) {
+                    val truncated = content.substring(content.length - maxLogSize)
+                    // Skip partial first line from the cut point
+                    val firstNewline = truncated.indexOf('\n')
+                    if (firstNewline >= 0) truncated.substring(firstNewline + 1) else truncated
+                } else {
+                    content
+                }
+            }
 
         override suspend fun submitBugReport(
             title: String?,

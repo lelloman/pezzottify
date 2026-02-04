@@ -28,7 +28,7 @@ use tower_http::services::{ServeDir, ServeFile};
 
 use axum::{
     body::Body,
-    extract::{Path, Query, State},
+    extract::{DefaultBodyLimit, Path, Query, State},
     http::{header, response, HeaderValue, StatusCode},
     middleware,
     response::{IntoResponse, Response},
@@ -4719,8 +4719,10 @@ pub async fn make_app(
         .with_state(state.clone());
 
     // Bug report route (requires ReportBug permission)
+    // Body limit raised to accommodate logs (up to 1MB) plus other fields
     let bug_report_routes: Router = Router::new()
         .route("/bug-report", post(submit_bug_report))
+        .layer(DefaultBodyLimit::max(2 * 1024 * 1024))
         .layer(GovernorLayer::new(write_rate_limit.clone()))
         .route_layer(middleware::from_fn_with_state(
             state.clone(),

@@ -99,7 +99,7 @@ pub struct CatalogEvent {
 /// Size limits for bug report fields (in bytes)
 pub const BUG_REPORT_TITLE_MAX_LEN: usize = 200;
 pub const BUG_REPORT_DESCRIPTION_MAX_SIZE: usize = 100 * 1024; // 100KB
-pub const BUG_REPORT_LOGS_MAX_SIZE: usize = 6 * 1024 * 1024; // 6MB
+pub const BUG_REPORT_LOGS_MAX_SIZE: usize = 1024 * 1024; // 1MB
 pub const BUG_REPORT_ATTACHMENT_MAX_SIZE: usize = 25 * 1024 * 1024; // 25MB per image
 pub const BUG_REPORT_MAX_ATTACHMENTS: usize = 5;
 pub const BUG_REPORT_TOTAL_MAX_SIZE: usize = 500 * 1024 * 1024; // 500MB total storage
