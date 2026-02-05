@@ -46,6 +46,12 @@ pub trait IngestionStore: Send + Sync {
     /// List all jobs (for admin).
     fn list_all_jobs(&self, limit: usize) -> Result<Vec<IngestionJob>>;
 
+    /// List job IDs that are in active (non-terminal) states.
+    ///
+    /// Returns IDs of jobs with status NOT IN ('COMPLETED', 'FAILED').
+    /// Used by cleanup jobs to identify orphaned temp directories.
+    fn list_active_job_ids(&self) -> Result<Vec<String>>;
+
     // ==================== File Operations ====================
 
     /// Create a new file record.
@@ -347,6 +353,16 @@ impl IngestionStore for SqliteIngestionStore {
             .query_map(params![limit as i64], Self::row_to_job)?
             .collect::<rusqlite::Result<Vec<_>>>()?;
         Ok(jobs)
+    }
+
+    fn list_active_job_ids(&self) -> Result<Vec<String>> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn
+            .prepare("SELECT id FROM ingestion_jobs WHERE status NOT IN ('COMPLETED', 'FAILED')")?;
+        let ids = stmt
+            .query_map([], |row| row.get(0))?
+            .collect::<rusqlite::Result<Vec<String>>>()?;
+        Ok(ids)
     }
 
     // ==================== File Operations ====================
@@ -775,5 +791,41 @@ mod tests {
         let item = store.get_review_item("job1").unwrap().unwrap();
         assert!(item.resolved_at.is_some());
         assert_eq!(item.selected_option, Some("album:abc".to_string()));
+    }
+
+    #[test]
+    fn test_list_active_job_ids() {
+        let store = SqliteIngestionStore::in_memory().unwrap();
+
+        // Create jobs in various states
+        let mut job1 = IngestionJob::new("job1", "user1", "album1.zip", 1000, 5);
+        job1.status = IngestionJobStatus::Pending;
+        store.create_job(&job1).unwrap();
+
+        let mut job2 = IngestionJob::new("job2", "user1", "album2.zip", 2000, 10);
+        job2.status = IngestionJobStatus::Analyzing;
+        store.create_job(&job2).unwrap();
+
+        let mut job3 = IngestionJob::new("job3", "user1", "album3.zip", 3000, 8);
+        job3.status = IngestionJobStatus::Completed;
+        store.create_job(&job3).unwrap();
+
+        let mut job4 = IngestionJob::new("job4", "user1", "album4.zip", 4000, 12);
+        job4.status = IngestionJobStatus::Failed;
+        store.create_job(&job4).unwrap();
+
+        let mut job5 = IngestionJob::new("job5", "user1", "album5.zip", 5000, 6);
+        job5.status = IngestionJobStatus::AwaitingReview;
+        store.create_job(&job5).unwrap();
+
+        // Get active job IDs (should exclude Completed and Failed)
+        let active_ids = store.list_active_job_ids().unwrap();
+
+        assert_eq!(active_ids.len(), 3);
+        assert!(active_ids.contains(&"job1".to_string())); // Pending
+        assert!(active_ids.contains(&"job2".to_string())); // Analyzing
+        assert!(active_ids.contains(&"job5".to_string())); // AwaitingReview
+        assert!(!active_ids.contains(&"job3".to_string())); // Completed
+        assert!(!active_ids.contains(&"job4".to_string())); // Failed
     }
 }
