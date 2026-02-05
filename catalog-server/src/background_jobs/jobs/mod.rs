@@ -7,11 +7,13 @@
 // pub mod audit_log_cleanup;
 // pub mod expand_artists_base;
 // pub mod missing_files_watchdog;
+pub mod ingestion_cleanup;
 pub mod popular_content;
 pub mod whatsnew_batch;
 
 // pub use audit_log_cleanup::AuditLogCleanupJob;
 // pub use expand_artists_base::ExpandArtistsBaseJob;
 // pub use missing_files_watchdog::MissingFilesWatchdogJob;
+pub use ingestion_cleanup::IngestionCleanupJob;
 pub use popular_content::PopularContentJob;
 pub use whatsnew_batch::WhatsNewBatchJob;

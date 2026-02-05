@@ -231,6 +231,38 @@ impl IngestionManager {
         Ok(())
     }
 
+    /// Mark a job as failed, clean up temp files, and notify.
+    ///
+    /// This is the centralized failure handling for ingestion jobs. It:
+    /// 1. Sets the job status to Failed
+    /// 2. Records the error message
+    /// 3. Sets the completed_at timestamp
+    /// 4. Updates the job in the store
+    /// 5. Cleans up temporary files
+    /// 6. Notifies via WebSocket (if notifier is configured)
+    async fn fail_job_with_cleanup(
+        &self,
+        job: &mut IngestionJob,
+        error_message: &str,
+    ) -> Result<(), IngestionError> {
+        job.status = IngestionJobStatus::Failed;
+        job.error_message = Some(error_message.to_string());
+        job.completed_at = Some(chrono::Utc::now().timestamp_millis());
+        self.store.update_job(job)?;
+
+        // Clean up temp files
+        if let Err(e) = self.file_handler.cleanup_job(&job.id).await {
+            warn!("Failed to cleanup temp files for job {}: {}", job.id, e);
+        }
+
+        // Notify failure
+        if let Some(notifier) = &self.notifier {
+            notifier.notify_failed(job, error_message).await;
+        }
+
+        Ok(())
+    }
+
     // =========================================================================
     // Job Creation
     // =========================================================================
@@ -875,19 +907,11 @@ impl IngestionManager {
         let failed_count = files_after.len() - probed_count;
 
         if probed_count == 0 {
-            job.status = IngestionJobStatus::Failed;
-            job.error_message = Some(format!(
+            let error_msg = format!(
                 "All {} audio files failed to probe — files may be corrupted or in an unsupported format",
                 failed_count
-            ));
-            job.completed_at = Some(chrono::Utc::now().timestamp_millis());
-            self.store.update_job(&job)?;
-
-            if let Some(notifier) = &self.notifier {
-                notifier
-                    .notify_failed(&job, job.error_message.as_deref().unwrap())
-                    .await;
-            }
+            );
+            self.fail_job_with_cleanup(&mut job, &error_msg).await?;
 
             return Err(IngestionError::Store(anyhow::anyhow!(
                 "All files failed audio probe"
@@ -1241,19 +1265,10 @@ impl IngestionManager {
                     let job_after_map = self.store.get_job(job_id)?.unwrap();
                     if job_after_map.tracks_matched == 0 {
                         let mut job = job_after_map;
-                        job.status = IngestionJobStatus::Failed;
-                        job.error_message = Some(
-                            "No tracks could be matched — files may lack metadata tags or have corrupt audio data"
-                                .to_string(),
-                        );
-                        job.completed_at = Some(chrono::Utc::now().timestamp_millis());
-                        self.store.update_job(&job)?;
-
-                        if let Some(notifier) = &self.notifier {
-                            notifier
-                                .notify_failed(&job, job.error_message.as_deref().unwrap())
-                                .await;
-                        }
+                        self.fail_job_with_cleanup(
+                            &mut job,
+                            "No tracks could be matched — files may lack metadata tags or have corrupt audio data",
+                        ).await?;
 
                         return Err(IngestionError::Store(anyhow::anyhow!(
                             "Zero tracks matched for job {}",
@@ -1415,19 +1430,10 @@ impl IngestionManager {
                 let job_after_map = self.store.get_job(job_id)?.unwrap();
                 if job_after_map.tracks_matched == 0 {
                     let mut job = job_after_map;
-                    job.status = IngestionJobStatus::Failed;
-                    job.error_message = Some(
-                        "No tracks could be matched — files may lack metadata tags or have corrupt audio data"
-                            .to_string(),
-                    );
-                    job.completed_at = Some(chrono::Utc::now().timestamp_millis());
-                    self.store.update_job(&job)?;
-
-                    if let Some(notifier) = &self.notifier {
-                        notifier
-                            .notify_failed(&job, job.error_message.as_deref().unwrap())
-                            .await;
-                    }
+                    self.fail_job_with_cleanup(
+                        &mut job,
+                        "No tracks could be matched — files may lack metadata tags or have corrupt audio data",
+                    ).await?;
 
                     return Err(IngestionError::Store(anyhow::anyhow!(
                         "Zero tracks matched for job {}",
@@ -1711,19 +1717,10 @@ impl IngestionManager {
         let job_after_map = self.store.get_job(&job_id)?.unwrap();
         if job_after_map.tracks_matched == 0 {
             let mut job = job_after_map;
-            job.status = IngestionJobStatus::Failed;
-            job.error_message = Some(
-                "No tracks could be matched — files may lack metadata tags or have corrupt audio data"
-                    .to_string(),
-            );
-            job.completed_at = Some(chrono::Utc::now().timestamp_millis());
-            self.store.update_job(&job)?;
-
-            if let Some(notifier) = &self.notifier {
-                notifier
-                    .notify_failed(&job, job.error_message.as_deref().unwrap())
-                    .await;
-            }
+            self.fail_job_with_cleanup(
+                &mut job,
+                "No tracks could be matched — files may lack metadata tags or have corrupt audio data",
+            ).await?;
 
             return Err(IngestionError::Store(anyhow::anyhow!(
                 "Zero tracks matched for job {}",
@@ -2624,19 +2621,10 @@ impl IngestionManager {
             let job_after_map = self.store.get_job(job_id)?.unwrap();
             if job_after_map.tracks_matched == 0 {
                 let mut job = job_after_map;
-                job.status = IngestionJobStatus::Failed;
-                job.error_message = Some(
-                    "No tracks could be matched — files may lack metadata tags or have corrupt audio data"
-                        .to_string(),
-                );
-                job.completed_at = Some(chrono::Utc::now().timestamp_millis());
-                self.store.update_job(&job)?;
-
-                if let Some(notifier) = &self.notifier {
-                    notifier
-                        .notify_failed(&job, job.error_message.as_deref().unwrap())
-                        .await;
-                }
+                self.fail_job_with_cleanup(
+                    &mut job,
+                    "No tracks could be matched — files may lack metadata tags or have corrupt audio data",
+                ).await?;
 
                 return Err(IngestionError::Store(anyhow::anyhow!(
                     "Zero tracks matched for job {}",
@@ -2646,15 +2634,8 @@ impl IngestionManager {
 
             self.convert_job(job_id).await?;
         } else if selected_option == "no_match" {
-            job.status = IngestionJobStatus::Failed;
-            job.error_message = Some("Album not in catalog".to_string());
-            job.completed_at = Some(chrono::Utc::now().timestamp_millis());
-            self.store.update_job(&job)?;
-
-            // Notify failure
-            if let Some(notifier) = &self.notifier {
-                notifier.notify_failed(&job, "Album not in catalog").await;
-            }
+            self.fail_job_with_cleanup(&mut job, "Album not in catalog")
+                .await?;
         } else if selected_option == "continue" {
             // User accepted duration mismatches, continue to conversion
             job.status = IngestionJobStatus::Converting;

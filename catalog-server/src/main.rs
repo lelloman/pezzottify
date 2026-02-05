@@ -8,12 +8,15 @@ use tracing::{error, info, level_filters::LevelFilter};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
 
 // Import modules from the library crate
-use pezzottify_catalog_server::background_jobs::jobs::{PopularContentJob, WhatsNewBatchJob};
+use pezzottify_catalog_server::background_jobs::jobs::{
+    IngestionCleanupJob, PopularContentJob, WhatsNewBatchJob,
+};
 use pezzottify_catalog_server::background_jobs::{
     create_scheduler, GuardedSearchVault, JobContext,
 };
 use pezzottify_catalog_server::catalog_store::{CatalogStore, SqliteCatalogStore};
 use pezzottify_catalog_server::config;
+use pezzottify_catalog_server::ingestion::{IngestionStore, SqliteIngestionStore};
 use pezzottify_catalog_server::search::{Fts5LevenshteinSearchVault, NoopSearchVault};
 use pezzottify_catalog_server::server::{metrics, run_server, RequestsLoggingLevel};
 use pezzottify_catalog_server::server_store::{self, SqliteServerStore};
@@ -257,6 +260,28 @@ async fn main() -> Result<()> {
     scheduler
         .register_job(Arc::new(WhatsNewBatchJob::new()))
         .await;
+
+    // Register ingestion cleanup job if ingestion is enabled
+    if app_config.ingestion.enabled {
+        let ingestion_db_path = app_config.ingestion_db_path();
+        match SqliteIngestionStore::open(&ingestion_db_path) {
+            Ok(store) => {
+                let ingestion_store: Arc<dyn IngestionStore> = Arc::new(store);
+                let temp_dir = app_config.ingestion_temp_dir();
+                scheduler
+                    .register_job(Arc::new(IngestionCleanupJob::new(
+                        ingestion_store,
+                        temp_dir,
+                    )))
+                    .await;
+                info!("Registered ingestion cleanup job");
+            }
+            Err(e) => {
+                error!("Failed to open ingestion database for cleanup job: {:?}", e);
+            }
+        }
+    }
+
     info!(
         "Job scheduler initialized with {} job(s)",
         scheduler.job_count().await
