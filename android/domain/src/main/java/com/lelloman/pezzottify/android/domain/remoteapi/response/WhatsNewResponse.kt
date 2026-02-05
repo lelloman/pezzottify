@@ -56,7 +56,7 @@ data class BatchChangeSummary(
 @Serializable
 data class WhatsNewBatch(
     val id: String,
-    val name: String,
+    val name: String? = null,
     val description: String? = null,
     @SerialName("closed_at")
     val closedAt: Long,

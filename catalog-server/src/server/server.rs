@@ -1779,19 +1779,109 @@ fn default_whats_new_limit() -> usize {
     10
 }
 
+#[derive(Serialize)]
+struct WhatsNewResponse {
+    batches: Vec<WhatsNewBatchResponse>,
+}
+
+#[derive(Serialize)]
+struct WhatsNewBatchResponse {
+    id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    description: Option<String>,
+    closed_at: i64,
+    summary: BatchSummary,
+}
+
+#[derive(Serialize, Default)]
+struct BatchSummary {
+    artists: EntitySummary,
+    albums: EntitySummary,
+    tracks: TrackSummary,
+    images: EntitySummary,
+}
+
+#[derive(Serialize)]
+struct EntityRef {
+    id: String,
+    name: String,
+}
+
+#[derive(Serialize, Default)]
+struct EntitySummary {
+    added: Vec<EntityRef>,
+    updated_count: i32,
+    deleted: Vec<EntityRef>,
+}
+
+#[derive(Serialize, Default)]
+struct TrackSummary {
+    added_count: i32,
+    updated_count: i32,
+    deleted_count: i32,
+}
+
 /// GET /v1/content/whatsnew - List recent catalog updates
-/// TODO: Re-enable after implementing whatsnew for Spotify schema
 async fn get_whats_new(
     _session: Session,
-    State(_catalog_store): State<GuardedCatalogStore>,
-    Query(_query): Query<WhatsNewQuery>,
+    State(catalog_store): State<GuardedCatalogStore>,
+    State(server_store): State<GuardedServerStore>,
+    Query(query): Query<WhatsNewQuery>,
 ) -> Response {
-    // What's New functionality disabled - Spotify schema is read-only
-    (
-        StatusCode::NOT_IMPLEMENTED,
-        "What's New not available for Spotify catalog",
-    )
-        .into_response()
+    let limit = query.limit.min(50);
+
+    let batches = match server_store.list_whatsnew_batches(limit) {
+        Ok(b) => b,
+        Err(e) => {
+            return (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response();
+        }
+    };
+
+    let mut response_batches = Vec::new();
+    for batch in batches {
+        let album_ids = match server_store.get_whatsnew_batch_album_ids(&batch.id) {
+            Ok(ids) => ids,
+            Err(e) => {
+                warn!("Failed to get album IDs for What's New batch {}: {}", batch.id, e);
+                continue;
+            }
+        };
+
+        // Enrich with album names from catalog
+        let albums: Vec<EntityRef> = album_ids
+            .iter()
+            .filter_map(|id| {
+                catalog_store.get_album_json(id).ok().flatten().map(|json| {
+                    let name = json.get("name").and_then(|n| n.as_str()).unwrap_or("Unknown Album");
+                    EntityRef {
+                        id: id.clone(),
+                        name: name.to_string(),
+                    }
+                })
+            })
+            .collect();
+
+        response_batches.push(WhatsNewBatchResponse {
+            id: batch.id,
+            name: None, // Clients derive from closed_at
+            description: None,
+            closed_at: batch.closed_at,
+            summary: BatchSummary {
+                albums: EntitySummary {
+                    added: albums,
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
+        });
+    }
+
+    Json(WhatsNewResponse {
+        batches: response_batches,
+    })
+    .into_response()
 }
 
 /// Get popular albums and artists based on listening data from the last 365 days.
@@ -5296,6 +5386,35 @@ mod tests {
         }
         fn cleanup_old_catalog_events(&self, _before_timestamp: i64) -> anyhow::Result<usize> {
             Ok(0)
+        }
+        fn add_pending_whatsnew_album(&self, _album_id: &str) -> anyhow::Result<()> {
+            Ok(())
+        }
+        fn get_pending_whatsnew_albums(&self) -> anyhow::Result<Vec<(String, i64)>> {
+            Ok(vec![])
+        }
+        fn clear_pending_whatsnew_albums(&self) -> anyhow::Result<()> {
+            Ok(())
+        }
+        fn is_album_in_whatsnew(&self, _album_id: &str) -> anyhow::Result<bool> {
+            Ok(false)
+        }
+        fn create_whatsnew_batch(
+            &self,
+            _id: &str,
+            _closed_at: i64,
+            _album_ids: &[String],
+        ) -> anyhow::Result<()> {
+            Ok(())
+        }
+        fn list_whatsnew_batches(
+            &self,
+            _limit: usize,
+        ) -> anyhow::Result<Vec<crate::server_store::WhatsNewBatch>> {
+            Ok(vec![])
+        }
+        fn get_whatsnew_batch_album_ids(&self, _batch_id: &str) -> anyhow::Result<Vec<String>> {
+            Ok(vec![])
         }
     }
 

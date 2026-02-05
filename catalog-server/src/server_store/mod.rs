@@ -2,7 +2,12 @@ mod models;
 mod schema;
 mod sqlite_server_store;
 
-pub use models::*;
+pub use models::{
+    BugReport, BugReportSummary, CatalogContentType, CatalogEvent, CatalogEventType,
+    JobAuditEntry, JobAuditEventType, JobRun, JobRunStatus, JobScheduleState, WhatsNewBatch,
+    BUG_REPORT_ATTACHMENT_MAX_SIZE, BUG_REPORT_DESCRIPTION_MAX_SIZE, BUG_REPORT_LOGS_MAX_SIZE,
+    BUG_REPORT_MAX_ATTACHMENTS, BUG_REPORT_TITLE_MAX_LEN, BUG_REPORT_TOTAL_MAX_SIZE,
+};
 pub use schema::SERVER_VERSIONED_SCHEMAS;
 pub use sqlite_server_store::SqliteServerStore;
 
@@ -75,4 +80,23 @@ pub trait ServerStore: Send + Sync {
     fn get_catalog_events_current_seq(&self) -> Result<i64>;
     /// Delete catalog events older than a given timestamp (for pruning).
     fn cleanup_old_catalog_events(&self, before_timestamp: i64) -> Result<usize>;
+
+    // What's New - pending albums
+    /// Add an album to the pending What's New list.
+    /// If the album is already pending or in a batch, this is a no-op.
+    fn add_pending_whatsnew_album(&self, album_id: &str) -> Result<()>;
+    /// Get all pending albums with their added_at timestamps.
+    fn get_pending_whatsnew_albums(&self) -> Result<Vec<(String, i64)>>;
+    /// Clear all pending albums (after batching).
+    fn clear_pending_whatsnew_albums(&self) -> Result<()>;
+    /// Check if an album is already in What's New (pending or batched).
+    fn is_album_in_whatsnew(&self, album_id: &str) -> Result<bool>;
+
+    // What's New - batches
+    /// Create a new batch with the given albums.
+    fn create_whatsnew_batch(&self, id: &str, closed_at: i64, album_ids: &[String]) -> Result<()>;
+    /// List recent batches, most recent first.
+    fn list_whatsnew_batches(&self, limit: usize) -> Result<Vec<WhatsNewBatch>>;
+    /// Get album IDs for a specific batch.
+    fn get_whatsnew_batch_album_ids(&self, batch_id: &str) -> Result<Vec<String>>;
 }

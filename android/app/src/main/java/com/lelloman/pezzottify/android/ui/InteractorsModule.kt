@@ -131,6 +131,12 @@ import com.lelloman.pezzottify.android.ui.theme.AppFontFamily as UiAppFontFamily
 import com.lelloman.pezzottify.android.ui.theme.ColorPalette as UiColorPalette
 import com.lelloman.pezzottify.android.ui.theme.ThemeMode as UiThemeMode
 
+private fun formatBatchDate(timestampSeconds: Long): String {
+    val date = java.util.Date(timestampSeconds * 1000)
+    val format = java.text.SimpleDateFormat("MMMM d, yyyy", java.util.Locale.getDefault())
+    return format.format(date)
+}
+
 @InstallIn(ViewModelComponent::class)
 @Module
 class InteractorsModule {
@@ -794,7 +800,7 @@ class InteractorsModule {
                     response.batches.map { batch ->
                         SearchScreenViewModel.WhatsNewBatchData(
                             batchId = batch.id,
-                            batchName = batch.name,
+                            batchName = batch.name ?: formatBatchDate(batch.closedAt),
                             closedAt = batch.closedAt,
                             addedAlbumIds = batch.summary.albums.added.map { it.id },
                         )
@@ -1841,9 +1847,11 @@ class InteractorsModule {
             override suspend fun getWhatsNew(limit: Int): Result<List<WhatsNewScreenViewModel.WhatsNewBatchData>> {
                 return getWhatsNew(limit).map { response ->
                     response.batches.map { batch ->
+                        // Derive batch name from closedAt timestamp if not provided
+                        val batchName = batch.name ?: formatBatchDate(batch.closedAt)
                         WhatsNewScreenViewModel.WhatsNewBatchData(
                             batchId = batch.id,
-                            batchName = batch.name,
+                            batchName = batchName,
                             description = batch.description,
                             closedAt = batch.closedAt,
                             artistsAdded = batch.summary.artists.added.size,
