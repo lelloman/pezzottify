@@ -799,8 +799,14 @@ async fn test_whatsnew_pending_to_batch_flow() {
     let server = TestServer::spawn().await;
 
     // Add albums to pending list
-    server.server_store.add_pending_whatsnew_album("album-a").unwrap();
-    server.server_store.add_pending_whatsnew_album("album-b").unwrap();
+    server
+        .server_store
+        .add_pending_whatsnew_album("album-a")
+        .unwrap();
+    server
+        .server_store
+        .add_pending_whatsnew_album("album-b")
+        .unwrap();
 
     // Verify pending list
     let pending = server.server_store.get_pending_whatsnew_albums().unwrap();
@@ -810,12 +816,18 @@ async fn test_whatsnew_pending_to_batch_flow() {
     let album_ids: Vec<String> = pending.into_iter().map(|(id, _)| id).collect();
     let batch_id = "integration-test-batch";
     let closed_at = Utc::now().timestamp();
-    server.server_store.create_whatsnew_batch(batch_id, closed_at, &album_ids).unwrap();
+    server
+        .server_store
+        .create_whatsnew_batch(batch_id, closed_at, &album_ids)
+        .unwrap();
     server.server_store.clear_pending_whatsnew_albums().unwrap();
 
     // Verify pending is cleared
     let pending = server.server_store.get_pending_whatsnew_albums().unwrap();
-    assert!(pending.is_empty(), "Pending should be cleared after batching");
+    assert!(
+        pending.is_empty(),
+        "Pending should be cleared after batching"
+    );
 
     // Verify batch exists
     let batches = server.server_store.list_whatsnew_batches(10).unwrap();
@@ -823,7 +835,10 @@ async fn test_whatsnew_pending_to_batch_flow() {
     assert_eq!(batches[0].id, batch_id);
 
     // Verify batch has correct albums
-    let batch_album_ids = server.server_store.get_whatsnew_batch_album_ids(batch_id).unwrap();
+    let batch_album_ids = server
+        .server_store
+        .get_whatsnew_batch_album_ids(batch_id)
+        .unwrap();
     assert_eq!(batch_album_ids.len(), 2);
     assert!(batch_album_ids.contains(&"album-a".to_string()));
     assert!(batch_album_ids.contains(&"album-b".to_string()));
@@ -844,12 +859,21 @@ async fn test_whatsnew_already_batched_album_not_re_added() {
     let server = TestServer::spawn().await;
 
     // Create a batch with an album
-    server.server_store.create_whatsnew_batch("batch-1", 1000, &["album-1".to_string()]).unwrap();
+    server
+        .server_store
+        .create_whatsnew_batch("batch-1", 1000, &["album-1".to_string()])
+        .unwrap();
 
     // Try to add the same album to pending
-    server.server_store.add_pending_whatsnew_album("album-1").unwrap();
+    server
+        .server_store
+        .add_pending_whatsnew_album("album-1")
+        .unwrap();
 
     // Should not be in pending (already batched)
     let pending = server.server_store.get_pending_whatsnew_albums().unwrap();
-    assert!(pending.is_empty(), "Album already in batch should not be added to pending");
+    assert!(
+        pending.is_empty(),
+        "Album already in batch should not be added to pending"
+    );
 }

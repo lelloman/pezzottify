@@ -1844,7 +1844,10 @@ async fn get_whats_new(
         let album_ids = match server_store.get_whatsnew_batch_album_ids(&batch.id) {
             Ok(ids) => ids,
             Err(e) => {
-                warn!("Failed to get album IDs for What's New batch {}: {}", batch.id, e);
+                warn!(
+                    "Failed to get album IDs for What's New batch {}: {}",
+                    batch.id, e
+                );
                 continue;
             }
         };
@@ -1854,7 +1857,10 @@ async fn get_whats_new(
             .iter()
             .filter_map(|id| {
                 catalog_store.get_album_json(id).ok().flatten().map(|json| {
-                    let name = json.get("name").and_then(|n| n.as_str()).unwrap_or("Unknown Album");
+                    let name = json
+                        .get("name")
+                        .and_then(|n| n.as_str())
+                        .unwrap_or("Unknown Album");
                     EntityRef {
                         id: id.clone(),
                         name: name.to_string(),

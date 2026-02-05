@@ -3,8 +3,8 @@ mod schema;
 mod sqlite_server_store;
 
 pub use models::{
-    BugReport, BugReportSummary, CatalogContentType, CatalogEvent, CatalogEventType,
-    JobAuditEntry, JobAuditEventType, JobRun, JobRunStatus, JobScheduleState, WhatsNewBatch,
+    BugReport, BugReportSummary, CatalogContentType, CatalogEvent, CatalogEventType, JobAuditEntry,
+    JobAuditEventType, JobRun, JobRunStatus, JobScheduleState, WhatsNewBatch,
     BUG_REPORT_ATTACHMENT_MAX_SIZE, BUG_REPORT_DESCRIPTION_MAX_SIZE, BUG_REPORT_LOGS_MAX_SIZE,
     BUG_REPORT_MAX_ATTACHMENTS, BUG_REPORT_TITLE_MAX_LEN, BUG_REPORT_TOTAL_MAX_SIZE,
 };
