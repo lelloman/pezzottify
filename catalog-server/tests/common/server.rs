@@ -9,7 +9,7 @@ use pezzottify_catalog_server::catalog_store::{CatalogStore, SqliteCatalogStore}
 use pezzottify_catalog_server::search::{HashedItemType, SearchResult, SearchVault};
 use pezzottify_catalog_server::server::state::GuardedSearchVault;
 use pezzottify_catalog_server::server::{server::make_app, RequestsLoggingLevel, ServerConfig};
-use pezzottify_catalog_server::server_store::SqliteServerStore;
+use pezzottify_catalog_server::server_store::{ServerStore, SqliteServerStore};
 use pezzottify_catalog_server::user::{FullUserStore, SqliteUserStore, UserManager};
 use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
@@ -83,6 +83,9 @@ pub struct TestServer {
 
     /// User store for direct database access in tests
     pub user_store: Arc<dyn FullUserStore>,
+
+    /// Server store for direct database access in tests (jobs, catalog events, whatsnew)
+    pub server_store: Arc<dyn ServerStore>,
 
     // Private fields - keep resources alive until drop
     _temp_catalog_dir: TempDir,
@@ -167,9 +170,10 @@ impl TestServer {
 
         // Create server store for testing
         let server_db_path = temp_db_dir.path().join("server.db");
-        let server_store = Arc::new(
+        let server_store: Arc<dyn ServerStore> = Arc::new(
             SqliteServerStore::new(&server_db_path).expect("Failed to create server store"),
         );
+        let server_store_for_test = server_store.clone();
 
         let app = make_app(
             config,
@@ -202,6 +206,7 @@ impl TestServer {
             base_url: base_url.clone(),
             port,
             user_store: user_store_for_test,
+            server_store: server_store_for_test,
             _temp_catalog_dir: temp_catalog_dir,
             _temp_db_dir: temp_db_dir,
             _shutdown_tx: Some(shutdown_tx),

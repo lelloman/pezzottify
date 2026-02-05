@@ -197,6 +197,13 @@ impl DownloadSyncNotifier {
             }
         };
 
+        // Add album to What's New pending list if this is an album event
+        if content_type == CatalogContentType::Album {
+            if let Err(e) = self.server_store.add_pending_whatsnew_album(content_id) {
+                warn!("Failed to add album to What's New pending: {}", e);
+            }
+        }
+
         // Broadcast to all connected clients
         let ws_msg = ServerMessage::new(
             CATALOG_INVALIDATION,

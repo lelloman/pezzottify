@@ -222,3 +222,16 @@ pub struct JobScheduleState {
     pub next_run_at: DateTime<Utc>,
     pub last_run_at: Option<DateTime<Utc>>,
 }
+
+// =============================================================================
+// What's New
+// =============================================================================
+
+/// A closed What's New batch.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WhatsNewBatch {
+    /// Unique batch identifier (UUID).
+    pub id: String,
+    /// Unix timestamp when the batch was closed.
+    pub closed_at: i64,
+}

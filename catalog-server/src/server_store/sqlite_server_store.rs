@@ -648,6 +648,124 @@ impl ServerStore for SqliteServerStore {
         )?;
         Ok(deleted)
     }
+
+    fn add_pending_whatsnew_album(&self, album_id: &str) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+
+        // Check if album is already in a batch
+        let in_batch: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM whatsnew_batch_albums WHERE album_id = ?1",
+                params![album_id],
+                |row| row.get(0),
+            )
+            .unwrap_or(0);
+
+        if in_batch > 0 {
+            return Ok(()); // Already batched, skip
+        }
+
+        // Insert or ignore if already pending
+        let now = chrono::Utc::now().timestamp();
+        conn.execute(
+            "INSERT OR IGNORE INTO whatsnew_pending_albums (album_id, added_at) VALUES (?1, ?2)",
+            params![album_id, now],
+        )?;
+        Ok(())
+    }
+
+    fn get_pending_whatsnew_albums(&self) -> Result<Vec<(String, i64)>> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt =
+            conn.prepare("SELECT album_id, added_at FROM whatsnew_pending_albums ORDER BY added_at")?;
+        let albums = stmt
+            .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+        Ok(albums)
+    }
+
+    fn clear_pending_whatsnew_albums(&self) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute("DELETE FROM whatsnew_pending_albums", [])?;
+        Ok(())
+    }
+
+    fn is_album_in_whatsnew(&self, album_id: &str) -> Result<bool> {
+        let conn = self.conn.lock().unwrap();
+
+        // Check pending
+        let in_pending: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM whatsnew_pending_albums WHERE album_id = ?1",
+                params![album_id],
+                |row| row.get(0),
+            )
+            .unwrap_or(0);
+
+        if in_pending > 0 {
+            return Ok(true);
+        }
+
+        // Check batched
+        let in_batch: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM whatsnew_batch_albums WHERE album_id = ?1",
+                params![album_id],
+                |row| row.get(0),
+            )
+            .unwrap_or(0);
+
+        Ok(in_batch > 0)
+    }
+
+    fn create_whatsnew_batch(&self, id: &str, closed_at: i64, album_ids: &[String]) -> Result<()> {
+        let mut conn = self.conn.lock().unwrap();
+        let tx = conn.transaction()?;
+
+        // Create the batch
+        tx.execute(
+            "INSERT INTO whatsnew_batches (id, closed_at) VALUES (?1, ?2)",
+            params![id, closed_at],
+        )?;
+
+        // Add album associations
+        for album_id in album_ids {
+            tx.execute(
+                "INSERT INTO whatsnew_batch_albums (batch_id, album_id) VALUES (?1, ?2)",
+                params![id, album_id],
+            )?;
+        }
+
+        tx.commit()?;
+        Ok(())
+    }
+
+    fn list_whatsnew_batches(&self, limit: usize) -> Result<Vec<super::WhatsNewBatch>> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare(
+            "SELECT id, closed_at FROM whatsnew_batches ORDER BY closed_at DESC LIMIT ?1",
+        )?;
+        let batches = stmt
+            .query_map(params![limit as i64], |row| {
+                Ok(super::WhatsNewBatch {
+                    id: row.get(0)?,
+                    closed_at: row.get(1)?,
+                })
+            })?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+        Ok(batches)
+    }
+
+    fn get_whatsnew_batch_album_ids(&self, batch_id: &str) -> Result<Vec<String>> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare(
+            "SELECT album_id FROM whatsnew_batch_albums WHERE batch_id = ?1",
+        )?;
+        let album_ids = stmt
+            .query_map(params![batch_id], |row| row.get(0))?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+        Ok(album_ids)
+    }
 }
 
 #[cfg(test)]
@@ -1190,5 +1308,166 @@ mod tests {
         let events = store.get_catalog_events_since(0).unwrap();
         assert_eq!(events.len(), 1);
         assert_eq!(events[0].content_id, "new-1");
+    }
+
+    // What's New tests
+
+    #[test]
+    fn test_whatsnew_pending_add_and_get() {
+        let test = create_test_store();
+        let store = &test.store;
+
+        // Initially empty
+        let pending = store.get_pending_whatsnew_albums().unwrap();
+        assert!(pending.is_empty());
+
+        // Add albums
+        store.add_pending_whatsnew_album("album-1").unwrap();
+        store.add_pending_whatsnew_album("album-2").unwrap();
+
+        let pending = store.get_pending_whatsnew_albums().unwrap();
+        assert_eq!(pending.len(), 2);
+        assert_eq!(pending[0].0, "album-1");
+        assert_eq!(pending[1].0, "album-2");
+        assert!(pending[0].1 > 0); // Has a timestamp
+    }
+
+    #[test]
+    fn test_whatsnew_pending_duplicate_ignored() {
+        let test = create_test_store();
+        let store = &test.store;
+
+        store.add_pending_whatsnew_album("album-1").unwrap();
+        store.add_pending_whatsnew_album("album-1").unwrap(); // Duplicate
+
+        let pending = store.get_pending_whatsnew_albums().unwrap();
+        assert_eq!(pending.len(), 1);
+    }
+
+    #[test]
+    fn test_whatsnew_pending_clear() {
+        let test = create_test_store();
+        let store = &test.store;
+
+        store.add_pending_whatsnew_album("album-1").unwrap();
+        store.add_pending_whatsnew_album("album-2").unwrap();
+
+        store.clear_pending_whatsnew_albums().unwrap();
+
+        let pending = store.get_pending_whatsnew_albums().unwrap();
+        assert!(pending.is_empty());
+    }
+
+    #[test]
+    fn test_whatsnew_create_batch() {
+        let test = create_test_store();
+        let store = &test.store;
+
+        let closed_at = chrono::Utc::now().timestamp();
+        store
+            .create_whatsnew_batch(
+                "batch-1",
+                closed_at,
+                &["album-1".to_string(), "album-2".to_string()],
+            )
+            .unwrap();
+
+        let batches = store.list_whatsnew_batches(10).unwrap();
+        assert_eq!(batches.len(), 1);
+        assert_eq!(batches[0].id, "batch-1");
+        assert_eq!(batches[0].closed_at, closed_at);
+
+        let album_ids = store.get_whatsnew_batch_album_ids("batch-1").unwrap();
+        assert_eq!(album_ids.len(), 2);
+        assert!(album_ids.contains(&"album-1".to_string()));
+        assert!(album_ids.contains(&"album-2".to_string()));
+    }
+
+    #[test]
+    fn test_whatsnew_list_batches_order() {
+        let test = create_test_store();
+        let store = &test.store;
+
+        // Create batches with different timestamps
+        store
+            .create_whatsnew_batch("batch-old", 1000, &["album-1".to_string()])
+            .unwrap();
+        store
+            .create_whatsnew_batch("batch-new", 2000, &["album-2".to_string()])
+            .unwrap();
+
+        // Should be ordered by closed_at DESC (newest first)
+        let batches = store.list_whatsnew_batches(10).unwrap();
+        assert_eq!(batches.len(), 2);
+        assert_eq!(batches[0].id, "batch-new");
+        assert_eq!(batches[1].id, "batch-old");
+    }
+
+    #[test]
+    fn test_whatsnew_list_batches_limit() {
+        let test = create_test_store();
+        let store = &test.store;
+
+        for i in 0..5 {
+            store
+                .create_whatsnew_batch(&format!("batch-{}", i), i as i64, &[])
+                .unwrap();
+        }
+
+        let batches = store.list_whatsnew_batches(3).unwrap();
+        assert_eq!(batches.len(), 3);
+    }
+
+    #[test]
+    fn test_whatsnew_is_album_in_pending() {
+        let test = create_test_store();
+        let store = &test.store;
+
+        assert!(!store.is_album_in_whatsnew("album-1").unwrap());
+
+        store.add_pending_whatsnew_album("album-1").unwrap();
+
+        assert!(store.is_album_in_whatsnew("album-1").unwrap());
+        assert!(!store.is_album_in_whatsnew("album-2").unwrap());
+    }
+
+    #[test]
+    fn test_whatsnew_is_album_in_batch() {
+        let test = create_test_store();
+        let store = &test.store;
+
+        store
+            .create_whatsnew_batch("batch-1", 1000, &["album-1".to_string()])
+            .unwrap();
+
+        assert!(store.is_album_in_whatsnew("album-1").unwrap());
+        assert!(!store.is_album_in_whatsnew("album-2").unwrap());
+    }
+
+    #[test]
+    fn test_whatsnew_batched_album_not_re_added_to_pending() {
+        let test = create_test_store();
+        let store = &test.store;
+
+        // Create a batch with an album
+        store
+            .create_whatsnew_batch("batch-1", 1000, &["album-1".to_string()])
+            .unwrap();
+
+        // Try to add the same album to pending
+        store.add_pending_whatsnew_album("album-1").unwrap();
+
+        // Should not be in pending (already batched)
+        let pending = store.get_pending_whatsnew_albums().unwrap();
+        assert!(pending.is_empty());
+    }
+
+    #[test]
+    fn test_whatsnew_get_nonexistent_batch_album_ids() {
+        let test = create_test_store();
+        let store = &test.store;
+
+        let album_ids = store.get_whatsnew_batch_album_ids("nonexistent").unwrap();
+        assert!(album_ids.is_empty());
     }
 }

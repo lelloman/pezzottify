@@ -8,7 +8,7 @@ use tracing::{error, info, level_filters::LevelFilter};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
 
 // Import modules from the library crate
-use pezzottify_catalog_server::background_jobs::jobs::PopularContentJob;
+use pezzottify_catalog_server::background_jobs::jobs::{PopularContentJob, WhatsNewBatchJob};
 use pezzottify_catalog_server::background_jobs::{
     create_scheduler, GuardedSearchVault, JobContext,
 };
@@ -253,6 +253,9 @@ async fn main() -> Result<()> {
     // Register jobs
     scheduler
         .register_job(Arc::new(PopularContentJob::new()))
+        .await;
+    scheduler
+        .register_job(Arc::new(WhatsNewBatchJob::new()))
         .await;
     info!(
         "Job scheduler initialized with {} job(s)",

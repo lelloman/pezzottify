@@ -241,6 +241,78 @@ fn migrate_v4_to_v5(conn: &rusqlite::Connection) -> anyhow::Result<()> {
 }
 
 // =============================================================================
+// Version 6 - What's New staging and batches
+// =============================================================================
+
+/// Pending albums waiting to be batched for What's New
+const WHATSNEW_PENDING_ALBUMS_TABLE_V6: Table = Table {
+    name: "whatsnew_pending_albums",
+    columns: &[
+        sqlite_column!("album_id", &SqlType::Text, is_primary_key = true),
+        sqlite_column!("added_at", &SqlType::Integer, non_null = true),
+    ],
+    indices: &[],
+    unique_constraints: &[],
+};
+
+/// Closed What's New batches
+const WHATSNEW_BATCHES_TABLE_V6: Table = Table {
+    name: "whatsnew_batches",
+    columns: &[
+        sqlite_column!("id", &SqlType::Text, is_primary_key = true),
+        sqlite_column!("closed_at", &SqlType::Integer, non_null = true),
+    ],
+    indices: &[("idx_whatsnew_batches_closed_at", "closed_at DESC")],
+    unique_constraints: &[],
+};
+
+/// Albums in closed What's New batches
+const WHATSNEW_BATCH_ALBUMS_TABLE_V6: Table = Table {
+    name: "whatsnew_batch_albums",
+    columns: &[
+        sqlite_column!("batch_id", &SqlType::Text, non_null = true),
+        sqlite_column!("album_id", &SqlType::Text, non_null = true),
+    ],
+    indices: &[("idx_whatsnew_batch_albums_batch_id", "batch_id")],
+    unique_constraints: &[&["batch_id", "album_id"]],
+};
+
+/// Migration from version 5 to version 6: add What's New tables
+fn migrate_v5_to_v6(conn: &rusqlite::Connection) -> anyhow::Result<()> {
+    conn.execute(
+        "CREATE TABLE whatsnew_pending_albums (
+            album_id TEXT PRIMARY KEY,
+            added_at INTEGER NOT NULL
+        )",
+        [],
+    )?;
+    conn.execute(
+        "CREATE TABLE whatsnew_batches (
+            id TEXT PRIMARY KEY,
+            closed_at INTEGER NOT NULL
+        )",
+        [],
+    )?;
+    conn.execute(
+        "CREATE INDEX idx_whatsnew_batches_closed_at ON whatsnew_batches(closed_at DESC)",
+        [],
+    )?;
+    conn.execute(
+        "CREATE TABLE whatsnew_batch_albums (
+            batch_id TEXT NOT NULL REFERENCES whatsnew_batches(id) ON DELETE CASCADE,
+            album_id TEXT NOT NULL,
+            UNIQUE (batch_id, album_id)
+        )",
+        [],
+    )?;
+    conn.execute(
+        "CREATE INDEX idx_whatsnew_batch_albums_batch_id ON whatsnew_batch_albums(batch_id)",
+        [],
+    )?;
+    Ok(())
+}
+
+// =============================================================================
 // Versioned Schema Definition
 // =============================================================================
 
@@ -251,6 +323,7 @@ fn migrate_v4_to_v5(conn: &rusqlite::Connection) -> anyhow::Result<()> {
 /// Version 3: Job audit log table
 /// Version 4: Bug reports table
 /// Version 5: Catalog events table
+/// Version 6: What's New staging and batches
 pub const SERVER_VERSIONED_SCHEMAS: &[VersionedSchema] = &[
     VersionedSchema {
         version: 1,
@@ -298,6 +371,21 @@ pub const SERVER_VERSIONED_SCHEMAS: &[VersionedSchema] = &[
             CATALOG_EVENTS_TABLE_V5,
         ],
         migration: Some(migrate_v4_to_v5),
+    },
+    VersionedSchema {
+        version: 6,
+        tables: &[
+            JOB_RUNS_TABLE_V1,
+            JOB_SCHEDULES_TABLE_V1,
+            SERVER_STATE_TABLE_V2,
+            JOB_AUDIT_LOG_TABLE_V3,
+            BUG_REPORTS_TABLE_V4,
+            CATALOG_EVENTS_TABLE_V5,
+            WHATSNEW_PENDING_ALBUMS_TABLE_V6,
+            WHATSNEW_BATCHES_TABLE_V6,
+            WHATSNEW_BATCH_ALBUMS_TABLE_V6,
+        ],
+        migration: Some(migrate_v5_to_v6),
     },
 ];
 
@@ -682,5 +770,143 @@ mod tests {
             .unwrap();
 
         assert_eq!(seqs, vec![1, 2, 3]);
+    }
+
+    #[test]
+    fn test_v6_schema_creates_successfully() {
+        let conn = Connection::open_in_memory().unwrap();
+        let schema = &SERVER_VERSIONED_SCHEMAS[5];
+        schema.create(&conn).unwrap();
+        schema.validate(&conn).unwrap();
+    }
+
+    #[test]
+    fn test_v6_whatsnew_tables_exist() {
+        let conn = Connection::open_in_memory().unwrap();
+        let schema = &SERVER_VERSIONED_SCHEMAS[5];
+        schema.create(&conn).unwrap();
+
+        // Verify whatsnew_pending_albums exists
+        let pending_exists: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='whatsnew_pending_albums'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(pending_exists, 1);
+
+        // Verify whatsnew_batches exists
+        let batches_exists: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='whatsnew_batches'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(batches_exists, 1);
+
+        // Verify whatsnew_batch_albums exists
+        let batch_albums_exists: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='whatsnew_batch_albums'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(batch_albums_exists, 1);
+    }
+
+    #[test]
+    fn test_v6_whatsnew_index_created() {
+        let conn = Connection::open_in_memory().unwrap();
+        let schema = &SERVER_VERSIONED_SCHEMAS[5];
+        schema.create(&conn).unwrap();
+
+        // Verify batches closed_at index exists
+        let idx_closed_at: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND name='idx_whatsnew_batches_closed_at'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(idx_closed_at, 1);
+    }
+
+    #[test]
+    fn test_migration_v5_to_v6() {
+        let conn = Connection::open_in_memory().unwrap();
+
+        // Create V5 schema
+        let v5_schema = &SERVER_VERSIONED_SCHEMAS[4];
+        v5_schema.create(&conn).unwrap();
+
+        // Run migration to V6
+        if let Some(migrate_fn) = SERVER_VERSIONED_SCHEMAS[5].migration {
+            migrate_fn(&conn).unwrap();
+        }
+
+        // Verify whatsnew tables exist
+        let pending_exists: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='whatsnew_pending_albums'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(pending_exists, 1);
+
+        // Verify V6 schema validates
+        let v6_schema = &SERVER_VERSIONED_SCHEMAS[5];
+        v6_schema.validate(&conn).unwrap();
+    }
+
+    #[test]
+    fn test_whatsnew_tables_basic_operations() {
+        let conn = Connection::open_in_memory().unwrap();
+        let schema = &SERVER_VERSIONED_SCHEMAS[5];
+        schema.create(&conn).unwrap();
+
+        // Insert pending album
+        conn.execute(
+            "INSERT INTO whatsnew_pending_albums (album_id, added_at) VALUES ('album-1', 1700000000)",
+            [],
+        )
+        .unwrap();
+
+        // Create a batch
+        conn.execute(
+            "INSERT INTO whatsnew_batches (id, closed_at) VALUES ('batch-1', 1700000001)",
+            [],
+        )
+        .unwrap();
+
+        // Add album to batch
+        conn.execute(
+            "INSERT INTO whatsnew_batch_albums (batch_id, album_id) VALUES ('batch-1', 'album-2')",
+            [],
+        )
+        .unwrap();
+
+        // Verify data
+        let pending_count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM whatsnew_pending_albums", [], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        assert_eq!(pending_count, 1);
+
+        let batch_count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM whatsnew_batches", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(batch_count, 1);
+
+        let batch_album_count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM whatsnew_batch_albums", [], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        assert_eq!(batch_album_count, 1);
     }
 }
