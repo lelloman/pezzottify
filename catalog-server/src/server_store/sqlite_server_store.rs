@@ -676,8 +676,8 @@ impl ServerStore for SqliteServerStore {
 
     fn get_pending_whatsnew_albums(&self) -> Result<Vec<(String, i64)>> {
         let conn = self.conn.lock().unwrap();
-        let mut stmt =
-            conn.prepare("SELECT album_id, added_at FROM whatsnew_pending_albums ORDER BY added_at")?;
+        let mut stmt = conn
+            .prepare("SELECT album_id, added_at FROM whatsnew_pending_albums ORDER BY added_at")?;
         let albums = stmt
             .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?
             .collect::<rusqlite::Result<Vec<_>>>()?;
@@ -758,9 +758,8 @@ impl ServerStore for SqliteServerStore {
 
     fn get_whatsnew_batch_album_ids(&self, batch_id: &str) -> Result<Vec<String>> {
         let conn = self.conn.lock().unwrap();
-        let mut stmt = conn.prepare(
-            "SELECT album_id FROM whatsnew_batch_albums WHERE batch_id = ?1",
-        )?;
+        let mut stmt =
+            conn.prepare("SELECT album_id FROM whatsnew_batch_albums WHERE batch_id = ?1")?;
         let album_ids = stmt
             .query_map(params![batch_id], |row| row.get(0))?
             .collect::<rusqlite::Result<Vec<_>>>()?;
