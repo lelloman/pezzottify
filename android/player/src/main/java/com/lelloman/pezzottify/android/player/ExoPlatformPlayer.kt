@@ -274,8 +274,6 @@ internal class ExoPlatformPlayer(
     override fun setIsPlaying(isPlaying: Boolean) {
         val controllerReady = isControllerReady()
         logger.debug("setIsPlaying($isPlaying) - current=${mutableIsPlaying.value}, controllerReady=$controllerReady")
-        // Always update our state - this ensures loadPlaylist uses the correct value
-        mutableIsPlaying.value = isPlaying
         if (!controllerReady) {
             logger.info("setIsPlaying($isPlaying) - controller not ready, attempting to reconnect")
             reconnectAndExecute { controller ->
@@ -286,9 +284,10 @@ internal class ExoPlatformPlayer(
         mediaController!!.playWhenReady = isPlaying
     }
 
-    override fun loadPlaylist(tracksUrls: List<String>) {
-        logger.info("loadPlaylist() - ${tracksUrls.size} tracks, sessionToken=${sessionToken != null}")
+    override fun loadPlaylist(tracksUrls: List<String>, playWhenReady: Boolean) {
+        logger.info("loadPlaylist() - ${tracksUrls.size} tracks, playWhenReady=$playWhenReady, sessionToken=${sessionToken != null}")
         pendingTrackIndex = null
+        mutableIsPlaying.value = playWhenReady
         if (sessionToken == null) {
             sessionToken =
                 SessionToken(context, ComponentName(context, PlaybackService::class.java))
@@ -300,32 +299,38 @@ internal class ExoPlatformPlayer(
                     logger.info("MediaController created - isConnected=${mediaController?.isConnected}")
                     mediaController?.addListener(playerListener)
                     updateControllerState()
-                    loadPlaylistWhenMediaControllerIsReady(tracksUrls)
+                    loadPlaylistWhenMediaControllerIsReady(tracksUrls, playWhenReady)
                 },
                 MoreExecutors.directExecutor()
             )
         } else {
-            loadPlaylistWhenMediaControllerIsReady(tracksUrls)
+            loadPlaylistWhenMediaControllerIsReady(tracksUrls, playWhenReady)
         }
     }
 
-    private fun loadPlaylistWhenMediaControllerIsReady(tracksUrls: List<String>) {
+    private fun loadPlaylistWhenMediaControllerIsReady(tracksUrls: List<String>, playWhenReady: Boolean) {
         mediaController?.let {
             it.clearMediaItems()
             tracksUrls.forEach { url ->
                 it.addMediaItem(MediaItem.fromUri(url))
             }
             it.prepare()
-            it.playWhenReady = isPlaying.value
+            it.playWhenReady = playWhenReady
             mutableIsActive.value = true
             updateControllerState()
-            if (isPlaying.value) {
+            if (playWhenReady) {
                 startProgressPolling()
             }
             // Apply pending track index if one was set before playlist was ready
-            pendingTrackIndex?.let { index ->
-                it.seekTo(index, 0)
+            val targetIndex = pendingTrackIndex
+            if (targetIndex != null) {
+                it.seekTo(targetIndex, 0)
                 pendingTrackIndex = null
+                mutableCurrentTrackIndex.value = targetIndex
+            } else {
+                // Emit initial track index - the listener only fires on
+                // EVENT_POSITION_DISCONTINUITY which doesn't happen on first load
+                mutableCurrentTrackIndex.value = it.currentMediaItemIndex
             }
         }
     }
@@ -386,13 +391,18 @@ internal class ExoPlatformPlayer(
 
                 if (controller.isConnected) {
                     // Sync state from the reconnected controller
+                    val hasContent = controller.mediaItemCount > 0
                     mutableIsPlaying.value = controller.playWhenReady
-                    mutableIsActive.value = controller.mediaItemCount > 0
-                    if (controller.playWhenReady) {
+                    mutableIsActive.value = hasContent
+                    if (controller.playWhenReady && hasContent) {
                         startProgressPolling()
                     }
-                    action(controller)
-                    logger.debug("reconnectAndExecute() - action executed successfully")
+                    if (hasContent) {
+                        action(controller)
+                        logger.debug("reconnectAndExecute() - action executed successfully")
+                    } else {
+                        logger.info("reconnectAndExecute() - service has no content, skipping action")
+                    }
                 } else {
                     logger.warn("reconnectAndExecute() - controller built but not connected")
                 }

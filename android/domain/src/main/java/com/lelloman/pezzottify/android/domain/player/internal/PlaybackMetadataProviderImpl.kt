@@ -17,6 +17,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -71,6 +73,16 @@ internal class PlaybackMetadataProviderImpl(
 
                 // Cancel any ongoing metadata load
                 metadataLoadJob?.cancel()
+
+                // Emit loading state immediately so the UI can show the bottom player
+                // with a loading indicator while metadata is being fetched
+                val currentIndex = platformPlayer.currentTrackIndex.value ?: 0
+                mutableQueueState.value = PlaybackQueueState(
+                    tracks = emptyList(),
+                    currentIndex = currentIndex,
+                    loadingState = QueueLoadingState.LOADING,
+                )
+
                 metadataLoadJob = scope.launch {
                     loadMetadataForTracks(tracksIds)
                 }
@@ -91,21 +103,17 @@ internal class PlaybackMetadataProviderImpl(
     }
 
     private suspend fun loadMetadataForTracks(tracksIds: List<String>) {
-        val currentIndex = platformPlayer.currentTrackIndex.value ?: 0
-        logger.debug("Loading metadata for ${tracksIds.size} tracks, currentIndex=$currentIndex")
+        logger.debug("Loading metadata for ${tracksIds.size} tracks")
 
-        // Don't emit empty/loading state during initial load - this can confuse the UI
-        // and cause issues with playback state. Just keep the previous state until
-        // we have the new metadata ready.
+        // Fetch all tracks in parallel
+        val trackResults = tracksIds.map { trackId ->
+            scope.async { trackId to fetchTrack(trackId) }
+        }.awaitAll()
 
-        // Collect all unique album and artist IDs we need to fetch
         val trackDataMap = mutableMapOf<String, Track>()
         val albumIds = mutableSetOf<String>()
         val artistIds = mutableSetOf<String>()
-
-        // Fetch all tracks first
-        for (trackId in tracksIds) {
-            val track = fetchTrack(trackId)
+        for ((trackId, track) in trackResults) {
             if (track != null) {
                 trackDataMap[trackId] = track
                 albumIds.add(track.albumId)
@@ -113,23 +121,20 @@ internal class PlaybackMetadataProviderImpl(
             }
         }
 
-        // Fetch all albums
-        val albumDataMap = mutableMapOf<String, Album>()
-        for (albumId in albumIds) {
-            val album = fetchAlbum(albumId)
-            if (album != null) {
-                albumDataMap[albumId] = album
-            }
+        // Fetch all albums and artists in parallel
+        val albumDeferred = albumIds.map { albumId ->
+            scope.async { albumId to fetchAlbum(albumId) }
+        }
+        val artistDeferred = artistIds.map { artistId ->
+            scope.async { artistId to fetchArtist(artistId) }
         }
 
-        // Fetch all artists
-        val artistDataMap = mutableMapOf<String, Artist>()
-        for (artistId in artistIds) {
-            val artist = fetchArtist(artistId)
-            if (artist != null) {
-                artistDataMap[artistId] = artist
-            }
-        }
+        val albumDataMap = albumDeferred.awaitAll()
+            .filter { it.second != null }
+            .associate { it.first to it.second!! }
+        val artistDataMap = artistDeferred.awaitAll()
+            .filter { it.second != null }
+            .associate { it.first to it.second!! }
 
         // Build metadata for each track
         val baseUrl = configStore.baseUrl.value.trimEnd('/')
