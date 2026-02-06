@@ -64,6 +64,9 @@ internal class PlayerImpl(
             platformPlayer.isActive.collect { isActive ->
                 if (!isActive) {
                     mutablePlaybackPlaylist.value = null
+                    // Reset restoration flag so we can attempt restoration again
+                    // if the service dies while we still have saved state
+                    restorationAttempted = false
                 }
             }
         }
@@ -200,16 +203,12 @@ internal class PlayerImpl(
                 if (loadedAlbum != null) {
                     val tracksIds = loadedAlbum.data.discs.flatMap { it.tracksIds }
 
-                    // Start playback FIRST, before setting playlist state
-                    // This ensures ExoPlayer starts streaming immediately while
-                    // metadata loading happens in the background
-                    platformPlayer.setIsPlaying(true)
                     logger.info("Loading new track list into platform player.")
                     val baseUrl = configStore.baseUrl.value
                     val urls = tracksIds.map { "$baseUrl/v1/content/stream/$it" }
-                    platformPlayer.loadPlaylist(urls)
+                    platformPlayer.loadPlaylist(urls, playWhenReady = true)
 
-                    // Set playlist state AFTER starting playback
+                    // Set playlist state after starting playback
                     // This triggers metadata loading which can be slow
                     mutablePlaybackPlaylist.value = PlaybackPlaylist(
                         context = PlaybackPlaylistContext.Album(albumId),
@@ -258,14 +257,12 @@ internal class PlayerImpl(
                 if (playlist != null && playlist.trackIds.isNotEmpty()) {
                     val tracksIds = playlist.trackIds
 
-                    // Start playback FIRST, before setting playlist state
-                    platformPlayer.setIsPlaying(true)
                     logger.info("Loading user playlist into platform player.")
                     val baseUrl = configStore.baseUrl.value
                     val urls = tracksIds.map { "$baseUrl/v1/content/stream/$it" }
-                    platformPlayer.loadPlaylist(urls)
+                    platformPlayer.loadPlaylist(urls, playWhenReady = true)
 
-                    // Set playlist state AFTER starting playback
+                    // Set playlist state after starting playback
                     mutablePlaybackPlaylist.value = PlaybackPlaylist(
                         context = PlaybackPlaylistContext.UserPlaylist(userPlaylistId, isEdited = false),
                         tracksIds = tracksIds,
@@ -308,13 +305,11 @@ internal class PlayerImpl(
         runOnPlayerThread {
             loadNexPlaylistJob?.cancel()
             loadNexPlaylistJob = runOnPlayerThread {
-                // Start playback FIRST, before setting playlist state
-                platformPlayer.setIsPlaying(true)
                 val baseUrl = configStore.baseUrl.value
                 val url = "$baseUrl/v1/content/stream/$trackId"
-                platformPlayer.loadPlaylist(listOf(url))
+                platformPlayer.loadPlaylist(listOf(url), playWhenReady = true)
 
-                // Set playlist state AFTER starting playback
+                // Set playlist state after starting playback
                 mutablePlaybackPlaylist.value = PlaybackPlaylist(
                     context = PlaybackPlaylistContext.UserMix,
                     tracksIds = listOf(trackId),
@@ -386,10 +381,9 @@ internal class PlayerImpl(
                     context = PlaybackPlaylistContext.UserMix,
                     tracksIds = tracksIds,
                 )
-                platformPlayer.setIsPlaying(true)
                 val baseUrl = configStore.baseUrl.value
                 val urls = tracksIds.map { "$baseUrl/v1/content/stream/$it" }
-                platformPlayer.loadPlaylist(urls)
+                platformPlayer.loadPlaylist(urls, playWhenReady = true)
                 logger.info("Created new UserMix playlist with ${tracksIds.size} tracks")
             }
         }

@@ -240,28 +240,31 @@ class PlaybackService : MediaSessionService() {
         logger.debug("Media session metadata cleared")
     }
 
+    private fun releasePlayerAndSession() {
+        player?.let {
+            it.playWhenReady = false
+            it.release()
+            player = null
+        }
+        mediaSession?.let {
+            it.release()
+            mediaSession = null
+        }
+    }
+
     override fun onDestroy() {
         metadataObserverJob?.cancel()
         artworkLoadJob?.cancel()
         serviceScope.cancel()
         unregisterReceiver(becomingNoisyReceiver)
-        mediaSession?.run {
-            player.release()
-            release()
-            mediaSession = null
-        }
+        releasePlayerAndSession()
         super.onDestroy()
     }
 
     @OptIn(UnstableApi::class)
     override fun onTaskRemoved(rootIntent: Intent?) {
         super.onTaskRemoved(rootIntent)
-        mediaSession?.release()
-        mediaSession = null
-        player?.playWhenReady = false
-        player?.release()
-        player = null
-
+        releasePlayerAndSession()
         playerServiceEventsEmitter.shutdown()
         pauseAllPlayersAndStopSelf()
     }
