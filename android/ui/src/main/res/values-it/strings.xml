@@ -427,9 +427,7 @@
     <string name="my_requests_title">Le mie richieste</string>
     <string name="my_requests_tab_queue">In coda (%1$d)</string>
     <string name="my_requests_tab_completed">Completate</string>
-    <string name="my_requests_limit_today">Oggi</string>
-    <string name="my_requests_limit_in_queue">In coda</string>
-    <string name="my_requests_empty_queue">Nessun elemento in coda</string>
+<string name="my_requests_empty_queue">Nessun elemento in coda</string>
     <string name="my_requests_empty_completed">Ancora nessun download completato</string>
     <string name="my_requests_requested_time">Richiesto %1$s</string>
     <string name="my_requests_queue_position">#%1$d in coda</string>

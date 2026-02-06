@@ -1615,7 +1615,6 @@ class InteractorsModule {
     @Provides
     fun provideMyRequestsScreenInteractor(
         getMyDownloadRequestsUseCase: com.lelloman.pezzottify.android.domain.download.GetMyDownloadRequestsUseCase,
-        getDownloadLimitsUseCase: com.lelloman.pezzottify.android.domain.download.GetDownloadLimitsUseCase,
         downloadStatusRepository: com.lelloman.pezzottify.android.domain.download.DownloadStatusRepository,
     ): com.lelloman.pezzottify.android.ui.screen.main.myrequests.MyRequestsScreenViewModel.Interactor =
         object :
@@ -1660,18 +1659,6 @@ class InteractorsModule {
                             queuePosition = request.queuePosition,
                         )
                     }
-                }
-            }
-
-            override suspend fun getDownloadLimits(): Result<com.lelloman.pezzottify.android.ui.screen.main.myrequests.MyRequestsScreenViewModel.DownloadLimitsData> {
-                val result = getDownloadLimitsUseCase()
-                return result.map { limits ->
-                    com.lelloman.pezzottify.android.ui.screen.main.myrequests.MyRequestsScreenViewModel.DownloadLimitsData(
-                        requestsToday = limits.requestsToday,
-                        maxPerDay = limits.maxPerDay,
-                        inQueue = limits.inQueue,
-                        maxQueue = limits.maxQueue,
-                    )
                 }
             }
 

@@ -427,9 +427,7 @@
     <string name="my_requests_title">My Requests</string>
     <string name="my_requests_tab_queue">Queue (%1$d)</string>
     <string name="my_requests_tab_completed">Completed</string>
-    <string name="my_requests_limit_today">Today</string>
-    <string name="my_requests_limit_in_queue">In Queue</string>
-    <string name="my_requests_empty_queue">No items in queue</string>
+<string name="my_requests_empty_queue">No items in queue</string>
     <string name="my_requests_empty_completed">No completed downloads yet</string>
     <string name="my_requests_requested_time">Requested %1$s</string>
     <string name="my_requests_queue_position">#%1$d in queue</string>

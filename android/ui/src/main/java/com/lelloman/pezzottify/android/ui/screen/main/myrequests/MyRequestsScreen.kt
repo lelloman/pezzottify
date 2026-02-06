@@ -1,8 +1,6 @@
 package com.lelloman.pezzottify.android.ui.screen.main.myrequests
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -50,7 +48,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -118,11 +115,6 @@ fun MyRequestsScreen(
                 .padding(paddingValues),
         ) {
             Column(modifier = Modifier.fillMaxSize()) {
-                // Limits header
-                state.limits?.let { limits ->
-                    LimitsHeader(limits = limits)
-                }
-
                 // Tab row
                 PrimaryTabRow(
                     selectedTabIndex = state.selectedTab.ordinal,
@@ -185,59 +177,6 @@ fun MyRequestsScreen(
                 }
             }
         }
-    }
-}
-
-@Composable
-private fun LimitsHeader(
-    limits: UiRequestLimits,
-    modifier: Modifier = Modifier,
-) {
-    Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .background(MaterialTheme.colorScheme.surfaceVariant)
-            .padding(horizontal = Spacing.Medium, vertical = Spacing.Small),
-        horizontalArrangement = Arrangement.SpaceEvenly,
-    ) {
-        LimitItem(
-            label = stringResource(R.string.my_requests_limit_today),
-            current = limits.requestsToday,
-            max = limits.maxPerDay,
-            isAtLimit = limits.isAtDailyLimit,
-        )
-        LimitItem(
-            label = stringResource(R.string.my_requests_limit_in_queue),
-            current = limits.inQueue,
-            max = limits.maxQueue,
-            isAtLimit = limits.isAtQueueLimit,
-        )
-    }
-}
-
-@Composable
-private fun LimitItem(
-    label: String,
-    current: Int,
-    max: Int,
-    isAtLimit: Boolean,
-    modifier: Modifier = Modifier,
-) {
-    Column(
-        modifier = modifier,
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        Text(
-            text = label,
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        Text(
-            text = "$current / $max",
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold,
-            color = if (isAtLimit) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
-        )
     }
 }
 
