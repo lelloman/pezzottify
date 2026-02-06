@@ -71,6 +71,7 @@ class PlaybackService : MediaSessionService() {
     private var artworkLoadJob: Job? = null
     private var currentArtworkUrl: String? = null
     private var currentArtworkTrackId: String? = null
+    private var currentArtworkBytes: ByteArray? = null
 
     private val authToken get() = (authStore.getAuthState().value as? AuthState.LoggedIn)?.authToken.orEmpty()
 
@@ -149,20 +150,27 @@ class PlaybackService : MediaSessionService() {
     private fun updateMediaSessionMetadata(track: TrackMetadata) {
         logger.info("Updating media session metadata: trackId=${track.trackId}, name=${track.trackName}")
 
-        val metadata = MediaMetadata.Builder()
+        val metadataBuilder = MediaMetadata.Builder()
             .setTitle(track.trackName)
             .setArtist(track.artistNames.joinToString(", "))
             .setAlbumTitle(track.albumName)
-            .build()
+
+        val artworkUrl = track.artworkUrl
+
+        // Reuse cached artwork if URL hasn't changed
+        val cachedBytes = currentArtworkBytes
+        if (artworkUrl != null && artworkUrl == currentArtworkUrl && cachedBytes != null) {
+            metadataBuilder.setArtworkData(cachedBytes, MediaMetadata.PICTURE_TYPE_FRONT_COVER)
+        }
 
         // Update the current MediaItem with new metadata
-        updateCurrentMediaItemMetadata(metadata)
+        updateCurrentMediaItemMetadata(metadataBuilder.build())
 
         // Load artwork asynchronously if URL changed
-        val artworkUrl = track.artworkUrl
         if (artworkUrl != null && artworkUrl != currentArtworkUrl) {
             currentArtworkUrl = artworkUrl
             currentArtworkTrackId = track.trackId
+            currentArtworkBytes = null
             loadArtworkAsync(artworkUrl, track)
         }
     }
@@ -213,11 +221,14 @@ class PlaybackService : MediaSessionService() {
 
     private fun updateMediaSessionWithArtwork(track: TrackMetadata, artwork: Bitmap) {
         serviceScope.launch(Dispatchers.Main) {
+            val artworkBytes = bitmapToByteArray(artwork)
+            currentArtworkBytes = artworkBytes
+
             val metadata = MediaMetadata.Builder()
                 .setTitle(track.trackName)
                 .setArtist(track.artistNames.joinToString(", "))
                 .setAlbumTitle(track.albumName)
-                .setArtworkData(bitmapToByteArray(artwork), MediaMetadata.PICTURE_TYPE_FRONT_COVER)
+                .setArtworkData(artworkBytes, MediaMetadata.PICTURE_TYPE_FRONT_COVER)
                 .build()
 
             updateCurrentMediaItemMetadata(metadata)
@@ -234,6 +245,7 @@ class PlaybackService : MediaSessionService() {
     private fun clearMediaSessionMetadata() {
         currentArtworkUrl = null
         currentArtworkTrackId = null
+        currentArtworkBytes = null
         artworkLoadJob?.cancel()
         // Clear metadata by updating with empty metadata
         updateCurrentMediaItemMetadata(MediaMetadata.EMPTY)
