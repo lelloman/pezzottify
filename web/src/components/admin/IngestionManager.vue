@@ -185,6 +185,58 @@
           <div class="reviewHeader">
             <span class="reviewQuestion">{{ item.question }}</span>
           </div>
+
+          <!-- Album comparison table -->
+          <template v-if="reviewAlbumData[item.job_id]">
+            <div class="reviewAlbumHeader">
+              <div class="reviewAlbumInfo">
+                <span class="reviewAlbumArtist">{{ reviewAlbumData[item.job_id].artistName }}</span>
+                <span class="reviewAlbumName">{{ reviewAlbumData[item.job_id].albumName }}</span>
+              </div>
+              <div class="reviewAlbumScores">
+                <span
+                  class="scoreBadge"
+                  :class="fpScoreClass(reviewAlbumData[item.job_id].fpScore)"
+                >FP {{ reviewAlbumData[item.job_id].fpScore ?? '?' }}%</span>
+                <span
+                  v-if="reviewAlbumData[item.job_id].metaScore != null"
+                  class="scoreBadge scoreMeta"
+                >Meta {{ reviewAlbumData[item.job_id].metaScore }}%</span>
+                <span class="reviewTrackCount">
+                  {{ reviewAlbumData[item.job_id].catalogTracks.length }} catalog /
+                  {{ reviewAlbumData[item.job_id].uploadedFiles.length }} uploaded
+                </span>
+              </div>
+            </div>
+            <div class="trackTableWrapper">
+              <table class="trackTable">
+                <thead>
+                  <tr>
+                    <th class="colNum">#</th>
+                    <th class="colName">Catalog Track</th>
+                    <th class="colDur">Duration</th>
+                    <th class="colDelta">Delta</th>
+                    <th class="colDur">Duration</th>
+                    <th class="colName">Uploaded File</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="(row, i) in buildComparisonRows(reviewAlbumData[item.job_id])" :key="i">
+                    <td class="colNum">{{ row.number }}</td>
+                    <td class="colName" :title="row.catalogName">{{ row.catalogName || '—' }}</td>
+                    <td class="colDur mono">{{ row.catalogDuration }}</td>
+                    <td class="colDelta mono" :class="row.deltaClass">{{ row.delta }}</td>
+                    <td class="colDur mono">{{ row.uploadedDuration }}</td>
+                    <td class="colName" :title="row.uploadedName">{{ row.uploadedName || '—' }}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </template>
+          <div v-else-if="reviewAlbumLoading[item.job_id]" class="reviewAlbumLoading">
+            Loading album comparison...
+          </div>
+
           <div class="reviewOptions">
             <button
               v-for="option in parseOptions(item.options)"
@@ -249,6 +301,8 @@ const myJobs = ref([]);
 const reviewItems = ref([]);
 const processingJobs = reactive({});
 const resolvingReviews = reactive({});
+const reviewAlbumData = reactive({});
+const reviewAlbumLoading = reactive({});
 
 const uploadState = reactive({
   uploading: false,
@@ -616,6 +670,11 @@ const loadData = async () => {
 
     myJobs.value = Array.isArray(jobsResult) ? jobsResult : [];
     reviewItems.value = reviewResult?.items || [];
+
+    // Fetch album comparison data for review items (non-blocking)
+    if (reviewItems.value.length > 0) {
+      loadReviewAlbumData(reviewItems.value);
+    }
   } catch (error) {
     console.error("Failed to load ingestion data:", error);
   }
@@ -668,6 +727,128 @@ const resolveReview = async (jobId, selectedOption) => {
     console.error("Failed to resolve review:", error);
   }
   resolvingReviews[jobId] = false;
+};
+
+// Review album comparison
+const loadReviewAlbumData = async (items) => {
+  for (const item of items) {
+    if (reviewAlbumData[item.job_id] || reviewAlbumLoading[item.job_id]) continue;
+
+    // Parse options to find album candidate
+    const options = parseOptions(item.options);
+    const albumOption = options.find((o) => o.id.startsWith("album:"));
+    if (!albumOption) continue;
+
+    const albumId = albumOption.id.substring(6);
+    // Parse scores from label: "Artist - Album (fingerprint XX%, metadata YY%)"
+    const fpMatch = albumOption.label.match(/fingerprint\s+(\d+)%/);
+    const metaMatch = albumOption.label.match(/metadata\s+(\d+)%/);
+
+    reviewAlbumLoading[item.job_id] = true;
+
+    // Fetch job details (for uploaded files) and resolved album (for catalog tracks) in parallel
+    const [jobDetails, resolvedAlbum] = await Promise.all([
+      remoteStore.fetchIngestionJobDetails(item.job_id),
+      remoteStore.fetchResolvedAlbum(albumId),
+    ]);
+
+    if (resolvedAlbum && jobDetails?.files) {
+      // Flatten catalog tracks sorted by disc/track number
+      const catalogTracks = [];
+      for (const disc of resolvedAlbum.discs || []) {
+        for (const track of disc.tracks || []) {
+          catalogTracks.push({
+            discNumber: disc.number,
+            trackNumber: track.track_number,
+            name: track.name,
+            durationMs: track.duration_ms,
+          });
+        }
+      }
+      catalogTracks.sort(
+        (a, b) => a.discNumber - b.discNumber || a.trackNumber - b.trackNumber,
+      );
+
+      // Sort uploaded files by disc/track tags then filename
+      const uploadedFiles = [...jobDetails.files].sort((a, b) => {
+        const dA = a.tag_disc_num || 1;
+        const dB = b.tag_disc_num || 1;
+        if (dA !== dB) return dA - dB;
+        const tA = a.tag_track_num || 999;
+        const tB = b.tag_track_num || 999;
+        if (tA !== tB) return tA - tB;
+        return (a.filename || "").localeCompare(b.filename || "");
+      });
+
+      reviewAlbumData[item.job_id] = {
+        albumName:
+          resolvedAlbum.album?.name || "Unknown Album",
+        artistName:
+          resolvedAlbum.artists?.map((a) => a.name).join(", ") ||
+          "Unknown Artist",
+        fpScore: fpMatch ? parseInt(fpMatch[1]) : null,
+        metaScore: metaMatch ? parseInt(metaMatch[1]) : null,
+        catalogTracks,
+        uploadedFiles,
+      };
+    }
+
+    reviewAlbumLoading[item.job_id] = false;
+  }
+};
+
+const buildComparisonRows = (data) => {
+  if (!data) return [];
+  const rows = [];
+  const maxLen = Math.max(data.catalogTracks.length, data.uploadedFiles.length);
+  for (let i = 0; i < maxLen; i++) {
+    const catalog = data.catalogTracks[i];
+    const uploaded = data.uploadedFiles[i];
+
+    const catalogMs = catalog?.durationMs;
+    const uploadedMs = uploaded?.duration_ms;
+
+    let deltaClass = "";
+    let deltaStr = "—";
+    if (catalogMs != null && uploadedMs != null) {
+      const deltaMs = Math.abs(uploadedMs - catalogMs);
+      const deltaSec = deltaMs / 1000;
+      if (deltaSec < 2) deltaClass = "deltaOk";
+      else if (deltaSec < 5) deltaClass = "deltaWarn";
+      else deltaClass = "deltaBad";
+      deltaStr = deltaSec < 1 ? `${deltaMs}ms` : `${deltaSec.toFixed(1)}s`;
+    }
+
+    rows.push({
+      number: catalog
+        ? `${catalog.discNumber > 1 ? catalog.discNumber + "." : ""}${catalog.trackNumber}`
+        : String(i + 1),
+      catalogName: catalog?.name || null,
+      catalogDuration: catalogMs != null ? formatDurationMs(catalogMs) : "—",
+      uploadedName: uploaded
+        ? uploaded.tag_title || uploaded.filename
+        : null,
+      uploadedDuration:
+        uploadedMs != null ? formatDurationMs(uploadedMs) : "—",
+      delta: deltaStr,
+      deltaClass,
+    });
+  }
+  return rows;
+};
+
+const formatDurationMs = (ms) => {
+  const totalSec = Math.round(ms / 1000);
+  const min = Math.floor(totalSec / 60);
+  const sec = totalSec % 60;
+  return `${min}:${sec.toString().padStart(2, "0")}`;
+};
+
+const fpScoreClass = (score) => {
+  if (score == null) return "";
+  if (score >= 95) return "scoreHigh";
+  if (score >= 80) return "scoreMedium";
+  return "scoreLow";
 };
 
 // Formatting
@@ -1179,6 +1360,152 @@ onUnmounted(() => {
   display: flex;
   gap: var(--spacing-3);
   font-size: var(--text-xs);
+}
+
+/* Review Album Comparison */
+.reviewAlbumHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--spacing-3);
+  background-color: var(--bg-highlight);
+  border-radius: var(--radius-md);
+  margin-bottom: var(--spacing-2);
+  gap: var(--spacing-3);
+}
+
+.reviewAlbumInfo {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.reviewAlbumArtist {
+  font-size: var(--text-xs);
+  color: var(--text-subdued);
+}
+
+.reviewAlbumName {
+  font-size: var(--text-sm);
+  font-weight: var(--font-semibold);
+  color: var(--text-base);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.reviewAlbumScores {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-2);
+  flex-shrink: 0;
+}
+
+.scoreBadge {
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  font-size: 11px;
+  font-weight: var(--font-semibold);
+}
+
+.scoreBadge.scoreHigh {
+  background-color: rgba(34, 197, 94, 0.2);
+  color: #22c55e;
+}
+
+.scoreBadge.scoreMedium {
+  background-color: rgba(249, 115, 22, 0.2);
+  color: #f97316;
+}
+
+.scoreBadge.scoreLow {
+  background-color: rgba(220, 38, 38, 0.2);
+  color: #dc2626;
+}
+
+.scoreBadge.scoreMeta {
+  background-color: rgba(59, 130, 246, 0.2);
+  color: #3b82f6;
+}
+
+.reviewTrackCount {
+  font-size: 11px;
+  color: var(--text-subdued);
+}
+
+.trackTableWrapper {
+  overflow-x: auto;
+  margin-bottom: var(--spacing-3);
+  border: 1px solid var(--border-subdued);
+  border-radius: var(--radius-md);
+}
+
+.trackTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-xs);
+}
+
+.trackTable th {
+  padding: var(--spacing-2);
+  text-align: left;
+  font-weight: var(--font-medium);
+  font-size: 11px;
+  color: var(--text-subdued);
+  border-bottom: 1px solid var(--border-subdued);
+  background-color: var(--bg-elevated-base);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.trackTable td {
+  padding: 4px var(--spacing-2);
+  border-bottom: 1px solid var(--bg-highlight);
+  color: var(--text-base);
+}
+
+.trackTable tr:last-child td {
+  border-bottom: none;
+}
+
+.colNum {
+  width: 32px;
+  text-align: center;
+  color: var(--text-subdued);
+}
+
+.colName {
+  max-width: 180px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.colDur {
+  width: 52px;
+  text-align: right;
+}
+
+.colDelta {
+  width: 56px;
+  text-align: center;
+  font-weight: var(--font-medium);
+}
+
+.mono {
+  font-family: monospace;
+}
+
+.deltaOk { color: #22c55e; }
+.deltaWarn { color: #f97316; }
+.deltaBad { color: #dc2626; }
+
+.reviewAlbumLoading {
+  padding: var(--spacing-3);
+  text-align: center;
+  color: var(--text-subdued);
+  font-size: var(--text-xs);
+  margin-bottom: var(--spacing-2);
 }
 
 /* Refresh Button */
