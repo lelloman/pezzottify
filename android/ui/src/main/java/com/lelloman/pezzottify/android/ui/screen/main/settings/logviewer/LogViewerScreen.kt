@@ -274,7 +274,7 @@ private fun LogViewerScreenInternal(
                         val maxLineLength = remember(filteredLines) {
                             filteredLines.maxOfOrNull { it.raw.length } ?: 0
                         }
-                        val estimatedWidth = (maxLineLength * 6.5).dp + 16.dp
+                        val estimatedWidth = ((maxLineLength * 6.5).coerceAtMost(50_000.0)).dp + 16.dp
 
                         SelectionContainer {
                             Box(
