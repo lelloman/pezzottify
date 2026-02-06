@@ -6,7 +6,6 @@ data class MyRequestsScreenState(
     val requests: List<UiDownloadRequest>? = null,
     val isLoading: Boolean = true,
     @StringRes val errorRes: Int? = null,
-    val limits: UiRequestLimits? = null,
     val selectedTab: MyRequestsTab = MyRequestsTab.Queue,
     val hasMoreCompleted: Boolean = true,
     val isLoadingMore: Boolean = false,
@@ -42,16 +41,6 @@ data class RequestProgress(
     val total: Int,
 ) {
     val percent: Float get() = if (total > 0) current.toFloat() / total else 0f
-}
-
-data class UiRequestLimits(
-    val requestsToday: Int,
-    val maxPerDay: Int,
-    val inQueue: Int,
-    val maxQueue: Int,
-) {
-    val isAtDailyLimit: Boolean get() = requestsToday >= maxPerDay
-    val isAtQueueLimit: Boolean get() = inQueue >= maxQueue
 }
 
 /**

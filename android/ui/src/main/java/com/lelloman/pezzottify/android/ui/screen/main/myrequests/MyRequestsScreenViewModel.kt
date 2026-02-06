@@ -109,19 +109,6 @@ class MyRequestsScreenViewModel(
         viewModelScope.launch(coroutineContext) {
             mutableState.value = mutableState.value.copy(isLoading = true, errorRes = null)
 
-            // Load limits
-            val limitsResult = interactor.getDownloadLimits()
-            limitsResult.getOrNull()?.let { limits ->
-                mutableState.value = mutableState.value.copy(
-                    limits = UiRequestLimits(
-                        requestsToday = limits.requestsToday,
-                        maxPerDay = limits.maxPerDay,
-                        inQueue = limits.inQueue,
-                        maxQueue = limits.maxQueue,
-                    )
-                )
-            }
-
             // Load requests (first page)
             val requestsResult = interactor.getMyRequests(PAGE_SIZE, 0)
             mutableState.value = if (requestsResult.isSuccess) {
@@ -181,20 +168,12 @@ class MyRequestsScreenViewModel(
 
     interface Interactor {
         suspend fun getMyRequests(limit: Int, offset: Int): Result<List<UiDownloadRequest>>
-        suspend fun getDownloadLimits(): Result<DownloadLimitsData>
         fun observeUpdates(): Flow<UiDownloadStatusUpdate>
     }
 
     companion object {
         const val PAGE_SIZE = 50
     }
-
-    data class DownloadLimitsData(
-        val requestsToday: Int,
-        val maxPerDay: Int,
-        val inQueue: Int,
-        val maxQueue: Int,
-    )
 }
 
 sealed class MyRequestsScreenEvent {
