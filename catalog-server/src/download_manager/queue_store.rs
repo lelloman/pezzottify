@@ -216,42 +216,6 @@ pub trait DownloadQueueStore: Send + Sync {
 
     /// Clean up old audit entries. Returns number of entries deleted.
     fn cleanup_old_audit_entries(&self, older_than: i64) -> Result<usize>;
-
-    // === Ticket Mapping (Quentin Torrentino Integration) ===
-
-    /// Create a mapping between a queue item and a QT ticket.
-    fn create_ticket_mapping(
-        &self,
-        queue_item_id: &str,
-        ticket_id: &str,
-        album_id: &str,
-    ) -> Result<()>;
-
-    /// Get the ticket ID for a queue item.
-    fn get_ticket_for_queue_item(&self, queue_item_id: &str) -> Result<Option<String>>;
-
-    /// Get the queue item ID for a ticket.
-    fn get_queue_item_for_ticket(&self, ticket_id: &str) -> Result<Option<String>>;
-
-    /// Update the state of a ticket mapping.
-    fn update_ticket_state(&self, ticket_id: &str, state: &str) -> Result<()>;
-
-    /// Get all active (non-terminal) ticket mappings.
-    fn get_active_tickets(&self) -> Result<Vec<TicketMappingRow>>;
-
-    /// Delete a ticket mapping.
-    fn delete_ticket_mapping(&self, ticket_id: &str) -> Result<bool>;
-}
-
-/// Row from the ticket_mapping table.
-#[derive(Debug, Clone)]
-pub struct TicketMappingRow {
-    pub queue_item_id: String,
-    pub ticket_id: String,
-    pub album_id: String,
-    pub ticket_state: String,
-    pub created_at: i64,
-    pub updated_at: i64,
 }
 
 /// SQLite-backed download queue store.
@@ -1747,100 +1711,6 @@ impl DownloadQueueStore for SqliteDownloadQueueStore {
 
         Ok(rows_deleted)
     }
-
-    // === Ticket Mapping (Quentin Torrentino Integration) ===
-
-    fn create_ticket_mapping(
-        &self,
-        queue_item_id: &str,
-        ticket_id: &str,
-        album_id: &str,
-    ) -> Result<()> {
-        let conn = self.conn.lock().unwrap();
-        let now = Self::now();
-
-        conn.execute(
-            r#"INSERT INTO ticket_mapping (queue_item_id, ticket_id, album_id, ticket_state, created_at, updated_at)
-               VALUES (?1, ?2, ?3, 'PENDING', ?4, ?4)"#,
-            rusqlite::params![queue_item_id, ticket_id, album_id, now],
-        )?;
-
-        Ok(())
-    }
-
-    fn get_ticket_for_queue_item(&self, queue_item_id: &str) -> Result<Option<String>> {
-        let conn = self.conn.lock().unwrap();
-        let ticket_id = conn
-            .query_row(
-                "SELECT ticket_id FROM ticket_mapping WHERE queue_item_id = ?1",
-                [queue_item_id],
-                |row| row.get(0),
-            )
-            .optional()?;
-
-        Ok(ticket_id)
-    }
-
-    fn get_queue_item_for_ticket(&self, ticket_id: &str) -> Result<Option<String>> {
-        let conn = self.conn.lock().unwrap();
-        let queue_item_id = conn
-            .query_row(
-                "SELECT queue_item_id FROM ticket_mapping WHERE ticket_id = ?1",
-                [ticket_id],
-                |row| row.get(0),
-            )
-            .optional()?;
-
-        Ok(queue_item_id)
-    }
-
-    fn update_ticket_state(&self, ticket_id: &str, state: &str) -> Result<()> {
-        let conn = self.conn.lock().unwrap();
-        let now = Self::now();
-
-        conn.execute(
-            "UPDATE ticket_mapping SET ticket_state = ?1, updated_at = ?2 WHERE ticket_id = ?3",
-            rusqlite::params![state, now, ticket_id],
-        )?;
-
-        Ok(())
-    }
-
-    fn get_active_tickets(&self) -> Result<Vec<TicketMappingRow>> {
-        let conn = self.conn.lock().unwrap();
-        let mut stmt = conn.prepare(
-            r#"SELECT queue_item_id, ticket_id, album_id, ticket_state, created_at, updated_at
-               FROM ticket_mapping
-               WHERE ticket_state NOT IN ('COMPLETED', 'FAILED', 'CANCELLED')
-               ORDER BY created_at ASC"#,
-        )?;
-
-        let rows = stmt
-            .query_map([], |row| {
-                Ok(TicketMappingRow {
-                    queue_item_id: row.get("queue_item_id")?,
-                    ticket_id: row.get("ticket_id")?,
-                    album_id: row.get("album_id")?,
-                    ticket_state: row.get("ticket_state")?,
-                    created_at: row.get("created_at")?,
-                    updated_at: row.get("updated_at")?,
-                })
-            })?
-            .collect::<rusqlite::Result<Vec<_>>>()?;
-
-        Ok(rows)
-    }
-
-    fn delete_ticket_mapping(&self, ticket_id: &str) -> Result<bool> {
-        let conn = self.conn.lock().unwrap();
-
-        let rows_deleted = conn.execute(
-            "DELETE FROM ticket_mapping WHERE ticket_id = ?1",
-            [ticket_id],
-        )?;
-
-        Ok(rows_deleted > 0)
-    }
 }
 
 #[cfg(test)]
@@ -1912,8 +1782,8 @@ mod tests {
             )
             .unwrap();
 
-        // 5 tables should be created (4 original + ticket_mapping)
-        assert_eq!(count, 5);
+        // 4 tables should be created (ticket_mapping was dropped in v2)
+        assert_eq!(count, 4);
     }
 
     #[test]
@@ -1937,8 +1807,8 @@ mod tests {
             .query_row("PRAGMA user_version;", [], |row| row.get(0))
             .unwrap();
 
-        // Version should be BASE_DB_VERSION + schema version (1 after ticket_mapping added)
-        let expected_version = BASE_DB_VERSION + 1;
+        // Version should be BASE_DB_VERSION + latest schema version (2)
+        let expected_version = BASE_DB_VERSION + 2;
         assert_eq!(version as usize, expected_version);
     }
 
@@ -4497,195 +4367,5 @@ mod tests {
             .unwrap();
         assert!(result.entries.is_empty());
         assert_eq!(result.total_albums, 0);
-    }
-
-    // === Ticket Mapping Tests ===
-
-    #[test]
-    fn test_create_ticket_mapping() {
-        let store = SqliteDownloadQueueStore::in_memory().unwrap();
-
-        // Create a queue item first
-        let item = QueueItem::new(
-            "queue-item-1".to_string(),
-            DownloadContentType::TrackAudio,
-            "track-1".to_string(),
-            QueuePriority::User,
-            RequestSource::User,
-            5,
-        );
-        store.enqueue(item).unwrap();
-
-        // Create ticket mapping
-        store
-            .create_ticket_mapping("queue-item-1", "ticket-abc123", "album-xyz")
-            .unwrap();
-
-        // Verify we can retrieve it
-        let ticket_id = store
-            .get_ticket_for_queue_item("queue-item-1")
-            .unwrap()
-            .unwrap();
-        assert_eq!(ticket_id, "ticket-abc123");
-    }
-
-    #[test]
-    fn test_get_queue_item_for_ticket() {
-        let store = SqliteDownloadQueueStore::in_memory().unwrap();
-
-        let item = QueueItem::new(
-            "queue-item-1".to_string(),
-            DownloadContentType::TrackAudio,
-            "track-1".to_string(),
-            QueuePriority::User,
-            RequestSource::User,
-            5,
-        );
-        store.enqueue(item).unwrap();
-
-        store
-            .create_ticket_mapping("queue-item-1", "ticket-abc123", "album-xyz")
-            .unwrap();
-
-        // Lookup by ticket ID
-        let queue_item_id = store
-            .get_queue_item_for_ticket("ticket-abc123")
-            .unwrap()
-            .unwrap();
-        assert_eq!(queue_item_id, "queue-item-1");
-
-        // Non-existent ticket returns None
-        let result = store.get_queue_item_for_ticket("nonexistent").unwrap();
-        assert!(result.is_none());
-    }
-
-    #[test]
-    fn test_update_ticket_state() {
-        let store = SqliteDownloadQueueStore::in_memory().unwrap();
-
-        let item = QueueItem::new(
-            "queue-item-1".to_string(),
-            DownloadContentType::TrackAudio,
-            "track-1".to_string(),
-            QueuePriority::User,
-            RequestSource::User,
-            5,
-        );
-        store.enqueue(item).unwrap();
-
-        store
-            .create_ticket_mapping("queue-item-1", "ticket-abc123", "album-xyz")
-            .unwrap();
-
-        // Update state
-        store
-            .update_ticket_state("ticket-abc123", "DOWNLOADING")
-            .unwrap();
-
-        // Verify via get_active_tickets
-        let active = store.get_active_tickets().unwrap();
-        assert_eq!(active.len(), 1);
-        assert_eq!(active[0].ticket_state, "DOWNLOADING");
-    }
-
-    #[test]
-    fn test_get_active_tickets_excludes_terminal() {
-        let store = SqliteDownloadQueueStore::in_memory().unwrap();
-
-        // Create multiple queue items and ticket mappings
-        for i in 1..=4 {
-            let item = QueueItem::new(
-                format!("queue-item-{}", i),
-                DownloadContentType::TrackAudio,
-                format!("track-{}", i),
-                QueuePriority::User,
-                RequestSource::User,
-                5,
-            );
-            store.enqueue(item).unwrap();
-            store
-                .create_ticket_mapping(
-                    &format!("queue-item-{}", i),
-                    &format!("ticket-{}", i),
-                    &format!("album-{}", i),
-                )
-                .unwrap();
-        }
-
-        // Set different states
-        store.update_ticket_state("ticket-1", "PENDING").unwrap();
-        store
-            .update_ticket_state("ticket-2", "DOWNLOADING")
-            .unwrap();
-        store.update_ticket_state("ticket-3", "COMPLETED").unwrap();
-        store.update_ticket_state("ticket-4", "FAILED").unwrap();
-
-        // Only non-terminal tickets should be returned
-        let active = store.get_active_tickets().unwrap();
-        assert_eq!(active.len(), 2);
-
-        let ticket_ids: Vec<&str> = active.iter().map(|t| t.ticket_id.as_str()).collect();
-        assert!(ticket_ids.contains(&"ticket-1"));
-        assert!(ticket_ids.contains(&"ticket-2"));
-        assert!(!ticket_ids.contains(&"ticket-3")); // COMPLETED
-        assert!(!ticket_ids.contains(&"ticket-4")); // FAILED
-    }
-
-    #[test]
-    fn test_delete_ticket_mapping() {
-        let store = SqliteDownloadQueueStore::in_memory().unwrap();
-
-        let item = QueueItem::new(
-            "queue-item-1".to_string(),
-            DownloadContentType::TrackAudio,
-            "track-1".to_string(),
-            QueuePriority::User,
-            RequestSource::User,
-            5,
-        );
-        store.enqueue(item).unwrap();
-
-        store
-            .create_ticket_mapping("queue-item-1", "ticket-abc123", "album-xyz")
-            .unwrap();
-
-        // Delete the mapping
-        let deleted = store.delete_ticket_mapping("ticket-abc123").unwrap();
-        assert!(deleted);
-
-        // Verify it's gone
-        let result = store.get_ticket_for_queue_item("queue-item-1").unwrap();
-        assert!(result.is_none());
-
-        // Deleting again returns false
-        let deleted_again = store.delete_ticket_mapping("ticket-abc123").unwrap();
-        assert!(!deleted_again);
-    }
-
-    #[test]
-    fn test_ticket_mapping_unique_ticket_id() {
-        let store = SqliteDownloadQueueStore::in_memory().unwrap();
-
-        // Create two queue items
-        for i in 1..=2 {
-            let item = QueueItem::new(
-                format!("queue-item-{}", i),
-                DownloadContentType::TrackAudio,
-                format!("track-{}", i),
-                QueuePriority::User,
-                RequestSource::User,
-                5,
-            );
-            store.enqueue(item).unwrap();
-        }
-
-        // First mapping succeeds
-        store
-            .create_ticket_mapping("queue-item-1", "ticket-same", "album-1")
-            .unwrap();
-
-        // Second mapping with same ticket_id should fail (UNIQUE constraint)
-        let result = store.create_ticket_mapping("queue-item-2", "ticket-same", "album-2");
-        assert!(result.is_err());
     }
 }

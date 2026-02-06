@@ -138,46 +138,6 @@ const DOWNLOAD_AUDIT_LOG_TABLE_V1: Table = Table {
     unique_constraints: &[],
 };
 
-// =============================================================================
-// Ticket Mapping Table - Version 1 (Quentin Torrentino integration)
-// =============================================================================
-
-/// Maps local queue items to Quentin Torrentino tickets.
-/// Added in schema version 1 for torrent-based downloads.
-const TICKET_MAPPING_TABLE_V1: Table = Table {
-    name: "ticket_mapping",
-    columns: &[
-        // Local queue item ID (references download_queue.id)
-        sqlite_column!("queue_item_id", &SqlType::Text, is_primary_key = true),
-        // Quentin Torrentino ticket ID
-        sqlite_column!(
-            "ticket_id",
-            &SqlType::Text,
-            non_null = true,
-            is_unique = true
-        ),
-        // Album ID this ticket is for (for grouping related tracks)
-        sqlite_column!("album_id", &SqlType::Text, non_null = true),
-        // Current ticket state (from QT: PENDING, SEARCHING, DOWNLOADING, etc.)
-        sqlite_column!(
-            "ticket_state",
-            &SqlType::Text,
-            non_null = true,
-            default_value = Some("'PENDING'")
-        ),
-        // When the ticket was created
-        sqlite_column!("created_at", &SqlType::Integer, non_null = true),
-        // When the ticket state was last updated
-        sqlite_column!("updated_at", &SqlType::Integer, non_null = true),
-    ],
-    indices: &[
-        ("idx_ticket_mapping_ticket_id", "ticket_id"),
-        ("idx_ticket_mapping_album", "album_id"),
-        ("idx_ticket_mapping_state", "ticket_state"),
-    ],
-    unique_constraints: &[],
-};
-
 pub const DOWNLOAD_QUEUE_VERSIONED_SCHEMAS: &[VersionedSchema] = &[
     // Version 0: Initial schema
     VersionedSchema {
@@ -190,11 +150,20 @@ pub const DOWNLOAD_QUEUE_VERSIONED_SCHEMAS: &[VersionedSchema] = &[
         ],
         migration: None,
     },
-    // Version 1: Add ticket_mapping table for Quentin Torrentino integration
+    // Version 1: Add ticket_mapping table (legacy, now removed in v2)
     VersionedSchema {
         version: 1,
-        tables: &[TICKET_MAPPING_TABLE_V1],
+        tables: &[],
         migration: None,
+    },
+    // Version 2: Drop ticket_mapping table (QT integration removed)
+    VersionedSchema {
+        version: 2,
+        tables: &[],
+        migration: Some(|conn| {
+            conn.execute("DROP TABLE IF EXISTS ticket_mapping", [])?;
+            Ok(())
+        }),
     },
 ];
 

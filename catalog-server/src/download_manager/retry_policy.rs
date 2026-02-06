@@ -78,29 +78,16 @@ mod tests {
     fn make_default_config() -> DownloadManagerSettings {
         DownloadManagerSettings {
             enabled: true,
-            qt_base_url: None,
-            qt_ws_url: None,
-            qt_auth_token: None,
             max_albums_per_hour: 10,
             max_albums_per_day: 60,
             user_max_requests_per_day: 100,
             user_max_queue_size: 200,
-            process_interval_secs: 5,
             stale_in_progress_threshold_secs: 3600,
             max_retries: 8,
             initial_backoff_secs: 60,
             max_backoff_secs: 86400,
             backoff_multiplier: 2.5,
             audit_log_retention_days: 90,
-            throttle_enabled: true,
-            throttle_max_mb_per_minute: 20,
-            throttle_max_mb_per_hour: 1500,
-            corruption_window_size: 4,
-            corruption_failure_threshold: 2,
-            corruption_base_cooldown_secs: 600,
-            corruption_max_cooldown_secs: 7200,
-            corruption_cooldown_multiplier: 2.0,
-            corruption_successes_to_deescalate: 10,
         }
     }
 

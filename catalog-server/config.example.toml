@@ -21,15 +21,9 @@ event_retention_days = 30
 prune_interval_hours = 24
 
 # Download Manager settings
-# Enables queue-based content acquisition via Quentin Torrentino.
-# Requires qt_base_url and qt_ws_url to be set.
+# Enables passive download queue. Users submit requests, an external script
+# picks them up and fulfills them via the ingestion system.
 [download_manager]
-# Quentin Torrentino HTTP base URL (e.g., "http://qt-server:8080")
-# qt_base_url = "http://quentin-torrentino:8080"
-# Quentin Torrentino WebSocket URL (e.g., "ws://qt-server:8080/ws")
-# qt_ws_url = "ws://quentin-torrentino:8080/ws"
-# Quentin Torrentino auth token (optional, for authenticated QT instances)
-# qt_auth_token = "your_secret_token"
 
 # Rate Limiting
 # Maximum albums a user can request per hour
@@ -41,9 +35,6 @@ user_max_requests_per_day = 100
 # Maximum items a user can have in the queue at once
 user_max_queue_size = 200
 
-# Queue Processing
-# Interval between queue processing ticks (seconds)
-process_interval_secs = 5
 # Time before in-progress items are flagged as stale (seconds)
 stale_in_progress_threshold_secs = 3600
 
@@ -60,29 +51,6 @@ backoff_multiplier = 2.5
 # Audit Log
 # Days to retain audit log entries (0 to disable cleanup)
 audit_log_retention_days = 90
-
-# Bandwidth Throttling
-# Prevents overwhelming the downloader service
-throttle_enabled = true
-# Maximum MB per minute
-throttle_max_mb_per_minute = 20
-# Maximum MB per hour
-throttle_max_mb_per_hour = 1500
-
-# Corruption Handler
-# Detects file corruption (ffprobe failures) and triggers downloader restarts
-# Size of sliding window for tracking recent results
-corruption_window_size = 4
-# Number of failures in window that triggers restart
-corruption_failure_threshold = 2
-# Base cooldown duration in seconds after restart (level 0)
-corruption_base_cooldown_secs = 600
-# Maximum cooldown duration in seconds
-corruption_max_cooldown_secs = 7200
-# Multiplier for cooldown escalation (2.0 = double each level)
-corruption_cooldown_multiplier = 2.0
-# Successful downloads needed to de-escalate one level
-corruption_successes_to_deescalate = 10
 
 # Search settings
 [search]

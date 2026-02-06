@@ -1,5 +1,4 @@
 use axum::extract::FromRef;
-use tokio_util::sync::CancellationToken;
 
 use crate::background_jobs::SchedulerHandle;
 use crate::catalog_store::CatalogStore;
@@ -31,7 +30,6 @@ pub type OptionalOrganicIndexer = Option<Arc<OrganicIndexer>>;
 pub type HttpClient = reqwest::Client;
 pub type OptionalDownloadManager = Option<Arc<DownloadManager>>;
 pub type OptionalIngestionManager = Option<Arc<IngestionManager>>;
-pub type OptionalShutdownToken = Option<CancellationToken>;
 pub type GuardedPlaybackSessionManager = Arc<PlaybackSessionManager>;
 
 #[derive(Clone)]
@@ -52,8 +50,6 @@ pub struct ServerState {
     pub http_client: HttpClient,
     pub download_manager: OptionalDownloadManager,
     pub ingestion_manager: OptionalIngestionManager,
-    /// Shutdown token for graceful termination of background tasks (e.g., QueueProcessor)
-    pub shutdown_token: OptionalShutdownToken,
     /// Playback session manager for multi-device playback sync
     pub playback_session_manager: GuardedPlaybackSessionManager,
 }

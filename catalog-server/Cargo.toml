@@ -62,7 +62,6 @@ uuid = { version = "1.11", features = ["v4"] }
 walkdir = "2.5"
 zip = "2.2"
 reqwest = { version = "0.12", features = ["json", "stream"] }
-tokio-tungstenite = { version = "0.26", features = ["native-tls"] }
 openidconnect = "4.0"
 jsonwebtoken = "9"
 indicatif = "0.17"

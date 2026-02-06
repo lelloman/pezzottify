@@ -39,36 +39,17 @@ pub struct CatalogStoreConfig {
 pub struct DownloadManagerConfig {
     /// Enable the download manager queue (allows users to request downloads).
     /// Defaults to true. Set to false to disable the feature entirely.
-    /// Note: Automatic processing requires qt_base_url and qt_ws_url to be set.
     pub enabled: Option<bool>,
-    /// Quentin Torrentino HTTP base URL (e.g., "http://localhost:8080")
-    pub qt_base_url: Option<String>,
-    /// Quentin Torrentino WebSocket URL (e.g., "ws://localhost:8080/ws")
-    pub qt_ws_url: Option<String>,
-    /// Quentin Torrentino auth token
-    pub qt_auth_token: Option<String>,
     pub max_albums_per_hour: Option<u32>,
     pub max_albums_per_day: Option<u32>,
     pub user_max_requests_per_day: Option<u32>,
     pub user_max_queue_size: Option<u32>,
-    pub process_interval_secs: Option<u64>,
     pub stale_in_progress_threshold_secs: Option<u64>,
     pub max_retries: Option<u32>,
     pub initial_backoff_secs: Option<u64>,
     pub max_backoff_secs: Option<u64>,
     pub backoff_multiplier: Option<f64>,
     pub audit_log_retention_days: Option<u64>,
-    // Throttle settings
-    pub throttle_enabled: Option<bool>,
-    pub throttle_max_mb_per_minute: Option<u64>,
-    pub throttle_max_mb_per_hour: Option<u64>,
-    // Corruption handler settings
-    pub corruption_window_size: Option<usize>,
-    pub corruption_failure_threshold: Option<usize>,
-    pub corruption_base_cooldown_secs: Option<u64>,
-    pub corruption_max_cooldown_secs: Option<u64>,
-    pub corruption_cooldown_multiplier: Option<f64>,
-    pub corruption_successes_to_deescalate: Option<u32>,
 }
 
 #[derive(Debug, Deserialize, Default, Clone)]
