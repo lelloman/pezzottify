@@ -56,6 +56,12 @@ pub trait DownloadManagerTrait: Send + Sync {
         duration_ms: i64,
     ) -> Result<()>;
 
+    /// Mark a download request as in-progress (prevents re-download by cron).
+    fn mark_request_in_progress(&self, item_id: &str) -> Result<()>;
+
+    /// Mark a download request as failed (e.g., when ingestion fails).
+    fn mark_request_failed(&self, item_id: &str, error_message: &str) -> Result<()>;
+
     /// Complete all pending download requests for an album.
     /// Returns the IDs of completed requests.
     fn complete_requests_for_album(
@@ -260,6 +266,20 @@ impl IngestionManager {
             notifier.notify_failed(job, error_message).await;
         }
 
+        // If this job is from a download request, mark the queue item as failed
+        if let (Some(IngestionContextType::DownloadRequest), Some(context_id)) =
+            (job.context_type, &job.context_id)
+        {
+            if let Some(dm) = &self.download_manager {
+                if let Err(e) = dm.mark_request_failed(context_id, error_message) {
+                    warn!(
+                        "Failed to mark download request {} as failed: {}",
+                        context_id, e
+                    );
+                }
+            }
+        }
+
         Ok(())
     }
 
@@ -395,6 +415,9 @@ impl IngestionManager {
             "Detected upload type"
         );
 
+        // Save context_id for later use (it gets moved into JobCreationParams)
+        let saved_context_id = context_id.clone();
+
         // Create jobs based on upload type
         let job_ids = match upload_type {
             UploadType::Track => {
@@ -460,6 +483,21 @@ impl IngestionManager {
         };
 
         let album_count = job_ids.len();
+
+        // If this upload is from a download request, mark the queue item as IN_PROGRESS
+        // so the cron downloader won't re-download the same content.
+        if context_type == IngestionContextType::DownloadRequest {
+            if let Some(ref ctx_id) = saved_context_id {
+                if let Some(dm) = &self.download_manager {
+                    if let Err(e) = dm.mark_request_in_progress(ctx_id) {
+                        warn!(
+                            "Failed to mark download request {} as in-progress: {}",
+                            ctx_id, e
+                        );
+                    }
+                }
+            }
+        }
 
         info!(
             session_id = %session_id,

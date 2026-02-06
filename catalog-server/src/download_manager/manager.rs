@@ -59,6 +59,59 @@ impl DownloadManagerTrait for DownloadManager {
         Ok(())
     }
 
+    fn mark_request_in_progress(&self, item_id: &str) -> Result<()> {
+        match self.queue_store.claim_for_processing(item_id) {
+            Ok(true) => {
+                info!(
+                    "Marked download request {} as IN_PROGRESS (ingestion started)",
+                    item_id
+                );
+                // Log audit event
+                if let Ok(Some(item)) = self.queue_store.get_item(item_id) {
+                    let _ = self.audit_logger.log_download_started(&item);
+                }
+                Ok(())
+            }
+            Ok(false) => {
+                warn!(
+                    "Download request {} was not PENDING (already claimed or missing)",
+                    item_id
+                );
+                Ok(())
+            }
+            Err(e) => Err(e),
+        }
+    }
+
+    fn mark_request_failed(&self, item_id: &str, error_message: &str) -> Result<()> {
+        // Check current status — don't overwrite COMPLETED with FAILED
+        // (possible in collection uploads where multiple jobs share one queue item)
+        if let Ok(Some(item)) = self.queue_store.get_item(item_id) {
+            if item.status == QueueStatus::Completed {
+                info!(
+                    "Download request {} already COMPLETED, not marking as failed",
+                    item_id
+                );
+                return Ok(());
+            }
+        }
+
+        let error = DownloadError::new(DownloadErrorType::Unknown, error_message);
+        self.queue_store.mark_failed(item_id, &error)?;
+
+        // Log audit event
+        if let Ok(Some(item)) = self.queue_store.get_item(item_id) {
+            let _ = self.audit_logger.log_download_failed(&item, &error);
+        }
+
+        info!(
+            "Marked download request {} as FAILED: {}",
+            item_id, error_message
+        );
+
+        Ok(())
+    }
+
     fn complete_requests_for_album(
         &self,
         album_id: &str,
