@@ -936,6 +936,13 @@ impl IngestionManager {
             self.store.update_file(&file)?;
         }
 
+        // Notify 100% completion of analyzing phase
+        if let Some(notifier) = &self.notifier {
+            notifier
+                .notify_progress(&job, "analyzing", 100, total_files as u32)
+                .await;
+        }
+
         // Count probe failures — fail early if no files could be probed
         let files_after = self.store.get_files_for_job(job_id)?;
         let probed_count = files_after
@@ -1681,8 +1688,18 @@ impl IngestionManager {
             self.store
                 .create_review_item(&job_id, &question, &options_json)?;
 
+            job.matched_album_id = Some(album_id.clone());
+            job.match_confidence = Some(fp_score);
+            job.match_source = Some(IngestionMatchSource::DownloadRequest);
             job.status = IngestionJobStatus::AwaitingReview;
             self.store.update_job(job)?;
+
+            if let Some(notifier) = &self.notifier {
+                notifier
+                    .notify_review_needed(job, &question, &options)
+                    .await;
+            }
+
             return Ok(());
         } else {
             // Low fingerprint score — review with warning
@@ -1727,8 +1744,18 @@ impl IngestionManager {
             self.store
                 .create_review_item(&job_id, &question, &options_json)?;
 
+            job.matched_album_id = Some(album_id.clone());
+            job.match_confidence = Some(fp_score);
+            job.match_source = Some(IngestionMatchSource::DownloadRequest);
             job.status = IngestionJobStatus::AwaitingReview;
             self.store.update_job(job)?;
+
+            if let Some(notifier) = &self.notifier {
+                notifier
+                    .notify_review_needed(job, &question, &options)
+                    .await;
+            }
+
             return Ok(());
         }
 
