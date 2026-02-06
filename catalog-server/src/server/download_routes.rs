@@ -77,7 +77,7 @@ pub struct AdminRequestsQuery {
 
 #[derive(Debug, Serialize)]
 pub struct DownloadStatusResponse {
-    pub connected: bool,
+    pub enabled: bool,
     pub pending_count: usize,
 }
 
@@ -104,20 +104,11 @@ pub struct AuditLogResponse {
     pub total_count: usize,
 }
 
-/// Downloader service status
-#[derive(Debug, Serialize)]
-pub struct DownloaderStatus {
-    /// Current state: "connected" or "disconnected"
-    pub state: String,
-}
-
-/// Admin stats response with queue and downloader status
+/// Admin stats response with queue status
 #[derive(Debug, Serialize)]
 pub struct AdminStatsResponse {
     /// Queue statistics
     pub queue: crate::download_manager::QueueStats,
-    /// Downloader service status
-    pub downloader: DownloaderStatus,
 }
 
 // =============================================================================
@@ -265,7 +256,7 @@ async fn request_album(
     }
 }
 
-/// GET /status - Get download manager connection status
+/// GET /status - Get download manager status
 async fn get_status(State(dm): State<OptionalDownloadManager>) -> impl IntoResponse {
     let manager = match get_download_manager(&dm) {
         Ok(m) => m,
@@ -274,7 +265,7 @@ async fn get_status(State(dm): State<OptionalDownloadManager>) -> impl IntoRespo
 
     let status = manager.get_status();
     Json(DownloadStatusResponse {
-        connected: status.connected,
+        enabled: status.enabled,
         pending_count: status.pending_count,
     })
     .into_response()
@@ -284,7 +275,7 @@ async fn get_status(State(dm): State<OptionalDownloadManager>) -> impl IntoRespo
 // Admin Routes
 // =============================================================================
 
-/// GET /admin/stats - Get queue statistics and downloader status
+/// GET /admin/stats - Get queue statistics
 async fn get_admin_stats(
     session: Session,
     State(dm): State<OptionalDownloadManager>,
@@ -299,22 +290,7 @@ async fn get_admin_stats(
     };
 
     match manager.get_queue_stats() {
-        Ok(queue_stats) => {
-            let status = manager.get_status();
-            let downloader = DownloaderStatus {
-                state: if status.connected {
-                    "connected".to_string()
-                } else {
-                    "disconnected".to_string()
-                },
-            };
-
-            Json(AdminStatsResponse {
-                queue: queue_stats,
-                downloader,
-            })
-            .into_response()
-        }
+        Ok(queue_stats) => Json(AdminStatsResponse { queue: queue_stats }).into_response(),
         Err(e) => {
             warn!("Failed to get queue stats: {}", e);
             (StatusCode::INTERNAL_SERVER_ERROR, "Failed to get stats").into_response()
@@ -435,7 +411,7 @@ async fn delete_request(
     };
 
     let user_id = session.user_id.to_string();
-    match manager.delete_request(&item_id, &user_id).await {
+    match manager.delete_request(&item_id, &user_id) {
         Ok(true) => Json(RequestResponse {
             success: true,
             message: "Request deleted".to_string(),

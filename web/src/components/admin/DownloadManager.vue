@@ -2,14 +2,6 @@
   <div class="downloadManager">
     <h2 class="sectionTitle">Download Manager</h2>
 
-    <!-- Downloader Status -->
-    <div class="downloaderStatus" :class="downloaderStatusClass">
-      <div class="statusMain">
-        <span class="statusDot"></span>
-        <span class="statusState">{{ downloaderState }}</span>
-      </div>
-    </div>
-
     <!-- Action Buttons -->
     <div class="actionButtons">
       <button class="actionButton" @click="openDownloadModal('album')">
@@ -626,20 +618,6 @@ const isFormValid = computed(() => {
   if (!downloadForm.id || !downloadForm.artistName) return false;
   if (downloadModalType.value === "album" && !downloadForm.albumName) return false;
   return true;
-});
-
-const downloaderState = computed(() => {
-  if (stats.value === null) return "Checking...";
-  if (!stats.value.downloader) return "Unknown";
-  return stats.value.downloader.state || "Unknown";
-});
-
-const downloaderStatusClass = computed(() => {
-  const state = stats.value?.downloader?.state;
-  if (!state) return "status-unknown";
-  if (state === "Healthy" || state === "connected") return "status-online";
-  if (state === "LoggingIn" || state === "Booting") return "status-pending";
-  return "status-offline";
 });
 
 const openDownloadModal = (type) => {
@@ -1600,66 +1578,6 @@ onUnmounted(() => {
   font-weight: var(--font-bold);
   color: var(--text-base);
   margin: 0 0 var(--spacing-4) 0;
-}
-
-/* Downloader Status */
-.downloaderStatus {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--spacing-4);
-  padding: var(--spacing-3) var(--spacing-4);
-  border-radius: var(--radius-lg);
-  margin-bottom: var(--spacing-4);
-  font-size: var(--text-sm);
-}
-
-.downloaderStatus.status-online {
-  background-color: rgba(34, 197, 94, 0.15);
-}
-
-.downloaderStatus.status-offline {
-  background-color: rgba(220, 38, 38, 0.15);
-}
-
-.downloaderStatus.status-pending {
-  background-color: rgba(249, 115, 22, 0.15);
-}
-
-.downloaderStatus.status-unknown {
-  background-color: rgba(156, 163, 175, 0.15);
-}
-
-.statusMain {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-2);
-  font-weight: var(--font-semibold);
-}
-
-.statusDot {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-}
-
-.status-online .statusDot { background-color: #22c55e; }
-.status-online .statusState { color: #22c55e; }
-.status-offline .statusDot { background-color: #dc2626; }
-.status-offline .statusState { color: #dc2626; }
-.status-pending .statusDot { background-color: #f97316; }
-.status-pending .statusState { color: #f97316; }
-.status-unknown .statusDot { background-color: #9ca3af; }
-.status-unknown .statusState { color: #9ca3af; }
-
-.statusUptime {
-  color: var(--text-subdued);
-}
-
-.statusError {
-  color: #dc2626;
-  font-size: var(--text-xs);
-  flex-basis: 100%;
 }
 
 /* Action Buttons */

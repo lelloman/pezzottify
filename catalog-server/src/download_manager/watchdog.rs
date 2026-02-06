@@ -25,7 +25,7 @@ use super::queue_store::DownloadQueueStore;
 /// 1. Scans all tracks to find those missing audio files
 /// 2. Queues repair downloads for missing content (if not already queued)
 ///
-/// Note: Image scanning removed - audio-only scope for Torrentino integration.
+/// Note: Only scans audio files (image scanning not implemented).
 pub struct MissingFilesWatchdog {
     catalog_store: Arc<dyn CatalogStore>,
     queue_store: Arc<dyn DownloadQueueStore>,

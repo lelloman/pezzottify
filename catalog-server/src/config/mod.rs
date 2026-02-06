@@ -171,21 +171,12 @@ impl AppConfig {
 
         // Download manager settings - merge file config with defaults
         let dm_file = file.download_manager.unwrap_or_default();
-        let qt_base_url = dm_file.qt_base_url.clone();
-        let qt_ws_url = dm_file.qt_ws_url.clone();
-        let qt_auth_token = dm_file.qt_auth_token.clone();
-        // Enabled defaults to true (queue accepts requests even without QT).
-        // Automatic processing only works when both qt_base_url and qt_ws_url are set.
         let download_manager = DownloadManagerSettings {
             enabled: dm_file.enabled.unwrap_or(true),
-            qt_base_url,
-            qt_ws_url,
-            qt_auth_token,
             max_albums_per_hour: dm_file.max_albums_per_hour.unwrap_or(10),
             max_albums_per_day: dm_file.max_albums_per_day.unwrap_or(60),
             user_max_requests_per_day: dm_file.user_max_requests_per_day.unwrap_or(100),
             user_max_queue_size: dm_file.user_max_queue_size.unwrap_or(200),
-            process_interval_secs: dm_file.process_interval_secs.unwrap_or(5),
             stale_in_progress_threshold_secs: dm_file
                 .stale_in_progress_threshold_secs
                 .unwrap_or(3600),
@@ -194,19 +185,6 @@ impl AppConfig {
             max_backoff_secs: dm_file.max_backoff_secs.unwrap_or(86400), // 24 hours
             backoff_multiplier: dm_file.backoff_multiplier.unwrap_or(2.5),
             audit_log_retention_days: dm_file.audit_log_retention_days.unwrap_or(90),
-            // Throttle settings
-            throttle_enabled: dm_file.throttle_enabled.unwrap_or(true),
-            throttle_max_mb_per_minute: dm_file.throttle_max_mb_per_minute.unwrap_or(20),
-            throttle_max_mb_per_hour: dm_file.throttle_max_mb_per_hour.unwrap_or(1500),
-            // Corruption handler settings
-            corruption_window_size: dm_file.corruption_window_size.unwrap_or(4),
-            corruption_failure_threshold: dm_file.corruption_failure_threshold.unwrap_or(2),
-            corruption_base_cooldown_secs: dm_file.corruption_base_cooldown_secs.unwrap_or(600),
-            corruption_max_cooldown_secs: dm_file.corruption_max_cooldown_secs.unwrap_or(7200),
-            corruption_cooldown_multiplier: dm_file.corruption_cooldown_multiplier.unwrap_or(2.0),
-            corruption_successes_to_deescalate: dm_file
-                .corruption_successes_to_deescalate
-                .unwrap_or(10),
         };
 
         let background_jobs = BackgroundJobsSettings::default();
@@ -371,65 +349,32 @@ impl AppConfig {
 #[derive(Debug, Clone)]
 pub struct DownloadManagerSettings {
     pub enabled: bool,
-    /// Quentin Torrentino HTTP base URL (e.g., "http://localhost:8080")
-    pub qt_base_url: Option<String>,
-    /// Quentin Torrentino WebSocket URL (e.g., "ws://localhost:8080/ws")
-    pub qt_ws_url: Option<String>,
-    /// Quentin Torrentino auth token
-    pub qt_auth_token: Option<String>,
     pub max_albums_per_hour: u32,
     pub max_albums_per_day: u32,
     pub user_max_requests_per_day: u32,
     pub user_max_queue_size: u32,
-    pub process_interval_secs: u64,
     pub stale_in_progress_threshold_secs: u64,
     pub max_retries: u32,
     pub initial_backoff_secs: u64,
     pub max_backoff_secs: u64,
     pub backoff_multiplier: f64,
     pub audit_log_retention_days: u64,
-    // Throttle settings
-    pub throttle_enabled: bool,
-    pub throttle_max_mb_per_minute: u64,
-    pub throttle_max_mb_per_hour: u64,
-    // Corruption handler settings
-    pub corruption_window_size: usize,
-    pub corruption_failure_threshold: usize,
-    pub corruption_base_cooldown_secs: u64,
-    pub corruption_max_cooldown_secs: u64,
-    pub corruption_cooldown_multiplier: f64,
-    pub corruption_successes_to_deescalate: u32,
 }
 
 impl Default for DownloadManagerSettings {
     fn default() -> Self {
         Self {
             enabled: false,
-            qt_base_url: None,
-            qt_ws_url: None,
-            qt_auth_token: None,
             max_albums_per_hour: 10,
             max_albums_per_day: 60,
             user_max_requests_per_day: 100,
             user_max_queue_size: 200,
-            process_interval_secs: 5,
             stale_in_progress_threshold_secs: 3600,
             max_retries: 8,
             initial_backoff_secs: 60,
             max_backoff_secs: 86400, // 24 hours
             backoff_multiplier: 2.5,
             audit_log_retention_days: 90,
-            // Throttle defaults
-            throttle_enabled: true,
-            throttle_max_mb_per_minute: 20,
-            throttle_max_mb_per_hour: 1500,
-            // Corruption handler defaults
-            corruption_window_size: 4,
-            corruption_failure_threshold: 2,
-            corruption_base_cooldown_secs: 600, // 10 minutes
-            corruption_max_cooldown_secs: 7200, // 2 hours
-            corruption_cooldown_multiplier: 2.0,
-            corruption_successes_to_deescalate: 10,
         }
     }
 }
@@ -595,7 +540,6 @@ mod tests {
         assert_eq!(config.downloader_timeout_sec, 600);
         assert_eq!(config.event_retention_days, 60);
         assert_eq!(config.prune_interval_hours, 12);
-        // download_manager.enabled defaults to true (queue works without QT)
         assert!(config.download_manager.enabled);
     }
 
@@ -675,11 +619,9 @@ mod tests {
             ..Default::default()
         };
 
-        // enabled defaults to true even without QT URLs
+        // enabled defaults to true
         let config = AppConfig::resolve(&cli, None).unwrap();
         assert!(config.download_manager.enabled);
-        assert!(config.download_manager.qt_base_url.is_none());
-        assert!(config.download_manager.qt_ws_url.is_none());
     }
 
     #[test]
@@ -700,40 +642,6 @@ mod tests {
 
         let config = AppConfig::resolve(&cli, Some(file_config)).unwrap();
         assert!(!config.download_manager.enabled);
-    }
-
-    #[test]
-    fn test_resolve_download_manager_with_qt_urls() {
-        let temp_dir = make_temp_db_dir();
-        let cli = CliConfig {
-            db_dir: Some(temp_dir.path().to_path_buf()),
-            ..Default::default()
-        };
-
-        let file_config = FileConfig {
-            download_manager: Some(DownloadManagerConfig {
-                qt_base_url: Some("http://localhost:8080".to_string()),
-                qt_ws_url: Some("ws://localhost:8080/ws".to_string()),
-                qt_auth_token: Some("test_token".to_string()),
-                ..Default::default()
-            }),
-            ..Default::default()
-        };
-
-        let config = AppConfig::resolve(&cli, Some(file_config)).unwrap();
-        assert!(config.download_manager.enabled);
-        assert_eq!(
-            config.download_manager.qt_base_url,
-            Some("http://localhost:8080".to_string())
-        );
-        assert_eq!(
-            config.download_manager.qt_ws_url,
-            Some("ws://localhost:8080/ws".to_string())
-        );
-        assert_eq!(
-            config.download_manager.qt_auth_token,
-            Some("test_token".to_string())
-        );
     }
 
     #[test]
