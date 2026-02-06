@@ -69,11 +69,10 @@ The catalog server is the backend component of Pezzottify that provides:
   - `Fts5LevenshteinSearchVault`: SQLite FTS5 with trigram tokenizer and Levenshtein typo correction
   - `streaming/`: Streaming search pipeline with target identification and enrichment
 
-- **`download_manager/`**: Content acquisition via Quentin Torrentino
+- **`download_manager/`**: Passive download request queue
 
   - `DownloadManager`: Main facade for download operations
   - `DownloadQueueStore`: SQLite-backed queue persistence (download_queue.db)
-  - `TorrentClient`: HTTP + WebSocket client for Quentin Torrentino
   - `AuditLogger`: Comprehensive audit trail for all operations
 
 - **`background_jobs/`**: Scheduled background task system
@@ -280,11 +279,8 @@ media_path = "/data/media"
 port = 3001
 logging_level = "path"
 
-# Enable download manager by configuring Quentin Torrentino
+# Enable download request queue
 [download_manager]
-qt_base_url = "http://quentin-torrentino:8080"
-qt_ws_url = "ws://quentin-torrentino:8080/ws"
-# qt_auth_token = "optional_auth_token"
 max_albums_per_hour = 10
 max_albums_per_day = 60
 ```
@@ -561,24 +557,17 @@ The download manager uses a priority-based queue:
 
 ### Configuration
 
-Enable the download manager by configuring Quentin Torrentino:
+Enable the download request queue in `config.toml`:
 
 ```toml
-# In config.toml
 [download_manager]
-# Quentin Torrentino connection (required for download manager)
-qt_base_url = "http://quentin-torrentino:8080"
-qt_ws_url = "ws://quentin-torrentino:8080/ws"
-qt_auth_token = "optional_auth_token"
-
 # Rate limiting
 max_albums_per_hour = 10
 max_albums_per_day = 60
 user_max_requests_per_day = 100
 user_max_queue_size = 200
 
-# Queue processing
-process_interval_secs = 5
+# Stale detection
 stale_in_progress_threshold_secs = 3600
 
 # Retry settings
@@ -593,14 +582,11 @@ audit_log_retention_days = 90
 
 | Option | Default | Description |
 | ------ | ------- | ----------- |
-| `qt_base_url` | None | Quentin Torrentino HTTP base URL (required) |
-| `qt_ws_url` | None | Quentin Torrentino WebSocket URL (required) |
-| `qt_auth_token` | None | Auth token for Quentin Torrentino (optional) |
+| `enabled` | `true` | Enable/disable the download request queue |
 | `max_albums_per_hour` | `10` | Maximum albums a user can request per hour |
 | `max_albums_per_day` | `60` | Maximum albums a user can request per day |
 | `user_max_requests_per_day` | `100` | Maximum requests a user can make per day |
 | `user_max_queue_size` | `200` | Maximum items a user can have in the queue |
-| `process_interval_secs` | `5` | Interval between queue processing ticks |
 | `max_retries` | `8` | Maximum retry attempts for failed downloads |
 | `initial_backoff_secs` | `60` | Initial delay before first retry |
 | `max_backoff_secs` | `86400` | Maximum delay between retries (24 hours) |
