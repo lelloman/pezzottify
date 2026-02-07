@@ -81,10 +81,7 @@ impl LastFmClient {
         let response = self.client.get(&url).send()?;
 
         if !response.status().is_success() {
-            if response.status().as_u16() == 429 {
-                // Rate limited
-                return Ok(vec![]);
-            }
+            // Transient errors (429, 5xx) — return Err so job retries
             anyhow::bail!(
                 "Last.fm API failed with status {}",
                 response.status()

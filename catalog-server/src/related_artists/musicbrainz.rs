@@ -17,12 +17,18 @@ pub struct MusicBrainzClient {
 }
 
 #[derive(Deserialize)]
-struct ArtistSearchResponse {
-    artists: Option<Vec<MbArtist>>,
+struct UrlLookupResponse {
+    #[serde(default)]
+    relations: Vec<UrlRelation>,
 }
 
 #[derive(Deserialize)]
-struct MbArtist {
+struct UrlRelation {
+    artist: Option<RelatedArtist>,
+}
+
+#[derive(Deserialize)]
+struct RelatedArtist {
     id: String,
 }
 
@@ -66,73 +72,35 @@ impl MusicBrainzClient {
 
     /// Look up a MusicBrainz artist ID by Spotify ID.
     ///
-    /// Queries MusicBrainz for artists with a Spotify URL relation matching
-    /// the given Spotify artist ID.
+    /// Uses the `/ws/2/url` endpoint to find the artist linked to the given
+    /// Spotify artist URL via `artist-rels`.
     pub fn lookup_mbid_for_spotify_id(&self, spotify_id: &str) -> Result<Option<String>> {
         self.rate_limit();
 
         let spotify_url = format!("https://open.spotify.com/artist/{}", spotify_id);
         let url = format!(
-            "{}/artist/?query=url:\"{}\"&fmt=json&limit=1",
+            "{}/url?resource={}&inc=artist-rels&fmt=json",
             MUSICBRAINZ_API_BASE,
             urlencoding::encode(&spotify_url)
         );
 
         let response = self.client.get(&url).send()?;
+        let status = response.status();
 
-        if !response.status().is_success() {
-            if response.status().as_u16() == 503 {
-                // Rate limited - return None to retry later
+        if !status.is_success() {
+            if status.as_u16() == 404 {
+                // No URL entity for this Spotify link — genuinely not found
                 return Ok(None);
             }
-            anyhow::bail!(
-                "MusicBrainz search failed with status {}",
-                response.status()
-            );
+            // Transient errors (503, 429, etc.) — return Err so job retries
+            anyhow::bail!("MusicBrainz URL lookup failed with status {}", status);
         }
 
-        let body: ArtistSearchResponse = response.json()?;
+        let body: UrlLookupResponse = response.json()?;
 
-        if let Some(artists) = body.artists {
-            if let Some(artist) = artists.into_iter().next() {
-                // Verify this artist actually has a Spotify URL relation matching our ID
-                // by doing a follow-up lookup with url-rels
-                return self.verify_spotify_relation(&artist.id, spotify_id);
-            }
-        }
-
-        Ok(None)
-    }
-
-    /// Verify that a MusicBrainz artist has a Spotify URL relation for the given ID.
-    fn verify_spotify_relation(
-        &self,
-        mbid: &str,
-        spotify_id: &str,
-    ) -> Result<Option<String>> {
-        self.rate_limit();
-
-        let url = format!(
-            "{}/artist/{}?inc=url-rels&fmt=json",
-            MUSICBRAINZ_API_BASE, mbid
-        );
-
-        let response = self.client.get(&url).send()?;
-
-        if !response.status().is_success() {
-            return Ok(None);
-        }
-
-        let body: ArtistLookupResponse = response.json()?;
-
-        let spotify_suffix = format!("/artist/{}", spotify_id);
         for rel in &body.relations {
-            if let Some(url) = &rel.url {
-                if let Some(resource) = &url.resource {
-                    if resource.contains("spotify.com") && resource.ends_with(&spotify_suffix) {
-                        return Ok(Some(mbid.to_string()));
-                    }
-                }
+            if let Some(artist) = &rel.artist {
+                return Ok(Some(artist.id.clone()));
             }
         }
 
@@ -151,9 +119,16 @@ impl MusicBrainzClient {
         );
 
         let response = self.client.get(&url).send()?;
+        let status = response.status();
 
-        if !response.status().is_success() {
-            return Ok(None);
+        if !status.is_success() {
+            if status.as_u16() == 404 {
+                return Ok(None);
+            }
+            anyhow::bail!(
+                "MusicBrainz artist lookup failed with status {}",
+                status
+            );
         }
 
         let body: ArtistLookupResponse = response.json()?;
@@ -162,7 +137,6 @@ impl MusicBrainzClient {
             if let Some(url) = &rel.url {
                 if let Some(resource) = &url.resource {
                     if resource.contains("open.spotify.com/artist/") {
-                        // Extract the Spotify ID from the URL
                         if let Some(id) = resource.rsplit('/').next() {
                             return Ok(Some(id.to_string()));
                         }
