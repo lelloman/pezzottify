@@ -499,6 +499,33 @@ const formatDetails = (details) => {
     parts.push(`Retention: ${details.retention_days} days`);
   }
 
+  // RelatedArtistsEnrichment - started
+  if (details.batch_size !== undefined && details.similar_artists_limit !== undefined && parts.length === 0) {
+    parts.push(`Batch: ${details.batch_size}, limit: ${details.similar_artists_limit} similar`);
+  }
+
+  // RelatedArtistsEnrichment - completed
+  if (details.phase1 !== undefined && details.phase2 !== undefined) {
+    const p1 = details.phase1;
+    const p2 = details.phase2;
+    const p1Parts = [];
+    if (p1.processed > 0) {
+      p1Parts.push(`${p1.mbid_found} found`);
+      if (p1.mbid_not_found > 0) p1Parts.push(`${p1.mbid_not_found} not found`);
+      if (p1.errors > 0) p1Parts.push(`${p1.errors} errors`);
+      parts.push(`MBID: ${p1.processed} processed (${p1Parts.join(", ")})`);
+    } else {
+      parts.push("MBID: nothing to process");
+    }
+    if (p2.processed > 0) {
+      const p2Parts = [`${p2.enriched} enriched`];
+      if (p2.errors > 0) p2Parts.push(`${p2.errors} errors`);
+      parts.push(`Related: ${p2.processed} processed (${p2Parts.join(", ")})`);
+    } else {
+      parts.push("Related: nothing to process");
+    }
+  }
+
   // AuditLogCleanup - completed
   if (details.total_deleted !== undefined) {
     if (details.total_deleted === 0) {
