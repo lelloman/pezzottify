@@ -45,9 +45,7 @@ struct LastFmArtist {
 
 impl LastFmClient {
     pub fn new(api_key: &str) -> Result<Self> {
-        let client = Client::builder()
-            .timeout(Duration::from_secs(30))
-            .build()?;
+        let client = Client::builder().timeout(Duration::from_secs(30)).build()?;
 
         Ok(Self {
             client,
@@ -66,11 +64,7 @@ impl LastFmClient {
     }
 
     /// Get similar artists for an artist identified by MusicBrainz ID.
-    pub fn get_similar_artists(
-        &self,
-        mbid: &str,
-        limit: usize,
-    ) -> Result<Vec<SimilarArtist>> {
+    pub fn get_similar_artists(&self, mbid: &str, limit: usize) -> Result<Vec<SimilarArtist>> {
         self.rate_limit();
 
         let url = format!(
@@ -82,10 +76,7 @@ impl LastFmClient {
 
         if !response.status().is_success() {
             // Transient errors (429, 5xx) — return Err so job retries
-            anyhow::bail!(
-                "Last.fm API failed with status {}",
-                response.status()
-            );
+            anyhow::bail!("Last.fm API failed with status {}", response.status());
         }
 
         let body: SimilarArtistsResponse = response.json()?;

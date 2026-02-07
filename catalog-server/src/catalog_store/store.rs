@@ -774,7 +774,7 @@ impl SqliteCatalogStore {
         let conn = read_conn.lock().unwrap();
 
         let mut stmt = conn.prepare_cached(
-            "SELECT id, rowid FROM artists WHERE mbid_lookup_status = 0 LIMIT ?1",
+            "SELECT id, rowid FROM artists WHERE mbid_lookup_status = 0 ORDER BY artist_available DESC, popularity DESC LIMIT ?1",
         )?;
 
         let results = stmt

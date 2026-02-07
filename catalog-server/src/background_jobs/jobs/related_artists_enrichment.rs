@@ -85,7 +85,9 @@ impl BackgroundJob for RelatedArtistsEnrichmentJob {
         let artists_needing_mbid = ctx
             .catalog_store
             .get_artists_needing_mbid(batch_size)
-            .map_err(|e| JobError::ExecutionFailed(format!("Failed to get artists needing mbid: {}", e)))?;
+            .map_err(|e| {
+                JobError::ExecutionFailed(format!("Failed to get artists needing mbid: {}", e))
+            })?;
 
         let mut mbid_found = 0u32;
         let mut mbid_not_found = 0u32;
@@ -143,10 +145,7 @@ impl BackgroundJob for RelatedArtistsEnrichmentJob {
             .catalog_store
             .get_artists_needing_related(batch_size)
             .map_err(|e| {
-                JobError::ExecutionFailed(format!(
-                    "Failed to get artists needing related: {}",
-                    e
-                ))
+                JobError::ExecutionFailed(format!("Failed to get artists needing related: {}", e))
             })?;
 
         let mut related_success = 0u32;
@@ -193,16 +192,12 @@ impl BackgroundJob for RelatedArtistsEnrichmentJob {
                         match self.musicbrainz.lookup_spotify_id_for_mbid(similar_mbid) {
                             Ok(Some(related_spotify_id)) => {
                                 // Try to find this Spotify ID in our catalog and opportunistically cache the mbid
-                                match ctx
-                                    .catalog_store
-                                    .get_artist_json(&related_spotify_id)
-                                {
+                                match ctx.catalog_store.get_artist_json(&related_spotify_id) {
                                     Ok(Some(_)) => {
                                         // Artist exists in catalog, cache the mbid for future lookups
-                                        let _ = ctx.catalog_store.set_artist_mbid(
-                                            &related_spotify_id,
-                                            similar_mbid,
-                                        );
+                                        let _ = ctx
+                                            .catalog_store
+                                            .set_artist_mbid(&related_spotify_id, similar_mbid);
                                         ctx.catalog_store
                                             .get_artist_rowid_by_mbid(similar_mbid)
                                             .ok()
@@ -229,10 +224,7 @@ impl BackgroundJob for RelatedArtistsEnrichmentJob {
                 .catalog_store
                 .set_related_artists(*artist_rowid, &related_pairs)
             {
-                error!(
-                    "Failed to store related artists for {}: {}",
-                    spotify_id, e
-                );
+                error!("Failed to store related artists for {}: {}", spotify_id, e);
                 related_errors += 1;
             } else {
                 debug!(

@@ -1503,10 +1503,16 @@ mod tests {
             fn update_album_fingerprint(&self, _album_id: &str) -> anyhow::Result<()> {
                 Ok(())
             }
-            fn get_artists_needing_mbid(&self, _limit: usize) -> anyhow::Result<Vec<(String, i64)>> {
+            fn get_artists_needing_mbid(
+                &self,
+                _limit: usize,
+            ) -> anyhow::Result<Vec<(String, i64)>> {
                 Ok(Vec::new())
             }
-            fn get_artists_needing_related(&self, _limit: usize) -> anyhow::Result<Vec<(String, String, i64)>> {
+            fn get_artists_needing_related(
+                &self,
+                _limit: usize,
+            ) -> anyhow::Result<Vec<(String, String, i64)>> {
                 Ok(Vec::new())
             }
             fn set_artist_mbid(&self, _artist_id: &str, _mbid: &str) -> anyhow::Result<()> {
@@ -1515,10 +1521,17 @@ mod tests {
             fn mark_artist_mbid_not_found(&self, _artist_id: &str) -> anyhow::Result<()> {
                 Ok(())
             }
-            fn set_related_artists(&self, _artist_rowid: i64, _related: &[(i64, f64)]) -> anyhow::Result<()> {
+            fn set_related_artists(
+                &self,
+                _artist_rowid: i64,
+                _related: &[(i64, f64)],
+            ) -> anyhow::Result<()> {
                 Ok(())
             }
-            fn get_related_artists(&self, _artist_id: &str) -> anyhow::Result<Vec<crate::catalog_store::Artist>> {
+            fn get_related_artists(
+                &self,
+                _artist_id: &str,
+            ) -> anyhow::Result<Vec<crate::catalog_store::Artist>> {
                 Ok(Vec::new())
             }
             fn get_artist_rowid_by_mbid(&self, _mbid: &str) -> anyhow::Result<Option<i64>> {
