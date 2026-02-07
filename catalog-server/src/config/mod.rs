@@ -2,7 +2,7 @@ mod file_config;
 
 pub use file_config::{
     AgentConfig, AgentLlmConfig, BackgroundJobsConfig, CatalogStoreConfig, DownloadManagerConfig,
-    FileConfig, IngestionConfig, OidcConfig, SearchConfig,
+    FileConfig, IngestionConfig, OidcConfig, RelatedArtistsConfig, SearchConfig,
     StreamingSearchConfig as StreamingSearchFileConfig,
 };
 
@@ -108,6 +108,7 @@ pub struct AppConfig {
     pub catalog_store: CatalogStoreSettings,
     pub agent: AgentSettings,
     pub ingestion: IngestionSettings,
+    pub related_artists: Option<RelatedArtistsSettings>,
 }
 
 impl AppConfig {
@@ -292,6 +293,23 @@ impl AppConfig {
                 .unwrap_or(ingestion_defaults.output_bitrate),
         };
 
+        // Related artists settings from file config
+        let related_artists = file.related_artists.and_then(|ra| {
+            if !ra.enabled.unwrap_or(false) {
+                return None;
+            }
+            let api_key = ra.lastfm_api_key?;
+            let user_agent = ra.musicbrainz_user_agent?;
+            Some(RelatedArtistsSettings {
+                enabled: true,
+                lastfm_api_key: api_key,
+                musicbrainz_user_agent: user_agent,
+                batch_size: ra.batch_size.unwrap_or(50),
+                similar_artists_limit: ra.similar_artists_limit.unwrap_or(20),
+                interval_hours: ra.interval_hours.unwrap_or(12),
+            })
+        });
+
         Ok(Self {
             db_dir,
             media_path,
@@ -310,6 +328,7 @@ impl AppConfig {
             catalog_store,
             agent,
             ingestion,
+            related_artists,
         })
     }
 
@@ -437,6 +456,17 @@ impl Default for AgentLlmSettings {
             timeout_secs: 120,
         }
     }
+}
+
+/// Settings for related artists enrichment.
+#[derive(Debug, Clone)]
+pub struct RelatedArtistsSettings {
+    pub enabled: bool,
+    pub lastfm_api_key: String,
+    pub musicbrainz_user_agent: String,
+    pub batch_size: usize,
+    pub similar_artists_limit: usize,
+    pub interval_hours: u64,
 }
 
 /// Settings for the ingestion feature.

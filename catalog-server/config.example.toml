@@ -68,6 +68,17 @@ engine = "pezzothash"
 # Each connection uses additional memory, so don't over-provision
 read_pool_size = 4
 
+# Related Artists Enrichment
+# Populates related artists via MusicBrainz and Last.fm APIs.
+# Requires both lastfm_api_key and musicbrainz_user_agent to be set.
+# [related_artists]
+# enabled = true
+# lastfm_api_key = "your-lastfm-api-key"
+# musicbrainz_user_agent = "pezzottify/1.0 (admin@example.com)"
+# batch_size = 50
+# similar_artists_limit = 20
+# interval_hours = 12
+
 # Background Jobs settings
 [background_jobs]
 # Future: per-job configuration

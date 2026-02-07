@@ -196,4 +196,32 @@ impl CatalogStore for NullCatalogStore {
     fn update_album_fingerprint(&self, _album_id: &str) -> Result<()> {
         anyhow::bail!("NullCatalogStore does not support write operations")
     }
+
+    fn get_artists_needing_mbid(&self, _limit: usize) -> Result<Vec<(String, i64)>> {
+        Ok(Vec::new())
+    }
+
+    fn get_artists_needing_related(&self, _limit: usize) -> Result<Vec<(String, String, i64)>> {
+        Ok(Vec::new())
+    }
+
+    fn set_artist_mbid(&self, _artist_id: &str, _mbid: &str) -> Result<()> {
+        anyhow::bail!("NullCatalogStore does not support write operations")
+    }
+
+    fn mark_artist_mbid_not_found(&self, _artist_id: &str) -> Result<()> {
+        anyhow::bail!("NullCatalogStore does not support write operations")
+    }
+
+    fn set_related_artists(&self, _artist_rowid: i64, _related: &[(i64, f64)]) -> Result<()> {
+        anyhow::bail!("NullCatalogStore does not support write operations")
+    }
+
+    fn get_related_artists(&self, _artist_id: &str) -> Result<Vec<super::Artist>> {
+        Ok(Vec::new())
+    }
+
+    fn get_artist_rowid_by_mbid(&self, _mbid: &str) -> Result<Option<i64>> {
+        Ok(None)
+    }
 }

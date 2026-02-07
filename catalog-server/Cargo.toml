@@ -61,7 +61,7 @@ urlencoding = "2.1"
 uuid = { version = "1.11", features = ["v4"] }
 walkdir = "2.5"
 zip = "2.2"
-reqwest = { version = "0.12", features = ["json", "stream"] }
+reqwest = { version = "0.12", features = ["json", "stream", "blocking"] }
 openidconnect = "4.0"
 jsonwebtoken = "9"
 indicatif = "0.17"

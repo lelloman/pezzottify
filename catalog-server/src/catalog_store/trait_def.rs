@@ -235,6 +235,34 @@ pub trait CatalogStore: Send + Sync {
     /// Update the fingerprint columns (track_count, total_duration_ms) for an album.
     /// Called after tracks are added/removed.
     fn update_album_fingerprint(&self, album_id: &str) -> Result<()>;
+
+    // =========================================================================
+    // Related Artists Enrichment
+    // =========================================================================
+
+    /// Get artists that need MusicBrainz ID lookup (mbid_lookup_status = 0).
+    /// Returns (spotify_id, artist_rowid) pairs.
+    fn get_artists_needing_mbid(&self, limit: usize) -> Result<Vec<(String, i64)>>;
+
+    /// Get artists that have an mbid and need related artists fetched (mbid_lookup_status = 1).
+    /// Returns (spotify_id, mbid, artist_rowid) tuples.
+    fn get_artists_needing_related(&self, limit: usize) -> Result<Vec<(String, String, i64)>>;
+
+    /// Set the MusicBrainz ID for an artist and mark status = 1 (found).
+    fn set_artist_mbid(&self, artist_id: &str, mbid: &str) -> Result<()>;
+
+    /// Mark an artist's mbid as not found (status = 2).
+    fn mark_artist_mbid_not_found(&self, artist_id: &str) -> Result<()>;
+
+    /// Store related artist relationships and mark status = 3 (done).
+    /// Each tuple is (related_artist_rowid, match_score).
+    fn set_related_artists(&self, artist_rowid: i64, related: &[(i64, f64)]) -> Result<()>;
+
+    /// Get related artists for an artist by ID, ordered by match score descending.
+    fn get_related_artists(&self, artist_id: &str) -> Result<Vec<super::Artist>>;
+
+    /// Look up an artist rowid by MusicBrainz ID.
+    fn get_artist_rowid_by_mbid(&self, mbid: &str) -> Result<Option<i64>>;
 }
 
 /// A searchable item for the search index.
