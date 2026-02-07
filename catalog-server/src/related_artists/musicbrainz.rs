@@ -125,10 +125,7 @@ impl MusicBrainzClient {
             if status.as_u16() == 404 {
                 return Ok(None);
             }
-            anyhow::bail!(
-                "MusicBrainz artist lookup failed with status {}",
-                status
-            );
+            anyhow::bail!("MusicBrainz artist lookup failed with status {}", status);
         }
 
         let body: ArtistLookupResponse = response.json()?;
