@@ -26,6 +26,7 @@ pub struct FileConfig {
     pub catalog_store: Option<CatalogStoreConfig>,
     pub agent: Option<AgentConfig>,
     pub ingestion: Option<IngestionConfig>,
+    pub related_artists: Option<RelatedArtistsConfig>,
 }
 
 #[derive(Debug, Deserialize, Default, Clone)]
@@ -176,6 +177,25 @@ pub struct IngestionConfig {
     pub ffprobe_path: Option<String>,
     /// Output bitrate for converted audio (e.g., "320k").
     pub output_bitrate: Option<String>,
+}
+
+/// Configuration for related artists enrichment via MusicBrainz + Last.fm.
+#[derive(Debug, Deserialize, Default, Clone)]
+#[serde(default)]
+pub struct RelatedArtistsConfig {
+    /// Whether the related artists enrichment job is enabled.
+    pub enabled: Option<bool>,
+    /// Last.fm API key (required when enabled).
+    pub lastfm_api_key: Option<String>,
+    /// MusicBrainz User-Agent string (required when enabled).
+    /// Should follow format: "AppName/Version (contact@example.com)"
+    pub musicbrainz_user_agent: Option<String>,
+    /// Number of artists to process per phase per job run.
+    pub batch_size: Option<usize>,
+    /// Maximum number of similar artists to fetch from Last.fm per artist.
+    pub similar_artists_limit: Option<usize>,
+    /// Interval in hours between job runs.
+    pub interval_hours: Option<u64>,
 }
 
 impl FileConfig {

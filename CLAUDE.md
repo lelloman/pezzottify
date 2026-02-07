@@ -136,6 +136,10 @@ The Android project uses a multi-module Gradle setup with modules: `app`, `ui`, 
   - `PopularContentJob`: Computes popular content metrics
   - `IntegrityWatchdogJob`: Periodic catalog integrity scans
   - `AuditLogCleanupJob`: Cleans old download audit entries
+  - `RelatedArtistsEnrichmentJob`: Populates related artists via MusicBrainz + Last.fm
+- `related_artists/`: External API clients for related artist enrichment
+  - `MusicBrainzClient`: Spotify ID ↔ MusicBrainz ID resolution
+  - `LastFmClient`: Similar artists lookup by MusicBrainz ID
 - `server_store/`: Server-level data persistence
   - `SqliteServerStore`: Stores server state (job history, etc.)
 - `downloader/`: External content fetching (optional)

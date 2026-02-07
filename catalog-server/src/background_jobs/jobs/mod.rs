@@ -9,6 +9,7 @@
 // pub mod missing_files_watchdog;
 pub mod ingestion_cleanup;
 pub mod popular_content;
+pub mod related_artists_enrichment;
 pub mod whatsnew_batch;
 
 // pub use audit_log_cleanup::AuditLogCleanupJob;
@@ -16,4 +17,5 @@ pub mod whatsnew_batch;
 // pub use missing_files_watchdog::MissingFilesWatchdogJob;
 pub use ingestion_cleanup::IngestionCleanupJob;
 pub use popular_content::PopularContentJob;
+pub use related_artists_enrichment::RelatedArtistsEnrichmentJob;
 pub use whatsnew_batch::WhatsNewBatchJob;

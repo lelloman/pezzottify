@@ -382,9 +382,11 @@ impl SqliteCatalogStore {
             None => return Ok(None),
         };
 
+        let related_artists = self.get_related_artists(id).unwrap_or_default();
+
         Ok(Some(ResolvedArtist {
             artist,
-            related_artists: vec![],
+            related_artists,
         }))
     }
 
@@ -760,6 +762,177 @@ impl SqliteCatalogStore {
         let conn = read_conn.lock().unwrap();
         conn.query_row("SELECT COUNT(*) FROM tracks", [], |r| r.get::<_, i64>(0))
             .unwrap_or(0) as usize
+    }
+
+    // =========================================================================
+    // Related Artists Enrichment
+    // =========================================================================
+
+    /// Get artists needing MusicBrainz ID lookup (status = 0).
+    pub fn get_artists_needing_mbid(&self, limit: usize) -> Result<Vec<(String, i64)>> {
+        let read_conn = self.get_read_conn();
+        let conn = read_conn.lock().unwrap();
+
+        let mut stmt = conn.prepare_cached(
+            "SELECT id, rowid FROM artists WHERE mbid_lookup_status = 0 LIMIT ?1",
+        )?;
+
+        let results = stmt
+            .query_map(params![limit as i64], |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?))
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+
+        Ok(results)
+    }
+
+    /// Get artists needing related artists fetch (status = 1, has mbid).
+    pub fn get_artists_needing_related(&self, limit: usize) -> Result<Vec<(String, String, i64)>> {
+        let read_conn = self.get_read_conn();
+        let conn = read_conn.lock().unwrap();
+
+        let mut stmt = conn.prepare_cached(
+            "SELECT id, mbid, rowid FROM artists WHERE mbid_lookup_status = 1 AND mbid IS NOT NULL LIMIT ?1",
+        )?;
+
+        let results = stmt
+            .query_map(params![limit as i64], |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, i64>(2)?,
+                ))
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+
+        Ok(results)
+    }
+
+    /// Set MusicBrainz ID for an artist, marking status = 1.
+    pub fn set_artist_mbid(&self, artist_id: &str, mbid: &str) -> Result<()> {
+        let conn = self.write_conn.lock().unwrap();
+        conn.execute(
+            "UPDATE artists SET mbid = ?1, mbid_lookup_status = 1 WHERE id = ?2",
+            params![mbid, artist_id],
+        )?;
+        Ok(())
+    }
+
+    /// Mark artist mbid as not found (status = 2).
+    pub fn mark_artist_mbid_not_found(&self, artist_id: &str) -> Result<()> {
+        let conn = self.write_conn.lock().unwrap();
+        conn.execute(
+            "UPDATE artists SET mbid_lookup_status = 2 WHERE id = ?1",
+            params![artist_id],
+        )?;
+        Ok(())
+    }
+
+    /// Store related artists and mark status = 3.
+    pub fn set_related_artists(&self, artist_rowid: i64, related: &[(i64, f64)]) -> Result<()> {
+        let conn = self.write_conn.lock().unwrap();
+        conn.execute("BEGIN IMMEDIATE", [])?;
+
+        let result = (|| -> Result<()> {
+            // Clear existing relationships
+            conn.execute(
+                "DELETE FROM related_artists WHERE artist_rowid = ?1",
+                params![artist_rowid],
+            )?;
+
+            // Insert new relationships
+            for (related_rowid, score) in related {
+                conn.execute(
+                    "INSERT OR IGNORE INTO related_artists (artist_rowid, related_artist_rowid, match_score) VALUES (?1, ?2, ?3)",
+                    params![artist_rowid, related_rowid, score],
+                )?;
+            }
+
+            // Mark as done
+            conn.execute(
+                "UPDATE artists SET mbid_lookup_status = 3 WHERE rowid = ?1",
+                params![artist_rowid],
+            )?;
+
+            Ok(())
+        })();
+
+        match result {
+            Ok(()) => {
+                conn.execute("COMMIT", [])?;
+                Ok(())
+            }
+            Err(e) => {
+                let _ = conn.execute("ROLLBACK", []);
+                Err(e)
+            }
+        }
+    }
+
+    /// Get related artists for an artist, ordered by match score descending.
+    pub fn get_related_artists(&self, artist_id: &str) -> Result<Vec<Artist>> {
+        let read_conn = self.get_read_conn();
+        let conn = read_conn.lock().unwrap();
+
+        let artist_rowid = match Self::get_artist_rowid(&conn, artist_id)? {
+            Some(r) => r,
+            None => return Ok(vec![]),
+        };
+
+        let mut stmt = conn.prepare_cached(
+            "SELECT a.id, a.name, a.followers_total, a.popularity, a.rowid, a.artist_available
+             FROM artists a
+             INNER JOIN related_artists ra ON a.rowid = ra.related_artist_rowid
+             WHERE ra.artist_rowid = ?1
+             ORDER BY ra.match_score DESC",
+        )?;
+
+        let artists: Vec<Artist> = stmt
+            .query_map(params![artist_rowid], |row| {
+                let artist_rowid: i64 = row.get(4)?;
+                let available: i32 = row.get(5)?;
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, i64>(2)?,
+                    row.get::<_, i32>(3)?,
+                    artist_rowid,
+                    available != 0,
+                ))
+            })?
+            .filter_map(|r| r.ok())
+            .map(
+                |(id, name, followers, popularity, artist_rowid, available)| {
+                    let genres = Self::get_artist_genres(&conn, artist_rowid).unwrap_or_default();
+                    Artist {
+                        id,
+                        name,
+                        genres,
+                        followers_total: followers,
+                        popularity,
+                        available,
+                    }
+                },
+            )
+            .collect();
+
+        Ok(artists)
+    }
+
+    /// Look up artist rowid by MusicBrainz ID.
+    pub fn get_artist_rowid_by_mbid(&self, mbid: &str) -> Result<Option<i64>> {
+        let read_conn = self.get_read_conn();
+        let conn = read_conn.lock().unwrap();
+
+        match conn.query_row(
+            "SELECT rowid FROM artists WHERE mbid = ?1",
+            params![mbid],
+            |r| r.get(0),
+        ) {
+            Ok(rowid) => Ok(Some(rowid)),
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+            Err(e) => Err(e.into()),
+        }
     }
 }
 
@@ -1139,6 +1312,10 @@ impl CatalogStore for SqliteCatalogStore {
                 )?;
                 conn.execute(
                     "DELETE FROM artist_images WHERE artist_rowid = ?1",
+                    params![rowid],
+                )?;
+                conn.execute(
+                    "DELETE FROM related_artists WHERE artist_rowid = ?1 OR related_artist_rowid = ?1",
                     params![rowid],
                 )?;
                 conn.execute("DELETE FROM artists WHERE rowid = ?1", params![rowid])?;
@@ -1952,6 +2129,34 @@ impl CatalogStore for SqliteCatalogStore {
         )?;
 
         Ok(())
+    }
+
+    fn get_artists_needing_mbid(&self, limit: usize) -> Result<Vec<(String, i64)>> {
+        SqliteCatalogStore::get_artists_needing_mbid(self, limit)
+    }
+
+    fn get_artists_needing_related(&self, limit: usize) -> Result<Vec<(String, String, i64)>> {
+        SqliteCatalogStore::get_artists_needing_related(self, limit)
+    }
+
+    fn set_artist_mbid(&self, artist_id: &str, mbid: &str) -> Result<()> {
+        SqliteCatalogStore::set_artist_mbid(self, artist_id, mbid)
+    }
+
+    fn mark_artist_mbid_not_found(&self, artist_id: &str) -> Result<()> {
+        SqliteCatalogStore::mark_artist_mbid_not_found(self, artist_id)
+    }
+
+    fn set_related_artists(&self, artist_rowid: i64, related: &[(i64, f64)]) -> Result<()> {
+        SqliteCatalogStore::set_related_artists(self, artist_rowid, related)
+    }
+
+    fn get_related_artists(&self, artist_id: &str) -> Result<Vec<Artist>> {
+        SqliteCatalogStore::get_related_artists(self, artist_id)
+    }
+
+    fn get_artist_rowid_by_mbid(&self, mbid: &str) -> Result<Option<i64>> {
+        SqliteCatalogStore::get_artist_rowid_by_mbid(self, mbid)
     }
 }
 

@@ -9,7 +9,7 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilte
 
 // Import modules from the library crate
 use pezzottify_catalog_server::background_jobs::jobs::{
-    IngestionCleanupJob, PopularContentJob, WhatsNewBatchJob,
+    IngestionCleanupJob, PopularContentJob, RelatedArtistsEnrichmentJob, WhatsNewBatchJob,
 };
 use pezzottify_catalog_server::background_jobs::{
     create_scheduler, GuardedSearchVault, JobContext,
@@ -278,6 +278,19 @@ async fn main() -> Result<()> {
             }
             Err(e) => {
                 error!("Failed to open ingestion database for cleanup job: {:?}", e);
+            }
+        }
+    }
+
+    // Register related artists enrichment job if configured
+    if let Some(ref ra_settings) = app_config.related_artists {
+        match RelatedArtistsEnrichmentJob::new(ra_settings.clone()) {
+            Ok(job) => {
+                scheduler.register_job(Arc::new(job)).await;
+                info!("Registered related artists enrichment job");
+            }
+            Err(e) => {
+                error!("Failed to create related artists enrichment job: {}", e);
             }
         }
     }

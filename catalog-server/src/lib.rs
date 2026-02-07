@@ -11,6 +11,7 @@ pub mod ingestion;
 pub mod mcp;
 pub mod notifications;
 pub mod oidc;
+pub mod related_artists;
 pub mod search;
 pub mod server;
 pub mod server_store;

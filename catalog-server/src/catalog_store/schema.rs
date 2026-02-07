@@ -26,6 +26,13 @@ const ARTISTS_TABLE: Table = Table {
             non_null = true,
             default_value = Some("0")
         ), // 1 if artist has at least one available track
+        sqlite_column!("mbid", &SqlType::Text), // MusicBrainz ID (nullable)
+        sqlite_column!(
+            "mbid_lookup_status",
+            &SqlType::Integer,
+            non_null = true,
+            default_value = Some("0")
+        ), // 0=not attempted, 1=found, 2=not found, 3=related fetched
     ],
     indices: &[
         ("idx_artists_id", "id"),
@@ -144,6 +151,25 @@ const ARTIST_GENRES_TABLE: Table = Table {
     ],
     indices: &[("idx_artist_genres_artist", "artist_rowid")],
     unique_constraints: &[],
+};
+
+// =============================================================================
+// Related Artists Table
+// =============================================================================
+
+/// Related artists junction table (populated by enrichment job)
+const RELATED_ARTISTS_TABLE: Table = Table {
+    name: "related_artists",
+    columns: &[
+        sqlite_column!("artist_rowid", &SqlType::Integer, non_null = true),
+        sqlite_column!("related_artist_rowid", &SqlType::Integer, non_null = true),
+        sqlite_column!("match_score", &SqlType::Real, non_null = true),
+    ],
+    indices: &[
+        ("idx_related_artists_artist", "artist_rowid"),
+        ("idx_related_artists_related", "related_artist_rowid"),
+    ],
+    unique_constraints: &[&["artist_rowid", "related_artist_rowid"]],
 };
 
 // =============================================================================
@@ -319,6 +345,49 @@ pub const CATALOG_VERSIONED_SCHEMAS: &[VersionedSchema] = &[
             // Create composite index for efficient fingerprint queries
             tx.execute(
                 "CREATE INDEX IF NOT EXISTS idx_album_fingerprint ON albums(track_count, total_duration_ms)",
+                [],
+            )?;
+            Ok(())
+        }),
+    },
+    VersionedSchema {
+        version: 5,
+        tables: &[
+            ARTISTS_TABLE,
+            ALBUMS_TABLE,
+            TRACKS_TABLE,
+            TRACK_ARTISTS_TABLE,
+            ARTIST_ALBUMS_TABLE,
+            ARTIST_GENRES_TABLE,
+            ALBUM_IMAGES_TABLE,
+            ARTIST_IMAGES_TABLE,
+            RELATED_ARTISTS_TABLE,
+        ],
+        migration: Some(|tx: &rusqlite::Connection| {
+            // Add MusicBrainz ID and lookup status columns to artists
+            tx.execute("ALTER TABLE artists ADD COLUMN mbid TEXT", [])?;
+            tx.execute(
+                "ALTER TABLE artists ADD COLUMN mbid_lookup_status INTEGER NOT NULL DEFAULT 0",
+                [],
+            )?;
+            // Status: 0=not attempted, 1=mbid found, 2=mbid not found, 3=related artists fetched
+
+            // Create related_artists junction table
+            tx.execute(
+                "CREATE TABLE IF NOT EXISTS related_artists (
+                    artist_rowid INTEGER NOT NULL,
+                    related_artist_rowid INTEGER NOT NULL,
+                    match_score REAL NOT NULL,
+                    UNIQUE(artist_rowid, related_artist_rowid)
+                )",
+                [],
+            )?;
+            tx.execute(
+                "CREATE INDEX IF NOT EXISTS idx_related_artists_artist ON related_artists(artist_rowid)",
+                [],
+            )?;
+            tx.execute(
+                "CREATE INDEX IF NOT EXISTS idx_related_artists_related ON related_artists(related_artist_rowid)",
                 [],
             )?;
             Ok(())
