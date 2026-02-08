@@ -20,6 +20,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -317,11 +318,14 @@ class PlaybackRouter @Inject constructor(
         localPlayer.initialize()
         remoteController.initialize()
 
-        // Stop local playback when entering remote mode
-        GlobalScope.launch {
+        // Clear local playback session when entering remote mode so that
+        // returning to local mode starts with an idle player instead of stale state.
+        // Must use Main dispatcher because clearSession() calls MediaController
+        // which requires the main thread.
+        GlobalScope.launch(Dispatchers.Main) {
             playbackModeManager.mode.collect { mode ->
                 if (mode is PlaybackMode.Remote) {
-                    localPlayer.stop()
+                    localPlayer.clearSession()
                 }
             }
         }
