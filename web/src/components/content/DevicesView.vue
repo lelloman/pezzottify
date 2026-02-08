@@ -155,11 +155,15 @@ const localImageUrls = computed(() => {
   return [];
 });
 
+const remoteImageUrlCache = {};
+const EMPTY_URLS = [];
 function remoteImageUrls(currentTrack) {
-  if (currentTrack?.image_id) {
-    return [`/v1/content/image/${currentTrack.image_id}`];
+  const id = currentTrack?.image_id;
+  if (!id) return EMPTY_URLS;
+  if (!remoteImageUrlCache[id]) {
+    remoteImageUrlCache[id] = [`/v1/content/image/${id}`];
   }
-  return [];
+  return remoteImageUrlCache[id];
 }
 
 function remoteProgress(state) {

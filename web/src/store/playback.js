@@ -141,7 +141,7 @@ export const usePlaybackStore = defineStore("playback", () => {
       albumTitle: album?.name || "Unknown Album",
       duration: track.duration || localDuration.value || 0,
       trackNumber: track.track_number,
-      imageId: album?.image_id || album?.covers?.[0]?.id || null,
+      imageId: album?.image_id || album?.covers?.[0]?.id || album?.id || null,
     };
   };
 
@@ -164,7 +164,10 @@ export const usePlaybackStore = defineStore("playback", () => {
         trackName: track.name || track.title,
         albumName: albumRef?.item?.name,
         artistName: artistRef?.item?.name,
-        imageId: albumRef?.item?.image_id || albumRef?.item?.covers?.[0]?.id,
+        imageId:
+          albumRef?.item?.image_id ||
+          albumRef?.item?.covers?.[0]?.id ||
+          albumRef?.item?.id,
       };
     },
     () => resolveLocalTrack(),
