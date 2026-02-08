@@ -2,6 +2,7 @@ import { defineStore } from "pinia";
 import { ref } from "vue";
 import { useRemoteStore } from "./remote";
 import { useUserStore } from "./user";
+import { useStaticsStore } from "./statics";
 
 // localStorage key for sync cursor
 const SYNC_CURSOR_KEY = "pezzottify_sync_cursor";
@@ -9,6 +10,7 @@ const SYNC_CURSOR_KEY = "pezzottify_sync_cursor";
 export const useSyncStore = defineStore("sync", () => {
   const remoteStore = useRemoteStore();
   const userStore = useUserStore();
+  const staticsStore = useStaticsStore();
 
   const cursor = ref(0);
   const isInitialized = ref(false);
@@ -101,6 +103,17 @@ export const useSyncStore = defineStore("sync", () => {
 
       case "permissions_reset":
         userStore.applyPermissionsReset(payload.permissions);
+        break;
+
+      case "catalog_invalidation":
+        // Invalidate cached content when catalog changes
+        const contentType = payload.content_type; // "album", "artist", "track"
+        const contentId = payload.content_id;
+        const typeMap = { album: "albums", artist: "artists", track: "tracks" };
+        const itemType = typeMap[contentType];
+        if (itemType) {
+          staticsStore.invalidateItem(itemType, contentId);
+        }
         break;
 
       default:
@@ -306,4 +319,18 @@ export const useSyncStore = defineStore("sync", () => {
     handleSyncMessage,
     applyEvent,
   };
+});
+
+// Register catalog invalidation handler with WebSocket
+// This must be at module level to ensure registration on import
+import { registerHandler } from "@/services/websocket";
+
+registerHandler("catalog", (type, payload) => {
+  if (type === "catalog_invalidation") {
+    const syncStore = useSyncStore();
+    syncStore.applyEvent({
+      type: "catalog_invalidation",
+      payload: payload,
+    });
+  }
 });
