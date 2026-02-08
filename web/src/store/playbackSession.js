@@ -273,9 +273,9 @@ export const usePlaybackSessionStore = defineStore("playbackSession", () => {
         break;
       case "seek":
         if (cmdPayload?.position != null) {
-          const dur = _playbackStore.currentTrack?.duration || 0;
-          if (dur > 0) {
-            _playbackStore.seekToPercentage(cmdPayload.position / dur);
+          const durMs = _playbackStore.currentTrack?.duration || 0;
+          if (durMs > 0) {
+            _playbackStore.seekToPercentage(cmdPayload.position / (durMs / 1000));
           }
         }
         break;
@@ -287,6 +287,69 @@ export const usePlaybackSessionStore = defineStore("playbackSession", () => {
       case "setMuted":
         if (cmdPayload?.muted != null) {
           _playbackStore.setMuted(cmdPayload.muted);
+        }
+        break;
+      case "loadAlbum":
+        if (cmdPayload?.albumId) {
+          _playbackStore.setAlbumId(cmdPayload.albumId, 0, 0);
+        }
+        break;
+      case "loadPlaylist":
+        if (cmdPayload?.playlistId) {
+          // Load playlist by ID - need to fetch playlist first
+          console.log(
+            "[PlaybackSession] loadPlaylist command:",
+            cmdPayload.playlistId,
+          );
+        }
+        break;
+      case "loadSingleTrack":
+        if (cmdPayload?.trackId) {
+          _playbackStore.setPlaylistFromTrackIds([cmdPayload.trackId], 0, true);
+        }
+        break;
+      case "addAlbumToQueue":
+        // Album queue addition requires fetching album tracks first
+        console.log(
+          "[PlaybackSession] addAlbumToQueue command:",
+          cmdPayload?.albumId,
+        );
+        break;
+      case "addPlaylistToQueue":
+        console.log(
+          "[PlaybackSession] addPlaylistToQueue command:",
+          cmdPayload?.playlistId,
+        );
+        break;
+      case "addTracksToQueue":
+        if (cmdPayload?.trackIds) {
+          _playbackStore.addTracksToPlaylist(cmdPayload.trackIds);
+        }
+        break;
+      case "skipToTrack":
+        if (cmdPayload?.index != null) {
+          _playbackStore.loadTrackIndex(cmdPayload.index);
+        }
+        break;
+      case "setShuffle":
+        // Shuffle not yet implemented in web player
+        console.log(
+          "[PlaybackSession] setShuffle command:",
+          cmdPayload?.enabled,
+        );
+        break;
+      case "setRepeat":
+        // Repeat not yet implemented in web player
+        console.log("[PlaybackSession] setRepeat command:", cmdPayload?.mode);
+        break;
+      case "removeTrack":
+        if (cmdPayload?.index != null) {
+          _playbackStore.removeTrackFromPlaylist(cmdPayload.index);
+        }
+        break;
+      case "moveTrack":
+        if (cmdPayload?.fromIndex != null && cmdPayload?.toIndex != null) {
+          _playbackStore.moveTrack(cmdPayload.fromIndex, cmdPayload.toIndex);
         }
         break;
       default:

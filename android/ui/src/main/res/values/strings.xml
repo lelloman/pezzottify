@@ -12,6 +12,7 @@
     <string name="save">Save</string>
     <string name="error">Error</string>
     <string name="undo">Undo</string>
+    <string name="devices">Devices</string>
     <string name="play">Play</string>
     <string name="play_single_track">Play single track</string>
     <string name="pause">Pause</string>

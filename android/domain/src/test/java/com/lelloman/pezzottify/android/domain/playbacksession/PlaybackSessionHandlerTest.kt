@@ -3,8 +3,9 @@ package com.lelloman.pezzottify.android.domain.playbacksession
 import com.google.common.truth.Truth.assertThat
 import com.lelloman.pezzottify.android.domain.app.TimeProvider
 import com.lelloman.pezzottify.android.domain.device.DeviceInfoProvider
-import com.lelloman.pezzottify.android.domain.player.PezzottifyPlayer
-import com.lelloman.pezzottify.android.domain.player.PlaybackMetadataProvider
+import com.lelloman.pezzottify.android.domain.player.PlaybackModeManager
+import com.lelloman.pezzottify.android.domain.player.internal.PlaybackMetadataProviderImpl
+import com.lelloman.pezzottify.android.domain.player.internal.PlayerImpl
 import com.lelloman.pezzottify.android.domain.player.PlaybackPlaylist
 import com.lelloman.pezzottify.android.domain.player.PlaybackPlaylistContext
 import com.lelloman.pezzottify.android.domain.player.PlaybackQueueState
@@ -38,10 +39,11 @@ import org.junit.Test
 class PlaybackSessionHandlerTest {
 
     private lateinit var webSocketManager: WebSocketManager
-    private lateinit var player: PezzottifyPlayer
-    private lateinit var playbackMetadataProvider: PlaybackMetadataProvider
+    private lateinit var player: PlayerImpl
+    private lateinit var playbackMetadataProvider: PlaybackMetadataProviderImpl
     private lateinit var deviceInfoProvider: DeviceInfoProvider
     private lateinit var timeProvider: TimeProvider
+    private lateinit var playbackModeManager: PlaybackModeManager
     private lateinit var loggerFactory: LoggerFactory
 
     private val testDispatcher = StandardTestDispatcher()
@@ -60,6 +62,7 @@ class PlaybackSessionHandlerTest {
     private lateinit var queueStateFlow: MutableStateFlow<PlaybackQueueState?>
     private lateinit var currentTrackProgressSecFlow: MutableStateFlow<Int?>
     private lateinit var currentTrackDurationSecondsFlow: MutableStateFlow<Int?>
+    private lateinit var currentTrackPercentFlow: MutableStateFlow<Float?>
     // Captured handler
     private lateinit var capturedMessageHandler: MessageHandler
 
@@ -83,6 +86,7 @@ class PlaybackSessionHandlerTest {
         queueStateFlow = MutableStateFlow(null)
         currentTrackProgressSecFlow = MutableStateFlow(null)
         currentTrackDurationSecondsFlow = MutableStateFlow(null)
+        currentTrackPercentFlow = MutableStateFlow(null)
 
         val handlerSlot = slot<MessageHandler>()
         webSocketManager = mockk(relaxed = true) {
@@ -105,6 +109,7 @@ class PlaybackSessionHandlerTest {
             every { playbackPlaylist } returns playbackPlaylistFlow
             every { currentTrackProgressSec } returns currentTrackProgressSecFlow
             every { currentTrackDurationSeconds } returns currentTrackDurationSecondsFlow
+            every { currentTrackPercent } returns currentTrackPercentFlow
         }
 
         playbackMetadataProvider = mockk(relaxed = true) {
@@ -129,6 +134,8 @@ class PlaybackSessionHandlerTest {
             every { getValue(any(), any()) } returns mockLogger
         }
 
+        playbackModeManager = PlaybackModeManager(loggerFactory)
+
         sentMessages.clear()
     }
 
@@ -143,6 +150,7 @@ class PlaybackSessionHandlerTest {
         playbackMetadataProvider = playbackMetadataProvider,
         deviceInfoProvider = deviceInfoProvider,
         timeProvider = timeProvider,
+        playbackModeManager = playbackModeManager,
         scope = scope,
         loggerFactory = loggerFactory,
     )
@@ -158,6 +166,7 @@ class PlaybackSessionHandlerTest {
         )
         currentTrackProgressSecFlow.value = 42
         currentTrackDurationSecondsFlow.value = 300
+        currentTrackPercentFlow.value = 14.0f
         isActiveFlow.value = true
         isPlayingFlow.value = true
         currentTrackIndexFlow.value = 0
@@ -245,7 +254,7 @@ class PlaybackSessionHandlerTest {
         @Suppress("UNCHECKED_CAST")
         val payload = stateMessage!!.second as Map<String, Any?>
         assertThat(payload["is_playing"]).isEqualTo(true)
-        assertThat(payload["position"]).isEqualTo(42)
+        assertThat(payload["position"] as Double).isWithin(0.01).of(42.0)
         assertThat(payload["volume"]).isEqualTo(1.0)
         assertThat(payload["muted"]).isEqualTo(false)
         assertThat(payload["shuffle"]).isEqualTo(false)
@@ -371,6 +380,7 @@ class PlaybackSessionHandlerTest {
             "playback.command",
             """{"command":"play"}"""
         )
+        testScheduler.runCurrent()
 
         verify { player.setIsPlaying(true) }
     }
@@ -385,6 +395,7 @@ class PlaybackSessionHandlerTest {
             "playback.command",
             """{"command":"pause"}"""
         )
+        testScheduler.runCurrent()
 
         verify { player.setIsPlaying(false) }
     }
@@ -399,6 +410,7 @@ class PlaybackSessionHandlerTest {
             "playback.command",
             """{"command":"next"}"""
         )
+        testScheduler.runCurrent()
 
         verify { player.skipToNextTrack() }
     }
@@ -413,6 +425,7 @@ class PlaybackSessionHandlerTest {
             "playback.command",
             """{"command":"prev"}"""
         )
+        testScheduler.runCurrent()
 
         verify { player.skipToPreviousTrack() }
     }
@@ -429,8 +442,9 @@ class PlaybackSessionHandlerTest {
             "playback.command",
             """{"command":"seek","payload":{"position":100.0}}"""
         )
+        testScheduler.runCurrent()
 
-        verify { player.seekToPercentage(0.5f) }
+        verify { player.seekToPercentage(50.0f) }
     }
 
     @Test
@@ -443,6 +457,7 @@ class PlaybackSessionHandlerTest {
             "playback.command",
             """{"command":"setVolume","payload":{"volume":0.75}}"""
         )
+        testScheduler.runCurrent()
 
         verify { player.setVolume(0.75f) }
     }
@@ -457,6 +472,7 @@ class PlaybackSessionHandlerTest {
             "playback.command",
             """{"command":"setMuted","payload":{"muted":true}}"""
         )
+        testScheduler.runCurrent()
 
         verify { player.setMuted(true) }
     }
@@ -636,6 +652,236 @@ class PlaybackSessionHandlerTest {
         )
 
         // None of these should cause a crash - if we get here, the test passes
+    }
+
+    // ========== Welcome Device State Tests ==========
+
+    @Test
+    fun `welcome message populates myDeviceId`() = runTest {
+        handler = createHandler(backgroundScope)
+        handler.initialize()
+        testScheduler.runCurrent()
+
+        capturedMessageHandler.onMessage(
+            "playback.welcome",
+            """{"device_id":42,"devices":[],"session":{"active_devices":[]}}"""
+        )
+
+        assertThat(handler.myDeviceId.value).isEqualTo(42)
+    }
+
+    @Test
+    fun `welcome message populates connectedDevices`() = runTest {
+        handler = createHandler(backgroundScope)
+        handler.initialize()
+        testScheduler.runCurrent()
+
+        capturedMessageHandler.onMessage(
+            "playback.welcome",
+            """{"device_id":1,"devices":[{"id":1,"name":"Android","device_type":"android"},{"id":2,"name":"Chrome on Linux","device_type":"web"}],"session":{"active_devices":[]}}"""
+        )
+
+        assertThat(handler.connectedDevices.value).hasSize(2)
+        assertThat(handler.connectedDevices.value[0].id).isEqualTo(1)
+        assertThat(handler.connectedDevices.value[0].name).isEqualTo("Android")
+        assertThat(handler.connectedDevices.value[0].deviceType).isEqualTo("android")
+        assertThat(handler.connectedDevices.value[1].id).isEqualTo(2)
+        assertThat(handler.connectedDevices.value[1].name).isEqualTo("Chrome on Linux")
+        assertThat(handler.connectedDevices.value[1].deviceType).isEqualTo("web")
+    }
+
+    @Test
+    fun `welcome message populates otherDeviceStates from active_devices`() = runTest {
+        handler = createHandler(backgroundScope)
+        handler.initialize()
+        testScheduler.runCurrent()
+
+        capturedMessageHandler.onMessage(
+            "playback.welcome",
+            """{"device_id":1,"devices":[{"id":1,"name":"Android","device_type":"android"},{"id":2,"name":"Web","device_type":"web"}],"session":{"active_devices":[{"device_id":2,"device_name":"Web","state":{"current_track":{"id":"t1","title":"Song","artist_name":"Artist","album_title":"Album","duration":180000,"image_id":"img1"},"position":45.0,"is_playing":true,"volume":0.8,"muted":false,"shuffle":false,"repeat":"off","timestamp":1000}}]}}"""
+        )
+
+        assertThat(handler.otherDeviceStates.value).hasSize(1)
+        val state = handler.otherDeviceStates.value[2]!!
+        assertThat(state.isPlaying).isTrue()
+        assertThat(state.position).isEqualTo(45.0)
+        assertThat(state.currentTrack!!.id).isEqualTo("t1")
+        assertThat(state.currentTrack!!.title).isEqualTo("Song")
+        assertThat(state.currentTrack!!.artistName).isEqualTo("Artist")
+        assertThat(state.currentTrack!!.durationMs).isEqualTo(180000L)
+        assertThat(state.currentTrack!!.imageId).isEqualTo("img1")
+    }
+
+    @Test
+    fun `welcome message excludes own device from otherDeviceStates`() = runTest {
+        handler = createHandler(backgroundScope)
+        handler.initialize()
+        testScheduler.runCurrent()
+
+        capturedMessageHandler.onMessage(
+            "playback.welcome",
+            """{"device_id":1,"devices":[],"session":{"active_devices":[{"device_id":1,"device_name":"Self","state":{"current_track":{"id":"t1","title":"Song","artist_name":"A","duration":1000},"position":0,"is_playing":false,"volume":1,"muted":false,"shuffle":false,"repeat":"off","timestamp":0}}]}}"""
+        )
+
+        assertThat(handler.otherDeviceStates.value).isEmpty()
+    }
+
+    // ========== Device State Update Tests ==========
+
+    @Test
+    fun `device_state updates otherDeviceStates`() = runTest {
+        handler = createHandler(backgroundScope)
+        handler.initialize()
+        testScheduler.runCurrent()
+
+        // Set myDeviceId first via welcome
+        capturedMessageHandler.onMessage(
+            "playback.welcome",
+            """{"device_id":1,"devices":[],"session":{"active_devices":[]}}"""
+        )
+
+        capturedMessageHandler.onMessage(
+            "playback.device_state",
+            """{"device_id":3,"device_name":"Phone","state":{"current_track":{"id":"t2","title":"Track 2","artist_name":"Art","duration":200000,"image_id":"i2"},"position":10.5,"is_playing":true,"volume":1.0,"muted":false,"shuffle":true,"repeat":"all","timestamp":2000}}"""
+        )
+
+        assertThat(handler.otherDeviceStates.value).hasSize(1)
+        val state = handler.otherDeviceStates.value[3]!!
+        assertThat(state.currentTrack!!.title).isEqualTo("Track 2")
+        assertThat(state.position).isEqualTo(10.5)
+        assertThat(state.shuffle).isTrue()
+        assertThat(state.repeat).isEqualTo("all")
+        assertThat(state.receivedAt).isGreaterThan(0L)
+    }
+
+    @Test
+    fun `device_state ignores own device updates`() = runTest {
+        handler = createHandler(backgroundScope)
+        handler.initialize()
+        testScheduler.runCurrent()
+
+        capturedMessageHandler.onMessage(
+            "playback.welcome",
+            """{"device_id":1,"devices":[],"session":{"active_devices":[]}}"""
+        )
+
+        capturedMessageHandler.onMessage(
+            "playback.device_state",
+            """{"device_id":1,"device_name":"Self","state":{"current_track":{"id":"t1","title":"S","duration":1000},"position":0,"is_playing":false,"volume":1,"muted":false,"shuffle":false,"repeat":"off","timestamp":0}}"""
+        )
+
+        assertThat(handler.otherDeviceStates.value).isEmpty()
+    }
+
+    // ========== Device Stopped Tests ==========
+
+    @Test
+    fun `device_stopped removes device from otherDeviceStates`() = runTest {
+        handler = createHandler(backgroundScope)
+        handler.initialize()
+        testScheduler.runCurrent()
+
+        capturedMessageHandler.onMessage(
+            "playback.welcome",
+            """{"device_id":1,"devices":[],"session":{"active_devices":[{"device_id":5,"device_name":"W","state":{"current_track":{"id":"t","title":"T","duration":1000},"position":0,"is_playing":false,"volume":1,"muted":false,"shuffle":false,"repeat":"off","timestamp":0}}]}}"""
+        )
+
+        assertThat(handler.otherDeviceStates.value).hasSize(1)
+
+        capturedMessageHandler.onMessage(
+            "playback.device_stopped",
+            """{"device_id":5}"""
+        )
+
+        assertThat(handler.otherDeviceStates.value).isEmpty()
+    }
+
+    // ========== Device List Changed Tests ==========
+
+    @Test
+    fun `device_list_changed updates connectedDevices`() = runTest {
+        handler = createHandler(backgroundScope)
+        handler.initialize()
+        testScheduler.runCurrent()
+
+        capturedMessageHandler.onMessage(
+            "playback.welcome",
+            """{"device_id":1,"devices":[{"id":1,"name":"A","device_type":"android"}],"session":{"active_devices":[]}}"""
+        )
+
+        assertThat(handler.connectedDevices.value).hasSize(1)
+
+        capturedMessageHandler.onMessage(
+            "playback.device_list_changed",
+            """{"devices":[{"id":1,"name":"A","device_type":"android"},{"id":2,"name":"B","device_type":"web"},{"id":3,"name":"C","device_type":"web"}]}"""
+        )
+
+        assertThat(handler.connectedDevices.value).hasSize(3)
+        assertThat(handler.connectedDevices.value[2].name).isEqualTo("C")
+    }
+
+    // ========== Disconnect State Reset Tests ==========
+
+    @Test
+    fun `disconnect resets device state`() = runTest {
+        handler = createHandler(backgroundScope)
+        handler.initialize()
+        testScheduler.runCurrent()
+
+        connectionStateFlow.value = ConnectionState.Connected(deviceId = 1, serverVersion = "1.0")
+        testScheduler.runCurrent()
+
+        capturedMessageHandler.onMessage(
+            "playback.welcome",
+            """{"device_id":1,"devices":[{"id":1,"name":"A","device_type":"android"}],"session":{"active_devices":[{"device_id":2,"device_name":"B","state":{"current_track":{"id":"t","title":"T","duration":1000},"position":0,"is_playing":false,"volume":1,"muted":false,"shuffle":false,"repeat":"off","timestamp":0}}]}}"""
+        )
+
+        assertThat(handler.myDeviceId.value).isEqualTo(1)
+        assertThat(handler.connectedDevices.value).isNotEmpty()
+        assertThat(handler.otherDeviceStates.value).isNotEmpty()
+
+        connectionStateFlow.value = ConnectionState.Disconnected
+        testScheduler.runCurrent()
+
+        assertThat(handler.myDeviceId.value).isNull()
+        assertThat(handler.connectedDevices.value).isEmpty()
+        assertThat(handler.otherDeviceStates.value).isEmpty()
+    }
+
+    // ========== Send Command Tests ==========
+
+    @Test
+    fun `sendCommand sends correctly formatted message`() = runTest {
+        handler = createHandler(backgroundScope)
+        handler.initialize()
+        testScheduler.runCurrent()
+
+        handler.sendCommand("play", emptyMap(), 42)
+
+        val commandMessage = sentMessages.find { it.first == "playback.command" }
+        assertThat(commandMessage).isNotNull()
+        @Suppress("UNCHECKED_CAST")
+        val payload = commandMessage!!.second as Map<String, Any?>
+        assertThat(payload["command"]).isEqualTo("play")
+        assertThat(payload["target_device_id"]).isEqualTo(42)
+    }
+
+    @Test
+    fun `sendCommand includes payload`() = runTest {
+        handler = createHandler(backgroundScope)
+        handler.initialize()
+        testScheduler.runCurrent()
+
+        handler.sendCommand("seek", mapOf("position" to 45.0), 7)
+
+        val commandMessage = sentMessages.find { it.first == "playback.command" }
+        @Suppress("UNCHECKED_CAST")
+        val payload = commandMessage!!.second as Map<String, Any?>
+        assertThat(payload["command"]).isEqualTo("seek")
+        assertThat(payload["target_device_id"]).isEqualTo(7)
+        @Suppress("UNCHECKED_CAST")
+        val cmdPayload = payload["payload"] as Map<String, Any?>
+        assertThat(cmdPayload["position"]).isEqualTo(45.0)
     }
 
     companion object {

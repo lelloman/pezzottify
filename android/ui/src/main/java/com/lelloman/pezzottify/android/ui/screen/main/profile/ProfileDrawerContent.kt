@@ -18,6 +18,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ExitToApp
 import androidx.compose.material.icons.outlined.History
+import androidx.compose.material.icons.outlined.Devices
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.NewReleases
 import androidx.compose.material.icons.outlined.Notifications
@@ -57,6 +58,7 @@ fun ProfileDrawerContent(
     onNavigateToMyRequests: () -> Unit,
     onNavigateToNotifications: () -> Unit,
     onNavigateToListeningHistory: () -> Unit,
+    onNavigateToDevices: () -> Unit,
     onNavigateToWhatsNew: () -> Unit,
     onNavigateToAbout: () -> Unit,
     onNavigateToLogin: () -> Unit,
@@ -72,6 +74,7 @@ fun ProfileDrawerContent(
         onNavigateToMyRequests = onNavigateToMyRequests,
         onNavigateToNotifications = onNavigateToNotifications,
         onNavigateToListeningHistory = onNavigateToListeningHistory,
+        onNavigateToDevices = onNavigateToDevices,
         onNavigateToWhatsNew = onNavigateToWhatsNew,
         onNavigateToAbout = onNavigateToAbout,
         onNavigateToLogin = onNavigateToLogin,
@@ -89,6 +92,7 @@ private fun ProfileDrawerContentInternal(
     onNavigateToMyRequests: () -> Unit,
     onNavigateToNotifications: () -> Unit,
     onNavigateToListeningHistory: () -> Unit,
+    onNavigateToDevices: () -> Unit,
     onNavigateToWhatsNew: () -> Unit,
     onNavigateToAbout: () -> Unit,
     onNavigateToLogin: () -> Unit,
@@ -198,6 +202,16 @@ private fun ProfileDrawerContentInternal(
                 onClick = {
                     onCloseDrawer()
                     onNavigateToListeningHistory()
+                }
+            )
+
+            // Devices
+            DrawerMenuItem(
+                icon = Icons.Outlined.Devices,
+                label = stringResource(R.string.devices),
+                onClick = {
+                    onCloseDrawer()
+                    onNavigateToDevices()
                 }
             )
 

@@ -88,10 +88,8 @@ export const useStaticsStore = defineStore("statics", () => {
       artists_ids: resolvedTrack.artists
         ? resolvedTrack.artists.map((a) => a.artist.id)
         : [],
-      // Also include duration in ms for compatibility (server returns duration_secs)
-      duration: resolvedTrack.track.duration_secs
-        ? resolvedTrack.track.duration_secs * 1000
-        : null,
+      // Duration in ms (server field is duration_ms)
+      duration: resolvedTrack.track.duration_ms || null,
       // Include availability state (defaults to available if not present)
       availability: resolvedTrack.track.availability || "available",
     };

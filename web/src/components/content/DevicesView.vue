@@ -118,13 +118,13 @@
           <div v-if="device.state?.current_track" class="progressRow">
             <ProgressBar
               class="deviceProgressBar"
-              :progress="remoteProgress(device.state)"
+              :progress="interpolatedRemoteProgress(device.id, device.state)"
               @update:progress="
                 (p) => onRemoteSeek(p, device.id, device.state)
               "
             />
             <span class="progressTime"
-              >{{ formatSec(device.state.position) }} /
+              >{{ formatSec(interpolatedRemotePositionSec(device.id, device.state)) }} /
               {{ formatMs(device.state.current_track.duration) }}</span
             >
           </div>
@@ -138,7 +138,7 @@
 </template>
 
 <script setup>
-import { computed } from "vue";
+import { computed, ref, onMounted, onUnmounted } from "vue";
 import { usePlaybackSessionStore } from "@/store/playbackSession";
 import { usePlaybackStore } from "@/store/playback";
 import MultiSourceImage from "@/components/common/MultiSourceImage.vue";
@@ -171,12 +171,60 @@ function remoteImageUrls(currentTrack) {
   return remoteImageUrlCache[id];
 }
 
-function remoteProgress(state) {
+// ========================================
+// Progress interpolation for remote devices
+// ========================================
+
+// Tick counter to force reactive updates
+const tickCount = ref(0);
+let interpolationTimer = null;
+
+onMounted(() => {
+  interpolationTimer = setInterval(() => {
+    tickCount.value++;
+  }, 500);
+});
+
+onUnmounted(() => {
+  if (interpolationTimer) {
+    clearInterval(interpolationTimer);
+    interpolationTimer = null;
+  }
+});
+
+/**
+ * Compute the interpolated position in seconds for a remote device.
+ * Uses the last received state + elapsed time since the broadcast timestamp.
+ */
+function interpolatedRemotePositionSec(deviceId, state) {
+  // Access tickCount to make this reactive on timer ticks
+  void tickCount.value;
+
+  if (!state?.current_track?.duration || state.current_track.duration <= 0)
+    return 0;
+
+  const basePosition = state.position || 0;
+  const durationSec = state.current_track.duration / 1000;
+
+  if (!state.is_playing || !state.timestamp) {
+    return Math.min(basePosition, durationSec);
+  }
+
+  // Interpolate: position + elapsed time since broadcast
+  const elapsedSec = (Date.now() - state.timestamp) / 1000;
+  return Math.min(basePosition + elapsedSec, durationSec);
+}
+
+/**
+ * Compute the interpolated progress (0-1) for a remote device.
+ */
+function interpolatedRemoteProgress(deviceId, state) {
   if (!state?.current_track?.duration || state.current_track.duration <= 0)
     return 0;
   const durationSec = state.current_track.duration / 1000;
   if (durationSec <= 0) return 0;
-  return Math.min(state.position / durationSec, 1);
+  const posSec = interpolatedRemotePositionSec(deviceId, state);
+  return Math.min(posSec / durationSec, 1);
 }
 
 function formatSec(sec) {
