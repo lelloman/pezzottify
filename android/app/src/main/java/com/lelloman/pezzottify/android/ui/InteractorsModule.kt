@@ -1327,8 +1327,9 @@ class InteractorsModule {
                         if (currentTrack != null || playerError != null) {
                             val currentIndex = data.queueState?.currentIndex ?: 0
                             val tracksCount = data.queueState?.tracks?.size ?: 0
-                            val hasNext = currentIndex < tracksCount - 1
-                            val hasPrevious = currentIndex > 0
+                            val isRemote = playbackModeManager.mode.value is com.lelloman.pezzottify.android.domain.player.PlaybackMode.Remote
+                            val hasNext = isRemote || currentIndex < tracksCount - 1
+                            val hasPrevious = isRemote || currentIndex > 0
                             val repeatModeUi = when (data.repeatMode) {
                                 RepeatMode.OFF -> RepeatModeUi.OFF
                                 RepeatMode.ALL -> RepeatModeUi.ALL

@@ -17,6 +17,8 @@ data class RemotePlaybackState(
     val timestamp: Long,
     /** Local clock time when this state was received, for clock-skew-safe interpolation. */
     val receivedAt: Long = 0L,
+    /** Index of the current track within the queue, as reported by the remote device. */
+    val queuePosition: Int = 0,
 )
 
 data class RemoteTrackInfo(
