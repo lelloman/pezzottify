@@ -553,6 +553,76 @@ impl PlaybackSessionManager {
             .get(&(user_id, device_id))
             .map(|meta| meta.name.clone())
     }
+
+    /// Return a snapshot of all active playback sessions for admin visibility.
+    pub async fn get_active_sessions(&self) -> Vec<ActiveSessionSnapshot> {
+        let sessions = self.sessions.read().await;
+        let devices = self.devices.read().await;
+
+        sessions
+            .iter()
+            .filter(|(_, session)| !session.device_states.is_empty())
+            .map(|(user_id, session)| {
+                let device_snapshots: Vec<DeviceSnapshot> = session
+                    .device_states
+                    .iter()
+                    .map(|(device_id, ds)| {
+                        let meta = devices.get(&(*user_id, *device_id));
+                        DeviceSnapshot {
+                            device_id: *device_id,
+                            device_name: meta
+                                .map(|m| m.name.clone())
+                                .unwrap_or_else(|| "Unknown".to_string()),
+                            device_type: meta.map(|m| m.device_type),
+                            is_playing: ds.state.is_playing,
+                            track_title: ds
+                                .state
+                                .current_track
+                                .as_ref()
+                                .map(|t| t.title.clone()),
+                            artist_name: ds
+                                .state
+                                .current_track
+                                .as_ref()
+                                .map(|t| t.artist_name.clone()),
+                            position: ds.state.position,
+                            queue_length: ds.queue.len(),
+                            last_update_secs_ago: ds.last_update.elapsed().as_secs(),
+                        }
+                    })
+                    .collect();
+
+                ActiveSessionSnapshot {
+                    user_id: *user_id,
+                    devices: device_snapshots,
+                }
+            })
+            .collect()
+    }
+}
+
+/// Admin-facing snapshot of one user's active playback session.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct ActiveSessionSnapshot {
+    pub user_id: usize,
+    pub devices: Vec<DeviceSnapshot>,
+}
+
+/// Admin-facing snapshot of one device's playback state.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct DeviceSnapshot {
+    pub device_id: usize,
+    pub device_name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub device_type: Option<DeviceType>,
+    pub is_playing: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub track_title: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub artist_name: Option<String>,
+    pub position: f64,
+    pub queue_length: usize,
+    pub last_update_secs_ago: u64,
 }
 
 #[cfg(test)]
