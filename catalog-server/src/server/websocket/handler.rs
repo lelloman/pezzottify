@@ -309,11 +309,22 @@ async fn handle_playback_message(
 
         msg_types::PLAYBACK_COMMAND => {
             match serde_json::from_value::<PlaybackCommandPayload>(payload) {
-                Ok(cmd) => {
-                    manager
-                        .handle_command(user_id, device_id, &cmd.command, cmd.payload)
-                        .await
-                }
+                Ok(cmd) => match cmd.target_device_id {
+                    Some(target) => {
+                        manager
+                            .handle_command(
+                                user_id,
+                                device_id,
+                                target,
+                                &cmd.command,
+                                cmd.payload,
+                            )
+                            .await
+                    }
+                    None => Err(PlaybackError::InvalidMessage(
+                        "target_device_id is required".to_string(),
+                    )),
+                },
                 Err(e) => Err(PlaybackError::InvalidMessage(format!(
                     "Invalid command payload: {}",
                     e

@@ -133,8 +133,12 @@ export const usePlaybackSessionStore = defineStore("playbackSession", () => {
     });
   }
 
-  function sendCommand(command, payload = {}) {
-    ws.send("playback.command", { command, payload });
+  function sendCommand(command, payload = {}, targetDeviceId = null) {
+    const msg = { command, payload };
+    if (targetDeviceId != null) {
+      msg.target_device_id = targetDeviceId;
+    }
+    ws.send("playback.command", msg);
   }
 
   // ============================================
