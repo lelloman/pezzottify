@@ -33,28 +33,6 @@
     </div>
 
     <div class="settings-section">
-      <h2 class="section-title">Remote Control</h2>
-      <div class="setting-row">
-        <div class="setting-info">
-          <span class="setting-label">Auto Remote Control</span>
-          <span class="setting-description">
-            When another device is playing music, choose how this device
-            responds.
-          </span>
-        </div>
-        <select
-          class="setting-select"
-          :value="remoteControlPreference"
-          @change="updateRemoteControlPreference"
-        >
-          <option value="always">Always connect</option>
-          <option value="ask">Ask first</option>
-          <option value="never">Never</option>
-        </select>
-      </div>
-    </div>
-
-    <div class="settings-section">
       <h2 class="section-title">Display</h2>
       <div class="setting-row">
         <div class="setting-info">
@@ -73,23 +51,13 @@
 </template>
 
 <script setup>
-import { ref } from "vue";
 import { useDebugStore } from "@/store/debug";
 import { storeToRefs } from "pinia";
-import { usePlaybackSessionStore } from "@/store/playbackSession";
 
 const debugStore = useDebugStore();
 const { useOrganicSearch, imagesEnabled, excludeUnavailable } =
   storeToRefs(debugStore);
 
-const sessionStore = usePlaybackSessionStore();
-const remoteControlPreference = ref(sessionStore.getRemoteControlPreference());
-
-function updateRemoteControlPreference(event) {
-  const value = event.target.value;
-  remoteControlPreference.value = value;
-  sessionStore.setRemoteControlPreference(value);
-}
 </script>
 
 <style scoped>

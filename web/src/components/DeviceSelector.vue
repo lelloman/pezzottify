@@ -27,7 +27,7 @@
           v-for="device in devices"
           :key="device.id"
           class="deviceItem"
-          :class="{ activeDevice: device.is_audio_device }"
+          :class="{ activeDevice: device.is_playing }"
         >
           <div class="deviceIcon">
             <svg
@@ -58,31 +58,11 @@
             <span v-if="device.id === myDeviceId" class="deviceBadge"
               >This device</span
             >
-            <span v-if="device.is_audio_device" class="deviceBadge playing"
+            <span v-if="device.is_playing" class="deviceBadge playing"
               >Playing</span
             >
           </div>
-          <button
-            v-if="!device.is_audio_device && device.id === myDeviceId && sessionExists"
-            class="deviceAction"
-            @click.stop="handleTakeover"
-          >
-            Play here
-          </button>
         </div>
-      </div>
-      <div v-if="isRemote" class="dropdownFooter">
-        <button class="disconnectButton" @click.stop="handleDisconnect">
-          Stop remote control
-        </button>
-      </div>
-      <div
-        v-else-if="sessionExists && !isAudioDevice && !isRemote"
-        class="dropdownFooter"
-      >
-        <button class="connectButton" @click.stop="handleConnect">
-          Control {{ audioDeviceName || "remote device" }}
-        </button>
       </div>
     </div>
   </div>
@@ -98,10 +78,6 @@ const selectorRef = ref(null);
 
 const devices = computed(() => sessionStore.devices);
 const myDeviceId = computed(() => sessionStore.myDeviceId);
-const sessionExists = computed(() => sessionStore.sessionExists);
-const isRemote = computed(() => sessionStore.isRemote);
-const isAudioDevice = computed(() => sessionStore.isAudioDevice);
-const audioDeviceName = computed(() => sessionStore.audioDeviceName);
 const otherDevicesCount = computed(() => sessionStore.otherDevicesCount);
 
 const buttonTitle = computed(() => {
@@ -112,21 +88,6 @@ const buttonTitle = computed(() => {
 
 function toggleOpen() {
   isOpen.value = !isOpen.value;
-}
-
-function handleTakeover() {
-  sessionStore.requestTakeover();
-  isOpen.value = false;
-}
-
-function handleConnect() {
-  sessionStore.enterRemoteMode();
-  isOpen.value = false;
-}
-
-function handleDisconnect() {
-  sessionStore.exitRemoteMode();
-  isOpen.value = false;
 }
 
 function handleClickOutside(e) {
@@ -243,57 +204,4 @@ onBeforeUnmount(() => {
   color: var(--spotify-green);
 }
 
-.deviceAction {
-  flex-shrink: 0;
-  padding: var(--spacing-1) var(--spacing-3);
-  font-size: var(--text-xs);
-  font-weight: var(--font-medium);
-  color: var(--text-base);
-  background-color: transparent;
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-full);
-  cursor: pointer;
-  transition: all var(--transition-fast);
-}
-
-.deviceAction:hover {
-  background-color: var(--bg-elevated-highlight);
-  border-color: var(--text-base);
-}
-
-.dropdownFooter {
-  padding: var(--spacing-2) var(--spacing-4) var(--spacing-3);
-  border-top: 1px solid var(--bg-elevated-highlight);
-}
-
-.connectButton,
-.disconnectButton {
-  width: 100%;
-  padding: var(--spacing-2) var(--spacing-3);
-  font-size: var(--text-sm);
-  font-weight: var(--font-medium);
-  border: none;
-  border-radius: var(--radius-full);
-  cursor: pointer;
-  transition: all var(--transition-fast);
-}
-
-.connectButton {
-  background-color: var(--spotify-green);
-  color: var(--bg-base);
-}
-
-.connectButton:hover {
-  background-color: var(--spotify-green-hover);
-}
-
-.disconnectButton {
-  background-color: transparent;
-  color: var(--text-base);
-  border: 1px solid var(--border-default);
-}
-
-.disconnectButton:hover {
-  background-color: var(--bg-elevated-highlight);
-}
 </style>

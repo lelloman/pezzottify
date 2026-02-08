@@ -421,29 +421,6 @@ export const usePlaybackStore = defineStore("playback", () => {
   }
 
   // ============================================
-  // Transfer support
-  // ============================================
-
-  function assumeFromTransfer(state, queue) {
-    const trackIds = queue.map((item) => item.id);
-    const playlist = makePlaylistFromTrackIds(trackIds);
-    setNewPlayingPlaylist(playlist);
-
-    if (state.current_track) {
-      const trackIndex = state.queue_position;
-      const dur = state.current_track.duration || 0;
-      const seekPct = dur > 0 ? state.position / dur : 0;
-      loadTrack(trackIndex, seekPct);
-      if (state.is_playing) {
-        play();
-      }
-    }
-
-    setVolume(state.volume);
-    setMuted(state.muted);
-  }
-
-  // ============================================
   // Playlist creation helpers
   // ============================================
 
@@ -781,6 +758,7 @@ export const usePlaybackStore = defineStore("playback", () => {
     currentTrackIndex.value = null;
     currentPlaylistIndex.value = null;
     playlistsHistory.value = [];
+    getSessionStore()?.notifyStopped();
   };
 
   // ============================================
@@ -992,7 +970,6 @@ export const usePlaybackStore = defineStore("playback", () => {
     exitRemoteMode,
     applyRemoteState,
     applyRemoteQueue,
-    assumeFromTransfer,
     snapshotState,
     snapshotQueue,
     loadPersistedState,
