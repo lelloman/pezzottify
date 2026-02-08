@@ -4,20 +4,24 @@ import androidx.activity.compose.BackHandler
 import androidx.annotation.StringRes
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Laptop
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.DrawerValue
@@ -181,6 +185,10 @@ private fun MainScreenContent(state: MainScreenState, actions: MainScreenActions
                     shouldRestoreDrawer = true
                     navController.navigate(Screen.Main.ListeningHistory)
                 },
+                onNavigateToDevices = {
+                    shouldRestoreDrawer = true
+                    navController.navigate(Screen.Main.Devices)
+                },
                 onNavigateToWhatsNew = {
                     shouldRestoreDrawer = true
                     navController.navigate(Screen.Main.WhatsNew)
@@ -316,6 +324,11 @@ private fun MainScreenContent(state: MainScreenState, actions: MainScreenActions
                         navController = navController,
                     )
                 }
+                composable<Screen.Main.Devices> {
+                    com.lelloman.pezzottify.android.ui.screen.main.devices.DevicesScreen(
+                        navController = navController,
+                    )
+                }
                 composable<Screen.Main.GenreList> {
                     com.lelloman.pezzottify.android.ui.screen.main.genre.GenreListScreen(
                         navController = navController
@@ -337,7 +350,12 @@ private fun MainScreenContent(state: MainScreenState, actions: MainScreenActions
                 }
             }
             if (state.bottomPlayer.isVisible && !isOverlayScreen) {
-                BottomPlayer(state.bottomPlayer, actions, onClickPlayer = { navController.toPlayer() })
+                BottomPlayer(
+                    state = state.bottomPlayer,
+                    actions = actions,
+                    remoteDeviceName = state.remoteDeviceName,
+                    onClickPlayer = { navController.toPlayer() },
+                )
             }
         }
     }
@@ -373,7 +391,12 @@ private fun TrackInfoPage(
 }
 
 @Composable
-private fun BottomPlayer(state: MainScreenState.BottomPlayer, actions: MainScreenActions, onClickPlayer: () -> Unit) {
+private fun BottomPlayer(
+    state: MainScreenState.BottomPlayer,
+    actions: MainScreenActions,
+    remoteDeviceName: String? = null,
+    onClickPlayer: () -> Unit,
+) {
     // Build the list of tracks for the pager: [previous?, current, next?]
     val hasPrevious = state.previousTrackName != null
     val hasNext = state.nextTrackName != null
@@ -422,9 +445,34 @@ private fun BottomPlayer(state: MainScreenState.BottomPlayer, actions: MainScree
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .background(MaterialTheme.colorScheme.surfaceContainer)
+            .background(
+                if (remoteDeviceName != null) MaterialTheme.colorScheme.tertiaryContainer
+                else MaterialTheme.colorScheme.surfaceContainer
+            )
     ) {
         Column {
+            if (remoteDeviceName != null) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 2.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center,
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Laptop,
+                        contentDescription = null,
+                        modifier = Modifier.size(12.dp),
+                        tint = MaterialTheme.colorScheme.onTertiaryContainer,
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = "Controlling $remoteDeviceName",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onTertiaryContainer,
+                    )
+                }
+            }
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier
@@ -489,6 +537,7 @@ private fun BottomPlayer(state: MainScreenState.BottomPlayer, actions: MainScree
 @Composable
 private fun PreviewBottomPlayer() {
     BottomPlayer(
+        remoteDeviceName = null,
         state = MainScreenState.BottomPlayer(
             isVisible = true,
             trackName = "A very long track name to see what happens when it is very very long",

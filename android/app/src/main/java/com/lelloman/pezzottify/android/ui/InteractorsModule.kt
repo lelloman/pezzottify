@@ -64,6 +64,10 @@ import com.lelloman.pezzottify.android.ui.screen.main.content.artist.ArtistScree
 import com.lelloman.pezzottify.android.ui.screen.main.content.track.TrackScreenViewModel
 import com.lelloman.pezzottify.android.ui.screen.main.content.userplaylist.UiUserPlaylistDetails
 import com.lelloman.pezzottify.android.ui.screen.main.content.userplaylist.UserPlaylistScreenViewModel
+import com.lelloman.pezzottify.android.domain.playbacksession.PlaybackSessionHandler
+import com.lelloman.pezzottify.android.ui.screen.main.devices.DevicesScreenState
+import com.lelloman.pezzottify.android.ui.screen.main.devices.DevicesScreenViewModel
+import com.lelloman.pezzottify.android.ui.screen.main.devices.DeviceUiState
 import com.lelloman.pezzottify.android.ui.screen.main.genre.GenreListScreenViewModel
 import com.lelloman.pezzottify.android.ui.screen.main.genre.GenreScreenViewModel
 import com.lelloman.pezzottify.android.ui.screen.main.home.HomeScreenState
@@ -1098,6 +1102,7 @@ class InteractorsModule {
         player: PezzottifyPlayer,
         notificationRepository: NotificationRepository,
         playbackMetadataProvider: com.lelloman.pezzottify.android.domain.player.PlaybackMetadataProvider,
+        playbackModeManager: com.lelloman.pezzottify.android.domain.player.PlaybackModeManager,
     ): MainScreenViewModel.Interactor =
         object : MainScreenViewModel.Interactor {
 
@@ -1105,6 +1110,11 @@ class InteractorsModule {
 
             override fun getNotificationUnreadCount(): Flow<Int> =
                 notificationRepository.unreadCount
+
+            override fun getRemoteDeviceName(): Flow<String?> =
+                playbackModeManager.mode.map { mode ->
+                    (mode as? com.lelloman.pezzottify.android.domain.player.PlaybackMode.Remote)?.deviceName
+                }
 
             override fun getPlaybackState(): Flow<MainScreenViewModel.Interactor.PlaybackState?> =
                 playbackMetadataProvider.queueState
@@ -1234,6 +1244,7 @@ class InteractorsModule {
     fun providePlayerScreenInteractor(
         player: PezzottifyPlayer,
         playbackMetadataProvider: com.lelloman.pezzottify.android.domain.player.PlaybackMetadataProvider,
+        playbackModeManager: com.lelloman.pezzottify.android.domain.player.PlaybackModeManager,
     ): PlayerScreenViewModel.Interactor =
         object : PlayerScreenViewModel.Interactor {
             override fun getPlaybackState(): Flow<PlayerScreenViewModel.Interactor.PlaybackState?> =
@@ -1377,6 +1388,15 @@ class InteractorsModule {
             override fun cycleRepeatMode() = player.cycleRepeatMode()
 
             override fun retry() = player.retry()
+
+            override fun getRemoteDeviceName(): Flow<String?> =
+                playbackModeManager.mode.map { mode ->
+                    (mode as? com.lelloman.pezzottify.android.domain.player.PlaybackMode.Remote)?.deviceName
+                }
+
+            override fun exitRemoteMode() {
+                playbackModeManager.exitRemoteMode()
+            }
         }
 
     @Provides
@@ -1874,6 +1894,92 @@ class InteractorsModule {
 
         override fun addTracksToPlaylist(tracksIds: List<String>) {
             player.addTracksToPlaylist(tracksIds)
+        }
+    }
+
+    @Provides
+    fun provideDevicesScreenInteractor(
+        playbackSessionHandler: PlaybackSessionHandler,
+        playbackMetadataProvider: com.lelloman.pezzottify.android.domain.player.PlaybackMetadataProvider,
+        player: PezzottifyPlayer,
+        configStore: ConfigStore,
+        playbackModeManager: com.lelloman.pezzottify.android.domain.player.PlaybackModeManager,
+    ): DevicesScreenViewModel.Interactor = object : DevicesScreenViewModel.Interactor {
+        override fun observeDevicesScreenState(): Flow<DevicesScreenState> =
+            combine(
+                playbackSessionHandler.connectedDevices,
+                playbackSessionHandler.myDeviceId,
+                playbackSessionHandler.otherDeviceStates,
+                playbackMetadataProvider.queueState,
+                player.isPlaying,
+                player.currentTrackProgressSec,
+            ) { values ->
+                @Suppress("UNCHECKED_CAST")
+                val connectedDevices = values[0] as List<com.lelloman.pezzottify.android.domain.playbacksession.ConnectedDevice>
+                val myDeviceId = values[1] as Int?
+                @Suppress("UNCHECKED_CAST")
+                val otherStates = values[2] as Map<Int, com.lelloman.pezzottify.android.domain.playbacksession.RemotePlaybackState>
+                val queueState = values[3] as com.lelloman.pezzottify.android.domain.player.PlaybackQueueState?
+                val isPlaying = values[4] as Boolean
+                val progressSec = values[5] as Int?
+
+                val baseUrl = configStore.baseUrl.value.trimEnd('/')
+
+                val devices = connectedDevices.map { device ->
+                    val isThisDevice = device.id == myDeviceId
+                    if (isThisDevice) {
+                        val currentTrack = queueState?.currentTrack
+                        DeviceUiState(
+                            id = device.id,
+                            name = device.name,
+                            deviceType = device.deviceType,
+                            isThisDevice = true,
+                            trackTitle = currentTrack?.trackName,
+                            artistName = currentTrack?.artistNames?.firstOrNull(),
+                            albumImageUrl = currentTrack?.artworkUrl,
+                            isPlaying = isPlaying,
+                            positionSec = (progressSec ?: 0).toDouble(),
+                            durationMs = (currentTrack?.durationSeconds?.toLong() ?: 0L) * 1000L,
+                        )
+                    } else {
+                        val remoteState = otherStates[device.id]
+                        DeviceUiState(
+                            id = device.id,
+                            name = device.name,
+                            deviceType = device.deviceType,
+                            isThisDevice = false,
+                            trackTitle = remoteState?.currentTrack?.title,
+                            artistName = remoteState?.currentTrack?.artistName,
+                            albumImageUrl = remoteState?.currentTrack?.imageId?.let { "$baseUrl/v1/content/image/$it" },
+                            isPlaying = remoteState?.isPlaying ?: false,
+                            positionSec = remoteState?.position ?: 0.0,
+                            durationMs = remoteState?.currentTrack?.durationMs ?: 0L,
+                            timestamp = remoteState?.receivedAt ?: 0L,
+                        )
+                    }
+                }
+
+                DevicesScreenState(
+                    devices = devices,
+                    thisDeviceId = myDeviceId,
+                )
+            }
+
+        override fun observeRemoteControlDeviceId(): Flow<Int?> =
+            playbackModeManager.mode.map { mode ->
+                (mode as? com.lelloman.pezzottify.android.domain.player.PlaybackMode.Remote)?.deviceId
+            }
+
+        override fun sendCommand(command: String, payload: Map<String, Any?>, targetDeviceId: Int) {
+            playbackSessionHandler.sendCommand(command, payload, targetDeviceId)
+        }
+
+        override fun enterRemoteMode(deviceId: Int, deviceName: String) {
+            playbackModeManager.enterRemoteMode(deviceId, deviceName)
+        }
+
+        override fun exitRemoteMode() {
+            playbackModeManager.exitRemoteMode()
         }
     }
 

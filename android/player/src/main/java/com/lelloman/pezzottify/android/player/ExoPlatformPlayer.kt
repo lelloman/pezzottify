@@ -205,7 +205,11 @@ internal class ExoPlatformPlayer(
         if (progressPollingJob?.isActive == true) return
         progressPollingJob = coroutineScope.launch(Dispatchers.Main) {
             while (isActive) {
-                updateProgress()
+                try {
+                    updateProgress()
+                } catch (e: Exception) {
+                    logger.warn("Progress polling update failed: ${e.message}")
+                }
                 delay(500)
             }
         }

@@ -79,7 +79,7 @@ export const usePlaybackStore = defineStore("playback", () => {
       }
     },
     onTrackLoaded: (duration) => {
-      localDuration.value = duration || 0;
+      localDuration.value = (duration || 0) * 1000; // Howler returns seconds, store as ms
     },
   });
 
@@ -139,7 +139,7 @@ export const usePlaybackStore = defineStore("playback", () => {
       artistName: artist?.name || "Unknown Artist",
       albumId: track.album_id || "",
       albumTitle: album?.name || "Unknown Album",
-      duration: track.duration || localDuration.value || 0,
+      duration: track.duration || track.duration_ms || localDuration.value || 0,
       trackNumber: track.track_number,
       imageId: album?.image_id || album?.covers?.[0]?.id || album?.id || null,
     };
@@ -297,9 +297,9 @@ export const usePlaybackStore = defineStore("playback", () => {
       if (_remoteIsPlaying) {
         const elapsed = (Date.now() - _remoteTimestamp) / 1000;
         const interpolated = _remotePosition + elapsed;
-        const dur = currentTrack.value?.duration || 0;
-        progressSec.value = Math.min(interpolated, dur);
-        progressPercent.value = dur > 0 ? progressSec.value / dur : 0;
+        const durSec = (currentTrack.value?.duration || 0) / 1000;
+        progressSec.value = Math.min(interpolated, durSec);
+        progressPercent.value = durSec > 0 ? progressSec.value / durSec : 0;
       }
       _interpolationFrame = requestAnimationFrame(tick);
     }
@@ -349,8 +349,8 @@ export const usePlaybackStore = defineStore("playback", () => {
       currentTrackId.value = null;
     }
 
-    const dur = state.current_track?.duration || 0;
-    progressPercent.value = dur > 0 ? state.position / dur : 0;
+    const durSec = (state.current_track?.duration || 0) / 1000;
+    progressPercent.value = durSec > 0 ? state.position / durSec : 0;
   }
 
   function applyRemoteQueue(queue) {
@@ -670,8 +670,8 @@ export const usePlaybackStore = defineStore("playback", () => {
 
   const seekToPercentage = (percentage) => {
     if (mode.value === "remote") {
-      const dur = currentTrack.value?.duration || 0;
-      getSessionStore()?.sendCommand("seek", { position: dur * percentage });
+      const durMs = currentTrack.value?.duration || 0;
+      getSessionStore()?.sendCommand("seek", { position: (durMs / 1000) * percentage });
       return;
     }
 
@@ -683,10 +683,10 @@ export const usePlaybackStore = defineStore("playback", () => {
   const forward10Sec = () => {
     if (mode.value === "remote") {
       const pos = progressSec.value;
-      const dur = currentTrack.value?.duration || 0;
-      if (dur > 0) {
+      const durMs = currentTrack.value?.duration || 0;
+      if (durMs > 0) {
         getSessionStore()?.sendCommand("seek", {
-          position: Math.min(pos + 10, dur),
+          position: Math.min(pos + 10, durMs / 1000),
         });
       }
       return;

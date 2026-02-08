@@ -28,7 +28,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.time.Duration.Companion.seconds
 
-internal class PlaybackMetadataProviderImpl(
+class PlaybackMetadataProviderImpl(
     private val player: PezzottifyPlayer,
     private val platformPlayer: PlatformPlayer,
     private val staticsProvider: StaticsProvider,

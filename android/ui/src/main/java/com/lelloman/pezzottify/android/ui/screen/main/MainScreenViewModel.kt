@@ -65,6 +65,12 @@ class MainScreenViewModel @Inject constructor(
                 mutableState.value = oldState.copy(notificationUnreadCount = count)
             }
         }
+
+        viewModelScope.launch {
+            interactor.getRemoteDeviceName().collect { deviceName ->
+                mutableState.value = mutableState.value.copy(remoteDeviceName = deviceName)
+            }
+        }
     }
 
     override fun clickOnPlayPause() = interactor.clickOnPlayPause()
@@ -78,6 +84,8 @@ class MainScreenViewModel @Inject constructor(
         fun getPlaybackState(): Flow<PlaybackState?>
 
         fun getNotificationUnreadCount(): Flow<Int>
+
+        fun getRemoteDeviceName(): Flow<String?>
 
         fun clickOnPlayPause()
 

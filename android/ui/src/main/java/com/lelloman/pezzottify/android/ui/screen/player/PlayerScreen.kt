@@ -23,6 +23,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -176,16 +177,27 @@ private fun PlayerScreenContent(
             topBar = {
                 TopAppBar(
                     title = {
-                        Text(
-                            text = state.albumName,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.clickable {
-                                if (state.albumId.isNotEmpty()) {
-                                    navController.toAlbum(state.albumId)
+                        Column {
+                            Text(
+                                text = state.albumName,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.clickable {
+                                    if (state.albumId.isNotEmpty()) {
+                                        navController.toAlbum(state.albumId)
+                                    }
                                 }
+                            )
+                            if (state.remoteDeviceName != null) {
+                                Text(
+                                    text = "Controlling ${state.remoteDeviceName}",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.tertiary,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
                             }
-                        )
+                        }
                     },
                     navigationIcon = {
                         IconButton(onClick = { dismiss() }) {
@@ -197,6 +209,16 @@ private fun PlayerScreenContent(
                         }
                     },
                     actions = {
+                        if (state.remoteDeviceName != null) {
+                            IconButton(onClick = { actions.exitRemoteMode() }) {
+                                Icon(
+                                    imageVector = Icons.Default.Close,
+                                    contentDescription = "Disconnect remote",
+                                    modifier = Modifier.size(24.dp),
+                                    tint = MaterialTheme.colorScheme.tertiary,
+                                )
+                            }
+                        }
                         IconButton(onClick = { navController.toQueue() }) {
                             Icon(
                                 painter = painterResource(R.drawable.baseline_queue_music_24),
@@ -318,10 +340,14 @@ private fun ProgressSection(
 ) {
     var isDragging by remember { mutableFloatStateOf(-1f) }
     var seekTarget by remember { mutableFloatStateOf(-1f) }
+    var seekTargetTimestamp by remember { mutableStateOf(0L) }
 
-    // Reset seek target once player state catches up (within 2%)
-    if (seekTarget >= 0f && abs(progressPercent - seekTarget) < 2f) {
-        seekTarget = -1f
+    // Reset seek target once player state catches up (within 2%) or after timeout
+    if (seekTarget >= 0f) {
+        val elapsed = System.currentTimeMillis() - seekTargetTimestamp
+        if (abs(progressPercent - seekTarget) < 2f || elapsed > 2000L) {
+            seekTarget = -1f
+        }
     }
 
     val displayPercent = when {
@@ -338,6 +364,7 @@ private fun ProgressSection(
                 if (isDragging >= 0f) {
                     onSeek(isDragging)
                     seekTarget = isDragging
+                    seekTargetTimestamp = System.currentTimeMillis()
                     isDragging = -1f
                 }
             },

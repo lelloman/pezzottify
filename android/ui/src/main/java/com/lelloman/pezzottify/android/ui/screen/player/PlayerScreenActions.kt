@@ -10,4 +10,5 @@ interface PlayerScreenActions {
     fun clickOnShuffle()
     fun clickOnRepeat()
     fun retry()
+    fun exitRemoteMode()
 }

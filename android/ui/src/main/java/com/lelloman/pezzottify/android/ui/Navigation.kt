@@ -125,6 +125,9 @@ sealed interface Screen {
         data class Genre(val genreName: String) : Main
 
         @Serializable
+        data object Devices : Main
+
+        @Serializable
         data object GenreList : Main
     }
 }
@@ -148,5 +151,7 @@ fun NavController.toNotifications() = navigate(Screen.Main.Notifications)
 fun NavController.toWhatsNew() = navigate(Screen.Main.WhatsNew)
 
 fun NavController.toGenre(genreName: String) = navigate(Screen.Main.Genre(genreName))
+
+fun NavController.toDevices() = navigate(Screen.Main.Devices)
 
 fun NavController.toGenreList() = navigate(Screen.Main.GenreList)

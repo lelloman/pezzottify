@@ -28,7 +28,7 @@ import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.time.Duration.Companion.seconds
 
 @OptIn(DelicateCoroutinesApi::class)
-internal class PlayerImpl(
+class PlayerImpl(
     private val staticsProvider: StaticsProvider,
     loggerFactory: LoggerFactory,
     private val platformPlayer: PlatformPlayer,
@@ -48,11 +48,9 @@ internal class PlayerImpl(
     private val mutablePlaybackPlaylist = MutableStateFlow<PlaybackPlaylist?>(null)
     override val playbackPlaylist = mutablePlaybackPlaylist.asStateFlow()
 
-    override val canGoToPreviousPlaylist: StateFlow<Boolean>
-        get() = TODO("Not yet implemented")
+    override val canGoToPreviousPlaylist: StateFlow<Boolean> = MutableStateFlow(false)
 
-    override val canGoToNextPlaylist: StateFlow<Boolean>
-        get() = TODO("Not yet implemented")
+    override val canGoToNextPlaylist: StateFlow<Boolean> = MutableStateFlow(false)
 
     private fun runOnPlayerThread(block: suspend () -> Unit) =
         coroutineScope.launch(Dispatchers.Main) {

@@ -27,6 +27,12 @@ class PlayerScreenViewModel @Inject constructor(
         var lastErrorMessage: String? = null
 
         viewModelScope.launch {
+            interactor.getRemoteDeviceName().collect { name ->
+                mutableState.value = mutableState.value.copy(remoteDeviceName = name)
+            }
+        }
+
+        viewModelScope.launch {
             interactor.getPlaybackState().collect { playbackState ->
                 val currentState = mutableState.value
                 mutableState.value = when (playbackState) {
@@ -98,8 +104,11 @@ class PlayerScreenViewModel @Inject constructor(
 
     override fun retry() = interactor.retry()
 
+    override fun exitRemoteMode() = interactor.exitRemoteMode()
+
     interface Interactor {
         fun getPlaybackState(): Flow<PlaybackState?>
+        fun getRemoteDeviceName(): Flow<String?>
         fun togglePlayPause()
         fun skipToNext()
         fun skipToPrevious()
@@ -109,6 +118,7 @@ class PlayerScreenViewModel @Inject constructor(
         fun toggleShuffle()
         fun cycleRepeatMode()
         fun retry()
+        fun exitRemoteMode()
 
         sealed interface PlaybackState {
             data object Idle : PlaybackState
