@@ -552,6 +552,16 @@ export const useRemoteStore = defineStore("remote", () => {
     }
   };
 
+  const fetchPlaybackSessions = async () => {
+    try {
+      const response = await axios.get("/v1/admin/playback/sessions");
+      return response.data;
+    } catch (error) {
+      console.error("Failed to fetch playback sessions:", error);
+      return null;
+    }
+  };
+
   // =====================================================
   // Admin API - Server Control (ServerAdmin)
   // =====================================================
@@ -1161,6 +1171,7 @@ export const useRemoteStore = defineStore("remote", () => {
     fetchTrackStats,
     fetchUserListeningSummary,
     fetchOnlineUsers,
+    fetchPlaybackSessions,
     // Admin API - Server Control
     rebootServer,
     fetchBackgroundJobs,

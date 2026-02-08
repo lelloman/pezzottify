@@ -92,6 +92,11 @@ const router = createRouter({
           meta: { requiresAuth: true, section: "analytics" },
         },
         {
+          path: "playback-sessions",
+          name: "admin-playback-sessions",
+          meta: { requiresAuth: true, section: "playback-sessions" },
+        },
+        {
           path: "server",
           name: "admin-server",
           meta: { requiresAuth: true, section: "server" },
