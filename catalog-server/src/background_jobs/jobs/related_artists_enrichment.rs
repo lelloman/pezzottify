@@ -79,6 +79,29 @@ impl BackgroundJob for RelatedArtistsEnrichmentJob {
             "similar_artists_limit": self.settings.similar_artists_limit,
         })));
 
+        let result = self.run_enrichment(ctx, &audit, batch_size);
+
+        match &result {
+            Ok(()) => {}
+            Err(JobError::Cancelled) => {
+                audit.log_failed("Cancelled", None);
+            }
+            Err(e) => {
+                audit.log_failed(&e.to_string(), None);
+            }
+        }
+
+        result
+    }
+}
+
+impl RelatedArtistsEnrichmentJob {
+    fn run_enrichment(
+        &self,
+        ctx: &JobContext,
+        audit: &JobAuditLogger,
+        batch_size: usize,
+    ) -> Result<(), JobError> {
         // =====================================================================
         // Phase 1: Populate MusicBrainz IDs
         // =====================================================================
