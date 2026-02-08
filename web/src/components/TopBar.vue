@@ -65,6 +65,13 @@
           <SettingsIcon class="settingsIcon" />
         </router-link>
         <router-link
+          to="/devices"
+          class="devicesLink scaleClickFeedback"
+          title="Devices"
+        >
+          <DevicesIcon class="devicesIcon" />
+        </router-link>
+        <router-link
           to="/logout"
           class="logoutLink scaleClickFeedback"
           title="Logout"
@@ -82,6 +89,7 @@ import { debounce } from "lodash-es"; // Lightweight debounce
 import { useRouter, useRoute } from "vue-router";
 import CrossIcon from "./icons/CrossIcon.vue";
 import SettingsIcon from "./icons/SettingsIcon.vue";
+import DevicesIcon from "./icons/DevicesIcon.vue";
 import LogoutIcon from "./icons/LogoutIcon.vue";
 import AdminIcon from "./icons/AdminIcon.vue";
 import DownloadIcon from "./icons/DownloadIcon.vue";
@@ -307,6 +315,7 @@ function openIngestionMonitor() {
 .adminLink,
 .requestsLink,
 .settingsLink,
+.devicesLink,
 .logoutLink {
   display: flex;
   align-items: center;
@@ -323,6 +332,7 @@ function openIngestionMonitor() {
 .adminLink:hover,
 .requestsLink:hover,
 .settingsLink:hover,
+.devicesLink:hover,
 .logoutLink:hover {
   color: var(--text-base);
   background-color: var(--bg-elevated);
@@ -331,6 +341,7 @@ function openIngestionMonitor() {
 .adminIcon,
 .requestsIcon,
 .settingsIcon,
+.devicesIcon,
 .logoutIcon {
   width: 20px;
   height: 20px;
