@@ -367,23 +367,39 @@ impl JobScheduler {
             .insert(job_id.to_string(), cancel_token.clone());
 
         // Create job context with the specific cancellation token
-        let ctx = if let Some(search_vault) = &self.job_context.search_vault {
-            JobContext::with_search_vault(
+        let ctx = match (&self.job_context.search_vault, &self.job_context.sync_notifier) {
+            (Some(search_vault), Some(sync_notifier)) => JobContext::with_search_vault_and_sync_notifier(
                 cancel_token,
                 Arc::clone(&self.job_context.catalog_store),
                 Arc::clone(&self.job_context.user_store),
                 Arc::clone(&self.job_context.server_store),
                 Arc::clone(&self.job_context.user_manager),
                 Arc::clone(search_vault),
-            )
-        } else {
-            JobContext::new(
+                Arc::clone(sync_notifier),
+            ),
+            (Some(search_vault), None) => JobContext::with_search_vault(
                 cancel_token,
                 Arc::clone(&self.job_context.catalog_store),
                 Arc::clone(&self.job_context.user_store),
                 Arc::clone(&self.job_context.server_store),
                 Arc::clone(&self.job_context.user_manager),
-            )
+                Arc::clone(search_vault),
+            ),
+            (None, Some(sync_notifier)) => JobContext::with_sync_notifier(
+                cancel_token,
+                Arc::clone(&self.job_context.catalog_store),
+                Arc::clone(&self.job_context.user_store),
+                Arc::clone(&self.job_context.server_store),
+                Arc::clone(&self.job_context.user_manager),
+                Arc::clone(sync_notifier),
+            ),
+            (None, None) => JobContext::new(
+                cancel_token,
+                Arc::clone(&self.job_context.catalog_store),
+                Arc::clone(&self.job_context.user_store),
+                Arc::clone(&self.job_context.server_store),
+                Arc::clone(&self.job_context.user_manager),
+            ),
         };
 
         let server_store = Arc::clone(&self.server_store);

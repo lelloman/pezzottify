@@ -272,6 +272,20 @@ export const useStaticsStore = defineStore("statics", () => {
     return getItem("tracks", trackId);
   };
 
+  // Invalidate a cached item (remove from memory and localStorage)
+  const invalidateItem = (itemType, itemId) => {
+    // Remove from in-memory cache
+    if (statics[itemType][itemId]) {
+      statics[itemType][itemId].ref.item = null;
+    }
+
+    // Remove from localStorage
+    const storageKey = getStoredItemKey(itemType, itemId);
+    localStorage.removeItem(storageKey);
+
+    console.log(`[Statics] Invalidated ${itemType}/${itemId}`);
+  };
+
   return {
     getAlbum,
     getArtist,
@@ -280,5 +294,6 @@ export const useStaticsStore = defineStore("statics", () => {
     getTrackData,
     waitAlbumData,
     waitTrackData,
+    invalidateItem,
   };
 });

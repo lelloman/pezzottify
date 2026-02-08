@@ -23,6 +23,7 @@ use crate::background_jobs::{
 use crate::config::RelatedArtistsSettings;
 use crate::related_artists::lastfm::LastFmClient;
 use crate::related_artists::musicbrainz::MusicBrainzClient;
+use crate::server_store::{CatalogContentType, CatalogEventType};
 use std::sync::Arc;
 use std::time::Duration;
 use tracing::{debug, error, info, warn};
@@ -257,6 +258,25 @@ impl RelatedArtistsEnrichmentJob {
                     mbid
                 );
                 related_success += 1;
+
+                // Emit catalog invalidation so clients refresh their cache
+                // Note: This runs in a sync context, so we use block_on
+                if let Some(sync_notifier) = &ctx.sync_notifier {
+                    if let Ok(handle) = tokio::runtime::Handle::try_current() {
+                        let sync_notifier = sync_notifier.clone();
+                        let spotify_id = spotify_id.to_string();
+                        handle.spawn(async move {
+                            sync_notifier
+                                .emit_catalog_event(
+                                    CatalogEventType::ArtistUpdated,
+                                    CatalogContentType::Artist,
+                                    &spotify_id,
+                                    "related_artists_enrichment",
+                                )
+                                .await;
+                        });
+                    }
+                }
             }
         }
 

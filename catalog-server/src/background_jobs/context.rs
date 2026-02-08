@@ -1,4 +1,5 @@
 use crate::catalog_store::CatalogStore;
+use crate::download_manager::DownloadSyncNotifier;
 use crate::search::SearchVault;
 use crate::server_store::ServerStore;
 use crate::user::{FullUserStore, UserManager};
@@ -12,6 +13,9 @@ pub type GuardedUserManager = Arc<Mutex<UserManager>>;
 /// SearchVault is internally thread-safe (uses separate read/write connections with internal Mutex).
 /// No external Mutex needed - the implementation handles concurrent access.
 pub type GuardedSearchVault = Arc<dyn SearchVault>;
+
+/// Type alias for thread-safe DownloadSyncNotifier access.
+pub type GuardedSyncNotifier = Arc<DownloadSyncNotifier>;
 
 /// Context provided to jobs during execution.
 ///
@@ -36,6 +40,9 @@ pub struct JobContext {
 
     /// Access to search vault for updating popularity scores.
     pub search_vault: Option<GuardedSearchVault>,
+
+    /// Access to sync notifier for emitting catalog events.
+    pub sync_notifier: Option<GuardedSyncNotifier>,
 }
 
 impl JobContext {
@@ -54,6 +61,7 @@ impl JobContext {
             server_store,
             user_manager,
             search_vault: None,
+            sync_notifier: None,
         }
     }
 
@@ -73,6 +81,48 @@ impl JobContext {
             server_store,
             user_manager,
             search_vault: Some(search_vault),
+            sync_notifier: None,
+        }
+    }
+
+    /// Create a new job context with sync notifier.
+    pub fn with_sync_notifier(
+        cancellation_token: CancellationToken,
+        catalog_store: Arc<dyn CatalogStore>,
+        user_store: Arc<dyn FullUserStore>,
+        server_store: Arc<dyn ServerStore>,
+        user_manager: GuardedUserManager,
+        sync_notifier: GuardedSyncNotifier,
+    ) -> Self {
+        Self {
+            cancellation_token,
+            catalog_store,
+            user_store,
+            server_store,
+            user_manager,
+            search_vault: None,
+            sync_notifier: Some(sync_notifier),
+        }
+    }
+
+    /// Create a new job context with search vault and sync notifier.
+    pub fn with_search_vault_and_sync_notifier(
+        cancellation_token: CancellationToken,
+        catalog_store: Arc<dyn CatalogStore>,
+        user_store: Arc<dyn FullUserStore>,
+        server_store: Arc<dyn ServerStore>,
+        user_manager: GuardedUserManager,
+        search_vault: GuardedSearchVault,
+        sync_notifier: GuardedSyncNotifier,
+    ) -> Self {
+        Self {
+            cancellation_token,
+            catalog_store,
+            user_store,
+            server_store,
+            user_manager,
+            search_vault: Some(search_vault),
+            sync_notifier: Some(sync_notifier),
         }
     }
 
