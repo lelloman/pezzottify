@@ -39,7 +39,6 @@ import DownloadManager from "@/components/admin/DownloadManager.vue";
 import BatchManager from "@/components/admin/BatchManager.vue";
 import BugReports from "@/components/admin/BugReports.vue";
 import IngestionManager from "@/components/admin/IngestionManager.vue";
-import PlaybackSessions from "@/components/admin/PlaybackSessions.vue";
 import { wsConnectionStatus, wsServerVersion } from "@/services/websocket";
 
 const route = useRoute();
@@ -85,13 +84,6 @@ const allSections = [
     permission: "ViewAnalytics",
     component: AnalyticsDashboard,
     route: "/admin/analytics",
-  },
-  {
-    id: "playback-sessions",
-    label: "Playback",
-    permission: "ViewAnalytics",
-    component: PlaybackSessions,
-    route: "/admin/playback-sessions",
   },
   {
     id: "server",
