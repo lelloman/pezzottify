@@ -1,18 +1,15 @@
 /**
  * Playback Session Store
  *
- * Manages the WebSocket playback session protocol for multi-device control.
- * Follows the same pattern as sync.js - a Pinia store that registers a WS handler
- * via registerHandler("playback", ...).
+ * Manages the WebSocket playback session protocol for multi-device state syncing.
+ * Each device independently reports its playback state to the server, which
+ * relays updates to other devices of the same user.
  *
  * Responsibilities:
  * - Send playback.hello on WS connect, handle welcome
- * - Track connected devices
- * - Register as audio device when local playback starts
- * - Broadcast state periodically (5s) and on events when audio device
- * - Receive and dispatch remote commands when audio device
- * - Receive and apply remote state when in remote mode
- * - Handle device transfer protocol
+ * - Track connected devices and other devices' playback states
+ * - Broadcast local state periodically and on events
+ * - Display other devices' playback status
  */
 
 import { defineStore } from "pinia";
@@ -20,7 +17,6 @@ import { ref, computed, watch } from "vue";
 import * as ws from "../services/websocket";
 
 const BROADCAST_INTERVAL_MS = 5000;
-const REMOTE_CONTROL_PREF_KEY = "remoteControlPreference";
 
 /**
  * Detect a human-readable device name from the browser.
@@ -58,31 +54,31 @@ export const usePlaybackSessionStore = defineStore("playbackSession", () => {
   // State
   // ============================================
 
-  const role = ref("idle"); // 'idle' | 'audioDevice' | 'remote'
   const myDeviceId = ref(null);
   const devices = ref([]);
-  const audioDeviceId = ref(null);
-  const remoteState = ref(null);
-  const remoteQueue = ref(null);
-  const remoteQueueVersion = ref(0);
-  const sessionExists = ref(false);
-  const pendingTransferId = ref(null);
+  const isBroadcasting = ref(false);
+  const queueVersion = ref(0);
+
+  // Per-device playback states from other devices
+  // { [deviceId]: { deviceName, state, queue, queueVersion } }
+  const otherDeviceStates = ref({});
 
   // ============================================
   // Computed
   // ============================================
 
-  const audioDeviceName = computed(() => {
-    if (!audioDeviceId.value) return null;
-    const device = devices.value.find((d) => d.id === audioDeviceId.value);
-    return device?.name || null;
-  });
-
-  const isRemote = computed(() => role.value === "remote");
-  const isAudioDevice = computed(() => role.value === "audioDevice");
+  const anyOtherDevicePlaying = computed(
+    () => Object.keys(otherDeviceStates.value).length > 0,
+  );
 
   const otherDevicesCount = computed(() => {
     return devices.value.filter((d) => d.id !== myDeviceId.value).length;
+  });
+
+  const otherPlayingDeviceNames = computed(() => {
+    return Object.values(otherDeviceStates.value)
+      .map((d) => d.deviceName)
+      .filter(Boolean);
   });
 
   // ============================================
@@ -95,7 +91,7 @@ export const usePlaybackSessionStore = defineStore("playbackSession", () => {
   function startStateBroadcast() {
     stopStateBroadcast();
     _broadcastInterval = setInterval(() => {
-      if (role.value === "audioDevice" && _playbackStore) {
+      if (isBroadcasting.value && _playbackStore) {
         broadcastState();
       }
     }, BROADCAST_INTERVAL_MS);
@@ -109,39 +105,21 @@ export const usePlaybackSessionStore = defineStore("playbackSession", () => {
   }
 
   function broadcastState() {
-    if (role.value !== "audioDevice" || !_playbackStore) return;
-    const state = _playbackStore.snapshotState(remoteQueueVersion.value);
+    if (!_playbackStore?.currentTrackId || _playbackStore?.mode === "remote")
+      return;
+    const state = _playbackStore.snapshotState(queueVersion.value);
     ws.send("playback.state", state);
   }
 
   function broadcastQueue() {
-    if (role.value !== "audioDevice" || !_playbackStore) return;
-    remoteQueueVersion.value++;
+    if (!_playbackStore?.currentTrackId || _playbackStore?.mode === "remote")
+      return;
+    queueVersion.value++;
     const queue = _playbackStore.snapshotQueue();
     ws.send("playback.queue_update", {
       queue,
-      queue_version: remoteQueueVersion.value,
+      queue_version: queueVersion.value,
     });
-  }
-
-  // ============================================
-  // Remote control preference
-  // ============================================
-
-  function getRemoteControlPreference() {
-    try {
-      return localStorage.getItem(REMOTE_CONTROL_PREF_KEY) || "ask";
-    } catch {
-      return "ask";
-    }
-  }
-
-  function setRemoteControlPreference(value) {
-    try {
-      localStorage.setItem(REMOTE_CONTROL_PREF_KEY, value);
-    } catch {
-      // ignore
-    }
   }
 
   // ============================================
@@ -153,14 +131,6 @@ export const usePlaybackSessionStore = defineStore("playbackSession", () => {
       device_name: detectDeviceName(),
       device_type: "web",
     });
-  }
-
-  function sendRegisterAudioDevice() {
-    ws.send("playback.register_audio_device", {});
-  }
-
-  function sendUnregisterAudioDevice() {
-    ws.send("playback.unregister_audio_device", {});
   }
 
   function sendCommand(command, payload = {}) {
@@ -176,11 +146,14 @@ export const usePlaybackSessionStore = defineStore("playbackSession", () => {
       case "playback.welcome":
         handleWelcome(payload);
         break;
-      case "playback.register_ack":
-        handleRegisterAck(payload);
+      case "playback.device_state":
+        handleDeviceState(payload);
         break;
-      case "playback.state":
-        handleRemoteState(payload);
+      case "playback.device_queue":
+        handleDeviceQueue(payload);
+        break;
+      case "playback.device_stopped":
+        handleDeviceStopped(payload);
         break;
       case "playback.queue_sync":
         handleQueueSync(payload);
@@ -190,21 +163,6 @@ export const usePlaybackSessionStore = defineStore("playbackSession", () => {
         break;
       case "playback.device_list_changed":
         handleDeviceListChanged(payload);
-        break;
-      case "playback.session_ended":
-        handleSessionEnded(payload);
-        break;
-      case "playback.prepare_transfer":
-        handlePrepareTransfer(payload);
-        break;
-      case "playback.become_audio_device":
-        handleBecomeAudioDevice(payload);
-        break;
-      case "playback.transfer_complete":
-        handleTransferComplete(payload);
-        break;
-      case "playback.transfer_aborted":
-        handleTransferAborted(payload);
         break;
       case "playback.error":
         console.error("[PlaybackSession] Server error:", payload);
@@ -221,65 +179,79 @@ export const usePlaybackSessionStore = defineStore("playbackSession", () => {
   function handleWelcome(payload) {
     myDeviceId.value = payload.device_id;
     devices.value = payload.devices || [];
-    sessionExists.value = payload.session?.exists || false;
 
-    if (payload.session?.audio_device_id != null) {
-      audioDeviceId.value = payload.session.audio_device_id;
-    }
-
-    // If a session exists and we're not the audio device, check preference
-    if (
-      sessionExists.value &&
-      audioDeviceId.value != null &&
-      audioDeviceId.value !== myDeviceId.value
-    ) {
-      const pref = getRemoteControlPreference();
-      if (pref === "always") {
-        enterRemoteMode(payload.session.state, payload.session.queue);
+    const states = {};
+    for (const d of payload.session?.active_devices || []) {
+      if (d.device_id !== payload.device_id) {
+        states[d.device_id] = {
+          deviceName: d.device_name,
+          state: d.state,
+          queue: d.queue,
+          queueVersion: d.queue_version,
+        };
       }
-      // "ask" is handled by UI (shows banner)
-      // "never" does nothing
+    }
+    otherDeviceStates.value = states;
+
+    // On reconnect, re-announce if we have a loaded track
+    if (_playbackStore?.currentTrackId && _playbackStore?.mode !== "remote") {
+      if (!isBroadcasting.value) {
+        isBroadcasting.value = true;
+        startStateBroadcast();
+      }
+      broadcastState();
+      broadcastQueue();
     }
 
     console.log(
       "[PlaybackSession] Welcome, device:",
       myDeviceId.value,
-      "session exists:",
-      sessionExists.value,
+      "other active devices:",
+      Object.keys(states).length,
     );
   }
 
-  function handleRegisterAck(payload) {
-    if (payload.success) {
-      role.value = "audioDevice";
-      sessionExists.value = true;
-      audioDeviceId.value = myDeviceId.value;
-      startStateBroadcast();
-      broadcastState();
-      broadcastQueue();
-      console.log("[PlaybackSession] Registered as audio device");
-    } else {
-      console.warn("[PlaybackSession] Registration failed:", payload.error);
-    }
+  function handleDeviceState(payload) {
+    if (payload.device_id === myDeviceId.value) return;
+
+    const existing = otherDeviceStates.value[payload.device_id] || {};
+    otherDeviceStates.value = {
+      ...otherDeviceStates.value,
+      [payload.device_id]: {
+        ...existing,
+        deviceName: payload.device_name,
+        state: payload.state,
+      },
+    };
   }
 
-  function handleRemoteState(state) {
-    remoteState.value = state;
-    if (role.value === "remote" && _playbackStore) {
-      _playbackStore.applyRemoteState(state);
-    }
+  function handleDeviceQueue(payload) {
+    if (payload.device_id === myDeviceId.value) return;
+
+    const existing = otherDeviceStates.value[payload.device_id] || {};
+    otherDeviceStates.value = {
+      ...otherDeviceStates.value,
+      [payload.device_id]: {
+        ...existing,
+        queue: payload.queue,
+        queueVersion: payload.queue_version,
+      },
+    };
+  }
+
+  function handleDeviceStopped(payload) {
+    const newStates = { ...otherDeviceStates.value };
+    delete newStates[payload.device_id];
+    otherDeviceStates.value = newStates;
   }
 
   function handleQueueSync(payload) {
-    remoteQueue.value = payload.queue;
-    remoteQueueVersion.value = payload.queue_version;
-    if (role.value === "remote" && _playbackStore) {
-      _playbackStore.applyRemoteQueue(payload.queue);
-    }
+    // Queue sync response - currently not used in new model but kept for compatibility
+    console.log("[PlaybackSession] Queue sync received:", payload);
   }
 
   function handleCommand(payload) {
-    if (role.value !== "audioDevice" || !_playbackStore) return;
+    if (!_playbackStore) return;
 
     const { command, payload: cmdPayload } = payload;
     switch (command) {
@@ -320,84 +292,6 @@ export const usePlaybackSessionStore = defineStore("playbackSession", () => {
 
   function handleDeviceListChanged(payload) {
     devices.value = payload.devices || [];
-
-    // Update audio device ID from the list
-    const audio = devices.value.find((d) => d.is_audio_device);
-    audioDeviceId.value = audio?.id || null;
-
-    // Check if the session still exists (any audio device)
-    sessionExists.value = audioDeviceId.value != null;
-  }
-
-  function handleSessionEnded(payload) {
-    console.log("[PlaybackSession] Session ended:", payload.reason);
-    sessionExists.value = false;
-    audioDeviceId.value = null;
-
-    if (role.value === "remote") {
-      exitRemoteMode();
-    } else if (role.value === "audioDevice") {
-      stopStateBroadcast();
-      role.value = "idle";
-    }
-  }
-
-  // ============================================
-  // Transfer protocol handlers
-  // ============================================
-
-  function handlePrepareTransfer(payload) {
-    // We are the current audio device, someone wants to take over
-    if (role.value !== "audioDevice" || !_playbackStore) return;
-
-    _playbackStore.pause();
-    const state = _playbackStore.snapshotState(remoteQueueVersion.value);
-    const queue = _playbackStore.snapshotQueue();
-
-    ws.send("playback.transfer_ready", {
-      transfer_id: payload.transfer_id,
-      state,
-      queue,
-    });
-  }
-
-  function handleBecomeAudioDevice(payload) {
-    // We are the new audio device after transfer
-    pendingTransferId.value = null;
-    role.value = "audioDevice";
-    sessionExists.value = true;
-    audioDeviceId.value = myDeviceId.value;
-
-    if (_playbackStore) {
-      _playbackStore.exitRemoteMode();
-      _playbackStore.assumeFromTransfer(payload.state, payload.queue);
-    }
-
-    ws.send("playback.transfer_complete", {
-      transfer_id: payload.transfer_id,
-    });
-
-    startStateBroadcast();
-  }
-
-  function handleTransferComplete() {
-    // We were the old audio device, transfer is done
-    stopStateBroadcast();
-    role.value = "idle";
-
-    if (_playbackStore) {
-      _playbackStore.stop();
-    }
-  }
-
-  function handleTransferAborted(payload) {
-    pendingTransferId.value = null;
-    console.warn("[PlaybackSession] Transfer aborted:", payload.reason);
-
-    // If we were the audio device, resume
-    if (role.value === "audioDevice" && _playbackStore) {
-      _playbackStore.play();
-    }
   }
 
   // ============================================
@@ -405,59 +299,43 @@ export const usePlaybackSessionStore = defineStore("playbackSession", () => {
   // ============================================
 
   function notifyPlaybackStarted() {
-    if (role.value === "idle" && !sessionExists.value) {
-      sendRegisterAudioDevice();
+    if (!isBroadcasting.value) {
+      isBroadcasting.value = true;
+      startStateBroadcast();
     }
+    broadcastState();
+    broadcastQueue();
   }
 
   function notifyStateChanged() {
-    if (role.value === "audioDevice") {
+    if (isBroadcasting.value) {
       broadcastState();
     }
   }
 
   function notifyQueueChanged() {
-    if (role.value === "audioDevice") {
+    if (isBroadcasting.value) {
       broadcastQueue();
     }
   }
 
-  // ============================================
-  // Public API: Remote mode control
-  // ============================================
+  function notifyStopped() {
+    stopStateBroadcast();
+    isBroadcasting.value = false;
 
-  function enterRemoteMode(initialState = null, initialQueue = null) {
-    if (!_playbackStore) return;
-
-    _playbackStore.enterRemoteMode();
-    role.value = "remote";
-
-    if (initialState) {
-      _playbackStore.applyRemoteState(initialState);
-    } else if (remoteState.value) {
-      _playbackStore.applyRemoteState(remoteState.value);
-    }
-
-    if (initialQueue) {
-      _playbackStore.applyRemoteQueue(initialQueue);
-    } else if (remoteQueue.value) {
-      _playbackStore.applyRemoteQueue(remoteQueue.value);
-    }
-  }
-
-  function exitRemoteMode() {
-    if (!_playbackStore) return;
-
-    _playbackStore.exitRemoteMode();
-    role.value = "idle";
-    remoteState.value = null;
-    remoteQueue.value = null;
-  }
-
-  function requestTakeover() {
-    const transferId = crypto.randomUUID();
-    pendingTransferId.value = transferId;
-    sendCommand("becomeAudioDevice", { transfer_id: transferId });
+    // Send a final stopped state so server removes us immediately
+    ws.send("playback.state", {
+      current_track: null,
+      queue_position: 0,
+      queue_version: 0,
+      position: 0,
+      is_playing: false,
+      volume: 1,
+      muted: false,
+      shuffle: false,
+      repeat: "off",
+      timestamp: Date.now(),
+    });
   }
 
   // ============================================
@@ -480,17 +358,10 @@ export const usePlaybackSessionStore = defineStore("playbackSession", () => {
       _connectWatcher = watch(ws.wsConnected, (connected) => {
         if (connected) {
           // Reset state on reconnect - server assigns new device ID
-          role.value = "idle";
           myDeviceId.value = null;
           devices.value = [];
-          audioDeviceId.value = null;
-          sessionExists.value = false;
+          otherDeviceStates.value = {};
           sendHello();
-
-          // Re-register as audio device if we were playing locally
-          if (_playbackStore?.isPlaying && _playbackStore?.mode === "local") {
-            sendRegisterAudioDevice();
-          }
         }
       });
     }
@@ -502,38 +373,25 @@ export const usePlaybackSessionStore = defineStore("playbackSession", () => {
       _connectWatcher();
       _connectWatcher = null;
     }
-    if (role.value === "audioDevice") {
-      sendUnregisterAudioDevice();
-    }
-    role.value = "idle";
+    isBroadcasting.value = false;
     myDeviceId.value = null;
     devices.value = [];
-    audioDeviceId.value = null;
-    remoteState.value = null;
-    remoteQueue.value = null;
-    remoteQueueVersion.value = 0;
-    sessionExists.value = false;
-    pendingTransferId.value = null;
+    otherDeviceStates.value = {};
+    queueVersion.value = 0;
     _playbackStore = null;
   }
 
   return {
     // State
-    role,
     myDeviceId,
     devices,
-    audioDeviceId,
-    remoteState,
-    remoteQueue,
-    remoteQueueVersion,
-    sessionExists,
-    pendingTransferId,
+    isBroadcasting,
+    otherDeviceStates,
 
     // Computed
-    audioDeviceName,
-    isRemote,
-    isAudioDevice,
+    anyOtherDevicePlaying,
     otherDevicesCount,
+    otherPlayingDeviceNames,
 
     // Protocol
     handleMessage,
@@ -544,15 +402,7 @@ export const usePlaybackSessionStore = defineStore("playbackSession", () => {
     notifyPlaybackStarted,
     notifyStateChanged,
     notifyQueueChanged,
-
-    // Remote mode
-    enterRemoteMode,
-    exitRemoteMode,
-    requestTakeover,
-
-    // Preference
-    getRemoteControlPreference,
-    setRemoteControlPreference,
+    notifyStopped,
 
     // Lifecycle
     setPlaybackStore,

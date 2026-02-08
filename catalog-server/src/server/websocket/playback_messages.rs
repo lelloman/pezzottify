@@ -71,7 +71,7 @@ pub struct ConnectedDevice {
     pub id: usize,
     pub name: String,
     pub device_type: DeviceType,
-    pub is_audio_device: bool,
+    pub is_playing: bool,
     pub connected_at: u64,
 }
 
@@ -94,25 +94,11 @@ pub struct PlaybackCommandPayload {
     pub payload: serde_json::Value,
 }
 
-/// Payload for playback.transfer_ready message.
-#[derive(Debug, Clone, Deserialize)]
-pub struct TransferReadyPayload {
-    pub transfer_id: String,
-    pub state: PlaybackState,
-    pub queue: Vec<QueueItem>,
-}
-
 /// Payload for playback.queue_update message.
 #[derive(Debug, Clone, Deserialize)]
 pub struct QueueUpdatePayload {
     pub queue: Vec<QueueItem>,
     pub queue_version: u64,
-}
-
-/// Payload for playback.transfer_complete message.
-#[derive(Debug, Clone, Deserialize)]
-pub struct TransferCompletePayload {
-    pub transfer_id: String,
 }
 
 // ============================================================================
@@ -130,15 +116,16 @@ pub struct WelcomePayload {
 /// Session information included in welcome message.
 #[derive(Debug, Clone, Serialize)]
 pub struct SessionInfo {
-    pub exists: bool,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub state: Option<PlaybackState>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub queue: Option<Vec<QueueItem>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub audio_device_id: Option<usize>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub reclaimable: Option<bool>,
+    pub active_devices: Vec<DevicePlaybackInfo>,
+}
+
+/// Playback state for a single device, included in session info.
+#[derive(Debug, Clone, Serialize)]
+pub struct DevicePlaybackInfo {
+    pub device_id: usize,
+    pub device_name: String,
+    pub state: PlaybackState,
+    pub queue: Vec<QueueItem>,
     pub queue_version: u64,
 }
 
@@ -158,30 +145,6 @@ pub struct DeviceChange {
     pub device_id: usize,
 }
 
-/// Payload for playback.prepare_transfer message.
-#[derive(Debug, Clone, Serialize)]
-pub struct PrepareTransferPayload {
-    pub transfer_id: String,
-    pub target_device_id: usize,
-    pub target_device_name: String,
-}
-
-/// Payload for playback.become_audio_device message.
-#[derive(Debug, Clone, Serialize)]
-pub struct BecomeAudioDevicePayload {
-    pub transfer_id: String,
-    pub state: PlaybackState,
-    pub queue: Vec<QueueItem>,
-}
-
-/// Payload for playback.transfer_aborted message.
-#[derive(Debug, Clone, Serialize)]
-pub struct TransferAbortedPayload {
-    pub transfer_id: String,
-    /// Reason for abort: "timeout", "source_disconnected", "target_disconnected"
-    pub reason: String,
-}
-
 /// Payload for playback.queue_sync message.
 #[derive(Debug, Clone, Serialize)]
 pub struct QueueSyncPayload {
@@ -189,17 +152,26 @@ pub struct QueueSyncPayload {
     pub queue_version: u64,
 }
 
-/// Payload for playback.register_ack message.
+/// Relay payload: a device's playback state update.
 #[derive(Debug, Clone, Serialize)]
-pub struct RegisterAckPayload {
-    pub success: bool,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub error: Option<PlaybackErrorPayload>,
+pub struct DeviceStatePayload {
+    pub device_id: usize,
+    pub device_name: String,
+    pub state: PlaybackState,
 }
 
-/// Payload for playback.session_ended message.
+/// Relay payload: a device's queue update.
 #[derive(Debug, Clone, Serialize)]
-pub struct SessionEndedPayload {
+pub struct DeviceQueuePayload {
+    pub device_id: usize,
+    pub queue: Vec<QueueItem>,
+    pub queue_version: u64,
+}
+
+/// Relay payload: a device stopped playback.
+#[derive(Debug, Clone, Serialize)]
+pub struct DeviceStoppedPayload {
+    pub device_id: usize,
     pub reason: String,
 }
 
@@ -217,8 +189,6 @@ pub struct PlaybackErrorPayload {
 pub struct ErrorContext {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub command: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub transfer_id: Option<String>,
 }
 
 #[cfg(test)]
@@ -289,28 +259,20 @@ mod tests {
         let payload = WelcomePayload {
             device_id: 42,
             session: SessionInfo {
-                exists: false,
-                state: None,
-                queue: None,
-                audio_device_id: None,
-                reclaimable: None,
-                queue_version: 0,
+                active_devices: vec![],
             },
             devices: vec![ConnectedDevice {
                 id: 42,
                 name: "Chrome on Windows".to_string(),
                 device_type: DeviceType::Web,
-                is_audio_device: false,
+                is_playing: false,
                 connected_at: 1234567890,
             }],
         };
 
         let json = serde_json::to_string(&payload).unwrap();
         assert!(json.contains("\"device_id\":42"));
-        assert!(json.contains("\"exists\":false"));
-        // Optional fields should not appear when None
-        assert!(!json.contains("\"state\""));
-        assert!(!json.contains("\"reclaimable\""));
+        assert!(json.contains("\"active_devices\":[]"));
     }
 
     #[test]

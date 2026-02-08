@@ -75,6 +75,11 @@ export const useAuthStore = defineStore("auth", {
         playbackStore.setSessionStore(playbackSessionStore);
         playbackSessionStore.initialize();
 
+        // Announce persisted playback state (e.g. after page refresh)
+        if (playbackStore.currentTrackId && playbackStore.mode === "local") {
+          playbackSessionStore.notifyPlaybackStarted();
+        }
+
         return true;
       } catch (error) {
         // 401/403 means no valid session

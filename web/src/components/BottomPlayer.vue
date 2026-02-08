@@ -3,21 +3,10 @@
     v-if="showRemoteBanner"
     class="remoteBanner"
   >
-    <span v-if="playback.mode === 'remote'" class="remoteBannerText">
-      Playing on {{ sessionStore.audioDeviceName || 'another device' }}
-    </span>
-    <span v-else class="remoteBannerText">
-      Music playing on {{ sessionStore.audioDeviceName || 'another device' }}
+    <span class="remoteBannerText">
+      {{ remoteBannerText }}
     </span>
     <button
-      v-if="playback.mode !== 'remote'"
-      class="remoteBannerAction"
-      @click="handleEnterRemoteMode"
-    >
-      Control it
-    </button>
-    <button
-      v-if="playback.mode !== 'remote'"
       class="remoteBannerDismiss"
       @click="dismissBanner"
     >
@@ -152,35 +141,27 @@ const hasPlayback = computed(() => {
 const bannerDismissed = ref(false);
 
 const showRemoteBanner = computed(() => {
-  if (playback.mode === "remote") return true;
-
-  // Show "ask" banner when there's a remote session we could control
-  if (
-    !bannerDismissed.value &&
-    sessionStore.sessionExists &&
-    sessionStore.audioDeviceId !== sessionStore.myDeviceId &&
-    sessionStore.role === "idle" &&
-    sessionStore.getRemoteControlPreference() === "ask"
-  ) {
-    return true;
-  }
-
-  return false;
+  return !bannerDismissed.value && sessionStore.anyOtherDevicePlaying;
 });
 
-function handleEnterRemoteMode() {
-  sessionStore.enterRemoteMode();
-}
+const remoteBannerText = computed(() => {
+  const names = sessionStore.otherPlayingDeviceNames;
+  if (names.length === 0) return "Music playing on another device";
+  if (names.length === 1) return `${names[0]} is playing`;
+  return `${names.join(", ")} are playing`;
+});
 
 function dismissBanner() {
   bannerDismissed.value = true;
 }
 
-// Reset banner dismissal when session state changes
+// Reset banner dismissal when other devices change
 watch(
-  () => sessionStore.sessionExists,
-  () => {
-    bannerDismissed.value = false;
+  () => sessionStore.anyOtherDevicePlaying,
+  (playing) => {
+    if (playing) {
+      bannerDismissed.value = false;
+    }
   },
 );
 

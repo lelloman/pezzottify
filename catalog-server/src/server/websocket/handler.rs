@@ -118,25 +118,10 @@ async fn handle_socket(
     );
     outgoing_handle.abort();
 
-    // Parse device type for playback session manager
-    let device_type = match device_type_str.as_str() {
-        "web" => DeviceType::Web,
-        "android" => DeviceType::Android,
-        "ios" => DeviceType::Ios,
-        _ => DeviceType::Web, // Default to web for unknown types
-    };
-
-    // Look up device name from playback session manager before disconnecting
-    let device_name = state
-        .playback_session_manager
-        .get_device_name(user_id, device_id)
-        .await
-        .unwrap_or_else(|| "Unknown".to_string());
-
     // Notify playback session manager of disconnect
     state
         .playback_session_manager
-        .handle_device_disconnect(user_id, device_id, &device_name, device_type)
+        .handle_device_disconnect(user_id, device_id)
         .await;
 
     state
@@ -350,76 +335,6 @@ async fn handle_playback_message(
                     Ok(())
                 }
                 Err(e) => Err(e),
-            }
-        }
-
-        msg_types::PLAYBACK_REGISTER_AUDIO_DEVICE => {
-            let result = manager.register_audio_device(user_id, device_id).await;
-            // Send register_ack regardless of success/failure
-            let ack = match &result {
-                Ok(()) => RegisterAckPayload {
-                    success: true,
-                    error: None,
-                },
-                Err(e) => RegisterAckPayload {
-                    success: false,
-                    error: Some(e.clone().into()),
-                },
-            };
-            let _ = state
-                .connection_manager
-                .send_to_device(
-                    user_id,
-                    device_id,
-                    ServerMessage::new(msg_types::PLAYBACK_REGISTER_ACK, ack),
-                )
-                .await;
-            result
-        }
-
-        msg_types::PLAYBACK_UNREGISTER_AUDIO_DEVICE => {
-            manager.unregister_audio_device(user_id, device_id).await
-        }
-
-        msg_types::PLAYBACK_TRANSFER_READY => {
-            match serde_json::from_value::<TransferReadyPayload>(payload) {
-                Ok(p) => {
-                    manager
-                        .handle_transfer_ready(user_id, device_id, p.transfer_id, p.state, p.queue)
-                        .await
-                }
-                Err(e) => Err(PlaybackError::InvalidMessage(format!(
-                    "Invalid transfer_ready payload: {}",
-                    e
-                ))),
-            }
-        }
-
-        msg_types::PLAYBACK_TRANSFER_COMPLETE => {
-            match serde_json::from_value::<TransferCompletePayload>(payload) {
-                Ok(p) => {
-                    manager
-                        .handle_transfer_complete(user_id, device_id, p.transfer_id)
-                        .await
-                }
-                Err(e) => Err(PlaybackError::InvalidMessage(format!(
-                    "Invalid transfer_complete payload: {}",
-                    e
-                ))),
-            }
-        }
-
-        msg_types::PLAYBACK_RECLAIM_AUDIO_DEVICE => {
-            match serde_json::from_value::<PlaybackState>(payload) {
-                Ok(state_payload) => {
-                    manager
-                        .handle_reclaim(user_id, device_id, state_payload)
-                        .await
-                }
-                Err(e) => Err(PlaybackError::InvalidMessage(format!(
-                    "Invalid reclaim payload: {}",
-                    e
-                ))),
             }
         }
 

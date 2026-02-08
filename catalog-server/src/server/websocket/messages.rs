@@ -131,40 +131,26 @@ pub mod msg_types {
     pub const PLAYBACK_HELLO: &str = "playback.hello";
     /// Server welcome response with session info.
     pub const PLAYBACK_WELCOME: &str = "playback.welcome";
-    /// Playback state broadcast from audio device.
+    /// Playback state broadcast from a device.
     pub const PLAYBACK_STATE: &str = "playback.state";
-    /// Queue update from audio device.
+    /// Queue update from a device.
     pub const PLAYBACK_QUEUE_UPDATE: &str = "playback.queue_update";
     /// Full queue sync response.
     pub const PLAYBACK_QUEUE_SYNC: &str = "playback.queue_sync";
     /// Request full queue sync.
     pub const PLAYBACK_REQUEST_QUEUE: &str = "playback.request_queue";
-    /// Remote command to audio device.
+    /// Remote command (stub, not yet implemented).
     pub const PLAYBACK_COMMAND: &str = "playback.command";
-    /// Session ended notification.
-    pub const PLAYBACK_SESSION_ENDED: &str = "playback.session_ended";
     /// Device list changed notification.
     pub const PLAYBACK_DEVICE_LIST_CHANGED: &str = "playback.device_list_changed";
-    /// Prepare for playback transfer (to current audio device).
-    pub const PLAYBACK_PREPARE_TRANSFER: &str = "playback.prepare_transfer";
-    /// Transfer ready response (from current audio device).
-    pub const PLAYBACK_TRANSFER_READY: &str = "playback.transfer_ready";
-    /// Become audio device (to target device).
-    pub const PLAYBACK_BECOME_AUDIO_DEVICE: &str = "playback.become_audio_device";
-    /// Transfer complete confirmation.
-    pub const PLAYBACK_TRANSFER_COMPLETE: &str = "playback.transfer_complete";
-    /// Transfer aborted notification.
-    pub const PLAYBACK_TRANSFER_ABORTED: &str = "playback.transfer_aborted";
-    /// Register as audio device.
-    pub const PLAYBACK_REGISTER_AUDIO_DEVICE: &str = "playback.register_audio_device";
-    /// Unregister as audio device.
-    pub const PLAYBACK_UNREGISTER_AUDIO_DEVICE: &str = "playback.unregister_audio_device";
-    /// Reclaim audio device status after reconnection.
-    pub const PLAYBACK_RECLAIM_AUDIO_DEVICE: &str = "playback.reclaim_audio_device";
+    /// Relay: another device's state update.
+    pub const PLAYBACK_DEVICE_STATE: &str = "playback.device_state";
+    /// Relay: another device's queue update.
+    pub const PLAYBACK_DEVICE_QUEUE: &str = "playback.device_queue";
+    /// Relay: a device stopped playback.
+    pub const PLAYBACK_DEVICE_STOPPED: &str = "playback.device_stopped";
     /// Playback-specific error response.
     pub const PLAYBACK_ERROR: &str = "playback.error";
-    /// Acknowledgment for audio device registration.
-    pub const PLAYBACK_REGISTER_ACK: &str = "playback.register_ack";
 }
 
 /// Sync-related message payloads.

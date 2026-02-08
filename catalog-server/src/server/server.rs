@@ -4428,7 +4428,7 @@ pub async fn make_app(
             let mut interval = tokio::time::interval(std::time::Duration::from_secs(5));
             loop {
                 interval.tick().await;
-                playback_manager.check_orphaned_sessions().await;
+                playback_manager.check_stale_devices().await;
             }
         });
     }
