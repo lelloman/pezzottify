@@ -210,7 +210,7 @@ private fun PlayerScreenContent(
                     },
                     actions = {
                         if (state.remoteDeviceName != null) {
-                            IconButton(onClick = { actions.exitRemoteMode() }) {
+                            IconButton(onClick = { actions.exitRemoteMode(); dismiss() }) {
                                 Icon(
                                     imageVector = Icons.Default.Close,
                                     contentDescription = "Disconnect remote",
