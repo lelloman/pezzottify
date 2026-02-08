@@ -81,4 +81,42 @@ read_pool_size = 4
 
 # Background Jobs settings
 [background_jobs]
-# Future: per-job configuration
+
+# Popular Content Job
+# Pre-computes popular albums and artists based on listening data
+[background_jobs.popular_content]
+# Interval in hours between job runs (default: 6)
+interval_hours = 6
+# Number of top albums to compute (default: 20)
+albums_limit = 20
+# Number of top artists to compute (default: 20)
+artists_limit = 20
+# Number of days of listening data to consider (default: 30)
+lookback_days = 30
+# Number of days of impression data to consider (default: 365)
+impression_lookback_days = 365
+# Number of days to retain impression data before pruning (default: 365)
+impression_retention_days = 365
+
+# What's New Batch Job
+# Creates batches from pending What's New albums
+[background_jobs.whatsnew_batch]
+# Interval in hours between job runs (default: 6)
+interval_hours = 6
+
+# Ingestion Cleanup Job (only registered if ingestion is enabled)
+# Cleans up orphaned ingestion temp directories
+[background_jobs.ingestion_cleanup]
+# Interval in hours between job runs (default: 1)
+# Increase this if hourly cleanup is too frequent for your use case
+interval_hours = 1
+# Minimum age in seconds before a temp directory is eligible for cleanup (default: 300)
+min_age_secs = 300
+
+# Audit Log Cleanup Job
+# Deletes old audit log entries based on retention policy
+[background_jobs.audit_log_cleanup]
+# Interval in hours between job runs (default: 24)
+interval_hours = 24
+# Number of days to retain audit log entries (default: 90)
+retention_days = 90

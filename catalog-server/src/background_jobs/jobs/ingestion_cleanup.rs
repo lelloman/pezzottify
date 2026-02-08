@@ -13,6 +13,7 @@ use crate::background_jobs::{
     job::{BackgroundJob, JobError, JobSchedule, ShutdownBehavior},
     JobAuditLogger,
 };
+use crate::config::IngestionCleanupJobSettings;
 use crate::ingestion::IngestionStore;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -21,10 +22,12 @@ use tracing::{debug, info, warn};
 
 /// Background job that cleans up orphaned ingestion temp directories.
 ///
-/// This job runs hourly and removes directories from the ingestion temp
-/// folder that don't correspond to active jobs and are older than
-/// `min_age_secs` (default 5 minutes).
+/// This job runs at a configured interval and removes directories from the
+/// ingestion temp folder that don't correspond to active jobs and are older
+/// than `min_age_secs` (default 5 minutes).
 pub struct IngestionCleanupJob {
+    /// Interval in hours between runs
+    interval_hours: u64,
     /// The ingestion store to query for active jobs.
     ingestion_store: Arc<dyn IngestionStore>,
     /// Directory containing job temp directories.
@@ -35,16 +38,27 @@ pub struct IngestionCleanupJob {
 }
 
 impl IngestionCleanupJob {
-    /// Create a new IngestionCleanupJob.
+    /// Create a new IngestionCleanupJob with default settings.
     pub fn new(ingestion_store: Arc<dyn IngestionStore>, temp_dir: PathBuf) -> Self {
+        Self::from_settings(ingestion_store, temp_dir, &IngestionCleanupJobSettings::default())
+    }
+
+    /// Create a new IngestionCleanupJob from settings.
+    pub fn from_settings(
+        ingestion_store: Arc<dyn IngestionStore>,
+        temp_dir: PathBuf,
+        settings: &IngestionCleanupJobSettings,
+    ) -> Self {
         Self {
+            interval_hours: settings.interval_hours,
             ingestion_store,
             temp_dir,
-            min_age_secs: 300, // 5 minutes default
+            min_age_secs: settings.min_age_secs,
         }
     }
 
-    /// Create with a custom minimum age.
+    /// Create with a custom minimum age (deprecated: use from_settings).
+    #[deprecated(note = "Use from_settings instead for better configurability")]
     #[allow(dead_code)]
     pub fn with_min_age(mut self, min_age_secs: u64) -> Self {
         self.min_age_secs = min_age_secs;
@@ -66,8 +80,8 @@ impl BackgroundJob for IngestionCleanupJob {
     }
 
     fn schedule(&self) -> JobSchedule {
-        // Run every hour
-        JobSchedule::Interval(Duration::from_secs(60 * 60))
+        // Run at configured interval
+        JobSchedule::Interval(Duration::from_secs(self.interval_hours * 60 * 60))
     }
 
     fn shutdown_behavior(&self) -> ShutdownBehavior {

@@ -56,8 +56,41 @@ pub struct DownloadManagerConfig {
 #[derive(Debug, Deserialize, Default, Clone)]
 #[serde(default)]
 pub struct BackgroundJobsConfig {
-    // Future: per-job configuration can be added here
-    // e.g., pub popular_content_interval_hours: Option<u64>,
+    pub popular_content: Option<PopularContentJobConfig>,
+    pub whatsnew_batch: Option<IntervalJobConfig>,
+    pub ingestion_cleanup: Option<IngestionCleanupJobConfig>,
+    pub audit_log_cleanup: Option<AuditLogCleanupJobConfig>,
+}
+
+#[derive(Debug, Deserialize, Default, Clone)]
+#[serde(default)]
+pub struct PopularContentJobConfig {
+    pub interval_hours: Option<u64>,
+    pub albums_limit: Option<usize>,
+    pub artists_limit: Option<usize>,
+    pub lookback_days: Option<u32>,
+    pub impression_lookback_days: Option<u32>,
+    pub impression_retention_days: Option<u32>,
+}
+
+#[derive(Debug, Deserialize, Default, Clone)]
+#[serde(default)]
+pub struct IntervalJobConfig {
+    pub interval_hours: Option<u64>,
+}
+
+#[derive(Debug, Deserialize, Default, Clone)]
+#[serde(default)]
+pub struct IngestionCleanupJobConfig {
+    pub interval_hours: Option<u64>,
+    pub min_age_secs: Option<u64>,
+}
+
+#[derive(Debug, Deserialize, Default, Clone)]
+#[serde(default)]
+pub struct AuditLogCleanupJobConfig {
+    pub interval_hours: Option<u64>,
+    pub retention_days: Option<u64>,
 }
 
 #[derive(Debug, Deserialize, Default, Clone)]

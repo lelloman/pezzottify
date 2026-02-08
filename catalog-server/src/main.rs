@@ -255,10 +255,14 @@ async fn main() -> Result<()> {
 
     // Register jobs
     scheduler
-        .register_job(Arc::new(PopularContentJob::new()))
+        .register_job(Arc::new(PopularContentJob::from_settings(
+            &app_config.background_jobs.popular_content,
+        )))
         .await;
     scheduler
-        .register_job(Arc::new(WhatsNewBatchJob::new()))
+        .register_job(Arc::new(WhatsNewBatchJob::from_settings(
+            &app_config.background_jobs.whatsnew_batch,
+        )))
         .await;
 
     // Register ingestion cleanup job if ingestion is enabled
@@ -268,10 +272,17 @@ async fn main() -> Result<()> {
             Ok(store) => {
                 let ingestion_store: Arc<dyn IngestionStore> = Arc::new(store);
                 let temp_dir = app_config.ingestion_temp_dir();
+                let ic_settings = app_config
+                    .background_jobs
+                    .ingestion_cleanup
+                    .as_ref()
+                    .cloned()
+                    .unwrap_or_default();
                 scheduler
-                    .register_job(Arc::new(IngestionCleanupJob::new(
+                    .register_job(Arc::new(IngestionCleanupJob::from_settings(
                         ingestion_store,
                         temp_dir,
+                        &ic_settings,
                     )))
                     .await;
                 info!("Registered ingestion cleanup job");

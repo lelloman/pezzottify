@@ -9,6 +9,7 @@ use crate::background_jobs::{
     job::{BackgroundJob, JobError, JobSchedule, ShutdownBehavior},
     JobAuditLogger,
 };
+use crate::config::IntervalJobSettings;
 use std::sync::Arc;
 use std::time::Duration;
 use tracing::info;
@@ -17,13 +18,27 @@ use uuid::Uuid;
 /// Background job that batches pending What's New albums.
 ///
 /// Albums are added to a pending list when they're ingested. This job
-/// runs every 6 hours to close the pending albums into a batch.
-pub struct WhatsNewBatchJob;
+/// runs every configured interval to close the pending albums into a batch.
+pub struct WhatsNewBatchJob {
+    interval_hours: u64,
+}
 
 impl WhatsNewBatchJob {
-    /// Create a new WhatsNewBatchJob.
+    /// Create a new WhatsNewBatchJob with default settings.
     pub fn new() -> Self {
-        Self
+        Self::from_settings(&IntervalJobSettings::default())
+    }
+
+    /// Create a new WhatsNewBatchJob from settings.
+    pub fn from_settings(settings: &IntervalJobSettings) -> Self {
+        Self {
+            interval_hours: settings.interval_hours,
+        }
+    }
+
+    /// Create a new WhatsNewBatchJob with custom interval.
+    pub fn with_interval_hours(interval_hours: u64) -> Self {
+        Self { interval_hours }
     }
 }
 
@@ -47,8 +62,8 @@ impl BackgroundJob for WhatsNewBatchJob {
     }
 
     fn schedule(&self) -> JobSchedule {
-        // Run every 6 hours (no startup run - wait for albums to accumulate)
-        JobSchedule::Interval(Duration::from_secs(6 * 60 * 60))
+        // Run every configured interval (no startup run - wait for albums to accumulate)
+        JobSchedule::Interval(Duration::from_secs(self.interval_hours * 60 * 60))
     }
 
     fn shutdown_behavior(&self) -> ShutdownBehavior {

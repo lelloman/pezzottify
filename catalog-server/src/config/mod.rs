@@ -1,8 +1,10 @@
 mod file_config;
 
 pub use file_config::{
-    AgentConfig, AgentLlmConfig, BackgroundJobsConfig, CatalogStoreConfig, DownloadManagerConfig,
-    FileConfig, IngestionConfig, OidcConfig, RelatedArtistsConfig, SearchConfig,
+    AgentConfig, AgentLlmConfig, AuditLogCleanupJobConfig, BackgroundJobsConfig,
+    CatalogStoreConfig, DownloadManagerConfig, FileConfig, IngestionCleanupJobConfig,
+    IngestionConfig, IntervalJobConfig, OidcConfig, PopularContentJobConfig,
+    RelatedArtistsConfig, SearchConfig,
     StreamingSearchConfig as StreamingSearchFileConfig,
 };
 
@@ -188,7 +190,51 @@ impl AppConfig {
             audit_log_retention_days: dm_file.audit_log_retention_days.unwrap_or(90),
         };
 
-        let background_jobs = BackgroundJobsSettings::default();
+        // Background jobs settings from file config
+        let bg_jobs_file = file.background_jobs.unwrap_or_default();
+        let bg_jobs_defaults = BackgroundJobsSettings::default();
+
+        // Popular content job settings
+        let pc_file = bg_jobs_file.popular_content.unwrap_or_default();
+        let popular_content = PopularContentJobSettings {
+            interval_hours: pc_file.interval_hours.unwrap_or(bg_jobs_defaults.popular_content.interval_hours),
+            albums_limit: pc_file.albums_limit.unwrap_or(bg_jobs_defaults.popular_content.albums_limit),
+            artists_limit: pc_file.artists_limit.unwrap_or(bg_jobs_defaults.popular_content.artists_limit),
+            lookback_days: pc_file.lookback_days.unwrap_or(bg_jobs_defaults.popular_content.lookback_days),
+            impression_lookback_days: pc_file.impression_lookback_days.unwrap_or(bg_jobs_defaults.popular_content.impression_lookback_days),
+            impression_retention_days: pc_file.impression_retention_days.unwrap_or(bg_jobs_defaults.popular_content.impression_retention_days),
+        };
+
+        // What's new batch job settings
+        let wn_file = bg_jobs_file.whatsnew_batch.unwrap_or_default();
+        let whatsnew_batch = IntervalJobSettings {
+            interval_hours: wn_file.interval_hours.unwrap_or(bg_jobs_defaults.whatsnew_batch.interval_hours),
+        };
+
+        // Ingestion cleanup job settings (optional - only if configured)
+        let ingestion_cleanup = bg_jobs_file.ingestion_cleanup.map(|ic_file| {
+            let ic_defaults = IngestionCleanupJobSettings::default();
+            IngestionCleanupJobSettings {
+                interval_hours: ic_file.interval_hours.unwrap_or(ic_defaults.interval_hours),
+                min_age_secs: ic_file.min_age_secs.unwrap_or(ic_defaults.min_age_secs),
+            }
+        });
+
+        // Audit log cleanup job settings (optional - only if configured)
+        let audit_log_cleanup = bg_jobs_file.audit_log_cleanup.map(|alc_file| {
+            let alc_defaults = AuditLogCleanupJobSettings::default();
+            AuditLogCleanupJobSettings {
+                interval_hours: alc_file.interval_hours.unwrap_or(alc_defaults.interval_hours),
+                retention_days: alc_file.retention_days.unwrap_or(alc_defaults.retention_days),
+            }
+        });
+
+        let background_jobs = BackgroundJobsSettings {
+            popular_content,
+            whatsnew_batch,
+            ingestion_cleanup,
+            audit_log_cleanup,
+        };
 
         // Catalog store settings from file config
         let catalog_store_file = file.catalog_store.unwrap_or_default();
@@ -400,7 +446,78 @@ impl Default for DownloadManagerSettings {
 
 #[derive(Debug, Clone, Default)]
 pub struct BackgroundJobsSettings {
-    // Future: per-job settings can be added here
+    pub popular_content: PopularContentJobSettings,
+    pub whatsnew_batch: IntervalJobSettings,
+    pub ingestion_cleanup: Option<IngestionCleanupJobSettings>,
+    pub audit_log_cleanup: Option<AuditLogCleanupJobSettings>,
+}
+
+/// Settings for popular content job
+#[derive(Debug, Clone)]
+pub struct PopularContentJobSettings {
+    pub interval_hours: u64,
+    pub albums_limit: usize,
+    pub artists_limit: usize,
+    pub lookback_days: u32,
+    pub impression_lookback_days: u32,
+    pub impression_retention_days: u32,
+}
+
+impl Default for PopularContentJobSettings {
+    fn default() -> Self {
+        Self {
+            interval_hours: 6,
+            albums_limit: 20,
+            artists_limit: 20,
+            lookback_days: 30,
+            impression_lookback_days: 365,
+            impression_retention_days: 365,
+        }
+    }
+}
+
+/// Settings for jobs that only need interval configuration
+#[derive(Debug, Clone)]
+pub struct IntervalJobSettings {
+    pub interval_hours: u64,
+}
+
+impl Default for IntervalJobSettings {
+    fn default() -> Self {
+        Self { interval_hours: 6 }
+    }
+}
+
+/// Settings for ingestion cleanup job
+#[derive(Debug, Clone)]
+pub struct IngestionCleanupJobSettings {
+    pub interval_hours: u64,
+    pub min_age_secs: u64,
+}
+
+impl Default for IngestionCleanupJobSettings {
+    fn default() -> Self {
+        Self {
+            interval_hours: 1,
+            min_age_secs: 300,
+        }
+    }
+}
+
+/// Settings for audit log cleanup job
+#[derive(Debug, Clone)]
+pub struct AuditLogCleanupJobSettings {
+    pub interval_hours: u64,
+    pub retention_days: u64,
+}
+
+impl Default for AuditLogCleanupJobSettings {
+    fn default() -> Self {
+        Self {
+            interval_hours: 24,
+            retention_days: 90,
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
