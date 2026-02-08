@@ -86,6 +86,9 @@ class PlaybackSessionHandler internal constructor(
     private val _otherDeviceStates = MutableStateFlow<Map<Int, RemotePlaybackState>>(emptyMap())
     val otherDeviceStates: StateFlow<Map<Int, RemotePlaybackState>> = _otherDeviceStates.asStateFlow()
 
+    private val _otherDeviceQueues = MutableStateFlow<Map<Int, List<String>>>(emptyMap())
+    val otherDeviceQueues: StateFlow<Map<Int, List<String>>> = _otherDeviceQueues.asStateFlow()
+
     private val handler = MessageHandler { type, payload ->
         handleMessage(type, payload)
     }
@@ -103,6 +106,7 @@ class PlaybackSessionHandler internal constructor(
                         _myDeviceId.value = null
                         _connectedDevices.value = emptyList()
                         _otherDeviceStates.value = emptyMap()
+                        _otherDeviceQueues.value = emptyMap()
                     }
                     is ConnectionState.Connecting -> {}
                 }
@@ -308,8 +312,7 @@ class PlaybackSessionHandler internal constructor(
             }
 
             "$PREFIX.device_queue" -> {
-                // Stored for Phase 3 remote mode
-                logger.debug("Received device queue update")
+                if (payload != null) handleDeviceQueue(payload)
             }
 
             "$PREFIX.device_stopped" -> {
@@ -351,6 +354,7 @@ class PlaybackSessionHandler internal constructor(
             val activeDevices = payloadJson["session"]?.jsonObject?.get("active_devices")?.jsonArray
             if (activeDevices != null) {
                 val states = mutableMapOf<Int, RemotePlaybackState>()
+                val queues = mutableMapOf<Int, List<String>>()
                 for (device in activeDevices) {
                     val deviceObj = device.jsonObject
                     val deviceId = deviceObj["device_id"]?.jsonPrimitive?.int ?: continue
@@ -360,8 +364,15 @@ class PlaybackSessionHandler internal constructor(
                     if (parsed != null) {
                         states[deviceId] = parsed.copy(receivedAt = System.currentTimeMillis())
                     }
+                    val queueArray = deviceObj["queue"]?.jsonArray
+                    if (queueArray != null) {
+                        queues[deviceId] = queueArray.mapNotNull { item ->
+                            item.jsonObject["id"]?.jsonPrimitive?.content
+                        }
+                    }
                 }
                 _otherDeviceStates.value = states
+                _otherDeviceQueues.value = queues
             }
         } catch (e: Exception) {
             logger.error("Failed to parse welcome payload", e)
@@ -388,8 +399,26 @@ class PlaybackSessionHandler internal constructor(
             val payloadJson = json.parseToJsonElement(payloadString).jsonObject
             val deviceId = payloadJson["device_id"]?.jsonPrimitive?.int ?: return
             _otherDeviceStates.value = _otherDeviceStates.value - deviceId
+            _otherDeviceQueues.value = _otherDeviceQueues.value - deviceId
         } catch (e: Exception) {
             logger.error("Failed to parse device stopped", e)
+        }
+    }
+
+    private fun handleDeviceQueue(payloadString: String) {
+        try {
+            val payloadJson = json.parseToJsonElement(payloadString).jsonObject
+            val deviceId = payloadJson["device_id"]?.jsonPrimitive?.int ?: return
+            if (deviceId == _myDeviceId.value) return
+
+            val queueArray = payloadJson["queue"]?.jsonArray ?: return
+            val trackIds = queueArray.mapNotNull { item ->
+                item.jsonObject["id"]?.jsonPrimitive?.content
+            }
+            _otherDeviceQueues.value = _otherDeviceQueues.value + (deviceId to trackIds)
+            logger.debug("Received device queue update for device $deviceId with ${trackIds.size} tracks")
+        } catch (e: Exception) {
+            logger.error("Failed to parse device queue", e)
         }
     }
 
@@ -436,6 +465,7 @@ class PlaybackSessionHandler internal constructor(
                 shuffle = stateObj["shuffle"]?.jsonPrimitive?.boolean ?: false,
                 repeat = stateObj["repeat"]?.jsonPrimitive?.content ?: "off",
                 timestamp = stateObj["timestamp"]?.jsonPrimitive?.long ?: 0L,
+                queuePosition = stateObj["queue_position"]?.jsonPrimitive?.int ?: 0,
             )
         } catch (e: Exception) {
             logger.error("Failed to parse remote playback state", e)

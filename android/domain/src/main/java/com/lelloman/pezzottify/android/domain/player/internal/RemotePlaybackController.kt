@@ -151,6 +151,7 @@ class RemotePlaybackController internal constructor(
             "one" -> RepeatMode.ONE
             else -> RepeatMode.OFF
         }
+        _currentTrackIndex.value = state.queuePosition
 
         val durationMs = state.currentTrack?.durationMs ?: 0L
         val durationSec = (durationMs / 1000).toInt()
