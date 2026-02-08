@@ -4193,6 +4193,34 @@ async fn admin_get_online_users(
     Json(OnlineUsersResponse { count, handles }).into_response()
 }
 
+/// Get active playback sessions across all users.
+async fn admin_get_playback_sessions(
+    _session: Session,
+    State(playback_session_manager): State<GuardedPlaybackSessionManager>,
+    State(user_manager): State<GuardedUserManager>,
+) -> Response {
+    let sessions = playback_session_manager.get_active_sessions().await;
+
+    let manager = user_manager.lock().unwrap();
+    let enriched: Vec<serde_json::Value> = sessions
+        .into_iter()
+        .map(|s| {
+            let handle = manager
+                .get_user_handle(s.user_id)
+                .ok()
+                .flatten()
+                .unwrap_or_else(|| format!("user_{}", s.user_id));
+            serde_json::json!({
+                "user_id": s.user_id,
+                "user_handle": handle,
+                "devices": s.devices,
+            })
+        })
+        .collect();
+
+    Json(enriched).into_response()
+}
+
 // ============================================================================
 // Changelog admin endpoints (requires EditCatalog permission)
 // ============================================================================
@@ -4897,6 +4925,7 @@ pub async fn make_app(
             get(admin_get_user_listening_summary),
         )
         .route("/online-users", get(admin_get_online_users))
+        .route("/playback/sessions", get(admin_get_playback_sessions))
         .layer(GovernorLayer::new(write_rate_limit.clone()))
         .route_layer(middleware::from_fn_with_state(
             state.clone(),
